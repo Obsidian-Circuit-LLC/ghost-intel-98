@@ -1,0 +1,44 @@
+/* Minor tweaks on top of 98.css to make the desktop feel cohesive. */
+
+.window {
+  background: var(--ga98-grey);
+}
+
+button {
+  min-width: 64px;
+}
+
+button:focus {
+  outline: 1px dotted #000;
+  outline-offset: -4px;
+}
+
+.title-bar {
+  cursor: move;
+}
+
+.title-bar-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Make scrollbars look 98-ish in Chromium */
+::-webkit-scrollbar {
+  width: 16px;
+  height: 16px;
+}
+::-webkit-scrollbar-track {
+  background: var(--ga98-grey);
+  border-left: 1px solid var(--ga98-shadow-dark);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--ga98-grey);
+  border-top: 1px solid var(--ga98-shadow-light);
+  border-left: 1px solid var(--ga98-shadow-light);
+  border-bottom: 1px solid var(--ga98-shadow-dark);
+  border-right: 1px solid var(--ga98-shadow-dark);
+}
+::-webkit-scrollbar-thumb:active {
+  background: var(--ga98-shadow-dark);
+}
