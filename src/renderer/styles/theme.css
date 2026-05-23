@@ -1,0 +1,397 @@
+/* Ghost Access 98 — theme layer that sits on top of 98.css. */
+
+:root {
+  --ga98-desktop-bg: #008080;
+  --ga98-grey: #c0c0c0;
+  --ga98-shadow-dark: #808080;
+  --ga98-shadow-light: #ffffff;
+  --ga98-shadow-deep: #000000;
+  --ga98-taskbar-height: 32px;
+  --ga98-blue: #000080;
+}
+
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: 'Pixelated MS Sans Serif', Arial, sans-serif;
+  font-size: 12px;
+  color: #000;
+  overflow: hidden;
+  user-select: none;
+  background: var(--ga98-desktop-bg);
+}
+
+.ga98-screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.ga98-desktop {
+  position: absolute;
+  inset: 0 0 var(--ga98-taskbar-height) 0;
+  overflow: hidden;
+  background:
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.04) 0 1px, transparent 1px 2px),
+    var(--ga98-desktop-bg);
+}
+
+.ga98-desktop-grid {
+  position: absolute;
+  inset: 12px 0 12px 12px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 96px);
+  grid-auto-rows: 96px;
+  gap: 4px;
+  pointer-events: none;
+}
+
+.ga98-icon {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+  width: 96px;
+  height: 96px;
+  cursor: pointer;
+  padding: 6px 2px;
+  color: #fff;
+  text-shadow: 1px 1px 0 #000;
+  font-size: 11px;
+  text-align: center;
+}
+
+.ga98-icon[data-selected='true'] {
+  background: rgba(0, 0, 128, 0.3);
+  outline: 1px dotted #fff;
+}
+
+.ga98-icon-glyph {
+  width: 32px;
+  height: 32px;
+  image-rendering: pixelated;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  background: var(--ga98-grey);
+  border-top: 1px solid var(--ga98-shadow-light);
+  border-left: 1px solid var(--ga98-shadow-light);
+  border-bottom: 1px solid var(--ga98-shadow-dark);
+  border-right: 1px solid var(--ga98-shadow-dark);
+  box-shadow: inset -1px -1px 0 var(--ga98-shadow-deep);
+}
+
+/* taskbar */
+.ga98-taskbar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--ga98-taskbar-height);
+  background: var(--ga98-grey);
+  border-top: 2px solid var(--ga98-shadow-light);
+  display: flex;
+  align-items: center;
+  padding: 2px 4px;
+  gap: 4px;
+  z-index: 9999;
+}
+
+.ga98-access-button {
+  font-weight: bold;
+  min-width: 70px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ga98-access-button[data-open='true'] {
+  border-color: var(--ga98-shadow-dark) var(--ga98-shadow-light) var(--ga98-shadow-light) var(--ga98-shadow-dark);
+  box-shadow: inset 1px 1px 0 var(--ga98-shadow-deep);
+}
+
+.ga98-taskbar-divider {
+  width: 1px;
+  height: 22px;
+  background: var(--ga98-shadow-dark);
+  border-right: 1px solid var(--ga98-shadow-light);
+  margin: 0 2px;
+}
+
+.ga98-taskbar-items {
+  flex: 1;
+  display: flex;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.ga98-taskbar-item {
+  flex: 0 1 180px;
+  text-align: left;
+  padding: 2px 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 11px;
+}
+
+.ga98-taskbar-item[data-active='true'] {
+  border-color: var(--ga98-shadow-dark) var(--ga98-shadow-light) var(--ga98-shadow-light) var(--ga98-shadow-dark);
+  box-shadow: inset 1px 1px 0 var(--ga98-shadow-deep);
+}
+
+.ga98-tray {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px;
+  height: 24px;
+  border-top: 1px solid var(--ga98-shadow-dark);
+  border-left: 1px solid var(--ga98-shadow-dark);
+  border-bottom: 1px solid var(--ga98-shadow-light);
+  border-right: 1px solid var(--ga98-shadow-light);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* access menu */
+.ga98-access-menu {
+  position: absolute;
+  left: 4px;
+  bottom: calc(var(--ga98-taskbar-height) + 2px);
+  width: 240px;
+  background: var(--ga98-grey);
+  border-top: 2px solid var(--ga98-shadow-light);
+  border-left: 2px solid var(--ga98-shadow-light);
+  border-right: 2px solid var(--ga98-shadow-dark);
+  border-bottom: 2px solid var(--ga98-shadow-dark);
+  box-shadow: 2px 2px 0 #000;
+  display: flex;
+  z-index: 10001;
+}
+
+.ga98-access-rail {
+  width: 28px;
+  background: linear-gradient(180deg, #000080 0%, #1084d0 100%);
+  color: #fff;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  font-weight: bold;
+  padding: 8px 0;
+  text-align: center;
+  font-size: 14px;
+}
+
+.ga98-access-list {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  gap: 1px;
+}
+
+.ga98-access-entry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.ga98-access-entry:hover,
+.ga98-access-entry:focus {
+  background: var(--ga98-blue);
+  color: #fff;
+  outline: none;
+}
+
+.ga98-access-entry-glyph {
+  width: 18px;
+  text-align: center;
+}
+
+.ga98-access-separator {
+  height: 1px;
+  background: var(--ga98-shadow-dark);
+  border-bottom: 1px solid var(--ga98-shadow-light);
+  margin: 4px 0;
+}
+
+/* windows */
+.ga98-window-shell {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  z-index: 10;
+}
+
+.ga98-window-shell[data-focused='true'] {
+  z-index: 100;
+}
+
+.ga98-window-shell .window {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.ga98-window-shell .window-body {
+  flex: 1;
+  overflow: auto;
+  margin: 0;
+}
+
+.ga98-titlebar-buttons {
+  display: flex;
+}
+
+.ga98-dropzone {
+  border: 2px dashed var(--ga98-shadow-dark);
+  background: #f4f4f4;
+  padding: 16px;
+  text-align: center;
+  margin: 8px 0;
+  font-size: 12px;
+}
+
+.ga98-dropzone[data-hot='true'] {
+  border-color: var(--ga98-blue);
+  background: #d4e3fc;
+}
+
+.ga98-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.ga98-list li {
+  padding: 4px 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid #d0d0d0;
+}
+
+.ga98-list li[data-selected='true'] {
+  background: var(--ga98-blue);
+  color: #fff;
+}
+
+.ga98-toolbar {
+  display: flex;
+  gap: 4px;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--ga98-shadow-dark);
+  background: var(--ga98-grey);
+}
+
+.ga98-split {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  height: 100%;
+}
+
+.ga98-pane {
+  padding: 6px;
+  overflow: auto;
+  border-right: 1px solid var(--ga98-shadow-dark);
+}
+
+.ga98-pane:last-child {
+  border-right: none;
+}
+
+.ga98-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+}
+
+textarea.ga98-text {
+  width: 100%;
+  height: 100%;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  border-top: 2px solid var(--ga98-shadow-dark);
+  border-left: 2px solid var(--ga98-shadow-dark);
+  border-right: 2px solid var(--ga98-shadow-light);
+  border-bottom: 2px solid var(--ga98-shadow-light);
+  background: #fff;
+  resize: none;
+}
+
+input.ga98-text, select.ga98-text {
+  font-size: 12px;
+}
+
+.ga98-grid-calendar {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 1px;
+  background: var(--ga98-shadow-dark);
+  border: 1px solid var(--ga98-shadow-dark);
+}
+
+.ga98-grid-calendar > div {
+  background: #fff;
+  min-height: 80px;
+  padding: 4px;
+  font-size: 11px;
+  position: relative;
+}
+
+.ga98-grid-calendar > div[data-today='true'] {
+  outline: 2px solid var(--ga98-blue);
+  outline-offset: -2px;
+}
+
+.ga98-grid-calendar > div[data-muted='true'] {
+  background: #f4f4f4;
+  color: #888;
+}
+
+.ga98-cal-header {
+  background: var(--ga98-grey);
+  font-weight: bold;
+  text-align: center;
+}
+
+.ga98-cal-event {
+  background: var(--ga98-blue);
+  color: #fff;
+  font-size: 10px;
+  padding: 1px 3px;
+  margin-top: 2px;
+  border-radius: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ga98-coming-soon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 12px;
+  text-align: center;
+  padding: 24px;
+}
+
+.ga98-statusbar {
+  display: flex;
+  gap: 8px;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-top: 1px solid var(--ga98-shadow-light);
+  background: var(--ga98-grey);
+}

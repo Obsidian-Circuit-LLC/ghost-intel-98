@@ -1,0 +1,153 @@
+/**
+ * Shared types crossing the IPC boundary.
+ * Imported by both main and renderer processes.
+ */
+
+export type CaseId = string;
+export type ISODate = string;
+
+export type CaseStatus = 'new' | 'open' | 'pending' | 'closed' | 'archived';
+export type CasePriority = 'low' | 'medium' | 'high' | 'critical';
+
+export interface CaseSummary {
+  id: CaseId;
+  title: string;
+  reference: string;
+  status: CaseStatus;
+  priority: CasePriority;
+  tags: string[];
+  createdAt: ISODate;
+  updatedAt: ISODate;
+  archived: boolean;
+}
+
+export interface TimelineEvent {
+  id: string;
+  at: ISODate;
+  kind: 'created' | 'note' | 'file' | 'link' | 'reminder' | 'task' | 'status' | 'custom';
+  message: string;
+}
+
+export interface TaskItem {
+  id: string;
+  text: string;
+  done: boolean;
+  createdAt: ISODate;
+  dueAt?: ISODate;
+}
+
+export interface Reminder {
+  id: string;
+  caseId?: CaseId;
+  title: string;
+  body?: string;
+  fireAt: ISODate;
+  repeat?: 'none' | 'daily' | 'weekly';
+  fired?: boolean;
+}
+
+export interface Alarm {
+  id: string;
+  label: string;
+  fireAt: ISODate;
+  enabled: boolean;
+  repeat?: 'none' | 'daily' | 'weekly';
+}
+
+export interface WebLink {
+  id: string;
+  url: string;
+  title: string;
+  addedAt: ISODate;
+}
+
+export interface AttachmentMeta {
+  fileName: string;
+  originalName: string;
+  importedAt: ISODate;
+  size: number;
+  sourcePath: string | null;
+  sha256?: string;
+}
+
+export interface CaseRecord extends CaseSummary {
+  description: string;
+  notes: { name: string; updatedAt: ISODate }[];
+  attachments: AttachmentMeta[];
+  links: WebLink[];
+  timeline: TimelineEvent[];
+  tasks: TaskItem[];
+  reminders: Reminder[];
+}
+
+export interface CreateCaseInput {
+  title: string;
+  reference?: string;
+  description?: string;
+  status?: CaseStatus;
+  priority?: CasePriority;
+  tags?: string[];
+}
+
+export interface AccessShortcut {
+  id: string;
+  label: string;
+  /** Either a built-in module key or 'url' for a web link. */
+  kind: 'module' | 'url';
+  /** Module name (e.g. 'cases') for kind=module; URL string for kind=url. */
+  target: string;
+  icon?: string;
+}
+
+export interface AppSettings {
+  soundEnabled: boolean;
+  themeIntensity: 'lite' | 'classic' | 'maximum';
+  startupSoundEnabled: boolean;
+  caseFolderOverride: string | null;
+  shortcuts: AccessShortcut[];
+  ai: {
+    provider: 'ollama' | 'openai-compatible' | 'none';
+    endpoint: string;
+    model: string;
+    defaultSystemPrompt: string;
+    /** Reference into secrets.enc; the API key itself is never stored here. */
+    apiKeyRef: string | null;
+  };
+  mail: {
+    accounts: { id: string; label: string; imapHost: string; imapPort: number; smtpHost: string; smtpPort: number; user: string; secureRef: string | null }[];
+  };
+  browser: {
+    homepage: string;
+  };
+}
+
+export const defaultShortcuts: AccessShortcut[] = [
+  { id: 'cases', label: 'Case Files', kind: 'module', target: 'cases', icon: 'folder' },
+  { id: 'notepad', label: 'Notepad 98', kind: 'module', target: 'notepad', icon: 'note' },
+  { id: 'browser', label: 'Net Explorer', kind: 'module', target: 'net-explorer', icon: 'globe' },
+  { id: 'mail', label: 'Mail', kind: 'module', target: 'mail', icon: 'mail' },
+  { id: 'dialterm', label: 'DialTerm', kind: 'module', target: 'dialterm', icon: 'modem' },
+  { id: 'eyespy', label: 'EyeSpy', kind: 'module', target: 'eyespy', icon: 'cam' },
+  { id: 'calendar', label: 'Calendar', kind: 'module', target: 'calendar', icon: 'calendar' },
+  { id: 'reminders', label: 'Reminders', kind: 'module', target: 'reminders', icon: 'bell' },
+  { id: 'alarm', label: 'Alarm', kind: 'module', target: 'alarm', icon: 'alarm' },
+  { id: 'ai', label: 'AI Assistant', kind: 'module', target: 'ai-assistant', icon: 'sparkle' },
+  { id: 'settings', label: 'Settings', kind: 'module', target: 'settings', icon: 'gear' }
+];
+
+export const defaultSettings: AppSettings = {
+  soundEnabled: true,
+  themeIntensity: 'classic',
+  startupSoundEnabled: true,
+  caseFolderOverride: null,
+  shortcuts: defaultShortcuts,
+  ai: {
+    provider: 'none',
+    endpoint: 'http://localhost:11434',
+    model: '',
+    defaultSystemPrompt: 'You are an investigative case-management assistant. Use only the case data the user has explicitly shared. Be concise.',
+    apiKeyRef: null
+  },
+  mail: { accounts: [] },
+  browser: { homepage: 'about:blank' }
+};
