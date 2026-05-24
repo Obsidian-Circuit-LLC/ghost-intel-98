@@ -34,12 +34,6 @@ export const channels = {
     addReminder: 'cases:addReminder',
     deleteReminder: 'cases:deleteReminder'
   },
-  files: {
-    importDropped: 'files:importDropped',
-    listAttachments: 'files:listAttachments',
-    revealAttachment: 'files:revealAttachment',
-    deleteAttachment: 'files:deleteAttachment'
-  },
   notes: {
     list: 'notes:list',
     read: 'notes:read',
@@ -74,7 +68,27 @@ export const channels = {
     testAccount: 'mail:testAccount',
     fetchInbox: 'mail:fetchInbox',
     fetchMessage: 'mail:fetchMessage',
-    send: 'mail:send'
+    send: 'mail:send',
+    listDrafts: 'mail:listDrafts',
+    upsertDraft: 'mail:upsertDraft',
+    deleteDraft: 'mail:deleteDraft',
+    saveAttachment: 'mail:saveAttachment'
+  },
+  browser: {
+    listBookmarks: 'browser:listBookmarks',
+    addBookmark: 'browser:addBookmark',
+    deleteBookmark: 'browser:deleteBookmark',
+    listHistory: 'browser:listHistory',
+    addHistory: 'browser:addHistory',
+    clearHistory: 'browser:clearHistory'
+  },
+  files: {
+    importDropped: 'files:importDropped',
+    listAttachments: 'files:listAttachments',
+    revealAttachment: 'files:revealAttachment',
+    deleteAttachment: 'files:deleteAttachment',
+    pickOpen: 'files:pickOpen',
+    pickSave: 'files:pickSave'
   },
   ssh: {
     listHosts: 'ssh:listHosts',

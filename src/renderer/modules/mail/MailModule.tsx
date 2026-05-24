@@ -1,32 +1,43 @@
 /**
- * Mail — IMAP/SMTP via main process. Accounts list, inbox view, compose pane.
- * Credentials never leave the main process; the renderer only sees envelope + body text.
+ * Mail v2 — adds drafts (third left pane), outbound attachments via the
+ * native file picker, and inbound attachment download via the save-file dialog.
  */
 
 import { useCallback, useEffect, useState } from 'react';
 import type { MailAccount, MailMessage, MailMessageSummary } from '@shared/post-mvp-types';
+import type { MailDraft } from '../../../preload/api';
 import { useSettings } from '../../state/store';
 import { playMailAlert } from '../../audio/synth';
 import { toast } from '../../state/toasts';
+import { confirmDialog } from '../../state/dialogs';
+
+type LeftView = 'inbox' | 'drafts';
 
 export function MailModule(): JSX.Element {
   const [accounts, setAccounts] = useState<MailAccount[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [leftView, setLeftView] = useState<LeftView>('inbox');
   const [inbox, setInbox] = useState<MailMessageSummary[]>([]);
+  const [drafts, setDrafts] = useState<MailDraft[]>([]);
   const [selected, setSelected] = useState<MailMessage | null>(null);
   const [showSetup, setShowSetup] = useState(false);
-  const [showCompose, setShowCompose] = useState(false);
+  const [compose, setCompose] = useState<MailDraft | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const settings = useSettings((s) => s.settings);
 
   const loadAccounts = useCallback(async () => {
     const list = await window.api.mail.listAccounts();
     setAccounts(list);
-    if (!activeId && list.length > 0) setActiveId(list[0].id);
+    setActiveId((prev) => prev ?? list[0]?.id ?? null);
     if (list.length === 0) setShowSetup(true);
-  }, [activeId]);
-
+  }, []);
   useEffect(() => { void loadAccounts(); }, [loadAccounts]);
+
+  const refreshDrafts = useCallback(async () => {
+    if (!activeId) { setDrafts([]); return; }
+    setDrafts(await window.api.mail.listDrafts(activeId));
+  }, [activeId]);
+  useEffect(() => { void refreshDrafts(); }, [refreshDrafts]);
 
   const refreshInbox = useCallback(async () => {
     if (!activeId) return;
@@ -57,10 +68,41 @@ export function MailModule(): JSX.Element {
     }
   }
 
+  async function downloadAttachment(att: { filename: string; contentBase64?: string }): Promise<void> {
+    if (!att.contentBase64) return;
+    try {
+      const saved = await window.api.mail.saveAttachment({ filename: att.filename, contentBase64: att.contentBase64 });
+      if (saved) toast.success(`Saved ${saved}.`);
+    } catch (err) {
+      toast.error(`Save failed: ${(err as Error).message}`);
+    }
+  }
+
+  function openCompose(seed?: MailDraft): void {
+    if (!activeId) return;
+    setCompose(seed ?? {
+      id: `dr-${crypto.randomUUID()}`,
+      accountId: activeId,
+      to: '',
+      subject: '',
+      body: '',
+      attachments: [],
+      savedAt: new Date().toISOString()
+    });
+  }
+
+  async function deleteDraft(id: string): Promise<void> {
+    const ok = await confirmDialog('Delete this draft?', 'Delete draft');
+    if (!ok) return;
+    await window.api.mail.deleteDraft(id);
+    await refreshDrafts();
+    toast.success('Draft deleted.');
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div className="ga98-toolbar">
-        <button onClick={() => setShowCompose(true)} disabled={!activeId}>Compose</button>
+        <button onClick={() => openCompose()} disabled={!activeId} title="Ctrl/Cmd+N to compose">Compose</button>
         <button onClick={() => void refreshInbox()} disabled={!activeId}>Get mail</button>
         <select className="ga98-text" value={activeId ?? ''} onChange={(e) => { setActiveId(e.target.value || null); setInbox([]); setSelected(null); }}>
           <option value="">(no account)</option>
@@ -68,26 +110,49 @@ export function MailModule(): JSX.Element {
         </select>
         <button onClick={() => setShowSetup(true)}>Accounts…</button>
         <span style={{ flex: 1 }} />
+        <button data-active={leftView === 'inbox'} onClick={() => setLeftView('inbox')}>Inbox</button>
+        <button data-active={leftView === 'drafts'} onClick={() => { setLeftView('drafts'); void refreshDrafts(); }}>
+          Drafts ({drafts.length})
+        </button>
         <span style={{ fontSize: 11 }}>{busy ?? ''}</span>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', flex: 1, overflow: 'hidden' }}>
         <div className="ga98-pane">
-          <ul className="ga98-list">
-            {inbox.length === 0 && <li style={{ color: '#666' }}>No messages — click "Get mail".</li>}
-            {inbox.map((m) => (
-              <li key={m.uid} data-selected={selected?.uid === m.uid} onClick={() => void openMessage(m.uid)}>
-                <span style={{ width: 8 }}>{m.unseen ? '●' : ''}</span>
-                <div style={{ flex: 1, overflow: 'hidden' }}>
-                  <div style={{ fontWeight: m.unseen ? 'bold' : 'normal', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {m.from}
+          {leftView === 'inbox' ? (
+            <ul className="ga98-list">
+              {inbox.length === 0 && <li style={{ color: '#666' }}>No messages — click "Get mail".</li>}
+              {inbox.map((m) => (
+                <li key={m.uid} data-selected={selected?.uid === m.uid} onClick={() => void openMessage(m.uid)}>
+                  <span style={{ width: 8 }}>{m.unseen ? '●' : ''}</span>
+                  <div style={{ flex: 1, overflow: 'hidden' }}>
+                    <div style={{ fontWeight: m.unseen ? 'bold' : 'normal', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {m.from}
+                    </div>
+                    <div style={{ fontSize: 11, opacity: 0.8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {m.subject}
+                    </div>
                   </div>
-                  <div style={{ fontSize: 11, opacity: 0.8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {m.subject}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <ul className="ga98-list">
+              {drafts.length === 0 && <li style={{ color: '#666' }}>No drafts.</li>}
+              {drafts.map((d) => (
+                <li key={d.id} onClick={() => openCompose(d)}>
+                  <div style={{ flex: 1, overflow: 'hidden' }}>
+                    <div style={{ fontWeight: 'bold', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {d.to || '(no recipient)'}
+                    </div>
+                    <div style={{ fontSize: 11, opacity: 0.8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {d.subject || '(no subject)'} {d.attachments.length > 0 && `📎×${d.attachments.length}`}
+                    </div>
                   </div>
-                </div>
-              </li>
-            ))}
-          </ul>
+                  <button onClick={(e) => { e.stopPropagation(); void deleteDraft(d.id); }}>×</button>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
         <div className="ga98-pane" style={{ display: 'flex', flexDirection: 'column' }}>
           {selected ? (
@@ -96,31 +161,41 @@ export function MailModule(): JSX.Element {
                 <div><b>From:</b> {selected.from}</div>
                 <div><b>Subject:</b> {selected.subject}</div>
                 <div style={{ fontSize: 11, opacity: 0.7 }}>{new Date(selected.date).toLocaleString()}</div>
+                {selected.attachments.length > 0 && (
+                  <div style={{ marginTop: 4, fontSize: 11 }}>
+                    <b>Attachments:</b>{' '}
+                    {selected.attachments.map((a, i) => (
+                      <button
+                        key={i}
+                        onClick={() => void downloadAttachment(a)}
+                        style={{ marginRight: 4 }}
+                        title={`${a.contentType} · ${Math.ceil(a.size / 1024)} KB`}
+                      >
+                        📎 {a.filename}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
-              <pre style={{ flex: 1, overflow: 'auto', whiteSpace: 'pre-wrap', fontFamily: 'Courier New, monospace', fontSize: 12 }}>{selected.body}</pre>
+              <pre style={{ flex: 1, overflow: 'auto', whiteSpace: 'pre-wrap', fontFamily: 'Courier New, monospace', fontSize: 12 }}>
+                {selected.body}
+              </pre>
             </>
           ) : <p style={{ color: '#666' }}>Select a message to preview.</p>}
         </div>
       </div>
       {showSetup && <AccountSetup accounts={accounts} onClose={() => { setShowSetup(false); void loadAccounts(); }} />}
-      {showCompose && activeId && <Compose accountId={activeId} onClose={() => setShowCompose(false)} />}
+      {compose && <Compose draft={compose} onClose={(saved) => { setCompose(null); if (saved) void refreshDrafts(); }} />}
     </div>
   );
 }
 
 function AccountSetup({ accounts, onClose }: { accounts: MailAccount[]; onClose: () => void }): JSX.Element {
   const [draft, setDraft] = useState<MailAccount & { password: string }>({
-    id: '',
-    label: 'My Mail',
-    imapHost: 'imap.example.com',
-    imapPort: 993,
-    imapSecure: true,
-    smtpHost: 'smtp.example.com',
-    smtpPort: 465,
-    smtpSecure: true,
-    user: '',
-    passwordRef: '',
-    password: ''
+    id: '', label: 'My Mail',
+    imapHost: 'imap.example.com', imapPort: 993, imapSecure: true,
+    smtpHost: 'smtp.example.com', smtpPort: 465, smtpSecure: true,
+    user: '', passwordRef: '', password: ''
   });
   const [status, setStatus] = useState<string | null>(null);
 
@@ -141,7 +216,7 @@ function AccountSetup({ accounts, onClose }: { accounts: MailAccount[]; onClose:
   }
 
   return (
-    <div style={overlayStyle}>
+    <div className="ga98-dialog-veil">
       <div className="window" style={{ width: 440 }}>
         <div className="title-bar"><div className="title-bar-text">Mail account</div></div>
         <div className="window-body ga98-stack">
@@ -193,52 +268,103 @@ function AccountSetup({ accounts, onClose }: { accounts: MailAccount[]; onClose:
   );
 }
 
-function Compose({ accountId, onClose }: { accountId: string; onClose: () => void }): JSX.Element {
-  const [to, setTo] = useState('');
-  const [subject, setSubject] = useState('');
-  const [body, setBody] = useState('');
+function Compose({ draft: initial, onClose }: { draft: MailDraft; onClose: (savedAsDraft: boolean) => void }): JSX.Element {
+  const [draft, setDraft] = useState<MailDraft>(initial);
   const [sending, setSending] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
+
+  async function addAttachment(): Promise<void> {
+    try {
+      const paths = await window.api.files.pickOpen({ multi: true });
+      if (!paths.length) return;
+      const additions = paths.map((p) => ({
+        name: p.split(/[\\/]/).pop() ?? p,
+        path: p,
+        size: 0
+      }));
+      setDraft((d) => ({ ...d, attachments: [...d.attachments, ...additions] }));
+    } catch (err) {
+      toast.error(`Pick failed: ${(err as Error).message}`);
+    }
+  }
+
+  function removeAttachment(i: number): void {
+    setDraft((d) => ({ ...d, attachments: d.attachments.filter((_, idx) => idx !== i) }));
+  }
+
+  async function saveDraft(): Promise<void> {
+    setSavingDraft(true);
+    try {
+      await window.api.mail.upsertDraft({
+        id: draft.id,
+        accountId: draft.accountId,
+        to: draft.to,
+        subject: draft.subject,
+        body: draft.body,
+        attachments: draft.attachments
+      });
+      toast.success('Draft saved.');
+      onClose(true);
+    } catch (err) {
+      toast.error(`Save failed: ${(err as Error).message}`);
+    } finally {
+      setSavingDraft(false);
+    }
+  }
 
   async function send(): Promise<void> {
     setSending(true);
-    const r = await window.api.mail.send({ accountId, to, subject, body });
+    const r = await window.api.mail.send({
+      accountId: draft.accountId,
+      to: draft.to,
+      subject: draft.subject,
+      body: draft.body,
+      attachments: draft.attachments.map((a) => ({ path: a.path, filename: a.name }))
+    });
     setSending(false);
     if (r.ok) {
+      // Delete the draft on successful send (no point keeping it around)
+      try { await window.api.mail.deleteDraft(draft.id); } catch { /* ok if not yet saved */ }
       toast.success('Sent.');
-      onClose();
+      onClose(true);
     } else {
       toast.error(`Send failed: ${r.error}`);
     }
   }
 
   return (
-    <div style={overlayStyle}>
-      <div className="window" style={{ width: 600 }}>
+    <div className="ga98-dialog-veil">
+      <div className="window" style={{ width: 640 }}>
         <div className="title-bar"><div className="title-bar-text">Compose</div></div>
         <div className="window-body ga98-stack">
           <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: 4 }}>
             <label>To:</label>
-            <input className="ga98-text" value={to} onChange={(e) => setTo(e.target.value)} />
+            <input className="ga98-text" value={draft.to} onChange={(e) => setDraft({ ...draft, to: e.target.value })} />
             <label>Subject:</label>
-            <input className="ga98-text" value={subject} onChange={(e) => setSubject(e.target.value)} />
+            <input className="ga98-text" value={draft.subject} onChange={(e) => setDraft({ ...draft, subject: e.target.value })} />
           </div>
-          <textarea className="ga98-text" rows={12} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Message body…" />
+          <textarea className="ga98-text" rows={12} value={draft.body} onChange={(e) => setDraft({ ...draft, body: e.target.value })} placeholder="Message body…" />
+          <fieldset>
+            <legend>Attachments ({draft.attachments.length})</legend>
+            <ul className="ga98-list">
+              {draft.attachments.map((a, i) => (
+                <li key={i}>
+                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }} title={a.path}>📎 {a.name}</span>
+                  <button onClick={() => removeAttachment(i)}>×</button>
+                </li>
+              ))}
+            </ul>
+            <button onClick={() => void addAttachment()}>Add file…</button>
+          </fieldset>
           <div style={{ display: 'flex', gap: 4 }}>
-            <button onClick={() => void send()} disabled={sending || !to.trim() || !subject.trim()}>{sending ? 'Sending…' : 'Send'}</button>
-            <button onClick={onClose}>Cancel</button>
+            <button onClick={() => void send()} disabled={sending || !draft.to.trim() || !draft.subject.trim()}>
+              {sending ? 'Sending…' : 'Send'}
+            </button>
+            <button onClick={() => void saveDraft()} disabled={savingDraft}>{savingDraft ? 'Saving…' : 'Save draft'}</button>
+            <button onClick={() => onClose(false)}>Cancel</button>
           </div>
         </div>
       </div>
     </div>
   );
 }
-
-const overlayStyle: React.CSSProperties = {
-  position: 'absolute',
-  inset: 0,
-  background: 'rgba(0,0,0,0.3)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  zIndex: 50
-};

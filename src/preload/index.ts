@@ -31,7 +31,11 @@ const api = {
       ipcRenderer.invoke(channels.files.importDropped, id, list),
     listAttachments: (id: string) => ipcRenderer.invoke(channels.files.listAttachments, id),
     revealAttachment: (id: string, name: string) => ipcRenderer.invoke(channels.files.revealAttachment, id, name),
-    deleteAttachment: (id: string, name: string) => ipcRenderer.invoke(channels.files.deleteAttachment, id, name)
+    deleteAttachment: (id: string, name: string) => ipcRenderer.invoke(channels.files.deleteAttachment, id, name),
+    pickOpen: (opts?: { multi?: boolean; filters?: { name: string; extensions: string[] }[] }) =>
+      ipcRenderer.invoke(channels.files.pickOpen, opts),
+    pickSave: (opts?: { defaultName?: string; filters?: { name: string; extensions: string[] }[] }) =>
+      ipcRenderer.invoke(channels.files.pickSave, opts)
   },
   notes: {
     list: (id: string) => ipcRenderer.invoke(channels.notes.list, id),
@@ -75,7 +79,19 @@ const api = {
     testAccount: (input: unknown) => ipcRenderer.invoke(channels.mail.testAccount, input),
     fetchInbox: (id: string, limit?: number) => ipcRenderer.invoke(channels.mail.fetchInbox, id, limit),
     fetchMessage: (id: string, uid: number) => ipcRenderer.invoke(channels.mail.fetchMessage, id, uid),
-    send: (input: unknown) => ipcRenderer.invoke(channels.mail.send, input)
+    send: (input: unknown) => ipcRenderer.invoke(channels.mail.send, input),
+    listDrafts: (accountId?: string) => ipcRenderer.invoke(channels.mail.listDrafts, accountId),
+    upsertDraft: (input: unknown) => ipcRenderer.invoke(channels.mail.upsertDraft, input),
+    deleteDraft: (id: string) => ipcRenderer.invoke(channels.mail.deleteDraft, id),
+    saveAttachment: (input: { filename: string; contentBase64: string }) => ipcRenderer.invoke(channels.mail.saveAttachment, input)
+  },
+  browser: {
+    listBookmarks: () => ipcRenderer.invoke(channels.browser.listBookmarks),
+    addBookmark: (title: string, url: string) => ipcRenderer.invoke(channels.browser.addBookmark, title, url),
+    deleteBookmark: (id: string) => ipcRenderer.invoke(channels.browser.deleteBookmark, id),
+    listHistory: (limit?: number) => ipcRenderer.invoke(channels.browser.listHistory, limit),
+    addHistory: (url: string, title: string) => ipcRenderer.invoke(channels.browser.addHistory, url, title),
+    clearHistory: () => ipcRenderer.invoke(channels.browser.clearHistory)
   },
   ssh: {
     listHosts: () => ipcRenderer.invoke(channels.ssh.listHosts),

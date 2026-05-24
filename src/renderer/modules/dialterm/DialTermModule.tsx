@@ -44,6 +44,34 @@ export function DialTermModule(): JSX.Element {
   }, []);
   useEffect(() => { void loadHosts(); }, [loadHosts]);
 
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
+
+  async function doCopy(): Promise<void> {
+    const term = termInstance.current;
+    if (!term) return;
+    const sel = term.getSelection();
+    if (!sel) { setCtxMenu(null); return; }
+    try {
+      await navigator.clipboard.writeText(sel);
+      toast.success('Copied.');
+    } catch (err) {
+      toast.error(`Copy failed: ${(err as Error).message}`);
+    }
+    setCtxMenu(null);
+  }
+
+  async function doPaste(): Promise<void> {
+    const sid = sessionIdRef.current;
+    if (!sid) { setCtxMenu(null); return; }
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) await window.api.ssh.write(sid, text);
+    } catch (err) {
+      toast.error(`Paste failed: ${(err as Error).message}`);
+    }
+    setCtxMenu(null);
+  }
+
   // mount xterm when we move to 'open'
   useEffect(() => {
     if (state !== 'open' || !termRef.current || termInstance.current) return;
@@ -57,6 +85,14 @@ export function DialTermModule(): JSX.Element {
     term.onData((d) => {
       const sid = sessionIdRef.current;
       if (sid) void window.api.ssh.write(sid, d);
+    });
+    // Ctrl+Shift+C / Ctrl+Shift+V (or Cmd+C / Cmd+V on macOS when selection exists)
+    term.attachCustomKeyEventHandler((e) => {
+      if (e.type !== 'keydown') return true;
+      const cmd = e.ctrlKey || e.metaKey;
+      if (cmd && e.shiftKey && e.key.toLowerCase() === 'c') { void doCopy(); return false; }
+      if (cmd && e.shiftKey && e.key.toLowerCase() === 'v') { void doPaste(); return false; }
+      return true;
     });
     const onResize = (): void => {
       try {
@@ -155,7 +191,14 @@ export function DialTermModule(): JSX.Element {
         <span style={{ flex: 1 }} />
         <span style={{ fontSize: 11 }}>{state.toUpperCase()}{activeHost ? ` · ${activeHost.host}:${activeHost.port}` : ''}{sessionId ? ` · ${sessionId.slice(0, 8)}` : ''}</span>
       </div>
-      <div style={{ flex: 1, background: '#000', color: '#aaffaa', padding: 4, overflow: 'hidden', position: 'relative' }}>
+      <div
+        style={{ flex: 1, background: '#000', color: '#aaffaa', padding: 4, overflow: 'hidden', position: 'relative' }}
+        onContextMenu={(e) => {
+          if (state !== 'open') return;
+          e.preventDefault();
+          setCtxMenu({ x: e.clientX, y: e.clientY });
+        }}
+      >
         {state === 'open' ? (
           <div ref={termRef} style={{ width: '100%', height: '100%' }} />
         ) : (
@@ -169,6 +212,19 @@ export function DialTermModule(): JSX.Element {
         )}
       </div>
       {showSetup && <HostSetup hosts={hosts} onClose={() => { setShowSetup(false); void loadHosts(); }} />}
+      {ctxMenu && (
+        <>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 29999 }} onMouseDown={() => setCtxMenu(null)} />
+          <div className="ga98-context-menu" style={{ left: ctxMenu.x, top: ctxMenu.y }}>
+            <button className="ga98-context-menu-item" onClick={() => void doCopy()}>
+              Copy <span style={{ opacity: 0.7, marginLeft: 8 }}>Ctrl+Shift+C</span>
+            </button>
+            <button className="ga98-context-menu-item" onClick={() => void doPaste()}>
+              Paste <span style={{ opacity: 0.7, marginLeft: 8 }}>Ctrl+Shift+V</span>
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

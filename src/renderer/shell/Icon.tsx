@@ -51,7 +51,8 @@ const GLYPHS: Record<ModuleKey, string> = {
   mail: '✉',
   dialterm: '📞',
   eyespy: '📷',
-  'ai-assistant': '✨'
+  'ai-assistant': '✨',
+  help: '?'
 };
 
 export function glyphFor(m: ModuleKey): string {

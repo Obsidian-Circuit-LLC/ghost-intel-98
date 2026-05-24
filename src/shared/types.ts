@@ -104,6 +104,9 @@ export interface AppSettings {
   themeIntensity: 'lite' | 'classic' | 'maximum';
   startupSoundEnabled: boolean;
   caseFolderOverride: string | null;
+  hasSeenWelcome: boolean;
+  caseSortBy: 'updatedAt' | 'createdAt' | 'priority' | 'status' | 'title';
+  caseSortDir: 'asc' | 'desc';
   shortcuts: AccessShortcut[];
   ai: {
     provider: 'ollama' | 'openai-compatible' | 'none';
@@ -132,6 +135,7 @@ export const defaultShortcuts: AccessShortcut[] = [
   { id: 'reminders', label: 'Reminders', kind: 'module', target: 'reminders', icon: 'bell' },
   { id: 'alarm', label: 'Alarm', kind: 'module', target: 'alarm', icon: 'alarm' },
   { id: 'ai', label: 'AI Assistant', kind: 'module', target: 'ai-assistant', icon: 'sparkle' },
+  { id: 'help', label: 'Help', kind: 'module', target: 'help', icon: 'help' },
   { id: 'settings', label: 'Settings', kind: 'module', target: 'settings', icon: 'gear' }
 ];
 
@@ -140,6 +144,9 @@ export const defaultSettings: AppSettings = {
   themeIntensity: 'classic',
   startupSoundEnabled: true,
   caseFolderOverride: null,
+  hasSeenWelcome: false,
+  caseSortBy: 'updatedAt',
+  caseSortDir: 'desc',
   shortcuts: defaultShortcuts,
   ai: {
     provider: 'none',

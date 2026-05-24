@@ -4,11 +4,27 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { CaseRecord, CaseSummary, CasePriority, CaseStatus } from '@shared/types';
+import type { CaseRecord, CaseSummary, CasePriority, CaseStatus, AppSettings } from '@shared/types';
 import { CaseDetail } from './CaseDetail';
 import { confirmDialog, promptDialog } from '../../state/dialogs';
 import { toast } from '../../state/toasts';
 import { shortcutBus, type ShortcutEventDetail } from '../../shell/Shortcuts';
+import { useSettings } from '../../state/store';
+
+const PRIORITY_ORDER: Record<CasePriority, number> = { critical: 3, high: 2, medium: 1, low: 0 };
+const STATUS_ORDER: Record<CaseStatus, number> = { new: 4, open: 3, pending: 2, closed: 1, archived: 0 };
+
+function compareCases(a: CaseSummary, b: CaseSummary, by: AppSettings['caseSortBy'], dir: AppSettings['caseSortDir']): number {
+  let cmp = 0;
+  switch (by) {
+    case 'updatedAt': cmp = b.updatedAt.localeCompare(a.updatedAt); break;
+    case 'createdAt': cmp = b.createdAt.localeCompare(a.createdAt); break;
+    case 'title':     cmp = a.title.localeCompare(b.title); break;
+    case 'priority':  cmp = PRIORITY_ORDER[b.priority] - PRIORITY_ORDER[a.priority]; break;
+    case 'status':    cmp = STATUS_ORDER[b.status] - STATUS_ORDER[a.status]; break;
+  }
+  return dir === 'asc' ? -cmp : cmp;
+}
 
 export function CasesModule(): JSX.Element {
   const [cases, setCases] = useState<CaseSummary[]>([]);
@@ -34,18 +50,24 @@ export function CasesModule(): JSX.Element {
     void window.api.cases.read(selectedId).then(setDetail).catch(() => setDetail(null));
   }, [selectedId]);
 
+  const sortBy = useSettings((s) => s.settings?.caseSortBy ?? 'updatedAt');
+  const sortDir = useSettings((s) => s.settings?.caseSortDir ?? 'desc');
+  const patchSettings = useSettings((s) => s.patch);
+
   const visible = useMemo(() => {
-    return cases.filter((c) => {
-      if (!showArchived && c.archived) return false;
-      if (!filter.trim()) return true;
-      const q = filter.toLowerCase();
-      return (
-        c.title.toLowerCase().includes(q) ||
-        c.reference.toLowerCase().includes(q) ||
-        c.tags.some((t) => t.toLowerCase().includes(q))
-      );
-    });
-  }, [cases, filter, showArchived]);
+    return cases
+      .filter((c) => {
+        if (!showArchived && c.archived) return false;
+        if (!filter.trim()) return true;
+        const q = filter.toLowerCase();
+        return (
+          c.title.toLowerCase().includes(q) ||
+          c.reference.toLowerCase().includes(q) ||
+          c.tags.some((t) => t.toLowerCase().includes(q))
+        );
+      })
+      .sort((a, b) => compareCases(a, b, sortBy, sortDir));
+  }, [cases, filter, showArchived, sortBy, sortDir]);
 
   const createCase = useCallback(async (): Promise<void> => {
     const title = await promptDialog('Case title?', '', 'New case', 'e.g. Smith v. Acme');
@@ -127,7 +149,7 @@ export function CasesModule(): JSX.Element {
       <div className="ga98-pane">
         <div className="ga98-stack" style={{ padding: 0 }}>
           <div style={{ display: 'flex', gap: 4 }}>
-            <button onClick={() => void createCase()}>New</button>
+            <button onClick={() => void createCase()} title="Ctrl/Cmd+N">New</button>
             <button disabled={!selectedId} onClick={() => void renameSelected()}>Rename</button>
             <button disabled={!selectedId} onClick={() => void deleteSelected()}>Delete</button>
           </div>
@@ -137,6 +159,23 @@ export function CasesModule(): JSX.Element {
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
           />
+          <div style={{ display: 'flex', gap: 4, alignItems: 'center', fontSize: 11 }}>
+            <label>Sort:</label>
+            <select className="ga98-text" value={sortBy} onChange={(e) => void patchSettings({ caseSortBy: e.target.value as AppSettings['caseSortBy'] })}>
+              <option value="updatedAt">Updated</option>
+              <option value="createdAt">Created</option>
+              <option value="title">Title</option>
+              <option value="priority">Priority</option>
+              <option value="status">Status</option>
+            </select>
+            <button
+              title={`Sort direction: ${sortDir === 'asc' ? 'ascending' : 'descending'}`}
+              onClick={() => void patchSettings({ caseSortDir: sortDir === 'asc' ? 'desc' : 'asc' })}
+              style={{ minWidth: 28 }}
+            >
+              {sortDir === 'asc' ? '↑' : '↓'}
+            </button>
+          </div>
           <label style={{ fontSize: 11 }}>
             <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} /> Show archived
           </label>

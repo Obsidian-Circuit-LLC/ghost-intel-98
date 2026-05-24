@@ -14,7 +14,9 @@
  *    for broken cases, in addition to the toast.
  */
 
-import { app, ipcMain, shell, BrowserWindow } from 'electron';
+import { app, ipcMain, shell, dialog, BrowserWindow } from 'electron';
+import { writeFile } from 'node:fs/promises';
+import { basename } from 'node:path';
 import { channels } from '@shared/ipc-contracts';
 import type { MailAccount, MailSendInput, SshHostProfile, AiChatRequest } from '@shared/post-mvp-types';
 import {
@@ -32,6 +34,8 @@ import * as mail from '../services/mail';
 import * as ssh from '../services/ssh';
 import * as streams from '../services/streams';
 import * as ai from '../services/ai';
+import * as bookmarks from '../storage/bookmarks';
+import * as history from '../storage/history';
 import { ensureUuid, ensureFileName, validateExternalUrl } from '../security/validate';
 import { getSecretBackend } from '../secrets';
 import { homedir } from 'node:os';
@@ -119,6 +123,23 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     const path = fileStore.attachmentAbsolutePath(id, name);
     shell.showItemInFolder(path);
   });
+  safeHandle(channels.files.pickOpen, async (...args) => {
+    const opts = (args[0] as { multi?: boolean; filters?: { name: string; extensions: string[] }[] }) ?? {};
+    const win = getWindow();
+    const result = win
+      ? await dialog.showOpenDialog(win, { properties: opts.multi ? ['openFile', 'multiSelections'] : ['openFile'], filters: opts.filters })
+      : await dialog.showOpenDialog({ properties: opts.multi ? ['openFile', 'multiSelections'] : ['openFile'], filters: opts.filters });
+    if (result.canceled) return [];
+    return result.filePaths;
+  });
+  safeHandle(channels.files.pickSave, async (...args) => {
+    const opts = (args[0] as { defaultName?: string; filters?: { name: string; extensions: string[] }[] }) ?? {};
+    const win = getWindow();
+    const result = win
+      ? await dialog.showSaveDialog(win, { defaultPath: opts.defaultName, filters: opts.filters })
+      : await dialog.showSaveDialog({ defaultPath: opts.defaultName, filters: opts.filters });
+    return result.canceled ? null : (result.filePath ?? null);
+  });
 
   // ---- notes ----
   safeHandle(channels.notes.list, (...args) => noteStore.list(ensureUuid(args[0], 'caseId')));
@@ -145,6 +166,28 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.mail.fetchInbox, (...args) => mail.fetchInbox(args[0] as string, args[1] as number | undefined));
   safeHandle(channels.mail.fetchMessage, (...args) => mail.fetchMessage(args[0] as string, args[1] as number));
   safeHandle(channels.mail.send, (...args) => mail.sendMail(args[0] as MailSendInput));
+  safeHandle(channels.mail.listDrafts, (...args) => mail.listDrafts(args[0] as string | undefined));
+  safeHandle(channels.mail.upsertDraft, (...args) => mail.upsertDraft(args[0] as Parameters<typeof mail.upsertDraft>[0]));
+  safeHandle(channels.mail.deleteDraft, (...args) => mail.deleteDraft(args[0] as string));
+  safeHandle(channels.mail.saveAttachment, async (...args) => {
+    const { filename, contentBase64 } = args[0] as { filename: string; contentBase64: string };
+    const safeDefault = filename.replace(/[\\/:*?"<>|]/g, '_');
+    const win = getWindow();
+    const result = win
+      ? await dialog.showSaveDialog(win, { defaultPath: safeDefault })
+      : await dialog.showSaveDialog({ defaultPath: safeDefault });
+    if (result.canceled || !result.filePath) return null;
+    await writeFile(result.filePath, Buffer.from(contentBase64, 'base64'));
+    return basename(result.filePath);
+  });
+
+  // ---- browser (bookmarks + history) ----
+  safeHandle(channels.browser.listBookmarks, () => bookmarks.list());
+  safeHandle(channels.browser.addBookmark, (...args) => bookmarks.add(args[0] as string, args[1] as string));
+  safeHandle(channels.browser.deleteBookmark, (...args) => bookmarks.remove(args[0] as string));
+  safeHandle(channels.browser.listHistory, (...args) => history.list(args[0] as number | undefined));
+  safeHandle(channels.browser.addHistory, (...args) => history.add(args[0] as string, args[1] as string));
+  safeHandle(channels.browser.clearHistory, () => history.clear());
 
   // ---- ssh ----
   safeHandle(channels.ssh.listHosts, () => ssh.listHosts());

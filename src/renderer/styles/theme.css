@@ -515,3 +515,127 @@ input.ga98-text, select.ga98-text {
   text-align: center;
   font-size: 11px;
 }
+
+/* Net Explorer tabs */
+.ga98-tabbar {
+  display: flex;
+  align-items: end;
+  padding: 4px 4px 0 4px;
+  gap: 2px;
+  background: var(--ga98-grey);
+  border-bottom: 1px solid var(--ga98-shadow-dark);
+  overflow-x: auto;
+}
+
+.ga98-tab {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  background: #d4d0c8;
+  border-top: 2px solid var(--ga98-shadow-light);
+  border-left: 2px solid var(--ga98-shadow-light);
+  border-right: 2px solid var(--ga98-shadow-dark);
+  border-bottom: 0;
+  cursor: pointer;
+  max-width: 220px;
+  min-width: 120px;
+  font-size: 11px;
+}
+
+.ga98-tab[data-active='true'] {
+  background: var(--ga98-grey);
+  font-weight: bold;
+  position: relative;
+  z-index: 1;
+}
+
+.ga98-tab-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ga98-tab-close {
+  min-width: 0;
+  padding: 0 4px;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.ga98-tab-new {
+  min-width: 0;
+  padding: 2px 8px;
+  font-weight: bold;
+}
+
+/* Bookmark bar */
+.ga98-bookmark-bar {
+  display: flex;
+  gap: 2px;
+  padding: 2px 4px;
+  background: var(--ga98-grey);
+  border-bottom: 1px solid var(--ga98-shadow-dark);
+  overflow-x: auto;
+}
+
+.ga98-bookmark {
+  min-width: 0;
+  padding: 1px 8px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+/* DialTerm context menu */
+.ga98-context-menu {
+  position: fixed;
+  background: var(--ga98-grey);
+  border-top: 2px solid var(--ga98-shadow-light);
+  border-left: 2px solid var(--ga98-shadow-light);
+  border-right: 2px solid var(--ga98-shadow-dark);
+  border-bottom: 2px solid var(--ga98-shadow-dark);
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.4);
+  z-index: 30000;
+  padding: 2px;
+  min-width: 140px;
+}
+
+.ga98-context-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 4px 12px;
+  font: inherit;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.ga98-context-menu-item:hover {
+  background: var(--ga98-blue);
+  color: #fff;
+}
+
+/* Welcome overlay */
+.ga98-welcome-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 32, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 25000;
+}
+
+.ga98-welcome-window {
+  width: 560px;
+  max-width: 90vw;
+}
+
+/* Calendar day cell hover for drag-create affordance */
+.ga98-grid-calendar > div[data-clickable='true']:hover {
+  background: #ffe;
+  cursor: copy;
+}

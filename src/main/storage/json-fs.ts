@@ -606,7 +606,10 @@ function mergeSettings(base: AppSettings, patch: Partial<AppSettings>): AppSetti
     ai: { ...base.ai, ...(patch.ai ?? {}) },
     mail: { ...base.mail, ...(patch.mail ?? {}) },
     browser: { ...base.browser, ...(patch.browser ?? {}) },
-    shortcuts: patch.shortcuts ?? base.shortcuts
+    shortcuts: patch.shortcuts ?? base.shortcuts,
+    hasSeenWelcome: patch.hasSeenWelcome ?? base.hasSeenWelcome,
+    caseSortBy: patch.caseSortBy ?? base.caseSortBy,
+    caseSortDir: patch.caseSortDir ?? base.caseSortDir
   };
 }
 

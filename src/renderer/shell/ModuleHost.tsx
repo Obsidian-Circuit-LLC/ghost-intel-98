@@ -16,6 +16,7 @@ import { MailModule } from '../modules/mail/MailModule';
 import { DialTermModule } from '../modules/dialterm/DialTermModule';
 import { EyeSpyModule } from '../modules/eyespy/EyeSpyModule';
 import { AiAssistantModule } from '../modules/ai-assistant/AiAssistantModule';
+import { HelpModule } from '../modules/help/HelpModule';
 import { ComingSoon } from '../modules/coming-soon/ComingSoon';
 
 export function ModuleHost({ spec }: { spec: WindowSpec }): JSX.Element {
@@ -44,6 +45,8 @@ export function ModuleHost({ spec }: { spec: WindowSpec }): JSX.Element {
       return <EyeSpyModule />;
     case 'ai-assistant':
       return <AiAssistantModule />;
+    case 'help':
+      return <HelpModule />;
     default:
       return <ComingSoon name={spec.module} detail="No module registered for this key." />;
   }

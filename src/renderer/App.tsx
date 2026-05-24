@@ -12,6 +12,7 @@ import { ModuleHost } from './shell/ModuleHost';
 import { DialogHost } from './shell/Dialog';
 import { Toaster } from './shell/Toaster';
 import { Shortcuts } from './shell/Shortcuts';
+import { Welcome } from './shell/Welcome';
 import { playStartup, playReminder } from './audio/synth';
 import { toast } from './state/toasts';
 
@@ -88,6 +89,7 @@ export function App(): JSX.Element {
       <Taskbar />
       <Toaster />
       <DialogHost />
+      <Welcome />
     </div>
   );
 }

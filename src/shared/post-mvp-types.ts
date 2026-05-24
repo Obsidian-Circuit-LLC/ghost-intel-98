@@ -31,8 +31,25 @@ export interface MailMessageSummary {
   unseen: boolean;
 }
 
+export interface MailAttachment {
+  filename: string;
+  contentType: string;
+  size: number;
+  /** Base64-encoded content. Only populated on demand for inbound mail. */
+  contentBase64?: string;
+}
+
 export interface MailMessage extends MailMessageSummary {
   body: string;
+  html?: string;
+  attachments: MailAttachment[];
+}
+
+export interface MailSendAttachment {
+  /** Absolute path on disk to attach. */
+  path: string;
+  /** Optional override filename — defaults to basename(path). */
+  filename?: string;
 }
 
 export interface MailSendInput {
@@ -40,6 +57,7 @@ export interface MailSendInput {
   to: string;
   subject: string;
   body: string;
+  attachments?: MailSendAttachment[];
 }
 
 // ---------- DialTerm (SSH) ----------

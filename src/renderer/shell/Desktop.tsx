@@ -27,7 +27,8 @@ const moduleTitles: Record<ModuleKey, string> = {
   mail: 'Mail',
   dialterm: 'DialTerm',
   eyespy: 'EyeSpy',
-  'ai-assistant': 'AI Assistant'
+  'ai-assistant': 'AI Assistant',
+  help: 'Help'
 };
 
 export function Desktop(): JSX.Element {

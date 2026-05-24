@@ -18,7 +18,8 @@ export type ModuleKey =
   | 'mail'
   | 'dialterm'
   | 'eyespy'
-  | 'ai-assistant';
+  | 'ai-assistant'
+  | 'help';
 
 export interface WindowSpec {
   id: string;
