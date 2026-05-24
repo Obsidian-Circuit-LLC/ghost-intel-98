@@ -15,7 +15,7 @@
  */
 
 import { app, ipcMain, shell, dialog, BrowserWindow } from 'electron';
-import { writeFile } from 'node:fs/promises';
+import { writeFile, rename, lstat, rm } from 'node:fs/promises';
 import { basename } from 'node:path';
 import { channels } from '@shared/ipc-contracts';
 import type { MailAccount, MailSendInput, SshHostProfile, AiChatRequest } from '@shared/post-mvp-types';
@@ -36,9 +36,12 @@ import * as streams from '../services/streams';
 import * as ai from '../services/ai';
 import * as bookmarks from '../storage/bookmarks';
 import * as history from '../storage/history';
-import { ensureUuid, ensureFileName, validateExternalUrl } from '../security/validate';
+import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault } from '../security/validate';
+import { markConsented, assertAllConsented } from '../security/consent';
 import { getSecretBackend } from '../secrets';
 import { homedir } from 'node:os';
+
+const MAX_SAVE_ATTACHMENT_BYTES = 64 * 1024 * 1024; // 64 MB cap on base64 decoded payload
 
 type Handler = (...args: unknown[]) => unknown | Promise<unknown>;
 
@@ -124,20 +127,25 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     shell.showItemInFolder(path);
   });
   safeHandle(channels.files.pickOpen, async (...args) => {
-    const opts = (args[0] as { multi?: boolean; filters?: { name: string; extensions: string[] }[] }) ?? {};
+    const opts = (args[0] as { multi?: boolean; filters?: unknown }) ?? {};
+    const filters = validatePickFilters(opts.filters);
     const win = getWindow();
     const result = win
-      ? await dialog.showOpenDialog(win, { properties: opts.multi ? ['openFile', 'multiSelections'] : ['openFile'], filters: opts.filters })
-      : await dialog.showOpenDialog({ properties: opts.multi ? ['openFile', 'multiSelections'] : ['openFile'], filters: opts.filters });
+      ? await dialog.showOpenDialog(win, { properties: opts.multi ? ['openFile', 'multiSelections'] : ['openFile'], filters })
+      : await dialog.showOpenDialog({ properties: opts.multi ? ['openFile', 'multiSelections'] : ['openFile'], filters });
     if (result.canceled) return [];
+    // Mark paths as consented for downstream IPC (mail.send) — user picked these via the dialog.
+    markConsented(result.filePaths);
     return result.filePaths;
   });
   safeHandle(channels.files.pickSave, async (...args) => {
-    const opts = (args[0] as { defaultName?: string; filters?: { name: string; extensions: string[] }[] }) ?? {};
+    const opts = (args[0] as { defaultName?: string; filters?: unknown }) ?? {};
+    const filters = validatePickFilters(opts.filters);
     const win = getWindow();
+    const safeDefault = opts.defaultName ? sanitiseSaveDefault(opts.defaultName) : undefined;
     const result = win
-      ? await dialog.showSaveDialog(win, { defaultPath: opts.defaultName, filters: opts.filters })
-      : await dialog.showSaveDialog({ defaultPath: opts.defaultName, filters: opts.filters });
+      ? await dialog.showSaveDialog(win, { defaultPath: safeDefault, filters })
+      : await dialog.showSaveDialog({ defaultPath: safeDefault, filters });
     return result.canceled ? null : (result.filePath ?? null);
   });
 
@@ -167,26 +175,83 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.mail.fetchMessage, (...args) => mail.fetchMessage(args[0] as string, args[1] as number));
   safeHandle(channels.mail.send, (...args) => mail.sendMail(args[0] as MailSendInput));
   safeHandle(channels.mail.listDrafts, (...args) => mail.listDrafts(args[0] as string | undefined));
-  safeHandle(channels.mail.upsertDraft, (...args) => mail.upsertDraft(args[0] as Parameters<typeof mail.upsertDraft>[0]));
+  safeHandle(channels.mail.upsertDraft, (...args) => {
+    // CRITICAL: validate attachment paths at draft-write time, not just send time.
+    // Without this, a compromised renderer can upsertDraft({path:'/etc/shadow'}) →
+    // listDrafts auto-consents → send exfils. Round-3 audit Critical N1.
+    const input = args[0] as Parameters<typeof mail.upsertDraft>[0];
+    const paths = (input.attachments ?? []).map((a) => a.path);
+    assertAllConsented(paths, 'draft attachment');
+    return mail.upsertDraft(input);
+  });
   safeHandle(channels.mail.deleteDraft, (...args) => mail.deleteDraft(args[0] as string));
   safeHandle(channels.mail.saveAttachment, async (...args) => {
     const { filename, contentBase64 } = args[0] as { filename: string; contentBase64: string };
-    const safeDefault = filename.replace(/[\\/:*?"<>|]/g, '_');
+    if (typeof contentBase64 !== 'string') throw new Error('contentBase64 must be a string');
+    // Cap before Buffer allocation — protects main from OOM via crafted oversize payloads.
+    // Base64 inflates by ~4/3; the decoded byte limit is the inflated string limit / 4 * 3.
+    if (contentBase64.length > Math.ceil(MAX_SAVE_ATTACHMENT_BYTES * 4 / 3)) {
+      throw new Error(`Attachment exceeds the ${MAX_SAVE_ATTACHMENT_BYTES} byte download limit`);
+    }
+    const safeDefault = sanitiseSaveDefault(filename || 'attachment');
     const win = getWindow();
     const result = win
       ? await dialog.showSaveDialog(win, { defaultPath: safeDefault })
       : await dialog.showSaveDialog({ defaultPath: safeDefault });
     if (result.canceled || !result.filePath) return null;
-    await writeFile(result.filePath, Buffer.from(contentBase64, 'base64'));
+    // Symlink guard: if the destination exists as a symlink, refuse — the user
+    // could be tricked into overwriting a planted target outside their intent.
+    try {
+      const st = await lstat(result.filePath);
+      if (st.isSymbolicLink()) {
+        throw new Error('Refusing to save to a symbolic link — choose a different filename.');
+      }
+    } catch (err) {
+      const e = err as NodeJS.ErrnoException;
+      if (e.code !== 'ENOENT') throw err;
+    }
+    // Atomic write via temp + rename so a crash doesn't leave a truncated file.
+    const tmp = `${result.filePath}.${process.pid}.tmp`;
+    try {
+      await writeFile(tmp, Buffer.from(contentBase64, 'base64'));
+      await rename(tmp, result.filePath);
+    } catch (err) {
+      try { await rm(tmp, { force: true }); } catch { /* nothing */ }
+      throw err;
+    }
     return basename(result.filePath);
   });
 
   // ---- browser (bookmarks + history) ----
-  safeHandle(channels.browser.listBookmarks, () => bookmarks.list());
-  safeHandle(channels.browser.addBookmark, (...args) => bookmarks.add(args[0] as string, args[1] as string));
+  // Re-validate every bookmark URL on read — defends against legacy entries persisted
+  // before v2.0.1 hardening, and against direct edits of bookmarks.json. Round-3 audit N2.
+  safeHandle(channels.browser.listBookmarks, async () => {
+    const all = await bookmarks.list();
+    const out: typeof all = [];
+    for (const bm of all) {
+      try {
+        validateBookmarkUrl(bm.url);
+        out.push(bm);
+      } catch {
+        // eslint-disable-next-line no-console
+        console.warn('[bookmarks.list] dropping invalid', bm.id, bm.url);
+      }
+    }
+    return out;
+  });
+  safeHandle(channels.browser.addBookmark, (...args) => {
+    const title = (args[0] as string ?? '').slice(0, 200).trim() || '(untitled)';
+    const url = validateBookmarkUrl(args[1] as string);
+    return bookmarks.add(title, url);
+  });
   safeHandle(channels.browser.deleteBookmark, (...args) => bookmarks.remove(args[0] as string));
   safeHandle(channels.browser.listHistory, (...args) => history.list(args[0] as number | undefined));
-  safeHandle(channels.browser.addHistory, (...args) => history.add(args[0] as string, args[1] as string));
+  safeHandle(channels.browser.addHistory, (...args) => {
+    let url = String(args[0] ?? '').slice(0, 2048);
+    const title = String(args[1] ?? '').slice(0, 256);
+    if (!url || url === 'about:blank' || url.startsWith('chrome-error://') || url.startsWith('chrome://')) return;
+    return history.add(url, title);
+  });
   safeHandle(channels.browser.clearHistory, () => history.clear());
 
   // ---- ssh ----

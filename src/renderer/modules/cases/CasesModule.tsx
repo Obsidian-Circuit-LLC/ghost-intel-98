@@ -14,12 +14,15 @@ import { useSettings } from '../../state/store';
 const PRIORITY_ORDER: Record<CasePriority, number> = { critical: 3, high: 2, medium: 1, low: 0 };
 const STATUS_ORDER: Record<CaseStatus, number> = { new: 4, open: 3, pending: 2, closed: 1, archived: 0 };
 
+/** Every cmp expression is written in "natural descending" orientation (b first =
+ *  positive) so the final `dir === 'asc' ? -cmp : cmp` flip works uniformly.
+ *  title uses fixed 'en' locale + base sensitivity so cross-locale rendering is stable. */
 function compareCases(a: CaseSummary, b: CaseSummary, by: AppSettings['caseSortBy'], dir: AppSettings['caseSortDir']): number {
   let cmp = 0;
   switch (by) {
     case 'updatedAt': cmp = b.updatedAt.localeCompare(a.updatedAt); break;
     case 'createdAt': cmp = b.createdAt.localeCompare(a.createdAt); break;
-    case 'title':     cmp = a.title.localeCompare(b.title); break;
+    case 'title':     cmp = b.title.localeCompare(a.title, 'en', { sensitivity: 'base' }); break;
     case 'priority':  cmp = PRIORITY_ORDER[b.priority] - PRIORITY_ORDER[a.priority]; break;
     case 'status':    cmp = STATUS_ORDER[b.status] - STATUS_ORDER[a.status]; break;
   }

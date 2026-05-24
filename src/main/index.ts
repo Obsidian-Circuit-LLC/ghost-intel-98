@@ -9,7 +9,7 @@
  *  - permission request handler denies camera/mic/geo/notifications by default
  */
 
-import { app, BrowserWindow, shell } from 'electron';
+import { app, BrowserWindow, session, shell } from 'electron';
 import { join } from 'node:path';
 import { ensureDataLayout } from './storage/paths';
 import { registerIpc, startReminderTicker } from './ipc/register';
@@ -55,6 +55,19 @@ function createWindow(): void {
       }
     } catch { /* malformed URL — drop */ }
     return { action: 'deny' };
+  });
+
+  // Main-window-only permission allowlist for clipboard access (DialTerm paste needs it).
+  // Round-3 audit Critical H5 fix: previous attempt in lockDownWebContents had a startup
+  // race where `mainWindow` was still null when web-contents-created fired synchronously
+  // from new BrowserWindow(). Setting it directly on mainWindow.webContents.session here
+  // runs AFTER construction so there is no race.
+  mainWindow.webContents.session.setPermissionRequestHandler((_wc, permission, callback) => {
+    if (permission === 'clipboard-read' || (permission as string) === 'clipboard-sanitized-write') {
+      callback(true);
+      return;
+    }
+    callback(false);
   });
 
   if (isDev && process.env['ELECTRON_RENDERER_URL']) {
@@ -107,7 +120,9 @@ function lockDownWebContents(): void {
       } catch { /* drop */ }
       return { action: 'deny' };
     });
-    contents.session.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
+    // Permission handlers are set on sessions, not on each webContents — see
+    // createWindow() (main window's session) and lockDownPartitionSessions()
+    // (the persist:netexplorer session used by Net Explorer tabs).
     // Forbid in-place navigation away from the original origin via main-process redirect tricks.
     contents.on('will-navigate', (e, url) => {
       try {
@@ -122,11 +137,21 @@ function lockDownWebContents(): void {
   });
 }
 
+/** Lock down the webview-tab partition session (camera/mic/geo/notif all denied).
+ *  Called after createWindow so mainWindow exists; the partition is created on first
+ *  use (mounting a <webview partition="persist:netexplorer">), but setting the handler
+ *  in advance is safe — fromPartition creates it on demand. */
+function lockDownPartitionSessions(): void {
+  const webviewSession = session.fromPartition('persist:netexplorer');
+  webviewSession.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
+}
+
 app.whenReady().then(async () => {
   await ensureDataLayout();
   lockDownWebContents();
   registerIpc(() => mainWindow);
   createWindow();
+  lockDownPartitionSessions();
   reminderInterval = startReminderTicker(() => mainWindow);
 
   app.on('activate', () => {

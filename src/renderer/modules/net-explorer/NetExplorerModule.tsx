@@ -1,8 +1,13 @@
 /**
- * Net Explorer v2 — multi-tab internal browser with bookmark bar and history panel.
+ * Net Explorer v2.1 — multi-tab internal browser with bookmark bar and history panel.
  *
- * Implementation notes: each tab owns its own <webview>. We keep all webviews mounted
- * but only the active one visible (so back/forward + scroll state survives tab switches).
+ * v2.1 fixes (v2.0 audit round 1):
+ *  - Per-tab event wiring (not just active tab) — background tab navigations now
+ *    update their tab state, and history entries are recorded for all tabs.
+ *  - Filters out about:blank / chrome-error:// / chrome:// from history.
+ *  - Ref callback null-cleanup — Map shrinks when a tab unmounts.
+ *  - history.addHistory failures surface as a one-shot toast after N consecutive
+ *    failures so the user knows browsing isn't being recorded.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -34,6 +39,25 @@ function newTabId(): string {
   return `tab-${crypto.randomUUID()}`;
 }
 
+let historyFailures = 0;
+let toastedHistoryFailure = false;
+
+function reportHistoryFailure(err: unknown): void {
+  historyFailures += 1;
+  // eslint-disable-next-line no-console
+  console.warn('[net-explorer] addHistory failed', err);
+  if (historyFailures >= 3 && !toastedHistoryFailure) {
+    toast.error('Browsing history is not being saved — check disk space or permissions.');
+    toastedHistoryFailure = true;
+  }
+}
+
+function reportHistorySuccess(): void {
+  // Reset on success so a transient failure doesn't permanently bias the counter.
+  // (toastedHistoryFailure stays latched — one warning per session is enough.)
+  historyFailures = 0;
+}
+
 export function NetExplorerModule(): JSX.Element {
   const homepage = useSettings((s) => s.settings?.browser.homepage ?? 'about:blank');
   const [tabs, setTabs] = useState<Tab[]>([{ id: newTabId(), url: homepage, title: 'New tab', loading: false }]);
@@ -44,7 +68,7 @@ export function NetExplorerModule(): JSX.Element {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [cases, setCases] = useState<CaseSummary[]>([]);
   const [saveCase, setSaveCase] = useState('');
-  const refs = useRef<Map<string, WebviewElement | null>>(new Map());
+  const refs = useRef<Map<string, WebviewElement>>(new Map());
 
   const activeTab = tabs.find((t) => t.id === activeId);
 
@@ -58,44 +82,61 @@ export function NetExplorerModule(): JSX.Element {
     setHistory(await window.api.browser.listHistory(200));
   }
 
-  // Per-tab webview event wiring
+  // Per-tab event wiring. Wires listeners ONCE per tab id; React effect cleanup
+  // detaches on unmount or tab close. tabId is captured per-tab, not via activeId,
+  // so background tabs still update their own state.
   useEffect(() => {
-    const wv = refs.current.get(activeId);
-    if (!wv) return;
-    function onStart(): void {
-      setTabs((ts) => ts.map((t) => t.id === activeId ? { ...t, loading: true } : t));
+    const cleanups: Array<() => void> = [];
+    for (const t of tabs) {
+      const wv = refs.current.get(t.id);
+      if (!wv) continue;
+      const tabId = t.id;
+      const wvBound = wv; // narrow for closures
+      function onStart(): void {
+        setTabs((ts) => ts.map((x) => x.id === tabId ? { ...x, loading: true } : x));
+      }
+      function onStop(): void {
+        setTabs((ts) => ts.map((x) => x.id === tabId ? { ...x, loading: false } : x));
+      }
+      function onNav(e: Event & { url?: string }): void {
+        const u = e.url ?? wvBound.getURL();
+        setTabs((ts) => ts.map((x) => x.id === tabId ? { ...x, url: u } : x));
+        if (tabId === activeIdRef.current) setAddress(u);
+      }
+      function onTitle(e: Event & { title?: string }): void {
+        const title = e.title ?? wvBound.getTitle();
+        setTabs((ts) => ts.map((x) => x.id === tabId ? { ...x, title } : x));
+        void window.api.browser.addHistory(wvBound.getURL(), title).then(reportHistorySuccess, reportHistoryFailure);
+      }
+      wvBound.addEventListener('did-start-loading', onStart);
+      wvBound.addEventListener('did-stop-loading', onStop);
+      wvBound.addEventListener('did-navigate', onNav as EventListener);
+      wvBound.addEventListener('did-navigate-in-page', onNav as EventListener);
+      wvBound.addEventListener('page-title-updated', onTitle as EventListener);
+      cleanups.push(() => {
+        wvBound.removeEventListener('did-start-loading', onStart);
+        wvBound.removeEventListener('did-stop-loading', onStop);
+        wvBound.removeEventListener('did-navigate', onNav as EventListener);
+        wvBound.removeEventListener('did-navigate-in-page', onNav as EventListener);
+        wvBound.removeEventListener('page-title-updated', onTitle as EventListener);
+      });
     }
-    function onStop(): void {
-      setTabs((ts) => ts.map((t) => t.id === activeId ? { ...t, loading: false } : t));
-    }
-    function onNav(e: Event & { url?: string }): void {
-      const u = e.url ?? (wv?.getURL() ?? '');
-      setAddress(u);
-      setTabs((ts) => ts.map((t) => t.id === activeId ? { ...t, url: u } : t));
-      // Log to history (best-effort; failures are user-visible only via toast if persistent)
-      void window.api.browser.addHistory(u, wv?.getTitle() ?? u).catch(() => {});
-    }
-    function onTitle(e: Event & { title?: string }): void {
-      const title = e.title ?? wv?.getTitle() ?? '';
-      setTabs((ts) => ts.map((t) => t.id === activeId ? { ...t, title } : t));
-    }
-    if (!wv) return;
-    wv.addEventListener('did-start-loading', onStart);
-    wv.addEventListener('did-stop-loading', onStop);
-    wv.addEventListener('did-navigate', onNav as EventListener);
-    wv.addEventListener('did-navigate-in-page', onNav as EventListener);
-    wv.addEventListener('page-title-updated', onTitle as EventListener);
-    return () => {
-      wv.removeEventListener('did-start-loading', onStart);
-      wv.removeEventListener('did-stop-loading', onStop);
-      wv.removeEventListener('did-navigate', onNav as EventListener);
-      wv.removeEventListener('did-navigate-in-page', onNav as EventListener);
-      wv.removeEventListener('page-title-updated', onTitle as EventListener);
-    };
-  }, [activeId]);
+    return () => { for (const c of cleanups) c(); };
+  }, [tabs]);
+
+  // Track activeId in a ref so the per-tab listeners' setAddress check sees current value.
+  const activeIdRef = useRef(activeId);
+  useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
 
   useEffect(() => {
-    setAddress(activeTab?.url ?? '');
+    // Sync the address bar to the active tab. Prefer the live URL from the webview
+    // if available (background tab might have navigated since we last persisted).
+    const wv = refs.current.get(activeId);
+    if (wv) {
+      try { setAddress(wv.getURL() || activeTab?.url || ''); } catch { setAddress(activeTab?.url ?? ''); }
+    } else {
+      setAddress(activeTab?.url ?? '');
+    }
   }, [activeId, activeTab?.url]);
 
   const go = useCallback((u?: string) => {
@@ -155,6 +196,24 @@ export function NetExplorerModule(): JSX.Element {
     await refreshHistory();
   }
 
+  async function clearHistoryOnly(): Promise<void> {
+    // Honest copy: this clears history only. Cookies / session storage live in the
+    // partition and persist by design (so logged-in sites stay logged in across launches).
+    // Audit round-3 HIGH fix: previous confirm copy promised cookie clearing that
+    // didn't happen.
+    const ok = await confirmDialog(
+      'Clear browsing history? Cookies and logged-in sessions WILL be preserved (they live in the persistent partition).',
+      'Clear history'
+    );
+    if (!ok) return;
+    try {
+      await window.api.browser.clearHistory();
+      toast.success('History cleared.');
+    } catch (err) {
+      toast.error(`Clear failed: ${(err as Error).message}`);
+    }
+  }
+
   async function saveToCase(): Promise<void> {
     if (!saveCase || !activeTab) return;
     try {
@@ -168,7 +227,6 @@ export function NetExplorerModule(): JSX.Element {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* Tab bar */}
       <div className="ga98-tabbar">
         {tabs.map((t) => (
           <div
@@ -189,7 +247,6 @@ export function NetExplorerModule(): JSX.Element {
         <button className="ga98-tab-new" onClick={() => newTab()} title="New tab">+</button>
       </div>
 
-      {/* Toolbar */}
       <div className="ga98-toolbar">
         <button onClick={() => refs.current.get(activeId)?.goBack()} title="Back">‹</button>
         <button onClick={() => refs.current.get(activeId)?.goForward()} title="Forward">›</button>
@@ -211,7 +268,6 @@ export function NetExplorerModule(): JSX.Element {
         <button onClick={() => void saveToCase()} disabled={!saveCase}>Save URL</button>
       </div>
 
-      {/* Bookmark bar */}
       {bookmarks.length > 0 && (
         <div className="ga98-bookmark-bar">
           {bookmarks.map((bm) => (
@@ -228,12 +284,19 @@ export function NetExplorerModule(): JSX.Element {
         </div>
       )}
 
-      {/* Webview stack — all mounted, only active one visible */}
       <div style={{ flex: 1, background: '#fff', position: 'relative' }}>
         {tabs.map((t) => (
           <webview
             key={t.id}
-            ref={(el) => { refs.current.set(t.id, el as unknown as WebviewElement); }}
+            ref={(el) => {
+              // Ref-callback null-cleanup — when React unmounts, prevent Map from
+              // accumulating null entries (audit round-1 finding).
+              if (el) {
+                refs.current.set(t.id, el as unknown as WebviewElement);
+              } else {
+                refs.current.delete(t.id);
+              }
+            }}
             src={t.url}
             style={{
               position: 'absolute',
@@ -248,6 +311,7 @@ export function NetExplorerModule(): JSX.Element {
       <div className="ga98-statusbar">
         <span>{activeTab?.loading ? 'Loading…' : 'Idle'}</span>
         <span style={{ flex: 1 }} />
+        <button onClick={() => void clearHistoryOnly()} style={{ fontSize: 10, padding: '0 4px' }}>Clear history…</button>
         <span>{tabs.length} tab{tabs.length === 1 ? '' : 's'}</span>
       </div>
 

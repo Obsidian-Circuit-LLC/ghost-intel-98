@@ -16,6 +16,14 @@ import type { MailAccount, MailMessage, MailMessageSummary, MailSendInput } from
 import { secretStore, SecretsUnavailableError, SecretsCorruptedError } from '../secrets';
 import * as accountStore from '../storage/accounts';
 import * as draftStore from '../storage/drafts';
+import { markConsented, assertAllConsented } from '../security/consent';
+import { isDraftAttachmentSafe } from '../security/validate';
+
+/** Refuse to parse messages larger than this — protects main process against
+ *  multipart bombs from a hostile mail server. */
+const MAX_MESSAGE_BYTES = 25 * 1024 * 1024; // 25 MB
+/** Refuse to ship individual attachments larger than this back to the renderer. */
+const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024; // 10 MB
 
 export async function listAccounts(): Promise<MailAccount[]> {
   return accountStore.listAccounts();
@@ -150,25 +158,81 @@ export async function fetchMessage(id: string, uid: number): Promise<MailMessage
   await client.connect();
   try {
     await client.mailboxOpen('INBOX');
-    const msg = await client.fetchOne(String(uid), { envelope: true, internalDate: true, source: true, uid: true }, { uid: true });
-    if (!msg) throw new Error(`Message uid=${uid} not found`);
-    const source = msg.source ?? Buffer.from('');
-    let parsed: ParsedMail;
+    // Round-3 audit High: pull envelope first so we have headers even if we abort the body fetch.
+    const meta = await client.fetchOne(String(uid), { envelope: true, internalDate: true, uid: true }, { uid: true });
+    if (!meta) throw new Error(`Message uid=${uid} not found`);
+    // Stream the body with a byte-counted cap so a hostile server can't OOM main by
+    // returning a multi-GB message. Previous fetchOne({source:true}) buffered the
+    // whole message in RAM before our cap check fired.
+    const dl = await client.download(String(uid), undefined, { uid: true });
+    let source: Buffer | null = null;
+    let aborted = false;
+    if (dl && dl.content) {
+      const chunks: Buffer[] = [];
+      let total = 0;
+      for await (const chunk of dl.content as AsyncIterable<Buffer>) {
+        total += chunk.length;
+        if (total > MAX_MESSAGE_BYTES) {
+          aborted = true;
+          break;
+        }
+        chunks.push(chunk);
+      }
+      source = aborted ? null : Buffer.concat(chunks);
+    }
+    if (aborted || !source) {
+      return {
+        uid: meta.uid,
+        from: meta.envelope?.from?.[0]?.address ?? '',
+        to: meta.envelope?.to?.[0]?.address ?? '',
+        subject: meta.envelope?.subject ?? '(no subject)',
+        date: toIso(meta.internalDate),
+        preview: '', unseen: false,
+        body: `[Message exceeds the ${MAX_MESSAGE_BYTES} byte in-app size limit. Open in webmail to view.]`,
+        attachments: []
+      };
+    }
+    const msg = { ...meta, source } as typeof meta & { source: Buffer };
+    let parsed: ParsedMail | null = null;
+    let parseError: string | null = null;
     try {
       parsed = await simpleParser(source);
-    } catch {
-      // Fallback: at least return raw source as body if multipart parse fails.
+    } catch (err) {
+      parseError = (err as Error).message;
+      // eslint-disable-next-line no-console
+      console.error('[mail.parse]', { uid, err });
+    }
+    if (!parsed) {
+      // Fallback: raw source as body — but stamp the parse error so the UI can warn the user.
       return {
         uid: msg.uid,
         from: msg.envelope?.from?.[0]?.address ?? '',
         to: msg.envelope?.to?.[0]?.address ?? '',
-        subject: msg.envelope?.subject ?? '(no subject)',
+        subject: `${msg.envelope?.subject ?? '(no subject)'} — [parse failed: ${parseError}]`,
         date: toIso(msg.internalDate),
         preview: '', unseen: false,
         body: source.toString('utf8'),
         attachments: []
       };
     }
+    const attachments = (parsed.attachments ?? []).map((a: ParsedAttachment) => {
+      const size = a.size ?? a.content.length;
+      if (size > MAX_ATTACHMENT_BYTES) {
+        return {
+          filename: a.filename ?? 'attachment',
+          contentType: a.contentType ?? 'application/octet-stream',
+          size,
+          // Do not ship the content — the renderer can't usefully hold 50 MB+ base64.
+          contentBase64: undefined
+        };
+      }
+      return {
+        filename: a.filename ?? 'attachment',
+        contentType: a.contentType ?? 'application/octet-stream',
+        size,
+        contentBase64: a.content.toString('base64')
+      };
+    });
     return {
       uid: msg.uid,
       from: parsed.from?.text ?? msg.envelope?.from?.[0]?.address ?? '',
@@ -179,12 +243,7 @@ export async function fetchMessage(id: string, uid: number): Promise<MailMessage
       unseen: false,
       body: parsed.text ?? '',
       html: typeof parsed.html === 'string' ? parsed.html : undefined,
-      attachments: (parsed.attachments ?? []).map((a: ParsedAttachment) => ({
-        filename: a.filename ?? 'attachment',
-        contentType: a.contentType ?? 'application/octet-stream',
-        size: a.size ?? a.content.length,
-        contentBase64: a.content.toString('base64')
-      }))
+      attachments
     };
   } finally {
     await safeLogout(client);
@@ -193,6 +252,12 @@ export async function fetchMessage(id: string, uid: number): Promise<MailMessage
 
 export async function sendMail(input: MailSendInput): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
   try {
+    // Critical: every attachment path must have come through a user-gesture path
+    // (files.pickOpen dialog or a previously persisted draft). Without this gate,
+    // a compromised renderer could exfil arbitrary local files via SMTP.
+    const paths = (input.attachments ?? []).map((a) => a.path);
+    assertAllConsented(paths, 'mail attachment');
+
     const { acct, password } = await loadAccountWithPassword(input.accountId);
     const transporter = nodemailer.createTransport({
       host: acct.smtpHost, port: acct.smtpPort, secure: acct.smtpSecure,
@@ -217,7 +282,28 @@ export async function sendMail(input: MailSendInput): Promise<{ ok: true; id: st
 // ---------- Drafts ----------
 
 export async function listDrafts(accountId?: string): Promise<draftStore.MailDraft[]> {
-  return draftStore.list(accountId);
+  const drafts = await draftStore.list(accountId);
+  // Re-validate every draft attachment path BEFORE marking consented. Defends against
+  // the upgrade case where a v2.0.0 compromised renderer might have persisted
+  // attacker-planted paths to mail-drafts.json. (Round-5 audit High H-A fix.)
+  // Invalid entries are dropped from the returned draft so the UI doesn't show them.
+  const out: draftStore.MailDraft[] = [];
+  for (const d of drafts) {
+    const safeAttachments: typeof d.attachments = [];
+    const safePaths: string[] = [];
+    for (const a of d.attachments) {
+      if (await isDraftAttachmentSafe(a.path)) {
+        safeAttachments.push(a);
+        safePaths.push(a.path);
+      } else {
+        // eslint-disable-next-line no-console
+        console.warn('[mail.listDrafts] dropping unsafe attachment from draft', { draftId: d.id, name: a.name });
+      }
+    }
+    markConsented(safePaths);
+    out.push({ ...d, attachments: safeAttachments });
+  }
+  return out;
 }
 
 export async function upsertDraft(input: Parameters<typeof draftStore.upsert>[0]): Promise<draftStore.MailDraft> {

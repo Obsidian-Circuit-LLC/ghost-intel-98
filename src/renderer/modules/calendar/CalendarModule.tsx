@@ -20,7 +20,7 @@ function ymd(d: Date): string {
 }
 
 function makeId(): string {
-  return `rem-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+  return `rem-${crypto.randomUUID()}`;
 }
 
 export function CalendarModule(): JSX.Element {
@@ -30,26 +30,36 @@ export function CalendarModule(): JSX.Element {
   const [refreshTick, setRefreshTick] = useState(0);
 
   const refresh = useCallback(async () => {
-    const [globals, cases] = await Promise.all([
-      window.api.reminders.listGlobal(),
-      window.api.cases.list()
-    ]);
-    const evs: Event[] = [];
-    for (const r of globals) evs.push({ date: ymd(new Date(r.fireAt)), label: r.title, kind: 'reminder' });
-    for (const c of cases) {
-      try {
-        const detail = await window.api.cases.read(c.id);
-        for (const r of detail.reminders) {
-          evs.push({ date: ymd(new Date(r.fireAt)), label: `${c.title} — ${r.title}`, kind: 'reminder' });
+    try {
+      const [globals, cases] = await Promise.all([
+        window.api.reminders.listGlobal(),
+        window.api.cases.list()
+      ]);
+      const evs: Event[] = [];
+      const broken: string[] = [];
+      for (const r of globals) evs.push({ date: ymd(new Date(r.fireAt)), label: r.title, kind: 'reminder' });
+      for (const c of cases) {
+        try {
+          const detail = await window.api.cases.read(c.id);
+          for (const r of detail.reminders) {
+            evs.push({ date: ymd(new Date(r.fireAt)), label: `${c.title} — ${r.title}`, kind: 'reminder' });
+          }
+          for (const t of detail.tasks) {
+            if (t.dueAt) evs.push({ date: ymd(new Date(t.dueAt)), label: `${c.title} — ${t.text}`, kind: 'case-due' });
+          }
+        } catch (err) {
+          broken.push(`${c.title}: ${(err as Error).message}`);
+          // eslint-disable-next-line no-console
+          console.warn('[calendar] case read failed', c.id, err);
         }
-        for (const t of detail.tasks) {
-          if (t.dueAt) evs.push({ date: ymd(new Date(t.dueAt)), label: `${c.title} — ${t.text}`, kind: 'case-due' });
-        }
-      } catch {
-        // skip malformed case
       }
+      setEvents(evs);
+      if (broken.length > 0) {
+        toast.warn(`Calendar: ${broken.length} case${broken.length === 1 ? '' : 's'} could not be loaded — see console.`);
+      }
+    } catch (err) {
+      toast.error(`Calendar refresh failed: ${(err as Error).message}`);
     }
-    setEvents(evs);
   }, []);
 
   useEffect(() => {

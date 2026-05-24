@@ -4,6 +4,7 @@
 
 import { useState } from 'react';
 import { useSettings } from '../state/store';
+import { toast } from '../state/toasts';
 import logoUrl from '../assets/logo.png';
 
 const STEPS = [
@@ -46,22 +47,40 @@ export function Welcome(): JSX.Element | null {
   const settings = useSettings((s) => s.settings);
   const patch = useSettings((s) => s.patch);
   const [step, setStep] = useState(0);
+  const [persisting, setPersisting] = useState(false);
+  const [dismissedLocally, setDismissedLocally] = useState(false);
 
-  if (!settings || settings.hasSeenWelcome) return null;
+  if (!settings || settings.hasSeenWelcome || dismissedLocally) return null;
 
   const current = STEPS[step];
   const isLast = step === STEPS.length - 1;
 
-  function next(): void {
+  async function persist(): Promise<void> {
+    setPersisting(true);
+    try {
+      await patch({ hasSeenWelcome: true });
+    } catch (err) {
+      toast.error(
+        `Could not save preference: ${(err as Error).message}. Welcome will return on next launch until disk space / permissions are fixed.`
+      );
+      // Round-3 audit fix: dismiss locally even on persist failure so the user
+      // isn't stuck in a dead-loop staring at a welcome they keep "dismissing".
+      setDismissedLocally(true);
+    } finally {
+      setPersisting(false);
+    }
+  }
+
+  async function next(): Promise<void> {
     if (isLast) {
-      void patch({ hasSeenWelcome: true });
+      await persist();
       return;
     }
     setStep(step + 1);
   }
 
-  function skip(): void {
-    void patch({ hasSeenWelcome: true });
+  async function skip(): Promise<void> {
+    await persist();
   }
 
   return (
@@ -78,9 +97,9 @@ export function Welcome(): JSX.Element | null {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 6, padding: 8, borderTop: '1px solid #808080', justifyContent: 'flex-end' }}>
-          <button onClick={skip}>Skip</button>
-          <button onClick={() => setStep(Math.max(0, step - 1))} disabled={step === 0}>‹ Back</button>
-          <button onClick={next} autoFocus>{isLast ? 'Finish' : 'Next ›'}</button>
+          <button onClick={() => void skip()} disabled={persisting}>Skip</button>
+          <button onClick={() => setStep(Math.max(0, step - 1))} disabled={step === 0 || persisting}>‹ Back</button>
+          <button onClick={() => void next()} disabled={persisting} autoFocus>{isLast ? (persisting ? 'Saving…' : 'Finish') : 'Next ›'}</button>
         </div>
       </div>
     </div>
