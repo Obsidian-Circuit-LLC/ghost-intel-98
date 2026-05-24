@@ -1,56 +1,125 @@
 /**
- * SecretStore backed by Electron's safeStorage (OS-level encryption: Keychain on macOS,
- * DPAPI on Windows, libsecret on Linux). One encrypted JSON blob on disk; never plaintext.
+ * SecretStore backed by Electron's safeStorage (DPAPI on Windows, Keychain on macOS,
+ * libsecret/KWallet on Linux — with a documented `basic_text` fallback that we WARN about).
+ *
+ * Safety properties added in v1.0.1:
+ *  - Distinct error class for "encryption backend unavailable" vs "blob unreadable" vs ENOENT
+ *  - Refuses to write when the prior read failed to decrypt — refuses to silently destroy
+ *    secrets that may still be recoverable (e.g. by restoring the OS keyring)
+ *  - Per-call temp suffix so concurrent writes don't clobber the same .tmp
+ *  - Single async mutex around read-modify-write spans
+ *  - getBackend() returns the OS backend label so the UI can warn on `basic_text`
  */
 
 import { safeStorage } from 'electron';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import type { SecretStore } from '../storage/interface';
 import { secretsFile } from '../storage/paths';
+import { withLock } from '../util/mutex';
 
 type Blob = Record<string, string>;
 
+export class SecretsUnavailableError extends Error {
+  constructor() {
+    super('OS keyring is unavailable. Cannot read or write encrypted secrets.');
+    this.name = 'SecretsUnavailableError';
+  }
+}
+
+export class SecretsCorruptedError extends Error {
+  constructor(reason: string) {
+    super(`secrets.enc could not be decrypted (${reason}). Refusing to overwrite — rename the file to secrets.enc.broken to start fresh.`);
+    this.name = 'SecretsCorruptedError';
+  }
+}
+
+let blobUnreadable: SecretsCorruptedError | null = null;
+
 async function readBlob(): Promise<Blob> {
+  let buf: Buffer;
   try {
-    const buf = await readFile(secretsFile());
-    if (!safeStorage.isEncryptionAvailable()) return {};
-    const plain = safeStorage.decryptString(buf);
-    return JSON.parse(plain) as Blob;
+    buf = await readFile(secretsFile());
   } catch (err) {
     const e = err as NodeJS.ErrnoException;
-    if (e.code === 'ENOENT') return {};
+    if (e.code === 'ENOENT') {
+      blobUnreadable = null;
+      return {};
+    }
     throw err;
+  }
+  if (!safeStorage.isEncryptionAvailable()) {
+    blobUnreadable = new SecretsCorruptedError('encryption backend not available');
+    throw new SecretsUnavailableError();
+  }
+  try {
+    const plain = safeStorage.decryptString(buf);
+    const parsed = JSON.parse(plain) as Blob;
+    blobUnreadable = null;
+    return parsed;
+  } catch (err) {
+    blobUnreadable = new SecretsCorruptedError((err as Error).message);
+    throw blobUnreadable;
   }
 }
 
 async function writeBlob(blob: Blob): Promise<void> {
   if (!safeStorage.isEncryptionAvailable()) {
-    throw new Error('safeStorage encryption is not available on this OS — refusing to write secrets in plaintext.');
+    throw new SecretsUnavailableError();
+  }
+  if (blobUnreadable) {
+    // Refuse to silently overwrite a blob that may still be recoverable.
+    throw blobUnreadable;
   }
   const dir = dirname(secretsFile());
   await mkdir(dir, { recursive: true });
   const enc = safeStorage.encryptString(JSON.stringify(blob));
-  const tmp = `${secretsFile()}.${process.pid}.tmp`;
+  const tmp = `${secretsFile()}.${process.pid}.${randomUUID().slice(0, 8)}.tmp`;
   await writeFile(tmp, enc);
   await rename(tmp, secretsFile());
 }
 
 export const secretStore: SecretStore = {
   async get(key) {
-    const blob = await readBlob();
-    return blob[key] ?? null;
+    return withLock('secrets', async () => {
+      // Lets corruption errors propagate; unavailability bubbles too so callers can tell
+      // "OS keyring locked" apart from "key genuinely not set".
+      const blob = await readBlob();
+      return blob[key] ?? null;
+    });
   },
   async set(key, value) {
-    const blob = await readBlob();
-    blob[key] = value;
-    await writeBlob(blob);
+    return withLock('secrets', async () => {
+      const blob = await readBlob(); // may throw SecretsUnavailableError / SecretsCorruptedError
+      blob[key] = value;
+      await writeBlob(blob);
+    });
   },
   async delete(key) {
-    const blob = await readBlob();
-    if (key in blob) {
-      delete blob[key];
-      await writeBlob(blob);
-    }
+    return withLock('secrets', async () => {
+      const blob = await readBlob();
+      if (key in blob) {
+        delete blob[key];
+        await writeBlob(blob);
+      }
+    });
   }
 };
+
+/** Returns the OS safeStorage backend label (or 'unavailable') for UI warnings. */
+export function getSecretBackend(): string {
+  if (!safeStorage.isEncryptionAvailable()) return 'unavailable';
+  // Linux-only API in Electron ≥15; on Win/macOS returns the default backend name.
+  if (process.platform === 'linux') {
+    try {
+      const fn = (safeStorage as unknown as { getSelectedStorageBackend?: () => string }).getSelectedStorageBackend;
+      return fn ? fn() : 'unknown';
+    } catch {
+      return 'unknown';
+    }
+  }
+  if (process.platform === 'win32') return 'dpapi';
+  if (process.platform === 'darwin') return 'keychain';
+  return 'unknown';
+}

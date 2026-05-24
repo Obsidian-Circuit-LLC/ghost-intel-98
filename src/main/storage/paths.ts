@@ -1,20 +1,14 @@
 /**
  * All on-disk paths derive from app.getPath('userData') / GhostAccess98 /.
- * No path is hard-coded; no user home is hard-coded.
+ * No path is hard-coded; no user home is hard-coded; the data root is *not*
+ * runtime-overridable (no IPC surface, no test seam — keep it boring).
  */
 
 import { app } from 'electron';
 import { join } from 'node:path';
 import { mkdir } from 'node:fs/promises';
 
-let rootCache: string | null = null;
-
-export function setRootOverride(absolutePath: string | null): void {
-  rootCache = absolutePath;
-}
-
 export function dataRoot(): string {
-  if (rootCache) return rootCache;
   return join(app.getPath('userData'), 'GhostAccess98');
 }
 
@@ -64,10 +58,6 @@ export function settingsFile(): string {
 
 export function globalRemindersFile(): string {
   return join(dataRoot(), 'reminders.global.json');
-}
-
-export function alarmsFile(): string {
-  return join(dataRoot(), 'alarms.json');
 }
 
 export function shredDir(): string {

@@ -1,42 +1,29 @@
 /**
- * Mail service — accounts persisted in settings (sans password); passwords in secrets.enc.
- * Connections are short-lived (open per fetch / send) to keep the model simple and
- * the resource footprint low.
+ * Mail service — accounts in mail-accounts.json, passwords in secrets.enc.
+ * Connections are short-lived per fetch / send.
+ *
+ * v1.0.1 round-3 fixes:
+ *  - Write account profile FIRST, then secret. If secret fails, roll back the profile.
+ *    No more orphaned passwordRefs piling up in secrets.enc when disk pressure spikes.
+ *  - SecretsUnavailableError surfaces as "Keyring locked — unlock and retry" rather than
+ *    masquerading as "no password stored".
+ *  - safeLogout still wraps logout in try/catch so it doesn't mask in-flight errors.
  */
 
 import { ImapFlow } from 'imapflow';
 import nodemailer from 'nodemailer';
 import { randomUUID } from 'node:crypto';
 import type { MailAccount, MailMessage, MailMessageSummary, MailSendInput } from '@shared/post-mvp-types';
-import { secretStore } from '../secrets';
-import { settingsStore } from '../storage/json-fs';
-
-interface PersistedAccounts {
-  accounts: Omit<MailAccount, never>[];
-}
-
-async function readAccounts(): Promise<MailAccount[]> {
-  const s = await settingsStore.read();
-  return ((s as unknown as { mailAccountsV2?: MailAccount[] }).mailAccountsV2) ?? [];
-}
-
-async function writeAccounts(list: MailAccount[]): Promise<void> {
-  const s = await settingsStore.read();
-  const next = { ...s, mailAccountsV2: list } as unknown as PersistedAccounts;
-  await settingsStore.update(next as unknown as Parameters<typeof settingsStore.update>[0]);
-}
+import { secretStore, SecretsUnavailableError, SecretsCorruptedError } from '../secrets';
+import * as accountStore from '../storage/accounts';
 
 export async function listAccounts(): Promise<MailAccount[]> {
-  return readAccounts();
+  return accountStore.listAccounts();
 }
 
 export async function upsertAccount(input: MailAccount & { password?: string }): Promise<MailAccount> {
-  const list = await readAccounts();
   const id = input.id || `acct-${randomUUID()}`;
   const passwordRef = input.passwordRef || `mail.password.${id}`;
-  if (input.password) {
-    await secretStore.set(passwordRef, input.password);
-  }
   const cleaned: MailAccount = {
     id,
     label: input.label,
@@ -49,18 +36,53 @@ export async function upsertAccount(input: MailAccount & { password?: string }):
     user: input.user,
     passwordRef
   };
-  const idx = list.findIndex((a) => a.id === id);
-  if (idx >= 0) list[idx] = cleaned;
-  else list.push(cleaned);
-  await writeAccounts(list);
+  // 1. Persist the profile first.
+  await accountStore.upsertAccount(cleaned);
+  // 2. Then write the secret. If this fails, roll back the profile so we don't have
+  //    a row pointing at a non-existent password (forcing the user to re-enter from scratch).
+  if (input.password) {
+    try {
+      await secretStore.set(passwordRef, input.password);
+    } catch (err) {
+      // Roll back. If this rollback ALSO fails, surface both.
+      try { await accountStore.deleteAccount(id); } catch { /* nothing more we can do */ }
+      throw err;
+    }
+  }
   return cleaned;
 }
 
 export async function deleteAccount(id: string): Promise<void> {
-  const list = await readAccounts();
+  const removed = await accountStore.deleteAccount(id);
+  if (removed) {
+    try {
+      await secretStore.delete(removed.passwordRef);
+    } catch {
+      // If secrets are unreadable, leave the password ref orphaned rather than blocking the delete.
+    }
+  }
+}
+
+async function loadAccountWithPassword(id: string): Promise<{ acct: MailAccount; password: string }> {
+  const list = await accountStore.listAccounts();
   const acct = list.find((a) => a.id === id);
-  if (acct) await secretStore.delete(acct.passwordRef);
-  await writeAccounts(list.filter((a) => a.id !== id));
+  if (!acct) throw new Error(`Mail account not found: ${id}`);
+  let password: string | null;
+  try {
+    password = await secretStore.get(acct.passwordRef);
+  } catch (err) {
+    if (err instanceof SecretsUnavailableError) {
+      throw new Error(`OS keyring is locked or unavailable — unlock it and retry. (${acct.label})`);
+    }
+    if (err instanceof SecretsCorruptedError) {
+      throw new Error(`Encrypted secrets file is unreadable — see Settings → About → secrets backend. (${acct.label})`);
+    }
+    throw err;
+  }
+  if (password == null) {
+    throw new Error(`No password stored for ${acct.label} — re-enter via Accounts…`);
+  }
+  return { acct, password };
 }
 
 function toIso(d: string | Date | null | undefined): string {
@@ -69,18 +91,18 @@ function toIso(d: string | Date | null | undefined): string {
   return new Date(d).toISOString();
 }
 
-async function loadAccountWithPassword(id: string): Promise<{ acct: MailAccount; password: string }> {
-  const list = await readAccounts();
-  const acct = list.find((a) => a.id === id);
-  if (!acct) throw new Error(`Mail account not found: ${id}`);
-  const password = await secretStore.get(acct.passwordRef);
-  if (password == null) throw new Error(`No password stored for ${acct.label}.`);
-  return { acct, password };
+async function safeLogout(client: ImapFlow): Promise<void> {
+  try {
+    await client.logout();
+  } catch {
+    try { client.close(); } catch { /* nothing */ }
+  }
 }
 
 export async function testAccount(input: MailAccount & { password: string }): Promise<{ ok: true } | { ok: false; error: string }> {
+  let client: ImapFlow | null = null;
   try {
-    const client = new ImapFlow({
+    client = new ImapFlow({
       host: input.imapHost,
       port: input.imapPort,
       secure: input.imapSecure,
@@ -91,6 +113,7 @@ export async function testAccount(input: MailAccount & { password: string }): Pr
     await client.logout();
     return { ok: true };
   } catch (err) {
+    if (client) await safeLogout(client);
     return { ok: false, error: (err as Error).message };
   }
 }
@@ -120,7 +143,6 @@ export async function fetchInbox(id: string, limit = 30): Promise<MailMessageSum
       });
       if (out.length >= limit) break;
     }
-    // also pull recently seen for context
     for await (const msg of client.fetch({ seen: true }, { envelope: true, internalDate: true, uid: true })) {
       if (out.length >= limit * 2) break;
       out.push({
@@ -135,7 +157,7 @@ export async function fetchInbox(id: string, limit = 30): Promise<MailMessageSum
     }
     return out.sort((a, b) => b.date.localeCompare(a.date));
   } finally {
-    await client.logout();
+    await safeLogout(client);
   }
 }
 
@@ -165,7 +187,7 @@ export async function fetchMessage(id: string, uid: number): Promise<MailMessage
       body: bodyBuf.toString('utf8')
     };
   } finally {
-    await client.logout();
+    await safeLogout(client);
   }
 }
 

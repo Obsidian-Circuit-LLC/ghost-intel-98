@@ -64,7 +64,8 @@ export const channels = {
   system: {
     appInfo: 'system:appInfo',
     openExternal: 'system:openExternal',
-    onReminderFired: 'system:onReminderFired'
+    onReminderFired: 'system:onReminderFired',
+    onDiagnostic: 'system:onDiagnostic'
   },
   mail: {
     listAccounts: 'mail:listAccounts',
@@ -94,6 +95,7 @@ export const channels = {
   ai: {
     chat: 'ai:chat',
     chatStream: 'ai:chatStream',
+    setApiKey: 'ai:setApiKey',
     onChatChunk: 'ai:onChatChunk'
   }
 } as const;

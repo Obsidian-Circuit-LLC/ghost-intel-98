@@ -104,10 +104,16 @@ html, body, #root {
 
 .ga98-access-button {
   font-weight: bold;
-  min-width: 70px;
+  min-width: 80px;
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.ga98-access-button-glyph {
+  width: 18px;
+  height: 18px;
+  image-rendering: pixelated;
 }
 
 .ga98-access-button[data-open='true'] {
@@ -176,15 +182,28 @@ html, body, #root {
 }
 
 .ga98-access-rail {
-  width: 28px;
+  width: 32px;
   background: linear-gradient(180deg, #000080 0%, #1084d0 100%);
   color: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-weight: bold;
+  padding: 6px 0;
+  font-size: 13px;
+}
+
+.ga98-access-rail-logo {
+  width: 24px;
+  height: 24px;
+  margin-bottom: 8px;
+  image-rendering: pixelated;
+  border: 1px solid var(--ga98-shadow-light);
+}
+
+.ga98-access-rail span {
   writing-mode: vertical-rl;
   text-orientation: mixed;
-  font-weight: bold;
-  padding: 8px 0;
-  text-align: center;
-  font-size: 14px;
 }
 
 .ga98-access-list {

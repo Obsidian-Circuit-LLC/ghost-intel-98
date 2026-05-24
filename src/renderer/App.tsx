@@ -35,7 +35,6 @@ export function App(): JSX.Element {
   useEffect(() => {
     const off = window.api.system.onReminderFired(({ reminder }) => {
       if (useSettings.getState().settings?.soundEnabled) playReminder();
-      // simple banner-by-window: open a tiny reminder window
       useWindows.getState().open({
         module: 'reminders',
         title: `Reminder — ${reminder.title}`,
@@ -43,6 +42,23 @@ export function App(): JSX.Element {
         width: 540,
         height: 360
       });
+    });
+    return () => off();
+  }, []);
+
+  // Diagnostic events from main (broken reminders, etc.) surface as a Settings → About visit.
+  useEffect(() => {
+    const off = window.api.system.onDiagnostic((payload) => {
+      // eslint-disable-next-line no-console
+      console.warn('[diagnostic]', payload);
+      if (payload.kind === 'reminders-broken') {
+        useWindows.getState().open({
+          module: 'settings',
+          title: 'Settings — diagnostics',
+          width: 720,
+          height: 520
+        });
+      }
     });
     return () => off();
   }, []);

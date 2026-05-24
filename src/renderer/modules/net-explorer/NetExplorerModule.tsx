@@ -92,21 +92,16 @@ export function NetExplorerModule(): JSX.Element {
         <button onClick={() => void saveToCase()} disabled={!saveCase}>Save URL to case</button>
       </div>
       <div style={{ flex: 1, background: '#fff', position: 'relative' }}>
-        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-        {(() => {
-          // <webview> isn't in React's JSX intrinsics — use createElement with allowpopups disabled
-          // to avoid TypeScript griping while keeping the actual tag.
-          return (
-            <webview
-              ref={ref as unknown as React.RefObject<HTMLElement>}
-              src={homepage}
-              style={{ width: '100%', height: '100%', display: 'inline-flex' }}
-              // @ts-expect-error: webview attributes aren't in React typings
-              allowpopups="true"
-              partition="persist:netexplorer"
-            />
-          );
-        })()}
+        {/* <webview> isn't in React's JSX intrinsics. allowpopups is OMITTED on purpose —
+            popups would otherwise open new BrowserWindows that don't inherit the hardening
+            from main/index.ts. Window-open requests are intercepted in main and routed
+            to the OS browser instead. */}
+        <webview
+          ref={ref as unknown as React.RefObject<HTMLElement>}
+          src={homepage}
+          style={{ width: '100%', height: '100%', display: 'inline-flex' }}
+          partition="persist:netexplorer"
+        />
       </div>
       <div className="ga98-statusbar">
         <span>{loading ? 'Loading…' : 'Idle'}</span>

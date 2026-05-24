@@ -5,6 +5,7 @@
 import { useEffect, useState } from 'react';
 import { AccessMenu } from './AccessMenu';
 import { useWindows } from '../state/store';
+import iconUrl from '../assets/icon.png';
 
 export function Taskbar(): JSX.Element {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -43,7 +44,7 @@ export function Taskbar(): JSX.Element {
             setMenuOpen((v) => !v);
           }}
         >
-          <span aria-hidden="true">🛸</span>
+          <img src={iconUrl} alt="" className="ga98-access-button-glyph" />
           <span>Access</span>
         </button>
         <div className="ga98-taskbar-divider" />

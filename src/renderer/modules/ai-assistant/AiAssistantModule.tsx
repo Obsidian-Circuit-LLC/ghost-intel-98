@@ -2,6 +2,10 @@
  * AI Assistant — chat interface backed by the configured provider in Settings.
  * Case context is opt-in per-message — the user explicitly checks which case to include.
  * API keys live in safeStorage; the renderer never sees them in plaintext.
+ *
+ * v1.0.1 fixes: randomUUID streamId (no millisecond collisions), useEffect cleanup
+ * cancels active streams on unmount, context-load failure surfaces in the UI instead
+ * of silently sending an empty context.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -15,28 +19,46 @@ interface DisplayMessage extends AiChatMessage {
 }
 
 function newId(): string {
-  return `msg-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+  return crypto.randomUUID();
 }
 
 export function AiAssistantModule(): JSX.Element {
   const [cases, setCases] = useState<CaseSummary[]>([]);
   const [contextCaseId, setContextCaseId] = useState('');
   const [contextCase, setContextCase] = useState<CaseRecord | null>(null);
+  const [contextError, setContextError] = useState<string | null>(null);
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
+  const activeStreamRef = useRef<{ id: string; off: () => void } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const settings = useSettings((s) => s.settings);
 
   useEffect(() => { void window.api.cases.list().then(setCases); }, []);
+
   useEffect(() => {
+    setContextError(null);
     if (!contextCaseId) { setContextCase(null); return; }
-    void window.api.cases.read(contextCaseId).then(setContextCase).catch(() => setContextCase(null));
+    void window.api.cases.read(contextCaseId)
+      .then((c) => { setContextCase(c); setContextError(null); })
+      .catch((err) => { setContextCase(null); setContextError((err as Error).message); });
   }, [contextCaseId]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [messages]);
+
+  // Cancel any in-flight stream + drop the listener on unmount.
+  useEffect(() => {
+    return () => {
+      const active = activeStreamRef.current;
+      if (active) {
+        active.off();
+        void window.api.ai.cancel(active.id).catch(() => {});
+        activeStreamRef.current = null;
+      }
+    };
+  }, []);
 
   const send = useCallback(async () => {
     if (!input.trim() || streaming) return;
@@ -44,7 +66,11 @@ export function AiAssistantModule(): JSX.Element {
       alert('Set an AI provider in Settings first.');
       return;
     }
-    const streamId = `chat-${Date.now()}`;
+    if (contextCaseId && !contextCase) {
+      alert('Case context is selected but failed to load. Clear the dropdown or retry before sending.');
+      return;
+    }
+    const streamId = `chat-${newId()}`;
     const userMsg: DisplayMessage = { id: newId(), role: 'user', content: input.trim() };
     const assistantMsg: DisplayMessage = { id: newId(), role: 'assistant', content: '', streaming: true };
     const history: AiChatMessage[] = [...messages.map(({ role, content }) => ({ role, content })), { role: 'user', content: input.trim() }];
@@ -67,8 +93,10 @@ export function AiAssistantModule(): JSX.Element {
         setMessages((prev) => prev.map((m) => m.id === assistantMsg.id ? { ...m, streaming: false } : m));
         setStreaming(false);
         off();
+        if (activeStreamRef.current?.id === streamId) activeStreamRef.current = null;
       }
     });
+    activeStreamRef.current = { id: streamId, off };
 
     try {
       await window.api.ai.chatStream(streamId, req);
@@ -76,8 +104,9 @@ export function AiAssistantModule(): JSX.Element {
       setMessages((prev) => prev.map((m) => m.id === assistantMsg.id ? { ...m, content: `[error: ${(err as Error).message}]`, streaming: false } : m));
       setStreaming(false);
       off();
+      activeStreamRef.current = null;
     }
-  }, [input, streaming, settings, messages, contextCase]);
+  }, [input, streaming, settings, messages, contextCase, contextCaseId]);
 
   function quickPrompt(text: string): void {
     setInput(text);
@@ -95,10 +124,15 @@ export function AiAssistantModule(): JSX.Element {
             {cases.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
           </select>
         </label>
-        <button onClick={() => quickPrompt('Summarise this case in 3-5 bullet points.')} disabled={!contextCaseId}>Summarise</button>
-        <button onClick={() => quickPrompt('Draft a status report for this case suitable for an external stakeholder.')} disabled={!contextCaseId}>Draft report</button>
-        <button onClick={() => quickPrompt('What questions should I be asking that I have not yet?')} disabled={!contextCaseId}>Open questions</button>
+        <button onClick={() => quickPrompt('Summarise this case in 3-5 bullet points.')} disabled={!contextCase}>Summarise</button>
+        <button onClick={() => quickPrompt('Draft a status report for this case suitable for an external stakeholder.')} disabled={!contextCase}>Draft report</button>
+        <button onClick={() => quickPrompt('What questions should I be asking that I have not yet?')} disabled={!contextCase}>Open questions</button>
       </div>
+      {contextError && (
+        <div style={{ background: '#fee', color: '#900', padding: '4px 8px', fontSize: 11, borderBottom: '1px solid #c00' }}>
+          Context unavailable: {contextError} — clear the dropdown or retry before sending.
+        </div>
+      )}
       <div ref={scrollRef} style={{ flex: 1, overflow: 'auto', padding: 8, background: '#fff' }}>
         {messages.length === 0 && (
           <div style={{ color: '#666', padding: 16 }}>

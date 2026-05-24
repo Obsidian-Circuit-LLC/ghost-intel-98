@@ -7,6 +7,7 @@ import { useSettings, useWindows, type ModuleKey } from '../state/store';
 import { moduleTitles } from './Desktop';
 import { glyphFor } from './Icon';
 import { playClick } from '../audio/synth';
+import logoUrl from '../assets/logo.png';
 
 interface AccessMenuProps {
   onClose(): void;
@@ -33,7 +34,10 @@ export function AccessMenu({ onClose }: AccessMenuProps): JSX.Element {
 
   return (
     <div className="ga98-access-menu" role="menu" onMouseDown={(e) => e.stopPropagation()}>
-      <div className="ga98-access-rail">Ghost Access 98</div>
+      <div className="ga98-access-rail">
+        <img src={logoUrl} alt="" className="ga98-access-rail-logo" />
+        <span>Ghost Access 98</span>
+      </div>
       <div className="ga98-access-list">
         {items.length === 0 && <div className="ga98-access-entry">(no shortcuts — open Settings)</div>}
         {items.map((s, i) => (

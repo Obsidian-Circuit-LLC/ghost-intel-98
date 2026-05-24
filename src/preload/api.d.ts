@@ -70,9 +70,10 @@ export interface GhostApi {
     purgeAll(): Promise<void>;
   };
   system: {
-    appInfo(): Promise<{ version: string; userData: string; platform: NodeJS.Platform }>;
+    appInfo(): Promise<{ version: string; userData: string; platform: NodeJS.Platform; secretBackend?: string }>;
     openExternal(url: string): Promise<void>;
     onReminderFired(cb: (payload: { reminder: Reminder }) => void): () => void;
+    onDiagnostic(cb: (payload: { kind: string; cases?: { caseId: string; reason: string }[] }) => void): () => void;
   };
   mail: {
     listAccounts(): Promise<MailAccount[]>;
@@ -102,6 +103,7 @@ export interface GhostApi {
   ai: {
     chatStream(streamId: string, req: AiChatRequest): Promise<void>;
     cancel(streamId: string): Promise<void>;
+    setApiKey(value: string): Promise<void>;
     onChunk(cb: (payload: { streamId: string; chunk?: string; done?: boolean; error?: string }) => void): () => void;
   };
 }

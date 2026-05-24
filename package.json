@@ -1,6 +1,6 @@
 {
   "name": "ghost-access-98",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Windows 98–inspired case-management desktop app. Electron + React + TypeScript.",
   "author": {
@@ -57,10 +57,15 @@
       "buildResources": "resources"
     },
     "npmRebuild": false,
+    "publish": null,
     "files": [
       "out/**/*",
       "package.json",
       "!node_modules/**/cpu-features/**"
+    ],
+    "extraResources": [
+      { "from": "resources/icon.png", "to": "icon.png" },
+      { "from": "resources/logo.png", "to": "logo.png" }
     ],
     "win": {
       "target": [
@@ -71,6 +76,7 @@
           ]
         }
       ],
+      "icon": "resources/icon.ico",
       "artifactName": "GhostAccess98-Setup-${version}.${ext}"
     },
     "nsis": {
@@ -79,13 +85,17 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Ghost Access 98"
+      "shortcutName": "Ghost Access 98",
+      "installerIcon": "resources/icon.ico",
+      "uninstallerIcon": "resources/icon.ico",
+      "installerHeaderIcon": "resources/icon.ico"
     },
     "linux": {
       "target": [
         "AppImage"
       ],
       "category": "Utility",
+      "icon": "resources/icon.png",
       "artifactName": "GhostAccess98-${version}.${ext}"
     }
   }

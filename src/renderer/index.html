@@ -2,7 +2,14 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' data: blob:; script-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https: http:; media-src 'self' blob: https: http:; connect-src 'self' http://localhost:* http://127.0.0.1:* https: http:; font-src 'self' data:; frame-src https: http:; child-src https: http:; worker-src 'self' blob:;" />
+    <!-- v1.0.1: tightened — no wildcard connect-src. The renderer never makes direct
+         network calls to user-supplied AI / IMAP / SSH endpoints; those go through the
+         main process. The renderer DOES load HLS chunks (EyeSpy) and webview content,
+         but HLS goes via the <video> element under media-src, and <webview> spawns its
+         own webContents with its own CSP, not this one. So the renderer's own connect-src
+         can be locked to 'self' + the localhost ports we need for Ollama-via-renderer
+         (currently unused; reserved for a possible future direct-call path). -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https: http:; media-src 'self' blob: https: http:; connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-src 'none'; worker-src 'self' blob:; form-action 'none';" />
     <title>Ghost Access 98</title>
   </head>
   <body>

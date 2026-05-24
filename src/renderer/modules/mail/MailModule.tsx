@@ -130,8 +130,13 @@ function AccountSetup({ accounts, onClose }: { accounts: MailAccount[]; onClose:
   }
 
   async function save(): Promise<void> {
-    await window.api.mail.upsertAccount(draft);
-    onClose();
+    setStatus('Saving…');
+    try {
+      await window.api.mail.upsertAccount(draft);
+      onClose();
+    } catch (err) {
+      setStatus(`✗ Save failed: ${(err as Error).message}`);
+    }
   }
 
   return (

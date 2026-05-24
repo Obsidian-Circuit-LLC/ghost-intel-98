@@ -61,6 +61,11 @@ const api = {
       const listener = (_e: unknown, payload: { reminder: unknown }) => cb(payload);
       ipcRenderer.on(channels.system.onReminderFired, listener);
       return () => ipcRenderer.removeListener(channels.system.onReminderFired, listener);
+    },
+    onDiagnostic: (cb: (payload: { kind: string; cases?: { caseId: string; reason: string }[] }) => void) => {
+      const listener = (_e: unknown, payload: { kind: string; cases?: { caseId: string; reason: string }[] }) => cb(payload);
+      ipcRenderer.on(channels.system.onDiagnostic, listener);
+      return () => ipcRenderer.removeListener(channels.system.onDiagnostic, listener);
     }
   },
   mail: {
@@ -99,6 +104,7 @@ const api = {
   ai: {
     chatStream: (streamId: string, req: unknown) => ipcRenderer.invoke(channels.ai.chatStream, streamId, req),
     cancel: (streamId: string) => ipcRenderer.invoke(channels.ai.chat, streamId),
+    setApiKey: (value: string) => ipcRenderer.invoke(channels.ai.setApiKey, value),
     onChunk: (cb: (payload: { streamId: string; chunk?: string; done?: boolean; error?: string }) => void) => {
       const l = (_e: unknown, p: { streamId: string; chunk?: string; done?: boolean; error?: string }) => cb(p);
       ipcRenderer.on(channels.ai.onChatChunk, l);

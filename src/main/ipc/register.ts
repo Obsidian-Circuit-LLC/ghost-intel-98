@@ -1,6 +1,17 @@
 /**
- * Wires every IPC channel from src/shared/ipc-contracts.ts to its handler.
- * Called once at app ready.
+ * IPC bridge — every renderer-supplied id, name, and URL passes through validate.ts
+ * before hitting storage. Handlers are wrapped so unhandled errors are surfaced
+ * to the renderer with the offending channel name in the message, not silently
+ * dropped into the dev-tools console.
+ *
+ * v1.0.1 round-3 hardening:
+ *  - safeHandle preserves error name + code (renderer can disambiguate "keyring locked"
+ *    from "decrypt failed" from "validation error")
+ *  - Error messages are sanitised at the boundary: dataRoot() prefix stripped, UUIDs
+ *    masked, so absolute filesystem paths don't leak into the renderer (or downstream
+ *    AI / log destinations).
+ *  - Reminder ticker now emits a structured diagnostic via channels.system.onDiagnostic
+ *    for broken cases, in addition to the toast.
  */
 
 import { app, ipcMain, shell, BrowserWindow } from 'electron';
@@ -8,6 +19,7 @@ import { channels } from '@shared/ipc-contracts';
 import type { MailAccount, MailSendInput, SshHostProfile, AiChatRequest } from '@shared/post-mvp-types';
 import {
   caseStore,
+  consumeDrainDiagnostics,
   fileStore,
   noteStore,
   reminderStore,
@@ -20,106 +32,174 @@ import * as mail from '../services/mail';
 import * as ssh from '../services/ssh';
 import * as streams from '../services/streams';
 import * as ai from '../services/ai';
+import { ensureUuid, ensureFileName, validateExternalUrl } from '../security/validate';
+import { getSecretBackend } from '../secrets';
+import { homedir } from 'node:os';
+
+type Handler = (...args: unknown[]) => unknown | Promise<unknown>;
+
+const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/gi;
+const HOME_PATTERNS = [
+  /\/home\/[^/\s]+/g,
+  /\/Users\/[^/\s]+/g,
+  /[Cc]:\\\\Users\\\\[^\\\s]+/g
+];
+
+function sanitiseMessage(msg: string): string {
+  let out = msg;
+  const root = dataRoot();
+  if (root) out = out.split(root).join('<userData>');
+  // Strip the user's home directory in any of its OS-specific shapes.
+  const home = homedir();
+  if (home) out = out.split(home).join('<home>');
+  for (const p of HOME_PATTERNS) out = out.replace(p, '<home>');
+  out = out.replace(UUID_RE, '<uuid>');
+  return out;
+}
+
+function safeHandle(channel: string, fn: Handler): void {
+  ipcMain.handle(channel, async (_e, ...args) => {
+    try {
+      return await fn(...args);
+    } catch (err) {
+      const original = err as Error & { code?: string };
+      const sanitised = sanitiseMessage(original.message ?? String(err));
+      // eslint-disable-next-line no-console
+      console.error(`[ipc:${channel}]`, original.name, sanitised);
+      const wrapped = new Error(`[${channel}] ${sanitised}`);
+      wrapped.name = original.name || 'Error';
+      // Preserve any code field so the renderer can disambiguate.
+      if (original.code) (wrapped as Error & { code?: string }).code = original.code;
+      throw wrapped;
+    }
+  });
+}
 
 export function registerIpc(getWindow: () => BrowserWindow | null): void {
   // ---- system ----
-  ipcMain.handle(channels.system.appInfo, () => ({
+  safeHandle(channels.system.appInfo, () => ({
     version: app.getVersion(),
     userData: dataRoot(),
-    platform: process.platform
+    platform: process.platform,
+    secretBackend: getSecretBackend()
   }));
-  ipcMain.handle(channels.system.openExternal, async (_e, url: string) => {
+  safeHandle(channels.system.openExternal, async (...args) => {
+    const url = validateExternalUrl(args[0] as string);
     await shell.openExternal(url);
   });
 
   // ---- settings ----
-  ipcMain.handle(channels.settings.read, () => settingsStore.read());
-  ipcMain.handle(channels.settings.update, (_e, patch) => settingsStore.update(patch));
+  safeHandle(channels.settings.read, () => settingsStore.read());
+  safeHandle(channels.settings.update, (...args) => settingsStore.update(args[0] as Parameters<typeof settingsStore.update>[0]));
 
   // ---- cases ----
-  ipcMain.handle(channels.cases.list, () => caseStore.list());
-  ipcMain.handle(channels.cases.create, (_e, input) => caseStore.create(input));
-  ipcMain.handle(channels.cases.read, (_e, id) => caseStore.read(id));
-  ipcMain.handle(channels.cases.rename, (_e, id, title) => caseStore.rename(id, title));
-  ipcMain.handle(channels.cases.update, (_e, id, patch) => caseStore.update(id, patch));
-  ipcMain.handle(channels.cases.archive, (_e, id, archived) => caseStore.archive(id, archived));
-  ipcMain.handle(channels.cases.delete, (_e, id) => caseStore.softDelete(id));
-  ipcMain.handle(channels.cases.addTimeline, (_e, id, ev) => caseStore.addTimeline(id, ev));
-  ipcMain.handle(channels.cases.addTask, (_e, id, text, dueAt) => caseStore.addTask(id, text, dueAt));
-  ipcMain.handle(channels.cases.toggleTask, (_e, id, taskId) => caseStore.toggleTask(id, taskId));
-  ipcMain.handle(channels.cases.deleteTask, (_e, id, taskId) => caseStore.deleteTask(id, taskId));
-  ipcMain.handle(channels.cases.addLink, (_e, id, url, title) => caseStore.addLink(id, url, title));
-  ipcMain.handle(channels.cases.deleteLink, (_e, id, linkId) => caseStore.deleteLink(id, linkId));
-  ipcMain.handle(channels.cases.addReminder, (_e, id, r) => caseStore.addReminder(id, r));
-  ipcMain.handle(channels.cases.deleteReminder, (_e, id, rid) => caseStore.deleteReminder(id, rid));
+  safeHandle(channels.cases.list, () => caseStore.list());
+  safeHandle(channels.cases.create, (...args) => caseStore.create(args[0] as Parameters<typeof caseStore.create>[0]));
+  safeHandle(channels.cases.read, (...args) => caseStore.read(ensureUuid(args[0], 'caseId')));
+  safeHandle(channels.cases.rename, (...args) => caseStore.rename(ensureUuid(args[0], 'caseId'), args[1] as string));
+  safeHandle(channels.cases.update, (...args) => caseStore.update(ensureUuid(args[0], 'caseId'), args[1] as Parameters<typeof caseStore.update>[1]));
+  safeHandle(channels.cases.archive, (...args) => caseStore.archive(ensureUuid(args[0], 'caseId'), args[1] as boolean));
+  safeHandle(channels.cases.delete, (...args) => caseStore.softDelete(ensureUuid(args[0], 'caseId')));
+  safeHandle(channels.cases.addTimeline, (...args) => caseStore.addTimeline(ensureUuid(args[0], 'caseId'), args[1] as Parameters<typeof caseStore.addTimeline>[1]));
+  safeHandle(channels.cases.addTask, (...args) => caseStore.addTask(ensureUuid(args[0], 'caseId'), args[1] as string, args[2] as string | undefined));
+  safeHandle(channels.cases.toggleTask, (...args) => caseStore.toggleTask(ensureUuid(args[0], 'caseId'), args[1] as string));
+  safeHandle(channels.cases.deleteTask, (...args) => caseStore.deleteTask(ensureUuid(args[0], 'caseId'), args[1] as string));
+  safeHandle(channels.cases.addLink, (...args) => caseStore.addLink(ensureUuid(args[0], 'caseId'), args[1] as string, args[2] as string));
+  safeHandle(channels.cases.deleteLink, (...args) => caseStore.deleteLink(ensureUuid(args[0], 'caseId'), args[1] as string));
+  safeHandle(channels.cases.addReminder, (...args) => caseStore.addReminder(ensureUuid(args[0], 'caseId'), args[1] as Parameters<typeof caseStore.addReminder>[1]));
+  safeHandle(channels.cases.deleteReminder, (...args) => caseStore.deleteReminder(ensureUuid(args[0], 'caseId'), args[1] as string));
 
   // ---- files ----
-  ipcMain.handle(channels.files.importDropped, (_e, id, list) => fileStore.importDropped(id, list));
-  ipcMain.handle(channels.files.listAttachments, (_e, id) => fileStore.listAttachments(id));
-  ipcMain.handle(channels.files.deleteAttachment, (_e, id, name) => fileStore.deleteAttachment(id, name));
-  ipcMain.handle(channels.files.revealAttachment, (_e, id, name) => {
+  safeHandle(channels.files.importDropped, (...args) => fileStore.importDropped(ensureUuid(args[0], 'caseId'), args[1] as Parameters<typeof fileStore.importDropped>[1]));
+  safeHandle(channels.files.listAttachments, (...args) => fileStore.listAttachments(ensureUuid(args[0], 'caseId')));
+  safeHandle(channels.files.deleteAttachment, (...args) => fileStore.deleteAttachment(ensureUuid(args[0], 'caseId'), ensureFileName(args[1], 'fileName')));
+  safeHandle(channels.files.revealAttachment, (...args) => {
+    const id = ensureUuid(args[0], 'caseId');
+    const name = ensureFileName(args[1], 'fileName');
     const path = fileStore.attachmentAbsolutePath(id, name);
     shell.showItemInFolder(path);
   });
 
   // ---- notes ----
-  ipcMain.handle(channels.notes.list, (_e, id) => noteStore.list(id));
-  ipcMain.handle(channels.notes.read, (_e, id, name) => noteStore.read(id, name));
-  ipcMain.handle(channels.notes.write, (_e, id, name, body) => noteStore.write(id, name, body));
-  ipcMain.handle(channels.notes.delete, (_e, id, name) => noteStore.delete(id, name));
+  safeHandle(channels.notes.list, (...args) => noteStore.list(ensureUuid(args[0], 'caseId')));
+  safeHandle(channels.notes.read, (...args) => noteStore.read(ensureUuid(args[0], 'caseId'), ensureFileName(args[1], 'noteName')));
+  safeHandle(channels.notes.write, (...args) => noteStore.write(ensureUuid(args[0], 'caseId'), ensureFileName(args[1], 'noteName'), args[2] as string));
+  safeHandle(channels.notes.delete, (...args) => noteStore.delete(ensureUuid(args[0], 'caseId'), ensureFileName(args[1], 'noteName')));
 
-  // ---- reminders (global) ----
-  ipcMain.handle(channels.reminders.listGlobal, () => reminderStore.listGlobal());
-  ipcMain.handle(channels.reminders.upsertGlobal, (_e, r) => reminderStore.upsertGlobal(r));
-  ipcMain.handle(channels.reminders.deleteGlobal, (_e, id) => reminderStore.deleteGlobal(id));
+  // ---- reminders ----
+  safeHandle(channels.reminders.listGlobal, () => reminderStore.listGlobal());
+  safeHandle(channels.reminders.upsertGlobal, (...args) => reminderStore.upsertGlobal(args[0] as Parameters<typeof reminderStore.upsertGlobal>[0]));
+  safeHandle(channels.reminders.deleteGlobal, (...args) => reminderStore.deleteGlobal(args[0] as string));
 
   // ---- shred ----
-  ipcMain.handle(channels.shred.list, () => shredStore.list());
-  ipcMain.handle(channels.shred.restore, (_e, id) => shredStore.restore(id));
-  ipcMain.handle(channels.shred.purge, (_e, id) => shredStore.purge(id));
-  ipcMain.handle(channels.shred.purgeAll, () => shredStore.purgeAll());
+  safeHandle(channels.shred.list, () => shredStore.list());
+  safeHandle(channels.shred.restore, (...args) => shredStore.restore(args[0] as string));
+  safeHandle(channels.shred.purge, (...args) => shredStore.purge(args[0] as string));
+  safeHandle(channels.shred.purgeAll, () => shredStore.purgeAll());
 
   // ---- mail ----
-  ipcMain.handle(channels.mail.listAccounts, () => mail.listAccounts());
-  ipcMain.handle(channels.mail.upsertAccount, (_e, input: MailAccount & { password?: string }) => mail.upsertAccount(input));
-  ipcMain.handle(channels.mail.deleteAccount, (_e, id: string) => mail.deleteAccount(id));
-  ipcMain.handle(channels.mail.testAccount, (_e, input: MailAccount & { password: string }) => mail.testAccount(input));
-  ipcMain.handle(channels.mail.fetchInbox, (_e, id: string, limit?: number) => mail.fetchInbox(id, limit));
-  ipcMain.handle(channels.mail.fetchMessage, (_e, id: string, uid: number) => mail.fetchMessage(id, uid));
-  ipcMain.handle(channels.mail.send, (_e, input: MailSendInput) => mail.sendMail(input));
+  safeHandle(channels.mail.listAccounts, () => mail.listAccounts());
+  safeHandle(channels.mail.upsertAccount, (...args) => mail.upsertAccount(args[0] as MailAccount & { password?: string }));
+  safeHandle(channels.mail.deleteAccount, (...args) => mail.deleteAccount(args[0] as string));
+  safeHandle(channels.mail.testAccount, (...args) => mail.testAccount(args[0] as MailAccount & { password: string }));
+  safeHandle(channels.mail.fetchInbox, (...args) => mail.fetchInbox(args[0] as string, args[1] as number | undefined));
+  safeHandle(channels.mail.fetchMessage, (...args) => mail.fetchMessage(args[0] as string, args[1] as number));
+  safeHandle(channels.mail.send, (...args) => mail.sendMail(args[0] as MailSendInput));
 
   // ---- ssh ----
-  ipcMain.handle(channels.ssh.listHosts, () => ssh.listHosts());
-  ipcMain.handle(channels.ssh.upsertHost, (_e, input: SshHostProfile & { secret?: string }) => ssh.upsertHost(input));
-  ipcMain.handle(channels.ssh.deleteHost, (_e, id: string) => ssh.deleteHost(id));
-  ipcMain.handle(channels.ssh.connect, (_e, hostId: string) => ssh.connect(hostId, getWindow));
-  ipcMain.handle(channels.ssh.write, (_e, sessionId: string, data: string) => ssh.write(sessionId, data));
-  ipcMain.handle(channels.ssh.resize, (_e, sessionId: string, cols: number, rows: number) => ssh.resize(sessionId, cols, rows));
-  ipcMain.handle(channels.ssh.disconnect, (_e, sessionId: string) => ssh.disconnect(sessionId));
+  safeHandle(channels.ssh.listHosts, () => ssh.listHosts());
+  safeHandle(channels.ssh.upsertHost, (...args) => ssh.upsertHost(args[0] as SshHostProfile & { secret?: string }));
+  safeHandle(channels.ssh.deleteHost, (...args) => ssh.deleteHost(args[0] as string));
+  safeHandle(channels.ssh.connect, (...args) => ssh.connect(args[0] as string, getWindow));
+  safeHandle(channels.ssh.write, (...args) => ssh.write(args[0] as string, args[1] as string));
+  safeHandle(channels.ssh.resize, (...args) => ssh.resize(args[0] as string, args[1] as number, args[2] as number));
+  safeHandle(channels.ssh.disconnect, (...args) => ssh.disconnect(args[0] as string));
 
   // ---- streams (EyeSpy) ----
-  ipcMain.handle(channels.streams.list, () => streams.list());
-  ipcMain.handle(channels.streams.upsert, (_e, input) => streams.upsert(input));
-  ipcMain.handle(channels.streams.delete, (_e, id: string) => streams.remove(id));
+  safeHandle(channels.streams.list, () => streams.list());
+  safeHandle(channels.streams.upsert, (...args) => streams.upsert(args[0] as Parameters<typeof streams.upsert>[0]));
+  safeHandle(channels.streams.delete, (...args) => streams.remove(args[0] as string));
 
   // ---- ai ----
-  ipcMain.handle(channels.ai.chatStream, (_e, streamId: string, req: AiChatRequest) => ai.chat(streamId, req, getWindow));
-  ipcMain.handle(channels.ai.chat, async (_e, streamId: string) => ai.cancel(streamId));
+  safeHandle(channels.ai.chatStream, (...args) => ai.chat(args[0] as string, args[1] as AiChatRequest, getWindow));
+  safeHandle(channels.ai.chat, (...args) => ai.cancel(args[0] as string));
+  safeHandle(channels.ai.setApiKey, (...args) => ai.setApiKey(args[0] as string));
 }
 
-/** Reminder tick: every 30s, pull due reminders, fire notifications + emit IPC to renderer. */
+/** Reminder tick: every 30s, pull due reminders, fire notifications + emit IPC to renderer.
+ *  Guarded so an overlapping tick (slow disk, many cases) doesn't double-fire reminders.
+ *  Per-case errors are surfaced as a structured diagnostic event so the user sees which
+ *  case is broken, not just "reminders failed". */
 export function startReminderTicker(getWindow: () => BrowserWindow | null): NodeJS.Timeout {
+  let running = false;
+  let lastBrokenSummary = '';
   const interval = setInterval(async () => {
+    if (running) return;
+    running = true;
     try {
       const due = await reminderStore.drainDue(new Date());
-      if (due.length === 0) return;
       const win = getWindow();
       for (const r of due) {
         showNotification(r.title, r.body);
         if (win) win.webContents.send(channels.system.onReminderFired, { reminder: r });
       }
+      const broken = consumeDrainDiagnostics();
+      if (broken.length > 0) {
+        const summary = broken.map((b) => `${b.caseId.slice(0, 8)}:${b.reason}`).join(';');
+        if (summary !== lastBrokenSummary) {
+          lastBrokenSummary = summary;
+          showNotification('Ghost Access 98', `Reminders failed for ${broken.length} case${broken.length === 1 ? '' : 's'}. See Settings → diagnostics.`);
+          if (win) win.webContents.send(channels.system.onDiagnostic, { kind: 'reminders-broken', cases: broken });
+        }
+      } else {
+        lastBrokenSummary = '';
+      }
     } catch (err) {
+      // eslint-disable-next-line no-console
       console.error('[reminder-ticker]', err);
+      showNotification('Ghost Access 98', 'Reminders failed to fire — see Settings → About → diagnostics');
+    } finally {
+      running = false;
     }
   }, 30_000);
   return interval;

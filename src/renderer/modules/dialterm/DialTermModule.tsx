@@ -2,6 +2,11 @@
  * DialTerm — SSH client wrapped in a 90s dial-up handshake animation.
  * Hosts persist via main process; xterm.js renders the terminal.
  * Passwords / passphrases live in safeStorage-encrypted secrets.enc only.
+ *
+ * v1.0.1 fixes: IPC listeners filter strictly by sessionId so two open windows
+ * (or a reconnect against a freshly-disconnected prior session) can't cross-write.
+ * Connect-failure path properly tears down listeners. Component unmount cleans
+ * up listeners AND disconnects the live session.
  */
 
 import { Terminal } from '@xterm/xterm';
@@ -26,16 +31,19 @@ export function DialTermModule(): JSX.Element {
   const fitInstance = useRef<FitAddon | null>(null);
   const offData = useRef<(() => void) | null>(null);
   const offClose = useRef<(() => void) | null>(null);
+  // Ref-tracked sessionId so listener callbacks (registered before setSessionId resolves)
+  // can filter by the latest value without stale closures.
+  const sessionIdRef = useRef<string | null>(null);
   const settings = useSettings((s) => s.settings);
 
   const loadHosts = useCallback(async () => {
     const list = await window.api.ssh.listHosts();
     setHosts(list);
-    if (!activeId && list.length > 0) setActiveId(list[0].id);
-  }, [activeId]);
+    setActiveId((prev) => prev ?? list[0]?.id ?? null);
+  }, []);
   useEffect(() => { void loadHosts(); }, [loadHosts]);
 
-  // mount xterm on demand
+  // mount xterm when we move to 'open'
   useEffect(() => {
     if (state !== 'open' || !termRef.current || termInstance.current) return;
     const term = new Terminal({ fontSize: 13, fontFamily: '"Courier New", monospace', theme: { background: '#000', foreground: '#aaffaa' } });
@@ -46,14 +54,17 @@ export function DialTermModule(): JSX.Element {
     termInstance.current = term;
     fitInstance.current = fit;
     term.onData((d) => {
-      if (sessionId) void window.api.ssh.write(sessionId, d);
+      const sid = sessionIdRef.current;
+      if (sid) void window.api.ssh.write(sid, d);
     });
     const onResize = (): void => {
       try {
         fit.fit();
-        if (sessionId) void window.api.ssh.resize(sessionId, term.cols, term.rows);
-      } catch {
-        // ignore
+        const sid = sessionIdRef.current;
+        if (sid) void window.api.ssh.resize(sid, term.cols, term.rows);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn('[dialterm] resize failed', err);
       }
     };
     window.addEventListener('resize', onResize);
@@ -63,7 +74,23 @@ export function DialTermModule(): JSX.Element {
       termInstance.current = null;
       fitInstance.current = null;
     };
-  }, [state, sessionId]);
+  }, [state]);
+
+  function teardown(): void {
+    offData.current?.();
+    offClose.current?.();
+    offData.current = null;
+    offClose.current = null;
+    const sid = sessionIdRef.current;
+    if (sid) void window.api.ssh.disconnect(sid).catch(() => {});
+    sessionIdRef.current = null;
+    setSessionId(null);
+  }
+
+  // Component unmount safety net.
+  useEffect(() => {
+    return () => teardown();
+  }, []);
 
   async function dial(): Promise<void> {
     if (!activeId) return;
@@ -81,30 +108,33 @@ export function DialTermModule(): JSX.Element {
     }
     setState('connecting');
     setHandshakeLog((h) => [...h, 'CARRIER LOCK', 'OPENING SSH SESSION…']);
+
+    // Subscribe ONCE per dial attempt; filter strictly by sessionId.
+    offData.current = window.api.ssh.onData(({ data, sessionId: sid }) => {
+      if (sid !== sessionIdRef.current) return;
+      if (termInstance.current) termInstance.current.write(data);
+    });
+    offClose.current = window.api.ssh.onClose(({ reason, sessionId: sid }) => {
+      if (sid !== sessionIdRef.current) return;
+      if (termInstance.current) termInstance.current.write(`\r\n\x1b[31m[disconnected: ${reason}]\x1b[0m\r\n`);
+      teardown();
+      setState('closed');
+    });
+
     try {
-      offData.current = window.api.ssh.onData(({ data, sessionId: sid }) => {
-        if (sid && termInstance.current) termInstance.current.write(data);
-      });
-      offClose.current = window.api.ssh.onClose(({ reason }) => {
-        if (termInstance.current) termInstance.current.write(`\r\n\x1b[31m[disconnected: ${reason}]\x1b[0m\r\n`);
-        setState('closed');
-      });
       const { sessionId: sid } = await window.api.ssh.connect(activeId);
+      sessionIdRef.current = sid;
       setSessionId(sid);
       setState('open');
     } catch (err) {
       setHandshakeLog((h) => [...h, `ERROR: ${(err as Error).message}`]);
+      teardown();
       setState('closed');
     }
   }
 
   async function hangup(): Promise<void> {
-    if (sessionId) await window.api.ssh.disconnect(sessionId);
-    offData.current?.();
-    offClose.current?.();
-    offData.current = null;
-    offClose.current = null;
-    setSessionId(null);
+    teardown();
     setState('idle');
   }
 
@@ -122,7 +152,7 @@ export function DialTermModule(): JSX.Element {
           ? <button onClick={() => void hangup()}>Hang up</button>
           : <button onClick={() => void dial()} disabled={!activeId || state === 'dialing'}>Dial</button>}
         <span style={{ flex: 1 }} />
-        <span style={{ fontSize: 11 }}>{state.toUpperCase()}{activeHost ? ` · ${activeHost.host}:${activeHost.port}` : ''}</span>
+        <span style={{ fontSize: 11 }}>{state.toUpperCase()}{activeHost ? ` · ${activeHost.host}:${activeHost.port}` : ''}{sessionId ? ` · ${sessionId.slice(0, 8)}` : ''}</span>
       </div>
       <div style={{ flex: 1, background: '#000', color: '#aaffaa', padding: 4, overflow: 'hidden', position: 'relative' }}>
         {state === 'open' ? (
@@ -154,14 +184,20 @@ function HostSetup({ hosts, onClose }: { hosts: SshHostProfile[]; onClose: () =>
     secretRef: '',
     secret: ''
   });
+  const [error, setError] = useState<string | null>(null);
 
   async function save(): Promise<void> {
+    setError(null);
     if (!draft.host || !draft.username) {
-      alert('Host and username are required.');
+      setError('Host and username are required.');
       return;
     }
-    await window.api.ssh.upsertHost(draft);
-    onClose();
+    try {
+      await window.api.ssh.upsertHost(draft);
+      onClose();
+    } catch (err) {
+      setError((err as Error).message);
+    }
   }
 
   return (
@@ -202,7 +238,7 @@ function HostSetup({ hosts, onClose }: { hosts: SshHostProfile[]; onClose: () =>
                 <>
                   <label>Key path:</label>
                   <input className="ga98-text" value={draft.keyPath} onChange={(e) => setDraft({ ...draft, keyPath: e.target.value })}
-                    placeholder="e.g. /home/you/.ssh/id_ed25519 or C:\\Users\\you\\.ssh\\id_ed25519" />
+                    placeholder="must live inside your home dir, e.g. ~/.ssh/id_ed25519" />
                   <label>Passphrase:</label>
                   <input className="ga98-text" type="password" value={draft.secret} onChange={(e) => setDraft({ ...draft, secret: e.target.value })}
                     placeholder="(optional, encrypted in secrets.enc)" />
@@ -217,9 +253,10 @@ function HostSetup({ hosts, onClose }: { hosts: SshHostProfile[]; onClose: () =>
               )}
             </div>
           </fieldset>
-          <div style={{ display: 'flex', gap: 4 }}>
+          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
             <button onClick={() => void save()}>Save</button>
             <button onClick={onClose}>Cancel</button>
+            {error && <span style={{ color: '#900', fontSize: 11, marginLeft: 8 }}>{error}</span>}
           </div>
         </div>
       </div>
