@@ -1,6 +1,6 @@
 {
   "name": "ghost-access-98",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Windows 98–inspired case-management desktop app. Electron + React + TypeScript.",
   "author": {
@@ -20,19 +20,27 @@
     "package": "pnpm build && electron-builder",
     "package:win": "pnpm build && electron-builder --win --x64",
     "package:linux": "pnpm build && electron-builder --linux",
-    "postinstall": "electron-builder install-app-deps"
+    "postinstall": "echo 'skipping native rebuild — ssh2 runs pure-JS; cpu-features (optional) is intentionally skipped'"
   },
   "dependencies": {
     "98.css": "^0.1.20",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "hls.js": "^1.6.16",
+    "imapflow": "^1.3.3",
+    "nodemailer": "^8.0.8",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.28.0",
+    "ssh2": "^1.17.0",
     "zustand": "^5.0.2"
   },
   "devDependencies": {
     "@types/node": "^20.17.10",
+    "@types/nodemailer": "^8.0.0",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
+    "@types/ssh2": "^1.15.5",
     "@vitejs/plugin-react": "^4.3.4",
     "electron": "^33.2.1",
     "electron-builder": "^25.1.8",
@@ -48,15 +56,19 @@
       "output": "release/${version}",
       "buildResources": "resources"
     },
+    "npmRebuild": false,
     "files": [
       "out/**/*",
-      "package.json"
+      "package.json",
+      "!node_modules/**/cpu-features/**"
     ],
     "win": {
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "artifactName": "GhostAccess98-Setup-${version}.${ext}"
@@ -70,7 +82,9 @@
       "shortcutName": "Ghost Access 98"
     },
     "linux": {
-      "target": ["AppImage"],
+      "target": [
+        "AppImage"
+      ],
       "category": "Utility",
       "artifactName": "GhostAccess98-${version}.${ext}"
     }

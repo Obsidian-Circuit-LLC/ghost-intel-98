@@ -65,6 +65,36 @@ export const channels = {
     appInfo: 'system:appInfo',
     openExternal: 'system:openExternal',
     onReminderFired: 'system:onReminderFired'
+  },
+  mail: {
+    listAccounts: 'mail:listAccounts',
+    upsertAccount: 'mail:upsertAccount',
+    deleteAccount: 'mail:deleteAccount',
+    testAccount: 'mail:testAccount',
+    fetchInbox: 'mail:fetchInbox',
+    fetchMessage: 'mail:fetchMessage',
+    send: 'mail:send'
+  },
+  ssh: {
+    listHosts: 'ssh:listHosts',
+    upsertHost: 'ssh:upsertHost',
+    deleteHost: 'ssh:deleteHost',
+    connect: 'ssh:connect',
+    write: 'ssh:write',
+    resize: 'ssh:resize',
+    disconnect: 'ssh:disconnect',
+    onData: 'ssh:onData',
+    onClose: 'ssh:onClose'
+  },
+  streams: {
+    list: 'streams:list',
+    upsert: 'streams:upsert',
+    delete: 'streams:delete'
+  },
+  ai: {
+    chat: 'ai:chat',
+    chatStream: 'ai:chatStream',
+    onChatChunk: 'ai:onChatChunk'
   }
 } as const;
 

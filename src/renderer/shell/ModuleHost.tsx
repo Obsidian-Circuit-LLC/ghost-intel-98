@@ -11,6 +11,11 @@ import { RemindersModule } from '../modules/reminders/RemindersModule';
 import { AlarmModule } from '../modules/alarm/AlarmModule';
 import { ShredModule } from '../modules/shred/ShredModule';
 import { SettingsModule } from '../modules/settings/SettingsModule';
+import { NetExplorerModule } from '../modules/net-explorer/NetExplorerModule';
+import { MailModule } from '../modules/mail/MailModule';
+import { DialTermModule } from '../modules/dialterm/DialTermModule';
+import { EyeSpyModule } from '../modules/eyespy/EyeSpyModule';
+import { AiAssistantModule } from '../modules/ai-assistant/AiAssistantModule';
 import { ComingSoon } from '../modules/coming-soon/ComingSoon';
 
 export function ModuleHost({ spec }: { spec: WindowSpec }): JSX.Element {
@@ -30,15 +35,15 @@ export function ModuleHost({ spec }: { spec: WindowSpec }): JSX.Element {
     case 'settings':
       return <SettingsModule />;
     case 'net-explorer':
-      return <ComingSoon name="Net Explorer" detail="Internal browser — coming in v1.0.0." />;
+      return <NetExplorerModule />;
     case 'mail':
-      return <ComingSoon name="Mail" detail="IMAP/SMTP client — coming in v1.0.0." />;
+      return <MailModule />;
     case 'dialterm':
-      return <ComingSoon name="DialTerm" detail="SSH client with dial-up handshake — coming in v1.0.0." />;
+      return <DialTermModule />;
     case 'eyespy':
-      return <ComingSoon name="EyeSpy" detail="Authorised camera streams — coming in v1.0.0." />;
+      return <EyeSpyModule />;
     case 'ai-assistant':
-      return <ComingSoon name="AI Assistant" detail="Pluggable Ollama / OpenAI-compatible — coming in v1.0.0." />;
+      return <AiAssistantModule />;
     default:
       return <ComingSoon name={spec.module} detail="No module registered for this key." />;
   }

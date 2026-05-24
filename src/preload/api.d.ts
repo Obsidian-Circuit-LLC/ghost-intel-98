@@ -13,6 +13,15 @@ import type {
   TimelineEvent,
   WebLink
 } from '../shared/types';
+import type {
+  AiChatRequest,
+  CameraStream,
+  MailAccount,
+  MailMessage,
+  MailMessageSummary,
+  MailSendInput,
+  SshHostProfile
+} from '../shared/post-mvp-types';
 
 export interface GhostApi {
   cases: {
@@ -64,6 +73,36 @@ export interface GhostApi {
     appInfo(): Promise<{ version: string; userData: string; platform: NodeJS.Platform }>;
     openExternal(url: string): Promise<void>;
     onReminderFired(cb: (payload: { reminder: Reminder }) => void): () => void;
+  };
+  mail: {
+    listAccounts(): Promise<MailAccount[]>;
+    upsertAccount(input: MailAccount & { password?: string }): Promise<MailAccount>;
+    deleteAccount(id: string): Promise<void>;
+    testAccount(input: MailAccount & { password: string }): Promise<{ ok: true } | { ok: false; error: string }>;
+    fetchInbox(id: string, limit?: number): Promise<MailMessageSummary[]>;
+    fetchMessage(id: string, uid: number): Promise<MailMessage>;
+    send(input: MailSendInput): Promise<{ ok: true; id: string } | { ok: false; error: string }>;
+  };
+  ssh: {
+    listHosts(): Promise<SshHostProfile[]>;
+    upsertHost(input: SshHostProfile & { secret?: string }): Promise<SshHostProfile>;
+    deleteHost(id: string): Promise<void>;
+    connect(hostId: string): Promise<{ sessionId: string }>;
+    write(sessionId: string, data: string): Promise<void>;
+    resize(sessionId: string, cols: number, rows: number): Promise<void>;
+    disconnect(sessionId: string): Promise<void>;
+    onData(cb: (payload: { sessionId: string; data: string }) => void): () => void;
+    onClose(cb: (payload: { sessionId: string; reason: string }) => void): () => void;
+  };
+  streams: {
+    list(): Promise<CameraStream[]>;
+    upsert(input: Partial<CameraStream> & { url: string; label: string; kind: CameraStream['kind'] }): Promise<CameraStream>;
+    delete(id: string): Promise<void>;
+  };
+  ai: {
+    chatStream(streamId: string, req: AiChatRequest): Promise<void>;
+    cancel(streamId: string): Promise<void>;
+    onChunk(cb: (payload: { streamId: string; chunk?: string; done?: boolean; error?: string }) => void): () => void;
   };
 }
 
