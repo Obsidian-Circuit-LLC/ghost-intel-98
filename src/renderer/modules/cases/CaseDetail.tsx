@@ -7,6 +7,8 @@ import { useCallback, useState, type DragEvent } from 'react';
 import type { CaseRecord, CasePriority, CaseStatus } from '@shared/types';
 import { useWindows } from '../../state/store';
 import { playError } from '../../audio/synth';
+import { confirmDialog } from '../../state/dialogs';
+import { toast } from '../../state/toasts';
 
 interface Props {
   record: CaseRecord;
@@ -39,16 +41,18 @@ export function CaseDetail({ record, onChange, onArchive, onRefresh, onUpdateFie
       .filter((p) => p.sourcePath);
     if (payload.length === 0) {
       playError();
-      alert('Could not resolve dropped file paths. Drag from a real folder (not a browser).');
+      toast.error('Could not resolve dropped file paths. Drag from a real folder (not a browser tab).');
       return;
     }
     try {
-      await window.api.files.importDropped(record.id, payload);
+      const imported = await window.api.files.importDropped(record.id, payload);
       await onRefresh();
       await onChange();
+      if (imported.length === payload.length) toast.success(`Imported ${imported.length} file${imported.length === 1 ? '' : 's'}.`);
+      else toast.warn(`Imported ${imported.length} of ${payload.length} — see the case timeline for details.`);
     } catch (err) {
       playError();
-      alert(`Import failed: ${(err as Error).message}`);
+      toast.error(`Import failed: ${(err as Error).message}`);
     }
   }, [record.id, onRefresh, onChange]);
 
@@ -116,9 +120,15 @@ export function CaseDetail({ record, onChange, onArchive, onRefresh, onUpdateFie
                 </span>
                 <button onClick={() => void window.api.files.revealAttachment(record.id, a.fileName)}>Reveal</button>
                 <button onClick={async () => {
-                  if (!confirm(`Send ${a.originalName} to Shred?`)) return;
-                  await window.api.files.deleteAttachment(record.id, a.fileName);
-                  await onRefresh();
+                  const ok = await confirmDialog(`Send ${a.originalName} to Shred?`, 'Shred attachment');
+                  if (!ok) return;
+                  try {
+                    await window.api.files.deleteAttachment(record.id, a.fileName);
+                    await onRefresh();
+                    toast.success('Sent to Shred.');
+                  } catch (err) {
+                    toast.error(`Shred failed: ${(err as Error).message}`);
+                  }
                 }}>Shred</button>
               </li>
             ))}

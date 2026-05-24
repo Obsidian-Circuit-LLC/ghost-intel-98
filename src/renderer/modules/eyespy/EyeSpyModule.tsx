@@ -10,6 +10,8 @@ import Hls from 'hls.js';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CameraStream, StreamKind } from '@shared/post-mvp-types';
 import type { CaseSummary } from '@shared/types';
+import { confirmDialog } from '../../state/dialogs';
+import { toast } from '../../state/toasts';
 
 export function EyeSpyModule(): JSX.Element {
   const [streams, setStreams] = useState<CameraStream[]>([]);
@@ -38,10 +40,16 @@ export function EyeSpyModule(): JSX.Element {
   }
 
   async function del(id: string): Promise<void> {
-    if (!confirm('Delete this stream?')) return;
-    await window.api.streams.delete(id);
-    setSelected(null);
-    await refresh();
+    const ok = await confirmDialog('Delete this stream?', 'Delete stream');
+    if (!ok) return;
+    try {
+      await window.api.streams.delete(id);
+      setSelected(null);
+      await refresh();
+      toast.success('Stream deleted.');
+    } catch (err) {
+      toast.error(`Delete failed: ${(err as Error).message}`);
+    }
   }
 
   return (

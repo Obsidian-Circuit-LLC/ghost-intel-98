@@ -5,6 +5,7 @@
 import { useEffect, useState } from 'react';
 import { AccessMenu } from './AccessMenu';
 import { useWindows } from '../state/store';
+import { glyphFor } from './Icon';
 import iconUrl from '../assets/icon.png';
 
 export function Taskbar(): JSX.Element {
@@ -60,7 +61,8 @@ export function Taskbar(): JSX.Element {
               }}
               title={w.title}
             >
-              {w.title}
+              <span className="ga98-taskbar-item-glyph" aria-hidden="true">{glyphFor(w.module)}</span>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.title}</span>
             </button>
           ))}
         </div>

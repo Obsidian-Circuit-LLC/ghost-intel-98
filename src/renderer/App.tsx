@@ -9,7 +9,11 @@ import { Desktop } from './shell/Desktop';
 import { Taskbar } from './shell/Taskbar';
 import { Window } from './shell/Window';
 import { ModuleHost } from './shell/ModuleHost';
+import { DialogHost } from './shell/Dialog';
+import { Toaster } from './shell/Toaster';
+import { Shortcuts } from './shell/Shortcuts';
 import { playStartup, playReminder } from './audio/synth';
+import { toast } from './state/toasts';
 
 export function App(): JSX.Element {
   const windows = useWindows((s) => s.windows);
@@ -46,18 +50,14 @@ export function App(): JSX.Element {
     return () => off();
   }, []);
 
-  // Diagnostic events from main (broken reminders, etc.) surface as a Settings → About visit.
+  // Diagnostic events from main (broken reminders, etc.) surface as a toast + log.
   useEffect(() => {
     const off = window.api.system.onDiagnostic((payload) => {
       // eslint-disable-next-line no-console
       console.warn('[diagnostic]', payload);
       if (payload.kind === 'reminders-broken') {
-        useWindows.getState().open({
-          module: 'settings',
-          title: 'Settings — diagnostics',
-          width: 720,
-          height: 520
-        });
+        const n = payload.cases?.length ?? 0;
+        toast.warn(`Reminders failed to fire for ${n} case${n === 1 ? '' : 's'}. Open Settings → diagnostics for details.`);
       }
     });
     return () => off();
@@ -65,6 +65,7 @@ export function App(): JSX.Element {
 
   return (
     <div className="ga98-screen">
+      <Shortcuts />
       <Desktop />
       {windows
         .filter((w) => !w.minimized)
@@ -85,6 +86,8 @@ export function App(): JSX.Element {
           </Window>
         ))}
       <Taskbar />
+      <Toaster />
+      <DialogHost />
     </div>
   );
 }

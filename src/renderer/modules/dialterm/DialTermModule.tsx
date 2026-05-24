@@ -16,6 +16,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SshHostProfile } from '@shared/post-mvp-types';
 import { useSettings } from '../../state/store';
 import { playDialup } from '../../audio/synth';
+import { toast } from '../../state/toasts';
 
 type ConnState = 'idle' | 'dialing' | 'connecting' | 'open' | 'closed';
 
@@ -194,6 +195,7 @@ function HostSetup({ hosts, onClose }: { hosts: SshHostProfile[]; onClose: () =>
     }
     try {
       await window.api.ssh.upsertHost(draft);
+      toast.success(`Host "${draft.label}" saved.`);
       onClose();
     } catch (err) {
       setError((err as Error).message);

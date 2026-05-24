@@ -12,6 +12,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AiChatMessage, AiChatRequest } from '@shared/post-mvp-types';
 import type { CaseSummary, CaseRecord } from '@shared/types';
 import { useSettings } from '../../state/store';
+import { toast } from '../../state/toasts';
 
 interface DisplayMessage extends AiChatMessage {
   id: string;
@@ -63,11 +64,11 @@ export function AiAssistantModule(): JSX.Element {
   const send = useCallback(async () => {
     if (!input.trim() || streaming) return;
     if (settings?.ai.provider === 'none') {
-      alert('Set an AI provider in Settings first.');
+      toast.warn('Set an AI provider in Settings first.');
       return;
     }
     if (contextCaseId && !contextCase) {
-      alert('Case context is selected but failed to load. Clear the dropdown or retry before sending.');
+      toast.warn('Case context failed to load. Clear the dropdown or retry before sending.');
       return;
     }
     const streamId = `chat-${newId()}`;

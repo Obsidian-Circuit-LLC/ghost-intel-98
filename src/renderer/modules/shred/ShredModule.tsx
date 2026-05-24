@@ -3,6 +3,8 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
+import { confirmDialog } from '../../state/dialogs';
+import { toast } from '../../state/toasts';
 
 interface Entry {
   id: string;
@@ -23,20 +25,37 @@ export function ShredModule(): JSX.Element {
   }, [refresh]);
 
   async function restore(id: string): Promise<void> {
-    await window.api.shred.restore(id);
-    await refresh();
+    try {
+      await window.api.shred.restore(id);
+      await refresh();
+      toast.success('Restored.');
+    } catch (err) {
+      toast.error(`Restore failed: ${(err as Error).message}`);
+    }
   }
 
   async function purge(id: string): Promise<void> {
-    if (!confirm('Purge this item forever? This cannot be undone.')) return;
-    await window.api.shred.purge(id);
-    await refresh();
+    const ok = await confirmDialog('Purge this item forever? This cannot be undone.', 'Purge');
+    if (!ok) return;
+    try {
+      await window.api.shred.purge(id);
+      await refresh();
+      toast.success('Purged.');
+    } catch (err) {
+      toast.error(`Purge failed: ${(err as Error).message}`);
+    }
   }
 
   async function purgeAll(): Promise<void> {
-    if (!confirm('Empty Shred? Everything inside will be gone forever.')) return;
-    await window.api.shred.purgeAll();
-    await refresh();
+    const ok = await confirmDialog('Empty Shred? Everything inside will be gone forever.', 'Empty Shred');
+    if (!ok) return;
+    try {
+      await window.api.shred.purgeAll();
+      await refresh();
+      toast.success('Shred emptied.');
+    } catch (err) {
+      toast.error(`Empty failed: ${(err as Error).message}`);
+    }
   }
 
   return (

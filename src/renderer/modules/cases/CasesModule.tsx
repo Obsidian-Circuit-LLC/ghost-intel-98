@@ -6,6 +6,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CaseRecord, CaseSummary, CasePriority, CaseStatus } from '@shared/types';
 import { CaseDetail } from './CaseDetail';
+import { confirmDialog, promptDialog } from '../../state/dialogs';
+import { toast } from '../../state/toasts';
+import { shortcutBus, type ShortcutEventDetail } from '../../shell/Shortcuts';
 
 export function CasesModule(): JSX.Element {
   const [cases, setCases] = useState<CaseSummary[]>([]);
@@ -44,39 +47,72 @@ export function CasesModule(): JSX.Element {
     });
   }, [cases, filter, showArchived]);
 
-  async function createCase(): Promise<void> {
-    const title = prompt('Case title?');
+  const createCase = useCallback(async (): Promise<void> => {
+    const title = await promptDialog('Case title?', '', 'New case', 'e.g. Smith v. Acme');
     if (!title) return;
-    const reference = prompt('Case reference (optional):') ?? '';
-    const created = await window.api.cases.create({ title, reference });
-    await refreshList();
-    setSelectedId(created.id);
-  }
+    const reference = await promptDialog('Case reference (optional)', '', 'New case', 'e.g. INV-2026-001');
+    try {
+      const created = await window.api.cases.create({ title, reference: reference ?? '' });
+      await refreshList();
+      setSelectedId(created.id);
+      toast.success(`Case "${created.title}" created.`);
+    } catch (err) {
+      toast.error(`Could not create case: ${(err as Error).message}`);
+    }
+  }, [refreshList]);
 
   async function renameSelected(): Promise<void> {
     if (!selectedId || !detail) return;
-    const next = prompt('New title:', detail.title);
+    const next = await promptDialog('New title:', detail.title, 'Rename case');
     if (!next) return;
-    await window.api.cases.rename(selectedId, next);
-    await refreshList();
-    setDetail(await window.api.cases.read(selectedId));
+    try {
+      await window.api.cases.rename(selectedId, next);
+      await refreshList();
+      setDetail(await window.api.cases.read(selectedId));
+      toast.success('Renamed.');
+    } catch (err) {
+      toast.error(`Rename failed: ${(err as Error).message}`);
+    }
   }
 
   async function archiveSelected(archive: boolean): Promise<void> {
     if (!selectedId) return;
-    await window.api.cases.archive(selectedId, archive);
-    await refreshList();
-    setDetail(await window.api.cases.read(selectedId));
+    try {
+      await window.api.cases.archive(selectedId, archive);
+      await refreshList();
+      setDetail(await window.api.cases.read(selectedId));
+      toast.success(archive ? 'Archived.' : 'Unarchived.');
+    } catch (err) {
+      toast.error(`${archive ? 'Archive' : 'Unarchive'} failed: ${(err as Error).message}`);
+    }
   }
 
   async function deleteSelected(): Promise<void> {
     if (!selectedId || !detail) return;
-    if (!confirm(`Move "${detail.title}" to Shred?`)) return;
-    await window.api.cases.delete(selectedId);
-    setSelectedId(null);
-    setDetail(null);
-    await refreshList();
+    const ok = await confirmDialog(`Move "${detail.title}" to Shred? It can be restored from there until you Purge.`, 'Delete case');
+    if (!ok) return;
+    try {
+      await window.api.cases.delete(selectedId);
+      setSelectedId(null);
+      setDetail(null);
+      await refreshList();
+      toast.success('Sent to Shred.');
+    } catch (err) {
+      toast.error(`Delete failed: ${(err as Error).message}`);
+    }
   }
+
+  // Wire the Ctrl/Cmd+N shortcut while this module is focused.
+  useEffect(() => {
+    function onShortcut(e: Event): void {
+      const detail = (e as CustomEvent<ShortcutEventDetail>).detail;
+      if (detail.moduleKey !== 'cases') return;
+      if (detail.action === 'new') void createCase();
+    }
+    shortcutBus.addEventListener('shortcut', onShortcut);
+    return () => shortcutBus.removeEventListener('shortcut', onShortcut);
+  }, [createCase]);
+
 
   async function updateField<K extends keyof CaseRecord>(key: K, value: CaseRecord[K]): Promise<void> {
     if (!selectedId) return;

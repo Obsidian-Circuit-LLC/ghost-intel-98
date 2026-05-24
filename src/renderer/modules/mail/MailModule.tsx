@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { MailAccount, MailMessage, MailMessageSummary } from '@shared/post-mvp-types';
 import { useSettings } from '../../state/store';
 import { playMailAlert } from '../../audio/synth';
+import { toast } from '../../state/toasts';
 
 export function MailModule(): JSX.Element {
   const [accounts, setAccounts] = useState<MailAccount[]>([]);
@@ -37,7 +38,7 @@ export function MailModule(): JSX.Element {
       const nextUnseen = list.filter((m) => m.unseen).length;
       if (nextUnseen > prevUnseen && settings?.soundEnabled) playMailAlert();
     } catch (err) {
-      alert(`IMAP error: ${(err as Error).message}`);
+      toast.error(`IMAP error: ${(err as Error).message}`);
     } finally {
       setBusy(null);
     }
@@ -50,7 +51,7 @@ export function MailModule(): JSX.Element {
       const msg = await window.api.mail.fetchMessage(activeId, uid);
       setSelected(msg);
     } catch (err) {
-      alert(`Could not load message: ${(err as Error).message}`);
+      toast.error(`Could not load message: ${(err as Error).message}`);
     } finally {
       setBusy(null);
     }
@@ -203,10 +204,10 @@ function Compose({ accountId, onClose }: { accountId: string; onClose: () => voi
     const r = await window.api.mail.send({ accountId, to, subject, body });
     setSending(false);
     if (r.ok) {
-      alert('Sent.');
+      toast.success('Sent.');
       onClose();
     } else {
-      alert(`Send failed: ${r.error}`);
+      toast.error(`Send failed: ${r.error}`);
     }
   }
 

@@ -414,3 +414,104 @@ input.ga98-text, select.ga98-text {
   border-top: 1px solid var(--ga98-shadow-light);
   background: var(--ga98-grey);
 }
+
+/* Themed dialogs */
+.ga98-dialog-veil {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 32, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20000;
+}
+
+.ga98-dialog-window {
+  width: 420px;
+  max-width: 90vw;
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.4);
+}
+
+.ga98-dialog-window .title-bar {
+  cursor: default;
+}
+
+/* Toaster pinned above the taskbar */
+.ga98-toaster {
+  position: fixed;
+  right: 12px;
+  bottom: calc(var(--ga98-taskbar-height) + 8px);
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 19000;
+  pointer-events: none;
+}
+
+.ga98-toast {
+  pointer-events: auto;
+  cursor: pointer;
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.5);
+  animation: ga98-toast-in 160ms ease-out;
+}
+
+@keyframes ga98-toast-in {
+  from { transform: translateY(8px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+
+/* Settings left-rail layout */
+.ga98-settings-shell {
+  display: grid;
+  grid-template-columns: 168px 1fr;
+  height: 100%;
+}
+
+.ga98-settings-rail {
+  background: var(--ga98-grey);
+  border-right: 1px solid var(--ga98-shadow-dark);
+  padding: 6px 0;
+  overflow: auto;
+}
+
+.ga98-settings-rail-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 6px 12px;
+  font: inherit;
+  cursor: pointer;
+  box-shadow: none;
+  min-width: 0;
+}
+
+.ga98-settings-rail-item:hover {
+  background: rgba(0, 0, 128, 0.08);
+}
+
+.ga98-settings-rail-item[data-active='true'] {
+  background: var(--ga98-blue);
+  color: #fff;
+}
+
+.ga98-settings-pane {
+  overflow: auto;
+  padding: 12px;
+}
+
+/* Taskbar pill icons */
+.ga98-taskbar-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ga98-taskbar-item-glyph {
+  display: inline-block;
+  width: 14px;
+  text-align: center;
+  font-size: 11px;
+}

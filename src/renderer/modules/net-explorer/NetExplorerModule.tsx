@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CaseSummary } from '@shared/types';
 import { useSettings } from '../../state/store';
+import { toast } from '../../state/toasts';
 
 interface WebviewElement extends HTMLElement {
   src: string;
@@ -67,8 +68,13 @@ export function NetExplorerModule(): JSX.Element {
 
   async function saveToCase(): Promise<void> {
     if (!saveCase) return;
-    await window.api.cases.addLink(saveCase, currentUrl, title || currentUrl);
-    alert('Link added to case.');
+    try {
+      await window.api.cases.addLink(saveCase, currentUrl, title || currentUrl);
+      const c = cases.find((x) => x.id === saveCase);
+      toast.success(`Link added to ${c?.title ?? 'case'}.`);
+    } catch (err) {
+      toast.error(`Add link failed: ${(err as Error).message}`);
+    }
   }
 
   return (
