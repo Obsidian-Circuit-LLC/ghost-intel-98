@@ -39,6 +39,60 @@ export function ensureFileName(name: unknown, context = 'name'): string {
   return name;
 }
 
+/** Stricter sanitiser used at the OS-save-dialog default path — strips control bytes,
+ *  leading/trailing dots and spaces, Windows reserved names. Caller still drives the
+ *  native dialog; the user has final say on the destination. */
+export function sanitiseSaveDefault(name: string): string {
+  let s = name.replace(/[\x00-\x1F\x7F]/g, '_');
+  s = s.replace(/[\\/:*?"<>|]/g, '_');
+  s = s.replace(/^[.\s]+/, '').replace(/[.\s]+$/, '');
+  s = s.slice(0, 200);
+  // Windows reserved device names
+  const stem = s.replace(/\.[^.]*$/, '').toUpperCase();
+  if (/^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/.test(stem)) s = `_${s}`;
+  return s || 'attachment';
+}
+
+/** Validates pickOpen filter shape — extensions are short alphanumeric tokens. */
+export function validatePickFilters(filters: unknown): { name: string; extensions: string[] }[] | undefined {
+  if (!filters) return undefined;
+  if (!Array.isArray(filters)) throw new ValidationError('filters must be an array');
+  if (filters.length > 8) throw new ValidationError('too many filters (max 8)');
+  const out: { name: string; extensions: string[] }[] = [];
+  for (const f of filters) {
+    if (!f || typeof f !== 'object') throw new ValidationError('filter must be an object');
+    const fo = f as { name?: unknown; extensions?: unknown };
+    if (typeof fo.name !== 'string' || fo.name.length === 0 || fo.name.length > 50) {
+      throw new ValidationError('filter.name must be a 1-50 char string');
+    }
+    if (!Array.isArray(fo.extensions) || fo.extensions.length === 0 || fo.extensions.length > 16) {
+      throw new ValidationError('filter.extensions must be a 1-16 element array');
+    }
+    const exts: string[] = [];
+    for (const e of fo.extensions) {
+      if (typeof e !== 'string' || !/^[A-Za-z0-9]{1,8}$/.test(e)) {
+        throw new ValidationError(`bad extension: ${String(e)}`);
+      }
+      exts.push(e);
+    }
+    out.push({ name: fo.name, extensions: exts });
+  }
+  return out;
+}
+
+/** Bookmark URL allowlist — http(s) only, no loopback/private (those belong in DialTerm/EyeSpy). */
+export function validateBookmarkUrl(raw: string): string {
+  let u: URL;
+  try { u = new URL(raw); } catch { throw new ValidationError('Invalid URL'); }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+    throw new ValidationError(`Bookmark URL must use http:// or https:// — got ${u.protocol}`);
+  }
+  if (isLoopbackOrPrivate(u.hostname)) {
+    throw new ValidationError('Bookmark URL cannot point at loopback or a private network');
+  }
+  return u.toString();
+}
+
 /** Asserts the resolved `candidate` is inside `root` (purely textual — does not follow symlinks). */
 export function ensureWithin(root: string, candidate: string): string {
   const r = resolve(root);
@@ -175,6 +229,49 @@ export function validateExternalUrl(raw: string): string {
     return u.toString();
   }
   throw new ValidationError(`URL scheme not allowed: ${u.protocol}`);
+}
+
+/** Validates a draft attachment path is safe to auto-consent on listDrafts read.
+ *  Defends against the upgrade-from-v2.0.0 case where a compromised renderer in v2.0.0
+ *  could have persisted malicious paths (e.g. /etc/shadow) into mail-drafts.json. On
+ *  v2.0.1 listDrafts, we re-validate before marking consented.
+ *
+ *  Returns true if the path is sendable (regular file, inside the user's home, not a
+ *  symlink, not in system directories). False otherwise — caller should drop the path. */
+export async function isDraftAttachmentSafe(path: string): Promise<boolean> {
+  if (typeof path !== 'string' || path.length === 0) return false;
+  const norm = normalize(path);
+  if (!isAbsolute(norm)) return false;
+
+  // Block well-known system paths even on case-insensitive volumes
+  const lower = norm.toLowerCase();
+  const blockedPrefixes = ['/etc/', '/proc/', '/sys/', '/dev/', '/root/', '/boot/',
+                           'c:\\windows\\', 'c:\\program files\\', 'c:\\program files (x86)\\'];
+  if (blockedPrefixes.some((p) => lower.startsWith(p) || lower === p.slice(0, -1))) return false;
+
+  // Must exist as a regular file, not a symlink
+  const { stat, lstat } = await import('node:fs/promises');
+  try {
+    const ls = await lstat(norm);
+    if (ls.isSymbolicLink()) return false;
+    const s = await stat(norm);
+    if (!s.isFile()) return false;
+  } catch {
+    return false; // ENOENT, EACCES, etc.
+  }
+
+  // Must live inside the user's home directory (after realpath, same as SSH key handling)
+  try {
+    const { realpath } = await import('node:fs/promises');
+    const real = await realpath(norm);
+    const home = await realpath(homedir());
+    const rel = relative(home, real);
+    if (rel.startsWith('..') || isAbsolute(rel)) return false;
+  } catch {
+    return false;
+  }
+
+  return true;
 }
 
 /** SSH private-key paths: must be absolute, must live inside the user's home directory.

@@ -68,8 +68,11 @@ export function MailModule(): JSX.Element {
     }
   }
 
-  async function downloadAttachment(att: { filename: string; contentBase64?: string }): Promise<void> {
-    if (!att.contentBase64) return;
+  async function downloadAttachment(att: { filename: string; contentBase64?: string; size: number }): Promise<void> {
+    if (!att.contentBase64) {
+      toast.warn(`"${att.filename}" is ${Math.ceil(att.size / 1024 / 1024)} MB — too large to download in-app (>10 MB limit). Open the message in your webmail to retrieve it.`);
+      return;
+    }
     try {
       const saved = await window.api.mail.saveAttachment({ filename: att.filename, contentBase64: att.contentBase64 });
       if (saved) toast.success(`Saved ${saved}.`);
@@ -314,21 +317,25 @@ function Compose({ draft: initial, onClose }: { draft: MailDraft; onClose: (save
 
   async function send(): Promise<void> {
     setSending(true);
-    const r = await window.api.mail.send({
-      accountId: draft.accountId,
-      to: draft.to,
-      subject: draft.subject,
-      body: draft.body,
-      attachments: draft.attachments.map((a) => ({ path: a.path, filename: a.name }))
-    });
-    setSending(false);
-    if (r.ok) {
-      // Delete the draft on successful send (no point keeping it around)
-      try { await window.api.mail.deleteDraft(draft.id); } catch { /* ok if not yet saved */ }
-      toast.success('Sent.');
-      onClose(true);
-    } else {
-      toast.error(`Send failed: ${r.error}`);
+    try {
+      const r = await window.api.mail.send({
+        accountId: draft.accountId,
+        to: draft.to,
+        subject: draft.subject,
+        body: draft.body,
+        attachments: draft.attachments.map((a) => ({ path: a.path, filename: a.name }))
+      });
+      if (r.ok) {
+        try { await window.api.mail.deleteDraft(draft.id); } catch { /* draft may never have been persisted */ }
+        toast.success('Sent.');
+        onClose(true);
+      } else {
+        toast.error(`Send failed: ${r.error}`);
+      }
+    } catch (err) {
+      toast.error(`Send failed: ${(err as Error).message}`);
+    } finally {
+      setSending(false);
     }
   }
 
@@ -357,11 +364,11 @@ function Compose({ draft: initial, onClose }: { draft: MailDraft; onClose: (save
             <button onClick={() => void addAttachment()}>Add file…</button>
           </fieldset>
           <div style={{ display: 'flex', gap: 4 }}>
-            <button onClick={() => void send()} disabled={sending || !draft.to.trim() || !draft.subject.trim()}>
+            <button onClick={() => void send()} disabled={sending || savingDraft || !draft.to.trim() || !draft.subject.trim()}>
               {sending ? 'Sending…' : 'Send'}
             </button>
-            <button onClick={() => void saveDraft()} disabled={savingDraft}>{savingDraft ? 'Saving…' : 'Save draft'}</button>
-            <button onClick={() => onClose(false)}>Cancel</button>
+            <button onClick={() => void saveDraft()} disabled={savingDraft || sending}>{savingDraft ? 'Saving…' : 'Save draft'}</button>
+            <button onClick={() => onClose(false)} disabled={sending}>Cancel</button>
           </div>
         </div>
       </div>
