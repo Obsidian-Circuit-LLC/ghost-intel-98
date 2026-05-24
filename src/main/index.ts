@@ -47,7 +47,7 @@ function createWindow(): void {
 
 app.whenReady().then(async () => {
   await ensureDataLayout();
-  registerIpc();
+  registerIpc(() => mainWindow);
   createWindow();
   startReminderTicker(() => mainWindow);
 

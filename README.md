@@ -6,24 +6,24 @@ Ghost Access 98 looks and feels like a late-1990s desktop environment — grey t
 
 ## Status
 
-Pre-MVP scaffolding. See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the module map and [`docs/SUBAGENTS.md`](docs/SUBAGENTS.md) for how the build is reviewed.
+**v1.0.0** — all twelve modules implemented. See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the module map and [`docs/SUBAGENTS.md`](docs/SUBAGENTS.md) for how the build is reviewed.
 
 ## Modules
 
-| Module | MVP | Purpose |
-|---|---|---|
-| Case Files | Yes | Create, open, rename, archive, delete cases |
-| Notepad 98 | Yes | Plain text editor, saves into cases |
-| Calendar | Yes | Month/week/day, surfaces reminders + case deadlines |
-| Reminders / Alarm | Yes | Case-linked reminders + general alarms with notifications + sounds |
-| Shred | Yes | Soft-delete bucket — restore or purge |
-| Settings | Yes | Sound, theme intensity, startup sound, default case folder, providers |
-| Access Menu | Yes | Editable program + web-link shortcuts |
-| Net Explorer | Post-MVP | Internal browser (`<webview>`), save URLs to a case |
-| Mail | Post-MVP | IMAP/SMTP client with synthesized "You have mail" alert |
-| DialTerm | Post-MVP | SSH client with 90s dial-up handshake animation |
-| EyeSpy | Post-MVP | Authorised camera streams (RTSP/MJPEG/HLS); no discovery, no brute force |
-| AI Assistant | Post-MVP | Pluggable Ollama / OpenAI-compatible providers; case-scoped only |
+| Module | Purpose |
+|---|---|
+| Case Files | Create, open, rename, archive, delete cases; per-case dashboard with timeline / tasks / links / reminders / attachments |
+| Notepad 98 | Plain text editor, saves notes into a case |
+| Calendar | Month grid surfacing case + global reminders and task due dates |
+| Reminders / Alarm | Case-linked reminders + general alarms; native notifications + synthesized chime |
+| Shred | Soft-delete bucket — restore or purge |
+| Settings | Sound, theme intensity, startup sound, default case folder, Access shortcut editor, AI / Mail / Browser providers |
+| Access Menu | Editable program + web-link shortcuts |
+| Net Explorer | Internal browser (`<webview>`); save URLs to a case |
+| Mail | IMAP/SMTP client (imapflow + nodemailer), encrypted credentials, synthesized "You have mail" alert |
+| DialTerm | SSH client (ssh2 + xterm.js) with 90s dial-up handshake animation; key-based auth preferred; passwords encrypted at rest |
+| EyeSpy | Authorised camera streams — manual URL entry only (HLS / MJPEG / HTTP refresh; RTSP requires a local ffmpeg→HLS bridge). **No discovery / scanning / brute-force code paths exist.** |
+| AI Assistant | Pluggable Ollama (local) / OpenAI-compatible providers; case context is opt-in per message; API keys encrypted at rest |
 
 ## Prerequisites
 

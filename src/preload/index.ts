@@ -62,6 +62,48 @@ const api = {
       ipcRenderer.on(channels.system.onReminderFired, listener);
       return () => ipcRenderer.removeListener(channels.system.onReminderFired, listener);
     }
+  },
+  mail: {
+    listAccounts: () => ipcRenderer.invoke(channels.mail.listAccounts),
+    upsertAccount: (input: unknown) => ipcRenderer.invoke(channels.mail.upsertAccount, input),
+    deleteAccount: (id: string) => ipcRenderer.invoke(channels.mail.deleteAccount, id),
+    testAccount: (input: unknown) => ipcRenderer.invoke(channels.mail.testAccount, input),
+    fetchInbox: (id: string, limit?: number) => ipcRenderer.invoke(channels.mail.fetchInbox, id, limit),
+    fetchMessage: (id: string, uid: number) => ipcRenderer.invoke(channels.mail.fetchMessage, id, uid),
+    send: (input: unknown) => ipcRenderer.invoke(channels.mail.send, input)
+  },
+  ssh: {
+    listHosts: () => ipcRenderer.invoke(channels.ssh.listHosts),
+    upsertHost: (input: unknown) => ipcRenderer.invoke(channels.ssh.upsertHost, input),
+    deleteHost: (id: string) => ipcRenderer.invoke(channels.ssh.deleteHost, id),
+    connect: (hostId: string) => ipcRenderer.invoke(channels.ssh.connect, hostId),
+    write: (sessionId: string, data: string) => ipcRenderer.invoke(channels.ssh.write, sessionId, data),
+    resize: (sessionId: string, cols: number, rows: number) => ipcRenderer.invoke(channels.ssh.resize, sessionId, cols, rows),
+    disconnect: (sessionId: string) => ipcRenderer.invoke(channels.ssh.disconnect, sessionId),
+    onData: (cb: (payload: { sessionId: string; data: string }) => void) => {
+      const l = (_e: unknown, p: { sessionId: string; data: string }) => cb(p);
+      ipcRenderer.on(channels.ssh.onData, l);
+      return () => ipcRenderer.removeListener(channels.ssh.onData, l);
+    },
+    onClose: (cb: (payload: { sessionId: string; reason: string }) => void) => {
+      const l = (_e: unknown, p: { sessionId: string; reason: string }) => cb(p);
+      ipcRenderer.on(channels.ssh.onClose, l);
+      return () => ipcRenderer.removeListener(channels.ssh.onClose, l);
+    }
+  },
+  streams: {
+    list: () => ipcRenderer.invoke(channels.streams.list),
+    upsert: (input: unknown) => ipcRenderer.invoke(channels.streams.upsert, input),
+    delete: (id: string) => ipcRenderer.invoke(channels.streams.delete, id)
+  },
+  ai: {
+    chatStream: (streamId: string, req: unknown) => ipcRenderer.invoke(channels.ai.chatStream, streamId, req),
+    cancel: (streamId: string) => ipcRenderer.invoke(channels.ai.chat, streamId),
+    onChunk: (cb: (payload: { streamId: string; chunk?: string; done?: boolean; error?: string }) => void) => {
+      const l = (_e: unknown, p: { streamId: string; chunk?: string; done?: boolean; error?: string }) => cb(p);
+      ipcRenderer.on(channels.ai.onChatChunk, l);
+      return () => ipcRenderer.removeListener(channels.ai.onChatChunk, l);
+    }
   }
 } as const;
 

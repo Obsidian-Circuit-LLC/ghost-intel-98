@@ -1,10 +1,11 @@
 /**
- * Wires every IPC channel from src/shared/ipc-contracts.ts to a storage-layer call.
+ * Wires every IPC channel from src/shared/ipc-contracts.ts to its handler.
  * Called once at app ready.
  */
 
 import { app, ipcMain, shell, BrowserWindow } from 'electron';
 import { channels } from '@shared/ipc-contracts';
+import type { MailAccount, MailSendInput, SshHostProfile, AiChatRequest } from '@shared/post-mvp-types';
 import {
   caseStore,
   fileStore,
@@ -13,11 +14,14 @@ import {
   settingsStore,
   shredStore
 } from '../storage/json-fs';
-import { fileStore as files } from '../storage/json-fs';
 import { showNotification } from '../notifications';
 import { dataRoot } from '../storage/paths';
+import * as mail from '../services/mail';
+import * as ssh from '../services/ssh';
+import * as streams from '../services/streams';
+import * as ai from '../services/ai';
 
-export function registerIpc(): void {
+export function registerIpc(getWindow: () => BrowserWindow | null): void {
   // ---- system ----
   ipcMain.handle(channels.system.appInfo, () => ({
     version: app.getVersion(),
@@ -50,7 +54,7 @@ export function registerIpc(): void {
   ipcMain.handle(channels.cases.deleteReminder, (_e, id, rid) => caseStore.deleteReminder(id, rid));
 
   // ---- files ----
-  ipcMain.handle(channels.files.importDropped, (_e, id, list) => files.importDropped(id, list));
+  ipcMain.handle(channels.files.importDropped, (_e, id, list) => fileStore.importDropped(id, list));
   ipcMain.handle(channels.files.listAttachments, (_e, id) => fileStore.listAttachments(id));
   ipcMain.handle(channels.files.deleteAttachment, (_e, id, name) => fileStore.deleteAttachment(id, name));
   ipcMain.handle(channels.files.revealAttachment, (_e, id, name) => {
@@ -74,6 +78,33 @@ export function registerIpc(): void {
   ipcMain.handle(channels.shred.restore, (_e, id) => shredStore.restore(id));
   ipcMain.handle(channels.shred.purge, (_e, id) => shredStore.purge(id));
   ipcMain.handle(channels.shred.purgeAll, () => shredStore.purgeAll());
+
+  // ---- mail ----
+  ipcMain.handle(channels.mail.listAccounts, () => mail.listAccounts());
+  ipcMain.handle(channels.mail.upsertAccount, (_e, input: MailAccount & { password?: string }) => mail.upsertAccount(input));
+  ipcMain.handle(channels.mail.deleteAccount, (_e, id: string) => mail.deleteAccount(id));
+  ipcMain.handle(channels.mail.testAccount, (_e, input: MailAccount & { password: string }) => mail.testAccount(input));
+  ipcMain.handle(channels.mail.fetchInbox, (_e, id: string, limit?: number) => mail.fetchInbox(id, limit));
+  ipcMain.handle(channels.mail.fetchMessage, (_e, id: string, uid: number) => mail.fetchMessage(id, uid));
+  ipcMain.handle(channels.mail.send, (_e, input: MailSendInput) => mail.sendMail(input));
+
+  // ---- ssh ----
+  ipcMain.handle(channels.ssh.listHosts, () => ssh.listHosts());
+  ipcMain.handle(channels.ssh.upsertHost, (_e, input: SshHostProfile & { secret?: string }) => ssh.upsertHost(input));
+  ipcMain.handle(channels.ssh.deleteHost, (_e, id: string) => ssh.deleteHost(id));
+  ipcMain.handle(channels.ssh.connect, (_e, hostId: string) => ssh.connect(hostId, getWindow));
+  ipcMain.handle(channels.ssh.write, (_e, sessionId: string, data: string) => ssh.write(sessionId, data));
+  ipcMain.handle(channels.ssh.resize, (_e, sessionId: string, cols: number, rows: number) => ssh.resize(sessionId, cols, rows));
+  ipcMain.handle(channels.ssh.disconnect, (_e, sessionId: string) => ssh.disconnect(sessionId));
+
+  // ---- streams (EyeSpy) ----
+  ipcMain.handle(channels.streams.list, () => streams.list());
+  ipcMain.handle(channels.streams.upsert, (_e, input) => streams.upsert(input));
+  ipcMain.handle(channels.streams.delete, (_e, id: string) => streams.remove(id));
+
+  // ---- ai ----
+  ipcMain.handle(channels.ai.chatStream, (_e, streamId: string, req: AiChatRequest) => ai.chat(streamId, req, getWindow));
+  ipcMain.handle(channels.ai.chat, async (_e, streamId: string) => ai.cancel(streamId));
 }
 
 /** Reminder tick: every 30s, pull due reminders, fire notifications + emit IPC to renderer. */
@@ -88,7 +119,6 @@ export function startReminderTicker(getWindow: () => BrowserWindow | null): Node
         if (win) win.webContents.send(channels.system.onReminderFired, { reminder: r });
       }
     } catch (err) {
-      // never crash the ticker; surface in main-process log
       console.error('[reminder-ticker]', err);
     }
   }, 30_000);
