@@ -83,7 +83,7 @@ export interface SshConnectResult {
 
 // ---------- EyeSpy ----------
 
-export type StreamKind = 'hls' | 'mjpeg' | 'rtsp' | 'http';
+export type StreamKind = 'hls' | 'mjpeg' | 'rtsp' | 'http' | 'mp4';
 
 export interface CameraStream {
   id: string;

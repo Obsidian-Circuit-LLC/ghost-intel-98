@@ -173,6 +173,13 @@ function ThemePane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSetting
           <option value="maximum">Maximum</option>
         </select>
       </label>
+      <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <label>Desktop background:&nbsp;
+          <input type="color" value={s.wallpaperColor} onChange={(e) => void patch({ wallpaperColor: e.target.value })} />
+        </label>
+        <span style={{ fontSize: 11, fontFamily: 'monospace' }}>{s.wallpaperColor}</span>
+        <button onClick={() => void patch({ wallpaperColor: '#008080' })}>Reset to teal</button>
+      </div>
     </fieldset>
   );
 }

@@ -117,6 +117,8 @@ export interface AccessShortcut {
 export interface AppSettings {
   soundEnabled: boolean;
   themeIntensity: 'lite' | 'classic' | 'maximum';
+  /** Desktop background colour (CSS hex). Defaults to the classic Win98 teal. */
+  wallpaperColor: string;
   startupSoundEnabled: boolean;
   caseFolderOverride: string | null;
   hasSeenWelcome: boolean;
@@ -158,6 +160,7 @@ export const defaultShortcuts: AccessShortcut[] = [
 export const defaultSettings: AppSettings = {
   soundEnabled: true,
   themeIntensity: 'classic',
+  wallpaperColor: '#008080',
   startupSoundEnabled: true,
   caseFolderOverride: null,
   hasSeenWelcome: false,

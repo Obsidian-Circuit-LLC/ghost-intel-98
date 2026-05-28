@@ -66,6 +66,7 @@ export function EyeSpyModule(): JSX.Element {
             <label>Kind:</label>
             <select className="ga98-text" value={draft.kind ?? 'hls'} onChange={(e) => setDraft({ ...draft, kind: e.target.value as StreamKind })}>
               <option value="hls">HLS (.m3u8)</option>
+              <option value="mp4">MP4 (.mp4 video)</option>
               <option value="mjpeg">MJPEG (multipart)</option>
               <option value="http">HTTP image (refreshing)</option>
               <option value="rtsp">RTSP (requires local bridge)</option>
@@ -149,6 +150,12 @@ function Viewer({ stream }: { stream: CameraStream }): JSX.Element {
   if (stream.kind === 'http') {
     const sep = stream.url.includes('?') ? '&' : '?';
     return <img alt={stream.label} src={`${stream.url}${sep}_t=${imgTick}`} style={{ maxWidth: '100%', maxHeight: '100%' }} />;
+  }
+
+  if (stream.kind === 'mp4') {
+    // Direct progressive/streamed MP4 over http(s). CSP media-src allows http(s); a
+    // local file:// path would not load (not in media-src) — point users to a URL.
+    return <video controls autoPlay muted loop src={stream.url} style={{ maxWidth: '100%', maxHeight: '100%' }} />;
   }
 
   return <video ref={videoRef} controls autoPlay muted style={{ maxWidth: '100%', maxHeight: '100%' }} />;
