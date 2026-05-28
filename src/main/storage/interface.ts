@@ -6,6 +6,7 @@
 import type {
   AppSettings,
   AttachmentMeta,
+  AttachmentTextResult,
   CaseId,
   CaseRecord,
   CaseSummary,
@@ -39,6 +40,9 @@ export interface FileStore {
   listAttachments(id: CaseId): Promise<AttachmentMeta[]>;
   deleteAttachment(id: CaseId, fileName: string): Promise<void>;
   attachmentAbsolutePath(id: CaseId, fileName: string): string;
+  /** Read up to a per-file byte cap of an attachment as UTF-8 text, for AI context.
+   *  Returns text:null for binary / empty / unreadable files (never ships binary). */
+  readAttachmentText(id: CaseId, fileName: string): Promise<AttachmentTextResult>;
 }
 
 export interface NoteStore {

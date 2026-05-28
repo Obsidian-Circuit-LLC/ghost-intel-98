@@ -7,13 +7,14 @@
  * sub-millisecond bursts don't collide.
  */
 
-import { mkdir, readdir, readFile, rename, rm, stat, writeFile, copyFile } from 'node:fs/promises';
+import { mkdir, open, readdir, readFile, rename, rm, stat, writeFile, copyFile } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { basename, extname, join } from 'node:path';
 import type {
   AppSettings,
   AttachmentMeta,
+  AttachmentTextResult,
   CaseId,
   CaseRecord,
   CaseSummary,
@@ -484,8 +485,59 @@ export const fileStore: FileStore = {
 
   attachmentAbsolutePath(id, fileName) {
     return join(caseAttachmentsDir(id), fileName);
+  },
+
+  async readAttachmentText(id, fileName): Promise<AttachmentTextResult> {
+    // fileName is validated by ensureFileName at the IPC boundary (no separators /
+    // traversal), and joined under the per-case attachments dir — same confinement
+    // as reveal/delete. We never read outside caseAttachmentsDir(id).
+    const path = join(caseAttachmentsDir(id), fileName);
+    let size = 0;
+    try {
+      const s = await stat(path);
+      size = s.size;
+      if (!s.isFile()) {
+        return { fileName, text: null, size, bytesRead: 0, truncated: false, reason: 'read-error' };
+      }
+      if (size === 0) {
+        return { fileName, text: null, size: 0, bytesRead: 0, truncated: false, reason: 'empty' };
+      }
+      const cap = Math.min(size, ATTACHMENT_TEXT_CAP_BYTES);
+      const fh = await open(path, 'r');
+      try {
+        const buf = Buffer.alloc(cap);
+        const { bytesRead } = await fh.read(buf, 0, cap, 0);
+        const slice = buf.subarray(0, bytesRead);
+        if (looksBinary(slice)) {
+          return { fileName, text: null, size, bytesRead, truncated: size > bytesRead, reason: 'binary' };
+        }
+        return { fileName, text: slice.toString('utf8'), size, bytesRead, truncated: size > bytesRead };
+      } finally {
+        await fh.close();
+      }
+    } catch {
+      return { fileName, text: null, size, bytesRead: 0, truncated: false, reason: 'read-error' };
+    }
   }
 };
+
+/** Per-file cap on attachment text pulled into AI context. Keeps a single giant log
+ *  from blowing the model's context window; the renderer enforces a separate total budget. */
+const ATTACHMENT_TEXT_CAP_BYTES = 64 * 1024;
+
+/** Heuristic binary sniff over the read buffer: a NUL byte, or >15% control chars
+ *  (excluding tab/newline/CR/FF), means "not text" — don't ship it to the model. */
+function looksBinary(buf: Buffer): boolean {
+  if (buf.length === 0) return false;
+  let control = 0;
+  for (let i = 0; i < buf.length; i++) {
+    const b = buf[i];
+    if (b === 0) return true;
+    // Allow \t(9) \n(10) \r(13) \f(12); count other sub-0x20 + DEL as control.
+    if ((b < 0x09 || (b > 0x0d && b < 0x20)) || b === 0x7f) control++;
+  }
+  return control / buf.length > 0.15;
+}
 
 async function uniqueAttachmentName(id: CaseId, originalName: string): Promise<string> {
   const safe = safeFileName(originalName);

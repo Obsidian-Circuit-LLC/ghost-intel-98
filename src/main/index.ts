@@ -11,6 +11,7 @@
 
 import { app, BrowserWindow, session, shell } from 'electron';
 import { join } from 'node:path';
+import { channels } from '@shared/ipc-contracts';
 import { ensureDataLayout } from './storage/paths';
 import { registerIpc, startReminderTicker } from './ipc/register';
 import { shutdownAllSessions } from './services/ssh';
@@ -20,6 +21,32 @@ const isDev = !!process.env['ELECTRON_RENDERER_URL'];
 
 let mainWindow: BrowserWindow | null = null;
 let reminderInterval: NodeJS.Timeout | null = null;
+
+/**
+ * Defense-in-depth crash guard. Electron's default uncaughtException handler pops a fatal
+ * "A JavaScript error occurred in the main process" dialog and kills the app. A single
+ * unhandled async error from any library (e.g. an EventEmitter emitting 'error' with no
+ * listener — see mail.ts) would otherwise take the whole app down. We log and surface a
+ * diagnostic toast instead; operation-level try/catch still handles real failure paths.
+ * This is NOT a license to swallow errors — it is a backstop so a transient background
+ * fault degrades gracefully rather than crashing a desktop app mid-session.
+ */
+function installCrashGuards(): void {
+  const report = (label: string, err: unknown): void => {
+    // eslint-disable-next-line no-console
+    console.error(label, err);
+    try {
+      mainWindow?.webContents.send(channels.system.onDiagnostic, {
+        kind: 'main-error',
+        message: (err as Error)?.message ?? String(err)
+      });
+    } catch { /* window may be torn down */ }
+  };
+  process.on('uncaughtException', (err) => report('[main.uncaughtException]', err));
+  process.on('unhandledRejection', (reason) => report('[main.unhandledRejection]', reason));
+}
+
+installCrashGuards();
 
 function createWindow(): void {
   const iconPath = isDev

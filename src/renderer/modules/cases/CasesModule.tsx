@@ -58,16 +58,19 @@ export function CasesModule(): JSX.Element {
   const patchSettings = useSettings((s) => s.patch);
 
   const visible = useMemo(() => {
+    const q = filter.trim().toLowerCase();
     return cases
       .filter((c) => {
         if (!showArchived && c.archived) return false;
-        if (!filter.trim()) return true;
-        const q = filter.toLowerCase();
-        return (
-          c.title.toLowerCase().includes(q) ||
-          c.reference.toLowerCase().includes(q) ||
-          c.tags.some((t) => t.toLowerCase().includes(q))
-        );
+        if (!q) return true;
+        // Null-safe: a legacy case row missing tags/reference must not throw and kill the
+        // whole filter (Array.filter has no per-element isolation). Build one haystack from
+        // every summary field the list endpoint exposes.
+        const hay = [c.title, c.reference, c.status, c.priority, ...(c.tags ?? [])]
+          .filter((v): v is string => typeof v === 'string')
+          .join(' ')
+          .toLowerCase();
+        return hay.includes(q);
       })
       .sort((a, b) => compareCases(a, b, sortBy, sortDir));
   }, [cases, filter, showArchived, sortBy, sortDir]);

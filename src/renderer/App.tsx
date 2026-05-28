@@ -59,6 +59,8 @@ export function App(): JSX.Element {
       if (payload.kind === 'reminders-broken') {
         const n = payload.cases?.length ?? 0;
         toast.warn(`Reminders failed to fire for ${n} case${n === 1 ? '' : 's'}. Open Settings → diagnostics for details.`);
+      } else if (payload.kind === 'main-error') {
+        toast.error(`Background error: ${payload.message ?? 'unknown'} — the app stayed up; retry the last action.`);
       }
     });
     return () => off();

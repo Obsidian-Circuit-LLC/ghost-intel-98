@@ -5,6 +5,7 @@
 import type {
   AppSettings,
   AttachmentMeta,
+  AttachmentTextResult,
   CaseRecord,
   CaseSummary,
   CreateCaseInput,
@@ -71,6 +72,7 @@ export interface GhostApi {
     listAttachments(id: string): Promise<AttachmentMeta[]>;
     revealAttachment(id: string, name: string): Promise<void>;
     deleteAttachment(id: string, name: string): Promise<void>;
+    readAttachmentText(id: string, name: string): Promise<AttachmentTextResult>;
     pickOpen(opts?: { multi?: boolean; filters?: { name: string; extensions: string[] }[] }): Promise<string[]>;
     pickSave(opts?: { defaultName?: string; filters?: { name: string; extensions: string[] }[] }): Promise<string | null>;
   };
@@ -99,7 +101,7 @@ export interface GhostApi {
     appInfo(): Promise<{ version: string; userData: string; platform: NodeJS.Platform; secretBackend?: string }>;
     openExternal(url: string): Promise<void>;
     onReminderFired(cb: (payload: { reminder: Reminder }) => void): () => void;
-    onDiagnostic(cb: (payload: { kind: string; cases?: { caseId: string; reason: string }[] }) => void): () => void;
+    onDiagnostic(cb: (payload: { kind: string; message?: string; cases?: { caseId: string; reason: string }[] }) => void): () => void;
   };
   mail: {
     listAccounts(): Promise<MailAccount[]>;

@@ -1,6 +1,6 @@
 {
   "name": "ghost-access-98",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "private": true,
   "description": "Windows 98–inspired case-management desktop app. Electron + React + TypeScript.",
   "author": {

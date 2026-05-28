@@ -45,7 +45,18 @@ export async function chat(streamId: string, req: AiChatRequest, getWindow: () =
   try {
     const messages: AiChatMessage[] = [];
     if (s.ai.defaultSystemPrompt) messages.push({ role: 'system', content: s.ai.defaultSystemPrompt });
-    if (req.context) messages.push({ role: 'system', content: `Case context the user explicitly shared:\n${req.context}` });
+    if (req.context) {
+      messages.push({
+        role: 'system',
+        content:
+          'The following is the case data the user has explicitly shared. Treat it as the ONLY ' +
+          'information you have about this case. A file\'s contents are present ONLY where its body ' +
+          'appears below under a "----- contents of <name> -----" marker. If a file is listed by name ' +
+          'with no such contents block, you do NOT have its contents: say so plainly — do not guess ' +
+          'whether it is empty or invent what it might contain.\n\n' +
+          req.context
+      });
+    }
     messages.push(...req.messages);
 
     if (provider === 'ollama') {

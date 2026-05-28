@@ -6,6 +6,7 @@
 import type {
   AppSettings,
   AttachmentMeta,
+  AttachmentTextResult,
   CaseId,
   CaseRecord,
   CaseSummary,
@@ -87,6 +88,7 @@ export const channels = {
     listAttachments: 'files:listAttachments',
     revealAttachment: 'files:revealAttachment',
     deleteAttachment: 'files:deleteAttachment',
+    readAttachmentText: 'files:readAttachmentText',
     pickOpen: 'files:pickOpen',
     pickSave: 'files:pickSave'
   },
@@ -138,6 +140,7 @@ export interface ApiContracts {
   [channels.files.listAttachments]: { args: [CaseId]; returns: AttachmentMeta[] };
   [channels.files.revealAttachment]: { args: [CaseId, string]; returns: void };
   [channels.files.deleteAttachment]: { args: [CaseId, string]; returns: void };
+  [channels.files.readAttachmentText]: { args: [CaseId, string]; returns: AttachmentTextResult };
 
   [channels.notes.list]: { args: [CaseId]; returns: { name: string; updatedAt: string }[] };
   [channels.notes.read]: { args: [CaseId, string]; returns: string };

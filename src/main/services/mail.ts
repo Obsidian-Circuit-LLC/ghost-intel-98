@@ -25,6 +25,34 @@ const MAX_MESSAGE_BYTES = 25 * 1024 * 1024; // 25 MB
 /** Refuse to ship individual attachments larger than this back to the renderer. */
 const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024; // 10 MB
 
+/** Tightened from imapflow's defaults (90s connect / 16s greeting / 5min idle) so an
+ *  unreachable or wrong host fails fast and *catchably* instead of hanging for minutes. */
+const IMAP_TIMEOUTS = { connectionTimeout: 20_000, greetingTimeout: 12_000, socketTimeout: 45_000 } as const;
+
+/**
+ * Construct an ImapFlow client with a persistent 'error' listener attached.
+ *
+ * CRITICAL: ImapFlow is an EventEmitter. A socket timeout or any async transport fault
+ * emits an 'error' event. With NO listener, Node's emitter contract re-throws it as an
+ * uncaughtException — which Electron turns into a fatal "A JavaScript error occurred in
+ * the main process" dialog that kills the entire app. (Reported in the wild: a slow /
+ * unreachable IMAP host hit the idle socketTimeout, imapflow emitted 'error', nothing
+ * listened, the app crashed.) The listener keeps the failure contained to the in-flight
+ * operation's awaited promise, which rejects and is surfaced to the renderer as a toast.
+ */
+function makeImapClient(opts: { host: string; port: number; secure: boolean; user: string; pass: string }): ImapFlow {
+  const client = new ImapFlow({
+    host: opts.host, port: opts.port, secure: opts.secure,
+    auth: { user: opts.user, pass: opts.pass }, logger: false,
+    ...IMAP_TIMEOUTS
+  });
+  client.on('error', (err) => {
+    // eslint-disable-next-line no-console
+    console.error('[mail.imap] client error event', { host: opts.host, message: (err as Error)?.message });
+  });
+  return client;
+}
+
 export async function listAccounts(): Promise<MailAccount[]> {
   return accountStore.listAccounts();
 }
@@ -96,9 +124,9 @@ async function safeLogout(client: ImapFlow): Promise<void> {
 export async function testAccount(input: MailAccount & { password: string }): Promise<{ ok: true } | { ok: false; error: string }> {
   let client: ImapFlow | null = null;
   try {
-    client = new ImapFlow({
+    client = makeImapClient({
       host: input.imapHost, port: input.imapPort, secure: input.imapSecure,
-      auth: { user: input.user, pass: input.password }, logger: false
+      user: input.user, pass: input.password
     });
     await client.connect();
     await client.logout();
@@ -111,9 +139,9 @@ export async function testAccount(input: MailAccount & { password: string }): Pr
 
 export async function fetchInbox(id: string, limit = 30): Promise<MailMessageSummary[]> {
   const { acct, password } = await loadAccountWithPassword(id);
-  const client = new ImapFlow({
+  const client = makeImapClient({
     host: acct.imapHost, port: acct.imapPort, secure: acct.imapSecure,
-    auth: { user: acct.user, pass: password }, logger: false
+    user: acct.user, pass: password
   });
   await client.connect();
   try {
@@ -151,9 +179,9 @@ export async function fetchInbox(id: string, limit = 30): Promise<MailMessageSum
 
 export async function fetchMessage(id: string, uid: number): Promise<MailMessage> {
   const { acct, password } = await loadAccountWithPassword(id);
-  const client = new ImapFlow({
+  const client = makeImapClient({
     host: acct.imapHost, port: acct.imapPort, secure: acct.imapSecure,
-    auth: { user: acct.user, pass: password }, logger: false
+    user: acct.user, pass: password
   });
   await client.connect();
   try {
@@ -261,7 +289,8 @@ export async function sendMail(input: MailSendInput): Promise<{ ok: true; id: st
     const { acct, password } = await loadAccountWithPassword(input.accountId);
     const transporter = nodemailer.createTransport({
       host: acct.smtpHost, port: acct.smtpPort, secure: acct.smtpSecure,
-      auth: { user: acct.user, pass: password }
+      auth: { user: acct.user, pass: password },
+      connectionTimeout: 20_000, greetingTimeout: 12_000, socketTimeout: 45_000
     });
     const info = await transporter.sendMail({
       from: acct.user,

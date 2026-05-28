@@ -32,6 +32,7 @@ const api = {
     listAttachments: (id: string) => ipcRenderer.invoke(channels.files.listAttachments, id),
     revealAttachment: (id: string, name: string) => ipcRenderer.invoke(channels.files.revealAttachment, id, name),
     deleteAttachment: (id: string, name: string) => ipcRenderer.invoke(channels.files.deleteAttachment, id, name),
+    readAttachmentText: (id: string, name: string) => ipcRenderer.invoke(channels.files.readAttachmentText, id, name),
     pickOpen: (opts?: { multi?: boolean; filters?: { name: string; extensions: string[] }[] }) =>
       ipcRenderer.invoke(channels.files.pickOpen, opts),
     pickSave: (opts?: { defaultName?: string; filters?: { name: string; extensions: string[] }[] }) =>
@@ -66,8 +67,8 @@ const api = {
       ipcRenderer.on(channels.system.onReminderFired, listener);
       return () => ipcRenderer.removeListener(channels.system.onReminderFired, listener);
     },
-    onDiagnostic: (cb: (payload: { kind: string; cases?: { caseId: string; reason: string }[] }) => void) => {
-      const listener = (_e: unknown, payload: { kind: string; cases?: { caseId: string; reason: string }[] }) => cb(payload);
+    onDiagnostic: (cb: (payload: { kind: string; message?: string; cases?: { caseId: string; reason: string }[] }) => void) => {
+      const listener = (_e: unknown, payload: { kind: string; message?: string; cases?: { caseId: string; reason: string }[] }) => cb(payload);
       ipcRenderer.on(channels.system.onDiagnostic, listener);
       return () => ipcRenderer.removeListener(channels.system.onDiagnostic, listener);
     }

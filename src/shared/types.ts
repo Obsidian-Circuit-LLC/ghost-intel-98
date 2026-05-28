@@ -70,6 +70,21 @@ export interface AttachmentMeta {
   sha256?: string;
 }
 
+/** Result of reading an attachment's text for AI context. `text` is null when the
+ *  file is binary, empty, or unreadable — the reason says which. Size caps + binary
+ *  detection happen in the main process; the renderer never receives binary blobs. */
+export interface AttachmentTextResult {
+  fileName: string;
+  text: string | null;
+  /** Total size on disk, bytes. */
+  size: number;
+  /** Bytes actually read (<= per-file cap). */
+  bytesRead: number;
+  /** True when the file is larger than the per-file read cap. */
+  truncated: boolean;
+  reason?: 'binary' | 'empty' | 'read-error';
+}
+
 export interface CaseRecord extends CaseSummary {
   description: string;
   notes: { name: string; updatedAt: ISODate }[];
@@ -135,8 +150,9 @@ export const defaultShortcuts: AccessShortcut[] = [
   { id: 'reminders', label: 'Reminders', kind: 'module', target: 'reminders', icon: 'bell' },
   { id: 'alarm', label: 'Alarm', kind: 'module', target: 'alarm', icon: 'alarm' },
   { id: 'ai', label: 'AI Assistant', kind: 'module', target: 'ai-assistant', icon: 'sparkle' },
-  { id: 'help', label: 'Help', kind: 'module', target: 'help', icon: 'help' },
-  { id: 'settings', label: 'Settings', kind: 'module', target: 'settings', icon: 'gear' }
+  { id: 'help', label: 'Help', kind: 'module', target: 'help', icon: 'help' }
+  // Settings is always available via the Access menu footer ("Settings…"), so it is
+  // intentionally NOT a duplicate editable shortcut here.
 ];
 
 export const defaultSettings: AppSettings = {

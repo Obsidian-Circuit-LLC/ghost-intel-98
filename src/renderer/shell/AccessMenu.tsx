@@ -17,7 +17,11 @@ export function AccessMenu({ onClose }: AccessMenuProps): JSX.Element {
   const settings = useSettings((s) => s.settings);
   const open = useWindows((s) => s.open);
 
-  const items = settings?.shortcuts ?? [];
+  // The footer "Settings…" entry (below the divider) is the canonical Settings launcher,
+  // so drop any settings-target shortcut from the editable list to avoid a duplicate entry.
+  // Done at render time so existing installs (which persisted a 'settings' shortcut on disk)
+  // are fixed too, not just fresh installs.
+  const items = (settings?.shortcuts ?? []).filter((s) => !(s.kind === 'module' && s.target === 'settings'));
 
   function activate(id: string): void {
     const s = items.find((x) => x.id === id);

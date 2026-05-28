@@ -13,6 +13,7 @@ import type { AiChatMessage, AiChatRequest } from '@shared/post-mvp-types';
 import type { CaseSummary, CaseRecord } from '@shared/types';
 import { useSettings } from '../../state/store';
 import { toast } from '../../state/toasts';
+import { confirmDialog } from '../../state/dialogs';
 
 interface DisplayMessage extends AiChatMessage {
   id: string;
@@ -31,11 +32,22 @@ export function AiAssistantModule(): JSX.Element {
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
+  const [includeFiles, setIncludeFiles] = useState(false);
   const activeStreamRef = useRef<{ id: string; off: () => void } | null>(null);
+  // One-time-per-session confirmation that file CONTENTS may leave the machine to a remote provider.
+  const remoteEgressConfirmedRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const settings = useSettings((s) => s.settings);
 
   useEffect(() => { void window.api.cases.list().then(setCases); }, []);
+
+  // Default the "include file contents" toggle by provider — on for local Ollama (data
+  // never leaves the box), off for remote/none until the user opts in. A provider change
+  // also invalidates any prior remote-egress confirmation.
+  useEffect(() => {
+    setIncludeFiles(settings?.ai.provider === 'ollama');
+    remoteEgressConfirmedRef.current = false;
+  }, [settings?.ai.provider]);
 
   useEffect(() => {
     setContextError(null);
@@ -71,15 +83,49 @@ export function AiAssistantModule(): JSX.Element {
       toast.warn('Case context failed to load. Clear the dropdown or retry before sending.');
       return;
     }
+    const text = input.trim();
+
+    // Assemble context BEFORE mutating chat state. Gathering file contents reads files and,
+    // for a remote provider, prompts the user to confirm egress. If they decline we abort
+    // cleanly with nothing added to the transcript — hence this runs before the bubbles append.
+    let context: string | undefined;
+    if (contextCase) {
+      if (includeFiles) {
+        let gathered: GatheredFiles;
+        try {
+          gathered = await gatherCaseFiles(contextCase);
+        } catch (err) {
+          toast.error(`Could not read case files: ${(err as Error).message}`);
+          return;
+        }
+        const remote = settings?.ai.provider === 'openai-compatible';
+        if (remote && gathered.included.length > 0 && !remoteEgressConfirmedRef.current) {
+          const ok = await confirmDialog(
+            `Include the contents of ${gathered.included.length} file(s) (${formatBytes(gathered.totalBytes)}) ` +
+              `from "${contextCase.title}" in this request? Your AI provider is a remote endpoint ` +
+              `(${safeHost(settings?.ai.endpoint)}) — these file contents will leave this machine.`,
+            'Send file contents to a remote provider?'
+          );
+          if (!ok) {
+            toast.warn('Send cancelled — file contents were not sent. Untick "Include file contents" to send metadata only.');
+            return;
+          }
+          remoteEgressConfirmedRef.current = true;
+        }
+        context = composeContext(contextCase, gathered);
+      } else {
+        context = buildContextMeta(contextCase);
+      }
+    }
+
     const streamId = `chat-${newId()}`;
-    const userMsg: DisplayMessage = { id: newId(), role: 'user', content: input.trim() };
+    const userMsg: DisplayMessage = { id: newId(), role: 'user', content: text };
     const assistantMsg: DisplayMessage = { id: newId(), role: 'assistant', content: '', streaming: true };
-    const history: AiChatMessage[] = [...messages.map(({ role, content }) => ({ role, content })), { role: 'user', content: input.trim() }];
+    const history: AiChatMessage[] = [...messages.map(({ role, content }) => ({ role, content })), { role: 'user', content: text }];
     setMessages((prev) => [...prev, userMsg, assistantMsg]);
     setInput('');
     setStreaming(true);
 
-    const context = contextCase ? buildContext(contextCase) : undefined;
     const req: AiChatRequest = { context, messages: history };
 
     const off = window.api.ai.onChunk(({ streamId: sid, chunk, done, error }) => {
@@ -107,7 +153,7 @@ export function AiAssistantModule(): JSX.Element {
       off();
       activeStreamRef.current = null;
     }
-  }, [input, streaming, settings, messages, contextCase, contextCaseId]);
+  }, [input, streaming, settings, messages, contextCase, contextCaseId, includeFiles]);
 
   function quickPrompt(text: string): void {
     setInput(text);
@@ -125,6 +171,13 @@ export function AiAssistantModule(): JSX.Element {
             {cases.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
           </select>
         </label>
+        <label
+          style={{ fontSize: 11, opacity: contextCase ? 1 : 0.5 }}
+          title="Include note + text-attachment contents in the context sent to the AI. Binary files are never sent; a remote provider asks for confirmation first."
+        >
+          <input type="checkbox" checked={includeFiles} disabled={!contextCase} onChange={(e) => setIncludeFiles(e.target.checked)} />
+          &nbsp;Include file contents
+        </label>
         <button onClick={() => quickPrompt('Summarise this case in 3-5 bullet points.')} disabled={!contextCase}>Summarise</button>
         <button onClick={() => quickPrompt('Draft a status report for this case suitable for an external stakeholder.')} disabled={!contextCase}>Draft report</button>
         <button onClick={() => quickPrompt('What questions should I be asking that I have not yet?')} disabled={!contextCase}>Open questions</button>
@@ -138,8 +191,9 @@ export function AiAssistantModule(): JSX.Element {
         {messages.length === 0 && (
           <div style={{ color: '#666', padding: 16 }}>
             Set a provider in Settings, optionally pick a case for context, and type below.
-            The case bundle (description, tasks, links, timeline, notes list) is only sent
-            when you explicitly select a case here.
+            Selecting a case sends its metadata (description, tasks, links, timeline, file list).
+            Tick <b>Include file contents</b> to also send note &amp; text-attachment bodies — with a
+            remote provider you&rsquo;ll confirm first, since that data leaves your machine.
           </div>
         )}
         {messages.map((m) => (
@@ -167,7 +221,73 @@ export function AiAssistantModule(): JSX.Element {
   );
 }
 
-function buildContext(c: CaseRecord): string {
+interface GatheredFiles {
+  sections: string;
+  included: { name: string; bytes: number }[];
+  skipped: { name: string; reason: string }[];
+  totalBytes: number;
+}
+
+/** Renderer-side soft caps. Per-item keeps one big note/log from dominating; the total
+ *  budget bounds how much leaves the machine. (The main process enforces its own hard
+ *  per-file cap + binary rejection independently — these are a UX/context-window concern.) */
+const RENDER_PER_ITEM_CAP = 64 * 1024;
+const RENDER_TOTAL_BUDGET = 256 * 1024;
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function safeHost(endpoint?: string): string {
+  if (!endpoint) return 'the configured endpoint';
+  try { return new URL(endpoint).host || endpoint; } catch { return endpoint; }
+}
+
+/** Read note bodies + text-attachment contents up to the total budget. Notes come via
+ *  notes.read; attachments via files.readAttachmentText (main rejects binaries → text:null). */
+async function gatherCaseFiles(c: CaseRecord): Promise<GatheredFiles> {
+  const parts: string[] = [];
+  const included: { name: string; bytes: number }[] = [];
+  const skipped: { name: string; reason: string }[] = [];
+  let total = 0;
+  const room = (): number => RENDER_TOTAL_BUDGET - total;
+
+  for (const n of c.notes) {
+    if (room() <= 0) { skipped.push({ name: n.name, reason: 'budget' }); continue; }
+    try {
+      const body = await window.api.notes.read(c.id, n.name);
+      if (!body) { skipped.push({ name: n.name, reason: 'empty' }); continue; }
+      const capped = body.slice(0, Math.min(RENDER_PER_ITEM_CAP, room()));
+      const trunc = capped.length < body.length ? ' (truncated)' : '';
+      parts.push(`----- contents of note "${n.name}"${trunc} -----\n${capped}`);
+      included.push({ name: n.name, bytes: capped.length });
+      total += capped.length;
+    } catch {
+      skipped.push({ name: n.name, reason: 'read-error' });
+    }
+  }
+
+  for (const a of c.attachments) {
+    if (room() <= 0) { skipped.push({ name: a.originalName, reason: 'budget' }); continue; }
+    try {
+      const res = await window.api.files.readAttachmentText(c.id, a.fileName);
+      if (res.text == null) { skipped.push({ name: a.originalName, reason: res.reason ?? 'skipped' }); continue; }
+      const capped = res.text.slice(0, room());
+      const trunc = (res.truncated || capped.length < res.text.length) ? ' (truncated)' : '';
+      parts.push(`----- contents of ${a.originalName}${trunc} -----\n${capped}`);
+      included.push({ name: a.originalName, bytes: capped.length });
+      total += capped.length;
+    } catch {
+      skipped.push({ name: a.originalName, reason: 'read-error' });
+    }
+  }
+
+  return { sections: parts.join('\n\n'), included, skipped, totalBytes: total };
+}
+
+function buildContextMeta(c: CaseRecord): string {
   const lines: string[] = [
     `Title: ${c.title}`,
     `Reference: ${c.reference}`,
@@ -184,10 +304,23 @@ function buildContext(c: CaseRecord): string {
     `Reminders (${c.reminders.length}):`,
     ...c.reminders.map((r) => `  - ${r.title} @ ${r.fireAt}${r.fired ? ' (fired)' : ''}`),
     '',
-    `Notes (filenames only; no body): ${c.notes.map((n) => n.name).join(', ') || '—'}`,
+    `Notes (${c.notes.length}): ${c.notes.map((n) => n.name).join(', ') || '—'}`,
+    `Attachments (${c.attachments.length}): ${c.attachments.map((a) => `${a.originalName} (${formatBytes(a.size)})`).join(', ') || '—'}`,
     '',
     `Recent timeline (${c.timeline.length}):`,
     ...c.timeline.slice(-10).map((e) => `  - [${e.at}] (${e.kind}) ${e.message}`)
   ];
   return lines.join('\n');
+}
+
+function composeContext(c: CaseRecord, g: GatheredFiles): string {
+  let ctx = buildContextMeta(c);
+  if (g.sections) {
+    ctx += `\n\n===== FILE CONTENTS (${g.included.length} file${g.included.length === 1 ? '' : 's'}, ${formatBytes(g.totalBytes)}) =====\n${g.sections}`;
+  }
+  if (g.skipped.length) {
+    ctx += `\n\nFiles present but contents NOT included (${g.skipped.length}): ` +
+      g.skipped.map((s) => `${s.name} [${s.reason}]`).join(', ');
+  }
+  return ctx;
 }

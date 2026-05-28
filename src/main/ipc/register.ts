@@ -126,6 +126,8 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     const path = fileStore.attachmentAbsolutePath(id, name);
     shell.showItemInFolder(path);
   });
+  safeHandle(channels.files.readAttachmentText, (...args) =>
+    fileStore.readAttachmentText(ensureUuid(args[0], 'caseId'), ensureFileName(args[1], 'fileName')));
   safeHandle(channels.files.pickOpen, async (...args) => {
     const opts = (args[0] as { multi?: boolean; filters?: unknown }) ?? {};
     const filters = validatePickFilters(opts.filters);
