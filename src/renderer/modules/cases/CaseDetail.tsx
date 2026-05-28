@@ -4,10 +4,10 @@
  */
 
 import { useCallback, useState, type DragEvent } from 'react';
-import type { CaseRecord, CasePriority, CaseStatus } from '@shared/types';
+import type { AttachmentMeta, CaseRecord, CasePriority, CaseStatus, ExtractedAttachmentMeta } from '@shared/types';
 import { useWindows } from '../../state/store';
 import { playError } from '../../audio/synth';
-import { confirmDialog } from '../../state/dialogs';
+import { confirmDialog, promptDialog } from '../../state/dialogs';
 import { toast } from '../../state/toasts';
 
 interface Props {
@@ -114,23 +114,7 @@ export function CaseDetail({ record, onChange, onArchive, onRefresh, onUpdateFie
         ) : (
           <ul className="ga98-list">
             {record.attachments.map((a) => (
-              <li key={a.fileName}>
-                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {a.originalName} <span style={{ opacity: 0.6 }}>({Math.ceil(a.size / 1024)} KB)</span>
-                </span>
-                <button onClick={() => void window.api.files.revealAttachment(record.id, a.fileName)}>Reveal</button>
-                <button onClick={async () => {
-                  const ok = await confirmDialog(`Send ${a.originalName} to Shred?`, 'Shred attachment');
-                  if (!ok) return;
-                  try {
-                    await window.api.files.deleteAttachment(record.id, a.fileName);
-                    await onRefresh();
-                    toast.success('Sent to Shred.');
-                  } catch (err) {
-                    toast.error(`Shred failed: ${(err as Error).message}`);
-                  }
-                }}>Shred</button>
-              </li>
+              <AttachmentRow key={a.fileName} caseId={record.id} att={a} onRefresh={onRefresh} />
             ))}
           </ul>
         )}
@@ -218,5 +202,89 @@ export function CaseDetail({ record, onChange, onArchive, onRefresh, onUpdateFie
         </ul>
       </fieldset>
     </div>
+  );
+}
+
+function fileGlyph(name: string): string {
+  const ext = name.toLowerCase().split('.').pop() ?? '';
+  if (ext === 'pdf') return '📕';
+  if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'tif', 'tiff'].includes(ext)) return '🖼';
+  if (ext === 'docx' || ext === 'doc') return '📘';
+  if (['csv', 'tsv', 'xlsx', 'xls'].includes(ext)) return '📊';
+  if (ext === 'json' || ext === 'xml') return '🧾';
+  if (ext === 'eml' || ext === 'msg') return '✉';
+  if (['txt', 'md', 'log', 'html', 'htm'].includes(ext)) return '📄';
+  return '📎';
+}
+
+function AttachmentRow({ caseId, att, onRefresh }: {
+  caseId: string;
+  att: AttachmentMeta;
+  onRefresh(): void | Promise<void>;
+}): JSX.Element {
+  const [showDetails, setShowDetails] = useState(false);
+  const [meta, setMeta] = useState<ExtractedAttachmentMeta | null>(null);
+  const [showGps, setShowGps] = useState(false);
+
+  async function toggleDetails(): Promise<void> {
+    const next = !showDetails;
+    setShowDetails(next);
+    if (next && !meta) {
+      try { setMeta(await window.api.files.extractAttachmentMeta(caseId, att.fileName)); }
+      catch (err) { toast.error(`Could not read metadata: ${(err as Error).message}`); }
+    }
+  }
+
+  function view(): void {
+    useWindows.getState().open({
+      module: 'doc-viewer',
+      title: att.originalName,
+      props: { caseId, fileName: att.fileName, originalName: att.originalName },
+      width: 900,
+      height: 680
+    });
+  }
+
+  return (
+    <li style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <span aria-hidden="true">{fileGlyph(att.originalName)}</span>
+        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {att.originalName}{' '}
+          <span style={{ opacity: 0.6 }}>({Math.ceil(att.size / 1024)} KB{att.importedAt ? ` · ${new Date(att.importedAt).toLocaleDateString()}` : ''})</span>
+        </span>
+        <button onClick={view}>View</button>
+        <button onClick={() => void window.api.files.revealAttachment(caseId, att.fileName)}>Reveal</button>
+        <button onClick={async () => {
+          const next = await promptDialog('New name (keep the extension):', att.originalName, 'Rename attachment');
+          if (!next || next === att.originalName) return;
+          try { await window.api.files.renameAttachment(caseId, att.fileName, next); await onRefresh(); toast.success('Renamed.'); }
+          catch (err) { toast.error(`Rename failed: ${(err as Error).message}`); }
+        }}>Rename</button>
+        <button onClick={() => void toggleDetails()} title="File metadata">{showDetails ? '▾' : 'ⓘ'}</button>
+        <button onClick={async () => {
+          const ok = await confirmDialog(`Send ${att.originalName} to Shred?`, 'Shred attachment');
+          if (!ok) return;
+          try { await window.api.files.deleteAttachment(caseId, att.fileName); await onRefresh(); toast.success('Sent to Shred.'); }
+          catch (err) { toast.error(`Shred failed: ${(err as Error).message}`); }
+        }}>Shred</button>
+      </div>
+      {showDetails && meta && (
+        <div style={{ fontSize: 11, background: '#f4f4f4', border: '1px solid #d0d0d0', margin: '4px 0 0 22px', padding: 6 }}>
+          <div>Type: {meta.fileType} · Size: {meta.size} bytes</div>
+          {meta.modifiedAt && <div>Modified: {new Date(meta.modifiedAt).toLocaleString()}</div>}
+          {meta.originalPath && <div>Original path: <code>{meta.originalPath}</code></div>}
+          {meta.exif && <div>EXIF: {Object.entries(meta.exif).map(([k, v]) => `${k}=${v}`).join(' · ')}</div>}
+          {meta.emlHeaders && <div>Email headers: {meta.emlHeaders.length}</div>}
+          {meta.gps && (
+            <div>
+              {showGps
+                ? <span>GPS: {meta.gps.lat.toFixed(5)}, {meta.gps.lon.toFixed(5)}</span>
+                : <button onClick={() => setShowGps(true)}>Show location</button>}
+            </div>
+          )}
+        </div>
+      )}
+    </li>
   );
 }

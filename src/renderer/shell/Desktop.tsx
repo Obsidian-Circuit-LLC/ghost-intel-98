@@ -28,6 +28,7 @@ const moduleTitles: Record<ModuleKey, string> = {
   dialterm: 'DialTerm',
   eyespy: 'EyeSpy',
   'ai-assistant': 'AI Assistant',
+  'doc-viewer': 'Document Viewer',
   help: 'Help'
 };
 

@@ -138,6 +138,8 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     fileStore.readEmlPreview(ensureUuid(args[0], 'caseId'), ensureFileName(args[1], 'fileName')));
   safeHandle(channels.files.extractAttachmentMeta, (...args) =>
     fileStore.extractAttachmentMeta(ensureUuid(args[0], 'caseId'), ensureFileName(args[1], 'fileName')));
+  safeHandle(channels.files.renameAttachment, (...args) =>
+    fileStore.renameAttachment(ensureUuid(args[0], 'caseId'), ensureFileName(args[1], 'fileName'), ensureFileName(args[2], 'newName')));
   safeHandle(channels.files.pickOpen, async (...args) => {
     const opts = (args[0] as { multi?: boolean; filters?: unknown }) ?? {};
     const filters = validatePickFilters(opts.filters);

@@ -52,6 +52,8 @@ export interface FileStore {
   readEmlPreview(id: CaseId, fileName: string): Promise<EmlPreview>;
   /** Extract + cache displayable metadata (type/dates/EXIF/GPS/EML headers) for an attachment. No hashing. */
   extractAttachmentMeta(id: CaseId, fileName: string): Promise<ExtractedAttachmentMeta>;
+  /** Rename an attachment in place (collision-safe); returns the actual new on-disk name. */
+  renameAttachment(id: CaseId, fileName: string, newName: string): Promise<string>;
 }
 
 export interface NoteStore {

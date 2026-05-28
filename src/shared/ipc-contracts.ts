@@ -95,6 +95,7 @@ export const channels = {
     readAttachmentBytes: 'files:readAttachmentBytes',
     readEml: 'files:readEml',
     extractAttachmentMeta: 'files:extractAttachmentMeta',
+    renameAttachment: 'files:renameAttachment',
     pickOpen: 'files:pickOpen',
     pickSave: 'files:pickSave'
   },
@@ -150,6 +151,7 @@ export interface ApiContracts {
   [channels.files.readAttachmentBytes]: { args: [CaseId, string, number, number]; returns: AttachmentBytesResult };
   [channels.files.readEml]: { args: [CaseId, string]; returns: EmlPreview };
   [channels.files.extractAttachmentMeta]: { args: [CaseId, string]; returns: ExtractedAttachmentMeta };
+  [channels.files.renameAttachment]: { args: [CaseId, string, string]; returns: string };
 
   [channels.notes.list]: { args: [CaseId]; returns: { name: string; updatedAt: string }[] };
   [channels.notes.read]: { args: [CaseId, string]; returns: string };

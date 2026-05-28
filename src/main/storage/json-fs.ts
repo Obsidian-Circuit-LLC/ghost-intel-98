@@ -634,6 +634,29 @@ export const fileStore: FileStore = {
 
     try { await writeJson(cachePath, result); } catch { /* cache is best-effort */ }
     return result;
+  },
+
+  async renameAttachment(id, fileName, newName): Promise<string> {
+    return withLock(caseLockKey(id), async () => {
+      const dir = caseAttachmentsDir(id);
+      const safeNew = await uniqueAttachmentName(id, newName); // sanitises + dedupes
+      const from = join(dir, fileName);
+      const to = join(dir, safeNew);
+      await rename(from, to);
+      // Move the .meta.json sidecar if present; drop the stale .extracted.json cache
+      // (it is keyed by filename and will be recomputed on demand under the new name).
+      try {
+        await rename(`${from}.meta.json`, `${to}.meta.json`);
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+      }
+      await rm(`${from}.extracted.json`, { force: true });
+      const meta = await readJson<AttachmentMeta | null>(`${to}.meta.json`, null);
+      if (meta) await writeJson(`${to}.meta.json`, { ...meta, fileName: safeNew, originalName: newName });
+      await appendTimelineUnlocked(id, { kind: 'file', message: `Renamed attachment: ${fileName} → ${safeNew}` });
+      await touchUnlocked(id);
+      return safeNew;
+    });
   }
 };
 

@@ -79,6 +79,7 @@ export interface GhostApi {
     readAttachmentBytes(id: string, name: string, offset: number, length: number): Promise<AttachmentBytesResult>;
     readEml(id: string, name: string): Promise<EmlPreview>;
     extractAttachmentMeta(id: string, name: string): Promise<ExtractedAttachmentMeta>;
+    renameAttachment(id: string, name: string, newName: string): Promise<string>;
     pickOpen(opts?: { multi?: boolean; filters?: { name: string; extensions: string[] }[] }): Promise<string[]>;
     pickSave(opts?: { defaultName?: string; filters?: { name: string; extensions: string[] }[] }): Promise<string | null>;
   };

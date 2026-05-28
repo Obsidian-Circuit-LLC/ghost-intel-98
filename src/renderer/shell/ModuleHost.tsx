@@ -16,6 +16,7 @@ import { MailModule } from '../modules/mail/MailModule';
 import { DialTermModule } from '../modules/dialterm/DialTermModule';
 import { EyeSpyModule } from '../modules/eyespy/EyeSpyModule';
 import { AiAssistantModule } from '../modules/ai-assistant/AiAssistantModule';
+import { DocViewerModule } from '../modules/doc-viewer/DocViewerModule';
 import { HelpModule } from '../modules/help/HelpModule';
 import { ComingSoon } from '../modules/coming-soon/ComingSoon';
 
@@ -45,6 +46,14 @@ export function ModuleHost({ spec }: { spec: WindowSpec }): JSX.Element {
       return <EyeSpyModule />;
     case 'ai-assistant':
       return <AiAssistantModule />;
+    case 'doc-viewer':
+      return (
+        <DocViewerModule
+          caseId={spec.props?.['caseId'] as string}
+          fileName={spec.props?.['fileName'] as string}
+          originalName={(spec.props?.['originalName'] as string) ?? (spec.props?.['fileName'] as string)}
+        />
+      );
     case 'help':
       return <HelpModule />;
     default:
