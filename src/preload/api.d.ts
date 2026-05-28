@@ -4,11 +4,14 @@
 
 import type {
   AppSettings,
+  AttachmentBytesResult,
   AttachmentMeta,
   AttachmentTextResult,
   CaseRecord,
   CaseSummary,
   CreateCaseInput,
+  EmlPreview,
+  ExtractedAttachmentMeta,
   Reminder,
   TaskItem,
   TimelineEvent,
@@ -73,6 +76,9 @@ export interface GhostApi {
     revealAttachment(id: string, name: string): Promise<void>;
     deleteAttachment(id: string, name: string): Promise<void>;
     readAttachmentText(id: string, name: string): Promise<AttachmentTextResult>;
+    readAttachmentBytes(id: string, name: string, offset: number, length: number): Promise<AttachmentBytesResult>;
+    readEml(id: string, name: string): Promise<EmlPreview>;
+    extractAttachmentMeta(id: string, name: string): Promise<ExtractedAttachmentMeta>;
     pickOpen(opts?: { multi?: boolean; filters?: { name: string; extensions: string[] }[] }): Promise<string[]>;
     pickSave(opts?: { defaultName?: string; filters?: { name: string; extensions: string[] }[] }): Promise<string | null>;
   };

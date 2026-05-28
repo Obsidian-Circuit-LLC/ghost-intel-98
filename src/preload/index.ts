@@ -33,6 +33,10 @@ const api = {
     revealAttachment: (id: string, name: string) => ipcRenderer.invoke(channels.files.revealAttachment, id, name),
     deleteAttachment: (id: string, name: string) => ipcRenderer.invoke(channels.files.deleteAttachment, id, name),
     readAttachmentText: (id: string, name: string) => ipcRenderer.invoke(channels.files.readAttachmentText, id, name),
+    readAttachmentBytes: (id: string, name: string, offset: number, length: number) =>
+      ipcRenderer.invoke(channels.files.readAttachmentBytes, id, name, offset, length),
+    readEml: (id: string, name: string) => ipcRenderer.invoke(channels.files.readEml, id, name),
+    extractAttachmentMeta: (id: string, name: string) => ipcRenderer.invoke(channels.files.extractAttachmentMeta, id, name),
     pickOpen: (opts?: { multi?: boolean; filters?: { name: string; extensions: string[] }[] }) =>
       ipcRenderer.invoke(channels.files.pickOpen, opts),
     pickSave: (opts?: { defaultName?: string; filters?: { name: string; extensions: string[] }[] }) =>

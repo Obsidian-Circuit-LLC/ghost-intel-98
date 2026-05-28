@@ -5,12 +5,15 @@
 
 import type {
   AppSettings,
+  AttachmentBytesResult,
   AttachmentMeta,
   AttachmentTextResult,
   CaseId,
   CaseRecord,
   CaseSummary,
   CreateCaseInput,
+  EmlPreview,
+  ExtractedAttachmentMeta,
   Reminder,
   TimelineEvent,
   TaskItem,
@@ -43,6 +46,12 @@ export interface FileStore {
   /** Read up to a per-file byte cap of an attachment as UTF-8 text, for AI context.
    *  Returns text:null for binary / empty / unreadable files (never ships binary). */
   readAttachmentText(id: CaseId, fileName: string): Promise<AttachmentTextResult>;
+  /** Read a path-confined, range-clamped page of raw attachment bytes (base64) for the viewer. */
+  readAttachmentBytes(id: CaseId, fileName: string, offset: number, length: number): Promise<AttachmentBytesResult>;
+  /** Parse an .eml attachment into a viewer preview (headers/body + inner-attachment metadata only). */
+  readEmlPreview(id: CaseId, fileName: string): Promise<EmlPreview>;
+  /** Extract + cache displayable metadata (type/dates/EXIF/GPS/EML headers) for an attachment. No hashing. */
+  extractAttachmentMeta(id: CaseId, fileName: string): Promise<ExtractedAttachmentMeta>;
 }
 
 export interface NoteStore {

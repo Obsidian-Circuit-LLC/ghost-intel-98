@@ -36,7 +36,7 @@ import * as streams from '../services/streams';
 import * as ai from '../services/ai';
 import * as bookmarks from '../storage/bookmarks';
 import * as history from '../storage/history';
-import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault } from '../security/validate';
+import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange } from '../security/validate';
 import { markConsented, assertAllConsented } from '../security/consent';
 import { getSecretBackend } from '../secrets';
 import { homedir } from 'node:os';
@@ -128,6 +128,16 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   });
   safeHandle(channels.files.readAttachmentText, (...args) =>
     fileStore.readAttachmentText(ensureUuid(args[0], 'caseId'), ensureFileName(args[1], 'fileName')));
+  safeHandle(channels.files.readAttachmentBytes, (...args) => {
+    const id = ensureUuid(args[0], 'caseId');
+    const name = ensureFileName(args[1], 'fileName');
+    const { offset, length } = validateByteRange(args[2], args[3]);
+    return fileStore.readAttachmentBytes(id, name, offset, length);
+  });
+  safeHandle(channels.files.readEml, (...args) =>
+    fileStore.readEmlPreview(ensureUuid(args[0], 'caseId'), ensureFileName(args[1], 'fileName')));
+  safeHandle(channels.files.extractAttachmentMeta, (...args) =>
+    fileStore.extractAttachmentMeta(ensureUuid(args[0], 'caseId'), ensureFileName(args[1], 'fileName')));
   safeHandle(channels.files.pickOpen, async (...args) => {
     const opts = (args[0] as { multi?: boolean; filters?: unknown }) ?? {};
     const filters = validatePickFilters(opts.filters);

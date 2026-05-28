@@ -85,6 +85,64 @@ export interface AttachmentTextResult {
   reason?: 'binary' | 'empty' | 'read-error';
 }
 
+/** A page of raw attachment bytes (base64) for the in-app document viewer.
+ *  Path-confined + range-clamped in the main process; never persisted. */
+export interface AttachmentBytesResult {
+  fileName: string;
+  /** base64 of the requested slice, or null on error / out-of-range. */
+  base64: string | null;
+  /** Total file size on disk, bytes. */
+  size: number;
+  /** Offset this slice started at. */
+  offset: number;
+  /** Bytes in this slice (decoded length). */
+  length: number;
+  /** True when there are more bytes past this slice. */
+  hasMore: boolean;
+  reason?: 'read-error' | 'out-of-range';
+}
+
+/** Inner attachment of a parsed .eml — metadata ONLY (never the bytes). */
+export interface EmlAttachmentInfo {
+  filename: string;
+  contentType: string;
+  size: number;
+}
+
+/** Parsed preview of an .eml file for the viewer. Body html is RAW — the renderer
+ *  must run it through sanitizeHtml before display. Never persisted. */
+export interface EmlPreview {
+  from: string;
+  to: string;
+  cc: string;
+  subject: string;
+  date: string;
+  headers: { key: string; value: string }[];
+  text: string;
+  html: string | null;
+  attachments: EmlAttachmentInfo[];
+}
+
+/** Extracted, displayable metadata for an attachment (no hashing). Cached on disk
+ *  next to the file as `<fileName>.extracted.json`; that cache file is skipped by
+ *  listAttachmentsImpl so it never appears as a phantom attachment. */
+export interface ExtractedAttachmentMeta {
+  fileName: string;
+  fileType: string;
+  size: number;
+  importedAt?: ISODate;
+  modifiedAt?: ISODate;
+  createdAt?: ISODate;
+  originalPath?: string | null;
+  /** Selected EXIF tags (images only), stringified for transport. */
+  exif?: Record<string, string>;
+  /** GPS coordinates if the image carried them. Stored, but the UI hides it behind
+   *  an explicit "Show location" toggle (operator decision). */
+  gps?: { lat: number; lon: number };
+  /** Email headers (EML only). */
+  emlHeaders?: { key: string; value: string }[];
+}
+
 export interface CaseRecord extends CaseSummary {
   description: string;
   notes: { name: string; updatedAt: ISODate }[];

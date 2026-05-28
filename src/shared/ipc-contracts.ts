@@ -5,12 +5,15 @@
 
 import type {
   AppSettings,
+  AttachmentBytesResult,
   AttachmentMeta,
   AttachmentTextResult,
   CaseId,
   CaseRecord,
   CaseSummary,
   CreateCaseInput,
+  EmlPreview,
+  ExtractedAttachmentMeta,
   Reminder,
   TaskItem,
   TimelineEvent,
@@ -89,6 +92,9 @@ export const channels = {
     revealAttachment: 'files:revealAttachment',
     deleteAttachment: 'files:deleteAttachment',
     readAttachmentText: 'files:readAttachmentText',
+    readAttachmentBytes: 'files:readAttachmentBytes',
+    readEml: 'files:readEml',
+    extractAttachmentMeta: 'files:extractAttachmentMeta',
     pickOpen: 'files:pickOpen',
     pickSave: 'files:pickSave'
   },
@@ -141,6 +147,9 @@ export interface ApiContracts {
   [channels.files.revealAttachment]: { args: [CaseId, string]; returns: void };
   [channels.files.deleteAttachment]: { args: [CaseId, string]; returns: void };
   [channels.files.readAttachmentText]: { args: [CaseId, string]; returns: AttachmentTextResult };
+  [channels.files.readAttachmentBytes]: { args: [CaseId, string, number, number]; returns: AttachmentBytesResult };
+  [channels.files.readEml]: { args: [CaseId, string]; returns: EmlPreview };
+  [channels.files.extractAttachmentMeta]: { args: [CaseId, string]; returns: ExtractedAttachmentMeta };
 
   [channels.notes.list]: { args: [CaseId]; returns: { name: string; updatedAt: string }[] };
   [channels.notes.read]: { args: [CaseId, string]; returns: string };

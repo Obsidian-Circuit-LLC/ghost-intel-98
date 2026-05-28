@@ -13,6 +13,7 @@ import { createReadStream } from 'node:fs';
 import { basename, extname, join } from 'node:path';
 import type {
   AppSettings,
+  AttachmentBytesResult,
   AttachmentMeta,
   AttachmentTextResult,
   CaseId,
@@ -21,11 +22,15 @@ import type {
   CaseStatus,
   CasePriority,
   CreateCaseInput,
+  EmlPreview,
+  ExtractedAttachmentMeta,
   Reminder,
   TimelineEvent,
   TaskItem,
   WebLink
 } from '@shared/types';
+import exifr from 'exifr';
+import { simpleParser, type AddressObject } from 'mailparser';
 import { defaultSettings } from '@shared/types';
 import type { CaseStore, FileStore, NoteStore, ReminderStore, SettingsStore, ShredStore } from './interface';
 import {
@@ -378,7 +383,9 @@ async function listAttachmentsImpl(id: CaseId): Promise<AttachmentMeta[]> {
   }
   const out: AttachmentMeta[] = [];
   for (const entry of entries) {
-    if (entry.endsWith('.meta.json')) continue;
+    // Sidecars (.meta.json) and the metadata-extraction cache (.extracted.json) are not
+    // attachments — skip both or they list as phantom files and pollute AI/search context.
+    if (entry.endsWith('.meta.json') || entry.endsWith('.extracted.json')) continue;
     const meta = await readJson<AttachmentMeta | null>(join(caseAttachmentsDir(id), `${entry}.meta.json`), null);
     if (meta) {
       out.push(meta);
@@ -518,12 +525,124 @@ export const fileStore: FileStore = {
     } catch {
       return { fileName, text: null, size, bytesRead: 0, truncated: false, reason: 'read-error' };
     }
+  },
+
+  async readAttachmentBytes(id, fileName, offset, length): Promise<AttachmentBytesResult> {
+    // fileName validated by ensureFileName + range by validateByteRange at the IPC boundary.
+    const path = join(caseAttachmentsDir(id), fileName);
+    let size = 0;
+    try {
+      const s = await stat(path);
+      size = s.size;
+      if (!s.isFile()) return { fileName, base64: null, size, offset, length: 0, hasMore: false, reason: 'read-error' };
+      if (offset >= size) return { fileName, base64: null, size, offset, length: 0, hasMore: false, reason: 'out-of-range' };
+      const want = Math.min(length, size - offset);
+      const fh = await open(path, 'r');
+      try {
+        const buf = Buffer.alloc(want);
+        const { bytesRead } = await fh.read(buf, 0, want, offset);
+        const slice = buf.subarray(0, bytesRead);
+        return { fileName, base64: slice.toString('base64'), size, offset, length: bytesRead, hasMore: offset + bytesRead < size };
+      } finally {
+        await fh.close();
+      }
+    } catch {
+      return { fileName, base64: null, size, offset, length: 0, hasMore: false, reason: 'read-error' };
+    }
+  },
+
+  async readEmlPreview(id, fileName): Promise<EmlPreview> {
+    const path = join(caseAttachmentsDir(id), fileName);
+    const raw = await readFile(path);
+    if (raw.length > EML_MAX_BYTES) throw new Error(`EML exceeds the ${EML_MAX_BYTES} byte preview limit`);
+    const parsed = await simpleParser(raw);
+    const headers = (parsed.headerLines ?? []).map((h) => {
+      const i = h.line.indexOf(':');
+      return { key: h.key, value: i >= 0 ? h.line.slice(i + 1).trim() : '' };
+    });
+    const addrText = (v: AddressObject | AddressObject[] | undefined): string =>
+      !v ? '' : Array.isArray(v) ? v.map((a) => a.text).join(', ') : v.text;
+    return {
+      from: parsed.from?.text ?? '',
+      to: addrText(parsed.to),
+      cc: addrText(parsed.cc),
+      subject: parsed.subject ?? '(no subject)',
+      date: parsed.date ? parsed.date.toISOString() : '',
+      headers,
+      text: parsed.text ?? '',
+      html: typeof parsed.html === 'string' ? parsed.html : null,
+      attachments: (parsed.attachments ?? []).map((a) => ({
+        filename: a.filename ?? 'attachment',
+        contentType: a.contentType ?? 'application/octet-stream',
+        size: a.size ?? a.content?.length ?? 0
+      }))
+    };
+  },
+
+  async extractAttachmentMeta(id, fileName): Promise<ExtractedAttachmentMeta> {
+    const dir = caseAttachmentsDir(id);
+    const path = join(dir, fileName);
+    const cachePath = join(dir, `${fileName}.extracted.json`);
+    const cached = await readJson<ExtractedAttachmentMeta | null>(cachePath, null);
+    if (cached) return cached;
+
+    const ext = extname(fileName).toLowerCase();
+    const result: ExtractedAttachmentMeta = { fileName, fileType: ext.replace(/^\./, '') || 'unknown', size: 0 };
+    try {
+      const s = await stat(path);
+      result.size = s.size;
+      result.modifiedAt = s.mtime.toISOString();
+      if (s.birthtimeMs > 0) result.createdAt = s.birthtime.toISOString();
+    } catch { /* leave size 0 */ }
+
+    const sidecar = await readJson<AttachmentMeta | null>(`${path}.meta.json`, null);
+    if (sidecar) {
+      result.importedAt = sidecar.importedAt;
+      result.originalPath = sidecar.sourcePath;
+    }
+
+    const IMAGE_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp', '.tif', '.tiff', '.heic', '.avif']);
+    if (IMAGE_EXT.has(ext)) {
+      try {
+        const exif = await exifr.parse(path);
+        if (exif && typeof exif === 'object') {
+          const keep = ['Make', 'Model', 'Software', 'Orientation', 'DateTimeOriginal', 'ExifImageWidth', 'ExifImageHeight', 'LensModel'];
+          const picked: Record<string, string> = {};
+          for (const k of keep) {
+            const v = (exif as Record<string, unknown>)[k];
+            if (v != null) picked[k] = String(v instanceof Date ? v.toISOString() : v);
+          }
+          if (Object.keys(picked).length) result.exif = picked;
+        }
+        const gps = await exifr.gps(path);
+        if (gps && typeof gps.latitude === 'number' && typeof gps.longitude === 'number') {
+          result.gps = { lat: gps.latitude, lon: gps.longitude };
+        }
+      } catch { /* EXIF is best-effort */ }
+    } else if (ext === '.eml') {
+      try {
+        const raw = await readFile(path);
+        if (raw.length <= EML_MAX_BYTES) {
+          const parsed = await simpleParser(raw);
+          result.emlHeaders = (parsed.headerLines ?? []).map((h) => {
+            const i = h.line.indexOf(':');
+            return { key: h.key, value: i >= 0 ? h.line.slice(i + 1).trim() : '' };
+          });
+        }
+      } catch { /* EML headers best-effort */ }
+    }
+
+    try { await writeJson(cachePath, result); } catch { /* cache is best-effort */ }
+    return result;
   }
 };
 
 /** Per-file cap on attachment text pulled into AI context. Keeps a single giant log
  *  from blowing the model's context window; the renderer enforces a separate total budget. */
 const ATTACHMENT_TEXT_CAP_BYTES = 64 * 1024;
+
+/** Refuse to parse a .eml larger than this in the viewer (multipart-bomb guard). */
+const EML_MAX_BYTES = 25 * 1024 * 1024;
 
 /** Heuristic binary sniff over the read buffer: a NUL byte, or >15% control chars
  *  (excluding tab/newline/CR/FF), means "not text" — don't ship it to the model. */

@@ -39,6 +39,24 @@ export function ensureFileName(name: unknown, context = 'name'): string {
   return name;
 }
 
+/** Hard ceiling on a single attachment-bytes read, regardless of what the renderer asks.
+ *  base64 inflates ~4/3, so 16 MiB raw → ~21 MiB string — fine for one viewer page. */
+export const MAX_ATTACHMENT_READ_BYTES = 16 * 1024 * 1024;
+
+/** Validate + clamp a byte range for readAttachmentBytes. `offset` must be a non-negative
+ *  safe integer; `length` is clamped to [1, MAX_ATTACHMENT_READ_BYTES] so a hostile renderer
+ *  cannot request an unbounded slice and OOM the main process. */
+export function validateByteRange(offset: unknown, length: unknown): { offset: number; length: number } {
+  if (typeof offset !== 'number' || !Number.isSafeInteger(offset) || offset < 0) {
+    throw new ValidationError('Invalid byte offset');
+  }
+  if (typeof length !== 'number' || !Number.isFinite(length)) {
+    throw new ValidationError('Invalid byte length');
+  }
+  const clamped = Math.min(Math.max(1, Math.floor(length)), MAX_ATTACHMENT_READ_BYTES);
+  return { offset, length: clamped };
+}
+
 /** Stricter sanitiser used at the OS-save-dialog default path — strips control bytes,
  *  leading/trailing dots and spaces, Windows reserved names. Caller still drives the
  *  native dialog; the user has final say on the destination. */
