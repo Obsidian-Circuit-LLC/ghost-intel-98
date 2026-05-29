@@ -13,7 +13,7 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { SshHostProfile } from '@shared/post-mvp-types';
+import type { SshHostProfile, DialTermProtocol } from '@shared/post-mvp-types';
 import { useSettings } from '../../state/store';
 import { playDialup } from '../../audio/synth';
 import { toast } from '../../state/toasts';
@@ -239,6 +239,7 @@ function HostSetup({ hosts, onClose }: { hosts: SshHostProfile[]; onClose: () =>
     authKind: 'key',
     keyPath: '',
     secretRef: '',
+    protocol: 'ssh',
     secret: ''
   });
   const [error, setError] = useState<string | null>(null);
@@ -281,32 +282,51 @@ function HostSetup({ hosts, onClose }: { hosts: SshHostProfile[]; onClose: () =>
             <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr', gap: 4 }}>
               <label>Label:</label>
               <input className="ga98-text" value={draft.label} onChange={(e) => setDraft({ ...draft, label: e.target.value })} />
+              <label>Protocol:</label>
+              <select className="ga98-text" value={draft.protocol ?? 'ssh'} onChange={(e) => {
+                const protocol = e.target.value as DialTermProtocol;
+                setDraft({ ...draft, protocol, port: protocol === 'telnet' ? 23 : 22, ...(protocol === 'telnet' ? { authKind: 'password' as const, keyPath: '', secret: '' } : {}) });
+              }}>
+                <option value="ssh">SSH</option>
+                <option value="telnet">Telnet (plaintext)</option>
+              </select>
               <label>Host:</label>
               <input className="ga98-text" value={draft.host} onChange={(e) => setDraft({ ...draft, host: e.target.value })} />
               <label>Port:</label>
               <input className="ga98-text" type="number" value={draft.port} onChange={(e) => setDraft({ ...draft, port: Number(e.target.value) })} />
               <label>Username:</label>
               <input className="ga98-text" value={draft.username} onChange={(e) => setDraft({ ...draft, username: e.target.value })} />
-              <label>Auth:</label>
-              <select className="ga98-text" value={draft.authKind} onChange={(e) => setDraft({ ...draft, authKind: e.target.value as SshHostProfile['authKind'] })}>
-                <option value="key">Private key (recommended)</option>
-                <option value="password">Password</option>
-              </select>
-              {draft.authKind === 'key' && (
+              {(draft.protocol ?? 'ssh') === 'ssh' ? (
                 <>
-                  <label>Key path:</label>
-                  <input className="ga98-text" value={draft.keyPath} onChange={(e) => setDraft({ ...draft, keyPath: e.target.value })}
-                    placeholder="must live inside your home dir, e.g. ~/.ssh/id_ed25519" />
-                  <label>Passphrase:</label>
-                  <input className="ga98-text" type="password" value={draft.secret} onChange={(e) => setDraft({ ...draft, secret: e.target.value })}
-                    placeholder="(optional, encrypted in secrets.enc)" />
+                  <label>Auth:</label>
+                  <select className="ga98-text" value={draft.authKind} onChange={(e) => setDraft({ ...draft, authKind: e.target.value as SshHostProfile['authKind'] })}>
+                    <option value="key">Private key (recommended)</option>
+                    <option value="password">Password</option>
+                  </select>
+                  {draft.authKind === 'key' && (
+                    <>
+                      <label>Key path:</label>
+                      <input className="ga98-text" value={draft.keyPath} onChange={(e) => setDraft({ ...draft, keyPath: e.target.value })}
+                        placeholder="must live inside your home dir, e.g. ~/.ssh/id_ed25519" />
+                      <label>Passphrase:</label>
+                      <input className="ga98-text" type="password" value={draft.secret} onChange={(e) => setDraft({ ...draft, secret: e.target.value })}
+                        placeholder="(optional, encrypted in secrets.enc)" />
+                    </>
+                  )}
+                  {draft.authKind === 'password' && (
+                    <>
+                      <label>Password:</label>
+                      <input className="ga98-text" type="password" value={draft.secret} onChange={(e) => setDraft({ ...draft, secret: e.target.value })}
+                        placeholder="(encrypted in secrets.enc)" />
+                    </>
+                  )}
                 </>
-              )}
-              {draft.authKind === 'password' && (
+              ) : (
                 <>
-                  <label>Password:</label>
-                  <input className="ga98-text" type="password" value={draft.secret} onChange={(e) => setDraft({ ...draft, secret: e.target.value })}
-                    placeholder="(encrypted in secrets.enc)" />
+                  <label>Auth:</label>
+                  <span style={{ fontSize: 11, opacity: 0.7, alignSelf: 'center' }}>
+                    Telnet is plaintext and logs in interactively in the terminal — no credentials are stored.
+                  </span>
                 </>
               )}
             </div>

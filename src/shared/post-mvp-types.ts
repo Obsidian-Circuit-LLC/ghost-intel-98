@@ -64,6 +64,9 @@ export interface MailSendInput {
 
 export type SshAuthKind = 'password' | 'key';
 
+/** DialTerm transport. 'ssh' + 'telnet' are terminal sessions; 'ftp' opens a file browser. */
+export type DialTermProtocol = 'ssh' | 'telnet' | 'ftp';
+
 export interface SshHostProfile {
   id: string;
   label: string;
@@ -75,6 +78,8 @@ export interface SshHostProfile {
   keyPath: string;
   /** Reference into secrets.enc for password OR key passphrase. Never the secret itself. */
   secretRef: string;
+  /** Transport. Optional for backward-compat — legacy profiles without it are treated as 'ssh'. */
+  protocol?: DialTermProtocol;
 }
 
 export interface SshConnectResult {

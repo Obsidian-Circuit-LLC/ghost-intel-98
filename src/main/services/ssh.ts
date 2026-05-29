@@ -12,6 +12,7 @@
  */
 
 import { Client as SshClient, type ClientChannel, type ConnectConfig } from 'ssh2';
+import { Socket } from 'node:net';
 import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import type { BrowserWindow } from 'electron';
@@ -20,10 +21,14 @@ import { channels } from '@shared/ipc-contracts';
 import { secretStore, SecretsUnavailableError, SecretsCorruptedError } from '../secrets';
 import * as hostStore from '../storage/hosts';
 import { validateSshKeyPath } from '../security/validate';
+import { newTelnetState, processTelnet, escapeTelnetOutput, type TelnetState } from './telnet';
 
 interface Session {
-  client: SshClient;
+  client: SshClient | null;
   channel: ClientChannel | null;
+  socket: Socket | null;
+  telnet: TelnetState | null;
+  kind: 'ssh' | 'telnet';
   hostId: string;
   closed: boolean;
 }
@@ -49,7 +54,8 @@ export async function upsertHost(input: SshHostProfile & { secret?: string }): P
     username: input.username,
     authKind: input.authKind,
     keyPath: input.keyPath,
-    secretRef
+    secretRef,
+    protocol: input.protocol ?? 'ssh'
   };
   // Profile first, then secret — with rollback if secret write fails.
   await hostStore.upsertHost(cleaned);
@@ -71,10 +77,46 @@ export async function deleteHost(id: string): Promise<void> {
   }
 }
 
+async function connectTelnet(host: SshHostProfile, getWindow: () => BrowserWindow | null): Promise<{ sessionId: string }> {
+  const sessionId = `t-${randomUUID()}`;
+  const socket = new Socket();
+  const session: Session = { client: null, channel: null, socket, telnet: newTelnetState(), kind: 'telnet', hostId: host.id, closed: false };
+  sessions.set(sessionId, session);
+
+  function closeOnce(reason: string): void {
+    if (session.closed) return;
+    session.closed = true;
+    getWindow()?.webContents.send(channels.ssh.onClose, { sessionId, reason });
+    sessions.delete(sessionId);
+    try { socket.destroy(); } catch { /* nothing */ }
+  }
+
+  socket.on('error', (err) => closeOnce((err as Error).message || 'connection error'));
+  socket.on('close', () => closeOnce('connection closed'));
+  socket.on('data', (chunk: Buffer) => {
+    const { out, reply } = processTelnet(session.telnet as TelnetState, chunk);
+    if (reply.length) { try { socket.write(reply); } catch { /* nothing */ } }
+    if (out.length) getWindow()?.webContents.send(channels.ssh.onData, { sessionId, data: out.toString('utf8') });
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    socket.setTimeout(15_000, () => { socket.destroy(); reject(new Error('Telnet connection timed out')); });
+    socket.once('connect', () => { socket.setTimeout(0); socket.setNoDelay(true); resolve(); });
+    socket.once('error', reject);
+    socket.connect(host.port, host.host);
+  });
+
+  return { sessionId };
+}
+
 export async function connect(hostId: string, getWindow: () => BrowserWindow | null): Promise<{ sessionId: string }> {
   const hosts = await hostStore.listHosts();
   const host = hosts.find((h) => h.id === hostId);
-  if (!host) throw new Error(`SSH host not found: ${hostId}`);
+  if (!host) throw new Error(`Host not found: ${hostId}`);
+  const protocol = host.protocol ?? 'ssh';
+  if (protocol === 'ftp') throw new Error('FTP hosts open in the file browser, not the terminal.');
+  if (protocol === 'telnet') return connectTelnet(host, getWindow);
+
   let secret: string | null;
   try {
     secret = await secretStore.get(host.secretRef);
@@ -108,7 +150,7 @@ export async function connect(hostId: string, getWindow: () => BrowserWindow | n
 
   const sessionId = `s-${randomUUID()}`;
   const client = new SshClient();
-  const session: Session = { client, channel: null, hostId, closed: false };
+  const session: Session = { client, channel: null, socket: null, telnet: null, kind: 'ssh', hostId, closed: false };
   sessions.set(sessionId, session);
 
   function closeOnce(reason: string): void {
@@ -153,26 +195,31 @@ export async function connect(hostId: string, getWindow: () => BrowserWindow | n
 
 export async function write(sessionId: string, data: string): Promise<void> {
   const s = sessions.get(sessionId);
-  if (!s?.channel || s.closed) throw new Error(`No active SSH session: ${sessionId}`);
-  s.channel.write(data);
+  if (!s || s.closed) throw new Error(`No active session: ${sessionId}`);
+  if (s.kind === 'telnet') {
+    if (!s.socket) throw new Error(`No active telnet session: ${sessionId}`);
+    s.socket.write(escapeTelnetOutput(Buffer.from(data, 'utf8')));
+  } else {
+    if (!s.channel) throw new Error(`No active SSH session: ${sessionId}`);
+    s.channel.write(data);
+  }
 }
 
 export async function resize(sessionId: string, cols: number, rows: number): Promise<void> {
   const s = sessions.get(sessionId);
-  if (!s?.channel || s.closed) return;
-  s.channel.setWindow(rows, cols, rows * 16, cols * 8);
+  if (!s || s.closed) return;
+  // Telnet window-size (NAWS) negotiation is omitted; most telnet servers don't require it.
+  if (s.kind === 'ssh' && s.channel) s.channel.setWindow(rows, cols, rows * 16, cols * 8);
 }
 
 export async function disconnect(sessionId: string): Promise<void> {
   const s = sessions.get(sessionId);
   if (!s) return;
-  // closeOnce was defined inside connect() — we can't reach it from here, so we do the
-  // same idempotent shutdown sequence ourselves, but we don't emit onClose (the renderer
-  // initiated this so it doesn't need a separate event). The 'close' handler on the
-  // ssh2 client will fire naturally and closeOnce will no-op because s.closed is set.
+  // Idempotent shutdown; the transport's own 'close' handler will no-op because closed is set.
   s.closed = true;
   try { s.channel?.end(); } catch { /* nothing */ }
-  try { s.client.end(); } catch { /* nothing */ }
+  try { s.client?.end(); } catch { /* nothing */ }
+  try { s.socket?.destroy(); } catch { /* nothing */ }
   sessions.delete(sessionId);
 }
 
@@ -181,7 +228,8 @@ export async function shutdownAllSessions(): Promise<void> {
   for (const [, s] of sessions) {
     s.closed = true;
     try { s.channel?.end(); } catch { /* nothing */ }
-    try { s.client.end(); } catch { /* nothing */ }
+    try { s.client?.end(); } catch { /* nothing */ }
+    try { s.socket?.destroy(); } catch { /* nothing */ }
   }
   sessions.clear();
 }
