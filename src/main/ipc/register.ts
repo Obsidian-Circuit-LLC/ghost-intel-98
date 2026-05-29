@@ -15,7 +15,7 @@
  */
 
 import { app, ipcMain, shell, dialog, BrowserWindow } from 'electron';
-import { writeFile, rename, lstat, rm } from 'node:fs/promises';
+import { writeFile, rename, lstat, rm, readFile, stat } from 'node:fs/promises';
 import { basename } from 'node:path';
 import { channels } from '@shared/ipc-contracts';
 import type { MailAccount, MailSendInput, SshHostProfile, AiChatRequest } from '@shared/post-mvp-types';
@@ -131,6 +131,21 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   // ---- settings ----
   safeHandle(channels.settings.read, () => settingsStore.read());
   safeHandle(channels.settings.update, (...args) => settingsStore.update(args[0] as Parameters<typeof settingsStore.update>[0]));
+  safeHandle(channels.settings.pickWallpaper, async () => {
+    const win = getWindow();
+    const result = win
+      ? await dialog.showOpenDialog(win, { properties: ['openFile'], filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'] }] })
+      : await dialog.showOpenDialog({ properties: ['openFile'] });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    const p = result.filePaths[0];
+    const ext = (p.split('.').pop() ?? '').toLowerCase();
+    const mime = ({ png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif' } as Record<string, string>)[ext];
+    if (!mime) throw new Error('Unsupported image type (PNG, JPG, WEBP, GIF).');
+    const st = await stat(p);
+    if (st.size > 8 * 1024 * 1024) throw new Error('Image too large — max 8 MB for a wallpaper.');
+    const buf = await readFile(p);
+    return `data:${mime};base64,${buf.toString('base64')}`;
+  });
 
   // ---- cases ----
   safeHandle(channels.cases.list, () => caseStore.list());

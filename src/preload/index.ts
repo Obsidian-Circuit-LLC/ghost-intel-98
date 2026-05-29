@@ -53,7 +53,8 @@ const api = {
   },
   settings: {
     read: () => ipcRenderer.invoke(channels.settings.read),
-    update: (patch: unknown) => ipcRenderer.invoke(channels.settings.update, patch)
+    update: (patch: unknown) => ipcRenderer.invoke(channels.settings.update, patch),
+    pickWallpaper: () => ipcRenderer.invoke(channels.settings.pickWallpaper)
   },
   reminders: {
     listGlobal: () => ipcRenderer.invoke(channels.reminders.listGlobal),

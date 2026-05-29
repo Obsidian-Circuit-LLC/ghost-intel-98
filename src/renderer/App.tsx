@@ -67,7 +67,14 @@ export function App(): JSX.Element {
   }, []);
 
   return (
-    <div className="ga98-screen" style={{ background: settings?.wallpaperColor ?? '#008080' }}>
+    <div
+      className="ga98-screen"
+      style={{
+        background: settings?.wallpaperImage
+          ? `${settings.wallpaperColor ?? '#008080'} url(${JSON.stringify(settings.wallpaperImage)}) center / cover no-repeat`
+          : (settings?.wallpaperColor ?? '#008080')
+      }}
+    >
       <Shortcuts />
       <Desktop />
       {windows

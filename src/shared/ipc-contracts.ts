@@ -58,7 +58,8 @@ export const channels = {
   },
   settings: {
     read: 'settings:read',
-    update: 'settings:update'
+    update: 'settings:update',
+    pickWallpaper: 'settings:pickWallpaper'
   },
   reminders: {
     listGlobal: 'reminders:listGlobal',

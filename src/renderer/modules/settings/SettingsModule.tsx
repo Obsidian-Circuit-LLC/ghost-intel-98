@@ -183,6 +183,15 @@ function ThemePane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSetting
         <span style={{ fontSize: 11, fontFamily: 'monospace' }}>{s.wallpaperColor}</span>
         <button onClick={() => void patch({ wallpaperColor: '#008080' })}>Reset to teal</button>
       </div>
+      <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <label>Background image:</label>
+        <button onClick={async () => {
+          try { const uri = await window.api.settings.pickWallpaper(); if (uri) await patch({ wallpaperImage: uri }); }
+          catch (err) { toast.error(`Could not load image: ${(err as Error).message}`); }
+        }}>Choose…</button>
+        {s.wallpaperImage && <button onClick={() => void patch({ wallpaperImage: null })}>Clear</button>}
+        <span style={{ fontSize: 11, opacity: 0.7 }}>{s.wallpaperImage ? 'image set' : 'none'}</span>
+      </div>
     </fieldset>
   );
 }

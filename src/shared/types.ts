@@ -261,6 +261,8 @@ export interface AppSettings {
   themeIntensity: 'lite' | 'classic' | 'maximum';
   /** Desktop background colour (CSS hex). Defaults to the classic Win98 teal. */
   wallpaperColor: string;
+  /** Optional desktop background image as a data: URI (covers the colour when set). */
+  wallpaperImage: string | null;
   startupSoundEnabled: boolean;
   caseFolderOverride: string | null;
   hasSeenWelcome: boolean;
@@ -304,6 +306,7 @@ export const defaultSettings: AppSettings = {
   soundEnabled: true,
   themeIntensity: 'classic',
   wallpaperColor: '#008080',
+  wallpaperImage: null,
   startupSoundEnabled: true,
   caseFolderOverride: null,
   hasSeenWelcome: false,

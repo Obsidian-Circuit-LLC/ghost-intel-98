@@ -101,6 +101,7 @@ export interface GhostApi {
   settings: {
     read(): Promise<AppSettings>;
     update(patch: Partial<AppSettings>): Promise<AppSettings>;
+    pickWallpaper(): Promise<string | null>;
   };
   reminders: {
     listGlobal(): Promise<Reminder[]>;
