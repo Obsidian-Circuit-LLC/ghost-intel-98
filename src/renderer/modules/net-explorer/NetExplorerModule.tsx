@@ -19,6 +19,7 @@ import { confirmDialog, promptDialog } from '../../state/dialogs';
 
 interface WebviewElement extends HTMLElement {
   src: string;
+  loadURL(url: string): Promise<void>;
   canGoBack(): boolean;
   canGoForward(): boolean;
   goBack(): void;
@@ -30,6 +31,10 @@ interface WebviewElement extends HTMLElement {
 
 interface Tab {
   id: string;
+  /** Stable initial src for the <webview> element — set once at tab creation and NEVER
+   *  re-bound, so React reconciliation can't clobber an in-flight loadURL() navigation. */
+  initialUrl: string;
+  /** Live URL (address bar / save-to-case), updated by did-navigate. */
   url: string;
   title: string;
   loading: boolean;
@@ -60,7 +65,7 @@ function reportHistorySuccess(): void {
 
 export function NetExplorerModule(): JSX.Element {
   const homepage = useSettings((s) => s.settings?.browser.homepage ?? 'about:blank');
-  const [tabs, setTabs] = useState<Tab[]>([{ id: newTabId(), url: homepage, title: 'New tab', loading: false }]);
+  const [tabs, setTabs] = useState<Tab[]>([{ id: newTabId(), initialUrl: homepage, url: homepage, title: 'New tab', loading: false }]);
   const [activeId, setActiveId] = useState<string>(() => tabs[0].id);
   const [address, setAddress] = useState(homepage);
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
@@ -108,17 +113,25 @@ export function NetExplorerModule(): JSX.Element {
         setTabs((ts) => ts.map((x) => x.id === tabId ? { ...x, title } : x));
         void window.api.browser.addHistory(wvBound.getURL(), title).then(reportHistorySuccess, reportHistoryFailure);
       }
+      function onFail(e: Event & { errorCode?: number; errorDescription?: string; validatedURL?: string; isMainFrame?: boolean }): void {
+        if (e.errorCode === -3) return;               // ERR_ABORTED — normal on redirects / cancels
+        if (e.isMainFrame === false) return;          // sub-resource failures are noise
+        setTabs((ts) => ts.map((x) => x.id === tabId ? { ...x, loading: false } : x));
+        toast.error(`Could not load ${e.validatedURL || ''} — ${e.errorDescription || 'load failed'} (${e.errorCode ?? '?'})`);
+      }
       wvBound.addEventListener('did-start-loading', onStart);
       wvBound.addEventListener('did-stop-loading', onStop);
       wvBound.addEventListener('did-navigate', onNav as EventListener);
       wvBound.addEventListener('did-navigate-in-page', onNav as EventListener);
       wvBound.addEventListener('page-title-updated', onTitle as EventListener);
+      wvBound.addEventListener('did-fail-load', onFail as EventListener);
       cleanups.push(() => {
         wvBound.removeEventListener('did-start-loading', onStart);
         wvBound.removeEventListener('did-stop-loading', onStop);
         wvBound.removeEventListener('did-navigate', onNav as EventListener);
         wvBound.removeEventListener('did-navigate-in-page', onNav as EventListener);
         wvBound.removeEventListener('page-title-updated', onTitle as EventListener);
+        wvBound.removeEventListener('did-fail-load', onFail as EventListener);
       });
     }
     return () => { for (const c of cleanups) c(); };
@@ -142,14 +155,18 @@ export function NetExplorerModule(): JSX.Element {
   const go = useCallback((u?: string) => {
     const wv = refs.current.get(activeId);
     if (!wv) return;
-    const raw = u ?? address;
-    const normalised = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
-    wv.src = normalised;
+    const raw = (u ?? address).trim();
+    if (!raw) return;
+    const normalised = /^(https?:|about:)/i.test(raw) ? raw : `https://${raw}`;
+    // loadURL() is the navigation API for <webview>; assigning .src is a no-op. The element's
+    // src attribute stays pinned to the stable initialUrl, so React never overrides this.
+    void wv.loadURL(normalised).catch(() => { /* did-fail-load surfaces the reason */ });
     setAddress(normalised);
+    setTabs((ts) => ts.map((x) => x.id === activeId ? { ...x, url: normalised } : x));
   }, [address, activeId]);
 
   function newTab(initial = 'about:blank'): void {
-    const t: Tab = { id: newTabId(), url: initial, title: 'New tab', loading: false };
+    const t: Tab = { id: newTabId(), initialUrl: initial, url: initial, title: 'New tab', loading: false };
     setTabs((ts) => [...ts, t]);
     setActiveId(t.id);
   }
@@ -159,7 +176,7 @@ export function NetExplorerModule(): JSX.Element {
       const idx = ts.findIndex((t) => t.id === id);
       const next = ts.filter((t) => t.id !== id);
       if (next.length === 0) {
-        const fresh: Tab = { id: newTabId(), url: 'about:blank', title: 'New tab', loading: false };
+        const fresh: Tab = { id: newTabId(), initialUrl: 'about:blank', url: 'about:blank', title: 'New tab', loading: false };
         setActiveId(fresh.id);
         return [fresh];
       }
@@ -297,11 +314,11 @@ export function NetExplorerModule(): JSX.Element {
                 refs.current.delete(t.id);
               }
             }}
-            src={t.url}
+            src={t.initialUrl}
             style={{
               position: 'absolute',
               inset: 0,
-              display: t.id === activeId ? 'inline-flex' : 'none'
+              display: t.id === activeId ? 'flex' : 'none'
             }}
             partition="persist:netexplorer"
           />
