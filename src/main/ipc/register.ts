@@ -36,12 +36,14 @@ import * as streams from '../services/streams';
 import * as ai from '../services/ai';
 import * as bookmarks from '../storage/bookmarks';
 import * as history from '../storage/history';
-import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureWhiteboard } from '../security/validate';
+import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureWhiteboard, ensurePassword, ensureRecoveryKey } from '../security/validate';
 import * as entities from '../storage/entities';
 import * as bioStore from '../storage/bio-images';
 import * as ftp from '../services/ftp';
 import * as backup from '../services/backup';
 import * as whiteboard from '../storage/whiteboard';
+import * as vault from '../services/vault';
+import { encryptAll, decryptAll } from '../storage/encryption-migrate';
 import { buildSummaryHtml, renderCasePdf } from '../services/export';
 import { timelineCsv, linksCsv, entitiesCsv, attachmentsCsv } from '../services/csv';
 import * as search from '../services/search';
@@ -98,9 +100,26 @@ function sanitiseMessage(msg: string): string {
   return out;
 }
 
+// Channels callable while the vault is enabled-but-locked. Everything else is refused at the
+// boundary (defence-in-depth behind the renderer's lock screen + the secure-fs read guard).
+// The whole auth namespace is exempt: those handlers do their own state checks (unlock/disable
+// must run precisely when isUnlocked() is false). settings.read + system.appInfo let the lock
+// screen render the saved theme/wallpaper and the version string.
+const GATE_EXEMPT = new Set<string>([
+  ...Object.values(channels.auth),
+  channels.settings.read,
+  channels.system.appInfo
+]);
+
 function safeHandle(channel: string, fn: Handler): void {
   ipcMain.handle(channel, async (_e, ...args) => {
     try {
+      if (!GATE_EXEMPT.has(channel) && vault.isEnabledCached() && !vault.isUnlocked()) {
+        const locked = new Error('Locked — unlock Ghost Access 98 to continue.');
+        locked.name = 'VaultLocked';
+        (locked as Error & { code?: string }).code = 'EVAULTLOCKED';
+        throw locked;
+      }
       return await fn(...args);
     } catch (err) {
       const original = err as Error & { code?: string };
@@ -128,6 +147,28 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     const url = validateExternalUrl(args[0] as string);
     await shell.openExternal(url);
   });
+
+  // ---- auth (login / encrypt-at-rest) ----
+  safeHandle(channels.auth.status, async () => ({
+    enabled: await vault.refreshEnabled(),
+    unlocked: vault.isUnlocked()
+  }));
+  safeHandle(channels.auth.setup, async (...args) => {
+    const password = ensurePassword(args[0]);
+    const result = await vault.setup(password); // writes auth.json + unlocks
+    await encryptAll();                          // encrypt existing plaintext data in place
+    return result;                               // { recoveryKey } — shown to the user once
+  });
+  safeHandle(channels.auth.unlock, (...args) => vault.unlock(ensurePassword(args[0])));
+  safeHandle(channels.auth.unlockRecovery, (...args) => vault.unlockWithRecovery(ensureRecoveryKey(args[0])));
+  safeHandle(channels.auth.changePassword, (...args) => vault.changePassword(ensurePassword(args[0])));
+  safeHandle(channels.auth.disable, async (...args) => {
+    const password = ensurePassword(args[0]);
+    await vault.unlock(password); // verify the password (throws on mismatch) + ensure the DEK is loaded
+    await decryptAll();           // decrypt every blob while the DEK is still available
+    await vault.removeAuth();     // delete auth.json + zeroize the DEK
+  });
+  safeHandle(channels.auth.lock, () => { vault.lock(); });
 
   // ---- settings ----
   safeHandle(channels.settings.read, () => settingsStore.read());
@@ -492,6 +533,9 @@ export function startReminderTicker(getWindow: () => BrowserWindow | null): Node
   let lastBrokenSummary = '';
   const interval = setInterval(async () => {
     if (running) return;
+    // While the vault is enabled-but-locked, reminder data is encrypted and unreadable —
+    // skip the tick entirely rather than reading (which would throw) and spamming failures.
+    if (vault.isEnabledCached() && !vault.isUnlocked()) return;
     running = true;
     try {
       const due = await reminderStore.drainDue(new Date());

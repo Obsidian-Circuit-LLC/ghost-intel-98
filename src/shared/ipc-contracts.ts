@@ -180,8 +180,19 @@ export const channels = {
   whiteboard: {
     read: 'whiteboard:read',
     write: 'whiteboard:write'
+  },
+  auth: {
+    status: 'auth:status',
+    setup: 'auth:setup',
+    unlock: 'auth:unlock',
+    unlockRecovery: 'auth:unlockRecovery',
+    changePassword: 'auth:changePassword',
+    disable: 'auth:disable',
+    lock: 'auth:lock'
   }
 } as const;
+
+export interface AuthStatus { enabled: boolean; unlocked: boolean }
 
 export type Channels = typeof channels;
 
@@ -260,4 +271,12 @@ export interface ApiContracts {
   [channels.system.appInfo]: { args: []; returns: { version: string; userData: string; platform: NodeJS.Platform } };
   [channels.system.openExternal]: { args: [string]; returns: void };
   [channels.system.onReminderFired]: { args: [(payload: { reminder: Reminder }) => void]; returns: () => void };
+
+  [channels.auth.status]: { args: []; returns: AuthStatus };
+  [channels.auth.setup]: { args: [string]; returns: { recoveryKey: string } };
+  [channels.auth.unlock]: { args: [string]; returns: void };
+  [channels.auth.unlockRecovery]: { args: [string]; returns: void };
+  [channels.auth.changePassword]: { args: [string]; returns: void };
+  [channels.auth.disable]: { args: [string]; returns: void };
+  [channels.auth.lock]: { args: []; returns: void };
 }

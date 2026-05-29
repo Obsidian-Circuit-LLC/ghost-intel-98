@@ -13,7 +13,7 @@
  * detectable (safe migration + mixed states).
  */
 import { scryptSync, randomBytes, createCipheriv, createDecipheriv } from 'node:crypto';
-import { readFile, writeFile, rename, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, rename, mkdir, rm } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { dataRoot } from '../storage/paths';
 
@@ -33,6 +33,9 @@ interface AuthFile {
 }
 
 let dek: Buffer | null = null;
+// In-memory mirror of "auth.json exists", so the per-IPC lock gate is a cheap sync check
+// instead of a stat() on every call. Kept truthful by setup/removeAuth + a boot refresh.
+let enabledCache = false;
 
 function authPath(): string { return join(dataRoot(), 'auth.json'); }
 
@@ -76,6 +79,11 @@ export async function isEnabled(): Promise<boolean> {
 }
 export function isUnlocked(): boolean { return dek !== null; }
 
+/** Refresh + return the cached enabled flag. Call once at boot; setup/removeAuth keep it current. */
+export async function refreshEnabled(): Promise<boolean> { enabledCache = await isEnabled(); return enabledCache; }
+/** Cheap synchronous read of the enabled flag, for the per-IPC lock gate. */
+export function isEnabledCached(): boolean { return enabledCache; }
+
 /** First-time setup: returns the one-time recovery key (shown once). Leaves the vault unlocked. */
 export async function setup(password: string): Promise<{ recoveryKey: string }> {
   if (await isEnabled()) throw new Error('Login is already enabled.');
@@ -94,6 +102,7 @@ export async function setup(password: string): Promise<{ recoveryKey: string }> 
   };
   await writeAuth(auth);
   dek = newDek;
+  enabledCache = true;
   return { recoveryKey };
 }
 
@@ -121,6 +130,14 @@ export async function changePassword(newPassword: string): Promise<void> {
 }
 
 export function lock(): void { if (dek) { dek.fill(0); dek = null; } }
+
+/** Disable login: delete auth.json and lock. The caller MUST decrypt all data first (the DEK
+ *  is still needed for that and is zeroized here). After this, isEnabled() is false. */
+export async function removeAuth(): Promise<void> {
+  await rm(authPath(), { force: true });
+  enabledCache = false;
+  lock();
+}
 
 export function encryptBuffer(plain: Buffer): Buffer {
   if (!dek) throw new Error('Vault is locked.');

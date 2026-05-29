@@ -162,6 +162,26 @@ export function ensureSearchQuery(q: unknown): string {
   return t;
 }
 
+// ---------- auth ----------
+
+/** Master password: non-empty, bounded (the bound only guards against pathological input —
+ *  scrypt cost is fixed by the KDF params, not the password length). Not trimmed: leading/
+ *  trailing whitespace is legitimate password material. */
+export function ensurePassword(v: unknown): string {
+  if (typeof v !== 'string') throw new ValidationError('Password must be a string');
+  if (v.length === 0) throw new ValidationError('Password is required');
+  if (v.length > 1024) throw new ValidationError('Password too long');
+  return v;
+}
+
+/** Recovery key as typed by the user — normalized vault-side, so accept dashes/spacing/case. */
+export function ensureRecoveryKey(v: unknown): string {
+  if (typeof v !== 'string') throw new ValidationError('Recovery key must be a string');
+  if (v.trim().length === 0) throw new ValidationError('Recovery key is required');
+  if (v.length > 128) throw new ValidationError('Recovery key too long');
+  return v;
+}
+
 // ---------- whiteboard ----------
 
 const WB_NODE_TYPES = new Set<WhiteboardNodeType>(['text', 'link', 'image', 'file']);

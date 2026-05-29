@@ -182,6 +182,15 @@ const api = {
   whiteboard: {
     read: (caseId: string) => ipcRenderer.invoke(channels.whiteboard.read, caseId),
     write: (caseId: string, board: unknown) => ipcRenderer.invoke(channels.whiteboard.write, caseId, board)
+  },
+  auth: {
+    status: () => ipcRenderer.invoke(channels.auth.status),
+    setup: (password: string) => ipcRenderer.invoke(channels.auth.setup, password),
+    unlock: (password: string) => ipcRenderer.invoke(channels.auth.unlock, password),
+    unlockRecovery: (recoveryKey: string) => ipcRenderer.invoke(channels.auth.unlockRecovery, recoveryKey),
+    changePassword: (newPassword: string) => ipcRenderer.invoke(channels.auth.changePassword, newPassword),
+    disable: (password: string) => ipcRenderer.invoke(channels.auth.disable, password),
+    lock: () => ipcRenderer.invoke(channels.auth.lock)
   }
 } as const;
 

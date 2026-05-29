@@ -15,6 +15,7 @@ import { appendFile, mkdir } from 'node:fs/promises';
 import { channels } from '@shared/ipc-contracts';
 import { ensureDataLayout } from './storage/paths';
 import { registerIpc, startReminderTicker } from './ipc/register';
+import * as vault from './services/vault';
 import { shutdownAllSessions } from './services/ssh';
 import { shutdownAll as shutdownAllFtp } from './services/ftp';
 import { cancelAll as cancelAllAiStreams } from './services/ai';
@@ -183,6 +184,7 @@ function lockDownPartitionSessions(): void {
 
 app.whenReady().then(async () => {
   await ensureDataLayout();
+  await vault.refreshEnabled(); // populate the lock-gate cache before any IPC can fire
   lockDownWebContents();
   registerIpc(() => mainWindow);
   createWindow();

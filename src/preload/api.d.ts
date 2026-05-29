@@ -22,7 +22,7 @@ import type {
   WebLink,
   Whiteboard
 } from '../shared/types';
-import type { EntityCreateInput, EntityLinkOpts, BioAddInput } from '../shared/ipc-contracts';
+import type { EntityCreateInput, EntityLinkOpts, BioAddInput, AuthStatus } from '../shared/ipc-contracts';
 import type {
   AiChatRequest,
   CameraStream,
@@ -210,6 +210,15 @@ export interface GhostApi {
   whiteboard: {
     read(caseId: string): Promise<Whiteboard>;
     write(caseId: string, board: Whiteboard): Promise<void>;
+  };
+  auth: {
+    status(): Promise<AuthStatus>;
+    setup(password: string): Promise<{ recoveryKey: string }>;
+    unlock(password: string): Promise<void>;
+    unlockRecovery(recoveryKey: string): Promise<void>;
+    changePassword(newPassword: string): Promise<void>;
+    disable(password: string): Promise<void>;
+    lock(): Promise<void>;
   };
 }
 
