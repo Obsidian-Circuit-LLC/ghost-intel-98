@@ -46,3 +46,6 @@ coverage/
 
 # User runtime data (in case it ever lands inside the repo by accident)
 /GhostAccess98-data/
+
+# Internal audit/working notes — never published
+.redteam/
