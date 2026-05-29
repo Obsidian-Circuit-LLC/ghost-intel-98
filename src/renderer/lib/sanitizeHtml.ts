@@ -27,7 +27,14 @@ function installHook(): void {
       }
     }
     const tag = el.tagName.toLowerCase();
-    if ((tag === 'link' || tag === 'use') && el.hasAttribute('href')) el.removeAttribute('href');
+    // Strip plain `href` on <link> (HTML) and on EVERY SVG resource element except <a>
+    // (image/use/feImage/...). SVG2 allows `<image href="https://…">` which the xlink:href
+    // sweep above misses — this is the remote-load vector the security review flagged.
+    const isSvg = el.namespaceURI === 'http://www.w3.org/2000/svg';
+    if (tag !== 'a' && (tag === 'link' || isSvg) && el.hasAttribute('href')) {
+      const v = el.getAttribute('href') ?? '';
+      if (!/^data:image\//i.test(v)) el.removeAttribute('href');
+    }
     if (tag === 'a' && el.hasAttribute('href')) {
       const href = el.getAttribute('href') ?? '';
       if (/^https?:/i.test(href)) {

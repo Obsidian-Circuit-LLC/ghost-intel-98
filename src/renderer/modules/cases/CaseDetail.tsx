@@ -9,6 +9,7 @@ import { useWindows } from '../../state/store';
 import { playError } from '../../audio/synth';
 import { confirmDialog, promptDialog } from '../../state/dialogs';
 import { toast } from '../../state/toasts';
+import { EntitiesSection } from './EntitiesSection';
 
 interface Props {
   record: CaseRecord;
@@ -142,6 +143,8 @@ export function CaseDetail({ record, onChange, onArchive, onRefresh, onUpdateFie
           ))}
         </ul>
       </fieldset>
+
+      <EntitiesSection caseId={record.id} entities={record.entities ?? []} attachments={record.attachments} onRefresh={onRefresh} />
 
       <fieldset>
         <legend>Tasks</legend>

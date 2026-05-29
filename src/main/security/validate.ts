@@ -10,6 +10,7 @@ import { resolve, relative, isAbsolute, normalize } from 'node:path';
 import { realpath } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isIP, isIPv6 } from 'node:net';
+import { ENTITY_TYPES, ENTITY_RELATIONSHIPS, type EntityType, type EntityRelationship } from '@shared/types';
 
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -55,6 +56,86 @@ export function validateByteRange(offset: unknown, length: unknown): { offset: n
   }
   const clamped = Math.min(Math.max(1, Math.floor(length)), MAX_ATTACHMENT_READ_BYTES);
   return { offset, length: clamped };
+}
+
+// ---------- entities ----------
+
+const MAX_ENTITY_VALUE = 2000;
+const MAX_ENTITY_NOTES = 20000;
+
+const ENTITY_ID = /^ent-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** Entity registry ids are `ent-<uuidv4>`. */
+export function ensureEntityId(id: unknown): string {
+  if (typeof id !== 'string' || !ENTITY_ID.test(id)) throw new ValidationError('Invalid entity id');
+  return id;
+}
+
+export function ensureEntityType(t: unknown): EntityType {
+  if (typeof t !== 'string' || !ENTITY_TYPES.includes(t as EntityType)) throw new ValidationError('Invalid entity type');
+  return t as EntityType;
+}
+
+/** Returns the relationship, or null to clear it. */
+export function ensureRelationship(r: unknown): EntityRelationship | null {
+  if (r == null || r === '') return null;
+  if (typeof r !== 'string' || !ENTITY_RELATIONSHIPS.includes(r as EntityRelationship)) throw new ValidationError('Invalid relationship');
+  return r as EntityRelationship;
+}
+
+interface EntityInputClean { type: EntityType; value: string; notes: string; aliases: string[] }
+
+export function ensureEntityInput(raw: unknown): EntityInputClean {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  const type = ensureEntityType(o['type']);
+  const value = o['value'];
+  if (typeof value !== 'string' || value.trim().length === 0 || value.length > MAX_ENTITY_VALUE) {
+    throw new ValidationError('Entity value is empty or too long');
+  }
+  const notes = typeof o['notes'] === 'string' ? o['notes'].slice(0, MAX_ENTITY_NOTES) : '';
+  const aliases = Array.isArray(o['aliases'])
+    ? (o['aliases'] as unknown[]).filter((a): a is string => typeof a === 'string' && a.length <= MAX_ENTITY_VALUE).slice(0, 100)
+    : [];
+  return { type, value: value.trim(), notes, aliases };
+}
+
+export function ensureEntityPatch(raw: unknown): Partial<EntityInputClean> {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  const out: Partial<EntityInputClean> = {};
+  if (o['type'] !== undefined) out.type = ensureEntityType(o['type']);
+  if (o['value'] !== undefined) {
+    const v = o['value'];
+    if (typeof v !== 'string' || v.trim().length === 0 || v.length > MAX_ENTITY_VALUE) throw new ValidationError('Entity value is empty or too long');
+    out.value = v.trim();
+  }
+  if (o['notes'] !== undefined) out.notes = typeof o['notes'] === 'string' ? o['notes'].slice(0, MAX_ENTITY_NOTES) : '';
+  if (o['aliases'] !== undefined) {
+    out.aliases = Array.isArray(o['aliases'])
+      ? (o['aliases'] as unknown[]).filter((a): a is string => typeof a === 'string').slice(0, 100)
+      : [];
+  }
+  return out;
+}
+
+/** Validate the per-case link options. CRITICAL: each attachmentFileName passes ensureFileName
+ *  (no separators/traversal) because these are later dereferenced against the case dir. */
+export function ensureLinkOpts(raw: unknown): { relationship?: EntityRelationship; linkIds?: string[]; attachmentFileNames?: string[] } {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  const out: { relationship?: EntityRelationship; linkIds?: string[]; attachmentFileNames?: string[] } = {};
+  const rel = ensureRelationship(o['relationship']);
+  if (rel) out.relationship = rel;
+  if (o['linkIds'] !== undefined) {
+    if (!Array.isArray(o['linkIds'])) throw new ValidationError('linkIds must be an array');
+    out.linkIds = (o['linkIds'] as unknown[]).map((x) => {
+      if (typeof x !== 'string' || x.length === 0 || x.length > 200) throw new ValidationError('Invalid link id');
+      return x;
+    });
+  }
+  if (o['attachmentFileNames'] !== undefined) {
+    if (!Array.isArray(o['attachmentFileNames'])) throw new ValidationError('attachmentFileNames must be an array');
+    out.attachmentFileNames = (o['attachmentFileNames'] as unknown[]).map((x) => ensureFileName(x, 'attachmentFileName'));
+  }
+  return out;
 }
 
 /** Stricter sanitiser used at the OS-save-dialog default path — strips control bytes,

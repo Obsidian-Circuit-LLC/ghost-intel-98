@@ -143,6 +143,49 @@ export interface ExtractedAttachmentMeta {
   emlHeaders?: { key: string; value: string }[];
 }
 
+export type EntityType =
+  | 'person' | 'alias' | 'email' | 'phone' | 'domain' | 'ip'
+  | 'organisation' | 'social-profile' | 'vehicle' | 'location' | 'crypto-wallet' | 'other';
+
+export const ENTITY_TYPES: readonly EntityType[] = [
+  'person', 'alias', 'email', 'phone', 'domain', 'ip',
+  'organisation', 'social-profile', 'vehicle', 'location', 'crypto-wallet', 'other'
+];
+
+export type EntityRelationship = 'family' | 'associate' | 'other';
+export const ENTITY_RELATIONSHIPS: readonly EntityRelationship[] = ['family', 'associate', 'other'];
+
+/** A global, cross-case entity. Lives once in dataRoot/entities.json; referenced by id from
+ *  any number of cases. Merging folds one record into another and records the provenance. */
+export interface EntityRecord {
+  id: string;
+  type: EntityType;
+  value: string;
+  notes: string;
+  aliases: string[];
+  createdAt: ISODate;
+  updatedAt: ISODate;
+  mergedFrom?: string[];
+}
+
+/** A per-case link to a global entity, with the optional Family/Associates/Other bucket and
+ *  references to the case's own web links + attachments. Persisted in caseDir/entity-links.json. */
+export interface EntityLink {
+  entityId: string;
+  relationship?: EntityRelationship;
+  linkIds: string[];
+  attachmentFileNames: string[];
+  addedAt: ISODate;
+}
+
+/** A case's entity link resolved against the global registry, for display. */
+export interface ResolvedEntity {
+  entity: EntityRecord;
+  relationship?: EntityRelationship;
+  linkIds: string[];
+  attachmentFileNames: string[];
+}
+
 export interface CaseRecord extends CaseSummary {
   description: string;
   notes: { name: string; updatedAt: ISODate }[];
@@ -151,6 +194,7 @@ export interface CaseRecord extends CaseSummary {
   timeline: TimelineEvent[];
   tasks: TaskItem[];
   reminders: Reminder[];
+  entities: ResolvedEntity[];
 }
 
 export interface CreateCaseInput {

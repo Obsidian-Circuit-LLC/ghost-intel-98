@@ -36,7 +36,8 @@ import * as streams from '../services/streams';
 import * as ai from '../services/ai';
 import * as bookmarks from '../storage/bookmarks';
 import * as history from '../storage/history';
-import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange } from '../security/validate';
+import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts } from '../security/validate';
+import * as entities from '../storage/entities';
 import { markConsented, assertAllConsented } from '../security/consent';
 import { getSecretBackend } from '../secrets';
 import { homedir } from 'node:os';
@@ -140,6 +141,17 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     fileStore.extractAttachmentMeta(ensureUuid(args[0], 'caseId'), ensureFileName(args[1], 'fileName')));
   safeHandle(channels.files.renameAttachment, (...args) =>
     fileStore.renameAttachment(ensureUuid(args[0], 'caseId'), ensureFileName(args[1], 'fileName'), ensureFileName(args[2], 'newName')));
+
+  // ---- entities (cross-case registry) ----
+  safeHandle(channels.entities.listAll, () => entities.listAll());
+  safeHandle(channels.entities.create, (...args) => entities.create(ensureEntityInput(args[0])));
+  safeHandle(channels.entities.update, (...args) => entities.update(ensureEntityId(args[0]), ensureEntityPatch(args[1])));
+  safeHandle(channels.entities.delete, (...args) => entities.remove(ensureEntityId(args[0])));
+  safeHandle(channels.entities.merge, (...args) => entities.merge(ensureEntityId(args[0]), ensureEntityId(args[1])));
+  safeHandle(channels.entities.linkToCase, (...args) => entities.linkToCase(ensureUuid(args[0], 'caseId'), ensureEntityId(args[1]), ensureLinkOpts(args[2])));
+  safeHandle(channels.entities.unlinkFromCase, (...args) => entities.unlinkFromCase(ensureUuid(args[0], 'caseId'), ensureEntityId(args[1])));
+  safeHandle(channels.entities.setRelationship, (...args) => entities.setRelationship(ensureUuid(args[0], 'caseId'), ensureEntityId(args[1]), ensureRelationship(args[2])));
+  safeHandle(channels.entities.casesForEntity, (...args) => entities.casesForEntity(ensureEntityId(args[0])));
   safeHandle(channels.files.pickOpen, async (...args) => {
     const opts = (args[0] as { multi?: boolean; filters?: unknown }) ?? {};
     const filters = validatePickFilters(opts.filters);
