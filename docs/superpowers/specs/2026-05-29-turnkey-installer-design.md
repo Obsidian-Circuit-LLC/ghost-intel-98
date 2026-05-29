@@ -133,8 +133,11 @@ Bundled track: installer has already placed binary + model → first AI use dete
 
 ## Top risks
 
-1. Mega-installer size (~6 GB) vs GitHub Actions runner disk (~14 GB) — prune aggressively; may
-   need a self-hosted runner if it doesn't fit.
+1. Mega-installer size (~6 GB) vs GitHub Actions runner disk (~14 GB) — **stock GitHub-hosted
+   runners are confirmed** (no self-hosted). The job must prune aggressively (delete the source
+   GGUF/runtime downloads once assembled, free the toolcache/`/opt` space GitHub provides) and
+   stream uploads. If a single job can't fit, split assembly across steps/artifacts rather than
+   moving off GitHub-hosted runners.
 2. Offline GGUF→Ollama import path (`ollama create` from a bundled blob) — validate early; it is
    the crux of the air-gap promise.
 3. macOS notarization friction (unsigned) — documented workaround until a cert exists.
