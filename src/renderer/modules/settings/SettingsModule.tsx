@@ -10,6 +10,7 @@ import type { AccessShortcut, AppSettings } from '@shared/types';
 import { toast } from '../../state/toasts';
 import { confirmDialog } from '../../state/dialogs';
 import { useAuth } from '../../state/store';
+import { LocalAiPane } from './LocalAiPane';
 import logoUrl from '../../assets/logo.png';
 
 type SectionKey = 'about' | 'sound' | 'theme' | 'cases' | 'shortcuts' | 'ai' | 'browser' | 'mail' | 'backup' | 'security';
@@ -271,7 +272,9 @@ function AiPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSettings>)
   const [apiKeyDraft, setApiKeyDraft] = useState('');
 
   return (
-    <fieldset>
+    <>
+      <LocalAiPane />
+      <fieldset>
       <legend>AI Assistant</legend>
       <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 6, alignItems: 'center' }}>
         <label>Provider:</label>
@@ -308,7 +311,8 @@ function AiPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSettings>)
         in plaintext — it lives encrypted in <code>secrets.enc</code> and is read by the
         main process at request time.
       </p>
-    </fieldset>
+      </fieldset>
+    </>
   );
 }
 
