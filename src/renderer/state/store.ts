@@ -5,6 +5,7 @@
 
 import { create } from 'zustand';
 import type { AppSettings } from '@shared/types';
+import type { LocalAiStatus, LocalAiProgress } from '@shared/ipc-contracts';
 
 export type ModuleKey =
   | 'cases'
@@ -142,5 +143,23 @@ export const useAuth = create<AuthState>((set) => ({
   status: null,
   async refresh() {
     set({ status: await window.api.auth.status() });
+  }
+}));
+
+export interface LocalAiSliceState {
+  status: LocalAiStatus | null;
+  progress: LocalAiProgress | null;
+  refresh(): Promise<void>;
+  setup(mode: 'online' | 'bundled'): Promise<void>;
+}
+
+export const useLocalAi = create<LocalAiSliceState>((set) => ({
+  status: null,
+  progress: null,
+  async refresh() { set({ status: await window.api.localAi.status() }); },
+  async setup(mode) {
+    const off = window.api.localAi.onProgress((p) => set({ progress: p }));
+    try { const status = await window.api.localAi.setup({ mode }); set({ status, progress: null }); }
+    finally { off(); }
   }
 }));
