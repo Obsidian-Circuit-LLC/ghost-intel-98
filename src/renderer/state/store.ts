@@ -20,6 +20,7 @@ export type ModuleKey =
   | 'eyespy'
   | 'ai-assistant'
   | 'doc-viewer'
+  | 'search'
   | 'help';
 
 export interface WindowSpec {

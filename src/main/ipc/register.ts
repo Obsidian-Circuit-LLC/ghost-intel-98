@@ -36,14 +36,43 @@ import * as streams from '../services/streams';
 import * as ai from '../services/ai';
 import * as bookmarks from '../storage/bookmarks';
 import * as history from '../storage/history';
-import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput } from '../security/validate';
+import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery } from '../security/validate';
 import * as entities from '../storage/entities';
 import * as bioStore from '../storage/bio-images';
+import { buildSummaryHtml, renderCasePdf } from '../services/export';
+import { timelineCsv, linksCsv, entitiesCsv, attachmentsCsv } from '../services/csv';
+import * as search from '../services/search';
 import { markConsented, assertAllConsented } from '../security/consent';
 import { getSecretBackend } from '../secrets';
 import { homedir } from 'node:os';
 
 const MAX_SAVE_ATTACHMENT_BYTES = 64 * 1024 * 1024; // 64 MB cap on base64 decoded payload
+const MAX_EXPORT_BYTES = 64 * 1024 * 1024;
+
+/** Shared save-to-disk: native dialog, symlink refusal, atomic temp+rename. Renderer never
+ *  supplies a destination path (the dialog does), so there is no path-traversal surface. */
+async function saveBufferWithDialog(win: BrowserWindow | null, defaultName: string, data: Buffer): Promise<string | null> {
+  const safeDefault = sanitiseSaveDefault(defaultName);
+  const result = win
+    ? await dialog.showSaveDialog(win, { defaultPath: safeDefault })
+    : await dialog.showSaveDialog({ defaultPath: safeDefault });
+  if (result.canceled || !result.filePath) return null;
+  try {
+    const st = await lstat(result.filePath);
+    if (st.isSymbolicLink()) throw new Error('Refusing to save to a symbolic link — choose a different filename.');
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+  }
+  const tmp = `${result.filePath}.${process.pid}.tmp`;
+  try {
+    await writeFile(tmp, data);
+    await rename(tmp, result.filePath);
+  } catch (err) {
+    try { await rm(tmp, { force: true }); } catch { /* nothing */ }
+    throw err;
+  }
+  return basename(result.filePath);
+}
 
 type Handler = (...args: unknown[]) => unknown | Promise<unknown>;
 
@@ -165,6 +194,42 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     const name = ensureFileName(args[1], 'fileName');
     shell.showItemInFolder(bioStore.originalAbsolutePath(id, name));
   });
+
+  // ---- export ----
+  safeHandle(channels.export.summaryHtml, async (...args) => {
+    const rec = await caseStore.read(ensureUuid(args[0], 'caseId'));
+    return saveBufferWithDialog(getWindow(), `${rec.title}.html`, Buffer.from(buildSummaryHtml(rec), 'utf8'));
+  });
+  safeHandle(channels.export.summaryPdf, async (...args) => {
+    const rec = await caseStore.read(ensureUuid(args[0], 'caseId'));
+    return saveBufferWithDialog(getWindow(), `${rec.title}.pdf`, await renderCasePdf(rec));
+  });
+  safeHandle(channels.export.timelineCsv, async (...args) => {
+    const rec = await caseStore.read(ensureUuid(args[0], 'caseId'));
+    return saveBufferWithDialog(getWindow(), `${rec.title}-timeline.csv`, Buffer.from(timelineCsv(rec), 'utf8'));
+  });
+  safeHandle(channels.export.linksCsv, async (...args) => {
+    const rec = await caseStore.read(ensureUuid(args[0], 'caseId'));
+    return saveBufferWithDialog(getWindow(), `${rec.title}-links.csv`, Buffer.from(linksCsv(rec), 'utf8'));
+  });
+  safeHandle(channels.export.entitiesCsv, async (...args) => {
+    const rec = await caseStore.read(ensureUuid(args[0], 'caseId'));
+    return saveBufferWithDialog(getWindow(), `${rec.title}-entities.csv`, Buffer.from(entitiesCsv(rec), 'utf8'));
+  });
+  safeHandle(channels.export.attachmentsCsv, async (...args) => {
+    const rec = await caseStore.read(ensureUuid(args[0], 'caseId'));
+    return saveBufferWithDialog(getWindow(), `${rec.title}-attachments.csv`, Buffer.from(attachmentsCsv(rec), 'utf8'));
+  });
+  safeHandle(channels.export.text, async (...args) => {
+    const defaultName = args[0] as string;
+    const content = args[1] as string;
+    if (typeof content !== 'string') throw new Error('content must be a string');
+    if (content.length > MAX_EXPORT_BYTES) throw new Error('Export content too large');
+    return saveBufferWithDialog(getWindow(), defaultName, Buffer.from(content, 'utf8'));
+  });
+
+  // ---- search (cross-case) ----
+  safeHandle(channels.search.query, (...args) => search.query(ensureSearchQuery(args[0])));
   safeHandle(channels.files.pickOpen, async (...args) => {
     const opts = (args[0] as { multi?: boolean; filters?: unknown }) ?? {};
     const filters = validatePickFilters(opts.filters);

@@ -59,6 +59,15 @@ export function CaseDetail({ record, onChange, onArchive, onRefresh, onUpdateFie
     }
   }, [record.id, onRefresh, onChange]);
 
+  async function exportAs(fn: () => Promise<string | null>): Promise<void> {
+    try {
+      const saved = await fn();
+      if (saved) toast.success(`Saved ${saved}.`);
+    } catch (err) {
+      toast.error(`Export failed: ${(err as Error).message}`);
+    }
+  }
+
   return (
     <div className="ga98-stack" style={{ padding: 0 }}>
       <fieldset>
@@ -216,6 +225,18 @@ export function CaseDetail({ record, onChange, onArchive, onRefresh, onUpdateFie
             </li>
           ))}
         </ul>
+      </fieldset>
+
+      <fieldset>
+        <legend>Export</legend>
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+          <button onClick={() => void exportAs(() => window.api.export.summaryPdf(record.id))}>Summary → PDF</button>
+          <button onClick={() => void exportAs(() => window.api.export.summaryHtml(record.id))}>Summary → HTML</button>
+          <button onClick={() => void exportAs(() => window.api.export.timelineCsv(record.id))}>Timeline → CSV</button>
+          <button disabled={(record.entities ?? []).length === 0} onClick={() => void exportAs(() => window.api.export.entitiesCsv(record.id))}>Entities → CSV</button>
+          <button disabled={record.links.length === 0} onClick={() => void exportAs(() => window.api.export.linksCsv(record.id))}>Links → CSV</button>
+          <button disabled={record.attachments.length === 0} onClick={() => void exportAs(() => window.api.export.attachmentsCsv(record.id))}>Attachments → CSV</button>
+        </div>
       </fieldset>
     </div>
   );

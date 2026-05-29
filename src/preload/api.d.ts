@@ -16,6 +16,7 @@ import type {
   EntityRelationship,
   ExtractedAttachmentMeta,
   Reminder,
+  SearchResult,
   TaskItem,
   TimelineEvent,
   WebLink
@@ -175,6 +176,18 @@ export interface GhostApi {
     updateCaption(caseId: string, id: string, caption: string): Promise<void>;
     readOriginal(caseId: string, id: string): Promise<string | null>;
     reveal(caseId: string, fileName: string): Promise<void>;
+  };
+  export: {
+    summaryHtml(caseId: string): Promise<string | null>;
+    summaryPdf(caseId: string): Promise<string | null>;
+    timelineCsv(caseId: string): Promise<string | null>;
+    linksCsv(caseId: string): Promise<string | null>;
+    entitiesCsv(caseId: string): Promise<string | null>;
+    attachmentsCsv(caseId: string): Promise<string | null>;
+    text(defaultName: string, content: string): Promise<string | null>;
+  };
+  search: {
+    query(q: string): Promise<SearchResult[]>;
   };
 }
 

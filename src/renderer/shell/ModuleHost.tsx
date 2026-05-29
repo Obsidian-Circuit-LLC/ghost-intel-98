@@ -17,13 +17,14 @@ import { DialTermModule } from '../modules/dialterm/DialTermModule';
 import { EyeSpyModule } from '../modules/eyespy/EyeSpyModule';
 import { AiAssistantModule } from '../modules/ai-assistant/AiAssistantModule';
 import { DocViewerModule } from '../modules/doc-viewer/DocViewerModule';
+import { SearchModule } from '../modules/search/SearchModule';
 import { HelpModule } from '../modules/help/HelpModule';
 import { ComingSoon } from '../modules/coming-soon/ComingSoon';
 
 export function ModuleHost({ spec }: { spec: WindowSpec }): JSX.Element {
   switch (spec.module) {
     case 'cases':
-      return <CasesModule />;
+      return <CasesModule initialCaseId={spec.props?.['caseId'] as string | undefined} />;
     case 'notepad':
       return <NotepadModule initialCaseId={(spec.props?.['caseId'] as string | undefined) ?? null} />;
     case 'calendar':
@@ -46,6 +47,8 @@ export function ModuleHost({ spec }: { spec: WindowSpec }): JSX.Element {
       return <EyeSpyModule />;
     case 'ai-assistant':
       return <AiAssistantModule />;
+    case 'search':
+      return <SearchModule />;
     case 'doc-viewer':
       return (
         <DocViewerModule

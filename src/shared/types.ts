@@ -243,6 +243,9 @@ export interface CreateCaseInput {
   tags?: string[];
 }
 
+export interface SearchHit { field: string; snippet: string }
+export interface SearchResult { caseId: string; caseTitle: string; hits: SearchHit[] }
+
 export interface AccessShortcut {
   id: string;
   label: string;
@@ -291,6 +294,7 @@ export const defaultShortcuts: AccessShortcut[] = [
   { id: 'reminders', label: 'Reminders', kind: 'module', target: 'reminders', icon: 'bell' },
   { id: 'alarm', label: 'Alarm', kind: 'module', target: 'alarm', icon: 'alarm' },
   { id: 'ai', label: 'AI Assistant', kind: 'module', target: 'ai-assistant', icon: 'sparkle' },
+  { id: 'search', label: 'Search', kind: 'module', target: 'search', icon: 'search' },
   { id: 'help', label: 'Help', kind: 'module', target: 'help', icon: 'help' }
   // Settings is always available via the Access menu footer ("Settings…"), so it is
   // intentionally NOT a duplicate editable shortcut here.

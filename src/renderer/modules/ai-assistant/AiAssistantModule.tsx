@@ -159,6 +159,16 @@ export function AiAssistantModule(): JSX.Element {
     setInput(text);
   }
 
+  async function exportChat(): Promise<void> {
+    const text = messages.map((m) => `## ${m.role === 'user' ? 'You' : 'Assistant'}\n\n${m.content}`).join('\n\n');
+    try {
+      const saved = await window.api.export.text('ai-conversation.txt', text);
+      if (saved) toast.success(`Saved ${saved}.`);
+    } catch (err) {
+      toast.error(`Export failed: ${(err as Error).message}`);
+    }
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div className="ga98-toolbar">
@@ -181,6 +191,7 @@ export function AiAssistantModule(): JSX.Element {
         <button onClick={() => quickPrompt('Summarise this case in 3-5 bullet points.')} disabled={!contextCase}>Summarise</button>
         <button onClick={() => quickPrompt('Draft a status report for this case suitable for an external stakeholder.')} disabled={!contextCase}>Draft report</button>
         <button onClick={() => quickPrompt('What questions should I be asking that I have not yet?')} disabled={!contextCase}>Open questions</button>
+        <button onClick={() => void exportChat()} disabled={messages.length === 0} title="Save this conversation to a file">Export…</button>
       </div>
       {contextError && (
         <div style={{ background: '#fee', color: '#900', padding: '4px 8px', fontSize: 11, borderBottom: '1px solid #c00' }}>

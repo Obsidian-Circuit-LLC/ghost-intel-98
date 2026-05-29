@@ -153,6 +153,15 @@ export function ensureLinkOpts(raw: unknown): { relationship?: EntityRelationshi
   return out;
 }
 
+/** Literal (non-regex) search query: trimmed, non-empty, bounded. */
+export function ensureSearchQuery(q: unknown): string {
+  if (typeof q !== 'string') throw new ValidationError('Search query must be a string');
+  const t = q.trim();
+  if (t.length === 0) throw new ValidationError('Search query is empty');
+  if (t.length > 200) throw new ValidationError('Search query too long');
+  return t;
+}
+
 // ---------- bio images ----------
 
 const BIO_ID = /^bio-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

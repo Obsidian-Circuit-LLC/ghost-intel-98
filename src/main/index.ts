@@ -11,6 +11,7 @@
 
 import { app, BrowserWindow, session, shell } from 'electron';
 import { join } from 'node:path';
+import { appendFile, mkdir } from 'node:fs/promises';
 import { channels } from '@shared/ipc-contracts';
 import { ensureDataLayout } from './storage/paths';
 import { registerIpc, startReminderTicker } from './ipc/register';
@@ -41,6 +42,12 @@ function installCrashGuards(): void {
         message: (err as Error)?.message ?? String(err)
       });
     } catch { /* window may be torn down */ }
+    // Persist a developer log (best-effort) so a background fault is diagnosable after the fact.
+    try {
+      const dir = app.getPath('logs');
+      const line = `${new Date().toISOString()} ${label} ${(err as Error)?.stack ?? String(err)}\n`;
+      void mkdir(dir, { recursive: true }).then(() => appendFile(join(dir, 'ga98-main.log'), line)).catch(() => undefined);
+    } catch { /* logs path unavailable pre-ready */ }
   };
   process.on('uncaughtException', (err) => report('[main.uncaughtException]', err));
   process.on('unhandledRejection', (reason) => report('[main.unhandledRejection]', reason));

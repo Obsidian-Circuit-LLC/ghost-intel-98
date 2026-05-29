@@ -53,6 +53,7 @@ const GLYPHS: Record<ModuleKey, string> = {
   eyespy: '📷',
   'ai-assistant': '✨',
   'doc-viewer': '📄',
+  search: '🔍',
   help: '?'
 };
 

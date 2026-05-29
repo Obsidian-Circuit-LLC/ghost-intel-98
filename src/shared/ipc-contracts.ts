@@ -19,6 +19,7 @@ import type {
   EntityType,
   ExtractedAttachmentMeta,
   ImageMime,
+  SearchResult,
   Reminder,
   TaskItem,
   TimelineEvent,
@@ -148,6 +149,18 @@ export const channels = {
     updateCaption: 'bioImages:updateCaption',
     readOriginal: 'bioImages:readOriginal',
     reveal: 'bioImages:reveal'
+  },
+  export: {
+    summaryHtml: 'export:summaryHtml',
+    summaryPdf: 'export:summaryPdf',
+    timelineCsv: 'export:timelineCsv',
+    linksCsv: 'export:linksCsv',
+    entitiesCsv: 'export:entitiesCsv',
+    attachmentsCsv: 'export:attachmentsCsv',
+    text: 'export:text'
+  },
+  search: {
+    query: 'search:query'
   }
 } as const;
 
@@ -197,6 +210,16 @@ export interface ApiContracts {
   [channels.bioImages.updateCaption]: { args: [CaseId, string, string]; returns: void };
   [channels.bioImages.readOriginal]: { args: [CaseId, string]; returns: string | null };
   [channels.bioImages.reveal]: { args: [CaseId, string]; returns: void };
+
+  [channels.export.summaryHtml]: { args: [CaseId]; returns: string | null };
+  [channels.export.summaryPdf]: { args: [CaseId]; returns: string | null };
+  [channels.export.timelineCsv]: { args: [CaseId]; returns: string | null };
+  [channels.export.linksCsv]: { args: [CaseId]; returns: string | null };
+  [channels.export.entitiesCsv]: { args: [CaseId]; returns: string | null };
+  [channels.export.attachmentsCsv]: { args: [CaseId]; returns: string | null };
+  [channels.export.text]: { args: [string, string]; returns: string | null };
+
+  [channels.search.query]: { args: [string]; returns: SearchResult[] };
 
   [channels.notes.list]: { args: [CaseId]; returns: { name: string; updatedAt: string }[] };
   [channels.notes.read]: { args: [CaseId, string]; returns: string };

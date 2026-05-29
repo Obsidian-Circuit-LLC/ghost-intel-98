@@ -151,6 +151,18 @@ const api = {
     updateCaption: (caseId: string, id: string, caption: string) => ipcRenderer.invoke(channels.bioImages.updateCaption, caseId, id, caption),
     readOriginal: (caseId: string, id: string) => ipcRenderer.invoke(channels.bioImages.readOriginal, caseId, id),
     reveal: (caseId: string, fileName: string) => ipcRenderer.invoke(channels.bioImages.reveal, caseId, fileName)
+  },
+  export: {
+    summaryHtml: (caseId: string) => ipcRenderer.invoke(channels.export.summaryHtml, caseId),
+    summaryPdf: (caseId: string) => ipcRenderer.invoke(channels.export.summaryPdf, caseId),
+    timelineCsv: (caseId: string) => ipcRenderer.invoke(channels.export.timelineCsv, caseId),
+    linksCsv: (caseId: string) => ipcRenderer.invoke(channels.export.linksCsv, caseId),
+    entitiesCsv: (caseId: string) => ipcRenderer.invoke(channels.export.entitiesCsv, caseId),
+    attachmentsCsv: (caseId: string) => ipcRenderer.invoke(channels.export.attachmentsCsv, caseId),
+    text: (defaultName: string, content: string) => ipcRenderer.invoke(channels.export.text, defaultName, content)
+  },
+  search: {
+    query: (q: string) => ipcRenderer.invoke(channels.search.query, q)
   }
 } as const;
 

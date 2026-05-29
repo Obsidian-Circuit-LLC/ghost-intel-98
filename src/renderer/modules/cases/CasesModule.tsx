@@ -29,9 +29,9 @@ function compareCases(a: CaseSummary, b: CaseSummary, by: AppSettings['caseSortB
   return dir === 'asc' ? -cmp : cmp;
 }
 
-export function CasesModule(): JSX.Element {
+export function CasesModule({ initialCaseId }: { initialCaseId?: string } = {}): JSX.Element {
   const [cases, setCases] = useState<CaseSummary[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(initialCaseId ?? null);
   const [detail, setDetail] = useState<CaseRecord | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [filter, setFilter] = useState('');
