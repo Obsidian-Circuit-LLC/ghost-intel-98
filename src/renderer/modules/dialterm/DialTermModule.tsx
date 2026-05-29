@@ -17,6 +17,7 @@ import type { SshHostProfile, DialTermProtocol } from '@shared/post-mvp-types';
 import { useSettings } from '../../state/store';
 import { playDialup } from '../../audio/synth';
 import { toast } from '../../state/toasts';
+import { FtpBrowser } from './FtpBrowser';
 
 type ConnState = 'idle' | 'dialing' | 'connecting' | 'open' | 'closed';
 
@@ -176,6 +177,7 @@ export function DialTermModule(): JSX.Element {
   }
 
   const activeHost = hosts.find((h) => h.id === activeId);
+  const activeIsFtp = (activeHost?.protocol ?? 'ssh') === 'ftp';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -185,11 +187,11 @@ export function DialTermModule(): JSX.Element {
           {hosts.map((h) => <option key={h.id} value={h.id}>{h.label} — {h.username}@{h.host}</option>)}
         </select>
         <button onClick={() => setShowSetup(true)} disabled={state === 'open' || state === 'dialing'}>Hosts…</button>
-        {state === 'open'
+        {!activeIsFtp && (state === 'open'
           ? <button onClick={() => void hangup()}>Hang up</button>
-          : <button onClick={() => void dial()} disabled={!activeId || state === 'dialing'}>Dial</button>}
+          : <button onClick={() => void dial()} disabled={!activeId || state === 'dialing'}>Dial</button>)}
         <span style={{ flex: 1 }} />
-        <span style={{ fontSize: 11 }}>{state.toUpperCase()}{activeHost ? ` · ${activeHost.host}:${activeHost.port}` : ''}{sessionId ? ` · ${sessionId.slice(0, 8)}` : ''}</span>
+        <span style={{ fontSize: 11 }}>{activeIsFtp ? 'FTP' : state.toUpperCase()}{activeHost ? ` · ${activeHost.host}:${activeHost.port}` : ''}{sessionId ? ` · ${sessionId.slice(0, 8)}` : ''}</span>
       </div>
       <div
         style={{ flex: 1, background: '#000', color: '#aaffaa', padding: 4, overflow: 'hidden', position: 'relative' }}
@@ -199,7 +201,9 @@ export function DialTermModule(): JSX.Element {
           setCtxMenu({ x: e.clientX, y: e.clientY });
         }}
       >
-        {state === 'open' ? (
+        {activeIsFtp && activeHost ? (
+          <FtpBrowser key={activeHost.id} host={activeHost} />
+        ) : state === 'open' ? (
           <div ref={termRef} style={{ width: '100%', height: '100%' }} />
         ) : (
           <pre style={{ margin: 0, fontFamily: 'Courier New, monospace', fontSize: 13 }}>
@@ -285,10 +289,12 @@ function HostSetup({ hosts, onClose }: { hosts: SshHostProfile[]; onClose: () =>
               <label>Protocol:</label>
               <select className="ga98-text" value={draft.protocol ?? 'ssh'} onChange={(e) => {
                 const protocol = e.target.value as DialTermProtocol;
-                setDraft({ ...draft, protocol, port: protocol === 'telnet' ? 23 : 22, ...(protocol === 'telnet' ? { authKind: 'password' as const, keyPath: '', secret: '' } : {}) });
+                const port = protocol === 'telnet' ? 23 : protocol === 'ftp' ? 21 : 22;
+                setDraft({ ...draft, protocol, port, ...(protocol !== 'ssh' ? { authKind: 'password' as const, keyPath: '' } : {}) });
               }}>
                 <option value="ssh">SSH</option>
                 <option value="telnet">Telnet (plaintext)</option>
+                <option value="ftp">FTP (plaintext)</option>
               </select>
               <label>Host:</label>
               <input className="ga98-text" value={draft.host} onChange={(e) => setDraft({ ...draft, host: e.target.value })} />
@@ -320,6 +326,14 @@ function HostSetup({ hosts, onClose }: { hosts: SshHostProfile[]; onClose: () =>
                         placeholder="(encrypted in secrets.enc)" />
                     </>
                   )}
+                </>
+              ) : draft.protocol === 'ftp' ? (
+                <>
+                  <label>Password:</label>
+                  <input className="ga98-text" type="password" value={draft.secret} onChange={(e) => setDraft({ ...draft, secret: e.target.value })}
+                    placeholder="(encrypted in secrets.enc; leave blank for anonymous)" />
+                  <label></label>
+                  <span style={{ fontSize: 11, opacity: 0.7 }}>FTP is plaintext. Uses the username above + this password.</span>
                 </>
               ) : (
                 <>

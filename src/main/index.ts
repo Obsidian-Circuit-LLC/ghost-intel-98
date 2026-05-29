@@ -16,6 +16,7 @@ import { channels } from '@shared/ipc-contracts';
 import { ensureDataLayout } from './storage/paths';
 import { registerIpc, startReminderTicker } from './ipc/register';
 import { shutdownAllSessions } from './services/ssh';
+import { shutdownAll as shutdownAllFtp } from './services/ftp';
 import { cancelAll as cancelAllAiStreams } from './services/ai';
 
 const isDev = !!process.env['ELECTRON_RENDERER_URL'];
@@ -200,6 +201,7 @@ app.on('before-quit', async () => {
   }
   await cancelAllAiStreams();
   await shutdownAllSessions();
+  await shutdownAllFtp();
 });
 
 app.on('window-all-closed', () => {

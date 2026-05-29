@@ -25,6 +25,8 @@ import type { EntityCreateInput, EntityLinkOpts, BioAddInput } from '../shared/i
 import type {
   AiChatRequest,
   CameraStream,
+  FtpConnectResult,
+  FtpListing,
   MailAccount,
   MailMessage,
   MailMessageSummary,
@@ -188,6 +190,14 @@ export interface GhostApi {
   };
   search: {
     query(q: string): Promise<SearchResult[]>;
+  };
+  ftp: {
+    connect(hostId: string): Promise<FtpConnectResult>;
+    list(sessionId: string): Promise<FtpListing>;
+    cd(sessionId: string, path: string): Promise<FtpListing>;
+    download(sessionId: string, name: string): Promise<string | null>;
+    upload(sessionId: string): Promise<FtpListing | null>;
+    disconnect(sessionId: string): Promise<void>;
   };
 }
 

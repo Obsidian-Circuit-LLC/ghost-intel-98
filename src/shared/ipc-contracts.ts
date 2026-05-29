@@ -161,6 +161,14 @@ export const channels = {
   },
   search: {
     query: 'search:query'
+  },
+  ftp: {
+    connect: 'ftp:connect',
+    list: 'ftp:list',
+    cd: 'ftp:cd',
+    download: 'ftp:download',
+    upload: 'ftp:upload',
+    disconnect: 'ftp:disconnect'
   }
 } as const;
 

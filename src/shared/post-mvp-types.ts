@@ -86,6 +86,22 @@ export interface SshConnectResult {
   sessionId: string;
 }
 
+export interface FtpEntry {
+  name: string;
+  type: 'file' | 'dir' | 'link' | 'other';
+  size: number;
+  modifiedAt?: string;
+}
+
+export interface FtpListing {
+  cwd: string;
+  entries: FtpEntry[];
+}
+
+export interface FtpConnectResult extends FtpListing {
+  sessionId: string;
+}
+
 // ---------- EyeSpy ----------
 
 export type StreamKind = 'hls' | 'mjpeg' | 'rtsp' | 'http' | 'mp4';

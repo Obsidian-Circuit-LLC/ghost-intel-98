@@ -162,6 +162,28 @@ export function ensureSearchQuery(q: unknown): string {
   return t;
 }
 
+// ---------- FTP (remote paths/names — bounded, control-char-free) ----------
+
+/** A single remote file name for download (no path separators — navigation is via cd). */
+export function ensureFtpName(name: unknown): string {
+  if (typeof name !== 'string' || name.length === 0 || name.length > 255) throw new ValidationError('Invalid FTP file name');
+  if (name.includes('\0') || name.includes('/') || name.includes('\\')) throw new ValidationError('Invalid FTP file name');
+  return name;
+}
+
+/** A remote path for cd (may contain '/'; remote-side only, no local-FS bearing). */
+export function ensureFtpPath(path: unknown): string {
+  if (typeof path !== 'string' || path.length === 0 || path.length > 1024) throw new ValidationError('Invalid FTP path');
+  if (path.includes('\0')) throw new ValidationError('Invalid FTP path');
+  return path;
+}
+
+/** A DialTerm session id (server-generated `s-`/`t-`/`f-` + uuid). Bounded string check. */
+export function ensureSessionId(id: unknown): string {
+  if (typeof id !== 'string' || !/^[stf]-[0-9a-f-]{36}$/i.test(id)) throw new ValidationError('Invalid session id');
+  return id;
+}
+
 // ---------- bio images ----------
 
 const BIO_ID = /^bio-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

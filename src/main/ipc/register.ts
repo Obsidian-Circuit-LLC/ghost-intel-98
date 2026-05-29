@@ -36,9 +36,10 @@ import * as streams from '../services/streams';
 import * as ai from '../services/ai';
 import * as bookmarks from '../storage/bookmarks';
 import * as history from '../storage/history';
-import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery } from '../security/validate';
+import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId } from '../security/validate';
 import * as entities from '../storage/entities';
 import * as bioStore from '../storage/bio-images';
+import * as ftp from '../services/ftp';
 import { buildSummaryHtml, renderCasePdf } from '../services/export';
 import { timelineCsv, linksCsv, entitiesCsv, attachmentsCsv } from '../services/csv';
 import * as search from '../services/search';
@@ -230,6 +231,40 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
 
   // ---- search (cross-case) ----
   safeHandle(channels.search.query, (...args) => search.query(ensureSearchQuery(args[0])));
+
+  // ---- FTP file client ----
+  safeHandle(channels.ftp.connect, (...args) => ftp.connect(args[0] as string));
+  safeHandle(channels.ftp.list, (...args) => ftp.list(ensureSessionId(args[0])));
+  safeHandle(channels.ftp.cd, (...args) => ftp.cd(ensureSessionId(args[0]), ensureFtpPath(args[1])));
+  safeHandle(channels.ftp.disconnect, (...args) => ftp.disconnect(ensureSessionId(args[0])));
+  safeHandle(channels.ftp.download, async (...args) => {
+    const sessionId = ensureSessionId(args[0]);
+    const name = ensureFtpName(args[1]);
+    const win = getWindow();
+    const safeDefault = sanitiseSaveDefault(name);
+    const result = win
+      ? await dialog.showSaveDialog(win, { defaultPath: safeDefault })
+      : await dialog.showSaveDialog({ defaultPath: safeDefault });
+    if (result.canceled || !result.filePath) return null;
+    try {
+      const st = await lstat(result.filePath);
+      if (st.isSymbolicLink()) throw new Error('Refusing to save to a symbolic link — choose a different filename.');
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+    }
+    await ftp.downloadToPath(sessionId, name, result.filePath);
+    return basename(result.filePath);
+  });
+  safeHandle(channels.ftp.upload, async (...args) => {
+    const sessionId = ensureSessionId(args[0]);
+    const win = getWindow();
+    const result = win
+      ? await dialog.showOpenDialog(win, { properties: ['openFile'] })
+      : await dialog.showOpenDialog({ properties: ['openFile'] });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    const localPath = result.filePaths[0];
+    return ftp.uploadFromPath(sessionId, localPath, basename(localPath));
+  });
   safeHandle(channels.files.pickOpen, async (...args) => {
     const opts = (args[0] as { multi?: boolean; filters?: unknown }) ?? {};
     const filters = validatePickFilters(opts.filters);

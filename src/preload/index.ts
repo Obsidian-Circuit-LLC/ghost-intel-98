@@ -163,6 +163,14 @@ const api = {
   },
   search: {
     query: (q: string) => ipcRenderer.invoke(channels.search.query, q)
+  },
+  ftp: {
+    connect: (hostId: string) => ipcRenderer.invoke(channels.ftp.connect, hostId),
+    list: (sessionId: string) => ipcRenderer.invoke(channels.ftp.list, sessionId),
+    cd: (sessionId: string, path: string) => ipcRenderer.invoke(channels.ftp.cd, sessionId, path),
+    download: (sessionId: string, name: string) => ipcRenderer.invoke(channels.ftp.download, sessionId, name),
+    upload: (sessionId: string) => ipcRenderer.invoke(channels.ftp.upload, sessionId),
+    disconnect: (sessionId: string) => ipcRenderer.invoke(channels.ftp.disconnect, sessionId)
   }
 } as const;
 
