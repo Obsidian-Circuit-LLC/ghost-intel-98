@@ -129,3 +129,18 @@ export const useSettings = create<SettingsState>((set) => ({
     set({ settings: next });
   }
 }));
+
+export interface AuthStatusState { enabled: boolean; unlocked: boolean }
+
+interface AuthState {
+  /** null until the first status check returns — the app renders nothing decisive until then. */
+  status: AuthStatusState | null;
+  refresh(): Promise<void>;
+}
+
+export const useAuth = create<AuthState>((set) => ({
+  status: null,
+  async refresh() {
+    set({ status: await window.api.auth.status() });
+  }
+}));

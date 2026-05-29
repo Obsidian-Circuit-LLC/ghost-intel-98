@@ -4,7 +4,7 @@
  */
 
 import { useEffect } from 'react';
-import { useSettings, useWindows } from './state/store';
+import { useAuth, useSettings, useWindows } from './state/store';
 import { Desktop } from './shell/Desktop';
 import { Taskbar } from './shell/Taskbar';
 import { Window } from './shell/Window';
@@ -13,6 +13,7 @@ import { DialogHost } from './shell/Dialog';
 import { Toaster } from './shell/Toaster';
 import { Shortcuts } from './shell/Shortcuts';
 import { Welcome } from './shell/Welcome';
+import { LockScreen } from './shell/LockScreen';
 import { playStartup, playReminder } from './audio/synth';
 import { toast } from './state/toasts';
 
@@ -26,10 +27,13 @@ export function App(): JSX.Element {
   const update = useWindows((s) => s.update);
   const loadSettings = useSettings((s) => s.load);
   const settings = useSettings((s) => s.settings);
+  const authStatus = useAuth((s) => s.status);
+  const refreshAuth = useAuth((s) => s.refresh);
 
   useEffect(() => {
     void loadSettings();
-  }, [loadSettings]);
+    void refreshAuth();
+  }, [loadSettings, refreshAuth]);
 
   useEffect(() => {
     if (settings?.startupSoundEnabled && settings.soundEnabled) {
@@ -66,6 +70,11 @@ export function App(): JSX.Element {
     return () => off();
   }, []);
 
+  // Gate the desktop behind the vault: enabled-but-locked shows the lock screen; until the
+  // first auth.status returns we render only the wallpaper (no flash of either UI).
+  const locked = authStatus?.enabled === true && authStatus.unlocked === false;
+  const ready = authStatus !== null;
+
   return (
     <div
       className="ga98-screen"
@@ -75,30 +84,35 @@ export function App(): JSX.Element {
           : (settings?.wallpaperColor ?? '#008080')
       }}
     >
-      <Shortcuts />
-      <Desktop />
-      {windows
-        .filter((w) => !w.minimized)
-        .sort((a, b) => focusStack.indexOf(a.id) - focusStack.indexOf(b.id))
-        .map((w) => (
-          <Window
-            key={w.id}
-            spec={w}
-            focused={focusStack[focusStack.length - 1] === w.id}
-            onFocus={() => focus(w.id)}
-            onClose={() => close(w.id)}
-            onMinimize={() => minimize(w.id)}
-            onToggleMaximize={() => toggleMaximize(w.id)}
-            onMove={(x, y) => update(w.id, { x, y })}
-            onResize={(width, height) => update(w.id, { width, height })}
-          >
-            <ModuleHost spec={w} />
-          </Window>
-        ))}
-      <Taskbar />
+      {ready && locked && <LockScreen />}
+      {ready && !locked && (
+        <>
+          <Shortcuts />
+          <Desktop />
+          {windows
+            .filter((w) => !w.minimized)
+            .sort((a, b) => focusStack.indexOf(a.id) - focusStack.indexOf(b.id))
+            .map((w) => (
+              <Window
+                key={w.id}
+                spec={w}
+                focused={focusStack[focusStack.length - 1] === w.id}
+                onFocus={() => focus(w.id)}
+                onClose={() => close(w.id)}
+                onMinimize={() => minimize(w.id)}
+                onToggleMaximize={() => toggleMaximize(w.id)}
+                onMove={(x, y) => update(w.id, { x, y })}
+                onResize={(width, height) => update(w.id, { width, height })}
+              >
+                <ModuleHost spec={w} />
+              </Window>
+            ))}
+          <Taskbar />
+          <Welcome />
+        </>
+      )}
       <Toaster />
       <DialogHost />
-      <Welcome />
     </div>
   );
 }

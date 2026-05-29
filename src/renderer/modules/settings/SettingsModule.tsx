@@ -9,9 +9,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AccessShortcut, AppSettings } from '@shared/types';
 import { toast } from '../../state/toasts';
 import { confirmDialog } from '../../state/dialogs';
+import { useAuth } from '../../state/store';
 import logoUrl from '../../assets/logo.png';
 
-type SectionKey = 'about' | 'sound' | 'theme' | 'cases' | 'shortcuts' | 'ai' | 'browser' | 'mail' | 'backup';
+type SectionKey = 'about' | 'sound' | 'theme' | 'cases' | 'shortcuts' | 'ai' | 'browser' | 'mail' | 'backup' | 'security';
 
 interface Section {
   key: SectionKey;
@@ -28,7 +29,8 @@ const SECTIONS: Section[] = [
   { key: 'ai',        label: 'AI Assistant',glyph: '✨' },
   { key: 'browser',   label: 'Browser',     glyph: '🌐' },
   { key: 'mail',      label: 'Mail',        glyph: '✉' },
-  { key: 'backup',    label: 'Backup',      glyph: '💾' }
+  { key: 'backup',    label: 'Backup',      glyph: '💾' },
+  { key: 'security',  label: 'Security',    glyph: '🔒' }
 ];
 
 function newShortcutId(): string {
@@ -101,6 +103,7 @@ export function SettingsModule(): JSX.Element {
         {section === 'browser' && <BrowserPane s={s} patch={patch} />}
         {section === 'mail' && <MailPane />}
         {section === 'backup' && <BackupPane />}
+        {section === 'security' && <SecurityPane />}
       </div>
     </div>
   );
@@ -364,4 +367,171 @@ function swap<T>(arr: T[], i: number, j: number): T[] {
   const next = arr.slice();
   const tmp = next[i]; next[i] = next[j]; next[j] = tmp;
   return next;
+}
+
+function SecurityPane(): JSX.Element {
+  const refreshAuth = useAuth((st) => st.refresh);
+  const [enabled, setEnabled] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [pw, setPw] = useState('');
+  const [pw2, setPw2] = useState('');
+  const [recoveryKey, setRecoveryKey] = useState<string | null>(null);
+  const [npw, setNpw] = useState('');
+  const [npw2, setNpw2] = useState('');
+  const [dpw, setDpw] = useState('');
+
+  const loadStatus = useCallback(async () => {
+    setEnabled((await window.api.auth.status()).enabled);
+  }, []);
+  useEffect(() => { void loadStatus(); }, [loadStatus]);
+
+  const enable = async (): Promise<void> => {
+    if (pw.length < 8) { toast.error('Use at least 8 characters.'); return; }
+    if (pw !== pw2) { toast.error('Passwords do not match.'); return; }
+    setBusy(true);
+    try {
+      const { recoveryKey: rk } = await window.api.auth.setup(pw);
+      setRecoveryKey(rk);
+      setEnabled(true);
+      setPw(''); setPw2('');
+      await refreshAuth();
+      toast.success('Login enabled — your data is now encrypted at rest.');
+    } catch (err) {
+      toast.error(`Could not enable login: ${(err as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const changePassword = async (): Promise<void> => {
+    if (npw.length < 8) { toast.error('Use at least 8 characters.'); return; }
+    if (npw !== npw2) { toast.error('Passwords do not match.'); return; }
+    setBusy(true);
+    try {
+      await window.api.auth.changePassword(npw);
+      setNpw(''); setNpw2('');
+      toast.success('Master password changed.');
+    } catch (err) {
+      toast.error(`Could not change password: ${(err as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const disable = async (): Promise<void> => {
+    if (!dpw) { toast.error('Enter your password to confirm.'); return; }
+    const ok = await confirmDialog(
+      'Disabling login decrypts all your data back to plaintext on disk. Continue?',
+      'Disable login'
+    );
+    if (!ok) return;
+    setBusy(true);
+    try {
+      await window.api.auth.disable(dpw);
+      setDpw('');
+      setEnabled(false);
+      await refreshAuth();
+      toast.success('Login disabled — data decrypted.');
+    } catch (err) {
+      toast.error(`Could not disable login: ${(err as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const lockNow = async (): Promise<void> => {
+    await window.api.auth.lock();
+    await refreshAuth(); // App swaps to the lock screen (this window unmounts)
+  };
+
+  if (enabled === null) return <div className="ga98-stack">Loading…</div>;
+
+  if (recoveryKey) {
+    return (
+      <fieldset>
+        <legend>Save your recovery key</legend>
+        <p style={{ color: '#900', marginTop: 4 }}>
+          This is shown <strong>once</strong>. It is the only way back in if you forget your password.
+          Write it down and store it somewhere safe — it is not saved anywhere you can read it again.
+        </p>
+        <p
+          style={{ fontFamily: 'monospace', fontSize: 16, letterSpacing: 1, padding: 8, border: '1px solid #808080', background: '#fff', userSelect: 'all', textAlign: 'center' }}
+        >
+          {recoveryKey}
+        </p>
+        <div className="field-row" style={{ justifyContent: 'flex-end', gap: 6 }}>
+          <button onClick={() => { void navigator.clipboard?.writeText(recoveryKey).then(() => toast.success('Copied.'), () => toast.error('Copy failed — write it down.')); }}>Copy</button>
+          <button onClick={() => setRecoveryKey(null)}>I have saved it</button>
+        </div>
+      </fieldset>
+    );
+  }
+
+  if (!enabled) {
+    return (
+      <>
+        <fieldset>
+          <legend>Login &amp; encryption</legend>
+          <p style={{ marginTop: 4 }}>
+            Protect Ghost Access 98 with a master password. When enabled, all case data is encrypted
+            at rest (AES-256-GCM); the app stays locked until you enter the password.
+          </p>
+          <p style={{ color: '#900', fontSize: 11 }}>
+            There is no password reset. You will get a one-time recovery key — keep it safe.
+          </p>
+          <div className="field-row-stacked">
+            <label htmlFor="ga98-pw">Master password</label>
+            <input id="ga98-pw" type="password" value={pw} disabled={busy} onChange={(e) => setPw(e.target.value)} />
+          </div>
+          <div className="field-row-stacked">
+            <label htmlFor="ga98-pw2">Confirm password</label>
+            <input id="ga98-pw2" type="password" value={pw2} disabled={busy} onChange={(e) => setPw2(e.target.value)} />
+          </div>
+          <div className="field-row" style={{ justifyContent: 'flex-end', marginTop: 8 }}>
+            <button onClick={() => void enable()} disabled={busy || !pw || !pw2}>
+              {busy ? 'Encrypting…' : 'Enable login'}
+            </button>
+          </div>
+        </fieldset>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <fieldset>
+        <legend>Login &amp; encryption</legend>
+        <p style={{ marginTop: 4 }}>Login is <strong>enabled</strong>. Your data is encrypted at rest.</p>
+        <div className="field-row" style={{ justifyContent: 'flex-start' }}>
+          <button onClick={() => void lockNow()} disabled={busy}>Lock now</button>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>Change master password</legend>
+        <div className="field-row-stacked">
+          <label htmlFor="ga98-npw">New password</label>
+          <input id="ga98-npw" type="password" value={npw} disabled={busy} onChange={(e) => setNpw(e.target.value)} />
+        </div>
+        <div className="field-row-stacked">
+          <label htmlFor="ga98-npw2">Confirm new password</label>
+          <input id="ga98-npw2" type="password" value={npw2} disabled={busy} onChange={(e) => setNpw2(e.target.value)} />
+        </div>
+        <div className="field-row" style={{ justifyContent: 'flex-end', marginTop: 8 }}>
+          <button onClick={() => void changePassword()} disabled={busy || !npw || !npw2}>Change password</button>
+        </div>
+        <p style={{ fontSize: 11, color: '#555' }}>The recovery key is unchanged by a password change.</p>
+      </fieldset>
+      <fieldset>
+        <legend>Disable login</legend>
+        <p style={{ marginTop: 4, color: '#900' }}>Decrypts all data back to plaintext on disk and removes the password.</p>
+        <div className="field-row-stacked">
+          <label htmlFor="ga98-dpw">Confirm with your password</label>
+          <input id="ga98-dpw" type="password" value={dpw} disabled={busy} onChange={(e) => setDpw(e.target.value)} />
+        </div>
+        <div className="field-row" style={{ justifyContent: 'flex-end', marginTop: 8 }}>
+          <button onClick={() => void disable()} disabled={busy || !dpw}>{busy ? 'Working…' : 'Disable login'}</button>
+        </div>
+      </fieldset>
+    </>
+  );
 }
