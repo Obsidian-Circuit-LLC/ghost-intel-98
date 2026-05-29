@@ -18,6 +18,7 @@ import { EyeSpyModule } from '../modules/eyespy/EyeSpyModule';
 import { AiAssistantModule } from '../modules/ai-assistant/AiAssistantModule';
 import { DocViewerModule } from '../modules/doc-viewer/DocViewerModule';
 import { SearchModule } from '../modules/search/SearchModule';
+import { WhiteboardModule } from '../modules/whiteboard/WhiteboardModule';
 import { HelpModule } from '../modules/help/HelpModule';
 import { ComingSoon } from '../modules/coming-soon/ComingSoon';
 
@@ -49,6 +50,8 @@ export function ModuleHost({ spec }: { spec: WindowSpec }): JSX.Element {
       return <AiAssistantModule />;
     case 'search':
       return <SearchModule />;
+    case 'whiteboard':
+      return <WhiteboardModule caseId={spec.props?.['caseId'] as string} />;
     case 'doc-viewer':
       return (
         <DocViewerModule

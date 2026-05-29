@@ -36,11 +36,12 @@ import * as streams from '../services/streams';
 import * as ai from '../services/ai';
 import * as bookmarks from '../storage/bookmarks';
 import * as history from '../storage/history';
-import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId } from '../security/validate';
+import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureWhiteboard } from '../security/validate';
 import * as entities from '../storage/entities';
 import * as bioStore from '../storage/bio-images';
 import * as ftp from '../services/ftp';
 import * as backup from '../services/backup';
+import * as whiteboard from '../storage/whiteboard';
 import { buildSummaryHtml, renderCasePdf } from '../services/export';
 import { timelineCsv, linksCsv, entitiesCsv, attachmentsCsv } from '../services/csv';
 import * as search from '../services/search';
@@ -330,6 +331,10 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     if (result.canceled || result.filePaths.length === 0) return null;
     return backup.importCase(result.filePaths[0]);
   });
+
+  // ---- whiteboard ----
+  safeHandle(channels.whiteboard.read, (...args) => whiteboard.read(ensureUuid(args[0], 'caseId')));
+  safeHandle(channels.whiteboard.write, (...args) => whiteboard.write(ensureUuid(args[0], 'caseId'), ensureWhiteboard(args[1])));
   safeHandle(channels.files.pickOpen, async (...args) => {
     const opts = (args[0] as { multi?: boolean; filters?: unknown }) ?? {};
     const filters = validatePickFilters(opts.filters);

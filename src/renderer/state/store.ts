@@ -21,6 +21,7 @@ export type ModuleKey =
   | 'ai-assistant'
   | 'doc-viewer'
   | 'search'
+  | 'whiteboard'
   | 'help';
 
 export interface WindowSpec {

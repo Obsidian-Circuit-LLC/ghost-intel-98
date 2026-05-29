@@ -19,7 +19,8 @@ import type {
   SearchResult,
   TaskItem,
   TimelineEvent,
-  WebLink
+  WebLink,
+  Whiteboard
 } from '../shared/types';
 import type { EntityCreateInput, EntityLinkOpts, BioAddInput } from '../shared/ipc-contracts';
 import type {
@@ -205,6 +206,10 @@ export interface GhostApi {
   backup: {
     create(): Promise<string | null>;
     restore(): Promise<{ files: number } | null>;
+  };
+  whiteboard: {
+    read(caseId: string): Promise<Whiteboard>;
+    write(caseId: string, board: Whiteboard): Promise<void>;
   };
 }
 

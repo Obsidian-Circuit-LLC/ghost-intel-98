@@ -178,6 +178,10 @@ const api = {
   backup: {
     create: () => ipcRenderer.invoke(channels.backup.create),
     restore: () => ipcRenderer.invoke(channels.backup.restore)
+  },
+  whiteboard: {
+    read: (caseId: string) => ipcRenderer.invoke(channels.whiteboard.read, caseId),
+    write: (caseId: string, board: unknown) => ipcRenderer.invoke(channels.whiteboard.write, caseId, board)
   }
 } as const;
 

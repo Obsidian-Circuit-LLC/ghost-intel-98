@@ -30,6 +30,7 @@ const moduleTitles: Record<ModuleKey, string> = {
   'ai-assistant': 'AI Assistant',
   'doc-viewer': 'Document Viewer',
   search: 'Search',
+  whiteboard: 'Whiteboard',
   help: 'Help'
 };
 

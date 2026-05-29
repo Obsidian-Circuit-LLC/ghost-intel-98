@@ -107,6 +107,9 @@ export function CaseDetail({ record, onChange, onArchive, onRefresh, onUpdateFie
           <button onClick={() => open({ module: 'notepad', title: `Notepad 98 — ${record.title}`, props: { caseId: record.id } })}>
             Open Notepad…
           </button>
+          <button onClick={() => open({ module: 'whiteboard', title: `Whiteboard — ${record.title}`, props: { caseId: record.id }, width: 960, height: 680 })}>
+            Open whiteboard…
+          </button>
         </div>
       </fieldset>
 

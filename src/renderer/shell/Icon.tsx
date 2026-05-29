@@ -54,6 +54,7 @@ const GLYPHS: Record<ModuleKey, string> = {
   'ai-assistant': '✨',
   'doc-viewer': '📄',
   search: '🔍',
+  whiteboard: '🗺',
   help: '?'
 };
 

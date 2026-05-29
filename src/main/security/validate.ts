@@ -10,7 +10,7 @@ import { resolve, relative, isAbsolute, normalize } from 'node:path';
 import { realpath } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isIP, isIPv6 } from 'node:net';
-import { ENTITY_TYPES, ENTITY_RELATIONSHIPS, TIMELINE_KINDS, IMAGE_MIMES, type EntityType, type EntityRelationship, type TimelineKind, type TimelineEvent, type ImageMime } from '@shared/types';
+import { ENTITY_TYPES, ENTITY_RELATIONSHIPS, TIMELINE_KINDS, IMAGE_MIMES, type EntityType, type EntityRelationship, type TimelineKind, type TimelineEvent, type ImageMime, type Whiteboard, type WhiteboardNode, type WhiteboardEdge, type WhiteboardNodeType } from '@shared/types';
 
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -160,6 +160,54 @@ export function ensureSearchQuery(q: unknown): string {
   if (t.length === 0) throw new ValidationError('Search query is empty');
   if (t.length > 200) throw new ValidationError('Search query too long');
   return t;
+}
+
+// ---------- whiteboard ----------
+
+const WB_NODE_TYPES = new Set<WhiteboardNodeType>(['text', 'link', 'image', 'file']);
+const MAX_WB_NODES = 2000;
+const MAX_WB_EDGES = 4000;
+
+function wbNum(v: unknown, def = 0): number { return typeof v === 'number' && Number.isFinite(v) ? v : def; }
+function wbStr(v: unknown, max: number): string | undefined { return typeof v === 'string' ? v.slice(0, max) : undefined; }
+
+/** Validate + clamp a renderer-supplied whiteboard: bounded node/edge counts, numeric coords,
+ *  bounded strings, fileName refs through ensureFileName, and dangling edges dropped. */
+export function ensureWhiteboard(raw: unknown): Whiteboard {
+  const o = (raw ?? {}) as { nodes?: unknown; edges?: unknown };
+  const nodesIn = Array.isArray(o.nodes) ? o.nodes.slice(0, MAX_WB_NODES) : [];
+  const edgesIn = Array.isArray(o.edges) ? o.edges.slice(0, MAX_WB_EDGES) : [];
+  const nodes: WhiteboardNode[] = [];
+  for (const raw0 of nodesIn) {
+    const n = (raw0 ?? {}) as Record<string, unknown>;
+    if (typeof n['id'] !== 'string' || typeof n['type'] !== 'string' || !WB_NODE_TYPES.has(n['type'] as WhiteboardNodeType)) continue;
+    const node: WhiteboardNode = {
+      id: n['id'].slice(0, 64),
+      type: n['type'] as WhiteboardNodeType,
+      x: wbNum(n['x']),
+      y: wbNum(n['y']),
+      w: Math.max(40, Math.min(wbNum(n['w'], 200), 4000)),
+      h: Math.max(30, Math.min(wbNum(n['h'], 120), 4000))
+    };
+    const text = wbStr(n['text'], 20000); if (text !== undefined) node.text = text;
+    const url = wbStr(n['url'], 2048); if (url !== undefined) node.url = url;
+    const color = wbStr(n['color'], 16); if (color !== undefined) node.color = color;
+    if (n['fileName'] !== undefined) {
+      try { node.fileName = ensureFileName(n['fileName'], 'fileName'); } catch { continue; }
+    }
+    nodes.push(node);
+  }
+  const ids = new Set(nodes.map((n) => n.id));
+  const edges: WhiteboardEdge[] = [];
+  for (const raw0 of edgesIn) {
+    const e = (raw0 ?? {}) as Record<string, unknown>;
+    if (typeof e['id'] !== 'string' || typeof e['from'] !== 'string' || typeof e['to'] !== 'string') continue;
+    if (!ids.has(e['from']) || !ids.has(e['to'])) continue; // drop dangling edges
+    const edge: WhiteboardEdge = { id: e['id'].slice(0, 64), from: e['from'], to: e['to'] };
+    const label = wbStr(e['label'], 200); if (label !== undefined) edge.label = label;
+    edges.push(edge);
+  }
+  return { nodes, edges };
 }
 
 // ---------- FTP (remote paths/names — bounded, control-char-free) ----------

@@ -246,6 +246,38 @@ export interface CreateCaseInput {
 export interface SearchHit { field: string; snippet: string }
 export interface SearchResult { caseId: string; caseTitle: string; hits: SearchHit[] }
 
+export type WhiteboardNodeType = 'text' | 'link' | 'image' | 'file';
+
+export interface WhiteboardNode {
+  id: string;
+  type: WhiteboardNodeType;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** Text content (text node), title (link/file/image caption). */
+  text?: string;
+  /** Link node URL. */
+  url?: string;
+  /** image/file node → references a case attachment by its on-disk fileName. */
+  fileName?: string;
+  /** Optional node accent colour (CSS hex). */
+  color?: string;
+}
+
+export interface WhiteboardEdge {
+  id: string;
+  from: string;
+  to: string;
+  label?: string;
+}
+
+/** A per-case canvas board (Obsidian-Canvas / Freeform style), stored in caseDir/whiteboard.json. */
+export interface Whiteboard {
+  nodes: WhiteboardNode[];
+  edges: WhiteboardEdge[];
+}
+
 export interface AccessShortcut {
   id: string;
   label: string;

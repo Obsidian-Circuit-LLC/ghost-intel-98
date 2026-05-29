@@ -176,6 +176,10 @@ export const channels = {
   backup: {
     create: 'backup:create',
     restore: 'backup:restore'
+  },
+  whiteboard: {
+    read: 'whiteboard:read',
+    write: 'whiteboard:write'
   }
 } as const;
 
