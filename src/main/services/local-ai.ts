@@ -5,8 +5,6 @@ import { LOCAL_AI_ENDPOINT, LOCAL_AI_MODEL, bundledRoot as defaultBundledRoot, f
 import type { LocalAiStatus } from '@shared/ipc-contracts';
 import { settingsStore } from '../storage/json-fs';
 
-let bundledOverride: boolean | null = null; // set by isBundled() in a later task; test seam
-
 let bundledRootFn = defaultBundledRoot;
 export function __setBundledRootForTest(p: string): void { bundledRootFn = () => p; }
 async function exists(p: string): Promise<boolean> { try { await access(p); return true; } catch { return false; } }
@@ -31,16 +29,17 @@ export function __resetForTest(): void {
   spawnFn = nodeSpawn as unknown as SpawnLike;
   child = null;
   bundledRootFn = defaultBundledRoot;
-  bundledOverride = null;
   runImport = defaultRunImport;
 }
 
 export async function isBundled(): Promise<boolean> {
-  const root = bundledRootFn();
-  const bin = (await exists(join(root, 'ollama'))) || (await exists(join(root, 'ollama.exe')));
-  const model = await exists(join(root, 'MODEL_PRESENT'));
-  bundledOverride = bin && model;
-  return bundledOverride;
+  try {
+    const root = bundledRootFn();
+    if (!root) return false;
+    const bin = (await exists(join(root, 'ollama'))) || (await exists(join(root, 'ollama.exe')));
+    const model = await exists(join(root, 'MODEL_PRESENT'));
+    return bin && model;
+  } catch { return false; }
 }
 
 async function probeTags(): Promise<string[] | null> {
@@ -48,7 +47,7 @@ async function probeTags(): Promise<string[] | null> {
     const res = await fetch(`${LOCAL_AI_ENDPOINT}/api/tags`, { signal: AbortSignal.timeout(1500) });
     if (!res.ok) return null;
     const body = (await res.json()) as { models?: { name?: string }[] };
-    return (body.models ?? []).map((m) => m.name ?? '');
+    return Array.isArray(body.models) ? body.models.map((m) => m.name ?? '') : null;
   } catch { return null; }
 }
 
@@ -58,10 +57,14 @@ export async function detect(): Promise<LocalAiStatus> {
   const modelPresent = !!tags?.some((n) => n.startsWith(LOCAL_AI_MODEL));
   return {
     state: runtimeUp ? (modelPresent ? 'running' : 'not-present') : 'not-present',
-    runtimeUp, modelPresent, bundled: bundledOverride ?? false
+    runtimeUp, modelPresent, bundled: await isBundled()
   };
 }
 
+// PROVISIONAL request shapes — MUST be validated/pinned against the real pinned Ollama version
+// in Phase 0 Task 0.2 before the bundled/online model import ships. /api/create likely needs the
+// Modelfile *content* (or the structured files/from form), not a filesystem `path`, and /api/pull
+// may use `model` rather than `name`. Behind the runImport seam; not exercised by unit tests.
 async function defaultRunImport(mode: 'bundled' | 'online', onProgress?: (p: ModelProgress) => void): Promise<void> {
   if (mode === 'bundled') {
     // Import the shipped GGUF via a Modelfile the bundle places next to the binary.
@@ -95,12 +98,17 @@ export async function ensureRuntime(): Promise<void> {
   const env: NodeJS.ProcessEnv = { ...process.env, OLLAMA_HOST: '127.0.0.1:11434', OLLAMA_MODELS: modelsDir, OLLAMA_NO_ANALYTICS: '1' };
   const c = spawnFn(bin, ['serve'], { env, stdio: 'ignore' });
   child = c;
+  let earlyExit = false;
+  c.on('exit', () => { earlyExit = true; });
+  c.on('error', () => { earlyExit = true; });
   // readiness poll: up to ~30s
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
+    if (earlyExit) { child = null; throw new Error('Local AI runtime exited before it became ready (is port 11434 already in use?).'); }
     if ((await probeTags()) !== null) return;
     await new Promise((r) => setTimeout(r, 500));
   }
+  child = null;
   throw new Error('Local AI runtime did not become ready in time.');
 }
 

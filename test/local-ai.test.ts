@@ -21,6 +21,12 @@ describe('local-ai detect()', () => {
     expect(s.runtimeUp).toBe(false);
     expect(s.modelPresent).toBe(false);
   });
+
+  it('treats a foreign 200 with no models array as runtime-down', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 })));
+    const s = await localAi.detect();
+    expect(s.runtimeUp).toBe(false);
+  });
 });
 
 describe('local-ai isBundled()', () => {
@@ -59,6 +65,21 @@ describe('local-ai ensureRuntime()', () => {
     localAi.__setSpawnForTest(spawn);
     await localAi.ensureRuntime();
     expect(spawn).not.toHaveBeenCalled();
+  });
+
+  it('ensureRuntime() fails fast and clears the child if it exits before ready', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('down'); })); // never becomes ready
+    const kill = vi.fn();
+    // spawn mock whose 'exit' listener fires immediately
+    localAi.__setSpawnForTest(() => {
+      const handlers: Record<string, () => void> = {};
+      queueMicrotask(() => handlers.exit?.());
+      return { on: (ev: string, cb: () => void) => { handlers[ev] = cb; }, kill, pid: 5 };
+    });
+    localAi.__setBundledRootForTest('/tmp/ga98-localai-test/res/local-ai');
+    await expect(localAi.ensureRuntime()).rejects.toThrow(/exited before/i);
+    localAi.stop();
+    expect(kill).not.toHaveBeenCalled(); // child was cleared on early exit
   });
 
   it('ensureRuntime() spawns the managed child (loopback env) when none is up', async () => {
