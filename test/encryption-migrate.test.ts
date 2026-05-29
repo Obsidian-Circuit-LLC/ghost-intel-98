@@ -26,7 +26,7 @@ async function seed(): Promise<void> {
 afterEach(async () => { vault.lock(); await rm(ROOT, { recursive: true, force: true }); });
 
 describe('encryption migration walker', () => {
-  it('encrypts case data, skips settings/auth/tmp, and round-trips on decrypt', async () => {
+  it('encrypts case data, excludes settings/auth, purges orphan tmp, and round-trips on decrypt', async () => {
     await seed();
     await vault.setup('pw');                              // creates auth.json, unlocks
     const enc = await encryptAll();
@@ -36,7 +36,8 @@ describe('encryption migration walker', () => {
     expect(vault.isEncrypted(await readFile(accountsJson))).toBe(true);
     expect(vault.isEncrypted(await readFile(settings))).toBe(false);  // excluded
     expect(vault.isEncrypted(await readFile(authJson))).toBe(false);  // excluded
-    expect((await readFile(tmpFile)).toString()).toBe('transient');   // transient, untouched
+    // An orphan *.tmp is plaintext crash debris — purged on enable, not left as a cleartext leak.
+    await expect(readFile(tmpFile)).rejects.toMatchObject({ code: 'ENOENT' });
 
     // idempotent: a second pass re-encrypts nothing
     expect((await encryptAll()).processed).toBe(0);

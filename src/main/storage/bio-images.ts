@@ -11,7 +11,7 @@ import { randomUUID } from 'node:crypto';
 import type { BioImage, ImageMime } from '@shared/types';
 import { caseDir } from './paths';
 import { withLock } from '../util/mutex';
-import { secureReadFile, secureReadText, secureWriteFile } from './secure-fs';
+import { secureReadFile, secureReadText, secureWriteFile, EVAULTLOCKED, EDECRYPT } from './secure-fs';
 
 interface BioIndex { primaryId: string | null; images: BioImage[] }
 
@@ -48,11 +48,21 @@ async function writeIndex(caseId: string, idx: BioIndex): Promise<void> {
   await secureWriteFile(indexFile(caseId), JSON.stringify(clean, null, 2));
 }
 
+/** A locked vault or a failed authentication tag is a real fault that must surface; ENOENT and
+ *  other IO are benign for a regenerable display artifact, so we degrade to no-image. */
+function isRealReadFault(err: unknown): boolean {
+  const code = (err as { code?: string } | undefined)?.code;
+  return code === EVAULTLOCKED || code === EDECRYPT;
+}
+
 async function thumbDataUri(caseId: string, thumbName: string): Promise<string | undefined> {
   try {
     const buf = await secureReadFile(join(bioThumbsDir(caseId), thumbName));
     return `data:image/png;base64,${buf.toString('base64')}`;
-  } catch { return undefined; }
+  } catch (err) {
+    if (isRealReadFault(err)) throw err; // don't mask locked/decrypt-fail as "no thumbnail"
+    return undefined;
+  }
 }
 
 /** BioImage list with thumbnail data-URIs inlined — used on the case read path. */
@@ -137,8 +147,9 @@ export async function readOriginalDataUri(caseId: string, id: string): Promise<s
   const idx = await readIndex(caseId);
   const img = idx.images.find((i) => i.id === id);
   if (!img) return null;
-  try {
-    const buf = await secureReadFile(join(bioImagesDir(caseId), img.fileName));
-    return `data:${img.mime};base64,${buf.toString('base64')}`;
-  } catch { return null; }
+  // No blanket catch: this is an explicit "view this original" request, so a locked vault or a
+  // decrypt failure (corrupt/tampered original) MUST surface rather than silently show nothing.
+  // A missing-on-disk file throws ENOENT, which is the honest answer for an explicit fetch.
+  const buf = await secureReadFile(join(bioImagesDir(caseId), img.fileName));
+  return `data:${img.mime};base64,${buf.toString('base64')}`;
 }

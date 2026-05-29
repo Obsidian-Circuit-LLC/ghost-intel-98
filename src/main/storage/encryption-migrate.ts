@@ -12,7 +12,7 @@
  * plus transient *.tmp and ._* render artifacts. Exclusions match by absolute path so an
  * attachment coincidentally named "settings.json" is still encrypted.
  */
-import { readdir, readFile, writeFile, rename } from 'node:fs/promises';
+import { readdir, readFile, writeFile, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import * as vault from '../services/vault';
@@ -48,9 +48,38 @@ async function atomicWrite(path: string, buf: Buffer): Promise<void> {
   await rename(tmp, path);
 }
 
+/** Yield every *.tmp / ._* under the data root. These are atomic-write temps; a live one is
+ *  renamed within the same tick, so any temp present at a quiescent migration is crash debris. */
+async function* walkTemps(dir: string): AsyncGenerator<string> {
+  let entries;
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const e of entries) {
+    const abs = join(dir, e.name);
+    if (e.isDirectory()) { yield* walkTemps(abs); continue; }
+    if (isTransient(e.name)) yield abs;
+  }
+}
+
+/** Remove orphaned atomic-write temp files. The encrypt sweep skips *.tmp (a half-written
+ *  temp must not be encrypted mid-flight), so without this an abandoned PLAINTEXT temp from a
+ *  crashed write would survive enabling encryption — a cleartext leak (red-team finding B). */
+export async function cleanupOrphanTemps(): Promise<number> {
+  let removed = 0;
+  for await (const path of walkTemps(dataRoot())) {
+    await rm(path, { force: true });
+    removed++;
+  }
+  return removed;
+}
+
 /** Encrypt every plaintext file under the data root in place. Vault must be unlocked. */
 export async function encryptAll(): Promise<{ processed: number; skipped: number }> {
   if (!vault.isUnlocked()) throw new Error('Vault must be unlocked to encrypt data.');
+  await cleanupOrphanTemps(); // purge plaintext crash-debris temps before they become a leak
   const skip = excludedPaths();
   let processed = 0;
   let skipped = 0;

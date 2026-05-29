@@ -36,6 +36,13 @@ let dek: Buffer | null = null;
 // In-memory mirror of "auth.json exists", so the per-IPC lock gate is a cheap sync check
 // instead of a stat() on every call. Kept truthful by setup/removeAuth + a boot refresh.
 let enabledCache = false;
+// Migration transition state. `migrating` is true during an enable OR disable sweep (the
+// reminder ticker skips so it can't write concurrently). `disabling` is true ONLY during a
+// disable sweep: the DEK is still loaded so decryptAll can read ciphertext, but new writes
+// MUST NOT encrypt — otherwise a write racing decryptAll()→removeAuth() would orphan a file
+// under a DEK we are about to destroy (red-team finding A).
+let migrating = false;
+let disabling = false;
 
 function authPath(): string { return join(dataRoot(), 'auth.json'); }
 
@@ -78,6 +85,19 @@ export async function isEnabled(): Promise<boolean> {
   try { await readFile(authPath()); return true; } catch { return false; }
 }
 export function isUnlocked(): boolean { return dek !== null; }
+
+/** True iff a fresh write should be encrypted: the DEK is loaded AND we're not tearing the
+ *  vault down. secure-fs consults this synchronously, so no concurrent write can slip between
+ *  the check and the encrypt. */
+export function shouldEncrypt(): boolean { return dek !== null && !disabling; }
+/** True while an enable/disable sweep is running — the reminder ticker skips on this. */
+export function isMigrating(): boolean { return migrating; }
+/** Mark the start of an enable sweep (writes still encrypt; ticker pauses). */
+export function beginEnable(): void { migrating = true; }
+/** Mark the start of a disable sweep (writes STOP encrypting; ticker pauses). */
+export function beginDisable(): void { migrating = true; disabling = true; }
+/** Clear all transition state. Idempotent; safe to call in a finally. */
+export function endMigration(): void { migrating = false; disabling = false; }
 
 /** Refresh + return the cached enabled flag. Call once at boot; setup/removeAuth keep it current. */
 export async function refreshEnabled(): Promise<boolean> { enabledCache = await isEnabled(); return enabledCache; }
@@ -134,9 +154,10 @@ export function lock(): void { if (dek) { dek.fill(0); dek = null; } }
 /** Disable login: delete auth.json and lock. The caller MUST decrypt all data first (the DEK
  *  is still needed for that and is zeroized here). After this, isEnabled() is false. */
 export async function removeAuth(): Promise<void> {
-  await rm(authPath(), { force: true });
+  await rm(authPath(), { force: true }); // throws only on a real IO failure, not ENOENT
   enabledCache = false;
   lock();
+  endMigration();
 }
 
 export function encryptBuffer(plain: Buffer): Buffer {
@@ -159,4 +180,12 @@ export function decryptBuffer(data: Buffer): Buffer {
 
 export function isEncrypted(data: Buffer): boolean {
   return data.length >= MAGIC.length + IV_LEN + TAG_LEN && data.subarray(0, MAGIC.length).equals(MAGIC);
+}
+
+/** Magic-prefix-only check for the cheap header probe (isEncryptedFile reads just the first
+ *  MAGIC bytes, which can't satisfy isEncrypted's full-envelope length test). encryptBuffer
+ *  always emits a >= (MAGIC+IV+TAG) blob, so a magic match on the head is a sound encrypted
+ *  signal; a false positive would fail decryption loudly rather than be served as plaintext. */
+export function hasMagicPrefix(head: Buffer): boolean {
+  return head.length >= MAGIC.length && head.subarray(0, MAGIC.length).equals(MAGIC);
 }

@@ -156,7 +156,12 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.auth.setup, async (...args) => {
     const password = ensurePassword(args[0]);
     const result = await vault.setup(password); // writes auth.json + unlocks
-    await encryptAll();                          // encrypt existing plaintext data in place
+    vault.beginEnable();                         // pause the reminder ticker during the sweep
+    try {
+      await encryptAll();                        // purge orphan temps + encrypt plaintext in place
+    } finally {
+      vault.endMigration();
+    }
     return result;                               // { recoveryKey } — shown to the user once
   });
   safeHandle(channels.auth.unlock, (...args) => vault.unlock(ensurePassword(args[0])));
@@ -165,8 +170,13 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.auth.disable, async (...args) => {
     const password = ensurePassword(args[0]);
     await vault.unlock(password); // verify the password (throws on mismatch) + ensure the DEK is loaded
-    await decryptAll();           // decrypt every blob while the DEK is still available
-    await vault.removeAuth();     // delete auth.json + zeroize the DEK
+    vault.beginDisable();         // stop NEW writes from encrypting + pause the ticker BEFORE decrypt
+    try {
+      await decryptAll();         // decrypt every blob while the DEK is still available
+      await vault.removeAuth();   // delete auth.json + zeroize the DEK (also ends the migration)
+    } finally {
+      vault.endMigration();       // belt-and-suspenders: clear transition state on any failure path
+    }
   });
   safeHandle(channels.auth.lock, () => { vault.lock(); });
 
@@ -536,6 +546,9 @@ export function startReminderTicker(getWindow: () => BrowserWindow | null): Node
     // While the vault is enabled-but-locked, reminder data is encrypted and unreadable —
     // skip the tick entirely rather than reading (which would throw) and spamming failures.
     if (vault.isEnabledCached() && !vault.isUnlocked()) return;
+    // During an enable/disable sweep, stay out of the tree entirely — a concurrent reminder
+    // write would race the migration walker (orphan temps / re-encryption).
+    if (vault.isMigrating()) return;
     running = true;
     try {
       const due = await reminderStore.drainDue(new Date());

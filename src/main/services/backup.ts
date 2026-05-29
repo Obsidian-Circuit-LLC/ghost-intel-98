@@ -116,10 +116,15 @@ export async function importCase(srcPath: string): Promise<{ caseId: string }> {
   // Merge the bundled entity records into the global registry.
   const entEntry = zip.getEntry('entities.json');
   if (entEntry) {
+    let records: unknown = null;
     try {
-      const records = JSON.parse(entEntry.getData().toString('utf8'));
-      if (Array.isArray(records)) await importEntities(records);
-    } catch { /* tolerate a malformed entities.json — the case still imports */ }
+      records = JSON.parse(entEntry.getData().toString('utf8'));
+    } catch {
+      records = null; // a malformed/garbage entities.json is tolerable — the case still imports
+    }
+    // A registry WRITE failure is NOT swallowed: importEntities runs outside the parse catch so
+    // an IO/registry error propagates rather than masquerading as "malformed bundle".
+    if (Array.isArray(records)) await importEntities(records);
   }
   return { caseId: newId };
 }

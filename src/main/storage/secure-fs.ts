@@ -25,17 +25,36 @@ export async function isEncryptedFile(path: string): Promise<boolean> {
   try {
     const head = Buffer.alloc(8);
     const { bytesRead } = await fh.read(head, 0, 8, 0);
-    return vault.isEncrypted(head.subarray(0, bytesRead));
+    // Magic-prefix check only — the 8-byte head can't satisfy isEncrypted's full-envelope
+    // length test, so using isEncrypted here would (and did) always return false.
+    return vault.hasMagicPrefix(head.subarray(0, bytesRead));
   } finally {
     await fh.close();
   }
 }
 
+/** Error codes set on throws from secureReadFile so callers can distinguish a locked vault and
+ *  a failed authentication tag (tamper / corruption) from an ordinary filesystem error. */
+export const EVAULTLOCKED = 'EVAULTLOCKED';
+export const EDECRYPT = 'EDECRYPT';
+
 export async function secureReadFile(path: string): Promise<Buffer> {
   const raw = await readFile(path);
   if (vault.isEncrypted(raw)) {
-    if (!vault.isUnlocked()) throw new Error('Locked — unlock the app to read encrypted data.');
-    return vault.decryptBuffer(raw);
+    if (!vault.isUnlocked()) {
+      const e = new Error('Locked — unlock the app to read encrypted data.') as Error & { code?: string };
+      e.code = EVAULTLOCKED;
+      throw e;
+    }
+    try {
+      return vault.decryptBuffer(raw);
+    } catch (err) {
+      // A GCM tag failure here means the ciphertext was truncated, corrupted, or tampered —
+      // a signal a forensic tool must surface, never mask as a generic read error.
+      const e = new Error(`Decryption failed (authentication tag mismatch): ${(err as Error).message}`) as Error & { code?: string };
+      e.code = EDECRYPT;
+      throw e;
+    }
   }
   return raw;
 }
@@ -46,7 +65,9 @@ export async function secureReadText(path: string): Promise<string> {
 
 export async function secureWriteFile(path: string, data: Buffer | string): Promise<void> {
   const buf = typeof data === 'string' ? Buffer.from(data, 'utf8') : data;
-  const out = vault.isUnlocked() ? vault.encryptBuffer(buf) : buf;
+  // shouldEncrypt() (not isUnlocked()) so a write racing a disable sweep stays plaintext and
+  // can't be orphaned under a DEK that removeAuth is about to destroy. Decided synchronously.
+  const out = vault.shouldEncrypt() ? vault.encryptBuffer(buf) : buf;
   await mkdir(dirname(path), { recursive: true });
   const tmp = `${path}.${process.pid}.${randomUUID().slice(0, 8)}.tmp`;
   await writeFile(tmp, out);

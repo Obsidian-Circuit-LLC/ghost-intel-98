@@ -118,7 +118,7 @@ export interface AttachmentTextResult {
   bytesRead: number;
   /** True when the file is larger than the per-file read cap. */
   truncated: boolean;
-  reason?: 'binary' | 'empty' | 'read-error';
+  reason?: 'binary' | 'empty' | 'read-error' | 'locked' | 'decrypt-failed';
 }
 
 /** A page of raw attachment bytes (base64) for the in-app document viewer.
@@ -135,7 +135,7 @@ export interface AttachmentBytesResult {
   length: number;
   /** True when there are more bytes past this slice. */
   hasMore: boolean;
-  reason?: 'read-error' | 'out-of-range';
+  reason?: 'read-error' | 'out-of-range' | 'locked' | 'decrypt-failed';
 }
 
 /** Inner attachment of a parsed .eml — metadata ONLY (never the bytes). */

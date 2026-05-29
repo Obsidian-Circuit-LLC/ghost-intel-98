@@ -10,7 +10,7 @@
 import { mkdir, open, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 import { basename, extname, join } from 'node:path';
-import { secureReadFile, secureReadText, secureWriteFile, isEncryptedFile } from './secure-fs';
+import { secureReadFile, secureReadText, secureWriteFile, isEncryptedFile, EVAULTLOCKED, EDECRYPT } from './secure-fs';
 import type {
   AppSettings,
   AttachmentBytesResult,
@@ -110,6 +110,16 @@ function safeFileName(input: string): string {
 
 function caseLockKey(id: CaseId): string {
   return `case:${id}`;
+}
+
+/** Classify a secure-fs read failure for the result `reason`. A locked vault and a failed GCM
+ *  authentication tag (truncation / corruption / tamper) are surfaced distinctly — collapsing
+ *  them into a generic "read-error" would hide exactly the signal encryption exists to detect. */
+function readFailureReason(err: unknown): 'locked' | 'decrypt-failed' | 'read-error' {
+  const code = (err as { code?: string } | undefined)?.code;
+  if (code === EVAULTLOCKED) return 'locked';
+  if (code === EDECRYPT) return 'decrypt-failed';
+  return 'read-error';
 }
 
 // ---------- CaseStore ----------
@@ -568,8 +578,8 @@ export const fileStore: FileStore = {
       } finally {
         await fh.close();
       }
-    } catch {
-      return { fileName, text: null, size, bytesRead: 0, truncated: false, reason: 'read-error' };
+    } catch (err) {
+      return { fileName, text: null, size, bytesRead: 0, truncated: false, reason: readFailureReason(err) };
     }
   },
 
@@ -602,8 +612,8 @@ export const fileStore: FileStore = {
       } finally {
         await fh.close();
       }
-    } catch {
-      return { fileName, base64: null, size, offset, length: 0, hasMore: false, reason: 'read-error' };
+    } catch (err) {
+      return { fileName, base64: null, size, offset, length: 0, hasMore: false, reason: readFailureReason(err) };
     }
   },
 
