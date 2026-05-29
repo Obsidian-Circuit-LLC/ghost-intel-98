@@ -73,3 +73,39 @@ describe('local-ai ensureRuntime()', () => {
     expect(env.OLLAMA_HOST).toBe('127.0.0.1:11434');
   });
 });
+
+describe('local-ai stop()', () => {
+  beforeEach(async () => {
+    vi.restoreAllMocks();
+    localAi.__resetForTest();
+    await mkdir('/tmp/ga98-localai-test/res/local-ai/models', { recursive: true });
+    await writeFile('/tmp/ga98-localai-test/res/local-ai/ollama', 'x');
+    await writeFile('/tmp/ga98-localai-test/res/local-ai/MODEL_PRESENT', 'llama3.1');
+  });
+
+  afterEach(async () => {
+    localAi.__resetForTest();
+    await rm('/tmp/ga98-localai-test/res', { recursive: true, force: true });
+  });
+
+  it('stop() kills only a child we spawned, once', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockImplementationOnce(async () => { throw new Error('down'); })
+      .mockImplementation(async () => new Response(JSON.stringify({ models: [] }), { status: 200 })));
+    const kill = vi.fn();
+    localAi.__setSpawnForTest(() => ({ on: vi.fn(), kill, pid: 7 }));
+    localAi.__setBundledRootForTest('/tmp/ga98-localai-test/res/local-ai');
+    await localAi.ensureRuntime();
+    localAi.stop(); localAi.stop();
+    expect(kill).toHaveBeenCalledTimes(1);
+  });
+
+  it('stop() never kills a reused runtime', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ models: [] }), { status: 200 })));
+    const kill = vi.fn();
+    localAi.__setSpawnForTest(() => ({ on: vi.fn(), kill, pid: 9 }));
+    await localAi.ensureRuntime(); // runtime already up → reuse, no spawn
+    localAi.stop();
+    expect(kill).not.toHaveBeenCalled();
+  });
+});

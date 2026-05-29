@@ -13,7 +13,11 @@ async function exists(p: string): Promise<boolean> { try { await access(p); retu
 type SpawnLike = (cmd: string, args: string[], opts: { env: NodeJS.ProcessEnv; stdio?: unknown }) => { on: (...a: unknown[]) => void; kill: () => void; pid?: number };
 let spawnFn: SpawnLike = nodeSpawn as unknown as SpawnLike;
 export function __setSpawnForTest(fn: SpawnLike): void { spawnFn = fn; }
-export let child: { kill: () => void } | null = null; // set ONLY when WE spawned (stop() uses this)
+let child: { kill: () => void } | null = null; // set ONLY when WE spawned (stop() uses this)
+
+export function stop(): void {
+  if (child) { child.kill(); child = null; }
+}
 
 export function __resetForTest(): void {
   spawnFn = nodeSpawn as unknown as SpawnLike;

@@ -19,6 +19,7 @@ import * as vault from './services/vault';
 import { shutdownAllSessions } from './services/ssh';
 import { shutdownAll as shutdownAllFtp } from './services/ftp';
 import { cancelAll as cancelAllAiStreams } from './services/ai';
+import * as localAi from './services/local-ai';
 
 const isDev = !!process.env['ELECTRON_RENDERER_URL'];
 
@@ -205,6 +206,8 @@ app.on('before-quit', async () => {
   await shutdownAllSessions();
   await shutdownAllFtp();
 });
+
+app.on('will-quit', () => { localAi.stop(); });
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
