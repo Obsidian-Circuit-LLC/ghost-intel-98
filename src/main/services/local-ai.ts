@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { spawn as nodeSpawn } from 'node:child_process';
 import { LOCAL_AI_ENDPOINT, LOCAL_AI_MODEL, bundledRoot as defaultBundledRoot, fetchedRoot, fetchedModelsDir } from './local-ai-paths';
 import type { LocalAiStatus } from '@shared/ipc-contracts';
+import { settingsStore } from '../storage/json-fs';
 
 let bundledOverride: boolean | null = null; // set by isBundled() in a later task; test seam
 
@@ -108,4 +109,10 @@ export async function ensureModel(onProgress?: (p: ModelProgress) => void): Prom
   if (tags?.some((n) => n.startsWith(LOCAL_AI_MODEL))) return; // already present
   const mode: 'bundled' | 'online' = (await isBundled()) ? 'bundled' : 'online';
   await runImport(mode, onProgress);
+}
+
+export async function autoConfigure(): Promise<void> {
+  const s = await settingsStore.read();
+  if (s.ai.provider !== 'none') return; // user already chose a provider — never clobber it
+  await settingsStore.update({ ai: { ...s.ai, provider: 'ollama', endpoint: LOCAL_AI_ENDPOINT, model: LOCAL_AI_MODEL } });
 }

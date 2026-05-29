@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterAll, afterEach } from 'vitest';
 import { mkdir, writeFile, rm } from 'node:fs/promises';
 vi.mock('electron', () => ({ app: { getPath: () => '/tmp/ga98-localai-test' } }));
+import { settingsStore } from '../src/main/storage/json-fs';
 import * as localAi from '../src/main/services/local-ai';
 
 describe('local-ai detect()', () => {
@@ -135,5 +136,35 @@ describe('local-ai ensureModel()', () => {
     localAi.__setBundledRootForTest('/tmp/ga98-localai-test/res/local-ai');
     await localAi.ensureModel();
     expect(run).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('local-ai autoConfigure()', () => {
+  beforeEach(async () => {
+    localAi.__resetForTest();
+    await rm('/tmp/ga98-localai-test', { recursive: true, force: true });
+    await mkdir('/tmp/ga98-localai-test', { recursive: true });
+  });
+
+  afterEach(async () => {
+    localAi.__resetForTest();
+    await rm('/tmp/ga98-localai-test', { recursive: true, force: true });
+  });
+
+  it('autoConfigure() sets ollama/loopback/llama3.1 when provider is none', async () => {
+    await settingsStore.update({ ai: { provider: 'none', endpoint: '', model: '' } as any });
+    await localAi.autoConfigure();
+    const s = await settingsStore.read();
+    expect(s.ai.provider).toBe('ollama');
+    expect(s.ai.endpoint).toBe('http://127.0.0.1:11434');
+    expect(s.ai.model).toBe('llama3.1');
+  });
+
+  it('autoConfigure() never overrides a user-set custom endpoint', async () => {
+    await settingsStore.update({ ai: { provider: 'openai-compatible', endpoint: 'https://api.example.com', model: 'gpt-4o-mini' } as any });
+    await localAi.autoConfigure();
+    const s = await settingsStore.read();
+    expect(s.ai.provider).toBe('openai-compatible');
+    expect(s.ai.endpoint).toBe('https://api.example.com');
   });
 });
