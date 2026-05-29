@@ -194,6 +194,18 @@ export const channels = {
 
 export interface AuthStatus { enabled: boolean; unlocked: boolean }
 
+export type LocalAiState = 'using-existing' | 'bundled-ready' | 'running' | 'not-present' | 'downloading' | 'importing' | 'error';
+export interface LocalAiStatus {
+  state: LocalAiState;
+  /** true when a responsive Ollama is reachable on the loopback endpoint right now */
+  runtimeUp: boolean;
+  /** true when the llama3.1 model is present in that runtime */
+  modelPresent: boolean;
+  /** true when this build shipped bundled runtime+model assets */
+  bundled: boolean;
+  message?: string;
+}
+
 export type Channels = typeof channels;
 
 /** Payload + return signatures, keyed by channel string. */
