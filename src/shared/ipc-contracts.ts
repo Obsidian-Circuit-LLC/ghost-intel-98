@@ -189,6 +189,13 @@ export const channels = {
     changePassword: 'auth:changePassword',
     disable: 'auth:disable',
     lock: 'auth:lock'
+  },
+  localAi: {
+    status: 'localAi:status',
+    setup: 'localAi:setup',
+    start: 'localAi:start',
+    stop: 'localAi:stop',
+    onProgress: 'localAi:onProgress'
   }
 } as const;
 
@@ -203,6 +210,13 @@ export interface LocalAiStatus {
   modelPresent: boolean;
   /** true when this build shipped bundled runtime+model assets */
   bundled: boolean;
+  message?: string;
+}
+
+export interface LocalAiProgress {
+  phase: 'download' | 'import';
+  receivedBytes?: number;
+  totalBytes?: number | null;
   message?: string;
 }
 
@@ -291,4 +305,10 @@ export interface ApiContracts {
   [channels.auth.changePassword]: { args: [string]; returns: void };
   [channels.auth.disable]: { args: [string]; returns: void };
   [channels.auth.lock]: { args: []; returns: void };
+
+  [channels.localAi.status]: { args: []; returns: LocalAiStatus };
+  [channels.localAi.setup]: { args: [{ mode: 'online' | 'bundled' }]; returns: LocalAiStatus };
+  [channels.localAi.start]: { args: []; returns: void };
+  [channels.localAi.stop]: { args: []; returns: void };
+  [channels.localAi.onProgress]: { args: [(payload: LocalAiProgress) => void]; returns: () => void };
 }

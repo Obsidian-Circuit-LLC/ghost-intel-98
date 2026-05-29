@@ -162,6 +162,17 @@ export function ensureSearchQuery(q: unknown): string {
   return t;
 }
 
+// ---------- local AI ----------
+
+/** Wizard setup options. The model SOURCE is pinned server-side (build constants / ci/pins.json),
+ *  NEVER supplied by the renderer — so we accept only the mode, nothing URL-like (SSRF guard). */
+export function ensureLocalAiSetupOpts(raw: unknown): { mode: 'online' | 'bundled' } {
+  if (!raw || typeof raw !== 'object') throw new ValidationError('Setup options required');
+  const mode = (raw as { mode?: unknown }).mode;
+  if (mode !== 'online' && mode !== 'bundled') throw new ValidationError('mode must be "online" or "bundled"');
+  return { mode };
+}
+
 // ---------- auth ----------
 
 /** Master password: non-empty, bounded (the bound only guards against pathological input —
