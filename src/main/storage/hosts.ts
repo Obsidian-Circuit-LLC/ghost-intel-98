@@ -3,12 +3,12 @@
  * dedicated file, mutex-protected, one-shot migration from legacy settings.sshHosts.
  */
 
-import { readFile, writeFile, rename, mkdir } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import type { SshHostProfile } from '@shared/post-mvp-types';
 import { dataRoot } from './paths';
 import { withLock } from '../util/mutex';
+import { secureReadText, secureWriteFile } from './secure-fs';
 
 function hostsFile(): string {
   return join(dataRoot(), 'ssh-hosts.json');
@@ -20,8 +20,7 @@ function legacySettingsFile(): string {
 
 async function readHostsFile(): Promise<SshHostProfile[]> {
   try {
-    const buf = await readFile(hostsFile(), 'utf8');
-    return JSON.parse(buf) as SshHostProfile[];
+    return JSON.parse(await secureReadText(hostsFile())) as SshHostProfile[];
   } catch (err) {
     const e = err as NodeJS.ErrnoException;
     if (e.code !== 'ENOENT') throw err;
@@ -44,10 +43,7 @@ async function readHostsFile(): Promise<SshHostProfile[]> {
 }
 
 async function writeHostsFile(list: SshHostProfile[]): Promise<void> {
-  await mkdir(dirname(hostsFile()), { recursive: true });
-  const tmp = `${hostsFile()}.${process.pid}.${randomUUID().slice(0, 8)}.tmp`;
-  await writeFile(tmp, JSON.stringify(list, null, 2), 'utf8');
-  await rename(tmp, hostsFile());
+  await secureWriteFile(hostsFile(), JSON.stringify(list, null, 2));
 }
 
 export async function listHosts(): Promise<SshHostProfile[]> {

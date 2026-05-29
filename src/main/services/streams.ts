@@ -3,11 +3,11 @@
  * Stream playback happens entirely in the renderer.
  */
 
-import { readFile, writeFile, rename, mkdir } from 'node:fs/promises';
-import { join, dirname } from 'node:path';
+import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { CameraStream } from '@shared/post-mvp-types';
 import { dataRoot } from '../storage/paths';
+import { secureReadText, secureWriteFile } from '../storage/secure-fs';
 
 function streamsFile(): string {
   return join(dataRoot(), 'streams.json');
@@ -15,8 +15,7 @@ function streamsFile(): string {
 
 async function readAll(): Promise<CameraStream[]> {
   try {
-    const buf = await readFile(streamsFile(), 'utf8');
-    return JSON.parse(buf) as CameraStream[];
+    return JSON.parse(await secureReadText(streamsFile())) as CameraStream[];
   } catch (err) {
     const e = err as NodeJS.ErrnoException;
     if (e.code === 'ENOENT') return [];
@@ -25,10 +24,7 @@ async function readAll(): Promise<CameraStream[]> {
 }
 
 async function writeAll(list: CameraStream[]): Promise<void> {
-  await mkdir(dirname(streamsFile()), { recursive: true });
-  const tmp = `${streamsFile()}.${process.pid}.tmp`;
-  await writeFile(tmp, JSON.stringify(list, null, 2), 'utf8');
-  await rename(tmp, streamsFile());
+  await secureWriteFile(streamsFile(), JSON.stringify(list, null, 2));
 }
 
 export async function list(): Promise<CameraStream[]> {

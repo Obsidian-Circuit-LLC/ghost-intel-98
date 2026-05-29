@@ -2,11 +2,11 @@
  * Net Explorer bookmarks — saved URL list. Dedicated file, mutex-protected.
  */
 
-import { readFile, writeFile, rename, mkdir } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { dataRoot } from './paths';
 import { withLock } from '../util/mutex';
+import { secureReadText, secureWriteFile } from './secure-fs';
 
 export interface Bookmark {
   id: string;
@@ -21,8 +21,7 @@ function file(): string {
 
 async function readAll(): Promise<Bookmark[]> {
   try {
-    const buf = await readFile(file(), 'utf8');
-    return JSON.parse(buf) as Bookmark[];
+    return JSON.parse(await secureReadText(file())) as Bookmark[];
   } catch (err) {
     const e = err as NodeJS.ErrnoException;
     if (e.code === 'ENOENT') return [];
@@ -31,10 +30,7 @@ async function readAll(): Promise<Bookmark[]> {
 }
 
 async function writeAll(list: Bookmark[]): Promise<void> {
-  await mkdir(dirname(file()), { recursive: true });
-  const tmp = `${file()}.${process.pid}.${randomUUID().slice(0, 8)}.tmp`;
-  await writeFile(tmp, JSON.stringify(list, null, 2), 'utf8');
-  await rename(tmp, file());
+  await secureWriteFile(file(), JSON.stringify(list, null, 2));
 }
 
 export async function list(): Promise<Bookmark[]> {

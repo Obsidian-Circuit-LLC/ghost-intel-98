@@ -12,10 +12,24 @@
  * Magic-byte detection means plaintext (pre-migration / disabled) and ciphertext files
  * coexist safely, which is what makes the enable/disable migration resumable.
  */
-import { readFile, writeFile, rename, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, rename, mkdir, open } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import * as vault from '../services/vault';
+
+/** Cheap magic-byte probe: reads only the envelope header (8 bytes), not the whole file.
+ *  Lets the positional attachment readers keep their pread() fast-path for plaintext and
+ *  fall back to whole-file decrypt only when a blob is actually encrypted. */
+export async function isEncryptedFile(path: string): Promise<boolean> {
+  const fh = await open(path, 'r');
+  try {
+    const head = Buffer.alloc(8);
+    const { bytesRead } = await fh.read(head, 0, 8, 0);
+    return vault.isEncrypted(head.subarray(0, bytesRead));
+  } finally {
+    await fh.close();
+  }
+}
 
 export async function secureReadFile(path: string): Promise<Buffer> {
   const raw = await readFile(path);

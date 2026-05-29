@@ -2,11 +2,11 @@
  * Net Explorer browsing history. Capped at 500 entries; oldest evicted.
  */
 
-import { readFile, writeFile, rename, mkdir } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { dataRoot } from './paths';
 import { withLock } from '../util/mutex';
+import { secureReadText, secureWriteFile } from './secure-fs';
 
 export interface HistoryEntry {
   id: string;
@@ -23,8 +23,7 @@ function file(): string {
 
 async function readAll(): Promise<HistoryEntry[]> {
   try {
-    const buf = await readFile(file(), 'utf8');
-    return JSON.parse(buf) as HistoryEntry[];
+    return JSON.parse(await secureReadText(file())) as HistoryEntry[];
   } catch (err) {
     const e = err as NodeJS.ErrnoException;
     if (e.code === 'ENOENT') return [];
@@ -33,10 +32,7 @@ async function readAll(): Promise<HistoryEntry[]> {
 }
 
 async function writeAll(list: HistoryEntry[]): Promise<void> {
-  await mkdir(dirname(file()), { recursive: true });
-  const tmp = `${file()}.${process.pid}.${randomUUID().slice(0, 8)}.tmp`;
-  await writeFile(tmp, JSON.stringify(list, null, 2), 'utf8');
-  await rename(tmp, file());
+  await secureWriteFile(file(), JSON.stringify(list, null, 2));
 }
 
 export async function list(limit = 100): Promise<HistoryEntry[]> {

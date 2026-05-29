@@ -5,12 +5,13 @@
  * Thumbnails are tiny, so the case read inlines their data-URIs (thumbDataUri) for direct <img>
  * rendering; the full original is fetched on demand for the viewer. No hashing.
  */
-import { readFile, writeFile, rename, mkdir, rm } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { mkdir, rm } from 'node:fs/promises';
+import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { BioImage, ImageMime } from '@shared/types';
 import { caseDir } from './paths';
 import { withLock } from '../util/mutex';
+import { secureReadFile, secureReadText, secureWriteFile } from './secure-fs';
 
 interface BioIndex { primaryId: string | null; images: BioImage[] }
 
@@ -27,7 +28,7 @@ export function originalAbsolutePath(caseId: string, fileName: string): string {
 
 async function readIndex(caseId: string): Promise<BioIndex> {
   try {
-    return JSON.parse(await readFile(indexFile(caseId), 'utf8')) as BioIndex;
+    return JSON.parse(await secureReadText(indexFile(caseId))) as BioIndex;
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') return { primaryId: null, images: [] };
     throw err;
@@ -35,9 +36,6 @@ async function readIndex(caseId: string): Promise<BioIndex> {
 }
 
 async function writeIndex(caseId: string, idx: BioIndex): Promise<void> {
-  const path = indexFile(caseId);
-  await mkdir(dirname(path), { recursive: true });
-  const tmp = `${path}.${process.pid}.${randomUUID().slice(0, 8)}.tmp`;
   // Persist BioImage metadata only — omit the transient thumbDataUri / isPrimary fields.
   const clean: BioIndex = {
     primaryId: idx.primaryId,
@@ -47,13 +45,12 @@ async function writeIndex(caseId: string, idx: BioIndex): Promise<void> {
       ...(img.caption !== undefined ? { caption: img.caption } : {})
     }))
   };
-  await writeFile(tmp, JSON.stringify(clean, null, 2), 'utf8');
-  await rename(tmp, path);
+  await secureWriteFile(indexFile(caseId), JSON.stringify(clean, null, 2));
 }
 
 async function thumbDataUri(caseId: string, thumbName: string): Promise<string | undefined> {
   try {
-    const buf = await readFile(join(bioThumbsDir(caseId), thumbName));
+    const buf = await secureReadFile(join(bioThumbsDir(caseId), thumbName));
     return `data:image/png;base64,${buf.toString('base64')}`;
   } catch { return undefined; }
 }
@@ -88,8 +85,8 @@ export async function add(caseId: string, input: {
     const ext = EXT[input.mime];
     const fileName = `${id}.${ext}`;
     const thumbName = `${id}.png`;
-    await writeFile(join(bioImagesDir(caseId), fileName), Buffer.from(input.originalBase64, 'base64'));
-    await writeFile(join(bioThumbsDir(caseId), thumbName), Buffer.from(input.thumbBase64, 'base64'));
+    await secureWriteFile(join(bioImagesDir(caseId), fileName), Buffer.from(input.originalBase64, 'base64'));
+    await secureWriteFile(join(bioThumbsDir(caseId), thumbName), Buffer.from(input.thumbBase64, 'base64'));
     const rec: BioImage = {
       id, fileName, thumbName, originalName: input.originalName, mime: input.mime,
       width: input.width, height: input.height,
@@ -141,7 +138,7 @@ export async function readOriginalDataUri(caseId: string, id: string): Promise<s
   const img = idx.images.find((i) => i.id === id);
   if (!img) return null;
   try {
-    const buf = await readFile(join(bioImagesDir(caseId), img.fileName));
+    const buf = await secureReadFile(join(bioImagesDir(caseId), img.fileName));
     return `data:${img.mime};base64,${buf.toString('base64')}`;
   } catch { return null; }
 }

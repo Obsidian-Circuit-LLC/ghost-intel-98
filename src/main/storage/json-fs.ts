@@ -7,10 +7,10 @@
  * sub-millisecond bursts don't collide.
  */
 
-import { mkdir, open, readdir, readFile, rename, rm, stat, writeFile, copyFile } from 'node:fs/promises';
+import { mkdir, open, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
-import { createReadStream } from 'node:fs';
 import { basename, extname, join } from 'node:path';
+import { secureReadFile, secureReadText, secureWriteFile, isEncryptedFile } from './secure-fs';
 import type {
   AppSettings,
   AttachmentBytesResult,
@@ -60,7 +60,7 @@ import { withLock } from '../util/mutex';
 async function readJson<T>(path: string, fallback: T): Promise<T> {
   let buf: string;
   try {
-    buf = await readFile(path, 'utf8');
+    buf = await secureReadText(path);
   } catch (err) {
     const e = err as NodeJS.ErrnoException;
     if (e.code === 'ENOENT') return fallback;
@@ -70,6 +70,25 @@ async function readJson<T>(path: string, fallback: T): Promise<T> {
 }
 
 async function writeJson(path: string, value: unknown): Promise<void> {
+  await secureWriteFile(path, JSON.stringify(value, null, 2));
+}
+
+/** Plaintext JSON helpers for files that MUST stay readable before unlock — i.e.
+ *  settings.json (the lock screen renders the saved theme/wallpaper pre-unlock).
+ *  These bypass the encryption shim deliberately; never use them for case data. */
+async function readJsonPlain<T>(path: string, fallback: T): Promise<T> {
+  let buf: string;
+  try {
+    buf = await readFile(path, 'utf8');
+  } catch (err) {
+    const e = err as NodeJS.ErrnoException;
+    if (e.code === 'ENOENT') return fallback;
+    throw err;
+  }
+  return JSON.parse(buf) as T;
+}
+
+async function writeJsonPlain(path: string, value: unknown): Promise<void> {
   const tmp = `${path}.${process.pid}.${randomUUID().slice(0, 8)}.tmp`;
   await writeFile(tmp, JSON.stringify(value, null, 2), 'utf8');
   await rename(tmp, path);
@@ -87,17 +106,6 @@ function newId(): string {
 function safeFileName(input: string): string {
   const cleaned = input.replace(/[^A-Za-z0-9._\- ]/g, '_').slice(0, 200).trim();
   return cleaned || 'untitled';
-}
-
-async function sha256File(path: string): Promise<string> {
-  const h = createHash('sha256');
-  await new Promise<void>((resolve, reject) => {
-    const stream = createReadStream(path);
-    stream.on('data', (chunk) => h.update(chunk));
-    stream.on('end', () => resolve());
-    stream.on('error', reject);
-  });
-  return h.digest('hex');
 }
 
 function caseLockKey(id: CaseId): string {
@@ -451,15 +459,17 @@ export const fileStore: FileStore = {
         try {
           const safeName = await uniqueAttachmentName(id, f.originalName);
           const dest = join(caseAttachmentsDir(id), safeName);
-          await copyFile(f.sourcePath, dest);
-          let sha: string | undefined;
-          try { sha = await sha256File(dest); } catch { sha = undefined; }
-          const s = await stat(dest);
+          // Read the dropped source (plaintext, outside dataRoot), hash + size the
+          // PLAINTEXT, then write through the shim (encrypts iff the vault is unlocked).
+          // sha256 must bind the plaintext so the digest is stable across encrypt/disable.
+          const bytes = await readFile(f.sourcePath);
+          await secureWriteFile(dest, bytes);
+          const sha = createHash('sha256').update(bytes).digest('hex');
           const meta: AttachmentMeta = {
             fileName: safeName,
             originalName: f.originalName,
             importedAt: nowIso(),
-            size: s.size,
+            size: bytes.length,
             sourcePath: f.sourcePath,
             sha256: sha
           };
@@ -525,6 +535,18 @@ export const fileStore: FileStore = {
     const path = join(caseAttachmentsDir(id), fileName);
     let size = 0;
     try {
+      if (await isEncryptedFile(path)) {
+        // GCM authenticates the whole blob — no positional read. Decrypt fully (throws
+        // if locked, caught below), then cap the PLAINTEXT to the AI-context limit.
+        const plain = await secureReadFile(path);
+        size = plain.length;
+        if (size === 0) return { fileName, text: null, size: 0, bytesRead: 0, truncated: false, reason: 'empty' };
+        const slice = plain.subarray(0, Math.min(size, ATTACHMENT_TEXT_CAP_BYTES));
+        if (looksBinary(slice)) {
+          return { fileName, text: null, size, bytesRead: slice.length, truncated: size > slice.length, reason: 'binary' };
+        }
+        return { fileName, text: slice.toString('utf8'), size, bytesRead: slice.length, truncated: size > slice.length };
+      }
       const s = await stat(path);
       size = s.size;
       if (!s.isFile()) {
@@ -556,6 +578,16 @@ export const fileStore: FileStore = {
     const path = join(caseAttachmentsDir(id), fileName);
     let size = 0;
     try {
+      if (await isEncryptedFile(path)) {
+        // Whole-blob decrypt then slice the requested range from the plaintext.
+        // NOTE: paging a large encrypted file re-decrypts per chunk (O(n^2)) — acceptable
+        // for typical case attachments; a known cost only for very large encrypted media.
+        const plain = await secureReadFile(path);
+        size = plain.length;
+        if (offset >= size) return { fileName, base64: null, size, offset, length: 0, hasMore: false, reason: 'out-of-range' };
+        const slice = plain.subarray(offset, offset + Math.min(length, size - offset));
+        return { fileName, base64: slice.toString('base64'), size, offset, length: slice.length, hasMore: offset + slice.length < size };
+      }
       const s = await stat(path);
       size = s.size;
       if (!s.isFile()) return { fileName, base64: null, size, offset, length: 0, hasMore: false, reason: 'read-error' };
@@ -577,7 +609,7 @@ export const fileStore: FileStore = {
 
   async readEmlPreview(id, fileName): Promise<EmlPreview> {
     const path = join(caseAttachmentsDir(id), fileName);
-    const raw = await readFile(path);
+    const raw = await secureReadFile(path);
     if (raw.length > EML_MAX_BYTES) throw new Error(`EML exceeds the ${EML_MAX_BYTES} byte preview limit`);
     const parsed = await simpleParser(raw);
     const headers = (parsed.headerLines ?? []).map((h) => {
@@ -623,12 +655,18 @@ export const fileStore: FileStore = {
     if (sidecar) {
       result.importedAt = sidecar.importedAt;
       result.originalPath = sidecar.sourcePath;
+      // The sidecar records the PLAINTEXT size at import time; prefer it so an encrypted
+      // blob (whose on-disk stat size includes the GCM envelope) reports its true size.
+      if (typeof sidecar.size === 'number' && sidecar.size >= 0) result.size = sidecar.size;
     }
 
     const IMAGE_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp', '.tif', '.tiff', '.heic', '.avif']);
     if (IMAGE_EXT.has(ext)) {
       try {
-        const exif = await exifr.parse(path);
+        // exifr opens the path itself, which would parse ciphertext — feed it the
+        // decrypted buffer instead (passthrough when the vault is off).
+        const imgBuf = await secureReadFile(path);
+        const exif = await exifr.parse(imgBuf);
         if (exif && typeof exif === 'object') {
           const keep = ['Make', 'Model', 'Software', 'Orientation', 'DateTimeOriginal', 'ExifImageWidth', 'ExifImageHeight', 'LensModel'];
           const picked: Record<string, string> = {};
@@ -638,14 +676,14 @@ export const fileStore: FileStore = {
           }
           if (Object.keys(picked).length) result.exif = picked;
         }
-        const gps = await exifr.gps(path);
+        const gps = await exifr.gps(imgBuf);
         if (gps && typeof gps.latitude === 'number' && typeof gps.longitude === 'number') {
           result.gps = { lat: gps.latitude, lon: gps.longitude };
         }
       } catch { /* EXIF is best-effort */ }
     } else if (ext === '.eml') {
       try {
-        const raw = await readFile(path);
+        const raw = await secureReadFile(path);
         if (raw.length <= EML_MAX_BYTES) {
           const parsed = await simpleParser(raw);
           result.emlHeaders = (parsed.headerLines ?? []).map((h) => {
@@ -766,7 +804,7 @@ export const noteStore: NoteStore = {
 
   async read(id, name) {
     const safe = safeFileName(name);
-    return readFile(join(caseNotesDir(id), `${safe}.txt`), 'utf8');
+    return secureReadText(join(caseNotesDir(id), `${safe}.txt`));
   },
 
   async write(id, name, body) {
@@ -774,9 +812,7 @@ export const noteStore: NoteStore = {
       await ensureCaseLayout(id);
       const safe = safeFileName(name);
       const path = join(caseNotesDir(id), `${safe}.txt`);
-      const tmp = `${path}.${process.pid}.${randomUUID().slice(0, 8)}.tmp`;
-      await writeFile(tmp, body, 'utf8');
-      await rename(tmp, path);
+      await secureWriteFile(path, body);
       await appendTimelineUnlocked(id, { kind: 'note', message: `Note saved: ${safe}` });
       await touchUnlocked(id);
     });
@@ -797,9 +833,10 @@ export const settingsStore: SettingsStore = {
   async read(): Promise<AppSettings> {
     return withLock('settings', async () => {
       await ensureDataLayout();
-      const onDisk = await readJson<Partial<AppSettings> | null>(settingsFile(), null);
+      // Plaintext on disk: the lock screen renders the saved theme/wallpaper before unlock.
+      const onDisk = await readJsonPlain<Partial<AppSettings> | null>(settingsFile(), null);
       if (!onDisk) {
-        await writeJson(settingsFile(), defaultSettings);
+        await writeJsonPlain(settingsFile(), defaultSettings);
         return defaultSettings;
       }
       return mergeSettings(defaultSettings, onDisk);
@@ -809,10 +846,10 @@ export const settingsStore: SettingsStore = {
   async update(patch): Promise<AppSettings> {
     return withLock('settings', async () => {
       await ensureDataLayout();
-      const onDisk = await readJson<Partial<AppSettings> | null>(settingsFile(), null);
+      const onDisk = await readJsonPlain<Partial<AppSettings> | null>(settingsFile(), null);
       const cur = onDisk ? mergeSettings(defaultSettings, onDisk) : defaultSettings;
       const next = mergeSettings(cur, patch);
-      await writeJson(settingsFile(), next);
+      await writeJsonPlain(settingsFile(), next);
       return next;
     });
   }

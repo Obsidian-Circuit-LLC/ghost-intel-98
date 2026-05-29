@@ -9,8 +9,8 @@
  * longer exists) are tolerated and dropped at resolution — no cascade deletes, keeping every
  * operation additive and crash-safe.
  */
-import { readFile, writeFile, rename, mkdir, readdir } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { readdir } from 'node:fs/promises';
+import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type {
   EntityLink,
@@ -21,6 +21,7 @@ import type {
 } from '@shared/types';
 import { casesDir, caseDir, caseFile, dataRoot } from './paths';
 import { withLock } from '../util/mutex';
+import { secureReadText, secureWriteFile } from './secure-fs';
 
 function nowIso(): string { return new Date().toISOString(); }
 function registryFile(): string { return join(dataRoot(), 'entities.json'); }
@@ -28,7 +29,7 @@ function linksFile(caseId: string): string { return join(caseDir(caseId), 'entit
 
 async function readJsonArr<T>(path: string): Promise<T[]> {
   try {
-    return JSON.parse(await readFile(path, 'utf8')) as T[];
+    return JSON.parse(await secureReadText(path)) as T[];
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
     throw err;
@@ -36,10 +37,7 @@ async function readJsonArr<T>(path: string): Promise<T[]> {
 }
 
 async function writeJsonArr<T>(path: string, list: T[]): Promise<void> {
-  await mkdir(dirname(path), { recursive: true });
-  const tmp = `${path}.${process.pid}.${randomUUID().slice(0, 8)}.tmp`;
-  await writeFile(tmp, JSON.stringify(list, null, 2), 'utf8');
-  await rename(tmp, path);
+  await secureWriteFile(path, JSON.stringify(list, null, 2));
 }
 
 // ---------- registry ----------
@@ -214,7 +212,7 @@ export async function casesForEntity(entityId: string): Promise<{ caseId: string
     if (!links.some((l) => l.entityId === entityId)) continue;
     let title = caseId;
     try {
-      const meta = JSON.parse(await readFile(caseFile(caseId), 'utf8')) as { title?: string };
+      const meta = JSON.parse(await secureReadText(caseFile(caseId))) as { title?: string };
       if (meta.title) title = meta.title;
     } catch { /* keep id as title */ }
     out.push({ caseId, title });

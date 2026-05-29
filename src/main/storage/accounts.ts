@@ -5,12 +5,12 @@
  * field inside settings.json.
  */
 
-import { readFile, writeFile, rename, mkdir } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import type { MailAccount } from '@shared/post-mvp-types';
 import { dataRoot } from './paths';
 import { withLock } from '../util/mutex';
+import { secureReadText, secureWriteFile } from './secure-fs';
 
 function accountsFile(): string {
   return join(dataRoot(), 'mail-accounts.json');
@@ -22,8 +22,7 @@ function legacySettingsFile(): string {
 
 async function readAccountsFile(): Promise<MailAccount[]> {
   try {
-    const buf = await readFile(accountsFile(), 'utf8');
-    return JSON.parse(buf) as MailAccount[];
+    return JSON.parse(await secureReadText(accountsFile())) as MailAccount[];
   } catch (err) {
     const e = err as NodeJS.ErrnoException;
     if (e.code !== 'ENOENT') throw err;
@@ -48,10 +47,7 @@ async function readAccountsFile(): Promise<MailAccount[]> {
 }
 
 async function writeAccountsFile(list: MailAccount[]): Promise<void> {
-  await mkdir(dirname(accountsFile()), { recursive: true });
-  const tmp = `${accountsFile()}.${process.pid}.${randomUUID().slice(0, 8)}.tmp`;
-  await writeFile(tmp, JSON.stringify(list, null, 2), 'utf8');
-  await rename(tmp, accountsFile());
+  await secureWriteFile(accountsFile(), JSON.stringify(list, null, 2));
 }
 
 export async function listAccounts(): Promise<MailAccount[]> {
