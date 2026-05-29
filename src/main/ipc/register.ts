@@ -36,7 +36,7 @@ import * as streams from '../services/streams';
 import * as ai from '../services/ai';
 import * as bookmarks from '../storage/bookmarks';
 import * as history from '../storage/history';
-import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts } from '../security/validate';
+import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent } from '../security/validate';
 import * as entities from '../storage/entities';
 import { markConsented, assertAllConsented } from '../security/consent';
 import { getSecretBackend } from '../secrets';
@@ -108,7 +108,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.cases.update, (...args) => caseStore.update(ensureUuid(args[0], 'caseId'), args[1] as Parameters<typeof caseStore.update>[1]));
   safeHandle(channels.cases.archive, (...args) => caseStore.archive(ensureUuid(args[0], 'caseId'), args[1] as boolean));
   safeHandle(channels.cases.delete, (...args) => caseStore.softDelete(ensureUuid(args[0], 'caseId')));
-  safeHandle(channels.cases.addTimeline, (...args) => caseStore.addTimeline(ensureUuid(args[0], 'caseId'), args[1] as Parameters<typeof caseStore.addTimeline>[1]));
+  safeHandle(channels.cases.addTimeline, (...args) => caseStore.addTimeline(ensureUuid(args[0], 'caseId'), ensureTimelineEvent(args[1])));
   safeHandle(channels.cases.addTask, (...args) => caseStore.addTask(ensureUuid(args[0], 'caseId'), args[1] as string, args[2] as string | undefined));
   safeHandle(channels.cases.toggleTask, (...args) => caseStore.toggleTask(ensureUuid(args[0], 'caseId'), args[1] as string));
   safeHandle(channels.cases.deleteTask, (...args) => caseStore.deleteTask(ensureUuid(args[0], 'caseId'), args[1] as string));

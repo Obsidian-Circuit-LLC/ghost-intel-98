@@ -35,6 +35,7 @@ export function EntitiesSection({ caseId, entities, attachments, onRefresh }: {
     try {
       const e = await window.api.entities.create({ type, value: value.trim() });
       await window.api.entities.linkToCase(caseId, e.id, rel ? { relationship: rel } : {});
+      await window.api.cases.addTimeline(caseId, { kind: 'entity', message: `Linked entity: ${e.value}` });
       setValue(''); setRel('');
       await onRefresh();
     } catch (err) { toast.error(`Add failed: ${(err as Error).message}`); }
@@ -44,6 +45,8 @@ export function EntitiesSection({ caseId, entities, attachments, onRefresh }: {
     if (!linkExistingId) return;
     try {
       await window.api.entities.linkToCase(caseId, linkExistingId, rel ? { relationship: rel } : {});
+      const e = registry.find((x) => x.id === linkExistingId);
+      await window.api.cases.addTimeline(caseId, { kind: 'entity', message: `Linked entity: ${e?.value ?? linkExistingId}` });
       setLinkExistingId(''); setRel('');
       await onRefresh();
     } catch (err) { toast.error(`Link failed: ${(err as Error).message}`); }

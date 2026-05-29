@@ -30,6 +30,7 @@ export function CaseDetail({ record, onChange, onArchive, onRefresh, onUpdateFie
   const [taskText, setTaskText] = useState('');
   const [remTitle, setRemTitle] = useState('');
   const [remWhen, setRemWhen] = useState('');
+  const [tlFilter, setTlFilter] = useState('all');
   const open = useWindows((s) => s.open);
 
   const handleDrop = useCallback(async (e: DragEvent<HTMLDivElement>) => {
@@ -194,8 +195,17 @@ export function CaseDetail({ record, onChange, onArchive, onRefresh, onUpdateFie
 
       <fieldset>
         <legend>Timeline</legend>
+        <label style={{ fontSize: 11 }}>
+          Filter:&nbsp;
+          <select className="ga98-text" value={tlFilter} onChange={(e) => setTlFilter(e.target.value)}>
+            <option value="all">All events</option>
+            {Array.from(new Set(record.timeline.map((e) => e.kind))).sort().map((k) => (
+              <option key={k} value={k}>{k}</option>
+            ))}
+          </select>
+        </label>
         <ul className="ga98-list" style={{ maxHeight: 160, overflow: 'auto' }}>
-          {record.timeline.slice().reverse().map((ev) => (
+          {record.timeline.slice().reverse().filter((ev) => tlFilter === 'all' || ev.kind === tlFilter).map((ev) => (
             <li key={ev.id}>
               <span style={{ width: 130, fontSize: 11, opacity: 0.7 }}>{new Date(ev.at).toLocaleString()}</span>
               <span style={{ width: 70, fontSize: 11, opacity: 0.7 }}>[{ev.kind}]</span>
@@ -246,6 +256,7 @@ function AttachmentRow({ caseId, att, onRefresh }: {
       width: 900,
       height: 680
     });
+    void window.api.cases.addTimeline(caseId, { kind: 'view', message: `Viewed ${att.originalName}` }).then(() => onRefresh());
   }
 
   return (

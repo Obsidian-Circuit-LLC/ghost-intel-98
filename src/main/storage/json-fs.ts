@@ -241,7 +241,14 @@ export const caseStore: CaseStore = {
         tags: patch.tags ?? meta.tags,
         updatedAt: nowIso()
       };
+      // No-op guard: only persist + emit when content actually changed, so editing then
+      // tabbing away without a change doesn't thrash updatedAt (re-sorts the list) or
+      // dilute the AI context (which samples the last 10 timeline events).
+      const changed: string[] = (['title', 'reference', 'description', 'status', 'priority'] as const).filter((k) => next[k] !== meta[k]);
+      if (JSON.stringify(next.tags) !== JSON.stringify(meta.tags)) changed.push('tags');
+      if (changed.length === 0) return loadFullCase(id);
       await writeCaseMeta(next);
+      await appendTimelineUnlocked(id, { kind: 'updated', message: `Updated ${changed.join(', ')}` });
       return loadFullCase(id);
     });
   },
@@ -249,9 +256,12 @@ export const caseStore: CaseStore = {
   async rename(id: CaseId, title: string): Promise<void> {
     return withLock(caseLockKey(id), async () => {
       const meta = await readCaseMeta(id);
-      meta.title = title.trim() || meta.title;
+      const newTitle = title.trim() || meta.title;
+      if (newTitle === meta.title) return;
+      meta.title = newTitle;
       meta.updatedAt = nowIso();
       await writeCaseMeta(meta);
+      await appendTimelineUnlocked(id, { kind: 'rename', message: `Renamed case to "${newTitle}"` });
     });
   },
 
@@ -261,6 +271,7 @@ export const caseStore: CaseStore = {
       meta.archived = archived;
       meta.updatedAt = nowIso();
       await writeCaseMeta(meta);
+      await appendTimelineUnlocked(id, { kind: 'archive', message: archived ? 'Archived' : 'Unarchived' });
     });
   },
 
@@ -291,6 +302,7 @@ export const caseStore: CaseStore = {
       const created: TaskItem = { id: newId(), text, done: false, createdAt: nowIso(), dueAt };
       list.push(created);
       await writeJson(caseTasksFile(id), list);
+      await appendTimelineUnlocked(id, { kind: 'task', message: `Task added: ${text}` });
       await touchUnlocked(id);
       return created;
     });
@@ -303,6 +315,7 @@ export const caseStore: CaseStore = {
       if (!t) throw new Error(`Task not found: ${taskId}`);
       t.done = !t.done;
       await writeJson(caseTasksFile(id), list);
+      await appendTimelineUnlocked(id, { kind: 'task', message: `${t.done ? 'Completed' : 'Reopened'}: ${t.text}` });
       await touchUnlocked(id);
       return t;
     });
@@ -323,6 +336,7 @@ export const caseStore: CaseStore = {
       const link: WebLink = { id: newId(), url, title: title || url, addedAt: nowIso() };
       list.push(link);
       await writeJson(caseLinksFile(id), list);
+      await appendTimelineUnlocked(id, { kind: 'link', message: `Link added: ${link.title}` });
       await touchUnlocked(id);
       return link;
     });
@@ -343,6 +357,7 @@ export const caseStore: CaseStore = {
       const created: Reminder = { id: newId(), caseId: id, fired: false, ...r };
       list.push(created);
       await writeJson(caseRemindersFile(id), list);
+      await appendTimelineUnlocked(id, { kind: 'reminder', message: `Reminder set: ${created.title}` });
       await touchUnlocked(id);
       return created;
     });
@@ -755,6 +770,7 @@ export const noteStore: NoteStore = {
       const tmp = `${path}.${process.pid}.${randomUUID().slice(0, 8)}.tmp`;
       await writeFile(tmp, body, 'utf8');
       await rename(tmp, path);
+      await appendTimelineUnlocked(id, { kind: 'note', message: `Note saved: ${safe}` });
       await touchUnlocked(id);
     });
   },

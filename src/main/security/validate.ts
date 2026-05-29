@@ -10,7 +10,7 @@ import { resolve, relative, isAbsolute, normalize } from 'node:path';
 import { realpath } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isIP, isIPv6 } from 'node:net';
-import { ENTITY_TYPES, ENTITY_RELATIONSHIPS, type EntityType, type EntityRelationship } from '@shared/types';
+import { ENTITY_TYPES, ENTITY_RELATIONSHIPS, TIMELINE_KINDS, type EntityType, type EntityRelationship, type TimelineKind, type TimelineEvent } from '@shared/types';
 
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -56,6 +56,21 @@ export function validateByteRange(offset: unknown, length: unknown): { offset: n
   }
   const clamped = Math.min(Math.max(1, Math.floor(length)), MAX_ATTACHMENT_READ_BYTES);
   return { offset, length: clamped };
+}
+
+/** Validate a renderer-originated timeline event (the addTimeline channel carries 'view'
+ *  and 'entity' events from the renderer). Whitelists the kind and bounds + de-controls the
+ *  message — closes the cast-only trust gap the handler previously had. */
+export function ensureTimelineEvent(raw: unknown): Omit<TimelineEvent, 'id' | 'at'> {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  const kind = o['kind'];
+  if (typeof kind !== 'string' || !TIMELINE_KINDS.includes(kind as TimelineKind)) {
+    throw new ValidationError('Invalid timeline event kind');
+  }
+  const message = typeof o['message'] === 'string'
+    ? o['message'].replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, 2000)
+    : '';
+  return { kind: kind as TimelineKind, message };
 }
 
 // ---------- entities ----------

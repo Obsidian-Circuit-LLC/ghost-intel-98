@@ -21,10 +21,21 @@ export interface CaseSummary {
   archived: boolean;
 }
 
+export type TimelineKind =
+  | 'created' | 'note' | 'file' | 'link' | 'reminder' | 'task' | 'status' | 'custom'
+  | 'updated' | 'archive' | 'rename' | 'view' | 'entity' | 'bio-image';
+
+/** Widened additively over time — old timeline.json files only contain earlier kinds and keep
+ *  loading; render does no enum-check so forward-version events still display. */
+export const TIMELINE_KINDS: readonly TimelineKind[] = [
+  'created', 'note', 'file', 'link', 'reminder', 'task', 'status', 'custom',
+  'updated', 'archive', 'rename', 'view', 'entity', 'bio-image'
+];
+
 export interface TimelineEvent {
   id: string;
   at: ISODate;
-  kind: 'created' | 'note' | 'file' | 'link' | 'reminder' | 'task' | 'status' | 'custom';
+  kind: TimelineKind;
   message: string;
 }
 
