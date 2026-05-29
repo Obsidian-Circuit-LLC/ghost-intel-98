@@ -19,11 +19,19 @@ export function stop(): void {
   if (child) { child.kill(); child = null; }
 }
 
+export interface ModelProgress { phase: 'import'; message?: string; receivedBytes?: number; totalBytes?: number; }
+
+// The actual import executor, injectable for tests. Default talks to the runtime's HTTP API.
+type RunImport = (mode: 'bundled' | 'online', onProgress?: (p: ModelProgress) => void) => Promise<void>;
+let runImport: RunImport = defaultRunImport;
+export function __setRunForTest(fn: RunImport): void { runImport = fn; }
+
 export function __resetForTest(): void {
   spawnFn = nodeSpawn as unknown as SpawnLike;
   child = null;
   bundledRootFn = defaultBundledRoot;
   bundledOverride = null;
+  runImport = defaultRunImport;
 }
 
 export async function isBundled(): Promise<boolean> {
@@ -53,6 +61,29 @@ export async function detect(): Promise<LocalAiStatus> {
   };
 }
 
+async function defaultRunImport(mode: 'bundled' | 'online', onProgress?: (p: ModelProgress) => void): Promise<void> {
+  if (mode === 'bundled') {
+    // Import the shipped GGUF via a Modelfile the bundle places next to the binary.
+    // (The exact bundled layout is finalized in the packaging task; this points at it.)
+    const modelfilePath = join(bundledRootFn(), 'Modelfile.llama3.1');
+    const res = await fetch(`${LOCAL_AI_ENDPOINT}/api/create`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: LOCAL_AI_MODEL, path: modelfilePath })
+    });
+    if (!res.ok) throw new Error(`Model import failed (HTTP ${res.status}).`);
+    onProgress?.({ phase: 'import', message: 'Imported bundled model.' });
+  } else {
+    const res = await fetch(`${LOCAL_AI_ENDPOINT}/api/pull`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: LOCAL_AI_MODEL })
+    });
+    if (!res.ok) throw new Error(`Model pull failed (HTTP ${res.status}).`);
+    onProgress?.({ phase: 'import', message: 'Pulled model.' });
+  }
+}
+
 export async function ensureRuntime(): Promise<void> {
   if ((await detect()).runtimeUp) return; // reuse existing — never spawn/kill it
   const bundled = await isBundled();
@@ -70,4 +101,11 @@ export async function ensureRuntime(): Promise<void> {
     await new Promise((r) => setTimeout(r, 500));
   }
   throw new Error('Local AI runtime did not become ready in time.');
+}
+
+export async function ensureModel(onProgress?: (p: ModelProgress) => void): Promise<void> {
+  const tags = await probeTags();
+  if (tags?.some((n) => n.startsWith(LOCAL_AI_MODEL))) return; // already present
+  const mode: 'bundled' | 'online' = (await isBundled()) ? 'bundled' : 'online';
+  await runImport(mode, onProgress);
 }

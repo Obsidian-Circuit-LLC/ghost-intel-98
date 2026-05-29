@@ -109,3 +109,31 @@ describe('local-ai stop()', () => {
     expect(kill).not.toHaveBeenCalled();
   });
 });
+
+describe('local-ai ensureModel()', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    localAi.__resetForTest();
+  });
+
+  afterEach(() => {
+    localAi.__resetForTest();
+  });
+
+  it('ensureModel() is a no-op when llama3.1 already present', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ models: [{ name: 'llama3.1' }] }), { status: 200 })));
+    const run = vi.fn();
+    localAi.__setRunForTest(run);
+    await localAi.ensureModel();
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it('ensureModel() runs the import when the model is absent', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ models: [] }), { status: 200 })));
+    const run = vi.fn(async () => {});
+    localAi.__setRunForTest(run);
+    localAi.__setBundledRootForTest('/tmp/ga98-localai-test/res/local-ai');
+    await localAi.ensureModel();
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+});
