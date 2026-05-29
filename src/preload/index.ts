@@ -5,6 +5,7 @@
 
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import { channels } from '../shared/ipc-contracts';
+import type { LocalAiStatus, LocalAiProgress } from '../shared/ipc-contracts';
 
 const api = {
   cases: {
@@ -191,6 +192,17 @@ const api = {
     changePassword: (newPassword: string) => ipcRenderer.invoke(channels.auth.changePassword, newPassword),
     disable: (password: string) => ipcRenderer.invoke(channels.auth.disable, password),
     lock: () => ipcRenderer.invoke(channels.auth.lock)
+  },
+  localAi: {
+    status: (): Promise<LocalAiStatus> => ipcRenderer.invoke(channels.localAi.status),
+    setup: (opts: { mode: 'online' | 'bundled' }): Promise<LocalAiStatus> => ipcRenderer.invoke(channels.localAi.setup, opts),
+    start: (): Promise<void> => ipcRenderer.invoke(channels.localAi.start),
+    stop: (): Promise<void> => ipcRenderer.invoke(channels.localAi.stop),
+    onProgress: (cb: (p: LocalAiProgress) => void): (() => void) => {
+      const listener = (_e: unknown, payload: LocalAiProgress): void => cb(payload);
+      ipcRenderer.on(channels.localAi.onProgress, listener);
+      return () => ipcRenderer.removeListener(channels.localAi.onProgress, listener);
+    }
   }
 } as const;
 

@@ -22,7 +22,7 @@ import type {
   WebLink,
   Whiteboard
 } from '../shared/types';
-import type { EntityCreateInput, EntityLinkOpts, BioAddInput, AuthStatus } from '../shared/ipc-contracts';
+import type { EntityCreateInput, EntityLinkOpts, BioAddInput, AuthStatus, LocalAiStatus, LocalAiProgress } from '../shared/ipc-contracts';
 import type {
   AiChatRequest,
   CameraStream,
@@ -219,6 +219,13 @@ export interface GhostApi {
     changePassword(newPassword: string): Promise<void>;
     disable(password: string): Promise<void>;
     lock(): Promise<void>;
+  };
+  localAi: {
+    status(): Promise<LocalAiStatus>;
+    setup(opts: { mode: 'online' | 'bundled' }): Promise<LocalAiStatus>;
+    start(): Promise<void>;
+    stop(): Promise<void>;
+    onProgress(cb: (p: LocalAiProgress) => void): () => void;
   };
 }
 
