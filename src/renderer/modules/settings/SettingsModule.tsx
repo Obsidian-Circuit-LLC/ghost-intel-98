@@ -151,6 +151,14 @@ function AboutPane({ info }: { info: { version: string; userData: string; platfo
           <li><kbd>Esc</kbd> — Dismiss the topmost dialog</li>
         </ul>
       </fieldset>
+      <fieldset>
+        <legend>Local AI attribution</legend>
+        <p style={{ fontSize: 11, margin: '4px 0' }}>
+          Built with Llama. Llama 3.1 is licensed under the Llama 3.1 Community License,
+          © Meta Platforms, Inc. Local model runtime: Ollama (MIT). Full license texts ship
+          with the bundled installer.
+        </p>
+      </fieldset>
     </>
   );
 }
