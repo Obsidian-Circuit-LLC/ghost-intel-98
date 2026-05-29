@@ -48,6 +48,20 @@ export async function listAll(): Promise<EntityRecord[]> {
   return withLock('entities', () => readJsonArr<EntityRecord>(registryFile()));
 }
 
+/** Merge imported entity records into the registry (used by per-case bundle import). Adds any
+ *  record whose id isn't already present; existing ids are left as-is (recipient wins). */
+export async function importEntities(records: EntityRecord[]): Promise<void> {
+  return withLock('entities', async () => {
+    const all = await readJsonArr<EntityRecord>(registryFile());
+    const have = new Set(all.map((e) => e.id));
+    let changed = false;
+    for (const r of records) {
+      if (r && typeof r.id === 'string' && !have.has(r.id)) { all.push(r); have.add(r.id); changed = true; }
+    }
+    if (changed) await writeJsonArr(registryFile(), all);
+  });
+}
+
 export async function create(input: { type: EntityType; value: string; notes?: string; aliases?: string[] }): Promise<EntityRecord> {
   return withLock('entities', async () => {
     const all = await readJsonArr<EntityRecord>(registryFile());

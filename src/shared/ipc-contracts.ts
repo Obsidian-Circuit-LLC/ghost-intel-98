@@ -46,7 +46,9 @@ export const channels = {
     addLink: 'cases:addLink',
     deleteLink: 'cases:deleteLink',
     addReminder: 'cases:addReminder',
-    deleteReminder: 'cases:deleteReminder'
+    deleteReminder: 'cases:deleteReminder',
+    exportBundle: 'cases:exportBundle',
+    importBundle: 'cases:importBundle'
   },
   notes: {
     list: 'notes:list',
@@ -169,6 +171,10 @@ export const channels = {
     download: 'ftp:download',
     upload: 'ftp:upload',
     disconnect: 'ftp:disconnect'
+  },
+  backup: {
+    create: 'backup:create',
+    restore: 'backup:restore'
   }
 } as const;
 

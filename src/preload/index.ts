@@ -22,7 +22,9 @@ const api = {
     addLink: (id: string, url: string, title: string) => ipcRenderer.invoke(channels.cases.addLink, id, url, title),
     deleteLink: (id: string, linkId: string) => ipcRenderer.invoke(channels.cases.deleteLink, id, linkId),
     addReminder: (id: string, r: unknown) => ipcRenderer.invoke(channels.cases.addReminder, id, r),
-    deleteReminder: (id: string, rid: string) => ipcRenderer.invoke(channels.cases.deleteReminder, id, rid)
+    deleteReminder: (id: string, rid: string) => ipcRenderer.invoke(channels.cases.deleteReminder, id, rid),
+    exportBundle: (id: string) => ipcRenderer.invoke(channels.cases.exportBundle, id),
+    importBundle: () => ipcRenderer.invoke(channels.cases.importBundle)
   },
   files: {
     /** Translate a renderer-side File (from a drop event) into the absolute OS path the main process needs. */
@@ -171,6 +173,10 @@ const api = {
     download: (sessionId: string, name: string) => ipcRenderer.invoke(channels.ftp.download, sessionId, name),
     upload: (sessionId: string) => ipcRenderer.invoke(channels.ftp.upload, sessionId),
     disconnect: (sessionId: string) => ipcRenderer.invoke(channels.ftp.disconnect, sessionId)
+  },
+  backup: {
+    create: () => ipcRenderer.invoke(channels.backup.create),
+    restore: () => ipcRenderer.invoke(channels.backup.restore)
   }
 } as const;
 

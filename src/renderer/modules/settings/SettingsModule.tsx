@@ -8,9 +8,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AccessShortcut, AppSettings } from '@shared/types';
 import { toast } from '../../state/toasts';
+import { confirmDialog } from '../../state/dialogs';
 import logoUrl from '../../assets/logo.png';
 
-type SectionKey = 'about' | 'sound' | 'theme' | 'cases' | 'shortcuts' | 'ai' | 'browser' | 'mail';
+type SectionKey = 'about' | 'sound' | 'theme' | 'cases' | 'shortcuts' | 'ai' | 'browser' | 'mail' | 'backup';
 
 interface Section {
   key: SectionKey;
@@ -26,7 +27,8 @@ const SECTIONS: Section[] = [
   { key: 'shortcuts', label: 'Shortcuts',   glyph: '⚡' },
   { key: 'ai',        label: 'AI Assistant',glyph: '✨' },
   { key: 'browser',   label: 'Browser',     glyph: '🌐' },
-  { key: 'mail',      label: 'Mail',        glyph: '✉' }
+  { key: 'mail',      label: 'Mail',        glyph: '✉' },
+  { key: 'backup',    label: 'Backup',      glyph: '💾' }
 ];
 
 function newShortcutId(): string {
@@ -98,6 +100,7 @@ export function SettingsModule(): JSX.Element {
         {section === 'ai' && <AiPane s={s} patch={patch} />}
         {section === 'browser' && <BrowserPane s={s} patch={patch} />}
         {section === 'mail' && <MailPane />}
+        {section === 'backup' && <BackupPane />}
       </div>
     </div>
   );
@@ -314,6 +317,36 @@ function MailPane(): JSX.Element {
     <fieldset>
       <legend>Mail</legend>
       <p style={{ fontSize: 12 }}>Add accounts from the Mail module. Each account stores its IMAP/SMTP password in <code>secrets.enc</code>, encrypted via your OS keyring.</p>
+    </fieldset>
+  );
+}
+
+function BackupPane(): JSX.Element {
+  return (
+    <fieldset>
+      <legend>Backup / Restore</legend>
+      <p style={{ fontSize: 12, marginTop: 0 }}>
+        Save all your cases, notes, attachments, entities, and settings to a single <code>.ga98</code>
+        {' '}file — a safety copy, or to move everything to another machine.
+      </p>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <button onClick={async () => {
+          try { const saved = await window.api.backup.create(); if (saved) toast.success(`Backup saved: ${saved}`); }
+          catch (err) { toast.error(`Backup failed: ${(err as Error).message}`); }
+        }}>Create backup…</button>
+        <button onClick={async () => {
+          const ok = await confirmDialog('Restore overwrites your current data with the backup’s contents. Continue?', 'Restore backup');
+          if (!ok) return;
+          try {
+            const r = await window.api.backup.restore();
+            if (r) toast.success(`Restored ${r.files} files. Restart the app to load everything.`);
+          } catch (err) { toast.error(`Restore failed: ${(err as Error).message}`); }
+        }}>Restore…</button>
+      </div>
+      <p style={{ fontSize: 11, color: '#900', marginTop: 8 }}>
+        Encrypted credentials (Mail / SSH / AI passwords) are OS-keyring-bound and do not transfer to
+        another machine — re-enter them there.
+      </p>
     </fieldset>
   );
 }

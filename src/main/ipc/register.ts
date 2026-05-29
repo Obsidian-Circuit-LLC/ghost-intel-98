@@ -40,6 +40,7 @@ import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, v
 import * as entities from '../storage/entities';
 import * as bioStore from '../storage/bio-images';
 import * as ftp from '../services/ftp';
+import * as backup from '../services/backup';
 import { buildSummaryHtml, renderCasePdf } from '../services/export';
 import { timelineCsv, linksCsv, entitiesCsv, attachmentsCsv } from '../services/csv';
 import * as search from '../services/search';
@@ -264,6 +265,55 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     if (result.canceled || result.filePaths.length === 0) return null;
     const localPath = result.filePaths[0];
     return ftp.uploadFromPath(sessionId, localPath, basename(localPath));
+  });
+
+  // ---- full backup / restore ----
+  safeHandle(channels.backup.create, async () => {
+    const win = getWindow();
+    const result = win
+      ? await dialog.showSaveDialog(win, { defaultPath: 'ghost-access-98-backup.ga98' })
+      : await dialog.showSaveDialog({ defaultPath: 'ghost-access-98-backup.ga98' });
+    if (result.canceled || !result.filePath) return null;
+    try {
+      const st = await lstat(result.filePath);
+      if (st.isSymbolicLink()) throw new Error('Refusing to write to a symbolic link.');
+    } catch (err) { if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err; }
+    await backup.createBackup(result.filePath);
+    return basename(result.filePath);
+  });
+  safeHandle(channels.backup.restore, async () => {
+    const win = getWindow();
+    const result = win
+      ? await dialog.showOpenDialog(win, { properties: ['openFile'], filters: [{ name: 'Ghost Access 98 backup', extensions: ['ga98', 'zip'] }] })
+      : await dialog.showOpenDialog({ properties: ['openFile'] });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    return backup.restoreBackup(result.filePaths[0]);
+  });
+
+  // ---- per-case share bundle ----
+  safeHandle(channels.cases.exportBundle, async (...args) => {
+    const id = ensureUuid(args[0], 'caseId');
+    const rec = await caseStore.read(id);
+    const win = getWindow();
+    const def = sanitiseSaveDefault(`${rec.title}.ga98case`);
+    const result = win
+      ? await dialog.showSaveDialog(win, { defaultPath: def })
+      : await dialog.showSaveDialog({ defaultPath: def });
+    if (result.canceled || !result.filePath) return null;
+    try {
+      const st = await lstat(result.filePath);
+      if (st.isSymbolicLink()) throw new Error('Refusing to write to a symbolic link.');
+    } catch (err) { if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err; }
+    await backup.exportCase(id, result.filePath);
+    return basename(result.filePath);
+  });
+  safeHandle(channels.cases.importBundle, async () => {
+    const win = getWindow();
+    const result = win
+      ? await dialog.showOpenDialog(win, { properties: ['openFile'], filters: [{ name: 'Ghost Access 98 case', extensions: ['ga98case', 'zip'] }] })
+      : await dialog.showOpenDialog({ properties: ['openFile'] });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    return backup.importCase(result.filePaths[0]);
   });
   safeHandle(channels.files.pickOpen, async (...args) => {
     const opts = (args[0] as { multi?: boolean; filters?: unknown }) ?? {};

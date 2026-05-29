@@ -75,6 +75,8 @@ export interface GhostApi {
     deleteLink(id: string, linkId: string): Promise<void>;
     addReminder(id: string, r: Omit<Reminder, 'id' | 'fired' | 'caseId'>): Promise<Reminder>;
     deleteReminder(id: string, rid: string): Promise<void>;
+    exportBundle(id: string): Promise<string | null>;
+    importBundle(): Promise<{ caseId: string } | null>;
   };
   files: {
     getPathForFile(file: File): string;
@@ -198,6 +200,10 @@ export interface GhostApi {
     download(sessionId: string, name: string): Promise<string | null>;
     upload(sessionId: string): Promise<FtpListing | null>;
     disconnect(sessionId: string): Promise<void>;
+  };
+  backup: {
+    create(): Promise<string | null>;
+    restore(): Promise<{ files: number } | null>;
   };
 }
 
