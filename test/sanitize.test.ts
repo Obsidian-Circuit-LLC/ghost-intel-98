@@ -43,4 +43,9 @@ describe('sanitizeHtml — no-egress (the load-bearing guarantee)', () => {
     const out = sanitizeHtml('<link rel="stylesheet" href="https://evil/style.css">');
     expect(out).not.toMatch(/evil/);
   });
+  it('strips SVG <image href> and <use href> remote loads (SVG2 plain-href vector)', () => {
+    expect(sanitizeHtml('<svg><image href="https://evil/x.png"/></svg>')).not.toMatch(/evil/);
+    expect(sanitizeHtml('<svg><use href="https://evil/y#g"/></svg>')).not.toMatch(/evil/);
+    expect(sanitizeHtml('<svg><image xlink:href="https://evil/z.png"/></svg>')).not.toMatch(/evil/);
+  });
 });

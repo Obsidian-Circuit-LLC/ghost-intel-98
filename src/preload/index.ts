@@ -132,6 +132,17 @@ const api = {
       ipcRenderer.on(channels.ai.onChatChunk, l);
       return () => ipcRenderer.removeListener(channels.ai.onChatChunk, l);
     }
+  },
+  entities: {
+    listAll: () => ipcRenderer.invoke(channels.entities.listAll),
+    create: (input: unknown) => ipcRenderer.invoke(channels.entities.create, input),
+    update: (id: string, patch: unknown) => ipcRenderer.invoke(channels.entities.update, id, patch),
+    delete: (id: string) => ipcRenderer.invoke(channels.entities.delete, id),
+    merge: (keepId: string, mergeId: string) => ipcRenderer.invoke(channels.entities.merge, keepId, mergeId),
+    linkToCase: (caseId: string, entityId: string, opts: unknown) => ipcRenderer.invoke(channels.entities.linkToCase, caseId, entityId, opts),
+    unlinkFromCase: (caseId: string, entityId: string) => ipcRenderer.invoke(channels.entities.unlinkFromCase, caseId, entityId),
+    setRelationship: (caseId: string, entityId: string, rel: string | null) => ipcRenderer.invoke(channels.entities.setRelationship, caseId, entityId, rel),
+    casesForEntity: (entityId: string) => ipcRenderer.invoke(channels.entities.casesForEntity, entityId)
   }
 } as const;
 

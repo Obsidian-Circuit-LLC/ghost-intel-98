@@ -11,12 +11,15 @@ import type {
   CaseSummary,
   CreateCaseInput,
   EmlPreview,
+  EntityRecord,
+  EntityRelationship,
   ExtractedAttachmentMeta,
   Reminder,
   TaskItem,
   TimelineEvent,
   WebLink
 } from '../shared/types';
+import type { EntityCreateInput, EntityLinkOpts } from '../shared/ipc-contracts';
 import type {
   AiChatRequest,
   CameraStream,
@@ -152,6 +155,17 @@ export interface GhostApi {
     cancel(streamId: string): Promise<void>;
     setApiKey(value: string): Promise<void>;
     onChunk(cb: (payload: { streamId: string; chunk?: string; done?: boolean; error?: string }) => void): () => void;
+  };
+  entities: {
+    listAll(): Promise<EntityRecord[]>;
+    create(input: EntityCreateInput): Promise<EntityRecord>;
+    update(id: string, patch: Partial<EntityCreateInput>): Promise<EntityRecord>;
+    delete(id: string): Promise<void>;
+    merge(keepId: string, mergeId: string): Promise<EntityRecord>;
+    linkToCase(caseId: string, entityId: string, opts: EntityLinkOpts): Promise<void>;
+    unlinkFromCase(caseId: string, entityId: string): Promise<void>;
+    setRelationship(caseId: string, entityId: string, rel: EntityRelationship | null): Promise<void>;
+    casesForEntity(entityId: string): Promise<{ caseId: string; title: string }[]>;
   };
 }
 

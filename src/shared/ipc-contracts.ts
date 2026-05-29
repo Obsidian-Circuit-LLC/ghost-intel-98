@@ -13,12 +13,18 @@ import type {
   CaseSummary,
   CreateCaseInput,
   EmlPreview,
+  EntityRecord,
+  EntityRelationship,
+  EntityType,
   ExtractedAttachmentMeta,
   Reminder,
   TaskItem,
   TimelineEvent,
   WebLink
 } from './types';
+
+export interface EntityCreateInput { type: EntityType; value: string; notes?: string; aliases?: string[] }
+export interface EntityLinkOpts { relationship?: EntityRelationship; linkIds?: string[]; attachmentFileNames?: string[] }
 
 export const channels = {
   cases: {
@@ -120,6 +126,17 @@ export const channels = {
     chatStream: 'ai:chatStream',
     setApiKey: 'ai:setApiKey',
     onChatChunk: 'ai:onChatChunk'
+  },
+  entities: {
+    listAll: 'entities:listAll',
+    create: 'entities:create',
+    update: 'entities:update',
+    delete: 'entities:delete',
+    merge: 'entities:merge',
+    linkToCase: 'entities:linkToCase',
+    unlinkFromCase: 'entities:unlinkFromCase',
+    setRelationship: 'entities:setRelationship',
+    casesForEntity: 'entities:casesForEntity'
   }
 } as const;
 
@@ -152,6 +169,16 @@ export interface ApiContracts {
   [channels.files.readEml]: { args: [CaseId, string]; returns: EmlPreview };
   [channels.files.extractAttachmentMeta]: { args: [CaseId, string]; returns: ExtractedAttachmentMeta };
   [channels.files.renameAttachment]: { args: [CaseId, string, string]; returns: string };
+
+  [channels.entities.listAll]: { args: []; returns: EntityRecord[] };
+  [channels.entities.create]: { args: [EntityCreateInput]; returns: EntityRecord };
+  [channels.entities.update]: { args: [string, Partial<EntityCreateInput>]; returns: EntityRecord };
+  [channels.entities.delete]: { args: [string]; returns: void };
+  [channels.entities.merge]: { args: [string, string]; returns: EntityRecord };
+  [channels.entities.linkToCase]: { args: [CaseId, string, EntityLinkOpts]; returns: void };
+  [channels.entities.unlinkFromCase]: { args: [CaseId, string]; returns: void };
+  [channels.entities.setRelationship]: { args: [CaseId, string, EntityRelationship | null]; returns: void };
+  [channels.entities.casesForEntity]: { args: [string]; returns: { caseId: string; title: string }[] };
 
   [channels.notes.list]: { args: [CaseId]; returns: { name: string; updatedAt: string }[] };
   [channels.notes.read]: { args: [CaseId, string]; returns: string };

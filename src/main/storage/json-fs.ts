@@ -31,6 +31,7 @@ import type {
 } from '@shared/types';
 import exifr from 'exifr';
 import { simpleParser, type AddressObject } from 'mailparser';
+import { resolveCaseEntities } from './entities';
 import { defaultSettings } from '@shared/types';
 import type { CaseStore, FileStore, NoteStore, ReminderStore, SettingsStore, ShredStore } from './interface';
 import {
@@ -130,15 +131,16 @@ async function writeCaseMeta(meta: OnDiskCase): Promise<void> {
 
 async function loadFullCase(id: CaseId): Promise<CaseRecord> {
   const meta = await readCaseMeta(id);
-  const [timeline, tasks, links, reminders, notes, attachments] = await Promise.all([
+  const [timeline, tasks, links, reminders, notes, attachments, entities] = await Promise.all([
     readJson<TimelineEvent[]>(caseTimelineFile(id), []),
     readJson<TaskItem[]>(caseTasksFile(id), []),
     readJson<WebLink[]>(caseLinksFile(id), []),
     readJson<Reminder[]>(caseRemindersFile(id), []),
     listNotes(id),
-    listAttachmentsImpl(id)
+    listAttachmentsImpl(id),
+    resolveCaseEntities(id)
   ]);
-  return { ...meta, notes, attachments, links, timeline, tasks, reminders };
+  return { ...meta, notes, attachments, links, timeline, tasks, reminders, entities };
 }
 
 export const caseStore: CaseStore = {
