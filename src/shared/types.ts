@@ -19,6 +19,31 @@ export interface CaseSummary {
   createdAt: ISODate;
   updatedAt: ISODate;
   archived: boolean;
+  /** Small base64 data-URI of the case's primary bio thumbnail, if any. Optional + null-safe:
+   *  legacy summaries and bio-less cases omit it; the list UI must tolerate undefined. */
+  primaryBioThumb?: string;
+}
+
+export type ImageMime = 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif';
+export const IMAGE_MIMES: readonly ImageMime[] = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+
+/** A bio/profile image attached to a case. Original + a generated thumbnail live under
+ *  caseDir/bio-images/ and bio-thumbs/; metadata is indexed in bio-images.json. No hashing. */
+export interface BioImage {
+  id: string;
+  fileName: string;
+  thumbName: string;
+  originalName: string;
+  mime: ImageMime;
+  width: number;
+  height: number;
+  size: number;
+  importedAt: ISODate;
+  caption?: string;
+  /** Transient: thumbnail data-URI, inlined on read for direct <img> rendering. Never persisted. */
+  thumbDataUri?: string;
+  /** Transient: true if this is the case's primary image. Never persisted. */
+  isPrimary?: boolean;
 }
 
 export type TimelineKind =
@@ -206,6 +231,7 @@ export interface CaseRecord extends CaseSummary {
   tasks: TaskItem[];
   reminders: Reminder[];
   entities: ResolvedEntity[];
+  bioImages: BioImage[];
 }
 
 export interface CreateCaseInput {

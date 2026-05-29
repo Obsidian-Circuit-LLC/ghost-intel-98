@@ -32,6 +32,7 @@ import type {
 import exifr from 'exifr';
 import { simpleParser, type AddressObject } from 'mailparser';
 import { resolveCaseEntities } from './entities';
+import * as bioImages from './bio-images';
 import { defaultSettings } from '@shared/types';
 import type { CaseStore, FileStore, NoteStore, ReminderStore, SettingsStore, ShredStore } from './interface';
 import {
@@ -131,16 +132,17 @@ async function writeCaseMeta(meta: OnDiskCase): Promise<void> {
 
 async function loadFullCase(id: CaseId): Promise<CaseRecord> {
   const meta = await readCaseMeta(id);
-  const [timeline, tasks, links, reminders, notes, attachments, entities] = await Promise.all([
+  const [timeline, tasks, links, reminders, notes, attachments, entities, bioImagesList] = await Promise.all([
     readJson<TimelineEvent[]>(caseTimelineFile(id), []),
     readJson<TaskItem[]>(caseTasksFile(id), []),
     readJson<WebLink[]>(caseLinksFile(id), []),
     readJson<Reminder[]>(caseRemindersFile(id), []),
     listNotes(id),
     listAttachmentsImpl(id),
-    resolveCaseEntities(id)
+    resolveCaseEntities(id),
+    bioImages.listResolved(id)
   ]);
-  return { ...meta, notes, attachments, links, timeline, tasks, reminders, entities };
+  return { ...meta, notes, attachments, links, timeline, tasks, reminders, entities, bioImages: bioImagesList };
 }
 
 export const caseStore: CaseStore = {
@@ -158,6 +160,10 @@ export const caseStore: CaseStore = {
     for (const id of entries) {
       try {
         const meta = await readCaseMeta(id);
+        // Hot-path extra: a tiny primary-thumbnail data-URI for the list row. Guarded so a
+        // missing/corrupt thumb never breaks the listing.
+        let primaryBioThumb: string | undefined;
+        try { primaryBioThumb = await bioImages.primaryThumb(id); } catch { primaryBioThumb = undefined; }
         summaries.push({
           id: meta.id,
           title: meta.title,
@@ -167,7 +173,8 @@ export const caseStore: CaseStore = {
           tags: meta.tags,
           createdAt: meta.createdAt,
           updatedAt: meta.updatedAt,
-          archived: meta.archived
+          archived: meta.archived,
+          primaryBioThumb
         });
       } catch (err) {
         // surface a placeholder so the UI can see something is wrong with this case dir,

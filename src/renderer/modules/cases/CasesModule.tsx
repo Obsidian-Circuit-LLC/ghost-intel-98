@@ -189,6 +189,9 @@ export function CasesModule(): JSX.Element {
             {visible.length === 0 && <li style={{ color: '#666' }}>No cases. Click <b>New</b>.</li>}
             {visible.map((c) => (
               <li key={c.id} data-selected={c.id === selectedId} onClick={() => setSelectedId(c.id)}>
+                {c.primaryBioThumb && (
+                  <img src={c.primaryBioThumb} alt="" style={{ width: 20, height: 20, objectFit: 'cover', marginRight: 4, border: '1px solid #808080' }} />
+                )}
                 <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   <b>{c.title}</b>
                   {c.reference ? <span style={{ opacity: 0.7 }}> [{c.reference}]</span> : null}

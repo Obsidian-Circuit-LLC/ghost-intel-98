@@ -8,6 +8,7 @@ import type {
   AttachmentBytesResult,
   AttachmentMeta,
   AttachmentTextResult,
+  BioImage,
   CaseId,
   CaseRecord,
   CaseSummary,
@@ -17,6 +18,7 @@ import type {
   EntityRelationship,
   EntityType,
   ExtractedAttachmentMeta,
+  ImageMime,
   Reminder,
   TaskItem,
   TimelineEvent,
@@ -25,6 +27,7 @@ import type {
 
 export interface EntityCreateInput { type: EntityType; value: string; notes?: string; aliases?: string[] }
 export interface EntityLinkOpts { relationship?: EntityRelationship; linkIds?: string[]; attachmentFileNames?: string[] }
+export interface BioAddInput { originalName: string; mime: ImageMime; width: number; height: number; originalBase64: string; thumbBase64: string }
 
 export const channels = {
   cases: {
@@ -137,6 +140,14 @@ export const channels = {
     unlinkFromCase: 'entities:unlinkFromCase',
     setRelationship: 'entities:setRelationship',
     casesForEntity: 'entities:casesForEntity'
+  },
+  bioImages: {
+    add: 'bioImages:add',
+    delete: 'bioImages:delete',
+    setPrimary: 'bioImages:setPrimary',
+    updateCaption: 'bioImages:updateCaption',
+    readOriginal: 'bioImages:readOriginal',
+    reveal: 'bioImages:reveal'
   }
 } as const;
 
@@ -179,6 +190,13 @@ export interface ApiContracts {
   [channels.entities.unlinkFromCase]: { args: [CaseId, string]; returns: void };
   [channels.entities.setRelationship]: { args: [CaseId, string, EntityRelationship | null]; returns: void };
   [channels.entities.casesForEntity]: { args: [string]; returns: { caseId: string; title: string }[] };
+
+  [channels.bioImages.add]: { args: [CaseId, BioAddInput]; returns: BioImage };
+  [channels.bioImages.delete]: { args: [CaseId, string]; returns: void };
+  [channels.bioImages.setPrimary]: { args: [CaseId, string]; returns: void };
+  [channels.bioImages.updateCaption]: { args: [CaseId, string, string]; returns: void };
+  [channels.bioImages.readOriginal]: { args: [CaseId, string]; returns: string | null };
+  [channels.bioImages.reveal]: { args: [CaseId, string]; returns: void };
 
   [channels.notes.list]: { args: [CaseId]; returns: { name: string; updatedAt: string }[] };
   [channels.notes.read]: { args: [CaseId, string]; returns: string };

@@ -36,8 +36,9 @@ import * as streams from '../services/streams';
 import * as ai from '../services/ai';
 import * as bookmarks from '../storage/bookmarks';
 import * as history from '../storage/history';
-import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent } from '../security/validate';
+import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput } from '../security/validate';
 import * as entities from '../storage/entities';
+import * as bioStore from '../storage/bio-images';
 import { markConsented, assertAllConsented } from '../security/consent';
 import { getSecretBackend } from '../secrets';
 import { homedir } from 'node:os';
@@ -152,6 +153,18 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.entities.unlinkFromCase, (...args) => entities.unlinkFromCase(ensureUuid(args[0], 'caseId'), ensureEntityId(args[1])));
   safeHandle(channels.entities.setRelationship, (...args) => entities.setRelationship(ensureUuid(args[0], 'caseId'), ensureEntityId(args[1]), ensureRelationship(args[2])));
   safeHandle(channels.entities.casesForEntity, (...args) => entities.casesForEntity(ensureEntityId(args[0])));
+
+  // ---- bio images ----
+  safeHandle(channels.bioImages.add, (...args) => bioStore.add(ensureUuid(args[0], 'caseId'), ensureBioInput(args[1])));
+  safeHandle(channels.bioImages.delete, (...args) => bioStore.remove(ensureUuid(args[0], 'caseId'), ensureBioId(args[1])));
+  safeHandle(channels.bioImages.setPrimary, (...args) => bioStore.setPrimary(ensureUuid(args[0], 'caseId'), ensureBioId(args[1])));
+  safeHandle(channels.bioImages.updateCaption, (...args) => bioStore.updateCaption(ensureUuid(args[0], 'caseId'), ensureBioId(args[1]), args[2] as string));
+  safeHandle(channels.bioImages.readOriginal, (...args) => bioStore.readOriginalDataUri(ensureUuid(args[0], 'caseId'), ensureBioId(args[1])));
+  safeHandle(channels.bioImages.reveal, (...args) => {
+    const id = ensureUuid(args[0], 'caseId');
+    const name = ensureFileName(args[1], 'fileName');
+    shell.showItemInFolder(bioStore.originalAbsolutePath(id, name));
+  });
   safeHandle(channels.files.pickOpen, async (...args) => {
     const opts = (args[0] as { multi?: boolean; filters?: unknown }) ?? {};
     const filters = validatePickFilters(opts.filters);

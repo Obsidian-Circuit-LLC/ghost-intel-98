@@ -143,6 +143,14 @@ const api = {
     unlinkFromCase: (caseId: string, entityId: string) => ipcRenderer.invoke(channels.entities.unlinkFromCase, caseId, entityId),
     setRelationship: (caseId: string, entityId: string, rel: string | null) => ipcRenderer.invoke(channels.entities.setRelationship, caseId, entityId, rel),
     casesForEntity: (entityId: string) => ipcRenderer.invoke(channels.entities.casesForEntity, entityId)
+  },
+  bioImages: {
+    add: (caseId: string, input: unknown) => ipcRenderer.invoke(channels.bioImages.add, caseId, input),
+    delete: (caseId: string, id: string) => ipcRenderer.invoke(channels.bioImages.delete, caseId, id),
+    setPrimary: (caseId: string, id: string) => ipcRenderer.invoke(channels.bioImages.setPrimary, caseId, id),
+    updateCaption: (caseId: string, id: string, caption: string) => ipcRenderer.invoke(channels.bioImages.updateCaption, caseId, id, caption),
+    readOriginal: (caseId: string, id: string) => ipcRenderer.invoke(channels.bioImages.readOriginal, caseId, id),
+    reveal: (caseId: string, fileName: string) => ipcRenderer.invoke(channels.bioImages.reveal, caseId, fileName)
   }
 } as const;
 

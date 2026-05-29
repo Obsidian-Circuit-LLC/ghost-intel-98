@@ -7,6 +7,7 @@ import type {
   AttachmentBytesResult,
   AttachmentMeta,
   AttachmentTextResult,
+  BioImage,
   CaseRecord,
   CaseSummary,
   CreateCaseInput,
@@ -19,7 +20,7 @@ import type {
   TimelineEvent,
   WebLink
 } from '../shared/types';
-import type { EntityCreateInput, EntityLinkOpts } from '../shared/ipc-contracts';
+import type { EntityCreateInput, EntityLinkOpts, BioAddInput } from '../shared/ipc-contracts';
 import type {
   AiChatRequest,
   CameraStream,
@@ -166,6 +167,14 @@ export interface GhostApi {
     unlinkFromCase(caseId: string, entityId: string): Promise<void>;
     setRelationship(caseId: string, entityId: string, rel: EntityRelationship | null): Promise<void>;
     casesForEntity(entityId: string): Promise<{ caseId: string; title: string }[]>;
+  };
+  bioImages: {
+    add(caseId: string, input: BioAddInput): Promise<BioImage>;
+    delete(caseId: string, id: string): Promise<void>;
+    setPrimary(caseId: string, id: string): Promise<void>;
+    updateCaption(caseId: string, id: string, caption: string): Promise<void>;
+    readOriginal(caseId: string, id: string): Promise<string | null>;
+    reveal(caseId: string, fileName: string): Promise<void>;
   };
 }
 

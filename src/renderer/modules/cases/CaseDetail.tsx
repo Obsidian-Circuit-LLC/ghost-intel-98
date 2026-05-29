@@ -10,6 +10,7 @@ import { playError } from '../../audio/synth';
 import { confirmDialog, promptDialog } from '../../state/dialogs';
 import { toast } from '../../state/toasts';
 import { EntitiesSection } from './EntitiesSection';
+import { BioImagesSection } from './BioImagesSection';
 
 interface Props {
   record: CaseRecord;
@@ -121,6 +122,8 @@ export function CaseDetail({ record, onChange, onArchive, onRefresh, onUpdateFie
           </ul>
         )}
       </fieldset>
+
+      <BioImagesSection caseId={record.id} images={record.bioImages ?? []} onRefresh={onRefresh} />
 
       <fieldset>
         <legend>Web links</legend>

@@ -10,7 +10,7 @@ import { resolve, relative, isAbsolute, normalize } from 'node:path';
 import { realpath } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isIP, isIPv6 } from 'node:net';
-import { ENTITY_TYPES, ENTITY_RELATIONSHIPS, TIMELINE_KINDS, type EntityType, type EntityRelationship, type TimelineKind, type TimelineEvent } from '@shared/types';
+import { ENTITY_TYPES, ENTITY_RELATIONSHIPS, TIMELINE_KINDS, IMAGE_MIMES, type EntityType, type EntityRelationship, type TimelineKind, type TimelineEvent, type ImageMime } from '@shared/types';
 
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -151,6 +151,37 @@ export function ensureLinkOpts(raw: unknown): { relationship?: EntityRelationshi
     out.attachmentFileNames = (o['attachmentFileNames'] as unknown[]).map((x) => ensureFileName(x, 'attachmentFileName'));
   }
   return out;
+}
+
+// ---------- bio images ----------
+
+const BIO_ID = /^bio-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function ensureBioId(id: unknown): string {
+  if (typeof id !== 'string' || !BIO_ID.test(id)) throw new ValidationError('Invalid bio image id');
+  return id;
+}
+
+export function ensureImageMime(m: unknown): ImageMime {
+  if (typeof m !== 'string' || !IMAGE_MIMES.includes(m as ImageMime)) throw new ValidationError('Unsupported image type (allowed: JPG, PNG, WEBP, GIF)');
+  return m as ImageMime;
+}
+
+interface BioAddClean { originalName: string; mime: ImageMime; width: number; height: number; originalBase64: string; thumbBase64: string }
+
+/** Validate a bio-image add payload. base64 length caps are enforced in the store; here we
+ *  whitelist the mime, bound the name + dimensions, and confirm the base64 fields are strings. */
+export function ensureBioInput(raw: unknown): BioAddClean {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  const mime = ensureImageMime(o['mime']);
+  const originalName = typeof o['originalName'] === 'string' && o['originalName'].length > 0 && o['originalName'].length <= 200
+    ? o['originalName'] : 'image';
+  const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 100000 ? Math.floor(v) : 0);
+  const originalBase64 = o['originalBase64'];
+  const thumbBase64 = o['thumbBase64'];
+  if (typeof originalBase64 !== 'string' || originalBase64.length === 0) throw new ValidationError('Missing image data');
+  if (typeof thumbBase64 !== 'string' || thumbBase64.length === 0) throw new ValidationError('Missing thumbnail data');
+  return { originalName, mime, width: num(o['width']), height: num(o['height']), originalBase64, thumbBase64 };
 }
 
 /** Stricter sanitiser used at the OS-save-dialog default path — strips control bytes,
