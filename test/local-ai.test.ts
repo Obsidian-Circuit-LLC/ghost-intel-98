@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterAll, afterEach } from 'vitest';
 import { mkdir, writeFile, rm } from 'node:fs/promises';
 vi.mock('electron', () => ({ app: { getPath: () => '/tmp/ga98-localai-test' } }));
 import * as localAi from '../src/main/services/local-ai';
@@ -34,5 +34,42 @@ describe('local-ai isBundled()', () => {
     await writeFile('/tmp/ga98-localai-test/res/local-ai/ollama', 'x');
     await writeFile('/tmp/ga98-localai-test/res/local-ai/MODEL_PRESENT', 'llama3.1');
     expect(await localAi.isBundled()).toBe(true);
+  });
+});
+
+describe('local-ai ensureRuntime()', () => {
+  beforeEach(async () => {
+    vi.restoreAllMocks();
+    localAi.__resetForTest();
+    // Ensure the bundled binary fixture exists on disk for spawn tests
+    await mkdir('/tmp/ga98-localai-test/res/local-ai/models', { recursive: true });
+    await writeFile('/tmp/ga98-localai-test/res/local-ai/ollama', 'x');
+    await writeFile('/tmp/ga98-localai-test/res/local-ai/MODEL_PRESENT', 'llama3.1');
+  });
+
+  afterEach(async () => {
+    localAi.__resetForTest();
+    await rm('/tmp/ga98-localai-test/res', { recursive: true, force: true });
+  });
+
+  it('ensureRuntime() reuses an existing runtime without spawning', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ models: [] }), { status: 200 })));
+    const spawn = vi.fn();
+    localAi.__setSpawnForTest(spawn);
+    await localAi.ensureRuntime();
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
+  it('ensureRuntime() spawns the managed child (loopback env) when none is up', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockImplementationOnce(async () => { throw new Error('down'); })   // initial detect
+      .mockImplementation(async () => new Response(JSON.stringify({ models: [] }), { status: 200 }))); // readiness
+    const spawn = vi.fn(() => ({ on: vi.fn(), kill: vi.fn(), pid: 123 }));
+    localAi.__setSpawnForTest(spawn);
+    localAi.__setBundledRootForTest('/tmp/ga98-localai-test/res/local-ai'); // binary present from 1.3 test setup
+    await localAi.ensureRuntime();
+    expect(spawn).toHaveBeenCalledTimes(1);
+    const env = spawn.mock.calls[0][2].env;
+    expect(env.OLLAMA_HOST).toBe('127.0.0.1:11434');
   });
 });
