@@ -18,8 +18,18 @@ import { randomUUID } from 'node:crypto';
 import type { SecretStore } from '../storage/interface';
 import { secretsFile } from '../storage/paths';
 import { withLock } from '../util/mutex';
+import * as vault from '../services/vault';
 
 type Blob = Record<string, string>;
+
+/** secrets.enc is normally keyring-bound (DPAPI/Keychain/libsecret). On Linux without a real
+ *  keyring, safeStorage falls back to `basic_text` — trivially reversible obfuscation. In that
+ *  case ONLY, and while the vault is enabled, we additionally wrap the blob with the vault DEK so
+ *  enabling encryption actually protects stored credentials too (red-team #11). On a strong
+ *  backend this is a no-op and the on-disk format is byte-identical to before. */
+function weakKeyringBackend(): boolean {
+  return getSecretBackend() === 'basic_text';
+}
 
 export class SecretsUnavailableError extends Error {
   constructor() {
@@ -49,6 +59,20 @@ async function readBlob(): Promise<Blob> {
     }
     throw err;
   }
+  // Optional vault DEK layer (weak-keyring hardening). Magic-byte detected so plaintext-keyring
+  // and DEK-wrapped blobs coexist across an enable/disable transition.
+  if (vault.isEncrypted(buf)) {
+    if (!vault.isUnlocked()) {
+      blobUnreadable = new SecretsCorruptedError('vault locked — unlock to read secrets');
+      throw blobUnreadable;
+    }
+    try {
+      buf = vault.decryptBuffer(buf);
+    } catch (err) {
+      blobUnreadable = new SecretsCorruptedError(`vault decrypt failed (${(err as Error).message})`);
+      throw blobUnreadable;
+    }
+  }
   if (!safeStorage.isEncryptionAvailable()) {
     blobUnreadable = new SecretsCorruptedError('encryption backend not available');
     throw new SecretsUnavailableError();
@@ -74,10 +98,30 @@ async function writeBlob(blob: Blob): Promise<void> {
   }
   const dir = dirname(secretsFile());
   await mkdir(dir, { recursive: true });
-  const enc = safeStorage.encryptString(JSON.stringify(blob));
+  let enc: Buffer = safeStorage.encryptString(JSON.stringify(blob));
+  // On a weak keyring, add the vault DEK layer (defence in depth). shouldEncrypt() is false during
+  // a disable sweep, so this naturally strips the DEK layer back off before the DEK is destroyed.
+  if (weakKeyringBackend() && vault.shouldEncrypt()) enc = vault.encryptBuffer(enc);
   const tmp = `${secretsFile()}.${process.pid}.${randomUUID().slice(0, 8)}.tmp`;
   await writeFile(tmp, enc);
   await rename(tmp, secretsFile());
+}
+
+/** Re-apply the current DEK-layer policy to secrets.enc — called when the vault is enabled
+ *  (adds the layer on a weak keyring) and when disabled (shouldEncrypt() is false → strips it
+ *  while the DEK is still loaded). No-op if no secrets file exists or on a strong keyring. */
+export async function rewrapSecretsForVault(): Promise<void> {
+  if (!weakKeyringBackend()) return; // DEK layer only applies on a weak keyring — no-op otherwise
+  return withLock('secrets', async () => {
+    try {
+      await readFile(secretsFile()); // existence probe — nothing to rewrap if absent
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return;
+      throw err;
+    }
+    const blob = await readBlob(); // unwraps the DEK layer if present (vault must be unlocked)
+    await writeBlob(blob);         // re-applies current policy (wrap iff weak + shouldEncrypt)
+  });
 }
 
 export const secretStore: SecretStore = {

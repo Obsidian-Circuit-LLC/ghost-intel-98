@@ -369,6 +369,42 @@ function swap<T>(arr: T[], i: number, j: number): T[] {
   return next;
 }
 
+/** Minimum master-password length. Mirrors main-process ensureNewPassword (defence in depth):
+ *  a .ga98 backup bundles the wrapped DEK, so the password is an offline scrypt-cracking target. */
+const MIN_PW_LEN = 12;
+
+/** Lightweight inline strength estimate (no external dep). Heuristic only — length + variety. */
+function pwStrength(pw: string): { score: number; label: string; color: string } {
+  if (!pw) return { score: 0, label: '', color: '#c0c0c0' };
+  let s = 0;
+  if (pw.length >= MIN_PW_LEN) s++;
+  if (pw.length >= 16) s++;
+  if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) s++;
+  if (/\d/.test(pw)) s++;
+  if (/[^A-Za-z0-9]/.test(pw)) s++;
+  const score = Math.min(4, s);
+  return {
+    score,
+    label: ['Very weak', 'Weak', 'Fair', 'Good', 'Strong'][score],
+    color: ['#a00000', '#c06000', '#a0a000', '#2080a0', '#008000'][score]
+  };
+}
+
+function StrengthMeter({ pw }: { pw: string }): JSX.Element | null {
+  if (!pw) return null;
+  const { score, label, color } = pwStrength(pw);
+  return (
+    <div style={{ marginTop: 2 }}>
+      <div style={{ height: 6, background: '#dfdfdf', border: '1px solid #808080' }}>
+        <div style={{ height: '100%', width: `${(score + 1) * 20}%`, background: color }} />
+      </div>
+      <span style={{ fontSize: 11, color }}>
+        {label}{pw.length < MIN_PW_LEN ? ` — needs ${MIN_PW_LEN}+ characters` : ''}
+      </span>
+    </div>
+  );
+}
+
 function SecurityPane(): JSX.Element {
   const refreshAuth = useAuth((st) => st.refresh);
   const [enabled, setEnabled] = useState<boolean | null>(null);
@@ -386,7 +422,7 @@ function SecurityPane(): JSX.Element {
   useEffect(() => { void loadStatus(); }, [loadStatus]);
 
   const enable = async (): Promise<void> => {
-    if (pw.length < 8) { toast.error('Use at least 8 characters.'); return; }
+    if (pw.length < MIN_PW_LEN) { toast.error(`Use at least ${MIN_PW_LEN} characters.`); return; }
     if (pw !== pw2) { toast.error('Passwords do not match.'); return; }
     setBusy(true);
     try {
@@ -404,7 +440,7 @@ function SecurityPane(): JSX.Element {
   };
 
   const changePassword = async (): Promise<void> => {
-    if (npw.length < 8) { toast.error('Use at least 8 characters.'); return; }
+    if (npw.length < MIN_PW_LEN) { toast.error(`Use at least ${MIN_PW_LEN} characters.`); return; }
     if (npw !== npw2) { toast.error('Passwords do not match.'); return; }
     setBusy(true);
     try {
@@ -479,9 +515,14 @@ function SecurityPane(): JSX.Element {
           <p style={{ color: '#900', fontSize: 11 }}>
             There is no password reset. You will get a one-time recovery key — keep it safe.
           </p>
+          <p style={{ color: '#555', fontSize: 11 }}>
+            A backup file (.ga98) carries your encrypted key, so anyone who gets it can guess your
+            password offline at their leisure. Use {MIN_PW_LEN}+ characters — a long passphrase is best.
+          </p>
           <div className="field-row-stacked">
             <label htmlFor="ga98-pw">Master password</label>
             <input id="ga98-pw" type="password" value={pw} disabled={busy} onChange={(e) => setPw(e.target.value)} />
+            <StrengthMeter pw={pw} />
           </div>
           <div className="field-row-stacked">
             <label htmlFor="ga98-pw2">Confirm password</label>
@@ -511,6 +552,7 @@ function SecurityPane(): JSX.Element {
         <div className="field-row-stacked">
           <label htmlFor="ga98-npw">New password</label>
           <input id="ga98-npw" type="password" value={npw} disabled={busy} onChange={(e) => setNpw(e.target.value)} />
+          <StrengthMeter pw={npw} />
         </div>
         <div className="field-row-stacked">
           <label htmlFor="ga98-npw2">Confirm new password</label>

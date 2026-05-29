@@ -174,6 +174,21 @@ export function ensurePassword(v: unknown): string {
   return v;
 }
 
+/** Minimum length for a NEW master password. A full backup (.ga98) bundles the wrapped DEK, so
+ *  the password wrap is an OFFLINE scrypt-cracking target — its strength is the only brake. */
+export const MIN_NEW_PASSWORD_LEN = 12;
+
+/** Validator for setup + changePassword: enforces the minimum length in the MAIN process, so a
+ *  compromised renderer can't bypass the policy. unlock/disable keep ensurePassword (existing
+ *  passwords predate the policy and must still be accepted). */
+export function ensureNewPassword(v: unknown): string {
+  const pw = ensurePassword(v);
+  if (pw.length < MIN_NEW_PASSWORD_LEN) {
+    throw new ValidationError(`Password must be at least ${MIN_NEW_PASSWORD_LEN} characters`);
+  }
+  return pw;
+}
+
 /** Recovery key as typed by the user — normalized vault-side, so accept dashes/spacing/case. */
 export function ensureRecoveryKey(v: unknown): string {
   if (typeof v !== 'string') throw new ValidationError('Recovery key must be a string');
