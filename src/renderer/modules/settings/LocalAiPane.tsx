@@ -127,7 +127,11 @@ export function LocalAiPane(): JSX.Element {
     );
   }
 
-  // --- runtime not up, no bundled assets: online path ---
+  // --- runtime not up, no bundled assets: guide the user to install the runtime ---
+  // Automatic runtime download is not wired yet (it needs the pinned Ollama release from the
+  // bundled-track work). Until then, installing Ollama is a one-click step; once it is running,
+  // pressing Re-check moves to the "Install model" path above, which DOES pull llama3.1 and
+  // configure the app automatically. Fully automatic / offline-bundled setup ships in a later build.
   return (
     <fieldset>
       <legend>Local AI</legend>
@@ -135,15 +139,16 @@ export function LocalAiPane(): JSX.Element {
         Run AI features entirely on your machine, with no data sent to any cloud service.
       </p>
       <p style={{ fontSize: 11, color: '#555', marginTop: 4 }}>
-        This will download the Ollama runtime and the llama3.1 model from the internet
-        (a few GB total). The download happens once; everything runs locally after that.
-        Make sure you have enough free disk space before continuing.
+        No local runtime detected. Install Ollama (a free, one-click installer), then press
+        <strong> Re-check</strong> — Ghost Access 98 will download the llama3.1 model and
+        configure itself. (Fully automatic and offline-bundled setup arrive in a later build.)
       </p>
       {Attribution}
-      <div className="field-row" style={{ marginTop: 8 }}>
-        <button onClick={() => void doSetup('online')} disabled={busy}>
-          {busy ? 'Downloading…' : 'Download & enable (uses the internet)'}
+      <div className="field-row" style={{ marginTop: 8, gap: 6 }}>
+        <button onClick={() => void window.api.system.openExternal('https://ollama.com/download')} disabled={busy}>
+          Get Ollama
         </button>
+        <button onClick={doRefresh} disabled={busy}>Re-check</button>
       </div>
       <ProgressLine />
     </fieldset>
