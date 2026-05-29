@@ -36,7 +36,7 @@ import * as streams from '../services/streams';
 import * as ai from '../services/ai';
 import * as bookmarks from '../storage/bookmarks';
 import * as history from '../storage/history';
-import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureWhiteboard, ensurePassword, ensureRecoveryKey } from '../security/validate';
+import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureWhiteboard, ensurePassword, ensureNewPassword, ensureRecoveryKey } from '../security/validate';
 import * as entities from '../storage/entities';
 import * as bioStore from '../storage/bio-images';
 import * as ftp from '../services/ftp';
@@ -48,7 +48,7 @@ import { buildSummaryHtml, renderCasePdf } from '../services/export';
 import { timelineCsv, linksCsv, entitiesCsv, attachmentsCsv } from '../services/csv';
 import * as search from '../services/search';
 import { markConsented, assertAllConsented } from '../security/consent';
-import { getSecretBackend } from '../secrets';
+import { getSecretBackend, rewrapSecretsForVault } from '../secrets';
 import { homedir } from 'node:os';
 
 const MAX_SAVE_ATTACHMENT_BYTES = 64 * 1024 * 1024; // 64 MB cap on base64 decoded payload
@@ -142,7 +142,10 @@ async function resumeEnableIfNeeded(): Promise<void> {
   vault.beginEnable();
   try {
     const r = await encryptAll();
-    if (r.failed.length === 0) await vault.markEnableComplete();
+    if (r.failed.length === 0) {
+      await vault.markEnableComplete();
+      try { await rewrapSecretsForVault(); } catch { /* best-effort */ }
+    }
   } finally {
     vault.endMigration();
   }
@@ -167,13 +170,15 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     unlocked: vault.isUnlocked()
   }));
   safeHandle(channels.auth.setup, async (...args) => {
-    const password = ensurePassword(args[0]);
+    const password = ensureNewPassword(args[0]); // enforce the 12-char minimum in main, not just UI
     const result = await vault.setup(password); // writes auth.json (migrating marker) + unlocks
     vault.beginEnable();                         // pause the reminder ticker during the sweep
     try {
       const r = await encryptAll();              // purge orphan temps + encrypt plaintext in place
       if (r.failed.length === 0) {
         await vault.markEnableComplete();        // whole tree confirmed encrypted → clear the marker
+        // On a weak keyring, add the vault DEK layer to existing stored credentials too (#11).
+        try { await rewrapSecretsForVault(); } catch { /* best-effort; credentials still keyring-protected */ }
       } else {
         // Partial: the vault IS enabled and the recovery key MUST still reach the user, so don't
         // throw (that would lose the key). Leave the marker set — the next unlock resumes the
@@ -196,7 +201,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     await vault.unlockWithRecovery(ensureRecoveryKey(args[0]));
     await resumeEnableIfNeeded();
   });
-  safeHandle(channels.auth.changePassword, (...args) => vault.changePassword(ensurePassword(args[0])));
+  safeHandle(channels.auth.changePassword, (...args) => vault.changePassword(ensureNewPassword(args[0])));
   safeHandle(channels.auth.disable, async (...args) => {
     const password = ensurePassword(args[0]);
     await vault.unlock(password); // verify the password (throws on mismatch) + ensure the DEK is loaded
@@ -208,6 +213,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
         // the vault enabled + unlocked (no data lost) and surface the failure for retry.
         throw new Error(`Could not decrypt ${r.failed.length} file(s); login left enabled so nothing is lost. Resolve the error (e.g. file permissions) and try again.`);
       }
+      await rewrapSecretsForVault(); // strip the secrets DEK layer NOW, while the DEK still exists
       await vault.removeAuth();   // delete auth.json + zeroize the DEK (also ends the migration)
     } finally {
       vault.endMigration();       // belt-and-suspenders: clear transition state on any failure path
