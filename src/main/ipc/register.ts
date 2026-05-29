@@ -135,6 +135,19 @@ function safeHandle(channel: string, fn: Handler): void {
   });
 }
 
+/** Resume a crashed/partial enable: if the migrating marker is set and the DEK is now loaded,
+ *  finish encrypting the tree and clear the marker. Called after every successful unlock. */
+async function resumeEnableIfNeeded(): Promise<void> {
+  if (!vault.isUnlocked() || !(await vault.isEnableIncomplete())) return;
+  vault.beginEnable();
+  try {
+    const r = await encryptAll();
+    if (r.failed.length === 0) await vault.markEnableComplete();
+  } finally {
+    vault.endMigration();
+  }
+}
+
 export function registerIpc(getWindow: () => BrowserWindow | null): void {
   // ---- system ----
   safeHandle(channels.system.appInfo, () => ({
@@ -155,24 +168,46 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   }));
   safeHandle(channels.auth.setup, async (...args) => {
     const password = ensurePassword(args[0]);
-    const result = await vault.setup(password); // writes auth.json + unlocks
+    const result = await vault.setup(password); // writes auth.json (migrating marker) + unlocks
     vault.beginEnable();                         // pause the reminder ticker during the sweep
     try {
-      await encryptAll();                        // purge orphan temps + encrypt plaintext in place
+      const r = await encryptAll();              // purge orphan temps + encrypt plaintext in place
+      if (r.failed.length === 0) {
+        await vault.markEnableComplete();        // whole tree confirmed encrypted → clear the marker
+      } else {
+        // Partial: the vault IS enabled and the recovery key MUST still reach the user, so don't
+        // throw (that would lose the key). Leave the marker set — the next unlock resumes the
+        // sweep — and surface the incomplete state as a non-fatal diagnostic.
+        getWindow()?.webContents.send(channels.system.onDiagnostic, {
+          kind: 'main-error',
+          message: `Encryption is still finishing: ${r.failed.length} file(s) pending (retried on next unlock). Check file permissions.`
+        });
+      }
     } finally {
       vault.endMigration();
     }
     return result;                               // { recoveryKey } — shown to the user once
   });
-  safeHandle(channels.auth.unlock, (...args) => vault.unlock(ensurePassword(args[0])));
-  safeHandle(channels.auth.unlockRecovery, (...args) => vault.unlockWithRecovery(ensureRecoveryKey(args[0])));
+  safeHandle(channels.auth.unlock, async (...args) => {
+    await vault.unlock(ensurePassword(args[0]));
+    await resumeEnableIfNeeded();                // finish a crashed/partial enable now that the DEK is back
+  });
+  safeHandle(channels.auth.unlockRecovery, async (...args) => {
+    await vault.unlockWithRecovery(ensureRecoveryKey(args[0]));
+    await resumeEnableIfNeeded();
+  });
   safeHandle(channels.auth.changePassword, (...args) => vault.changePassword(ensurePassword(args[0])));
   safeHandle(channels.auth.disable, async (...args) => {
     const password = ensurePassword(args[0]);
     await vault.unlock(password); // verify the password (throws on mismatch) + ensure the DEK is loaded
     vault.beginDisable();         // stop NEW writes from encrypting + pause the ticker BEFORE decrypt
     try {
-      await decryptAll();         // decrypt every blob while the DEK is still available
+      const r = await decryptAll(); // decrypt every blob while the DEK is still available
+      if (r.failed.length > 0) {
+        // Do NOT removeAuth: a still-encrypted file would orphan under the destroyed DEK. Leave
+        // the vault enabled + unlocked (no data lost) and surface the failure for retry.
+        throw new Error(`Could not decrypt ${r.failed.length} file(s); login left enabled so nothing is lost. Resolve the error (e.g. file permissions) and try again.`);
+      }
       await vault.removeAuth();   // delete auth.json + zeroize the DEK (also ends the migration)
     } finally {
       vault.endMigration();       // belt-and-suspenders: clear transition state on any failure path

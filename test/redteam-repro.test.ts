@@ -24,7 +24,12 @@ import { secureWriteFile, secureReadFile } from '../src/main/storage/secure-fs';
 const ROOT = '/tmp/ga98-redteam-test';
 const DATA = join(ROOT, 'GhostAccess98');
 
-afterEach(async () => { vault.lock(); vault.endMigration(); await rm(ROOT, { recursive: true, force: true }); });
+afterEach(async () => {
+  vault.lock();
+  vault.endMigration();
+  await rm(ROOT, { recursive: true, force: true });
+  await vault.refreshEnabled(); // auth.json is gone now → resets enabledCache to false between tests
+});
 
 describe('RED TEAM repros (now regression guards)', () => {
   // FINDING A (FIXED): once the disable transition begins, no write re-encrypts, so removeAuth
@@ -64,6 +69,29 @@ describe('RED TEAM repros (now regression guards)', () => {
     expect(vault.isEncrypted(await readFile(f))).toBe(true);
     // the orphan must be gone (ENOENT), not lingering as cleartext
     await expect(readFile(orphan)).rejects.toMatchObject({ code: 'ENOENT' });
+  }, 30000);
+
+  // FINDING 3 (FIXED): enable carries a completion marker, cleared only when the sweep finishes,
+  // so a crashed/partial enable can't masquerade as complete (it resumes on next unlock).
+  it('enable completion marker is set on setup and cleared only when the sweep finishes', async () => {
+    await mkdir(join(DATA, 'cases', 'c1'), { recursive: true });
+    await writeFile(join(DATA, 'cases', 'c1', 'case.json'), JSON.stringify({ id: 'c1' }), 'utf8');
+    await vault.setup('pw');
+    expect(await vault.isEnableIncomplete()).toBe(true);   // marker set, tree not yet confirmed
+    const r = await encryptAll();
+    expect(r.failed).toEqual([]);
+    await vault.markEnableComplete();
+    expect(await vault.isEnableIncomplete()).toBe(false);   // cleared once fully encrypted
+  }, 30000);
+
+  // FINDING 4 (FIXED): secure-fs refuses to write plaintext into an enabled-but-locked tree, so a
+  // stale gate / bug can't corrupt the encrypted corpus with cleartext.
+  it('secureWriteFile refuses to write while enabled-but-locked', async () => {
+    await vault.setup('pw');
+    vault.lock(); // enabled (auth.json exists) but locked (DEK gone)
+    await expect(
+      secureWriteFile(join(DATA, 'cases', 'c1', 'x.json'), 'plaintext')
+    ).rejects.toMatchObject({ code: 'EVAULTLOCKED' });
   }, 30000);
 
   // FINDING C (informational): GCM IV is a random 96-bit nonce per write under one DEK.

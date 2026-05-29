@@ -76,34 +76,55 @@ export async function cleanupOrphanTemps(): Promise<number> {
   return removed;
 }
 
-/** Encrypt every plaintext file under the data root in place. Vault must be unlocked. */
-export async function encryptAll(): Promise<{ processed: number; skipped: number }> {
+export interface MigrationResult {
+  processed: number;
+  skipped: number;
+  /** Per-file failures. A non-empty list means the pass did NOT fully complete — the caller must
+   *  treat the migration as incomplete (leave the enable marker set / do not removeAuth). */
+  failed: { path: string; error: string }[];
+}
+
+/** Encrypt every plaintext file under the data root in place. Vault must be unlocked.
+ *  Resilient: a single unreadable file is collected into `failed`, not thrown — one bad file
+ *  must never abort the whole pass and silently leave the rest plaintext under an enabled vault. */
+export async function encryptAll(): Promise<MigrationResult> {
   if (!vault.isUnlocked()) throw new Error('Vault must be unlocked to encrypt data.');
   await cleanupOrphanTemps(); // purge plaintext crash-debris temps before they become a leak
   const skip = excludedPaths();
   let processed = 0;
   let skipped = 0;
+  const failed: { path: string; error: string }[] = [];
   for await (const path of walkFiles(dataRoot(), skip)) {
-    const raw = await readFile(path);
-    if (vault.isEncrypted(raw)) { skipped++; continue; }
-    await atomicWrite(path, vault.encryptBuffer(raw));
-    processed++;
+    try {
+      const raw = await readFile(path);
+      if (vault.isEncrypted(raw)) { skipped++; continue; }
+      await atomicWrite(path, vault.encryptBuffer(raw));
+      processed++;
+    } catch (err) {
+      failed.push({ path, error: (err as Error).message });
+    }
   }
-  return { processed, skipped };
+  return { processed, skipped, failed };
 }
 
 /** Decrypt every encrypted file under the data root in place. Vault must still be unlocked
- *  (the DEK is needed); the caller removes auth.json + locks AFTER this resolves. */
-export async function decryptAll(): Promise<{ processed: number; skipped: number }> {
+ *  (the DEK is needed); the caller removes auth.json + locks AFTER this resolves — and ONLY if
+ *  `failed` is empty, else a still-encrypted file would orphan under the destroyed DEK. */
+export async function decryptAll(): Promise<MigrationResult> {
   if (!vault.isUnlocked()) throw new Error('Vault must be unlocked to decrypt data.');
   const skip = excludedPaths();
   let processed = 0;
   let skipped = 0;
+  const failed: { path: string; error: string }[] = [];
   for await (const path of walkFiles(dataRoot(), skip)) {
-    const raw = await readFile(path);
-    if (!vault.isEncrypted(raw)) { skipped++; continue; }
-    await atomicWrite(path, vault.decryptBuffer(raw));
-    processed++;
+    try {
+      const raw = await readFile(path);
+      if (!vault.isEncrypted(raw)) { skipped++; continue; }
+      await atomicWrite(path, vault.decryptBuffer(raw));
+      processed++;
+    } catch (err) {
+      failed.push({ path, error: (err as Error).message });
+    }
   }
-  return { processed, skipped };
+  return { processed, skipped, failed };
 }

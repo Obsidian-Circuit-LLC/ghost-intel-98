@@ -4,12 +4,11 @@
  * window via a temp file + loadFile (the production load path) — chosen over a data: URL to stay
  * clear of the app's will-navigate scheme lockdown.
  */
-import { BrowserWindow } from 'electron';
+import { BrowserWindow, app } from 'electron';
 import { writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { CaseRecord } from '@shared/types';
-import { dataRoot } from '../storage/paths';
 
 function esc(s: unknown): string {
   return String(s ?? '').replace(/[&<>"]/g, (c) => (({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] ?? c));
@@ -66,7 +65,11 @@ export function buildSummaryHtml(c: CaseRecord): string {
 
 export async function renderCasePdf(c: CaseRecord): Promise<Buffer> {
   const html = buildSummaryHtml(c);
-  const tmp = join(dataRoot(), `._export-${randomUUID().slice(0, 8)}.html`);
+  // The offscreen window must loadFile() PLAINTEXT html (it can't decrypt), so this temp can't
+  // be encrypted. Therefore it must NOT live in dataRoot — a crash before the finally-rm would
+  // strand a full plaintext case inside the encrypted vault. Put it in the OS temp dir, off the
+  // vault's protected surface, where transient render artifacts belong.
+  const tmp = join(app.getPath('temp'), `ga98-export-${randomUUID().slice(0, 8)}.html`);
   await writeFile(tmp, html, 'utf8');
   const win = new BrowserWindow({
     show: false,

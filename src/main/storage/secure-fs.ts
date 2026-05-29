@@ -64,6 +64,14 @@ export async function secureReadText(path: string): Promise<string> {
 }
 
 export async function secureWriteFile(path: string, data: Buffer | string): Promise<void> {
+  // Choke-point invariant: never write PLAINTEXT into an enabled-but-locked tree. The DEK is
+  // absent so we can't encrypt; writing plaintext would corrupt the encrypted corpus with
+  // cleartext. Refusing here is defence-in-depth independent of the IPC lock gate (#4).
+  if (vault.isEnabledCached() && !vault.isUnlocked()) {
+    const e = new Error('Locked — cannot write while the vault is locked.') as Error & { code?: string };
+    e.code = EVAULTLOCKED;
+    throw e;
+  }
   const buf = typeof data === 'string' ? Buffer.from(data, 'utf8') : data;
   // shouldEncrypt() (not isUnlocked()) so a write racing a disable sweep stays plaintext and
   // can't be orphaned under a DEK that removeAuth is about to destroy. Decided synchronously.
