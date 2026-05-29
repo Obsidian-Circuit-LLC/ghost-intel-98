@@ -34,9 +34,10 @@ import * as mail from '../services/mail';
 import * as ssh from '../services/ssh';
 import * as streams from '../services/streams';
 import * as ai from '../services/ai';
+import * as localAi from '../services/local-ai';
 import * as bookmarks from '../storage/bookmarks';
 import * as history from '../storage/history';
-import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureWhiteboard, ensurePassword, ensureNewPassword, ensureRecoveryKey } from '../security/validate';
+import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureWhiteboard, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts } from '../security/validate';
 import * as entities from '../storage/entities';
 import * as bioStore from '../storage/bio-images';
 import * as ftp from '../services/ftp';
@@ -573,6 +574,27 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.ai.chatStream, (...args) => ai.chat(args[0] as string, args[1] as AiChatRequest, getWindow));
   safeHandle(channels.ai.chat, (...args) => ai.cancel(args[0] as string));
   safeHandle(channels.ai.setApiKey, (...args) => ai.setApiKey(args[0] as string));
+
+  // ---- local AI (consent-gated: vault lock gate applies by default — NOT in GATE_EXEMPT) ----
+  safeHandle(channels.localAi.status, () => localAi.detect());
+  safeHandle(channels.localAi.setup, async (...args) => {
+    const { mode } = ensureLocalAiSetupOpts(args[0]);
+    // NOTE (provisional, pending Phase 0.1 pin): the ONLINE track must first fetch the Ollama
+    // runtime binary (via local-ai-fetch.downloadVerified with the pinned URL+sha256 from
+    // ci/pins.json) into the fetched runtime dir before ensureRuntime() can spawn it. That pin
+    // is produced by Phase 0.1 and is not yet available, so online provisioning of the *binary*
+    // is wired in a later task. For 'bundled', the installer already placed the binary+model.
+    void mode; // mode is read above for validation; runtime/model path selection is inside the service
+    await localAi.ensureRuntime();
+    await localAi.ensureModel((p) => {
+      const win = getWindow();
+      if (win) win.webContents.send(channels.localAi.onProgress, { phase: 'import', message: p.message, receivedBytes: p.receivedBytes, totalBytes: p.totalBytes });
+    });
+    await localAi.autoConfigure();
+    return localAi.detect();
+  });
+  safeHandle(channels.localAi.start, () => localAi.ensureRuntime());
+  safeHandle(channels.localAi.stop, () => { localAi.stop(); });
 }
 
 /** Reminder tick: every 30s, pull due reminders, fire notifications + emit IPC to renderer.
