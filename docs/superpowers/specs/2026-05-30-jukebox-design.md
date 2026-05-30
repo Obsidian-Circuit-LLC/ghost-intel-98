@@ -24,8 +24,12 @@ WinAmp-flavored skin with the spectrum visualizer on by default.
    is enforced); verified before the dependency is locked.
 4. **Streaming:** full support (saved stations + arbitrary stream URLs + HLS audio
    via the already-bundled `hls.js`), but **dark until one opt-in toggle**
-   (`media.streamingEnabled`, default `false`), enforced at the CSP layer, not just
-   hidden in the UI.
+   (`media.streamingEnabled`, default `false`). Enforced at the **application layer**
+   (see §6): the renderer never resolves a remote URL unless the toggle is on. This
+   is *not* CSP-enforced — EyeSpy already plays remote video/HLS in the same
+   main-window renderer under the same `media-src` CSP, so CSP cannot distinguish or
+   gate audio streams without breaking EyeSpy. The toggle (default off) is the gate,
+   matching EyeSpy's own existing model. Operator-confirmed 2026-05-30.
 5. **Skin:** full WinAmp-flavored 98.css skin; **spectrum visualizer on by default**.
 6. **Audio delivery (the architecture fork):** **Approach B** — a privileged
    `ga98media://` protocol with HTTP range support for local files, path-confined to
@@ -125,11 +129,20 @@ Save = write the current queue as a valid M3U via the confined save dialog.
   no network is reachable for media — CSP forbids it.
 - **On:** saved **Stations** + arbitrary stream URLs play through `<audio>`; HLS
   (`.m3u8` audio) plays via the bundled `hls.js`.
-- **Enforcement:** the renderer session's CSP `media-src` / `connect-src` is set via
-  `session.defaultSession.webRequest.onHeadersReceived` keyed on the toggle —
-  `'self' blob: ga98media:` when off; plus the stream origins (or `https:`) when on.
-  Streaming is blocked at the engine level until the operator flips it, not merely
-  hidden. Toggling updates the CSP for subsequent loads.
+- **Enforcement (application layer, operator-confirmed 2026-05-30):** the gate is the
+  `media.streamingEnabled` flag, not CSP. When off, the renderer never assigns a
+  remote URL to `<audio>` and never instantiates `hls.js` for a stream; stations and
+  `http(s)` M3U entries list but do not resolve. When on, they resolve. Stream URLs
+  are validated `http`/`https`-only at the IPC boundary regardless.
+  **Why not CSP:** EyeSpy already plays remote `<video>`/HLS in this same main-window
+  renderer under the shared `media-src 'self' blob: https: http:` directive (see
+  `index.html` CSP + `EyeSpyModule.tsx`). CSP cannot tell an audio stream from
+  EyeSpy's video, and the static `<meta>` CSP can't be loosened at runtime, so a
+  per-toggle CSP flip would either break EyeSpy or be a no-op. The honest guarantee
+  is therefore "no audio egress unless you opt in," enforced in app logic — the same
+  model EyeSpy uses (a remote-media surface controlled by explicit user action).
+  A future hardening (isolated streaming partition session with its own CSP) is the
+  upgrade path if true engine-level isolation is later wanted; out of scope for v1.
 
 ## Error handling
 - Unreadable/missing track → marked unavailable in the list, playback skips to next,
@@ -144,7 +157,9 @@ Save = write the current queue as a valid M3U via the confined save dialog.
 ## Security surface (red-team targets)
 1. `ga98media://` path confinement — traversal, symlink escape, outside-root,
    non-allowlisted ad-hoc paths. Fail closed.
-2. No egress when streaming is off — assert at the CSP layer (not just UI state).
+2. No audio egress when streaming is off — app-layer gate (the renderer resolves no
+   remote URL unless `media.streamingEnabled`); assert via unit tests on the resolve
+   path, not CSP (see §6 for why CSP can't gate this without breaking EyeSpy).
 3. Station/stream URL validation — `http`/`https` only, no `file:`/`javascript:` etc.
 4. M3U entries cannot smuggle out-of-root local paths into the allowlist beyond their
    own directory's resolved files.
