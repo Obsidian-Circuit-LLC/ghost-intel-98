@@ -116,6 +116,34 @@ export interface CameraStream {
   notes: string;
 }
 
+// ---------- Jukebox (media player) ----------
+
+export interface MediaTrack {
+  /** Absolute path on disk. Served only via ga98media:// after authorization. */
+  path: string;
+  /** fs mtimeMs at index time (used to skip re-parsing unchanged files). */
+  mtime: number;
+  size: number;
+  title?: string;
+  artist?: string;
+  album?: string;
+  durationMs?: number;
+  /** Filename of cached cover art under media-art/, if the file had embedded art. */
+  artRef?: string;
+}
+
+export interface MediaStation {
+  id: string;
+  label: string;
+  url: string;
+}
+
+export interface MediaLibrarySnapshot {
+  roots: string[];
+  tracks: MediaTrack[];
+  stations: MediaStation[];
+}
+
 // ---------- AI Assistant ----------
 
 export interface AiChatMessage {

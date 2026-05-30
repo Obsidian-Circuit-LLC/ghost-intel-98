@@ -315,6 +315,13 @@ export interface AppSettings {
   browser: {
     homepage: string;
   };
+  media: {
+    /** Opt-in egress gate for the Jukebox. When false (default) the player never
+     *  resolves a remote stream URL. App-layer enforced (see Jukebox spec). */
+    streamingEnabled: boolean;
+    /** Show the spectrum visualizer in the Jukebox. */
+    visualizer: boolean;
+  };
 }
 
 export const defaultShortcuts: AccessShortcut[] = [
@@ -353,5 +360,6 @@ export const defaultSettings: AppSettings = {
     apiKeyRef: null
   },
   mail: { accounts: [] },
-  browser: { homepage: 'about:blank' }
+  browser: { homepage: 'about:blank' },
+  media: { streamingEnabled: false, visualizer: true }
 };
