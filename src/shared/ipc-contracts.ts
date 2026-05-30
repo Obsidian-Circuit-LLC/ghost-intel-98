@@ -127,7 +127,8 @@ export const channels = {
   streams: {
     list: 'streams:list',
     upsert: 'streams:upsert',
-    delete: 'streams:delete'
+    delete: 'streams:delete',
+    import: 'streams:import'
   },
   media: {
     getSnapshot: 'media:getSnapshot',

@@ -501,6 +501,15 @@ export function validateExternalUrl(raw: string): string {
   throw new ValidationError(`URL scheme not allowed: ${u.protocol}`);
 }
 
+/** EyeSpy feed import: a camera URL is acceptable only if http/https/rtsp.
+ *  (rtsp is allowed — the operator's own cameras — but file:/javascript:/etc are not.) */
+export function ensureFeedUrl(url: string): boolean {
+  try {
+    const p = new URL(url).protocol;
+    return p === 'http:' || p === 'https:' || p === 'rtsp:';
+  } catch { return false; }
+}
+
 /** Jukebox: a remembered library folder path (existence is checked at use time). */
 export function ensureMediaRoot(p: unknown): string {
   if (typeof p !== 'string' || p.length === 0 || p.length > 4096) {

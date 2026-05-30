@@ -37,7 +37,7 @@ import * as ai from '../services/ai';
 import * as localAi from '../services/local-ai';
 import * as bookmarks from '../storage/bookmarks';
 import * as history from '../storage/history';
-import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureWhiteboard, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput } from '../security/validate';
+import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureWhiteboard, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl } from '../security/validate';
 import * as entities from '../storage/entities';
 import * as bioStore from '../storage/bio-images';
 import * as ftp from '../services/ftp';
@@ -46,6 +46,7 @@ import * as whiteboard from '../storage/whiteboard';
 import * as mediaLib from '../media/library';
 import { adHocAllowlist } from '../media/protocol';
 import { parseM3u, toM3u } from '../media/m3u';
+import { parseFeedList, feedToUpsert } from '../services/feed-import';
 import * as vault from '../services/vault';
 import { encryptAll, decryptAll } from '../storage/encryption-migrate';
 import { buildSummaryHtml, renderCasePdf } from '../services/export';
@@ -576,6 +577,24 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.streams.list, () => streams.list());
   safeHandle(channels.streams.upsert, (...args) => streams.upsert(args[0] as Parameters<typeof streams.upsert>[0]));
   safeHandle(channels.streams.delete, (...args) => streams.remove(args[0] as string));
+  safeHandle(channels.streams.import, async () => {
+    const win = getWindow();
+    const r = win
+      ? await dialog.showOpenDialog(win, { properties: ['openFile'], filters: [{ name: 'Camera feed list', extensions: ['csv', 'json', 'txt', 'm3u', 'm3u8'] }] })
+      : await dialog.showOpenDialog({ properties: ['openFile'] });
+    if (r.canceled || !r.filePaths[0]) return { added: 0, skipped: 0, total: 0 };
+    const feeds = parseFeedList(await readFile(r.filePaths[0], 'utf8'));
+    const seen = new Set((await streams.list()).map((s) => s.url.toLowerCase()));
+    let added = 0;
+    let skipped = 0;
+    for (const f of feeds) {
+      if (!ensureFeedUrl(f.url) || seen.has(f.url.toLowerCase())) { skipped++; continue; }
+      await streams.upsert(feedToUpsert(f));
+      seen.add(f.url.toLowerCase());
+      added++;
+    }
+    return { added, skipped, total: feeds.length };
+  });
 
   // ---- media (Jukebox; vault-gated like everything else — NOT in GATE_EXEMPT) ----
   safeHandle(channels.media.getSnapshot, () => mediaLib.getSnapshot());

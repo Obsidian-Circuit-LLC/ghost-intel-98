@@ -3,7 +3,9 @@
  * Supported: HLS (hls.js), MJPEG (<img>), and HTTP still images.
  * RTSP is intentionally not implemented in-app (would require bundling ffmpeg) — the user is
  * pointed to a recommended local ffmpeg→HLS bridge instead. NO discovery, scanning, or
- * unauthorised-access code paths exist in this module.
+ * unauthorised-access code paths exist in this module. "Import feeds…" bulk-loads the user's
+ * OWN feed list from a file they choose (CSV/JSON/URL-list) — it parses a provided file, it
+ * does not probe or enumerate any network.
  */
 
 import Hls from 'hls.js';
@@ -37,6 +39,17 @@ export function EyeSpyModule(): JSX.Element {
     setDraft({ kind: 'hls', label: '', url: '' });
     await refresh();
     setSelected(created);
+  }
+
+  async function importFeeds(): Promise<void> {
+    try {
+      const r = await window.api.streams.import();
+      await refresh();
+      if (r.total === 0) { toast.warn('No camera feeds found in that file.'); return; }
+      toast.success(`Imported ${r.added} feed${r.added === 1 ? '' : 's'}${r.skipped ? ` · skipped ${r.skipped} (duplicate/invalid)` : ''}.`);
+    } catch (err) {
+      toast.error(`Import failed: ${(err as Error).message}`);
+    }
   }
 
   async function del(id: string): Promise<void> {
@@ -77,8 +90,9 @@ export function EyeSpyModule(): JSX.Element {
               {cases.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
             </select>
           </div>
-          <div style={{ marginTop: 6 }}>
+          <div style={{ marginTop: 6, display: 'flex', gap: 6 }}>
             <button onClick={() => void save()} disabled={!draft.url || !draft.label}>Add</button>
+            <button onClick={() => void importFeeds()} title="Bulk-import your own camera feeds from a CSV, JSON, or plain URL-list file">Import feeds…</button>
           </div>
         </fieldset>
         <ul className="ga98-list">
