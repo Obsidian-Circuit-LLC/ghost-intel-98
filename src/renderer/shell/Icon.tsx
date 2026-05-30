@@ -55,6 +55,7 @@ const GLYPHS: Record<ModuleKey, string> = {
   'doc-viewer': '📄',
   search: '🔍',
   whiteboard: '🗺',
+  'media-player': '🎵',
   help: '?'
 };
 

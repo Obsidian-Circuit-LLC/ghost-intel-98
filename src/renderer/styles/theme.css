@@ -29,6 +29,34 @@ html, body, #root {
   flex-direction: column;
 }
 
+/* ── Theme intensity (Settings → Theme → Intensity) ──────────────────────────
+   Driven by data-ga98-intensity on <html> (set in App.tsx).
+   • lite     — calmest/focus mode: flat desktop, no scanline texture.
+   • classic  — the default Windows-98 look (no overrides; the .ga98-desktop
+                baseline scanline below stays in effect).
+   • maximum  — full retro CRT: pronounced desktop scanlines plus a screen-wide
+                scanline + vignette overlay painted over the entire UI. */
+:root[data-ga98-intensity='lite'] .ga98-desktop {
+  background: var(--ga98-desktop-bg);
+}
+
+:root[data-ga98-intensity='maximum'] .ga98-desktop {
+  background:
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.10) 0 1px, transparent 1px 3px),
+    var(--ga98-desktop-bg);
+}
+
+:root[data-ga98-intensity='maximum'] .ga98-screen::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none; /* glass overlay must never swallow clicks */
+  z-index: 99999;
+  background:
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.18) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse at center, transparent 58%, rgba(0, 0, 0, 0.28) 100%);
+}
+
 .ga98-desktop {
   position: absolute;
   inset: 0 0 var(--ga98-taskbar-height) 0;
@@ -639,3 +667,35 @@ input.ga98-text, select.ga98-text {
   background: #ffe;
   cursor: copy;
 }
+
+/* ── Jukebox (Win98/WinAmp media player) ─────────────────────────────────── */
+.ga98-jukebox {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 6px;
+  gap: 6px;
+  box-sizing: border-box;
+}
+.ga98-jukebox-lcd {
+  background: #000;
+  color: #00ff66;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  padding: 4px 8px;
+  border: 2px inset #404040;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.ga98-jukebox-title { overflow: hidden; text-overflow: ellipsis; }
+.ga98-jukebox-time { flex-shrink: 0; }
+.ga98-jukebox-transport { display: flex; align-items: center; gap: 4px; }
+.ga98-jukebox-transport button { min-width: 0; padding: 2px 10px; }
+.ga98-jukebox-panes { display: flex; gap: 6px; flex: 1; min-height: 0; }
+.ga98-jukebox-pane { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.ga98-jukebox-list { flex: 1; overflow: auto; margin: 0; }
+.ga98-jukebox-list li { cursor: pointer; padding: 1px 4px; display: flex; align-items: center; }
+.ga98-jukebox-list li[data-active='true'] { background: navy; color: #fff; }

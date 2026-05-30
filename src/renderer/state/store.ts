@@ -23,6 +23,7 @@ export type ModuleKey =
   | 'doc-viewer'
   | 'search'
   | 'whiteboard'
+  | 'media-player'
   | 'help';
 
 export interface WindowSpec {

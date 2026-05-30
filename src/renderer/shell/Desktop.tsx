@@ -31,6 +31,7 @@ const moduleTitles: Record<ModuleKey, string> = {
   'doc-viewer': 'Document Viewer',
   search: 'Search',
   whiteboard: 'Whiteboard',
+  'media-player': 'Jukebox',
   help: 'Help'
 };
 
