@@ -501,6 +501,33 @@ export function validateExternalUrl(raw: string): string {
   throw new ValidationError(`URL scheme not allowed: ${u.protocol}`);
 }
 
+/** Jukebox: a remembered library folder path (existence is checked at use time). */
+export function ensureMediaRoot(p: unknown): string {
+  if (typeof p !== 'string' || p.length === 0 || p.length > 4096) {
+    throw new ValidationError('media root must be a non-empty path string');
+  }
+  return p;
+}
+
+/** Jukebox: an internet-radio station. Label is bounded; URL must be http(s)
+ *  (validateExternalUrl also allows mailto:, which is rejected here). */
+export function ensureStationInput(v: unknown): { id?: string; label: string; url: string } {
+  if (!v || typeof v !== 'object') throw new ValidationError('station must be an object');
+  const o = v as { id?: unknown; label?: unknown; url?: unknown };
+  if (typeof o.label !== 'string' || o.label.trim().length === 0 || o.label.length > 120) {
+    throw new ValidationError('station.label must be a 1-120 char string');
+  }
+  if (typeof o.url !== 'string') throw new ValidationError('station.url must be a string');
+  const url = validateExternalUrl(o.url);
+  if (!/^https?:\/\//i.test(url)) throw new ValidationError('station.url must be http or https');
+  const out: { id?: string; label: string; url: string } = { label: o.label.trim(), url };
+  if (o.id !== undefined) {
+    if (typeof o.id !== 'string' || o.id.length > 128) throw new ValidationError('station.id must be a short string');
+    out.id = o.id;
+  }
+  return out;
+}
+
 /** Validates a draft attachment path is safe to auto-consent on listDrafts read.
  *  Defends against the upgrade-from-v2.0.0 case where a compromised renderer in v2.0.0
  *  could have persisted malicious paths (e.g. /etc/shadow) into mail-drafts.json. On

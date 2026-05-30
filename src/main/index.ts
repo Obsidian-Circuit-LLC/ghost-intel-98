@@ -9,11 +9,17 @@
  *  - permission request handler denies camera/mic/geo/notifications by default
  */
 
-import { app, BrowserWindow, session, shell } from 'electron';
+import { app, BrowserWindow, protocol, session, shell } from 'electron';
 import { join } from 'node:path';
 import { appendFile, mkdir } from 'node:fs/promises';
 import { channels } from '@shared/ipc-contracts';
 import { ensureDataLayout } from './storage/paths';
+import { registerMediaProtocol } from './media/protocol';
+
+// Custom scheme for local audio playback. Must be declared before app is ready.
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'ga98media', privileges: { stream: true, supportFetchAPI: true, secure: true, standard: true } }
+]);
 import { registerIpc, startReminderTicker } from './ipc/register';
 import * as vault from './services/vault';
 import { shutdownAllSessions } from './services/ssh';
@@ -187,6 +193,7 @@ app.whenReady().then(async () => {
   await ensureDataLayout();
   await vault.refreshEnabled(); // populate the lock-gate cache before any IPC can fire
   lockDownWebContents();
+  registerMediaProtocol(); // ga98media:// for local audio playback
   registerIpc(() => mainWindow);
   createWindow();
   lockDownPartitionSessions();
