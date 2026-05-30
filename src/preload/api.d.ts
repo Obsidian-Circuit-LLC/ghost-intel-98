@@ -160,6 +160,7 @@ export interface GhostApi {
     list(): Promise<CameraStream[]>;
     upsert(input: Partial<CameraStream> & { url: string; label: string; kind: CameraStream['kind'] }): Promise<CameraStream>;
     delete(id: string): Promise<void>;
+    import(): Promise<{ added: number; skipped: number; total: number }>;
   };
   media: {
     getSnapshot(): Promise<MediaLibrarySnapshot>;
