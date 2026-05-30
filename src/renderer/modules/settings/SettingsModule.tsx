@@ -9,7 +9,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AccessShortcut, AppSettings } from '@shared/types';
 import { toast } from '../../state/toasts';
 import { confirmDialog } from '../../state/dialogs';
-import { useAuth } from '../../state/store';
+import { useAuth, useSettings } from '../../state/store';
 import { LocalAiPane } from './LocalAiPane';
 import logoUrl from '../../assets/logo.png';
 
@@ -66,14 +66,21 @@ export function SettingsModule(): JSX.Element {
     };
     latest.current = merged;
     setS(merged);
+    // Push into the shared store so the live shell (desktop wallpaper, theme
+    // intensity, etc. in App.tsx) re-renders immediately — optimistically here,
+    // then reconciled with the persisted result below. Without this the change
+    // only reaches disk and wouldn't show until the next launch.
+    useSettings.setState({ settings: merged });
     try {
       const written = await window.api.settings.update(p);
       latest.current = written;
       setS(written);
+      useSettings.setState({ settings: written });
     } catch (err) {
       toast.error(`Save failed: ${(err as Error).message}`);
       latest.current = base;
       setS(base);
+      useSettings.setState({ settings: base });
     }
   }, [s]);
 

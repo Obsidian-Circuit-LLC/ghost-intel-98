@@ -65,8 +65,9 @@ async function addCaseDirDecrypted(zip: AdmZip, caseId: string): Promise<void> {
   await walk(base, '');
 }
 
-/** Export one case to a portable .ga98case bundle: the case dir under `case/`, the entity
- *  records it references, and a manifest. Shareable with another GA98 user.
+/** Export one case to a portable .ghost bundle: the case dir under `case/`, the entity
+ *  records it references, and a manifest. (The internal manifest `kind` stays 'ga98case'
+ *  for compatibility; .ghost is just the user-facing extension.) Shareable with another GA98 user.
  *  The bundle is PLAINTEXT by design (the recipient holds a different key); transmit it over
  *  a confidential channel. The importer re-encrypts it under their own vault on arrival. */
 export async function exportCase(caseId: string, destPath: string): Promise<void> {

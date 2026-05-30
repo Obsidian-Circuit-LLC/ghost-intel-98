@@ -41,6 +41,12 @@ export function App(): JSX.Element {
     }
   }, [settings?.startupSoundEnabled, settings?.soundEnabled]);
 
+  // Reflect the theme-intensity setting onto the document root so the CSS in
+  // theme.css can style the whole shell (desktop, windows, lock screen) per level.
+  useEffect(() => {
+    document.documentElement.dataset.ga98Intensity = settings?.themeIntensity ?? 'classic';
+  }, [settings?.themeIntensity]);
+
   useEffect(() => {
     const off = window.api.system.onReminderFired(({ reminder }) => {
       if (useSettings.getState().settings?.soundEnabled) playReminder();

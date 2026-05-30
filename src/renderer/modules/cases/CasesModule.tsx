@@ -158,17 +158,17 @@ export function CasesModule({ initialCaseId }: { initialCaseId?: string } = {}):
             <button onClick={() => void createCase()} title="Ctrl/Cmd+N">New</button>
             <button disabled={!selectedId} onClick={() => void renameSelected()}>Rename</button>
             <button disabled={!selectedId} onClick={() => void deleteSelected()}>Delete</button>
-            <button disabled={!selectedId} title="Export this case as a shareable .ga98case file" onClick={async () => {
+            <button disabled={!selectedId} title="Save this case as a shareable .ghost file to send to another Ghost Access 98 user" onClick={async () => {
               if (!selectedId) return;
-              try { const saved = await window.api.cases.exportBundle(selectedId); if (saved) toast.success(`Exported: ${saved}`); }
-              catch (err) { toast.error(`Export failed: ${(err as Error).message}`); }
-            }}>Export</button>
-            <button title="Import a .ga98case file from another Ghost Access 98 user" onClick={async () => {
+              try { const saved = await window.api.cases.exportBundle(selectedId); if (saved) toast.success(`Saved shareable case: ${saved}`); }
+              catch (err) { toast.error(`Share failed: ${(err as Error).message}`); }
+            }}>Share…</button>
+            <button title="Open a .ghost case file shared by another Ghost Access 98 user" onClick={async () => {
               try {
                 const r = await window.api.cases.importBundle();
-                if (r) { await refreshList(); setSelectedId(r.caseId); toast.success('Case imported.'); }
+                if (r) { await refreshList(); setSelectedId(r.caseId); toast.success('Shared case imported.'); }
               } catch (err) { toast.error(`Import failed: ${(err as Error).message}`); }
-            }}>Import</button>
+            }}>Import…</button>
           </div>
           <input
             className="ga98-text"

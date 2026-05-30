@@ -206,7 +206,18 @@ export function DialTermModule(): JSX.Element {
         ) : state === 'open' ? (
           <div ref={termRef} style={{ width: '100%', height: '100%' }} />
         ) : (
-          <pre style={{ margin: 0, fontFamily: 'Courier New, monospace', fontSize: 13 }}>
+          <pre style={{
+            // Override 98.css's global `pre` rule (white sunken text-box) so the
+            // dial-up handshake reads as a green-on-black terminal, matching the
+            // xterm session view. Inline styles beat the element-selector rule.
+            margin: 0,
+            padding: 0,
+            fontFamily: 'Courier New, monospace',
+            fontSize: 13,
+            background: 'transparent',
+            boxShadow: 'none',
+            color: '#aaffaa'
+          }}>
             {state === 'idle' && (activeHost
               ? `Ready to dial ${activeHost.username}@${activeHost.host}:${activeHost.port}\n\nPress Dial to begin the handshake.`
               : 'Add a host profile via "Hosts…" to begin.')}
