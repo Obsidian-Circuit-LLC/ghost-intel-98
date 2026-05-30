@@ -25,6 +25,7 @@ import type {
   TimelineEvent,
   WebLink
 } from './types';
+import type { MediaLibrarySnapshot, MediaStation, MediaTrack } from './post-mvp-types';
 
 export interface EntityCreateInput { type: EntityType; value: string; notes?: string; aliases?: string[] }
 export interface EntityLinkOpts { relationship?: EntityRelationship; linkIds?: string[]; attachmentFileNames?: string[] }
@@ -127,6 +128,17 @@ export const channels = {
     list: 'streams:list',
     upsert: 'streams:upsert',
     delete: 'streams:delete'
+  },
+  media: {
+    getSnapshot: 'media:getSnapshot',
+    addRoot: 'media:addRoot',
+    removeRoot: 'media:removeRoot',
+    refresh: 'media:refresh',
+    openFiles: 'media:openFiles',
+    loadPlaylist: 'media:loadPlaylist',
+    savePlaylist: 'media:savePlaylist',
+    upsertStation: 'media:upsertStation',
+    deleteStation: 'media:deleteStation'
   },
   ai: {
     chat: 'ai:chat',
@@ -284,6 +296,16 @@ export interface ApiContracts {
 
   [channels.settings.read]: { args: []; returns: AppSettings };
   [channels.settings.update]: { args: [Partial<AppSettings>]; returns: AppSettings };
+
+  [channels.media.getSnapshot]: { args: []; returns: MediaLibrarySnapshot };
+  [channels.media.addRoot]: { args: []; returns: MediaLibrarySnapshot };
+  [channels.media.removeRoot]: { args: [string]; returns: MediaLibrarySnapshot };
+  [channels.media.refresh]: { args: []; returns: MediaLibrarySnapshot };
+  [channels.media.openFiles]: { args: []; returns: MediaTrack[] };
+  [channels.media.loadPlaylist]: { args: []; returns: { title: string; path?: string; url?: string }[] };
+  [channels.media.savePlaylist]: { args: [{ title: string; path?: string; url?: string }[]]; returns: string | null };
+  [channels.media.upsertStation]: { args: [{ id?: string; label: string; url: string }]; returns: MediaStation };
+  [channels.media.deleteStation]: { args: [string]; returns: void };
 
   [channels.reminders.listGlobal]: { args: []; returns: Reminder[] };
   [channels.reminders.upsertGlobal]: { args: [Reminder]; returns: Reminder };

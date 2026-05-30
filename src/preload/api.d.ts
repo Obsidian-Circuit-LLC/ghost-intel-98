@@ -32,6 +32,9 @@ import type {
   MailMessage,
   MailMessageSummary,
   MailSendInput,
+  MediaLibrarySnapshot,
+  MediaStation,
+  MediaTrack,
   SshHostProfile
 } from '../shared/post-mvp-types';
 
@@ -157,6 +160,17 @@ export interface GhostApi {
     list(): Promise<CameraStream[]>;
     upsert(input: Partial<CameraStream> & { url: string; label: string; kind: CameraStream['kind'] }): Promise<CameraStream>;
     delete(id: string): Promise<void>;
+  };
+  media: {
+    getSnapshot(): Promise<MediaLibrarySnapshot>;
+    addRoot(): Promise<MediaLibrarySnapshot>;
+    removeRoot(root: string): Promise<MediaLibrarySnapshot>;
+    refresh(): Promise<MediaLibrarySnapshot>;
+    openFiles(): Promise<MediaTrack[]>;
+    loadPlaylist(): Promise<{ title: string; path?: string; url?: string }[]>;
+    savePlaylist(queue: { title: string; path?: string; url?: string }[]): Promise<string | null>;
+    upsertStation(input: { id?: string; label: string; url: string }): Promise<MediaStation>;
+    deleteStation(id: string): Promise<void>;
   };
   ai: {
     chatStream(streamId: string, req: AiChatRequest): Promise<void>;

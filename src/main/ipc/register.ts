@@ -15,10 +15,10 @@
  */
 
 import { app, ipcMain, shell, dialog, BrowserWindow } from 'electron';
-import { writeFile, rename, lstat, rm, readFile, stat } from 'node:fs/promises';
-import { basename } from 'node:path';
+import { writeFile, rename, lstat, rm, readFile, stat, realpath } from 'node:fs/promises';
+import { basename, dirname } from 'node:path';
 import { channels } from '@shared/ipc-contracts';
-import type { MailAccount, MailSendInput, SshHostProfile, AiChatRequest } from '@shared/post-mvp-types';
+import type { MailAccount, MailSendInput, SshHostProfile, AiChatRequest, MediaTrack } from '@shared/post-mvp-types';
 import {
   caseStore,
   consumeDrainDiagnostics,
@@ -37,12 +37,15 @@ import * as ai from '../services/ai';
 import * as localAi from '../services/local-ai';
 import * as bookmarks from '../storage/bookmarks';
 import * as history from '../storage/history';
-import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureWhiteboard, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts } from '../security/validate';
+import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureWhiteboard, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput } from '../security/validate';
 import * as entities from '../storage/entities';
 import * as bioStore from '../storage/bio-images';
 import * as ftp from '../services/ftp';
 import * as backup from '../services/backup';
 import * as whiteboard from '../storage/whiteboard';
+import * as mediaLib from '../media/library';
+import { adHocAllowlist } from '../media/protocol';
+import { parseM3u, toM3u } from '../media/m3u';
 import * as vault from '../services/vault';
 import { encryptAll, decryptAll } from '../storage/encryption-migrate';
 import { buildSummaryHtml, renderCasePdf } from '../services/export';
@@ -404,7 +407,11 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     const id = ensureUuid(args[0], 'caseId');
     const rec = await caseStore.read(id);
     const win = getWindow();
-    const def = sanitiseSaveDefault(`${rec.title}.ga98case`);
+    // User-facing extension is .ghost; the bundle's internal manifest kind stays
+    // 'ga98case' for backward/forward compatibility (old .ga98case files still import).
+    // Prefix with the case reference when set, e.g. "0001-John Smith.ghost".
+    const stem = rec.reference?.trim() ? `${rec.reference.trim()}-${rec.title}` : rec.title;
+    const def = sanitiseSaveDefault(`${stem}.ghost`);
     const result = win
       ? await dialog.showSaveDialog(win, { defaultPath: def })
       : await dialog.showSaveDialog({ defaultPath: def });
@@ -419,7 +426,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.cases.importBundle, async () => {
     const win = getWindow();
     const result = win
-      ? await dialog.showOpenDialog(win, { properties: ['openFile'], filters: [{ name: 'Ghost Access 98 case', extensions: ['ga98case', 'zip'] }] })
+      ? await dialog.showOpenDialog(win, { properties: ['openFile'], filters: [{ name: 'Ghost Access 98 case', extensions: ['ghost', 'ga98case', 'zip'] }] })
       : await dialog.showOpenDialog({ properties: ['openFile'] });
     if (result.canceled || result.filePaths.length === 0) return null;
     return backup.importCase(result.filePaths[0]);
@@ -569,6 +576,61 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.streams.list, () => streams.list());
   safeHandle(channels.streams.upsert, (...args) => streams.upsert(args[0] as Parameters<typeof streams.upsert>[0]));
   safeHandle(channels.streams.delete, (...args) => streams.remove(args[0] as string));
+
+  // ---- media (Jukebox; vault-gated like everything else — NOT in GATE_EXEMPT) ----
+  safeHandle(channels.media.getSnapshot, () => mediaLib.getSnapshot());
+  safeHandle(channels.media.refresh, () => mediaLib.refresh());
+  safeHandle(channels.media.removeRoot, (...args) => mediaLib.removeRoot(ensureMediaRoot(args[0])));
+  safeHandle(channels.media.addRoot, async () => {
+    const win = getWindow();
+    const r = win
+      ? await dialog.showOpenDialog(win, { properties: ['openDirectory'] })
+      : await dialog.showOpenDialog({ properties: ['openDirectory'] });
+    if (r.canceled || !r.filePaths[0]) return mediaLib.getSnapshot();
+    await mediaLib.addRoot(r.filePaths[0]);
+    return mediaLib.refresh();
+  });
+  safeHandle(channels.media.openFiles, async () => {
+    const win = getWindow();
+    const r = win
+      ? await dialog.showOpenDialog(win, { properties: ['openFile', 'multiSelections'], filters: [{ name: 'Audio', extensions: ['mp3', 'm4a', 'aac', 'flac', 'wav', 'ogg', 'oga', 'opus'] }] })
+      : await dialog.showOpenDialog({ properties: ['openFile', 'multiSelections'] });
+    if (r.canceled) return [];
+    const out: MediaTrack[] = [];
+    for (const p of r.filePaths) {
+      adHocAllowlist.add(await realpath(p)); // authorize this ad-hoc file for ga98media://
+      const st = await stat(p);
+      out.push({ path: p, mtime: st.mtimeMs, size: st.size, title: basename(p) });
+    }
+    return out;
+  });
+  safeHandle(channels.media.loadPlaylist, async () => {
+    const win = getWindow();
+    const r = win
+      ? await dialog.showOpenDialog(win, { properties: ['openFile'], filters: [{ name: 'Playlist', extensions: ['m3u', 'm3u8'] }] })
+      : await dialog.showOpenDialog({ properties: ['openFile'] });
+    if (r.canceled || !r.filePaths[0]) return [];
+    const playlist = r.filePaths[0];
+    const items = parseM3u(await readFile(playlist, 'utf8'), dirname(playlist));
+    for (const it of items) {
+      if (it.path) { try { adHocAllowlist.add(await realpath(it.path)); } catch { /* missing file — still listed, just won't play */ } }
+    }
+    return items;
+  });
+  safeHandle(channels.media.savePlaylist, async (...args) => {
+    const queue = args[0] as { title: string; path?: string; url?: string }[];
+    const win = getWindow();
+    const r = win
+      ? await dialog.showSaveDialog(win, { defaultPath: 'playlist.m3u' })
+      : await dialog.showSaveDialog({ defaultPath: 'playlist.m3u' });
+    if (r.canceled || !r.filePath) return null;
+    try { const st = await lstat(r.filePath); if (st.isSymbolicLink()) throw new Error('Refusing to write to a symbolic link.'); }
+    catch (err) { if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err; }
+    await writeFile(r.filePath, toM3u(queue), 'utf8');
+    return basename(r.filePath);
+  });
+  safeHandle(channels.media.upsertStation, (...args) => mediaLib.upsertStation(ensureStationInput(args[0])));
+  safeHandle(channels.media.deleteStation, (...args) => mediaLib.deleteStation(args[0] as string));
 
   // ---- ai ----
   safeHandle(channels.ai.chatStream, (...args) => ai.chat(args[0] as string, args[1] as AiChatRequest, getWindow));

@@ -127,6 +127,17 @@ const api = {
     upsert: (input: unknown) => ipcRenderer.invoke(channels.streams.upsert, input),
     delete: (id: string) => ipcRenderer.invoke(channels.streams.delete, id)
   },
+  media: {
+    getSnapshot: () => ipcRenderer.invoke(channels.media.getSnapshot),
+    addRoot: () => ipcRenderer.invoke(channels.media.addRoot),
+    removeRoot: (root: string) => ipcRenderer.invoke(channels.media.removeRoot, root),
+    refresh: () => ipcRenderer.invoke(channels.media.refresh),
+    openFiles: () => ipcRenderer.invoke(channels.media.openFiles),
+    loadPlaylist: () => ipcRenderer.invoke(channels.media.loadPlaylist),
+    savePlaylist: (queue: unknown) => ipcRenderer.invoke(channels.media.savePlaylist, queue),
+    upsertStation: (input: unknown) => ipcRenderer.invoke(channels.media.upsertStation, input),
+    deleteStation: (id: string) => ipcRenderer.invoke(channels.media.deleteStation, id)
+  },
   ai: {
     chatStream: (streamId: string, req: unknown) => ipcRenderer.invoke(channels.ai.chatStream, streamId, req),
     cancel: (streamId: string) => ipcRenderer.invoke(channels.ai.chat, streamId),
