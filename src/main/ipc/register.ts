@@ -41,6 +41,7 @@ import * as bookmarks from '../storage/bookmarks';
 import * as history from '../storage/history';
 import * as firefox from '../services/firefox';
 import * as bookmarksBoard from '../storage/bookmarks-board';
+import * as voiceModel from '../voice/model-protocol';
 import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureWhiteboard, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon, ensureSaveToCaseOpts, ensureGeoItem, ensureBookmarkBoard } from '../security/validate';
 import * as entities from '../storage/entities';
 import * as bioStore from '../storage/bio-images';
@@ -614,6 +615,9 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     await firefox.launch(url);
     void history.add(url.slice(0, 2048), String(args[1] ?? '').slice(0, 256)).catch(() => {});
   });
+
+  // ---- voice (offline STT model status) ----
+  safeHandle(channels.voice.modelStatus, () => voiceModel.status());
 
   // ---- bookmarks dashboard (offline start.me-style board) ----
   // Re-validate on READ too (not just write): the board file can be edited directly when the

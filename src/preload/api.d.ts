@@ -154,6 +154,9 @@ export interface GhostApi {
     firefoxStatus(): Promise<{ installed: boolean; path: string | null }>;
     launchFirefox(url: string, title?: string): Promise<void>;
   };
+  voice: {
+    modelStatus(): Promise<{ installed: boolean; path: string | null }>;
+  };
   bookmarks: {
     get(): Promise<BookmarkBoard>;
     save(board: BookmarkBoard): Promise<void>;

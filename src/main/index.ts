@@ -15,10 +15,14 @@ import { appendFile, mkdir } from 'node:fs/promises';
 import { channels } from '@shared/ipc-contracts';
 import { ensureDataLayout } from './storage/paths';
 import { registerMediaProtocol } from './media/protocol';
+import { registerModelProtocol } from './voice/model-protocol';
 
-// Custom scheme for local audio playback. Must be declared before app is ready.
+// Custom schemes. Must be declared before app is ready.
+//  - ga98media: local audio/video streaming
+//  - ga98model: serve the bundled Vosk speech model to vosk-browser (offline STT)
 protocol.registerSchemesAsPrivileged([
-  { scheme: 'ga98media', privileges: { stream: true, supportFetchAPI: true, secure: true, standard: true } }
+  { scheme: 'ga98media', privileges: { stream: true, supportFetchAPI: true, secure: true, standard: true } },
+  { scheme: 'ga98model', privileges: { stream: true, supportFetchAPI: true, secure: true, standard: true } }
 ]);
 import { registerIpc, startReminderTicker } from './ipc/register';
 import * as vault from './services/vault';
@@ -83,7 +87,10 @@ function createWindow(): void {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
-      webviewTag: true
+      // Net Explorer is now an external Firefox launcher — no in-app <webview> consumer remains,
+      // so disable webviewTag entirely (red-team: a leftover webview could reach the mic in an
+      // attacker-chosen partition with no permission handler).
+      webviewTag: false
     }
   });
 
@@ -105,12 +112,34 @@ function createWindow(): void {
   // race where `mainWindow` was still null when web-contents-created fired synchronously
   // from new BrowserWindow(). Setting it directly on mainWindow.webContents.session here
   // runs AFTER construction so there is no race.
-  mainWindow.webContents.session.setPermissionRequestHandler((_wc, permission, callback) => {
+  const isMainWc = (wc: Electron.WebContents | null): boolean => !!wc && wc === mainWindow?.webContents;
+  mainWindow.webContents.session.setPermissionRequestHandler((wc, permission, callback, details) => {
     if (permission === 'clipboard-read' || (permission as string) === 'clipboard-sanitized-write') {
       callback(true);
       return;
     }
+    // Microphone for offline voice (Vosk STT): main window ONLY, AUDIO ONLY — never video,
+    // display-capture, or any other context. A blanket `media → true` would hand the mic to the
+    // whole session; this scopes it to the app's own renderer requesting audio.
+    if (
+      permission === 'media' &&
+      isMainWc(wc) &&
+      Array.isArray((details as { mediaTypes?: string[] }).mediaTypes) &&
+      (details as { mediaTypes: string[] }).mediaTypes.length > 0 &&
+      (details as { mediaTypes: string[] }).mediaTypes.every((t) => t === 'audio')
+    ) {
+      callback(true);
+      return;
+    }
     callback(false);
+  });
+  // Electron docs: the request handler alone is incomplete — the Permissions API / pre-flight
+  // capability checks consult the CHECK handler, which otherwise falls back to Chromium defaults
+  // (media defaults to allowed). Mirror the request policy exactly so there's one decision.
+  mainWindow.webContents.session.setPermissionCheckHandler((wc, permission, _origin, details) => {
+    if (permission === 'clipboard-read') return true;
+    if (permission === 'media' && isMainWc(wc) && (details as { mediaType?: string }).mediaType === 'audio') return true;
+    return false;
   });
 
   if (isDev && process.env['ELECTRON_RENDERER_URL']) {
@@ -194,6 +223,7 @@ app.whenReady().then(async () => {
   await vault.refreshEnabled(); // populate the lock-gate cache before any IPC can fire
   lockDownWebContents();
   registerMediaProtocol(); // ga98media:// for local audio playback
+  registerModelProtocol(); // ga98model:// serves the bundled Vosk model (offline STT)
   registerIpc(() => mainWindow);
   createWindow();
   lockDownPartitionSessions();

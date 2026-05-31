@@ -103,6 +103,9 @@ export const channels = {
     firefoxStatus: 'browser:firefoxStatus',
     launchFirefox: 'browser:launchFirefox'
   },
+  voice: {
+    modelStatus: 'voice:modelStatus'
+  },
   bookmarks: {
     get: 'bookmarks:get',
     save: 'bookmarks:save',
