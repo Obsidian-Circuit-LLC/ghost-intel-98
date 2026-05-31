@@ -32,6 +32,7 @@ const moduleTitles: Record<ModuleKey, string> = {
   search: 'Search',
   whiteboard: 'Whiteboard',
   'media-player': 'Jukebox',
+  geoint: 'GeoINT',
   help: 'Help'
 };
 

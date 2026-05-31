@@ -699,3 +699,17 @@ input.ga98-text, select.ga98-text {
 .ga98-jukebox-list { flex: 1; overflow: auto; margin: 0; }
 .ga98-jukebox-list li { cursor: pointer; padding: 1px 4px; display: flex; align-items: center; }
 .ga98-jukebox-list li[data-active='true'] { background: navy; color: #fff; }
+
+/* ── GeoINT dashboard ─────────────────────────────────────────────────────── */
+.ga98-geo-left { display: flex; flex-direction: column; gap: 6px; min-width: 320px; max-width: 420px; overflow: auto; }
+.ga98-geo-right { position: relative; }
+.ga98-geo-map-wrap { position: relative; height: 100%; width: 100%; }
+.ga98-geo-map { position: absolute; inset: 0; }
+.ga98-geo-map-placeholder {
+  position: absolute; inset: 0; z-index: 500;
+  display: flex; align-items: center; justify-content: center; text-align: center;
+  padding: 16px; color: #555; background: #c0c0c0; font-size: 12px;
+}
+.ga98-geo-events li[data-active='true'] { background: navy; color: #fff; }
+.ga98-geo-pin { font-size: 16px; line-height: 16px; }
+.leaflet-container { background: #aab; }

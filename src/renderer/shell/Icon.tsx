@@ -56,6 +56,7 @@ const GLYPHS: Record<ModuleKey, string> = {
   search: '🔍',
   whiteboard: '🗺',
   'media-player': '🎵',
+  geoint: '🌍',
   help: '?'
 };
 
