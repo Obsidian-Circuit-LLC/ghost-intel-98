@@ -138,6 +138,15 @@ export interface AttachmentBytesResult {
   reason?: 'read-error' | 'out-of-range' | 'locked' | 'decrypt-failed';
 }
 
+/** Result of requesting a streamable ga98media:// URL for a case attachment (large
+ *  video/audio that must NOT be base64-loaded into the renderer). `url` is null when the
+ *  file can't be streamed; `reason` says why. `encrypted` means encrypt-at-rest is on and
+ *  whole-file GCM can't be range-streamed — the viewer falls back to "use Reveal". */
+export interface MediaUrlResult {
+  url: string | null;
+  reason?: 'encrypted' | 'missing' | 'forbidden';
+}
+
 /** Inner attachment of a parsed .eml — metadata ONLY (never the bytes). */
 export interface EmlAttachmentInfo {
   filename: string;
@@ -301,6 +310,10 @@ export interface AppSettings {
   caseSortBy: 'updatedAt' | 'createdAt' | 'priority' | 'status' | 'title';
   caseSortDir: 'asc' | 'desc';
   shortcuts: AccessShortcut[];
+  /** Targets of REQUIRED_MODULE_SHORTCUTS that have been seeded into `shortcuts` at least once.
+   *  Lets the reconciler introduce new built-in modules to existing installs exactly once,
+   *  without re-adding a shortcut the user later deletes. */
+  seededShortcuts: string[];
   ai: {
     provider: 'ollama' | 'openai-compatible' | 'none';
     endpoint: string;
@@ -308,6 +321,13 @@ export interface AppSettings {
     defaultSystemPrompt: string;
     /** Reference into secrets.enc; the API key itself is never stored here. */
     apiKeyRef: string | null;
+    /** Text-to-speech (offline, Web Speech / OS voices). Flat fields so partial settings
+     *  patches through the shallow `ai` merge can't drop sibling values. */
+    ttsEnabled: boolean;
+    /** Chosen voice's voiceURI, or null to use the OS default voice. */
+    ttsVoiceUri: string | null;
+    /** Speech rate, 0.5–2.0. */
+    ttsRate: number;
   };
   mail: {
     accounts: { id: string; label: string; imapHost: string; imapPort: number; smtpHost: string; smtpPort: number; user: string; secureRef: string | null }[];
@@ -339,15 +359,53 @@ export const defaultShortcuts: AccessShortcut[] = [
   { id: 'mail', label: 'Mail', kind: 'module', target: 'mail', icon: 'mail' },
   { id: 'dialterm', label: 'DialTerm', kind: 'module', target: 'dialterm', icon: 'modem' },
   { id: 'eyespy', label: 'EyeSpy', kind: 'module', target: 'eyespy', icon: 'cam' },
+  { id: 'media-player', label: 'Jukebox', kind: 'module', target: 'media-player', icon: 'music' },
+  { id: 'geoint', label: 'GeoINT', kind: 'module', target: 'geoint', icon: 'globe' },
+  { id: 'bookmarks', label: 'Bookmarks', kind: 'module', target: 'bookmarks', icon: 'bookmark' },
   { id: 'calendar', label: 'Calendar', kind: 'module', target: 'calendar', icon: 'calendar' },
   { id: 'reminders', label: 'Reminders', kind: 'module', target: 'reminders', icon: 'bell' },
   { id: 'alarm', label: 'Alarm', kind: 'module', target: 'alarm', icon: 'alarm' },
   { id: 'ai', label: 'AI Assistant', kind: 'module', target: 'ai-assistant', icon: 'sparkle' },
   { id: 'search', label: 'Search', kind: 'module', target: 'search', icon: 'search' },
-  { id: 'help', label: 'Help', kind: 'module', target: 'help', icon: 'help' }
+  { id: 'help', label: 'RTFM', kind: 'module', target: 'help', icon: 'help' }
   // Settings is always available via the Access menu footer ("Settings…"), so it is
   // intentionally NOT a duplicate editable shortcut here.
 ];
+
+/** Built-in module shortcuts that every install should carry. Used by the settings
+ *  reconciler to repair installs whose persisted shortcuts predate a module's release
+ *  (e.g. Jukebox/GeoINT were registered as modules but never seeded into older
+ *  settings.json), and to migrate the legacy "Help" label to "RTFM". Appends only —
+ *  it never removes a shortcut the user deleted on purpose, except by relabel. */
+export const REQUIRED_MODULE_SHORTCUTS: readonly AccessShortcut[] = [
+  { id: 'media-player', label: 'Jukebox', kind: 'module', target: 'media-player', icon: 'music' },
+  { id: 'geoint', label: 'GeoINT', kind: 'module', target: 'geoint', icon: 'globe' },
+  { id: 'bookmarks', label: 'Bookmarks', kind: 'module', target: 'bookmarks', icon: 'bookmark' }
+];
+
+/** Repairs a persisted shortcut list (returns NEW arrays, never mutates inputs):
+ *  - renames the legacy default "Help" entry to "RTFM" (only if still the default label),
+ *  - seeds any REQUIRED_MODULE_SHORTCUTS missing by target — but ONLY ONCE. `seeded` records
+ *    which required targets have already been introduced; a module the user then deletes stays
+ *    deleted (it's in `seeded` but absent), instead of being force-re-added every launch.
+ *  Returns the updated `seededShortcuts` to persist alongside. */
+export function reconcileShortcuts(
+  shortcuts: AccessShortcut[],
+  seeded: string[] = []
+): { shortcuts: AccessShortcut[]; seededShortcuts: string[] } {
+  const next = shortcuts.map((s) =>
+    s.kind === 'module' && s.target === 'help' && s.label === 'Help' ? { ...s, label: 'RTFM' } : s
+  );
+  const seen = new Set(seeded);
+  for (const req of REQUIRED_MODULE_SHORTCUTS) {
+    const present = next.some((s) => s.kind === 'module' && s.target === req.target);
+    if (present) { seen.add(req.target); continue; }
+    if (seen.has(req.target)) continue; // seeded once, user removed it → respect the deletion
+    next.push({ ...req });
+    seen.add(req.target);
+  }
+  return { shortcuts: next, seededShortcuts: [...seen] };
+}
 
 export const defaultSettings: AppSettings = {
   soundEnabled: true,
@@ -360,12 +418,16 @@ export const defaultSettings: AppSettings = {
   caseSortBy: 'updatedAt',
   caseSortDir: 'desc',
   shortcuts: defaultShortcuts,
+  seededShortcuts: [],
   ai: {
     provider: 'none',
     endpoint: 'http://localhost:11434',
     model: '',
     defaultSystemPrompt: 'You are an investigative case-management assistant. Use only the case data the user has explicitly shared. Be concise.',
-    apiKeyRef: null
+    apiKeyRef: null,
+    ttsEnabled: false,
+    ttsVoiceUri: null,
+    ttsRate: 1
   },
   mail: { accounts: [] },
   browser: { homepage: 'about:blank' },

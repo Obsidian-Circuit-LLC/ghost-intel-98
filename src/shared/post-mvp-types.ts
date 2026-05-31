@@ -195,3 +195,32 @@ export interface AiChatRequest {
   context?: string;
   messages: AiChatMessage[];
 }
+
+// ---------- Bookmarks dashboard (offline start.me-style board) ----------
+
+/** A single saved link inside a category. Icon resolution at render: `emoji` if set →
+ *  `favicon` (cached data-URI, fetched only when network is enabled) → default glyph. */
+export interface BookmarkLink {
+  id: string;
+  name: string;
+  url: string;
+  /** User-chosen emoji icon (offline). */
+  emoji?: string;
+  /** Cached favicon as a data: URI (only populated when the user fetches it with network on). */
+  favicon?: string;
+}
+
+/** A category card (start.me "widget"): a titled, ordered list of links. */
+export interface BookmarkCategory {
+  id: string;
+  title: string;
+  links: BookmarkLink[];
+}
+
+/** The whole dashboard. Persisted under dataRoot, encrypted at rest when login is enabled.
+ *  Exported/imported as a portable .ghostbookmarks file for sharing between users. */
+export interface BookmarkBoard {
+  categories: BookmarkCategory[];
+  /** Off by default. Gates favicon fetching (the only network egress this module can do). */
+  networkEnabled: boolean;
+}

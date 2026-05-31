@@ -1,6 +1,6 @@
 {
   "name": "ghost-access-98",
-  "version": "3.2.3",
+  "version": "3.3.0",
   "private": true,
   "description": "Windows 98–inspired case-management desktop app. Electron + React + TypeScript.",
   "author": {
@@ -92,6 +92,10 @@
       {
         "from": "resources/geoint",
         "to": "geoint"
+      },
+      {
+        "from": "resources/firefox",
+        "to": "firefox"
       }
     ],
     "win": {

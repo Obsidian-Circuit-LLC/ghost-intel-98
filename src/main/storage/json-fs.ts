@@ -33,7 +33,7 @@ import exifr from 'exifr';
 import { simpleParser, type AddressObject } from 'mailparser';
 import { resolveCaseEntities } from './entities';
 import * as bioImages from './bio-images';
-import { defaultSettings } from '@shared/types';
+import { defaultSettings, reconcileShortcuts } from '@shared/types';
 import type { CaseStore, FileStore, NoteStore, ReminderStore, SettingsStore, ShredStore } from './interface';
 import {
   caseAttachmentsDir,
@@ -866,6 +866,10 @@ export const settingsStore: SettingsStore = {
 };
 
 function mergeSettings(base: AppSettings, patch: Partial<AppSettings>): AppSettings {
+  const reconciled = reconcileShortcuts(
+    patch.shortcuts ?? base.shortcuts,
+    patch.seededShortcuts ?? base.seededShortcuts ?? []
+  );
   return {
     ...base,
     ...patch,
@@ -874,7 +878,8 @@ function mergeSettings(base: AppSettings, patch: Partial<AppSettings>): AppSetti
     browser: { ...base.browser, ...(patch.browser ?? {}) },
     media: { ...base.media, ...(patch.media ?? {}) },
     geoint: { ...base.geoint, ...(patch.geoint ?? {}) },
-    shortcuts: patch.shortcuts ?? base.shortcuts,
+    shortcuts: reconciled.shortcuts,
+    seededShortcuts: reconciled.seededShortcuts,
     hasSeenWelcome: patch.hasSeenWelcome ?? base.hasSeenWelcome,
     caseSortBy: patch.caseSortBy ?? base.caseSortBy,
     caseSortDir: patch.caseSortDir ?? base.caseSortDir

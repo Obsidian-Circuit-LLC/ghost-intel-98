@@ -14,7 +14,7 @@ import { Toaster } from './shell/Toaster';
 import { Shortcuts } from './shell/Shortcuts';
 import { Welcome } from './shell/Welcome';
 import { LockScreen } from './shell/LockScreen';
-import { playStartup, playReminder } from './audio/synth';
+import { playBoot, playReminder, playMouseClick } from './audio/synth';
 import { toast } from './state/toasts';
 
 export function App(): JSX.Element {
@@ -37,9 +37,27 @@ export function App(): JSX.Element {
 
   useEffect(() => {
     if (settings?.startupSoundEnabled && settings.soundEnabled) {
-      playStartup();
+      playBoot();
     }
   }, [settings?.startupSoundEnabled, settings?.soundEnabled]);
+
+  // Global retro mouse-click on every <button>. Delegated at the document so it covers
+  // buttons in any module/dialog without per-component wiring. Read soundEnabled live
+  // (getState) so the listener binds once and never goes stale. Desktop icons and Access
+  // menu entries are <div role="menuitem">, not <button>, so they keep their own playClick
+  // call without double-triggering here.
+  useEffect(() => {
+    const onClick = (e: MouseEvent): void => {
+      const target = e.target as HTMLElement | null;
+      if (!target?.closest('button')) return;
+      // Don't click-sound (or lazily spin up the AudioContext) behind the lock screen.
+      const auth = useAuth.getState().status;
+      if (auth?.enabled === true && auth.unlocked === false) return;
+      if (useSettings.getState().settings?.soundEnabled) playMouseClick();
+    };
+    document.addEventListener('click', onClick);
+    return () => document.removeEventListener('click', onClick);
+  }, []);
 
   // Reflect the theme-intensity setting onto the document root so the CSS in
   // theme.css can style the whole shell (desktop, windows, lock screen) per level.

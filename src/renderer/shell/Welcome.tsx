@@ -21,7 +21,7 @@ const STEPS = [
     title: 'Open programs from the Access menu',
     body: (
       <>
-        <p>Click <b>Access</b> in the bottom-left to open the start menu. Every module is in there — Case Files, Notepad 98, Calendar, Mail, DialTerm (SSH), Net Explorer, EyeSpy, AI Assistant.</p>
+        <p>Click <b>Access</b> in the bottom-left to open the start menu. Every module is in there — Case Files, Notepad 98, Jukebox, GeoINT, Calendar, Mail, DialTerm (SSH), Net Explorer, EyeSpy, AI Assistant.</p>
         <p>You can also double-click desktop icons. Edit the menu from <b>Settings → Shortcuts</b> to add your own web-link shortcuts.</p>
       </>
     )
@@ -37,7 +37,7 @@ const STEPS = [
           <li><kbd>Ctrl/⌘ + Tab</kbd> — Cycle windows</li>
           <li><kbd>F1</kbd> — Open Settings</li>
         </ul>
-        <p style={{ marginTop: 8 }}>You can drag files from Windows Explorer onto a case to attach them. Mail and AI credentials are encrypted by your OS keyring. Open <b>Help</b> from the Access menu any time for the full reference.</p>
+        <p style={{ marginTop: 8 }}>You can drag files from Windows Explorer onto a case to attach them. Mail and AI credentials are encrypted by your OS keyring. Open <b>RTFM</b> from the Access menu any time for the full reference.</p>
       </>
     )
   }

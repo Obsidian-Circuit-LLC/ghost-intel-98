@@ -1,82 +1,33 @@
 /**
- * Net Explorer v2.1 — multi-tab internal browser with bookmark bar and history panel.
+ * Net Explorer — Firefox Portable launcher.
  *
- * v2.1 fixes (v2.0 audit round 1):
- *  - Per-tab event wiring (not just active tab) — background tab navigations now
- *    update their tab state, and history entries are recorded for all tabs.
- *  - Filters out about:blank / chrome-error:// / chrome:// from history.
- *  - Ref callback null-cleanup — Map shrinks when a tab unmounts.
- *  - history.addHistory failures surface as a one-shot toast after N consecutive
- *    failures so the user knows browsing isn't being recorded.
+ * v3.3 swap: the in-process Electron <webview> browser was replaced (operator decision) by a
+ * launcher that opens URLs in a bundled Firefox Portable as a separate OS process. The trade
+ * was made knowingly — it loses the embedded retro chrome and live tab capture, but routes all
+ * browsing through Firefox's own engine. The app keeps the parts that matter for casework:
+ * an address bar, a bookmark bar, save-URL-to-case, and a record of launched URLs.
+ *
+ * Security: the renderer can only pass a URL. The main process spawns ONLY the bundled
+ * executable (resources/firefox/) with the URL as a single non-shell argument — see
+ * services/firefox.ts. No renderer-supplied executable path is ever accepted.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { CaseSummary } from '@shared/types';
 import type { Bookmark, HistoryEntry } from '../../../preload/api';
-import { useSettings } from '../../state/store';
 import { toast } from '../../state/toasts';
 import { confirmDialog, promptDialog } from '../../state/dialogs';
 
-interface WebviewElement extends HTMLElement {
-  src: string;
-  loadURL(url: string): Promise<void>;
-  canGoBack(): boolean;
-  canGoForward(): boolean;
-  goBack(): void;
-  goForward(): void;
-  reload(): void;
-  getURL(): string;
-  getTitle(): string;
-}
-
-interface Tab {
-  id: string;
-  /** Stable initial src for the <webview> element — set once at tab creation and NEVER
-   *  re-bound, so React reconciliation can't clobber an in-flight loadURL() navigation. */
-  initialUrl: string;
-  /** Live URL (address bar / save-to-case), updated by did-navigate. */
-  url: string;
-  title: string;
-  loading: boolean;
-}
-
-function newTabId(): string {
-  return `tab-${crypto.randomUUID()}`;
-}
-
-let historyFailures = 0;
-let toastedHistoryFailure = false;
-
-function reportHistoryFailure(err: unknown): void {
-  historyFailures += 1;
-  // eslint-disable-next-line no-console
-  console.warn('[net-explorer] addHistory failed', err);
-  if (historyFailures >= 3 && !toastedHistoryFailure) {
-    toast.error('Browsing history is not being saved — check disk space or permissions.');
-    toastedHistoryFailure = true;
-  }
-}
-
-function reportHistorySuccess(): void {
-  // Reset on success so a transient failure doesn't permanently bias the counter.
-  // (toastedHistoryFailure stays latched — one warning per session is enough.)
-  historyFailures = 0;
-}
-
 export function NetExplorerModule(): JSX.Element {
-  const homepage = useSettings((s) => s.settings?.browser.homepage ?? 'about:blank');
-  const [tabs, setTabs] = useState<Tab[]>([{ id: newTabId(), initialUrl: homepage, url: homepage, title: 'New tab', loading: false }]);
-  const [activeId, setActiveId] = useState<string>(() => tabs[0].id);
-  const [address, setAddress] = useState(homepage);
+  const [status, setStatus] = useState<{ installed: boolean; path: string | null } | null>(null);
+  const [address, setAddress] = useState('https://');
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [cases, setCases] = useState<CaseSummary[]>([]);
   const [saveCase, setSaveCase] = useState('');
-  const refs = useRef<Map<string, WebviewElement>>(new Map());
 
-  const activeTab = tabs.find((t) => t.id === activeId);
-
+  useEffect(() => { void window.api.browser.firefoxStatus().then(setStatus); }, []);
   useEffect(() => { void window.api.cases.list().then(setCases); }, []);
   useEffect(() => { void refreshBookmarks(); }, []);
 
@@ -87,113 +38,25 @@ export function NetExplorerModule(): JSX.Element {
     setHistory(await window.api.browser.listHistory(200));
   }
 
-  // Per-tab event wiring. Wires listeners ONCE per tab id; React effect cleanup
-  // detaches on unmount or tab close. tabId is captured per-tab, not via activeId,
-  // so background tabs still update their own state.
-  useEffect(() => {
-    const cleanups: Array<() => void> = [];
-    for (const t of tabs) {
-      const wv = refs.current.get(t.id);
-      if (!wv) continue;
-      const tabId = t.id;
-      const wvBound = wv; // narrow for closures
-      function onStart(): void {
-        setTabs((ts) => ts.map((x) => x.id === tabId ? { ...x, loading: true } : x));
-      }
-      function onStop(): void {
-        setTabs((ts) => ts.map((x) => x.id === tabId ? { ...x, loading: false } : x));
-      }
-      function onNav(e: Event & { url?: string }): void {
-        const u = e.url ?? wvBound.getURL();
-        setTabs((ts) => ts.map((x) => x.id === tabId ? { ...x, url: u } : x));
-        if (tabId === activeIdRef.current) setAddress(u);
-      }
-      function onTitle(e: Event & { title?: string }): void {
-        const title = e.title ?? wvBound.getTitle();
-        setTabs((ts) => ts.map((x) => x.id === tabId ? { ...x, title } : x));
-        void window.api.browser.addHistory(wvBound.getURL(), title).then(reportHistorySuccess, reportHistoryFailure);
-      }
-      function onFail(e: Event & { errorCode?: number; errorDescription?: string; validatedURL?: string; isMainFrame?: boolean }): void {
-        if (e.errorCode === -3) return;               // ERR_ABORTED — normal on redirects / cancels
-        if (e.isMainFrame === false) return;          // sub-resource failures are noise
-        setTabs((ts) => ts.map((x) => x.id === tabId ? { ...x, loading: false } : x));
-        toast.error(`Could not load ${e.validatedURL || ''} — ${e.errorDescription || 'load failed'} (${e.errorCode ?? '?'})`);
-      }
-      wvBound.addEventListener('did-start-loading', onStart);
-      wvBound.addEventListener('did-stop-loading', onStop);
-      wvBound.addEventListener('did-navigate', onNav as EventListener);
-      wvBound.addEventListener('did-navigate-in-page', onNav as EventListener);
-      wvBound.addEventListener('page-title-updated', onTitle as EventListener);
-      wvBound.addEventListener('did-fail-load', onFail as EventListener);
-      cleanups.push(() => {
-        wvBound.removeEventListener('did-start-loading', onStart);
-        wvBound.removeEventListener('did-stop-loading', onStop);
-        wvBound.removeEventListener('did-navigate', onNav as EventListener);
-        wvBound.removeEventListener('did-navigate-in-page', onNav as EventListener);
-        wvBound.removeEventListener('page-title-updated', onTitle as EventListener);
-        wvBound.removeEventListener('did-fail-load', onFail as EventListener);
-      });
+  const launch = useCallback(async (raw?: string) => {
+    const input = (raw ?? address).trim();
+    if (!input) return;
+    const url = /^https?:\/\//i.test(input) ? input : `https://${input}`;
+    try {
+      await window.api.browser.launchFirefox(url, url);
+      setAddress(url);
+    } catch (err) {
+      toast.error(`Could not open Firefox: ${(err as Error).message}`);
     }
-    return () => { for (const c of cleanups) c(); };
-  }, [tabs]);
-
-  // Track activeId in a ref so the per-tab listeners' setAddress check sees current value.
-  const activeIdRef = useRef(activeId);
-  useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
-
-  useEffect(() => {
-    // Sync the address bar to the active tab. Prefer the live URL from the webview
-    // if available (background tab might have navigated since we last persisted).
-    const wv = refs.current.get(activeId);
-    if (wv) {
-      try { setAddress(wv.getURL() || activeTab?.url || ''); } catch { setAddress(activeTab?.url ?? ''); }
-    } else {
-      setAddress(activeTab?.url ?? '');
-    }
-  }, [activeId, activeTab?.url]);
-
-  const go = useCallback((u?: string) => {
-    const wv = refs.current.get(activeId);
-    if (!wv) return;
-    const raw = (u ?? address).trim();
-    if (!raw) return;
-    const normalised = /^(https?:|about:)/i.test(raw) ? raw : `https://${raw}`;
-    // loadURL() is the navigation API for <webview>; assigning .src is a no-op. The element's
-    // src attribute stays pinned to the stable initialUrl, so React never overrides this.
-    void wv.loadURL(normalised).catch(() => { /* did-fail-load surfaces the reason */ });
-    setAddress(normalised);
-    setTabs((ts) => ts.map((x) => x.id === activeId ? { ...x, url: normalised } : x));
-  }, [address, activeId]);
-
-  function newTab(initial = 'about:blank'): void {
-    const t: Tab = { id: newTabId(), initialUrl: initial, url: initial, title: 'New tab', loading: false };
-    setTabs((ts) => [...ts, t]);
-    setActiveId(t.id);
-  }
-
-  function closeTab(id: string): void {
-    setTabs((ts) => {
-      const idx = ts.findIndex((t) => t.id === id);
-      const next = ts.filter((t) => t.id !== id);
-      if (next.length === 0) {
-        const fresh: Tab = { id: newTabId(), initialUrl: 'about:blank', url: 'about:blank', title: 'New tab', loading: false };
-        setActiveId(fresh.id);
-        return [fresh];
-      }
-      if (id === activeId) {
-        setActiveId(next[Math.max(0, idx - 1)].id);
-      }
-      return next;
-    });
-    refs.current.delete(id);
-  }
+  }, [address]);
 
   async function bookmarkCurrent(): Promise<void> {
-    if (!activeTab) return;
-    const title = await promptDialog('Bookmark title:', activeTab.title, 'Add bookmark');
+    const url = address.trim();
+    if (!url) return;
+    const title = await promptDialog('Bookmark title:', url, 'Add bookmark');
     if (!title) return;
     try {
-      await window.api.browser.addBookmark(title, activeTab.url);
+      await window.api.browser.addBookmark(title, /^https?:\/\//i.test(url) ? url : `https://${url}`);
       await refreshBookmarks();
       toast.success('Bookmark added.');
     } catch (err) {
@@ -208,33 +71,12 @@ export function NetExplorerModule(): JSX.Element {
     await refreshBookmarks();
   }
 
-  async function openHistoryPanel(): Promise<void> {
-    setShowHistory(true);
-    await refreshHistory();
-  }
-
-  async function clearHistoryOnly(): Promise<void> {
-    // Honest copy: this clears history only. Cookies / session storage live in the
-    // partition and persist by design (so logged-in sites stay logged in across launches).
-    // Audit round-3 HIGH fix: previous confirm copy promised cookie clearing that
-    // didn't happen.
-    const ok = await confirmDialog(
-      'Clear browsing history? Cookies and logged-in sessions WILL be preserved (they live in the persistent partition).',
-      'Clear history'
-    );
-    if (!ok) return;
-    try {
-      await window.api.browser.clearHistory();
-      toast.success('History cleared.');
-    } catch (err) {
-      toast.error(`Clear failed: ${(err as Error).message}`);
-    }
-  }
-
   async function saveToCase(): Promise<void> {
-    if (!saveCase || !activeTab) return;
+    const url = address.trim();
+    if (!saveCase || !url) return;
+    const full = /^https?:\/\//i.test(url) ? url : `https://${url}`;
     try {
-      await window.api.cases.addLink(saveCase, activeTab.url, activeTab.title || activeTab.url);
+      await window.api.cases.addLink(saveCase, full, full);
       const c = cases.find((x) => x.id === saveCase);
       toast.success(`Link added to ${c?.title ?? 'case'}.`);
     } catch (err) {
@@ -242,42 +84,25 @@ export function NetExplorerModule(): JSX.Element {
     }
   }
 
+  async function openHistoryPanel(): Promise<void> {
+    setShowHistory(true);
+    await refreshHistory();
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div className="ga98-tabbar">
-        {tabs.map((t) => (
-          <div
-            key={t.id}
-            className="ga98-tab"
-            data-active={t.id === activeId}
-            onClick={() => setActiveId(t.id)}
-            title={t.url}
-          >
-            <span className="ga98-tab-title">{t.loading ? '⟳ ' : ''}{t.title || t.url}</span>
-            <button
-              className="ga98-tab-close"
-              onClick={(e) => { e.stopPropagation(); closeTab(t.id); }}
-              aria-label="Close tab"
-            >×</button>
-          </div>
-        ))}
-        <button className="ga98-tab-new" onClick={() => newTab()} title="New tab">+</button>
-      </div>
-
       <div className="ga98-toolbar">
-        <button onClick={() => refs.current.get(activeId)?.goBack()} title="Back">‹</button>
-        <button onClick={() => refs.current.get(activeId)?.goForward()} title="Forward">›</button>
-        <button onClick={() => refs.current.get(activeId)?.reload()} title="Reload">↻</button>
         <input
           className="ga98-text"
           style={{ flex: 1 }}
           value={address}
+          placeholder="https://…  (opens in Firefox)"
           onChange={(e) => setAddress(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') go(); }}
+          onKeyDown={(e) => { if (e.key === 'Enter') void launch(); }}
         />
-        <button onClick={() => go()} title="Go">Go</button>
+        <button onClick={() => void launch()} title="Open this URL in Firefox">Open in Firefox</button>
         <button onClick={() => void bookmarkCurrent()} title="Add bookmark">★</button>
-        <button onClick={() => void openHistoryPanel()} title="History">History</button>
+        <button onClick={() => void openHistoryPanel()} title="Launched URLs">History</button>
         <select className="ga98-text" value={saveCase} onChange={(e) => setSaveCase(e.target.value)}>
           <option value="">(select case…)</option>
           {cases.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
@@ -291,9 +116,9 @@ export function NetExplorerModule(): JSX.Element {
             <button
               key={bm.id}
               className="ga98-bookmark"
-              onClick={() => go(bm.url)}
+              onClick={() => void launch(bm.url)}
               onContextMenu={(e) => { e.preventDefault(); void deleteBookmark(bm.id); }}
-              title={`${bm.url} — right-click to remove`}
+              title={`${bm.url} — click to open in Firefox, right-click to remove`}
             >
               {bm.title}
             </button>
@@ -301,47 +126,60 @@ export function NetExplorerModule(): JSX.Element {
         </div>
       )}
 
-      <div style={{ flex: 1, background: '#fff', position: 'relative' }}>
-        {tabs.map((t) => (
-          <webview
-            key={t.id}
-            ref={(el) => {
-              // Ref-callback null-cleanup — when React unmounts, prevent Map from
-              // accumulating null entries (audit round-1 finding).
-              if (el) {
-                refs.current.set(t.id, el as unknown as WebviewElement);
-              } else {
-                refs.current.delete(t.id);
-              }
-            }}
-            src={t.initialUrl}
-            style={{
-              position: 'absolute',
-              inset: 0,
-              display: t.id === activeId ? 'flex' : 'none'
-            }}
-            partition="persist:netexplorer"
-          />
-        ))}
+      <div style={{ flex: 1, overflow: 'auto', padding: 24, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', gap: 14 }}>
+        <div style={{ fontSize: 40 }}>🦊</div>
+        <h3 style={{ margin: 0 }}>Browse with Firefox Portable</h3>
+        {status === null ? (
+          <p style={{ color: '#666' }}>Checking for the bundled Firefox…</p>
+        ) : status.installed ? (
+          <>
+            <p style={{ maxWidth: 460, color: '#333' }}>
+              Type a URL above (or pick a bookmark) and choose <b>Open in Firefox</b>. Pages open in a
+              separate Firefox window with its own engine, cookies, and downloads. Use <b>Save URL</b> to
+              attach the address to a case.
+            </p>
+            <p style={{ fontSize: 11, color: '#777', wordBreak: 'break-all' }}>Firefox: {status.path}</p>
+          </>
+        ) : (
+          <div className="ga98-firefox-missing">
+            <p style={{ maxWidth: 480, color: '#900' }}>
+              <b>Firefox Portable isn&rsquo;t bundled yet.</b> Drop the Firefox Portable payload into
+              <code> resources/firefox/ </code> (so that one of <code>FirefoxPortable.exe</code>,
+              <code> firefox.exe</code>, or <code>App/Firefox64/firefox.exe</code> exists) and rebuild the
+              installer. Until then, URLs can still be saved to cases and bookmarked, but won&rsquo;t open.
+            </p>
+          </div>
+        )}
       </div>
 
       <div className="ga98-statusbar">
-        <span>{activeTab?.loading ? 'Loading…' : 'Idle'}</span>
+        <span>{status?.installed ? 'Firefox ready' : 'Firefox not bundled'}</span>
         <span style={{ flex: 1 }} />
-        <button onClick={() => void clearHistoryOnly()} style={{ fontSize: 10, padding: '0 4px' }}>Clear history…</button>
-        <span>{tabs.length} tab{tabs.length === 1 ? '' : 's'}</span>
+        <button onClick={() => void clearHistoryConfirmed(refreshHistory)} style={{ fontSize: 10, padding: '0 4px' }}>Clear history…</button>
       </div>
 
       {showHistory && (
         <HistoryPanel
           entries={history}
           onClose={() => setShowHistory(false)}
-          onOpen={(url) => { go(url); setShowHistory(false); }}
+          onOpen={(url) => { void launch(url); setShowHistory(false); }}
           onClear={async () => { await window.api.browser.clearHistory(); await refreshHistory(); toast.success('History cleared.'); }}
         />
       )}
     </div>
   );
+}
+
+async function clearHistoryConfirmed(refresh: () => Promise<void>): Promise<void> {
+  const ok = await confirmDialog('Clear the record of URLs launched from here?', 'Clear history');
+  if (!ok) return;
+  try {
+    await window.api.browser.clearHistory();
+    await refresh();
+    toast.success('History cleared.');
+  } catch (err) {
+    toast.error(`Clear failed: ${(err as Error).message}`);
+  }
 }
 
 function HistoryPanel({ entries, onClose, onOpen, onClear }: {
@@ -354,14 +192,14 @@ function HistoryPanel({ entries, onClose, onOpen, onClear }: {
     <div className="ga98-dialog-veil">
       <div className="window" style={{ width: 640, maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
         <div className="title-bar">
-          <div className="title-bar-text">History</div>
+          <div className="title-bar-text">Launched URLs</div>
           <div className="title-bar-controls">
             <button aria-label="Close" onClick={onClose} />
           </div>
         </div>
         <div className="window-body" style={{ overflow: 'auto', flex: 1 }}>
           {entries.length === 0
-            ? <p style={{ color: '#666' }}>No history yet.</p>
+            ? <p style={{ color: '#666' }}>No URLs launched yet.</p>
             : (
               <ul className="ga98-list">
                 {entries.map((h) => (

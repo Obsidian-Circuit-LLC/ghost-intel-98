@@ -2,6 +2,7 @@
  * Renderer entry. Mounts the React tree into #root.
  */
 
+import './lib/uint8-hex-polyfill';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import '98.css';

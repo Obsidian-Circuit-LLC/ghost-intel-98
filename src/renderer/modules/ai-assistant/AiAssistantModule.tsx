@@ -14,6 +14,7 @@ import type { CaseSummary, CaseRecord } from '@shared/types';
 import { useSettings } from '../../state/store';
 import { toast } from '../../state/toasts';
 import { confirmDialog } from '../../state/dialogs';
+import { ttsSupported, listVoices, speak, cancelSpeech, type TtsVoice } from '../../audio/tts';
 
 interface DisplayMessage extends AiChatMessage {
   id: string;
@@ -34,12 +35,26 @@ export function AiAssistantModule(): JSX.Element {
   const [streaming, setStreaming] = useState(false);
   const [includeFiles, setIncludeFiles] = useState(false);
   const activeStreamRef = useRef<{ id: string; off: () => void } | null>(null);
+  // Set by STFU/unmount so a `done` event already queued in the event loop can't start TTS
+  // after the user explicitly stopped (TOCTOU between cancel and the dispatched done event).
+  const stoppedRef = useRef(false);
   // One-time-per-session confirmation that file CONTENTS may leave the machine to a remote provider.
   const remoteEgressConfirmedRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const settings = useSettings((s) => s.settings);
+  const patchSettings = useSettings((s) => s.patch);
+  const [voices, setVoices] = useState<TtsVoice[]>([]);
 
   useEffect(() => { void window.api.cases.list().then(setCases); }, []);
+
+  // Populate the offline voice list once (Chromium fills it asynchronously).
+  useEffect(() => { if (ttsSupported()) void listVoices().then(setVoices); }, []);
+
+  async function setTts(patch: { ttsEnabled?: boolean; ttsVoiceUri?: string | null; ttsRate?: number }): Promise<void> {
+    if (!settings) return;
+    if (patch.ttsEnabled === false) cancelSpeech();
+    await patchSettings({ ai: { ...settings.ai, ...patch } });
+  }
 
   // Default the "include file contents" toggle by provider — on for local Ollama (data
   // never leaves the box), off for remote/none until the user opts in. A provider change
@@ -64,6 +79,7 @@ export function AiAssistantModule(): JSX.Element {
   // Cancel any in-flight stream + drop the listener on unmount.
   useEffect(() => {
     return () => {
+      cancelSpeech();
       const active = activeStreamRef.current;
       if (active) {
         active.off();
@@ -125,12 +141,17 @@ export function AiAssistantModule(): JSX.Element {
     setMessages((prev) => [...prev, userMsg, assistantMsg]);
     setInput('');
     setStreaming(true);
+    stoppedRef.current = false;
 
     const req: AiChatRequest = { context, messages: history };
 
+    // Accumulate the full reply locally so we can speak it on `done` without reading
+    // back through React state (avoids StrictMode double-speak + stale closures).
+    let acc = '';
     const off = window.api.ai.onChunk(({ streamId: sid, chunk, done, error }) => {
       if (sid !== streamId) return;
       if (chunk) {
+        acc += chunk;
         setMessages((prev) => prev.map((m) => m.id === assistantMsg.id ? { ...m, content: m.content + chunk } : m));
       }
       if (error) {
@@ -141,6 +162,13 @@ export function AiAssistantModule(): JSX.Element {
         setStreaming(false);
         off();
         if (activeStreamRef.current?.id === streamId) activeStreamRef.current = null;
+        const st = useSettings.getState().settings;
+        if (!stoppedRef.current && st?.ai.ttsEnabled && acc.trim()) {
+          const r = speak(acc, { voiceURI: st.ai.ttsVoiceUri, rate: st.ai.ttsRate });
+          if (!r.spoken && (r.reason === 'remote-blocked' || r.reason === 'no-local-voice')) {
+            toast.warn('Voice off: no on-device voice available. Install an offline/Natural voice in Windows settings — cloud voices are blocked by design.');
+          }
+        }
       }
     });
     activeStreamRef.current = { id: streamId, off };
@@ -154,6 +182,24 @@ export function AiAssistantModule(): JSX.Element {
       activeStreamRef.current = null;
     }
   }, [input, streaming, settings, messages, contextCase, contextCaseId, includeFiles]);
+
+  // STFU — abort the in-flight generation immediately. The cancel IPC aborts the
+  // upstream fetch (AbortController in main); we also finalize the UI locally rather
+  // than wait for a possibly-never-arriving `done`, dropping the chunk listener so a
+  // late tail can't keep mutating the bubble.
+  const stop = useCallback(() => {
+    stoppedRef.current = true;
+    cancelSpeech();
+    const active = activeStreamRef.current;
+    if (!active) return;
+    void window.api.ai.cancel(active.id).catch(() => {});
+    active.off();
+    activeStreamRef.current = null;
+    setMessages((prev) => prev.map((m) => m.streaming
+      ? { ...m, content: `${m.content}${m.content ? '\n\n' : ''}[stopped]`, streaming: false }
+      : m));
+    setStreaming(false);
+  }, []);
 
   function quickPrompt(text: string): void {
     setInput(text);
@@ -192,6 +238,31 @@ export function AiAssistantModule(): JSX.Element {
         <button onClick={() => quickPrompt('Draft a status report for this case suitable for an external stakeholder.')} disabled={!contextCase}>Draft report</button>
         <button onClick={() => quickPrompt('What questions should I be asking that I have not yet?')} disabled={!contextCase}>Open questions</button>
         <button onClick={() => void exportChat()} disabled={messages.length === 0} title="Save this conversation to a file">Export…</button>
+        {ttsSupported() && (
+          <>
+            <button
+              onClick={() => void setTts({ ttsEnabled: !settings?.ai.ttsEnabled })}
+              title="Speak AI responses aloud using your offline OS voices"
+              style={{ fontWeight: settings?.ai.ttsEnabled ? 'bold' : 'normal' }}
+            >
+              {settings?.ai.ttsEnabled ? '🔊 Voice' : '🔇 Voice'}
+            </button>
+            {settings?.ai.ttsEnabled && voices.some((v) => !v.remote) && (
+              <select
+                className="ga98-text"
+                style={{ maxWidth: 160 }}
+                value={settings?.ai.ttsVoiceUri ?? ''}
+                onChange={(e) => void setTts({ ttsVoiceUri: e.target.value || null })}
+                title="On-device voices only. Cloud/'online' voices are hidden by design (no-cloud). Install Windows Natural voices via Settings → Accessibility."
+              >
+                <option value="">(default on-device voice)</option>
+                {voices.filter((v) => !v.remote).map((v) => (
+                  <option key={v.voiceURI} value={v.voiceURI}>{v.name}</option>
+                ))}
+              </select>
+            )}
+          </>
+        )}
       </div>
       {contextError && (
         <div style={{ background: '#fee', color: '#900', padding: '4px 8px', fontSize: 11, borderBottom: '1px solid #c00' }}>
@@ -226,7 +297,17 @@ export function AiAssistantModule(): JSX.Element {
           onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) void send(); }}
           placeholder="Ask anything. Ctrl/Cmd-Enter to send."
         />
-        <button onClick={() => void send()} disabled={streaming || !input.trim()}>Send</button>
+        {streaming
+          ? (
+            <button
+              onClick={stop}
+              title="Stop the AI right now — aborts the request"
+              style={{ minWidth: 64, fontWeight: 'bold', color: '#a00' }}
+            >
+              STFU
+            </button>
+          )
+          : <button onClick={() => void send()} disabled={!input.trim()}>Send</button>}
       </div>
     </div>
   );

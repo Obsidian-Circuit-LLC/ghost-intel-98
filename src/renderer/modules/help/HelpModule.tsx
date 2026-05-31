@@ -15,7 +15,9 @@ const MODULE_DOCS: { name: string; desc: string }[] = [
   { name: 'Mail', desc: 'IMAP receive + SMTP send. Multiple accounts. Drafts persist across launches. Compose supports file attachments. Inbound multipart messages are parsed and their attachments are downloadable via the OS save dialog.' },
   { name: 'DialTerm', desc: 'SSH client with a 90s dial-up handshake animation. Key-based auth recommended; passphrases/passwords encrypted in secrets.enc. Right-click for Copy/Paste; Ctrl+Shift+C / Ctrl+Shift+V also work.' },
   { name: 'EyeSpy', desc: 'Authorised camera streams only. HLS, MJPEG, and HTTP-refresh image streams play in-app. RTSP needs a local ffmpeg→HLS bridge — instructions shown on RTSP entry. No discovery or brute-force.' },
-  { name: 'AI Assistant', desc: 'Pluggable Ollama (local) or OpenAI-compatible (https). Case context is opt-in per message — selected from the dropdown. API key encrypted in secrets.enc, never seen by the renderer.' }
+  { name: 'AI Assistant', desc: 'Pluggable Ollama (local) or OpenAI-compatible (https). Case context is opt-in per message — selected from the dropdown. API key encrypted in secrets.enc, never seen by the renderer. Use STFU to abort a running generation.' },
+  { name: 'Jukebox', desc: 'WinAmp-styled audio player. Local MP3/OGG/FLAC/WAV/M4A + M3U playlists, spectrum visualizer. Internet radio is opt-in (off by default). Local files stream through a path-confined internal protocol.' },
+  { name: 'GeoINT', desc: 'Pluggable geopolitical-monitoring dashboard. RSS/Atom/GeoJSON sources + OPML import, a Leaflet map on a tile server you configure, offline gazetteer geocoding. Network is opt-in (off by default). Save an event into a case as a record / link / note with an auto-linked location entity + timeline entry.' }
 ];
 
 const SHORTCUTS: { keys: string; action: string }[] = [
@@ -35,8 +37,8 @@ export function HelpModule(): JSX.Element {
       <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
         <img src={logoUrl} alt="" style={{ width: 64, height: 64, imageRendering: 'pixelated', border: '1px solid #808080' }} />
         <div>
-          <h2 style={{ margin: 0 }}>Ghost Access 98 Help</h2>
-          <p style={{ margin: 0, fontSize: 12 }}>Module reference + keyboard shortcuts</p>
+          <h2 style={{ margin: 0 }}>RTFM</h2>
+          <p style={{ margin: 0, fontSize: 12 }}>Read the Friendly Manual — module reference + keyboard shortcuts</p>
         </div>
       </div>
 

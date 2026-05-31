@@ -18,14 +18,20 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 interface Props { caseId: string; fileName: string; originalName: string }
 
-type Kind = 'pdf' | 'image' | 'csv' | 'json' | 'html' | 'docx' | 'eml' | 'text';
+type Kind = 'pdf' | 'image' | 'csv' | 'json' | 'html' | 'docx' | 'eml' | 'video' | 'audio' | 'text';
 
 const IMAGE_EXT = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'tif', 'tiff'];
+// Container types Chromium can play. These stream via ga98media:// (range requests) rather
+// than base64-loading into the renderer, so a 350 MB video no longer trips the 64 MB cap.
+const VIDEO_EXT = ['mp4', 'm4v', 'webm', 'ogv', 'mov'];
+const AUDIO_EXT = ['mp3', 'm4a', 'aac', 'flac', 'wav', 'ogg', 'oga', 'opus'];
 
 function kindFor(name: string): Kind {
   const ext = name.toLowerCase().split('.').pop() ?? '';
   if (ext === 'pdf') return 'pdf';
   if (IMAGE_EXT.includes(ext)) return 'image';
+  if (VIDEO_EXT.includes(ext)) return 'video';
+  if (AUDIO_EXT.includes(ext)) return 'audio';
   if (ext === 'csv' || ext === 'tsv') return 'csv';
   if (ext === 'json') return 'json';
   if (ext === 'html' || ext === 'htm') return 'html';
@@ -78,8 +84,48 @@ function Body({ kind, caseId, fileName }: { kind: Kind; caseId: string; fileName
     case 'html': return <HtmlBody caseId={caseId} fileName={fileName} />;
     case 'docx': return <DocxBody caseId={caseId} fileName={fileName} />;
     case 'eml': return <EmlBody caseId={caseId} fileName={fileName} />;
+    case 'video': return <MediaBody kind="video" caseId={caseId} fileName={fileName} />;
+    case 'audio': return <MediaBody kind="audio" caseId={caseId} fileName={fileName} />;
     default: return <TextBody caseId={caseId} fileName={fileName} />;
   }
+}
+
+/** Large video/audio attachments stream through the path-confined ga98media:// protocol via
+ *  files.mediaUrl — no base64, no 64 MB cap. Encrypted-at-rest files can't be range-streamed,
+ *  so the IPC returns reason:'encrypted' and we tell the user to Reveal instead. */
+function MediaBody({ kind, caseId, fileName }: { kind: 'video' | 'audio'; caseId: string; fileName: string }): JSX.Element {
+  const [url, setUrl] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    setUrl(null); setErr(null);
+    window.api.files.mediaUrl(caseId, fileName)
+      .then((r) => {
+        if (!live) return;
+        if (r.url) { setUrl(r.url); return; }
+        setErr(
+          r.reason === 'encrypted'
+            ? 'This media is encrypted at rest — in-app streaming is unavailable while login is enabled. Use Reveal to open it externally.'
+            : r.reason === 'missing'
+              ? 'File not found on disk.'
+              : 'This media cannot be streamed in-app. Use Reveal to open it externally.'
+        );
+      })
+      .catch((e) => { if (live) setErr((e as Error).message); });
+    return () => { live = false; };
+  }, [caseId, fileName]);
+
+  if (err) return <Centered>{err}</Centered>;
+  if (!url) return <Centered>Preparing stream…</Centered>;
+  if (kind === 'audio') {
+    return <div style={{ padding: 24 }}><audio controls src={url} style={{ width: '100%' }} /></div>;
+  }
+  return (
+    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#000' }}>
+      {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+      <video controls src={url} style={{ maxWidth: '100%', maxHeight: '100%' }} />
+    </div>
+  );
 }
 
 function PdfBody({ caseId, fileName }: { caseId: string; fileName: string }): JSX.Element {

@@ -39,6 +39,7 @@ const api = {
     readAttachmentBytes: (id: string, name: string, offset: number, length: number) =>
       ipcRenderer.invoke(channels.files.readAttachmentBytes, id, name, offset, length),
     readEml: (id: string, name: string) => ipcRenderer.invoke(channels.files.readEml, id, name),
+    mediaUrl: (id: string, name: string) => ipcRenderer.invoke(channels.files.mediaUrl, id, name),
     extractAttachmentMeta: (id: string, name: string) => ipcRenderer.invoke(channels.files.extractAttachmentMeta, id, name),
     renameAttachment: (id: string, name: string, newName: string) => ipcRenderer.invoke(channels.files.renameAttachment, id, name, newName),
     pickOpen: (opts?: { multi?: boolean; filters?: { name: string; extensions: string[] }[] }) =>
@@ -101,7 +102,16 @@ const api = {
     deleteBookmark: (id: string) => ipcRenderer.invoke(channels.browser.deleteBookmark, id),
     listHistory: (limit?: number) => ipcRenderer.invoke(channels.browser.listHistory, limit),
     addHistory: (url: string, title: string) => ipcRenderer.invoke(channels.browser.addHistory, url, title),
-    clearHistory: () => ipcRenderer.invoke(channels.browser.clearHistory)
+    clearHistory: () => ipcRenderer.invoke(channels.browser.clearHistory),
+    firefoxStatus: () => ipcRenderer.invoke(channels.browser.firefoxStatus),
+    launchFirefox: (url: string, title?: string) => ipcRenderer.invoke(channels.browser.launchFirefox, url, title)
+  },
+  bookmarks: {
+    get: () => ipcRenderer.invoke(channels.bookmarks.get),
+    save: (board: unknown) => ipcRenderer.invoke(channels.bookmarks.save, board),
+    exportBoard: () => ipcRenderer.invoke(channels.bookmarks.exportBoard),
+    importBoard: () => ipcRenderer.invoke(channels.bookmarks.importBoard),
+    fetchFavicon: (url: string) => ipcRenderer.invoke(channels.bookmarks.fetchFavicon, url)
   },
   ssh: {
     listHosts: () => ipcRenderer.invoke(channels.ssh.listHosts),

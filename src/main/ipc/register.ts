@@ -16,9 +16,10 @@
 
 import { app, ipcMain, shell, dialog, BrowserWindow } from 'electron';
 import { writeFile, rename, lstat, rm, readFile, stat, realpath } from 'node:fs/promises';
-import { basename, dirname } from 'node:path';
+import { basename, dirname, sep } from 'node:path';
 import { channels } from '@shared/ipc-contracts';
 import type { MailAccount, MailSendInput, SshHostProfile, AiChatRequest, MediaTrack } from '@shared/post-mvp-types';
+import type { MediaUrlResult } from '@shared/types';
 import {
   caseStore,
   consumeDrainDiagnostics,
@@ -29,7 +30,8 @@ import {
   shredStore
 } from '../storage/json-fs';
 import { showNotification } from '../notifications';
-import { dataRoot } from '../storage/paths';
+import { dataRoot, caseAttachmentsDir } from '../storage/paths';
+import { isEncryptedFile } from '../storage/secure-fs';
 import * as mail from '../services/mail';
 import * as ssh from '../services/ssh';
 import * as streams from '../services/streams';
@@ -37,7 +39,9 @@ import * as ai from '../services/ai';
 import * as localAi from '../services/local-ai';
 import * as bookmarks from '../storage/bookmarks';
 import * as history from '../storage/history';
-import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureWhiteboard, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon, ensureSaveToCaseOpts, ensureGeoItem } from '../security/validate';
+import * as firefox from '../services/firefox';
+import * as bookmarksBoard from '../storage/bookmarks-board';
+import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureWhiteboard, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon, ensureSaveToCaseOpts, ensureGeoItem, ensureBookmarkBoard } from '../security/validate';
 import * as entities from '../storage/entities';
 import * as bioStore from '../storage/bio-images';
 import * as ftp from '../services/ftp';
@@ -228,7 +232,12 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
       vault.endMigration();       // belt-and-suspenders: clear transition state on any failure path
     }
   });
-  safeHandle(channels.auth.lock, () => { vault.lock(); });
+  safeHandle(channels.auth.lock, () => {
+    vault.lock();
+    // Revoke any ga98media:// authorizations minted this session so locking the vault also
+    // stops media streaming (the protocol isn't behind the IPC vault gate) — red-team C1.
+    adHocAllowlist.clear();
+  });
 
   // ---- settings ----
   safeHandle(channels.settings.read, () => settingsStore.read());
@@ -286,6 +295,35 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   });
   safeHandle(channels.files.readEml, (...args) =>
     fileStore.readEmlPreview(ensureUuid(args[0], 'caseId'), ensureFileName(args[1], 'fileName')));
+  // Stream a large video/audio attachment through the path-confined ga98media:// protocol
+  // instead of base64-loading it (which the 64 MB viewer cap rejects). Confinement: realpath
+  // must resolve inside the case's own attachments dir; the realpath is then allowlisted for
+  // the protocol handler. Encrypted-at-rest files are refused — whole-file GCM can't be
+  // range-streamed, so the viewer falls back to Reveal rather than serving ciphertext.
+  safeHandle(channels.files.mediaUrl, async (...args): Promise<MediaUrlResult> => {
+    const id = ensureUuid(args[0], 'caseId');
+    const name = ensureFileName(args[1], 'fileName');
+    // Only ever mint a streaming URL for an actual media extension — the protocol derives its
+    // Content-Type from the extension, so without this an attacker-named in-case file could be
+    // served under a chosen media MIME (red-team H3). Mirrors the viewer's VIDEO_EXT/AUDIO_EXT.
+    if (!/\.(mp4|m4v|webm|ogv|mov|mp3|m4a|aac|flac|wav|ogg|oga|opus)$/i.test(name)) {
+      return { url: null, reason: 'forbidden' };
+    }
+    const candidate = fileStore.attachmentAbsolutePath(id, name);
+    let real: string;
+    let realDir: string;
+    try {
+      real = await realpath(candidate);
+      realDir = await realpath(caseAttachmentsDir(id));
+    } catch {
+      return { url: null, reason: 'missing' };
+    }
+    const prefix = realDir.endsWith(sep) ? realDir : realDir + sep;
+    if (real !== realDir && !real.startsWith(prefix)) return { url: null, reason: 'forbidden' };
+    if (await isEncryptedFile(real)) return { url: null, reason: 'encrypted' };
+    adHocAllowlist.add(real);
+    return { url: `ga98media://track/${encodeURIComponent(real)}` };
+  });
   safeHandle(channels.files.extractAttachmentMeta, (...args) =>
     fileStore.extractAttachmentMeta(ensureUuid(args[0], 'caseId'), ensureFileName(args[1], 'fileName')));
   safeHandle(channels.files.renameAttachment, (...args) =>
@@ -567,6 +605,48 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     return history.add(url, title);
   });
   safeHandle(channels.browser.clearHistory, () => history.clear());
+  // Firefox Portable launcher (the in-app webview was swapped for an external bundled Firefox).
+  safeHandle(channels.browser.firefoxStatus, () => firefox.status());
+  safeHandle(channels.browser.launchFirefox, async (...args) => {
+    // URL is validated (http/https only) inside firefox.launch. Await the spawn so a failed
+    // launch surfaces to the renderer, and record history only once it actually launched.
+    const url = String(args[0] ?? '');
+    await firefox.launch(url);
+    void history.add(url.slice(0, 2048), String(args[1] ?? '').slice(0, 256)).catch(() => {});
+  });
+
+  // ---- bookmarks dashboard (offline start.me-style board) ----
+  // Re-validate on READ too (not just write): the board file can be edited directly when the
+  // vault is off, and may predate a future hardening — mirror browser.listBookmarks's posture.
+  safeHandle(channels.bookmarks.get, async () => ensureBookmarkBoard(await bookmarksBoard.read()));
+  safeHandle(channels.bookmarks.save, (...args) => bookmarksBoard.write(ensureBookmarkBoard(args[0])));
+  safeHandle(channels.bookmarks.fetchFavicon, (...args) =>
+    bookmarksBoard.fetchFavicon(validateExternalUrl(String(args[0] ?? ''))));
+  safeHandle(channels.bookmarks.exportBoard, async () => {
+    const res = await dialog.showSaveDialog({
+      defaultPath: 'bookmarks.ghostbookmarks',
+      filters: [{ name: 'Ghost Bookmarks', extensions: ['ghostbookmarks'] }]
+    });
+    if (res.canceled || !res.filePath) return null;
+    const board = await bookmarksBoard.read();
+    await writeFile(res.filePath, JSON.stringify({ kind: 'ga98bookmarks', version: 1, board }, null, 2), 'utf8');
+    return res.filePath;
+  });
+  safeHandle(channels.bookmarks.importBoard, async () => {
+    const res = await dialog.showOpenDialog({
+      properties: ['openFile'],
+      filters: [{ name: 'Ghost Bookmarks', extensions: ['ghostbookmarks', 'json'] }]
+    });
+    if (res.canceled || !res.filePaths[0]) return null;
+    // Cap before reading — a hostile shared .ghostbookmarks file must not OOM the main process.
+    const st = await stat(res.filePaths[0]);
+    if (st.size > 16 * 1024 * 1024) throw new Error('Bookmarks file too large (over 16 MB).');
+    const raw = await readFile(res.filePaths[0], 'utf8');
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    // Accept either a bare board or the {kind,version,board} envelope. Validate before returning.
+    const boardRaw = parsed && typeof parsed === 'object' && 'board' in parsed ? parsed['board'] : parsed;
+    return ensureBookmarkBoard(boardRaw);
+  });
 
   // ---- ssh ----
   safeHandle(channels.ssh.listHosts, () => ssh.listHosts());
