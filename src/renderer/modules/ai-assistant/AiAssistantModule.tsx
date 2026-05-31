@@ -15,6 +15,8 @@ import { useSettings } from '../../state/store';
 import { toast } from '../../state/toasts';
 import { confirmDialog } from '../../state/dialogs';
 import { ttsSupported, listVoices, speak, cancelSpeech, type TtsVoice } from '../../audio/tts';
+import { createVoskRecognizer } from '../../voice/recognizer';
+import { VoiceConversation, type VoiceMode, type VoiceState } from '../../voice/conversation';
 
 interface DisplayMessage extends AiChatMessage {
   id: string;
@@ -44,8 +46,22 @@ export function AiAssistantModule(): JSX.Element {
   const settings = useSettings((s) => s.settings);
   const patchSettings = useSettings((s) => s.patch);
   const [voices, setVoices] = useState<TtsVoice[]>([]);
+  // Voice conversation (offline STT → AI → TTS). Mode is ephemeral per session.
+  const [voiceMode, setVoiceMode] = useState<VoiceMode | 'off'>('off');
+  const [voiceState, setVoiceState] = useState<VoiceState>('idle');
+  const [voicePartial, setVoicePartial] = useState('');
+  const [modelInstalled, setModelInstalled] = useState<boolean | null>(null);
+  const convoRef = useRef<VoiceConversation | null>(null);
+  // The in-flight voice AI stream, so Stop-voice / unmount can actually abort it (it doesn't go
+  // through activeStreamRef). And a guard so a double-click during model load can't start twice.
+  const voiceStreamRef = useRef<{ id: string; off: () => void } | null>(null);
+  const voiceStartingRef = useRef(false);
+  // Latest messages, read by askOnce without re-binding it on every message.
+  const messagesRef = useRef(messages);
+  useEffect(() => { messagesRef.current = messages; }, [messages]);
 
   useEffect(() => { void window.api.cases.list().then(setCases); }, []);
+  useEffect(() => { void window.api.voice.modelStatus().then((s) => setModelInstalled(s.installed)); }, []);
 
   // Populate the offline voice list once (Chromium fills it asynchronously).
   useEffect(() => { if (ttsSupported()) void listVoices().then(setVoices); }, []);
@@ -201,6 +217,117 @@ export function AiAssistantModule(): JSX.Element {
     setStreaming(false);
   }, []);
 
+  // One-shot ask used by the voice conversation: pushes the user transcript + a streaming
+  // assistant bubble into the transcript, streams the reply, and resolves the full text so the
+  // controller can speak it. Voice sends case METADATA context only (never file contents) so a
+  // remote provider can't trigger a blocking egress dialog mid-conversation.
+  const askOnce = useCallback((text: string): Promise<string> => {
+    return new Promise((resolve) => {
+      const st = useSettings.getState().settings;
+      if (!st || st.ai.provider === 'none') { resolve(''); return; }
+      const streamId = `voice-${newId()}`;
+      const userMsg: DisplayMessage = { id: newId(), role: 'user', content: text };
+      const asstMsg: DisplayMessage = { id: newId(), role: 'assistant', content: '', streaming: true };
+      const history: AiChatMessage[] = [
+        ...messagesRef.current.map(({ role, content }) => ({ role, content })),
+        { role: 'user', content: text }
+      ];
+      setMessages((prev) => [...prev, userMsg, asstMsg]);
+      const context = contextCase ? buildContextMeta(contextCase) : undefined;
+      let acc = '';
+      let settled = false;
+      const finish = (text: string): void => {
+        if (settled) return;
+        settled = true;
+        off();
+        if (voiceStreamRef.current?.id === streamId) voiceStreamRef.current = null;
+        setMessages((prev) => prev.map((m) => m.id === asstMsg.id ? { ...m, streaming: false } : m));
+        resolve(text);
+      };
+      const off = window.api.ai.onChunk(({ streamId: sid, chunk, done, error }) => {
+        if (sid !== streamId) return;
+        if (chunk) { acc += chunk; setMessages((prev) => prev.map((m) => m.id === asstMsg.id ? { ...m, content: m.content + chunk } : m)); }
+        // Treat error as TERMINAL (resolve + drop the listener) — a stray error without a paired
+        // `done` would otherwise hang the conversation in 'thinking' and leak this listener.
+        if (error) { setMessages((prev) => prev.map((m) => m.id === asstMsg.id ? { ...m, content: `${m.content}\n\n[error: ${error}]` } : m)); finish(acc); return; }
+        if (done) finish(acc);
+      });
+      voiceStreamRef.current = { id: streamId, off };
+      window.api.ai.chatStream(streamId, { context, messages: history })
+        .catch((e) => finish(`[error: ${(e as Error).message}]`));
+    });
+  }, [contextCase]);
+
+  const stopVoice = useCallback(() => {
+    cancelSpeech();
+    // Abort any in-flight voice AI request (it isn't tracked by activeStreamRef / STFU).
+    const vs = voiceStreamRef.current;
+    if (vs) { void window.api.ai.cancel(vs.id).catch(() => {}); vs.off(); voiceStreamRef.current = null; }
+    void convoRef.current?.stop();
+    convoRef.current = null;
+    setVoiceMode('off');
+    setVoiceState('idle');
+    setVoicePartial('');
+  }, []);
+
+  const startVoice = useCallback(async (mode: VoiceMode) => {
+    if (settings?.ai.provider === 'none') { toast.warn('Set an AI provider in Settings first.'); return; }
+    // Guard against a double-click during the (slow) model load creating two recognizers/mics.
+    if (voiceMode !== 'off' || convoRef.current || voiceStartingRef.current) return;
+    voiceStartingRef.current = true;
+    try {
+      // Race the model load against a timeout so a corrupt/stalled model can't hang silently.
+      const recognizer = await Promise.race([
+        createVoskRecognizer(),
+        new Promise<never>((_, rej) => setTimeout(() => rej(new Error('model load timed out')), 30000))
+      ]);
+      const st = useSettings.getState().settings;
+      const convo = new VoiceConversation({
+        recognizer,
+        mode,
+        ask: askOnce,
+        speak: (t) => new Promise<void>((res) => {
+          const r = speak(t, { voiceURI: st?.ai.ttsVoiceUri, rate: st?.ai.ttsRate, onEnd: res });
+          if (!r.spoken) res();
+        }),
+        onState: setVoiceState,
+        onPartial: setVoicePartial,
+        onError: (e) => toast.error(`Voice: ${e.message}`)
+      });
+      convoRef.current = convo;
+      setVoiceMode(mode);
+      await convo.start();
+    } catch (err) {
+      toast.error(`Could not start voice: ${(err as Error).message}. Is the Vosk model bundled and mic access allowed?`);
+      stopVoice();
+    } finally {
+      voiceStartingRef.current = false;
+    }
+  }, [voiceMode, settings, askOnce, stopVoice]);
+
+  // Tear voice down on unmount: abort the in-flight voice stream + stop the recognizer/mic.
+  useEffect(() => () => {
+    const vs = voiceStreamRef.current;
+    if (vs) { void window.api.ai.cancel(vs.id).catch(() => {}); vs.off(); voiceStreamRef.current = null; }
+    void convoRef.current?.stop();
+  }, []);
+
+  // Push-to-talk press/release via pointer events with a document-level pointerup, so dragging
+  // the cursor off the button doesn't truncate the utterance (mouseLeave would).
+  const pttHoldingRef = useRef(false);
+  const pttDown = useCallback((e: React.PointerEvent) => {
+    e.preventDefault();
+    pttHoldingRef.current = true;
+    convoRef.current?.pttDown();
+    const up = (): void => {
+      if (!pttHoldingRef.current) return;
+      pttHoldingRef.current = false;
+      convoRef.current?.pttUp();
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointerup', up);
+  }, []);
+
   function quickPrompt(text: string): void {
     setInput(text);
   }
@@ -287,6 +414,36 @@ export function AiAssistantModule(): JSX.Element {
           </div>
         ))}
       </div>
+      {ttsSupported() && (
+        <div style={{ padding: '3px 6px', display: 'flex', gap: 6, alignItems: 'center', borderTop: '1px solid #999', background: 'var(--ga98-grey)', fontSize: 11, flexWrap: 'wrap' }}>
+          {modelInstalled === false ? (
+            <span style={{ color: '#900' }} title="Vosk speech model not bundled">
+              🎙 Voice input needs a Vosk model in <code>resources/vosk/</code> — speak-aloud (TTS) still works.
+            </span>
+          ) : voiceMode === 'off' ? (
+            <>
+              <span>Voice conversation:</span>
+              <button onClick={() => void startVoice('continuous')} disabled={modelInstalled === null} title="Hands-free: mic stays open; the AI listens, answers, and speaks while you read">🎙 Hands-free</button>
+              <button onClick={() => void startVoice('ptt')} disabled={modelInstalled === null} title="Push-to-talk: hold a button to speak">🎤 Push-to-talk</button>
+            </>
+          ) : (
+            <>
+              <button onClick={stopVoice} style={{ fontWeight: 'bold' }}>■ Stop voice</button>
+              {voiceMode === 'ptt' && (
+                <button
+                  onPointerDown={pttDown}
+                  disabled={voiceState === 'thinking' || voiceState === 'speaking'}
+                  title="Hold while speaking"
+                >🎤 Hold to talk</button>
+              )}
+              <span style={{ opacity: 0.85 }}>
+                {voiceMode === 'continuous' ? 'hands-free' : 'push-to-talk'} · <b>{voiceState}</b>
+                {voicePartial ? ` — “${voicePartial}”` : ''}
+              </span>
+            </>
+          )}
+        </div>
+      )}
       <div style={{ padding: 4, display: 'flex', gap: 4, borderTop: '1px solid #999', background: 'var(--ga98-grey)' }}>
         <textarea
           className="ga98-text"

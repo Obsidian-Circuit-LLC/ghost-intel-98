@@ -106,6 +106,9 @@ const api = {
     firefoxStatus: () => ipcRenderer.invoke(channels.browser.firefoxStatus),
     launchFirefox: (url: string, title?: string) => ipcRenderer.invoke(channels.browser.launchFirefox, url, title)
   },
+  voice: {
+    modelStatus: () => ipcRenderer.invoke(channels.voice.modelStatus)
+  },
   bookmarks: {
     get: () => ipcRenderer.invoke(channels.bookmarks.get),
     save: (board: unknown) => ipcRenderer.invoke(channels.bookmarks.save, board),
