@@ -6,10 +6,11 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import type { GeoSnapshot, GeoSourceType } from '@shared/post-mvp-types';
+import type { GeoSnapshot, GeoSourceType, GeoItem } from '@shared/post-mvp-types';
 import { useSettings } from '../../state/store';
 import { toast } from '../../state/toasts';
 import { MapPane } from './MapPane';
+import { SaveEventDialog } from './SaveEventDialog';
 
 export function GeoIntModule(): JSX.Element {
   const settings = useSettings((s) => s.settings);
@@ -23,6 +24,7 @@ export function GeoIntModule(): JSX.Element {
   const [focusId, setFocusId] = useState<string | null>(null);
   const [pickFor, setPickFor] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [saveItem, setSaveItem] = useState<GeoItem | null>(null);
   const [draft, setDraft] = useState<{ label: string; url: string; type: GeoSourceType }>({ label: '', url: '', type: 'rss' });
 
   const load = useCallback(async () => { setSnap(await window.api.geoint.snapshot()); }, []);
@@ -111,6 +113,7 @@ export function GeoIntModule(): JSX.Element {
                 </span>
                 <button title="Click then click the map to set this event's location" onClick={() => setPickFor(i.id)}
                   style={{ minWidth: 0, padding: '0 6px', outline: pickFor === i.id ? '2px solid navy' : undefined }}>📍</button>
+                <button title="Save this event to a case" onClick={() => setSaveItem(i)} style={{ minWidth: 0, padding: '0 6px' }}>📁</button>
               </li>
             ))}
           </ul>
@@ -122,6 +125,7 @@ export function GeoIntModule(): JSX.Element {
         <MapPane items={items} tilesEnabled={net} tileUrl={tileUrl} tileAttribution={tileAttribution}
           pickMode={pickFor != null} onPick={(la, lo) => void onPick(la, lo)} focusId={focusId} />
       </div>
+      {saveItem && <SaveEventDialog item={saveItem} onClose={() => setSaveItem(null)} />}
     </div>
   );
 }

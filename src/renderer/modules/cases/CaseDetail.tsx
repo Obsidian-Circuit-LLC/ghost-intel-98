@@ -3,8 +3,9 @@
  * the drag-and-drop attachments zone (MVP-4) and the per-case notes shortcut.
  */
 
-import { useCallback, useState, type DragEvent } from 'react';
+import { useCallback, useEffect, useState, type DragEvent } from 'react';
 import type { AttachmentMeta, CaseRecord, CasePriority, CaseStatus, ExtractedAttachmentMeta } from '@shared/types';
+import type { SavedGeoEvent } from '@shared/post-mvp-types';
 import { useWindows } from '../../state/store';
 import { playError } from '../../audio/synth';
 import { confirmDialog, promptDialog } from '../../state/dialogs';
@@ -162,6 +163,8 @@ export function CaseDetail({ record, onChange, onArchive, onRefresh, onUpdateFie
 
       <EntitiesSection caseId={record.id} entities={record.entities ?? []} attachments={record.attachments} onRefresh={onRefresh} />
 
+      <GeoEventsSection caseId={record.id} />
+
       <fieldset>
         <legend>Tasks</legend>
         <div style={{ display: 'flex', gap: 4 }}>
@@ -255,6 +258,38 @@ function fileGlyph(name: string): string {
   if (ext === 'eml' || ext === 'msg') return '✉';
   if (['txt', 'md', 'log', 'html', 'htm'].includes(ext)) return '📄';
   return '📎';
+}
+
+/** Self-loading list of GeoINT events saved into this case (cycle 2). */
+function GeoEventsSection({ caseId }: { caseId: string }): JSX.Element {
+  const [events, setEvents] = useState<SavedGeoEvent[]>([]);
+  const reload = useCallback(async () => { setEvents(await window.api.geoint.listCaseEvents(caseId)); }, [caseId]);
+  useEffect(() => { void reload(); }, [reload]);
+
+  return (
+    <fieldset>
+      <legend>GeoINT events</legend>
+      {events.length === 0
+        ? <p style={{ fontSize: 11, color: '#555', margin: 0 }}>No saved events.</p>
+        : <ul className="ga98-list">
+            {events.map((ev) => {
+              const http = typeof ev.link === 'string' && /^https?:\/\//i.test(ev.link);
+              return (
+                <li key={ev.id}>
+                  <span style={{ flex: 1 }}>
+                    <b>{ev.title}</b>
+                    <div style={{ fontSize: 10, opacity: 0.7 }}>
+                      {ev.place ?? (ev.lat != null ? `${ev.lat}, ${ev.lon}` : '—')} · {(ev.published ?? ev.savedAt).slice(0, 10)}
+                      {http ? <> · <a href={ev.link} target="_blank" rel="noopener noreferrer">open</a></> : null}
+                    </div>
+                  </span>
+                  <button onClick={async () => { await window.api.geoint.removeCaseEvent(caseId, ev.id); await reload(); }}>×</button>
+                </li>
+              );
+            })}
+          </ul>}
+    </fieldset>
+  );
 }
 
 function AttachmentRow({ caseId, att, onRefresh }: {
