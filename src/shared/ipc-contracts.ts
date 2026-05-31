@@ -25,7 +25,7 @@ import type {
   TimelineEvent,
   WebLink
 } from './types';
-import type { MediaLibrarySnapshot, MediaStation, MediaTrack, GeoSnapshot, GeoSource } from './post-mvp-types';
+import type { MediaLibrarySnapshot, MediaStation, MediaTrack, GeoSnapshot, GeoSource, GeoItem, SavedGeoEvent } from './post-mvp-types';
 
 export interface EntityCreateInput { type: EntityType; value: string; notes?: string; aliases?: string[] }
 export interface EntityLinkOpts { relationship?: EntityRelationship; linkIds?: string[]; attachmentFileNames?: string[] }
@@ -148,7 +148,10 @@ export const channels = {
     removeSource: 'geoint:removeSource',
     importOpml: 'geoint:importOpml',
     refresh: 'geoint:refresh',
-    setItemLocation: 'geoint:setItemLocation'
+    setItemLocation: 'geoint:setItemLocation',
+    saveToCase: 'geoint:saveToCase',
+    listCaseEvents: 'geoint:listCaseEvents',
+    removeCaseEvent: 'geoint:removeCaseEvent'
   },
   ai: {
     chat: 'ai:chat',
@@ -324,6 +327,9 @@ export interface ApiContracts {
   [channels.geoint.importOpml]: { args: []; returns: number };
   [channels.geoint.refresh]: { args: [string | undefined]; returns: { fetched: number; failed: number } };
   [channels.geoint.setItemLocation]: { args: [string, { lat: number; lon: number } | null]; returns: void };
+  [channels.geoint.saveToCase]: { args: [string, GeoItem, { form: 'record' | 'link' | 'note'; entityIds?: string[] }]; returns: { savedEventId?: string } };
+  [channels.geoint.listCaseEvents]: { args: [string]; returns: SavedGeoEvent[] };
+  [channels.geoint.removeCaseEvent]: { args: [string, string]; returns: void };
 
   [channels.reminders.listGlobal]: { args: []; returns: Reminder[] };
   [channels.reminders.upsertGlobal]: { args: [Reminder]; returns: Reminder };

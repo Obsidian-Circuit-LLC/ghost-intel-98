@@ -37,6 +37,8 @@ import type {
   MediaTrack,
   GeoSnapshot,
   GeoSource,
+  GeoItem,
+  SavedGeoEvent,
   SshHostProfile
 } from '../shared/post-mvp-types';
 
@@ -183,6 +185,9 @@ export interface GhostApi {
     importOpml(): Promise<number>;
     refresh(id?: string): Promise<{ fetched: number; failed: number }>;
     setItemLocation(id: string, loc: { lat: number; lon: number } | null): Promise<void>;
+    saveToCase(caseId: string, item: GeoItem, opts: { form: 'record' | 'link' | 'note'; entityIds?: string[] }): Promise<{ savedEventId?: string }>;
+    listCaseEvents(caseId: string): Promise<SavedGeoEvent[]>;
+    removeCaseEvent(caseId: string, eventId: string): Promise<void>;
   };
   ai: {
     chatStream(streamId: string, req: AiChatRequest): Promise<void>;

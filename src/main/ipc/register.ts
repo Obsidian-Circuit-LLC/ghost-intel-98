@@ -37,7 +37,7 @@ import * as ai from '../services/ai';
 import * as localAi from '../services/local-ai';
 import * as bookmarks from '../storage/bookmarks';
 import * as history from '../storage/history';
-import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureWhiteboard, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon } from '../security/validate';
+import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureWhiteboard, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon, ensureSaveToCaseOpts } from '../security/validate';
 import * as entities from '../storage/entities';
 import * as bioStore from '../storage/bio-images';
 import * as ftp from '../services/ftp';
@@ -49,6 +49,8 @@ import { parseM3u, toM3u } from '../media/m3u';
 import { parseFeedList, feedToUpsert } from '../services/feed-import';
 import * as geoint from '../geoint/sources';
 import { parseOpml } from '../geoint/feeds';
+import { saveToCase as geoSaveToCase } from '../geoint/save-to-case';
+import * as geoCaseEvents from '../geoint/case-events';
 import * as vault from '../services/vault';
 import { encryptAll, decryptAll } from '../storage/encryption-migrate';
 import { buildSummaryHtml, renderCasePdf } from '../services/export';
@@ -677,6 +679,9 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     for (const s of sources) { const res = await geoint.fetchSource(s.id, true); if (res.ok) fetched++; else failed++; }
     return { fetched, failed };
   });
+  safeHandle(channels.geoint.saveToCase, (...a) => geoSaveToCase(ensureUuid(a[0], 'caseId'), a[1] as import('@shared/post-mvp-types').GeoItem, ensureSaveToCaseOpts(a[2])));
+  safeHandle(channels.geoint.listCaseEvents, (...a) => geoCaseEvents.listCaseEvents(ensureUuid(a[0], 'caseId')));
+  safeHandle(channels.geoint.removeCaseEvent, (...a) => geoCaseEvents.removeCaseEvent(ensureUuid(a[0], 'caseId'), ensureUuid(a[1], 'eventId')));
 
   // ---- ai ----
   safeHandle(channels.ai.chatStream, (...args) => ai.chat(args[0] as string, args[1] as AiChatRequest, getWindow));

@@ -524,6 +524,19 @@ export function ensureGeoSource(v: unknown): { label: string; url: string; type:
   return { label: o.label.trim(), url, type: o.type };
 }
 
+/** GeoINT cycle 2: options for saving an event to a case. */
+export function ensureSaveToCaseOpts(v: unknown): { form: 'record' | 'link' | 'note'; entityIds?: string[] } {
+  if (!v || typeof v !== 'object') throw new ValidationError('opts must be an object');
+  const o = v as { form?: unknown; entityIds?: unknown };
+  if (o.form !== 'record' && o.form !== 'link' && o.form !== 'note') throw new ValidationError('opts.form invalid');
+  let entityIds: string[] | undefined;
+  if (o.entityIds !== undefined) {
+    if (!Array.isArray(o.entityIds)) throw new ValidationError('entityIds must be an array');
+    entityIds = o.entityIds.map((x) => ensureUuid(x, 'entityId'));
+  }
+  return { form: o.form, entityIds };
+}
+
 /** GeoINT: a manual map pin (or null to clear). Coordinates must be finite + in range. */
 export function ensureLatLon(v: unknown): { lat: number; lon: number } | null {
   if (v === null) return null;
