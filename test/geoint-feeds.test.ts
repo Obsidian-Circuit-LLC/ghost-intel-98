@@ -4,13 +4,13 @@ import { resolve } from 'node:path';
 import { parseRss, parseAtom, parseGeoJson, parseOpml, detectType } from '../src/main/geoint/feeds';
 
 const fx = (n: string): string => readFileSync(resolve(__dirname, 'fixtures/geoint', n), 'utf8');
-const mali = (t: string): { lat: number; lon: number } | null => (t.includes('Mali') ? { lat: 17, lon: -4 } : null);
+const mali = (t: string): { lat: number; lon: number; name: string } | null => (t.includes('Mali') ? { lat: 17, lon: -4, name: 'Mali' } : null);
 
 describe('feed parsers', () => {
   it('parses RSS incl GeoRSS coords, geocodes the rest', () => {
     const items = parseRss(fx('rss.xml'), 's1', mali);
     expect(items[0]).toMatchObject({ title: 'Quake near Tokyo', lat: 35.68, lon: 139.69, located: 'geo' });
-    expect(items[1]).toMatchObject({ title: 'Unrest in Mali', lat: 17, lon: -4, located: 'gazetteer' });
+    expect(items[1]).toMatchObject({ title: 'Unrest in Mali', lat: 17, lon: -4, located: 'gazetteer', place: 'Mali' });
   });
   it('parses Atom entries', () => {
     const items = parseAtom(fx('atom.xml'), 's2', () => null);

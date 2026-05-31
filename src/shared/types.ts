@@ -48,13 +48,13 @@ export interface BioImage {
 
 export type TimelineKind =
   | 'created' | 'note' | 'file' | 'link' | 'reminder' | 'task' | 'status' | 'custom'
-  | 'updated' | 'archive' | 'rename' | 'view' | 'entity' | 'bio-image';
+  | 'updated' | 'archive' | 'rename' | 'view' | 'entity' | 'bio-image' | 'geo-event';
 
 /** Widened additively over time — old timeline.json files only contain earlier kinds and keep
  *  loading; render does no enum-check so forward-version events still display. */
 export const TIMELINE_KINDS: readonly TimelineKind[] = [
   'created', 'note', 'file', 'link', 'reminder', 'task', 'status', 'custom',
-  'updated', 'archive', 'rename', 'view', 'entity', 'bio-image'
+  'updated', 'archive', 'rename', 'view', 'entity', 'bio-image', 'geo-event'
 ];
 
 export interface TimelineEvent {

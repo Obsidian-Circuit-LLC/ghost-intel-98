@@ -13,14 +13,14 @@ const geocode = makeGeocoder(gaz);
 
 describe('geocode (gazetteer match)', () => {
   it('matches a place name in free text', () => {
-    expect(geocode('Unrest reported across France today')).toEqual({ lat: 46, lon: 2 });
+    expect(geocode('Unrest reported across France today')).toEqual({ lat: 46, lon: 2, name: 'France' });
   });
   it('prefers the longest name match (South Sudan over Sudan)', () => {
-    expect(geocode('clashes in South Sudan today')).toEqual({ lat: 7, lon: 30 });
+    expect(geocode('clashes in South Sudan today')).toEqual({ lat: 7, lon: 30, name: 'South Sudan' });
   });
   it('is whole-word + case-insensitive (no substring false hits)', () => {
     expect(geocode('the malimba festival')).toBeNull(); // "Mali" must not match inside "malimba"
-    expect(geocode('news from MALI')).toEqual({ lat: 17, lon: -4 });
+    expect(geocode('news from MALI')).toEqual({ lat: 17, lon: -4, name: 'Mali' });
   });
   it('returns null when nothing matches', () => {
     expect(geocode('local weather update')).toBeNull();

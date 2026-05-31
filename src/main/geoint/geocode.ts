@@ -6,7 +6,7 @@
  */
 
 export interface GazEntry { name: string; lat: number; lon: number }
-export type Geocoder = (text: string) => { lat: number; lon: number } | null;
+export type Geocoder = (text: string) => { lat: number; lon: number; name: string } | null;
 
 export function makeGeocoder(entries: GazEntry[]): Geocoder {
   const sorted = [...entries].sort((a, b) => b.name.length - a.name.length || a.name.localeCompare(b.name));
@@ -18,7 +18,7 @@ export function makeGeocoder(entries: GazEntry[]): Geocoder {
   return (text: string) => {
     if (!text) return null;
     for (const { e, re } of prepared) {
-      if (re.test(text)) return { lat: e.lat, lon: e.lon };
+      if (re.test(text)) return { lat: e.lat, lon: e.lon, name: e.name };
     }
     return null;
   };

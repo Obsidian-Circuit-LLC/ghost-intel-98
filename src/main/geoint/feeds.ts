@@ -8,7 +8,7 @@ import { XMLParser } from 'fast-xml-parser';
 import { randomUUID } from 'node:crypto';
 import type { GeoItem, GeoSourceType } from '@shared/post-mvp-types';
 
-type Geocoder = (text: string) => { lat: number; lon: number } | null;
+type Geocoder = (text: string) => { lat: number; lon: number; name: string } | null;
 
 const xml = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_', textNodeName: '#text' });
 const arr = <T>(v: T | T[] | undefined | null): T[] => (v == null ? [] : Array.isArray(v) ? v : [v]);
@@ -20,10 +20,10 @@ function locate(
   summary: string,
   geo: { lat: number; lon: number } | null,
   geocode: Geocoder
-): Pick<GeoItem, 'lat' | 'lon' | 'located'> {
+): Pick<GeoItem, 'lat' | 'lon' | 'located' | 'place'> {
   if (geo) return { lat: geo.lat, lon: geo.lon, located: 'geo' };
   const g = geocode(`${title} ${summary}`);
-  return g ? { lat: g.lat, lon: g.lon, located: 'gazetteer' } : { located: 'none' };
+  return g ? { lat: g.lat, lon: g.lon, located: 'gazetteer', place: g.name } : { located: 'none' };
 }
 
 export function parseRss(body: string, sourceId: string, geocode: Geocoder): GeoItem[] {

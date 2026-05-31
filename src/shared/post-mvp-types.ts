@@ -167,6 +167,8 @@ export interface GeoItem {
   published?: string;
   lat?: number;
   lon?: number;
+  /** Matched gazetteer place name when located:'gazetteer' (drives the auto location-entity). */
+  place?: string;
   /** How this item got its coordinates (if any). */
   located: 'geo' | 'gazetteer' | 'manual' | 'none';
 }
@@ -174,6 +176,11 @@ export interface GeoItem {
 export interface GeoSnapshot {
   sources: GeoSource[];
   items: GeoItem[];
+}
+
+export interface SavedGeoEvent extends GeoItem {
+  /** When this event was saved into a case (ISO). */
+  savedAt: string;
 }
 
 // ---------- AI Assistant ----------
