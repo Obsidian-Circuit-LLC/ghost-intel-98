@@ -21,6 +21,7 @@ import { SearchModule } from '../modules/search/SearchModule';
 import { WhiteboardModule } from '../modules/whiteboard/WhiteboardModule';
 import { MediaPlayerModule } from '../modules/media/MediaPlayerModule';
 import { GeoIntModule } from '../modules/geoint/GeoIntModule';
+import { BookmarksModule } from '../modules/bookmarks/BookmarksModule';
 import { HelpModule } from '../modules/help/HelpModule';
 import { ComingSoon } from '../modules/coming-soon/ComingSoon';
 
@@ -58,6 +59,8 @@ export function ModuleHost({ spec }: { spec: WindowSpec }): JSX.Element {
       return <MediaPlayerModule />;
     case 'geoint':
       return <GeoIntModule />;
+    case 'bookmarks':
+      return <BookmarksModule />;
     case 'doc-viewer':
       return (
         <DocViewerModule

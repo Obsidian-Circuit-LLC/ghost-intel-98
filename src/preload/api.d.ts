@@ -5,6 +5,7 @@
 import type {
   AppSettings,
   AttachmentBytesResult,
+  MediaUrlResult,
   AttachmentMeta,
   AttachmentTextResult,
   BioImage,
@@ -39,7 +40,8 @@ import type {
   GeoSource,
   GeoItem,
   SavedGeoEvent,
-  SshHostProfile
+  SshHostProfile,
+  BookmarkBoard
 } from '../shared/post-mvp-types';
 
 export interface MailDraft {
@@ -95,6 +97,7 @@ export interface GhostApi {
     readAttachmentText(id: string, name: string): Promise<AttachmentTextResult>;
     readAttachmentBytes(id: string, name: string, offset: number, length: number): Promise<AttachmentBytesResult>;
     readEml(id: string, name: string): Promise<EmlPreview>;
+    mediaUrl(id: string, name: string): Promise<MediaUrlResult>;
     extractAttachmentMeta(id: string, name: string): Promise<ExtractedAttachmentMeta>;
     renameAttachment(id: string, name: string, newName: string): Promise<string>;
     pickOpen(opts?: { multi?: boolean; filters?: { name: string; extensions: string[] }[] }): Promise<string[]>;
@@ -148,6 +151,15 @@ export interface GhostApi {
     listHistory(limit?: number): Promise<HistoryEntry[]>;
     addHistory(url: string, title: string): Promise<void>;
     clearHistory(): Promise<void>;
+    firefoxStatus(): Promise<{ installed: boolean; path: string | null }>;
+    launchFirefox(url: string, title?: string): Promise<void>;
+  };
+  bookmarks: {
+    get(): Promise<BookmarkBoard>;
+    save(board: BookmarkBoard): Promise<void>;
+    exportBoard(): Promise<string | null>;
+    importBoard(): Promise<BookmarkBoard | null>;
+    fetchFavicon(url: string): Promise<string | null>;
   };
   ssh: {
     listHosts(): Promise<SshHostProfile[]>;

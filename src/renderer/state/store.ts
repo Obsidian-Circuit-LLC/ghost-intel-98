@@ -25,6 +25,7 @@ export type ModuleKey =
   | 'whiteboard'
   | 'media-player'
   | 'geoint'
+  | 'bookmarks'
   | 'help';
 
 export interface WindowSpec {

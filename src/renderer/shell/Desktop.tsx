@@ -10,6 +10,9 @@ import { playClick } from '../audio/synth';
 const desktopShortcutDefaults: { module: ModuleKey; label: string }[] = [
   { module: 'cases', label: 'Case Files' },
   { module: 'notepad', label: 'Notepad 98' },
+  { module: 'media-player', label: 'Jukebox' },
+  { module: 'geoint', label: 'GeoINT' },
+  { module: 'bookmarks', label: 'Bookmarks' },
   { module: 'calendar', label: 'Calendar' },
   { module: 'reminders', label: 'Reminders' },
   { module: 'shred', label: 'Shred' }
@@ -33,7 +36,8 @@ const moduleTitles: Record<ModuleKey, string> = {
   whiteboard: 'Whiteboard',
   'media-player': 'Jukebox',
   geoint: 'GeoINT',
-  help: 'Help'
+  bookmarks: 'Bookmarks',
+  help: 'RTFM'
 };
 
 export function Desktop(): JSX.Element {

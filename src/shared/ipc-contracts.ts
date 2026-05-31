@@ -19,6 +19,7 @@ import type {
   EntityType,
   ExtractedAttachmentMeta,
   ImageMime,
+  MediaUrlResult,
   SearchResult,
   Reminder,
   TaskItem,
@@ -98,7 +99,16 @@ export const channels = {
     deleteBookmark: 'browser:deleteBookmark',
     listHistory: 'browser:listHistory',
     addHistory: 'browser:addHistory',
-    clearHistory: 'browser:clearHistory'
+    clearHistory: 'browser:clearHistory',
+    firefoxStatus: 'browser:firefoxStatus',
+    launchFirefox: 'browser:launchFirefox'
+  },
+  bookmarks: {
+    get: 'bookmarks:get',
+    save: 'bookmarks:save',
+    exportBoard: 'bookmarks:exportBoard',
+    importBoard: 'bookmarks:importBoard',
+    fetchFavicon: 'bookmarks:fetchFavicon'
   },
   files: {
     importDropped: 'files:importDropped',
@@ -108,6 +118,7 @@ export const channels = {
     readAttachmentText: 'files:readAttachmentText',
     readAttachmentBytes: 'files:readAttachmentBytes',
     readEml: 'files:readEml',
+    mediaUrl: 'files:mediaUrl',
     extractAttachmentMeta: 'files:extractAttachmentMeta',
     renameAttachment: 'files:renameAttachment',
     pickOpen: 'files:pickOpen',
@@ -272,6 +283,7 @@ export interface ApiContracts {
   [channels.files.readAttachmentText]: { args: [CaseId, string]; returns: AttachmentTextResult };
   [channels.files.readAttachmentBytes]: { args: [CaseId, string, number, number]; returns: AttachmentBytesResult };
   [channels.files.readEml]: { args: [CaseId, string]; returns: EmlPreview };
+  [channels.files.mediaUrl]: { args: [CaseId, string]; returns: MediaUrlResult };
   [channels.files.extractAttachmentMeta]: { args: [CaseId, string]; returns: ExtractedAttachmentMeta };
   [channels.files.renameAttachment]: { args: [CaseId, string, string]; returns: string };
 

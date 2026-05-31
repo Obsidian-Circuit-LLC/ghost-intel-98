@@ -10,8 +10,9 @@ import { resolve, relative, isAbsolute, normalize } from 'node:path';
 import { realpath } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isIP, isIPv6 } from 'node:net';
+import { randomUUID } from 'node:crypto';
 import { ENTITY_TYPES, ENTITY_RELATIONSHIPS, TIMELINE_KINDS, IMAGE_MIMES, type EntityType, type EntityRelationship, type TimelineKind, type TimelineEvent, type ImageMime, type Whiteboard, type WhiteboardNode, type WhiteboardEdge, type WhiteboardNodeType } from '@shared/types';
-import type { GeoItem } from '@shared/post-mvp-types';
+import type { GeoItem, BookmarkBoard, BookmarkCategory, BookmarkLink } from '@shared/post-mvp-types';
 
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -587,7 +588,9 @@ export function ensureSaveToCaseOpts(v: unknown): { form: 'record' | 'link' | 'n
   let entityIds: string[] | undefined;
   if (o.entityIds !== undefined) {
     if (!Array.isArray(o.entityIds)) throw new ValidationError('entityIds must be an array');
-    entityIds = o.entityIds.map((x) => ensureUuid(x, 'entityId'));
+    // Entity registry ids are `ent-<uuid>`, not bare UUIDs — validating as a plain UUID both
+    // rejected real ids and would have let bare UUIDs through as dangling links (red-team).
+    entityIds = o.entityIds.map((x) => ensureEntityId(x));
   }
   return { form: o.form, entityIds };
 }
@@ -603,6 +606,52 @@ export function ensureLatLon(v: unknown): { lat: number; lon: number } | null {
     throw new ValidationError('lat/lon out of range');
   }
   return { lat, lon };
+}
+
+// ---------- bookmarks dashboard ----------
+
+const MAX_BM_CATEGORIES = 300;
+const MAX_BM_LINKS = 1000;
+const MAX_BM_FAVICON = 256 * 1024; // data: URI length cap
+
+function bmId(v: unknown): string {
+  return typeof v === 'string' && v.length > 0 && v.length <= 64 ? v : randomUUID();
+}
+function bmText(v: unknown, max: number): string {
+  return typeof v === 'string' ? v.replace(/[ -]/g, ' ').slice(0, max) : '';
+}
+
+/** Validate + clamp a renderer-supplied bookmark board before it touches disk. URLs must be
+ *  http(s) (validateExternalUrl normalizes + rejects file:/js:); emoji/favicon are bounded;
+ *  a favicon must be a data: URI (never a remote ref that would beacon on render). */
+export function ensureBookmarkBoard(raw: unknown): BookmarkBoard {
+  const o = (raw ?? {}) as { categories?: unknown; networkEnabled?: unknown };
+  const catsIn = Array.isArray(o.categories) ? o.categories.slice(0, MAX_BM_CATEGORIES) : [];
+  const categories: BookmarkCategory[] = [];
+  for (const rawCat of catsIn) {
+    const c = (rawCat ?? {}) as { id?: unknown; title?: unknown; links?: unknown };
+    const linksIn = Array.isArray(c.links) ? c.links.slice(0, MAX_BM_LINKS) : [];
+    const links: BookmarkLink[] = [];
+    for (const rawLink of linksIn) {
+      const l = (rawLink ?? {}) as Record<string, unknown>;
+      let url: string;
+      try { url = validateExternalUrl(String(l['url'] ?? '')); } catch { continue; }
+      if (!/^https?:\/\//i.test(url)) continue; // no mailto:/etc on the board
+      const link: BookmarkLink = { id: bmId(l['id']), name: bmText(l['name'], 200) || url, url };
+      const emoji = bmText(l['emoji'], 16);
+      if (emoji) link.emoji = emoji;
+      const fav = l['favicon'];
+      // Only a base64 RASTER image data: URI. Excludes data:text/html and data:image/svg+xml —
+      // SVG is the one image type that can carry script/remote refs, and the only safety today is
+      // <img>'s secure-static mode; don't let a future render path turn a stored SVG into a beacon.
+      if (typeof fav === 'string'
+        && /^data:image\/(png|jpeg|jpg|gif|webp|bmp|x-icon|vnd\.microsoft\.icon);base64,/i.test(fav)
+        && fav.length <= MAX_BM_FAVICON) link.favicon = fav;
+      links.push(link);
+    }
+    categories.push({ id: bmId(c.id), title: bmText(c.title, 200) || 'Untitled', links });
+  }
+  return { categories, networkEnabled: o.networkEnabled === true };
 }
 
 /** Jukebox: a remembered library folder path (existence is checked at use time). */
