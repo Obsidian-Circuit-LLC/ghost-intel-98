@@ -146,7 +146,10 @@ const api = {
     removeSource: (id: string) => ipcRenderer.invoke(channels.geoint.removeSource, id),
     importOpml: () => ipcRenderer.invoke(channels.geoint.importOpml),
     refresh: (id?: string) => ipcRenderer.invoke(channels.geoint.refresh, id),
-    setItemLocation: (id: string, loc: unknown) => ipcRenderer.invoke(channels.geoint.setItemLocation, id, loc)
+    setItemLocation: (id: string, loc: unknown) => ipcRenderer.invoke(channels.geoint.setItemLocation, id, loc),
+    saveToCase: (caseId: string, item: unknown, opts: unknown) => ipcRenderer.invoke(channels.geoint.saveToCase, caseId, item, opts),
+    listCaseEvents: (caseId: string) => ipcRenderer.invoke(channels.geoint.listCaseEvents, caseId),
+    removeCaseEvent: (caseId: string, eventId: string) => ipcRenderer.invoke(channels.geoint.removeCaseEvent, caseId, eventId)
   },
   ai: {
     chatStream: (streamId: string, req: unknown) => ipcRenderer.invoke(channels.ai.chatStream, streamId, req),
