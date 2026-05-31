@@ -1,0 +1,5 @@
+<?xml version="1.0"?>
+<opml version="2.0"><body>
+<outline text="Wire" type="rss" xmlUrl="http://feeds/wire.xml"/>
+<outline text="Quakes" xmlUrl="http://feeds/quakes.geojson"/>
+</body></opml>

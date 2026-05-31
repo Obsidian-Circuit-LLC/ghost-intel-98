@@ -144,6 +144,38 @@ export interface MediaLibrarySnapshot {
   stations: MediaStation[];
 }
 
+// ---------- GeoINT ----------
+
+export type GeoSourceType = 'rss' | 'atom' | 'geojson';
+
+export interface GeoSource {
+  id: string;
+  label: string;
+  url: string;
+  type: GeoSourceType;
+  enabled: boolean;
+  lastFetched?: string;
+  lastError?: string;
+}
+
+export interface GeoItem {
+  id: string;
+  sourceId: string;
+  title: string;
+  link?: string;
+  summary?: string;
+  published?: string;
+  lat?: number;
+  lon?: number;
+  /** How this item got its coordinates (if any). */
+  located: 'geo' | 'gazetteer' | 'manual' | 'none';
+}
+
+export interface GeoSnapshot {
+  sources: GeoSource[];
+  items: GeoItem[];
+}
+
 // ---------- AI Assistant ----------
 
 export interface AiChatMessage {

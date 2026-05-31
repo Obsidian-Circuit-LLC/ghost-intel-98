@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<rss xmlns:geo="http://www.w3.org/2003/01/geo/wgs84_pos#" version="2.0"><channel>
+<item><title>Quake near Tokyo</title><link>http://x/1</link><description>m5</description>
+<pubDate>Sat, 31 May 2026 00:00:00 GMT</pubDate><geo:lat>35.68</geo:lat><geo:long>139.69</geo:long></item>
+<item><title>Unrest in Mali</title><link>http://x/2</link><description>report</description></item>
+</channel></rss>

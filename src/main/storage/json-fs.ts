@@ -873,6 +873,7 @@ function mergeSettings(base: AppSettings, patch: Partial<AppSettings>): AppSetti
     mail: { ...base.mail, ...(patch.mail ?? {}) },
     browser: { ...base.browser, ...(patch.browser ?? {}) },
     media: { ...base.media, ...(patch.media ?? {}) },
+    geoint: { ...base.geoint, ...(patch.geoint ?? {}) },
     shortcuts: patch.shortcuts ?? base.shortcuts,
     hasSeenWelcome: patch.hasSeenWelcome ?? base.hasSeenWelcome,
     caseSortBy: patch.caseSortBy ?? base.caseSortBy,

@@ -322,6 +322,14 @@ export interface AppSettings {
     /** Show the spectrum visualizer in the Jukebox. */
     visualizer: boolean;
   };
+  geoint: {
+    /** Master opt-in egress gate for GeoINT. When false (default) no feed is fetched
+     *  and the map loads no tiles. App-layer enforced (see GeoINT spec). */
+    networkEnabled: boolean;
+    /** User-configured raster tile server URL template (e.g. https://.../{z}/{x}/{y}.png). */
+    tileServerUrl: string;
+    tileAttribution: string;
+  };
 }
 
 export const defaultShortcuts: AccessShortcut[] = [
@@ -361,5 +369,6 @@ export const defaultSettings: AppSettings = {
   },
   mail: { accounts: [] },
   browser: { homepage: 'about:blank' },
-  media: { streamingEnabled: false, visualizer: true }
+  media: { streamingEnabled: false, visualizer: true },
+  geoint: { networkEnabled: false, tileServerUrl: '', tileAttribution: '' }
 };
