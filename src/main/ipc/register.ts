@@ -37,7 +37,7 @@ import * as ai from '../services/ai';
 import * as localAi from '../services/local-ai';
 import * as bookmarks from '../storage/bookmarks';
 import * as history from '../storage/history';
-import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureWhiteboard, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon, ensureSaveToCaseOpts } from '../security/validate';
+import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureWhiteboard, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon, ensureSaveToCaseOpts, ensureGeoItem } from '../security/validate';
 import * as entities from '../storage/entities';
 import * as bioStore from '../storage/bio-images';
 import * as ftp from '../services/ftp';
@@ -579,7 +579,13 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
 
   // ---- streams (EyeSpy) ----
   safeHandle(channels.streams.list, () => streams.list());
-  safeHandle(channels.streams.upsert, (...args) => streams.upsert(args[0] as Parameters<typeof streams.upsert>[0]));
+  safeHandle(channels.streams.upsert, (...args) => {
+    const input = args[0] as Parameters<typeof streams.upsert>[0];
+    // EyeSpy renders the URL straight into <img>/<video>/hls — a hostile renderer must not
+    // add arbitrary egress URLs. Enforce http/https/rtsp (loopback/LAN allowed: own cameras).
+    if (typeof input?.url !== 'string' || !ensureFeedUrl(input.url)) throw new Error('Stream URL must be http(s) or rtsp.');
+    return streams.upsert(input);
+  });
   safeHandle(channels.streams.delete, (...args) => streams.remove(args[0] as string));
   safeHandle(channels.streams.import, async () => {
     const win = getWindow();
@@ -635,8 +641,11 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     if (r.canceled || !r.filePaths[0]) return [];
     const playlist = r.filePaths[0];
     const items = parseM3u(await readFile(playlist, 'utf8'), dirname(playlist));
+    // Only authorize audio files for ga98media:// — a malicious playlist must NOT be able to
+    // allowlist arbitrary local paths (e.g. /etc/passwd, ~/.ssh/id_ed25519) for renderer read.
+    const AUDIO_RE = /\.(mp3|m4a|aac|flac|wav|ogg|oga|opus)$/i;
     for (const it of items) {
-      if (it.path) { try { adHocAllowlist.add(await realpath(it.path)); } catch { /* missing file — still listed, just won't play */ } }
+      if (it.path && AUDIO_RE.test(it.path)) { try { adHocAllowlist.add(await realpath(it.path)); } catch { /* missing file — listed, won't play */ } }
     }
     return items;
   });
@@ -679,7 +688,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     for (const s of sources) { const res = await geoint.fetchSource(s.id, true); if (res.ok) fetched++; else failed++; }
     return { fetched, failed };
   });
-  safeHandle(channels.geoint.saveToCase, (...a) => geoSaveToCase(ensureUuid(a[0], 'caseId'), a[1] as import('@shared/post-mvp-types').GeoItem, ensureSaveToCaseOpts(a[2])));
+  safeHandle(channels.geoint.saveToCase, (...a) => geoSaveToCase(ensureUuid(a[0], 'caseId'), ensureGeoItem(a[1]), ensureSaveToCaseOpts(a[2])));
   safeHandle(channels.geoint.listCaseEvents, (...a) => geoCaseEvents.listCaseEvents(ensureUuid(a[0], 'caseId')));
   safeHandle(channels.geoint.removeCaseEvent, (...a) => geoCaseEvents.removeCaseEvent(ensureUuid(a[0], 'caseId'), ensureUuid(a[1], 'eventId')));
 

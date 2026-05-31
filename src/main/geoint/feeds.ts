@@ -12,8 +12,13 @@ type Geocoder = (text: string) => { lat: number; lon: number; name: string } | n
 
 const xml = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_', textNodeName: '#text' });
 const arr = <T>(v: T | T[] | undefined | null): T[] => (v == null ? [] : Array.isArray(v) ? v : [v]);
+// Bound per-feed work: cap items and clip each text field, so a hostile feed can't drive a
+// CPU DoS through the per-item gazetteer regex sweep or bloat the cache (red-team L7).
+const MAX_FEED_ITEMS = 2000;
+const MAX_FIELD = 8000;
+const clip = (s: string): string => (s.length > MAX_FIELD ? s.slice(0, MAX_FIELD) : s);
 const txt = (v: unknown): string =>
-  v == null ? '' : typeof v === 'object' ? String((v as Record<string, unknown>)['#text'] ?? '') : String(v);
+  clip(v == null ? '' : typeof v === 'object' ? String((v as Record<string, unknown>)['#text'] ?? '') : String(v));
 
 function locate(
   title: string,
@@ -28,7 +33,7 @@ function locate(
 
 export function parseRss(body: string, sourceId: string, geocode: Geocoder): GeoItem[] {
   const doc = xml.parse(body) as Record<string, any>;
-  return arr(doc?.rss?.channel?.item).map((it: Record<string, unknown>) => {
+  return arr(doc?.rss?.channel?.item).slice(0, MAX_FEED_ITEMS).map((it: Record<string, unknown>) => {
     const title = txt(it['title']);
     const summary = txt(it['description']);
     const lat = it['geo:lat'] != null ? Number(it['geo:lat']) : NaN;
@@ -48,7 +53,7 @@ export function parseRss(body: string, sourceId: string, geocode: Geocoder): Geo
 
 export function parseAtom(body: string, sourceId: string, geocode: Geocoder): GeoItem[] {
   const doc = xml.parse(body) as Record<string, any>;
-  return arr(doc?.feed?.entry).map((e: Record<string, unknown>) => {
+  return arr(doc?.feed?.entry).slice(0, MAX_FEED_ITEMS).map((e: Record<string, unknown>) => {
     const title = txt(e['title']);
     const summary = txt(e['summary']);
     const linkEl = arr(e['link'])[0] as Record<string, unknown> | undefined;
@@ -71,15 +76,16 @@ export function parseGeoJson(body: string, sourceId: string): GeoItem[] {
   };
   return arr(fc.features)
     .filter((f) => f.geometry?.type === 'Point' && Array.isArray(f.geometry.coordinates) && f.geometry.coordinates.length >= 2)
+    .slice(0, MAX_FEED_ITEMS)
     .map((f) => {
       const [lon, lat] = f.geometry!.coordinates as number[]; // GeoJSON order is [lon, lat]
       const p = f.properties ?? {};
       return {
         id: randomUUID(),
         sourceId,
-        title: String(p['title'] ?? p['name'] ?? 'Untitled'),
+        title: clip(String(p['title'] ?? p['name'] ?? 'Untitled')),
         link: typeof p['link'] === 'string' ? p['link'] : undefined,
-        summary: typeof p['description'] === 'string' ? (p['description'] as string) : undefined,
+        summary: typeof p['description'] === 'string' ? clip(p['description'] as string) : undefined,
         published: typeof p['date'] === 'string' ? (p['date'] as string) : undefined,
         lat,
         lon,

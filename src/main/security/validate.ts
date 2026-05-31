@@ -11,6 +11,7 @@ import { realpath } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isIP, isIPv6 } from 'node:net';
 import { ENTITY_TYPES, ENTITY_RELATIONSHIPS, TIMELINE_KINDS, IMAGE_MIMES, type EntityType, type EntityRelationship, type TimelineKind, type TimelineEvent, type ImageMime, type Whiteboard, type WhiteboardNode, type WhiteboardEdge, type WhiteboardNodeType } from '@shared/types';
+import type { GeoItem } from '@shared/post-mvp-types';
 
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -519,9 +520,63 @@ export function ensureGeoSource(v: unknown): { label: string; url: string; type:
   }
   if (typeof o.url !== 'string') throw new ValidationError('source.url must be a string');
   const url = validateExternalUrl(o.url);
-  if (!/^https?:\/\//i.test(url)) throw new ValidationError('source.url must be http or https');
+  if (!isPublicHttpUrl(url)) throw new ValidationError('source.url must be a public http(s) URL (not loopback/private)');
   if (o.type !== 'rss' && o.type !== 'atom' && o.type !== 'geojson') throw new ValidationError('source.type invalid');
   return { label: o.label.trim(), url, type: o.type };
+}
+
+/** True iff `raw` is an http(s) URL whose host is NOT loopback/private/link-local/metadata.
+ *  GeoINT fetches sources from the public internet only — this blocks SSRF to internal hosts
+ *  (used for manual add, OPML import, and every redirect hop). */
+export function isPublicHttpUrl(raw: string): boolean {
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
+    return !isLoopbackOrPrivate(u.hostname);
+  } catch { return false; }
+}
+
+const MAX_GEO_TEXT = 4000;
+
+/** Validate a renderer-supplied GeoItem at the saveToCase boundary. A hostile renderer can
+ *  call geoint.saveToCase directly; without this the item flows unbounded into the case +
+ *  cross-case entity stores (esp. `place` → entities.create, bypassing MAX_ENTITY_VALUE). */
+export function ensureGeoItem(raw: unknown): GeoItem {
+  if (!raw || typeof raw !== 'object') throw new ValidationError('item must be an object');
+  const o = raw as Record<string, unknown>;
+  const str = (v: unknown, max: number, field: string): string | undefined => {
+    if (v === undefined || v === null) return undefined;
+    if (typeof v !== 'string' || v.length > max) throw new ValidationError(`item.${field} invalid or too long`);
+    return v;
+  };
+  const title = str(o['title'], MAX_GEO_TEXT, 'title');
+  if (!title || title.trim().length === 0) throw new ValidationError('item.title is required');
+  const num = (v: unknown, field: string): number | undefined => {
+    if (v === undefined || v === null) return undefined;
+    const n = Number(v);
+    if (!Number.isFinite(n)) throw new ValidationError(`item.${field} not finite`);
+    return n;
+  };
+  const lat = num(o['lat'], 'lat');
+  const lon = num(o['lon'], 'lon');
+  if (lat !== undefined && (lat < -90 || lat > 90)) throw new ValidationError('item.lat out of range');
+  if (lon !== undefined && (lon < -180 || lon > 180)) throw new ValidationError('item.lon out of range');
+  const located = o['located'];
+  if (located !== 'geo' && located !== 'gazetteer' && located !== 'manual' && located !== 'none') {
+    throw new ValidationError('item.located invalid');
+  }
+  return {
+    id: str(o['id'], 200, 'id') ?? '',
+    sourceId: str(o['sourceId'], 200, 'sourceId') ?? '',
+    title,
+    link: str(o['link'], 2048, 'link'),
+    summary: str(o['summary'], MAX_GEO_TEXT, 'summary'),
+    published: str(o['published'], 200, 'published'),
+    lat,
+    lon,
+    place: str(o['place'], 500, 'place'),
+    located
+  };
 }
 
 /** GeoINT cycle 2: options for saving an event to a case. */

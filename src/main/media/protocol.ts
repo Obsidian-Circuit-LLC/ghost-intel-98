@@ -56,11 +56,15 @@ export function registerMediaProtocol(): void {
   protocol.handle('ga98media', async (request) => {
     const p = pathFromRequest(request.url);
     if (!p) return new Response('bad request', { status: 400 });
+    // Resolve to a realpath ONCE and authorize + stat + stream that same path, so a symlink
+    // swapped between check and open can't redirect the read (TOCTOU hardening, red-team L6).
+    let real: string;
+    try { real = realpathSync(p); } catch { return new Response('not found', { status: 404 }); }
     const roots = await getLibraryRoots();
-    if (!isAuthorizedMediaPath(p, roots, adHocAllowlist)) return new Response('forbidden', { status: 403 });
+    if (!isAuthorizedMediaPath(real, roots, adHocAllowlist)) return new Response('forbidden', { status: 403 });
 
     let size: number;
-    try { size = statSync(p).size; } catch { return new Response('not found', { status: 404 }); }
+    try { size = statSync(real).size; } catch { return new Response('not found', { status: 404 }); }
 
     const range = request.headers.get('range');
     const m = range ? /^bytes=(\d*)-(\d*)$/.exec(range) : null;
@@ -70,19 +74,19 @@ export function registerMediaProtocol(): void {
       if (Number.isNaN(start) || Number.isNaN(end) || start > end || end >= size) {
         return new Response('range not satisfiable', { status: 416, headers: { 'Content-Range': `bytes */${size}` } });
       }
-      return new Response(Readable.toWeb(createReadStream(p, { start, end })) as ReadableStream, {
+      return new Response(Readable.toWeb(createReadStream(real, { start, end })) as ReadableStream, {
         status: 206,
         headers: {
-          'Content-Type': mimeFor(p),
+          'Content-Type': mimeFor(real),
           'Content-Length': String(end - start + 1),
           'Content-Range': `bytes ${start}-${end}/${size}`,
           'Accept-Ranges': 'bytes'
         }
       });
     }
-    return new Response(Readable.toWeb(createReadStream(p)) as ReadableStream, {
+    return new Response(Readable.toWeb(createReadStream(real)) as ReadableStream, {
       status: 200,
-      headers: { 'Content-Type': mimeFor(p), 'Content-Length': String(size), 'Accept-Ranges': 'bytes' }
+      headers: { 'Content-Type': mimeFor(real), 'Content-Length': String(size), 'Accept-Ranges': 'bytes' }
     });
   });
 }

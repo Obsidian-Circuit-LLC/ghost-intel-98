@@ -13,6 +13,25 @@ import { secureReadText, secureWriteFile } from '../storage/secure-fs';
 import type { GeoItem, GeoSnapshot, GeoSource, GeoSourceType } from '@shared/post-mvp-types';
 import { parseRss, parseAtom, parseGeoJson, detectType } from './feeds';
 import { geocoder } from './gazetteer';
+import { isPublicHttpUrl } from '../security/validate';
+
+/** Fetch following redirects manually, re-validating every hop against the public-URL guard
+ *  so an external feed cannot 30x-redirect the request inward (SSRF / cloud metadata). */
+async function safeFetch(url: string, maxHops = 4): Promise<Response> {
+  let current = url;
+  for (let hop = 0; hop < maxHops; hop++) {
+    if (!isPublicHttpUrl(current)) throw new Error('refusing to fetch a non-public URL');
+    const res = await fetch(current, { redirect: 'manual' });
+    if (res.status >= 300 && res.status < 400) {
+      const loc = res.headers.get('location');
+      if (!loc) return res;
+      current = new URL(loc, current).toString();
+      continue;
+    }
+    return res;
+  }
+  throw new Error('too many redirects');
+}
 
 const sourcesFile = (): string => join(dataRoot(), 'geoint-sources.json');
 const cacheFile = (id: string): string => join(dataRoot(), 'geoint-cache', `${id}.json`);
@@ -56,6 +75,7 @@ export async function importSources(items: { label: string; url: string; type: G
   let added = 0;
   for (const it of items) {
     if (seen.has(it.url.toLowerCase())) continue;
+    if (!isPublicHttpUrl(it.url)) continue; // SSRF guard: OPML can carry internal/metadata URLs
     list.push({ id: randomUUID(), label: it.label, url: it.url, type: it.type, enabled: true });
     seen.add(it.url.toLowerCase());
     added++;
@@ -96,7 +116,7 @@ export async function fetchSource(id: string, networkEnabled: boolean): Promise<
   const s = list.find((x) => x.id === id);
   if (!s || !s.enabled) return { ok: false, count: 0 };
   try {
-    const res = await fetch(s.url);
+    const res = await safeFetch(s.url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const body = await res.text();
     const type: GeoSourceType = s.type ?? detectType(s.url, body);

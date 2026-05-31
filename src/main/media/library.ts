@@ -8,13 +8,12 @@
 
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
-import { readdir, stat, mkdir, writeFile } from 'node:fs/promises';
+import { readdir, stat } from 'node:fs/promises';
 import { dataRoot } from '../storage/paths';
 import { secureReadText, secureWriteFile } from '../storage/secure-fs';
 import type { MediaLibrarySnapshot, MediaStation, MediaTrack } from '@shared/post-mvp-types';
 
 const file = (): string => join(dataRoot(), 'media-library.json');
-const artDir = (): string => join(dataRoot(), 'media-art');
 const EMPTY: MediaLibrarySnapshot = { roots: [], tracks: [], stations: [] };
 const AUDIO_EXT = new Set(['mp3', 'm4a', 'aac', 'flac', 'wav', 'ogg', 'oga', 'opus']);
 
@@ -114,13 +113,9 @@ export async function refresh(): Promise<MediaLibrarySnapshot> {
         track.artist = meta.common.artist;
         track.album = meta.common.album;
         track.durationMs = meta.format.duration ? Math.round(meta.format.duration * 1000) : undefined;
-        const pic = meta.common.picture?.[0];
-        if (pic) {
-          await mkdir(artDir(), { recursive: true });
-          const ref = `${Math.round(st.mtimeMs).toString(36)}-${st.size.toString(36)}.img`;
-          await writeFile(join(artDir(), ref), pic.data);
-          track.artRef = ref;
-        }
+        // Embedded cover art is intentionally NOT extracted/written: it has no read path yet,
+        // and writing it via plain fs would bypass the at-rest vault (red-team M3). Add it back
+        // through secure-fs only when a viewer exists.
       } catch { /* unreadable/unsupported tags — keep the filename-only entry */ }
       next.push(track);
     }
