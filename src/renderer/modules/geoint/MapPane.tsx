@@ -9,6 +9,7 @@ import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { GeoItem } from '@shared/post-mvp-types';
+import { buildPopup } from './popup';
 
 const pin = L.divIcon({ className: 'ga98-geo-pin', html: '📍', iconSize: [16, 16], iconAnchor: [8, 16] });
 
@@ -52,8 +53,7 @@ export function MapPane({ items, tilesEnabled, tileUrl, tileAttribution, pickMod
     lg.clearLayers();
     for (const it of items) {
       if (it.lat == null || it.lon == null) continue;
-      const link = it.link ? `<br><a href="${it.link}" target="_blank" rel="noopener">open</a>` : '';
-      const mk = L.marker([it.lat, it.lon], { icon: pin }).bindPopup(`<b>${it.title}</b>${link}`);
+      const mk = L.marker([it.lat, it.lon], { icon: pin }).bindPopup(buildPopup(it.title, it.link));
       mk.addTo(lg);
       if (it.id === focusId) { m.setView([it.lat, it.lon], 6); mk.openPopup(); }
     }
