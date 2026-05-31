@@ -38,4 +38,4 @@ A full adversarial review of the 3.2.x surface (0 Critical). Fixed:
 ---
 
 **Artifact:** `GhostAccess98-Setup-3.2.3.exe` (~119 MB, NSIS, x64, unsigned)
-**SHA-256:** filled in on the release after build.
+**SHA-256:** `2eaaa90ef74c5250021ecdfe5106b5d72869dcd035f3c411d90d9163fd97ef25`
