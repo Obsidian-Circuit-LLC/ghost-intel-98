@@ -510,6 +510,33 @@ export function ensureFeedUrl(url: string): boolean {
   } catch { return false; }
 }
 
+/** GeoINT: a pluggable source. Label bounded; URL must be http/https; type enum. */
+export function ensureGeoSource(v: unknown): { label: string; url: string; type: 'rss' | 'atom' | 'geojson' } {
+  if (!v || typeof v !== 'object') throw new ValidationError('source must be an object');
+  const o = v as { label?: unknown; url?: unknown; type?: unknown };
+  if (typeof o.label !== 'string' || o.label.trim().length === 0 || o.label.length > 200) {
+    throw new ValidationError('source.label must be a 1-200 char string');
+  }
+  if (typeof o.url !== 'string') throw new ValidationError('source.url must be a string');
+  const url = validateExternalUrl(o.url);
+  if (!/^https?:\/\//i.test(url)) throw new ValidationError('source.url must be http or https');
+  if (o.type !== 'rss' && o.type !== 'atom' && o.type !== 'geojson') throw new ValidationError('source.type invalid');
+  return { label: o.label.trim(), url, type: o.type };
+}
+
+/** GeoINT: a manual map pin (or null to clear). Coordinates must be finite + in range. */
+export function ensureLatLon(v: unknown): { lat: number; lon: number } | null {
+  if (v === null) return null;
+  if (!v || typeof v !== 'object') throw new ValidationError('location must be {lat,lon} or null');
+  const o = v as { lat?: unknown; lon?: unknown };
+  const lat = Number(o.lat);
+  const lon = Number(o.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+    throw new ValidationError('lat/lon out of range');
+  }
+  return { lat, lon };
+}
+
 /** Jukebox: a remembered library folder path (existence is checked at use time). */
 export function ensureMediaRoot(p: unknown): string {
   if (typeof p !== 'string' || p.length === 0 || p.length > 4096) {

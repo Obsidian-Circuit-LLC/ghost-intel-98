@@ -25,7 +25,7 @@ import type {
   TimelineEvent,
   WebLink
 } from './types';
-import type { MediaLibrarySnapshot, MediaStation, MediaTrack } from './post-mvp-types';
+import type { MediaLibrarySnapshot, MediaStation, MediaTrack, GeoSnapshot, GeoSource } from './post-mvp-types';
 
 export interface EntityCreateInput { type: EntityType; value: string; notes?: string; aliases?: string[] }
 export interface EntityLinkOpts { relationship?: EntityRelationship; linkIds?: string[]; attachmentFileNames?: string[] }
@@ -140,6 +140,15 @@ export const channels = {
     savePlaylist: 'media:savePlaylist',
     upsertStation: 'media:upsertStation',
     deleteStation: 'media:deleteStation'
+  },
+  geoint: {
+    snapshot: 'geoint:snapshot',
+    addSource: 'geoint:addSource',
+    updateSource: 'geoint:updateSource',
+    removeSource: 'geoint:removeSource',
+    importOpml: 'geoint:importOpml',
+    refresh: 'geoint:refresh',
+    setItemLocation: 'geoint:setItemLocation'
   },
   ai: {
     chat: 'ai:chat',
@@ -307,6 +316,14 @@ export interface ApiContracts {
   [channels.media.savePlaylist]: { args: [{ title: string; path?: string; url?: string }[]]; returns: string | null };
   [channels.media.upsertStation]: { args: [{ id?: string; label: string; url: string }]; returns: MediaStation };
   [channels.media.deleteStation]: { args: [string]; returns: void };
+
+  [channels.geoint.snapshot]: { args: []; returns: GeoSnapshot };
+  [channels.geoint.addSource]: { args: [{ label: string; url: string; type: 'rss' | 'atom' | 'geojson' }]; returns: GeoSource };
+  [channels.geoint.updateSource]: { args: [string, Partial<GeoSource>]; returns: void };
+  [channels.geoint.removeSource]: { args: [string]; returns: void };
+  [channels.geoint.importOpml]: { args: []; returns: number };
+  [channels.geoint.refresh]: { args: [string | undefined]; returns: { fetched: number; failed: number } };
+  [channels.geoint.setItemLocation]: { args: [string, { lat: number; lon: number } | null]; returns: void };
 
   [channels.reminders.listGlobal]: { args: []; returns: Reminder[] };
   [channels.reminders.upsertGlobal]: { args: [Reminder]; returns: Reminder };

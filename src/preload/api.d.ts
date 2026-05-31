@@ -35,6 +35,8 @@ import type {
   MediaLibrarySnapshot,
   MediaStation,
   MediaTrack,
+  GeoSnapshot,
+  GeoSource,
   SshHostProfile
 } from '../shared/post-mvp-types';
 
@@ -172,6 +174,15 @@ export interface GhostApi {
     savePlaylist(queue: { title: string; path?: string; url?: string }[]): Promise<string | null>;
     upsertStation(input: { id?: string; label: string; url: string }): Promise<MediaStation>;
     deleteStation(id: string): Promise<void>;
+  };
+  geoint: {
+    snapshot(): Promise<GeoSnapshot>;
+    addSource(input: { label: string; url: string; type: 'rss' | 'atom' | 'geojson' }): Promise<GeoSource>;
+    updateSource(id: string, patch: Partial<GeoSource>): Promise<void>;
+    removeSource(id: string): Promise<void>;
+    importOpml(): Promise<number>;
+    refresh(id?: string): Promise<{ fetched: number; failed: number }>;
+    setItemLocation(id: string, loc: { lat: number; lon: number } | null): Promise<void>;
   };
   ai: {
     chatStream(streamId: string, req: AiChatRequest): Promise<void>;

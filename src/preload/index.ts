@@ -139,6 +139,15 @@ const api = {
     upsertStation: (input: unknown) => ipcRenderer.invoke(channels.media.upsertStation, input),
     deleteStation: (id: string) => ipcRenderer.invoke(channels.media.deleteStation, id)
   },
+  geoint: {
+    snapshot: () => ipcRenderer.invoke(channels.geoint.snapshot),
+    addSource: (s: unknown) => ipcRenderer.invoke(channels.geoint.addSource, s),
+    updateSource: (id: string, patch: unknown) => ipcRenderer.invoke(channels.geoint.updateSource, id, patch),
+    removeSource: (id: string) => ipcRenderer.invoke(channels.geoint.removeSource, id),
+    importOpml: () => ipcRenderer.invoke(channels.geoint.importOpml),
+    refresh: (id?: string) => ipcRenderer.invoke(channels.geoint.refresh, id),
+    setItemLocation: (id: string, loc: unknown) => ipcRenderer.invoke(channels.geoint.setItemLocation, id, loc)
+  },
   ai: {
     chatStream: (streamId: string, req: unknown) => ipcRenderer.invoke(channels.ai.chatStream, streamId, req),
     cancel: (streamId: string) => ipcRenderer.invoke(channels.ai.chat, streamId),

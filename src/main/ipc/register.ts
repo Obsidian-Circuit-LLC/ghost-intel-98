@@ -37,7 +37,7 @@ import * as ai from '../services/ai';
 import * as localAi from '../services/local-ai';
 import * as bookmarks from '../storage/bookmarks';
 import * as history from '../storage/history';
-import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureWhiteboard, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl } from '../security/validate';
+import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureWhiteboard, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon } from '../security/validate';
 import * as entities from '../storage/entities';
 import * as bioStore from '../storage/bio-images';
 import * as ftp from '../services/ftp';
@@ -47,6 +47,8 @@ import * as mediaLib from '../media/library';
 import { adHocAllowlist } from '../media/protocol';
 import { parseM3u, toM3u } from '../media/m3u';
 import { parseFeedList, feedToUpsert } from '../services/feed-import';
+import * as geoint from '../geoint/sources';
+import { parseOpml } from '../geoint/feeds';
 import * as vault from '../services/vault';
 import { encryptAll, decryptAll } from '../storage/encryption-migrate';
 import { buildSummaryHtml, renderCasePdf } from '../services/export';
@@ -650,6 +652,31 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   });
   safeHandle(channels.media.upsertStation, (...args) => mediaLib.upsertStation(ensureStationInput(args[0])));
   safeHandle(channels.media.deleteStation, (...args) => mediaLib.deleteStation(args[0] as string));
+
+  // ---- GeoINT (vault-gated; network is app-layer gated by settings.geoint.networkEnabled) ----
+  safeHandle(channels.geoint.snapshot, () => geoint.snapshot());
+  safeHandle(channels.geoint.addSource, (...a) => geoint.addSource(ensureGeoSource(a[0])));
+  safeHandle(channels.geoint.updateSource, (...a) => geoint.updateSource(ensureUuid(a[0], 'sourceId'), a[1] as object));
+  safeHandle(channels.geoint.removeSource, (...a) => geoint.removeSource(ensureUuid(a[0], 'sourceId')));
+  safeHandle(channels.geoint.setItemLocation, (...a) => geoint.setItemLocation(ensureUuid(a[0], 'itemId'), ensureLatLon(a[1])));
+  safeHandle(channels.geoint.importOpml, async () => {
+    const win = getWindow();
+    const r = win
+      ? await dialog.showOpenDialog(win, { properties: ['openFile'], filters: [{ name: 'OPML', extensions: ['opml', 'xml'] }] })
+      : await dialog.showOpenDialog({ properties: ['openFile'] });
+    if (r.canceled || !r.filePaths[0]) return 0;
+    return geoint.importSources(parseOpml(await readFile(r.filePaths[0], 'utf8')));
+  });
+  safeHandle(channels.geoint.refresh, async (...a) => {
+    // EGRESS GATE: do not fetch anything unless the operator has enabled GeoINT network.
+    if (!(await settingsStore.read()).geoint.networkEnabled) return { fetched: 0, failed: 0 };
+    const targetId = a[0] as string | undefined;
+    const sources = (await geoint.listSources()).filter((s) => s.enabled && (!targetId || s.id === targetId));
+    let fetched = 0;
+    let failed = 0;
+    for (const s of sources) { const res = await geoint.fetchSource(s.id, true); if (res.ok) fetched++; else failed++; }
+    return { fetched, failed };
+  });
 
   // ---- ai ----
   safeHandle(channels.ai.chatStream, (...args) => ai.chat(args[0] as string, args[1] as AiChatRequest, getWindow));
