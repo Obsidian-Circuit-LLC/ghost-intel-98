@@ -38,4 +38,4 @@ all network is **off by default** and gated behind one explicit opt-in.
 ---
 
 **Artifact:** `GhostAccess98-Setup-3.2.2.exe` (~118 MB, NSIS, x64, unsigned)
-**SHA-256:** filled in on the release after build.
+**SHA-256:** `8d0c52c4ccf13828a0b78e1f64373f03e93995b13248df69a053871d32871814`
