@@ -8,13 +8,14 @@
  * lazily on the first play (autoplay policy needs a user gesture) and reused.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import Hls from 'hls.js';
 import type { MediaLibrarySnapshot, MediaStation } from '@shared/post-mvp-types';
 import { useSettings } from '../../state/store';
 import { toast } from '../../state/toasts';
 import { resolveSource, isHlsUrl } from './resolveSource';
 import { Visualizer } from './Visualizer';
+import { nextIndex, prevIndex, endedIndex, cycleRepeat, type RepeatMode } from './playlist-nav';
 
 interface QueueItem { title: string; path?: string; url?: string }
 
@@ -30,6 +31,53 @@ function fmtTime(s: number): string {
   return `${m}:${sec.toString().padStart(2, '0')}`;
 }
 
+// Transport icons drawn as inline SVG (currentColor) rather than Unicode media glyphs
+// (⏮ ▶ ⏹ ⏭), which render as "tofu" boxes on Windows builds lacking the symbol font —
+// the "wonky buttons" GhostExodus reported. SVG renders identically everywhere.
+const SVG = { width: 13, height: 13, viewBox: '0 0 16 16', 'aria-hidden': true } as const;
+function IcoPrev(): JSX.Element {
+  return <svg {...SVG}><rect x="2" y="3" width="2" height="10" fill="currentColor" /><path d="M13 3 L13 13 L5 8 Z" fill="currentColor" /></svg>;
+}
+function IcoNext(): JSX.Element {
+  return <svg {...SVG}><path d="M3 3 L3 13 L11 8 Z" fill="currentColor" /><rect x="12" y="3" width="2" height="10" fill="currentColor" /></svg>;
+}
+function IcoPlay(): JSX.Element {
+  return <svg {...SVG}><path d="M4 3 L4 13 L13 8 Z" fill="currentColor" /></svg>;
+}
+function IcoPause(): JSX.Element {
+  return <svg {...SVG}><rect x="4" y="3" width="3" height="10" fill="currentColor" /><rect x="9" y="3" width="3" height="10" fill="currentColor" /></svg>;
+}
+function IcoStop(): JSX.Element {
+  return <svg {...SVG}><rect x="3" y="3" width="10" height="10" fill="currentColor" /></svg>;
+}
+function IcoShuffle(): JSX.Element {
+  return (
+    <svg {...SVG}>
+      <g fill="none" stroke="currentColor" strokeWidth="1.6">
+        <path d="M1 4 H4 L11 12" /><path d="M1 12 H4 L11 4" />
+      </g>
+      <path d="M11 1 L15 4 L11 7 Z" fill="currentColor" />
+      <path d="M11 9 L15 12 L11 15 Z" fill="currentColor" />
+    </svg>
+  );
+}
+function IcoRepeat({ one }: { one: boolean }): JSX.Element {
+  return (
+    <svg {...SVG}>
+      <g fill="none" stroke="currentColor" strokeWidth="1.5">
+        <path d="M3 8 V6 A2 2 0 0 1 5 4 H12" /><path d="M13 8 V10 A2 2 0 0 1 11 12 H4" />
+      </g>
+      <path d="M11 2 L14 4 L11 6 Z" fill="currentColor" />
+      <path d="M5 10 L2 12 L5 14 Z" fill="currentColor" />
+      {one && <text x="8" y="10" textAnchor="middle" fontSize="6" fontWeight="bold" fill="currentColor">1</text>}
+    </svg>
+  );
+}
+// Pressed/active look for the latching Shuffle + Repeat toggles, without touching CSS.
+function transportToggleStyle(active: boolean): CSSProperties {
+  return active ? { borderStyle: 'inset', background: '#bfe0bf', color: '#003300' } : {};
+}
+
 export function MediaPlayerModule(): JSX.Element {
   const settings = useSettings((s) => s.settings);
   const patch = useSettings((s) => s.patch);
@@ -43,6 +91,16 @@ export function MediaPlayerModule(): JSX.Element {
   const [now, setNow] = useState(0);
   const [dur, setDur] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [repeat, setRepeat] = useState<RepeatMode>('off');
+  const [shuffle, setShuffle] = useState(false);
+  // next()/prev()/onEnded read the *latest* repeat+shuffle without re-binding their
+  // useCallbacks (which depend on queue/current), so refs mirror the state.
+  const repeatRef = useRef<RepeatMode>('off');
+  const shuffleRef = useRef(false);
+  repeatRef.current = repeat;
+  shuffleRef.current = shuffle;
+  // Visited indices, so Previous walks back through the shuffle order rather than index-1.
+  const historyRef = useRef<number[]>([]);
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const ctxRef = useRef<AudioContext | null>(null);
@@ -118,17 +176,36 @@ export function MediaPlayerModule(): JSX.Element {
 
   const playLibraryTrack = (index: number): void => { playItem(queue[index], index); };
 
+  const rememberCurrent = (): void => {
+    if (current < 0) return;
+    historyRef.current.push(current);
+    if (historyRef.current.length > 256) historyRef.current.shift();
+  };
+
   const next = useCallback(() => {
-    if (queue.length === 0) return;
-    const n = current + 1;
-    if (n < queue.length) playItem(queue[n], n);
-    else setPlaying(false);
+    rememberCurrent();
+    const n = nextIndex({ current, length: queue.length, repeat: repeatRef.current, shuffle: shuffleRef.current, rng: Math.random });
+    if (n === null) setPlaying(false);
+    else playItem(queue[n], n);
   }, [current, queue, playItem]);
 
   const prev = useCallback(() => {
     if (queue.length === 0) return;
-    const p = current - 1;
-    if (p >= 0) playItem(queue[p], p);
+    // In shuffle, Previous walks back through the actual play history, not index-1.
+    if (shuffleRef.current) {
+      const h = historyRef.current.pop();
+      if (h != null && h >= 0 && h < queue.length) { playItem(queue[h], h); return; }
+    }
+    const p = prevIndex({ current, length: queue.length, repeat: repeatRef.current, shuffle: shuffleRef.current, rng: Math.random });
+    if (p !== null) playItem(queue[p], p);
+  }, [current, queue, playItem]);
+
+  // Track ended naturally: repeat-one replays, otherwise advance like Next (respecting shuffle/repeat-all).
+  const handleEnded = useCallback(() => {
+    rememberCurrent();
+    const n = endedIndex({ current, length: queue.length, repeat: repeatRef.current, shuffle: shuffleRef.current, rng: Math.random });
+    if (n === null) setPlaying(false);
+    else playItem(queue[n], n);
   }, [current, queue, playItem]);
 
   function togglePlay(): void {
@@ -209,7 +286,7 @@ export function MediaPlayerModule(): JSX.Element {
         ref={audioRef}
         onTimeUpdate={(e) => setNow(e.currentTarget.currentTime)}
         onDurationChange={(e) => setDur(e.currentTarget.duration)}
-        onEnded={next}
+        onEnded={handleEnded}
         style={{ display: 'none' }}
       />
 
@@ -227,10 +304,14 @@ export function MediaPlayerModule(): JSX.Element {
       />
 
       <div className="ga98-jukebox-transport">
-        <button onClick={prev} title="Previous">⏮</button>
-        <button onClick={togglePlay} title="Play/Pause">{playing ? '⏸' : '▶'}</button>
-        <button onClick={stop} title="Stop">⏹</button>
-        <button onClick={next} title="Next">⏭</button>
+        <button onClick={prev} title="Previous track" aria-label="Previous track"><IcoPrev /></button>
+        <button onClick={togglePlay} title={playing ? 'Pause' : 'Play'} aria-label={playing ? 'Pause' : 'Play'}>{playing ? <IcoPause /> : <IcoPlay />}</button>
+        <button onClick={stop} title="Stop" aria-label="Stop"><IcoStop /></button>
+        <button onClick={next} title="Next track" aria-label="Next track"><IcoNext /></button>
+        <button onClick={() => setShuffle((s) => !s)} title={`Shuffle: ${shuffle ? 'on' : 'off'}`} aria-label="Shuffle"
+          aria-pressed={shuffle} style={transportToggleStyle(shuffle)}><IcoShuffle /></button>
+        <button onClick={() => setRepeat((r) => cycleRepeat(r))} title={`Repeat: ${repeat}`} aria-label={`Repeat: ${repeat}`}
+          aria-pressed={repeat !== 'off'} style={transportToggleStyle(repeat !== 'off')}><IcoRepeat one={repeat === 'one'} /></button>
         <span style={{ flex: 1 }} />
         <label style={{ fontSize: 11 }}>Vol</label>
         <input type="range" min={0} max={1} step={0.01} defaultValue={1}
