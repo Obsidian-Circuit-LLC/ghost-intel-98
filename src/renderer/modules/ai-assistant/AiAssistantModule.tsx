@@ -164,17 +164,31 @@ export function AiAssistantModule(): JSX.Element {
     // Accumulate the full reply locally so we can speak it on `done` without reading
     // back through React state (avoids StrictMode double-speak + stale closures).
     let acc = '';
+    let errored = false;
+    // Coalesce token bursts into ~16 fps state flushes. A per-token setMessages re-renders an
+    // ever-growing <pre> — O(n²) over a long reply — which saturated the main thread so the STFU
+    // click couldn't get a turn ("stops working on very large output"). Throttling keeps the UI
+    // and the STFU button responsive; `acc` still holds the full text for TTS. A pending flush is
+    // dropped once the user has stopped, so it can't overwrite the "[stopped]" bubble.
+    let flushTimer: ReturnType<typeof setTimeout> | null = null;
+    const flushNow = (): void => {
+      flushTimer = null;
+      if (stoppedRef.current) return;
+      setMessages((prev) => prev.map((m) => m.id === assistantMsg.id ? { ...m, content: acc } : m));
+    };
+    const scheduleFlush = (): void => { if (flushTimer === null && !stoppedRef.current) flushTimer = setTimeout(flushNow, 60); };
+    const clearFlush = (): void => { if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; } };
     const off = window.api.ai.onChunk(({ streamId: sid, chunk, done, error }) => {
       if (sid !== streamId) return;
-      if (chunk) {
-        acc += chunk;
-        setMessages((prev) => prev.map((m) => m.id === assistantMsg.id ? { ...m, content: m.content + chunk } : m));
-      }
+      if (chunk) { acc += chunk; scheduleFlush(); }
       if (error) {
-        setMessages((prev) => prev.map((m) => m.id === assistantMsg.id ? { ...m, content: `${m.content}\n\n[error: ${error}]`, streaming: false } : m));
+        clearFlush();
+        errored = true;
+        setMessages((prev) => prev.map((m) => m.id === assistantMsg.id ? { ...m, content: `${acc}\n\n[error: ${error}]`, streaming: false } : m));
       }
       if (done) {
-        setMessages((prev) => prev.map((m) => m.id === assistantMsg.id ? { ...m, streaming: false } : m));
+        clearFlush();
+        setMessages((prev) => prev.map((m) => m.id === assistantMsg.id ? { ...m, content: errored ? m.content : acc, streaming: false } : m));
         setStreaming(false);
         off();
         if (activeStreamRef.current?.id === streamId) activeStreamRef.current = null;

@@ -12,6 +12,13 @@ import { toast } from '../../state/toasts';
 import { MapPane } from './MapPane';
 import { SaveEventDialog } from './SaveEventDialog';
 
+// A sensible default basemap so the map actually renders the moment the user opts into the
+// network. Nothing is fetched until the "Allow GeoINT network" box is ticked (the egress gate);
+// once it is, this fills an empty tile field so the map isn't a blank grey square. The user can
+// replace it with any {z}/{x}/{y} tile server.
+const DEFAULT_TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+const DEFAULT_TILE_ATTRIBUTION = '© OpenStreetMap contributors';
+
 export function GeoIntModule(): JSX.Element {
   const settings = useSettings((s) => s.settings);
   const patch = useSettings((s) => s.patch);
@@ -24,10 +31,16 @@ export function GeoIntModule(): JSX.Element {
   const [focusId, setFocusId] = useState<string | null>(null);
   const [pickFor, setPickFor] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [saveItem, setSaveItem] = useState<GeoItem | null>(null);
   const [draft, setDraft] = useState<{ label: string; url: string; type: GeoSourceType }>({ label: '', url: '', type: 'rss' });
 
-  const load = useCallback(async () => { setSnap(await window.api.geoint.snapshot()); }, []);
+  // Surface a snapshot failure instead of leaving the whole panel silently empty (which read
+  // as "GeoINT does nothing"). A locked vault, for instance, now shows the actual reason here.
+  const load = useCallback(async () => {
+    try { setSnap(await window.api.geoint.snapshot()); setLoadError(null); }
+    catch (err) { setLoadError((err as Error).message); }
+  }, []);
   useEffect(() => { void load(); }, [load]);
 
   async function addSource(): Promise<void> {
@@ -39,11 +52,20 @@ export function GeoIntModule(): JSX.Element {
     try { const n = await window.api.geoint.importOpml(); if (n > 0) toast.success(`Imported ${n} source${n === 1 ? '' : 's'}.`); else toast.warn('No sources found.'); await load(); }
     catch (err) { toast.error((err as Error).message); }
   }
+  function setNetwork(enabled: boolean): void {
+    // Enabling with no tile server configured yet → drop in the default basemap so the map
+    // renders immediately instead of staying blank (the #1 "GeoINT does nothing" symptom).
+    const url = enabled && !tileUrl ? DEFAULT_TILE_URL : tileUrl;
+    const attr = enabled && !tileUrl ? DEFAULT_TILE_ATTRIBUTION : tileAttribution;
+    void patch({ geoint: { networkEnabled: enabled, tileServerUrl: url, tileAttribution: attr } });
+  }
   async function toggleSource(id: string, enabled: boolean): Promise<void> {
-    await window.api.geoint.updateSource(id, { enabled }); await load();
+    try { await window.api.geoint.updateSource(id, { enabled }); await load(); }
+    catch (err) { toast.error((err as Error).message); }
   }
   async function removeSource(id: string): Promise<void> {
-    await window.api.geoint.removeSource(id); await load();
+    try { await window.api.geoint.removeSource(id); await load(); }
+    catch (err) { toast.error((err as Error).message); }
   }
   async function refresh(): Promise<void> {
     if (!net) { toast.warn('GeoINT network is off — enable it to fetch sources.'); return; }
@@ -54,8 +76,8 @@ export function GeoIntModule(): JSX.Element {
   }
   async function onPick(lat: number, lon: number): Promise<void> {
     if (!pickFor) return;
-    await window.api.geoint.setItemLocation(pickFor, { lat, lon });
-    setPickFor(null); await load();
+    try { await window.api.geoint.setItemLocation(pickFor, { lat, lon }); setPickFor(null); await load(); }
+    catch (err) { toast.error((err as Error).message); }
   }
 
   const items = (snap?.items ?? []).filter((i) => !filter || i.title.toLowerCase().includes(filter.toLowerCase()));
@@ -63,10 +85,15 @@ export function GeoIntModule(): JSX.Element {
   return (
     <div className="ga98-split ga98-geo" style={{ height: '100%' }}>
       <div className="ga98-pane ga98-geo-left">
+        {loadError && (
+          <div style={{ background: '#fee', color: '#900', padding: '4px 8px', fontSize: 11, border: '1px solid #c00', marginBottom: 4 }}>
+            GeoINT data failed to load: {loadError}
+          </div>
+        )}
         <fieldset>
           <legend>Network</legend>
           <label style={{ display: 'block' }}>
-            <input type="checkbox" checked={net} onChange={(e) => void patch({ geoint: { networkEnabled: e.target.checked, tileServerUrl: tileUrl, tileAttribution } })} />
+            <input type="checkbox" checked={net} onChange={(e) => setNetwork(e.target.checked)} />
             {' '}Allow GeoINT network (feeds + map tiles)
           </label>
           <p style={{ fontSize: 11, color: '#555', margin: '4px 0' }}>Off by default. When off, nothing is fetched and the map loads no tiles.</p>
