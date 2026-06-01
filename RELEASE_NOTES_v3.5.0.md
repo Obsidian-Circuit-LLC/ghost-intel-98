@@ -46,5 +46,5 @@ Every change went through an adversarial red-team pass before release; all findi
 
 ---
 
-**Artifact:** `GhostAccess98-Setup-3.5.0.exe` (NSIS, x64, unsigned)
-**SHA-256:** `<filled in from sha256sum after the build — not transcribed from memory>`
+**Artifact:** `GhostAccess98-Setup-3.5.0.exe` (~122 MB, NSIS, x64, unsigned)
+**SHA-256:** `d46cb4ff590fd93ee23ad84503f2f9703abb3d3c29a55dfa30a3acc52c9b0d1b`
