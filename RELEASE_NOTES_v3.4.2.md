@@ -38,5 +38,5 @@ alarm-inducing word is gone from the Firefox message.
 
 ---
 
-**Artifact:** `GhostAccess98-Setup-3.4.2.exe` (NSIS, x64, unsigned)
-**SHA-256:** `<filled in from sha256sum after the build — not transcribed from memory>`
+**Artifact:** `GhostAccess98-Setup-3.4.2.exe` (~122 MB, NSIS, x64, unsigned)
+**SHA-256:** `0e21bd7aa55e970b6d11497b09648e4633b0b522d8cc2fc24124a489c62054d4`
