@@ -26,6 +26,7 @@ export type ModuleKey =
   | 'media-player'
   | 'geoint'
   | 'bookmarks'
+  | 'markets'
   | 'help';
 
 export interface WindowSpec {

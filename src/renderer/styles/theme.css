@@ -701,6 +701,36 @@ input.ga98-text, select.ga98-text {
 /* Icons paint with fill/stroke=currentColor — pin the color so they never inherit the
    button-face grey and vanish (the "buttons are gone, hover works" v3.4.1 regression). */
 .ga98-jukebox-transport button svg { vertical-align: middle; }
+
+/* CD-Player-style console (Jukebox restyle). Green LCD beside a beveled two-row deck, with
+   Artist/Title/Track fields and a status strip — modeled on the Win98 CD Player. */
+.ga98-cdp { display: flex; gap: 8px; align-items: stretch; }
+.ga98-cdp-lcd {
+  flex: 1; background: #001a00; color: #00ff66; border: 2px inset #404040;
+  font-family: 'Courier New', monospace; display: flex; align-items: center;
+  justify-content: space-between; padding: 4px 10px; min-height: 44px; overflow: hidden;
+}
+.ga98-cdp-tracknum { font-size: 18px; font-weight: bold; }
+.ga98-cdp-clock { font-size: 22px; font-weight: bold; letter-spacing: 1px; }
+.ga98-cdp-deck { display: flex; flex-direction: column; gap: 3px; }
+.ga98-cdp-row { display: flex; gap: 3px; }
+/* Pin icon color (currentColor) so the SVG glyphs never inherit the button-face grey. */
+.ga98-cdp-deck button { min-width: 0; padding: 2px 10px; color: #000; }
+.ga98-cdp-deck button svg { vertical-align: middle; }
+.ga98-cdp-fields {
+  display: grid; grid-template-columns: 52px 1fr; gap: 2px 6px; align-items: center;
+  margin-top: 4px; font-size: 11px;
+}
+.ga98-cdp-fields > label { text-align: right; color: #222; }
+.ga98-cdp-field {
+  background: #fff; border: 1px inset #808080; padding: 1px 4px; min-height: 16px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ga98-cdp-select { padding: 0; }
+.ga98-cdp-status {
+  display: flex; align-items: center; gap: 6px; margin-top: 4px;
+  border-top: 1px solid var(--ga98-shadow-dark); padding-top: 4px; font-size: 11px;
+}
 .ga98-jukebox-panes { display: flex; gap: 6px; flex: 1; min-height: 0; }
 .ga98-jukebox-pane { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 .ga98-jukebox-list { flex: 1; overflow: auto; margin: 0; }
@@ -708,7 +738,12 @@ input.ga98-text, select.ga98-text {
 .ga98-jukebox-list li[data-active='true'] { background: navy; color: #fff; }
 
 /* ── GeoINT dashboard ─────────────────────────────────────────────────────── */
-.ga98-geo-left { display: flex; flex-direction: column; gap: 6px; min-width: 320px; max-width: 420px; overflow: auto; }
+/* GeoINT needs a wider left column than the generic .ga98-split 220px track — its controls
+   are ~320px, so the pane overflowed a too-narrow grid cell and clipped the labels ("text on
+   the left doesn't fit"). Size the track here instead of fighting it with min-width. */
+.ga98-geo { grid-template-columns: 340px 1fr; }
+.ga98-geo-left { display: flex; flex-direction: column; gap: 6px; overflow-x: hidden; overflow-y: auto; }
+.ga98-geo-left input, .ga98-geo-left select { min-width: 0; }
 .ga98-geo-right { position: relative; }
 .ga98-geo-map-wrap { position: relative; height: 100%; width: 100%; }
 .ga98-geo-map { position: absolute; inset: 0; }
@@ -719,6 +754,16 @@ input.ga98-text, select.ga98-text {
 }
 .ga98-geo-events li[data-active='true'] { background: navy; color: #fff; }
 .ga98-geo-pin { font-size: 16px; line-height: 16px; }
+
+/* ── Markets ─────────────────────────────────────────────────────────────── */
+.ga98-mkt { display: flex; flex-direction: column; gap: 6px; height: 100%; overflow: auto; padding: 6px; box-sizing: border-box; }
+.ga98-mkt-wl { display: grid; grid-template-columns: 132px 1fr; gap: 4px; align-items: center; }
+.ga98-mkt-wl > label { text-align: right; font-size: 11px; }
+.ga98-mkt-quotes { display: flex; flex-direction: column; gap: 6px; }
+.ga98-mkt-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.ga98-mkt-table td { padding: 1px 4px; border-bottom: 1px solid #d8d8d8; }
+.ga98-mkt-px { text-align: right; font-family: 'Courier New', monospace; }
+.ga98-mkt-chg { text-align: right; font-family: 'Courier New', monospace; width: 76px; }
 .leaflet-container { background: #aab; }
 
 /* ── DialTerm dial-up: touch-tone keypad + Uplink connect graphic ──────────── */
@@ -781,7 +826,7 @@ input.ga98-text, select.ga98-text {
   font-size: 11px; padding: 0 2px; min-width: 0;
 }
 .ga98-bm-title-input:focus { outline: 1px dotted #fff; background: rgba(255,255,255,0.15); }
-.ga98-bm-links { display: flex; flex-direction: column; gap: 1px; padding: 4px; }
+.ga98-bm-links { display: flex; flex-direction: column; gap: 1px; padding: 4px; overflow: auto; resize: vertical; min-height: 36px; box-sizing: border-box; }
 .ga98-bm-link { display: flex; align-items: center; gap: 4px; padding: 1px 2px; cursor: grab; }
 .ga98-bm-link:hover { background: #d8d8d8; }
 .ga98-bm-icon { width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; }

@@ -17,7 +17,7 @@ import { resolveSource, isHlsUrl } from './resolveSource';
 import { Visualizer } from './Visualizer';
 import { nextIndex, prevIndex, endedIndex, cycleRepeat, type RepeatMode } from './playlist-nav';
 
-interface QueueItem { title: string; path?: string; url?: string }
+interface QueueItem { title: string; name?: string; artist?: string; path?: string; url?: string }
 
 function baseName(p: string): string { return p.split(/[\\/]/).pop() ?? p; }
 function trackLabel(t: { title?: string; artist?: string; path: string }): string {
@@ -114,7 +114,7 @@ export function MediaPlayerModule(): JSX.Element {
     setSnap(s);
     // Default queue = the whole library, sorted by label.
     const items: QueueItem[] = s.tracks
-      .map((t) => ({ title: trackLabel(t), path: t.path }))
+      .map((t) => ({ title: trackLabel(t), name: t.title ?? baseName(t.path), artist: t.artist, path: t.path }))
       .sort((a, b) => a.title.localeCompare(b.title));
     setQueue(items);
   }, []);
@@ -279,6 +279,8 @@ export function MediaPlayerModule(): JSX.Element {
   function toggleVisualizer(): void { void patch({ media: { streamingEnabled, visualizer: !visualizer } }); }
 
   const currentItem = current >= 0 ? queue[current] : null;
+  const titleText = currentItem ? (currentItem.name ?? currentItem.title) : '';
+  const artistText = currentItem?.artist ?? '';
 
   return (
     <div className="ga98-jukebox">
@@ -290,9 +292,43 @@ export function MediaPlayerModule(): JSX.Element {
         style={{ display: 'none' }}
       />
 
-      <div className="ga98-jukebox-lcd">
-        <div className="ga98-jukebox-title">{currentItem ? currentItem.title : 'Ghost Access 98 — Jukebox'}</div>
-        <div className="ga98-jukebox-time">{fmtTime(now)} / {currentItem?.url ? '∞' : fmtTime(dur)}</div>
+      {/* CD-Player-style console: a green LCD (track # + elapsed) beside a beveled two-row
+          transport deck. Same handlers as before — only the chrome changed. */}
+      <div className="ga98-cdp">
+        <div className="ga98-cdp-lcd">
+          <span className="ga98-cdp-tracknum">{current >= 0 ? `[${String(current + 1).padStart(2, '0')}]` : '[--]'}</span>
+          <span className="ga98-cdp-clock">{fmtTime(now)}</span>
+        </div>
+        <div className="ga98-cdp-deck">
+          <div className="ga98-cdp-row">
+            <button onClick={togglePlay} title={playing ? 'Pause' : 'Play'} aria-label={playing ? 'Pause' : 'Play'}>{playing ? <IcoPause /> : <IcoPlay />}</button>
+            <button onClick={() => { const a = audioRef.current; if (a && !a.paused) { a.pause(); setPlaying(false); } }} title="Pause" aria-label="Pause"><IcoPause /></button>
+            <button onClick={stop} title="Stop" aria-label="Stop"><IcoStop /></button>
+          </div>
+          <div className="ga98-cdp-row">
+            <button onClick={prev} title="Previous track" aria-label="Previous track"><IcoPrev /></button>
+            <button onClick={next} title="Next track" aria-label="Next track"><IcoNext /></button>
+            <button onClick={() => setShuffle((s) => !s)} title={`Shuffle: ${shuffle ? 'on' : 'off'}`} aria-label="Shuffle"
+              aria-pressed={shuffle} style={transportToggleStyle(shuffle)}><IcoShuffle /></button>
+            <button onClick={() => setRepeat((r) => cycleRepeat(r))} title={`Repeat: ${repeat}`} aria-label={`Repeat: ${repeat}`}
+              aria-pressed={repeat !== 'off'} style={transportToggleStyle(repeat !== 'off')}><IcoRepeat one={repeat === 'one'} /></button>
+          </div>
+        </div>
+      </div>
+
+      {/* Artist / Title / Track readout — the CD Player's labeled fields. Track is a live
+          dropdown of the queue; picking one plays it. */}
+      <div className="ga98-cdp-fields">
+        <label>Artist:</label>
+        <div className="ga98-cdp-field">{artistText || (currentItem ? '' : 'No track loaded')}</div>
+        <label>Title:</label>
+        <div className="ga98-cdp-field">{currentItem ? (titleText || currentItem.title) : 'Open a folder or files, then pick a track below.'}</div>
+        <label>Track:</label>
+        <select className="ga98-cdp-field ga98-cdp-select" value={current}
+          onChange={(e) => { const i = Number(e.target.value); if (i >= 0) playLibraryTrack(i); }}>
+          <option value={-1}>—</option>
+          {queue.map((q, i) => <option key={`${q.path ?? q.url}-${i}`} value={i}>{`${String(i + 1).padStart(2, '0')}  ${q.title}`}</option>)}
+        </select>
       </div>
 
       <Visualizer analyser={analyser} enabled={visualizer} />
@@ -303,19 +339,12 @@ export function MediaPlayerModule(): JSX.Element {
         style={{ width: '100%' }}
       />
 
-      <div className="ga98-jukebox-transport">
-        <button onClick={prev} title="Previous track" aria-label="Previous track"><IcoPrev /></button>
-        <button onClick={togglePlay} title={playing ? 'Pause' : 'Play'} aria-label={playing ? 'Pause' : 'Play'}>{playing ? <IcoPause /> : <IcoPlay />}</button>
-        <button onClick={stop} title="Stop" aria-label="Stop"><IcoStop /></button>
-        <button onClick={next} title="Next track" aria-label="Next track"><IcoNext /></button>
-        <button onClick={() => setShuffle((s) => !s)} title={`Shuffle: ${shuffle ? 'on' : 'off'}`} aria-label="Shuffle"
-          aria-pressed={shuffle} style={transportToggleStyle(shuffle)}><IcoShuffle /></button>
-        <button onClick={() => setRepeat((r) => cycleRepeat(r))} title={`Repeat: ${repeat}`} aria-label={`Repeat: ${repeat}`}
-          aria-pressed={repeat !== 'off'} style={transportToggleStyle(repeat !== 'off')}><IcoRepeat one={repeat === 'one'} /></button>
+      <div className="ga98-cdp-status">
+        <span>Track Length: {currentItem?.url ? '∞' : fmtTime(dur)} m:s</span>
         <span style={{ flex: 1 }} />
         <label style={{ fontSize: 11 }}>Vol</label>
         <input type="range" min={0} max={1} step={0.01} defaultValue={1}
-          onChange={(e) => { const a = audioRef.current; if (a) a.volume = Number(e.target.value); }} style={{ width: 80 }} />
+          onChange={(e) => { const a = audioRef.current; if (a) a.volume = Number(e.target.value); }} style={{ width: 70 }} />
         <label style={{ fontSize: 11, marginLeft: 8 }}>
           <input type="checkbox" checked={visualizer} onChange={toggleVisualizer} /> Viz
         </label>

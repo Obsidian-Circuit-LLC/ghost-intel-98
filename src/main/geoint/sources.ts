@@ -13,15 +13,17 @@ import { secureReadText, secureWriteFile } from '../storage/secure-fs';
 import type { GeoItem, GeoSnapshot, GeoSource, GeoSourceType } from '@shared/post-mvp-types';
 import { parseRss, parseAtom, parseGeoJson, detectType } from './feeds';
 import { geocoder } from './gazetteer';
-import { isPublicHttpUrl } from '../security/validate';
+import { isPublicHttpUrl, assertResolvedPublic } from '../security/validate';
+import { readTextCapped, FETCH_TIMEOUT_MS } from '../net/limits';
 
 /** Fetch following redirects manually, re-validating every hop against the public-URL guard
  *  so an external feed cannot 30x-redirect the request inward (SSRF / cloud metadata). */
-async function safeFetch(url: string, maxHops = 4): Promise<Response> {
+async function safeFetch(url: string, maxHops = 4, headers?: Record<string, string>): Promise<Response> {
   let current = url;
   for (let hop = 0; hop < maxHops; hop++) {
     if (!isPublicHttpUrl(current)) throw new Error('refusing to fetch a non-public URL');
-    const res = await fetch(current, { redirect: 'manual' });
+    await assertResolvedPublic(new URL(current).hostname);
+    const res = await fetch(current, { redirect: 'manual', headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
     if (res.status >= 300 && res.status < 400) {
       const loc = res.headers.get('location');
       if (!loc) return res;
@@ -107,6 +109,26 @@ export async function setItemLocation(itemId: string, loc: { lat: number; lon: n
   }
 }
 
+/** Geocode a free-text place query via OpenStreetMap Nominatim. Egress-gated: the caller
+ *  passes networkEnabled (the IPC handler checks the setting first; this re-guards as defense
+ *  in depth). Fixed public host, but still routed through the SSRF-revalidating safeFetch.
+ *  Returns the top hit or null; throws only on a network/HTTP failure. */
+export async function geocode(query: string, networkEnabled: boolean): Promise<{ lat: number; lon: number; label: string } | null> {
+  if (!networkEnabled) return null;
+  const q = query.trim().slice(0, 200);
+  if (!q) return null;
+  const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encodeURIComponent(q)}`;
+  // Nominatim's usage policy asks for an identifying User-Agent.
+  const res = await safeFetch(url, 4, { 'User-Agent': 'GhostAccess98 (offline-first OSINT desktop)', Accept: 'application/json' });
+  if (!res.ok) throw new Error(`geocoder HTTP ${res.status}`);
+  const arr = JSON.parse(await readTextCapped(res)) as Array<{ lat?: string; lon?: string; display_name?: string }>;
+  if (!Array.isArray(arr) || arr.length === 0) return null;
+  const lat = Number(arr[0].lat);
+  const lon = Number(arr[0].lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  return { lat, lon, label: arr[0].display_name ?? q };
+}
+
 /** Fetch + parse + cache one source. networkEnabled=false ⇒ no-op (egress gate;
  *  the IPC handler also checks the setting). Never throws past here — failures are
  *  recorded on the source as lastError. */
@@ -118,7 +140,7 @@ export async function fetchSource(id: string, networkEnabled: boolean): Promise<
   try {
     const res = await safeFetch(s.url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const body = await res.text();
+    const body = await readTextCapped(res);
     const type: GeoSourceType = s.type ?? detectType(s.url, body);
     const geo = geocoder();
     const items =

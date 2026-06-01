@@ -215,6 +215,9 @@ export interface BookmarkCategory {
   id: string;
   title: string;
   links: BookmarkLink[];
+  /** User-set height (px) of the card's link area. Undefined = auto (fits its links). The card
+   *  is resizable, so a sparse category can be shortened and others stack beneath it in column. */
+  height?: number;
 }
 
 /** The whole dashboard. Persisted under dataRoot, encrypted at rest when login is enabled.
@@ -223,4 +226,32 @@ export interface BookmarkBoard {
   categories: BookmarkCategory[];
   /** Off by default. Gates favicon fetching (the only network egress this module can do). */
   networkEnabled: boolean;
+}
+
+// ── Markets ──────────────────────────────────────────────────────────────────
+/** Asset class for a market quote (drives grouping + symbol classification). */
+export type MarketClass = 'crypto' | 'fx' | 'equity' | 'index' | 'commodity' | 'custom';
+
+/** A normalized quote — provider responses (CoinGecko/Frankfurter/Stooq/Yahoo/custom) are all
+ *  mapped to this shape so the UI is provider-agnostic. price/change may be null when a source
+ *  doesn't supply them (we never fabricate a number). */
+export interface MarketQuote {
+  symbol: string;
+  label: string;
+  price: number | null;
+  change: number | null;     // absolute change vs prior close/open
+  changePct: number | null;  // percent change
+  klass: MarketClass;
+  source: string;            // provider name, for attribution
+  asOf?: string;
+}
+
+/** A user-added data feed: a trusted HTTPS endpoint returning a generic quote JSON shape
+ *  (array of {symbol,price,change?,changePct?,label?} or {quotes:[...]}). */
+export interface MarketCustomFeed { id: string; label: string; url: string }
+
+export interface MarketSnapshot {
+  quotes: MarketQuote[];
+  errors: string[];          // per-source non-fatal failures, surfaced in the UI
+  fetchedAt: string;
 }

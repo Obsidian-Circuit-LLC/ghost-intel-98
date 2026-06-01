@@ -41,7 +41,8 @@ import type {
   GeoItem,
   SavedGeoEvent,
   SshHostProfile,
-  BookmarkBoard
+  BookmarkBoard,
+  MarketSnapshot
 } from '../shared/post-mvp-types';
 
 export interface MailDraft {
@@ -199,10 +200,14 @@ export interface GhostApi {
     removeSource(id: string): Promise<void>;
     importOpml(): Promise<number>;
     refresh(id?: string): Promise<{ fetched: number; failed: number }>;
+    geocode(query: string): Promise<{ lat: number; lon: number; label: string } | null>;
     setItemLocation(id: string, loc: { lat: number; lon: number } | null): Promise<void>;
     saveToCase(caseId: string, item: GeoItem, opts: { form: 'record' | 'link' | 'note'; entityIds?: string[] }): Promise<{ savedEventId?: string }>;
     listCaseEvents(caseId: string): Promise<SavedGeoEvent[]>;
     removeCaseEvent(caseId: string, eventId: string): Promise<void>;
+  };
+  markets: {
+    fetch(): Promise<MarketSnapshot>;
   };
   ai: {
     chatStream(streamId: string, req: AiChatRequest): Promise<void>;

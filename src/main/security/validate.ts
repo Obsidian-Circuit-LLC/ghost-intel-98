@@ -8,6 +8,7 @@
 
 import { resolve, relative, isAbsolute, normalize } from 'node:path';
 import { realpath } from 'node:fs/promises';
+import { lookup as dnsLookup } from 'node:dns/promises';
 import { homedir } from 'node:os';
 import { isIP, isIPv6 } from 'node:net';
 import { randomUUID } from 'node:crypto';
@@ -537,6 +538,23 @@ export function isPublicHttpUrl(raw: string): boolean {
   } catch { return false; }
 }
 
+/** isPublicHttpUrl is DNS-blind — it only inspects the hostname *string*, so a public name that
+ *  RESOLVES to internal space (e.g. *.nip.io, an attacker-registered A record, or a DNS-rebind)
+ *  would pass it. This resolves the host and throws if ANY resolved address is loopback / link-
+ *  local / RFC1918 / ULA / metadata. Call it before every outbound fetch hop. NOTE: this is a
+ *  pre-flight resolve; it closes the static-rebind class (the demonstrated bypass). Defeating an
+ *  active TTL=0 rebind between this check and the socket connect would additionally need IP
+ *  pinning in the fetch agent — tracked separately. */
+export async function assertResolvedPublic(hostname: string): Promise<void> {
+  let addrs: { address: string }[];
+  try { addrs = await dnsLookup(hostname, { all: true }); }
+  catch { throw new Error(`cannot resolve ${hostname}`); }
+  if (addrs.length === 0) throw new Error(`no address for ${hostname}`);
+  for (const a of addrs) {
+    if (isLoopbackOrPrivate(a.address)) throw new Error(`refusing to fetch ${hostname} — resolves to a private address`);
+  }
+}
+
 const MAX_GEO_TEXT = 4000;
 
 /** Validate a renderer-supplied GeoItem at the saveToCase boundary. A hostile renderer can
@@ -649,9 +667,43 @@ export function ensureBookmarkBoard(raw: unknown): BookmarkBoard {
         && fav.length <= MAX_BM_FAVICON) link.favicon = fav;
       links.push(link);
     }
-    categories.push({ id: bmId(c.id), title: bmText(c.title, 200) || 'Untitled', links });
+    // Carry the per-card resize height (clamped) — without this the bookmarks resize feature
+    // is silently dropped on the save/get round-trip.
+    const rawH = (c as { height?: unknown }).height;
+    const height = typeof rawH === 'number' && Number.isFinite(rawH) ? Math.max(60, Math.min(rawH, 4000)) : undefined;
+    categories.push({ id: bmId(c.id), title: bmText(c.title, 200) || 'Untitled', links, ...(height !== undefined ? { height } : {}) });
   }
   return { categories, networkEnabled: o.networkEnabled === true };
+}
+
+/** Bound + sanitize the renderer-supplied markets settings block. settings.update otherwise trusts
+ *  the whole patch; this caps list sizes and per-entry lengths, and requires every custom-feed URL
+ *  to be public http(s) (defense-in-depth; safeFetch re-checks + DNS-validates at fetch time). */
+export function ensureMarketsSettings(input: unknown): {
+  networkEnabled: boolean;
+  watchlist: { crypto: string[]; fx: string[]; symbols: string[] };
+  customFeeds: { id: string; label: string; url: string }[];
+} {
+  const o = (input ?? {}) as Record<string, unknown>;
+  const list = (v: unknown, max: number): string[] =>
+    Array.isArray(v)
+      ? v.filter((x): x is string => typeof x === 'string').map((s) => s.trim()).filter((s) => s.length > 0 && s.length <= 64).slice(0, max)
+      : [];
+  const wl = (o.watchlist ?? {}) as Record<string, unknown>;
+  const feedsIn = Array.isArray(o.customFeeds) ? o.customFeeds : [];
+  const customFeeds = feedsIn.slice(0, 50).flatMap((f) => {
+    const r = (f ?? {}) as Record<string, unknown>;
+    const url = typeof r.url === 'string' ? r.url.trim() : '';
+    const label = typeof r.label === 'string' ? r.label.trim().slice(0, 80) : '';
+    if (!label || !isPublicHttpUrl(url)) return [];
+    const id = typeof r.id === 'string' && r.id.length > 0 && r.id.length <= 64 ? r.id : label;
+    return [{ id, label, url }];
+  });
+  return {
+    networkEnabled: o.networkEnabled === true,
+    watchlist: { crypto: list(wl.crypto, 100), fx: list(wl.fx, 100), symbols: list(wl.symbols, 100) },
+    customFeeds
+  };
 }
 
 /** Jukebox: a remembered library folder path (existence is checked at use time). */

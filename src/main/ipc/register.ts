@@ -42,7 +42,7 @@ import * as history from '../storage/history';
 import * as firefox from '../services/firefox';
 import * as bookmarksBoard from '../storage/bookmarks-board';
 import * as voiceModel from '../voice/model-protocol';
-import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureWhiteboard, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon, ensureSaveToCaseOpts, ensureGeoItem, ensureBookmarkBoard } from '../security/validate';
+import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureWhiteboard, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon, ensureSaveToCaseOpts, ensureGeoItem, ensureBookmarkBoard, ensureMarketsSettings } from '../security/validate';
 import * as entities from '../storage/entities';
 import * as bioStore from '../storage/bio-images';
 import * as ftp from '../services/ftp';
@@ -56,6 +56,7 @@ import * as geoint from '../geoint/sources';
 import { parseOpml } from '../geoint/feeds';
 import { saveToCase as geoSaveToCase } from '../geoint/save-to-case';
 import * as geoCaseEvents from '../geoint/case-events';
+import * as markets from '../markets/providers';
 import * as vault from '../services/vault';
 import { encryptAll, decryptAll } from '../storage/encryption-migrate';
 import { buildSummaryHtml, renderCasePdf } from '../services/export';
@@ -242,7 +243,15 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
 
   // ---- settings ----
   safeHandle(channels.settings.read, () => settingsStore.read());
-  safeHandle(channels.settings.update, (...args) => settingsStore.update(args[0] as Parameters<typeof settingsStore.update>[0]));
+  safeHandle(channels.settings.update, (...args) => {
+    const patch = args[0] as Parameters<typeof settingsStore.update>[0];
+    // Bound + sanitize renderer-supplied market settings before they're persisted (the rest of
+    // the settings patch is shipped by trusted in-app UI; markets carries user URLs + lists).
+    if (patch && typeof patch === 'object' && (patch as { markets?: unknown }).markets) {
+      (patch as { markets: unknown }).markets = ensureMarketsSettings((patch as { markets: unknown }).markets);
+    }
+    return settingsStore.update(patch);
+  });
   safeHandle(channels.settings.pickWallpaper, async () => {
     const win = getWindow();
     const result = win
@@ -772,9 +781,23 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     for (const s of sources) { const res = await geoint.fetchSource(s.id, true); if (res.ok) fetched++; else failed++; }
     return { fetched, failed };
   });
+  safeHandle(channels.geoint.geocode, async (...a) => {
+    // EGRESS GATE: no outbound geocode request unless GeoINT network is enabled.
+    if (!(await settingsStore.read()).geoint.networkEnabled) return null;
+    const query = typeof a[0] === 'string' ? a[0] : '';
+    return geoint.geocode(query, true);
+  });
   safeHandle(channels.geoint.saveToCase, (...a) => geoSaveToCase(ensureUuid(a[0], 'caseId'), ensureGeoItem(a[1]), ensureSaveToCaseOpts(a[2])));
   safeHandle(channels.geoint.listCaseEvents, (...a) => geoCaseEvents.listCaseEvents(ensureUuid(a[0], 'caseId')));
   safeHandle(channels.geoint.removeCaseEvent, (...a) => geoCaseEvents.removeCaseEvent(ensureUuid(a[0], 'caseId'), ensureUuid(a[1], 'eventId')));
+
+  // ---- Markets (vault-gated; network app-layer gated by settings.markets.networkEnabled) ----
+  safeHandle(channels.markets.fetch, async () => {
+    const m = (await settingsStore.read()).markets;
+    // EGRESS GATE: no quote request unless the operator has enabled Markets network.
+    if (!m?.networkEnabled) return { quotes: [], errors: ['Markets network is off — enable it to fetch quotes.'], fetchedAt: new Date().toISOString() };
+    return markets.fetchSnapshot({ watchlist: m.watchlist, customFeeds: m.customFeeds });
+  });
 
   // ---- ai ----
   safeHandle(channels.ai.chatStream, (...args) => ai.chat(args[0] as string, args[1] as AiChatRequest, getWindow));

@@ -53,6 +53,39 @@ import {
 } from './paths';
 import { withLock } from '../util/mutex';
 
+// ── Short-lived decrypted-plaintext cache (red-team finding 6) ───────────────────────────────
+// Paging an encrypted attachment (the in-app document/media viewer) calls readAttachmentBytes once
+// per 4 MB page; without a cache each page re-decrypts the WHOLE file (O(n²) — a 64 MB encrypted
+// video decrypted ~16×). This caches the decrypted buffer keyed by path+mtime so the file decrypts
+// ONCE per read session. Operator-approved at-rest tradeoff: the plaintext lives in main-process
+// memory for at most DECRYPT_CACHE_TTL_MS, then the buffer is zeroed. It is only ever populated via
+// secureReadFile, which itself refuses while the vault is locked.
+const DECRYPT_CACHE_TTL_MS = 15_000;
+let decryptCache: { path: string; mtimeMs: number; buf: Buffer } | null = null;
+let decryptCacheTimer: NodeJS.Timeout | null = null;
+function clearDecryptCache(): void {
+  if (decryptCache) decryptCache.buf.fill(0); // zero plaintext on eviction
+  decryptCache = null;
+  if (decryptCacheTimer) { clearTimeout(decryptCacheTimer); decryptCacheTimer = null; }
+}
+function armDecryptCacheEviction(): void {
+  if (decryptCacheTimer) clearTimeout(decryptCacheTimer);
+  decryptCacheTimer = setTimeout(clearDecryptCache, DECRYPT_CACHE_TTL_MS);
+  decryptCacheTimer.unref?.();
+}
+async function readDecryptedCached(path: string): Promise<Buffer> {
+  const { mtimeMs } = await stat(path);
+  if (decryptCache && decryptCache.path === path && decryptCache.mtimeMs === mtimeMs) {
+    armDecryptCacheEviction();
+    return decryptCache.buf;
+  }
+  clearDecryptCache();
+  const buf = await secureReadFile(path); // throws if the vault is locked
+  decryptCache = { path, mtimeMs, buf };
+  armDecryptCacheEviction();
+  return buf;
+}
+
 // ---------- low-level helpers ----------
 
 /** Reads JSON, returning `fallback` ONLY when the file does not exist.
@@ -589,10 +622,9 @@ export const fileStore: FileStore = {
     let size = 0;
     try {
       if (await isEncryptedFile(path)) {
-        // Whole-blob decrypt then slice the requested range from the plaintext.
-        // NOTE: paging a large encrypted file re-decrypts per chunk (O(n^2)) — acceptable
-        // for typical case attachments; a known cost only for very large encrypted media.
-        const plain = await secureReadFile(path);
+        // Page from a single decrypt via the short-lived plaintext cache, instead of
+        // re-decrypting the whole blob per 4 MB page (was O(n²) — red-team finding 6).
+        const plain = await readDecryptedCached(path);
         size = plain.length;
         if (offset >= size) return { fileName, base64: null, size, offset, length: 0, hasMore: false, reason: 'out-of-range' };
         const slice = plain.subarray(offset, offset + Math.min(length, size - offset));
@@ -878,6 +910,11 @@ function mergeSettings(base: AppSettings, patch: Partial<AppSettings>): AppSetti
     browser: { ...base.browser, ...(patch.browser ?? {}) },
     media: { ...base.media, ...(patch.media ?? {}) },
     geoint: { ...base.geoint, ...(patch.geoint ?? {}) },
+    markets: {
+      ...base.markets,
+      ...(patch.markets ?? {}),
+      watchlist: { ...base.markets.watchlist, ...(patch.markets?.watchlist ?? {}) }
+    },
     shortcuts: reconciled.shortcuts,
     seededShortcuts: reconciled.seededShortcuts,
     hasSeenWelcome: patch.hasSeenWelcome ?? base.hasSeenWelcome,
