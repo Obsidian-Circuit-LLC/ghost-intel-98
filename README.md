@@ -95,8 +95,9 @@ To uninstall: Settings → Apps → Ghost Access 98 → Uninstall.
 
 ## Releases & changelog
 
-The current build is **v3.4.0**. Each release page carries its own notes + SHA-256.
+The current build is **v3.4.1**. Each release page carries its own notes + SHA-256.
 
+- **v3.4.1** — fixes from the v3.4.0 field report: **Jukebox tape-deck transport** — crisp inline-SVG icons replacing the missing-font Unicode glyphs that rendered as boxes, plus **Shuffle** and **Repeat** (off/all/one, with a real shuffle back-history); **GeoINT discoverability** — a default OpenStreetMap basemap the moment you opt into the network (the egress gate is unchanged) and every previously-silent failure now surfaced; and a **responsive STFU** — the streaming render is coalesced to ~16 fps so the stop button isn't starved on huge replies. 205 tests; pure unit-tested playlist-navigation logic.
 - **v3.4.0** — **offline voice conversation** in the AI Assistant: push-to-talk + hands-free, on-device **Vosk** speech-to-text (model operator-supplied) + on-device TTS replies, with the mic paused while the AI speaks (no feedback loop). Hardened by a dedicated red-team pass over the voice surface (0 Critical): mic permission scoped to audio + the app window, mic-leak / double-start paths closed, voice streams made cancellable. *Vosk model is operator-supplied — drop a `model.tar.gz` in `resources/vosk/`.*
 - **v3.3.0** — **Bookmarks** dashboard (offline start.me, `.ghostbookmarks` share), **AI offline text-to-speech** + **STFU** stop, **Net Explorer → Firefox Portable** launcher, and live-testing fixes (Jukebox/GeoINT discoverability, large-video streaming, PDF render fix, retro click/boot sounds, DialTerm DTMF + Uplink animation, Help → RTFM). **Two red-team rounds: 0 Critical, all High/Medium fixed.** *Firefox payload is operator-supplied — drop it in `resources/firefox/`.*
 - **v3.2.3** — GeoINT → case integration (save events to cases, auto location-entity, timeline) **+ all red-team security fixes** (GeoINT SSRF guard, save-to-case validation, `.m3u`/album-art/stream-URL hardening). *Superseded by 3.3.0.*
