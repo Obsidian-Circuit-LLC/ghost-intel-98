@@ -25,6 +25,9 @@ export function BookmarksModule(): JSX.Element {
   const [editing, setEditing] = useState<Editing | null>(null);
   // Drag state: a card index, or a link with its source category.
   const drag = useRef<{ kind: 'card'; catId: string } | { kind: 'link'; catId: string; linkId: string } | null>(null);
+  // Card-resize: remember the body height at pointerdown so pointerup can tell a deliberate
+  // resize-drag (height changed) from an ordinary click (height identical) and only persist then.
+  const resizeStart = useRef<number>(0);
 
   useEffect(() => {
     void window.api.bookmarks.get().then((b) => { setBoard(b ?? EMPTY); setLoaded(true); });
@@ -60,6 +63,9 @@ export function BookmarksModule(): JSX.Element {
   }
   function deleteLink(catId: string, linkId: string): void {
     mutateCats((cats) => cats.map((c) => c.id === catId ? { ...c, links: c.links.filter((l) => l.id !== linkId) } : c));
+  }
+  function setCategoryHeight(catId: string, height: number): void {
+    mutateCats((cats) => cats.map((c) => c.id === catId ? { ...c, height } : c));
   }
 
   // --- drag/drop reorganize ---
@@ -170,7 +176,12 @@ export function BookmarksModule(): JSX.Element {
                 <button aria-label="Close" onClick={() => void deleteCategory(c.id)} />
               </div>
             </div>
-            <div className="window-body ga98-bm-links">
+            <div
+              className="window-body ga98-bm-links"
+              style={c.height ? { height: c.height } : undefined}
+              onPointerDown={(e) => { resizeStart.current = e.currentTarget.offsetHeight; }}
+              onPointerUp={(e) => { const h = e.currentTarget.offsetHeight; if (h !== resizeStart.current) setCategoryHeight(c.id, h); }}
+            >
               {c.links.map((l) => (
                 <div
                   key={l.id}

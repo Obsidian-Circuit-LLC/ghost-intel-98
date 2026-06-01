@@ -93,30 +93,47 @@ function Body({ kind, caseId, fileName }: { kind: Kind; caseId: string; fileName
   }
 }
 
-/** Large video/audio attachments stream through the path-confined ga98media:// protocol via
- *  files.mediaUrl — no base64, no 64 MB cap. Encrypted-at-rest files can't be range-streamed,
- *  so the IPC returns reason:'encrypted' and we tell the user to Reveal instead. */
+/** Unencrypted video/audio stream through the path-confined ga98media:// protocol via
+ *  files.mediaUrl — no base64, no cap. Encrypted-at-rest files can't be range-streamed
+ *  (whole-file GCM ⇒ one auth tag over the whole file, no seekable plaintext), so the IPC
+ *  returns reason:'encrypted' and we fall back to IN-APP DECRYPT-AND-PLAY: the vault streams
+ *  the decrypted bytes back and we play them from an in-memory Blob URL — the plaintext stays
+ *  in renderer memory, never touches disk, and the object URL is revoked on unmount. */
+const MEDIA_MIME: Record<string, string> = {
+  mp4: 'video/mp4', m4v: 'video/mp4', webm: 'video/webm', ogv: 'video/ogg', mov: 'video/quicktime', mkv: 'video/x-matroska',
+  mp3: 'audio/mpeg', m4a: 'audio/mp4', aac: 'audio/aac', flac: 'audio/flac', wav: 'audio/wav', ogg: 'audio/ogg', oga: 'audio/ogg', opus: 'audio/ogg'
+};
+function mediaMime(name: string, kind: 'video' | 'audio'): string {
+  return MEDIA_MIME[name.toLowerCase().split('.').pop() ?? ''] ?? (kind === 'video' ? 'video/mp4' : 'audio/mpeg');
+}
+
 function MediaBody({ kind, caseId, fileName }: { kind: 'video' | 'audio'; caseId: string; fileName: string }): JSX.Element {
   const [url, setUrl] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => {
     let live = true;
+    let objectUrl: string | null = null;
     setUrl(null); setErr(null);
     window.api.files.mediaUrl(caseId, fileName)
-      .then((r) => {
+      .then(async (r) => {
         if (!live) return;
         if (r.url) { setUrl(r.url); return; }
-        setErr(
-          r.reason === 'encrypted'
-            ? 'This media is encrypted at rest — in-app streaming is unavailable while login is enabled. Use Reveal to open it externally.'
-            : r.reason === 'missing'
-              ? 'File not found on disk.'
-              : 'This media cannot be streamed in-app. Use Reveal to open it externally.'
-        );
+        if (r.reason === 'encrypted') {
+          // In-app decrypt & play (login enabled): pull the decrypted bytes through the vault
+          // and play from a Blob URL so the plaintext never lands on disk.
+          try {
+            const bytes = await loadAttachmentBytes(caseId, fileName);
+            if (!live) return;
+            objectUrl = URL.createObjectURL(new Blob([bytes], { type: mediaMime(fileName, kind) }));
+            setUrl(objectUrl);
+          } catch (e) { if (live) setErr((e as Error).message); }
+          return;
+        }
+        setErr(r.reason === 'missing' ? 'File not found on disk.' : 'This media cannot be played in-app. Use Reveal to open it externally.');
       })
       .catch((e) => { if (live) setErr((e as Error).message); });
-    return () => { live = false; };
-  }, [caseId, fileName]);
+    return () => { live = false; if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [caseId, fileName, kind]);
 
   if (err) return <Centered>{err}</Centered>;
   if (!url) return <Centered>Preparing stream…</Centered>;

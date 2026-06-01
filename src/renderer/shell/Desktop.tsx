@@ -13,6 +13,7 @@ const desktopShortcutDefaults: { module: ModuleKey; label: string }[] = [
   { module: 'media-player', label: 'Jukebox' },
   { module: 'geoint', label: 'GeoINT' },
   { module: 'bookmarks', label: 'Bookmarks' },
+  { module: 'markets', label: 'Markets' },
   { module: 'calendar', label: 'Calendar' },
   { module: 'reminders', label: 'Reminders' },
   { module: 'shred', label: 'Shred' }
@@ -37,6 +38,7 @@ const moduleTitles: Record<ModuleKey, string> = {
   'media-player': 'Jukebox',
   geoint: 'GeoINT',
   bookmarks: 'Bookmarks',
+  markets: 'Markets',
   help: 'RTFM'
 };
 

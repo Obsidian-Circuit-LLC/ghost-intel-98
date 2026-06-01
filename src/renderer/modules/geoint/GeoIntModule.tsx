@@ -5,7 +5,7 @@
  * (default off): with it off, Refresh is a main-side no-op and the map loads no tiles.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { GeoSnapshot, GeoSourceType, GeoItem } from '@shared/post-mvp-types';
 import { useSettings } from '../../state/store';
 import { toast } from '../../state/toasts';
@@ -19,12 +19,21 @@ import { SaveEventDialog } from './SaveEventDialog';
 const DEFAULT_TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const DEFAULT_TILE_ATTRIBUTION = '© OpenStreetMap contributors';
 
+// Built-in satellite basemap (Esri World Imagery). Like the street tiles, it only loads when
+// "Allow GeoINT network" is on. Note Esri's tile path is {z}/{y}/{x} — y before x.
+const ESRI_SAT_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+const ESRI_SAT_ATTRIBUTION = 'Imagery © Esri, Maxar, Earthstar Geographics';
+
 export function GeoIntModule(): JSX.Element {
   const settings = useSettings((s) => s.settings);
   const patch = useSettings((s) => s.patch);
   const net = settings?.geoint.networkEnabled ?? false;
   const tileUrl = settings?.geoint.tileServerUrl ?? '';
   const tileAttribution = settings?.geoint.tileAttribution ?? '';
+  const basemap = settings?.geoint.basemap ?? 'street';
+  // The map's active layer: street uses the user/OSM tiles; satellite uses the built-in Esri layer.
+  const activeTileUrl = basemap === 'satellite' ? ESRI_SAT_URL : tileUrl;
+  const activeTileAttribution = basemap === 'satellite' ? ESRI_SAT_ATTRIBUTION : tileAttribution;
 
   const [snap, setSnap] = useState<GeoSnapshot | null>(null);
   const [filter, setFilter] = useState('');
@@ -34,6 +43,10 @@ export function GeoIntModule(): JSX.Element {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveItem, setSaveItem] = useState<GeoItem | null>(null);
   const [draft, setDraft] = useState<{ label: string; url: string; type: GeoSourceType }>({ label: '', url: '', type: 'rss' });
+  const [search, setSearch] = useState('');
+  const [searching, setSearching] = useState(false);
+  const [flyTo, setFlyTo] = useState<{ lat: number; lon: number; key: number } | null>(null);
+  const flyKey = useRef(0); // monotonic nonce so repeat searches re-center even on identical coords
 
   // Surface a snapshot failure instead of leaving the whole panel silently empty (which read
   // as "GeoINT does nothing"). A locked vault, for instance, now shows the actual reason here.
@@ -52,12 +65,18 @@ export function GeoIntModule(): JSX.Element {
     try { const n = await window.api.geoint.importOpml(); if (n > 0) toast.success(`Imported ${n} source${n === 1 ? '' : 's'}.`); else toast.warn('No sources found.'); await load(); }
     catch (err) { toast.error((err as Error).message); }
   }
+  // Merge-write the geoint settings block. `patch` shallow-replaces the whole geoint object, so
+  // every write must carry all fields — this fills the unchanged ones from current state and
+  // applies the delta, so adding basemap (or any future field) can't silently drop the others.
+  function patchGeo(p: Partial<{ networkEnabled: boolean; tileServerUrl: string; tileAttribution: string; basemap: 'street' | 'satellite' }>): void {
+    void patch({ geoint: { networkEnabled: net, tileServerUrl: tileUrl, tileAttribution, basemap, ...p } });
+  }
   function setNetwork(enabled: boolean): void {
     // Enabling with no tile server configured yet → drop in the default basemap so the map
     // renders immediately instead of staying blank (the #1 "GeoINT does nothing" symptom).
     const url = enabled && !tileUrl ? DEFAULT_TILE_URL : tileUrl;
     const attr = enabled && !tileUrl ? DEFAULT_TILE_ATTRIBUTION : tileAttribution;
-    void patch({ geoint: { networkEnabled: enabled, tileServerUrl: url, tileAttribution: attr } });
+    patchGeo({ networkEnabled: enabled, tileServerUrl: url, tileAttribution: attr });
   }
   async function toggleSource(id: string, enabled: boolean): Promise<void> {
     try { await window.api.geoint.updateSource(id, { enabled }); await load(); }
@@ -79,6 +98,30 @@ export function GeoIntModule(): JSX.Element {
     try { await window.api.geoint.setItemLocation(pickFor, { lat, lon }); setPickFor(null); await load(); }
     catch (err) { toast.error((err as Error).message); }
   }
+  async function doSearch(): Promise<void> {
+    if (!net) { toast.warn('GeoINT network is off — enable it to search the map.'); return; }
+    const q = search.trim();
+    if (!q) return;
+    setSearching(true);
+    try {
+      const hit = await window.api.geoint.geocode(q);
+      if (!hit) { toast.warn(`No match for "${q}".`); return; }
+      flyKey.current += 1;
+      setFlyTo({ lat: hit.lat, lon: hit.lon, key: flyKey.current });
+      toast.success(hit.label);
+    } catch (err) { toast.error((err as Error).message); }
+    finally { setSearching(false); }
+  }
+
+  // Auto-refresh every 5 minutes while the network is on (off ⇒ no timer, no egress). The ref
+  // keeps the interval pointed at the latest refresh() without resetting the timer each render.
+  const refreshRef = useRef(refresh);
+  refreshRef.current = refresh;
+  useEffect(() => {
+    if (!net) return;
+    const id = setInterval(() => { void refreshRef.current(); }, 5 * 60 * 1000);
+    return () => clearInterval(id);
+  }, [net]);
 
   const items = (snap?.items ?? []).filter((i) => !filter || i.title.toLowerCase().includes(filter.toLowerCase()));
 
@@ -92,15 +135,31 @@ export function GeoIntModule(): JSX.Element {
         )}
         <fieldset>
           <legend>Network</legend>
-          <label style={{ display: 'block' }}>
-            <input type="checkbox" checked={net} onChange={(e) => setNetwork(e.target.checked)} />
-            {' '}Allow GeoINT network (feeds + map tiles)
-          </label>
-          <p style={{ fontSize: 11, color: '#555', margin: '4px 0' }}>Off by default. When off, nothing is fetched and the map loads no tiles.</p>
+          <div className="field-row" style={{ gap: 6, alignItems: 'center' }}>
+            <button onClick={() => setNetwork(!net)} aria-pressed={net}
+              style={net ? { borderStyle: 'inset', background: '#bfe0bf', color: '#003300', fontWeight: 'bold' } : { fontWeight: 'bold' }}>
+              {net ? 'Disable GeoINT network' : 'Enable GeoINT network'}
+            </button>
+            <span style={{ fontSize: 11, color: net ? '#060' : '#900' }}>{net ? '● on' : '○ off'}</span>
+          </div>
+          <p style={{ fontSize: 11, color: '#555', margin: '4px 0' }}>Off by default. When off, nothing is fetched and the map loads no tiles — feeds and map both stay quiet until you enable it.</p>
           <div className="field-row">
             <label style={{ minWidth: 60 }}>Tiles:</label>
-            <input className="ga98-text" placeholder="https://…/{z}/{x}/{y}.png" value={tileUrl} disabled={!net}
-              onChange={(e) => void patch({ geoint: { networkEnabled: net, tileServerUrl: e.target.value, tileAttribution } })} style={{ flex: 1 }} />
+            <input className="ga98-text" placeholder="https://…/{z}/{x}/{y}.png" value={tileUrl} disabled={!net || basemap === 'satellite'}
+              onChange={(e) => patchGeo({ tileServerUrl: e.target.value })} style={{ flex: 1 }} />
+          </div>
+          <div className="field-row" style={{ marginTop: 4 }}>
+            <label style={{ minWidth: 60 }}>View:</label>
+            <button onClick={() => patchGeo({ basemap: 'street' })} disabled={!net} aria-pressed={basemap === 'street'}
+              style={basemap === 'street' ? { borderStyle: 'inset', fontWeight: 'bold' } : {}}>Street</button>
+            <button onClick={() => patchGeo({ basemap: 'satellite' })} disabled={!net} aria-pressed={basemap === 'satellite'}
+              style={basemap === 'satellite' ? { borderStyle: 'inset', fontWeight: 'bold' } : {}}>Satellite</button>
+          </div>
+          <div className="field-row" style={{ marginTop: 4 }}>
+            <label style={{ minWidth: 60 }}>Search:</label>
+            <input className="ga98-text" placeholder="city, address, place…" value={search} disabled={!net}
+              onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void doSearch(); }} style={{ flex: 1 }} />
+            <button onClick={() => void doSearch()} disabled={!net || !search.trim() || searching}>{searching ? '…' : 'Go'}</button>
           </div>
         </fieldset>
 
@@ -149,8 +208,8 @@ export function GeoIntModule(): JSX.Element {
       </div>
 
       <div className="ga98-pane ga98-geo-right" style={{ padding: 0 }}>
-        <MapPane items={items} tilesEnabled={net} tileUrl={tileUrl} tileAttribution={tileAttribution}
-          pickMode={pickFor != null} onPick={(la, lo) => void onPick(la, lo)} focusId={focusId} />
+        <MapPane items={items} tilesEnabled={net} tileUrl={activeTileUrl} tileAttribution={activeTileAttribution}
+          pickMode={pickFor != null} onPick={(la, lo) => void onPick(la, lo)} focusId={focusId} flyTo={flyTo} />
       </div>
       {saveItem && <SaveEventDialog item={saveItem} onClose={() => setSaveItem(null)} />}
     </div>

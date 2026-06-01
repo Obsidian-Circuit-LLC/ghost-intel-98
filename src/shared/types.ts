@@ -349,6 +349,21 @@ export interface AppSettings {
     /** User-configured raster tile server URL template (e.g. https://.../{z}/{x}/{y}.png). */
     tileServerUrl: string;
     tileAttribution: string;
+    /** Active basemap. 'street' uses tileServerUrl (default OSM); 'satellite' uses a built-in
+     *  Esri World Imagery layer. Either way, tiles load only when networkEnabled is on. */
+    basemap: 'street' | 'satellite';
+  };
+  markets: {
+    /** Master opt-in egress gate for the Markets module. Off by default ⇒ no quote is fetched. */
+    networkEnabled: boolean;
+    /** User watchlist — the symbols/ids tracked per class. Fully user-editable. */
+    watchlist: {
+      crypto: string[];   // CoinGecko ids, e.g. bitcoin, ethereum, monero
+      fx: string[];       // quote currencies vs USD base, e.g. EUR, GBP, JPY
+      symbols: string[];  // Yahoo/Stooq tickers: indices (^GSPC), equities (AAPL), commodities (GC=F)
+    };
+    /** User-added data feeds (trusted HTTPS endpoints returning a generic quote JSON shape). */
+    customFeeds: { id: string; label: string; url: string }[];
   };
 }
 
@@ -432,5 +447,14 @@ export const defaultSettings: AppSettings = {
   mail: { accounts: [] },
   browser: { homepage: 'about:blank' },
   media: { streamingEnabled: false, visualizer: true },
-  geoint: { networkEnabled: false, tileServerUrl: '', tileAttribution: '' }
+  geoint: { networkEnabled: false, tileServerUrl: '', tileAttribution: '', basemap: 'street' },
+  markets: {
+    networkEnabled: false,
+    watchlist: {
+      crypto: ['bitcoin', 'ethereum', 'monero'],
+      fx: ['EUR', 'GBP', 'JPY'],
+      symbols: ['^GSPC', 'AAPL', 'GC=F']
+    },
+    customFeeds: []
+  }
 };

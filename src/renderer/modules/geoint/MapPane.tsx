@@ -13,7 +13,7 @@ import { buildPopup } from './popup';
 
 const pin = L.divIcon({ className: 'ga98-geo-pin', html: '📍', iconSize: [16, 16], iconAnchor: [8, 16] });
 
-export function MapPane({ items, tilesEnabled, tileUrl, tileAttribution, pickMode, onPick, focusId }: {
+export function MapPane({ items, tilesEnabled, tileUrl, tileAttribution, pickMode, onPick, focusId, flyTo }: {
   items: GeoItem[];
   tilesEnabled: boolean;
   tileUrl: string;
@@ -21,6 +21,8 @@ export function MapPane({ items, tilesEnabled, tileUrl, tileAttribution, pickMod
   pickMode: boolean;
   onPick: (lat: number, lon: number) => void;
   focusId: string | null;
+  /** Search target: when it changes to a non-null value, recenter the map there. */
+  flyTo: { lat: number; lon: number; key: number } | null;
 }): JSX.Element {
   const ref = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map | null>(null);
@@ -45,6 +47,13 @@ export function MapPane({ items, tilesEnabled, tileUrl, tileAttribution, pickMod
     if (tiles.current) { tiles.current.remove(); tiles.current = null; }
     if (tilesEnabled && tileUrl) tiles.current = L.tileLayer(tileUrl, { attribution: tileAttribution }).addTo(m);
   }, [tilesEnabled, tileUrl, tileAttribution]);
+
+  // Recenter on a geocoded search hit. The `key` nonce makes repeated searches for the same
+  // coordinates still fire (a new object each time), without re-running on unrelated renders.
+  useEffect(() => {
+    const m = map.current;
+    if (m && flyTo) m.setView([flyTo.lat, flyTo.lon], 9);
+  }, [flyTo?.key]);
 
   useEffect(() => {
     const lg = layer.current;
