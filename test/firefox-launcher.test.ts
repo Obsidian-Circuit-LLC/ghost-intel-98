@@ -20,6 +20,6 @@ describe('firefox launcher service', () => {
   });
 
   it('throws a clear error when asked to launch with no bundled binary', () => {
-    expect(() => firefox.launch('https://example.com')).toThrow(/not bundled/i);
+    expect(() => firefox.launch('https://example.com')).toThrow(/isn't installed yet/i);
   });
 });

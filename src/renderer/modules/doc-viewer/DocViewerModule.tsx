@@ -7,14 +7,17 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
-import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import PdfWorker from '../../lib/pdf-worker?worker';
 import mammoth from 'mammoth';
 import Papa from 'papaparse';
 import type { EmlPreview } from '@shared/types';
 import { loadAttachmentBytes, bytesToText, looksBinary } from '../../lib/attachmentBytes';
 import { sanitizeHtml, wireExternalLinks } from '../../lib/sanitizeHtml';
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+// Use a worker built from our own entry (pdf-worker.ts) rather than the raw pdfjs worker
+// URL, so the Uint8Array hex/base64 polyfill is present in the worker realm. workerPort
+// takes a live Worker instance; pdf.js drives all getDocument() calls through it.
+pdfjsLib.GlobalWorkerOptions.workerPort = new PdfWorker();
 
 interface Props { caseId: string; fileName: string; originalName: string }
 

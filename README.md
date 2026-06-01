@@ -23,11 +23,11 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`GhostAccess98-Setup-3.4.0.exe`](https://github.com/Dezirae-Stark/ghost-access-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned).
+> **Install:** download [`GhostAccess98-Setup-3.4.2.exe`](https://github.com/Dezirae-Stark/ghost-access-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned).
 
 ## Status
 
-**v3.4.0** — current release. Adds **offline voice conversation** to the AI Assistant: talk to it and
+**v3.4.2** — current release (a fix release on the v3.4.0 base; see the changelog). The v3.4.0 base added **offline voice conversation** to the AI Assistant: talk to it and
 hear replies aloud, fully on-device. **Push-to-talk** and **hands-free** (mic stays open; it listens,
 answers, and speaks while you read) — speech-to-text is **Vosk on-device** (the browser's built-in
 recognizer is cloud, so it's not used), and the spoken reply uses your on-device OS voices. The Vosk
@@ -57,13 +57,13 @@ High/Medium closed and regression-tested. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Dezirae-Stark/ghost-access-98/releases) and run it.
 
-Direct link to current release: [`GhostAccess98-Setup-3.4.0.exe`](https://github.com/Dezirae-Stark/ghost-access-98/releases/download/v3.4.0/GhostAccess98-Setup-3.4.0.exe).
+Direct link to current release: [`GhostAccess98-Setup-3.4.2.exe`](https://github.com/Dezirae-Stark/ghost-access-98/releases/download/v3.4.2/GhostAccess98-Setup-3.4.2.exe).
 
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\GhostAccess98-Setup-3.4.0.exe -Algorithm SHA256
-# expected: 5b07e4040dd632c6ea49c7c0222a1ee6b16b31a41a6f5a0f83e730533a3dd822
+Get-FileHash .\GhostAccess98-Setup-3.4.2.exe -Algorithm SHA256
+# compare against the SHA-256 printed in that version's release notes
 ```
 
 The installer is **unsigned** (no code-signing certificate yet), so SmartScreen will warn on first run — click **More info → Run anyway**. The app installs per-user (no admin required) and creates a desktop + Start menu shortcut.
@@ -95,8 +95,9 @@ To uninstall: Settings → Apps → Ghost Access 98 → Uninstall.
 
 ## Releases & changelog
 
-The current build is **v3.4.1**. Each release page carries its own notes + SHA-256.
+The current build is **v3.4.2**. Each release page carries its own notes + SHA-256.
 
+- **v3.4.2** — fixes from the next field report. **Jukebox icons visible again** — the v3.4.1 SVG icons inherited the button-face grey and drew invisibly (you could still hover/click them); the icon colour is now pinned. **Internal PDF reader fixed** (`a.toHex is not a function`) — pdf.js parses in a Web Worker (its own JS realm), so the compatibility shim that ran on the main thread never reached it; it now loads inside the worker. **Desktop wallpaper** — a theme image only showed on the lock screen because the desktop layer painted a solid colour over it; the desktop is now transparent to the wallpaper in every intensity. **Friendlier copy** — the Firefox "not bundled" message no longer says *payload*. 205 tests.
 - **v3.4.1** — fixes from the v3.4.0 field report: **Jukebox tape-deck transport** — crisp inline-SVG icons replacing the missing-font Unicode glyphs that rendered as boxes, plus **Shuffle** and **Repeat** (off/all/one, with a real shuffle back-history); **GeoINT discoverability** — a default OpenStreetMap basemap the moment you opt into the network (the egress gate is unchanged) and every previously-silent failure now surfaced; and a **responsive STFU** — the streaming render is coalesced to ~16 fps so the stop button isn't starved on huge replies. 205 tests; pure unit-tested playlist-navigation logic.
 - **v3.4.0** — **offline voice conversation** in the AI Assistant: push-to-talk + hands-free, on-device **Vosk** speech-to-text (model operator-supplied) + on-device TTS replies, with the mic paused while the AI speaks (no feedback loop). Hardened by a dedicated red-team pass over the voice surface (0 Critical): mic permission scoped to audio + the app window, mic-leak / double-start paths closed, voice streams made cancellable. *Vosk model is operator-supplied — drop a `model.tar.gz` in `resources/vosk/`.*
 - **v3.3.0** — **Bookmarks** dashboard (offline start.me, `.ghostbookmarks` share), **AI offline text-to-speech** + **STFU** stop, **Net Explorer → Firefox Portable** launcher, and live-testing fixes (Jukebox/GeoINT discoverability, large-video streaming, PDF render fix, retro click/boot sounds, DialTerm DTMF + Uplink animation, Help → RTFM). **Two red-team rounds: 0 Critical, all High/Medium fixed.** *Firefox payload is operator-supplied — drop it in `resources/firefox/`.*
