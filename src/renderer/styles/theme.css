@@ -37,13 +37,13 @@ html, body, #root {
    • maximum  — full retro CRT: pronounced desktop scanlines plus a screen-wide
                 scanline + vignette overlay painted over the entire UI. */
 :root[data-ga98-intensity='lite'] .ga98-desktop {
-  background: var(--ga98-desktop-bg);
+  background: transparent;
 }
 
 :root[data-ga98-intensity='maximum'] .ga98-desktop {
   background:
     repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.10) 0 1px, transparent 1px 3px),
-    var(--ga98-desktop-bg);
+    transparent;
 }
 
 :root[data-ga98-intensity='maximum'] .ga98-screen::after {
@@ -61,9 +61,13 @@ html, body, #root {
   position: absolute;
   inset: 0 0 var(--ga98-taskbar-height) 0;
   overflow: hidden;
+  /* Transparent base: the wallpaper (color + optional image) lives on .ga98-screen and
+     shows through here. Painting --ga98-desktop-bg used to occlude it — which is why the
+     wallpaper image only appeared on the lock screen (no .ga98-desktop layer). Only the
+     faint scanline texture stays. */
   background:
     repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.04) 0 1px, transparent 1px 2px),
-    var(--ga98-desktop-bg);
+    transparent;
 }
 
 .ga98-desktop-grid {
@@ -693,7 +697,10 @@ input.ga98-text, select.ga98-text {
 .ga98-jukebox-title { overflow: hidden; text-overflow: ellipsis; }
 .ga98-jukebox-time { flex-shrink: 0; }
 .ga98-jukebox-transport { display: flex; align-items: center; gap: 4px; }
-.ga98-jukebox-transport button { min-width: 0; padding: 2px 10px; }
+.ga98-jukebox-transport button { min-width: 0; padding: 2px 10px; color: #000; }
+/* Icons paint with fill/stroke=currentColor — pin the color so they never inherit the
+   button-face grey and vanish (the "buttons are gone, hover works" v3.4.1 regression). */
+.ga98-jukebox-transport button svg { vertical-align: middle; }
 .ga98-jukebox-panes { display: flex; gap: 6px; flex: 1; min-height: 0; }
 .ga98-jukebox-pane { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 .ga98-jukebox-list { flex: 1; overflow: auto; margin: 0; }

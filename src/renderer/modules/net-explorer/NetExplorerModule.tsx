@@ -143,7 +143,7 @@ export function NetExplorerModule(): JSX.Element {
         ) : (
           <div className="ga98-firefox-missing">
             <p style={{ maxWidth: 480, color: '#900' }}>
-              <b>Firefox Portable isn&rsquo;t bundled yet.</b> Drop the Firefox Portable payload into
+              <b>Firefox Portable isn&rsquo;t installed yet.</b> Drop the Firefox Portable files into
               <code> resources/firefox/ </code> (so that one of <code>FirefoxPortable.exe</code>,
               <code> firefox.exe</code>, or <code>App/Firefox64/firefox.exe</code> exists) and rebuild the
               installer. Until then, URLs can still be saved to cases and bookmarked, but won&rsquo;t open.

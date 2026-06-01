@@ -77,7 +77,7 @@ export function launch(rawUrl: string): Promise<void> {
   const exe = resolveExecutable();
   if (!exe) {
     throw new Error(
-      'Firefox Portable is not bundled. Place the Firefox Portable payload in resources/firefox/ and rebuild.'
+      "Firefox Portable isn't installed yet. Add the Firefox Portable files to resources/firefox/ and rebuild."
     );
   }
   return new Promise<void>((resolve, reject) => {
