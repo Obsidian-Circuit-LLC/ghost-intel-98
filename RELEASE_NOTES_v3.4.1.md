@@ -43,5 +43,5 @@ entirely.
 
 ---
 
-**Artifact:** `GhostAccess98-Setup-3.4.1.exe` (NSIS, x64, unsigned)
-**SHA-256:** _(filled in on publish)_
+**Artifact:** `GhostAccess98-Setup-3.4.1.exe` (~122 MB, NSIS, x64, unsigned)
+**SHA-256:** `1ce28d48fc94ca594f414ace87e3b03f0f19f066b4a889c76912697d5fa51be3`
