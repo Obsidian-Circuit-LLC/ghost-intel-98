@@ -25,6 +25,8 @@ that never depend on a third-party staying up:
   your own/authorized camera streams, and a Win98 CD-Player audio player.
 - **Bookmarks** — an offline start.me: drag-organized link board, per-link glyph/emoji/favicon,
   shareable `.ghostbookmarks` file.
+- **Briefcase & Solitaire** — a home for loose notes that aren't tied to a case, and a full Klondike
+  card game (drag-and-drop + win cascade) for the Win98 vibes.
 - **DialTerm / Net Explorer / Mail** — SSH/Telnet/FTP with a dial-up handshake, a Firefox launcher,
   and IMAP/SMTP.
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
@@ -34,8 +36,15 @@ that never depend on a third-party staying up:
 
 ## Status
 
-**v3.6.0** — current release. **Renames the program to Dead Cyber Society 98 (DCS98)** and clears a full
-field-report punch list:
+**v3.6.2** — current release: **Solitaire** (Klondike, with full card drag-and-drop and the classic
+bouncing-card win cascade), in the Access menu.
+
+**v3.6.1** added the **Briefcase** (standalone text notes not tied to any case — browse them in the
+Briefcase app or save straight there from Notepad 98), GeoINT **street-name labels** + a one-click tile
+**Reset**, and **Shred** pinned to the bottom-right corner like the Recycle Bin.
+
+**v3.6.0** renamed the program to **Dead Cyber Society 98 (DCS98)** (with automatic data migration from the
+old install) and cleared a full field-report punch list:
 
 - **Sticky Notes** *(new module)* — a Win95-style desktop note layer (drag, type, pick icon + color),
   fired reminders rendered as notes, and a global Hide.
@@ -53,8 +62,8 @@ field-report punch list:
   **Net Explorer** gains an "Open the Firefox folder" button.
 
 Migration carries an existing **Ghost Access 98** install's data forward on first launch (copy-not-move,
-and only committed if every file copies — no silent loss). Hardened by a pre-release adversarial red-team
-(**0 Critical**; all High/Medium fixed). **228 tests.**
+and only committed if every file copies — no silent loss). Every release is hardened by a pre-release
+adversarial red-team (**0 Critical**; all High/Medium fixed). **238 tests.**
 
 The v3.5.0 base added a **Markets** module, a stronger **GeoINT** (satellite, search, auto-refresh), and
 **in-app playback of encrypted media**. v3.4.x added **offline voice conversation** to the AI Assistant —
@@ -84,6 +93,7 @@ To uninstall: Settings → Apps → Dead Cyber Society 98 → Uninstall.
 |---|---|
 | My Cases | Create, open, rename, archive, delete cases; per-case dashboard with timeline / tasks / links / reminders / attachments / **entities (Family/Associates/Other)** / **bio photos** / **GeoINT events**; **document viewer**, **exports** (PDF/HTML/CSV), and **backup/share** |
 | Sticky Notes | Win95-style draggable desktop notes — text, a chosen icon and color; **fired reminders appear as notes** (OK to clear); a global **Hide**. Persists, encrypted at rest, zero network |
+| Briefcase | Standalone text notes not tied to any case — browse/edit/delete them here, or pick **💼 Briefcase** in Notepad 98's selector to save straight in. Encrypted at rest, zero network |
 | Doc Viewer | In-app viewer for case attachments — PDF, DOCX, HTML, images, CSV, JSON, EML, text (sanitized; no remote fetches) |
 | Search | Cross-case search over metadata, entities, and extracted attachment text; exportable results |
 | Whiteboard | Per-case pannable/zoomable canvas — text/image/file/link nodes + connectors |
@@ -91,7 +101,8 @@ To uninstall: Settings → Apps → Dead Cyber Society 98 → Uninstall.
 | **Jukebox** | Win98 CD-Player audio player — local **MP3 / OGG / FLAC / WAV / M4A** + **M3U** playlists, spectrum visualizer; internet radio is **opt-in** (off by default). Local files are served through a path-confined internal protocol |
 | **GeoINT** | Pluggable geopolitical-monitoring dashboard — **RSS / Atom / GeoJSON** sources + **OPML** import, a **Leaflet** map (**2D** custom tiles, **Satellite**, **Street View**), offline **gazetteer** geocoding + manual pins. Network is **opt-in** (off by default). Save an event into a case as a record / link / note |
 | **Bookmarks** | Offline start.me-style link dashboard — **category cards** of named links you organize by **dragging** (cards auto-scale to their link count); per-link icon of your choice (glyph / emoji / **consent-gated favicon**); **Share** the whole board as a portable `.ghostbookmarks` file |
-| Notepad 98 | Plain text editor, saves notes into a case |
+| Notepad 98 | Plain text editor — saves notes into a case, or into the **Briefcase** when "💼 Briefcase" is picked in the selector |
+| Solitaire | Klondike card game — full drag-and-drop, foundations A→K, Draw 1/3, double-click-to-foundation, and the classic bouncing-card **win cascade**. Self-contained, offline, zero data |
 | Calendar | Month grid surfacing case + global reminders and task due dates; right-click a reminder to delete it |
 | Reminders / Alarm | Case-linked reminders + general alarms; native notifications + synthesized chime; fired reminders surface as desktop sticky notes |
 | Shred | Soft-delete bucket — restore or purge |
@@ -105,8 +116,16 @@ To uninstall: Settings → Apps → Dead Cyber Society 98 → Uninstall.
 
 ## Releases & changelog
 
-The current build is **v3.6.0**. Each release page carries its own notes + SHA-256.
+The current build is **v3.6.2**. Each release page carries its own notes + SHA-256.
 
+- **v3.6.2** — **Solitaire (Klondike)**: green-felt card game with full drag-and-drop (move a card and the
+  run beneath it), build foundations A→K, double-click to a foundation, Draw 1/3, and the iconic
+  bouncing-card **win cascade**. Self-contained — no network, storage, or data. In the Access menu. 238 tests.
+- **v3.6.1** — **Briefcase** (standalone text notes not tied to a case, with a 💼 target in Notepad 98's
+  selector); **GeoINT** street/place-name **Labels** overlay (Esri reference layers, gated, no new egress
+  domain) + a tile **Reset** + the default OSM URL shown as a placeholder; **Shred** moved to the
+  bottom-right corner. Red-team: fixed a save/read UUID-validation mismatch in the Briefcase + AI-conversation
+  stores. 232 tests.
 - **v3.6.0** — **Renamed to Dead Cyber Society 98 (DCS98)** with automatic data migration from the old
   install. New: **Sticky Notes** desktop layer; **AI conversation memory** (saved-chat sidebar) + right-click
   copy + default `qwen3-abliterated:4b`; **GeoINT Street View** + custom-tile **Load** button + **2D Map**
@@ -165,7 +184,7 @@ This starts the Vite dev server (HMR) and the Electron main process.
 
 ```bash
 pnpm build        # type-check + bundle main / preload / renderer
-pnpm test         # vitest suite (228 tests as of v3.6.0)
+pnpm test         # vitest suite (238 tests as of v3.6.2)
 pnpm package      # platform installer for the current host
 pnpm package:win  # cross-build Windows NSIS installer
 ```
