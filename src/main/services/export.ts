@@ -59,7 +59,7 @@ export function buildSummaryHtml(c: CaseRecord): string {
   ${list(c.attachments.map((a) => `${esc(a.originalName)} <span class="ts">(${Math.ceil(a.size / 1024)} KB)</span>`))}
   <h2>Timeline</h2>
   ${list(c.timeline.map((e) => `<span class="ts">${esc(e.at)}</span> [${esc(e.kind)}] ${esc(e.message)}`))}
-  <hr><p class="muted">Exported from Ghost Access 98 · ${esc(c.id)}</p>
+  <hr><p class="muted">Exported from Dead Cyber Society 98 · ${esc(c.id)}</p>
 </body></html>`;
 }
 

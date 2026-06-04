@@ -14,6 +14,7 @@ import { join } from 'node:path';
 import { appendFile, mkdir } from 'node:fs/promises';
 import { channels } from '@shared/ipc-contracts';
 import { ensureDataLayout } from './storage/paths';
+import { migrateUserDataIfNeeded } from './migrate-userdata';
 import { registerMediaProtocol } from './media/protocol';
 import { registerModelProtocol } from './voice/model-protocol';
 
@@ -78,7 +79,7 @@ function createWindow(): void {
     minWidth: 960,
     minHeight: 600,
     backgroundColor: '#008080',
-    title: 'Ghost Access 98',
+    title: 'Dead Cyber Society 98',
     icon: iconPath,
     autoHideMenuBar: true,
     show: false,
@@ -219,6 +220,9 @@ function lockDownPartitionSessions(): void {
 }
 
 app.whenReady().then(async () => {
+  // FIRST: carry forward data from the pre-rename (Ghost Access 98) userData dir, before any
+  // storage layer reads or creates files in the new (Dead Cyber Society 98) location.
+  await migrateUserDataIfNeeded();
   await ensureDataLayout();
   await vault.refreshEnabled(); // populate the lock-gate cache before any IPC can fire
   lockDownWebContents();

@@ -104,7 +104,8 @@ const api = {
     addHistory: (url: string, title: string) => ipcRenderer.invoke(channels.browser.addHistory, url, title),
     clearHistory: () => ipcRenderer.invoke(channels.browser.clearHistory),
     firefoxStatus: () => ipcRenderer.invoke(channels.browser.firefoxStatus),
-    launchFirefox: (url: string, title?: string) => ipcRenderer.invoke(channels.browser.launchFirefox, url, title)
+    launchFirefox: (url: string, title?: string) => ipcRenderer.invoke(channels.browser.launchFirefox, url, title),
+    revealFirefoxDir: () => ipcRenderer.invoke(channels.browser.revealFirefoxDir)
   },
   voice: {
     modelStatus: () => ipcRenderer.invoke(channels.voice.modelStatus)
@@ -115,6 +116,16 @@ const api = {
     exportBoard: () => ipcRenderer.invoke(channels.bookmarks.exportBoard),
     importBoard: () => ipcRenderer.invoke(channels.bookmarks.importBoard),
     fetchFavicon: (url: string) => ipcRenderer.invoke(channels.bookmarks.fetchFavicon, url)
+  },
+  stickyNotes: {
+    get: () => ipcRenderer.invoke(channels.stickyNotes.get),
+    save: (state: unknown) => ipcRenderer.invoke(channels.stickyNotes.save, state)
+  },
+  aiConvos: {
+    list: () => ipcRenderer.invoke(channels.aiConvos.list),
+    get: (id: string) => ipcRenderer.invoke(channels.aiConvos.get, id),
+    save: (convo: unknown) => ipcRenderer.invoke(channels.aiConvos.save, convo),
+    delete: (id: string) => ipcRenderer.invoke(channels.aiConvos.delete, id)
   },
   ssh: {
     listHosts: () => ipcRenderer.invoke(channels.ssh.listHosts),

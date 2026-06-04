@@ -14,6 +14,7 @@ import { Toaster } from './shell/Toaster';
 import { Shortcuts } from './shell/Shortcuts';
 import { Welcome } from './shell/Welcome';
 import { LockScreen } from './shell/LockScreen';
+import { StickyNotes } from './shell/StickyNotes';
 import { playBoot, playReminder, playMouseClick } from './audio/synth';
 import { toast } from './state/toasts';
 
@@ -68,13 +69,9 @@ export function App(): JSX.Element {
   useEffect(() => {
     const off = window.api.system.onReminderFired(({ reminder }) => {
       if (useSettings.getState().settings?.soundEnabled) playReminder();
-      useWindows.getState().open({
-        module: 'reminders',
-        title: `Reminder — ${reminder.title}`,
-        props: { highlight: reminder.id },
-        width: 540,
-        height: 360
-      });
+      // The sticky-notes layer surfaces the reminder as a desktop note (OK to complete);
+      // a toast covers the case where notes are globally hidden.
+      toast.info(`Reminder: ${reminder.title}`);
     });
     return () => off();
   }, []);
@@ -113,8 +110,14 @@ export function App(): JSX.Element {
         <>
           <Shortcuts />
           <Desktop />
+          {/* Render EVERY open window — including minimized ones — and let the Window
+              frame hide minimized ones via display:none. Unmounting a minimized window
+              (the old behavior) destroyed its live state: the Jukebox <audio> element,
+              the AI conversation, unsaved Notepad text. Keeping it mounted-but-hidden
+              preserves all of that while still removing it from view and the focus order.
+              .slice() because .sort() mutates in place and the store array is shared. */}
           {windows
-            .filter((w) => !w.minimized)
+            .slice()
             .sort((a, b) => focusStack.indexOf(a.id) - focusStack.indexOf(b.id))
             .map((w) => (
               <Window
@@ -131,6 +134,7 @@ export function App(): JSX.Element {
                 <ModuleHost spec={w} />
               </Window>
             ))}
+          <StickyNotes />
           <Taskbar />
           <Welcome />
         </>

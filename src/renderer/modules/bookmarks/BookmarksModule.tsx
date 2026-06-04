@@ -67,6 +67,10 @@ export function BookmarksModule(): JSX.Element {
   function setCategoryHeight(catId: string, height: number): void {
     mutateCats((cats) => cats.map((c) => c.id === catId ? { ...c, height } : c));
   }
+  // Clear a stored (manually-dragged) height so the card returns to auto-scaling by link count.
+  function clearCategoryHeight(catId: string): void {
+    mutateCats((cats) => cats.map((c) => c.id === catId ? { ...c, height: undefined } : c));
+  }
 
   // --- drag/drop reorganize ---
   function moveCardBefore(targetCatId: string): void {
@@ -173,6 +177,14 @@ export function BookmarksModule(): JSX.Element {
                 aria-label="Category title"
               />
               <div className="title-bar-controls">
+                {c.height != null && (
+                  <button
+                    aria-label="Fit to contents"
+                    title="Fit this card to its links (clear the manual height)"
+                    onClick={() => clearCategoryHeight(c.id)}
+                    style={{ marginRight: 2 }}
+                  >⤢</button>
+                )}
                 <button aria-label="Close" onClick={() => void deleteCategory(c.id)} />
               </div>
             </div>

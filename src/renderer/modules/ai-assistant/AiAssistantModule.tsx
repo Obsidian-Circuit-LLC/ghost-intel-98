@@ -9,7 +9,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { AiChatMessage, AiChatRequest } from '@shared/post-mvp-types';
+import type { AiChatMessage, AiChatRequest, AiConversationSummary } from '@shared/post-mvp-types';
 import type { CaseSummary, CaseRecord } from '@shared/types';
 import { useSettings } from '../../state/store';
 import { toast } from '../../state/toasts';
@@ -35,6 +35,14 @@ export function AiAssistantModule(): JSX.Element {
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
+  // Saved-conversation memory (ChatGPT-style). convoIdRef is the id of the chat currently being
+  // built; null until the first message is sent. titleRef holds the title (first user message).
+  const [convos, setConvos] = useState<AiConversationSummary[]>([]);
+  const convoIdRef = useRef<string | null>(null);
+  const titleRef = useRef<string>('');
+  // Only persist when a new message actually happened — NOT when loadConvo() repopulates
+  // messages (that re-encrypted the store and, at the cap, could evict a chat just by browsing).
+  const dirtyRef = useRef(false);
   const [includeFiles, setIncludeFiles] = useState(false);
   const activeStreamRef = useRef<{ id: string; off: () => void } | null>(null);
   // Set by STFU/unmount so a `done` event already queued in the event loop can't start TTS
@@ -62,6 +70,48 @@ export function AiAssistantModule(): JSX.Element {
 
   useEffect(() => { void window.api.cases.list().then(setCases); }, []);
   useEffect(() => { void window.api.voice.modelStatus().then((s) => setModelInstalled(s.installed)); }, []);
+
+  // --- saved-conversation memory ---
+  const refreshConvos = useCallback(() => { void window.api.aiConvos.list().then(setConvos).catch(() => {}); }, []);
+  useEffect(() => { refreshConvos(); }, [refreshConvos]);
+
+  // Auto-save the active conversation whenever it settles (stream finished) and has content.
+  // convoIdRef is assigned in send() when the first message goes out.
+  useEffect(() => {
+    if (streaming || messages.length === 0 || !convoIdRef.current || !dirtyRef.current) return;
+    const payload = {
+      id: convoIdRef.current,
+      title: titleRef.current || messages.find((m) => m.role === 'user')?.content.slice(0, 60) || 'Conversation',
+      messages: messages.map(({ role, content }) => ({ role, content }))
+    };
+    void window.api.aiConvos.save(payload).then(() => { dirtyRef.current = false; refreshConvos(); }).catch(() => {});
+  }, [streaming, messages, refreshConvos]);
+
+  function newChat(): void {
+    convoIdRef.current = null;
+    titleRef.current = '';
+    dirtyRef.current = false;
+    setMessages([]);
+  }
+  async function loadConvo(id: string): Promise<void> {
+    try {
+      const c = await window.api.aiConvos.get(id);
+      if (!c) return;
+      convoIdRef.current = c.id;
+      titleRef.current = c.title;
+      dirtyRef.current = false; // loading is not a change — don't trigger a re-save
+      setMessages(c.messages.map((m) => ({ ...m, id: newId() })));
+    } catch (err) { toast.error(`Couldn't open conversation: ${(err as Error).message}`); }
+  }
+  async function deleteConvo(id: string): Promise<void> {
+    const ok = await confirmDialog('Delete this saved conversation?', 'Delete conversation');
+    if (!ok) return;
+    try {
+      await window.api.aiConvos.delete(id);
+      if (convoIdRef.current === id) newChat();
+      refreshConvos();
+    } catch (err) { toast.error(`Delete failed: ${(err as Error).message}`); }
+  }
 
   // Populate the offline voice list once (Chromium fills it asynchronously).
   useEffect(() => { if (ttsSupported()) void listVoices().then(setVoices); }, []);
@@ -154,6 +204,9 @@ export function AiAssistantModule(): JSX.Element {
     const userMsg: DisplayMessage = { id: newId(), role: 'user', content: text };
     const assistantMsg: DisplayMessage = { id: newId(), role: 'assistant', content: '', streaming: true };
     const history: AiChatMessage[] = [...messages.map(({ role, content }) => ({ role, content })), { role: 'user', content: text }];
+    // First message of a fresh chat → mint a conversation id + title (used by the auto-save effect).
+    if (!convoIdRef.current) { convoIdRef.current = newId(); titleRef.current = text.slice(0, 60); }
+    dirtyRef.current = true; // a real new message → the conversation should be saved
     setMessages((prev) => [...prev, userMsg, assistantMsg]);
     setInput('');
     setStreaming(true);
@@ -246,6 +299,7 @@ export function AiAssistantModule(): JSX.Element {
         ...messagesRef.current.map(({ role, content }) => ({ role, content })),
         { role: 'user', content: text }
       ];
+      if (!convoIdRef.current) { convoIdRef.current = newId(); titleRef.current = text.slice(0, 60); }
       setMessages((prev) => [...prev, userMsg, asstMsg]);
       const context = contextCase ? buildContextMeta(contextCase) : undefined;
       let acc = '';
@@ -255,6 +309,9 @@ export function AiAssistantModule(): JSX.Element {
         settled = true;
         off();
         if (voiceStreamRef.current?.id === streamId) voiceStreamRef.current = null;
+        // Mark dirty only at turn-completion so the auto-save effect persists the voice exchange
+        // ONCE here, not on every streamed chunk (chunks update messages with dirty still false).
+        dirtyRef.current = true;
         setMessages((prev) => prev.map((m) => m.id === asstMsg.id ? { ...m, streaming: false } : m));
         resolve(text);
       };
@@ -346,6 +403,35 @@ export function AiAssistantModule(): JSX.Element {
     setInput(text);
   }
 
+  // Right-click → copy. navigator.clipboard first; fall back to a hidden textarea +
+  // execCommand so copy works even if Electron doesn't treat the app origin as "secure"
+  // or the window isn't focused. Stays fully offline either way.
+  const [msgMenu, setMsgMenu] = useState<{ x: number; y: number; content: string } | null>(null);
+  async function copyText(text: string): Promise<void> {
+    setMsgMenu(null);
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success('Copied.');
+      return;
+    } catch { /* fall through to the legacy path */ }
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      toast.success('Copied.');
+    } catch (err) {
+      toast.error(`Copy failed: ${(err as Error).message}`);
+    }
+  }
+  function copyAll(): string {
+    return messages.map((m) => `## ${m.role === 'user' ? 'You' : 'Assistant'}\n\n${m.content}`).join('\n\n');
+  }
+
   async function exportChat(): Promise<void> {
     const text = messages.map((m) => `## ${m.role === 'user' ? 'You' : 'Assistant'}\n\n${m.content}`).join('\n\n');
     try {
@@ -357,7 +443,22 @@ export function AiAssistantModule(): JSX.Element {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <div style={{ display: 'flex', height: '100%' }}>
+      {/* Conversation memory sidebar (ChatGPT-style): new chat, the saved list, delete. */}
+      <div className="ga98-pane" style={{ width: 170, flex: '0 0 auto', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        <button onClick={newChat} style={{ margin: 4 }} title="Start a new conversation (the current one is saved)">+ New chat</button>
+        <ul className="ga98-list" style={{ flex: 1, overflow: 'auto', margin: 0 }}>
+          {convos.length === 0 && <li style={{ color: '#666', fontSize: 11 }}>No saved chats yet.</li>}
+          {convos.map((c) => (
+            <li key={c.id} data-selected={c.id === convoIdRef.current} title={`${c.messageCount} message${c.messageCount === 1 ? '' : 's'} · ${new Date(c.updatedAt).toLocaleString()}`}>
+              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer', fontSize: 11 }} onClick={() => void loadConvo(c.id)}>{c.title}</span>
+              <button onClick={() => void deleteConvo(c.id)} style={{ minWidth: 0, padding: '0 5px' }} title="Delete this conversation">×</button>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', flex: 1, minWidth: 0 }}>
       <div className="ga98-toolbar">
         <span style={{ fontSize: 11 }}>Provider: <b>{settings?.ai.provider}</b> · model <b>{settings?.ai.model || '—'}</b></span>
         <span style={{ flex: 1 }} />
@@ -420,7 +521,12 @@ export function AiAssistantModule(): JSX.Element {
           </div>
         )}
         {messages.map((m) => (
-          <div key={m.id} style={{ marginBottom: 12 }}>
+          <div
+            key={m.id}
+            style={{ marginBottom: 12 }}
+            onContextMenu={(e) => { e.preventDefault(); setMsgMenu({ x: e.clientX, y: e.clientY, content: m.content }); }}
+            title="Right-click to copy"
+          >
             <div style={{ fontSize: 11, fontWeight: 'bold', color: m.role === 'user' ? '#000080' : '#400080' }}>
               {m.role === 'user' ? 'You' : 'Assistant'}{m.streaming ? ' · streaming…' : ''}
             </div>
@@ -479,6 +585,17 @@ export function AiAssistantModule(): JSX.Element {
             </button>
           )
           : <button onClick={() => void send()} disabled={!input.trim()}>Send</button>}
+      </div>
+
+      {msgMenu && (
+        <>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 29999 }} onMouseDown={() => setMsgMenu(null)} />
+          <div className="ga98-context-menu" style={{ left: msgMenu.x, top: msgMenu.y }}>
+            <button className="ga98-context-menu-item" onClick={() => void copyText(msgMenu.content)}>Copy message</button>
+            <button className="ga98-context-menu-item" onClick={() => void copyText(copyAll())}>Copy whole conversation</button>
+          </div>
+        </>
+      )}
       </div>
     </div>
   );

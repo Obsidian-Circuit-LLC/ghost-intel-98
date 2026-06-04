@@ -45,8 +45,21 @@ export function GeoIntModule(): JSX.Element {
   const [draft, setDraft] = useState<{ label: string; url: string; type: GeoSourceType }>({ label: '', url: '', type: 'rss' });
   const [search, setSearch] = useState('');
   const [searching, setSearching] = useState(false);
+  // Custom tile URL is edited locally and applied only when the user clicks Load (rather than
+  // live on every keystroke), so loading a custom basemap is an explicit, obvious action and
+  // doesn't require switching the View toggle first.
+  const [tileDraft, setTileDraft] = useState(tileUrl);
+  useEffect(() => { setTileDraft(tileUrl); }, [tileUrl]);
+  function loadTiles(): void {
+    const u = tileDraft.trim() || DEFAULT_TILE_URL;
+    patchGeo({ basemap: 'street', tileServerUrl: u, tileAttribution: u === DEFAULT_TILE_URL ? DEFAULT_TILE_ATTRIBUTION : tileAttribution });
+    toast.success('Map tiles loaded.');
+  }
   const [flyTo, setFlyTo] = useState<{ lat: number; lon: number; key: number } | null>(null);
   const flyKey = useRef(0); // monotonic nonce so repeat searches re-center even on identical coords
+  // Street View overlay (embed). Tracks the map center so it opens the spot you're looking at.
+  const [streetView, setStreetView] = useState(false);
+  const [center, setCenter] = useState<{ lat: number; lon: number }>({ lat: 20, lon: 0 });
 
   // Surface a snapshot failure instead of leaving the whole panel silently empty (which read
   // as "GeoINT does nothing"). A locked vault, for instance, now shows the actual reason here.
@@ -145,15 +158,19 @@ export function GeoIntModule(): JSX.Element {
           <p style={{ fontSize: 11, color: '#555', margin: '4px 0' }}>Off by default. When off, nothing is fetched and the map loads no tiles — feeds and map both stay quiet until you enable it.</p>
           <div className="field-row">
             <label style={{ minWidth: 60 }}>Tiles:</label>
-            <input className="ga98-text" placeholder="https://…/{z}/{x}/{y}.png" value={tileUrl} disabled={!net || basemap === 'satellite'}
-              onChange={(e) => patchGeo({ tileServerUrl: e.target.value })} style={{ flex: 1 }} />
+            <input className="ga98-text" placeholder="https://…/{z}/{x}/{y}.png" value={tileDraft} disabled={!net}
+              onChange={(e) => setTileDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') loadTiles(); }} style={{ flex: 1 }} />
+            <button onClick={loadTiles} disabled={!net} title="Load this tile server as the 2D map">Load</button>
           </div>
           <div className="field-row" style={{ marginTop: 4 }}>
             <label style={{ minWidth: 60 }}>View:</label>
-            <button onClick={() => patchGeo({ basemap: 'street' })} disabled={!net} aria-pressed={basemap === 'street'}
-              style={basemap === 'street' ? { borderStyle: 'inset', fontWeight: 'bold' } : {}}>Street</button>
-            <button onClick={() => patchGeo({ basemap: 'satellite' })} disabled={!net} aria-pressed={basemap === 'satellite'}
-              style={basemap === 'satellite' ? { borderStyle: 'inset', fontWeight: 'bold' } : {}}>Satellite</button>
+            <button onClick={() => { patchGeo({ basemap: 'street' }); setStreetView(false); }} disabled={!net} aria-pressed={!streetView && basemap === 'street'}
+              style={!streetView && basemap === 'street' ? { borderStyle: 'inset', fontWeight: 'bold' } : {}}>2D Map</button>
+            <button onClick={() => { patchGeo({ basemap: 'satellite' }); setStreetView(false); }} disabled={!net} aria-pressed={!streetView && basemap === 'satellite'}
+              style={!streetView && basemap === 'satellite' ? { borderStyle: 'inset', fontWeight: 'bold' } : {}}>Satellite</button>
+            <button onClick={() => setStreetView(true)} disabled={!net} aria-pressed={streetView}
+              title="Google Street View of the current map center (loads Google in-app while the network is on)"
+              style={streetView ? { borderStyle: 'inset', fontWeight: 'bold' } : {}}>Street View</button>
           </div>
           <div className="field-row" style={{ marginTop: 4 }}>
             <label style={{ minWidth: 60 }}>Search:</label>
@@ -207,9 +224,34 @@ export function GeoIntModule(): JSX.Element {
         </fieldset>
       </div>
 
-      <div className="ga98-pane ga98-geo-right" style={{ padding: 0 }}>
+      <div className="ga98-pane ga98-geo-right" style={{ padding: 0, position: 'relative' }}>
+        {/* MapPane stays mounted under the Street View overlay so its Leaflet state + center
+            tracking survive toggling Street View on/off. */}
         <MapPane items={items} tilesEnabled={net} tileUrl={activeTileUrl} tileAttribution={activeTileAttribution}
-          pickMode={pickFor != null} onPick={(la, lo) => void onPick(la, lo)} focusId={focusId} flyTo={flyTo} />
+          pickMode={pickFor != null} onPick={(la, lo) => void onPick(la, lo)} focusId={focusId} flyTo={flyTo}
+          onCenterChange={(lat, lon) => setCenter({ lat, lon })} />
+        {streetView && net && (
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', background: '#000' }}>
+            <div className="ga98-toolbar" style={{ flex: '0 0 auto' }}>
+              <b style={{ fontSize: 11 }}>Street View — {center.lat.toFixed(4)}, {center.lon.toFixed(4)}</b>
+              <span style={{ flex: 1 }} />
+              <button
+                title="Open this spot in Firefox (instantstreetview) instead"
+                onClick={() => void window.api.browser.launchFirefox(`https://www.instantstreetview.com/@${center.lat},${center.lon},0h,0p,0z`, 'Street View').catch((e) => toast.error((e as Error).message))}
+              >Open in Firefox</button>
+              <button onClick={() => setStreetView(false)}>Close</button>
+            </div>
+            {/* Google's embeddable Street View endpoint (no API key). If Google ever refuses
+                framing, the frame is blank — use "Open in Firefox" above. Loads Google in-app:
+                this is the accepted egress for choosing the embedded Street View. */}
+            <iframe
+              title="Street View"
+              src={`https://www.google.com/maps?layer=c&cbll=${center.lat},${center.lon}&cbp=11,0,0,0,0&output=svembed`}
+              style={{ flex: 1, width: '100%', border: 0 }}
+              referrerPolicy="no-referrer"
+            />
+          </div>
+        )}
       </div>
       {saveItem && <SaveEventDialog item={saveItem} onClose={() => setSaveItem(null)} />}
     </div>

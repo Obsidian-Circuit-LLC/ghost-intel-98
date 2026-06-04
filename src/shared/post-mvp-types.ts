@@ -196,6 +196,31 @@ export interface AiChatRequest {
   messages: AiChatMessage[];
 }
 
+/** A saved AI conversation (ChatGPT-style memory). Persisted under dataRoot, encrypted at rest
+ *  when login is on. The renderer sends {id,title,messages}; the store stamps the timestamps. */
+export interface AiConversation {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  messages: AiChatMessage[];
+}
+
+/** Lightweight row for the conversation sidebar — full messages fetched on open. */
+export interface AiConversationSummary {
+  id: string;
+  title: string;
+  updatedAt: string;
+  messageCount: number;
+}
+
+/** What the renderer sends to persist a conversation (timestamps managed by the store). */
+export interface AiConversationInput {
+  id: string;
+  title: string;
+  messages: AiChatMessage[];
+}
+
 // ---------- Bookmarks dashboard (offline start.me-style board) ----------
 
 /** A single saved link inside a category. Icon resolution at render: `emoji` if set →
@@ -254,4 +279,28 @@ export interface MarketSnapshot {
   quotes: MarketQuote[];
   errors: string[];          // per-source non-fatal failures, surfaced in the UI
   fetchedAt: string;
+}
+
+// ── Sticky notes ─────────────────────────────────────────────────────────────
+/** A Win95-style desktop sticky note: draggable, typed text, a chosen icon + color.
+ *  Persisted under dataRoot (encrypted at rest when login is on) so the desktop survives
+ *  restarts. A note spawned by a fired reminder carries `reminderId`; its OK button completes
+ *  (deletes) that reminder. The desktop is OpSec-sensitive — these never leave the machine. */
+export interface StickyNote {
+  id: string;
+  text: string;
+  /** Emoji glyph from the picker allowlist (validator-bounded). */
+  icon: string;
+  /** Palette key: 'yellow' | 'pink' | 'blue' | 'green' | 'white'. */
+  color: string;
+  x: number;
+  y: number;
+  /** Present when this note represents a fired global reminder — OK marks it complete. */
+  reminderId?: string;
+}
+
+/** The whole sticky-note desktop layer. `hidden` is the global Hide toggle (persisted). */
+export interface StickyNotesState {
+  notes: StickyNote[];
+  hidden: boolean;
 }

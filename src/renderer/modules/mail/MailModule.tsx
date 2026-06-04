@@ -193,6 +193,17 @@ export function MailModule(): JSX.Element {
   );
 }
 
+/** Known-good IMAP/SMTP settings for the common providers. SMTP port 587 → secure:false
+ *  (STARTTLS, which the service now forces via requireTLS); 465 → secure:true (implicit TLS).
+ *  Every one of these providers rejects your normal login password over IMAP/SMTP and
+ *  requires an APP PASSWORD — see the note in the dialog. */
+const MAIL_PRESETS: Record<string, Partial<MailAccount>> = {
+  Gmail: { imapHost: 'imap.gmail.com', imapPort: 993, imapSecure: true, smtpHost: 'smtp.gmail.com', smtpPort: 465, smtpSecure: true },
+  'Outlook / Office 365': { imapHost: 'outlook.office365.com', imapPort: 993, imapSecure: true, smtpHost: 'smtp.office365.com', smtpPort: 587, smtpSecure: false },
+  Yahoo: { imapHost: 'imap.mail.yahoo.com', imapPort: 993, imapSecure: true, smtpHost: 'smtp.mail.yahoo.com', smtpPort: 465, smtpSecure: true },
+  iCloud: { imapHost: 'imap.mail.me.com', imapPort: 993, imapSecure: true, smtpHost: 'smtp.mail.me.com', smtpPort: 587, smtpSecure: false }
+};
+
 function AccountSetup({ accounts, onClose }: { accounts: MailAccount[]; onClose: () => void }): JSX.Element {
   const [draft, setDraft] = useState<MailAccount & { password: string }>({
     id: '', label: 'My Mail',
@@ -239,6 +250,17 @@ function AccountSetup({ accounts, onClose }: { accounts: MailAccount[]; onClose:
           <fieldset>
             <legend>New / edit</legend>
             <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr 60px 80px', gap: 4, alignItems: 'center' }}>
+              <label>Provider</label>
+              <select
+                className="ga98-text"
+                defaultValue=""
+                onChange={(e) => { const p = MAIL_PRESETS[e.target.value]; if (p) setDraft({ ...draft, ...p }); }}
+              >
+                <option value="">Choose a preset…</option>
+                {Object.keys(MAIL_PRESETS).map((name) => <option key={name} value={name}>{name}</option>)}
+                <option value="">Custom (fill below)</option>
+              </select>
+              <span /><span />
               <label>Label</label>
               <input className="ga98-text" value={draft.label} onChange={(e) => setDraft({ ...draft, label: e.target.value })} />
               <span /><span />
@@ -257,6 +279,12 @@ function AccountSetup({ accounts, onClose }: { accounts: MailAccount[]; onClose:
               <input className="ga98-text" type="number" value={draft.smtpPort} onChange={(e) => setDraft({ ...draft, smtpPort: Number(e.target.value) })} />
               <label><input type="checkbox" checked={draft.smtpSecure} onChange={(e) => setDraft({ ...draft, smtpSecure: e.target.checked })} />TLS</label>
             </div>
+            <p style={{ fontSize: 11, color: '#444', margin: '6px 2px 0', lineHeight: 1.4 }}>
+              <b>Gmail, Outlook, Yahoo and iCloud reject your normal password.</b> Generate an
+              <b> App Password</b> in that account's security settings (2FA must be on) and enable IMAP,
+              then paste the app password above. SMTP on port 587 uses STARTTLS (leave TLS unchecked);
+              port 465 uses implicit TLS (check TLS).
+            </p>
           </fieldset>
           <div style={{ display: 'flex', gap: 4 }}>
             <button onClick={() => void test()}>Test IMAP</button>
@@ -275,6 +303,14 @@ function Compose({ draft: initial, onClose }: { draft: MailDraft; onClose: (save
   const [draft, setDraft] = useState<MailDraft>(initial);
   const [sending, setSending] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
+
+  // Esc always escapes Compose — there must never be a state (e.g. a send that's still
+  // in-flight) that traps the user in this window with no way out.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent): void { if (e.key === 'Escape') onClose(false); }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
   async function addAttachment(): Promise<void> {
     try {
@@ -342,7 +378,13 @@ function Compose({ draft: initial, onClose }: { draft: MailDraft; onClose: (save
   return (
     <div className="ga98-dialog-veil">
       <div className="window" style={{ width: 640 }}>
-        <div className="title-bar"><div className="title-bar-text">Compose</div></div>
+        <div className="title-bar">
+          <div className="title-bar-text">Compose</div>
+          {/* Always-available close — the Compose window must never trap the user. */}
+          <div className="title-bar-controls ga98-titlebar-buttons">
+            <button aria-label="Close" onClick={() => onClose(false)} />
+          </div>
+        </div>
         <div className="window-body ga98-stack">
           <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: 4 }}>
             <label>To:</label>
@@ -368,7 +410,8 @@ function Compose({ draft: initial, onClose }: { draft: MailDraft; onClose: (save
               {sending ? 'Sending…' : 'Send'}
             </button>
             <button onClick={() => void saveDraft()} disabled={savingDraft || sending}>{savingDraft ? 'Saving…' : 'Save draft'}</button>
-            <button onClick={() => onClose(false)} disabled={sending}>Cancel</button>
+            {/* Never disabled: a hung/slow send must not lock the user inside Compose. */}
+            <button onClick={() => onClose(false)}>{sending ? 'Close' : 'Cancel'}</button>
           </div>
         </div>
       </div>

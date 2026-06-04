@@ -176,10 +176,11 @@ function PdfBody({ caseId, fileName }: { caseId: string; fileName: string }): JS
           canvas.style.display = 'block';
           canvas.style.margin = '8px auto';
           canvas.style.boxShadow = '0 0 4px rgba(0,0,0,0.4)';
-          const ctx = canvas.getContext('2d');
-          if (!ctx) continue;
           container.appendChild(canvas);
-          await page.render({ canvas, canvasContext: ctx, viewport }).promise;
+          // pdf.js 5.x: hand it the canvas element and let it derive the 2D context.
+          // Passing BOTH `canvas` and `canvasContext` is rejected in v5 (the context path
+          // requires canvas to be null), which made every page render throw → blank viewer.
+          await page.render({ canvas, viewport }).promise;
         }
       } catch (e) {
         if (!cancelled) setRenderError((e as Error).message);

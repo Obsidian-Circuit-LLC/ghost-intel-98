@@ -36,6 +36,17 @@ export function MarketsModule(): JSX.Element {
   const [feedLabel, setFeedLabel] = useState('');
   const [feedUrl, setFeedUrl] = useState('');
 
+  // First-run tutorial. The "don't show again" flag is a non-sensitive UI preference, so it
+  // lives in localStorage (renderer-only, no IPC) rather than the encrypted settings store.
+  const [showTutorial, setShowTutorial] = useState(false);
+  useEffect(() => {
+    try { if (localStorage.getItem('ga98.markets.tutorialSeen') !== '1') setShowTutorial(true); } catch { /* storage blocked */ }
+  }, []);
+  function dismissTutorial(forever: boolean): void {
+    if (forever) { try { localStorage.setItem('ga98.markets.tutorialSeen', '1'); } catch { /* storage blocked */ } }
+    setShowTutorial(false);
+  }
+
   // Seed the editable watchlist fields from persisted settings (joined back to comma lists).
   const persistedKey = `${watchlist.crypto.join(',')}|${watchlist.fx.join(',')}|${watchlist.symbols.join(',')}`;
   useEffect(() => {
@@ -95,6 +106,7 @@ export function MarketsModule(): JSX.Element {
           </button>
           <span style={{ fontSize: 11, color: net ? '#060' : '#900' }}>{net ? '● on' : '○ off'}</span>
           <button onClick={() => void refresh()} disabled={!net || busy}>{busy ? 'Refreshing…' : 'Refresh'}</button>
+          <button onClick={() => setShowTutorial(true)} title="Show the Markets intro" style={{ minWidth: 24 }}>?</button>
           {snap && <span style={{ fontSize: 11, color: '#555' }}>updated {new Date(snap.fetchedAt).toLocaleTimeString()}</span>}
         </div>
         <p style={{ fontSize: 11, color: '#555', margin: '4px 0' }}>Off by default — no quote is fetched until you enable it. Free keyless sources: CoinGecko, Frankfurter (ECB), Yahoo Finance.</p>
@@ -157,6 +169,36 @@ export function MarketsModule(): JSX.Element {
           </fieldset>
         ))}
       </div>
+
+      {showTutorial && (
+        <div className="ga98-dialog-veil">
+          <div className="window" style={{ width: 470 }}>
+            <div className="title-bar">
+              <div className="title-bar-text">Welcome to Markets</div>
+              <div className="title-bar-controls ga98-titlebar-buttons">
+                <button aria-label="Close" onClick={() => dismissTutorial(false)} />
+              </div>
+            </div>
+            <div className="window-body ga98-stack">
+              <div style={{ display: 'flex', gap: 10 }}>
+                <div style={{ fontSize: 34, lineHeight: 1 }}>📈</div>
+                <div style={{ fontSize: 12, lineHeight: 1.5 }}>
+                  <p style={{ marginTop: 0 }}><b>Markets</b> is an at-a-glance overview of crypto, FX, indices, equities and commodities.</p>
+                  <ol style={{ margin: '4px 0 0 16px', padding: 0 }}>
+                    <li>It&rsquo;s <b>off by default</b> — click <b>Enable market data</b> to fetch quotes. That&rsquo;s the only time this module touches the network.</li>
+                    <li>Edit the <b>Watchlist</b> to track your own coins, currencies and tickers, and add your own <b>custom feeds</b>.</li>
+                    <li>Quotes refresh automatically every 60 seconds while enabled.</li>
+                  </ol>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', marginTop: 6 }}>
+                <button onClick={() => dismissTutorial(true)}>Don&rsquo;t show this again</button>
+                <button onClick={() => dismissTutorial(false)} style={{ fontWeight: 'bold' }}>Remind me when opened</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -10,7 +10,8 @@ import { ValidationError } from '../src/main/security/validate';
 describe('firefox launcher service', () => {
   it('reports not-installed when no payload is bundled', () => {
     expect(firefox.resolveExecutable()).toBeNull();
-    expect(firefox.status()).toEqual({ installed: false, path: null });
+    expect(firefox.status()).toMatchObject({ installed: false, path: null });
+    expect(firefox.status().dir).toMatch(/firefox/);
   });
 
   it('refuses non-http(s) URLs before touching the filesystem (no file:/javascript: launch)', () => {

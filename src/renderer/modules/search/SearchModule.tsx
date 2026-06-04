@@ -52,7 +52,7 @@ export function SearchModule(): JSX.Element {
           <div key={r.caseId} style={{ marginBottom: 10, border: '1px solid #c0c0c0', background: '#fff' }}>
             <div
               style={{ background: '#000080', color: '#fff', padding: '2px 6px', cursor: 'pointer' }}
-              onClick={() => useWindows.getState().open({ module: 'cases', title: `Case Files — ${r.caseTitle}`, props: { caseId: r.caseId } })}
+              onClick={() => useWindows.getState().open({ module: 'cases', title: `My Cases — ${r.caseTitle}`, props: { caseId: r.caseId } })}
               title="Open this case"
             >
               <b>{r.caseTitle}</b>

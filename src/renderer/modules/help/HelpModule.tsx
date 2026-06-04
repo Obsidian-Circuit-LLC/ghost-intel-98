@@ -5,7 +5,7 @@
 import logoUrl from '../../assets/logo.png';
 
 const MODULE_DOCS: { name: string; desc: string }[] = [
-  { name: 'Case Files', desc: 'Create cases, attach files (drag-drop), keep notes, tasks, links, reminders, and a per-case timeline. Sort by updated/created/priority/status/title; filter by tag.' },
+  { name: 'My Cases', desc: 'Create cases, attach files (drag-drop), keep notes, tasks, links, reminders, and a per-case timeline. Sort by updated/created/priority/status/title; filter by tag.' },
   { name: 'Notepad 98', desc: 'Plain-text editor scoped to a case. Ctrl/⌘+N for new, Ctrl/⌘+S to save.' },
   { name: 'Calendar', desc: 'Month grid showing global reminders, case-scoped reminders, and case task due dates. Click any day to quickly create a reminder for it.' },
   { name: 'Reminders / Alarm', desc: 'Set named one-shot reminders. The ticker fires every 30s and surfaces matches as a Windows toast + a synthesized chime.' },

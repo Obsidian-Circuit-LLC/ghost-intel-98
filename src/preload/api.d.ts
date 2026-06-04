@@ -42,7 +42,11 @@ import type {
   SavedGeoEvent,
   SshHostProfile,
   BookmarkBoard,
-  MarketSnapshot
+  MarketSnapshot,
+  StickyNotesState,
+  AiConversation,
+  AiConversationSummary,
+  AiConversationInput
 } from '../shared/post-mvp-types';
 
 export interface MailDraft {
@@ -152,8 +156,9 @@ export interface GhostApi {
     listHistory(limit?: number): Promise<HistoryEntry[]>;
     addHistory(url: string, title: string): Promise<void>;
     clearHistory(): Promise<void>;
-    firefoxStatus(): Promise<{ installed: boolean; path: string | null }>;
+    firefoxStatus(): Promise<{ installed: boolean; path: string | null; dir: string }>;
     launchFirefox(url: string, title?: string): Promise<void>;
+    revealFirefoxDir(): Promise<string>;
   };
   voice: {
     modelStatus(): Promise<{ installed: boolean; path: string | null }>;
@@ -164,6 +169,16 @@ export interface GhostApi {
     exportBoard(): Promise<string | null>;
     importBoard(): Promise<BookmarkBoard | null>;
     fetchFavicon(url: string): Promise<string | null>;
+  };
+  stickyNotes: {
+    get(): Promise<StickyNotesState>;
+    save(state: StickyNotesState): Promise<void>;
+  };
+  aiConvos: {
+    list(): Promise<AiConversationSummary[]>;
+    get(id: string): Promise<AiConversation | null>;
+    save(convo: AiConversationInput): Promise<AiConversation>;
+    delete(id: string): Promise<void>;
   };
   ssh: {
     listHosts(): Promise<SshHostProfile[]>;

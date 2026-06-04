@@ -99,9 +99,14 @@ export function Window({ spec, focused, onFocus, onClose, onMinimize, onToggleMa
     };
   }, [drag, onMoveProp, onResizeProp]);
 
-  const positionStyle = spec.maximized
-    ? { left: 0, top: 0, right: 0, bottom: 'var(--ga98-taskbar-height)' as string, width: 'auto', height: 'auto' }
-    : { left: spec.x, top: spec.y, width: spec.width, height: spec.height };
+  // Minimized windows stay mounted (so their live state — audio, conversations, unsaved
+  // text — survives) but are hidden. display:none halts paint + pointer events but NOT
+  // media playback or timers, which is exactly what we want for the Jukebox.
+  const positionStyle = spec.minimized
+    ? { display: 'none' as const }
+    : spec.maximized
+      ? { left: 0, top: 0, right: 0, bottom: 'var(--ga98-taskbar-height)' as string, width: 'auto', height: 'auto' }
+      : { left: spec.x, top: spec.y, width: spec.width, height: spec.height };
 
   return (
     <div

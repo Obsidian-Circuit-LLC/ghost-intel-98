@@ -368,7 +368,7 @@ export interface AppSettings {
 }
 
 export const defaultShortcuts: AccessShortcut[] = [
-  { id: 'cases', label: 'Case Files', kind: 'module', target: 'cases', icon: 'folder' },
+  { id: 'cases', label: 'My Cases', kind: 'module', target: 'cases', icon: 'folder' },
   { id: 'notepad', label: 'Notepad 98', kind: 'module', target: 'notepad', icon: 'note' },
   { id: 'browser', label: 'Net Explorer', kind: 'module', target: 'net-explorer', icon: 'globe' },
   { id: 'mail', label: 'Mail', kind: 'module', target: 'mail', icon: 'mail' },
@@ -408,9 +408,13 @@ export function reconcileShortcuts(
   shortcuts: AccessShortcut[],
   seeded: string[] = []
 ): { shortcuts: AccessShortcut[]; seededShortcuts: string[] } {
-  const next = shortcuts.map((s) =>
-    s.kind === 'module' && s.target === 'help' && s.label === 'Help' ? { ...s, label: 'RTFM' } : s
-  );
+  const next = shortcuts.map((s) => {
+    // One-time label normalizations: rewrite ONLY the exact old default string, so a
+    // user's custom rename is preserved. Same pattern as the Help → RTFM rename.
+    if (s.kind === 'module' && s.target === 'help' && s.label === 'Help') return { ...s, label: 'RTFM' };
+    if (s.kind === 'module' && s.target === 'cases' && s.label === 'Case Files') return { ...s, label: 'My Cases' };
+    return s;
+  });
   const seen = new Set(seeded);
   for (const req of REQUIRED_MODULE_SHORTCUTS) {
     const present = next.some((s) => s.kind === 'module' && s.target === req.target);
@@ -437,7 +441,7 @@ export const defaultSettings: AppSettings = {
   ai: {
     provider: 'none',
     endpoint: 'http://localhost:11434',
-    model: '',
+    model: 'qwen3-abliterated:4b',
     defaultSystemPrompt: 'You are an investigative case-management assistant. Use only the case data the user has explicitly shared. Be concise.',
     apiKeyRef: null,
     ttsEnabled: false,

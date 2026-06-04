@@ -289,6 +289,10 @@ export async function sendMail(input: MailSendInput): Promise<{ ok: true; id: st
     const { acct, password } = await loadAccountWithPassword(input.accountId);
     const transporter = nodemailer.createTransport({
       host: acct.smtpHost, port: acct.smtpPort, secure: acct.smtpSecure,
+      // When the port isn't implicit-TLS (e.g. 587), the connection MUST upgrade to TLS via
+      // STARTTLS before auth. requireTLS makes nodemailer demand that upgrade and refuse to
+      // fall back to cleartext — both a security floor and the fix for "587 won't connect".
+      requireTLS: true,
       auth: { user: acct.user, pass: password },
       connectionTimeout: 20_000, greetingTimeout: 12_000, socketTimeout: 45_000
     });
