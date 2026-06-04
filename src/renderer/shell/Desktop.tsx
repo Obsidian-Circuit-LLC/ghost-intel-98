@@ -48,6 +48,7 @@ const moduleTitles: Record<ModuleKey, string> = {
   geoint: 'GeoINT',
   bookmarks: 'Bookmarks',
   markets: 'Markets',
+  solitaire: 'Solitaire',
   help: 'RTFM'
 };
 

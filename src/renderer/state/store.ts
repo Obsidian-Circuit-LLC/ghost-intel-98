@@ -28,6 +28,7 @@ export type ModuleKey =
   | 'bookmarks'
   | 'markets'
   | 'briefcase'
+  | 'solitaire'
   | 'help';
 
 export interface WindowSpec {
