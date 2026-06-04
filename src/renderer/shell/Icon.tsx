@@ -60,6 +60,7 @@ const GLYPHS: Record<ModuleKey, string> = {
   bookmarks: '🔖',
   markets: '📈',
   briefcase: '💼',
+  solitaire: '🃏',
   help: '?'
 };
 
