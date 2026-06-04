@@ -30,7 +30,7 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`DCS98-Setup-3.6.0.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned).
+> **Install:** download [`DCS98-Setup-3.6.2.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned).
 
 ## Status
 
@@ -65,12 +65,12 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/dcs98/releases) and run it.
 
-Direct link to current release: [`DCS98-Setup-3.6.0.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.6.0/DCS98-Setup-3.6.0.exe).
+Direct link to the current release: [`DCS98-Setup-3.6.2.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.6.2/DCS98-Setup-3.6.2.exe).
 
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\DCS98-Setup-3.6.0.exe -Algorithm SHA256
+Get-FileHash .\DCS98-Setup-3.6.2.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
