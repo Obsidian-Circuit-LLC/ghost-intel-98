@@ -60,7 +60,7 @@ export async function chat(streamId: string, req: AiChatRequest, getWindow: () =
     messages.push(...req.messages);
 
     if (provider === 'ollama') {
-      await streamOllama(endpoint, s.ai.model || 'llama3', messages, controller.signal, (chunk) =>
+      await streamOllama(endpoint, s.ai.model || 'qwen3-abliterated:4b', messages, controller.signal, (chunk) =>
         emit(getWindow, streamId, { chunk })
       );
     } else {

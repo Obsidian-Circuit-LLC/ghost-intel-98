@@ -1,13 +1,13 @@
 {
-  "name": "ghost-access-98",
-  "version": "3.5.0",
+  "name": "dcs98",
+  "version": "3.6.0",
   "private": true,
-  "description": "Windows 98–inspired case-management desktop app. Electron + React + TypeScript.",
+  "description": "Dead Cyber Society 98 (DCS98) — Windows 98–inspired OSINT/case-management desktop app. Electron + React + TypeScript.",
   "author": {
     "name": "Desirae Stark",
     "email": "213370007+Dezirae-Stark@users.noreply.github.com"
   },
-  "homepage": "https://github.com/Dezirae-Stark/ghost-access-98",
+  "homepage": "https://github.com/Obsidian-Circuit-LLC/dcs98",
   "license": "MIT",
   "main": "out/main/index.js",
   "scripts": {
@@ -68,8 +68,8 @@
     "world-countries": "^5.1.0"
   },
   "build": {
-    "appId": "com.obsidiancircuit.ghostaccess98",
-    "productName": "Ghost Access 98",
+    "appId": "com.deadcybersociety.dcs98",
+    "productName": "Dead Cyber Society 98",
     "directories": {
       "output": "release/${version}",
       "buildResources": "resources"
@@ -113,7 +113,7 @@
         }
       ],
       "icon": "resources/icon.ico",
-      "artifactName": "GhostAccess98-Setup-${version}.${ext}"
+      "artifactName": "DCS98-Setup-${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,
@@ -121,7 +121,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Ghost Access 98",
+      "shortcutName": "Dead Cyber Society 98",
       "installerIcon": "resources/icon.ico",
       "uninstallerIcon": "resources/icon.ico",
       "installerHeaderIcon": "resources/icon.ico"
@@ -132,7 +132,7 @@
       ],
       "category": "Utility",
       "icon": "resources/icon.png",
-      "artifactName": "GhostAccess98-${version}.${ext}"
+      "artifactName": "DCS98-${version}.${ext}"
     }
   }
 }

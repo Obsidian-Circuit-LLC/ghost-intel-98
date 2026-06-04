@@ -1,4 +1,4 @@
-# Ghost Access 98 — Architecture
+# Dead Cyber Society 98 — Architecture
 
 ## Process model
 

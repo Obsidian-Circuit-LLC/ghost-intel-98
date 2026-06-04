@@ -60,10 +60,20 @@ describe('reconcileShortcuts', () => {
   it('preserves user ordering and unrelated shortcuts', () => {
     const custom: AccessShortcut[] = [
       { id: 'x', label: 'My Link', kind: 'url', target: 'https://example.com' },
-      { id: 'cases', label: 'Case Files', kind: 'module', target: 'cases' }
+      // A genuinely custom cases label (NOT the old 'Case Files' default) must be preserved.
+      // The exact old default IS normalized to 'My Cases' — that's covered separately below.
+      { id: 'cases', label: 'My Investigations', kind: 'module', target: 'cases' }
     ];
     const { shortcuts } = reconcileShortcuts(custom, []);
     expect(shortcuts[0]).toEqual(custom[0]);
     expect(shortcuts[1]).toEqual(custom[1]);
+  });
+
+  it('normalizes the old "Case Files" default label to "My Cases"', () => {
+    const custom: AccessShortcut[] = [
+      { id: 'cases', label: 'Case Files', kind: 'module', target: 'cases' }
+    ];
+    const { shortcuts } = reconcileShortcuts(custom, []);
+    expect(shortcuts[0].label).toBe('My Cases');
   });
 });

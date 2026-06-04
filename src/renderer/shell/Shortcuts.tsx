@@ -92,7 +92,7 @@ export function Shortcuts(): JSX.Element {
 type OpenFn = (spec: Parameters<ReturnType<typeof useWindows.getState>['open']>[0]) => string;
 
 function quickNewCase(open: OpenFn): void {
-  open({ module: 'cases', title: 'Case Files' });
+  open({ module: 'cases', title: 'My Cases' });
   setTimeout(() => {
     shortcutBus.dispatchEvent(new CustomEvent<ShortcutEventDetail>('shortcut', { detail: { action: 'new', moduleKey: 'cases' } }));
   }, 50);

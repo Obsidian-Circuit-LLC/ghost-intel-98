@@ -1,4 +1,4 @@
-/* Ghost Access 98 — theme layer that sits on top of 98.css. */
+/* Dead Cyber Society 98 — theme layer that sits on top of 98.css. */
 
 :root {
   --ga98-desktop-bg: #008080;
@@ -826,7 +826,10 @@ input.ga98-text, select.ga98-text {
   font-size: 11px; padding: 0 2px; min-width: 0;
 }
 .ga98-bm-title-input:focus { outline: 1px dotted #fff; background: rgba(255,255,255,0.15); }
-.ga98-bm-links { display: flex; flex-direction: column; gap: 1px; padding: 4px; overflow: auto; resize: vertical; min-height: 36px; box-sizing: border-box; }
+/* No explicit height ⇒ the card grows to fit its links (scales by count). max-height caps a
+   huge category so it scrolls instead of running off-screen; a stored height (manual resize)
+   overrides via inline style, and the title-bar "Fit" button clears it back to auto. */
+.ga98-bm-links { display: flex; flex-direction: column; gap: 1px; padding: 4px; overflow: auto; resize: vertical; min-height: 36px; max-height: 70vh; box-sizing: border-box; }
 .ga98-bm-link { display: flex; align-items: center; gap: 4px; padding: 1px 2px; cursor: grab; }
 .ga98-bm-link:hover { background: #d8d8d8; }
 .ga98-bm-icon { width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; }
@@ -838,3 +841,42 @@ input.ga98-text, select.ga98-text {
 .ga98-bm-link-open:hover { color: #0a0acc; }
 .ga98-bm-link-edit { min-width: 0; padding: 0 5px; font-size: 11px; }
 .ga98-bm-add-link { margin-top: 4px; font-size: 11px; }
+
+/* ── Sticky notes (Win95-style desktop note layer) ─────────────────────────────
+   Full-screen overlay that is click-through (pointer-events:none); only the notes and
+   the control strip capture pointer events, so empty desktop clicks fall to the windows
+   beneath. z-index 9000 floats notes above all windows (z 10) but below the taskbar
+   (9999) and dialogs (20000+). */
+.ga98-sticky-layer { position: fixed; inset: 0 0 var(--ga98-taskbar-height) 0; pointer-events: none; z-index: 9000; }
+.ga98-sticky-controls { position: absolute; top: 6px; right: 6px; display: flex; gap: 4px; pointer-events: auto; }
+.ga98-sticky-controls button { font-size: 11px; }
+
+.ga98-sticky {
+  position: absolute; width: 184px; min-height: 120px; pointer-events: auto;
+  display: flex; flex-direction: column;
+  border: 1px solid #00000055; box-shadow: 3px 3px 6px rgba(0,0,0,0.35);
+  background: #fff9b1;
+}
+.ga98-sticky[data-color="yellow"] { background: #fff9b1; }
+.ga98-sticky[data-color="pink"]   { background: #ffd6ea; }
+.ga98-sticky[data-color="blue"]   { background: #d3e8ff; }
+.ga98-sticky[data-color="green"]  { background: #d8f5d8; }
+.ga98-sticky[data-color="white"]  { background: #ffffff; }
+
+.ga98-sticky-bar { display: flex; align-items: center; gap: 2px; padding: 1px 2px; cursor: grab; background: rgba(0,0,0,0.10); }
+.ga98-sticky-bar:active { cursor: grabbing; }
+.ga98-sticky-icon { min-width: 20px; padding: 0 2px; background: transparent; border: none; cursor: pointer; font-size: 13px; }
+.ga98-sticky-ok { min-width: 0; padding: 0 6px; font-size: 10px; font-weight: bold; }
+.ga98-sticky-x  { min-width: 0; padding: 0 6px; font-size: 12px; line-height: 1; }
+.ga98-sticky-text {
+  flex: 1; resize: none; border: none; background: transparent; outline: none;
+  padding: 4px 5px; font-family: 'Comic Sans MS', 'Segoe Print', cursive; font-size: 12px; color: #1a1a1a;
+}
+.ga98-sticky-colors { display: flex; gap: 3px; padding: 2px 4px; }
+.ga98-sticky-swatch { width: 12px; height: 12px; min-width: 0; padding: 0; border: 1px solid #00000055; cursor: pointer; }
+.ga98-sticky-swatch[data-active="true"] { outline: 1px solid #000; outline-offset: 1px; }
+.ga98-sticky-swatch[data-color="yellow"] { background: #ffe600; }
+.ga98-sticky-swatch[data-color="pink"]   { background: #ff8fc7; }
+.ga98-sticky-swatch[data-color="blue"]   { background: #7fbfff; }
+.ga98-sticky-swatch[data-color="green"]  { background: #8fe08f; }
+.ga98-sticky-swatch[data-color="white"]  { background: #ffffff; }

@@ -101,7 +101,8 @@ export const channels = {
     addHistory: 'browser:addHistory',
     clearHistory: 'browser:clearHistory',
     firefoxStatus: 'browser:firefoxStatus',
-    launchFirefox: 'browser:launchFirefox'
+    launchFirefox: 'browser:launchFirefox',
+    revealFirefoxDir: 'browser:revealFirefoxDir'
   },
   voice: {
     modelStatus: 'voice:modelStatus'
@@ -112,6 +113,16 @@ export const channels = {
     exportBoard: 'bookmarks:exportBoard',
     importBoard: 'bookmarks:importBoard',
     fetchFavicon: 'bookmarks:fetchFavicon'
+  },
+  stickyNotes: {
+    get: 'stickyNotes:get',
+    save: 'stickyNotes:save'
+  },
+  aiConvos: {
+    list: 'aiConvos:list',
+    get: 'aiConvos:get',
+    save: 'aiConvos:save',
+    delete: 'aiConvos:delete'
   },
   files: {
     importDropped: 'files:importDropped',

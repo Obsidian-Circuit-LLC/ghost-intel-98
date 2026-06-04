@@ -301,8 +301,15 @@ export function MediaPlayerModule(): JSX.Element {
         </div>
         <div className="ga98-cdp-deck">
           <div className="ga98-cdp-row">
-            <button onClick={togglePlay} title={playing ? 'Pause' : 'Play'} aria-label={playing ? 'Pause' : 'Play'}>{playing ? <IcoPause /> : <IcoPlay />}</button>
-            <button onClick={() => { const a = audioRef.current; if (a && !a.paused) { a.pause(); setPlaying(false); } }} title="Pause" aria-label="Pause"><IcoPause /></button>
+            {/* Distinct Play / Pause / Stop buttons like a real CD-player deck. Play resumes or
+                starts the first track; Pause only pauses. (Previously button 1 was a
+                Play/Pause toggle AND there was a separate Pause button — two pause icons while
+                playing.) The currently-active state is shown by highlighting, not by morphing. */}
+            <button onClick={togglePlay} title="Play" aria-label="Play"
+              aria-pressed={playing} style={transportToggleStyle(playing)}><IcoPlay /></button>
+            <button onClick={() => { const a = audioRef.current; if (a && !a.paused) { a.pause(); setPlaying(false); } }}
+              title="Pause" aria-label="Pause" aria-pressed={!playing && !!currentItem}
+              style={transportToggleStyle(!playing && !!currentItem)}><IcoPause /></button>
             <button onClick={stop} title="Stop" aria-label="Stop"><IcoStop /></button>
           </div>
           <div className="ga98-cdp-row">

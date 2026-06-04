@@ -10,7 +10,7 @@
  *  - The URL is validated (http/https only) before launch and passed as a single argv
  *    element with `shell: false`, so there is no shell-interpolation / argument-injection
  *    surface.
- *  - The child is detached + unref'd so closing Ghost Access 98 doesn't kill the browser.
+ *  - The child is detached + unref'd so closing Dead Cyber Society 98 doesn't kill the browser.
  *
  * The Firefox Portable payload itself is NOT vendored into the repo (a ~90 MB third-party
  * binary is a distribution/BOM decision for the operator). Drop it into `resources/firefox/`
@@ -20,8 +20,9 @@
 
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { app } from 'electron';
+import { app, shell } from 'electron';
 import { validateExternalUrl, ValidationError } from '../security/validate';
 
 /** Base dir that holds the bundled `firefox/` payload: resourcesPath when packaged,
@@ -51,15 +52,37 @@ export function resolveExecutable(): string | null {
   return null;
 }
 
+/** The directory the Firefox Portable payload must live in (resources/firefox/). */
+export function firefoxDir(): string {
+  return join(resourcesBase(), 'firefox');
+}
+
+/**
+ * Open the resources/firefox/ folder in the OS file manager so the user can drop the Firefox
+ * Portable files into the right place without hunting for the path. Creates the folder first
+ * (best-effort — when packaged it may sit under a read-only install dir needing elevation, in
+ * which case we open the parent resources/ dir instead). Returns the path that was opened.
+ */
+export async function revealFirefoxDir(): Promise<string> {
+  const dir = firefoxDir();
+  try { await mkdir(dir, { recursive: true }); } catch { /* read-only install dir (Program Files) */ }
+  const target = existsSync(dir) ? dir : resourcesBase();
+  const err = await shell.openPath(target);
+  if (err) throw new Error(err);
+  return target;
+}
+
 export interface FirefoxStatus {
   installed: boolean;
   /** Absolute path to the resolved executable, or null. Surfaced so the UI can show it. */
   path: string | null;
+  /** The folder the payload belongs in — shown in the UI's setup guidance. */
+  dir: string;
 }
 
 export function status(): FirefoxStatus {
   const path = resolveExecutable();
-  return { installed: path !== null, path };
+  return { installed: path !== null, path, dir: firefoxDir() };
 }
 
 /**

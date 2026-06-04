@@ -40,7 +40,7 @@ export function AccessMenu({ onClose }: AccessMenuProps): JSX.Element {
     <div className="ga98-access-menu" role="menu" onMouseDown={(e) => e.stopPropagation()}>
       <div className="ga98-access-rail">
         <img src={logoUrl} alt="" className="ga98-access-rail-logo" />
-        <span>Ghost Access 98</span>
+        <span>Dead Cyber Society 98</span>
       </div>
       <div className="ga98-access-list">
         {items.length === 0 && <div className="ga98-access-entry">(no shortcuts — open Settings)</div>}

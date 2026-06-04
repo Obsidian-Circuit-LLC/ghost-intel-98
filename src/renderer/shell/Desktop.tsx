@@ -8,7 +8,7 @@ import { useSettings, useWindows, type ModuleKey } from '../state/store';
 import { playClick } from '../audio/synth';
 
 const desktopShortcutDefaults: { module: ModuleKey; label: string }[] = [
-  { module: 'cases', label: 'Case Files' },
+  { module: 'cases', label: 'My Cases' },
   { module: 'notepad', label: 'Notepad 98' },
   { module: 'media-player', label: 'Jukebox' },
   { module: 'geoint', label: 'GeoINT' },
@@ -20,7 +20,7 @@ const desktopShortcutDefaults: { module: ModuleKey; label: string }[] = [
 ];
 
 const moduleTitles: Record<ModuleKey, string> = {
-  cases: 'Case Files',
+  cases: 'My Cases',
   notepad: 'Notepad 98',
   calendar: 'Calendar',
   reminders: 'Reminders',

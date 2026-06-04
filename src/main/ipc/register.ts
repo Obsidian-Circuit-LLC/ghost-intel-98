@@ -41,8 +41,10 @@ import * as bookmarks from '../storage/bookmarks';
 import * as history from '../storage/history';
 import * as firefox from '../services/firefox';
 import * as bookmarksBoard from '../storage/bookmarks-board';
+import * as stickyNotesStore from '../storage/sticky-notes';
+import * as aiConvos from '../storage/ai-conversations';
 import * as voiceModel from '../voice/model-protocol';
-import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureWhiteboard, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon, ensureSaveToCaseOpts, ensureGeoItem, ensureBookmarkBoard, ensureMarketsSettings } from '../security/validate';
+import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureWhiteboard, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon, ensureSaveToCaseOpts, ensureGeoItem, ensureBookmarkBoard, ensureMarketsSettings, ensureStickyNotes, ensureAiConversation } from '../security/validate';
 import * as entities from '../storage/entities';
 import * as bioStore from '../storage/bio-images';
 import * as ftp from '../services/ftp';
@@ -130,7 +132,7 @@ function safeHandle(channel: string, fn: Handler): void {
   ipcMain.handle(channel, async (_e, ...args) => {
     try {
       if (!GATE_EXEMPT.has(channel) && vault.isEnabledCached() && !vault.isUnlocked()) {
-        const locked = new Error('Locked — unlock Ghost Access 98 to continue.');
+        const locked = new Error('Locked — unlock Dead Cyber Society 98 to continue.');
         locked.name = 'VaultLocked';
         (locked as Error & { code?: string }).code = 'EVAULTLOCKED';
         throw locked;
@@ -449,7 +451,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.backup.restore, async () => {
     const win = getWindow();
     const result = win
-      ? await dialog.showOpenDialog(win, { properties: ['openFile'], filters: [{ name: 'Ghost Access 98 backup', extensions: ['ga98', 'zip'] }] })
+      ? await dialog.showOpenDialog(win, { properties: ['openFile'], filters: [{ name: 'Dead Cyber Society 98 backup', extensions: ['ga98', 'zip'] }] })
       : await dialog.showOpenDialog({ properties: ['openFile'] });
     if (result.canceled || result.filePaths.length === 0) return null;
     return backup.restoreBackup(result.filePaths[0]);
@@ -479,7 +481,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.cases.importBundle, async () => {
     const win = getWindow();
     const result = win
-      ? await dialog.showOpenDialog(win, { properties: ['openFile'], filters: [{ name: 'Ghost Access 98 case', extensions: ['ghost', 'ga98case', 'zip'] }] })
+      ? await dialog.showOpenDialog(win, { properties: ['openFile'], filters: [{ name: 'Dead Cyber Society 98 case', extensions: ['ghost', 'ga98case', 'zip'] }] })
       : await dialog.showOpenDialog({ properties: ['openFile'] });
     if (result.canceled || result.filePaths.length === 0) return null;
     return backup.importCase(result.filePaths[0]);
@@ -624,6 +626,9 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     await firefox.launch(url);
     void history.add(url.slice(0, 2048), String(args[1] ?? '').slice(0, 256)).catch(() => {});
   });
+  // Opens resources/firefox/ in the OS file manager so the user can drop the payload in place.
+  // Takes no renderer input — the path is computed entirely in main.
+  safeHandle(channels.browser.revealFirefoxDir, () => firefox.revealFirefoxDir());
 
   // ---- voice (offline STT model status) ----
   safeHandle(channels.voice.modelStatus, () => voiceModel.status());
@@ -633,6 +638,17 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   // vault is off, and may predate a future hardening — mirror browser.listBookmarks's posture.
   safeHandle(channels.bookmarks.get, async () => ensureBookmarkBoard(await bookmarksBoard.read()));
   safeHandle(channels.bookmarks.save, (...args) => bookmarksBoard.write(ensureBookmarkBoard(args[0])));
+
+  // ---- sticky notes (Win95-style desktop note layer; whole-state read/write, zero egress) ----
+  // Validate on read too: the file can be edited directly when the vault is off.
+  safeHandle(channels.stickyNotes.get, async () => ensureStickyNotes(await stickyNotesStore.read()));
+  safeHandle(channels.stickyNotes.save, (...args) => stickyNotesStore.write(ensureStickyNotes(args[0])));
+
+  // ---- AI conversations (ChatGPT-style saved chats; encrypted at rest, zero egress) ----
+  safeHandle(channels.aiConvos.list, () => aiConvos.list());
+  safeHandle(channels.aiConvos.get, (...args) => aiConvos.get(ensureUuid(args[0], 'conversation id')));
+  safeHandle(channels.aiConvos.save, (...args) => aiConvos.save(ensureAiConversation(args[0])));
+  safeHandle(channels.aiConvos.delete, (...args) => aiConvos.remove(ensureUuid(args[0], 'conversation id')));
   safeHandle(channels.bookmarks.fetchFavicon, (...args) =>
     bookmarksBoard.fetchFavicon(validateExternalUrl(String(args[0] ?? ''))));
   safeHandle(channels.bookmarks.exportBoard, async () => {
@@ -854,7 +870,7 @@ export function startReminderTicker(getWindow: () => BrowserWindow | null): Node
         const summary = broken.map((b) => `${b.caseId.slice(0, 8)}:${b.reason}`).join(';');
         if (summary !== lastBrokenSummary) {
           lastBrokenSummary = summary;
-          showNotification('Ghost Access 98', `Reminders failed for ${broken.length} case${broken.length === 1 ? '' : 's'}. See Settings → diagnostics.`);
+          showNotification('Dead Cyber Society 98', `Reminders failed for ${broken.length} case${broken.length === 1 ? '' : 's'}. See Settings → diagnostics.`);
           if (win) win.webContents.send(channels.system.onDiagnostic, { kind: 'reminders-broken', cases: broken });
         }
       } else {
@@ -863,7 +879,7 @@ export function startReminderTicker(getWindow: () => BrowserWindow | null): Node
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error('[reminder-ticker]', err);
-      showNotification('Ghost Access 98', 'Reminders failed to fire — see Settings → About → diagnostics');
+      showNotification('Dead Cyber Society 98', 'Reminders failed to fire — see Settings → About → diagnostics');
     } finally {
       running = false;
     }

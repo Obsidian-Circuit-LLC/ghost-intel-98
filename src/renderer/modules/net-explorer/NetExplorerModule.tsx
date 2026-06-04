@@ -19,7 +19,7 @@ import { toast } from '../../state/toasts';
 import { confirmDialog, promptDialog } from '../../state/dialogs';
 
 export function NetExplorerModule(): JSX.Element {
-  const [status, setStatus] = useState<{ installed: boolean; path: string | null } | null>(null);
+  const [status, setStatus] = useState<{ installed: boolean; path: string | null; dir: string } | null>(null);
   const [address, setAddress] = useState('https://');
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [showHistory, setShowHistory] = useState(false);
@@ -36,6 +36,17 @@ export function NetExplorerModule(): JSX.Element {
   }
   async function refreshHistory(): Promise<void> {
     setHistory(await window.api.browser.listHistory(200));
+  }
+
+  // Open the folder Firefox Portable belongs in, so the user can drop the files there without
+  // hunting for the path, then re-check status.
+  async function openFirefoxDir(): Promise<void> {
+    try {
+      const p = await window.api.browser.revealFirefoxDir();
+      toast.success(`Opened ${p} — copy your Firefox Portable files in here.`);
+    } catch (err) {
+      toast.error(`Couldn't open the folder: ${(err as Error).message}`);
+    }
   }
 
   const launch = useCallback(async (raw?: string) => {
@@ -142,12 +153,18 @@ export function NetExplorerModule(): JSX.Element {
           </>
         ) : (
           <div className="ga98-firefox-missing">
-            <p style={{ maxWidth: 480, color: '#900' }}>
-              <b>Firefox Portable isn&rsquo;t installed yet.</b> Drop the Firefox Portable files into
-              <code> resources/firefox/ </code> (so that one of <code>FirefoxPortable.exe</code>,
-              <code> firefox.exe</code>, or <code>App/Firefox64/firefox.exe</code> exists) and rebuild the
-              installer. Until then, URLs can still be saved to cases and bookmarked, but won&rsquo;t open.
+            <p style={{ maxWidth: 520, color: '#900' }}>
+              <b>Firefox Portable isn&rsquo;t installed yet.</b> Click <b>Open the Firefox folder</b> below,
+              then copy your Firefox Portable files into it — so that one of <code>FirefoxPortable.exe</code>,
+              <code> firefox.exe</code>, or <code>App\Firefox64\firefox.exe</code> ends up inside that folder.
+              No reinstall needed: hit <b>Re-check</b> and you&rsquo;re ready. Until then, URLs can still be
+              saved to cases and bookmarked, they just won&rsquo;t open.
             </p>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+              <button onClick={() => void openFirefoxDir()}>📂 Open the Firefox folder</button>
+              <button onClick={() => void window.api.browser.firefoxStatus().then(setStatus)}>Re-check</button>
+            </div>
+            {status.dir && <p style={{ fontSize: 11, color: '#777', wordBreak: 'break-all', marginTop: 4 }}>Folder: {status.dir}</p>}
           </div>
         )}
       </div>

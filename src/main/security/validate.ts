@@ -13,7 +13,7 @@ import { homedir } from 'node:os';
 import { isIP, isIPv6 } from 'node:net';
 import { randomUUID } from 'node:crypto';
 import { ENTITY_TYPES, ENTITY_RELATIONSHIPS, TIMELINE_KINDS, IMAGE_MIMES, type EntityType, type EntityRelationship, type TimelineKind, type TimelineEvent, type ImageMime, type Whiteboard, type WhiteboardNode, type WhiteboardEdge, type WhiteboardNodeType } from '@shared/types';
-import type { GeoItem, BookmarkBoard, BookmarkCategory, BookmarkLink } from '@shared/post-mvp-types';
+import type { GeoItem, BookmarkBoard, BookmarkCategory, BookmarkLink, StickyNote, StickyNotesState, AiChatMessage, AiConversationInput } from '@shared/post-mvp-types';
 
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -674,6 +674,68 @@ export function ensureBookmarkBoard(raw: unknown): BookmarkBoard {
     categories.push({ id: bmId(c.id), title: bmText(c.title, 200) || 'Untitled', links, ...(height !== undefined ? { height } : {}) });
   }
   return { categories, networkEnabled: o.networkEnabled === true };
+}
+
+// ---------- Sticky notes ----------
+
+const MAX_STICKY_NOTES = 200;
+const MAX_STICKY_TEXT = 4000;
+/** Color is rendered as a CSS data-attribute → must be a known-safe key (no arbitrary strings). */
+const STICKY_COLORS = new Set(['yellow', 'pink', 'blue', 'green', 'white']);
+
+function clampStickyCoord(v: unknown): number {
+  const n = typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : 0;
+  return Math.max(0, Math.min(n, 50000));
+}
+
+/**
+ * Clamp/whitelist a sticky-notes layer from the renderer. Bounds the note count, text length,
+ * icon length, and coordinates; the color must be an allowlisted palette key (it drives a CSS
+ * selector). Icon is free emoji text but length-capped — it's rendered as text content, never
+ * HTML, so there's no injection surface, only a size concern.
+ */
+export function ensureStickyNotes(raw: unknown): StickyNotesState {
+  const o = (raw ?? {}) as { notes?: unknown; hidden?: unknown };
+  const notesIn = Array.isArray(o.notes) ? o.notes.slice(0, MAX_STICKY_NOTES) : [];
+  const notes: StickyNote[] = [];
+  for (const rawNote of notesIn) {
+    const n = (rawNote ?? {}) as Record<string, unknown>;
+    const id = typeof n['id'] === 'string' && n['id'].length > 0 && n['id'].length <= 64 ? n['id'] : randomUUID();
+    const text = typeof n['text'] === 'string' ? n['text'].slice(0, MAX_STICKY_TEXT) : '';
+    const iconRaw = typeof n['icon'] === 'string' ? n['icon'] : '';
+    const icon = iconRaw ? iconRaw.slice(0, 8) : '📌';
+    const colorRaw = typeof n['color'] === 'string' ? n['color'] : 'yellow';
+    const color = STICKY_COLORS.has(colorRaw) ? colorRaw : 'yellow';
+    const note: StickyNote = { id, text, icon, color, x: clampStickyCoord(n['x']), y: clampStickyCoord(n['y']) };
+    const rid = n['reminderId'];
+    if (typeof rid === 'string' && rid.length > 0 && rid.length <= 80) note.reminderId = rid;
+    notes.push(note);
+  }
+  return { notes, hidden: o.hidden === true };
+}
+
+// ---------- AI conversations ----------
+
+const MAX_CONVO_TITLE = 200;
+const MAX_CONVO_MESSAGES = 2000;
+const MAX_CONVO_CONTENT = 100_000;
+const CONVO_ROLES = new Set(['system', 'user', 'assistant']);
+
+/** Clamp/whitelist a renderer-supplied conversation before it is persisted: bounds the title,
+ *  the message count, and per-message content length; the role must be a known enum value. */
+export function ensureAiConversation(raw: unknown): AiConversationInput {
+  const o = (raw ?? {}) as { id?: unknown; title?: unknown; messages?: unknown };
+  const id = typeof o.id === 'string' && o.id.length > 0 && o.id.length <= 80 ? o.id : randomUUID();
+  const title = (typeof o.title === 'string' && o.title.trim() ? o.title : 'Conversation').slice(0, MAX_CONVO_TITLE);
+  const msgsIn = Array.isArray(o.messages) ? o.messages.slice(0, MAX_CONVO_MESSAGES) : [];
+  const messages: AiChatMessage[] = [];
+  for (const rawM of msgsIn) {
+    const m = (rawM ?? {}) as { role?: unknown; content?: unknown };
+    const role = typeof m.role === 'string' && CONVO_ROLES.has(m.role) ? (m.role as AiChatMessage['role']) : 'user';
+    const content = typeof m.content === 'string' ? m.content.slice(0, MAX_CONVO_CONTENT) : '';
+    messages.push({ role, content });
+  }
+  return { id, title, messages };
 }
 
 /** Bound + sanitize the renderer-supplied markets settings block. settings.update otherwise trusts

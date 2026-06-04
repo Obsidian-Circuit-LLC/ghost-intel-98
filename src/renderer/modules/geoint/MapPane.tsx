@@ -13,7 +13,7 @@ import { buildPopup } from './popup';
 
 const pin = L.divIcon({ className: 'ga98-geo-pin', html: '📍', iconSize: [16, 16], iconAnchor: [8, 16] });
 
-export function MapPane({ items, tilesEnabled, tileUrl, tileAttribution, pickMode, onPick, focusId, flyTo }: {
+export function MapPane({ items, tilesEnabled, tileUrl, tileAttribution, pickMode, onPick, focusId, flyTo, onCenterChange }: {
   items: GeoItem[];
   tilesEnabled: boolean;
   tileUrl: string;
@@ -23,6 +23,8 @@ export function MapPane({ items, tilesEnabled, tileUrl, tileAttribution, pickMod
   focusId: string | null;
   /** Search target: when it changes to a non-null value, recenter the map there. */
   flyTo: { lat: number; lon: number; key: number } | null;
+  /** Reports the map center after each pan/zoom, so Street View can open the current spot. */
+  onCenterChange?: (lat: number, lon: number) => void;
 }): JSX.Element {
   const ref = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map | null>(null);
@@ -30,16 +32,32 @@ export function MapPane({ items, tilesEnabled, tileUrl, tileAttribution, pickMod
   const tiles = useRef<L.TileLayer | null>(null);
   const pickRef = useRef(pickMode);
   pickRef.current = pickMode;
+  const centerCb = useRef(onCenterChange);
+  centerCb.current = onCenterChange;
 
   useEffect(() => {
     if (!ref.current || map.current) return;
     const m = L.map(ref.current, { center: [20, 0], zoom: 2, attributionControl: true });
     layer.current = L.layerGroup().addTo(m);
     m.on('click', (e: L.LeafletMouseEvent) => { if (pickRef.current) onPick(e.latlng.lat, e.latlng.lng); });
+    m.on('moveend', () => { const c = m.getCenter(); centerCb.current?.(c.lat, c.lng); });
     map.current = m;
     // Leaflet measures the container on creation; nudge a resize after mount.
     setTimeout(() => m.invalidateSize(), 0);
   }, [onPick]);
+
+  // Keep the map sized to its container. Leaflet caches the container size and renders grey
+  // gaps when the pane grows/shrinks — on window resize, on split-pane drag, and (with the
+  // keep-mounted minimize model) when the window is restored from display:none (0→N px fires
+  // this too). A ResizeObserver in its own effect re-measures on every size change. Separate
+  // from the init effect so the churny `onPick` dependency can't tear it down mid-session.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => map.current?.invalidateSize());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   useEffect(() => {
     const m = map.current;
