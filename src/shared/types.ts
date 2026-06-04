@@ -370,6 +370,7 @@ export interface AppSettings {
 export const defaultShortcuts: AccessShortcut[] = [
   { id: 'cases', label: 'My Cases', kind: 'module', target: 'cases', icon: 'folder' },
   { id: 'notepad', label: 'Notepad 98', kind: 'module', target: 'notepad', icon: 'note' },
+  { id: 'briefcase', label: 'Briefcase', kind: 'module', target: 'briefcase', icon: 'briefcase' },
   { id: 'browser', label: 'Net Explorer', kind: 'module', target: 'net-explorer', icon: 'globe' },
   { id: 'mail', label: 'Mail', kind: 'module', target: 'mail', icon: 'mail' },
   { id: 'dialterm', label: 'DialTerm', kind: 'module', target: 'dialterm', icon: 'modem' },
@@ -395,7 +396,8 @@ export const defaultShortcuts: AccessShortcut[] = [
 export const REQUIRED_MODULE_SHORTCUTS: readonly AccessShortcut[] = [
   { id: 'media-player', label: 'Jukebox', kind: 'module', target: 'media-player', icon: 'music' },
   { id: 'geoint', label: 'GeoINT', kind: 'module', target: 'geoint', icon: 'globe' },
-  { id: 'bookmarks', label: 'Bookmarks', kind: 'module', target: 'bookmarks', icon: 'bookmark' }
+  { id: 'bookmarks', label: 'Bookmarks', kind: 'module', target: 'bookmarks', icon: 'bookmark' },
+  { id: 'briefcase', label: 'Briefcase', kind: 'module', target: 'briefcase', icon: 'briefcase' }
 ];
 
 /** Repairs a persisted shortcut list (returns NEW arrays, never mutates inputs):

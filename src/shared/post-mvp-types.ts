@@ -304,3 +304,20 @@ export interface StickyNotesState {
   notes: StickyNote[];
   hidden: boolean;
 }
+
+// ── Briefcase ────────────────────────────────────────────────────────────────
+/** A standalone text note not tied to any case — saved from Notepad 98 when no case is
+ *  selected. Persisted under dataRoot, encrypted at rest when login is on; zero network. */
+export interface BriefcaseNote {
+  id: string;
+  name: string;
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Lightweight row for the Briefcase list — body fetched on open. */
+export interface BriefcaseNoteSummary { id: string; name: string; updatedAt: string; bytes: number }
+
+/** What the renderer sends to persist a briefcase note (timestamps managed by the store). */
+export interface BriefcaseNoteInput { id: string; name: string; body: string }

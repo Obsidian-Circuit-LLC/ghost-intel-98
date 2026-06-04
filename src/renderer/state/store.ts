@@ -27,6 +27,7 @@ export type ModuleKey =
   | 'geoint'
   | 'bookmarks'
   | 'markets'
+  | 'briefcase'
   | 'help';
 
 export interface WindowSpec {

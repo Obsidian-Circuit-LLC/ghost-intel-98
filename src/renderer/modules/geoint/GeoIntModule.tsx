@@ -24,6 +24,14 @@ const DEFAULT_TILE_ATTRIBUTION = '© OpenStreetMap contributors';
 const ESRI_SAT_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
 const ESRI_SAT_ATTRIBUTION = 'Imagery © Esri, Maxar, Earthstar Geographics';
 
+// Transparent street-name / place-name reference overlays — Esri's "Imagery Hybrid" reference
+// layers, on the SAME arcgisonline.com host the satellite basemap already uses (no new egress
+// domain). Drawn on top of the basemap when "Labels" is on; most useful over Satellite, which
+// otherwise has no labels. {z}/{y}/{x} like the Esri imagery path.
+const LABELS_TRANSPORT_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}';
+const LABELS_PLACES_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}';
+const LABELS_ATTRIBUTION = 'Labels © Esri';
+
 export function GeoIntModule(): JSX.Element {
   const settings = useSettings((s) => s.settings);
   const patch = useSettings((s) => s.patch);
@@ -60,6 +68,10 @@ export function GeoIntModule(): JSX.Element {
   // Street View overlay (embed). Tracks the map center so it opens the spot you're looking at.
   const [streetView, setStreetView] = useState(false);
   const [center, setCenter] = useState<{ lat: number; lon: number }>({ lat: 20, lon: 0 });
+  // Street-name / place-name overlay (off by default; redundant on the OSM 2D map, which already
+  // labels — the win is on Satellite). Ephemeral per session.
+  const [labels, setLabels] = useState(false);
+  const overlayUrls = labels && net ? [LABELS_TRANSPORT_URL, LABELS_PLACES_URL] : [];
 
   // Surface a snapshot failure instead of leaving the whole panel silently empty (which read
   // as "GeoINT does nothing"). A locked vault, for instance, now shows the actual reason here.
@@ -158,9 +170,12 @@ export function GeoIntModule(): JSX.Element {
           <p style={{ fontSize: 11, color: '#555', margin: '4px 0' }}>Off by default. When off, nothing is fetched and the map loads no tiles — feeds and map both stay quiet until you enable it.</p>
           <div className="field-row">
             <label style={{ minWidth: 60 }}>Tiles:</label>
-            <input className="ga98-text" placeholder="https://…/{z}/{x}/{y}.png" value={tileDraft} disabled={!net}
+            <input className="ga98-text" placeholder={DEFAULT_TILE_URL} value={tileDraft} disabled={!net}
               onChange={(e) => setTileDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') loadTiles(); }} style={{ flex: 1 }} />
             <button onClick={loadTiles} disabled={!net} title="Load this tile server as the 2D map">Load</button>
+            <button
+              onClick={() => { setTileDraft(DEFAULT_TILE_URL); patchGeo({ basemap: 'street', tileServerUrl: DEFAULT_TILE_URL, tileAttribution: DEFAULT_TILE_ATTRIBUTION }); setStreetView(false); toast.success('Reset to the default OpenStreetMap tiles.'); }}
+              disabled={!net} title="Reset to the default OpenStreetMap tile server">Reset</button>
           </div>
           <div className="field-row" style={{ marginTop: 4 }}>
             <label style={{ minWidth: 60 }}>View:</label>
@@ -171,6 +186,10 @@ export function GeoIntModule(): JSX.Element {
             <button onClick={() => setStreetView(true)} disabled={!net} aria-pressed={streetView}
               title="Google Street View of the current map center (loads Google in-app while the network is on)"
               style={streetView ? { borderStyle: 'inset', fontWeight: 'bold' } : {}}>Street View</button>
+            <label style={{ fontSize: 11, marginLeft: 6, opacity: net ? 1 : 0.5 }}
+              title="Overlay street + place names on the map (most useful on Satellite — the 2D map already labels)">
+              <input type="checkbox" checked={labels} disabled={!net} onChange={(e) => setLabels(e.target.checked)} /> Labels
+            </label>
           </div>
           <div className="field-row" style={{ marginTop: 4 }}>
             <label style={{ minWidth: 60 }}>Search:</label>
@@ -229,7 +248,7 @@ export function GeoIntModule(): JSX.Element {
             tracking survive toggling Street View on/off. */}
         <MapPane items={items} tilesEnabled={net} tileUrl={activeTileUrl} tileAttribution={activeTileAttribution}
           pickMode={pickFor != null} onPick={(la, lo) => void onPick(la, lo)} focusId={focusId} flyTo={flyTo}
-          onCenterChange={(lat, lon) => setCenter({ lat, lon })} />
+          onCenterChange={(lat, lon) => setCenter({ lat, lon })} overlayUrls={overlayUrls} overlayAttribution={LABELS_ATTRIBUTION} />
         {streetView && net && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', background: '#000' }}>
             <div className="ga98-toolbar" style={{ flex: '0 0 auto' }}>

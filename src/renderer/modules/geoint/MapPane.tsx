@@ -13,7 +13,7 @@ import { buildPopup } from './popup';
 
 const pin = L.divIcon({ className: 'ga98-geo-pin', html: '📍', iconSize: [16, 16], iconAnchor: [8, 16] });
 
-export function MapPane({ items, tilesEnabled, tileUrl, tileAttribution, pickMode, onPick, focusId, flyTo, onCenterChange }: {
+export function MapPane({ items, tilesEnabled, tileUrl, tileAttribution, pickMode, onPick, focusId, flyTo, onCenterChange, overlayUrls = [], overlayAttribution = '' }: {
   items: GeoItem[];
   tilesEnabled: boolean;
   tileUrl: string;
@@ -25,11 +25,15 @@ export function MapPane({ items, tilesEnabled, tileUrl, tileAttribution, pickMod
   flyTo: { lat: number; lon: number; key: number } | null;
   /** Reports the map center after each pan/zoom, so Street View can open the current spot. */
   onCenterChange?: (lat: number, lon: number) => void;
+  /** Transparent overlay tile URLs (street/place labels) drawn ON TOP of the basemap. */
+  overlayUrls?: string[];
+  overlayAttribution?: string;
 }): JSX.Element {
   const ref = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map | null>(null);
   const layer = useRef<L.LayerGroup | null>(null);
   const tiles = useRef<L.TileLayer | null>(null);
+  const overlays = useRef<L.TileLayer[]>([]);
   const pickRef = useRef(pickMode);
   pickRef.current = pickMode;
   const centerCb = useRef(onCenterChange);
@@ -65,6 +69,19 @@ export function MapPane({ items, tilesEnabled, tileUrl, tileAttribution, pickMod
     if (tiles.current) { tiles.current.remove(); tiles.current = null; }
     if (tilesEnabled && tileUrl) tiles.current = L.tileLayer(tileUrl, { attribution: tileAttribution }).addTo(m);
   }, [tilesEnabled, tileUrl, tileAttribution]);
+
+  // Transparent label overlays on top of the basemap (zIndex above the base tiles). Rebuilt
+  // whenever the URL set or the network gate changes; removed entirely when off.
+  useEffect(() => {
+    const m = map.current;
+    if (!m) return;
+    for (const o of overlays.current) o.remove();
+    overlays.current = [];
+    if (!tilesEnabled) return;
+    overlays.current = overlayUrls.map((url) =>
+      L.tileLayer(url, { attribution: overlayAttribution, zIndex: 10, pane: 'tilePane' }).addTo(m)
+    );
+  }, [tilesEnabled, overlayUrls.join('|'), overlayAttribution]);
 
   // Recenter on a geocoded search hit. The `key` nonce makes repeated searches for the same
   // coordinates still fire (a new object each time), without re-running on unrelated renders.

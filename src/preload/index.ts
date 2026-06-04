@@ -127,6 +127,12 @@ const api = {
     save: (convo: unknown) => ipcRenderer.invoke(channels.aiConvos.save, convo),
     delete: (id: string) => ipcRenderer.invoke(channels.aiConvos.delete, id)
   },
+  briefcase: {
+    list: () => ipcRenderer.invoke(channels.briefcase.list),
+    read: (id: string) => ipcRenderer.invoke(channels.briefcase.read, id),
+    save: (note: unknown) => ipcRenderer.invoke(channels.briefcase.save, note),
+    delete: (id: string) => ipcRenderer.invoke(channels.briefcase.delete, id)
+  },
   ssh: {
     listHosts: () => ipcRenderer.invoke(channels.ssh.listHosts),
     upsertHost: (input: unknown) => ipcRenderer.invoke(channels.ssh.upsertHost, input),

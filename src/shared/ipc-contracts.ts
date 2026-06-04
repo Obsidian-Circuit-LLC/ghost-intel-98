@@ -124,6 +124,12 @@ export const channels = {
     save: 'aiConvos:save',
     delete: 'aiConvos:delete'
   },
+  briefcase: {
+    list: 'briefcase:list',
+    read: 'briefcase:read',
+    save: 'briefcase:save',
+    delete: 'briefcase:delete'
+  },
   files: {
     importDropped: 'files:importDropped',
     listAttachments: 'files:listAttachments',

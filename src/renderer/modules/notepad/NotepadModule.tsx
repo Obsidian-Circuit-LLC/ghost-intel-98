@@ -1,10 +1,12 @@
 /**
- * Notepad 98 — plain text editor that can save notes into a case.
- * If launched without an initial caseId, the user picks a case to scope the note.
+ * Notepad 98 — plain text editor. Saves notes into a case when one is selected, OR into the
+ * Briefcase (standalone notes) when "Briefcase" is picked in the selector. With "(no case)"
+ * there's nowhere to save — pick a case or Briefcase first.
  */
 
 import { useCallback, useEffect, useState } from 'react';
 import type { CaseSummary } from '@shared/types';
+import type { BriefcaseNoteSummary } from '@shared/post-mvp-types';
 import { confirmDialog } from '../../state/dialogs';
 import { toast } from '../../state/toasts';
 import { shortcutBus, type ShortcutEventDetail } from '../../shell/Shortcuts';
@@ -13,41 +15,52 @@ interface Props {
   initialCaseId: string | null;
 }
 
+/** Sentinel target for the Briefcase (vs a real case id or '' for no destination). */
+const BRIEFCASE = '__briefcase__';
+
 export function NotepadModule({ initialCaseId }: Props): JSX.Element {
   const [cases, setCases] = useState<CaseSummary[]>([]);
-  const [caseId, setCaseId] = useState<string | null>(initialCaseId);
-  const [notes, setNotes] = useState<{ name: string; updatedAt: string }[]>([]);
+  // `target` holds a case id, '' (no destination), or the BRIEFCASE sentinel.
+  const [target, setTarget] = useState<string | null>(initialCaseId);
+  const [caseNotes, setCaseNotes] = useState<{ name: string; updatedAt: string }[]>([]);
+  const [briefNotes, setBriefNotes] = useState<BriefcaseNoteSummary[]>([]);
+  const [briefId, setBriefId] = useState<string | null>(null); // id of the open briefcase note
   const [noteName, setNoteName] = useState('untitled');
   const [body, setBody] = useState('');
   const [dirty, setDirty] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+
+  const isBriefcase = target === BRIEFCASE;
 
   useEffect(() => {
     void window.api.cases.list().then(setCases);
   }, []);
 
   const refreshNotes = useCallback(async () => {
-    if (!caseId) {
-      setNotes([]);
-      return;
-    }
-    setNotes(await window.api.notes.list(caseId));
-  }, [caseId]);
+    if (isBriefcase) { setBriefNotes(await window.api.briefcase.list()); setCaseNotes([]); return; }
+    if (!target) { setCaseNotes([]); setBriefNotes([]); return; }
+    setCaseNotes(await window.api.notes.list(target)); setBriefNotes([]);
+  }, [target, isBriefcase]);
 
   useEffect(() => {
     void refreshNotes();
   }, [refreshNotes]);
 
-  async function openNote(name: string): Promise<void> {
-    if (!caseId) return;
+  async function openExisting(value: string): Promise<void> {
     if (dirty) {
       const ok = await confirmDialog('Discard unsaved changes?', 'Open note');
       if (!ok) return;
     }
     try {
-      const text = await window.api.notes.read(caseId, name);
-      setBody(text);
-      setNoteName(name);
+      if (isBriefcase) {
+        const n = await window.api.briefcase.read(value);
+        if (!n) return;
+        setBody(n.body); setNoteName(n.name); setBriefId(n.id);
+      } else {
+        if (!target) return;
+        const text = await window.api.notes.read(target, value);
+        setBody(text); setNoteName(value);
+      }
       setDirty(false);
     } catch (err) {
       toast.error(`Could not open note: ${(err as Error).message}`);
@@ -55,8 +68,8 @@ export function NotepadModule({ initialCaseId }: Props): JSX.Element {
   }
 
   const save = useCallback(async (): Promise<void> => {
-    if (!caseId) {
-      toast.warn('Pick a case first.');
+    if (!target) {
+      toast.warn('Pick a case or the Briefcase first.');
       return;
     }
     if (!noteName.trim()) {
@@ -64,15 +77,21 @@ export function NotepadModule({ initialCaseId }: Props): JSX.Element {
       return;
     }
     try {
-      await window.api.notes.write(caseId, noteName.trim(), body);
+      if (isBriefcase) {
+        const nid = briefId ?? crypto.randomUUID();
+        const saved = await window.api.briefcase.save({ id: nid, name: noteName.trim(), body });
+        setBriefId(saved.id);
+      } else {
+        await window.api.notes.write(target, noteName.trim(), body);
+      }
       setDirty(false);
       setSavedAt(new Date().toLocaleTimeString());
       await refreshNotes();
-      toast.success(`Saved "${noteName.trim()}".`);
+      toast.success(`Saved "${noteName.trim()}"${isBriefcase ? ' to Briefcase' : ''}.`);
     } catch (err) {
       toast.error(`Save failed: ${(err as Error).message}`);
     }
-  }, [caseId, noteName, body, refreshNotes]);
+  }, [target, isBriefcase, briefId, noteName, body, refreshNotes]);
 
   const newNote = useCallback(async (): Promise<void> => {
     if (dirty) {
@@ -81,6 +100,7 @@ export function NotepadModule({ initialCaseId }: Props): JSX.Element {
     }
     setNoteName('untitled');
     setBody('');
+    setBriefId(null);
     setDirty(false);
     setSavedAt(null);
   }, [dirty]);
@@ -102,8 +122,13 @@ export function NotepadModule({ initialCaseId }: Props): JSX.Element {
       <div className="ga98-toolbar">
         <button onClick={() => void newNote()} title="Ctrl/Cmd+N">New</button>
         <button onClick={() => void save()} title="Ctrl/Cmd+S">Save</button>
-        <select className="ga98-text" value={caseId ?? ''} onChange={(e) => setCaseId(e.target.value || null)}>
+        <select
+          className="ga98-text"
+          value={target ?? ''}
+          onChange={(e) => { setTarget(e.target.value || null); setBriefId(null); }}
+        >
           <option value="">(no case)</option>
+          <option value={BRIEFCASE}>💼 Briefcase</option>
           {cases.map((c) => (
             <option key={c.id} value={c.id}>{c.title}{c.reference ? ` [${c.reference}]` : ''}</option>
           ))}
@@ -115,9 +140,11 @@ export function NotepadModule({ initialCaseId }: Props): JSX.Element {
           placeholder="note-name"
           style={{ width: 200 }}
         />
-        <select className="ga98-text" value="" onChange={(e) => { if (e.target.value) void openNote(e.target.value); }}>
+        <select className="ga98-text" value="" onChange={(e) => { if (e.target.value) void openExisting(e.target.value); }}>
           <option value="">Open existing…</option>
-          {notes.map((n) => <option key={n.name} value={n.name}>{n.name}</option>)}
+          {isBriefcase
+            ? briefNotes.map((n) => <option key={n.id} value={n.id}>{n.name}</option>)
+            : caseNotes.map((n) => <option key={n.name} value={n.name}>{n.name}</option>)}
         </select>
       </div>
       <div style={{ flex: 1, padding: 4 }}>
@@ -129,7 +156,7 @@ export function NotepadModule({ initialCaseId }: Props): JSX.Element {
         />
       </div>
       <div className="ga98-statusbar">
-        <span>{dirty ? 'Modified' : savedAt ? `Saved at ${savedAt}` : 'Idle'}</span>
+        <span>{dirty ? 'Modified' : savedAt ? `Saved at ${savedAt}` : 'Idle'}{isBriefcase ? ' · Briefcase' : ''}</span>
         <span style={{ flex: 1 }} />
         <span>{body.length} chars · {body.split(/\s+/).filter(Boolean).length} words</span>
       </div>

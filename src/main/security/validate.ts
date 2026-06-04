@@ -13,7 +13,7 @@ import { homedir } from 'node:os';
 import { isIP, isIPv6 } from 'node:net';
 import { randomUUID } from 'node:crypto';
 import { ENTITY_TYPES, ENTITY_RELATIONSHIPS, TIMELINE_KINDS, IMAGE_MIMES, type EntityType, type EntityRelationship, type TimelineKind, type TimelineEvent, type ImageMime, type Whiteboard, type WhiteboardNode, type WhiteboardEdge, type WhiteboardNodeType } from '@shared/types';
-import type { GeoItem, BookmarkBoard, BookmarkCategory, BookmarkLink, StickyNote, StickyNotesState, AiChatMessage, AiConversationInput } from '@shared/post-mvp-types';
+import type { GeoItem, BookmarkBoard, BookmarkCategory, BookmarkLink, StickyNote, StickyNotesState, AiChatMessage, AiConversationInput, BriefcaseNoteInput } from '@shared/post-mvp-types';
 
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -725,7 +725,9 @@ const CONVO_ROLES = new Set(['system', 'user', 'assistant']);
  *  the message count, and per-message content length; the role must be a known enum value. */
 export function ensureAiConversation(raw: unknown): AiConversationInput {
   const o = (raw ?? {}) as { id?: unknown; title?: unknown; messages?: unknown };
-  const id = typeof o.id === 'string' && o.id.length > 0 && o.id.length <= 80 ? o.id : randomUUID();
+  // Must be a UUIDv4 (get/delete validate with ensureUuid) — mint one for anything else, so a
+  // saved conversation can never carry an id that get/delete will later reject.
+  const id = typeof o.id === 'string' && UUID_V4.test(o.id) ? o.id : randomUUID();
   const title = (typeof o.title === 'string' && o.title.trim() ? o.title : 'Conversation').slice(0, MAX_CONVO_TITLE);
   const msgsIn = Array.isArray(o.messages) ? o.messages.slice(0, MAX_CONVO_MESSAGES) : [];
   const messages: AiChatMessage[] = [];
@@ -836,6 +838,24 @@ export async function isDraftAttachmentSafe(path: string): Promise<boolean> {
   }
 
   return true;
+}
+
+// ---------- Briefcase (standalone notes) ----------
+
+const MAX_BRIEFCASE_NAME = 200;
+const MAX_BRIEFCASE_BODY = 2 * 1024 * 1024; // 2 MB per text note
+
+/** Clamp a renderer-supplied briefcase note before persisting: bounds the name and body length;
+ *  body is plain text (rendered in a textarea, never as HTML) so there's no injection surface. */
+export function ensureBriefcaseNote(raw: unknown): BriefcaseNoteInput {
+  const o = (raw ?? {}) as { id?: unknown; name?: unknown; body?: unknown };
+  // The id MUST be a UUIDv4: read/delete validate with ensureUuid, so accepting any other
+  // string here would persist a note that can never be opened or deleted (an orphaned,
+  // slot-wasting zombie). Mint a fresh uuid for anything that isn't one.
+  const id = typeof o.id === 'string' && UUID_V4.test(o.id) ? o.id : randomUUID();
+  const name = (typeof o.name === 'string' && o.name.trim() ? o.name : 'untitled').slice(0, MAX_BRIEFCASE_NAME);
+  const body = typeof o.body === 'string' ? o.body.slice(0, MAX_BRIEFCASE_BODY) : '';
+  return { id, name, body };
 }
 
 /** SSH private-key paths: must be absolute, must live inside the user's home directory.

@@ -80,6 +80,18 @@ html, body, #root {
   pointer-events: none;
 }
 
+/* Shred pinned bottom-right like the classic Recycle Bin. Content-width so it only captures
+   clicks on the icon itself, not the whole corner. */
+.ga98-desktop-corner {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: max-content;
+}
+
 .ga98-icon {
   pointer-events: auto;
   display: flex;

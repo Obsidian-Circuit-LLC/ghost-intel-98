@@ -43,8 +43,9 @@ import * as firefox from '../services/firefox';
 import * as bookmarksBoard from '../storage/bookmarks-board';
 import * as stickyNotesStore from '../storage/sticky-notes';
 import * as aiConvos from '../storage/ai-conversations';
+import * as briefcase from '../storage/briefcase';
 import * as voiceModel from '../voice/model-protocol';
-import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureWhiteboard, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon, ensureSaveToCaseOpts, ensureGeoItem, ensureBookmarkBoard, ensureMarketsSettings, ensureStickyNotes, ensureAiConversation } from '../security/validate';
+import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureWhiteboard, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon, ensureSaveToCaseOpts, ensureGeoItem, ensureBookmarkBoard, ensureMarketsSettings, ensureStickyNotes, ensureAiConversation, ensureBriefcaseNote } from '../security/validate';
 import * as entities from '../storage/entities';
 import * as bioStore from '../storage/bio-images';
 import * as ftp from '../services/ftp';
@@ -649,6 +650,12 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.aiConvos.get, (...args) => aiConvos.get(ensureUuid(args[0], 'conversation id')));
   safeHandle(channels.aiConvos.save, (...args) => aiConvos.save(ensureAiConversation(args[0])));
   safeHandle(channels.aiConvos.delete, (...args) => aiConvos.remove(ensureUuid(args[0], 'conversation id')));
+
+  // ---- briefcase (standalone notes not tied to a case; encrypted at rest, zero egress) ----
+  safeHandle(channels.briefcase.list, () => briefcase.list());
+  safeHandle(channels.briefcase.read, (...args) => briefcase.read(ensureUuid(args[0], 'briefcase note id')));
+  safeHandle(channels.briefcase.save, (...args) => briefcase.save(ensureBriefcaseNote(args[0])));
+  safeHandle(channels.briefcase.delete, (...args) => briefcase.remove(ensureUuid(args[0], 'briefcase note id')));
   safeHandle(channels.bookmarks.fetchFavicon, (...args) =>
     bookmarksBoard.fetchFavicon(validateExternalUrl(String(args[0] ?? ''))));
   safeHandle(channels.bookmarks.exportBoard, async () => {

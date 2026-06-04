@@ -46,7 +46,10 @@ import type {
   StickyNotesState,
   AiConversation,
   AiConversationSummary,
-  AiConversationInput
+  AiConversationInput,
+  BriefcaseNote,
+  BriefcaseNoteSummary,
+  BriefcaseNoteInput
 } from '../shared/post-mvp-types';
 
 export interface MailDraft {
@@ -178,6 +181,12 @@ export interface GhostApi {
     list(): Promise<AiConversationSummary[]>;
     get(id: string): Promise<AiConversation | null>;
     save(convo: AiConversationInput): Promise<AiConversation>;
+    delete(id: string): Promise<void>;
+  };
+  briefcase: {
+    list(): Promise<BriefcaseNoteSummary[]>;
+    read(id: string): Promise<BriefcaseNote | null>;
+    save(note: BriefcaseNoteInput): Promise<BriefcaseNote>;
     delete(id: string): Promise<void>;
   };
   ssh: {

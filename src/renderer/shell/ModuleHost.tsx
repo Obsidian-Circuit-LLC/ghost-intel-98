@@ -23,6 +23,7 @@ import { MediaPlayerModule } from '../modules/media/MediaPlayerModule';
 import { GeoIntModule } from '../modules/geoint/GeoIntModule';
 import { BookmarksModule } from '../modules/bookmarks/BookmarksModule';
 import { MarketsModule } from '../modules/markets/MarketsModule';
+import { BriefcaseModule } from '../modules/briefcase/BriefcaseModule';
 import { HelpModule } from '../modules/help/HelpModule';
 import { ComingSoon } from '../modules/coming-soon/ComingSoon';
 
@@ -64,6 +65,8 @@ export function ModuleHost({ spec }: { spec: WindowSpec }): JSX.Element {
       return <BookmarksModule />;
     case 'markets':
       return <MarketsModule />;
+    case 'briefcase':
+      return <BriefcaseModule initialNoteId={spec.props?.['noteId'] as string | undefined} />;
     case 'doc-viewer':
       return (
         <DocViewerModule
