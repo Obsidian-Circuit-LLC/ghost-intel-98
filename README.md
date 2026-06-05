@@ -32,18 +32,17 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`DCS98-Setup-3.6.3.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned).
+> **Install:** download [`DCS98-Setup-3.6.4.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned).
 
 ## Status
 
-**v3.6.3** — current release: **desktop polish** — the **DCS98 flame wallpaper** is the default
-background, desktop icons line up in a single **vertical left-edge column**, **My Cases** now uses an
-authentic Win95 **My Computer** icon, and the **sticky-notes bar** is a draggable widget that no longer
-overlaps the window minimise/close buttons.
+**v3.6.4** — current release: the **in-app PDF viewer renders again** (it relied on a JS method
+Electron 33's Chromium doesn't ship yet; v3.6.4 polyfills it). This clears the v3.6.3 known issue.
 
-> **Known issue:** the in-app **PDF viewer is not currently rendering** — a fix is in progress. The
-> other Doc Viewer formats (DOCX, HTML, images, CSV, JSON, EML, text) are unaffected, and PDF
-> **exports** still work.
+**v3.6.3** added **desktop polish** — the **DCS98 flame wallpaper** as the default background,
+desktop icons in a single **vertical left-edge column**, an authentic Win95 **My Computer** icon for
+**My Cases**, and a **draggable sticky-notes bar** that no longer overlaps the window minimise/close
+buttons.
 
 **v3.6.2** added **Solitaire** (Klondike, with full card drag-and-drop and the classic
 bouncing-card win cascade), in the Access menu.
@@ -72,7 +71,7 @@ old install) and cleared a full field-report punch list:
 
 Migration carries an existing **Ghost Access 98** install's data forward on first launch (copy-not-move,
 and only committed if every file copies — no silent loss). Every release is hardened by a pre-release
-adversarial red-team (**0 Critical**; all High/Medium fixed). **238 tests.**
+adversarial red-team (**0 Critical**; all High/Medium fixed). **243 tests.**
 
 The v3.5.0 base added a **Markets** module, a stronger **GeoINT** (satellite, search, auto-refresh), and
 **in-app playback of encrypted media**. v3.4.x added **offline voice conversation** to the AI Assistant —
@@ -83,12 +82,12 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/dcs98/releases) and run it.
 
-Direct link to the current release: [`DCS98-Setup-3.6.3.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.6.3/DCS98-Setup-3.6.3.exe).
+Direct link to the current release: [`DCS98-Setup-3.6.4.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.6.4/DCS98-Setup-3.6.4.exe).
 
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\DCS98-Setup-3.6.3.exe -Algorithm SHA256
+Get-FileHash .\DCS98-Setup-3.6.4.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
@@ -125,8 +124,13 @@ To uninstall: Settings → Apps → Dead Cyber Society 98 → Uninstall.
 
 ## Releases & changelog
 
-The current build is **v3.6.3**. Each release page carries its own notes + SHA-256.
+The current build is **v3.6.4**. Each release page carries its own notes + SHA-256.
 
+- **v3.6.4** — **PDF viewer fix**: the in-app Doc Viewer renders PDFs again. pdfjs-dist 5.x calls
+  `Map.prototype.getOrInsertComputed()` during render — a TC39 method Electron 33's Chromium 130
+  doesn't ship — so render threw and the viewer blanked; v3.6.4 adds a spec-faithful polyfill (Map +
+  WeakMap) in both the renderer and pdf.js worker realms, guarded to no-op once Chromium ships it.
+  Renderer-only. 243 tests (5 new).
 - **v3.6.3** — **Desktop polish**: the **DCS98 flame** image is the default wallpaper (desktop + lock
   screen); desktop icons flow as a single **vertical left-edge column**; **My Cases** uses an authentic
   Win95 **My Computer** icon (pixel-art SVG); and the **New note / Hide notes** bar is a **draggable**
@@ -198,7 +202,7 @@ This starts the Vite dev server (HMR) and the Electron main process.
 
 ```bash
 pnpm build        # type-check + bundle main / preload / renderer
-pnpm test         # vitest suite (238 tests as of v3.6.3)
+pnpm test         # vitest suite (243 tests as of v3.6.4)
 pnpm package      # platform installer for the current host
 pnpm package:win  # cross-build Windows NSIS installer
 ```
