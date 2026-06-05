@@ -27,7 +27,7 @@ beforeEach(() => {
   Object.defineProperty(window, 'speechSynthesis', { value: synth, configurable: true });
 });
 
-import { speak } from '../src/renderer/audio/tts';
+import { speak, onVoicesChanged } from '../src/renderer/audio/tts';
 
 const LOCAL: FakeVoice = { voiceURI: 'local', name: 'Local', lang: 'en', localService: true, default: false };
 const REMOTE: FakeVoice = { voiceURI: 'remote', name: 'Online Natural', lang: 'en', localService: false, default: true };
@@ -65,5 +65,55 @@ describe('TTS no-cloud enforcement', () => {
     voices = [LOCAL];
     speak('x'.repeat(10_000), {});
     expect(spoken[0].text.length).toBeLessThanOrEqual(4000);
+  });
+});
+
+describe('onVoicesChanged — live voice discovery', () => {
+  // A speechSynthesis stub with a real event registry so we can fire `voiceschanged`.
+  let handlers: Array<() => void>;
+  function installSynth(): void {
+    handlers = [];
+    const synth = {
+      getVoices: () => voices,
+      cancel: vi.fn(),
+      speak: vi.fn(),
+      speaking: false,
+      addEventListener: (ev: string, h: () => void) => { if (ev === 'voiceschanged') handlers.push(h); },
+      removeEventListener: (ev: string, h: () => void) => {
+        if (ev === 'voiceschanged') handlers = handlers.filter((x) => x !== h);
+      }
+    };
+    Object.defineProperty(window, 'speechSynthesis', { value: synth, configurable: true });
+  }
+
+  it('does NOT fire on subscribe (the caller pairs it with listVoices for the initial value)', () => {
+    installSynth();
+    voices = [LOCAL];
+    const cb = vi.fn();
+    onVoicesChanged(cb);
+    expect(cb).not.toHaveBeenCalled();
+  });
+
+  it('emits the mapped voice list when voiceschanged fires, with remote = !localService', () => {
+    installSynth();
+    voices = [];
+    const cb = vi.fn();
+    onVoicesChanged(cb);
+    // Voices arrive after the initial window — the case the one-shot fetch used to lose.
+    voices = [LOCAL, REMOTE];
+    handlers.forEach((h) => h());
+    expect(cb).toHaveBeenCalledTimes(1);
+    const emitted = cb.mock.calls[0][0] as Array<{ voiceURI: string; remote: boolean }>;
+    expect(emitted.map((v) => [v.voiceURI, v.remote])).toEqual([['local', false], ['remote', true]]);
+  });
+
+  it('unsubscribe stops further emissions', () => {
+    installSynth();
+    voices = [LOCAL];
+    const cb = vi.fn();
+    const off = onVoicesChanged(cb);
+    off();
+    handlers.forEach((h) => h()); // any leftover handlers (should be none)
+    expect(cb).not.toHaveBeenCalled();
   });
 });

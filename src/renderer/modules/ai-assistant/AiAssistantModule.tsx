@@ -14,7 +14,7 @@ import type { CaseSummary, CaseRecord } from '@shared/types';
 import { useSettings } from '../../state/store';
 import { toast } from '../../state/toasts';
 import { confirmDialog } from '../../state/dialogs';
-import { ttsSupported, listVoices, speak, cancelSpeech, type TtsVoice } from '../../audio/tts';
+import { ttsSupported, listVoices, onVoicesChanged, speak, cancelSpeech, type TtsVoice } from '../../audio/tts';
 import { extractPdfText } from '../../lib/pdfExtract';
 import { loadAttachmentBytes } from '../../lib/attachmentBytes';
 import { createVoskRecognizer } from '../../voice/recognizer';
@@ -56,6 +56,7 @@ export function AiAssistantModule(): JSX.Element {
   const settings = useSettings((s) => s.settings);
   const patchSettings = useSettings((s) => s.patch);
   const [voices, setVoices] = useState<TtsVoice[]>([]);
+  const [voicesLoaded, setVoicesLoaded] = useState(false);
   // Voice conversation (offline STT → AI → TTS). Mode is ephemeral per session.
   const [voiceMode, setVoiceMode] = useState<VoiceMode | 'off'>('off');
   const [voiceState, setVoiceState] = useState<VoiceState>('idle');
@@ -115,8 +116,17 @@ export function AiAssistantModule(): JSX.Element {
     } catch (err) { toast.error(`Delete failed: ${(err as Error).message}`); }
   }
 
-  // Populate the offline voice list once (Chromium fills it asynchronously).
-  useEffect(() => { if (ttsSupported()) void listVoices().then(setVoices); }, []);
+  // Populate the offline voice list and keep it current. Chromium fills voices asynchronously and
+  // the OS set can change at runtime, so we do a one-shot initial load (which has its own
+  // populate-or-timeout window) AND keep a live `voiceschanged` subscription — otherwise a voice
+  // that arrives after the initial window is lost and the picker silently never appears.
+  useEffect(() => {
+    if (!ttsSupported()) { setVoicesLoaded(true); return; }
+    let active = true;
+    void listVoices().then((vs) => { if (active) { setVoices(vs); setVoicesLoaded(true); } });
+    const unsub = onVoicesChanged((vs) => { if (active) { setVoices(vs); setVoicesLoaded(true); } });
+    return () => { active = false; unsub(); };
+  }, []);
 
   async function setTts(patch: { ttsEnabled?: boolean; ttsVoiceUri?: string | null; ttsRate?: number }): Promise<void> {
     if (!settings) return;
@@ -491,19 +501,30 @@ export function AiAssistantModule(): JSX.Element {
             >
               {settings?.ai.ttsEnabled ? '🔊 Voice' : '🔇 Voice'}
             </button>
-            {settings?.ai.ttsEnabled && voices.some((v) => !v.remote) && (
-              <select
-                className="ga98-text"
-                style={{ maxWidth: 160 }}
-                value={settings?.ai.ttsVoiceUri ?? ''}
-                onChange={(e) => void setTts({ ttsVoiceUri: e.target.value || null })}
-                title="On-device voices only. Cloud/'online' voices are hidden by design (no-cloud). Install Windows Natural voices via Settings → Accessibility."
-              >
-                <option value="">(default on-device voice)</option>
-                {voices.filter((v) => !v.remote).map((v) => (
-                  <option key={v.voiceURI} value={v.voiceURI}>{v.name}</option>
-                ))}
-              </select>
+            {settings?.ai.ttsEnabled && (
+              voices.some((v) => !v.remote) ? (
+                <select
+                  className="ga98-text"
+                  style={{ maxWidth: 160 }}
+                  value={settings?.ai.ttsVoiceUri ?? ''}
+                  onChange={(e) => void setTts({ ttsVoiceUri: e.target.value || null })}
+                  title="On-device voices only. Cloud/'online' voices are hidden by design (no-cloud). Install Windows Natural voices via Settings → Accessibility."
+                >
+                  <option value="">(default on-device voice)</option>
+                  {voices.filter((v) => !v.remote).map((v) => (
+                    <option key={v.voiceURI} value={v.voiceURI}>{v.name}</option>
+                  ))}
+                </select>
+              ) : voicesLoaded ? (
+                // Don't silently hide the control: say *why* there's nothing to pick. Cloud voices
+                // are filtered by design (no-cloud), so "no on-device voice" is the actual state.
+                <span
+                  style={{ fontSize: 11, opacity: 0.8, maxWidth: 280 }}
+                  title="Cloud/'online' voices are blocked by design (no-cloud). Install an on-device voice: Windows → Settings → Accessibility → Speech (or Narrator → add natural voices)."
+                >
+                  ⚠ No on-device voice found — install Windows Natural voices (cloud voices are blocked by design).
+                </span>
+              ) : null
             )}
           </>
         )}

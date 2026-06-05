@@ -104,13 +104,29 @@ export function playMouseClick(): void {
 }
 
 /** Original power-on swell. Deliberately NOT the Win9x/Eno startup recording — a layered
- *  triangle arpeggio over a soft sine pad, synthesized fresh each launch. */
+ *  triangle arpeggio over a soft sine pad, synthesized fresh each launch.
+ *
+ *  Voiced low and warm (roughly a register below a chime-style jingle) for a darker "hi-fi
+ *  waking up" feel: an F-major bed (F2/C3/F3) with slightly detuned twin oscillators for an
+ *  analog shimmer, a slow major arpeggio rising F3→F4, and two soft sine bells settling on the
+ *  major third so it resolves warm rather than shrill. Original composition; no sampled assets. */
 export function playBoot(): void {
-  tone({ freq: 130.81, duration: 2.0, type: 'sine', gain: 0.05, attack: 0.5 });
-  tone({ freq: 196.0, duration: 2.0, type: 'sine', gain: 0.04, attack: 0.5 });
-  const arp = [261.63, 329.63, 392.0, 523.25];
-  arp.forEach((f, i) => tone({ freq: f, duration: 1.2 - i * 0.1, type: 'triangle', gain: 0.1, startOffset: 0.15 + i * 0.18, attack: 0.02 }));
-  tone({ freq: 1046.5, duration: 1.0, type: 'sine', gain: 0.05, startOffset: 0.9, attack: 0.3 });
+  // Low warm pad: root + fifth + octave, each doubled with a faintly detuned twin for lushness.
+  const pad: Array<{ f: number; g: number }> = [
+    { f: 87.31, g: 0.055 },   // F2 (root)
+    { f: 130.81, g: 0.045 },  // C3 (fifth)
+    { f: 174.61, g: 0.04 }    // F3 (octave)
+  ];
+  pad.forEach(({ f, g }) => {
+    tone({ freq: f, duration: 2.6, type: 'sine', gain: g, attack: 0.7 });
+    tone({ freq: f * 1.004, duration: 2.6, type: 'sine', gain: g * 0.6, attack: 0.8 });
+  });
+  // Slow major arpeggio resolving up an octave to a warm F-major triad — mellow triangles.
+  const arp = [174.61, 220.0, 261.63, 349.23]; // F3 A3 C4 F4
+  arp.forEach((f, i) => tone({ freq: f, duration: 1.4 - i * 0.12, type: 'triangle', gain: 0.085, startOffset: 0.35 + i * 0.22, attack: 0.04 }));
+  // Two soft bells settling on the third/octave — the "resolved, welcoming" tail, kept low.
+  tone({ freq: 440.0, duration: 1.3, type: 'sine', gain: 0.05, startOffset: 1.15, attack: 0.3 });   // A4
+  tone({ freq: 523.25, duration: 1.2, type: 'sine', gain: 0.035, startOffset: 1.35, attack: 0.35 }); // C5
 }
 
 /** Standard DTMF (touch-tone) dual-tone frequencies — published telephony spec, not an asset. */

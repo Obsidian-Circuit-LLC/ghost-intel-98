@@ -34,26 +34,40 @@ export function ttsSupported(): boolean {
   return synth() !== null;
 }
 
+function mapVoice(v: SpeechSynthesisVoice): TtsVoice {
+  return { voiceURI: v.voiceURI, name: v.name, lang: v.lang, remote: !v.localService, default: v.default };
+}
+
 /** List installed voices. The list populates asynchronously on first access in Chromium, so we
  *  resolve once `onvoiceschanged` fires (or immediately if already populated), with a timeout. */
 export function listVoices(): Promise<TtsVoice[]> {
   const s = synth();
   if (!s) return Promise.resolve([]);
-  const map = (v: SpeechSynthesisVoice): TtsVoice => ({
-    voiceURI: v.voiceURI, name: v.name, lang: v.lang, remote: !v.localService, default: v.default
-  });
   const now = s.getVoices();
-  if (now.length > 0) return Promise.resolve(now.map(map));
+  if (now.length > 0) return Promise.resolve(now.map(mapVoice));
   return new Promise((resolve) => {
     let done = false;
     const finish = (): void => {
       if (done) return;
       done = true;
-      resolve(s.getVoices().map(map));
+      resolve(s.getVoices().map(mapVoice));
     };
     s.addEventListener('voiceschanged', finish, { once: true });
     setTimeout(finish, 1500);
   });
+}
+
+/** Subscribe to OS voice-list changes and get the updated list each time. Returns an unsubscribe.
+ *  The voice set can change at runtime (a voice pack installs, or Chromium finishes populating it
+ *  after the initial one-shot `listVoices()` window) — a persistent listener keeps the picker
+ *  honest instead of being stuck with whatever was (or wasn't) available at mount. Does NOT fire
+ *  on subscribe; pair it with `listVoices()` for the initial value. */
+export function onVoicesChanged(cb: (voices: TtsVoice[]) => void): () => void {
+  const s = synth();
+  if (!s) return () => { /* no speech engine — nothing to observe */ };
+  const emit = (): void => cb(s.getVoices().map(mapVoice));
+  s.addEventListener('voiceschanged', emit);
+  return () => s.removeEventListener('voiceschanged', emit);
 }
 
 export interface SpeakOpts {
