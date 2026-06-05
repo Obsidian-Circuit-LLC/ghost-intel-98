@@ -32,11 +32,17 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`DCS98-Setup-3.6.7.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned).
+> **Install:** download [`DCS98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned).
 
 ## Status
 
-**v3.6.7** — current release: a proper in-app **exit**. The Access (Start) menu now has a
+**v3.6.8** — current release: a new **OpChildSafety** section in **RTFM** (Help) — field guidance for
+grassroots child-protection / OSINT investigators on reporting CSAM lawfully through the proper
+channels (NCMEC, IWF, CEOP, HSI, ACCCE, Cybertip.ca, Europol IRU, INHOPE, NCA) **without** viewing,
+downloading, or mishandling material, plus evidence-handling do's and don'ts. Reference content only;
+official reporting links open in your OS browser. Contributed by GhostExodus.
+
+**v3.6.7** — a proper in-app **exit**. The Access (Start) menu now has a
 **Shut Down…** entry (with a confirm) that quits the app cleanly — previously the only way out was the
 native title-bar X, which a Win98-style shell trains you not to look for. Also: the **GeoINT** left
 menu is a little wider so the View row and event titles no longer clip.
@@ -99,12 +105,12 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/dcs98/releases) and run it.
 
-Direct link to the current release: [`DCS98-Setup-3.6.7.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.6.7/DCS98-Setup-3.6.7.exe).
+Direct link to the current release: [`DCS98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.6.8/DCS98-Setup-3.6.8.exe).
 
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\DCS98-Setup-3.6.7.exe -Algorithm SHA256
+Get-FileHash .\DCS98-Setup-3.6.8.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
@@ -141,8 +147,14 @@ To uninstall: Settings → Apps → Dead Cyber Society 98 → Uninstall.
 
 ## Releases & changelog
 
-The current build is **v3.6.7**. Each release page carries its own notes + SHA-256.
+The current build is **v3.6.8**. Each release page carries its own notes + SHA-256.
 
+- **v3.6.8** — **OpChildSafety (RTFM)**. A new reference section in Help/RTFM with field guidance for
+  grassroots child-protection / OSINT investigators: report CSAM lawfully through the proper channels
+  (NCMEC, IWF, CEOP, HSI, ACCCE, Cybertip.ca, Europol IRU, INHOPE, NCA) **without** viewing,
+  downloading, or mishandling material; evidence-handling do's and don'ts; terminal-browser tooling
+  notes; and website-investigation steps. Static reference text — official reporting links open in the
+  OS browser (deny-by-default window-open path), no new background egress. Contributed by GhostExodus.
 - **v3.6.7** — **In-app exit** + **GeoINT layout**. The Access (Start) menu gains a **Shut Down…**
   entry (with a confirm) that quits the app cleanly via a new `system:quit` IPC → `app.quit()` (runs
   the existing before-quit cleanup: SSH drain, AI-stream cancel). Previously the only way out was the
