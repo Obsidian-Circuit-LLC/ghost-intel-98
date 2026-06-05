@@ -1,0 +1,120 @@
+(* ============================================================================
+   DCS98 chat handshake — ProVerif model SKELETON (symbolic / Dolev-Yao)
+   Authored from construction v3 (2026-06-06-p2p-chat-handshake-construction-v3.md).
+
+   STATUS: DRAFT — NOT YET RUN. Authored without a ProVerif install in the loop;
+   expect to iterate on the first `proverif chat-handshake.pv` parse. This file is
+   a scaffold for the operator (formal-methods authority) to complete + run; it is
+   NOT a verification result and makes NO verified claim.
+
+   What ProVerif (symbolic) CAN discharge here: mutual authentication / injective
+   agreement, UKS, KCI, replay/no-double-accept, downgrade, and secrecy-under-
+   perfect-primitives. What it CANNOT: the *hybrid* "secure if EITHER X25519 or
+   ML-KEM survives" bound — that is a computational claim for CryptoVerif (see
+   README). Model both KEM and DH as perfect here; the hybrid reduction is separate.
+   ============================================================================ *)
+
+(* ---- channels ---- *)
+free net: channel.            (* public network = onion stream, attacker-controlled *)
+
+(* ---- primitive types ---- *)
+type skey.      (* Ed25519 signing secret *)
+type spkey.     (* Ed25519 public *)
+type exp.       (* X25519 scalar *)
+type G.         (* X25519 group element *)
+type kemsk.     (* ML-KEM secret *)
+type kempk.     (* ML-KEM public *)
+type coins.     (* encapsulation randomness *)
+type key.       (* symmetric key / shared secret *)
+
+(* ---- Diffie-Hellman (X25519) ---- *)
+const gX: G.
+fun expn(G, exp): G.
+equation forall x: exp, y: exp; expn(expn(gX, x), y) = expn(expn(gX, y), x).
+
+(* ---- Ed25519 signatures (with domain-separation tag as part of the message) ---- *)
+fun spk(skey): spkey.
+fun sign(bitstring, skey): bitstring.
+reduc forall m: bitstring, sk: skey; checksign(sign(m, sk), spk(sk)) = m.
+
+(* ---- ML-KEM-768 (perfect KEM in the symbolic model) ----
+   encap(pk, coins) -> ciphertext; the shared secret is a function of pk+coins;
+   decap recovers it with the matching secret key. The PQXDH/USENIX'24 *binding*
+   property is modelled by also binding ct + pk into the transcript hash below;
+   here decap is correct-by-construction. *)
+fun kempub(kemsk): kempk.
+fun encap(kempk, coins): bitstring.                 (* ct *)
+fun encapss(kempk, coins): key.                     (* ss *)
+reduc forall sk: kemsk, c: coins; decap(encap(kempub(sk), c), sk) = encapss(kempub(sk), c).
+
+(* ---- hash, KDF (MixKey), MAC, AEAD ---- *)
+fun h(bitstring): bitstring.
+fun g2b(G): bitstring [data].
+fun k2b(key): bitstring [data].
+(* MixKey: CK' = hkdf(ikm=secret, salt=CK, label). Model as a 3-ary function. *)
+fun hkdf(key, bitstring, bitstring): key.
+fun mac(key, bitstring): bitstring.
+fun aenc(key, bitstring, bitstring): bitstring.     (* aead_enc(k, msg, aad) *)
+reduc forall k: key, m: bitstring, a: bitstring; adec(aenc(k, m, a), k, a) = m.
+
+(* ---- domain-separation tags (distinct constants) ---- *)
+const DS_INVITE, DS_PREKEY, DS_HS_INIT, DS_HS_RESP, DS_MAC_T: bitstring.
+const MIX_ES, MIX_SSPRE, MIX_EE, MIX_SE, MIX_SSI: bitstring.
+const DRV_HK1, DRV_HK2, DRV_ROOT, DRV_SID: bitstring.
+const SUITE: bitstring.   (* single suite in v1 *)
+const MODE_FIRST: bitstring.
+
+(* ---- events for the correspondence (auth) queries ---- *)
+event I_begin(spkey, spkey, key).      (* I starts with (is_I, is_R, RK) *)
+event R_complete(spkey, spkey, key).   (* R completes believing (is_I, is_R, RK) *)
+event R_begin(spkey, spkey, key).
+event I_complete(spkey, spkey, key).
+
+(* ---- security queries (the goals to discharge) ---- *)
+(* G1 mutual auth / injective agreement: every R completion has a matching I run on the
+   same parties + key (kills replay + UKS), and symmetrically. *)
+query iIS: spkey, iIR: spkey, rk: key;
+  inj-event(R_complete(iIS, iIR, rk)) ==> inj-event(I_begin(iIS, iIR, rk)).
+query iIS: spkey, iIR: spkey, rk: key;
+  inj-event(I_complete(iIS, iIR, rk)) ==> inj-event(R_begin(iIS, iIR, rk)).
+
+(* G2' identity-payload + session-key secrecy under perfect primitives.
+   `secret RK` is checked via a separate reachability test on a sentinel (TODO:
+   wire a `query secret` once the RK is published through a `secret` declaration). *)
+
+(* ============================================================================
+   PROCESSES  (first_contact mode; reconnect mode is a TODO variant)
+   TODO: full prekey-pool + one-time consumption table; last-resort flag; the
+   `mode` branch; phase-based forward-secrecy reveals (see README §FS).
+   The bodies below are STRUCTURE, not yet a complete runnable model.
+   ============================================================================ *)
+
+(* Responder R: long-term is_R (sign), xs_R (dh), one signed one-time prekey. *)
+let responderR(isR: skey, xsR: exp, preSk: kemsk, tok: bitstring) =
+  (* publish invite signature over (SUITE, onion, xs_R, is_R, prekey) — modelled abstractly *)
+  in(net, msg1: bitstring);
+  (* TODO: parse mode ‖ xe_I ‖ ek_I ‖ prekey_id ‖ ct_pre ‖ mac_T ‖ c_idI;
+     verify mac_T = mac(h(tok), DS_MAC_T ‖ TH1) BEFORE any asymmetric op (C-1);
+     ssPre = decap(ct_pre, preSk); es = expn(xe_I, xsR);
+     CK0 = hkdf(...); CK1 = hkdf(es-as-key, CK0, MIX_ES); CK2 = hkdf(ssPre, CK1, MIX_SSPRE);
+     hk1 = hkdf(CK2, TH1, DRV_HK1); open c_idI with aad=h(tok); verify Sig_I;
+     consume tok+prekey (durable); ONLY THEN encap(ek_I) for Msg2; emit Msg2;
+     event R_complete(...). *)
+  0.
+
+(* Initiator I: long-term is_I, xs_I; holds invite (is_R, xs_R, prekey, tok). *)
+let initiatorI(isI: skey, xsI: exp, isRpub: spkey, xsRpub: G, prePk: kempk, tok: bitstring) =
+  new xeI: exp; new ekIsk: kemsk; new c: coins;
+  (* TODO: build TH1; ct_pre = encap(prePk, c); mac_T = mac(h(tok), DS_MAC_T ‖ TH1);
+     es = expn(xsRpub, xeI); CK..; hk1; c_idI = aenc(hk1, idpayload+Sig_I, h(tok));
+     event I_begin(...); send Msg1; recv Msg2; verify Sig_R; derive RK; event I_complete(...). *)
+  0.
+
+(* ---- top-level: honest parties + attacker; reveal oracles for KCI/UKS (TODO) ---- *)
+process
+  new isI: skey; new isR: skey; new xsI: exp; new xsR: exp;
+  new preSk: kemsk; new tok: bitstring;
+  out(net, spk(isI)); out(net, spk(isR));         (* identities are public *)
+  out(net, expn(gX, xsR)); out(net, kempub(preSk)); (* R's static DH + prekey public *)
+  ( !initiatorI(isI, xsI, spk(isR), expn(gX, xsR), kempub(preSk), tok)
+  | !responderR(isR, xsR, preSk, tok) )
