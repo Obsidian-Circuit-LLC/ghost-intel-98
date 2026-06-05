@@ -1,14 +1,17 @@
 /**
- * Polyfill for the TC39 "Uint8Array to/from base64 and hex" methods.
+ * Polyfills for recent TC39 methods that pdfjs-dist 5.x assumes but Electron 33's Chromium
+ * 130 doesn't ship yet. Each is installed only when the runtime lacks it, so the whole file
+ * becomes a no-op the day the bundled Chromium gains them natively.
  *
- * pdfjs-dist 5.x calls `Uint8Array.prototype.toHex()` (and friends) internally. Those
- * methods landed in Chromium ~140, but Electron 33 ships Chromium 130 — so on the
- * shipping build pdf.js throws `a.toHex is not a function` and the viewer can't render
- * a PDF. This installs spec-faithful implementations only when the runtime lacks them,
- * so it becomes a no-op the day the bundled Chromium gains them natively.
+ *  - `Uint8Array.prototype.toHex` / `fromHex` / base64 variants — landed in Chromium ~140.
+ *    Without them pdf.js throws `a.toHex is not a function` and the viewer can't render.
+ *  - `Map.prototype.getOrInsertComputed` — TC39 "getOrInsert" proposal. pdf.js calls it during
+ *    page render (e.g. WorkerTransport.getOptionalContentConfig); without it render throws
+ *    `getOrInsertComputed is not a function` and the viewer goes blank.
  *
- * Imported first in the renderer entry (main.tsx) so it is in place before any module
- * that might touch these methods is evaluated.
+ * Imported first in the renderer entry (main.tsx) AND in the pdf.js worker entry
+ * (pdf-worker.ts) — those are separate JS realms with separate prototypes, and pdf.js touches
+ * these methods in both — so the polyfill must be installed in each before pdf.js runs.
  */
 
 type SetResult = { read: number; written: number };
@@ -114,4 +117,29 @@ if (typeof proto.setFromBase64 !== 'function') {
     this.set(src.subarray(0, written));
     return { read: written, written };
   });
+}
+
+// --- TC39 "Map.prototype.getOrInsert / getOrInsertComputed" proposal --------------------
+// Spec contract: return the existing value for `key`; otherwise call `callbackfn(key)`, store
+// the result under `key`, and return it. pdf.js only uses the *Computed* form (44 call sites,
+// all on Maps), so that's what we install; WeakMap gets it too since the proposal covers both
+// and pdf.js could route an object-keyed cache through one.
+function getOrInsertComputed<K, V>(
+  this: { has(k: K): boolean; get(k: K): V | undefined; set(k: K, v: V): unknown },
+  key: K,
+  callbackfn: (key: K) => V
+): V {
+  if (this.has(key)) return this.get(key) as V;
+  const value = callbackfn(key);
+  this.set(key, value);
+  return value;
+}
+
+const mapProto = Map.prototype as unknown as { getOrInsertComputed?: unknown };
+if (typeof mapProto.getOrInsertComputed !== 'function') {
+  define(Map.prototype, 'getOrInsertComputed', getOrInsertComputed);
+}
+const weakMapProto = WeakMap.prototype as unknown as { getOrInsertComputed?: unknown };
+if (typeof weakMapProto.getOrInsertComputed !== 'function') {
+  define(WeakMap.prototype, 'getOrInsertComputed', getOrInsertComputed);
 }

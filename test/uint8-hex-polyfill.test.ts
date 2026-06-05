@@ -53,3 +53,45 @@ describe('Uint8Array hex/base64 polyfill', () => {
     expect(big.toBase64().length).toBeGreaterThan(0);
   });
 });
+
+// pdfjs-dist 5.x calls Map.prototype.getOrInsertComputed() during page render — absent in
+// Electron 33's Chromium 130 (and Node 20), which blanked the PDF viewer (regression fixed in
+// v3.6.4). These assert the polyfill matches the TC39 "getOrInsert" proposal contract.
+type ComputedMap<K, V> = Map<K, V> & { getOrInsertComputed(k: K, fn: (k: K) => V): V };
+
+describe('Map.prototype.getOrInsertComputed polyfill', () => {
+  it('installs the method', () => {
+    expect(typeof (Map.prototype as unknown as { getOrInsertComputed?: unknown }).getOrInsertComputed).toBe('function');
+  });
+
+  it('computes, inserts, and returns the value for a missing key', () => {
+    const m = new Map<string, number[]>() as ComputedMap<string, number[]>;
+    const v = m.getOrInsertComputed('a', () => [1, 2]);
+    expect(v).toEqual([1, 2]);
+    expect(m.get('a')).toBe(v); // the SAME instance was stored
+  });
+
+  it('returns the existing value and does NOT call the callback when the key is present', () => {
+    const m = new Map<string, number>() as ComputedMap<string, number>;
+    m.set('k', 7);
+    let called = false;
+    const v = m.getOrInsertComputed('k', () => { called = true; return 99; });
+    expect(v).toBe(7);
+    expect(called).toBe(false);
+  });
+
+  it('passes the key to the callback', () => {
+    const m = new Map<string, string>() as ComputedMap<string, string>;
+    const v = m.getOrInsertComputed('id-42', (key) => `val:${key}`);
+    expect(v).toBe('val:id-42');
+  });
+
+  it('treats a stored falsy value as present (does not recompute)', () => {
+    const m = new Map<string, number>() as ComputedMap<string, number>;
+    m.set('z', 0);
+    let called = false;
+    const v = m.getOrInsertComputed('z', () => { called = true; return 1; });
+    expect(v).toBe(0);
+    expect(called).toBe(false);
+  });
+});
