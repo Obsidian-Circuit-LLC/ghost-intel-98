@@ -14,6 +14,7 @@
  * the *keygen* / *encapsulate* / *randomBytes* calls whose randomness is intended.
  */
 import * as nodeCrypto from 'node:crypto';
+import { ed25519, x25519 } from '@noble/curves/ed25519.js';
 import { ml_kem768 } from '@noble/post-quantum/ml-kem.js';
 
 // ---- sizes (bytes) — used by upper layers to bound/validate wire + stored material ----
@@ -42,52 +43,43 @@ export class CryptoError extends Error {
   }
 }
 
-const b64url = (u: Uint8Array): string => Buffer.from(u).toString('base64url');
 const u8 = (b: Buffer): Uint8Array => new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
 
 // ---- X25519 (ECDH) ----
+// Raw-byte via @noble/curves rather than Node's JWK path: the JWK round-trip copies private keys
+// into immutable V8 strings that zeroize() can never reach (crypto-audit H1). Noble operates on
+// Uint8Array end-to-end, so secret material stays in buffers we can wipe.
 
 export function x25519Keygen(): KeyPair {
-  const { publicKey, privateKey } = nodeCrypto.generateKeyPairSync('x25519');
-  const pub = publicKey.export({ format: 'jwk' }) as { x: string };
-  const priv = privateKey.export({ format: 'jwk' }) as { d: string };
-  return { publicKey: new Uint8Array(Buffer.from(pub.x, 'base64url')), secretKey: new Uint8Array(Buffer.from(priv.d, 'base64url')) };
+  const secretKey = x25519.utils.randomSecretKey();
+  return { secretKey, publicKey: x25519.getPublicKey(secretKey) };
 }
 
-/** Raw X25519 shared secret. Needs our own public key to reconstruct the private KeyObject (JWK
- *  import requires both d and x). */
+/** Raw X25519 shared secret. Throws (via noble) on a low-order / all-zero peer point — fail-closed. */
 export function x25519Ecdh(self: KeyPair, peerPublic: Uint8Array): Uint8Array {
   if (peerPublic.length !== X25519_PUBLIC_LEN) throw new CryptoError('bad X25519 public key length');
-  const priv = nodeCrypto.createPrivateKey({
-    key: { kty: 'OKP', crv: 'X25519', d: b64url(self.secretKey), x: b64url(self.publicKey) },
-    format: 'jwk'
-  });
-  const pub = nodeCrypto.createPublicKey({ key: { kty: 'OKP', crv: 'X25519', x: b64url(peerPublic) }, format: 'jwk' });
-  return u8(nodeCrypto.diffieHellman({ privateKey: priv, publicKey: pub }));
+  try {
+    return x25519.getSharedSecret(self.secretKey, peerPublic);
+  } catch (err) {
+    throw new CryptoError('X25519 ECDH failed');
+  }
 }
 
 // ---- Ed25519 (identity signatures) ----
 
 export function ed25519Keygen(): KeyPair {
-  const { publicKey, privateKey } = nodeCrypto.generateKeyPairSync('ed25519');
-  const pub = publicKey.export({ format: 'jwk' }) as { x: string };
-  const priv = privateKey.export({ format: 'jwk' }) as { d: string };
-  return { publicKey: new Uint8Array(Buffer.from(pub.x, 'base64url')), secretKey: new Uint8Array(Buffer.from(priv.d, 'base64url')) };
+  const secretKey = ed25519.utils.randomSecretKey();
+  return { secretKey, publicKey: ed25519.getPublicKey(secretKey) };
 }
 
 export function ed25519Sign(message: Uint8Array, self: KeyPair): Uint8Array {
-  const priv = nodeCrypto.createPrivateKey({
-    key: { kty: 'OKP', crv: 'Ed25519', d: b64url(self.secretKey), x: b64url(self.publicKey) },
-    format: 'jwk'
-  });
-  return u8(nodeCrypto.sign(null, message, priv));
+  return ed25519.sign(message, self.secretKey);
 }
 
 export function ed25519Verify(signature: Uint8Array, message: Uint8Array, publicKey: Uint8Array): boolean {
   if (signature.length !== ED25519_SIG_LEN || publicKey.length !== ED25519_PUBLIC_LEN) return false;
   try {
-    const pub = nodeCrypto.createPublicKey({ key: { kty: 'OKP', crv: 'Ed25519', x: b64url(publicKey) }, format: 'jwk' });
-    return nodeCrypto.verify(null, message, pub, signature);
+    return ed25519.verify(signature, message, publicKey);
   } catch {
     return false;
   }

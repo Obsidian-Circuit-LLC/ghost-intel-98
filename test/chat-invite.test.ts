@@ -69,6 +69,13 @@ describe('chat invite links', () => {
     expect(() => parseInvite(truncated)).toThrow(InviteError);
   });
 
+  it('accepts a link with trailing padding / whitespace (normalization)', () => {
+    const link = sampleInvite();
+    expect(() => parseInvite(`${link}==`)).not.toThrow(); // stray base64 padding
+    expect(() => parseInvite(`${link}\n`)).not.toThrow(); // trailing newline from a paste
+    expect(parseInvite(`${link}\n`).onion).toBe(ONION);
+  });
+
   it('rejects an invite whose embedded identity bundle is corrupt', () => {
     const link = sampleInvite();
     const payload = new Uint8Array(Buffer.from(link.slice(INVITE_PREFIX.length), 'base64url'));

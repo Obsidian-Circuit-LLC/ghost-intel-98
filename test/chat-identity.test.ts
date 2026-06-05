@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   generateIdentity,
+  zeroizeIdentity,
   encodeIdentityPublic,
   decodeIdentityPublic,
   identityFingerprint,
@@ -61,5 +62,15 @@ describe('chat identity', () => {
     const b = generateIdentity().publicKeys;
     const c = generateIdentity().publicKeys; // imposter
     expect(safetyNumber(a, b)).not.toBe(safetyNumber(a, c));
+  });
+
+  it('zeroizeIdentity wipes secret keys (and leaves public keys intact)', () => {
+    const id = generateIdentity();
+    const pubBefore = Array.from(id.publicKeys.ed25519);
+    zeroizeIdentity(id);
+    expect(Array.from(id.ed25519Secret)).toEqual(new Array(id.ed25519Secret.length).fill(0));
+    expect(Array.from(id.x25519Secret)).toEqual(new Array(id.x25519Secret.length).fill(0));
+    expect(Array.from(id.mlkem768Secret)).toEqual(new Array(id.mlkem768Secret.length).fill(0));
+    expect(Array.from(id.publicKeys.ed25519)).toEqual(pubBefore); // public keys not wiped
   });
 });
