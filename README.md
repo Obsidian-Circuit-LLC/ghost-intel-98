@@ -32,11 +32,16 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`DCS98-Setup-3.6.6.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned).
+> **Install:** download [`DCS98-Setup-3.6.7.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned).
 
 ## Status
 
-**v3.6.6** — current release: a **warmer, lower startup chime** (an original synthesized power-on
+**v3.6.7** — current release: a proper in-app **exit**. The Access (Start) menu now has a
+**Shut Down…** entry (with a confirm) that quits the app cleanly — previously the only way out was the
+native title-bar X, which a Win98-style shell trains you not to look for. Also: the **GeoINT** left
+menu is a little wider so the View row and event titles no longer clip.
+
+**v3.6.6** — a **warmer, lower startup chime** (an original synthesized power-on
 swell — no sampled assets), and two **TTS voice-picker** fixes. The on-device voice selector no
 longer **silently disappears** when no eligible voice is found — it now says *why* (cloud voices are
 blocked by design; install Windows Natural voices) — and voice discovery is now **live**, so voices
@@ -94,12 +99,12 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/dcs98/releases) and run it.
 
-Direct link to the current release: [`DCS98-Setup-3.6.6.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.6.6/DCS98-Setup-3.6.6.exe).
+Direct link to the current release: [`DCS98-Setup-3.6.7.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.6.7/DCS98-Setup-3.6.7.exe).
 
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\DCS98-Setup-3.6.6.exe -Algorithm SHA256
+Get-FileHash .\DCS98-Setup-3.6.7.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
@@ -136,8 +141,14 @@ To uninstall: Settings → Apps → Dead Cyber Society 98 → Uninstall.
 
 ## Releases & changelog
 
-The current build is **v3.6.6**. Each release page carries its own notes + SHA-256.
+The current build is **v3.6.7**. Each release page carries its own notes + SHA-256.
 
+- **v3.6.7** — **In-app exit** + **GeoINT layout**. The Access (Start) menu gains a **Shut Down…**
+  entry (with a confirm) that quits the app cleanly via a new `system:quit` IPC → `app.quit()` (runs
+  the existing before-quit cleanup: SSH drain, AI-stream cancel). Previously the only way out was the
+  native title-bar X, which a Win98-style shell trains users not to look for — so there was effectively
+  no discoverable exit. The **GeoINT** left column widened 340→380px so the View row (2D Map /
+  Satellite / Street View / Labels) and event titles stop clipping. UI/IPC change; 254 tests.
 - **v3.6.6** — **Warmer startup chime** + **TTS voice-picker fixes**. The launch sound is a revoiced,
   lower-register **original** synthesized power-on swell (F-major bed + slow arpeggio + soft bells; no
   sampled assets — it is *not* the Win9x recording). The on-device voice selector no longer **silently
@@ -227,7 +238,7 @@ This starts the Vite dev server (HMR) and the Electron main process.
 
 ```bash
 pnpm build        # type-check + bundle main / preload / renderer
-pnpm test         # vitest suite (254 tests as of v3.6.6)
+pnpm test         # vitest suite (254 tests as of v3.6.7)
 pnpm package      # platform installer for the current host
 pnpm package:win  # cross-build Windows NSIS installer
 ```
