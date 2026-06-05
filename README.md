@@ -32,11 +32,16 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`DCS98-Setup-3.6.2.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned).
+> **Install:** download [`DCS98-Setup-3.6.3.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned).
 
 ## Status
 
-**v3.6.2** — current release: **Solitaire** (Klondike, with full card drag-and-drop and the classic
+**v3.6.3** — current release: **desktop polish** — the **DCS98 flame wallpaper** is the default
+background, desktop icons line up in a single **vertical left-edge column**, **My Cases** now uses an
+authentic Win95 **My Computer** icon, and the **sticky-notes bar** is a draggable widget that no longer
+overlaps the window minimise/close buttons.
+
+**v3.6.2** added **Solitaire** (Klondike, with full card drag-and-drop and the classic
 bouncing-card win cascade), in the Access menu.
 
 **v3.6.1** added the **Briefcase** (standalone text notes not tied to any case — browse them in the
@@ -74,12 +79,12 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/dcs98/releases) and run it.
 
-Direct link to the current release: [`DCS98-Setup-3.6.2.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.6.2/DCS98-Setup-3.6.2.exe).
+Direct link to the current release: [`DCS98-Setup-3.6.3.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.6.3/DCS98-Setup-3.6.3.exe).
 
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\DCS98-Setup-3.6.2.exe -Algorithm SHA256
+Get-FileHash .\DCS98-Setup-3.6.3.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
@@ -116,8 +121,13 @@ To uninstall: Settings → Apps → Dead Cyber Society 98 → Uninstall.
 
 ## Releases & changelog
 
-The current build is **v3.6.2**. Each release page carries its own notes + SHA-256.
+The current build is **v3.6.3**. Each release page carries its own notes + SHA-256.
 
+- **v3.6.3** — **Desktop polish**: the **DCS98 flame** image is the default wallpaper (desktop + lock
+  screen); desktop icons flow as a single **vertical left-edge column**; **My Cases** uses an authentic
+  Win95 **My Computer** icon (pixel-art SVG); and the **New note / Hide notes** bar is a **draggable**
+  widget with a grip handle, defaulted to bottom-centre so it no longer covers the window minimise/close
+  buttons (position remembered). Renderer/UI only — no IPC, egress, or crypto touched. 238 tests.
 - **v3.6.2** — **Solitaire (Klondike)**: green-felt card game with full drag-and-drop (move a card and the
   run beneath it), build foundations A→K, double-click to a foundation, Draw 1/3, and the iconic
   bouncing-card **win cascade**. Self-contained — no network, storage, or data. In the Access menu. 238 tests.
@@ -184,7 +194,7 @@ This starts the Vite dev server (HMR) and the Electron main process.
 
 ```bash
 pnpm build        # type-check + bundle main / preload / renderer
-pnpm test         # vitest suite (238 tests as of v3.6.2)
+pnpm test         # vitest suite (238 tests as of v3.6.3)
 pnpm package      # platform installer for the current host
 pnpm package:win  # cross-build Windows NSIS installer
 ```
