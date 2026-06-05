@@ -41,6 +41,10 @@ background, desktop icons line up in a single **vertical left-edge column**, **M
 authentic Win95 **My Computer** icon, and the **sticky-notes bar** is a draggable widget that no longer
 overlaps the window minimise/close buttons.
 
+> **Known issue:** the in-app **PDF viewer is not currently rendering** — a fix is in progress. The
+> other Doc Viewer formats (DOCX, HTML, images, CSV, JSON, EML, text) are unaffected, and PDF
+> **exports** still work.
+
 **v3.6.2** added **Solitaire** (Klondike, with full card drag-and-drop and the classic
 bouncing-card win cascade), in the Access menu.
 
@@ -60,7 +64,7 @@ old install) and cleared a full field-report punch list:
   and a map that resizes correctly.
 - **Markets** — a first-run intro popup with "Don't show again."
 - **Fixes** — minimizing a window no longer wipes its state (the **Jukebox keeps playing**, the **AI
-  conversation and Notepad text survive**); the **PDF viewer** renders again; **Mail** connects (provider
+  conversation and Notepad text survive**); **Mail** connects (provider
   presets, STARTTLS, app-password guidance) and the Compose window can always be closed; **My Cases** no
   longer shows the previous case's identity when you switch; the **Calendar** off-by-one is fixed with a
   right-click delete; the **Jukebox** double-pause is gone; **Bookmarks** scale to their link count; and
@@ -140,7 +144,7 @@ The current build is **v3.6.3**. Each release page carries its own notes + SHA-2
   install. New: **Sticky Notes** desktop layer; **AI conversation memory** (saved-chat sidebar) + right-click
   copy + default `qwen3-abliterated:4b`; **GeoINT Street View** + custom-tile **Load** button + **2D Map**
   relabel + map-resize fix; **Markets** first-run tutorial. Fixes: **minimize no longer wipes state**
-  (Jukebox keeps playing, AI/Notepad preserved), **PDF viewer**, **Mail** (provider presets, STARTTLS,
+  (Jukebox keeps playing, AI/Notepad preserved), **Mail** (provider presets, STARTTLS,
   always-closable Compose), **My Cases** rename + cross-case identity-leak fix, **Calendar** off-by-one +
   right-click delete, **Jukebox** double-pause, **Bookmarks** auto-scale, Net Explorer **"Open the Firefox
   folder"** button. Pre-release red-team (0 Critical; all High/Medium fixed). 228 tests.

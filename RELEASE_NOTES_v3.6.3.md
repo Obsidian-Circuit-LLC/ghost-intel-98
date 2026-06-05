@@ -25,6 +25,11 @@ stays out of your way.
   icon, and the relocated notes bar — confirmed by screenshot.
 - The drag-to-reposition of the notes bar is best confirmed by a quick drag on Windows.
 
+## Known issues
+
+- **In-app PDF viewer is not currently rendering** — a fix is in progress. Other Doc Viewer formats
+  (DOCX, HTML, images, CSV, JSON, EML, text) are unaffected, and PDF **exports** still work.
+
 ## Notes
 
 - These are renderer/UI changes only — no IPC, network-egress, or encryption-at-rest code was
