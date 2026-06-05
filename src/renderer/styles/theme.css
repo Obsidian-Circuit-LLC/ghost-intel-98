@@ -891,6 +891,13 @@ input.ga98-text, select.ga98-text {
   padding: 4px 5px; font-family: 'Comic Sans MS', 'Segoe Print', cursive; font-size: 12px; color: #1a1a1a;
 }
 .ga98-sticky-colors { display: flex; gap: 3px; padding: 2px 4px; }
+/* Bottom-right resize grip — a small diagonal-line corner, Win95-style. */
+.ga98-sticky-resize {
+  position: absolute; right: 0; bottom: 0; width: 14px; height: 14px;
+  cursor: nwse-resize; touch-action: none; pointer-events: auto;
+  background:
+    linear-gradient(135deg, transparent 0 6px, #00000055 6px 7px, transparent 7px 9px, #00000055 9px 10px, transparent 10px 12px, #00000055 12px 13px, transparent 13px);
+}
 .ga98-sticky-swatch { width: 12px; height: 12px; min-width: 0; padding: 0; border: 1px solid #00000055; cursor: pointer; }
 .ga98-sticky-swatch[data-active="true"] { outline: 1px solid #000; outline-offset: 1px; }
 .ga98-sticky-swatch[data-color="yellow"] { background: #ffe600; }

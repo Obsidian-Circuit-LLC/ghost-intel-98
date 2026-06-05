@@ -295,6 +295,9 @@ export interface StickyNote {
   color: string;
   x: number;
   y: number;
+  /** Optional user-resized dimensions (px). Absent ⇒ the CSS default size is used. */
+  w?: number;
+  h?: number;
   /** Present when this note represents a fired global reminder — OK marks it complete. */
   reminderId?: string;
 }

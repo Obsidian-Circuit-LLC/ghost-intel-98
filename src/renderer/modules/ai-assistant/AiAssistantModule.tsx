@@ -15,6 +15,8 @@ import { useSettings } from '../../state/store';
 import { toast } from '../../state/toasts';
 import { confirmDialog } from '../../state/dialogs';
 import { ttsSupported, listVoices, speak, cancelSpeech, type TtsVoice } from '../../audio/tts';
+import { extractPdfText } from '../../lib/pdfExtract';
+import { loadAttachmentBytes } from '../../lib/attachmentBytes';
 import { createVoskRecognizer } from '../../voice/recognizer';
 import { VoiceConversation, type VoiceMode, type VoiceState } from '../../voice/conversation';
 
@@ -614,6 +616,10 @@ interface GatheredFiles {
 const RENDER_PER_ITEM_CAP = 64 * 1024;
 const RENDER_TOTAL_BUDGET = 256 * 1024;
 
+function isPdfName(name: string): boolean {
+  return name.toLowerCase().endsWith('.pdf');
+}
+
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
@@ -651,6 +657,23 @@ async function gatherCaseFiles(c: CaseRecord): Promise<GatheredFiles> {
 
   for (const a of c.attachments) {
     if (room() <= 0) { skipped.push({ name: a.originalName, reason: 'budget' }); continue; }
+    // PDFs are binary, so readAttachmentText rejects them; pull their text layer with pdf.js
+    // instead (text-layer only — a scanned/image PDF yields nothing and is marked accordingly).
+    if (isPdfName(a.originalName) || isPdfName(a.fileName)) {
+      try {
+        const bytes = await loadAttachmentBytes(c.id, a.fileName);
+        const extracted = await extractPdfText(bytes, { maxChars: Math.min(RENDER_PER_ITEM_CAP, room()) });
+        if (!extracted.trim()) { skipped.push({ name: a.originalName, reason: 'pdf-no-text-layer' }); continue; }
+        const capped = extracted.slice(0, room());
+        const trunc = capped.length < extracted.length ? ' (truncated)' : '';
+        parts.push(`----- text of ${a.originalName} (PDF)${trunc} -----\n${capped}`);
+        included.push({ name: a.originalName, bytes: capped.length });
+        total += capped.length;
+      } catch {
+        skipped.push({ name: a.originalName, reason: 'pdf-error' });
+      }
+      continue;
+    }
     try {
       const res = await window.api.files.readAttachmentText(c.id, a.fileName);
       if (res.text == null) { skipped.push({ name: a.originalName, reason: res.reason ?? 'skipped' }); continue; }

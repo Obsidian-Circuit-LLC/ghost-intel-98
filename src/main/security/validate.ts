@@ -688,6 +688,17 @@ function clampStickyCoord(v: unknown): number {
   return Math.max(0, Math.min(n, 50000));
 }
 
+// Note dimensions are optional. Returns null when absent/invalid so the renderer falls back to
+// the CSS default size; when present, bounds to a sane min (still usable) and max (no off-screen
+// monsters). Mirror STICKY_MIN_W/H in the renderer's resize clamp.
+const STICKY_MIN_W = 140;
+const STICKY_MIN_H = 90;
+const STICKY_MAX_DIM = 1200;
+function clampStickyDim(v: unknown, min: number): number | null {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return null;
+  return Math.max(min, Math.min(Math.round(v), STICKY_MAX_DIM));
+}
+
 /**
  * Clamp/whitelist a sticky-notes layer from the renderer. Bounds the note count, text length,
  * icon length, and coordinates; the color must be an allowlisted palette key (it drives a CSS
@@ -707,6 +718,10 @@ export function ensureStickyNotes(raw: unknown): StickyNotesState {
     const colorRaw = typeof n['color'] === 'string' ? n['color'] : 'yellow';
     const color = STICKY_COLORS.has(colorRaw) ? colorRaw : 'yellow';
     const note: StickyNote = { id, text, icon, color, x: clampStickyCoord(n['x']), y: clampStickyCoord(n['y']) };
+    const w = clampStickyDim(n['w'], STICKY_MIN_W);
+    const h = clampStickyDim(n['h'], STICKY_MIN_H);
+    if (w !== null) note.w = w;
+    if (h !== null) note.h = h;
     const rid = n['reminderId'];
     if (typeof rid === 'string' && rid.length > 0 && rid.length <= 80) note.reminderId = rid;
     notes.push(note);

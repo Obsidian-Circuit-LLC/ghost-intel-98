@@ -38,4 +38,31 @@ describe('ensureStickyNotes', () => {
     expect(ensureStickyNotes({ notes: 'nope' })).toEqual({ notes: [], hidden: false });
     expect(ensureStickyNotes(undefined)).toEqual({ notes: [], hidden: false });
   });
+
+  it('omits w/h when absent so the CSS default size applies', () => {
+    const s = ensureStickyNotes({ notes: [{ id: 'n', text: '', icon: '📌', color: 'yellow', x: 0, y: 0 }] });
+    expect(s.notes[0]).not.toHaveProperty('w');
+    expect(s.notes[0]).not.toHaveProperty('h');
+  });
+
+  it('keeps valid resize dimensions and rounds them', () => {
+    const s = ensureStickyNotes({ notes: [{ id: 'n', text: '', icon: '📌', color: 'yellow', x: 0, y: 0, w: 240.6, h: 180.2 }] });
+    expect(s.notes[0].w).toBe(241);
+    expect(s.notes[0].h).toBe(180);
+  });
+
+  it('clamps resize dimensions to the min/max bounds', () => {
+    const small = ensureStickyNotes({ notes: [{ id: 'a', text: '', icon: '📌', color: 'yellow', x: 0, y: 0, w: 10, h: 10 }] });
+    expect(small.notes[0].w).toBe(140);   // STICKY_MIN_W
+    expect(small.notes[0].h).toBe(90);    // STICKY_MIN_H
+    const big = ensureStickyNotes({ notes: [{ id: 'b', text: '', icon: '📌', color: 'yellow', x: 0, y: 0, w: 99999, h: 99999 }] });
+    expect(big.notes[0].w).toBe(1200);    // STICKY_MAX_DIM
+    expect(big.notes[0].h).toBe(1200);
+  });
+
+  it('drops non-numeric w/h rather than persisting junk', () => {
+    const s = ensureStickyNotes({ notes: [{ id: 'n', text: '', icon: '📌', color: 'yellow', x: 0, y: 0, w: 'wide', h: NaN }] });
+    expect(s.notes[0]).not.toHaveProperty('w');
+    expect(s.notes[0]).not.toHaveProperty('h');
+  });
 });

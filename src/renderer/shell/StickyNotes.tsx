@@ -29,6 +29,11 @@ const CONTROLS_W = 172; // approximate bundle width, for clamping into the viewp
 const CONTROLS_H = 26;
 const TASKBAR_H = 32;
 
+// Minimum note dimensions while resizing — kept in lockstep with STICKY_MIN_W/H in the main-process
+// validator (validate.ts), which is the authority that bounds what actually persists.
+const STICKY_MIN_W = 140;
+const STICKY_MIN_H = 90;
+
 function clampControls(p: { x: number; y: number }): { x: number; y: number } {
   const maxX = Math.max(0, window.innerWidth - CONTROLS_W);
   const maxY = Math.max(0, window.innerHeight - TASKBAR_H - CONTROLS_H);
@@ -180,6 +185,34 @@ export function StickyNotes(): JSX.Element | null {
     dragCleanup.current = teardown; // so unmount can remove these if the drag is interrupted
   }
 
+  // --- resize a note from its bottom-right corner (same self-contained-listener pattern as drag) ---
+  function startResize(e: React.PointerEvent, note: StickyNote): void {
+    e.preventDefault();
+    e.stopPropagation(); // don't let the corner grip start a move drag
+    const startX = e.clientX, startY = e.clientY, id = note.id;
+    // Seed from the live rendered box so the first drag doesn't jump when w/h are still unset.
+    const box = (e.currentTarget as HTMLElement).closest('.ga98-sticky')?.getBoundingClientRect();
+    const origW = note.w ?? Math.round(box?.width ?? STICKY_MIN_W);
+    const origH = note.h ?? Math.round(box?.height ?? STICKY_MIN_H);
+    function onMove(ev: PointerEvent): void {
+      const w = Math.max(STICKY_MIN_W, origW + (ev.clientX - startX));
+      const h = Math.max(STICKY_MIN_H, origH + (ev.clientY - startY));
+      setState((s) => ({ ...s, notes: s.notes.map((n) => n.id === id ? { ...n, w, h } : n) }));
+    }
+    const teardown = (): void => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      dragCleanup.current = null;
+    };
+    function onUp(): void {
+      teardown();
+      save(stateRef.current); // persist the final size once
+    }
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    dragCleanup.current = teardown;
+  }
+
   // --- drag the controls bundle (grip handle only, so the buttons stay clickable) ---
   function startControlsDrag(e: React.PointerEvent): void {
     e.preventDefault();
@@ -222,7 +255,17 @@ export function StickyNotes(): JSX.Element | null {
       </div>
 
       {!state.hidden && state.notes.map((n) => (
-        <div key={n.id} className="ga98-sticky" data-color={n.color} style={{ left: n.x, top: n.y }}>
+        <div
+          key={n.id}
+          className="ga98-sticky"
+          data-color={n.color}
+          style={{
+            left: n.x,
+            top: n.y,
+            ...(n.w ? { width: n.w, minWidth: STICKY_MIN_W } : {}),
+            ...(n.h ? { height: n.h, minHeight: STICKY_MIN_H } : {})
+          }}
+        >
           <div className="ga98-sticky-bar" onPointerDown={(e) => startDrag(e, n)}>
             <button
               className="ga98-sticky-icon"
@@ -254,6 +297,11 @@ export function StickyNotes(): JSX.Element | null {
               />
             ))}
           </div>
+          <span
+            className="ga98-sticky-resize"
+            title="Drag to resize this note"
+            onPointerDown={(e) => startResize(e, n)}
+          />
         </div>
       ))}
     </div>
