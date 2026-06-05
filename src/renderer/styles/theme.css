@@ -74,9 +74,14 @@ html, body, #root {
   position: absolute;
   inset: 12px 0 12px 12px;
   display: grid;
-  grid-template-columns: repeat(auto-fill, 96px);
-  grid-auto-rows: 96px;
-  gap: 4px;
+  /* Classic Windows desktop: icons fill a single vertical column down the left edge,
+     top-to-bottom. The 80px row pitch lets all the default icons fit one column at the
+     standard window height; they spill into a second column only if the window is made
+     very short (graceful instead of clipping the bottom icon). */
+  grid-auto-flow: column;
+  grid-template-rows: repeat(auto-fill, 80px);
+  grid-auto-columns: 96px;
+  gap: 2px;
   pointer-events: none;
 }
 
@@ -100,7 +105,7 @@ html, body, #root {
   justify-content: flex-start;
   gap: 4px;
   width: 96px;
-  height: 96px;
+  height: 80px;
   cursor: pointer;
   padding: 6px 2px;
   color: #fff;
@@ -860,8 +865,9 @@ input.ga98-text, select.ga98-text {
    beneath. z-index 9000 floats notes above all windows (z 10) but below the taskbar
    (9999) and dialogs (20000+). */
 .ga98-sticky-layer { position: fixed; inset: 0 0 var(--ga98-taskbar-height) 0; pointer-events: none; z-index: 9000; }
-.ga98-sticky-controls { position: absolute; top: 6px; right: 6px; display: flex; gap: 4px; pointer-events: auto; }
+.ga98-sticky-controls { position: absolute; display: flex; align-items: center; gap: 4px; pointer-events: auto; background: var(--ga98-grey); padding: 2px; border-top: 1px solid var(--ga98-shadow-light); border-left: 1px solid var(--ga98-shadow-light); border-bottom: 1px solid var(--ga98-shadow-dark); border-right: 1px solid var(--ga98-shadow-dark); }
 .ga98-sticky-controls button { font-size: 11px; }
+.ga98-sticky-grip { cursor: move; touch-action: none; user-select: none; padding: 0 4px; color: #404040; font-size: 13px; line-height: 1; }
 
 .ga98-sticky {
   position: absolute; width: 184px; min-height: 120px; pointer-events: auto;

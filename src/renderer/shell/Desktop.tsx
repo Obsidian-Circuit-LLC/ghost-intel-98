@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { Icon, glyphFor } from './Icon';
+import { Icon, glyphFor, MyComputerGlyph } from './Icon';
 import { useSettings, useWindows, type ModuleKey } from '../state/store';
 import { playClick } from '../audio/synth';
 
@@ -68,6 +68,7 @@ export function Desktop(): JSX.Element {
       key={s.module}
       label={s.label}
       glyph={glyphFor(s.module)}
+      glyphNode={s.module === 'cases' ? <MyComputerGlyph /> : undefined}
       selected={selected === s.module}
       onSelect={() => setSelected(s.module)}
       onActivate={() => {

@@ -17,6 +17,7 @@ import { LockScreen } from './shell/LockScreen';
 import { StickyNotes } from './shell/StickyNotes';
 import { playBoot, playReminder, playMouseClick } from './audio/synth';
 import { toast } from './state/toasts';
+import defaultWallpaper from './assets/wallpaper.jpg';
 
 export function App(): JSX.Element {
   const windows = useWindows((s) => s.windows);
@@ -100,9 +101,9 @@ export function App(): JSX.Element {
     <div
       className="ga98-screen"
       style={{
-        background: settings?.wallpaperImage
-          ? `${settings.wallpaperColor ?? '#008080'} url(${JSON.stringify(settings.wallpaperImage)}) center / cover no-repeat`
-          : (settings?.wallpaperColor ?? '#008080')
+        // Default to the DCS98 flame wallpaper; a user-set wallpaperImage overrides it. The
+        // color paints behind the image so edges blend on aspect ratios that don't fill.
+        background: `${settings?.wallpaperColor ?? '#008080'} url(${JSON.stringify(settings?.wallpaperImage ?? defaultWallpaper)}) center / cover no-repeat`
       }}
     >
       {ready && locked && <LockScreen />}

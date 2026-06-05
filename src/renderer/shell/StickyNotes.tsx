@@ -22,6 +22,35 @@ function uid(): string { return crypto.randomUUID(); }
 
 const EMPTY: StickyNotesState = { notes: [], hidden: false };
 
+// Position of the draggable New note / Hide notes bundle. Pure UI preference (non-sensitive),
+// so it persists in localStorage rather than crossing the encrypted store / IPC boundary.
+const CONTROLS_POS_KEY = 'ga98.stickyControls.pos';
+const CONTROLS_W = 172; // approximate bundle width, for clamping into the viewport
+const CONTROLS_H = 26;
+const TASKBAR_H = 32;
+
+function clampControls(p: { x: number; y: number }): { x: number; y: number } {
+  const maxX = Math.max(0, window.innerWidth - CONTROLS_W);
+  const maxY = Math.max(0, window.innerHeight - TASKBAR_H - CONTROLS_H);
+  return { x: Math.min(Math.max(0, p.x), maxX), y: Math.min(Math.max(0, p.y), maxY) };
+}
+
+function loadControlsPos(): { x: number; y: number } {
+  try {
+    const raw = localStorage.getItem(CONTROLS_POS_KEY);
+    if (raw) {
+      const p = JSON.parse(raw) as { x?: unknown; y?: unknown };
+      if (typeof p.x === 'number' && typeof p.y === 'number') return clampControls({ x: p.x, y: p.y });
+    }
+  } catch { /* ignore a malformed preference */ }
+  // Default: bottom-centre, above the taskbar — clear of the window min/close buttons (top-right),
+  // the desktop icon column (left edge), and Shred (bottom-right corner).
+  return clampControls({
+    x: Math.round(window.innerWidth / 2 - CONTROLS_W / 2),
+    y: window.innerHeight - TASKBAR_H - CONTROLS_H - 8
+  });
+}
+
 export function StickyNotes(): JSX.Element | null {
   const [state, setState] = useState<StickyNotesState>(EMPTY);
   const [loaded, setLoaded] = useState(false);
@@ -32,6 +61,18 @@ export function StickyNotes(): JSX.Element | null {
   // Latest state for callbacks that must not re-bind (the reminder subscription).
   const stateRef = useRef(state);
   useEffect(() => { stateRef.current = state; }, [state]);
+
+  // Draggable position of the New note / Hide notes bundle.
+  const [controlsPos, setControlsPos] = useState(loadControlsPos);
+  const controlsPosRef = useRef(controlsPos);
+  useEffect(() => { controlsPosRef.current = controlsPos; }, [controlsPos]);
+  const controlsDrag = useRef<(() => void) | null>(null);
+  // Keep the bundle on-screen if the window is resized.
+  useEffect(() => {
+    const onResize = (): void => setControlsPos((p) => clampControls(p));
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   // On unmount (the whole shell unmounts on vault lock): flush any pending debounced text edit
   // so the last keystrokes aren't dropped, and tear down any active drag listeners. The flush
@@ -46,6 +87,8 @@ export function StickyNotes(): JSX.Element | null {
       }
       dragCleanup.current?.();
       dragCleanup.current = null;
+      controlsDrag.current?.();
+      controlsDrag.current = null;
     };
   }, []);
 
@@ -137,13 +180,36 @@ export function StickyNotes(): JSX.Element | null {
     dragCleanup.current = teardown; // so unmount can remove these if the drag is interrupted
   }
 
+  // --- drag the controls bundle (grip handle only, so the buttons stay clickable) ---
+  function startControlsDrag(e: React.PointerEvent): void {
+    e.preventDefault();
+    const startX = e.clientX, startY = e.clientY;
+    const origX = controlsPosRef.current.x, origY = controlsPosRef.current.y;
+    function onMove(ev: PointerEvent): void {
+      setControlsPos(clampControls({ x: origX + (ev.clientX - startX), y: origY + (ev.clientY - startY) }));
+    }
+    const teardown = (): void => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      controlsDrag.current = null;
+    };
+    function onUp(): void {
+      teardown();
+      try { localStorage.setItem(CONTROLS_POS_KEY, JSON.stringify(controlsPosRef.current)); } catch { /* storage full / disabled */ }
+    }
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    controlsDrag.current = teardown;
+  }
+
   if (!loaded) return null;
 
   const count = state.notes.length;
 
   return (
     <div className="ga98-sticky-layer">
-      <div className="ga98-sticky-controls">
+      <div className="ga98-sticky-controls" style={{ left: controlsPos.x, top: controlsPos.y }}>
+        <span className="ga98-sticky-grip" title="Drag to move these buttons" onPointerDown={startControlsDrag}>⠿</span>
         <button onClick={() => addNote()} title="Add a sticky note to the desktop">📌 New note</button>
         {count > 0 && (
           <button
