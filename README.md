@@ -32,12 +32,18 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`DCS98-Setup-3.6.4.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned).
+> **Install:** download [`DCS98-Setup-3.6.5.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned).
 
 ## Status
 
-**v3.6.4** — current release: the **in-app PDF viewer renders again** (it relied on a JS method
-Electron 33's Chromium doesn't ship yet; v3.6.4 polyfills it). This clears the v3.6.3 known issue.
+**v3.6.5** — current release: the **AI can now read PDF case attachments**. PDFs were previously
+rejected as binary; the assistant now extracts the PDF **text layer** (offline, through the same
+pdf.js engine the viewer uses — no OCR, no network) and folds it into case context, under the same
+remote-egress confirmation and size caps as every other attachment. Also: **sticky notes are now
+resizable** — drag the grip in a note's bottom-right corner; the size persists per note.
+
+**v3.6.4** — the **in-app PDF viewer renders again** (it relied on a JS method
+Electron 33's Chromium doesn't ship yet; v3.6.4 polyfills it). This cleared the v3.6.3 known issue.
 
 **v3.6.3** added **desktop polish** — the **DCS98 flame wallpaper** as the default background,
 desktop icons in a single **vertical left-edge column**, an authentic Win95 **My Computer** icon for
@@ -71,7 +77,7 @@ old install) and cleared a full field-report punch list:
 
 Migration carries an existing **Ghost Access 98** install's data forward on first launch (copy-not-move,
 and only committed if every file copies — no silent loss). Every release is hardened by a pre-release
-adversarial red-team (**0 Critical**; all High/Medium fixed). **243 tests.**
+adversarial red-team (**0 Critical**; all High/Medium fixed). **251 tests.**
 
 The v3.5.0 base added a **Markets** module, a stronger **GeoINT** (satellite, search, auto-refresh), and
 **in-app playback of encrypted media**. v3.4.x added **offline voice conversation** to the AI Assistant —
@@ -82,12 +88,12 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/dcs98/releases) and run it.
 
-Direct link to the current release: [`DCS98-Setup-3.6.4.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.6.4/DCS98-Setup-3.6.4.exe).
+Direct link to the current release: [`DCS98-Setup-3.6.5.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.6.5/DCS98-Setup-3.6.5.exe).
 
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\DCS98-Setup-3.6.4.exe -Algorithm SHA256
+Get-FileHash .\DCS98-Setup-3.6.5.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
@@ -124,8 +130,14 @@ To uninstall: Settings → Apps → Dead Cyber Society 98 → Uninstall.
 
 ## Releases & changelog
 
-The current build is **v3.6.4**. Each release page carries its own notes + SHA-256.
+The current build is **v3.6.5**. Each release page carries its own notes + SHA-256.
 
+- **v3.6.5** — **AI reads PDFs** + **resizable sticky notes**. PDF case attachments were rejected as
+  binary; the assistant now extracts the PDF **text layer** through the same offline pdf.js engine the
+  viewer uses (no OCR, no network) and includes it in case context under the existing remote-egress
+  confirmation and per-item/total size caps — a scanned image-only PDF yields no text and is reported as
+  such, not silently dropped. Sticky notes gain a **bottom-right resize grip**; the chosen size persists
+  per note and is bounded by the main-process validator. 251 tests (8 new).
 - **v3.6.4** — **PDF viewer fix**: the in-app Doc Viewer renders PDFs again. pdfjs-dist 5.x calls
   `Map.prototype.getOrInsertComputed()` during render — a TC39 method Electron 33's Chromium 130
   doesn't ship — so render threw and the viewer blanked; v3.6.4 adds a spec-faithful polyfill (Map +
@@ -202,7 +214,7 @@ This starts the Vite dev server (HMR) and the Electron main process.
 
 ```bash
 pnpm build        # type-check + bundle main / preload / renderer
-pnpm test         # vitest suite (243 tests as of v3.6.4)
+pnpm test         # vitest suite (251 tests as of v3.6.5)
 pnpm package      # platform installer for the current host
 pnpm package:win  # cross-build Windows NSIS installer
 ```
