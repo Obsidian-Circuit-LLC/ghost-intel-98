@@ -136,6 +136,7 @@ export interface GhostApi {
   system: {
     appInfo(): Promise<{ version: string; userData: string; platform: NodeJS.Platform; secretBackend?: string }>;
     openExternal(url: string): Promise<void>;
+    quit(): Promise<void>;
     onReminderFired(cb: (payload: { reminder: Reminder }) => void): () => void;
     onDiagnostic(cb: (payload: { kind: string; message?: string; cases?: { caseId: string; reason: string }[] }) => void): () => void;
   };

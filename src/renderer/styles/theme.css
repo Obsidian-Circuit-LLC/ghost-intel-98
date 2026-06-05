@@ -757,8 +757,10 @@ input.ga98-text, select.ga98-text {
 /* ── GeoINT dashboard ─────────────────────────────────────────────────────── */
 /* GeoINT needs a wider left column than the generic .ga98-split 220px track — its controls
    are ~320px, so the pane overflowed a too-narrow grid cell and clipped the labels ("text on
-   the left doesn't fit"). Size the track here instead of fighting it with min-width. */
-.ga98-geo { grid-template-columns: 340px 1fr; }
+   the left doesn't fit"). Size the track here instead of fighting it with min-width.
+   Bumped 340→380 so the View row (2D Map / Satellite / Street View / Labels) and the event
+   titles get a little breathing room instead of clipping. */
+.ga98-geo { grid-template-columns: 380px 1fr; }
 .ga98-geo-left { display: flex; flex-direction: column; gap: 6px; overflow-x: hidden; overflow-y: auto; }
 .ga98-geo-left input, .ga98-geo-left select { min-width: 0; }
 .ga98-geo-right { position: relative; }

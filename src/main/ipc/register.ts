@@ -181,6 +181,9 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     const url = validateExternalUrl(args[0] as string);
     await shell.openExternal(url);
   });
+  // Renderer-initiated quit (Access → Shut Down). app.quit() runs the before-quit cleanup
+  // (drains SSH sessions, cancels AI streams) rather than killing the process abruptly.
+  safeHandle(channels.system.quit, () => { app.quit(); });
 
   // ---- auth (login / encrypt-at-rest) ----
   safeHandle(channels.auth.status, async () => ({

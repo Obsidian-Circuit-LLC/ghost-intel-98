@@ -77,6 +77,7 @@ export const channels = {
   system: {
     appInfo: 'system:appInfo',
     openExternal: 'system:openExternal',
+    quit: 'system:quit',
     onReminderFired: 'system:onReminderFired',
     onDiagnostic: 'system:onDiagnostic'
   },

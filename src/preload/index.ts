@@ -72,6 +72,7 @@ const api = {
   system: {
     appInfo: () => ipcRenderer.invoke(channels.system.appInfo),
     openExternal: (url: string) => ipcRenderer.invoke(channels.system.openExternal, url),
+    quit: () => ipcRenderer.invoke(channels.system.quit),
     onReminderFired: (cb: (payload: { reminder: unknown }) => void) => {
       const listener = (_e: unknown, payload: { reminder: unknown }) => cb(payload);
       ipcRenderer.on(channels.system.onReminderFired, listener);

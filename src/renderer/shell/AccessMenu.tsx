@@ -7,6 +7,7 @@ import { useSettings, useWindows, type ModuleKey } from '../state/store';
 import { moduleTitles } from './Desktop';
 import { glyphFor } from './Icon';
 import { playClick } from '../audio/synth';
+import { confirmDialog } from '../state/dialogs';
 import logoUrl from '../assets/logo.png';
 
 interface AccessMenuProps {
@@ -77,7 +78,25 @@ export function AccessMenu({ onClose }: AccessMenuProps): JSX.Element {
           <span className="ga98-access-entry-glyph" aria-hidden="true">⚙</span>
           <span>Settings…</span>
         </div>
+        <div className="ga98-access-separator" />
+        <div
+          className="ga98-access-entry"
+          role="menuitem"
+          tabIndex={0}
+          onClick={() => { void shutDown(); }}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') void shutDown(); }}
+        >
+          <span className="ga98-access-entry-glyph" aria-hidden="true">⏻</span>
+          <span>Shut Down…</span>
+        </div>
       </div>
     </div>
   );
+
+  async function shutDown(): Promise<void> {
+    if (settings?.soundEnabled) playClick();
+    onClose();
+    const ok = await confirmDialog('Close Dead Cyber Society 98?', 'Shut Down');
+    if (ok) await window.api.system.quit();
+  }
 }
