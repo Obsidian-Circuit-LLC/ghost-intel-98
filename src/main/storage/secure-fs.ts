@@ -63,7 +63,18 @@ export async function secureReadText(path: string): Promise<string> {
   return (await secureReadFile(path)).toString('utf8');
 }
 
-export async function secureWriteFile(path: string, data: Buffer | string): Promise<void> {
+/**
+ * @param opts.durable when true, fsync the data to stable storage before the rename and best-effort
+ *   fsync the parent directory after — so the write survives a crash/power-loss. Default false
+ *   (the prior temp+rename behaviour) to keep ordinary store writes fast. Use `durable: true` only
+ *   where losing the write on an unclean shutdown is a *security* problem — e.g. one-time-prekey /
+ *   invite-token consumption, where a lost "consumed" mark reintroduces key/token reuse.
+ */
+export async function secureWriteFile(
+  path: string,
+  data: Buffer | string,
+  opts: { durable?: boolean } = {}
+): Promise<void> {
   // Choke-point invariant: never write PLAINTEXT into an enabled-but-locked tree. The DEK is
   // absent so we can't encrypt; writing plaintext would corrupt the encrypted corpus with
   // cleartext. Refusing here is defence-in-depth independent of the IPC lock gate (#4).
@@ -78,6 +89,29 @@ export async function secureWriteFile(path: string, data: Buffer | string): Prom
   const out = vault.shouldEncrypt() ? vault.encryptBuffer(buf) : buf;
   await mkdir(dirname(path), { recursive: true });
   const tmp = `${path}.${process.pid}.${randomUUID().slice(0, 8)}.tmp`;
-  await writeFile(tmp, out);
-  await rename(tmp, path);
+  if (opts.durable) {
+    const fh = await open(tmp, 'w');
+    try {
+      await fh.writeFile(out);
+      await fh.sync(); // flush data+metadata to disk BEFORE the rename
+    } finally {
+      await fh.close();
+    }
+    await rename(tmp, path);
+    // Make the rename itself durable. Directory fsync is a no-op / unsupported on some platforms
+    // (notably Windows), so it's best-effort — the file fsync above is the load-bearing guarantee.
+    try {
+      const dh = await open(dirname(path), 'r');
+      try {
+        await dh.sync();
+      } finally {
+        await dh.close();
+      }
+    } catch {
+      /* directory fsync not supported here — file data is already durable */
+    }
+  } else {
+    await writeFile(tmp, out);
+    await rename(tmp, path);
+  }
 }
