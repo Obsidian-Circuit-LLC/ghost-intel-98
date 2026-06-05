@@ -32,11 +32,17 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`DCS98-Setup-3.6.5.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned).
+> **Install:** download [`DCS98-Setup-3.6.6.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned).
 
 ## Status
 
-**v3.6.5** — current release: the **AI can now read PDF case attachments**. PDFs were previously
+**v3.6.6** — current release: a **warmer, lower startup chime** (an original synthesized power-on
+swell — no sampled assets), and two **TTS voice-picker** fixes. The on-device voice selector no
+longer **silently disappears** when no eligible voice is found — it now says *why* (cloud voices are
+blocked by design; install Windows Natural voices) — and voice discovery is now **live**, so voices
+that the OS populates after launch (or a freshly installed voice pack) appear without a restart.
+
+**v3.6.5** — the **AI can now read PDF case attachments**. PDFs were previously
 rejected as binary; the assistant now extracts the PDF **text layer** (offline, through the same
 pdf.js engine the viewer uses — no OCR, no network) and folds it into case context, under the same
 remote-egress confirmation and size caps as every other attachment. Also: **sticky notes are now
@@ -77,7 +83,7 @@ old install) and cleared a full field-report punch list:
 
 Migration carries an existing **Ghost Access 98** install's data forward on first launch (copy-not-move,
 and only committed if every file copies — no silent loss). Every release is hardened by a pre-release
-adversarial red-team (**0 Critical**; all High/Medium fixed). **251 tests.**
+adversarial red-team (**0 Critical**; all High/Medium fixed). **254 tests.**
 
 The v3.5.0 base added a **Markets** module, a stronger **GeoINT** (satellite, search, auto-refresh), and
 **in-app playback of encrypted media**. v3.4.x added **offline voice conversation** to the AI Assistant —
@@ -88,12 +94,12 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/dcs98/releases) and run it.
 
-Direct link to the current release: [`DCS98-Setup-3.6.5.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.6.5/DCS98-Setup-3.6.5.exe).
+Direct link to the current release: [`DCS98-Setup-3.6.6.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.6.6/DCS98-Setup-3.6.6.exe).
 
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\DCS98-Setup-3.6.5.exe -Algorithm SHA256
+Get-FileHash .\DCS98-Setup-3.6.6.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
@@ -130,8 +136,15 @@ To uninstall: Settings → Apps → Dead Cyber Society 98 → Uninstall.
 
 ## Releases & changelog
 
-The current build is **v3.6.5**. Each release page carries its own notes + SHA-256.
+The current build is **v3.6.6**. Each release page carries its own notes + SHA-256.
 
+- **v3.6.6** — **Warmer startup chime** + **TTS voice-picker fixes**. The launch sound is a revoiced,
+  lower-register **original** synthesized power-on swell (F-major bed + slow arpeggio + soft bells; no
+  sampled assets — it is *not* the Win9x recording). The on-device voice selector no longer **silently
+  vanishes** when no eligible voice exists — it explains *why* (cloud voices are blocked by design;
+  install Windows Natural voices) — and voice discovery is now **live** via a persistent
+  `voiceschanged` subscription, so voices that populate after launch (or a newly installed voice pack)
+  appear without a restart instead of being lost to the old one-shot fetch window. 254 tests (3 new).
 - **v3.6.5** — **AI reads PDFs** + **resizable sticky notes**. PDF case attachments were rejected as
   binary; the assistant now extracts the PDF **text layer** through the same offline pdf.js engine the
   viewer uses (no OCR, no network) and includes it in case context under the existing remote-egress
@@ -214,7 +227,7 @@ This starts the Vite dev server (HMR) and the Electron main process.
 
 ```bash
 pnpm build        # type-check + bundle main / preload / renderer
-pnpm test         # vitest suite (251 tests as of v3.6.5)
+pnpm test         # vitest suite (254 tests as of v3.6.6)
 pnpm package      # platform installer for the current host
 pnpm package:win  # cross-build Windows NSIS installer
 ```
