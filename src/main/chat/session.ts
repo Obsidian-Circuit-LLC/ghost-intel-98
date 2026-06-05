@@ -35,6 +35,13 @@ export class SessionError extends Error {
 
 export const ENVELOPE_VERSION = 1;
 export const MAX_MESSAGE_TEXT = 16 * 1024; // chars; Phase 2 attachments use their own chunk frames
+/** Byte cap on a decoded envelope body, enforced BEFORE UTF-8 decoding so a hostile peer can't force
+ *  a ~1 MiB string allocation per frame (crypto-audit). UTF-8 ≤ ~4 bytes/char, so this comfortably
+ *  covers MAX_MESSAGE_TEXT chars. */
+export const MAX_MESSAGE_BYTES = 64 * 1024;
+/** Force a reconnect/rehandshake well before the JS-safe-integer counter limit (audit: keeps the
+ *  nonce/counter exact and bounds a never-dropped connection's lack of PCS). */
+export const MAX_MESSAGES_PER_SESSION = 0x100000000; // 2^32
 
 enum ContentType {
   Text = 1
@@ -60,6 +67,7 @@ export function encodeEnvelope(content: MessageContent): Uint8Array {
  *  returned faithfully; display sanitization (no-HTML, control chars) happens at the IPC boundary. */
 export function decodeEnvelope(bytes: Uint8Array): MessageContent {
   if (bytes.length < 2) throw new SessionError('envelope truncated');
+  if (bytes.length - 2 > MAX_MESSAGE_BYTES) throw new SessionError('message body exceeds byte cap');
   if (bytes[0] !== ENVELOPE_VERSION) throw new SessionError(`unsupported envelope version ${bytes[0]}`);
   if (bytes[1] !== ContentType.Text) throw new SessionError(`unsupported content type ${bytes[1]}`);
   const text = new TextDecoder().decode(bytes.slice(2));
@@ -155,6 +163,9 @@ export class Session {
 
   /** Encrypt one plaintext envelope → sealed `Msg` payload. Advances + zeroizes the send chain. */
   encrypt(plaintext: Uint8Array): Uint8Array {
+    if (this.sendCounter >= MAX_MESSAGES_PER_SESSION) {
+      throw new SessionError('session message cap reached — reconnect to rekey');
+    }
     const { messageKey, nextChainKey } = chainStep(this.sendChain);
     zeroize(this.sendChain);
     this.sendChain = nextChainKey;
@@ -177,6 +188,7 @@ export class Session {
     const counter = readCounter(framePayload, 0);
     if (counter < this.recvCounter) throw new SessionError('replayed message');
     if (counter !== this.recvCounter) throw new SessionError('out-of-order message');
+    if (counter >= MAX_MESSAGES_PER_SESSION) throw new SessionError('session message cap reached');
 
     const { messageKey, nextChainKey } = chainStep(this.recvChain);
     const aad = aadFor(this.sessionId, this.recvDir, counter);

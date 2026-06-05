@@ -17,6 +17,7 @@ import {
   mlkemKeygen,
   sha256,
   hkdf,
+  zeroize,
   ED25519_PUBLIC_LEN,
   X25519_PUBLIC_LEN,
   MLKEM768_PUBLIC_LEN,
@@ -59,6 +60,13 @@ export function generateIdentity(): IdentityKeyPair {
     x25519Secret: x.secretKey,
     mlkem768Secret: kem.secretKey
   };
+}
+
+/** Best-effort wipe of an identity's secret keys (call on vault lock / engine teardown). The public
+ *  keys are left intact (they're not secret). Note: noble keeps secrets in Uint8Arrays we can wipe,
+ *  unlike the old JWK path — but JS still can't guarantee no copies survive elsewhere. */
+export function zeroizeIdentity(id: IdentityKeyPair): void {
+  zeroize(id.ed25519Secret, id.x25519Secret, id.mlkem768Secret);
 }
 
 /** Re-assemble the per-algorithm KeyPair views (for handing to crypto.ts helpers). */

@@ -7,6 +7,7 @@ import {
   decodeEnvelope,
   ENVELOPE_VERSION,
   MAX_MESSAGE_TEXT,
+  MAX_MESSAGE_BYTES,
   type Role
 } from '../src/main/chat/session';
 import { randomBytes, constantTimeEqual } from '../src/main/chat/crypto';
@@ -36,6 +37,13 @@ describe('chat session — envelope', () => {
     expect(() => decodeEnvelope(new Uint8Array([ENVELOPE_VERSION, 99, 65]))).toThrow(SessionError); // bad type
     expect(() => decodeEnvelope(new Uint8Array([ENVELOPE_VERSION]))).toThrow(SessionError); // truncated
     expect(() => encodeEnvelope({ type: 'text', text: 'x'.repeat(MAX_MESSAGE_TEXT + 1) })).toThrow(SessionError);
+  });
+
+  it('enforces the byte cap before decoding (no giant string allocation)', () => {
+    const oversize = new Uint8Array(2 + MAX_MESSAGE_BYTES + 1);
+    oversize[0] = ENVELOPE_VERSION;
+    oversize[1] = 1; // text content type
+    expect(() => decodeEnvelope(oversize)).toThrow(SessionError);
   });
 });
 

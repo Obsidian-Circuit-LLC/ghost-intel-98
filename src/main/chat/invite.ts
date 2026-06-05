@@ -71,9 +71,10 @@ export function parseInvite(link: string): ParsedInvite {
   if (typeof link !== 'string' || !link.startsWith(INVITE_PREFIX)) {
     throw new InviteError('not a dcs98 chat invite link');
   }
-  const b64 = link.slice(INVITE_PREFIX.length);
-  // Strict base64url: decode then re-encode and compare, so malformed/padded input is rejected
-  // rather than silently truncated (Buffer's base64 decode is lenient).
+  // Normalize first: a chat app may append '=' padding or trailing whitespace/newlines to a pasted
+  // link. Strip those, THEN do the strict canonical re-encode check so genuinely-malformed input is
+  // still rejected (Buffer's base64 decode is otherwise lenient and would silently truncate).
+  const b64 = link.slice(INVITE_PREFIX.length).trim().replace(/=+$/, '');
   const payload = new Uint8Array(Buffer.from(b64, 'base64url'));
   if (Buffer.from(payload).toString('base64url') !== b64) {
     throw new InviteError('malformed invite encoding');

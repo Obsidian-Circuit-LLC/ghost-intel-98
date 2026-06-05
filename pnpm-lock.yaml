@@ -11,8 +11,11 @@ importers:
       98.css:
         specifier: ^0.1.20
         version: 0.1.21
+      '@noble/curves':
+        specifier: 2.2.0
+        version: 2.2.0
       '@noble/post-quantum':
-        specifier: ^0.6.1
+        specifier: 0.6.1
         version: 0.6.1
       '@xterm/addon-fit':
         specifier: ^0.11.0
