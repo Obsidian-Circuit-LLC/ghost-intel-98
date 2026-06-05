@@ -34,5 +34,5 @@ stays out of your way.
 
 ---
 
-**Artifact:** `DCS98-Setup-3.6.3.exe` — to be produced at packaging time (`pnpm package:win`).
-**SHA-256:** _pending — fill in from the packaged installer before publishing the release._
+**Artifact:** `DCS98-Setup-3.6.3.exe` (124,481,343 bytes ≈ 119 MB, NSIS, x64, unsigned)
+**SHA-256:** `a32e5ce036567f0b763515c3b42ca6ea31ae0eede052c8af3f717af14e7dd21d`
