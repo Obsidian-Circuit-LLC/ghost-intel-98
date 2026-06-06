@@ -81,6 +81,20 @@ export const channels = {
     onReminderFired: 'system:onReminderFired',
     onDiagnostic: 'system:onDiagnostic'
   },
+  chat: {
+    status: 'chat:status',
+    enable: 'chat:enable',
+    disable: 'chat:disable',
+    createInvite: 'chat:createInvite',
+    acceptInvite: 'chat:acceptInvite',
+    listContacts: 'chat:listContacts',
+    send: 'chat:send',
+    history: 'chat:history',
+    onMessage: 'chat:onMessage',
+    onContactStatus: 'chat:onContactStatus',
+    onDelivery: 'chat:onDelivery',
+    onTorStatus: 'chat:onTorStatus'
+  },
   mail: {
     listAccounts: 'mail:listAccounts',
     upsertAccount: 'mail:upsertAccount',

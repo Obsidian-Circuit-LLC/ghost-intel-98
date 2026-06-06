@@ -31,6 +31,7 @@ import { shutdownAllSessions } from './services/ssh';
 import { shutdownAll as shutdownAllFtp } from './services/ftp';
 import { cancelAll as cancelAllAiStreams } from './services/ai';
 import * as localAi from './services/local-ai';
+import * as chat from './services/chat';
 
 const isDev = !!process.env['ELECTRON_RENDERER_URL'];
 
@@ -246,6 +247,7 @@ app.on('before-quit', async () => {
   await cancelAllAiStreams();
   await shutdownAllSessions();
   await shutdownAllFtp();
+  await chat.shutdown().catch(() => { /* tor may not be running */ });
 });
 
 app.on('will-quit', () => { localAi.stop(); });

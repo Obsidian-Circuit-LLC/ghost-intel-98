@@ -76,6 +76,23 @@ export interface HistoryEntry {
   visitedAt: string;
 }
 
+export interface ChatContactDTO {
+  contactId: string;
+  displayName: string;
+  onion: string | null;
+  verified: boolean;
+  lastSeen: number | null;
+  safetyNumber: string;
+}
+export interface ChatMessageDTO {
+  id: string;
+  direction: 'in' | 'out';
+  seq: number;
+  ts: number;
+  text: string;
+  state: 'queued' | 'sent' | 'delivered' | 'received';
+}
+
 export interface GhostApi {
   cases: {
     list(): Promise<CaseSummary[]>;
@@ -139,6 +156,20 @@ export interface GhostApi {
     quit(): Promise<void>;
     onReminderFired(cb: (payload: { reminder: Reminder }) => void): () => void;
     onDiagnostic(cb: (payload: { kind: string; message?: string; cases?: { caseId: string; reason: string }[] }) => void): () => void;
+  };
+  chat: {
+    status(): Promise<{ enabled: boolean; onion: string | null }>;
+    enable(): Promise<{ onion: string | null }>;
+    disable(): Promise<void>;
+    createInvite(): Promise<string>;
+    acceptInvite(link: string): Promise<string>;
+    listContacts(): Promise<ChatContactDTO[]>;
+    send(contactId: string, text: string): Promise<string>;
+    history(contactId: string): Promise<ChatMessageDTO[]>;
+    onMessage(cb: (p: { contactId: string; message: ChatMessageDTO }) => void): () => void;
+    onContactStatus(cb: (p: { contactId: string; status: 'online' | 'connecting' | 'offline' }) => void): () => void;
+    onDelivery(cb: (p: { contactId: string; messageId: string; state: 'sent' | 'delivered' }) => void): () => void;
+    onTorStatus(cb: (p: { status: string; onion: string | null }) => void): () => void;
   };
   mail: {
     listAccounts(): Promise<MailAccount[]>;
