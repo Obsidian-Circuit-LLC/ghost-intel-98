@@ -87,8 +87,13 @@ Rate: the existing `ai.ttsRate` (0.5–2.0) maps to Piper `length_scale ≈ 1/ra
   redistribution within the app (CC0 / public-domain / permissive preferred; a CC-BY
   voice is acceptable only with proper attribution shipped in-app + NOTICE).
 
-  > **OPEN (resolve in plan/impl, blocking the bundle step):** pick the specific High
-  > voice, fetch its `MODEL_CARD`, record voice id + license + attribution text here.
+  > **RESOLVED 2026-06-06:** voice = **`en_US-ljspeech-high`** (High-architecture
+  > 114 MB model). Dataset = LJ Speech; license = **PUBLIC DOMAIN** per the model card
+  > (https://huggingface.co/rhasspy/piper-voices/raw/main/en/en_US/ljspeech/high/MODEL_CARD).
+  > No attribution obligation. Pinned SHA-256s + provenance recorded in
+  > `resources/piper/README-PIPER.txt`. Piper engine itself is MIT. (A CC-BY voice
+  > such as `libritts_r-high` is available if better fidelity is later wanted at the
+  > cost of shipping attribution.)
 
 ## Error handling
 

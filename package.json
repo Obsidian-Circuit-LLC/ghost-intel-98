@@ -18,8 +18,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "fetch:tor": "node scripts/fetch-tor.mjs",
-    "package": "pnpm fetch:tor && pnpm build && electron-builder",
-    "package:win": "pnpm fetch:tor && pnpm build && electron-builder --win --x64",
+    "fetch:piper": "node scripts/fetch-piper.mjs",
+    "package": "pnpm fetch:tor && pnpm fetch:piper && pnpm build && electron-builder",
+    "package:win": "pnpm fetch:tor && pnpm fetch:piper && pnpm build && electron-builder --win --x64",
     "package:linux": "pnpm build && electron-builder --linux",
     "postinstall": "echo 'skipping native rebuild — ssh2 runs pure-JS; cpu-features (optional) is intentionally skipped'"
   },
@@ -108,6 +109,10 @@
       {
         "from": "resources/tor",
         "to": "tor"
+      },
+      {
+        "from": "resources/piper",
+        "to": "piper"
       }
     ],
     "win": {

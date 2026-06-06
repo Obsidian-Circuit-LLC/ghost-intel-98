@@ -13,9 +13,13 @@ import { readdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { buildPiperArgs, rateToLengthScale, isValidWavHeader, verifySha256 } from './piper-core';
 
-/** Pinned SHA-256 of the bundled binary (lowercase hex), set by the fetch step. Empty ⇒ skip the
- *  verify-before-exec gate (dev convenience only; a release build MUST pin this). */
-const PINNED_BINARY_SHA256 = '';
+/** Pinned SHA-256 of the bundled binary (lowercase hex) — verify-before-exec. This is the hash of
+ *  the Windows `piper.exe` from rhasspy/piper 2023.11.14-2 (piper_windows_amd64.zip). On non-Windows
+ *  dev hosts the binary differs, so the gate only applies to the win32 binary; other platforms (used
+ *  for manual dev smoke only) skip it. Bump together with scripts/fetch-piper.mjs. */
+const PINNED_BINARY_SHA256 = process.platform === 'win32'
+  ? '96f3da3811151580073e40bb4dd20eb0fb8115f5f5f76e2fb54282b3edfa5c1f'
+  : '';
 
 /** Per-chunk synthesis timeout — bounds a wedged process. High-quality synth of one sentence-sized
  *  chunk is well under this. */
