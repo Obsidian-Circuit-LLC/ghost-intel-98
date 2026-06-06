@@ -32,11 +32,31 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`DCS98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned).
+> **Install:** download [`DCS98-Setup-3.8.0-beta.1.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the **experimental** Tor P2P chat — see Status.)*
 
 ## Status
 
-**v3.6.8** — current release: a new **OpChildSafety** section in **RTFM** (Help) — field guidance for
+**v3.8.0-beta.1** — current release. Two big additions, both opt-in:
+
+- **P2P chat over Tor** (⚠ **EXPERIMENTAL** — the PQ-hybrid handshake crypto is **not yet formally
+  verified**; a loud in-app banner says so, and it's off by default). Invite-link **1:1** with an
+  X25519 + ML-KEM-768 handshake (no hosting, loopback-only sockets), plus **file attachments**
+  (whole-file SHA-256 verified before anything touches disk, received files held in an encrypted-at-rest
+  quarantine with an explicit Save step), **small groups** (client-side fan-out — *zero new
+  cryptography*; each message rides your existing 1:1 sessions), and **case-aware sharing** (a 📤 action
+  on case entities and attachments sends them straight into a chat). Each phase was adversarially
+  red-teamed and authorization-hardened.
+- **Offline neural TTS (Piper)** — a bundled, fully-offline voice (`en_US-ljspeech-high`, **public-domain**
+  LJ Speech dataset) as a selectable engine in the AI assistant, default when present, with the OS /
+  Web-Speech path retained as fallback. Synthesizes locally, model bundled → **zero runtime egress**.
+
+424 automated tests. *Bundled Tor + Piper binaries are fetched + SHA-256-verified (fail-closed) at
+build time; see `scripts/fetch-tor.mjs` / `scripts/fetch-piper.mjs`.*
+
+**v3.7.0-beta.1** — first cut of the experimental Tor-only P2P chat (invite-link 1:1; PQ-hybrid
+handshake; bundled SHA-256-verified Tor). Superseded by v3.8.0-beta.1.
+
+**v3.6.8** — a new **OpChildSafety** section in **RTFM** (Help) — field guidance for
 grassroots child-protection / OSINT investigators on reporting CSAM lawfully through the proper
 channels (NCMEC, IWF, CEOP, HSI, ACCCE, Cybertip.ca, Europol IRU, INHOPE, NCA) **without** viewing,
 downloading, or mishandling material, plus evidence-handling do's and don'ts. Reference content only;
@@ -105,12 +125,14 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/dcs98/releases) and run it.
 
-Direct link to the current release: [`DCS98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.6.8/DCS98-Setup-3.6.8.exe).
+Direct link to the current release: [`DCS98-Setup-3.8.0-beta.1.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.8.0-beta.1/DCS98-Setup-3.8.0-beta.1.exe)
+(experimental P2P chat + Piper TTS; the chat crypto is unverified — see Status). The last
+fully-stable build is [`DCS98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.6.8/DCS98-Setup-3.6.8.exe).
 
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\DCS98-Setup-3.6.8.exe -Algorithm SHA256
+Get-FileHash .\DCS98-Setup-3.8.0-beta.1.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
@@ -143,12 +165,25 @@ To uninstall: Settings → Apps → Dead Cyber Society 98 → Uninstall.
 | Mail | IMAP/SMTP client (imapflow + nodemailer) with provider presets + app-password guidance, encrypted credentials, synthesized "You have mail" alert |
 | DialTerm | SSH / Telnet / FTP client (ssh2 + xterm.js) with a 90s dial-up handshake animation; key-based auth preferred; passwords encrypted at rest; plaintext-protocol warnings |
 | EyeSpy | Authorized camera streams — manual URL entry **and bulk import** (CSV/JSON/URL-list) of your own/public feeds (HLS / MJPEG / HTTP refresh; RTSP requires a local ffmpeg→HLS bridge). **No discovery / scanning / brute-force code paths exist** |
-| AI Assistant | Pluggable Ollama (local, default model `qwen3-abliterated:4b`) / OpenAI-compatible providers, with an in-app **"Set up local AI"** wizard; **saved-conversation memory**; case context opt-in per message; API keys encrypted. **Offline voice conversation** — push-to-talk + hands-free, **on-device Vosk** STT (model operator-supplied in `resources/vosk/`) and on-device **TTS** for replies; **STFU** stops generation |
+| AI Assistant | Pluggable Ollama (local, default model `qwen3-abliterated:4b`) / OpenAI-compatible providers, with an in-app **"Set up local AI"** wizard; **saved-conversation memory**; case context opt-in per message; API keys encrypted. **Offline voice conversation** — push-to-talk + hands-free, **on-device Vosk** STT (model operator-supplied in `resources/vosk/`) and on-device **TTS** for replies; **STFU** stops generation. TTS has a bundled offline **Piper** neural-voice engine (selectable alongside OS voices; zero egress) |
+| **Chat** *(beta, experimental)* | Opt-in **Tor-only P2P chat** — invite-link **1:1** with a PQ-hybrid X25519 + ML-KEM-768 handshake (no hosting, loopback-only sockets), **file attachments** (hash-verified, encrypted quarantine + explicit save), **small groups** (client-side fan-out), and **case-aware sharing** from the case module. ⚠ The handshake crypto is **EXPERIMENTAL / not formally verified** (loud in-app banner); off by default. Bundled SHA-256-verified Tor (`resources/tor/` via `scripts/fetch-tor.mjs`) |
 
 ## Releases & changelog
 
-The current build is **v3.6.8**. Each release page carries its own notes + SHA-256.
+The current build is **v3.8.0-beta.1**. Each release page carries its own notes + SHA-256.
 
+- **v3.8.0-beta.1** — **P2P chat Phases 2–4 + Piper neural TTS**. File **attachments** (chunked over the
+  encrypted channel, whole-file SHA-256 verified before disk, encrypted quarantine + explicit save),
+  **small groups** (client-side fan-out — *zero new cryptography*), and **case-aware sharing** (entity →
+  text, attachment → file, straight into a chat). Plus an offline **Piper** neural TTS engine (bundled
+  **public-domain** `en_US-ljspeech-high` voice; selectable alongside the OS voices; zero runtime
+  egress). Each phase adversarially red-teamed + authorization-hardened. **Chat handshake crypto remains
+  EXPERIMENTAL / unverified** (loud in-app banner). Bundled Tor + Piper fetched + SHA-256-verified at
+  build. **424 tests.**
+- **v3.7.0-beta.1** — **Experimental P2P chat (Tor), Phase 1**. Opt-in, invite-link **1:1** chat over
+  Tor onion services with a PQ-hybrid X25519 + ML-KEM-768 handshake, forward-secret message ratchet,
+  TOFU + safety-number trust, encrypt-at-rest history, loopback-only sockets (no firewall prompt).
+  Bundled SHA-256-verified Tor. **Crypto EXPERIMENTAL — not formally verified.**
 - **v3.6.8** — **OpChildSafety (RTFM)**. A new reference section in Help/RTFM with field guidance for
   grassroots child-protection / OSINT investigators: report CSAM lawfully through the proper channels
   (NCMEC, IWF, CEOP, HSI, ACCCE, Cybertip.ca, Europol IRU, INHOPE, NCA) **without** viewing,
@@ -250,7 +285,7 @@ This starts the Vite dev server (HMR) and the Electron main process.
 
 ```bash
 pnpm build        # type-check + bundle main / preload / renderer
-pnpm test         # vitest suite (254 tests as of v3.6.7)
+pnpm test         # vitest suite (424 tests as of v3.8.0-beta.1)
 pnpm package      # platform installer for the current host
 pnpm package:win  # cross-build Windows NSIS installer
 ```
