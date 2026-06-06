@@ -152,7 +152,9 @@ export class ChatEngine {
   private async onIncoming(cid: string, envelope: Uint8Array): Promise<void> {
     let text: string;
     try {
-      text = decodeEnvelope(envelope).text;
+      const content = decodeEnvelope(envelope);
+      if (content.type !== 'text') return; // file-offer/file-chunk routing lands in the next increment
+      text = content.text;
     } catch {
       return; // malformed content — drop (the connection layer already validated framing/auth)
     }
