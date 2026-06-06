@@ -35,44 +35,171 @@ export class SessionError extends Error {
 
 export const ENVELOPE_VERSION = 1;
 export const MAX_MESSAGE_TEXT = 16 * 1024; // chars; Phase 2 attachments use their own chunk frames
-/** Byte cap on a decoded envelope body, enforced BEFORE UTF-8 decoding so a hostile peer can't force
- *  a ~1 MiB string allocation per frame (crypto-audit). UTF-8 ≤ ~4 bytes/char, so this comfortably
- *  covers MAX_MESSAGE_TEXT chars. */
+/** Byte cap on a decoded TEXT envelope body, enforced BEFORE UTF-8 decoding so a hostile peer can't
+ *  force a ~1 MiB string allocation per frame (crypto-audit). UTF-8 ≤ ~4 bytes/char, so this
+ *  comfortably covers MAX_MESSAGE_TEXT chars. File content types carry their own (larger) caps. */
 export const MAX_MESSAGE_BYTES = 64 * 1024;
+
+// ---- file transfer wire sizes (Phase 2) ----
+export const TRANSFER_ID_LEN = 16; // random per-transfer id (caller-supplied; not derived here)
+export const FILE_HASH_LEN = 32; // sha256 of the whole file, bound in the offer + verified on assemble
+export const CHUNK_SIZE = 128 * 1024; // payload bytes per FileChunk; each chunk is its own Msg frame
+export const MAX_FILE_BYTES = 64 * 1024 * 1024; // 64 MiB hard cap on a single transfer
+export const MAX_FILENAME_LEN = 255; // UTF-8 bytes
+export const MAX_MIME_LEN = 128; // UTF-8 bytes
+export const MAX_CHUNK_COUNT = Math.ceil(MAX_FILE_BYTES / CHUNK_SIZE); // bound for index/count validation
+/** Byte cap on a decoded file-chunk body: transferId + index + at most one CHUNK_SIZE payload. Sits
+ *  well under MAX_FRAME_PAYLOAD (1 MiB) even after AEAD + counter + frame overhead. */
+const MAX_CHUNK_BODY = TRANSFER_ID_LEN + 4 + CHUNK_SIZE;
+/** Byte cap on a decoded file-offer body: fixed prefix + bounded name + bounded mime. */
+const MAX_OFFER_BODY = TRANSFER_ID_LEN + FILE_HASH_LEN + 4 + 4 + 2 + MAX_FILENAME_LEN + 2 + MAX_MIME_LEN;
+const OFFER_FIXED_PREFIX = TRANSFER_ID_LEN + FILE_HASH_LEN + 4 + 4 + 2; // up to and including nameLen
+
 /** Force a reconnect/rehandshake well before the JS-safe-integer counter limit (audit: keeps the
  *  nonce/counter exact and bounds a never-dropped connection's lack of PCS). */
 export const MAX_MESSAGES_PER_SESSION = 0x100000000; // 2^32
 
 enum ContentType {
-  Text = 1
+  Text = 1,
+  FileOffer = 2,
+  FileChunk = 3
 }
 
-export type MessageContent = { type: 'text'; text: string };
+export type MessageContent =
+  | { type: 'text'; text: string }
+  | {
+      type: 'file-offer';
+      transferId: Uint8Array;
+      hash: Uint8Array;
+      name: string;
+      size: number;
+      mime: string;
+      chunkCount: number;
+    }
+  | { type: 'file-chunk'; transferId: Uint8Array; index: number; data: Uint8Array };
 
-/** Serialize a typed envelope: [version, contentType, ...utf8(content)]. Versioned + type-tagged so
- *  Phases 2–4 add content types without a wire break. */
-export function encodeEnvelope(content: MessageContent): Uint8Array {
-  if (content.type !== 'text') throw new SessionError(`unsupported content type ${(content as { type: string }).type}`);
-  if (content.text.length > MAX_MESSAGE_TEXT) throw new SessionError('message text exceeds cap');
-  const body = new TextEncoder().encode(content.text);
+const textEnc = new TextEncoder();
+
+/** Prepend the [version, contentType] envelope header to a serialized body. */
+function frameEnvelope(type: ContentType, body: Uint8Array): Uint8Array {
   const out = new Uint8Array(2 + body.length);
   out[0] = ENVELOPE_VERSION;
-  out[1] = ContentType.Text;
+  out[1] = type;
   out.set(body, 2);
   return out;
 }
 
-/** Parse + validate a decrypted envelope. Content-type allowlist = text only in Phase 1; unknown
- *  types are rejected (not silently dropped — the caller treats it as a protocol error). Text is
- *  returned faithfully; display sanitization (no-HTML, control chars) happens at the IPC boundary. */
+/** Serialize a typed envelope: [version, contentType, ...body]. Versioned + type-tagged so Phases
+ *  2–4 add content types without a wire break. Text bodies are UTF-8; file bodies are binary. */
+export function encodeEnvelope(content: MessageContent): Uint8Array {
+  switch (content.type) {
+    case 'text': {
+      if (content.text.length > MAX_MESSAGE_TEXT) throw new SessionError('message text exceeds cap');
+      return frameEnvelope(ContentType.Text, textEnc.encode(content.text));
+    }
+    case 'file-offer':
+      return frameEnvelope(ContentType.FileOffer, encodeFileOfferBody(content));
+    case 'file-chunk':
+      return frameEnvelope(ContentType.FileChunk, encodeFileChunkBody(content));
+    default:
+      throw new SessionError(`unsupported content type ${(content as { type: string }).type}`);
+  }
+}
+
+function encodeFileOfferBody(c: Extract<MessageContent, { type: 'file-offer' }>): Uint8Array {
+  if (c.transferId.length !== TRANSFER_ID_LEN) throw new SessionError('bad transferId length');
+  if (c.hash.length !== FILE_HASH_LEN) throw new SessionError('bad file hash length');
+  if (!Number.isInteger(c.size) || c.size < 0 || c.size > MAX_FILE_BYTES) throw new SessionError('file size out of range');
+  if (!Number.isInteger(c.chunkCount) || c.chunkCount < 0 || c.chunkCount > MAX_CHUNK_COUNT) throw new SessionError('chunkCount out of range');
+  const name = textEnc.encode(c.name);
+  const mime = textEnc.encode(c.mime);
+  if (name.length === 0 || name.length > MAX_FILENAME_LEN) throw new SessionError('file name length out of range');
+  if (mime.length > MAX_MIME_LEN) throw new SessionError('mime length out of range');
+  const body = new Uint8Array(OFFER_FIXED_PREFIX + name.length + 2 + mime.length);
+  const dv = new DataView(body.buffer);
+  let o = 0;
+  body.set(c.transferId, o); o += TRANSFER_ID_LEN;
+  body.set(c.hash, o); o += FILE_HASH_LEN;
+  dv.setUint32(o, c.size); o += 4;
+  dv.setUint32(o, c.chunkCount); o += 4;
+  dv.setUint16(o, name.length); o += 2;
+  body.set(name, o); o += name.length;
+  dv.setUint16(o, mime.length); o += 2;
+  body.set(mime, o);
+  return body;
+}
+
+function encodeFileChunkBody(c: Extract<MessageContent, { type: 'file-chunk' }>): Uint8Array {
+  if (c.transferId.length !== TRANSFER_ID_LEN) throw new SessionError('bad transferId length');
+  if (!Number.isInteger(c.index) || c.index < 0 || c.index >= MAX_CHUNK_COUNT) throw new SessionError('chunk index out of range');
+  if (c.data.length === 0 || c.data.length > CHUNK_SIZE) throw new SessionError('chunk size out of range');
+  const body = new Uint8Array(TRANSFER_ID_LEN + 4 + c.data.length);
+  const dv = new DataView(body.buffer);
+  body.set(c.transferId, 0);
+  dv.setUint32(TRANSFER_ID_LEN, c.index);
+  body.set(c.data, TRANSFER_ID_LEN + 4);
+  return body;
+}
+
+/** Parse + validate a decrypted envelope. Content-type allowlist = {text, file-offer, file-chunk};
+ *  unknown types are rejected (not silently dropped — the caller treats it as a protocol error). Each
+ *  type enforces its own byte cap BEFORE allocating. Text/name/mime display sanitization (no-HTML,
+ *  control chars) happens later at the IPC boundary. */
 export function decodeEnvelope(bytes: Uint8Array): MessageContent {
   if (bytes.length < 2) throw new SessionError('envelope truncated');
-  if (bytes.length - 2 > MAX_MESSAGE_BYTES) throw new SessionError('message body exceeds byte cap');
   if (bytes[0] !== ENVELOPE_VERSION) throw new SessionError(`unsupported envelope version ${bytes[0]}`);
-  if (bytes[1] !== ContentType.Text) throw new SessionError(`unsupported content type ${bytes[1]}`);
-  const text = new TextDecoder().decode(bytes.slice(2));
-  if (text.length > MAX_MESSAGE_TEXT) throw new SessionError('message text exceeds cap');
-  return { type: 'text', text };
+  const type = bytes[1];
+  const body = bytes.subarray(2);
+  switch (type) {
+    case ContentType.Text: {
+      if (body.length > MAX_MESSAGE_BYTES) throw new SessionError('message body exceeds byte cap');
+      const text = new TextDecoder().decode(body);
+      if (text.length > MAX_MESSAGE_TEXT) throw new SessionError('message text exceeds cap');
+      return { type: 'text', text };
+    }
+    case ContentType.FileOffer:
+      return decodeFileOfferBody(body);
+    case ContentType.FileChunk:
+      return decodeFileChunkBody(body);
+    default:
+      throw new SessionError(`unsupported content type ${type}`);
+  }
+}
+
+function decodeFileOfferBody(body: Uint8Array): MessageContent {
+  if (body.length > MAX_OFFER_BODY) throw new SessionError('file offer body exceeds cap');
+  if (body.length < OFFER_FIXED_PREFIX) throw new SessionError('file offer truncated');
+  const dv = new DataView(body.buffer, body.byteOffset, body.byteLength);
+  let o = 0;
+  const transferId = body.slice(o, o + TRANSFER_ID_LEN); o += TRANSFER_ID_LEN;
+  const hash = body.slice(o, o + FILE_HASH_LEN); o += FILE_HASH_LEN;
+  const size = dv.getUint32(o); o += 4;
+  const chunkCount = dv.getUint32(o); o += 4;
+  const nameLen = dv.getUint16(o); o += 2;
+  if (nameLen === 0 || nameLen > MAX_FILENAME_LEN) throw new SessionError('file name length out of range');
+  if (o + nameLen + 2 > body.length) throw new SessionError('file offer truncated (name)');
+  const name = new TextDecoder().decode(body.subarray(o, o + nameLen)); o += nameLen;
+  const mimeLen = dv.getUint16(o); o += 2;
+  if (mimeLen > MAX_MIME_LEN) throw new SessionError('mime length out of range');
+  if (o + mimeLen !== body.length) throw new SessionError('file offer length mismatch');
+  const mime = new TextDecoder().decode(body.subarray(o, o + mimeLen));
+  if (size > MAX_FILE_BYTES) throw new SessionError('file size exceeds cap');
+  if (chunkCount > MAX_CHUNK_COUNT) throw new SessionError('chunkCount out of range');
+  const expected = size === 0 ? 0 : Math.ceil(size / CHUNK_SIZE);
+  if (chunkCount !== expected) throw new SessionError('chunkCount inconsistent with size');
+  return { type: 'file-offer', transferId, hash, name, size, mime, chunkCount };
+}
+
+function decodeFileChunkBody(body: Uint8Array): MessageContent {
+  if (body.length > MAX_CHUNK_BODY) throw new SessionError('file chunk body exceeds cap');
+  if (body.length < TRANSFER_ID_LEN + 4 + 1) throw new SessionError('file chunk truncated');
+  const dv = new DataView(body.buffer, body.byteOffset, body.byteLength);
+  const transferId = body.slice(0, TRANSFER_ID_LEN);
+  const index = dv.getUint32(TRANSFER_ID_LEN);
+  const data = body.slice(TRANSFER_ID_LEN + 4);
+  if (data.length > CHUNK_SIZE) throw new SessionError('chunk size out of range');
+  if (index >= MAX_CHUNK_COUNT) throw new SessionError('chunk index out of range');
+  return { type: 'file-chunk', transferId, index, data };
 }
 
 // ---- symmetric ratchet ----

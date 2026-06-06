@@ -7,6 +7,13 @@ import { randomBytes } from '../src/main/chat/crypto';
 
 const flush = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
 
+/** Decode an envelope known to be text (narrows the MessageContent union for these tests). */
+const textOf = (env: Uint8Array): string => {
+  const c = decodeEnvelope(env);
+  if (c.type !== 'text') throw new Error('expected text content');
+  return c.text;
+};
+
 /** Build two connections over a pipe with paired sessions (as a real handshake would produce). */
 function linkedPair(evI: ConnectionEvents = {}, evR: ConnectionEvents = {}): { I: Connection; R: Connection } {
   const sessionId = randomBytes(16);
@@ -22,7 +29,7 @@ describe('chat connection', () => {
     const received: string[] = [];
     const acked: number[] = [];
     const { I, R } = linkedPair({ onAck: (c) => acked.push(c) }, {
-      onMessage: (env) => received.push(decodeEnvelope(env).text)
+      onMessage: (env) => received.push(textOf(env))
     });
     const counter = I.sendMessage(encodeEnvelope({ type: 'text', text: 'hello' }));
     await flush();
@@ -34,8 +41,8 @@ describe('chat connection', () => {
   it('carries messages both directions in order', async () => {
     const atR: string[] = [];
     const atI: string[] = [];
-    const { I, R } = linkedPair({ onMessage: (e) => atI.push(decodeEnvelope(e).text) }, {
-      onMessage: (e) => atR.push(decodeEnvelope(e).text)
+    const { I, R } = linkedPair({ onMessage: (e) => atI.push(textOf(e)) }, {
+      onMessage: (e) => atR.push(textOf(e))
     });
     I.sendMessage(encodeEnvelope({ type: 'text', text: 'a' }));
     I.sendMessage(encodeEnvelope({ type: 'text', text: 'b' }));

@@ -59,7 +59,9 @@ function makePinStore(): ContactPinStore {
 }
 
 async function bothExchange(iSession: { encrypt: (e: Uint8Array) => Uint8Array }, rSession: { decrypt: (s: Uint8Array) => Uint8Array }, text: string): Promise<string> {
-  return decodeEnvelope(rSession.decrypt(iSession.encrypt(encodeEnvelope({ type: 'text', text })))).text;
+  const content = decodeEnvelope(rSession.decrypt(iSession.encrypt(encodeEnvelope({ type: 'text', text }))));
+  if (content.type !== 'text') throw new Error('expected text content');
+  return content.text;
 }
 
 describe('chat handshake (v3, EXPERIMENTAL) — first contact', () => {
