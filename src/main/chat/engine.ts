@@ -334,3 +334,4 @@ export class ChatEngine {
 }
 
 export type { IdentityPublic };
+export type { FileStatus, ChatFileMeta } from './message-store';
