@@ -100,7 +100,14 @@ export interface ChatMessageDTO {
   kind?: 'text' | 'file';
   text: string;
   file?: ChatFileDTO;
+  sender?: string;
   state: 'queued' | 'sent' | 'delivered' | 'received';
+}
+export interface ChatGroupDTO {
+  groupId: string;
+  name: string;
+  memberIds: string[];
+  createdAt: number;
 }
 
 export interface GhostApi {
@@ -178,10 +185,16 @@ export interface GhostApi {
     sendFile(contactId: string): Promise<string | null>;
     saveFile(contactId: string, transferId: string): Promise<string | null>;
     history(contactId: string): Promise<ChatMessageDTO[]>;
+    createGroup(name: string, memberIds: string[]): Promise<string>;
+    listGroups(): Promise<ChatGroupDTO[]>;
+    groupHistory(groupId: string): Promise<ChatMessageDTO[]>;
+    sendGroup(groupId: string, text: string): Promise<string>;
     onMessage(cb: (p: { contactId: string; message: ChatMessageDTO }) => void): () => void;
     onContactStatus(cb: (p: { contactId: string; status: 'online' | 'connecting' | 'offline' }) => void): () => void;
     onDelivery(cb: (p: { contactId: string; messageId: string; state: 'sent' | 'delivered' }) => void): () => void;
     onFileStatus(cb: (p: { contactId: string; transferId: string; status: 'transferring' | 'complete' | 'failed'; progress?: { received: number; total: number } }) => void): () => void;
+    onGroupMessage(cb: (p: { groupId: string; message: ChatMessageDTO }) => void): () => void;
+    onGroupInvite(cb: (p: { groupId: string }) => void): () => void;
     onTorStatus(cb: (p: { status: string; onion: string | null }) => void): () => void;
   };
   mail: {

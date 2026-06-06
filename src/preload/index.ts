@@ -95,6 +95,10 @@ const api = {
     sendFile: (contactId: string) => ipcRenderer.invoke(channels.chat.sendFile, contactId),
     saveFile: (contactId: string, transferId: string) => ipcRenderer.invoke(channels.chat.saveFile, contactId, transferId),
     history: (contactId: string) => ipcRenderer.invoke(channels.chat.history, contactId),
+    createGroup: (name: string, memberIds: string[]) => ipcRenderer.invoke(channels.chat.createGroup, name, memberIds),
+    listGroups: () => ipcRenderer.invoke(channels.chat.listGroups),
+    groupHistory: (groupId: string) => ipcRenderer.invoke(channels.chat.groupHistory, groupId),
+    sendGroup: (groupId: string, text: string) => ipcRenderer.invoke(channels.chat.sendGroup, groupId, text),
     onMessage: (cb: (p: { contactId: string; message: unknown }) => void) => {
       const l = (_e: unknown, p: { contactId: string; message: unknown }) => cb(p);
       ipcRenderer.on(channels.chat.onMessage, l);
@@ -114,6 +118,16 @@ const api = {
       const l = (_e: unknown, p: { contactId: string; transferId: string; status: string; progress?: { received: number; total: number } }) => cb(p);
       ipcRenderer.on(channels.chat.onFileStatus, l);
       return () => ipcRenderer.removeListener(channels.chat.onFileStatus, l);
+    },
+    onGroupMessage: (cb: (p: { groupId: string; message: unknown }) => void) => {
+      const l = (_e: unknown, p: { groupId: string; message: unknown }) => cb(p);
+      ipcRenderer.on(channels.chat.onGroupMessage, l);
+      return () => ipcRenderer.removeListener(channels.chat.onGroupMessage, l);
+    },
+    onGroupInvite: (cb: (p: { groupId: string }) => void) => {
+      const l = (_e: unknown, p: { groupId: string }) => cb(p);
+      ipcRenderer.on(channels.chat.onGroupInvite, l);
+      return () => ipcRenderer.removeListener(channels.chat.onGroupInvite, l);
     },
     onTorStatus: (cb: (p: { status: string; onion: string | null }) => void) => {
       const l = (_e: unknown, p: { status: string; onion: string | null }) => cb(p);

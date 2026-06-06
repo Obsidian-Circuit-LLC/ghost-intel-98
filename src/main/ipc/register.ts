@@ -203,6 +203,18 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     if (typeof v !== 'string' || !/^[0-9a-f]{32}$/.test(v)) throw new Error('Invalid transferId');
     return v;
   };
+  const ensureGroupId = (v: unknown): string => {
+    if (typeof v !== 'string' || !/^[0-9a-f]{32}$/.test(v)) throw new Error('Invalid groupId');
+    return v;
+  };
+  const ensureGroupName = (v: unknown): string => {
+    if (typeof v !== 'string' || v.trim().length === 0) throw new Error('Group name required');
+    return v.replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, 128);
+  };
+  const ensureMemberIds = (v: unknown): string[] => {
+    if (!Array.isArray(v) || v.length === 0 || v.length > 64) throw new Error('Invalid member list');
+    return v.map((x) => ensureContactId(x));
+  };
   safeHandle(channels.chat.status, () => chat.status());
   safeHandle(channels.chat.enable, () => chat.enable(getWindow));
   safeHandle(channels.chat.disable, () => chat.disable());
@@ -223,6 +235,10 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     return saved;
   });
   safeHandle(channels.chat.history, (...a) => chat.history(ensureContactId(a[0])));
+  safeHandle(channels.chat.createGroup, (...a) => chat.createGroup(ensureGroupName(a[0]), ensureMemberIds(a[1])));
+  safeHandle(channels.chat.listGroups, () => chat.listGroups());
+  safeHandle(channels.chat.groupHistory, (...a) => chat.groupHistory(ensureGroupId(a[0])));
+  safeHandle(channels.chat.sendGroup, (...a) => chat.sendGroup(ensureGroupId(a[0]), ensureChatText(a[1])));
 
   // ---- auth (login / encrypt-at-rest) ----
   safeHandle(channels.auth.status, async () => ({

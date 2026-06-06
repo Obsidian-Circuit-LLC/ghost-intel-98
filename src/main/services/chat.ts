@@ -20,6 +20,7 @@ import { ChatIdentityStore } from '../chat/identity-store';
 import { PrekeyStore } from '../chat/prekey-store';
 import { ContactStore } from '../chat/contact-store';
 import { MessageStore } from '../chat/message-store';
+import { GroupStore } from '../chat/group-store';
 import { safetyNumber, contactId, type IdentityKeyPair } from '../chat/identity';
 
 const VIRT_PORT = 9001;
@@ -88,6 +89,7 @@ export async function enable(getWindow: () => BrowserWindow | null): Promise<{ o
   const dir = chatDir();
   await mkdir(dir, { recursive: true });
   await mkdir(join(dir, 'messages'), { recursive: true });
+  await mkdir(join(dir, 'groups', 'messages'), { recursive: true });
   await mkdir(quarantineDir(), { recursive: true });
 
   const identityStore = new ChatIdentityStore(join(dir, 'identity.json'));
@@ -96,6 +98,9 @@ export async function enable(getWindow: () => BrowserWindow | null): Promise<{ o
   await prekeys.ensurePool();
   contactStore = new ContactStore(join(dir, 'contacts.json'));
   const messages = new MessageStore(join(dir, 'messages'));
+  const groups = new GroupStore(join(dir, 'groups.json'));
+  // group history is keyed by groupId (32-hex), not contactId (64-hex)
+  const groupMessages = new MessageStore(join(dir, 'groups', 'messages'), undefined, /^[0-9a-f]{32}$/);
 
   const [socksPort, controlPort, listenPort] = await Promise.all([freePort(), freePort(), freePort()]);
   const transport = new TorTransport({
@@ -123,6 +128,8 @@ export async function enable(getWindow: () => BrowserWindow | null): Promise<{ o
     prekeys,
     contacts: contactStore,
     messages,
+    groups,
+    groupMessages,
     now: () => Date.now(),
     newId: () => randomUUID(),
     quarantine,
@@ -131,7 +138,9 @@ export async function enable(getWindow: () => BrowserWindow | null): Promise<{ o
       onContactStatus: (cid, s: ContactStatus) => push(channels.chat.onContactStatus, { contactId: cid, status: s }),
       onDelivery: (cid, id, state) => push(channels.chat.onDelivery, { contactId: cid, messageId: id, state }),
       onFileStatus: (cid, transferId, fileStatus: FileStatus, progress) =>
-        push(channels.chat.onFileStatus, { contactId: cid, transferId, status: fileStatus, progress })
+        push(channels.chat.onFileStatus, { contactId: cid, transferId, status: fileStatus, progress }),
+      onGroupMessage: (groupId, m) => push(channels.chat.onGroupMessage, { groupId, message: m }),
+      onGroupInvite: (groupId) => push(channels.chat.onGroupInvite, { groupId })
     }
   });
   await engine.start();
@@ -238,6 +247,20 @@ function mimeFromName(name: string): string {
 
 export function history(cid: string): ReturnType<ChatEngine['history']> {
   return requireEngine().history(cid);
+}
+
+// ---- groups (Phase 3, client-side fan-out) ----
+export function createGroup(name: string, memberIds: string[]): Promise<string> {
+  return requireEngine().createGroup(name, memberIds);
+}
+export function listGroups(): ReturnType<ChatEngine['listGroups']> {
+  return requireEngine().listGroups();
+}
+export function groupHistory(groupId: string): ReturnType<ChatEngine['groupHistory']> {
+  return requireEngine().groupHistory(groupId);
+}
+export function sendGroup(groupId: string, text: string): Promise<string> {
+  return requireEngine().sendGroup(groupId, text);
 }
 
 export async function listContacts(): Promise<ChatContactDTO[]> {

@@ -55,6 +55,14 @@ const MAX_CHUNK_BODY = TRANSFER_ID_LEN + 4 + CHUNK_SIZE;
 const MAX_OFFER_BODY = TRANSFER_ID_LEN + FILE_HASH_LEN + 4 + 4 + 2 + MAX_FILENAME_LEN + 2 + MAX_MIME_LEN;
 const OFFER_FIXED_PREFIX = TRANSFER_ID_LEN + FILE_HASH_LEN + 4 + 4 + 2; // up to and including nameLen
 
+// ---- group chat wire sizes (Phase 3, client-side fan-out) ----
+export const GROUP_ID_LEN = 16; // random group coordinate (caller-minted)
+export const CONTACT_ID_LEN = 32; // sha256 identity fingerprint = the contactId bytes
+export const MAX_GROUP_NAME = 128; // UTF-8 bytes
+export const MAX_GROUP_MEMBERS = 64; // bounds a group-invite member list
+const MAX_GROUP_TEXT_BODY = GROUP_ID_LEN + MAX_MESSAGE_BYTES;
+const MAX_GROUP_INVITE_BODY = GROUP_ID_LEN + 2 + MAX_GROUP_NAME + 2 + MAX_GROUP_MEMBERS * CONTACT_ID_LEN;
+
 /** Force a reconnect/rehandshake well before the JS-safe-integer counter limit (audit: keeps the
  *  nonce/counter exact and bounds a never-dropped connection's lack of PCS). */
 export const MAX_MESSAGES_PER_SESSION = 0x100000000; // 2^32
@@ -62,7 +70,9 @@ export const MAX_MESSAGES_PER_SESSION = 0x100000000; // 2^32
 enum ContentType {
   Text = 1,
   FileOffer = 2,
-  FileChunk = 3
+  FileChunk = 3,
+  GroupText = 4,
+  GroupInvite = 5
 }
 
 export type MessageContent =
@@ -76,7 +86,9 @@ export type MessageContent =
       mime: string;
       chunkCount: number;
     }
-  | { type: 'file-chunk'; transferId: Uint8Array; index: number; data: Uint8Array };
+  | { type: 'file-chunk'; transferId: Uint8Array; index: number; data: Uint8Array }
+  | { type: 'group-text'; groupId: Uint8Array; text: string }
+  | { type: 'group-invite'; groupId: Uint8Array; name: string; memberIds: Uint8Array[] };
 
 const textEnc = new TextEncoder();
 
@@ -101,9 +113,40 @@ export function encodeEnvelope(content: MessageContent): Uint8Array {
       return frameEnvelope(ContentType.FileOffer, encodeFileOfferBody(content));
     case 'file-chunk':
       return frameEnvelope(ContentType.FileChunk, encodeFileChunkBody(content));
+    case 'group-text':
+      return frameEnvelope(ContentType.GroupText, encodeGroupTextBody(content));
+    case 'group-invite':
+      return frameEnvelope(ContentType.GroupInvite, encodeGroupInviteBody(content));
     default:
       throw new SessionError(`unsupported content type ${(content as { type: string }).type}`);
   }
+}
+
+function encodeGroupTextBody(c: Extract<MessageContent, { type: 'group-text' }>): Uint8Array {
+  if (c.groupId.length !== GROUP_ID_LEN) throw new SessionError('bad groupId length');
+  if (c.text.length > MAX_MESSAGE_TEXT) throw new SessionError('message text exceeds cap');
+  const text = textEnc.encode(c.text);
+  const body = new Uint8Array(GROUP_ID_LEN + text.length);
+  body.set(c.groupId, 0);
+  body.set(text, GROUP_ID_LEN);
+  return body;
+}
+
+function encodeGroupInviteBody(c: Extract<MessageContent, { type: 'group-invite' }>): Uint8Array {
+  if (c.groupId.length !== GROUP_ID_LEN) throw new SessionError('bad groupId length');
+  if (c.memberIds.length > MAX_GROUP_MEMBERS) throw new SessionError('too many group members');
+  for (const id of c.memberIds) if (id.length !== CONTACT_ID_LEN) throw new SessionError('bad member id length');
+  const name = textEnc.encode(c.name);
+  if (name.length === 0 || name.length > MAX_GROUP_NAME) throw new SessionError('group name length out of range');
+  const body = new Uint8Array(GROUP_ID_LEN + 2 + name.length + 2 + c.memberIds.length * CONTACT_ID_LEN);
+  const dv = new DataView(body.buffer);
+  let o = 0;
+  body.set(c.groupId, o); o += GROUP_ID_LEN;
+  dv.setUint16(o, name.length); o += 2;
+  body.set(name, o); o += name.length;
+  dv.setUint16(o, c.memberIds.length); o += 2;
+  for (const id of c.memberIds) { body.set(id, o); o += CONTACT_ID_LEN; }
+  return body;
 }
 
 function encodeFileOfferBody(c: Extract<MessageContent, { type: 'file-offer' }>): Uint8Array {
@@ -161,9 +204,40 @@ export function decodeEnvelope(bytes: Uint8Array): MessageContent {
       return decodeFileOfferBody(body);
     case ContentType.FileChunk:
       return decodeFileChunkBody(body);
+    case ContentType.GroupText:
+      return decodeGroupTextBody(body);
+    case ContentType.GroupInvite:
+      return decodeGroupInviteBody(body);
     default:
       throw new SessionError(`unsupported content type ${type}`);
   }
+}
+
+function decodeGroupTextBody(body: Uint8Array): MessageContent {
+  if (body.length > MAX_GROUP_TEXT_BODY) throw new SessionError('group message body exceeds cap');
+  if (body.length < GROUP_ID_LEN) throw new SessionError('group message truncated');
+  const groupId = body.slice(0, GROUP_ID_LEN);
+  const text = new TextDecoder().decode(body.subarray(GROUP_ID_LEN));
+  if (text.length > MAX_MESSAGE_TEXT) throw new SessionError('message text exceeds cap');
+  return { type: 'group-text', groupId, text };
+}
+
+function decodeGroupInviteBody(body: Uint8Array): MessageContent {
+  if (body.length > MAX_GROUP_INVITE_BODY) throw new SessionError('group invite body exceeds cap');
+  if (body.length < GROUP_ID_LEN + 2) throw new SessionError('group invite truncated');
+  const dv = new DataView(body.buffer, body.byteOffset, body.byteLength);
+  let o = 0;
+  const groupId = body.slice(o, o + GROUP_ID_LEN); o += GROUP_ID_LEN;
+  const nameLen = dv.getUint16(o); o += 2;
+  if (nameLen === 0 || nameLen > MAX_GROUP_NAME) throw new SessionError('group name length out of range');
+  if (o + nameLen + 2 > body.length) throw new SessionError('group invite truncated (name)');
+  const name = new TextDecoder().decode(body.subarray(o, o + nameLen)); o += nameLen;
+  const count = dv.getUint16(o); o += 2;
+  if (count > MAX_GROUP_MEMBERS) throw new SessionError('too many group members');
+  if (o + count * CONTACT_ID_LEN !== body.length) throw new SessionError('group invite length mismatch');
+  const memberIds: Uint8Array[] = [];
+  for (let i = 0; i < count; i += 1) { memberIds.push(body.slice(o, o + CONTACT_ID_LEN)); o += CONTACT_ID_LEN; }
+  return { type: 'group-invite', groupId, name, memberIds };
 }
 
 function decodeFileOfferBody(body: Uint8Array): MessageContent {

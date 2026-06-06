@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSettings } from '../../state/store';
 import { toast } from '../../state/toasts';
-import type { ChatContactDTO, ChatMessageDTO } from '../../../preload/api';
+import type { ChatContactDTO, ChatMessageDTO, ChatGroupDTO } from '../../../preload/api';
 
 type Status = 'online' | 'connecting' | 'offline';
 
@@ -28,40 +28,51 @@ export function ChatModule(): JSX.Element {
   const [onion, setOnion] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [contacts, setContacts] = useState<ChatContactDTO[]>([]);
+  const [groups, setGroups] = useState<ChatGroupDTO[]>([]);
   const [statuses, setStatuses] = useState<Record<string, Status>>({});
   const [selected, setSelected] = useState<string | null>(null);
+  const [selectedKind, setSelectedKind] = useState<'contact' | 'group'>('contact');
   const [history, setHistory] = useState<ChatMessageDTO[]>([]);
   const [draft, setDraft] = useState('');
   const [invite, setInvite] = useState('');
   const [acceptLink, setAcceptLink] = useState('');
+  // new-group form
+  const [groupForm, setGroupForm] = useState<{ name: string; members: Set<string> } | null>(null);
   const selectedRef = useRef<string | null>(null);
-  useEffect(() => { selectedRef.current = selected; }, [selected]);
+  const selectedKindRef = useRef<'contact' | 'group'>('contact');
+  useEffect(() => { selectedRef.current = selected; selectedKindRef.current = selectedKind; }, [selected, selectedKind]);
 
   const refreshContacts = useCallback(() => {
     void window.api.chat.listContacts().then(setContacts).catch(() => {});
   }, []);
+  const refreshGroups = useCallback(() => {
+    void window.api.chat.listGroups().then(setGroups).catch(() => {});
+  }, []);
   const loadHistory = useCallback((cid: string) => {
     void window.api.chat.history(cid).then(setHistory).catch(() => {});
   }, []);
+  const loadGroupHistory = useCallback((gid: string) => {
+    void window.api.chat.groupHistory(gid).then(setHistory).catch(() => {});
+  }, []);
 
   useEffect(() => {
-    void window.api.chat.status().then((s) => { setRunning(s.enabled); setOnion(s.onion); if (s.enabled) refreshContacts(); });
-    const offMsg = window.api.chat.onMessage(({ contactId }) => {
-      refreshContacts();
-      if (selectedRef.current === contactId) loadHistory(contactId);
-    });
+    void window.api.chat.status().then((s) => { setRunning(s.enabled); setOnion(s.onion); if (s.enabled) { refreshContacts(); refreshGroups(); } });
+    const onContactConv = (contactId: string): void => {
+      if (selectedKindRef.current === 'contact' && selectedRef.current === contactId) loadHistory(contactId);
+    };
+    const offMsg = window.api.chat.onMessage(({ contactId }) => { refreshContacts(); onContactConv(contactId); });
     const offStatus = window.api.chat.onContactStatus(({ contactId, status }) => {
       setStatuses((m) => ({ ...m, [contactId]: status as Status }));
     });
-    const offDelivery = window.api.chat.onDelivery(({ contactId }) => {
-      if (selectedRef.current === contactId) loadHistory(contactId);
+    const offDelivery = window.api.chat.onDelivery(({ contactId }) => onContactConv(contactId));
+    const offFile = window.api.chat.onFileStatus(({ contactId }) => onContactConv(contactId));
+    const offGroupMsg = window.api.chat.onGroupMessage(({ groupId }) => {
+      if (selectedKindRef.current === 'group' && selectedRef.current === groupId) loadGroupHistory(groupId);
     });
-    const offFile = window.api.chat.onFileStatus(({ contactId }) => {
-      if (selectedRef.current === contactId) loadHistory(contactId);
-    });
+    const offGroupInvite = window.api.chat.onGroupInvite(() => refreshGroups());
     const offTor = window.api.chat.onTorStatus(({ onion: o }) => setOnion(o));
-    return () => { offMsg(); offStatus(); offDelivery(); offFile(); offTor(); };
-  }, [refreshContacts, loadHistory]);
+    return () => { offMsg(); offStatus(); offDelivery(); offFile(); offGroupMsg(); offGroupInvite(); offTor(); };
+  }, [refreshContacts, refreshGroups, loadHistory, loadGroupHistory]);
 
   const enable = useCallback(async () => {
     setBusy(true);
@@ -104,7 +115,26 @@ export function ChatModule(): JSX.Element {
     }
   }, [acceptLink, refreshContacts, loadHistory]);
 
-  const open = useCallback((cid: string) => { setSelected(cid); loadHistory(cid); }, [loadHistory]);
+  const open = useCallback((cid: string) => { setSelected(cid); setSelectedKind('contact'); loadHistory(cid); }, [loadHistory]);
+  const openGroup = useCallback((gid: string) => { setSelected(gid); setSelectedKind('group'); loadGroupHistory(gid); }, [loadGroupHistory]);
+
+  const createGroupNow = useCallback(async () => {
+    if (!groupForm) return;
+    const name = groupForm.name.trim();
+    const members = [...groupForm.members];
+    if (!name || members.length === 0) return;
+    setBusy(true);
+    try {
+      const gid = await window.api.chat.createGroup(name, members);
+      setGroupForm(null);
+      refreshGroups();
+      openGroup(gid);
+    } catch (e) {
+      toast.error(`Create group failed: ${(e as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  }, [groupForm, refreshGroups, openGroup]);
 
   const attach = useCallback(async () => {
     if (!selected) return;
@@ -134,14 +164,24 @@ export function ChatModule(): JSX.Element {
     if (!text || !selected) return;
     setDraft('');
     try {
-      await window.api.chat.send(selected, text);
-      loadHistory(selected);
+      if (selectedKind === 'group') {
+        await window.api.chat.sendGroup(selected, text);
+        loadGroupHistory(selected);
+      } else {
+        await window.api.chat.send(selected, text);
+        loadHistory(selected);
+      }
     } catch (e) {
       toast.error(`Send failed: ${(e as Error).message}`);
     }
-  }, [draft, selected, loadHistory]);
+  }, [draft, selected, selectedKind, loadHistory, loadGroupHistory]);
 
-  const sel = contacts.find((c) => c.contactId === selected) ?? null;
+  const sel = selectedKind === 'contact' ? (contacts.find((c) => c.contactId === selected) ?? null) : null;
+  const selGroup = selectedKind === 'group' ? (groups.find((g) => g.groupId === selected) ?? null) : null;
+  const nameFor = useCallback((cid?: string): string => {
+    if (!cid) return 'unknown';
+    return contacts.find((c) => c.contactId === cid)?.displayName ?? `${cid.slice(0, 8)}…`;
+  }, [contacts]);
 
   return (
     <div className="ga98-stack" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -186,35 +226,103 @@ export function ChatModule(): JSX.Element {
                 />
                 <button onClick={() => void accept()} disabled={busy || !acceptLink.trim()}>Connect</button>
               </div>
+              <div style={{ marginTop: 8 }}>
+                {!groupForm ? (
+                  <button onClick={() => setGroupForm({ name: '', members: new Set() })} disabled={contacts.length === 0} title={contacts.length === 0 ? 'Add a contact first' : 'Create a group'}>New group…</button>
+                ) : (
+                  <div style={{ border: '1px solid #808080', padding: 4 }}>
+                    <div><b>New group</b></div>
+                    <input
+                      className="ga98-text"
+                      style={{ width: '100%', fontSize: 11 }}
+                      placeholder="group name"
+                      value={groupForm.name}
+                      onChange={(e) => setGroupForm((f) => (f ? { ...f, name: e.target.value } : f))}
+                    />
+                    <div style={{ maxHeight: 90, overflowY: 'auto', margin: '4px 0' }}>
+                      {contacts.map((c) => (
+                        <label key={c.contactId} style={{ display: 'block', fontSize: 11 }}>
+                          <input
+                            type="checkbox"
+                            checked={groupForm.members.has(c.contactId)}
+                            onChange={(e) => setGroupForm((f) => {
+                              if (!f) return f;
+                              const members = new Set(f.members);
+                              if (e.target.checked) members.add(c.contactId); else members.delete(c.contactId);
+                              return { ...f, members };
+                            })}
+                          /> {c.displayName}
+                        </label>
+                      ))}
+                    </div>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <button onClick={() => void createGroupNow()} disabled={busy || !groupForm.name.trim() || groupForm.members.size === 0}>Create</button>
+                      <button onClick={() => setGroupForm(null)}>Cancel</button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
             <div style={{ borderTop: '1px solid #808080', overflowY: 'auto', flex: 1 }}>
               {contacts.length === 0 && <div style={{ padding: 6, fontSize: 11, opacity: 0.7 }}>No contacts yet — create an invite or accept one.</div>}
-              {contacts.map((c) => (
-                <div
-                  key={c.contactId}
-                  onClick={() => open(c.contactId)}
-                  style={{ padding: '4px 6px', cursor: 'pointer', fontSize: 12, background: c.contactId === selected ? 'navy' : undefined, color: c.contactId === selected ? '#fff' : undefined }}
-                >
-                  {statuses[c.contactId] === 'online' ? '🟢' : statuses[c.contactId] === 'connecting' ? '🟡' : '⚪'} {c.displayName}
-                  {c.verified ? ' ✔' : ''}
-                </div>
-              ))}
+              {contacts.map((c) => {
+                const active = selectedKind === 'contact' && c.contactId === selected;
+                return (
+                  <div
+                    key={c.contactId}
+                    onClick={() => open(c.contactId)}
+                    style={{ padding: '4px 6px', cursor: 'pointer', fontSize: 12, background: active ? 'navy' : undefined, color: active ? '#fff' : undefined }}
+                  >
+                    {statuses[c.contactId] === 'online' ? '🟢' : statuses[c.contactId] === 'connecting' ? '🟡' : '⚪'} {c.displayName}
+                    {c.verified ? ' ✔' : ''}
+                  </div>
+                );
+              })}
+              {groups.length > 0 && (
+                <div style={{ padding: '4px 6px', fontSize: 10, opacity: 0.6, borderTop: '1px solid #c0c0c0', marginTop: 4 }}>GROUPS</div>
+              )}
+              {groups.map((g) => {
+                const active = selectedKind === 'group' && g.groupId === selected;
+                return (
+                  <div
+                    key={g.groupId}
+                    onClick={() => openGroup(g.groupId)}
+                    style={{ padding: '4px 6px', cursor: 'pointer', fontSize: 12, background: active ? 'navy' : undefined, color: active ? '#fff' : undefined }}
+                  >
+                    👥 {g.name} <span style={{ fontSize: 10, opacity: 0.7 }}>({g.memberIds.length + 1})</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
           {/* right: conversation */}
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-            {!sel ? (
-              <div style={{ padding: 12, fontSize: 12, opacity: 0.7 }}>Select a contact.</div>
+            {!sel && !selGroup ? (
+              <div style={{ padding: 12, fontSize: 12, opacity: 0.7 }}>Select a contact or group.</div>
             ) : (
               <>
-                <div style={{ padding: '4px 8px', borderBottom: '1px solid #808080', fontSize: 11 }}>
-                  <b>{sel.displayName}</b> — safety number (compare out-of-band):
-                  <div style={{ fontFamily: 'monospace', fontSize: 10 }}>{sel.safetyNumber}</div>
-                </div>
+                {sel && (
+                  <div style={{ padding: '4px 8px', borderBottom: '1px solid #808080', fontSize: 11 }}>
+                    <b>{sel.displayName}</b> — safety number (compare out-of-band):
+                    <div style={{ fontFamily: 'monospace', fontSize: 10 }}>{sel.safetyNumber}</div>
+                  </div>
+                )}
+                {selGroup && (
+                  <div style={{ padding: '4px 8px', borderBottom: '1px solid #808080', fontSize: 11 }}>
+                    <b>👥 {selGroup.name}</b> — {selGroup.memberIds.length + 1} members
+                    <div style={{ fontSize: 10, opacity: 0.7 }}>
+                      {selGroup.memberIds.map(nameFor).join(', ') || 'no other members'}
+                      {selGroup.memberIds.some((id) => statuses[id] !== 'online') && ' · some members offline (messages reach connected members only)'}
+                    </div>
+                  </div>
+                )}
                 <div style={{ flex: 1, overflowY: 'auto', padding: 8, fontSize: 12 }}>
                   {history.map((m) => (
                     <div key={m.id} style={{ marginBottom: 4, textAlign: m.direction === 'out' ? 'right' : 'left' }}>
+                      {selGroup && m.direction === 'in' && (
+                        <div style={{ fontSize: 9, opacity: 0.6 }}>{nameFor(m.sender)}</div>
+                      )}
                       {m.kind === 'file' && m.file ? (
                         <span style={{ background: m.direction === 'out' ? '#d3e8ff' : '#eee', padding: '4px 8px', borderRadius: 3, display: 'inline-block', maxWidth: '80%', textAlign: 'left' }}>
                           <div>📎 <b>{m.file.name}</b> <span style={{ opacity: 0.6, fontSize: 10 }}>({formatBytes(m.file.size)})</span></div>
@@ -247,7 +355,7 @@ export function ChatModule(): JSX.Element {
                     onChange={(e) => setDraft(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') void send(); }}
                   />
-                  <button onClick={() => void attach()} disabled={busy} title="Send a file">📎</button>
+                  {sel && <button onClick={() => void attach()} disabled={busy} title="Send a file">📎</button>}
                   <button onClick={() => void send()} disabled={!draft.trim()}>Send</button>
                 </div>
               </>
