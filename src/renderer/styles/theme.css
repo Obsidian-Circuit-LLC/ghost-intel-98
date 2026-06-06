@@ -829,8 +829,40 @@ input.ga98-text, select.ga98-text {
 }
 @keyframes ga98-packet-travel { from { left: -8px; } to { left: 100%; } }
 @keyframes ga98-node-flicker { 0%, 100% { opacity: 1; } 50% { opacity: 0.65; } }
+
+/* DCS98 dial-up connection client — familiar dial-up-client chrome (logo header, three-panel
+   stage stepper, status caption), reskinned to the DialTerm green palette. */
+.ga98-dialclient {
+  height: 100%; display: flex; flex-direction: column; gap: 8px; padding: 10px;
+  color: #aaffaa; font-family: 'Courier New', monospace;
+}
+.ga98-dialclient-head {
+  display: flex; align-items: center; gap: 10px;
+  border-bottom: 1px solid #0a3a0a; padding-bottom: 6px;
+}
+.ga98-dialclient-logo { width: 40px; height: 40px; image-rendering: pixelated; border: 1px solid #0a3a0a; flex-shrink: 0; }
+.ga98-dialclient-brand { display: flex; flex-direction: column; line-height: 1.15; }
+.ga98-dialclient-brand-name { font-size: 16px; font-weight: bold; letter-spacing: 2px; color: #7CFC7C; text-shadow: 0 0 4px #2f2; }
+.ga98-dialclient-brand-sub { font-size: 10px; letter-spacing: 3px; opacity: 0.7; }
+.ga98-dialclient-stages { display: flex; justify-content: center; gap: 12px; padding: 2px 0; }
+.ga98-dialstage { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.ga98-dialstage-panel {
+  width: 84px; height: 50px; background: #021502; border: 2px outset #1d4d1d;
+  display: flex; align-items: center; justify-content: center; position: relative;
+}
+.ga98-dialstage.active .ga98-dialstage-panel { border-style: inset; box-shadow: 0 0 10px #2f2, 0 0 2px #fff inset; }
+.ga98-dialstage.done .ga98-dialstage-panel { background: #052805; border-style: inset; }
+.ga98-dialstage-label { font-size: 10px; letter-spacing: 2px; opacity: 0.65; }
+.ga98-dialstage.active .ga98-dialstage-label { opacity: 1; color: #7CFC7C; }
+.ga98-dialstage.done .ga98-dialstage-label { opacity: 0.85; }
+.ga98-dialstage-check { color: #7CFC7C; font-size: 26px; line-height: 1; text-shadow: 0 0 6px #2f2; }
+.ga98-marcher { width: 26px; height: 30px; }
+.ga98-dialclient-status { text-align: center; font-size: 13px; letter-spacing: 1px; min-height: 16px; text-shadow: 0 0 4px #1f5f1f; }
+@keyframes ga98-march { 0%, 100% { transform: translateX(-3px); } 50% { transform: translateX(3px); } }
+.ga98-dialstage.active .ga98-marcher { animation: ga98-march 0.5s steps(2, jump-none) infinite; }
+
 @media (prefers-reduced-motion: reduce) {
-  .ga98-packet, .ga98-node-screen { animation: none; }
+  .ga98-packet, .ga98-node-screen, .ga98-dialstage.active .ga98-marcher { animation: none; }
 }
 
 /* ── Bookmarks dashboard (offline start.me-style board) ────────────────────── */

@@ -32,11 +32,28 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`DCS98-Setup-3.9.1-beta.1.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the **experimental** Tor P2P chat — see Status.)*
+> **Install:** download [`DCS98-Setup-3.10.0-beta.1.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the **experimental** Tor P2P chat — see Status.)*
 
 ## Status
 
-**v3.9.1-beta.1** — current release. A look-and-feel pass:
+**v3.10.0-beta.1** — current release. DialTerm gets a dial-up *client* and an authentic handshake:
+
+- **DCS98 dial-up connection client** — the DialTerm connecting screen is now a familiar dial-up-client
+  layout: a **DCS98 logo header**, a three-panel **DIAL → LINK → AUTH** stage stepper (with a little
+  walking "marcher" in the active panel and ✓ on completed stages) and an AOL-style status caption —
+  wrapped around the existing uplink **packet animation** and the live negotiation log. DCS98-branded,
+  no third-party marks.
+- **Authentic dial-up handshake** — the DialTerm connect sound is rebuilt to follow a real V-series
+  sequence: **dial tone → DTMF dialing → 2100 Hz answer + V.8 "bong" → V.21 negotiation → echo-cancel
+  tone → V.34 line-probe "gallop" → scrambled-data roar**, beat-locked to the packet animation so the
+  stage stepper, log, and audio advance together. Still **fully synthesized at runtime** from functional
+  telephony / V-series frequencies — no sampled or copyrighted assets.
+
+429 automated tests. *Everything from v3.9.1-beta.1 (Notepad icon + reworked startup/hang-up sounds),
+v3.9.0-beta.1 (photo-embedding case reports, RTFM left-rail manual) and v3.8.0-beta.1 (experimental Tor
+P2P chat, offline Piper TTS) carries forward unchanged.*
+
+**v3.9.1-beta.1** — a look-and-feel pass:
 
 - **New Notepad desktop icon** — a hand-drawn Windows-98-style spiral notepad (teal header, ruled
   page, spiral binding) replacing the generic glyph, in the same crisp-pixel style as My Computer.
@@ -153,14 +170,14 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/dcs98/releases) and run it.
 
-Direct link to the current release: [`DCS98-Setup-3.9.1-beta.1.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.9.1-beta.1/DCS98-Setup-3.9.1-beta.1.exe)
+Direct link to the current release: [`DCS98-Setup-3.10.0-beta.1.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.10.0-beta.1/DCS98-Setup-3.10.0-beta.1.exe)
 (experimental P2P chat + Piper TTS; the chat crypto is unverified — see Status). The last
 fully-stable build is [`DCS98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.6.8/DCS98-Setup-3.6.8.exe).
 
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\DCS98-Setup-3.9.1-beta.1.exe -Algorithm SHA256
+Get-FileHash .\DCS98-Setup-3.10.0-beta.1.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
@@ -198,8 +215,16 @@ To uninstall: Settings → Apps → Dead Cyber Society 98 → Uninstall.
 
 ## Releases & changelog
 
-The current build is **v3.9.1-beta.1**. Each release page carries its own notes + SHA-256.
+The current build is **v3.10.0-beta.1**. Each release page carries its own notes + SHA-256.
 
+- **v3.10.0-beta.1** — **DialTerm dial-up client + authentic V-series handshake.** The connecting screen
+  is now a familiar dial-up-*client* layout — **DCS98 logo header**, a three-panel **DIAL → LINK → AUTH**
+  stage stepper (walking "marcher" + ✓ on completed stages) and an AOL-style status caption — wrapped
+  around the kept uplink **packet animation** + live negotiation log (DCS98-branded; no third-party
+  marks/mascot). The DialTerm connect **sound** is rebuilt to follow a real handshake: dial tone → DTMF →
+  2100 Hz answer + V.8 "bong" → V.21 negotiation → echo-cancel → V.34 line-probe → scrambled-data roar,
+  **beat-locked** to the animation (stepper, log, and audio advance together). Reproduced synthetically
+  from functional telephony / V-series frequencies — **no sampled or copyrighted assets**. **429 tests.**
 - **v3.9.1-beta.1** — **Look-and-feel pass.** New hand-drawn Windows-98-style **Notepad desktop icon**
   (teal spiral pad, matching the My Computer glyph). Reworked **sounds**, all still synthesized at
   runtime (no sampled assets): a warmer/more-synthetic power-on swell; a fuller DialTerm **dial-up

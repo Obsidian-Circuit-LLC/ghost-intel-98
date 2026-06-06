@@ -157,6 +157,14 @@ export function playDialPickup(): void {
   clickTick(0.04, 0.03);
 }
 
+/** North-American dial tone — a continuous 350 Hz + 440 Hz pair (published telephony spec, the
+ *  precise frequencies of the US dial tone, not a sampled asset). Played briefly after pickup,
+ *  before the digits are dialed, exactly as the reference handshake opens. */
+export function playDialTone(duration = 0.5): void {
+  tone({ freq: 350, duration, type: 'sine', gain: 0.06 });
+  tone({ freq: 440, duration, type: 'sine', gain: 0.05 });
+}
+
 /** One "packet beat" of the DialTerm uplink animation. The CSS keyframe `ga98-packet-travel`
  *  loops every 1.1 s with three packets staggered by a third of that, so a packet crosses the link
  *  every CARRIER_BEAT seconds. playCarrier lays its events on this grid (and the module reveals the
@@ -164,30 +172,59 @@ export function playDialPickup(): void {
  *  theme.css. */
 export const CARRIER_BEAT = 1.1 / 3; // ≈ 0.3667 s
 
-/** Modem dial-up handshake — a compressed take on the classic "sound of dial-up", quantised to the
- *  uplink animation's packet beat: answer tone, the iconic V.8 two-tone "bong", then the scrambled
- *  data wash (dual carriers + a sawtooth data chirp on every beat = every packet + white-noise
- *  hiss). All tones are published telephony / V-series frequencies — not a sampled recording. Runs
- *  9 beats (3 full packet cycles ≈ 3.3 s); resolves when done. */
+/** Modem dial-up handshake — the authentic V-series connect sequence, reproduced synthetically from
+ *  its functional ITU tones (an analysis of a real handshake recording gives the phase timeline; the
+ *  frequencies themselves are standardised signals, not copyrightable expression — and nothing is
+ *  sampled). Compressed onto the uplink animation's packet beat so audio + visuals + log advance in
+ *  lockstep. Phase map (B ≈ 0.367 s):
+ *    0–2  remote modem answers — 2100 Hz answer tone (CED/ANSam) + a short V.8 answer warble
+ *    2–3  the iconic V.8 two-tone "bong" (low → high)
+ *    3–5  V.21 FSK negotiation — the low mark/space warble
+ *    5–7  2100 Hz echo-canceller-disable tone, sustained, with a faint probe underneath
+ *    7–9  V.34 line-probe "gallop" — a mid warble under a rising multitone sweep
+ *    9–12 full scrambled-data roar — broadband low/mid/high carriers + rising hiss + a data chirp
+ *         on every packet beat
+ *  Runs 12 beats (4 full packet cycles ≈ 4.4 s); resolves when done. */
 export function playCarrier(): Promise<void> {
   const B = CARRIER_BEAT;
-  // Answer/carrier tone (CED 2100 Hz) over the first two beats.
+  // Phase 1 (beats 0–2) — remote modem answers: 2100 Hz answer tone with a brief V.8 answer warble
+  // (1530 + 2220) riding the front edge.
   tone({ freq: 2100, duration: B * 2, type: 'sine', gain: 0.06, startOffset: 0 });
-  // The V.8 two-tone "bong" landing on beat 2 — low then high.
+  tone({ freq: 2220, duration: 0.22, type: 'sine', gain: 0.05, startOffset: 0 });
+  tone({ freq: 1530, duration: 0.22, type: 'sine', gain: 0.045, startOffset: 0.05 });
+  // Phase 2 (beat 2) — the V.8 two-tone "bong", low then high.
   tone({ freq: 650, duration: 0.18, type: 'sine', gain: 0.1, startOffset: B * 2 });
-  tone({ freq: 1240, duration: 0.22, type: 'sine', gain: 0.1, startOffset: B * 2 + 0.18 });
-  // Data scramble from beat 3: two sustained carriers + a sawtooth data chirp on every beat (so
-  // each chirp coincides with a packet launching across the link) over white-noise hiss.
-  const dataStart = B * 3;
-  const dataBeats = 6;
-  tone({ freq: 2100, duration: B * dataBeats, type: 'sine', gain: 0.045, startOffset: dataStart });
-  tone({ freq: 1300, duration: B * dataBeats, type: 'sine', gain: 0.045, startOffset: dataStart });
-  const chirps = [1700, 2250, 1550, 1950, 1450, 2100];
+  tone({ freq: 1240, duration: 0.2, type: 'sine', gain: 0.1, startOffset: B * 2 + 0.18 });
+  // Phase 3 (beats 3–5) — V.21 FSK negotiation: the low warble, mark/space hopping each half-beat.
+  const fsk = [980, 1650, 1180, 1450, 990, 1620, 1080, 1340];
+  for (let i = 0; i < fsk.length; i += 1) {
+    tone({ freq: fsk[i], duration: B * 0.45, type: 'square', gain: 0.035, startOffset: B * 3 + i * B * 0.5 });
+  }
+  // Phase 4 (beats 5–7) — 2100 Hz echo-canceller-disable tone, sustained, with a faint probe.
+  tone({ freq: 2100, duration: B * 2, type: 'sine', gain: 0.05, startOffset: B * 5 });
+  tone({ freq: 1100, duration: B * 2, type: 'sine', gain: 0.012, startOffset: B * 5 });
+  // Phase 5 (beats 7–9) — V.34 line-probe "gallop": a mid sawtooth warble under a rising sweep.
+  const gallop = [1600, 1900, 1700, 1840, 1650, 1900];
+  for (let i = 0; i < gallop.length; i += 1) {
+    tone({ freq: gallop[i], duration: (B / 3) * 0.9, type: 'sawtooth', gain: 0.03, startOffset: B * 7 + i * (B / 3) });
+  }
+  const sweep = [2250, 2550, 2850, 3000];
+  for (let i = 0; i < sweep.length; i += 1) {
+    tone({ freq: sweep[i], duration: B * 0.45, type: 'sine', gain: 0.025, startOffset: B * 7 + i * B * 0.5 });
+  }
+  // Phase 6 (beats 9–12) — full scrambled-data roar: broadband carriers (low/mid/high) + rising
+  // filtered hiss + a sawtooth data chirp on every packet beat (each coincides with a packet
+  // launching across the link).
+  const dataStart = B * 9;
+  const dataBeats = 3;
+  const roar: Array<[number, number]> = [[360, 0.03], [1300, 0.035], [1800, 0.03], [2700, 0.022], [3100, 0.018]];
+  roar.forEach(([f, g]) => tone({ freq: f, duration: B * dataBeats, type: 'sine', gain: g, startOffset: dataStart }));
+  const chirps = [1700, 2250, 1550];
   for (let i = 0; i < dataBeats; i += 1) {
     tone({ freq: chirps[i % chirps.length], duration: 0.2, type: 'sawtooth', gain: 0.03, startOffset: dataStart + i * B });
   }
-  noise(B * dataBeats, 0.035, dataStart);
-  const total = dataStart + B * dataBeats; // 9 beats ≈ 3.3 s
+  noise(B * dataBeats, 0.05, dataStart);
+  const total = dataStart + B * dataBeats; // 12 beats ≈ 4.4 s
   return new Promise((resolve) => setTimeout(resolve, total * 1000));
 }
 

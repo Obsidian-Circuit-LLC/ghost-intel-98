@@ -15,9 +15,10 @@ import '@xterm/xterm/css/xterm.css';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SshHostProfile, DialTermProtocol } from '@shared/post-mvp-types';
 import { useSettings } from '../../state/store';
-import { playDtmf, playDialPickup, playCarrier, playHangup, CARRIER_BEAT } from '../../audio/synth';
+import { playDtmf, playDialPickup, playDialTone, playCarrier, playHangup, CARRIER_BEAT } from '../../audio/synth';
 import { toast } from '../../state/toasts';
 import { FtpBrowser } from './FtpBrowser';
+import logoUrl from '../../assets/logo.png';
 
 type ConnState = 'idle' | 'dialing' | 'connecting' | 'open' | 'closed';
 
@@ -165,10 +166,11 @@ export function DialTermModule(): JSX.Element {
       'NEGOTIATING…'
     ]);
 
-    // Dialing: light each key + fire its genuine DTMF dual-tone in lockstep. The visual
-    // advances regardless of the sound setting; only the tones are gated.
-    if (sound) playDialPickup();
-    await wait(220);
+    // Dialing: pick up (off-hook click), let the dial tone breathe, then light each key + fire its
+    // genuine DTMF dual-tone in lockstep. The visual advances regardless of the sound setting; only
+    // the tones are gated.
+    if (sound) { playDialPickup(); playDialTone(0.5); }
+    await wait(550);
     for (let i = 0; i < number.length; i += 1) {
       setDialedCount(i + 1);
       if (sound) playDtmf(number[i]);
@@ -182,13 +184,16 @@ export function DialTermModule(): JSX.Element {
     // Start the handshake tones and reveal the negotiation log on the same packet beat the uplink
     // animation runs on, so audio + visuals + log advance in lockstep. The waits pace the log
     // whether or not sound is enabled; when sound is on we then await the carrier's tail.
+    // The carrier runs 12 beats; reveal the log on the phase boundaries so the connection client's
+    // stage stepper tracks the audio — LOCK after the answer+bong (beat 3), LAP-M after negotiation
+    // (beat 6), and OPENING SSH as the data roar begins (beat 9), then await the 3-beat tail.
     const beat = CARRIER_BEAT * 1000;
     const carrierDone = sound ? playCarrier() : Promise.resolve();
-    await wait(beat * 2); if (!live()) return;
+    await wait(beat * 3); if (!live()) return;
     setHandshakeLog((h) => [...h, 'CARRIER LOCK · 33600']);
-    await wait(beat); if (!live()) return;
+    await wait(beat * 3); if (!live()) return;
     setHandshakeLog((h) => [...h, 'LAP-M / V.42bis OK']);
-    await wait(beat * 4); if (!live()) return;
+    await wait(beat * 3); if (!live()) return;
     setHandshakeLog((h) => [...h, 'OPENING SSH SESSION…']);
     await carrierDone;
     if (!live()) return;
@@ -265,7 +270,7 @@ export function DialTermModule(): JSX.Element {
         ) : state === 'dialing' ? (
           <DialPad number={dialNumber} dialedCount={dialedCount} />
         ) : state === 'connecting' ? (
-          <UplinkGraphic host={activeHost ? `${activeHost.host}:${activeHost.port}` : 'REMOTE'} log={handshakeLog} />
+          <DialClient host={activeHost ? `${activeHost.host}:${activeHost.port}` : 'REMOTE'} log={handshakeLog} />
         ) : (
           <pre style={{
             // Override 98.css's global `pre` rule (white sunken text-box) so the
@@ -321,11 +326,52 @@ function DialPad({ number, dialedCount }: { number: string; dialedCount: number 
   );
 }
 
-/** Uplink-style "computer connecting to computer" graphic shown during the carrier handshake:
- *  two nodes with packets streaming across the link, over the live negotiation log. */
-function UplinkGraphic({ host, log }: { host: string; log: string[] }): JSX.Element {
+/** The three connection stages, in the spirit of a familiar 90s dial-up client's progress panels
+ *  (Dial → Link → Auth), with the AOL-style status caption per stage. DCS98-branded — no third-party
+ *  marks or mascot. */
+const DIAL_STAGES = ['DIAL', 'LINK', 'AUTH'] as const;
+const DIAL_STATUS = ['Dialing…', 'Connecting…', 'Verifying credentials…'];
+
+/** A small original "marcher" figure that advances across the active stage panel — our take on the
+ *  little walking guy a dial-up client shows while it connects (not the AOL mascot; a green
+ *  wireframe runner in the DialTerm palette). */
+function Marcher(): JSX.Element {
   return (
-    <div className="ga98-uplink">
+    <svg className="ga98-marcher" viewBox="0 0 26 30" fill="none" stroke="#7CFC7C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="14" cy="5" r="3.4" fill="#7CFC7C" stroke="none" />
+      <path d="M14 9 L12 18" />
+      <path d="M12 18 L6 25 M12 18 L18 24" />
+      <path d="M13 12 L6 11 M13 12 L20 15" />
+    </svg>
+  );
+}
+
+/** DCS98 dial-up connection client shown during the carrier handshake. Familiar dial-up-client
+ *  chrome — DCS98 logo header, a three-panel stage stepper, and an AOL-style status caption —
+ *  wrapped around the kept uplink packet animation and the live negotiation log. The stepper is
+ *  derived from the log so it tracks the (beat-synced) handshake: once we're connecting the number
+ *  is dialed (DIAL done), LINK runs through negotiation, and AUTH lights as the SSH session opens. */
+function DialClient({ host, log }: { host: string; log: string[] }): JSX.Element {
+  const stage = log.some((l) => l.startsWith('OPENING SSH')) ? 2 : 1;
+  return (
+    <div className="ga98-dialclient">
+      <div className="ga98-dialclient-head">
+        <img src={logoUrl} alt="" className="ga98-dialclient-logo" />
+        <div className="ga98-dialclient-brand">
+          <span className="ga98-dialclient-brand-name">DEAD CYBER SOCIETY</span>
+          <span className="ga98-dialclient-brand-sub">98 · DIAL-UP NETWORKING</span>
+        </div>
+      </div>
+      <div className="ga98-dialclient-stages">
+        {DIAL_STAGES.map((s, i) => (
+          <div key={s} className={`ga98-dialstage${i < stage ? ' done' : i === stage ? ' active' : ''}`}>
+            <div className="ga98-dialstage-panel">
+              {i === stage ? <Marcher /> : i < stage ? <span className="ga98-dialstage-check">✓</span> : null}
+            </div>
+            <span className="ga98-dialstage-label">{s}</span>
+          </div>
+        ))}
+      </div>
       <div className="ga98-uplink-route">
         <div className="ga98-node">
           <div className="ga98-node-screen" />
@@ -341,6 +387,7 @@ function UplinkGraphic({ host, log }: { host: string; log: string[] }): JSX.Elem
           <span>{host}</span>
         </div>
       </div>
+      <div className="ga98-dialclient-status">{DIAL_STATUS[stage]}</div>
       <pre className="ga98-uplink-log">{log.map((l) => `${l}\n`).join('')}</pre>
     </div>
   );
