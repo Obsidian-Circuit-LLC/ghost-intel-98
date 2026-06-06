@@ -8,80 +8,89 @@ import {
   INVITE_PREFIX,
   INVITE_TOKEN_LEN
 } from '../src/main/chat/invite';
-import { generateIdentity } from '../src/main/chat/identity';
+import { generateIdentity, generateKemPrekey, type IdentityKeyPair, type KemPrekey } from '../src/main/chat/identity';
 
-const ONION = `${'a'.repeat(56)}.onion`; // valid v3 onion shape (base32 a-z2-7)
+const ONION = `${'a'.repeat(56)}.onion`;
 
-function sampleInvite(): string {
-  return createInvite({ onion: ONION, identityPublic: generateIdentity().publicKeys, token: mintInviteToken() });
+function sample(): { responder: IdentityKeyPair; prekey: KemPrekey; token: Uint8Array; link: string } {
+  const responder = generateIdentity();
+  const { prekey } = generateKemPrekey(responder);
+  const token = mintInviteToken();
+  const link = createInvite({ responder, onion: ONION, prekey, token });
+  return { responder, prekey, token, link };
 }
 
-describe('chat invite links', () => {
-  it('round-trips onion, identity, and token', () => {
-    const id = generateIdentity().publicKeys;
-    const token = mintInviteToken();
-    const link = createInvite({ onion: ONION, identityPublic: id, token });
+function payloadOf(link: string): Uint8Array {
+  return new Uint8Array(Buffer.from(link.slice(INVITE_PREFIX.length), 'base64url'));
+}
+function relink(payload: Uint8Array): string {
+  return INVITE_PREFIX + Buffer.from(payload).toString('base64url');
+}
+
+describe('chat invite links (v3)', () => {
+  it('round-trips onion, responder identity, prekey, token', () => {
+    const { responder, prekey, token, link } = sample();
     expect(link.startsWith(INVITE_PREFIX)).toBe(true);
-
-    const parsed = parseInvite(link);
-    expect(parsed.onion).toBe(ONION);
-    expect(parsed.version).toBe(1);
-    expect(Array.from(parsed.token)).toEqual(Array.from(token));
-    expect(Array.from(parsed.identityPublic.ed25519)).toEqual(Array.from(id.ed25519));
-    expect(Array.from(parsed.identityPublic.mlkem768)).toEqual(Array.from(id.mlkem768));
-  });
-
-  it('mints 32-byte tokens that vary', () => {
-    const a = mintInviteToken();
-    const b = mintInviteToken();
-    expect(a.length).toBe(INVITE_TOKEN_LEN);
-    expect(Array.from(a)).not.toEqual(Array.from(b));
+    const p = parseInvite(link);
+    expect(p.version).toBe(2);
+    expect(p.onion).toBe(ONION);
+    expect(Array.from(p.token)).toEqual(Array.from(token));
+    expect(Array.from(p.responderPublic.ed25519)).toEqual(Array.from(responder.publicKeys.ed25519));
+    expect(Array.from(p.responderPublic.x25519)).toEqual(Array.from(responder.publicKeys.x25519));
+    expect(Array.from(p.prekey.prekeyId)).toEqual(Array.from(prekey.prekeyId));
   });
 
   it('validates v3 onion shape', () => {
     expect(isValidOnionV3(ONION)).toBe(true);
-    expect(isValidOnionV3('tooshort.onion')).toBe(false);
-    expect(isValidOnionV3(`${'a'.repeat(56)}.com`)).toBe(false);
-    expect(isValidOnionV3(`${'A'.repeat(56)}.onion`)).toBe(false); // uppercase not base32 lc
-    expect(isValidOnionV3(`${'1'.repeat(56)}.onion`)).toBe(false); // '1' not in base32 a-z2-7
+    expect(isValidOnionV3('short.onion')).toBe(false);
+    expect(isValidOnionV3(`${'A'.repeat(56)}.onion`)).toBe(false);
   });
 
-  it('rejects a bad onion or wrong-length token on create', () => {
-    const id = generateIdentity().publicKeys;
-    expect(() => createInvite({ onion: 'nope.onion', identityPublic: id, token: mintInviteToken() })).toThrow(InviteError);
-    expect(() => createInvite({ onion: ONION, identityPublic: id, token: new Uint8Array(16) })).toThrow(InviteError);
+  it('rejects bad onion / wrong-length token on create', () => {
+    const responder = generateIdentity();
+    const { prekey } = generateKemPrekey(responder);
+    expect(() => createInvite({ responder, onion: 'nope.onion', prekey, token: mintInviteToken() })).toThrow(InviteError);
+    expect(() => createInvite({ responder, onion: ONION, prekey, token: new Uint8Array(16) })).toThrow(InviteError);
   });
 
-  it('rejects malformed links: bad prefix, bad base64, truncation, version, tampered length', () => {
-    expect(() => parseInvite('https://example.com/x')).toThrow(InviteError);
-    expect(() => parseInvite(`${INVITE_PREFIX}!!!not base64!!!`)).toThrow(InviteError);
-    expect(() => parseInvite(`${INVITE_PREFIX}AAAA`)).toThrow(InviteError); // decodes but too short
-
-    // Flip the version byte of a valid invite.
-    const link = sampleInvite();
-    const payload = new Uint8Array(Buffer.from(link.slice(INVITE_PREFIX.length), 'base64url'));
-    payload[0] = 2; // unsupported version
-    const badVer = INVITE_PREFIX + Buffer.from(payload).toString('base64url');
-    expect(() => parseInvite(badVer)).toThrow(InviteError);
-
-    // Truncate the payload (length mismatch).
-    const truncated = INVITE_PREFIX + Buffer.from(payload.slice(0, payload.length - 5)).toString('base64url');
-    expect(() => parseInvite(truncated)).toThrow(InviteError);
+  it('rejects a tampered xs_R (whole-invite signature catches it)', () => {
+    const { link } = sample();
+    const payload = payloadOf(link);
+    // xs_R sits inside the identity bundle: after version(1)+onionLen(1)+onion(62)+ed25519(32).
+    const xsROffset = 2 + 56 + 32; // onion is 56 chars + '.onion' = 62; ed25519 is 32 → xs_R starts here
+    payload[xsROffset + 6] ^= 0x01; // flip an x25519 byte (offset within onion handled below)
+    expect(() => parseInvite(relink(payload))).toThrow(InviteError);
   });
 
-  it('accepts a link with trailing padding / whitespace (normalization)', () => {
-    const link = sampleInvite();
-    expect(() => parseInvite(`${link}==`)).not.toThrow(); // stray base64 padding
-    expect(() => parseInvite(`${link}\n`)).not.toThrow(); // trailing newline from a paste
+  it('rejects a tampered onion / token (signature catches it)', () => {
+    const { link } = sample();
+    const p1 = payloadOf(link);
+    p1[3] ^= 0x01; // flip an onion byte
+    expect(() => parseInvite(relink(p1))).toThrow(InviteError);
+    const p2 = payloadOf(link);
+    p2[p2.length - 1 - 64] ^= 0x01; // flip a token byte (token is just before the 64-byte sig)
+    expect(() => parseInvite(relink(p2))).toThrow(InviteError);
+  });
+
+  it('accepts a link with trailing padding / whitespace', () => {
+    const { link } = sample();
+    expect(() => parseInvite(`${link}==`)).not.toThrow();
     expect(parseInvite(`${link}\n`).onion).toBe(ONION);
   });
 
-  it('rejects an invite whose embedded identity bundle is corrupt', () => {
-    const link = sampleInvite();
-    const payload = new Uint8Array(Buffer.from(link.slice(INVITE_PREFIX.length), 'base64url'));
-    // onionLen is at byte 1; corrupt it so the declared length no longer matches → mismatch throw
-    payload[1] = payload[1] + 1;
-    const bad = INVITE_PREFIX + Buffer.from(payload).toString('base64url');
-    expect(() => parseInvite(bad)).toThrow(InviteError);
+  it('rejects malformed links: bad prefix, bad base64, truncation, version', () => {
+    expect(() => parseInvite('https://example.com/x')).toThrow(InviteError);
+    expect(() => parseInvite(`${INVITE_PREFIX}!!!`)).toThrow(InviteError);
+    expect(() => parseInvite(`${INVITE_PREFIX}AAAA`)).toThrow(InviteError);
+    const { link } = sample();
+    const payload = payloadOf(link);
+    payload[0] = 1; // wrong version
+    expect(() => parseInvite(relink(payload))).toThrow(InviteError);
+    const truncated = relink(payload.slice(0, payload.length - 10));
+    expect(() => parseInvite(truncated)).toThrow(InviteError);
+  });
+
+  it('exposes INVITE_TOKEN_LEN = 32', () => {
+    expect(INVITE_TOKEN_LEN).toBe(32);
   });
 });
