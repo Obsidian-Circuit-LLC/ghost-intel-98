@@ -365,6 +365,11 @@ export interface AppSettings {
     /** User-added data feeds (trusted HTTPS endpoints returning a generic quote JSON shape). */
     customFeeds: { id: string; label: string; url: string }[];
   };
+  /** EXPERIMENTAL P2P chat (Tor onion). Off by default ⇒ tor is never spawned and no onion is
+   *  published. The handshake crypto is pending formal verification — see the in-app banner. */
+  chat: {
+    networkEnabled: boolean;
+  };
 }
 
 export const defaultShortcuts: AccessShortcut[] = [
@@ -464,5 +469,6 @@ export const defaultSettings: AppSettings = {
       symbols: ['^GSPC', 'AAPL', 'GC=F']
     },
     customFeeds: []
-  }
+  },
+  chat: { networkEnabled: false }
 };

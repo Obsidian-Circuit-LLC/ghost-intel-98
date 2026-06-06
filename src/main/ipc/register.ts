@@ -37,6 +37,7 @@ import * as ssh from '../services/ssh';
 import * as streams from '../services/streams';
 import * as ai from '../services/ai';
 import * as localAi from '../services/local-ai';
+import * as chat from '../services/chat';
 import * as bookmarks from '../storage/bookmarks';
 import * as history from '../storage/history';
 import * as firefox from '../services/firefox';
@@ -184,6 +185,28 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   // Renderer-initiated quit (Access → Shut Down). app.quit() runs the before-quit cleanup
   // (drains SSH sessions, cancels AI streams) rather than killing the process abruptly.
   safeHandle(channels.system.quit, () => { app.quit(); });
+
+  // ---- chat (EXPERIMENTAL P2P over Tor) — NOT in GATE_EXEMPT (requires an unlocked vault) ----
+  const ensureContactId = (v: unknown): string => {
+    if (typeof v !== 'string' || !/^[0-9a-f]{64}$/.test(v)) throw new Error('Invalid contactId');
+    return v;
+  };
+  const ensureChatText = (v: unknown): string => {
+    if (typeof v !== 'string' || v.length === 0) throw new Error('Empty message');
+    return v.replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, 16 * 1024);
+  };
+  const ensureInviteLink = (v: unknown): string => {
+    if (typeof v !== 'string' || v.length > 8192 || !v.startsWith('dcs98chat://invite/')) throw new Error('Invalid invite link');
+    return v;
+  };
+  safeHandle(channels.chat.status, () => chat.status());
+  safeHandle(channels.chat.enable, () => chat.enable(getWindow));
+  safeHandle(channels.chat.disable, () => chat.disable());
+  safeHandle(channels.chat.createInvite, () => chat.createInvite());
+  safeHandle(channels.chat.acceptInvite, (...a) => chat.acceptInvite(ensureInviteLink(a[0])));
+  safeHandle(channels.chat.listContacts, () => chat.listContacts());
+  safeHandle(channels.chat.send, (...a) => chat.send(ensureContactId(a[0]), ensureChatText(a[1])));
+  safeHandle(channels.chat.history, (...a) => chat.history(ensureContactId(a[0])));
 
   // ---- auth (login / encrypt-at-rest) ----
   safeHandle(channels.auth.status, async () => ({

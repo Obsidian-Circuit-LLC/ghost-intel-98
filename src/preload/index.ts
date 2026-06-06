@@ -84,6 +84,36 @@ const api = {
       return () => ipcRenderer.removeListener(channels.system.onDiagnostic, listener);
     }
   },
+  chat: {
+    status: () => ipcRenderer.invoke(channels.chat.status),
+    enable: () => ipcRenderer.invoke(channels.chat.enable),
+    disable: () => ipcRenderer.invoke(channels.chat.disable),
+    createInvite: () => ipcRenderer.invoke(channels.chat.createInvite),
+    acceptInvite: (link: string) => ipcRenderer.invoke(channels.chat.acceptInvite, link),
+    listContacts: () => ipcRenderer.invoke(channels.chat.listContacts),
+    send: (contactId: string, text: string) => ipcRenderer.invoke(channels.chat.send, contactId, text),
+    history: (contactId: string) => ipcRenderer.invoke(channels.chat.history, contactId),
+    onMessage: (cb: (p: { contactId: string; message: unknown }) => void) => {
+      const l = (_e: unknown, p: { contactId: string; message: unknown }) => cb(p);
+      ipcRenderer.on(channels.chat.onMessage, l);
+      return () => ipcRenderer.removeListener(channels.chat.onMessage, l);
+    },
+    onContactStatus: (cb: (p: { contactId: string; status: string }) => void) => {
+      const l = (_e: unknown, p: { contactId: string; status: string }) => cb(p);
+      ipcRenderer.on(channels.chat.onContactStatus, l);
+      return () => ipcRenderer.removeListener(channels.chat.onContactStatus, l);
+    },
+    onDelivery: (cb: (p: { contactId: string; messageId: string; state: string }) => void) => {
+      const l = (_e: unknown, p: { contactId: string; messageId: string; state: string }) => cb(p);
+      ipcRenderer.on(channels.chat.onDelivery, l);
+      return () => ipcRenderer.removeListener(channels.chat.onDelivery, l);
+    },
+    onTorStatus: (cb: (p: { status: string; onion: string | null }) => void) => {
+      const l = (_e: unknown, p: { status: string; onion: string | null }) => cb(p);
+      ipcRenderer.on(channels.chat.onTorStatus, l);
+      return () => ipcRenderer.removeListener(channels.chat.onTorStatus, l);
+    }
+  },
   mail: {
     listAccounts: () => ipcRenderer.invoke(channels.mail.listAccounts),
     upsertAccount: (input: unknown) => ipcRenderer.invoke(channels.mail.upsertAccount, input),
