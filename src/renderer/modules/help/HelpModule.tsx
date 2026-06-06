@@ -1,7 +1,12 @@
 /**
- * Help — keyboard-shortcut reference + module walkthrough.
+ * Help (RTFM) — left-rail navigation. Sections: Manual (shortcuts + module reference + privacy),
+ * OpChildSafety (child-safety reporting doctrine), Hacktivist Ethos, and OSINT. The rail reuses the
+ * Settings module's rail classes (ga98-settings-shell / -rail / -rail-item / -pane) so it matches
+ * the rest of the app for free. All reference text is static; the only network egress is opening an
+ * official reporting site in the OS browser when a link is clicked.
  */
 
+import { useState } from 'react';
 import logoUrl from '../../assets/logo.png';
 
 const MODULE_DOCS: { name: string; desc: string }[] = [
@@ -106,7 +111,43 @@ function ExtLink({ href }: { href: string }): JSX.Element {
   );
 }
 
+type SectionKey = 'manual' | 'opcs' | 'hacktivist' | 'osint';
+
+const SECTIONS: { key: SectionKey; label: string; glyph: string }[] = [
+  { key: 'manual',     label: 'Manual',          glyph: '📖' },
+  { key: 'opcs',       label: 'OpChildSafety',   glyph: '🛡' },
+  { key: 'hacktivist', label: 'Hacktivist Ethos', glyph: '✊' },
+  { key: 'osint',      label: 'OSINT',           glyph: '🔎' }
+];
+
 export function HelpModule(): JSX.Element {
+  const [section, setSection] = useState<SectionKey>('manual');
+  return (
+    <div className="ga98-settings-shell">
+      <nav className="ga98-settings-rail" aria-label="RTFM sections">
+        {SECTIONS.map((sec) => (
+          <button
+            key={sec.key}
+            className="ga98-settings-rail-item"
+            data-active={section === sec.key}
+            onClick={() => setSection(sec.key)}
+          >
+            <span style={{ display: 'inline-block', width: 18, textAlign: 'center' }} aria-hidden="true">{sec.glyph}</span>
+            <span>{sec.label}</span>
+          </button>
+        ))}
+      </nav>
+      <div className="ga98-settings-pane">
+        {section === 'manual' && <ManualPane />}
+        {section === 'opcs' && <OpChildSafetyPane />}
+        {section === 'hacktivist' && <HacktivistEthosPane />}
+        {section === 'osint' && <OsintPane />}
+      </div>
+    </div>
+  );
+}
+
+function ManualPane(): JSX.Element {
   return (
     <div className="ga98-stack">
       <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
@@ -143,6 +184,27 @@ export function HelpModule(): JSX.Element {
         </dl>
       </fieldset>
 
+      <fieldset>
+        <legend>Privacy</legend>
+        <ul style={{ marginTop: 4, fontSize: 12, paddingLeft: 18 }}>
+          <li>No telemetry. No analytics. No background phone-home.</li>
+          <li>All network egress is initiated by an explicit user action (mail fetch, browser nav, AI request, stream view).</li>
+          <li>Mail / SSH / AI credentials live in <code>secrets.enc</code>, encrypted via your OS keyring (DPAPI on Windows, Keychain on macOS, libsecret/KWallet on Linux). Plaintext credentials never touch disk.</li>
+          <li>Every sound is synthesized at runtime via Web Audio — no copyrighted assets.</li>
+        </ul>
+      </fieldset>
+
+      <fieldset>
+        <legend>Where things live</legend>
+        <p style={{ fontSize: 11 }}>Your data lives under the OS userData folder in a <code>GhostAccess98/</code> directory. Open <b>Settings → About</b> to see the exact path on your machine.</p>
+      </fieldset>
+    </div>
+  );
+}
+
+function OpChildSafetyPane(): JSX.Element {
+  return (
+    <div className="ga98-stack">
       <fieldset>
         <legend>OpChildSafety — child-safety reporting</legend>
         <div style={{ fontSize: 12 }}>
@@ -204,20 +266,33 @@ export function HelpModule(): JSX.Element {
           </p>
         </div>
       </fieldset>
+    </div>
+  );
+}
 
+function HacktivistEthosPane(): JSX.Element {
+  return (
+    <div className="ga98-stack">
       <fieldset>
-        <legend>Privacy</legend>
-        <ul style={{ marginTop: 4, fontSize: 12, paddingLeft: 18 }}>
-          <li>No telemetry. No analytics. No background phone-home.</li>
-          <li>All network egress is initiated by an explicit user action (mail fetch, browser nav, AI request, stream view).</li>
-          <li>Mail / SSH / AI credentials live in <code>secrets.enc</code>, encrypted via your OS keyring (DPAPI on Windows, Keychain on macOS, libsecret/KWallet on Linux). Plaintext credentials never touch disk.</li>
-          <li>Every sound is synthesized at runtime via Web Audio — no copyrighted assets.</li>
-        </ul>
+        <legend>Hacktivist Ethos</legend>
+        <p style={{ fontSize: 12, color: '#555' }}>
+          This section is reserved for the Hacktivist Ethos doctrine. The content is being finalised
+          and will appear here in a forthcoming update.
+        </p>
       </fieldset>
+    </div>
+  );
+}
 
+function OsintPane(): JSX.Element {
+  return (
+    <div className="ga98-stack">
       <fieldset>
-        <legend>Where things live</legend>
-        <p style={{ fontSize: 11 }}>Your data lives under the OS userData folder in a <code>GhostAccess98/</code> directory. Open <b>Settings → About</b> to see the exact path on your machine.</p>
+        <legend>OSINT</legend>
+        <p style={{ fontSize: 12, color: '#555' }}>
+          Open-Source Intelligence tradecraft — methodology, lawful collection, and source handling.
+          This section is in progress and will be published in a forthcoming update.
+        </p>
       </fieldset>
     </div>
   );

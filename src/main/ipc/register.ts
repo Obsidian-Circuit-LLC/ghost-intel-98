@@ -19,7 +19,7 @@ import { writeFile, rename, lstat, rm, readFile, stat, realpath } from 'node:fs/
 import { basename, dirname, sep } from 'node:path';
 import { channels } from '@shared/ipc-contracts';
 import type { MailAccount, MailSendInput, SshHostProfile, AiChatRequest, MediaTrack } from '@shared/post-mvp-types';
-import type { MediaUrlResult } from '@shared/types';
+import type { MediaUrlResult, CaseRecord } from '@shared/types';
 import {
   caseStore,
   consumeDrainDiagnostics,
@@ -64,7 +64,7 @@ import * as geoCaseEvents from '../geoint/case-events';
 import * as markets from '../markets/providers';
 import * as vault from '../services/vault';
 import { encryptAll, decryptAll } from '../storage/encryption-migrate';
-import { buildSummaryHtml, renderCasePdf } from '../services/export';
+import { buildSummaryHtml, renderCasePdf, type ReportImages } from '../services/export';
 import { timelineCsv, linksCsv, entitiesCsv, attachmentsCsv } from '../services/csv';
 import * as search from '../services/search';
 import { markConsented, assertAllConsented } from '../security/consent';
@@ -169,6 +169,55 @@ async function resumeEnableIfNeeded(): Promise<void> {
   } finally {
     vault.endMigration();
   }
+}
+
+// Photos embedded into a case report (summary HTML/PDF). Originals are decrypted here in main and
+// handed to the pure HTML builder as data URIs — the offline PDF render can neither fetch nor
+// decrypt. A total budget caps the embedded payload so a photo-heavy case can't produce a giant
+// file; a per-image cap drops outsized single images. Bio thumbnails (96px) are too small to be
+// useful, so bio images embed their originals, same as image attachments.
+const REPORT_IMG_TOTAL_CAP = 24 * 1024 * 1024; // ~24 MiB of embedded image bytes per report
+const REPORT_IMG_PER_CAP = 8 * 1024 * 1024;    // skip any single image larger than this
+const IMAGE_EXT_MIME: Record<string, string> = {
+  jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif'
+};
+
+async function gatherReportImages(caseId: string, rec: CaseRecord): Promise<ReportImages> {
+  const bio: ReportImages['bio'] = [];
+  const attachments: ReportImages['attachments'] = [];
+  let budget = REPORT_IMG_TOTAL_CAP;
+  let omitted = 0;
+
+  let bioList: Awaited<ReturnType<typeof bioStore.listResolved>> = [];
+  try { bioList = await bioStore.listResolved(caseId); } catch { /* no bio index / locked → none */ }
+  for (const img of bioList) {
+    if (img.size > REPORT_IMG_PER_CAP || img.size > budget) { omitted++; continue; }
+    try {
+      const dataUri = await bioStore.readOriginalDataUri(caseId, img.id);
+      if (!dataUri) { omitted++; continue; }
+      bio.push({ caption: img.caption || img.originalName, dataUri });
+      budget -= img.size;
+    } catch { omitted++; } // one corrupt/missing original must not abort the whole report
+  }
+
+  for (const a of rec.attachments) {
+    const ext = a.originalName.split('.').pop()?.toLowerCase() ?? '';
+    const mime = IMAGE_EXT_MIME[ext];
+    if (!mime) continue; // non-image attachment: stays in the name list, not embedded
+    if (a.size > REPORT_IMG_PER_CAP || a.size > budget) { omitted++; continue; }
+    try {
+      const res = await fileStore.readAttachmentBytes(caseId, a.fileName, 0, REPORT_IMG_PER_CAP);
+      if (!res.base64) { omitted++; continue; }
+      attachments.push({ caption: a.originalName, dataUri: `data:${mime};base64,${res.base64}` });
+      budget -= a.size;
+    } catch { omitted++; }
+  }
+
+  return {
+    bio,
+    attachments,
+    omittedNote: omitted ? `${omitted} image${omitted === 1 ? '' : 's'} not embedded (too large for the report).` : undefined
+  };
 }
 
 export function registerIpc(getWindow: () => BrowserWindow | null): void {
@@ -440,12 +489,14 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
 
   // ---- export ----
   safeHandle(channels.export.summaryHtml, async (...args) => {
-    const rec = await caseStore.read(ensureUuid(args[0], 'caseId'));
-    return saveBufferWithDialog(getWindow(), `${rec.title}.html`, Buffer.from(buildSummaryHtml(rec), 'utf8'));
+    const id = ensureUuid(args[0], 'caseId');
+    const rec = await caseStore.read(id);
+    return saveBufferWithDialog(getWindow(), `${rec.title}.html`, Buffer.from(buildSummaryHtml(rec, await gatherReportImages(id, rec)), 'utf8'));
   });
   safeHandle(channels.export.summaryPdf, async (...args) => {
-    const rec = await caseStore.read(ensureUuid(args[0], 'caseId'));
-    return saveBufferWithDialog(getWindow(), `${rec.title}.pdf`, await renderCasePdf(rec));
+    const id = ensureUuid(args[0], 'caseId');
+    const rec = await caseStore.read(id);
+    return saveBufferWithDialog(getWindow(), `${rec.title}.pdf`, await renderCasePdf(rec, await gatherReportImages(id, rec)));
   });
   safeHandle(channels.export.timelineCsv, async (...args) => {
     const rec = await caseStore.read(ensureUuid(args[0], 'caseId'));
