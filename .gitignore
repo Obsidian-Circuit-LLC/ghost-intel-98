@@ -49,3 +49,6 @@ coverage/
 
 # Internal audit/working notes — never published
 .redteam/
+
+# Bundled Tor expert bundle (operator/CI-fetched + verified; see scripts/fetch-tor.mjs)
+resources/tor/win-x64/
