@@ -10,12 +10,28 @@ import { secureReadText, secureWriteFile } from '../storage/secure-fs';
 export const MAX_HISTORY = 5000;
 
 export type MessageState = 'queued' | 'sent' | 'delivered' | 'received';
+
+export type FileStatus = 'transferring' | 'complete' | 'failed';
+/** Metadata for a file message. Inbound files land 'transferring' → 'complete' (with a quarantinePath
+ *  the user must explicitly save out of) or 'failed'. Bytes themselves are NEVER stored in history;
+ *  only this metadata + the quarantine pointer. */
+export interface ChatFileMeta {
+  transferId: string; // hex
+  name: string;
+  size: number;
+  mime: string;
+  status: FileStatus;
+  quarantinePath?: string | null; // inbound: where the verified bytes were quarantined (null until done)
+}
+
 export interface ChatMessage {
   id: string;
   direction: 'in' | 'out';
   seq: number;
   ts: number;
-  text: string;
+  kind?: 'text' | 'file'; // omitted ⇒ 'text' (legacy rows predate this field)
+  text: string; // for file messages this is the display label (the file name)
+  file?: ChatFileMeta;
   state: MessageState;
 }
 
@@ -62,6 +78,17 @@ export class MessageStore {
       const m = list.find((x) => x.id === id);
       if (!m) return;
       m.state = state;
+      await secureWriteFile(this.file(contactId), JSON.stringify(list));
+    });
+  }
+
+  /** Merge a partial update into a file message's metadata (transfer progress / completion). */
+  patchFile(contactId: string, id: string, patch: Partial<ChatFileMeta>): Promise<void> {
+    return this.serialize(async () => {
+      const list = await this.read(contactId);
+      const m = list.find((x) => x.id === id);
+      if (!m || !m.file) return;
+      m.file = { ...m.file, ...patch };
       await secureWriteFile(this.file(contactId), JSON.stringify(list));
     });
   }

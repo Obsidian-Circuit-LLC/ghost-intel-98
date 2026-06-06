@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { mkdtemp } from 'node:fs/promises';
-import { ChatEngine, type ChatEngineEvents } from '../src/main/chat/engine';
+import { ChatEngine, type ChatEngineEvents, type QuarantineSink } from '../src/main/chat/engine';
 import { InMemoryNetwork, InMemoryTransport } from '../src/main/chat/transport';
 import { PrekeyStore } from '../src/main/chat/prekey-store';
 import { ContactStore } from '../src/main/chat/contact-store';
@@ -13,7 +13,13 @@ const flush = (ms = 0): Promise<void> => new Promise((r) => setTimeout(r, ms));
 const ONION_A = `${'a'.repeat(56)}.onion`;
 const ONION_B = `${'b'.repeat(56)}.onion`;
 
-async function makeEngine(net: InMemoryNetwork, onion: string, identity: IdentityKeyPair, events: ChatEngineEvents): Promise<ChatEngine> {
+async function makeEngine(
+  net: InMemoryNetwork,
+  onion: string,
+  identity: IdentityKeyPair,
+  events: ChatEngineEvents,
+  quarantine?: QuarantineSink
+): Promise<ChatEngine> {
   const dir = await mkdtemp(join(tmpdir(), 'dcs98-eng-'));
   let n = 0;
   const engine = new ChatEngine({
@@ -24,6 +30,7 @@ async function makeEngine(net: InMemoryNetwork, onion: string, identity: Identit
     messages: new MessageStore(join(dir, 'messages')),
     now: () => 1717000000000 + n,
     newId: () => `${onion[0]}-${(n += 1)}`,
+    quarantine,
     events
   });
   return engine;
@@ -92,6 +99,90 @@ describe('ChatEngine — end-to-end over the in-memory network (EXPERIMENTAL sta
     const tampered = link.slice(0, -8) + (link.slice(-8) === 'AAAAAAAA' ? 'BBBBBBBB' : 'AAAAAAAA');
     await expect(b.acceptInvite(tampered)).rejects.toBeTruthy();
 
+    await a.stop();
+    await b.stop();
+  });
+});
+
+describe('ChatEngine — file transfer (Phase 2) over the in-memory network', () => {
+  /** Deterministic pseudo-file. */
+  const makeFile = (n: number): Uint8Array => {
+    const out = new Uint8Array(n);
+    for (let i = 0; i < n; i += 1) out[i] = (i * 17 + 5) & 0xff;
+    return out;
+  };
+
+  async function pair(events: { aEv?: ChatEngineEvents; bEv?: ChatEngineEvents; bSink?: QuarantineSink }): Promise<{
+    a: ChatEngine; b: ChatEngine; cidA_onB: string; cidB_onA: string;
+  }> {
+    const net = new InMemoryNetwork();
+    const idA = generateIdentity();
+    const idB = generateIdentity();
+    const a = await makeEngine(net, ONION_A, idA, events.aEv ?? {});
+    const b = await makeEngine(net, ONION_B, idB, events.bEv ?? {}, events.bSink);
+    await a.start();
+    await b.start();
+    const link = await a.createInvite();
+    const cidA_onB = await b.acceptInvite(link);
+    await flush(20);
+    return { a, b, cidA_onB, cidB_onA: contactId(idB.publicKeys) };
+  }
+
+  it('streams a multi-chunk file A→B; B quarantines verified bytes and records a complete file message', async () => {
+    const quarantined: { name: string; mime: string; data: Uint8Array }[] = [];
+    const bStatuses: { transferId: string; status: string }[] = [];
+    const sink: QuarantineSink = async ({ name, mime, data }) => {
+      quarantined.push({ name, mime, data });
+      return `/quarantine/${name}`;
+    };
+    const { a, b, cidB_onA, cidA_onB } = await pair({
+      bEv: { onFileStatus: (_c, transferId, status) => bStatuses.push({ transferId, status }) },
+      bSink: sink
+    });
+
+    const payload = makeFile(128 * 1024 * 2 + 777); // 3 chunks
+    const msgId = await a.sendFile(cidB_onA, 'evidence.bin', 'application/octet-stream', payload);
+    await flush(60);
+
+    // B received + verified + quarantined the exact bytes
+    expect(quarantined).toHaveLength(1);
+    expect(quarantined[0].name).toBe('evidence.bin');
+    expect(Array.from(quarantined[0].data)).toEqual(Array.from(payload));
+    expect(bStatuses.some((s) => s.status === 'complete')).toBe(true);
+
+    // B history shows a complete inbound file message with the quarantine pointer
+    const bHist = await b.history(cidA_onB);
+    const fileMsg = bHist.find((m) => m.kind === 'file');
+    expect(fileMsg?.file?.status).toBe('complete');
+    expect(fileMsg?.file?.quarantinePath).toBe('/quarantine/evidence.bin');
+    expect(fileMsg?.file?.size).toBe(payload.length);
+
+    // A's own copy is marked complete + delivered (offer was acked)
+    const aHist = await a.history(cidB_onA);
+    const aFile = aHist.find((m) => m.id === msgId);
+    expect(aFile?.file?.status).toBe('complete');
+    expect(aFile?.state).toBe('delivered');
+
+    await a.stop();
+    await b.stop();
+  });
+
+  it('sends a single-chunk file correctly', async () => {
+    const got: Uint8Array[] = [];
+    const sink: QuarantineSink = async ({ data }) => { got.push(data); return '/q/x'; };
+    const { a, b, cidB_onA } = await pair({ bSink: sink });
+    const payload = makeFile(2048);
+    await a.sendFile(cidB_onA, 'small.txt', 'text/plain', payload);
+    await flush(40);
+    expect(got).toHaveLength(1);
+    expect(Array.from(got[0])).toEqual(Array.from(payload));
+    await a.stop();
+    await b.stop();
+  });
+
+  it('refuses to send an empty file', async () => {
+    const { a, b, cidB_onA } = await pair({});
+    await expect(a.sendFile(cidB_onA, 'empty', '', new Uint8Array(0))).rejects.toBeTruthy();
     await a.stop();
     await b.stop();
   });

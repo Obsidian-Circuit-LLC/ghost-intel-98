@@ -11,18 +11,43 @@
 import { Connection } from './connection';
 import type { Transport, ChatStream } from './transport';
 import { initiatorHandshake, responderHandshake } from './handshake';
-import { encodeEnvelope, decodeEnvelope } from './session';
+import { encodeEnvelope, decodeEnvelope, TRANSFER_ID_LEN, type MessageContent } from './session';
+import { chunkFile, FileReceiver } from './transfer';
+import { randomBytes } from './crypto';
 import { createInvite, parseInvite } from './invite';
 import { contactId, type IdentityKeyPair, type IdentityPublic } from './identity';
 import type { PrekeyStore } from './prekey-store';
 import type { ContactStore } from './contact-store';
-import type { MessageStore, ChatMessage } from './message-store';
+import type { MessageStore, ChatMessage, ChatFileMeta, FileStatus } from './message-store';
 
 export type ContactStatus = 'online' | 'connecting' | 'offline';
+
+/** Caller-supplied sink for a fully received + hash-verified file. Implemented by the electron
+ *  service (writes to a quarantine dir under dataRoot); injected so the engine stays fs-free. Returns
+ *  the quarantine path recorded in history. The user must then explicitly save it elsewhere. */
+export type QuarantineSink = (params: {
+  contactId: string;
+  transferId: string;
+  name: string;
+  mime: string;
+  data: Uint8Array;
+}) => Promise<string>;
+
+/** Bound on concurrent inbound transfers held in memory (each up to MAX_FILE_BYTES) — DoS guard. */
+const MAX_ACTIVE_RECEIVERS = 8;
+/** Yield to the event loop every N chunks while sending a large file (avoid starving the loop). */
+const SEND_YIELD_EVERY = 16;
+
 export interface ChatEngineEvents {
   onMessage?(contactId: string, message: ChatMessage): void;
   onContactStatus?(contactId: string, status: ContactStatus): void;
   onDelivery?(contactId: string, messageId: string, state: 'sent' | 'delivered'): void;
+  onFileStatus?(
+    contactId: string,
+    transferId: string,
+    status: FileStatus,
+    progress?: { received: number; total: number }
+  ): void;
 }
 export interface ChatEngineDeps {
   identity: IdentityKeyPair;
@@ -32,14 +57,19 @@ export interface ChatEngineDeps {
   messages: MessageStore;
   now(): number;
   newId(): string;
+  quarantine?: QuarantineSink;
   events?: ChatEngineEvents;
 }
+
+const hex = (b: Uint8Array): string => Buffer.from(b).toString('hex');
 
 export class ChatEngine {
   private conns = new Map<string, Connection>();
   private sendSeq = new Map<string, number>();
   private recvSeq = new Map<string, number>();
   private pendingAcks = new Map<string, string>(); // `${cid}:${counter}` → messageId
+  // in-flight inbound transfers keyed by transferId(hex)
+  private receivers = new Map<string, { cid: string; rx: FileReceiver; msgId: string }>();
 
   constructor(private readonly d: ChatEngineDeps) {}
 
@@ -50,6 +80,7 @@ export class ChatEngine {
   async stop(): Promise<void> {
     for (const c of this.conns.values()) c.close();
     this.conns.clear();
+    this.receivers.clear(); // drop in-flight transfer buffers (zeroize-by-GC)
     await this.d.transport.stop();
   }
 
@@ -99,6 +130,41 @@ export class ChatEngine {
     return id;
   }
 
+  /** Send a file: record a file message, then stream the offer + ordered chunks over the session.
+   *  Each chunk is its own AEAD-sealed Msg frame. Returns the message id. */
+  async sendFile(contactId_: string, name: string, mime: string, data: Uint8Array): Promise<string> {
+    const transferId = randomBytes(TRANSFER_ID_LEN);
+    const tidHex = hex(transferId);
+    const { offer, chunks } = chunkFile({ transferId, name, mime, data });
+
+    const id = this.d.newId();
+    const seq = (this.sendSeq.get(contactId_) ?? 0) + 1;
+    this.sendSeq.set(contactId_, seq);
+    const file: ChatFileMeta = { transferId: tidHex, name, size: data.length, mime, status: 'transferring' };
+    await this.d.messages.append(contactId_, {
+      id, direction: 'out', seq, ts: this.d.now(), kind: 'file', text: name, file, state: 'queued'
+    });
+
+    let conn = this.conns.get(contactId_);
+    if (!conn || conn.closed) conn = await this.connect(contactId_);
+
+    // The offer's ack maps to this message's delivery state (like a text message).
+    const offerCounter = conn.sendMessage(encodeEnvelope(offer));
+    this.pendingAcks.set(`${contactId_}:${offerCounter}`, id);
+    await this.d.messages.updateState(contactId_, id, 'sent');
+    this.d.events?.onDelivery?.(contactId_, id, 'sent');
+
+    for (let i = 0; i < chunks.length; i += 1) {
+      conn.sendMessage(encodeEnvelope(chunks[i]));
+      if (i % SEND_YIELD_EVERY === SEND_YIELD_EVERY - 1) await Promise.resolve();
+    }
+
+    // From the sender's view the transfer is done once every chunk is queued on the wire.
+    await this.d.messages.patchFile(contactId_, id, { status: 'complete' });
+    this.d.events?.onFileStatus?.(contactId_, tidHex, 'complete');
+    return id;
+  }
+
   history(contactId_: string): Promise<ChatMessage[]> {
     return this.d.messages.list(contactId_);
   }
@@ -142,6 +208,7 @@ export class ChatEngine {
       onAck: (counter) => this.onAck(cid, counter),
       onClose: () => {
         if (this.conns.get(cid) === conn) this.conns.delete(cid);
+        void this.failTransfersFor(cid); // interrupted inbound transfers can't complete on this link
         this.d.events?.onContactStatus?.(cid, 'offline');
       }
     });
@@ -150,20 +217,110 @@ export class ChatEngine {
   }
 
   private async onIncoming(cid: string, envelope: Uint8Array): Promise<void> {
-    let text: string;
+    let content: MessageContent;
     try {
-      const content = decodeEnvelope(envelope);
-      if (content.type !== 'text') return; // file-offer/file-chunk routing lands in the next increment
-      text = content.text;
+      content = decodeEnvelope(envelope);
     } catch {
       return; // malformed content — drop (the connection layer already validated framing/auth)
+    }
+    switch (content.type) {
+      case 'text':
+        return this.onIncomingText(cid, content.text);
+      case 'file-offer':
+        return this.onFileOffer(cid, content);
+      case 'file-chunk':
+        return this.onFileChunk(cid, content);
+    }
+  }
+
+  private async onIncomingText(cid: string, text: string): Promise<void> {
+    const id = this.d.newId();
+    const seq = (this.recvSeq.get(cid) ?? 0) + 1;
+    this.recvSeq.set(cid, seq);
+    const message: ChatMessage = { id, direction: 'in', seq, ts: this.d.now(), kind: 'text', text, state: 'received' };
+    await this.d.messages.append(cid, message);
+    this.d.events?.onMessage?.(cid, message);
+  }
+
+  private async onFileOffer(cid: string, offer: Extract<MessageContent, { type: 'file-offer' }>): Promise<void> {
+    const key = hex(offer.transferId);
+    if (this.receivers.has(key)) return; // duplicate offer — ignore
+    if (this.receivers.size >= MAX_ACTIVE_RECEIVERS) return; // memory-bound: drop excess concurrent transfers
+    let rx: FileReceiver;
+    try {
+      rx = new FileReceiver(offer); // throws on an inconsistent/oversize offer → ignore
+    } catch {
+      return;
     }
     const id = this.d.newId();
     const seq = (this.recvSeq.get(cid) ?? 0) + 1;
     this.recvSeq.set(cid, seq);
-    const message: ChatMessage = { id, direction: 'in', seq, ts: this.d.now(), text, state: 'received' };
+    const file: ChatFileMeta = { transferId: key, name: offer.name, size: offer.size, mime: offer.mime, status: 'transferring' };
+    const message: ChatMessage = { id, direction: 'in', seq, ts: this.d.now(), kind: 'file', text: offer.name, file, state: 'received' };
+    this.receivers.set(key, { cid, rx, msgId: id });
     await this.d.messages.append(cid, message);
     this.d.events?.onMessage?.(cid, message);
+    this.d.events?.onFileStatus?.(cid, key, 'transferring', rx.progress);
+    if (rx.complete) await this.finishTransfer(key); // robustness (we never SEND empty files)
+  }
+
+  private async onFileChunk(cid: string, chunk: Extract<MessageContent, { type: 'file-chunk' }>): Promise<void> {
+    const key = hex(chunk.transferId);
+    const entry = this.receivers.get(key);
+    if (!entry || entry.cid !== cid) return; // unknown / foreign transfer — drop
+    try {
+      entry.rx.accept(chunk);
+    } catch {
+      await this.failTransfer(key); // tamper / oversize / conflicting dup → fail-closed
+      return;
+    }
+    this.d.events?.onFileStatus?.(cid, key, 'transferring', entry.rx.progress);
+    if (entry.rx.complete) await this.finishTransfer(key);
+  }
+
+  private async finishTransfer(key: string): Promise<void> {
+    const entry = this.receivers.get(key);
+    if (!entry) return;
+    this.receivers.delete(key);
+    let data: Uint8Array;
+    try {
+      data = entry.rx.assemble(); // verifies the whole-file hash before releasing bytes
+    } catch {
+      await this.markFailed(entry.cid, entry.msgId, key);
+      return;
+    }
+    let quarantinePath: string | null = null;
+    try {
+      quarantinePath = this.d.quarantine
+        ? await this.d.quarantine({ contactId: entry.cid, transferId: key, name: entry.rx.offer.name, mime: entry.rx.offer.mime, data })
+        : null;
+    } catch {
+      await this.markFailed(entry.cid, entry.msgId, key);
+      return;
+    }
+    await this.d.messages.patchFile(entry.cid, entry.msgId, { status: 'complete', quarantinePath });
+    this.d.events?.onFileStatus?.(entry.cid, key, 'complete', entry.rx.progress);
+  }
+
+  private async failTransfer(key: string): Promise<void> {
+    const entry = this.receivers.get(key);
+    if (!entry) return;
+    this.receivers.delete(key);
+    await this.markFailed(entry.cid, entry.msgId, key);
+  }
+
+  private async markFailed(cid: string, msgId: string, key: string): Promise<void> {
+    await this.d.messages.patchFile(cid, msgId, { status: 'failed' }).catch(() => { /* row may be gone */ });
+    this.d.events?.onFileStatus?.(cid, key, 'failed');
+  }
+
+  /** Fail every in-flight inbound transfer for a contact (its connection dropped mid-transfer). */
+  private async failTransfersFor(cid: string): Promise<void> {
+    for (const [key, entry] of [...this.receivers]) {
+      if (entry.cid !== cid) continue;
+      this.receivers.delete(key);
+      await this.markFailed(cid, entry.msgId, key);
+    }
   }
 
   private onAck(cid: string, counter: number): void {
