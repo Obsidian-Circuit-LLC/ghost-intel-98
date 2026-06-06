@@ -15,7 +15,7 @@ import '@xterm/xterm/css/xterm.css';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SshHostProfile, DialTermProtocol } from '@shared/post-mvp-types';
 import { useSettings } from '../../state/store';
-import { playDtmf, playDialPickup, playCarrier } from '../../audio/synth';
+import { playDtmf, playDialPickup, playCarrier, playHangup, CARRIER_BEAT } from '../../audio/synth';
 import { toast } from '../../state/toasts';
 import { FtpBrowser } from './FtpBrowser';
 
@@ -178,9 +178,19 @@ export function DialTermModule(): JSX.Element {
     if (!live()) return; // window closed / re-dialed during the dialing animation
 
     setState('connecting');
-    setHandshakeLog((h) => [...h, 'CARRIER LOCK', 'OPENING SSH SESSION…']);
-    if (sound) await playCarrier();
-    else await wait(1400);
+    setHandshakeLog((h) => [...h, 'CARRIER DETECT…']);
+    // Start the handshake tones and reveal the negotiation log on the same packet beat the uplink
+    // animation runs on, so audio + visuals + log advance in lockstep. The waits pace the log
+    // whether or not sound is enabled; when sound is on we then await the carrier's tail.
+    const beat = CARRIER_BEAT * 1000;
+    const carrierDone = sound ? playCarrier() : Promise.resolve();
+    await wait(beat * 2); if (!live()) return;
+    setHandshakeLog((h) => [...h, 'CARRIER LOCK · 33600']);
+    await wait(beat); if (!live()) return;
+    setHandshakeLog((h) => [...h, 'LAP-M / V.42bis OK']);
+    await wait(beat * 4); if (!live()) return;
+    setHandshakeLog((h) => [...h, 'OPENING SSH SESSION…']);
+    await carrierDone;
     if (!live()) return;
 
     // Drop any listeners a prior (superseded) dial attempt left registered before re-subscribing.
@@ -217,6 +227,7 @@ export function DialTermModule(): JSX.Element {
   }
 
   async function hangup(): Promise<void> {
+    if (settings?.soundEnabled) playHangup(); // legacy handset dropped back on the cradle
     dialEpochRef.current += 1; // cancel any dial animation still in flight
     teardown();
     setState('idle');

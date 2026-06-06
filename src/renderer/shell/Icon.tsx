@@ -38,6 +38,49 @@ export function MyComputerGlyph(): JSX.Element {
   );
 }
 
+/**
+ * Windows-98-style spiral Notepad icon (teal header band over a white ruled page, dark spiral
+ * binding across the top, a shadow page peeking behind), hand-drawn as crisp-edged pixels to match
+ * MyComputerGlyph and read as a period icon rather than a smooth vector.
+ */
+export function NotepadGlyph(): JSX.Element {
+  return (
+    <svg width="28" height="28" viewBox="0 0 32 32" shapeRendering="crispEdges" aria-hidden="true">
+      {/* shadow page peeking behind, lower-right, for depth */}
+      <rect x="9" y="9" width="17" height="20" fill="#9a9a9a" stroke="#000" />
+      {/* main page */}
+      <rect x="6" y="6" width="17" height="20" fill="#fdfdfd" stroke="#000" />
+      {/* teal cover/header band + its lower edge */}
+      <rect x="7" y="7" width="15" height="5" fill="#1ba7b8" />
+      <rect x="7" y="11" width="15" height="1" fill="#0d7d8c" />
+      {/* ruled lines */}
+      <rect x="9" y="15" width="11" height="1" fill="#8aa0a8" />
+      <rect x="9" y="18" width="11" height="1" fill="#8aa0a8" />
+      <rect x="9" y="21" width="9" height="1" fill="#8aa0a8" />
+      {/* spiral binding crossing the top edge */}
+      <g fill="#2a2a2a">
+        <rect x="8" y="4" width="2" height="5" />
+        <rect x="12" y="4" width="2" height="5" />
+        <rect x="16" y="4" width="2" height="5" />
+        <rect x="20" y="4" width="2" height="5" />
+      </g>
+      <g fill="#cfcfcf">
+        <rect x="8" y="4" width="2" height="1" />
+        <rect x="12" y="4" width="2" height="1" />
+        <rect x="16" y="4" width="2" height="1" />
+        <rect x="20" y="4" width="2" height="1" />
+      </g>
+    </svg>
+  );
+}
+
+/** Custom hand-drawn SVG glyph for modules that have one (falls through to the emoji otherwise). */
+export function glyphNodeFor(m: ModuleKey): ReactNode | undefined {
+  if (m === 'cases') return <MyComputerGlyph />;
+  if (m === 'notepad') return <NotepadGlyph />;
+  return undefined;
+}
+
 export function Icon(props: IconProps): JSX.Element {
   function handleClick(e: MouseEvent<HTMLDivElement>): void {
     e.stopPropagation();

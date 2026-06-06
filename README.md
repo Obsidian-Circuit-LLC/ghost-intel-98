@@ -32,11 +32,24 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`DCS98-Setup-3.9.0-beta.1.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the **experimental** Tor P2P chat — see Status.)*
+> **Install:** download [`DCS98-Setup-3.9.1-beta.1.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the **experimental** Tor P2P chat — see Status.)*
 
 ## Status
 
-**v3.9.0-beta.1** — current release. Two refinements on top of the v3.8.0 feature set:
+**v3.9.1-beta.1** — current release. A look-and-feel pass:
+
+- **New Notepad desktop icon** — a hand-drawn Windows-98-style spiral notepad (teal header, ruled
+  page, spiral binding) replacing the generic glyph, in the same crisp-pixel style as My Computer.
+- **Reworked sounds (all still synthesized at runtime — no sampled assets):** a warmer, more
+  synthetic power-on swell; a fuller dial-up **handshake** in DialTerm whose tones are **beat-synced
+  to the uplink connect animation** (each data chirp lands as a packet crosses the link, and the
+  negotiation log reveals on the same beat); and a new **hang-up** sound — a legacy handset dropped
+  back onto its cradle.
+
+429 automated tests. *Everything from v3.9.0-beta.1 (photo-embedding case reports, RTFM left-rail
+manual) and v3.8.0-beta.1 (experimental Tor P2P chat, offline Piper TTS) carries forward unchanged.*
+
+**v3.9.0-beta.1** — two refinements on top of the v3.8.0 feature set:
 
 - **Case reports now embed photos.** Exporting a case (Export… → **HTML** or **PDF**) inlines the
   case's **bio images** and any **image attachments** directly in the report, instead of just listing
@@ -140,14 +153,14 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/dcs98/releases) and run it.
 
-Direct link to the current release: [`DCS98-Setup-3.9.0-beta.1.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.9.0-beta.1/DCS98-Setup-3.9.0-beta.1.exe)
+Direct link to the current release: [`DCS98-Setup-3.9.1-beta.1.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.9.1-beta.1/DCS98-Setup-3.9.1-beta.1.exe)
 (experimental P2P chat + Piper TTS; the chat crypto is unverified — see Status). The last
 fully-stable build is [`DCS98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.6.8/DCS98-Setup-3.6.8.exe).
 
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\DCS98-Setup-3.9.0-beta.1.exe -Algorithm SHA256
+Get-FileHash .\DCS98-Setup-3.9.1-beta.1.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
@@ -185,8 +198,14 @@ To uninstall: Settings → Apps → Dead Cyber Society 98 → Uninstall.
 
 ## Releases & changelog
 
-The current build is **v3.9.0-beta.1**. Each release page carries its own notes + SHA-256.
+The current build is **v3.9.1-beta.1**. Each release page carries its own notes + SHA-256.
 
+- **v3.9.1-beta.1** — **Look-and-feel pass.** New hand-drawn Windows-98-style **Notepad desktop icon**
+  (teal spiral pad, matching the My Computer glyph). Reworked **sounds**, all still synthesized at
+  runtime (no sampled assets): a warmer/more-synthetic power-on swell; a fuller DialTerm **dial-up
+  handshake** whose tones are **beat-synced to the uplink connect animation** (each data chirp lands
+  as a packet crosses the link; the negotiation log reveals on the same beat); and a new **hang-up**
+  sound (a legacy handset dropped onto its cradle). **429 tests.**
 - **v3.9.0-beta.1** — **Photo-embedding case reports + RTFM left-rail manual.** Case exports (Export… →
   HTML/PDF) now inline the case's **bio images** and **image attachments** as `data:` URIs (decrypted in
   main; 24 MiB total / 8 MiB per-image budget; skipped images footnoted) instead of listing names only.
@@ -306,7 +325,7 @@ This starts the Vite dev server (HMR) and the Electron main process.
 
 ```bash
 pnpm build        # type-check + bundle main / preload / renderer
-pnpm test         # vitest suite (429 tests as of v3.9.0-beta.1)
+pnpm test         # vitest suite (429 tests as of v3.9.1-beta.1)
 pnpm package      # platform installer for the current host
 pnpm package:win  # cross-build Windows NSIS installer
 ```

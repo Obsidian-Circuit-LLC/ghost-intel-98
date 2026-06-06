@@ -103,30 +103,36 @@ export function playMouseClick(): void {
   clickTick(0.045, 0.035);
 }
 
-/** Original power-on swell. Deliberately NOT the Win9x/Eno startup recording — a layered
- *  triangle arpeggio over a soft sine pad, synthesized fresh each launch.
+/** Original power-on swell — a glassy synth bloom in the spirit of a late-90s OS waking up, but an
+ *  original composition: NOT the copyrighted Windows 98 startup recording, and not a note-for-note
+ *  transcription of it. Synthesized fresh each launch; no sampled assets (project invariant).
  *
- *  Voiced low and warm (roughly a register below a chime-style jingle) for a darker "hi-fi
- *  waking up" feel: an F-major bed (F2/C3/F3) with slightly detuned twin oscillators for an
- *  analog shimmer, a slow major arpeggio rising F3→F4, and two soft sine bells settling on the
- *  major third so it resolves warm rather than shrill. Original composition; no sampled assets. */
+ *  Voiced in a warm D major and dropped well below a bright chime, with the timbre opening up over
+ *  time (an additive "bloom": a faintly-detuned sawtooth edge and a glassy bell triad enter late,
+ *  so the sound brightens as it swells — the synthetic shimmer feel without a filter sweep). A high
+ *  sparkle arrives last and it settles on the major third, resolving warm rather than shrill. */
 export function playBoot(): void {
-  // Low warm pad: root + fifth + octave, each doubled with a faintly detuned twin for lushness.
+  // Low warm pad: D-major bed (root/fifth/octave/third). Each sine is shadowed by a faintly
+  // detuned sawtooth that swells in slowly — the "more synthetic" edge, blooming late.
   const pad: Array<{ f: number; g: number }> = [
-    { f: 87.31, g: 0.055 },   // F2 (root)
-    { f: 130.81, g: 0.045 },  // C3 (fifth)
-    { f: 174.61, g: 0.04 }    // F3 (octave)
+    { f: 73.42, g: 0.05 },    // D2 (root)
+    { f: 110.0, g: 0.042 },   // A2 (fifth)
+    { f: 146.83, g: 0.038 },  // D3 (octave)
+    { f: 185.0, g: 0.03 }     // F#3 (third)
   ];
   pad.forEach(({ f, g }) => {
     tone({ freq: f, duration: 2.6, type: 'sine', gain: g, attack: 0.7 });
-    tone({ freq: f * 1.004, duration: 2.6, type: 'sine', gain: g * 0.6, attack: 0.8 });
+    tone({ freq: f * 1.005, duration: 2.6, type: 'sawtooth', gain: g * 0.18, attack: 0.9 });
   });
-  // Slow major arpeggio resolving up an octave to a warm F-major triad — mellow triangles.
-  const arp = [174.61, 220.0, 261.63, 349.23]; // F3 A3 C4 F4
-  arp.forEach((f, i) => tone({ freq: f, duration: 1.4 - i * 0.12, type: 'triangle', gain: 0.085, startOffset: 0.35 + i * 0.22, attack: 0.04 }));
-  // Two soft bells settling on the third/octave — the "resolved, welcoming" tail, kept low.
-  tone({ freq: 440.0, duration: 1.3, type: 'sine', gain: 0.05, startOffset: 1.15, attack: 0.3 });   // A4
-  tone({ freq: 523.25, duration: 1.2, type: 'sine', gain: 0.035, startOffset: 1.35, attack: 0.35 }); // C5
+  // Glassy bell triad blooming in — staggered entries make the timbre open up (additive, so it
+  // renders identically every launch) rather than relying on a biquad sweep.
+  const bells = [293.66, 369.99, 440.0, 587.33]; // D4 F#4 A4 D5
+  bells.forEach((f, i) => tone({ freq: f, duration: 1.6 - i * 0.12, type: 'triangle', gain: 0.06, startOffset: 0.3 + i * 0.14, attack: 0.05 }));
+  // High shimmer entering last for sparkle, very soft.
+  tone({ freq: 880.0, duration: 1.0, type: 'sine', gain: 0.03, startOffset: 0.9, attack: 0.25 });     // A5
+  tone({ freq: 1174.66, duration: 0.9, type: 'sine', gain: 0.022, startOffset: 1.05, attack: 0.3 });  // D6
+  // Warm resolve bell on the major third — the "resolved, welcoming" tail.
+  tone({ freq: 369.99, duration: 1.4, type: 'sine', gain: 0.045, startOffset: 1.3, attack: 0.3 });    // F#4
 }
 
 /** Standard DTMF (touch-tone) dual-tone frequencies — published telephony spec, not an asset. */
@@ -151,13 +157,53 @@ export function playDialPickup(): void {
   clickTick(0.04, 0.03);
 }
 
-/** Modem carrier handshake — two carriers, scrambled data tones, noise. Resolves when done. */
+/** One "packet beat" of the DialTerm uplink animation. The CSS keyframe `ga98-packet-travel`
+ *  loops every 1.1 s with three packets staggered by a third of that, so a packet crosses the link
+ *  every CARRIER_BEAT seconds. playCarrier lays its events on this grid (and the module reveals the
+ *  negotiation log on it too) so the audio lands in lockstep with the visuals. Keep in sync with
+ *  theme.css. */
+export const CARRIER_BEAT = 1.1 / 3; // ≈ 0.3667 s
+
+/** Modem dial-up handshake — a compressed take on the classic "sound of dial-up", quantised to the
+ *  uplink animation's packet beat: answer tone, the iconic V.8 two-tone "bong", then the scrambled
+ *  data wash (dual carriers + a sawtooth data chirp on every beat = every packet + white-noise
+ *  hiss). All tones are published telephony / V-series frequencies — not a sampled recording. Runs
+ *  9 beats (3 full packet cycles ≈ 3.3 s); resolves when done. */
 export function playCarrier(): Promise<void> {
-  tone({ freq: 2100, duration: 1.6, type: 'sine', gain: 0.05 });
-  tone({ freq: 1300, duration: 1.6, type: 'sine', gain: 0.05 });
-  [1700, 1850, 1950].forEach((f, i) => tone({ freq: f, duration: 0.4, type: 'sawtooth', gain: 0.03, startOffset: 0.3 + i * 0.25 }));
-  noise(2.0, 0.03, 0.2);
-  return new Promise((resolve) => setTimeout(resolve, 2200));
+  const B = CARRIER_BEAT;
+  // Answer/carrier tone (CED 2100 Hz) over the first two beats.
+  tone({ freq: 2100, duration: B * 2, type: 'sine', gain: 0.06, startOffset: 0 });
+  // The V.8 two-tone "bong" landing on beat 2 — low then high.
+  tone({ freq: 650, duration: 0.18, type: 'sine', gain: 0.1, startOffset: B * 2 });
+  tone({ freq: 1240, duration: 0.22, type: 'sine', gain: 0.1, startOffset: B * 2 + 0.18 });
+  // Data scramble from beat 3: two sustained carriers + a sawtooth data chirp on every beat (so
+  // each chirp coincides with a packet launching across the link) over white-noise hiss.
+  const dataStart = B * 3;
+  const dataBeats = 6;
+  tone({ freq: 2100, duration: B * dataBeats, type: 'sine', gain: 0.045, startOffset: dataStart });
+  tone({ freq: 1300, duration: B * dataBeats, type: 'sine', gain: 0.045, startOffset: dataStart });
+  const chirps = [1700, 2250, 1550, 1950, 1450, 2100];
+  for (let i = 0; i < dataBeats; i += 1) {
+    tone({ freq: chirps[i % chirps.length], duration: 0.2, type: 'sawtooth', gain: 0.03, startOffset: dataStart + i * B });
+  }
+  noise(B * dataBeats, 0.035, dataStart);
+  const total = dataStart + B * dataBeats; // 9 beats ≈ 3.3 s
+  return new Promise((resolve) => setTimeout(resolve, total * 1000));
+}
+
+/** Hang-up: a legacy handset dropped back onto its cradle — the switch-hook click, a low plastic
+ *  "clunk" with a settling bounce and a bit of rattle, and a faint bell residue (older phones give
+ *  a tiny ding as the hook closes). Built from the same primitives; no sampled assets. */
+export function playHangup(): void {
+  clickTick(0, 0.05);                                                              // hook switch depresses
+  tone({ freq: 150, duration: 0.06, type: 'triangle', gain: 0.16, attack: 0.002 }); // body of the handset
+  tone({ freq: 92, duration: 0.09, type: 'sine', gain: 0.13, attack: 0.002 });      // low thud
+  noise(0.05, 0.05, 0.004);                                                          // plastic clack/rattle
+  tone({ freq: 1480, duration: 0.08, type: 'sine', gain: 0.02, startOffset: 0.03 }); // faint bell residue
+  // settling bounce as it seats into the cradle
+  tone({ freq: 132, duration: 0.05, type: 'triangle', gain: 0.09, attack: 0.002, startOffset: 0.075 });
+  noise(0.03, 0.03, 0.08);
+  clickTick(0.065, 0.03);
 }
 
 /** Error beep. */
