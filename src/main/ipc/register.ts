@@ -211,7 +211,17 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.chat.listContacts, () => chat.listContacts());
   safeHandle(channels.chat.send, (...a) => chat.send(ensureContactId(a[0]), ensureChatText(a[1])));
   safeHandle(channels.chat.sendFile, (...a) => chat.sendFile(ensureContactId(a[0]), getWindow));
-  safeHandle(channels.chat.saveFile, (...a) => chat.saveFile(ensureContactId(a[0]), ensureTransferId(a[1]), getWindow));
+  safeHandle(channels.chat.saveFile, async (...a) => {
+    const cid = ensureContactId(a[0]);
+    const transferId = ensureTransferId(a[1]);
+    // Decrypt from quarantine, then write through the SAME hardened path as every other save:
+    // sanitiseSaveDefault + symlink refusal + atomic temp→rename. The peer-supplied name is NEVER
+    // used as a path without sanitisation.
+    const { name, data } = await chat.getQuarantinedFile(cid, transferId);
+    const saved = await saveBufferWithDialog(getWindow(), name, data);
+    if (saved) await chat.deleteQuarantine(transferId); // don't retain received material past the save
+    return saved;
+  });
   safeHandle(channels.chat.history, (...a) => chat.history(ensureContactId(a[0])));
 
   // ---- auth (login / encrypt-at-rest) ----

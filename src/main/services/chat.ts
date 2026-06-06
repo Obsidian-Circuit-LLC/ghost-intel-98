@@ -7,7 +7,7 @@
  */
 import { app, dialog, type BrowserWindow } from 'electron';
 import { basename, join } from 'node:path';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, rm } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { createServer, type AddressInfo } from 'node:net';
 import { dataRoot } from '../storage/paths';
@@ -27,6 +27,11 @@ const VIRT_PORT = 9001;
 let engine: ChatEngine | null = null;
 let identity: IdentityKeyPair | null = null;
 let contactStore: ContactStore | null = null;
+let stallTimer: ReturnType<typeof setInterval> | null = null;
+
+/** Reap inbound transfers idle longer than this (slow-loris / stalled-peer memory guard). */
+const TRANSFER_IDLE_MS = 2 * 60 * 1000;
+const STALL_SWEEP_MS = 30 * 1000;
 
 export interface ChatContactDTO {
   contactId: string;
@@ -130,15 +135,42 @@ export async function enable(getWindow: () => BrowserWindow | null): Promise<{ o
     }
   });
   await engine.start();
+  await sweepOrphanQuarantine(); // drop quarantine bins no history row references (crash / prune leftovers)
+  const eng = engine;
+  stallTimer = setInterval(() => { void eng.sweepStalledTransfers(TRANSFER_IDLE_MS); }, STALL_SWEEP_MS);
+  if (typeof stallTimer.unref === 'function') stallTimer.unref();
   getWindow()?.webContents.send(channels.chat.onTorStatus, { status: 'online', onion: engine.onionAddress() });
   return { onion: engine.onionAddress() };
 }
 
 export async function disable(): Promise<void> {
+  if (stallTimer) { clearInterval(stallTimer); stallTimer = null; }
   await engine?.stop();
   engine = null;
   identity = null;
   contactStore = null;
+}
+
+/** Delete quarantine bins that no message-history row references — leftovers from a crash mid-transfer
+ *  or from history pruning evicting a file row. For child-protection work, unreferenced (and therefore
+ *  un-saveable / undeletable-from-UI) received material must not linger on disk. */
+async function sweepOrphanQuarantine(): Promise<void> {
+  if (!contactStore || !engine) return;
+  let bins: string[];
+  try {
+    bins = (await readdir(quarantineDir())).filter((f) => /^[0-9a-f]{32}\.bin$/.test(f));
+  } catch {
+    return; // dir absent → nothing to sweep
+  }
+  const referenced = new Set<string>();
+  for (const c of await contactStore.list()) {
+    for (const m of await engine.history(c.contactId)) {
+      if (m.kind === 'file' && m.file) referenced.add(`${m.file.transferId}.bin`);
+    }
+  }
+  await Promise.all(
+    bins.filter((b) => !referenced.has(b)).map((b) => rm(join(quarantineDir(), b), { force: true }).catch(() => {}))
+  );
 }
 
 function requireEngine(): ChatEngine {
@@ -176,21 +208,21 @@ export async function sendFile(cid: string, getWindow: () => BrowserWindow | nul
   return eng.sendFile(cid, name, mime, new Uint8Array(buf));
 }
 
-/** Save a quarantined inbound file out to a user-chosen path (decrypting from the at-rest store).
- *  Returns the saved path, or null if cancelled. */
-export async function saveFile(cid: string, transferId: string, getWindow: () => BrowserWindow | null): Promise<string | null> {
+/** Decrypt a completed inbound file from the at-rest quarantine. Returns the peer-supplied name (the
+ *  caller MUST sanitize it before using it as a path) + the plaintext bytes. The actual disk write is
+ *  done by the IPC layer's hardened saveBufferWithDialog (sanitize + symlink-refuse + atomic). */
+export async function getQuarantinedFile(cid: string, transferId: string): Promise<{ name: string; data: Buffer }> {
   requireEngine();
-  const hist = await history(cid);
-  const msg = hist.find((m) => m.kind === 'file' && m.file?.transferId === transferId);
+  const msg = (await history(cid)).find((m) => m.kind === 'file' && m.file?.transferId === transferId);
   if (!msg?.file || msg.file.status !== 'complete') throw new Error('File is not available to save.');
-  const win = getWindow();
-  const res = win
-    ? await dialog.showSaveDialog(win, { defaultPath: msg.file.name })
-    : await dialog.showSaveDialog({ defaultPath: msg.file.name });
-  if (res.canceled || !res.filePath) return null;
   const data = await secureReadFile(quarantinePath(transferId)); // decrypts from the at-rest store
-  await writeFile(res.filePath, data);
-  return res.filePath;
+  return { name: msg.file.name, data };
+}
+
+/** Remove a quarantine bin once the user has saved it out (don't retain received material longer than
+ *  the user chose to). Best-effort. */
+export async function deleteQuarantine(transferId: string): Promise<void> {
+  await rm(quarantinePath(transferId), { force: true }).catch(() => {});
 }
 
 /** Minimal extension→MIME guess (advisory only; the receiver treats files as untrusted regardless). */

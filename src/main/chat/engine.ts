@@ -69,7 +69,7 @@ export class ChatEngine {
   private recvSeq = new Map<string, number>();
   private pendingAcks = new Map<string, string>(); // `${cid}:${counter}` → messageId
   // in-flight inbound transfers keyed by transferId(hex)
-  private receivers = new Map<string, { cid: string; rx: FileReceiver; msgId: string }>();
+  private receivers = new Map<string, { cid: string; rx: FileReceiver; msgId: string; lastActivity: number }>();
 
   constructor(private readonly d: ChatEngineDeps) {}
 
@@ -257,7 +257,7 @@ export class ChatEngine {
     this.recvSeq.set(cid, seq);
     const file: ChatFileMeta = { transferId: key, name: offer.name, size: offer.size, mime: offer.mime, status: 'transferring' };
     const message: ChatMessage = { id, direction: 'in', seq, ts: this.d.now(), kind: 'file', text: offer.name, file, state: 'received' };
-    this.receivers.set(key, { cid, rx, msgId: id });
+    this.receivers.set(key, { cid, rx, msgId: id, lastActivity: this.d.now() });
     await this.d.messages.append(cid, message);
     this.d.events?.onMessage?.(cid, message);
     this.d.events?.onFileStatus?.(cid, key, 'transferring', rx.progress);
@@ -268,6 +268,7 @@ export class ChatEngine {
     const key = hex(chunk.transferId);
     const entry = this.receivers.get(key);
     if (!entry || entry.cid !== cid) return; // unknown / foreign transfer — drop
+    entry.lastActivity = this.d.now();
     try {
       entry.rx.accept(chunk);
     } catch {
@@ -320,6 +321,18 @@ export class ChatEngine {
       if (entry.cid !== cid) continue;
       this.receivers.delete(key);
       await this.markFailed(cid, entry.msgId, key);
+    }
+  }
+
+  /** Reap inbound transfers idle longer than maxIdleMs — bounds memory against a stalled / slow-loris
+   *  peer that opens an offer (holding a receiver slot + buffer) but withholds chunks. Driven by the
+   *  service on a timer; the engine stays time-free (now is injected). */
+  async sweepStalledTransfers(maxIdleMs: number): Promise<void> {
+    const cutoff = this.d.now() - maxIdleMs;
+    for (const [key, entry] of [...this.receivers]) {
+      if (entry.lastActivity > cutoff) continue;
+      this.receivers.delete(key);
+      await this.markFailed(entry.cid, entry.msgId, key);
     }
   }
 

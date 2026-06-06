@@ -186,4 +186,17 @@ describe('ChatEngine — file transfer (Phase 2) over the in-memory network', ()
     await a.stop();
     await b.stop();
   });
+
+  it('stall sweep does not disturb a completed transfer (no false-fail of finished files)', async () => {
+    const sink: QuarantineSink = async () => '/q/done';
+    const { a, b, cidB_onA, cidA_onB } = await pair({ bSink: sink });
+    await a.sendFile(cidB_onA, 'done.bin', '', makeFile(4096));
+    await flush(40);
+    // With no in-flight receivers, sweeping anything (even maxIdle 0) must be a harmless no-op.
+    await b.sweepStalledTransfers(0);
+    const fileMsg = (await b.history(cidA_onB)).find((m) => m.kind === 'file');
+    expect(fileMsg?.file?.status).toBe('complete'); // NOT flipped to 'failed'
+    await a.stop();
+    await b.stop();
+  });
 });

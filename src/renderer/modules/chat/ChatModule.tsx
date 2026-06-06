@@ -123,7 +123,7 @@ export function ChatModule(): JSX.Element {
     if (!selected) return;
     try {
       const path = await window.api.chat.saveFile(selected, transferId);
-      if (path) toast.info(`Saved to ${path}`);
+      if (path) toast.info(`Saved ${path}`);
     } catch (e) {
       toast.error(`Save failed: ${(e as Error).message}`);
     }
