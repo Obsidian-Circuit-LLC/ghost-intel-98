@@ -1,7 +1,13 @@
 /**
- * Web Audio sound generator. Every sound is synthesized at runtime — no
- * bundled audio files, no copyrighted assets.
+ * Web Audio sound generator. By default every sound is synthesized at runtime — no bundled audio
+ * files. The OPTIONAL "Legacy sound pack" (off by default; Settings → Sound) is the one exception:
+ * playLegacyStartup/playLegacyDialup play two bundled MP3s — AI-reworked recordings of the classic
+ * dial-up handshake and Windows startup jingle. Those are derivative works of their originals and are
+ * shipped as a deliberate, operator-accepted choice; they are NOT played unless the user opts in.
  */
+
+import legacyStartupUrl from '../assets/legacy-startup.mp3';
+import legacyDialupUrl from '../assets/legacy-dialup.mp3';
 
 let ctx: AudioContext | null = null;
 function getCtx(): AudioContext {
@@ -266,4 +272,42 @@ export function playDialup(): Promise<void> {
   tone({ freq: 1300, duration: 1.6, type: 'sine', gain: 0.05, startOffset: 1.0 });
   noise(2.0, 0.03, 1.2);
   return new Promise((resolve) => setTimeout(resolve, 3200));
+}
+
+// ── Optional Legacy sound pack (opt-in) ────────────────────────────────────────────────────────
+// Only reached when the user enables Settings → Sound → Legacy sound pack; the default boot/dial
+// paths never touch these. Played via an HTMLAudioElement rather than Web Audio decodeAudioData:
+// a media element loads the bundled asset fine under the packaged file:// origin (where fetch() of a
+// local resource is blocked), and Electron's default autoplayPolicy needs no user gesture.
+
+/** Play a bundled sample; resolves to its duration in seconds once metadata loads (0 on failure, so
+ *  callers can fall back to a default pacing) while playback continues independently. */
+function playSample(url: string, volume = 0.85): Promise<number> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (d: number): void => { if (!settled) { settled = true; resolve(d); } };
+    try {
+      const a = new Audio(url);
+      a.volume = volume;
+      a.addEventListener('loadedmetadata', () => {
+        void a.play().catch(() => { /* autoplay/codec issue — caller paces on its default */ });
+        finish(Number.isFinite(a.duration) ? a.duration : 0);
+      });
+      a.addEventListener('error', () => finish(0));
+      setTimeout(() => finish(0), 2000); // safety net if metadata never arrives
+    } catch {
+      finish(0);
+    }
+  });
+}
+
+/** Legacy startup jingle (opt-in). Fire-and-forget. */
+export function playLegacyStartup(): void {
+  void playSample(legacyStartupUrl, 0.85);
+}
+
+/** Legacy dial-up handshake (opt-in). Starts the clip and resolves to its duration in seconds so the
+ *  DialTerm connect animation/log can be paced to the audio length. */
+export function playLegacyDialup(): Promise<number> {
+  return playSample(legacyDialupUrl, 0.9);
 }

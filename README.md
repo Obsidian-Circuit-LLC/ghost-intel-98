@@ -32,11 +32,28 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`DCS98-Setup-3.10.0-beta.1.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the **experimental** Tor P2P chat — see Status.)*
+> **Install:** download [`DCS98-Setup-3.11.0-beta.1.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the **experimental** Tor P2P chat — see Status.)*
 
 ## Status
 
-**v3.10.0-beta.1** — current release. DialTerm gets a dial-up *client* and an authentic handshake:
+**v3.11.0-beta.1** — current release. Optional Legacy sound pack + an uninstall fix:
+
+- **Legacy sound pack (opt-in).** A new **Settings → Sound** toggle swaps the startup chime and the
+  DialTerm dial-up for **AI-reworked recordings of the classic Windows startup jingle and dial-up
+  handshake**. **Off by default**; the synthesized sounds remain the default. These two clips are the
+  only bundled audio in the app, and they are **derivative works of their originals** — shipped as a
+  deliberate, opt-in choice. When Legacy dial-up is on, the connection client's stage stepper and log
+  are paced to the clip's length.
+- **Fixed: the uninstaller could fail after enabling chat.** The app spawns a bundled `tor.exe` for
+  P2P chat; the on-quit teardown that kills it ran in an `async` handler Electron didn't wait for, so
+  the process could orphan and hold a file lock inside the install directory, breaking uninstall. Quit
+  now blocks on teardown (bounded by a timeout) before exiting. *(Already-stuck installs: end any
+  `tor.exe` in Task Manager, then uninstall.)*
+
+429 automated tests. *Everything from v3.10.0-beta.1 (DialTerm dial-up client + authentic handshake)
+and earlier carries forward unchanged.*
+
+**v3.10.0-beta.1** — DialTerm gets a dial-up *client* and an authentic handshake:
 
 - **DCS98 dial-up connection client** — the DialTerm connecting screen is now a familiar dial-up-client
   layout: a **DCS98 logo header**, a three-panel **DIAL → LINK → AUTH** stage stepper (with a little
@@ -170,14 +187,14 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/dcs98/releases) and run it.
 
-Direct link to the current release: [`DCS98-Setup-3.10.0-beta.1.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.10.0-beta.1/DCS98-Setup-3.10.0-beta.1.exe)
+Direct link to the current release: [`DCS98-Setup-3.11.0-beta.1.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.11.0-beta.1/DCS98-Setup-3.11.0-beta.1.exe)
 (experimental P2P chat + Piper TTS; the chat crypto is unverified — see Status). The last
 fully-stable build is [`DCS98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.6.8/DCS98-Setup-3.6.8.exe).
 
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\DCS98-Setup-3.10.0-beta.1.exe -Algorithm SHA256
+Get-FileHash .\DCS98-Setup-3.11.0-beta.1.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
@@ -215,8 +232,15 @@ To uninstall: Settings → Apps → Dead Cyber Society 98 → Uninstall.
 
 ## Releases & changelog
 
-The current build is **v3.10.0-beta.1**. Each release page carries its own notes + SHA-256.
+The current build is **v3.11.0-beta.1**. Each release page carries its own notes + SHA-256.
 
+- **v3.11.0-beta.1** — **Optional Legacy sound pack + uninstall fix.** A new **Settings → Sound** toggle
+  (off by default) swaps the startup chime and DialTerm dial-up for **AI-reworked recordings** of the
+  classic Windows startup jingle + dial-up handshake — the only bundled audio in the app, and
+  **derivative works** of their originals (shipped as a deliberate opt-in). When Legacy dial-up is on,
+  the connection client's stepper/log pace to the clip length. **Fix:** the bundled `tor.exe` (P2P chat)
+  could orphan on quit and lock the install dir, breaking the uninstaller — quit now blocks on teardown
+  before exiting (already-stuck installs: end `tor.exe` in Task Manager, then uninstall). **429 tests.**
 - **v3.10.0-beta.1** — **DialTerm dial-up client + authentic V-series handshake.** The connecting screen
   is now a familiar dial-up-*client* layout — **DCS98 logo header**, a three-panel **DIAL → LINK → AUTH**
   stage stepper (walking "marcher" + ✓ on completed stages) and an AOL-style status caption — wrapped
@@ -395,7 +419,7 @@ When **login is enabled**, an `auth.json` appears (the scrypt-wrapped data key a
 - [98.css](https://jdan.github.io/98.css/) by Jordan Scales (MIT) for the retro CSS primitives.
 - [Leaflet](https://leafletjs.com/) (BSD-2) for the GeoINT map; tile imagery comes from the tile server **you** configure (e.g. OpenStreetMap, subject to its tile-usage policy). Street View imagery is Google's, loaded only on explicit action.
 - [music-metadata](https://github.com/borewit/music-metadata) (MIT) for Jukebox tag reading, [hls.js](https://github.com/video-dev/hls.js) (Apache-2.0) for HLS, [pdf.js](https://github.com/mozilla/pdf.js) (Apache-2.0) for the PDF viewer, [fast-xml-parser](https://github.com/NaturalIntelligence/fast-xml-parser) (MIT) for GeoINT feed parsing, and [world-countries](https://github.com/mledoze/countries) (ODbL) for the offline gazetteer.
-- All audio chrome (chimes, dial-up, mouse clicks, boot swell, DTMF) is synthesized at runtime via the Web Audio API. No copyrighted Windows or AOL sound assets are bundled.
+- Audio chrome (clicks, boot swell, hang-up, DTMF, and the default dial-up handshake) is synthesized at runtime via the Web Audio API. The **optional Legacy sound pack** (off by default; Settings → Sound) is the one exception: it bundles two AI-reworked recordings of the classic dial-up handshake and Windows startup jingle, which are **derivative works of their respective originals** — they play only if you opt in.
 - Text-to-speech uses the OS's own voices via the Web Speech API (no bundled voices, on-device only).
 - Offline speech-to-text uses [Vosk](https://alphacephei.com/vosk/) via [vosk-browser](https://github.com/ccoreilly/vosk-browser) (Apache-2.0, WASM). The speech model is **not** vendored in this repo and is supplied by the operator (`resources/vosk/model.tar.gz`); verify the model's license before bundling it in a published installer.
 - The Net Explorer launcher targets [Firefox Portable](https://www.mozilla.org/firefox/) (Mozilla, MPL-2.0). The Firefox payload is **not** vendored in this repo and is supplied by the operator; bundling/redistributing it must follow Mozilla's trademark and distribution policy.

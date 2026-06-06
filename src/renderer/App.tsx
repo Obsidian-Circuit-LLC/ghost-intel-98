@@ -15,7 +15,7 @@ import { Shortcuts } from './shell/Shortcuts';
 import { Welcome } from './shell/Welcome';
 import { LockScreen } from './shell/LockScreen';
 import { StickyNotes } from './shell/StickyNotes';
-import { playBoot, playReminder, playMouseClick } from './audio/synth';
+import { playBoot, playLegacyStartup, playReminder, playMouseClick } from './audio/synth';
 import { toast } from './state/toasts';
 import defaultWallpaper from './assets/wallpaper.jpg';
 
@@ -39,9 +39,9 @@ export function App(): JSX.Element {
 
   useEffect(() => {
     if (settings?.startupSoundEnabled && settings.soundEnabled) {
-      playBoot();
+      if (settings.legacySounds) playLegacyStartup(); else playBoot();
     }
-  }, [settings?.startupSoundEnabled, settings?.soundEnabled]);
+  }, [settings?.startupSoundEnabled, settings?.soundEnabled, settings?.legacySounds]);
 
   // Global retro mouse-click on every <button>. Delegated at the document so it covers
   // buttons in any module/dialog without per-component wiring. Read soundEnabled live

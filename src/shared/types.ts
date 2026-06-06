@@ -305,6 +305,10 @@ export interface AppSettings {
   /** Optional desktop background image as a data: URI (covers the colour when set). */
   wallpaperImage: string | null;
   startupSoundEnabled: boolean;
+  /** Opt-in "Legacy sound pack": when true, the startup chime and DialTerm dial-up use bundled
+   *  AI-reworked recordings of the classic Windows jingle + dial-up handshake instead of the
+   *  default synthesized sounds. Off by default. */
+  legacySounds: boolean;
   caseFolderOverride: string | null;
   hasSeenWelcome: boolean;
   caseSortBy: 'updatedAt' | 'createdAt' | 'priority' | 'status' | 'title';
@@ -444,6 +448,7 @@ export const defaultSettings: AppSettings = {
   wallpaperColor: '#008080',
   wallpaperImage: null,
   startupSoundEnabled: true,
+  legacySounds: false,
   caseFolderOverride: null,
   hasSeenWelcome: false,
   caseSortBy: 'updatedAt',
