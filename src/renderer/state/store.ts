@@ -29,6 +29,7 @@ export type ModuleKey =
   | 'markets'
   | 'briefcase'
   | 'solitaire'
+  | 'chat'
   | 'help';
 
 export interface WindowSpec {
