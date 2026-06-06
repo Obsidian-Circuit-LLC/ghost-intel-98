@@ -214,8 +214,18 @@ passed; a manual loopback-Tor demonstration that a message round-trips over a re
 
 ## Open items to resolve in the implementation plan
 
-1. Confirm arti's current **onion-service (server-side) maturity**; if insufficient, switch to
-   the bundled C-tor fallback (B) — decision gate before transport work begins.
+1. ~~Confirm arti's current **onion-service (server-side) maturity**; if insufficient, switch to
+   the bundled C-tor fallback (B) — decision gate before transport work begins.~~
+   **RESOLVED 2026-06-05 (Stage 0 gate):** Per the Tor Project's own capabilities page + release
+   notes (June 2026), arti **onion-service HOSTING is still not production-ready** ("not recommended
+   for production use, or for any purpose that requires privacy"; partial impl, off by default,
+   incomplete security features). arti *client* is production-grade, but a 1:1 chat needs both peers
+   to **host**. **Gate fires → fall back to bundled C-tor (Option B)** for onion-service hosting +
+   SOCKS, keeping the `Transport` seam so an arti host can drop in once `tor-hsservice` is declared
+   production-ready. Recorded at `~/.claude/research-wiki/prior-art/arti-onion-service-hosting.md`.
+   This reverses the brainstorm's arti (A) choice on security grounds — **CONFIRMED by operator
+   2026-06-05: proceed with bundled C-tor (B), seam preserved for a future arti host. Stage 1
+   protocol core to proceed in parallel.**
 2. Fix the exact **Noise+KEM handshake pattern** and the specific vetted **ML-KEM-768** library.
 3. Packaging: how arti is shipped (sidecar binary vs native addon) per-platform and pinned by
    hash (supply-chain), consistent with the unsigned-but-hash-verified release posture.
