@@ -136,6 +136,11 @@ const api = {
       return () => ipcRenderer.removeListener(channels.chat.onTorStatus, l);
     }
   },
+  tts: {
+    piperStatus: () => ipcRenderer.invoke(channels.tts.piperStatus),
+    synthesize: (text: string, rate?: number) => ipcRenderer.invoke(channels.tts.synthesize, text, rate),
+    cancel: () => ipcRenderer.invoke(channels.tts.cancel)
+  },
   mail: {
     listAccounts: () => ipcRenderer.invoke(channels.mail.listAccounts),
     upsertAccount: (input: unknown) => ipcRenderer.invoke(channels.mail.upsertAccount, input),

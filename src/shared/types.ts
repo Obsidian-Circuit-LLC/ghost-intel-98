@@ -328,6 +328,9 @@ export interface AppSettings {
     ttsVoiceUri: string | null;
     /** Speech rate, 0.5–2.0. */
     ttsRate: number;
+    /** TTS engine: 'system' = Web Speech / OS voices; 'piper' = bundled offline neural voice; 'auto'
+     *  = prefer Piper when installed, else system. Default 'auto'. */
+    ttsEngine: 'auto' | 'system' | 'piper';
   };
   mail: {
     accounts: { id: string; label: string; imapHost: string; imapPort: number; smtpHost: string; smtpPort: number; user: string; secureRef: string | null }[];
@@ -455,7 +458,8 @@ export const defaultSettings: AppSettings = {
     apiKeyRef: null,
     ttsEnabled: false,
     ttsVoiceUri: null,
-    ttsRate: 1
+    ttsRate: 1,
+    ttsEngine: 'auto'
   },
   mail: { accounts: [] },
   browser: { homepage: 'about:blank' },

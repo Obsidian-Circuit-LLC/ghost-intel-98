@@ -38,6 +38,7 @@ import * as streams from '../services/streams';
 import * as ai from '../services/ai';
 import * as localAi from '../services/local-ai';
 import * as chat from '../services/chat';
+import * as piperTts from '../services/piper-tts';
 import * as bookmarks from '../storage/bookmarks';
 import * as history from '../storage/history';
 import * as firefox from '../services/firefox';
@@ -240,6 +241,19 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.chat.listGroups, () => chat.listGroups());
   safeHandle(channels.chat.groupHistory, (...a) => chat.groupHistory(ensureGroupId(a[0])));
   safeHandle(channels.chat.sendGroup, (...a) => chat.sendGroup(ensureGroupId(a[0]), ensureChatText(a[1])));
+
+  // ---- TTS (Piper neural voice — fully offline, no egress) ----
+  const ensureTtsText = (v: unknown): string => {
+    if (typeof v !== 'string' || v.trim().length === 0) throw new Error('Empty TTS text');
+    return v.replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, 4000);
+  };
+  const ensureRate = (v: unknown): number | undefined => {
+    if (typeof v !== 'number' || !Number.isFinite(v)) return undefined;
+    return Math.min(2, Math.max(0.5, v));
+  };
+  safeHandle(channels.tts.piperStatus, () => piperTts.piperStatus());
+  safeHandle(channels.tts.synthesize, (...a) => piperTts.synthesize(ensureTtsText(a[0]), ensureRate(a[1])));
+  safeHandle(channels.tts.cancel, () => { piperTts.cancelActive(); });
 
   // ---- auth (login / encrypt-at-rest) ----
   safeHandle(channels.auth.status, async () => ({

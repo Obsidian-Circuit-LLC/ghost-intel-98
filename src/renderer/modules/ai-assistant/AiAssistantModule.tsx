@@ -14,7 +14,8 @@ import type { CaseSummary, CaseRecord } from '@shared/types';
 import { useSettings } from '../../state/store';
 import { toast } from '../../state/toasts';
 import { confirmDialog } from '../../state/dialogs';
-import { ttsSupported, listVoices, onVoicesChanged, speak, cancelSpeech, type TtsVoice } from '../../audio/tts';
+import { ttsSupported, listVoices, onVoicesChanged, speakAuto, cancelSpeechAll, setTtsEnginePref, type TtsVoice } from '../../audio/tts';
+import { piperAvailable } from '../../audio/piper';
 import { extractPdfText } from '../../lib/pdfExtract';
 import { loadAttachmentBytes } from '../../lib/attachmentBytes';
 import { createVoskRecognizer } from '../../voice/recognizer';
@@ -57,6 +58,7 @@ export function AiAssistantModule(): JSX.Element {
   const patchSettings = useSettings((s) => s.patch);
   const [voices, setVoices] = useState<TtsVoice[]>([]);
   const [voicesLoaded, setVoicesLoaded] = useState(false);
+  const [piperOk, setPiperOk] = useState(false);
   // Voice conversation (offline STT → AI → TTS). Mode is ephemeral per session.
   const [voiceMode, setVoiceMode] = useState<VoiceMode | 'off'>('off');
   const [voiceState, setVoiceState] = useState<VoiceState>('idle');
@@ -128,11 +130,17 @@ export function AiAssistantModule(): JSX.Element {
     return () => { active = false; unsub(); };
   }, []);
 
-  async function setTts(patch: { ttsEnabled?: boolean; ttsVoiceUri?: string | null; ttsRate?: number }): Promise<void> {
+  async function setTts(patch: { ttsEnabled?: boolean; ttsVoiceUri?: string | null; ttsRate?: number; ttsEngine?: 'auto' | 'system' | 'piper' }): Promise<void> {
     if (!settings) return;
-    if (patch.ttsEnabled === false) cancelSpeech();
+    if (patch.ttsEnabled === false) cancelSpeechAll();
+    if (patch.ttsEngine) setTtsEnginePref(patch.ttsEngine);
     await patchSettings({ ai: { ...settings.ai, ...patch } });
   }
+
+  // Probe whether the bundled Piper voice is installed (gates the engine selector) and keep the
+  // dispatcher's engine preference in sync with the saved setting.
+  useEffect(() => { void piperAvailable().then(setPiperOk); }, []);
+  useEffect(() => { if (settings?.ai.ttsEngine) setTtsEnginePref(settings.ai.ttsEngine); }, [settings?.ai.ttsEngine]);
 
   // Default the "include file contents" toggle by provider — on for local Ollama (data
   // never leaves the box), off for remote/none until the user opts in. A provider change
@@ -157,7 +165,7 @@ export function AiAssistantModule(): JSX.Element {
   // Cancel any in-flight stream + drop the listener on unmount.
   useEffect(() => {
     return () => {
-      cancelSpeech();
+      cancelSpeechAll();
       const active = activeStreamRef.current;
       if (active) {
         active.off();
@@ -259,10 +267,11 @@ export function AiAssistantModule(): JSX.Element {
         if (activeStreamRef.current?.id === streamId) activeStreamRef.current = null;
         const st = useSettings.getState().settings;
         if (!stoppedRef.current && st?.ai.ttsEnabled && acc.trim()) {
-          const r = speak(acc, { voiceURI: st.ai.ttsVoiceUri, rate: st.ai.ttsRate });
-          if (!r.spoken && (r.reason === 'remote-blocked' || r.reason === 'no-local-voice')) {
-            toast.warn('Voice off: no on-device voice available. Install an offline/Natural voice in Windows settings — cloud voices are blocked by design.');
-          }
+          void speakAuto(acc, { voiceURI: st.ai.ttsVoiceUri, rate: st.ai.ttsRate }).then((r) => {
+            if (!r.spoken && (r.reason === 'remote-blocked' || r.reason === 'no-local-voice')) {
+              toast.warn('Voice off: no on-device voice available. Install an offline/Natural voice in Windows settings, or use the bundled Piper voice — cloud voices are blocked by design.');
+            }
+          });
         }
       }
     });
@@ -284,7 +293,7 @@ export function AiAssistantModule(): JSX.Element {
   // late tail can't keep mutating the bubble.
   const stop = useCallback(() => {
     stoppedRef.current = true;
-    cancelSpeech();
+    cancelSpeechAll();
     const active = activeStreamRef.current;
     if (!active) return;
     void window.api.ai.cancel(active.id).catch(() => {});
@@ -342,7 +351,7 @@ export function AiAssistantModule(): JSX.Element {
   }, [contextCase]);
 
   const stopVoice = useCallback(() => {
-    cancelSpeech();
+    cancelSpeechAll();
     // Abort any in-flight voice AI request (it isn't tracked by activeStreamRef / STFU).
     const vs = voiceStreamRef.current;
     if (vs) { void window.api.ai.cancel(vs.id).catch(() => {}); vs.off(); voiceStreamRef.current = null; }
@@ -370,8 +379,9 @@ export function AiAssistantModule(): JSX.Element {
         mode,
         ask: askOnce,
         speak: (t) => new Promise<void>((res) => {
-          const r = speak(t, { voiceURI: st?.ai.ttsVoiceUri, rate: st?.ai.ttsRate, onEnd: res });
-          if (!r.spoken) res();
+          void speakAuto(t, { voiceURI: st?.ai.ttsVoiceUri, rate: st?.ai.ttsRate, onEnd: res }).then((r) => {
+            if (!r.spoken) res();
+          });
         }),
         onState: setVoiceState,
         onPartial: setVoicePartial,
@@ -492,16 +502,32 @@ export function AiAssistantModule(): JSX.Element {
         <button onClick={() => quickPrompt('Draft a status report for this case suitable for an external stakeholder.')} disabled={!contextCase}>Draft report</button>
         <button onClick={() => quickPrompt('What questions should I be asking that I have not yet?')} disabled={!contextCase}>Open questions</button>
         <button onClick={() => void exportChat()} disabled={messages.length === 0} title="Save this conversation to a file">Export…</button>
-        {ttsSupported() && (
+        {(ttsSupported() || piperOk) && (
           <>
             <button
               onClick={() => void setTts({ ttsEnabled: !settings?.ai.ttsEnabled })}
-              title="Speak AI responses aloud using your offline OS voices"
+              title="Speak AI responses aloud (bundled offline Piper voice, or your OS voices)"
               style={{ fontWeight: settings?.ai.ttsEnabled ? 'bold' : 'normal' }}
             >
               {settings?.ai.ttsEnabled ? '🔊 Voice' : '🔇 Voice'}
             </button>
-            {settings?.ai.ttsEnabled && (
+            {settings?.ai.ttsEnabled && piperOk && (
+              <select
+                className="ga98-text"
+                style={{ maxWidth: 130 }}
+                value={settings?.ai.ttsEngine ?? 'auto'}
+                onChange={(e) => void setTts({ ttsEngine: e.target.value as 'auto' | 'system' | 'piper' })}
+                title="Voice engine. Piper is a bundled, fully-offline neural voice. System uses your OS voices."
+              >
+                <option value="auto">Voice: Auto (Piper)</option>
+                <option value="piper">Voice: Piper (neural)</option>
+                <option value="system">Voice: System</option>
+              </select>
+            )}
+            {settings?.ai.ttsEnabled && piperOk && (settings?.ai.ttsEngine ?? 'auto') !== 'system' && (
+              <span style={{ fontSize: 11, opacity: 0.7 }} title="Bundled neural voice — runs entirely on-device, no network.">🧠 offline neural</span>
+            )}
+            {settings?.ai.ttsEnabled && (!piperOk || (settings?.ai.ttsEngine ?? 'auto') === 'system') && (
               voices.some((v) => !v.remote) ? (
                 <select
                   className="ga98-text"

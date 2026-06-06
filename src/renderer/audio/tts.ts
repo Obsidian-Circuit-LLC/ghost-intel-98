@@ -14,6 +14,8 @@
  * plus an onEnd callback are enough for a turn-taking loop to drive.
  */
 
+import { speakPiper, cancelPiper, piperAvailable } from './piper';
+
 export interface TtsVoice {
   /** Stable identifier passed back to speak(). */
   voiceURI: string;
@@ -125,11 +127,45 @@ export function speak(text: string, opts: SpeakOpts = {}): SpeakResult {
   return { spoken: true };
 }
 
-/** Stop speaking immediately. */
+/** Stop speaking immediately (Web Speech path only). */
 export function cancelSpeech(): void {
   synth()?.cancel();
 }
 
 export function isSpeaking(): boolean {
   return synth()?.speaking ?? false;
+}
+
+// ---- engine dispatcher (Web Speech vs Piper) ----
+
+export type TtsEngine = 'auto' | 'system' | 'piper';
+let enginePref: TtsEngine = 'auto';
+/** Set by the app from settings.ai.ttsEngine. */
+export function setTtsEnginePref(pref: TtsEngine): void {
+  enginePref = pref;
+}
+
+/** Resolve the effective engine: 'auto' prefers Piper when it's installed, else Web Speech. */
+async function effectiveEngine(): Promise<'system' | 'piper'> {
+  if (enginePref === 'system') return 'system';
+  if (enginePref === 'piper') return (await piperAvailable()) ? 'piper' : 'system';
+  return (await piperAvailable()) ? 'piper' : 'system'; // auto
+}
+
+/**
+ * Speak via whichever engine is active. Piper (offline neural, bundled) when available/selected;
+ * otherwise the on-device Web Speech path. Cancels any in-progress utterance on EITHER engine first.
+ */
+export async function speakAuto(text: string, opts: SpeakOpts = {}): Promise<SpeakResult> {
+  cancelSpeechAll();
+  const engine = await effectiveEngine();
+  if (engine === 'piper') return speakPiper(text, opts);
+  // Web Speech is synchronous; fire onEnd via the utterance and return its immediate result.
+  return speak(text, opts);
+}
+
+/** Stop speaking on both engines. */
+export function cancelSpeechAll(): void {
+  cancelSpeech();
+  cancelPiper();
 }

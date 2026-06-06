@@ -199,6 +199,11 @@ export interface GhostApi {
     onGroupInvite(cb: (p: { groupId: string }) => void): () => void;
     onTorStatus(cb: (p: { status: string; onion: string | null }) => void): () => void;
   };
+  tts: {
+    piperStatus(): Promise<{ available: boolean }>;
+    synthesize(text: string, rate?: number): Promise<Uint8Array>;
+    cancel(): Promise<void>;
+  };
   mail: {
     listAccounts(): Promise<MailAccount[]>;
     upsertAccount(input: MailAccount & { password?: string }): Promise<MailAccount>;

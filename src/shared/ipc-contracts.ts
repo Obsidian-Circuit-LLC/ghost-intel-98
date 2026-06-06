@@ -105,6 +105,11 @@ export const channels = {
     onGroupInvite: 'chat:onGroupInvite',
     onTorStatus: 'chat:onTorStatus'
   },
+  tts: {
+    piperStatus: 'tts:piperStatus',
+    synthesize: 'tts:synthesize',
+    cancel: 'tts:cancel'
+  },
   mail: {
     listAccounts: 'mail:listAccounts',
     upsertAccount: 'mail:upsertAccount',
