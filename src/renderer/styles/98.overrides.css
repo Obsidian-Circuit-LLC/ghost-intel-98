@@ -1,5 +1,24 @@
 /* Minor tweaks on top of 98.css to make the desktop feel cohesive. */
 
+/* Checkboxes / radios: 98.css hides the native control (opacity:0; position:fixed) and redraws the
+   box only via an `input + label` SIBLING pseudo-element. Every checkbox/radio in this app nests the
+   input inside its label (or stands alone) rather than using that sibling pattern, so 98.css's box
+   never renders and the control is invisible — you can only toggle by clicking the label text.
+   Restore a real, visible native control. (Nothing here relies on 98.css's sibling rendering.) */
+input[type="checkbox"],
+input[type="radio"] {
+  appearance: auto;
+  -webkit-appearance: auto;
+  -moz-appearance: auto;
+  position: static;
+  opacity: 1;
+  border: revert;
+  margin: 0 6px 0 0;
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+}
+
 .window {
   background: var(--ga98-grey);
 }

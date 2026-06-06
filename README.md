@@ -32,11 +32,23 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`DCS98-Setup-3.11.0-beta.1.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the **experimental** Tor P2P chat — see Status.)*
+> **Install:** download [`DCS98-Setup-3.11.1-beta.1.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the **experimental** Tor P2P chat — see Status.)*
 
 ## Status
 
-**v3.11.0-beta.1** — current release. Optional Legacy sound pack + an uninstall fix:
+**v3.11.1-beta.1** — current release. Fixes invisible checkboxes:
+
+- **Checkboxes are visible again.** 98.css draws a checkbox's box via an `input + label` sibling
+  element and hides the real input; DCS98's checkboxes nest the input inside the label, so the box
+  never drew — every checkbox (Settings, GeoINT, Mail TLS, case tasks, …) rendered as a label with no
+  visible box. They still toggled when you clicked the text, but there was nothing to see. A single CSS
+  rule restores a real, visible control. This is what made the new **Legacy sound pack** toggle look
+  missing in v3.11.0.
+
+429 automated tests. *Everything from v3.11.0-beta.1 (opt-in Legacy sound pack + uninstall fix) and
+earlier carries forward unchanged.*
+
+**v3.11.0-beta.1** — Optional Legacy sound pack + an uninstall fix:
 
 - **Legacy sound pack (opt-in).** A new **Settings → Sound** toggle swaps the startup chime and the
   DialTerm dial-up for **AI-reworked recordings of the classic Windows startup jingle and dial-up
@@ -187,14 +199,14 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/dcs98/releases) and run it.
 
-Direct link to the current release: [`DCS98-Setup-3.11.0-beta.1.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.11.0-beta.1/DCS98-Setup-3.11.0-beta.1.exe)
+Direct link to the current release: [`DCS98-Setup-3.11.1-beta.1.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.11.1-beta.1/DCS98-Setup-3.11.1-beta.1.exe)
 (experimental P2P chat + Piper TTS; the chat crypto is unverified — see Status). The last
 fully-stable build is [`DCS98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.6.8/DCS98-Setup-3.6.8.exe).
 
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\DCS98-Setup-3.11.0-beta.1.exe -Algorithm SHA256
+Get-FileHash .\DCS98-Setup-3.11.1-beta.1.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
@@ -232,8 +244,13 @@ To uninstall: Settings → Apps → Dead Cyber Society 98 → Uninstall.
 
 ## Releases & changelog
 
-The current build is **v3.11.0-beta.1**. Each release page carries its own notes + SHA-256.
+The current build is **v3.11.1-beta.1**. Each release page carries its own notes + SHA-256.
 
+- **v3.11.1-beta.1** — **Fix: invisible checkboxes.** 98.css hides the native checkbox and redraws it
+  via an `input + label` sibling element; DCS98 nests the input inside its label, so the box never drew
+  and every checkbox (Settings incl. the new Legacy sound pack toggle, GeoINT, Mail TLS, case tasks, …)
+  rendered with no visible control — they toggled on a text-click but looked absent. One CSS rule in
+  `98.overrides.css` restores a real, visible control app-wide. CSS-only. **429 tests.**
 - **v3.11.0-beta.1** — **Optional Legacy sound pack + uninstall fix.** A new **Settings → Sound** toggle
   (off by default) swaps the startup chime and DialTerm dial-up for **AI-reworked recordings** of the
   classic Windows startup jingle + dial-up handshake — the only bundled audio in the app, and
