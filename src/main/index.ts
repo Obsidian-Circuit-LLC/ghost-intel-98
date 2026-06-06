@@ -239,18 +239,36 @@ app.whenReady().then(async () => {
   });
 });
 
-app.on('before-quit', async () => {
+// Electron does NOT await an async before-quit handler. Without preventDefault the process can exit
+// before our async teardown runs — which orphans the spawned tor.exe (a non-detached child is not
+// killed when its parent dies on Windows). The orphan then holds a file lock on the bundled binary
+// inside the install directory, and that lock makes the NSIS uninstaller fail. So: intercept the
+// first quit, run teardown to completion (bounded by a timeout so a hung stop can't wedge quit),
+// then actually quit. The second before-quit pass (quitCleanupDone === true) falls straight through.
+let quitCleanupDone = false;
+app.on('before-quit', (event) => {
+  if (quitCleanupDone) return;
+  event.preventDefault();
   if (reminderInterval) {
     clearInterval(reminderInterval);
     reminderInterval = null;
   }
-  await cancelAllAiStreams();
-  await shutdownAllSessions();
-  await shutdownAllFtp();
-  await chat.shutdown().catch(() => { /* tor may not be running */ });
+  const teardown = (async () => {
+    await cancelAllAiStreams();
+    await shutdownAllSessions();
+    await shutdownAllFtp();
+    await chat.shutdown().catch(() => { /* tor may not be running */ }); // kills tor.exe → frees the lock
+    localAi.stop();
+  })();
+  // Never let teardown wedge the quit: whichever resolves first, we then quit for real.
+  const bounded = Promise.race([teardown, new Promise<void>((resolve) => setTimeout(resolve, 6000))]);
+  void bounded.catch(() => { /* best-effort; quit regardless */ }).finally(() => {
+    quitCleanupDone = true;
+    app.quit();
+  });
 });
 
-app.on('will-quit', () => { localAi.stop(); });
+app.on('will-quit', () => { localAi.stop(); }); // sync backstop (idempotent)
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();

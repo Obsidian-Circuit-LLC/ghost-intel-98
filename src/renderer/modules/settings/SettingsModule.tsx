@@ -177,8 +177,12 @@ function SoundPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSetting
       <label><input type="checkbox" checked={s.soundEnabled} onChange={(e) => void patch({ soundEnabled: e.target.checked })} /> Enable sounds</label>
       <br />
       <label><input type="checkbox" checked={s.startupSoundEnabled} onChange={(e) => void patch({ startupSoundEnabled: e.target.checked })} /> Play startup chime on launch</label>
+      <br />
+      <label><input type="checkbox" checked={s.legacySounds} onChange={(e) => void patch({ legacySounds: e.target.checked })} /> Legacy sound pack (classic dial-up + startup jingle)</label>
       <p style={{ fontSize: 11, color: '#444', marginTop: 8 }}>
-        All sounds are synthesised at runtime via Web Audio. No copyrighted audio is bundled.
+        Sounds are synthesised at runtime via Web Audio by default. The optional <strong>Legacy sound
+        pack</strong> swaps the startup chime and DialTerm dial-up for bundled AI-reworked recordings of
+        the classic Windows jingle and dial-up handshake — derivative works of their originals, off by default.
       </p>
     </fieldset>
   );

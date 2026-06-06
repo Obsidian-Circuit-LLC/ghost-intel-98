@@ -15,7 +15,7 @@ import '@xterm/xterm/css/xterm.css';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SshHostProfile, DialTermProtocol } from '@shared/post-mvp-types';
 import { useSettings } from '../../state/store';
-import { playDtmf, playDialPickup, playDialTone, playCarrier, playHangup, CARRIER_BEAT } from '../../audio/synth';
+import { playDtmf, playDialPickup, playDialTone, playCarrier, playLegacyDialup, playHangup, CARRIER_BEAT } from '../../audio/synth';
 import { toast } from '../../state/toasts';
 import { FtpBrowser } from './FtpBrowser';
 import logoUrl from '../../assets/logo.png';
@@ -184,18 +184,31 @@ export function DialTermModule(): JSX.Element {
     // Start the handshake tones and reveal the negotiation log on the same packet beat the uplink
     // animation runs on, so audio + visuals + log advance in lockstep. The waits pace the log
     // whether or not sound is enabled; when sound is on we then await the carrier's tail.
-    // The carrier runs 12 beats; reveal the log on the phase boundaries so the connection client's
-    // stage stepper tracks the audio — LOCK after the answer+bong (beat 3), LAP-M after negotiation
-    // (beat 6), and OPENING SSH as the data roar begins (beat 9), then await the 3-beat tail.
-    const beat = CARRIER_BEAT * 1000;
-    const carrierDone = sound ? playCarrier() : Promise.resolve();
-    await wait(beat * 3); if (!live()) return;
-    setHandshakeLog((h) => [...h, 'CARRIER LOCK · 33600']);
-    await wait(beat * 3); if (!live()) return;
-    setHandshakeLog((h) => [...h, 'LAP-M / V.42bis OK']);
-    await wait(beat * 3); if (!live()) return;
-    setHandshakeLog((h) => [...h, 'OPENING SSH SESSION…']);
-    await carrierDone;
+    // Reveal the negotiation log + advance the stage stepper in lockstep with the handshake audio.
+    // Default (synthesized) carrier runs 12 beats and we reveal on its phase boundaries (3/6/9). The
+    // opt-in Legacy pack plays a bundled clip whose length we don't control, so we pace the reveals as
+    // fractions of the clip's actual duration instead.
+    const legacy = sound && !!settings?.legacySounds;
+    let total: number;                       // ms from here until the SSH session opens
+    let revealAt: [number, number, number];
+    if (legacy) {
+      const durS = await playLegacyDialup(); // starts the clip, resolves to its length in seconds
+      total = (durS > 0 ? durS : 13) * 1000;
+      revealAt = [total * 0.30, total * 0.55, total * 0.80];
+    } else {
+      const beat = CARRIER_BEAT * 1000;
+      if (sound) void playCarrier();
+      total = beat * 12;
+      revealAt = [beat * 3, beat * 6, beat * 9];
+    }
+    const lines = ['CARRIER LOCK · 33600', 'LAP-M / V.42bis OK', 'OPENING SSH SESSION…'];
+    let elapsed = 0;
+    for (let i = 0; i < lines.length; i += 1) {
+      await wait(revealAt[i] - elapsed); elapsed = revealAt[i];
+      if (!live()) return;
+      setHandshakeLog((h) => [...h, lines[i]]);
+    }
+    await wait(total - elapsed);
     if (!live()) return;
 
     // Drop any listeners a prior (superseded) dial attempt left registered before re-subscribing.
