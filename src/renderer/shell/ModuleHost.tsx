@@ -25,6 +25,7 @@ import { BookmarksModule } from '../modules/bookmarks/BookmarksModule';
 import { MarketsModule } from '../modules/markets/MarketsModule';
 import { BriefcaseModule } from '../modules/briefcase/BriefcaseModule';
 import { SolitaireModule } from '../modules/solitaire/SolitaireModule';
+import { ChatModule } from '../modules/chat/ChatModule';
 import { HelpModule } from '../modules/help/HelpModule';
 import { ComingSoon } from '../modules/coming-soon/ComingSoon';
 
@@ -78,6 +79,8 @@ export function ModuleHost({ spec }: { spec: WindowSpec }): JSX.Element {
           originalName={(spec.props?.['originalName'] as string) ?? (spec.props?.['fileName'] as string)}
         />
       );
+    case 'chat':
+      return <ChatModule />;
     case 'help':
       return <HelpModule />;
     default:

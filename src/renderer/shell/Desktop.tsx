@@ -19,7 +19,8 @@ const desktopShortcutDefaults: { module: ModuleKey; label: string }[] = [
   { module: 'bookmarks', label: 'Bookmarks' },
   { module: 'markets', label: 'Markets' },
   { module: 'calendar', label: 'Calendar' },
-  { module: 'reminders', label: 'Reminders' }
+  { module: 'reminders', label: 'Reminders' },
+  { module: 'chat', label: 'Chat (beta)' }
 ];
 
 // Pinned to the bottom-right corner (Recycle Bin position).
@@ -49,6 +50,7 @@ const moduleTitles: Record<ModuleKey, string> = {
   bookmarks: 'Bookmarks',
   markets: 'Markets',
   solitaire: 'Solitaire',
+  chat: 'Chat (beta)',
   help: 'RTFM'
 };
 

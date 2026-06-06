@@ -86,6 +86,7 @@ const GLYPHS: Record<ModuleKey, string> = {
   markets: '📈',
   briefcase: '💼',
   solitaire: '🃏',
+  chat: '💬',
   help: '?'
 };
 
