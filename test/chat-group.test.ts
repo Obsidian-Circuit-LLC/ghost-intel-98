@@ -80,30 +80,60 @@ describe('GroupStore', () => {
     const s = await store();
     const id = g32();
     const m = [c64(), c64()];
-    await s.upsert({ groupId: id, name: 'team', memberIds: m, createdAt: 1 });
+    const me = c64();
+    expect(await s.create({ groupId: id, name: 'team', memberIds: m, creator: me, createdAt: 1 })).toBe(true);
     expect((await s.list())).toHaveLength(1);
     expect((await s.get(id))?.name).toBe('team');
     expect((await s.get(id))?.memberIds).toEqual(m);
+    expect((await s.get(id))?.creator).toBe(me);
   });
 
-  it('upsert merges members and updates the name (peer reconciliation)', async () => {
+  it('create is a no-op on a groupId collision (hijack refusal)', async () => {
+    const s = await store();
+    const id = g32();
+    const creator = c64();
+    await s.create({ groupId: id, name: 'real', memberIds: [c64()], creator, createdAt: 1 });
+    // a second create for the SAME id (e.g. a malicious peer) must NOT overwrite
+    const second = await s.create({ groupId: id, name: 'hijacked', memberIds: [c64()], creator: c64(), createdAt: 2 });
+    expect(second).toBe(false);
+    expect((await s.get(id))?.name).toBe('real');
+    expect((await s.get(id))?.creator).toBe(creator);
+  });
+
+  it('update unions members and (optionally) renames', async () => {
     const s = await store();
     const id = g32();
     const a = c64();
     const b = c64();
     const c = c64();
-    await s.upsert({ groupId: id, name: 'v1', memberIds: [a, b], createdAt: 1 });
-    await s.upsert({ groupId: id, name: 'v2', memberIds: [b, c], createdAt: 2 });
-    const g = await s.get(id);
-    expect(g?.name).toBe('v2');
-    expect(new Set(g?.memberIds)).toEqual(new Set([a, b, c])); // union, deduped
-    expect((await s.list())).toHaveLength(1); // still one row
+    await s.create({ groupId: id, name: 'v1', memberIds: [a, b], creator: c64(), createdAt: 1 });
+    await s.update(id, { memberIds: [b, c] }); // member union, no rename
+    expect(new Set((await s.get(id))?.memberIds)).toEqual(new Set([a, b, c]));
+    expect((await s.get(id))?.name).toBe('v1');
+    await s.update(id, { name: 'v2' });
+    expect((await s.get(id))?.name).toBe('v2');
+  });
+
+  it('enforces a per-creator cap (invite-spam DoS bound)', async () => {
+    const s = await store();
+    const spammer = c64();
+    let made = 0;
+    let threw = false;
+    try {
+      for (let i = 0; i < 40; i += 1) {
+        if (await s.create({ groupId: g32(), name: `g${i}`, memberIds: [], creator: spammer, createdAt: i })) made += 1;
+      }
+    } catch {
+      threw = true;
+    }
+    expect(threw).toBe(true);
+    expect(made).toBe(32); // MAX_GROUPS_PER_PEER
   });
 
   it('setMembers replaces the member list; remove deletes the group', async () => {
     const s = await store();
     const id = g32();
-    await s.upsert({ groupId: id, name: 't', memberIds: [c64()], createdAt: 1 });
+    await s.create({ groupId: id, name: 't', memberIds: [c64()], creator: c64(), createdAt: 1 });
     const next = [c64(), c64()];
     await s.setMembers(id, next);
     expect((await s.get(id))?.memberIds).toEqual(next);

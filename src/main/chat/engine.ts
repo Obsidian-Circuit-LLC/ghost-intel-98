@@ -185,9 +185,10 @@ export class ChatEngine {
    *  groupId, stores it locally, and broadcasts a group-invite carrying the full participant set so
    *  each member converges on the same group. */
   async createGroup(name: string, memberIds: string[]): Promise<string> {
-    const others = [...new Set(memberIds)].filter((id) => id !== this.myContactId());
+    const me = this.myContactId();
+    const others = [...new Set(memberIds)].filter((id) => id !== me);
     const groupId = hex(randomBytes(GROUP_ID_LEN));
-    await this.d.groups.upsert({ groupId, name, memberIds: others, createdAt: this.d.now() });
+    await this.d.groups.create({ groupId, name, memberIds: others, creator: me, createdAt: this.d.now() });
     await this.broadcastGroupInvite(groupId, name, others);
     return groupId;
   }
@@ -321,6 +322,10 @@ export class ChatEngine {
     const groupId = hex(content.groupId);
     const g = await this.d.groups.get(groupId);
     if (!g) return; // unknown group (no invite seen yet) — drop rather than auto-join
+    // Authz (defence-in-depth; not true access control — a removed member keeps a working 1:1 ratchet,
+    // so real revocation means rotating the groupId): only accept group messages from a current member
+    // (the creator is implicitly a member). A paired-but-non-member contact can't inject into a group.
+    if (cid !== g.creator && !g.memberIds.includes(cid)) return;
     const id = this.d.newId();
     const seq = (this.recvSeq.get(groupId) ?? 0) + 1;
     this.recvSeq.set(groupId, seq);
@@ -332,12 +337,27 @@ export class ChatEngine {
   private async onGroupInvite(cid: string, content: Extract<MessageContent, { type: 'group-invite' }>): Promise<void> {
     const groupId = hex(content.groupId);
     const me = this.myContactId();
-    // local members = all advertised participants except me; the inviter (cid) is always included.
-    const participants = new Set(content.memberIds.map(hex));
-    participants.add(cid);
-    participants.delete(me);
-    await this.d.groups.upsert({ groupId, name: content.name, memberIds: [...participants], createdAt: this.d.now() });
-    this.d.events?.onGroupInvite?.(groupId);
+    // CLAMP the inviter's claimed roster to contacts we ALREADY trust — never persist arbitrary
+    // peer-supplied fingerprints. The inviter cid is by construction a paired contact (the frame
+    // arrived over an authenticated 1:1 session), so it's always allowed.
+    const known = new Set((await this.d.contacts.list()).map((c) => c.contactId));
+    const clamped = content.memberIds.map(hex).filter((id) => id !== me && known.has(id));
+    if (cid !== me && !clamped.includes(cid)) clamped.push(cid);
+
+    const existing = await this.d.groups.get(groupId);
+    if (!existing) {
+      // New group: auto-create with the inviter recorded as creator (the authz anchor).
+      const created = await this.d.groups.create({ groupId, name: content.name, memberIds: clamped, creator: cid, createdAt: this.d.now() }).catch(() => false);
+      if (created) this.d.events?.onGroupInvite?.(groupId);
+      return;
+    }
+    // Existing group: only the creator or a current member may mutate it — drop a hijack attempt.
+    // Only the creator may rename; non-creator members may only ADD members (union), never rename.
+    if (cid !== existing.creator && !existing.memberIds.includes(cid)) return;
+    await this.d.groups.update(groupId, {
+      memberIds: clamped,
+      name: cid === existing.creator ? content.name : undefined
+    });
   }
 
   private async onIncomingText(cid: string, text: string): Promise<void> {

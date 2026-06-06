@@ -107,6 +107,7 @@ export interface ChatGroupDTO {
   groupId: string;
   name: string;
   memberIds: string[];
+  creator: string;
   createdAt: number;
 }
 
