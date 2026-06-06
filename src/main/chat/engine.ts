@@ -11,7 +11,7 @@
 import { Connection } from './connection';
 import type { Transport, ChatStream } from './transport';
 import { initiatorHandshake, responderHandshake } from './handshake';
-import { encodeEnvelope, decodeEnvelope, TRANSFER_ID_LEN, type MessageContent } from './session';
+import { encodeEnvelope, decodeEnvelope, TRANSFER_ID_LEN, GROUP_ID_LEN, type MessageContent } from './session';
 import { chunkFile, FileReceiver } from './transfer';
 import { randomBytes } from './crypto';
 import { createInvite, parseInvite } from './invite';
@@ -19,6 +19,7 @@ import { contactId, type IdentityKeyPair, type IdentityPublic } from './identity
 import type { PrekeyStore } from './prekey-store';
 import type { ContactStore } from './contact-store';
 import type { MessageStore, ChatMessage, ChatFileMeta, FileStatus } from './message-store';
+import type { GroupStore, ChatGroup } from './group-store';
 
 export type ContactStatus = 'online' | 'connecting' | 'offline';
 
@@ -48,6 +49,8 @@ export interface ChatEngineEvents {
     status: FileStatus,
     progress?: { received: number; total: number }
   ): void;
+  onGroupMessage?(groupId: string, message: ChatMessage): void;
+  onGroupInvite?(groupId: string): void;
 }
 export interface ChatEngineDeps {
   identity: IdentityKeyPair;
@@ -55,6 +58,8 @@ export interface ChatEngineDeps {
   prekeys: PrekeyStore;
   contacts: ContactStore;
   messages: MessageStore;
+  groups: GroupStore;
+  groupMessages: MessageStore; // keyed by groupId (32-hex), not contactId
   now(): number;
   newId(): string;
   quarantine?: QuarantineSink;
@@ -62,6 +67,7 @@ export interface ChatEngineDeps {
 }
 
 const hex = (b: Uint8Array): string => Buffer.from(b).toString('hex');
+const unhex = (h: string): Uint8Array => new Uint8Array(Buffer.from(h, 'hex'));
 
 export class ChatEngine {
   private conns = new Map<string, Connection>();
@@ -169,6 +175,80 @@ export class ChatEngine {
     return this.d.messages.list(contactId_);
   }
 
+  // ---- groups (Phase 3, client-side fan-out) ----
+
+  private myContactId(): string {
+    return contactId(this.d.identity.publicKeys);
+  }
+
+  /** Create a group of existing contacts (memberIds = the OTHER participants, hex contactIds). Mints a
+   *  groupId, stores it locally, and broadcasts a group-invite carrying the full participant set so
+   *  each member converges on the same group. */
+  async createGroup(name: string, memberIds: string[]): Promise<string> {
+    const others = [...new Set(memberIds)].filter((id) => id !== this.myContactId());
+    const groupId = hex(randomBytes(GROUP_ID_LEN));
+    await this.d.groups.upsert({ groupId, name, memberIds: others, createdAt: this.d.now() });
+    await this.broadcastGroupInvite(groupId, name, others);
+    return groupId;
+  }
+
+  listGroups(): Promise<ChatGroup[]> {
+    return this.d.groups.list();
+  }
+  groupHistory(groupId: string): Promise<ChatMessage[]> {
+    return this.d.groupMessages.list(groupId);
+  }
+
+  /** (Re)send the group-invite to every member — used on create and when membership changes. The
+   *  invite's member list is the FULL participant set (others ∪ me) so each recipient can reconcile. */
+  async broadcastGroupInvite(groupId: string, name: string, others: string[]): Promise<void> {
+    const participants = [...new Set([...others, this.myContactId()])];
+    const memberIdBytes = participants.map(unhex);
+    const gidBytes = unhex(groupId);
+    await Promise.all(
+      others.map(async (memberCid) => {
+        try {
+          const conn = await this.ensureConn(memberCid);
+          conn.sendMessage(encodeEnvelope({ type: 'group-invite', groupId: gidBytes, name, memberIds: memberIdBytes }));
+        } catch {
+          /* member unreachable right now — they'll miss this invite (fan-out best-effort) */
+        }
+      })
+    );
+  }
+
+  /** Fan-out a group message: encrypt it separately over each reachable member's 1:1 session. Records
+   *  one outbound row in the group history; per-member delivery is best-effort (no group acks in v1). */
+  async sendGroup(groupId: string, text: string): Promise<string> {
+    const g = await this.d.groups.get(groupId);
+    if (!g) throw new Error('unknown group');
+    const id = this.d.newId();
+    const seq = (this.sendSeq.get(groupId) ?? 0) + 1;
+    this.sendSeq.set(groupId, seq);
+    await this.d.groupMessages.append(groupId, {
+      id, direction: 'out', seq, ts: this.d.now(), kind: 'text', text, sender: this.myContactId(), state: 'sent'
+    });
+    const gidBytes = unhex(groupId);
+    await Promise.all(
+      g.memberIds.map(async (memberCid) => {
+        try {
+          const conn = await this.ensureConn(memberCid);
+          conn.sendMessage(encodeEnvelope({ type: 'group-text', groupId: gidBytes, text }));
+        } catch {
+          /* unreachable member — fan-out is best-effort; mesh-incomplete is a known limitation */
+        }
+      })
+    );
+    return id;
+  }
+
+  /** Get a live connection to a contact, dialing on demand. */
+  private async ensureConn(cid: string): Promise<Connection> {
+    const c = this.conns.get(cid);
+    if (c && !c.closed) return c;
+    return this.connect(cid);
+  }
+
   // ---- internals ----
   private async connect(cid: string): Promise<Connection> {
     const c = await this.d.contacts.getById(cid);
@@ -230,7 +310,34 @@ export class ChatEngine {
         return this.onFileOffer(cid, content);
       case 'file-chunk':
         return this.onFileChunk(cid, content);
+      case 'group-text':
+        return this.onGroupText(cid, content);
+      case 'group-invite':
+        return this.onGroupInvite(cid, content);
     }
+  }
+
+  private async onGroupText(cid: string, content: Extract<MessageContent, { type: 'group-text' }>): Promise<void> {
+    const groupId = hex(content.groupId);
+    const g = await this.d.groups.get(groupId);
+    if (!g) return; // unknown group (no invite seen yet) — drop rather than auto-join
+    const id = this.d.newId();
+    const seq = (this.recvSeq.get(groupId) ?? 0) + 1;
+    this.recvSeq.set(groupId, seq);
+    const message: ChatMessage = { id, direction: 'in', seq, ts: this.d.now(), kind: 'text', text: content.text, sender: cid, state: 'received' };
+    await this.d.groupMessages.append(groupId, message);
+    this.d.events?.onGroupMessage?.(groupId, message);
+  }
+
+  private async onGroupInvite(cid: string, content: Extract<MessageContent, { type: 'group-invite' }>): Promise<void> {
+    const groupId = hex(content.groupId);
+    const me = this.myContactId();
+    // local members = all advertised participants except me; the inviter (cid) is always included.
+    const participants = new Set(content.memberIds.map(hex));
+    participants.add(cid);
+    participants.delete(me);
+    await this.d.groups.upsert({ groupId, name: content.name, memberIds: [...participants], createdAt: this.d.now() });
+    this.d.events?.onGroupInvite?.(groupId);
   }
 
   private async onIncomingText(cid: string, text: string): Promise<void> {

@@ -7,6 +7,7 @@ import { InMemoryNetwork, InMemoryTransport } from '../src/main/chat/transport';
 import { PrekeyStore } from '../src/main/chat/prekey-store';
 import { ContactStore } from '../src/main/chat/contact-store';
 import { MessageStore } from '../src/main/chat/message-store';
+import { GroupStore } from '../src/main/chat/group-store';
 import { generateIdentity, contactId, type IdentityKeyPair } from '../src/main/chat/identity';
 
 const flush = (ms = 0): Promise<void> => new Promise((r) => setTimeout(r, ms));
@@ -28,6 +29,8 @@ async function makeEngine(
     prekeys: new PrekeyStore(join(dir, 'prekeys.json'), identity),
     contacts: new ContactStore(join(dir, 'contacts.json')),
     messages: new MessageStore(join(dir, 'messages')),
+    groups: new GroupStore(join(dir, 'groups.json')),
+    groupMessages: new MessageStore(join(dir, 'gmsgs'), undefined, /^[0-9a-f]{32}$/),
     now: () => 1717000000000 + n,
     newId: () => `${onion[0]}-${(n += 1)}`,
     quarantine,
@@ -183,6 +186,45 @@ describe('ChatEngine — file transfer (Phase 2) over the in-memory network', ()
   it('refuses to send an empty file', async () => {
     const { a, b, cidB_onA } = await pair({});
     await expect(a.sendFile(cidB_onA, 'empty', '', new Uint8Array(0))).rejects.toBeTruthy();
+    await a.stop();
+    await b.stop();
+  });
+
+  it('group (fan-out): invite propagates, messages route both ways into group history', async () => {
+    const aGroupMsgs: { groupId: string; sender?: string; text: string }[] = [];
+    const bInvites: string[] = [];
+    const bGroupMsgs: { groupId: string; sender?: string; text: string }[] = [];
+    const { a, b, cidB_onA, cidA_onB } = await pair({
+      aEv: { onGroupMessage: (groupId, m) => aGroupMsgs.push({ groupId, sender: m.sender, text: m.text }) },
+      bEv: {
+        onGroupInvite: (groupId) => bInvites.push(groupId),
+        onGroupMessage: (groupId, m) => bGroupMsgs.push({ groupId, sender: m.sender, text: m.text })
+      }
+    });
+
+    // A creates a group containing B; the invite should reach B and auto-create the same group there.
+    const groupId = await a.createGroup('case-team', [cidB_onA]);
+    await flush(30);
+    expect(bInvites).toContain(groupId);
+    const bGroups = await b.listGroups();
+    expect(bGroups.find((g) => g.groupId === groupId)?.name).toBe('case-team');
+    // B's local member view is [A]
+    expect(bGroups.find((g) => g.groupId === groupId)?.memberIds).toEqual([cidA_onB]);
+
+    // A → group; B receives it attributed to A
+    await a.sendGroup(groupId, 'team, sync at 1500');
+    await flush(30);
+    expect(bGroupMsgs).toEqual([{ groupId, sender: cidA_onB, text: 'team, sync at 1500' }]);
+
+    // B → group; A receives it attributed to B
+    await b.sendGroup(groupId, 'ack');
+    await flush(30);
+    expect(aGroupMsgs).toEqual([{ groupId, sender: cidB_onA, text: 'ack' }]);
+
+    // both sides persist the group history (own + peer messages)
+    const aHist = await a.groupHistory(groupId);
+    expect(aHist.map((m) => `${m.direction}:${m.text}`)).toEqual(['out:team, sync at 1500', 'in:ack']);
+
     await a.stop();
     await b.stop();
   });

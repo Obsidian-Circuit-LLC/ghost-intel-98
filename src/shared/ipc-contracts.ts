@@ -92,10 +92,16 @@ export const channels = {
     sendFile: 'chat:sendFile',
     saveFile: 'chat:saveFile',
     history: 'chat:history',
+    createGroup: 'chat:createGroup',
+    listGroups: 'chat:listGroups',
+    groupHistory: 'chat:groupHistory',
+    sendGroup: 'chat:sendGroup',
     onMessage: 'chat:onMessage',
     onContactStatus: 'chat:onContactStatus',
     onDelivery: 'chat:onDelivery',
     onFileStatus: 'chat:onFileStatus',
+    onGroupMessage: 'chat:onGroupMessage',
+    onGroupInvite: 'chat:onGroupInvite',
     onTorStatus: 'chat:onTorStatus'
   },
   mail: {

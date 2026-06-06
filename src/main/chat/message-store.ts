@@ -32,15 +32,22 @@ export interface ChatMessage {
   kind?: 'text' | 'file'; // omitted ⇒ 'text' (legacy rows predate this field)
   text: string; // for file messages this is the display label (the file name)
   file?: ChatFileMeta;
+  sender?: string; // group messages only: contactId (hex) of the author; absent in 1:1 (implicit)
   state: MessageState;
 }
 
 export class MessageStore {
   private chain: Promise<unknown> = Promise.resolve();
-  constructor(private readonly dir: string, private readonly maxHistory: number = MAX_HISTORY) {}
+  /** keyPattern bounds the conversation key used as a filename. Default = 1:1 contactId (64-hex sha256
+   *  pair fingerprint); group histories pass a 32-hex groupId pattern. */
+  constructor(
+    private readonly dir: string,
+    private readonly maxHistory: number = MAX_HISTORY,
+    private readonly keyPattern: RegExp = /^[0-9a-f]{64}$/
+  ) {}
 
   private file(contactId: string): string {
-    if (!/^[0-9a-f]{64}$/.test(contactId)) throw new Error('bad contactId');
+    if (!this.keyPattern.test(contactId)) throw new Error('bad conversation key');
     return join(this.dir, `${contactId}.json`);
   }
   private serialize<T>(fn: () => Promise<T>): Promise<T> {
