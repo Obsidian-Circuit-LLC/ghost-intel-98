@@ -90,6 +90,7 @@ export const channels = {
     listContacts: 'chat:listContacts',
     send: 'chat:send',
     sendFile: 'chat:sendFile',
+    shareAttachment: 'chat:shareAttachment',
     saveFile: 'chat:saveFile',
     history: 'chat:history',
     createGroup: 'chat:createGroup',

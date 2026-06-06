@@ -184,6 +184,7 @@ export interface GhostApi {
     listContacts(): Promise<ChatContactDTO[]>;
     send(contactId: string, text: string): Promise<string>;
     sendFile(contactId: string): Promise<string | null>;
+    shareAttachment(contactId: string, caseId: string, fileName: string): Promise<string>;
     saveFile(contactId: string, transferId: string): Promise<string | null>;
     history(contactId: string): Promise<ChatMessageDTO[]>;
     createGroup(name: string, memberIds: string[]): Promise<string>;

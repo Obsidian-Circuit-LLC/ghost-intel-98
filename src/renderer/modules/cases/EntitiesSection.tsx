@@ -8,6 +8,7 @@ import type { AttachmentMeta, EntityRecord, EntityRelationship, EntityType, Reso
 import { ENTITY_TYPES, ENTITY_RELATIONSHIPS } from '@shared/types';
 import { confirmDialog } from '../../state/dialogs';
 import { toast } from '../../state/toasts';
+import { ChatSharePicker, type ShareTarget } from '../../components/ChatSharePicker';
 
 const BUCKETS: { key: EntityRelationship | 'untagged'; label: string }[] = [
   { key: 'family', label: 'Family' },
@@ -102,12 +103,31 @@ function EntityRow({ caseId, item, attachments, onRefresh }: {
   onRefresh(): void | Promise<void>;
 }): JSX.Element {
   const [otherCases, setOtherCases] = useState<{ caseId: string; title: string }[] | null>(null);
+  const [sharing, setSharing] = useState(false);
 
   async function showCrossCase(): Promise<void> {
     try {
       const cases = await window.api.entities.casesForEntity(item.entity.id);
       setOtherCases(cases.filter((c) => c.caseId !== caseId));
     } catch { setOtherCases([]); }
+  }
+
+  function entitySummary(): string {
+    const e = item.entity;
+    const lines = [`Case entity — ${e.type}: ${e.value}`];
+    if (e.aliases.length) lines.push(`aliases: ${e.aliases.join(', ')}`);
+    if (e.notes.trim()) lines.push(`notes: ${e.notes.trim()}`);
+    return lines.join('\n');
+  }
+
+  async function shareTo(t: ShareTarget): Promise<void> {
+    setSharing(false);
+    try {
+      const text = entitySummary();
+      if (t.kind === 'group') await window.api.chat.sendGroup(t.id, text);
+      else await window.api.chat.send(t.id, text);
+      toast.info(`Shared entity to ${t.name}`);
+    } catch (e) { toast.error(`Share failed: ${(e as Error).message}`); }
   }
 
   return (
@@ -135,6 +155,7 @@ function EntityRow({ caseId, item, attachments, onRefresh }: {
           </select>
         )}
         <button onClick={() => void showCrossCase()} title="Other cases with this entity">⤢</button>
+        <button onClick={() => setSharing(true)} title="Share a summary of this entity to a chat contact or group">📤</button>
         <button onClick={async () => {
           const ok = await confirmDialog(`Unlink "${item.entity.value}" from this case? The entity stays in the registry.`, 'Unlink entity');
           if (!ok) return;
@@ -146,6 +167,14 @@ function EntityRow({ caseId, item, attachments, onRefresh }: {
         <div style={{ fontSize: 11, background: '#f4f4f4', border: '1px solid #d0d0d0', margin: '4px 0 0 8px', padding: 6 }}>
           {otherCases.length === 0 ? 'Not referenced in any other case.' : <>Also in: {otherCases.map((c) => c.title).join(', ')}</>}
         </div>
+      )}
+      {sharing && (
+        <ChatSharePicker
+          title={`Share "${item.entity.value}" to…`}
+          allowGroups
+          onPick={(t) => void shareTo(t)}
+          onClose={() => setSharing(false)}
+        />
       )}
     </li>
   );

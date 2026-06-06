@@ -12,7 +12,7 @@ import { randomUUID } from 'node:crypto';
 import { createServer, type AddressInfo } from 'node:net';
 import { dataRoot } from '../storage/paths';
 import { channels } from '@shared/ipc-contracts';
-import { settingsStore } from '../storage/json-fs';
+import { settingsStore, fileStore } from '../storage/json-fs';
 import { secureReadFile, secureWriteFile } from '../storage/secure-fs';
 import { ChatEngine, type ContactStatus, type FileStatus, type QuarantineSink } from '../chat/engine';
 import { TorTransport, torPaths } from '../chat/transport-tor';
@@ -215,6 +215,20 @@ export async function sendFile(cid: string, getWindow: () => BrowserWindow | nul
   const name = basename(path);
   const mime = mimeFromName(name);
   return eng.sendFile(cid, name, mime, new Uint8Array(buf));
+}
+
+/** Share a case attachment into a 1:1 chat: read its decrypted bytes from the case store and stream
+ *  them as a Phase-2 file transfer. caseId/fileName are validated at the IPC boundary; the path is
+ *  confined under the per-case attachments dir by attachmentAbsolutePath. Returns the message id. */
+export async function shareAttachment(cid: string, caseId: string, fileName: string): Promise<string> {
+  const eng = requireEngine();
+  const path = fileStore.attachmentAbsolutePath(caseId, fileName);
+  const buf = await secureReadFile(path); // decrypts from the at-rest case store
+  if (buf.length === 0) throw new Error('Attachment is empty.');
+  if (buf.length > MAX_SEND_FILE_BYTES) throw new Error(`Attachment too large to share (max ${MAX_SEND_FILE_BYTES / (1024 * 1024)} MiB).`);
+  const meta = (await fileStore.listAttachments(caseId)).find((a) => a.fileName === fileName);
+  const name = meta?.originalName ?? fileName;
+  return eng.sendFile(cid, name, mimeFromName(name), new Uint8Array(buf));
 }
 
 /** Decrypt a completed inbound file from the at-rest quarantine. Returns the peer-supplied name (the

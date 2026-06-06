@@ -93,6 +93,7 @@ const api = {
     listContacts: () => ipcRenderer.invoke(channels.chat.listContacts),
     send: (contactId: string, text: string) => ipcRenderer.invoke(channels.chat.send, contactId, text),
     sendFile: (contactId: string) => ipcRenderer.invoke(channels.chat.sendFile, contactId),
+    shareAttachment: (contactId: string, caseId: string, fileName: string) => ipcRenderer.invoke(channels.chat.shareAttachment, contactId, caseId, fileName),
     saveFile: (contactId: string, transferId: string) => ipcRenderer.invoke(channels.chat.saveFile, contactId, transferId),
     history: (contactId: string) => ipcRenderer.invoke(channels.chat.history, contactId),
     createGroup: (name: string, memberIds: string[]) => ipcRenderer.invoke(channels.chat.createGroup, name, memberIds),

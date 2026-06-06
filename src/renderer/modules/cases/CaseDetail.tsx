@@ -12,6 +12,7 @@ import { confirmDialog, promptDialog } from '../../state/dialogs';
 import { toast } from '../../state/toasts';
 import { EntitiesSection } from './EntitiesSection';
 import { BioImagesSection } from './BioImagesSection';
+import { ChatSharePicker, type ShareTarget } from '../../components/ChatSharePicker';
 
 interface Props {
   record: CaseRecord;
@@ -300,6 +301,16 @@ function AttachmentRow({ caseId, att, onRefresh }: {
   const [showDetails, setShowDetails] = useState(false);
   const [meta, setMeta] = useState<ExtractedAttachmentMeta | null>(null);
   const [showGps, setShowGps] = useState(false);
+  const [sharing, setSharing] = useState(false);
+
+  async function shareTo(t: ShareTarget): Promise<void> {
+    setSharing(false);
+    try {
+      await window.api.chat.shareAttachment(t.id, caseId, att.fileName);
+      toast.success(`Sharing ${att.originalName} to ${t.name}…`);
+      void window.api.cases.addTimeline(caseId, { kind: 'view', message: `Shared ${att.originalName} to a chat contact` }).then(() => onRefresh());
+    } catch (e) { toast.error(`Share failed: ${(e as Error).message}`); }
+  }
 
   async function toggleDetails(): Promise<void> {
     const next = !showDetails;
@@ -338,6 +349,7 @@ function AttachmentRow({ caseId, att, onRefresh }: {
           catch (err) { toast.error(`Rename failed: ${(err as Error).message}`); }
         }}>Rename</button>
         <button onClick={() => void toggleDetails()} title="File metadata">{showDetails ? '▾' : 'ⓘ'}</button>
+        <button onClick={() => setSharing(true)} title="Share this attachment to a chat contact (1:1)">📤</button>
         <button onClick={async () => {
           const ok = await confirmDialog(`Send ${att.originalName} to Shred?`, 'Shred attachment');
           if (!ok) return;
@@ -360,6 +372,14 @@ function AttachmentRow({ caseId, att, onRefresh }: {
             </div>
           )}
         </div>
+      )}
+      {sharing && (
+        <ChatSharePicker
+          title={`Share "${att.originalName}" to…`}
+          allowGroups={false}
+          onPick={(t) => void shareTo(t)}
+          onClose={() => setSharing(false)}
+        />
       )}
     </li>
   );

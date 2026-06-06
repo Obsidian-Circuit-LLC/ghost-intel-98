@@ -223,6 +223,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.chat.listContacts, () => chat.listContacts());
   safeHandle(channels.chat.send, (...a) => chat.send(ensureContactId(a[0]), ensureChatText(a[1])));
   safeHandle(channels.chat.sendFile, (...a) => chat.sendFile(ensureContactId(a[0]), getWindow));
+  safeHandle(channels.chat.shareAttachment, (...a) => chat.shareAttachment(ensureContactId(a[0]), ensureUuid(a[1], 'caseId'), ensureFileName(a[2], 'fileName')));
   safeHandle(channels.chat.saveFile, async (...a) => {
     const cid = ensureContactId(a[0]);
     const transferId = ensureTransferId(a[1]);
