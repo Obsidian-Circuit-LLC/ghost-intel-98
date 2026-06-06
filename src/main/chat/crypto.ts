@@ -145,6 +145,11 @@ export function sha256(data: Uint8Array): Uint8Array {
   return u8(nodeCrypto.createHash('sha256').update(data).digest());
 }
 
+/** HMAC-SHA256 — used for the cheap token pre-gate (mac_T) that fails before any asymmetric op. */
+export function hmacSha256(key: Uint8Array, msg: Uint8Array): Uint8Array {
+  return u8(nodeCrypto.createHmac('sha256', key).update(msg).digest());
+}
+
 export function randomBytes(n: number): Uint8Array {
   return u8(nodeCrypto.randomBytes(n));
 }
