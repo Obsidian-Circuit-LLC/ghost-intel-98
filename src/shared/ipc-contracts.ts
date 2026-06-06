@@ -89,10 +89,13 @@ export const channels = {
     acceptInvite: 'chat:acceptInvite',
     listContacts: 'chat:listContacts',
     send: 'chat:send',
+    sendFile: 'chat:sendFile',
+    saveFile: 'chat:saveFile',
     history: 'chat:history',
     onMessage: 'chat:onMessage',
     onContactStatus: 'chat:onContactStatus',
     onDelivery: 'chat:onDelivery',
+    onFileStatus: 'chat:onFileStatus',
     onTorStatus: 'chat:onTorStatus'
   },
   mail: {

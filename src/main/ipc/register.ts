@@ -199,6 +199,10 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     if (typeof v !== 'string' || v.length > 8192 || !v.startsWith('dcs98chat://invite/')) throw new Error('Invalid invite link');
     return v;
   };
+  const ensureTransferId = (v: unknown): string => {
+    if (typeof v !== 'string' || !/^[0-9a-f]{32}$/.test(v)) throw new Error('Invalid transferId');
+    return v;
+  };
   safeHandle(channels.chat.status, () => chat.status());
   safeHandle(channels.chat.enable, () => chat.enable(getWindow));
   safeHandle(channels.chat.disable, () => chat.disable());
@@ -206,6 +210,8 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.chat.acceptInvite, (...a) => chat.acceptInvite(ensureInviteLink(a[0])));
   safeHandle(channels.chat.listContacts, () => chat.listContacts());
   safeHandle(channels.chat.send, (...a) => chat.send(ensureContactId(a[0]), ensureChatText(a[1])));
+  safeHandle(channels.chat.sendFile, (...a) => chat.sendFile(ensureContactId(a[0]), getWindow));
+  safeHandle(channels.chat.saveFile, (...a) => chat.saveFile(ensureContactId(a[0]), ensureTransferId(a[1]), getWindow));
   safeHandle(channels.chat.history, (...a) => chat.history(ensureContactId(a[0])));
 
   // ---- auth (login / encrypt-at-rest) ----

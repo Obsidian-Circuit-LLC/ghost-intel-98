@@ -84,12 +84,22 @@ export interface ChatContactDTO {
   lastSeen: number | null;
   safetyNumber: string;
 }
+export interface ChatFileDTO {
+  transferId: string;
+  name: string;
+  size: number;
+  mime: string;
+  status: 'transferring' | 'complete' | 'failed';
+  quarantinePath?: string | null;
+}
 export interface ChatMessageDTO {
   id: string;
   direction: 'in' | 'out';
   seq: number;
   ts: number;
+  kind?: 'text' | 'file';
   text: string;
+  file?: ChatFileDTO;
   state: 'queued' | 'sent' | 'delivered' | 'received';
 }
 
@@ -165,10 +175,13 @@ export interface GhostApi {
     acceptInvite(link: string): Promise<string>;
     listContacts(): Promise<ChatContactDTO[]>;
     send(contactId: string, text: string): Promise<string>;
+    sendFile(contactId: string): Promise<string | null>;
+    saveFile(contactId: string, transferId: string): Promise<string | null>;
     history(contactId: string): Promise<ChatMessageDTO[]>;
     onMessage(cb: (p: { contactId: string; message: ChatMessageDTO }) => void): () => void;
     onContactStatus(cb: (p: { contactId: string; status: 'online' | 'connecting' | 'offline' }) => void): () => void;
     onDelivery(cb: (p: { contactId: string; messageId: string; state: 'sent' | 'delivered' }) => void): () => void;
+    onFileStatus(cb: (p: { contactId: string; transferId: string; status: 'transferring' | 'complete' | 'failed'; progress?: { received: number; total: number } }) => void): () => void;
     onTorStatus(cb: (p: { status: string; onion: string | null }) => void): () => void;
   };
   mail: {

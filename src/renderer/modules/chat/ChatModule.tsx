@@ -13,6 +13,12 @@ import type { ChatContactDTO, ChatMessageDTO } from '../../../preload/api';
 
 type Status = 'online' | 'connecting' | 'offline';
 
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export function ChatModule(): JSX.Element {
   const settings = useSettings((s) => s.settings);
   const patch = useSettings((s) => s.patch);
@@ -50,8 +56,11 @@ export function ChatModule(): JSX.Element {
     const offDelivery = window.api.chat.onDelivery(({ contactId }) => {
       if (selectedRef.current === contactId) loadHistory(contactId);
     });
+    const offFile = window.api.chat.onFileStatus(({ contactId }) => {
+      if (selectedRef.current === contactId) loadHistory(contactId);
+    });
     const offTor = window.api.chat.onTorStatus(({ onion: o }) => setOnion(o));
-    return () => { offMsg(); offStatus(); offDelivery(); offTor(); };
+    return () => { offMsg(); offStatus(); offDelivery(); offFile(); offTor(); };
   }, [refreshContacts, loadHistory]);
 
   const enable = useCallback(async () => {
@@ -96,6 +105,29 @@ export function ChatModule(): JSX.Element {
   }, [acceptLink, refreshContacts, loadHistory]);
 
   const open = useCallback((cid: string) => { setSelected(cid); loadHistory(cid); }, [loadHistory]);
+
+  const attach = useCallback(async () => {
+    if (!selected) return;
+    setBusy(true);
+    try {
+      const id = await window.api.chat.sendFile(selected);
+      if (id) loadHistory(selected); // null = user cancelled the picker
+    } catch (e) {
+      toast.error(`Send file failed: ${(e as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  }, [selected, loadHistory]);
+
+  const saveFile = useCallback(async (transferId: string) => {
+    if (!selected) return;
+    try {
+      const path = await window.api.chat.saveFile(selected, transferId);
+      if (path) toast.info(`Saved to ${path}`);
+    } catch (e) {
+      toast.error(`Save failed: ${(e as Error).message}`);
+    }
+  }, [selected]);
 
   const send = useCallback(async () => {
     const text = draft.trim();
@@ -183,9 +215,21 @@ export function ChatModule(): JSX.Element {
                 <div style={{ flex: 1, overflowY: 'auto', padding: 8, fontSize: 12 }}>
                   {history.map((m) => (
                     <div key={m.id} style={{ marginBottom: 4, textAlign: m.direction === 'out' ? 'right' : 'left' }}>
-                      <span style={{ background: m.direction === 'out' ? '#d3e8ff' : '#eee', padding: '2px 6px', borderRadius: 3, display: 'inline-block', maxWidth: '80%', wordBreak: 'break-word' }}>
-                        {m.text}
-                      </span>
+                      {m.kind === 'file' && m.file ? (
+                        <span style={{ background: m.direction === 'out' ? '#d3e8ff' : '#eee', padding: '4px 8px', borderRadius: 3, display: 'inline-block', maxWidth: '80%', textAlign: 'left' }}>
+                          <div>📎 <b>{m.file.name}</b> <span style={{ opacity: 0.6, fontSize: 10 }}>({formatBytes(m.file.size)})</span></div>
+                          <div style={{ fontSize: 10, opacity: 0.7 }}>
+                            {m.file.status === 'transferring' ? 'transferring…' : m.file.status === 'failed' ? '⚠ transfer failed' : 'received'}
+                          </div>
+                          {m.direction === 'in' && m.file.status === 'complete' && (
+                            <button style={{ marginTop: 2, fontSize: 11 }} onClick={() => void saveFile(m.file!.transferId)}>Save…</button>
+                          )}
+                        </span>
+                      ) : (
+                        <span style={{ background: m.direction === 'out' ? '#d3e8ff' : '#eee', padding: '2px 6px', borderRadius: 3, display: 'inline-block', maxWidth: '80%', wordBreak: 'break-word' }}>
+                          {m.text}
+                        </span>
+                      )}
                       {m.direction === 'out' && (
                         <span style={{ fontSize: 9, opacity: 0.6, marginLeft: 4 }}>
                           {m.state === 'delivered' ? '✓✓' : m.state === 'sent' ? '✓' : '🕗'}
@@ -203,6 +247,7 @@ export function ChatModule(): JSX.Element {
                     onChange={(e) => setDraft(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') void send(); }}
                   />
+                  <button onClick={() => void attach()} disabled={busy} title="Send a file">📎</button>
                   <button onClick={() => void send()} disabled={!draft.trim()}>Send</button>
                 </div>
               </>

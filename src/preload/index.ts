@@ -92,6 +92,8 @@ const api = {
     acceptInvite: (link: string) => ipcRenderer.invoke(channels.chat.acceptInvite, link),
     listContacts: () => ipcRenderer.invoke(channels.chat.listContacts),
     send: (contactId: string, text: string) => ipcRenderer.invoke(channels.chat.send, contactId, text),
+    sendFile: (contactId: string) => ipcRenderer.invoke(channels.chat.sendFile, contactId),
+    saveFile: (contactId: string, transferId: string) => ipcRenderer.invoke(channels.chat.saveFile, contactId, transferId),
     history: (contactId: string) => ipcRenderer.invoke(channels.chat.history, contactId),
     onMessage: (cb: (p: { contactId: string; message: unknown }) => void) => {
       const l = (_e: unknown, p: { contactId: string; message: unknown }) => cb(p);
@@ -107,6 +109,11 @@ const api = {
       const l = (_e: unknown, p: { contactId: string; messageId: string; state: string }) => cb(p);
       ipcRenderer.on(channels.chat.onDelivery, l);
       return () => ipcRenderer.removeListener(channels.chat.onDelivery, l);
+    },
+    onFileStatus: (cb: (p: { contactId: string; transferId: string; status: string; progress?: { received: number; total: number } }) => void) => {
+      const l = (_e: unknown, p: { contactId: string; transferId: string; status: string; progress?: { received: number; total: number } }) => cb(p);
+      ipcRenderer.on(channels.chat.onFileStatus, l);
+      return () => ipcRenderer.removeListener(channels.chat.onFileStatus, l);
     },
     onTorStatus: (cb: (p: { status: string; onion: string | null }) => void) => {
       const l = (_e: unknown, p: { status: string; onion: string | null }) => cb(p);
