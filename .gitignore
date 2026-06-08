@@ -60,3 +60,7 @@ resources/piper/win-x64/
 # The README + C source ARE committed; the compiled binaries are not.
 resources/mlkem/*/mlkem-helper
 resources/mlkem/*/mlkem-helper.exe
+
+# Bundled ExifTool (operator-supplied per platform; see resources/exiftool/README-EXIFTOOL.txt).
+# The README is committed; the binaries/Perl distribution are not.
+resources/exiftool/*/
