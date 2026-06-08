@@ -38,6 +38,7 @@ function makeInviteStore(responder: IdentityKeyPair): ResponderInviteStore & {
     async consume(prekeyId) {
       map.delete(hex(prekeyId)); // one-time
     },
+    async release() { /* no reservation tracking in this in-memory test store */ },
     async issueNext() {
       const { prekey, secretKey } = await generateKemPrekey(responder);
       map.set(hex(prekey.prekeyId), { prekey, secretKey, token: null });

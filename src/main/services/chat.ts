@@ -31,6 +31,7 @@ let engine: ChatEngine | null = null;
 let identity: IdentityKeyPair | null = null;
 let contactStore: ContactStore | null = null;
 let mlkem: MlkemSidecar | null = null;
+let enabling: Promise<{ onion: string | null }> | null = null;
 let stallTimer: ReturnType<typeof setInterval> | null = null;
 
 /** Reap inbound transfers idle longer than this (slow-loris / stalled-peer memory guard). */
@@ -84,8 +85,16 @@ export function status(): { enabled: boolean; onion: string | null } {
 }
 
 /** Build + start the engine (spawns tor, publishes the onion). Requires the opt-in setting. */
-export async function enable(getWindow: () => BrowserWindow | null): Promise<{ onion: string | null }> {
-  if (engine) return { onion: engine.onionAddress() };
+// Serialize enable: a double-trigger (double-click / IPC retry / retry-after-failure) must not spawn a
+// second tor + ML-KEM helper. Return the in-flight start if one is already underway.
+export function enable(getWindow: () => BrowserWindow | null): Promise<{ onion: string | null }> {
+  if (engine) return Promise.resolve({ onion: engine.onionAddress() });
+  if (enabling) return enabling;
+  enabling = enableImpl(getWindow).finally(() => { enabling = null; });
+  return enabling;
+}
+
+async function enableImpl(getWindow: () => BrowserWindow | null): Promise<{ onion: string | null }> {
   if (!(await settingsStore.read()).chat.networkEnabled) {
     throw new Error('Chat networking is disabled — enable it in Settings first.');
   }

@@ -25,7 +25,12 @@ const PLATFORMS = [
 ];
 
 // Fill these once binaries are built + reviewed in CI (lowercase hex). Empty = unpinned (printed only).
-const PINNED = { 'linux-x64': '', 'win-x64': '', 'mac-x64': '', 'mac-arm64': '' };
+const PINNED = {
+  'linux-x64': '028cd33a7fbcc03999683b77e653c17e33fd43da4c89ef9f9aaa2c79927a75c3',
+  'win-x64': 'b955444d5f06d5beb4c3d5f4135d8ad4c2c14f8f8ccd91d3f3127f2a7a945b31',
+  'mac-x64': '',
+  'mac-arm64': ''
+};
 
 let failed = false;
 let present = 0;

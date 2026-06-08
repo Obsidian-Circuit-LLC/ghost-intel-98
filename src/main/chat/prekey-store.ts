@@ -35,6 +35,11 @@ const unb64 = (s: string): Uint8Array => new Uint8Array(Buffer.from(s, 'base64')
 const hex = (u: Uint8Array): string => Buffer.from(u).toString('hex');
 export class PrekeyStore {
   private chain: Promise<unknown> = Promise.resolve();
+  // One-time prekeyIds currently in-flight in a handshake. Closes a lookup→consume TOCTOU under the
+  // engine's concurrent inbound dispatch: without it, two streams replaying the same one-time prekeyId
+  // both pass lookup before either consumes, serving one "one-time" prekey to two sessions (a PQ-FS /
+  // replay regression, gate C-2). In-memory (per process) — consumption durability is unchanged.
+  private readonly reserved = new Set<string>();
 
   constructor(private readonly file: string, private readonly identity: IdentityKeyPair) {}
 
@@ -95,17 +100,34 @@ export class PrekeyStore {
   }
 
   // ---- ResponderInviteStore ----
-  async lookup(prekeyId: Uint8Array): Promise<{ prekey: KemPrekey; secretKey: Uint8Array; token: Uint8Array | null } | null> {
-    const f = await this.read();
-    const id = hex(prekeyId);
-    const s = f.oneTime.find((x) => x.pid === id) ?? (f.lastResort?.pid === id ? f.lastResort : null);
-    return s ? this.hydrate(s) : null;
+  // Reserve-on-lookup (inside the serialized chain): a one-time prekey is atomically marked in-flight, so a
+  // concurrent handshake replaying the same prekeyId gets null. The reservation is released on abort
+  // (release) or finalized on success (consume). Last-resort is reusable, so it is never reserved.
+  lookup(prekeyId: Uint8Array): Promise<{ prekey: KemPrekey; secretKey: Uint8Array; token: Uint8Array | null } | null> {
+    return this.serialize(async () => {
+      const f = await this.read();
+      const id = hex(prekeyId);
+      const oneTime = f.oneTime.find((x) => x.pid === id);
+      if (oneTime) {
+        if (this.reserved.has(id)) return null; // already in-flight in another handshake — fail closed
+        this.reserved.add(id);
+        return this.hydrate(oneTime);
+      }
+      if (f.lastResort?.pid === id) return this.hydrate(f.lastResort);
+      return null;
+    });
+  }
+
+  /** Release a reservation taken by lookup() when the handshake aborts before consuming the prekey. */
+  release(prekeyId: Uint8Array): Promise<void> {
+    return this.serialize(async () => { this.reserved.delete(hex(prekeyId)); });
   }
 
   consume(prekeyId: Uint8Array): Promise<void> {
     return this.serialize(async () => {
       const f = await this.read();
       const id = hex(prekeyId);
+      this.reserved.delete(id);
       if (f.lastResort?.pid === id) return; // last-resort is reused — never consumed
       const before = f.oneTime.length;
       f.oneTime = f.oneTime.filter((x) => x.pid !== id);

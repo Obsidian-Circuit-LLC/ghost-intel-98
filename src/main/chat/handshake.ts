@@ -54,6 +54,8 @@ export interface ResponderInviteStore {
   lookup(prekeyId: Uint8Array): Promise<{ prekey: KemPrekey; secretKey: Uint8Array; token: Uint8Array | null } | null>;
   /** Durably consume a one-time prekey/token (no-op for last-resort). Must fsync before returning. */
   consume(prekeyId: Uint8Array): Promise<void>;
+  /** Release a reservation taken by lookup() when the handshake aborts before consume(). */
+  release(prekeyId: Uint8Array): Promise<void>;
   /** A fresh signed prekey to hand the peer for next time (rotation). */
   issueNext(): Promise<KemPrekey>;
 }
@@ -239,6 +241,7 @@ async function responderHandshakeImpl(stream: ChatStream, opts: ResponderOpts): 
   const rec = await invites.lookup(prekeyId);
   if (!rec) throw new HandshakeError('unknown or consumed prekey');
   const { prekey, secretKey, token } = rec;
+  try {
 
   const th0 = h(PROTO_LABEL, SUITE_ID, Uint8Array.of(modeByte));
   const th1 = h(
@@ -307,6 +310,12 @@ async function responderHandshakeImpl(stream: ChatStream, opts: ResponderOpts): 
 
   zeroize(xeR.secretKey, secretKey, ssPre, encI.sharedSecret, ck, hk1, hk2, rk);
   return { session, peer, mode: firstContact ? 'first_contact' : 'reconnect' };
+  } catch (e) {
+    // Abort before durable consume() ⇒ release the one-time-prekey reservation so a failed/forged Msg1
+    // can't strand it (consume() already cleared it on the success path, so this is then a no-op).
+    await invites.release(prekeyId);
+    throw e;
+  }
 }
 
 const ROLE_I = new TextEncoder().encode('I');

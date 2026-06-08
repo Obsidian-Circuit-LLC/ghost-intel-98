@@ -33,6 +33,21 @@ describe('PrekeyStore', () => {
     expect(await store.lookup(prekey.prekeyId)).toBeNull(); // gone after consume
   });
 
+  it('reserves a one-time prekey on lookup so a concurrent replay gets null (TOCTOU guard)', async () => {
+    const id = generateIdentity();
+    const store = new PrekeyStore(await tmp('prekeys.json'), id);
+    const { prekey } = await store.issueFirstContactInvite();
+    // Two concurrent lookups of the same one-time prekeyId (the double-consume attack): exactly one wins.
+    const [a, b] = await Promise.all([store.lookup(prekey.prekeyId), store.lookup(prekey.prekeyId)]);
+    expect([a, b].filter((r) => r !== null)).toHaveLength(1);
+    // Releasing the reservation (handshake-abort path) makes it available again…
+    await store.release(prekey.prekeyId);
+    expect(await store.lookup(prekey.prekeyId)).not.toBeNull();
+    // …and consume() finalizes it for good.
+    await store.consume(prekey.prekeyId);
+    expect(await store.lookup(prekey.prekeyId)).toBeNull();
+  });
+
   it('reloads consumption state from disk (durability round-trip)', async () => {
     const id = generateIdentity();
     const path = await tmp('prekeys.json');

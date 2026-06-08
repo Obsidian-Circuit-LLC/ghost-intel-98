@@ -3,8 +3,9 @@
  *
  *  - Classical leg via Node's built-in `crypto` (the same engine the vault trusts for AES-256-GCM /
  *    scrypt): X25519 ECDH, Ed25519 sign/verify, ChaCha20-Poly1305 AEAD, HKDF-SHA-256, SHA-256.
- *  - PQ leg: ML-KEM-1024 delegated to an injected `MlkemProvider` — production wires the AWS-LC
- *    FIPS-validated sidecar (services/mlkem-sidecar.ts); tests inject an in-process reference. crypto.ts
+ *  - PQ leg: ML-KEM-1024 delegated to an injected `MlkemProvider` — production wires the AWS-LC sidecar
+ *    (FIPS-validated only where a FIPS-build helper is shipped; see services/mlkem-sidecar.ts). Tests
+ *    inject an in-process reference. crypto.ts
  *    holds NO ML-KEM implementation; this is the single ML-KEM seam, and the wrappers are async
  *    because the provider runs out-of-process.
  *

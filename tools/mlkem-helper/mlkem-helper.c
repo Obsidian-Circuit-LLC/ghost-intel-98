@@ -1,7 +1,8 @@
 /*
  * DCS98 ML-KEM-1024 helper — the native sidecar the chat handshake's KEM leg delegates to.
- * Links AWS-LC's libcrypto (production: the FIPS-validated module build; FIPS power-on self-test runs
- * at library init). Speaks a tiny length-prefixed binary protocol over stdin/stdout; the client is
+ * Links AWS-LC's libcrypto. For the FIPS posture, build against AWS-LC's FIPS-validated release (which
+ * runs a power-on self-test at init); a regular/cross build is functionally correct ML-KEM-1024 but is
+ * NOT the validated module. Speaks a tiny length-prefixed binary protocol over stdin/stdout; the client is
  * src/main/services/mlkem-sidecar.ts. No sockets, no files, no network — pure stdio.
  *
  *   request  = op(1) | len(4 BE) | payload
@@ -14,6 +15,7 @@
  */
 #include <openssl/evp.h>
 #include <openssl/nid.h>
+#include <openssl/mem.h>   /* OPENSSL_cleanse */
 #include <errno.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -84,6 +86,7 @@ static int do_keygen(void) {
   if (EVP_PKEY_get_raw_public_key(pkey, out, &publen) <= 0 || publen != PUB_LEN) { rc = fail("get_pub"); goto done; }
   if (EVP_PKEY_get_raw_private_key(pkey, out + PUB_LEN, &seclen) <= 0 || seclen != SEC_LEN) { rc = fail("get_sec"); goto done; }
   rc = respond(0, out, PUB_LEN + SEC_LEN);
+  OPENSSL_cleanse(out, sizeof(out)); /* out holds the secret key */
 done:
   if (pkey) EVP_PKEY_free(pkey);
   EVP_PKEY_CTX_free(ctx);
@@ -103,6 +106,7 @@ static int do_encap(const uint8_t *payload, uint32_t len) {
   if (!ctx) { rc = fail("ctx_new"); goto done; }
   if (EVP_PKEY_encapsulate(ctx, out, &ctlen, out + CT_LEN, &sslen) <= 0 || ctlen != CT_LEN || sslen != SS_LEN) { rc = fail("encap"); goto done; }
   rc = respond(0, out, CT_LEN + SS_LEN);
+  OPENSSL_cleanse(out, sizeof(out)); /* out holds the shared secret */
 done:
   if (ctx) EVP_PKEY_CTX_free(ctx);
   EVP_PKEY_free(pkey);
@@ -122,6 +126,7 @@ static int do_decap(const uint8_t *payload, uint32_t len) {
   if (!ctx) { rc = fail("ctx_new"); goto done; }
   if (EVP_PKEY_decapsulate(ctx, ss, &sslen, payload, CT_LEN) <= 0 || sslen != SS_LEN) { rc = fail("decap"); goto done; }
   rc = respond(0, ss, SS_LEN);
+  OPENSSL_cleanse(ss, sizeof(ss)); /* ss holds the shared secret */
 done:
   if (ctx) EVP_PKEY_CTX_free(ctx);
   EVP_PKEY_free(pkey);
@@ -152,6 +157,7 @@ int main(void) {
       case 3: rc = do_decap(payload, len); break;
       default: rc = fail("bad_op"); break;
     }
+    OPENSSL_cleanse(payload, sizeof(payload)); /* payload may have held a secret key (decap input) */
     if (rc < 0) return 1;        /* stdout write failed → exit */
   }
   return 0;

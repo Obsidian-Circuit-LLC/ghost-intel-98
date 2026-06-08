@@ -1,8 +1,10 @@
 /**
  * ML-KEM-1024 sidecar client (main process). The ML-KEM leg of the chat handshake is served by a
- * bundled native helper that links AWS-LC's FIPS-validated libcrypto — NOT by in-process JS — so the
- * KEM has audited, constant-time-designed, FIPS-tested implementations and is isolated from the V8
- * JIT. This module is the client: it spawns the long-lived helper (FIPS power-on self-test runs once),
+ * bundled native helper that links AWS-LC's libcrypto — NOT in-process JS — so the KEM has an audited,
+ * constant-time-designed implementation isolated from the V8 JIT. FIPS: when the helper is built from
+ * AWS-LC's FIPS-validated release it is the validated module and runs a power-on self-test at init; a
+ * regular/cross build (e.g. the current Windows mingw helper) is functionally correct ML-KEM-1024 but
+ * NOT the validated module. This module is the client: it spawns the long-lived helper,
  * speaks a tiny length-prefixed stdio protocol, and implements the `MlkemProvider` that crypto.ts
  * delegates to. Fail-closed: a missing/again-hash-mismatched/dead helper makes every ML-KEM op reject;
  * there is NO in-process fallback by design.
@@ -35,9 +37,9 @@ const OP_TIMEOUT_MS = 10_000;
 /** Per-platform pinned helper SHA-256 (verify-before-exec, fail-closed). Empty ⇒ dev/unpinned: the
  *  binary must still exist, but its hash isn't checked. CI pins these alongside fetch-mlkem.mjs. */
 const PINNED_SHA256: Record<string, string> = {
-  win32: '',
-  linux: '',
-  darwin: ''
+  win32: 'b955444d5f06d5beb4c3d5f4135d8ad4c2c14f8f8ccd91d3f3127f2a7a945b31',
+  linux: '028cd33a7fbcc03999683b77e653c17e33fd43da4c89ef9f9aaa2c79927a75c3',
+  darwin: '' // no mac helper built yet
 };
 
 function platformDir(): string {
@@ -83,7 +85,8 @@ export class MlkemSidecar implements MlkemProvider {
     proc.stdout.on('data', (d: Buffer) => this.onData(d));
     proc.on('exit', (code) => this.fail(new MlkemSidecarError(`ML-KEM helper exited (${code})`)));
     proc.on('error', (e) => this.fail(new MlkemSidecarError(`ML-KEM helper error: ${e.message}`)));
-    // Self-test: a keygen round-trip confirms the helper is alive and the FIPS POST passed.
+    // Liveness self-test: a keygen round-trip confirms the helper is alive and returns correct sizes.
+    // (This is a liveness check, NOT a FIPS power-on self-test — that only runs in a FIPS-module build.)
     const kp = await this.keygen();
     if (kp.publicKey.length !== MLKEM_PUBLIC_LEN || kp.secretKey.length !== MLKEM_SECRET_LEN) {
       throw new MlkemSidecarError('ML-KEM helper self-test returned wrong sizes');
@@ -100,12 +103,18 @@ export class MlkemSidecar implements MlkemProvider {
   private fail(e: Error): void {
     this.dead = e;
     if (this.pending) { clearTimeout(this.pending.timer); this.pending.reject(e); this.pending = null; }
+    // Kill a wedged/misbehaving helper so it can't linger (e.g. after a timeout); exit/error paths
+    // re-enter fail() harmlessly (the process is already gone).
+    const p = this.proc; this.proc = null; try { p?.kill(); } catch { /* already gone */ }
   }
 
   private onData(d: Buffer): void {
     this.buf = this.buf.length ? Buffer.concat([this.buf, d]) : d;
     if (!this.pending || this.buf.length < 5) return;
     const len = this.buf.readUInt32BE(1);
+    // Fast-fail an oversized/malformed frame instead of buffering up to 4 GiB. The largest legitimate
+    // response is a keygen (pub+sk); errors are short ascii — both well under this bound.
+    if (len > MLKEM_PUBLIC_LEN + MLKEM_SECRET_LEN) { this.fail(new MlkemSidecarError('ML-KEM helper response too large')); return; }
     if (this.buf.length < 5 + len) return;
     const status = this.buf[0];
     const payload = this.buf.subarray(5, 5 + len);
