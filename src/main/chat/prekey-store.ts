@@ -87,7 +87,7 @@ function rebuildPidToCid(issued: Record<string, IssuedEntry>): Record<string, st
   const rev: Record<string, string> = {};
   for (const [cid, entry] of Object.entries(issued)) {
     for (const p of entry.recent) rev[p] = cid;
-    if (entry.current) rev[entry.current] = cid; // current wins on any (improbable) collision
+    if (entry.current) rev[entry.current] = cid; // within this cid, current overwrites any recent entry for the same pid
   }
   return rev;
 }
@@ -138,9 +138,11 @@ export class PrekeyStore {
         oneTime: Array.isArray(p.oneTime) ? p.oneTime : [],
         lastResort: p.lastResort ?? null,
         issued,
-        // Trust a persisted reverse index only if it's a plain object; otherwise rebuild deterministically
-        // from `issued` (current first, then recent oldest-first) so the two stay consistent.
-        pidToCid: isPlainObject(p.pidToCid) ? (p.pidToCid as Record<string, string>) : rebuildPidToCid(issued),
+        // Never trust the persisted reverse index: ALWAYS rebuild it from `issued` (current first, then
+        // recent oldest-first). The rebuild is one cheap linear pass over already-sanitized data and is
+        // guaranteed consistent with `issued`, closing the type-safety gap where a corrupted file could
+        // smuggle non-string values past the isPlainObject guard.
+        pidToCid: rebuildPidToCid(issued),
       };
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === 'ENOENT') return empty();
