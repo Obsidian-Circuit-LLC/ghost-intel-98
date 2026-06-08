@@ -19,6 +19,8 @@ export interface Contact {
   lastSeen: number | null; // ms epoch (caller-stamped; never time() inside)
   /** The responder's rotation prekey for our next reconnect (we are the initiator). */
   nextPrekey: KemPrekey | null;
+  /** Per-contact gate key for the v4 reconnect-gate protocol. */
+  reconnectGateKey: Uint8Array | null;
 }
 
 interface StoredContact {
@@ -30,6 +32,7 @@ interface StoredContact {
   verified: boolean;
   lastSeen: number | null;
   nextPrekey: string | null; // b64 encodeKemPrekey
+  reconnectGateKey: string | null; // b64
 }
 
 const b64 = (u: Uint8Array): string => Buffer.from(u).toString('base64');
@@ -51,7 +54,8 @@ function toStored(c: Contact): StoredContact {
     displayName: c.displayName,
     verified: c.verified,
     lastSeen: c.lastSeen,
-    nextPrekey: c.nextPrekey ? b64(encodeKemPrekey(c.nextPrekey)) : null
+    nextPrekey: c.nextPrekey ? b64(encodeKemPrekey(c.nextPrekey)) : null,
+    reconnectGateKey: c.reconnectGateKey ? b64(c.reconnectGateKey) : null
   };
 }
 function fromStored(s: StoredContact): Contact {
@@ -69,7 +73,8 @@ function fromStored(s: StoredContact): Contact {
     displayName: s.displayName,
     verified: s.verified,
     lastSeen: s.lastSeen,
-    nextPrekey
+    nextPrekey,
+    reconnectGateKey: s.reconnectGateKey ? unb64(s.reconnectGateKey) : null
   };
 }
 
@@ -135,7 +140,8 @@ export class ContactStore {
           displayName: opts.displayName ?? id.slice(0, 12),
           verified: false,
           lastSeen: null,
-          nextPrekey: null
+          nextPrekey: null,
+          reconnectGateKey: null
         })
       );
       await this.write(list);
@@ -143,7 +149,7 @@ export class ContactStore {
   }
 
   /** Patch mutable fields of an existing contact. */
-  update(id: string, patch: Partial<Pick<Contact, 'onion' | 'displayName' | 'verified' | 'lastSeen' | 'nextPrekey'>>): Promise<void> {
+  update(id: string, patch: Partial<Pick<Contact, 'onion' | 'displayName' | 'verified' | 'lastSeen' | 'nextPrekey' | 'reconnectGateKey'>>): Promise<void> {
     return this.serialize(async () => {
       const list = await this.read();
       const c = list.find((x) => x.contactId === id);

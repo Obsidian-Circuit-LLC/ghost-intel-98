@@ -116,4 +116,15 @@ describe('ContactStore', () => {
     const store = new ContactStore(await tmp('contacts.json'));
     expect(await store.get(generateIdentity().publicKeys.ed25519)).toBeNull();
   });
+
+  it('persists and updates the reconnect gate key', async () => {
+    const store = new ContactStore(await tmp('contacts.json'));
+    const peer = generateIdentity().publicKeys;
+    await store.pin(peer);
+    const id = contactId(peer);
+    const rgk = new Uint8Array(32).fill(7);
+    await store.update(id, { reconnectGateKey: rgk });
+    const c = await store.getById(id);
+    expect(Array.from(c!.reconnectGateKey!)).toEqual(Array.from(rgk));
+  });
 });
