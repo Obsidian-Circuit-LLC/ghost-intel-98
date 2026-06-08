@@ -185,6 +185,7 @@ export interface GhostApi {
     createInvite(): Promise<string>;
     acceptInvite(link: string): Promise<string>;
     listContacts(): Promise<ChatContactDTO[]>;
+    setVerified(contactId: string, verified: boolean): Promise<void>;
     send(contactId: string, text: string): Promise<string>;
     sendFile(contactId: string): Promise<string | null>;
     shareAttachment(contactId: string, caseId: string, fileName: string): Promise<string>;

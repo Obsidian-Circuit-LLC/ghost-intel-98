@@ -319,6 +319,14 @@ export async function listContacts(): Promise<ChatContactDTO[]> {
   }));
 }
 
+/** Mark a contact verified / unverified. Set true only after the human has compared the safety number
+ *  out-of-band — this is the step the formal auth proofs assume (pinning-as-verified). Until then the UI
+ *  shows the contact as UNVERIFIED (TOFU-pinned, MITM-possible-on-first-contact). */
+export async function setVerified(cid: string, verified: boolean): Promise<void> {
+  if (!contactStore) throw new Error('chat is not enabled');
+  await contactStore.update(cid, { verified });
+}
+
 /** On app shutdown: stop the engine (kills tor, closes the onion). */
 export async function shutdown(): Promise<void> {
   await disable();
