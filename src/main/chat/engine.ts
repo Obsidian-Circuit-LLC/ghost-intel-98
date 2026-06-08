@@ -262,8 +262,11 @@ export class ChatEngine {
       prekey: c.nextPrekey,
       mode: 'reconnect'
     });
-    if (res.nextPrekey) await this.d.contacts.update(cid, { nextPrekey: res.nextPrekey, lastSeen: this.d.now() });
+    // Attach (subscribe the Connection to the stream) SYNCHRONOUSLY before any await, so a message the
+    // peer sends right after the handshake isn't lost in the gap before we're listening: the handshake
+    // reader has detached, and the transport does not buffer for a late subscriber.
     this.attach(cid, stream, res.session);
+    if (res.nextPrekey) await this.d.contacts.update(cid, { nextPrekey: res.nextPrekey, lastSeen: this.d.now() });
     return this.conns.get(cid) as Connection;
   }
 
@@ -275,8 +278,11 @@ export class ChatEngine {
         contacts: this.d.contacts
       });
       const cid = contactId(res.peer); // peer already pinned inside the handshake
-      await this.d.contacts.update(cid, { lastSeen: this.d.now() }).catch(() => { /* not yet a full contact row */ });
+      // Attach SYNCHRONOUSLY before the await below — otherwise the peer's first message can arrive in
+      // the gap before the Connection subscribes and be lost (the handshake reader has detached; the
+      // transport doesn't replay for late subscribers). See the handshake→session handoff fix.
       this.attach(cid, stream, res.session);
+      await this.d.contacts.update(cid, { lastSeen: this.d.now() }).catch(() => { /* not yet a full contact row */ });
     } catch {
       try { stream.close(); } catch { /* already closed */ }
     }

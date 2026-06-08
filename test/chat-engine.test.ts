@@ -19,15 +19,26 @@ async function makeEngine(
   onion: string,
   identity: IdentityKeyPair,
   events: ChatEngineEvents,
-  quarantine?: QuarantineSink
+  quarantine?: QuarantineSink,
+  contactsUpdateDelayMs = 0
 ): Promise<ChatEngine> {
   const dir = await mkdtemp(join(tmpdir(), 'dcs98-eng-'));
   let n = 0;
+  const contacts = new ContactStore(join(dir, 'contacts.json'));
+  if (contactsUpdateDelayMs > 0) {
+    // Widen the post-handshake window between responderHandshake resolving and attach() — to prove the
+    // handshake→session handoff no longer loses a message the peer sends in that gap (regression guard).
+    const realUpdate = contacts.update.bind(contacts);
+    (contacts as unknown as { update: typeof contacts.update }).update = async (...a: Parameters<typeof contacts.update>) => {
+      await new Promise((r) => setTimeout(r, contactsUpdateDelayMs));
+      return realUpdate(...a);
+    };
+  }
   const engine = new ChatEngine({
     identity,
     transport: new InMemoryTransport(net, onion),
     prekeys: new PrekeyStore(join(dir, 'prekeys.json'), identity),
-    contacts: new ContactStore(join(dir, 'contacts.json')),
+    contacts,
     messages: new MessageStore(join(dir, 'messages')),
     groups: new GroupStore(join(dir, 'groups.json')),
     groupMessages: new MessageStore(join(dir, 'gmsgs'), undefined, /^[0-9a-f]{32}$/),
@@ -83,6 +94,38 @@ describe('ChatEngine — end-to-end over the in-memory network (EXPERIMENTAL sta
     expect(aHist.map((m) => `${m.direction}:${m.text}`)).toEqual(['in:hello A, it is B', 'out:hi B, A here']);
     const bHist = await b.history(cidA_onB);
     expect(bHist.find((m) => m.id === m1)?.state).toBe('delivered');
+
+    await a.stop();
+    await b.stop();
+  });
+
+  it('does NOT lose the peer\'s first message sent in the post-handshake handoff gap (regression)', async () => {
+    const net = new InMemoryNetwork();
+    const idA = generateIdentity();
+    const idB = generateIdentity();
+    const aMsgs: { cid: string; text: string }[] = [];
+    // A is the RESPONDER (B accepts the invite → B dials A). Force A's post-handshake
+    // contacts.update to be slow so the gap between responderHandshake resolving and attach() is wide.
+    const a = await makeEngine(net, ONION_A, idA, { onMessage: (cid, m) => aMsgs.push({ cid, text: m.text }) }, undefined, 50);
+    const b = await makeEngine(net, ONION_B, idB, {});
+    await a.start();
+    await b.start();
+
+    const link = await a.createInvite();
+    const cidA_onB = await b.acceptInvite(link); // resolves once B (initiator) has attached
+    const cidB_onA = contactId(idB.publicKeys);
+    // Send IMMEDIATELY — no flush — so B's message hits A while A is still inside the widened gap.
+    await b.send(cidA_onB, 'first message in the gap');
+    await flush(120); // let A's delayed update finish + the message route
+
+    // Pre-fix: the orphaned handshake reader swallowed this frame → aMsgs empty + ratchet desync.
+    expect(aMsgs).toEqual([{ cid: cidB_onA, text: 'first message in the gap' }]);
+
+    // And the channel is still healthy afterwards (no counter desync / teardown).
+    await a.send(cidB_onA, 'reply after the gap');
+    await flush(20);
+    const bHist = await b.history(cidA_onB);
+    expect(bHist.some((m) => m.text === 'reply after the gap')).toBe(true);
 
     await a.stop();
     await b.stop();

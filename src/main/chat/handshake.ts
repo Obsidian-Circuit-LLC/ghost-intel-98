@@ -92,10 +92,15 @@ class HandshakeIO {
   private waiter: ((f: Uint8Array) => void) | null = null;
   private failure: Error | null = null;
   private rejectWaiter: ((e: Error) => void) | null = null;
+  private detached = false;
 
   constructor(private stream: ChatStream) {
     stream.onData((chunk) => {
-      if (this.failure) return;
+      // Once the handshake is done (detach()), this subscriber MUST go inert: the established
+      // Connection owns the stream now, and a post-handshake Msg frame here would otherwise be
+      // swallowed as "unexpected" (the transport fans every chunk to all subscribers, so the
+      // Connection still gets its own copy — but a live HandshakeIO would keep failing + retaining).
+      if (this.failure || this.detached) return;
       try {
         for (const f of this.decoder.push(chunk)) {
           if (f.type !== FrameType.Handshake) throw new HandshakeError(`unexpected frame ${f.type} during handshake`);
@@ -107,6 +112,14 @@ class HandshakeIO {
       }
     });
     stream.onClose(() => this.fail(new HandshakeError('stream closed during handshake')));
+  }
+
+  /** Stop processing once the handshake has produced a Session — the Connection takes over the stream.
+   *  The protocol strictly alternates (no pipelining), so no session bytes are buffered here at this
+   *  point; assert that invariant so a future change that breaks it is caught loudly. */
+  detach(): void {
+    this.detached = true;
+    if (this.q.length > 0) throw new HandshakeError('handshake buffered unexpected post-handshake frames');
   }
 
   private fail(e: Error): void {
@@ -219,6 +232,7 @@ async function initiatorHandshakeImpl(stream: ChatStream, opts: InitiatorOpts): 
   const session = new Session(sid, rk, 'initiator');
 
   zeroize(xeI.secretKey, ekI.secretKey, es, enc.sharedSecret, ssI, ck, hk1, hk2, rk);
+  io.detach(); // hand the stream to the Connection; stop this handshake reader (avoids dropping Msg1)
   return { session, peer: responderPublic, nextPrekey, mode };
 }
 
@@ -309,6 +323,7 @@ async function responderHandshakeImpl(stream: ChatStream, opts: ResponderOpts): 
   const session = new Session(sid, rk, 'responder');
 
   zeroize(xeR.secretKey, secretKey, ssPre, encI.sharedSecret, ck, hk1, hk2, rk);
+  io.detach(); // hand the stream to the Connection; stop this handshake reader (avoids dropping Msg1)
   return { session, peer, mode: firstContact ? 'first_contact' : 'reconnect' };
   } catch (e) {
     // Abort before durable consume() ⇒ release the one-time-prekey reservation so a failed/forged Msg1
