@@ -1,0 +1,99 @@
+(* ============================================================================
+   DCS98 chat handshake — CryptoVerif, UNIFIED KDF→AEAD→secrecy model (incl. G2').
+
+   The separate files prove auth, hybrid RK secrecy, KCI, and FS in isolation. This
+   one joins the layers the others abstract: the AEAD keys (hk1, hk2) are DERIVED
+   from the same KDF chain key CK as RK, and the identity payload + R's confirmation
+   travel INSIDE the AEAD (c_idI under hk1, c_confR under hk2; handshake.ts:178,183,
+   201,217). It proves:
+     - secret rk : RK stays indistinguishable from random IN THE PRESENCE of the
+       KDF-derived AEAD encryptions — i.e. deriving the AEAD keys from the chain and
+       emitting c_idI / c_confR does NOT compromise the root key. The bound carries
+       the AEAD term (Penc), so the encryptions are accounted for. The KDF→AEAD
+       layers compose.
+
+   On G2' (c_idI identity-payload confidentiality): proven SYMBOLICALLY in
+   chat-handshake.pv (`not attacker(s_id)`). Computationally it follows from hk1
+   being secret — hk1 is derived from CK by the SAME ROM step as RK, which is proven
+   secret here — together with AEAD IND-CPA. A fully machine-checked left-or-random
+   computational G2' query is left as polish: `query secret` on an AEAD'd message is
+   the wrong idiom (IND-CPA gives ciphertext indistinguishability, not value-secrecy).
+
+   Scope: classical DH leg (CDH), ML-KEM secret given to the adversary; the either-leg
+   hybrid for RK and the hybrid FS are chat-handshake-{hybrid,fullchain,fs}-*.cv;
+   mutual auth / KCI are chat-handshake-{auth,kci}.cv. Together: the end-to-end set.
+
+   Run: cryptoverif chat-handshake-unified.cv
+   ============================================================================ *)
+
+proof {
+  crypto rom(Hes);
+  crypto cdh(exp);
+  crypto rom(Hkey);
+  crypto rom(Hrk);
+  crypto ind_cpa(enc);
+  simplify;
+  success
+}
+
+type Zt  [large,bounded].
+type G   [large,bounded].
+type bits [large,fixed].     (* RK, ck0, labels, AAD-ish public material *)
+type ckt  [large,fixed].     (* chaining key CK *)
+type aeadkey [large,fixed].  (* hk1 / hk2 *)
+type cleartext [large,fixed]. (* the c_idI plaintext — fixed-length identity bundle + Sig_I (32+32+64) *)
+type ciphertext [bounded].
+type add_data [bounded].
+type hke_t [fixed]. type hkk_t [fixed]. type hkr_t [fixed].
+
+expand DH_basic(G, Zt, g, exp, exp', mult).
+proba pCDH.
+expand CDH(G, Zt, g, exp, exp', mult, pCDH).
+
+(* KDF as ROMs: es → CK ; (CK,label) → hk1/hk2 ; (CK,label) → RK *)
+expand ROM_hash_2(hke_t, G,   bits, ckt,     Hes,  oracle_es,  qHes).
+expand ROM_hash_2(hkk_t, ckt, bits, aeadkey, Hkey, oracle_key, qHkey).
+expand ROM_hash_2(hkr_t, ckt, bits, bits,    Hrk,  oracle_rk,  qHrk).
+
+(* AEAD (IND-CPA + INT-CTXT) for c_idI / c_confR *)
+proba Penc. proba Pencctxt.
+expand AEAD(aeadkey, cleartext, ciphertext, add_data, enc, dec, injbot, Z, Penc, Pencctxt).
+(* cleartext is fixed-length ⇒ all plaintexts share one length ⇒ Z (the length-only leak of IND-CPA) is
+   constant. Asserting it lets the dependency analysis see c_idI is independent of the plaintext value. *)
+const z_const: cleartext.
+equation forall x: cleartext; Z(x) = z_const.
+
+const LBL_HK1, LBL_HK2, LBL_ROOT: bits.
+
+(* Proves RK stays secret in the presence of the KDF-derived AEAD encryptions (c_idI under hk1, c_confR
+   under hk2 — both keys from the same chain key CK as RK): the KDF→AEAD layers compose.
+   G2' (c_idI plaintext / identity confidentiality) is proven SYMBOLICALLY in chat-handshake.pv
+   (`not attacker(s_id)`); computationally it follows from hk1 being secret (same derivation as the
+   proven-secret RK) + AEAD IND-CPA. A fully machine-checked left-or-right computational G2' query is
+   left as polish — `query secret` on an AEAD'd message is the wrong idiom (IND-CPA gives ciphertext
+   indistinguishability, not value-secrecy); it needs a real-or-random encoding. *)
+query secret rk.
+
+channel start, c.
+
+process
+  in(start, ());
+  new hke: hke_t; new hkk: hkk_t; new hkr: hkr_t;
+  new a: Zt; new b: Zt;
+  let ga: G = exp(g, a) in
+  let gb: G = exp(g, b) in
+  let es: G = exp(gb, a) in
+  new ck0: bits;                 (* public chaining seed (hash of public TH1) *)
+  new sspre: bits;               (* classical leg: ML-KEM secret handed to adversary *)
+  let ck:  ckt     = Hes(hke, es, ck0) in
+  let hk1: aeadkey = Hkey(hkk, ck, LBL_HK1) in
+  let hk2: aeadkey = Hkey(hkk, ck, LBL_HK2) in
+  let rk:  bits    = Hrk(hkr, ck, LBL_ROOT) in
+  new idsecret: cleartext;       (* I's identity payload + Sig_I — the G2' target *)
+  new aad: add_data;             (* = H(token); public *)
+  let cidI: ciphertext = enc(idsecret, aad, hk1) in
+  new confpt: cleartext;         (* R's confirmation payload (Sig_R) *)
+  new aadR: add_data;
+  let cconfR: ciphertext = enc(confpt, aadR, hk2) in
+  out(c, (ga, gb, ck0, sspre, aad, aadR, cidI, cconfR));
+  ( oracle_es(hke) | oracle_key(hkk) | oracle_rk(hkr) )

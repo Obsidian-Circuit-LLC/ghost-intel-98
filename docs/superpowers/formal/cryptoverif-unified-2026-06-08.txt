@@ -1,0 +1,1806 @@
+Doing expand get, insert and prove unique annotations... No change.
+Doing simplify (non-expanded game)... No change.
+Doing expand... Done.
+Doing remove assignments of findcond... No change.
+Doing simplify... Run simplify 2 time(s). Fixpoint reached.
+Done.
+Doing move all binders... No change.
+Doing SA rename new without array accesses and remove assignments of findcond... No change.
+Doing merge branches... No change.
+Proof of (one-session) secrecy of rk failed:
+  rk is not defined only by restrictions or assignments.
+Trying equivalence rom(Hes)... Transf. OK Proba. computed Transf. done Succeeded.
+Doing simplify (non-expanded game)... Done.
+Doing expand... Done.
+Doing remove assignments of findcond... Done.
+Doing simplify... Doing global dependency analysis on ck0 inside simplify... At 59, returned message ck0 depends on ck0.
+No change
+Doing global dependency analysis on ck0 inside simplify... At 59, returned message ck0 depends on ck0.
+No change
+Run simplify 2 time(s). Fixpoint reached.
+Done.
+Doing move all binders... Done.
+Doing SA rename new without array accesses and remove assignments of findcond... No change.
+Doing merge branches... No change.
+Trying equivalence cdh(exp)... Failed.
+Doing remove assignments of binder es... Done.
+Trying equivalence cdh(exp) with b, a... Transf. OK Proba. computed Transf. done Succeeded.
+Doing simplify (non-expanded game)... Done.
+Doing expand... Done.
+Doing remove assignments of findcond... Done.
+Doing simplify... Run simplify 1 time(s). Fixpoint reached.
+No change.
+Doing move all binders... No change.
+Doing SA rename new without array accesses and remove assignments of findcond... No change.
+Doing merge branches... No change.
+Trying equivalence rom(Hkey)... Transf. OK Proba. computed Transf. done Succeeded.
+Doing simplify (non-expanded game)... Done.
+Doing expand... Done.
+Doing remove assignments of findcond... Done.
+Doing simplify... Doing global dependency analysis on r_4 inside simplify... The variable rk depends on r_4 and occurs in a query.
+No change
+Doing global dependency analysis on r_4 inside simplify... The variable rk depends on r_4 and occurs in a query.
+No change
+Run simplify 2 time(s). Fixpoint reached.
+Done.
+Doing move all binders... Done.
+Doing SA rename new without array accesses and remove assignments of findcond... No change.
+Doing merge branches... No change.
+Trying equivalence rom(Hrk)... Transf. OK Proba. computed Transf. done Succeeded.
+Doing simplify (non-expanded game)... Done.
+Doing expand... Done.
+Doing remove assignments of findcond... Done.
+Doing simplify... Doing global dependency analysis on r_4 inside simplify... Done. Restarting simplify
+Eliminated collisions between r_4 and x1_2 Probability: qHrk / |ckt|
+(r_4 collides with a value independent of r_4[...] with probability at most 1 / |ckt|;
+ x1_2 does not depend on r_4[...])
+Eliminated collisions between r_4 and x1_1 Probability: qHkey / |ckt|
+(r_4 collides with a value independent of r_4[...] with probability at most 1 / |ckt|;
+ x1_1 does not depend on r_4[...])
+Run simplify 2 time(s). Fixpoint reached.
+Done.
+Doing move all binders... Done.
+Doing SA rename new without array accesses and remove assignments of findcond... Done.
+Doing merge branches... No change.
+Trying equivalence ind_cpa(enc)... Transf. OK Proba. computed Transf. done Succeeded.
+Doing simplify (non-expanded game)... No change.
+Doing expand... Done.
+Doing remove assignments of findcond... Done.
+Doing simplify... Run simplify 2 time(s). Maximum reached.
+Done.
+Doing move all binders... No change.
+Doing SA rename new without array accesses and remove assignments of findcond... No change.
+Doing merge branches... No change.
+Doing simplify... Run simplify 1 time(s). Fixpoint reached.
+No change.
+Proved one-session secrecy of rk
+Proved secrecy of rk
+===================== Proof starts =======================
+Initial state
+Game 1 is
+     start() :=
+     hke <-R hke_t;
+     hkk <-R hkk_t;
+     hkr <-R hkr_t;
+     a <-R Zt;
+     b <-R Zt;
+     ga: G <- exp(g, a);
+     gb: G <- exp(g, b);
+     es: G <- exp(gb, a);
+     ck0 <-R bits;
+     sspre <-R bits;
+     ck: ckt <- Hes(hke, es, ck0);
+     hk1: aeadkey <- Hkey(hkk, ck, LBL_HK1);
+     hk2: aeadkey <- Hkey(hkk, ck, LBL_HK2);
+     rk: bits <- Hrk(hkr, ck, LBL_ROOT);
+     idsecret <-R cleartext;
+     aad <-R add_data;
+     cidI: ciphertext <- (r_2 <-R enc_seed; enc_r(idsecret, aad, hk1, r_2));
+     confpt <-R cleartext;
+     aadR <-R add_data;
+     cconfR: ciphertext <- (r_3 <-R enc_seed; enc_r(confpt, aadR, hk2, r_3));
+     return(ga, gb, ck0, sspre, aad, aadR, cidI, cconfR);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       return(Hes(hke, x1, x2))
+     ) | (
+       foreach iH_1 <= qHkey do
+       ch1_1(x1_1: ckt, x2_1: bits) :=
+       return(Hkey(hkk, x1_1, x2_1))
+     ) | (
+       foreach iH_2 <= qHrk do
+       ch1_2(x1_2: ckt, x2_2: bits) :=
+       return(Hrk(hkr, x1_2, x2_2))
+     ))
+
+
+Applying expand
+  - Expand if/find/let
+yields
+
+Game 2 is
+     start() :=
+     hke <-R hke_t;
+     hkk <-R hkk_t;
+     hkr <-R hkr_t;
+     a <-R Zt;
+     b <-R Zt;
+     ga: G <- exp(g, a);
+     gb: G <- exp(g, b);
+     es: G <- {16}exp(gb, a);
+     ck0 <-R bits;
+     sspre <-R bits;
+     ck: ckt <- Hes(hke, es, ck0);
+     hk1: aeadkey <- Hkey(hkk, ck, LBL_HK1);
+     hk2: aeadkey <- Hkey(hkk, ck, LBL_HK2);
+     rk: bits <- Hrk(hkr, ck, LBL_ROOT);
+     idsecret <-R cleartext;
+     aad <-R add_data;
+     r_2 <-R enc_seed;
+     cidI: ciphertext <- enc_r(idsecret, aad, hk1, r_2);
+     confpt <-R cleartext;
+     aadR <-R add_data;
+     r_3 <-R enc_seed;
+     cconfR: ciphertext <- enc_r(confpt, aadR, hk2, r_3);
+     return(ga, gb, ck0, sspre, aad, aadR, cidI, cconfR);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       return(Hes(hke, x1, x2))
+     ) | (
+       foreach iH_1 <= qHkey do
+       ch1_1(x1_1: ckt, x2_1: bits) :=
+       return(Hkey(hkk, x1_1, x2_1))
+     ) | (
+       foreach iH_2 <= qHrk do
+       ch1_2(x1_2: ckt, x2_2: bits) :=
+       return(Hrk(hkr, x1_2, x2_2))
+     ))
+
+
+Applying simplify
+  - Simplification pass
+    - Replaced exp(gb, a) with exp(g, mult(b, a)) at 16
+yields
+
+Game 3 is
+     start() :=
+     hke <-R hke_t;
+     hkk <-R hkk_t;
+     hkr <-R hkr_t;
+     a <-R Zt;
+     b <-R Zt;
+     ga: G <- exp(g, a);
+     gb: G <- exp(g, b);
+     es: G <- exp(g, mult(b, a));
+     ck0 <-R bits;
+     sspre <-R bits;
+     ck: ckt <- Hes(hke, es, ck0);
+     hk1: aeadkey <- Hkey(hkk, ck, LBL_HK1);
+     hk2: aeadkey <- Hkey(hkk, ck, LBL_HK2);
+     rk: bits <- Hrk(hkr, ck, LBL_ROOT);
+     idsecret <-R cleartext;
+     aad <-R add_data;
+     r_2 <-R enc_seed;
+     cidI: ciphertext <- enc_r(idsecret, aad, hk1, r_2);
+     confpt <-R cleartext;
+     aadR <-R add_data;
+     r_3 <-R enc_seed;
+     cconfR: ciphertext <- enc_r(confpt, aadR, hk2, r_3);
+     return(ga, gb, ck0, sspre, aad, aadR, cidI, cconfR);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       return(Hes(hke, x1, x2))
+     ) | (
+       foreach iH_1 <= qHkey do
+       ch1_1(x1_1: ckt, x2_1: bits) :=
+       return(Hkey(hkk, x1_1, x2_1))
+     ) | (
+       foreach iH_2 <= qHrk do
+       ch1_2(x1_2: ckt, x2_2: bits) :=
+       return(Hrk(hkr, x1_2, x2_2))
+     ))
+
+
+Applying equivalence rom(Hes)
+  - Equivalence rom(Hes) with variables: hke -> hk
+yields
+
+Game 4 is
+     start() :=
+     hkk <-R hkk_t;
+     hkr <-R hkr_t;
+     a <-R Zt;
+     b <-R Zt;
+     ga: G <- exp(g, a);
+     gb: G <- exp(g, b);
+     es: G <- exp(g, mult(b, a));
+     ck0 <-R bits;
+     sspre <-R bits;
+     ck: ckt <- (x_O_1: G <- es; x_O: bits <- ck0; {27}find [unique]  else r_4 <-R ckt; r_4);
+     hk1: aeadkey <- Hkey(hkk, ck, LBL_HK1);
+     hk2: aeadkey <- Hkey(hkk, ck, LBL_HK2);
+     rk: bits <- Hrk(hkr, ck, LBL_ROOT);
+     idsecret <-R cleartext;
+     aad <-R add_data;
+     r_2 <-R enc_seed;
+     cidI: ciphertext <- enc_r(idsecret, aad, hk1, r_2);
+     confpt <-R cleartext;
+     aadR <-R add_data;
+     r_3 <-R enc_seed;
+     cconfR: ciphertext <- enc_r(confpt, aadR, hk2, r_3);
+     return(ga, gb, ck0, sspre, aad, aadR, cidI, cconfR);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       return((x_O_3: G <- x1; x_O_2: bits <- x2; find [unique]  suchthat defined(x_O_1, x_O, r_4) && (x_O_3 = x_O_1) && (x_O_2 = x_O) then r_4 orfind u = ri <= qHes suchthat defined(x_O_3[ri], x_O_2[ri], r_5[ri]) && (x_O_3 = x_O_3[ri]) && (x_O_2 = x_O_2[ri]) then r_5[u] else r_5 <-R ckt; r_5))
+     ) | (
+       foreach iH_1 <= qHkey do
+       ch1_1(x1_1: ckt, x2_1: bits) :=
+       return(Hkey(hkk, x1_1, x2_1))
+     ) | (
+       foreach iH_2 <= qHrk do
+       ch1_2(x1_2: ckt, x2_2: bits) :=
+       return(Hrk(hkr, x1_2, x2_2))
+     ))
+
+
+Applying simplify (non-expanded game)
+  - Simplification pass
+    - Find at 27 removed (else branch kept if any)
+yields
+
+Game 5 is
+     start() :=
+     hkk <-R hkk_t;
+     hkr <-R hkr_t;
+     a <-R Zt;
+     b <-R Zt;
+     ga: G <- exp(g, a);
+     gb: G <- exp(g, b);
+     es: G <- exp(g, mult(b, a));
+     ck0 <-R bits;
+     sspre <-R bits;
+     ck: ckt <- (x_O_1: G <- es; x_O: bits <- ck0; r_4 <-R ckt; r_4);
+     hk1: aeadkey <- Hkey(hkk, ck, LBL_HK1);
+     hk2: aeadkey <- Hkey(hkk, ck, LBL_HK2);
+     rk: bits <- Hrk(hkr, ck, LBL_ROOT);
+     idsecret <-R cleartext;
+     aad <-R add_data;
+     r_2 <-R enc_seed;
+     cidI: ciphertext <- enc_r(idsecret, aad, hk1, r_2);
+     confpt <-R cleartext;
+     aadR <-R add_data;
+     r_3 <-R enc_seed;
+     cconfR: ciphertext <- enc_r(confpt, aadR, hk2, r_3);
+     return(ga, gb, ck0, sspre, aad, aadR, cidI, cconfR);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       return((x_O_3: G <- x1; x_O_2: bits <- x2; find [unique]  suchthat defined(x_O_1, x_O, r_4) && (x_O_3 = x_O_1) && (x_O_2 = x_O) then r_4 orfind u = ri <= qHes suchthat defined(x_O_3[ri], x_O_2[ri], r_5[ri]) && (x_O_3 = x_O_3[ri]) && (x_O_2 = x_O_2[ri]) then r_5[u] else r_5 <-R ckt; r_5))
+     ) | (
+       foreach iH_1 <= qHkey do
+       ch1_1(x1_1: ckt, x2_1: bits) :=
+       return(Hkey(hkk, x1_1, x2_1))
+     ) | (
+       foreach iH_2 <= qHrk do
+       ch1_2(x1_2: ckt, x2_2: bits) :=
+       return(Hrk(hkr, x1_2, x2_2))
+     ))
+
+
+Applying expand
+  - Expand if/find/let
+yields
+
+Game 6 is
+     start() :=
+     hkk <-R hkk_t;
+     hkr <-R hkr_t;
+     a <-R Zt;
+     b <-R Zt;
+     ga: G <- exp(g, a);
+     gb: G <- exp(g, b);
+     es: G <- exp(g, mult(b, a));
+     ck0 <-R bits;
+     sspre <-R bits;
+     x_O_1: G <- es;
+     x_O: bits <- ck0;
+     r_4 <-R ckt;
+     ck: ckt <- r_4;
+     hk1: aeadkey <- Hkey(hkk, ck, LBL_HK1);
+     hk2: aeadkey <- Hkey(hkk, ck, LBL_HK2);
+     rk: bits <- Hrk(hkr, ck, LBL_ROOT);
+     idsecret <-R cleartext;
+     aad <-R add_data;
+     r_2 <-R enc_seed;
+     cidI: ciphertext <- enc_r(idsecret, aad, hk1, r_2);
+     confpt <-R cleartext;
+     aadR <-R add_data;
+     r_3 <-R enc_seed;
+     cconfR: ciphertext <- enc_r(confpt, aadR, hk2, r_3);
+     return(ga, gb, ck0, sspre, aad, aadR, cidI, cconfR);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       x_O_3: G <- x1;
+       x_O_2: bits <- x2;
+       find [unique]  suchthat defined(x_O_1, x_O, r_4) && (x_O_3 = x_O_1) && (x_O_2 = x_O) then
+         return(r_4)
+       orfind u = ri <= qHes suchthat defined(x_O_3[ri], x_O_2[ri], r_5[ri]) && (x_O_3 = x_O_3[ri]) && (x_O_2 = x_O_2[ri]) then
+         return(r_5[u])
+       else
+         r_5 <-R ckt;
+         return(r_5)
+     ) | (
+       foreach iH_1 <= qHkey do
+       ch1_1(x1_1: ckt, x2_1: bits) :=
+       return(Hkey(hkk, x1_1, x2_1))
+     ) | (
+       foreach iH_2 <= qHrk do
+       ch1_2(x1_2: ckt, x2_2: bits) :=
+       return(Hrk(hkr, x1_2, x2_2))
+     ))
+
+
+Applying remove assignments of findcond
+  - Remove assignments on x_O_1 (definition removed, all usages removed)
+  - Remove assignments on x_O (definition removed, all usages removed)
+  - Remove assignments on ck (definition removed, all usages removed)
+  - Remove assignments on x_O_3 (definition point kept, all usages removed)
+  - Remove assignments on x_O_2 (definition removed, all usages removed)
+yields
+
+Game 7 is
+     start() :=
+     hkk <-R hkk_t;
+     hkr <-R hkr_t;
+     a <-R Zt;
+     b <-R Zt;
+     ga: G <- exp(g, a);
+     gb: G <- exp(g, b);
+     es: G <- exp(g, mult(b, a));
+     ck0 <-R bits;
+     sspre <-R bits;
+     r_4 <-R ckt;
+     hk1: aeadkey <- Hkey(hkk, r_4, LBL_HK1);
+     hk2: aeadkey <- Hkey(hkk, r_4, LBL_HK2);
+     rk: bits <- Hrk(hkr, r_4, LBL_ROOT);
+     idsecret <-R cleartext;
+     aad <-R add_data;
+     r_2 <-R enc_seed;
+     cidI: ciphertext <- enc_r(idsecret, aad, hk1, r_2);
+     confpt <-R cleartext;
+     aadR <-R add_data;
+     r_3 <-R enc_seed;
+     cconfR: ciphertext <- enc_r(confpt, aadR, hk2, r_3);
+     return(ga, gb, ck0, sspre, aad, aadR, cidI, cconfR);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       x_O_3: G <- cst_G;
+ {71}  find [unique]  suchthat defined(r_4) && (x1 = es) && (x2 = ck0) then
+         return(r_4)
+       orfind u = ri <= qHes suchthat defined(x1[ri], x2[ri], x_O_3[ri], r_5[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_5[u])
+       else
+         r_5 <-R ckt;
+         return(r_5)
+     ) | (
+       foreach iH_1 <= qHkey do
+       ch1_1(x1_1: ckt, x2_1: bits) :=
+       return(Hkey(hkk, x1_1, x2_1))
+     ) | (
+       foreach iH_2 <= qHrk do
+       ch1_2(x1_2: ckt, x2_2: bits) :=
+       return(Hrk(hkr, x1_2, x2_2))
+     ))
+
+
+Applying simplify
+  - Simplification pass
+    - Replaced defined condition x1[ri], x2[ri], x_O_3[ri], r_5[ri] with r_5[ri], x2[ri], x1[ri] in find at 71
+    - Replaced defined condition r_4 with an empty condition in find at 71
+yields
+
+Game 8 is
+     start() :=
+     hkk <-R hkk_t;
+     hkr <-R hkr_t;
+     a <-R Zt;
+     b <-R Zt;
+     ga: G <- exp(g, a);
+     gb: G <- exp(g, b);
+     es: G <- exp(g, mult(b, a));
+     ck0 <-R bits;
+     sspre <-R bits;
+     r_4 <-R ckt;
+     hk1: aeadkey <- Hkey(hkk, r_4, LBL_HK1);
+     hk2: aeadkey <- Hkey(hkk, r_4, LBL_HK2);
+     rk: bits <- Hrk(hkr, r_4, LBL_ROOT);
+     idsecret <-R cleartext;
+     aad <-R add_data;
+     r_2 <-R enc_seed;
+     cidI: ciphertext <- enc_r(idsecret, aad, hk1, r_2);
+     confpt <-R cleartext;
+     aadR <-R add_data;
+     r_3 <-R enc_seed;
+     cconfR: ciphertext <- enc_r(confpt, aadR, hk2, r_3);
+     return(ga, gb, ck0, sspre, aad, aadR, cidI, cconfR);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       x_O_3: G <- cst_G;
+       find [unique]  suchthat (x1 = es) && (x2 = ck0) then
+         return(r_4)
+       orfind u = ri <= qHes suchthat defined(r_5[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_5[u])
+       else
+         r_5 <-R ckt;
+         return(r_5)
+     ) | (
+       foreach iH_1 <= qHkey do
+       ch1_1(x1_1: ckt, x2_1: bits) :=
+       return(Hkey(hkk, x1_1, x2_1))
+     ) | (
+       foreach iH_2 <= qHrk do
+       ch1_2(x1_2: ckt, x2_2: bits) :=
+       return(Hrk(hkr, x1_2, x2_2))
+     ))
+
+
+Applying move all binders
+  - Move assignment to x_O_3
+yields
+
+Game 9 is
+     start() :=
+     hkk <-R hkk_t;
+     hkr <-R hkr_t;
+     a <-R Zt;
+     b <-R Zt;
+     ga: G <- exp(g, a);
+     gb: G <- exp(g, b);
+     es: G <- exp(g, mult(b, a));
+     ck0 <-R bits;
+     sspre <-R bits;
+     r_4 <-R ckt;
+     hk1: aeadkey <- Hkey(hkk, r_4, LBL_HK1);
+     hk2: aeadkey <- Hkey(hkk, r_4, LBL_HK2);
+     rk: bits <- Hrk(hkr, r_4, LBL_ROOT);
+     idsecret <-R cleartext;
+     aad <-R add_data;
+     r_2 <-R enc_seed;
+     cidI: ciphertext <- enc_r(idsecret, aad, hk1, r_2);
+     confpt <-R cleartext;
+     aadR <-R add_data;
+     r_3 <-R enc_seed;
+     cconfR: ciphertext <- enc_r(confpt, aadR, hk2, r_3);
+     return(ga, gb, ck0, sspre, aad, aadR, cidI, cconfR);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       find [unique]  suchthat (x1 = es) && (x2 = ck0) then
+         return(r_4)
+       orfind u = ri <= qHes suchthat defined(r_5[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_5[u])
+       else
+         r_5 <-R ckt;
+         return(r_5)
+     ) | (
+       foreach iH_1 <= qHkey do
+       ch1_1(x1_1: ckt, x2_1: bits) :=
+       return(Hkey(hkk, x1_1, x2_1))
+     ) | (
+       foreach iH_2 <= qHrk do
+       ch1_2(x1_2: ckt, x2_2: bits) :=
+       return(Hrk(hkr, x1_2, x2_2))
+     ))
+
+
+Applying remove assignments of binder es
+  - Remove assignments on es (definition removed, all usages removed)
+yields
+
+Game 10 is
+     start() :=
+     hkk <-R hkk_t;
+     hkr <-R hkr_t;
+     a <-R Zt;
+     b <-R Zt;
+     ga: G <- exp(g, a);
+     gb: G <- exp(g, b);
+     ck0 <-R bits;
+     sspre <-R bits;
+     r_4 <-R ckt;
+     hk1: aeadkey <- Hkey(hkk, r_4, LBL_HK1);
+     hk2: aeadkey <- Hkey(hkk, r_4, LBL_HK2);
+     rk: bits <- Hrk(hkr, r_4, LBL_ROOT);
+     idsecret <-R cleartext;
+     aad <-R add_data;
+     r_2 <-R enc_seed;
+     cidI: ciphertext <- enc_r(idsecret, aad, hk1, r_2);
+     confpt <-R cleartext;
+     aadR <-R add_data;
+     r_3 <-R enc_seed;
+     cconfR: ciphertext <- enc_r(confpt, aadR, hk2, r_3);
+     return(ga, gb, ck0, sspre, aad, aadR, cidI, cconfR);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       find [unique]  suchthat (x1 = exp(g, mult(b, a))) && (x2 = ck0) then
+         return(r_4)
+       orfind u = ri <= qHes suchthat defined(r_5[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_5[u])
+       else
+         r_5 <-R ckt;
+         return(r_5)
+     ) | (
+       foreach iH_1 <= qHkey do
+       ch1_1(x1_1: ckt, x2_1: bits) :=
+       return(Hkey(hkk, x1_1, x2_1))
+     ) | (
+       foreach iH_2 <= qHrk do
+       ch1_2(x1_2: ckt, x2_2: bits) :=
+       return(Hrk(hkr, x1_2, x2_2))
+     ))
+
+
+Applying equivalence cdh(exp) with b, a [probability qHes * pCDH(time_1)]
+  - Equivalence cdh(exp) with variables: b -> b_1, a -> a_1
+yields
+
+Game 11 is
+     start() :=
+     hkk <-R hkk_t;
+     hkr <-R hkr_t;
+     a <-R Zt;
+     b <-R Zt;
+     ga: G <- exp'(g, a);
+     gb: G <- exp'(g, b);
+     ck0 <-R bits;
+     sspre <-R bits;
+     r_4 <-R ckt;
+     hk1: aeadkey <- Hkey(hkk, r_4, LBL_HK1);
+     hk2: aeadkey <- Hkey(hkk, r_4, LBL_HK2);
+     rk: bits <- Hrk(hkr, r_4, LBL_ROOT);
+     idsecret <-R cleartext;
+     aad <-R add_data;
+     r_2 <-R enc_seed;
+     cidI: ciphertext <- enc_r(idsecret, aad, hk1, r_2);
+     confpt <-R cleartext;
+     aadR <-R add_data;
+     r_3 <-R enc_seed;
+     cconfR: ciphertext <- enc_r(confpt, aadR, hk2, r_3);
+     return(ga, gb, ck0, sspre, aad, aadR, cidI, cconfR);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       find [unique]  suchthat (m_2: G <- x1; {68}find  else {69}find  else false) && (x2 = ck0) then
+         return(r_4)
+       orfind u = ri <= qHes suchthat defined(r_5[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_5[u])
+       else
+         r_5 <-R ckt;
+         return(r_5)
+     ) | (
+       foreach iH_1 <= qHkey do
+       ch1_1(x1_1: ckt, x2_1: bits) :=
+       return(Hkey(hkk, x1_1, x2_1))
+     ) | (
+       foreach iH_2 <= qHrk do
+       ch1_2(x1_2: ckt, x2_2: bits) :=
+       return(Hrk(hkr, x1_2, x2_2))
+     ))
+
+
+Applying simplify (non-expanded game)
+  - Simplification pass
+    - Find at 68 removed (else branch kept if any)
+    - Find at 69 removed (else branch kept if any)
+yields
+
+Game 12 is
+     start() :=
+     hkk <-R hkk_t;
+     hkr <-R hkr_t;
+     a <-R Zt;
+     b <-R Zt;
+     ga: G <- exp'(g, a);
+     gb: G <- exp'(g, b);
+     ck0 <-R bits;
+     sspre <-R bits;
+     r_4 <-R ckt;
+     hk1: aeadkey <- Hkey(hkk, r_4, LBL_HK1);
+     hk2: aeadkey <- Hkey(hkk, r_4, LBL_HK2);
+     rk: bits <- Hrk(hkr, r_4, LBL_ROOT);
+     idsecret <-R cleartext;
+     aad <-R add_data;
+     r_2 <-R enc_seed;
+     cidI: ciphertext <- enc_r(idsecret, aad, hk1, r_2);
+     confpt <-R cleartext;
+     aadR <-R add_data;
+     r_3 <-R enc_seed;
+     cconfR: ciphertext <- enc_r(confpt, aadR, hk2, r_3);
+     return(ga, gb, ck0, sspre, aad, aadR, cidI, cconfR);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+ {63}  find [unique]  suchthat (m_2: G <- x1; false) && (x2 = ck0) then
+         return(r_4)
+       orfind u = ri <= qHes suchthat defined(r_5[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_5[u])
+       else
+         r_5 <-R ckt;
+         return(r_5)
+     ) | (
+       foreach iH_1 <= qHkey do
+       ch1_1(x1_1: ckt, x2_1: bits) :=
+       return(Hkey(hkk, x1_1, x2_1))
+     ) | (
+       foreach iH_2 <= qHrk do
+       ch1_2(x1_2: ckt, x2_2: bits) :=
+       return(Hrk(hkr, x1_2, x2_2))
+     ))
+
+
+Applying expand
+  - Expand if/find/let
+    - Remove branch 1 in find at 63
+yields
+
+Game 13 is
+     start() :=
+     hkk <-R hkk_t;
+     hkr <-R hkr_t;
+     a <-R Zt;
+     b <-R Zt;
+     ga: G <- exp'(g, a);
+     gb: G <- exp'(g, b);
+     ck0 <-R bits;
+     sspre <-R bits;
+     r_4 <-R ckt;
+     hk1: aeadkey <- Hkey(hkk, r_4, LBL_HK1);
+     hk2: aeadkey <- Hkey(hkk, r_4, LBL_HK2);
+     rk: bits <- Hrk(hkr, r_4, LBL_ROOT);
+     idsecret <-R cleartext;
+     aad <-R add_data;
+     r_2 <-R enc_seed;
+     cidI: ciphertext <- enc_r(idsecret, aad, hk1, r_2);
+     confpt <-R cleartext;
+     aadR <-R add_data;
+     r_3 <-R enc_seed;
+     cconfR: ciphertext <- enc_r(confpt, aadR, hk2, r_3);
+     return(ga, gb, ck0, sspre, aad, aadR, cidI, cconfR);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       m_2: G <- x1;
+       find [unique] u = ri <= qHes suchthat defined(r_5[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_5[u])
+       else
+         r_5 <-R ckt;
+         return(r_5)
+     ) | (
+       foreach iH_1 <= qHkey do
+       ch1_1(x1_1: ckt, x2_1: bits) :=
+       return(Hkey(hkk, x1_1, x2_1))
+     ) | (
+       foreach iH_2 <= qHrk do
+       ch1_2(x1_2: ckt, x2_2: bits) :=
+       return(Hrk(hkr, x1_2, x2_2))
+     ))
+
+
+Applying remove assignments of findcond
+  - Remove assignments on m_2 (definition removed, all usages removed)
+yields
+
+Game 14 is
+     start() :=
+     hkk <-R hkk_t;
+     hkr <-R hkr_t;
+     a <-R Zt;
+     b <-R Zt;
+     ga: G <- exp'(g, a);
+     gb: G <- exp'(g, b);
+     ck0 <-R bits;
+     sspre <-R bits;
+     r_4 <-R ckt;
+     hk1: aeadkey <- Hkey(hkk, r_4, LBL_HK1);
+     hk2: aeadkey <- Hkey(hkk, r_4, LBL_HK2);
+     rk: bits <- Hrk(hkr, r_4, LBL_ROOT);
+     idsecret <-R cleartext;
+     aad <-R add_data;
+     r_2 <-R enc_seed;
+     cidI: ciphertext <- enc_r(idsecret, aad, hk1, r_2);
+     confpt <-R cleartext;
+     aadR <-R add_data;
+     r_3 <-R enc_seed;
+     cconfR: ciphertext <- enc_r(confpt, aadR, hk2, r_3);
+     return(ga, gb, ck0, sspre, aad, aadR, cidI, cconfR);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       find [unique] u = ri <= qHes suchthat defined(r_5[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_5[u])
+       else
+         r_5 <-R ckt;
+         return(r_5)
+     ) | (
+       foreach iH_1 <= qHkey do
+       ch1_1(x1_1: ckt, x2_1: bits) :=
+       return(Hkey(hkk, x1_1, x2_1))
+     ) | (
+       foreach iH_2 <= qHrk do
+       ch1_2(x1_2: ckt, x2_2: bits) :=
+       return(Hrk(hkr, x1_2, x2_2))
+     ))
+
+
+Applying equivalence rom(Hkey)
+  - Equivalence rom(Hkey) with variables: hkk -> hk
+yields
+
+Game 15 is
+     start() :=
+     hkr <-R hkr_t;
+     a <-R Zt;
+     b <-R Zt;
+     ga: G <- exp'(g, a);
+     gb: G <- exp'(g, b);
+     ck0 <-R bits;
+     sspre <-R bits;
+     r_4 <-R ckt;
+     hk1: aeadkey <- (x_O_5: ckt <- r_4; x_O_4: bits <- LBL_HK1; {21}find [unique]  else r_6 <-R aeadkey; r_6);
+     hk2: aeadkey <- (x_O_7: ckt <- r_4; x_O_6: bits <- LBL_HK2; {29}if defined(x_O_5, x_O_4, r_6) && {30}((x_O_7 = x_O_5) && (x_O_6 = x_O_4)) then r_6 else r_7 <-R aeadkey; r_7);
+     rk: bits <- Hrk(hkr, r_4, LBL_ROOT);
+     idsecret <-R cleartext;
+     aad <-R add_data;
+     r_2 <-R enc_seed;
+     cidI: ciphertext <- enc_r(idsecret, aad, hk1, r_2);
+     confpt <-R cleartext;
+     aadR <-R add_data;
+     r_3 <-R enc_seed;
+     cconfR: ciphertext <- enc_r(confpt, aadR, hk2, r_3);
+     return(ga, gb, ck0, sspre, aad, aadR, cidI, cconfR);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       find [unique] u = ri <= qHes suchthat defined(r_5[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_5[u])
+       else
+         r_5 <-R ckt;
+         return(r_5)
+     ) | (
+       foreach iH_1 <= qHkey do
+       ch1_1(x1_1: ckt, x2_1: bits) :=
+       return((x_O_9: ckt <- x1_1; x_O_8: bits <- x2_1; find [unique]  suchthat defined(x_O_5, x_O_4, r_6) && (x_O_9 = x_O_5) && (x_O_8 = x_O_4) then r_6 orfind  suchthat defined(x_O_7, x_O_6, r_7) && (x_O_9 = x_O_7) && (x_O_8 = x_O_6) then r_7 orfind u_2 = ri_2 <= qHkey suchthat defined(x_O_9[ri_2], x_O_8[ri_2], r_8[ri_2]) && (x_O_9 = x_O_9[ri_2]) && (x_O_8 = x_O_8[ri_2]) then r_8[u_2] else r_8 <-R aeadkey; r_8))
+     ) | (
+       foreach iH_2 <= qHrk do
+       ch1_2(x1_2: ckt, x2_2: bits) :=
+       return(Hrk(hkr, x1_2, x2_2))
+     ))
+
+
+Applying simplify (non-expanded game)
+  - Simplification pass
+    - Find at 21 removed (else branch kept if any)
+    - Replaced ((x_O_7 = x_O_5) && (x_O_6 = x_O_4)) with false at 30
+    - Remove branch 1 in find at 29
+    - Find at 29 removed (else branch kept if any)
+yields
+
+Game 16 is
+     start() :=
+     hkr <-R hkr_t;
+     a <-R Zt;
+     b <-R Zt;
+     ga: G <- exp'(g, a);
+     gb: G <- exp'(g, b);
+     ck0 <-R bits;
+     sspre <-R bits;
+     r_4 <-R ckt;
+     hk1: aeadkey <- (x_O_5: ckt <- r_4; x_O_4: bits <- LBL_HK1; r_6 <-R aeadkey; r_6);
+     hk2: aeadkey <- (x_O_7: ckt <- r_4; x_O_6: bits <- LBL_HK2; r_7 <-R aeadkey; r_7);
+     rk: bits <- Hrk(hkr, r_4, LBL_ROOT);
+     idsecret <-R cleartext;
+     aad <-R add_data;
+     r_2 <-R enc_seed;
+     cidI: ciphertext <- enc_r(idsecret, aad, hk1, r_2);
+     confpt <-R cleartext;
+     aadR <-R add_data;
+     r_3 <-R enc_seed;
+     cconfR: ciphertext <- enc_r(confpt, aadR, hk2, r_3);
+     return(ga, gb, ck0, sspre, aad, aadR, cidI, cconfR);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       find [unique] u = ri <= qHes suchthat defined(r_5[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_5[u])
+       else
+         r_5 <-R ckt;
+         return(r_5)
+     ) | (
+       foreach iH_1 <= qHkey do
+       ch1_1(x1_1: ckt, x2_1: bits) :=
+       return((x_O_9: ckt <- x1_1; x_O_8: bits <- x2_1; find [unique]  suchthat defined(x_O_5, x_O_4, r_6) && (x_O_9 = x_O_5) && (x_O_8 = x_O_4) then r_6 orfind  suchthat defined(x_O_7, x_O_6, r_7) && (x_O_9 = x_O_7) && (x_O_8 = x_O_6) then r_7 orfind u_2 = ri_2 <= qHkey suchthat defined(x_O_9[ri_2], x_O_8[ri_2], r_8[ri_2]) && (x_O_9 = x_O_9[ri_2]) && (x_O_8 = x_O_8[ri_2]) then r_8[u_2] else r_8 <-R aeadkey; r_8))
+     ) | (
+       foreach iH_2 <= qHrk do
+       ch1_2(x1_2: ckt, x2_2: bits) :=
+       return(Hrk(hkr, x1_2, x2_2))
+     ))
+
+
+Applying expand
+  - Expand if/find/let
+yields
+
+Game 17 is
+     start() :=
+     hkr <-R hkr_t;
+     a <-R Zt;
+     b <-R Zt;
+     ga: G <- exp'(g, a);
+     gb: G <- exp'(g, b);
+     ck0 <-R bits;
+     sspre <-R bits;
+     r_4 <-R ckt;
+     x_O_5: ckt <- r_4;
+     x_O_4: bits <- LBL_HK1;
+     r_6 <-R aeadkey;
+     hk1: aeadkey <- r_6;
+     x_O_7: ckt <- r_4;
+     x_O_6: bits <- LBL_HK2;
+     r_7 <-R aeadkey;
+     hk2: aeadkey <- r_7;
+     rk: bits <- Hrk(hkr, r_4, LBL_ROOT);
+     idsecret <-R cleartext;
+     aad <-R add_data;
+     r_2 <-R enc_seed;
+     cidI: ciphertext <- enc_r(idsecret, aad, hk1, r_2);
+     confpt <-R cleartext;
+     aadR <-R add_data;
+     r_3 <-R enc_seed;
+     cconfR: ciphertext <- enc_r(confpt, aadR, hk2, r_3);
+     return(ga, gb, ck0, sspre, aad, aadR, cidI, cconfR);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       find [unique] u = ri <= qHes suchthat defined(r_5[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_5[u])
+       else
+         r_5 <-R ckt;
+         return(r_5)
+     ) | (
+       foreach iH_1 <= qHkey do
+       ch1_1(x1_1: ckt, x2_1: bits) :=
+       x_O_9: ckt <- x1_1;
+       x_O_8: bits <- x2_1;
+       find [unique]  suchthat defined(x_O_5, x_O_4, r_6) && (x_O_9 = x_O_5) && (x_O_8 = x_O_4) then
+         return(r_6)
+       orfind  suchthat defined(x_O_7, x_O_6, r_7) && (x_O_9 = x_O_7) && (x_O_8 = x_O_6) then
+         return(r_7)
+       orfind u_2 = ri_2 <= qHkey suchthat defined(x_O_9[ri_2], x_O_8[ri_2], r_8[ri_2]) && (x_O_9 = x_O_9[ri_2]) && (x_O_8 = x_O_8[ri_2]) then
+         return(r_8[u_2])
+       else
+         r_8 <-R aeadkey;
+         return(r_8)
+     ) | (
+       foreach iH_2 <= qHrk do
+       ch1_2(x1_2: ckt, x2_2: bits) :=
+       return(Hrk(hkr, x1_2, x2_2))
+     ))
+
+
+Applying remove assignments of findcond
+  - Remove assignments on x_O_5 (definition removed, all usages removed)
+  - Remove assignments on hk1 (definition removed, all usages removed)
+  - Remove assignments on x_O_7 (definition removed, all usages removed)
+  - Remove assignments on hk2 (definition removed, all usages removed)
+  - Remove assignments on x_O_9 (definition point kept, all usages removed)
+  - Remove assignments on x_O_8 (definition removed, all usages removed)
+yields
+
+Game 18 is
+     start() :=
+     hkr <-R hkr_t;
+     a <-R Zt;
+     b <-R Zt;
+     ga: G <- exp'(g, a);
+     gb: G <- exp'(g, b);
+     ck0 <-R bits;
+     sspre <-R bits;
+     r_4 <-R ckt;
+     x_O_4: bits <- LBL_HK1;
+     r_6 <-R aeadkey;
+     x_O_6: bits <- LBL_HK2;
+     r_7 <-R aeadkey;
+     rk: bits <- Hrk(hkr, r_4, LBL_ROOT);
+     idsecret <-R cleartext;
+     aad <-R add_data;
+     r_2 <-R enc_seed;
+     cidI: ciphertext <- enc_r(idsecret, aad, r_6, r_2);
+     confpt <-R cleartext;
+     aadR <-R add_data;
+     r_3 <-R enc_seed;
+     cconfR: ciphertext <- enc_r(confpt, aadR, r_7, r_3);
+     return(ga, gb, ck0, sspre, aad, aadR, cidI, cconfR);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       find [unique] u = ri <= qHes suchthat defined(r_5[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_5[u])
+       else
+         r_5 <-R ckt;
+         return(r_5)
+     ) | (
+       foreach iH_1 <= qHkey do
+       ch1_1(x1_1: ckt, x2_1: bits) :=
+       x_O_9: ckt <- cst_ckt;
+ {87}  find [unique]  suchthat defined(x_O_4, r_6) && (x1_1 = r_4) && (x2_1 = x_O_4) then
+         return(r_6)
+       orfind  suchthat defined(x_O_6, r_7) && (x1_1 = r_4) && (x2_1 = x_O_6) then
+         return(r_7)
+       orfind u_2 = ri_2 <= qHkey suchthat defined(x1_1[ri_2], x2_1[ri_2], x_O_9[ri_2], r_8[ri_2]) && (x1_1 = x1_1[ri_2]) && (x2_1 = x2_1[ri_2]) then
+         return(r_8[u_2])
+       else
+         r_8 <-R aeadkey;
+         return(r_8)
+     ) | (
+       foreach iH_2 <= qHrk do
+       ch1_2(x1_2: ckt, x2_2: bits) :=
+       return(Hrk(hkr, x1_2, x2_2))
+     ))
+
+
+Applying simplify
+  - Simplification pass
+    - Replaced defined condition x1_1[ri_2], x2_1[ri_2], x_O_9[ri_2], r_8[ri_2] with r_8[ri_2], x2_1[ri_2], x1_1[ri_2] in find at 87
+    - Replaced defined condition x_O_6, r_7 with an empty condition in find at 87
+    - Replaced defined condition x_O_4, r_6 with an empty condition in find at 87
+yields
+
+Game 19 is
+     start() :=
+     hkr <-R hkr_t;
+     a <-R Zt;
+     b <-R Zt;
+     ga: G <- exp'(g, a);
+     gb: G <- exp'(g, b);
+     ck0 <-R bits;
+     sspre <-R bits;
+     r_4 <-R ckt;
+     x_O_4: bits <- LBL_HK1;
+     r_6 <-R aeadkey;
+     x_O_6: bits <- LBL_HK2;
+     r_7 <-R aeadkey;
+     rk: bits <- Hrk(hkr, r_4, LBL_ROOT);
+     idsecret <-R cleartext;
+     aad <-R add_data;
+     r_2 <-R enc_seed;
+     cidI: ciphertext <- enc_r(idsecret, aad, r_6, r_2);
+     confpt <-R cleartext;
+     aadR <-R add_data;
+     r_3 <-R enc_seed;
+     cconfR: ciphertext <- enc_r(confpt, aadR, r_7, r_3);
+     return(ga, gb, ck0, sspre, aad, aadR, cidI, cconfR);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       find [unique] u = ri <= qHes suchthat defined(r_5[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_5[u])
+       else
+         r_5 <-R ckt;
+         return(r_5)
+     ) | (
+       foreach iH_1 <= qHkey do
+       ch1_1(x1_1: ckt, x2_1: bits) :=
+       x_O_9: ckt <- cst_ckt;
+       find [unique]  suchthat (x1_1 = r_4) && (x2_1 = x_O_4) then
+         return(r_6)
+       orfind  suchthat (x1_1 = r_4) && (x2_1 = x_O_6) then
+         return(r_7)
+       orfind u_2 = ri_2 <= qHkey suchthat defined(r_8[ri_2], x2_1[ri_2], x1_1[ri_2]) && (x1_1 = x1_1[ri_2]) && (x2_1 = x2_1[ri_2]) then
+         return(r_8[u_2])
+       else
+         r_8 <-R aeadkey;
+         return(r_8)
+     ) | (
+       foreach iH_2 <= qHrk do
+       ch1_2(x1_2: ckt, x2_2: bits) :=
+       return(Hrk(hkr, x1_2, x2_2))
+     ))
+
+
+Applying move all binders
+  - Move assignment to x_O_9
+yields
+
+Game 20 is
+     start() :=
+     hkr <-R hkr_t;
+     a <-R Zt;
+     b <-R Zt;
+     ga: G <- exp'(g, a);
+     gb: G <- exp'(g, b);
+     ck0 <-R bits;
+     sspre <-R bits;
+     r_4 <-R ckt;
+     x_O_4: bits <- LBL_HK1;
+     r_6 <-R aeadkey;
+     x_O_6: bits <- LBL_HK2;
+     r_7 <-R aeadkey;
+     rk: bits <- Hrk(hkr, r_4, LBL_ROOT);
+     idsecret <-R cleartext;
+     aad <-R add_data;
+     r_2 <-R enc_seed;
+     cidI: ciphertext <- enc_r(idsecret, aad, r_6, r_2);
+     confpt <-R cleartext;
+     aadR <-R add_data;
+     r_3 <-R enc_seed;
+     cconfR: ciphertext <- enc_r(confpt, aadR, r_7, r_3);
+     return(ga, gb, ck0, sspre, aad, aadR, cidI, cconfR);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       find [unique] u = ri <= qHes suchthat defined(r_5[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_5[u])
+       else
+         r_5 <-R ckt;
+         return(r_5)
+     ) | (
+       foreach iH_1 <= qHkey do
+       ch1_1(x1_1: ckt, x2_1: bits) :=
+       find [unique]  suchthat (x1_1 = r_4) && (x2_1 = x_O_4) then
+         return(r_6)
+       orfind  suchthat (x1_1 = r_4) && (x2_1 = x_O_6) then
+         return(r_7)
+       orfind u_2 = ri_2 <= qHkey suchthat defined(r_8[ri_2], x2_1[ri_2], x1_1[ri_2]) && (x1_1 = x1_1[ri_2]) && (x2_1 = x2_1[ri_2]) then
+         return(r_8[u_2])
+       else
+         r_8 <-R aeadkey;
+         return(r_8)
+     ) | (
+       foreach iH_2 <= qHrk do
+       ch1_2(x1_2: ckt, x2_2: bits) :=
+       return(Hrk(hkr, x1_2, x2_2))
+     ))
+
+
+Applying equivalence rom(Hrk)
+  - Equivalence rom(Hrk) with variables: hkr -> hk
+yields
+
+Game 21 is
+     start() :=
+     a <-R Zt;
+     b <-R Zt;
+     ga: G <- exp'(g, a);
+     gb: G <- exp'(g, b);
+     ck0 <-R bits;
+     sspre <-R bits;
+     r_4 <-R ckt;
+     x_O_4: bits <- LBL_HK1;
+     r_6 <-R aeadkey;
+     x_O_6: bits <- LBL_HK2;
+     r_7 <-R aeadkey;
+     rk: bits <- (x_O_11: ckt <- r_4; x_O_10: bits <- LBL_ROOT; {26}find [unique]  else r_9 <-R bits; r_9);
+     idsecret <-R cleartext;
+     aad <-R add_data;
+     r_2 <-R enc_seed;
+     cidI: ciphertext <- enc_r(idsecret, aad, r_6, r_2);
+     confpt <-R cleartext;
+     aadR <-R add_data;
+     r_3 <-R enc_seed;
+     cconfR: ciphertext <- enc_r(confpt, aadR, r_7, r_3);
+     return(ga, gb, ck0, sspre, aad, aadR, cidI, cconfR);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       find [unique] u = ri <= qHes suchthat defined(r_5[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_5[u])
+       else
+         r_5 <-R ckt;
+         return(r_5)
+     ) | (
+       foreach iH_1 <= qHkey do
+       ch1_1(x1_1: ckt, x2_1: bits) :=
+       find [unique]  suchthat (x1_1 = r_4) && (x2_1 = x_O_4) then
+         return(r_6)
+       orfind  suchthat (x1_1 = r_4) && (x2_1 = x_O_6) then
+         return(r_7)
+       orfind u_2 = ri_2 <= qHkey suchthat defined(r_8[ri_2], x2_1[ri_2], x1_1[ri_2]) && (x1_1 = x1_1[ri_2]) && (x2_1 = x2_1[ri_2]) then
+         return(r_8[u_2])
+       else
+         r_8 <-R aeadkey;
+         return(r_8)
+     ) | (
+       foreach iH_2 <= qHrk do
+       ch1_2(x1_2: ckt, x2_2: bits) :=
+       return((x_O_13: ckt <- x1_2; x_O_12: bits <- x2_2; find [unique]  suchthat defined(x_O_11, x_O_10, r_9) && (x_O_13 = x_O_11) && (x_O_12 = x_O_10) then r_9 orfind u_5 = ri_5 <= qHrk suchthat defined(x_O_13[ri_5], x_O_12[ri_5], r_10[ri_5]) && (x_O_13 = x_O_13[ri_5]) && (x_O_12 = x_O_12[ri_5]) then r_10[u_5] else r_10 <-R bits; r_10))
+     ))
+
+
+Applying simplify (non-expanded game)
+  - Simplification pass
+    - Find at 26 removed (else branch kept if any)
+yields
+
+Game 22 is
+     start() :=
+     a <-R Zt;
+     b <-R Zt;
+     ga: G <- exp'(g, a);
+     gb: G <- exp'(g, b);
+     ck0 <-R bits;
+     sspre <-R bits;
+     r_4 <-R ckt;
+     x_O_4: bits <- LBL_HK1;
+     r_6 <-R aeadkey;
+     x_O_6: bits <- LBL_HK2;
+     r_7 <-R aeadkey;
+     rk: bits <- (x_O_11: ckt <- r_4; x_O_10: bits <- LBL_ROOT; r_9 <-R bits; r_9);
+     idsecret <-R cleartext;
+     aad <-R add_data;
+     r_2 <-R enc_seed;
+     cidI: ciphertext <- enc_r(idsecret, aad, r_6, r_2);
+     confpt <-R cleartext;
+     aadR <-R add_data;
+     r_3 <-R enc_seed;
+     cconfR: ciphertext <- enc_r(confpt, aadR, r_7, r_3);
+     return(ga, gb, ck0, sspre, aad, aadR, cidI, cconfR);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       find [unique] u = ri <= qHes suchthat defined(r_5[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_5[u])
+       else
+         r_5 <-R ckt;
+         return(r_5)
+     ) | (
+       foreach iH_1 <= qHkey do
+       ch1_1(x1_1: ckt, x2_1: bits) :=
+       find [unique]  suchthat (x1_1 = r_4) && (x2_1 = x_O_4) then
+         return(r_6)
+       orfind  suchthat (x1_1 = r_4) && (x2_1 = x_O_6) then
+         return(r_7)
+       orfind u_2 = ri_2 <= qHkey suchthat defined(r_8[ri_2], x2_1[ri_2], x1_1[ri_2]) && (x1_1 = x1_1[ri_2]) && (x2_1 = x2_1[ri_2]) then
+         return(r_8[u_2])
+       else
+         r_8 <-R aeadkey;
+         return(r_8)
+     ) | (
+       foreach iH_2 <= qHrk do
+       ch1_2(x1_2: ckt, x2_2: bits) :=
+       return((x_O_13: ckt <- x1_2; x_O_12: bits <- x2_2; find [unique]  suchthat defined(x_O_11, x_O_10, r_9) && (x_O_13 = x_O_11) && (x_O_12 = x_O_10) then r_9 orfind u_5 = ri_5 <= qHrk suchthat defined(x_O_13[ri_5], x_O_12[ri_5], r_10[ri_5]) && (x_O_13 = x_O_13[ri_5]) && (x_O_12 = x_O_12[ri_5]) then r_10[u_5] else r_10 <-R bits; r_10))
+     ))
+
+
+Applying expand
+  - Expand if/find/let
+yields
+
+Game 23 is
+     start() :=
+     a <-R Zt;
+     b <-R Zt;
+     ga: G <- exp'(g, a);
+     gb: G <- exp'(g, b);
+     ck0 <-R bits;
+     sspre <-R bits;
+     r_4 <-R ckt;
+     x_O_4: bits <- LBL_HK1;
+     r_6 <-R aeadkey;
+     x_O_6: bits <- LBL_HK2;
+     r_7 <-R aeadkey;
+     x_O_11: ckt <- r_4;
+     x_O_10: bits <- LBL_ROOT;
+     r_9 <-R bits;
+     rk: bits <- r_9;
+     idsecret <-R cleartext;
+     aad <-R add_data;
+     r_2 <-R enc_seed;
+     cidI: ciphertext <- enc_r(idsecret, aad, r_6, r_2);
+     confpt <-R cleartext;
+     aadR <-R add_data;
+     r_3 <-R enc_seed;
+     cconfR: ciphertext <- enc_r(confpt, aadR, r_7, r_3);
+     return(ga, gb, ck0, sspre, aad, aadR, cidI, cconfR);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       find [unique] u = ri <= qHes suchthat defined(r_5[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_5[u])
+       else
+         r_5 <-R ckt;
+         return(r_5)
+     ) | (
+       foreach iH_1 <= qHkey do
+       ch1_1(x1_1: ckt, x2_1: bits) :=
+       find [unique]  suchthat (x1_1 = r_4) && (x2_1 = x_O_4) then
+         return(r_6)
+       orfind  suchthat (x1_1 = r_4) && (x2_1 = x_O_6) then
+         return(r_7)
+       orfind u_2 = ri_2 <= qHkey suchthat defined(r_8[ri_2], x2_1[ri_2], x1_1[ri_2]) && (x1_1 = x1_1[ri_2]) && (x2_1 = x2_1[ri_2]) then
+         return(r_8[u_2])
+       else
+         r_8 <-R aeadkey;
+         return(r_8)
+     ) | (
+       foreach iH_2 <= qHrk do
+       ch1_2(x1_2: ckt, x2_2: bits) :=
+       x_O_13: ckt <- x1_2;
+       x_O_12: bits <- x2_2;
+       find [unique]  suchthat defined(x_O_11, x_O_10, r_9) && (x_O_13 = x_O_11) && (x_O_12 = x_O_10) then
+         return(r_9)
+       orfind u_5 = ri_5 <= qHrk suchthat defined(x_O_13[ri_5], x_O_12[ri_5], r_10[ri_5]) && (x_O_13 = x_O_13[ri_5]) && (x_O_12 = x_O_12[ri_5]) then
+         return(r_10[u_5])
+       else
+         r_10 <-R bits;
+         return(r_10)
+     ))
+
+
+Applying remove assignments of findcond
+  - Remove assignments on x_O_11 (definition removed, all usages removed)
+  - Remove assignments on x_O_13 (definition point kept, all usages removed)
+  - Remove assignments on x_O_12 (definition removed, all usages removed)
+yields
+
+Game 24 is
+     start() :=
+     a <-R Zt;
+     b <-R Zt;
+     ga: G <- exp'(g, a);
+     gb: G <- exp'(g, b);
+     ck0 <-R bits;
+     sspre <-R bits;
+     r_4 <-R ckt;
+     x_O_4: bits <- LBL_HK1;
+     r_6 <-R aeadkey;
+     x_O_6: bits <- LBL_HK2;
+     r_7 <-R aeadkey;
+     x_O_10: bits <- LBL_ROOT;
+     r_9 <-R bits;
+     rk: bits <- r_9;
+     idsecret <-R cleartext;
+     aad <-R add_data;
+     r_2 <-R enc_seed;
+     cidI: ciphertext <- enc_r(idsecret, aad, r_6, r_2);
+     confpt <-R cleartext;
+     aadR <-R add_data;
+     r_3 <-R enc_seed;
+     cconfR: ciphertext <- enc_r(confpt, aadR, r_7, r_3);
+     return(ga, gb, ck0, sspre, aad, aadR, cidI, cconfR);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       find [unique] u = ri <= qHes suchthat defined(r_5[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_5[u])
+       else
+         r_5 <-R ckt;
+         return(r_5)
+     ) | (
+       foreach iH_1 <= qHkey do
+       ch1_1(x1_1: ckt, x2_1: bits) :=
+       find [unique]  suchthat (x1_1 = r_4) && (x2_1 = x_O_4) then
+         return(r_6)
+       orfind  suchthat (x1_1 = r_4) && (x2_1 = x_O_6) then
+         return(r_7)
+       orfind u_2 = ri_2 <= qHkey suchthat defined(r_8[ri_2], x2_1[ri_2], x1_1[ri_2]) && (x1_1 = x1_1[ri_2]) && (x2_1 = x2_1[ri_2]) then
+         return(r_8[u_2])
+       else
+         r_8 <-R aeadkey;
+         return(r_8)
+     ) | (
+       foreach iH_2 <= qHrk do
+       ch1_2(x1_2: ckt, x2_2: bits) :=
+       x_O_13: ckt <- cst_ckt;
+       find [unique]  suchthat defined(x_O_10, r_9) && (x1_2 = r_4) && (x2_2 = x_O_10) then
+         return(r_9)
+       orfind u_5 = ri_5 <= qHrk suchthat defined(x1_2[ri_5], x2_2[ri_5], x_O_13[ri_5], r_10[ri_5]) && (x1_2 = x1_2[ri_5]) && (x2_2 = x2_2[ri_5]) then
+         return(r_10[u_5])
+       else
+         r_10 <-R bits;
+         return(r_10)
+     ))
+
+
+Applying simplify [probability (qHrk + qHkey) / |ckt|]
+  - Global dependency analysis on r_4
+yields
+
+Game 25 is
+     start() :=
+     a <-R Zt;
+     b <-R Zt;
+     ga: G <- exp'(g, a);
+     gb: G <- exp'(g, b);
+     ck0 <-R bits;
+     sspre <-R bits;
+ {14}r_4 <-R ckt;
+     x_O_4: bits <- LBL_HK1;
+     r_6 <-R aeadkey;
+     x_O_6: bits <- LBL_HK2;
+     r_7 <-R aeadkey;
+     x_O_10: bits <- LBL_ROOT;
+     r_9 <-R bits;
+     rk: bits <- r_9;
+     idsecret <-R cleartext;
+     aad <-R add_data;
+     r_2 <-R enc_seed;
+     cidI: ciphertext <- enc_r(idsecret, aad, r_6, r_2);
+     confpt <-R cleartext;
+     aadR <-R add_data;
+     r_3 <-R enc_seed;
+     cconfR: ciphertext <- enc_r(confpt, aadR, r_7, r_3);
+     return(ga, gb, ck0, sspre, aad, aadR, cidI, cconfR);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       find [unique] u = ri <= qHes suchthat defined(r_5[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_5[u])
+       else
+         r_5 <-R ckt;
+         return(r_5)
+     ) | (
+       foreach iH_1 <= qHkey do
+       ch1_1(x1_1: ckt, x2_1: bits) :=
+       find [unique] u_2 = ri_2 <= qHkey suchthat defined(r_8[ri_2], x2_1[ri_2], x1_1[ri_2]) && (x1_1 = x1_1[ri_2]) && (x2_1 = x2_1[ri_2]) then
+         return(r_8[u_2])
+       else
+         r_8 <-R aeadkey;
+         return(r_8)
+     ) | (
+       foreach iH_2 <= qHrk do
+       ch1_2(x1_2: ckt, x2_2: bits) :=
+       x_O_13: ckt <- cst_ckt;
+{113}  find [unique] u_5 = ri_5 <= qHrk suchthat defined(x1_2[ri_5], x2_2[ri_5], x_O_13[ri_5], r_10[ri_5]) && (x1_2 = x1_2[ri_5]) && (x2_2 = x2_2[ri_5]) then
+         return(r_10[u_5])
+       else
+         r_10 <-R bits;
+         return(r_10)
+     ))
+
+
+Applying simplify
+  - Simplification pass
+    - Replaced defined condition x1_2[ri_5], x2_2[ri_5], x_O_13[ri_5], r_10[ri_5] with r_10[ri_5], x2_2[ri_5], x1_2[ri_5] in find at 113
+    - Remove random number generation at 14
+yields
+
+Game 26 is
+     start() :=
+     a <-R Zt;
+     b <-R Zt;
+     ga: G <- exp'(g, a);
+     gb: G <- exp'(g, b);
+     ck0 <-R bits;
+     sspre <-R bits;
+     x_O_4: bits <- LBL_HK1;
+     r_6 <-R aeadkey;
+     x_O_6: bits <- LBL_HK2;
+     r_7 <-R aeadkey;
+     x_O_10: bits <- LBL_ROOT;
+     r_9 <-R bits;
+     rk: bits <- r_9;
+     idsecret <-R cleartext;
+     aad <-R add_data;
+     r_2 <-R enc_seed;
+     cidI: ciphertext <- enc_r(idsecret, aad, r_6, r_2);
+     confpt <-R cleartext;
+     aadR <-R add_data;
+     r_3 <-R enc_seed;
+     cconfR: ciphertext <- enc_r(confpt, aadR, r_7, r_3);
+     return(ga, gb, ck0, sspre, aad, aadR, cidI, cconfR);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       find [unique] u = ri <= qHes suchthat defined(r_5[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_5[u])
+       else
+         r_5 <-R ckt;
+         return(r_5)
+     ) | (
+       foreach iH_1 <= qHkey do
+       ch1_1(x1_1: ckt, x2_1: bits) :=
+       find [unique] u_2 = ri_2 <= qHkey suchthat defined(r_8[ri_2], x2_1[ri_2], x1_1[ri_2]) && (x1_1 = x1_1[ri_2]) && (x2_1 = x2_1[ri_2]) then
+         return(r_8[u_2])
+       else
+         r_8 <-R aeadkey;
+         return(r_8)
+     ) | (
+       foreach iH_2 <= qHrk do
+       ch1_2(x1_2: ckt, x2_2: bits) :=
+       x_O_13: ckt <- cst_ckt;
+       find [unique] u_5 = ri_5 <= qHrk suchthat defined(r_10[ri_5], x2_2[ri_5], x1_2[ri_5]) && (x1_2 = x1_2[ri_5]) && (x2_2 = x2_2[ri_5]) then
+         return(r_10[u_5])
+       else
+         r_10 <-R bits;
+         return(r_10)
+     ))
+
+
+Applying move all binders
+  - Move assignment to x_O_13
+yields
+
+Game 27 is
+     start() :=
+     a <-R Zt;
+     b <-R Zt;
+     ga: G <- exp'(g, a);
+     gb: G <- exp'(g, b);
+     ck0 <-R bits;
+     sspre <-R bits;
+     x_O_4: bits <- LBL_HK1;
+     r_6 <-R aeadkey;
+     x_O_6: bits <- LBL_HK2;
+     r_7 <-R aeadkey;
+     x_O_10: bits <- LBL_ROOT;
+     r_9 <-R bits;
+     rk: bits <- r_9;
+     idsecret <-R cleartext;
+     aad <-R add_data;
+     r_2 <-R enc_seed;
+     cidI: ciphertext <- enc_r(idsecret, aad, r_6, r_2);
+     confpt <-R cleartext;
+     aadR <-R add_data;
+     r_3 <-R enc_seed;
+     cconfR: ciphertext <- enc_r(confpt, aadR, r_7, r_3);
+     return(ga, gb, ck0, sspre, aad, aadR, cidI, cconfR);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       find [unique] u = ri <= qHes suchthat defined(r_5[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_5[u])
+       else
+         r_5 <-R ckt;
+         return(r_5)
+     ) | (
+       foreach iH_1 <= qHkey do
+       ch1_1(x1_1: ckt, x2_1: bits) :=
+       find [unique] u_2 = ri_2 <= qHkey suchthat defined(r_8[ri_2], x2_1[ri_2], x1_1[ri_2]) && (x1_1 = x1_1[ri_2]) && (x2_1 = x2_1[ri_2]) then
+         return(r_8[u_2])
+       else
+         r_8 <-R aeadkey;
+         return(r_8)
+     ) | (
+       foreach iH_2 <= qHrk do
+       ch1_2(x1_2: ckt, x2_2: bits) :=
+       find [unique] u_5 = ri_5 <= qHrk suchthat defined(r_10[ri_5], x2_2[ri_5], x1_2[ri_5]) && (x1_2 = x1_2[ri_5]) && (x2_2 = x2_2[ri_5]) then
+         return(r_10[u_5])
+       else
+         r_10 <-R bits;
+         return(r_10)
+     ))
+
+
+Applying SA rename new without array accesses and remove assignments of findcond
+  - Remove assignments on x_O_4 (definition removed, all usages removed)
+  - Remove assignments on x_O_6 (definition removed, all usages removed)
+  - Remove assignments on x_O_10 (definition removed, all usages removed)
+yields
+
+Game 28 is
+     start() :=
+     a <-R Zt;
+     b <-R Zt;
+     ga: G <- exp'(g, a);
+     gb: G <- exp'(g, b);
+     ck0 <-R bits;
+     sspre <-R bits;
+     r_6 <-R aeadkey;
+     r_7 <-R aeadkey;
+     r_9 <-R bits;
+     rk: bits <- r_9;
+     idsecret <-R cleartext;
+     aad <-R add_data;
+     r_2 <-R enc_seed;
+     cidI: ciphertext <- enc_r(idsecret, aad, r_6, r_2);
+     confpt <-R cleartext;
+     aadR <-R add_data;
+     r_3 <-R enc_seed;
+     cconfR: ciphertext <- enc_r(confpt, aadR, r_7, r_3);
+     return(ga, gb, ck0, sspre, aad, aadR, cidI, cconfR);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       find [unique] u = ri <= qHes suchthat defined(r_5[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_5[u])
+       else
+         r_5 <-R ckt;
+         return(r_5)
+     ) | (
+       foreach iH_1 <= qHkey do
+       ch1_1(x1_1: ckt, x2_1: bits) :=
+       find [unique] u_2 = ri_2 <= qHkey suchthat defined(r_8[ri_2], x2_1[ri_2], x1_1[ri_2]) && (x1_1 = x1_1[ri_2]) && (x2_1 = x2_1[ri_2]) then
+         return(r_8[u_2])
+       else
+         r_8 <-R aeadkey;
+         return(r_8)
+     ) | (
+       foreach iH_2 <= qHrk do
+       ch1_2(x1_2: ckt, x2_2: bits) :=
+       find [unique] u_5 = ri_5 <= qHrk suchthat defined(r_10[ri_5], x2_2[ri_5], x1_2[ri_5]) && (x1_2 = x1_2[ri_5]) && (x2_2 = x2_2[ri_5]) then
+         return(r_10[u_5])
+       else
+         r_10 <-R bits;
+         return(r_10)
+     ))
+
+
+Applying equivalence ind_cpa(enc) [probability Penc(time_2, 1)]
+  - Equivalence ind_cpa(enc) with variables: r_7 -> k_4, r_3 -> r_1
+yields
+
+Game 29 is
+     start() :=
+     a <-R Zt;
+     b <-R Zt;
+     ga: G <- exp'(g, a);
+     gb: G <- exp'(g, b);
+     ck0 <-R bits;
+     sspre <-R bits;
+     r_6 <-R aeadkey;
+     r_12 <-R aeadkey;
+     r_9 <-R bits;
+     rk: bits <- r_9;
+     idsecret <-R cleartext;
+     aad <-R add_data;
+     r_2 <-R enc_seed;
+     cidI: ciphertext <- enc_r(idsecret, aad, r_6, r_2);
+     confpt <-R cleartext;
+     aadR <-R add_data;
+     r_11 <-R enc_seed;
+     cconfR: ciphertext <- (x: cleartext <- confpt; d_2: add_data <- aadR; enc_r'(Z(x), d_2, r_12, r_11));
+     return(ga, gb, ck0, sspre, aad, aadR, cidI, cconfR);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       find [unique] u = ri <= qHes suchthat defined(r_5[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_5[u])
+       else
+         r_5 <-R ckt;
+         return(r_5)
+     ) | (
+       foreach iH_1 <= qHkey do
+       ch1_1(x1_1: ckt, x2_1: bits) :=
+       find [unique] u_2 = ri_2 <= qHkey suchthat defined(r_8[ri_2], x2_1[ri_2], x1_1[ri_2]) && (x1_1 = x1_1[ri_2]) && (x2_1 = x2_1[ri_2]) then
+         return(r_8[u_2])
+       else
+         r_8 <-R aeadkey;
+         return(r_8)
+     ) | (
+       foreach iH_2 <= qHrk do
+       ch1_2(x1_2: ckt, x2_2: bits) :=
+       find [unique] u_5 = ri_5 <= qHrk suchthat defined(r_10[ri_5], x2_2[ri_5], x1_2[ri_5]) && (x1_2 = x1_2[ri_5]) && (x2_2 = x2_2[ri_5]) then
+         return(r_10[u_5])
+       else
+         r_10 <-R bits;
+         return(r_10)
+     ))
+
+
+Applying expand
+  - Expand if/find/let
+yields
+
+Game 30 is
+     start() :=
+     a <-R Zt;
+     b <-R Zt;
+     ga: G <- exp'(g, a);
+     gb: G <- exp'(g, b);
+     ck0 <-R bits;
+     sspre <-R bits;
+     r_6 <-R aeadkey;
+     r_12 <-R aeadkey;
+     r_9 <-R bits;
+     rk: bits <- r_9;
+     idsecret <-R cleartext;
+     aad <-R add_data;
+     r_2 <-R enc_seed;
+     cidI: ciphertext <- enc_r(idsecret, aad, r_6, r_2);
+     confpt <-R cleartext;
+     aadR <-R add_data;
+     r_11 <-R enc_seed;
+     x: cleartext <- confpt;
+     d_2: add_data <- aadR;
+     cconfR: ciphertext <- enc_r'(Z(x), d_2, r_12, r_11);
+     return(ga, gb, ck0, sspre, aad, aadR, cidI, cconfR);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       find [unique] u = ri <= qHes suchthat defined(r_5[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_5[u])
+       else
+         r_5 <-R ckt;
+         return(r_5)
+     ) | (
+       foreach iH_1 <= qHkey do
+       ch1_1(x1_1: ckt, x2_1: bits) :=
+       find [unique] u_2 = ri_2 <= qHkey suchthat defined(r_8[ri_2], x2_1[ri_2], x1_1[ri_2]) && (x1_1 = x1_1[ri_2]) && (x2_1 = x2_1[ri_2]) then
+         return(r_8[u_2])
+       else
+         r_8 <-R aeadkey;
+         return(r_8)
+     ) | (
+       foreach iH_2 <= qHrk do
+       ch1_2(x1_2: ckt, x2_2: bits) :=
+       find [unique] u_5 = ri_5 <= qHrk suchthat defined(r_10[ri_5], x2_2[ri_5], x1_2[ri_5]) && (x1_2 = x1_2[ri_5]) && (x2_2 = x2_2[ri_5]) then
+         return(r_10[u_5])
+       else
+         r_10 <-R bits;
+         return(r_10)
+     ))
+
+
+Applying remove assignments of findcond
+  - Remove assignments on x (definition removed, all usages removed)
+  - Remove assignments on d_2 (definition removed, all usages removed)
+yields
+
+Game 31 is
+     start() :=
+     a <-R Zt;
+     b <-R Zt;
+     ga: G <- exp'(g, a);
+     gb: G <- exp'(g, b);
+     ck0 <-R bits;
+     sspre <-R bits;
+     r_6 <-R aeadkey;
+     r_12 <-R aeadkey;
+     r_9 <-R bits;
+     rk: bits <- r_9;
+     idsecret <-R cleartext;
+     aad <-R add_data;
+     r_2 <-R enc_seed;
+     cidI: ciphertext <- enc_r(idsecret, aad, r_6, r_2);
+     confpt <-R cleartext;
+     aadR <-R add_data;
+     r_11 <-R enc_seed;
+     cconfR: ciphertext <- {32}enc_r'(Z(confpt), aadR, r_12, r_11);
+     return(ga, gb, ck0, sspre, aad, aadR, cidI, cconfR);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       find [unique] u = ri <= qHes suchthat defined(r_5[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_5[u])
+       else
+         r_5 <-R ckt;
+         return(r_5)
+     ) | (
+       foreach iH_1 <= qHkey do
+       ch1_1(x1_1: ckt, x2_1: bits) :=
+       find [unique] u_2 = ri_2 <= qHkey suchthat defined(r_8[ri_2], x2_1[ri_2], x1_1[ri_2]) && (x1_1 = x1_1[ri_2]) && (x2_1 = x2_1[ri_2]) then
+         return(r_8[u_2])
+       else
+         r_8 <-R aeadkey;
+         return(r_8)
+     ) | (
+       foreach iH_2 <= qHrk do
+       ch1_2(x1_2: ckt, x2_2: bits) :=
+       find [unique] u_5 = ri_5 <= qHrk suchthat defined(r_10[ri_5], x2_2[ri_5], x1_2[ri_5]) && (x1_2 = x1_2[ri_5]) && (x2_2 = x2_2[ri_5]) then
+         return(r_10[u_5])
+       else
+         r_10 <-R bits;
+         return(r_10)
+     ))
+
+
+Applying simplify
+  - Simplification pass
+    - Replaced enc_r'(Z(confpt), aadR, r_12, r_11) with enc_r'(z_const, aadR, r_12, r_11) at 32
+yields
+
+Game 32 is
+     start() :=
+     a <-R Zt;
+     b <-R Zt;
+     ga: G <- exp'(g, a);
+     gb: G <- exp'(g, b);
+     ck0 <-R bits;
+     sspre <-R bits;
+     r_6 <-R aeadkey;
+     r_12 <-R aeadkey;
+     r_9 <-R bits;
+     rk: bits <- r_9;
+     idsecret <-R cleartext;
+     aad <-R add_data;
+     r_2 <-R enc_seed;
+     cidI: ciphertext <- enc_r(idsecret, aad, r_6, r_2);
+ {28}confpt <-R cleartext;
+     aadR <-R add_data;
+     r_11 <-R enc_seed;
+     cconfR: ciphertext <- enc_r'(z_const, aadR, r_12, r_11);
+     return(ga, gb, ck0, sspre, aad, aadR, cidI, cconfR);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       find [unique] u = ri <= qHes suchthat defined(r_5[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_5[u])
+       else
+         r_5 <-R ckt;
+         return(r_5)
+     ) | (
+       foreach iH_1 <= qHkey do
+       ch1_1(x1_1: ckt, x2_1: bits) :=
+       find [unique] u_2 = ri_2 <= qHkey suchthat defined(r_8[ri_2], x2_1[ri_2], x1_1[ri_2]) && (x1_1 = x1_1[ri_2]) && (x2_1 = x2_1[ri_2]) then
+         return(r_8[u_2])
+       else
+         r_8 <-R aeadkey;
+         return(r_8)
+     ) | (
+       foreach iH_2 <= qHrk do
+       ch1_2(x1_2: ckt, x2_2: bits) :=
+       find [unique] u_5 = ri_5 <= qHrk suchthat defined(r_10[ri_5], x2_2[ri_5], x1_2[ri_5]) && (x1_2 = x1_2[ri_5]) && (x2_2 = x2_2[ri_5]) then
+         return(r_10[u_5])
+       else
+         r_10 <-R bits;
+         return(r_10)
+     ))
+
+
+Applying simplify
+  - Simplification pass
+    - Remove random number generation at 28
+yields
+
+Game 33 is
+     start() :=
+     a <-R Zt;
+     b <-R Zt;
+     ga: G <- exp'(g, a);
+     gb: G <- exp'(g, b);
+     ck0 <-R bits;
+     sspre <-R bits;
+     r_6 <-R aeadkey;
+     r_12 <-R aeadkey;
+     r_9 <-R bits;
+     rk: bits <- r_9;
+     idsecret <-R cleartext;
+     aad <-R add_data;
+     r_2 <-R enc_seed;
+     cidI: ciphertext <- enc_r(idsecret, aad, r_6, r_2);
+     aadR <-R add_data;
+     r_11 <-R enc_seed;
+     cconfR: ciphertext <- enc_r'(z_const, aadR, r_12, r_11);
+     return(ga, gb, ck0, sspre, aad, aadR, cidI, cconfR);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       find [unique] u = ri <= qHes suchthat defined(r_5[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_5[u])
+       else
+         r_5 <-R ckt;
+         return(r_5)
+     ) | (
+       foreach iH_1 <= qHkey do
+       ch1_1(x1_1: ckt, x2_1: bits) :=
+       find [unique] u_2 = ri_2 <= qHkey suchthat defined(r_8[ri_2], x2_1[ri_2], x1_1[ri_2]) && (x1_1 = x1_1[ri_2]) && (x2_1 = x2_1[ri_2]) then
+         return(r_8[u_2])
+       else
+         r_8 <-R aeadkey;
+         return(r_8)
+     ) | (
+       foreach iH_2 <= qHrk do
+       ch1_2(x1_2: ckt, x2_2: bits) :=
+       find [unique] u_5 = ri_5 <= qHrk suchthat defined(r_10[ri_5], x2_2[ri_5], x1_2[ri_5]) && (x1_2 = x1_2[ri_5]) && (x2_2 = x2_2[ri_5]) then
+         return(r_10[u_5])
+       else
+         r_10 <-R bits;
+         return(r_10)
+     ))
+
+
+Proved secrecy of rk in game 33
+Adv[Game 1: secrecy of rk] <= 2 * Penc(time_2, 1) + (2 * qHrk + 2 * qHkey) / |ckt| + 2 * qHes * pCDH(time_1) + Adv[Game 33: secrecy of rk]
+Adv[Game 33: secrecy of rk] <= 0
+RESULT Proved secrecy of rk up to probability 2 * Penc(time_2, 1) + (2 * qHkey + 2 * qHrk) / |ckt| + 2 * qHes * pCDH(time_1)
+RESULT time_1 = (2 + qHkey) * time(Hkey) + (1 + qHrk) * time(Hrk) + 2 * time(enc_r) + time + (qHes - 1) * time(exp)
+RESULT time_2 = 2 * time(exp) + time(enc_r) + time
+All queries proved.
