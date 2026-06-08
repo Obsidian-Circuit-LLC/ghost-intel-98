@@ -52,7 +52,7 @@ const hex = (u: Uint8Array): string => Buffer.from(u).toString('hex');
 /** Per-cid cap on outstanding (unconsumed) issuances — spec open-q #4. The index must retain at least
  * this many recent ids per contact so every outstanding prekey stays attributable; hence the coupling
  * invariant RECENT_CAP >= MINT_CAP, asserted at module load below. */
-const MINT_CAP = 4;
+export const MINT_CAP = 4;
 /** How many older pids (beyond `current`) the per-contact index keeps. Source of truth; the test
  * imports this. Bounded per contact ⇒ no cross-contact eviction (the rev-1 global-cap defect). */
 export const RECENT_CAP = MINT_CAP;
@@ -60,6 +60,14 @@ export const RECENT_CAP = MINT_CAP;
 // prekey could fall off the index and lose its contact attribution. Fail loud at load if violated.
 if (RECENT_CAP < MINT_CAP) {
   throw new Error(`prekey-store invariant: RECENT_CAP (${RECENT_CAP}) must be >= MINT_CAP (${MINT_CAP})`);
+}
+
+/** Raised on a per-cid mint-cap breach (F-1: offerCurrent must not be an unbounded mint vector). */
+export class PrekeyError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PrekeyError';
+  }
 }
 
 const isPlainObject = (x: unknown): x is Record<string, unknown> =>
@@ -242,13 +250,47 @@ export class PrekeyStore {
   }
 
   /**
-   * Mint a fresh one-time prekey for a reconnect offer WITHOUT consuming anything from the pool.
-   * The returned prekey is pushed to oneTime and recorded in the issued index under `cid`.
-   * It will be consumed normally if a subsequent retry handshake completes.
+   * Offer a current prekey for a reconnect-recovery Reject WITHOUT minting per call (F-1 fix, rev-4).
+   *
+   * Re-offers the contact's newest still-unconsumed already-issued prekey (its `current`, else the
+   * newest `recent[]` whose secret is still in the pool). Re-offer neither consumes nor changes the
+   * pool — `remaining()` is unchanged. Only when the contact has no unconsumed issued prekey is a
+   * fresh one minted, and only while the per-cid outstanding-unconsumed count is below MINT_CAP;
+   * at/above the cap we fail cheaply (PrekeyError) rather than mint unboundedly. The cap is checked
+   * first: a contact already holding MINT_CAP outstanding prekeys is the DoS signal we refuse on.
+   * Last-resort (signed, isLastResort) is the floor only when the one-time pool is globally exhausted.
    */
   offerCurrent(cid: string): Promise<KemPrekeyKeyPair> {
     return this.serialize(async () => {
       const f = await this.read();
+      // Secret still in the pool ⇒ unconsumed (consume() deletes it from oneTime). O(1) membership.
+      const live = new Set(f.oneTime.map((x) => x.pid));
+      const entry = f.issued[cid];
+
+      // Outstanding-unconsumed count for this cid = its issued ids (current ∪ recent) still in the pool.
+      let outstanding = 0;
+      if (entry) {
+        const ids = entry.current ? [entry.current, ...entry.recent] : entry.recent;
+        for (const pid of new Set(ids)) if (live.has(pid)) outstanding++;
+      }
+      // Cap first: refuse the churn rather than re-offer/mint when the contact is already at the cap.
+      if (outstanding >= MINT_CAP) throw new PrekeyError('offerCurrent: per-cid mint cap reached');
+
+      // Re-offer: newest unconsumed issued prekey — current first, then recent[] newest-first.
+      if (entry) {
+        const ordered = entry.current ? [entry.current, ...[...entry.recent].reverse()] : [...entry.recent].reverse();
+        for (const pid of ordered) {
+          if (!live.has(pid)) continue;
+          const s = f.oneTime.find((x) => x.pid === pid)!;
+          return { prekey: decodeKemPrekey(unb64(s.enc)), secretKey: unb64(s.sk) }; // no mint, no consume, no write
+        }
+      }
+
+      // None unconsumed and under cap → mint one, index it under cid. Last-resort only when the
+      // one-time pool is globally exhausted (a fresh mint still lands in oneTime, so this is the floor).
+      if (f.oneTime.length === 0 && f.lastResort) {
+        return { prekey: decodeKemPrekey(unb64(f.lastResort.enc)), secretKey: unb64(f.lastResort.sk) };
+      }
       const s = await this.mint(null);
       f.oneTime.push(s);
       recordIssued(f, cid, s.pid);
