@@ -29,6 +29,8 @@ export type ModuleKey =
   | 'markets'
   | 'briefcase'
   | 'solitaire'
+  | 'minesweeper'
+  | 'chess'
   | 'chat'
   | 'help';
 

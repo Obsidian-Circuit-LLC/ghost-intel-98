@@ -25,6 +25,8 @@ import { BookmarksModule } from '../modules/bookmarks/BookmarksModule';
 import { MarketsModule } from '../modules/markets/MarketsModule';
 import { BriefcaseModule } from '../modules/briefcase/BriefcaseModule';
 import { SolitaireModule } from '../modules/solitaire/SolitaireModule';
+import { MinesweeperModule } from '../modules/minesweeper/MinesweeperModule';
+import { ChessModule } from '../modules/chess/ChessModule';
 import { ChatModule } from '../modules/chat/ChatModule';
 import { HelpModule } from '../modules/help/HelpModule';
 import { ComingSoon } from '../modules/coming-soon/ComingSoon';
@@ -71,6 +73,10 @@ export function ModuleHost({ spec }: { spec: WindowSpec }): JSX.Element {
       return <BriefcaseModule initialNoteId={spec.props?.['noteId'] as string | undefined} />;
     case 'solitaire':
       return <SolitaireModule />;
+    case 'minesweeper':
+      return <MinesweeperModule />;
+    case 'chess':
+      return <ChessModule />;
     case 'doc-viewer':
       return (
         <DocViewerModule
