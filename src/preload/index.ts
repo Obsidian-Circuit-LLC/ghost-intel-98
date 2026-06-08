@@ -94,6 +94,7 @@ const api = {
     createInvite: () => ipcRenderer.invoke(channels.chat.createInvite),
     acceptInvite: (link: string) => ipcRenderer.invoke(channels.chat.acceptInvite, link),
     listContacts: () => ipcRenderer.invoke(channels.chat.listContacts),
+    setVerified: (contactId: string, verified: boolean) => ipcRenderer.invoke(channels.chat.setVerified, contactId, verified),
     send: (contactId: string, text: string) => ipcRenderer.invoke(channels.chat.send, contactId, text),
     sendFile: (contactId: string) => ipcRenderer.invoke(channels.chat.sendFile, contactId),
     shareAttachment: (contactId: string, caseId: string, fileName: string) => ipcRenderer.invoke(channels.chat.shareAttachment, contactId, caseId, fileName),

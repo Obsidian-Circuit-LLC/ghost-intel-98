@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSettings } from '../../state/store';
 import { toast } from '../../state/toasts';
+import { confirmDialog } from '../../state/dialogs';
 import type { ChatContactDTO, ChatMessageDTO, ChatGroupDTO } from '../../../preload/api';
 
 type Status = 'online' | 'connecting' | 'offline';
@@ -52,6 +53,21 @@ export function ChatModule(): JSX.Element {
     if (forever) { try { localStorage.setItem('ga98.chat.introSeen', '1'); } catch { /* storage blocked */ } }
     setShowHelp(false);
   }
+
+  const markVerified = useCallback(async (cid: string, sn: string): Promise<void> => {
+    const ok = await confirmDialog(
+      `Only mark this contact verified AFTER you have compared the safety number out-of-band (call / in person) and it MATCHED on both ends:\n\n${sn}\n\nMatching numbers mean there is no machine-in-the-middle. Mark as verified?`,
+      'Verify contact'
+    );
+    if (!ok) return;
+    try {
+      await window.api.chat.setVerified(cid, true);
+      void window.api.chat.listContacts().then(setContacts).catch(() => {});
+      toast.success('Contact marked verified.');
+    } catch (err) {
+      toast.error(`Could not set verified: ${(err as Error).message}`);
+    }
+  }, []);
 
   const refreshContacts = useCallback(() => {
     void window.api.chat.listContacts().then(setContacts).catch(() => {});
@@ -318,7 +334,18 @@ export function ChatModule(): JSX.Element {
               <>
                 {sel && (
                   <div style={{ padding: '4px 8px', borderBottom: '1px solid #808080', fontSize: 11 }}>
-                    <b>{sel.displayName}</b> — safety number (compare out-of-band):
+                    <b>{sel.displayName}</b> {sel.verified
+                      ? <span style={{ color: '#0a7d28' }}>✔ verified</span>
+                      : <span style={{ color: '#a00' }}>⚠ UNVERIFIED</span>}
+                    {!sel.verified && (
+                      <div style={{ marginTop: 3, padding: '4px 6px', background: '#ffecec', border: '1px solid #d33', color: '#700', fontSize: 10 }}>
+                        This contact is <b>pinned but not verified</b> (TOFU). Until you compare the safety
+                        number out-of-band, a machine-in-the-middle on first contact cannot be ruled out.
+                        Compare the number below by phone/in person, then{' '}
+                        <button style={{ fontSize: 10 }} onClick={() => void markVerified(sel.contactId, sel.safetyNumber)}>Mark as verified</button>
+                      </div>
+                    )}
+                    <div style={{ marginTop: 2 }}>safety number (compare out-of-band):</div>
                     <div style={{ fontFamily: 'monospace', fontSize: 10 }}>{sel.safetyNumber}</div>
                   </div>
                 )}

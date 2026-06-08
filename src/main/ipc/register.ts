@@ -273,6 +273,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.chat.createInvite, () => chat.createInvite());
   safeHandle(channels.chat.acceptInvite, (...a) => chat.acceptInvite(ensureInviteLink(a[0])));
   safeHandle(channels.chat.listContacts, () => chat.listContacts());
+  safeHandle(channels.chat.setVerified, (...a) => chat.setVerified(ensureContactId(a[0]), a[1] === true));
   safeHandle(channels.chat.send, (...a) => chat.send(ensureContactId(a[0]), ensureChatText(a[1])));
   safeHandle(channels.chat.sendFile, (...a) => chat.sendFile(ensureContactId(a[0]), getWindow));
   safeHandle(channels.chat.shareAttachment, (...a) => chat.shareAttachment(ensureContactId(a[0]), ensureUuid(a[1], 'caseId'), ensureFileName(a[2], 'fileName')));

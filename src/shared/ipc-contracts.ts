@@ -90,6 +90,7 @@ export const channels = {
     createInvite: 'chat:createInvite',
     acceptInvite: 'chat:acceptInvite',
     listContacts: 'chat:listContacts',
+    setVerified: 'chat:setVerified',
     send: 'chat:send',
     sendFile: 'chat:sendFile',
     shareAttachment: 'chat:shareAttachment',
