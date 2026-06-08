@@ -4,7 +4,7 @@
  * there's nowhere to save — pick a case or Briefcase first.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CaseSummary } from '@shared/types';
 import type { BriefcaseNoteSummary } from '@shared/post-mvp-types';
 import { confirmDialog } from '../../state/dialogs';
@@ -13,12 +13,14 @@ import { shortcutBus, type ShortcutEventDetail } from '../../shell/Shortcuts';
 
 interface Props {
   initialCaseId: string | null;
+  /** When opened from a deep link (e.g. Search), auto-open this note in the case. */
+  initialNoteName?: string;
 }
 
 /** Sentinel target for the Briefcase (vs a real case id or '' for no destination). */
 const BRIEFCASE = '__briefcase__';
 
-export function NotepadModule({ initialCaseId }: Props): JSX.Element {
+export function NotepadModule({ initialCaseId, initialNoteName }: Props): JSX.Element {
   const [cases, setCases] = useState<CaseSummary[]>([]);
   // `target` holds a case id, '' (no destination), or the BRIEFCASE sentinel.
   const [target, setTarget] = useState<string | null>(initialCaseId);
@@ -45,6 +47,17 @@ export function NotepadModule({ initialCaseId }: Props): JSX.Element {
   useEffect(() => {
     void refreshNotes();
   }, [refreshNotes]);
+
+  // Deep-link: auto-open the requested note once, after the case target is set.
+  const openedInitialNote = useRef(false);
+  useEffect(() => {
+    if (openedInitialNote.current) return;
+    if (!initialNoteName || isBriefcase || !target) return;
+    openedInitialNote.current = true;
+    void openExisting(initialNoteName);
+    // openExisting reads the note directly by name; no list dependency needed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialNoteName, target, isBriefcase]);
 
   async function openExisting(value: string): Promise<void> {
     if (dirty) {

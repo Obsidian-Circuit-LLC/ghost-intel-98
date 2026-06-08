@@ -252,7 +252,15 @@ export interface CreateCaseInput {
   tags?: string[];
 }
 
-export interface SearchHit { field: string; snippet: string }
+export interface SearchHit {
+  field: string;
+  snippet: string;
+  /** Structured navigation target so the UI can deep-link to the exact hit. */
+  kind?: 'case' | 'note' | 'file';
+  noteName?: string; // when kind === 'note'
+  fileName?: string; // when kind === 'file' — internal storage name (doc-viewer needs this)
+  originalName?: string; // when kind === 'file' — user-facing name
+}
 export interface SearchResult { caseId: string; caseTitle: string; hits: SearchHit[] }
 
 export type WhiteboardNodeType = 'text' | 'link' | 'image' | 'file';
