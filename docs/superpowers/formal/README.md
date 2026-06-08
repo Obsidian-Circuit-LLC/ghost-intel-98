@@ -7,15 +7,15 @@ schedule (2-input core `chat-handshake-hybrid-*.cv` and the **actual 5-step chai
 replay / no UKS, R-authenticates-I injectivity shown to rest on single-use prekeys (the TOCTOU fix); **KCI resistance** (`chat-handshake-kci-reveal{R,I}.cv`) — each party still authenticates its peer with
 its OWN long-term key revealed; and **hybrid forward secrecy** (`chat-handshake-fs-{classical,pq}.cv`) —
 RK secret under full long-term-key compromise if either the ephemeral DH (`ee`) or the ephemeral KEM
-(`ss_I`) survives. The symbolic model (`chat-handshake.pv`, `proverif-output-2026-06-08.txt`) was
-completed and run under ProVerif 2.05.
+(`ss_I`) survives; and the **unified KDF→AEAD model** (`chat-handshake-unified.cv`) — RK stays secret in
+the presence of the chain-derived AEAD encryptions (c_idI/c_confR), so the layers compose. The symbolic
+model (`chat-handshake.pv`, `proverif-output-2026-06-08.txt`) was completed and run under ProVerif 2.05.
 
 **This does NOT clear the EXPERIMENTAL / not-formally-verified banner.** Remaining (see
-`model-code-correspondence.md` §2): (5) a single end-to-end model unifying the auth proof with the
-AEAD/secrecy layer (the auth model abstracts the c_idI/c_confR AEAD, modelling Sig_I/Sig_R in clear);
-plus the **fuzzing harness** and the **noble constant-time audit**. Beyond the formal kit, an **external
-audit** and the **FIPS-validated module build** are external gates that cannot be self-cleared. The
-banner stays until those land — the flip is the operator's call.
+`model-code-correspondence.md`): a fully machine-checked **computational G2′** (real-or-random; G2′ is
+already symbolic + follows from a secret AEAD key + IND-CPA) and the **noble constant-time audit**.
+Beyond the formal kit, an **external audit** and the **FIPS-validated module build** are external gates
+that cannot be self-cleared. The banner stays until those land — the flip is the operator's call.
 
 ### CryptoVerif results (2026-06-08, hybrid key-schedule core, ROM key derivation)
 

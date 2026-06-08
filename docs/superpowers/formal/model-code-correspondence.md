@@ -62,17 +62,24 @@ ephemerals. Hybrid, both legs proved: classical FS via `ee` (ephemeral-ephemeral
 statics + ML-KEM revealed; PQ FS via `ss_I` (ML-KEM to the deleted ephemeral ek_I, IND-CCA2 + decap
 oracle) with all X25519 incl. `ee` revealed. FS holds if EITHER ephemeral primitive survives. ✓
 
+**Unified KDF→AEAD model (`chat-handshake-unified.cv`):** the AEAD keys (hk1, hk2) are derived from the
+same KDF chain key CK as RK, and c_idI/c_confR are emitted under them. Proves **RK stays secret in the
+presence of those AEAD encryptions** (the bound carries the AEAD `Penc` term) — the KDF→AEAD layers
+compose; deriving the AEAD keys from the chain doesn't compromise the root key. ✓ (classical leg)
+
 **NOT yet covered (the gap that keeps "formally verified" from being claimable):**
 1. ~~The full 5-step MixKey chain~~ — **DONE** (fullchain files).
 2. ~~Computational mutual authentication / UKS / replay~~ — **DONE** (`chat-handshake-auth.cv`).
 3. ~~KCI (key-compromise impersonation)~~ — **DONE** (`chat-handshake-kci-reveal{R,I}.cv`).
 4. ~~Forward secrecy (computational, hybrid)~~ — **DONE** (`chat-handshake-fs-{classical,pq}.cv`).
-5. **AEAD layer abstracted in the auth model** — Sig_I/Sig_R are modelled in clear; the c_idI/c_confR
-   AEAD provides identity-confidentiality (G2′, symbolic-only so far) + key-confirmation, not auth. A
-   single end-to-end model unifying auth + the AEAD/secrecy layer is the remaining consolidation.
-Item 5, plus the **noble constant-time audit** (§3 residual), then an external audit + the FIPS module
-build, remain before the banner can change. (The fuzzing harness — §3 — is **done**:
-`test/chat-fuzz.test.ts`.)
+5. ~~Unified KDF→AEAD secrecy composition~~ — **DONE** (`chat-handshake-unified.cv`).
+   *Residual polish:* a fully machine-checked **computational G2′** (c_idI identity confidentiality).
+   G2′ is proven symbolically (`chat-handshake.pv`, `not attacker(s_id)`); computationally it follows
+   from hk1 secret (same derivation as the proven-secret RK) + AEAD IND-CPA, but the single-query
+   encoding needs a real-or-random game (`query secret` on an AEAD'd message is the wrong idiom). Not a
+   new property — confidentiality under a secret key + IND-CPA.
+Remaining: the G2′ real-or-random polish (5), the **noble constant-time audit** (§3 residual), then an
+external audit + the FIPS module build. (Fuzzing harness — §3 — **done**: `test/chat-fuzz.test.ts`.)
 
 ## 3. Implementation audit (tools are blind to this)
 
