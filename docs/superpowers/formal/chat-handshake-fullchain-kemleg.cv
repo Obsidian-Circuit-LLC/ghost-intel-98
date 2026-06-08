@@ -1,0 +1,73 @@
+(* ============================================================================
+   DCS98 chat handshake — CryptoVerif, FULL 5-step MixKey chain, KEM leg.
+
+   Companion to chat-handshake-fullchain-dhleg.cv. Same actual chain
+   (handshake.ts:174-217); here the surviving secret is the ML-KEM `ss_pre`
+   (R's signed prekey, :177), and EVERY X25519 secret (es, ee, se) plus the
+   other KEM secret ss_I are handed to the adversary, who also gets pk, the
+   ciphertext, and a decapsulation oracle (full IND-CCA2).
+
+     CK1 = MixKey(es,     CK0)   -- es given to adversary ⇒ CK1 computable
+     CK2 = MixKey(ss_pre, CK1)   -- ss_pre from IND-CCA2 KEM ⇒ random ⇒ CK2 unknown
+     CK3..CK5, RK                -- mixing known secrets into an unknown CK stays unknown
+
+   Claim (KEM leg of the hybrid): RK ≈ random under IND-CCA2(ML-KEM) over the real
+   multi-step chain. With the DH leg, this gives "secure unless BOTH primitives
+   break" for the chain as implemented.
+
+   Run: cryptoverif chat-handshake-fullchain-kemleg.cv
+   ============================================================================ *)
+
+proof {
+  crypto ind_cca2(encap);
+  crypto rom(Hpre);
+  crypto rom(Hmix);
+  success
+}
+
+type keyseed [large,fixed].
+type pkey [bounded].
+type skey [bounded].
+type kemss [large,fixed].      (* ML-KEM shared secret ss_pre *)
+type ciphertext [bounded].
+type encapoutput [bounded].
+type bits [large,fixed].       (* chaining keys + the given (DH + ss_I) secrets *)
+type hkpre [fixed].
+type hkmix [fixed].
+
+proba Penc.
+proba Pkeycoll.
+proba Pctxtcoll.
+expand IND_CCA2_KEM(keyseed, pkey, skey, kemss, ciphertext, encapoutput, pkgen, skgen, encap, pair, decap, injbot, Penc, Pkeycoll, Pctxtcoll).
+
+expand ROM_hash_2(hkpre, kemss, bits, bits, Hpre, oracle_pre, qHpre).
+expand ROM_hash_2(hkmix, bits,  bits, bits, Hmix, oracle_mix, qHmix).
+
+query secret rk.
+
+param Ndec.
+channel start, c, cdec, cdecret.
+
+process
+  in(start, ());
+  new kp: hkpre; new km: hkmix;
+  new seed: keyseed;
+  let pk: pkey = pkgen(seed) in
+  let sk: skey = skgen(seed) in
+  let enc: encapoutput = encap(pk) in
+  let pair(sspre: kemss, ct: ciphertext) = enc in
+  new ck0: bits;                 (* public chaining seed *)
+  new es:  bits;                 (* every X25519 secret + ss_I handed to the adversary below *)
+  new ee:  bits;
+  new se:  bits;
+  new ssi: bits;
+  new th4: bits;
+  let ck1: bits = Hmix(km, es,    ck0) in
+  let ck2: bits = Hpre(kp, sspre, ck1) in
+  let ck3: bits = Hmix(km, ee,    ck2) in
+  let ck4: bits = Hmix(km, se,    ck3) in
+  let ck5: bits = Hmix(km, ssi,   ck4) in
+  let rk:  bits = Hmix(km, ck5,   th4) in
+  out(c, (pk, ct, ck0, es, ee, se, ssi, th4));
+  ( oracle_pre(kp) | oracle_mix(km)
+  | (! Ndec in(cdec, cc: ciphertext); if cc <> ct then out(cdecret, decap(cc, sk))) )

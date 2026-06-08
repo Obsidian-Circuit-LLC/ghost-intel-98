@@ -1,0 +1,1421 @@
+Doing expand get, insert and prove unique annotations... No change.
+Doing simplify (non-expanded game)... No change.
+Doing expand... No change.
+Doing remove assignments of findcond... No change.
+Doing simplify... Run simplify 2 time(s). Fixpoint reached.
+Done.
+Doing move all binders... No change.
+Doing SA rename new without array accesses and remove assignments of findcond... No change.
+Doing merge branches... No change.
+Proof of (one-session) secrecy of rk failed:
+  rk is not defined only by restrictions or assignments.
+Trying equivalence rom(Hes)... Transf. OK Proba. computed Transf. done Succeeded.
+Doing simplify (non-expanded game)... Done.
+Doing expand... Done.
+Doing remove assignments of findcond... Done.
+Doing simplify... Doing global dependency analysis on ck0 inside simplify... At 54, returned message ck0 depends on ck0.
+No change
+Doing global dependency analysis on ck0 inside simplify... At 54, returned message ck0 depends on ck0.
+No change
+Run simplify 2 time(s). Fixpoint reached.
+Done.
+Doing move all binders... Done.
+Doing SA rename new without array accesses and remove assignments of findcond... No change.
+Doing merge branches... No change.
+Trying equivalence rom(Hmix)... Transf. OK Proba. computed Transf. done Succeeded.
+Doing simplify (non-expanded game)... Eliminated collisions between th4 and r Probability: 1 / |bits|
+Eliminated collisions between ssi and sspre Probability: 1 / |bits|
+Eliminated collisions between ssi and ee Probability: 1 / |bits|
+Eliminated collisions between ssi and se Probability: 1 / |bits|
+Eliminated collisions between se and sspre Probability: 1 / |bits|
+Eliminated collisions between se and ee Probability: 1 / |bits|
+Eliminated collisions between ee and sspre Probability: 1 / |bits|
+Done.
+Doing expand... Eliminated collisions between r_5 and ee Probability: 1 / |bits|
+Eliminated collisions between r_5 and se Probability: 1 / |bits|
+Eliminated collisions between r_5 and ssi Probability: 1 / |bits|
+Done.
+Doing remove assignments of findcond... Done.
+Doing simplify... Doing global dependency analysis on r_5 inside simplify... At 132, returned message r_5 depends on r_5.
+No change
+Doing global dependency analysis on th4 inside simplify... At 40, returned message th4 depends on th4.
+No change
+Doing global dependency analysis on ssi inside simplify... At 39, returned message ssi depends on ssi.
+No change
+Doing global dependency analysis on r_4 inside simplify... At 120, returned message r_4 depends on r_4.
+No change
+Doing global dependency analysis on se inside simplify... At 38, returned message se depends on se.
+No change
+Doing global dependency analysis on r_3 inside simplify... At 108, returned message r_3 depends on r_3.
+No change
+Doing global dependency analysis on ee inside simplify... At 37, returned message ee depends on ee.
+No change
+Doing global dependency analysis on r_2 inside simplify... At 96, returned message r_2 depends on r_2.
+No change
+Doing global dependency analysis on sspre inside simplify... At 36, returned message sspre depends on sspre.
+No change
+Doing global dependency analysis on r inside simplify... At 55, returned message r depends on r.
+No change
+Doing global dependency analysis on ck0 inside simplify... At 35, returned message ck0 depends on ck0.
+No change
+Doing global dependency analysis on r_5 inside simplify... At 132, returned message r_5 depends on r_5.
+No change
+Doing global dependency analysis on th4 inside simplify... At 40, returned message th4 depends on th4.
+No change
+Doing global dependency analysis on ssi inside simplify... At 39, returned message ssi depends on ssi.
+No change
+Doing global dependency analysis on r_4 inside simplify... At 120, returned message r_4 depends on r_4.
+No change
+Doing global dependency analysis on se inside simplify... At 38, returned message se depends on se.
+No change
+Doing global dependency analysis on r_3 inside simplify... At 108, returned message r_3 depends on r_3.
+No change
+Doing global dependency analysis on ee inside simplify... At 37, returned message ee depends on ee.
+No change
+Doing global dependency analysis on r_2 inside simplify... At 96, returned message r_2 depends on r_2.
+No change
+Doing global dependency analysis on sspre inside simplify... At 36, returned message sspre depends on sspre.
+No change
+Doing global dependency analysis on r inside simplify... At 55, returned message r depends on r.
+No change
+Doing global dependency analysis on ck0 inside simplify... At 35, returned message ck0 depends on ck0.
+No change
+Run simplify 2 time(s). Fixpoint reached.
+Done.
+Doing move all binders... Done.
+Doing SA rename new without array accesses and remove assignments of findcond... No change.
+Doing merge branches... No change.
+Trying equivalence cdh(exp)... Failed.
+Doing remove assignments of binder es... Done.
+Trying equivalence cdh(exp) with b, a... Transf. OK Proba. computed Transf. done Succeeded.
+Doing simplify (non-expanded game)... Done.
+Doing expand... Done.
+Doing remove assignments of findcond... Done.
+Doing simplify... Doing global dependency analysis on r_5 inside simplify... At 112, returned message r_5 depends on r_5.
+No change
+Doing global dependency analysis on th4 inside simplify... At 34, returned message th4 depends on th4.
+No change
+Doing global dependency analysis on ssi inside simplify... At 33, returned message ssi depends on ssi.
+No change
+Doing global dependency analysis on r_4 inside simplify... At 100, returned message r_4 depends on r_4.
+No change
+Doing global dependency analysis on se inside simplify... At 32, returned message se depends on se.
+No change
+Doing global dependency analysis on r_3 inside simplify... At 88, returned message r_3 depends on r_3.
+No change
+Doing global dependency analysis on ee inside simplify... At 31, returned message ee depends on ee.
+No change
+Doing global dependency analysis on r_2 inside simplify... At 76, returned message r_2 depends on r_2.
+No change
+Doing global dependency analysis on sspre inside simplify... At 30, returned message sspre depends on sspre.
+No change
+Doing global dependency analysis on r inside simplify... Done. Restarting simplify
+Eliminated collisions between r and x2_1 Probability: qHmix / |bits|
+(r collides with a value independent of r[...] with probability at most 1 / |bits|;
+ x2_1 does not depend on r[...])
+Doing global dependency analysis on r_5 inside simplify... At 100, returned message r_5 depends on r_5.
+No change
+Doing global dependency analysis on th4 inside simplify... At 34, returned message th4 depends on th4.
+No change
+Doing global dependency analysis on ssi inside simplify... At 33, returned message ssi depends on ssi.
+No change
+Doing global dependency analysis on r_4 inside simplify... At 88, returned message r_4 depends on r_4.
+No change
+Doing global dependency analysis on se inside simplify... At 32, returned message se depends on se.
+No change
+Doing global dependency analysis on r_3 inside simplify... At 76, returned message r_3 depends on r_3.
+No change
+Doing global dependency analysis on ee inside simplify... At 31, returned message ee depends on ee.
+No change
+Doing global dependency analysis on r_2 inside simplify... Done. Restarting simplify
+Eliminated collisions between r_2 and x2_1 Probability: qHmix / |bits|
+(r_2 collides with a value independent of r_2[...] with probability at most 1 / |bits|;
+ x2_1 does not depend on r_2[...])
+Doing global dependency analysis on r_5 inside simplify... At 88, returned message r_5 depends on r_5.
+No change
+Doing global dependency analysis on th4 inside simplify... At 34, returned message th4 depends on th4.
+No change
+Doing global dependency analysis on ssi inside simplify... At 33, returned message ssi depends on ssi.
+No change
+Doing global dependency analysis on r_4 inside simplify... At 76, returned message r_4 depends on r_4.
+No change
+Doing global dependency analysis on se inside simplify... At 32, returned message se depends on se.
+No change
+Doing global dependency analysis on r_3 inside simplify... Done. Restarting simplify
+Eliminated collisions between r_3 and x2_1 Probability: qHmix / |bits|
+(r_3 collides with a value independent of r_3[...] with probability at most 1 / |bits|;
+ x2_1 does not depend on r_3[...])
+Doing global dependency analysis on r_5 inside simplify... At 76, returned message r_5 depends on r_5.
+No change
+Doing global dependency analysis on th4 inside simplify... At 34, returned message th4 depends on th4.
+No change
+Doing global dependency analysis on ssi inside simplify... At 33, returned message ssi depends on ssi.
+No change
+Doing global dependency analysis on r_4 inside simplify... Done. Restarting simplify
+Eliminated collisions between r_4 and x2_1 Probability: qHmix / |bits|
+(r_4 collides with a value independent of r_4[...] with probability at most 1 / |bits|;
+ x2_1 does not depend on r_4[...])
+Doing global dependency analysis on r_5 inside simplify... Done. Restarting simplify
+Eliminated collisions between r_5 and x1_1 Probability: qHmix / |bits|
+(r_5 collides with a value independent of r_5[...] with probability at most 1 / |bits|;
+ x1_1 does not depend on r_5[...])
+Run simplify 2 time(s). Fixpoint reached.
+Done.
+Doing move all binders... No change.
+Doing SA rename new without array accesses and remove assignments of findcond... No change.
+Doing merge branches... No change.
+Proved one-session secrecy of rk
+Proved secrecy of rk
+===================== Proof starts =======================
+Initial state
+Game 1 is
+     start() :=
+     ke <-R hk1t;
+     km <-R hk2t;
+     a <-R Z;
+     b <-R Z;
+     ga: G <- exp(g, a);
+     gb: G <- exp(g, b);
+     es: G <- {15}exp(gb, a);
+     ck0 <-R bits;
+     sspre <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     ck1: bits <- Hes(ke, es, ck0);
+     ck2: bits <- Hmix(km, sspre, ck1);
+     ck3: bits <- Hmix(km, ee, ck2);
+     ck4: bits <- Hmix(km, se, ck3);
+     ck5: bits <- Hmix(km, ssi, ck4);
+     rk: bits <- Hmix(km, ck5, th4);
+     return(ga, gb, ck0, sspre, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       return(Hes(ke, x1, x2))
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       return(Hmix(km, x1_1, x2_1))
+     ))
+
+
+Applying simplify
+  - Simplification pass
+    - Replaced exp(gb, a) with exp(g, mult(b, a)) at 15
+yields
+
+Game 2 is
+     start() :=
+     ke <-R hk1t;
+     km <-R hk2t;
+     a <-R Z;
+     b <-R Z;
+     ga: G <- exp(g, a);
+     gb: G <- exp(g, b);
+     es: G <- exp(g, mult(b, a));
+     ck0 <-R bits;
+     sspre <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     ck1: bits <- Hes(ke, es, ck0);
+     ck2: bits <- Hmix(km, sspre, ck1);
+     ck3: bits <- Hmix(km, ee, ck2);
+     ck4: bits <- Hmix(km, se, ck3);
+     ck5: bits <- Hmix(km, ssi, ck4);
+     rk: bits <- Hmix(km, ck5, th4);
+     return(ga, gb, ck0, sspre, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       return(Hes(ke, x1, x2))
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       return(Hmix(km, x1_1, x2_1))
+     ))
+
+
+Applying equivalence rom(Hes)
+  - Equivalence rom(Hes) with variables: ke -> hk
+yields
+
+Game 3 is
+     start() :=
+     km <-R hk2t;
+     a <-R Z;
+     b <-R Z;
+     ga: G <- exp(g, a);
+     gb: G <- exp(g, b);
+     es: G <- exp(g, mult(b, a));
+     ck0 <-R bits;
+     sspre <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     ck1: bits <- (x_O_1: G <- es; x_O: bits <- ck0; {30}find [unique]  else r <-R bits; r);
+     ck2: bits <- Hmix(km, sspre, ck1);
+     ck3: bits <- Hmix(km, ee, ck2);
+     ck4: bits <- Hmix(km, se, ck3);
+     ck5: bits <- Hmix(km, ssi, ck4);
+     rk: bits <- Hmix(km, ck5, th4);
+     return(ga, gb, ck0, sspre, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       return((x_O_3: G <- x1; x_O_2: bits <- x2; find [unique]  suchthat defined(x_O_1, x_O, r) && (x_O_3 = x_O_1) && (x_O_2 = x_O) then r orfind u = ri <= qHes suchthat defined(x_O_3[ri], x_O_2[ri], r_1[ri]) && (x_O_3 = x_O_3[ri]) && (x_O_2 = x_O_2[ri]) then r_1[u] else r_1 <-R bits; r_1))
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       return(Hmix(km, x1_1, x2_1))
+     ))
+
+
+Applying simplify (non-expanded game)
+  - Simplification pass
+    - Find at 30 removed (else branch kept if any)
+yields
+
+Game 4 is
+     start() :=
+     km <-R hk2t;
+     a <-R Z;
+     b <-R Z;
+     ga: G <- exp(g, a);
+     gb: G <- exp(g, b);
+     es: G <- exp(g, mult(b, a));
+     ck0 <-R bits;
+     sspre <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     ck1: bits <- (x_O_1: G <- es; x_O: bits <- ck0; r <-R bits; r);
+     ck2: bits <- Hmix(km, sspre, ck1);
+     ck3: bits <- Hmix(km, ee, ck2);
+     ck4: bits <- Hmix(km, se, ck3);
+     ck5: bits <- Hmix(km, ssi, ck4);
+     rk: bits <- Hmix(km, ck5, th4);
+     return(ga, gb, ck0, sspre, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       return((x_O_3: G <- x1; x_O_2: bits <- x2; find [unique]  suchthat defined(x_O_1, x_O, r) && (x_O_3 = x_O_1) && (x_O_2 = x_O) then r orfind u = ri <= qHes suchthat defined(x_O_3[ri], x_O_2[ri], r_1[ri]) && (x_O_3 = x_O_3[ri]) && (x_O_2 = x_O_2[ri]) then r_1[u] else r_1 <-R bits; r_1))
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       return(Hmix(km, x1_1, x2_1))
+     ))
+
+
+Applying expand
+  - Expand if/find/let
+yields
+
+Game 5 is
+     start() :=
+     km <-R hk2t;
+     a <-R Z;
+     b <-R Z;
+     ga: G <- exp(g, a);
+     gb: G <- exp(g, b);
+     es: G <- exp(g, mult(b, a));
+     ck0 <-R bits;
+     sspre <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     x_O_1: G <- es;
+     x_O: bits <- ck0;
+     r <-R bits;
+     ck1: bits <- r;
+     ck2: bits <- Hmix(km, sspre, ck1);
+     ck3: bits <- Hmix(km, ee, ck2);
+     ck4: bits <- Hmix(km, se, ck3);
+     ck5: bits <- Hmix(km, ssi, ck4);
+     rk: bits <- Hmix(km, ck5, th4);
+     return(ga, gb, ck0, sspre, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       x_O_3: G <- x1;
+       x_O_2: bits <- x2;
+       find [unique]  suchthat defined(x_O_1, x_O, r) && (x_O_3 = x_O_1) && (x_O_2 = x_O) then
+         return(r)
+       orfind u = ri <= qHes suchthat defined(x_O_3[ri], x_O_2[ri], r_1[ri]) && (x_O_3 = x_O_3[ri]) && (x_O_2 = x_O_2[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R bits;
+         return(r_1)
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       return(Hmix(km, x1_1, x2_1))
+     ))
+
+
+Applying remove assignments of findcond
+  - Remove assignments on x_O_1 (definition removed, all usages removed)
+  - Remove assignments on x_O (definition removed, all usages removed)
+  - Remove assignments on ck1 (definition removed, all usages removed)
+  - Remove assignments on x_O_3 (definition point kept, all usages removed)
+  - Remove assignments on x_O_2 (definition removed, all usages removed)
+yields
+
+Game 6 is
+     start() :=
+     km <-R hk2t;
+     a <-R Z;
+     b <-R Z;
+     ga: G <- exp(g, a);
+     gb: G <- exp(g, b);
+     es: G <- exp(g, mult(b, a));
+     ck0 <-R bits;
+     sspre <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     r <-R bits;
+     ck2: bits <- Hmix(km, sspre, r);
+     ck3: bits <- Hmix(km, ee, ck2);
+     ck4: bits <- Hmix(km, se, ck3);
+     ck5: bits <- Hmix(km, ssi, ck4);
+     rk: bits <- Hmix(km, ck5, th4);
+     return(ga, gb, ck0, sspre, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       x_O_3: G <- cst_G;
+ {65}  find [unique]  suchthat defined(r) && (x1 = es) && (x2 = ck0) then
+         return(r)
+       orfind u = ri <= qHes suchthat defined(x1[ri], x2[ri], x_O_3[ri], r_1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R bits;
+         return(r_1)
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       return(Hmix(km, x1_1, x2_1))
+     ))
+
+
+Applying simplify
+  - Simplification pass
+    - Replaced defined condition x1[ri], x2[ri], x_O_3[ri], r_1[ri] with r_1[ri], x2[ri], x1[ri] in find at 65
+    - Replaced defined condition r with an empty condition in find at 65
+yields
+
+Game 7 is
+     start() :=
+     km <-R hk2t;
+     a <-R Z;
+     b <-R Z;
+     ga: G <- exp(g, a);
+     gb: G <- exp(g, b);
+     es: G <- exp(g, mult(b, a));
+     ck0 <-R bits;
+     sspre <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     r <-R bits;
+     ck2: bits <- Hmix(km, sspre, r);
+     ck3: bits <- Hmix(km, ee, ck2);
+     ck4: bits <- Hmix(km, se, ck3);
+     ck5: bits <- Hmix(km, ssi, ck4);
+     rk: bits <- Hmix(km, ck5, th4);
+     return(ga, gb, ck0, sspre, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       x_O_3: G <- cst_G;
+       find [unique]  suchthat (x1 = es) && (x2 = ck0) then
+         return(r)
+       orfind u = ri <= qHes suchthat defined(r_1[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R bits;
+         return(r_1)
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       return(Hmix(km, x1_1, x2_1))
+     ))
+
+
+Applying move all binders
+  - Move assignment to x_O_3
+yields
+
+Game 8 is
+     start() :=
+     km <-R hk2t;
+     a <-R Z;
+     b <-R Z;
+     ga: G <- exp(g, a);
+     gb: G <- exp(g, b);
+     es: G <- exp(g, mult(b, a));
+     ck0 <-R bits;
+     sspre <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     r <-R bits;
+     ck2: bits <- Hmix(km, sspre, r);
+     ck3: bits <- Hmix(km, ee, ck2);
+     ck4: bits <- Hmix(km, se, ck3);
+     ck5: bits <- Hmix(km, ssi, ck4);
+     rk: bits <- Hmix(km, ck5, th4);
+     return(ga, gb, ck0, sspre, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       find [unique]  suchthat (x1 = es) && (x2 = ck0) then
+         return(r)
+       orfind u = ri <= qHes suchthat defined(r_1[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R bits;
+         return(r_1)
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       return(Hmix(km, x1_1, x2_1))
+     ))
+
+
+Applying equivalence rom(Hmix)
+  - Equivalence rom(Hmix) with variables: km -> hk
+yields
+
+Game 9 is
+     start() :=
+     a <-R Z;
+     b <-R Z;
+     ga: G <- exp(g, a);
+     gb: G <- exp(g, b);
+     es: G <- exp(g, mult(b, a));
+     ck0 <-R bits;
+     sspre <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     r <-R bits;
+     ck2: bits <- (x_O_5: bits <- sspre; x_O_4: bits <- r; {30}find [unique]  else r_2 <-R bits; r_2);
+     ck3: bits <- (x_O_7: bits <- ee; x_O_6: bits <- ck2; {38}if defined(x_O_5, x_O_4, r_2) && {39}((x_O_7 = x_O_5) && (x_O_6 = x_O_4)) then r_2 else r_3 <-R bits; r_3);
+     ck4: bits <- (x_O_9: bits <- se; x_O_8: bits <- ck3; {54}find [unique]  suchthat defined(x_O_5, x_O_4, r_2) && {55}((x_O_9 = x_O_5) && (x_O_8 = x_O_4)) then r_2 orfind  suchthat defined(x_O_7, x_O_6, r_3) && {63}((x_O_9 = x_O_7) && (x_O_8 = x_O_6)) then r_3 else r_4 <-R bits; r_4);
+     ck5: bits <- (x_O_11: bits <- ssi; x_O_10: bits <- ck4; {78}find [unique]  suchthat defined(x_O_5, x_O_4, r_2) && {79}((x_O_11 = x_O_5) && (x_O_10 = x_O_4)) then r_2 orfind  suchthat defined(x_O_7, x_O_6, r_3) && {87}((x_O_11 = x_O_7) && (x_O_10 = x_O_6)) then r_3 orfind  suchthat defined(x_O_9, x_O_8, r_4) && {95}((x_O_11 = x_O_9) && (x_O_10 = x_O_8)) then r_4 else r_5 <-R bits; r_5);
+     rk: bits <- (x_O_13: bits <- ck5; x_O_12: bits <- th4; {110}find [unique]  suchthat defined(x_O_5, x_O_4, r_2) && {111}((x_O_13 = x_O_5) && (x_O_12 = x_O_4)) then r_2 orfind  suchthat defined(x_O_7, x_O_6, r_3) && (x_O_13 = x_O_7) && (x_O_12 = x_O_6) then r_3 orfind  suchthat defined(x_O_9, x_O_8, r_4) && (x_O_13 = x_O_9) && (x_O_12 = x_O_8) then r_4 orfind  suchthat defined(x_O_11, x_O_10, r_5) && (x_O_13 = x_O_11) && (x_O_12 = x_O_10) then r_5 else r_6 <-R bits; r_6);
+     return(ga, gb, ck0, sspre, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       find [unique]  suchthat (x1 = es) && (x2 = ck0) then
+         return(r)
+       orfind u = ri <= qHes suchthat defined(r_1[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R bits;
+         return(r_1)
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       return((x_O_15: bits <- x1_1; x_O_14: bits <- x2_1; find [unique]  suchthat defined(x_O_5, x_O_4, r_2) && (x_O_15 = x_O_5) && (x_O_14 = x_O_4) then r_2 orfind  suchthat defined(x_O_7, x_O_6, r_3) && (x_O_15 = x_O_7) && (x_O_14 = x_O_6) then r_3 orfind  suchthat defined(x_O_9, x_O_8, r_4) && (x_O_15 = x_O_9) && (x_O_14 = x_O_8) then r_4 orfind  suchthat defined(x_O_11, x_O_10, r_5) && (x_O_15 = x_O_11) && (x_O_14 = x_O_10) then r_5 orfind  suchthat defined(x_O_13, x_O_12, r_6) && (x_O_15 = x_O_13) && (x_O_14 = x_O_12) then r_6 orfind u_2 = ri_2 <= qHmix suchthat defined(x_O_15[ri_2], x_O_14[ri_2], r_7[ri_2]) && (x_O_15 = x_O_15[ri_2]) && (x_O_14 = x_O_14[ri_2]) then r_7[u_2] else r_7 <-R bits; r_7))
+     ))
+
+
+Applying simplify (non-expanded game) [probability 7 / |bits|]
+  - Simplification pass
+    - Find at 30 removed (else branch kept if any)
+    - Replaced ((x_O_7 = x_O_5) && (x_O_6 = x_O_4)) with false at 39
+    - Remove branch 1 in find at 38
+    - Find at 38 removed (else branch kept if any)
+    - Replaced ((x_O_9 = x_O_7) && (x_O_8 = x_O_6)) with false at 63
+    - Remove branch 2 in find at 54
+    - Replaced ((x_O_9 = x_O_5) && (x_O_8 = x_O_4)) with false at 55
+    - Remove branch 1 in find at 54
+    - Find at 54 removed (else branch kept if any)
+    - Replaced ((x_O_11 = x_O_9) && (x_O_10 = x_O_8)) with false at 95
+    - Remove branch 3 in find at 78
+    - Replaced ((x_O_11 = x_O_7) && (x_O_10 = x_O_6)) with false at 87
+    - Remove branch 2 in find at 78
+    - Replaced ((x_O_11 = x_O_5) && (x_O_10 = x_O_4)) with false at 79
+    - Remove branch 1 in find at 78
+    - Find at 78 removed (else branch kept if any)
+    - Replaced ((x_O_13 = x_O_5) && (x_O_12 = x_O_4)) with false at 111
+    - Remove branch 1 in find at 110
+yields
+
+Game 10 is
+     start() :=
+     a <-R Z;
+     b <-R Z;
+     ga: G <- exp(g, a);
+     gb: G <- exp(g, b);
+     es: G <- exp(g, mult(b, a));
+     ck0 <-R bits;
+     sspre <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     r <-R bits;
+     ck2: bits <- (x_O_5: bits <- sspre; x_O_4: bits <- r; r_2 <-R bits; r_2);
+     ck3: bits <- (x_O_7: bits <- ee; x_O_6: bits <- ck2; r_3 <-R bits; r_3);
+     ck4: bits <- (x_O_9: bits <- se; x_O_8: bits <- ck3; r_4 <-R bits; r_4);
+     ck5: bits <- (x_O_11: bits <- ssi; x_O_10: bits <- ck4; r_5 <-R bits; r_5);
+     rk: bits <- (x_O_13: bits <- ck5; x_O_12: bits <- th4; {58}find [unique]  suchthat defined(x_O_7, x_O_6, r_3) && (x_O_13 = x_O_7) && (x_O_12 = x_O_6) then r_3 orfind  suchthat defined(x_O_9, x_O_8, r_4) && (x_O_13 = x_O_9) && (x_O_12 = x_O_8) then r_4 orfind  suchthat defined(x_O_11, x_O_10, r_5) && (x_O_13 = x_O_11) && (x_O_12 = x_O_10) then r_5 else r_6 <-R bits; r_6);
+     return(ga, gb, ck0, sspre, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       find [unique]  suchthat (x1 = es) && (x2 = ck0) then
+         return(r)
+       orfind u = ri <= qHes suchthat defined(r_1[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R bits;
+         return(r_1)
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       return((x_O_15: bits <- x1_1; x_O_14: bits <- x2_1; find [unique]  suchthat defined(x_O_5, x_O_4, r_2) && (x_O_15 = x_O_5) && (x_O_14 = x_O_4) then r_2 orfind  suchthat defined(x_O_7, x_O_6, r_3) && (x_O_15 = x_O_7) && (x_O_14 = x_O_6) then r_3 orfind  suchthat defined(x_O_9, x_O_8, r_4) && (x_O_15 = x_O_9) && (x_O_14 = x_O_8) then r_4 orfind  suchthat defined(x_O_11, x_O_10, r_5) && (x_O_15 = x_O_11) && (x_O_14 = x_O_10) then r_5 orfind  suchthat defined(x_O_13, x_O_12, r_6) && (x_O_15 = x_O_13) && (x_O_14 = x_O_12) then r_6 orfind u_2 = ri_2 <= qHmix suchthat defined(x_O_15[ri_2], x_O_14[ri_2], r_7[ri_2]) && (x_O_15 = x_O_15[ri_2]) && (x_O_14 = x_O_14[ri_2]) then r_7[u_2] else r_7 <-R bits; r_7))
+     ))
+
+
+Applying expand [probability 3 / |bits|]
+  - Expand if/find/let
+    - Remove branch 3 in find at 58
+    - Remove branch 2 in find at 58
+    - Remove branch 1 in find at 58
+    - Find at 58 removed (else branch kept if any)
+yields
+
+Game 11 is
+     start() :=
+     a <-R Z;
+     b <-R Z;
+     ga: G <- exp(g, a);
+     gb: G <- exp(g, b);
+     es: G <- exp(g, mult(b, a));
+     ck0 <-R bits;
+     sspre <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     r <-R bits;
+     x_O_5: bits <- sspre;
+     x_O_4: bits <- r;
+     r_2 <-R bits;
+     ck2: bits <- r_2;
+     x_O_7: bits <- ee;
+     x_O_6: bits <- ck2;
+     r_3 <-R bits;
+     ck3: bits <- r_3;
+     x_O_9: bits <- se;
+     x_O_8: bits <- ck3;
+     r_4 <-R bits;
+     ck4: bits <- r_4;
+     x_O_11: bits <- ssi;
+     x_O_10: bits <- ck4;
+     r_5 <-R bits;
+     ck5: bits <- r_5;
+     x_O_13: bits <- ck5;
+     x_O_12: bits <- th4;
+     r_6 <-R bits;
+     rk: bits <- r_6;
+     return(ga, gb, ck0, sspre, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       find [unique]  suchthat (x1 = es) && (x2 = ck0) then
+         return(r)
+       orfind u = ri <= qHes suchthat defined(r_1[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R bits;
+         return(r_1)
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       x_O_15: bits <- x1_1;
+       x_O_14: bits <- x2_1;
+       find [unique]  suchthat defined(x_O_5, x_O_4, r_2) && (x_O_15 = x_O_5) && (x_O_14 = x_O_4) then
+         return(r_2)
+       orfind  suchthat defined(x_O_7, x_O_6, r_3) && (x_O_15 = x_O_7) && (x_O_14 = x_O_6) then
+         return(r_3)
+       orfind  suchthat defined(x_O_9, x_O_8, r_4) && (x_O_15 = x_O_9) && (x_O_14 = x_O_8) then
+         return(r_4)
+       orfind  suchthat defined(x_O_11, x_O_10, r_5) && (x_O_15 = x_O_11) && (x_O_14 = x_O_10) then
+         return(r_5)
+       orfind  suchthat defined(x_O_13, x_O_12, r_6) && (x_O_15 = x_O_13) && (x_O_14 = x_O_12) then
+         return(r_6)
+       orfind u_2 = ri_2 <= qHmix suchthat defined(x_O_15[ri_2], x_O_14[ri_2], r_7[ri_2]) && (x_O_15 = x_O_15[ri_2]) && (x_O_14 = x_O_14[ri_2]) then
+         return(r_7[u_2])
+       else
+         r_7 <-R bits;
+         return(r_7)
+     ))
+
+
+Applying remove assignments of findcond
+  - Remove assignments on x_O_5 (definition removed, all usages removed)
+  - Remove assignments on x_O_4 (definition removed, all usages removed)
+  - Remove assignments on ck2 (definition removed, all usages removed)
+  - Remove assignments on x_O_7 (definition removed, all usages removed)
+  - Remove assignments on x_O_6 (definition removed, all usages removed)
+  - Remove assignments on ck3 (definition removed, all usages removed)
+  - Remove assignments on x_O_9 (definition removed, all usages removed)
+  - Remove assignments on x_O_8 (definition removed, all usages removed)
+  - Remove assignments on ck4 (definition removed, all usages removed)
+  - Remove assignments on x_O_11 (definition removed, all usages removed)
+  - Remove assignments on x_O_10 (definition removed, all usages removed)
+  - Remove assignments on ck5 (definition removed, all usages removed)
+  - Remove assignments on x_O_13 (definition removed, all usages removed)
+  - Remove assignments on x_O_12 (definition removed, all usages removed)
+  - Remove assignments on x_O_15 (definition point kept, all usages removed)
+  - Remove assignments on x_O_14 (definition removed, all usages removed)
+yields
+
+Game 12 is
+     start() :=
+     a <-R Z;
+     b <-R Z;
+     ga: G <- exp(g, a);
+     gb: G <- exp(g, b);
+     es: G <- exp(g, mult(b, a));
+     ck0 <-R bits;
+     sspre <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     r <-R bits;
+     r_2 <-R bits;
+     r_3 <-R bits;
+     r_4 <-R bits;
+     r_5 <-R bits;
+     r_6 <-R bits;
+     rk: bits <- r_6;
+     return(ga, gb, ck0, sspre, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       find [unique]  suchthat (x1 = es) && (x2 = ck0) then
+         return(r)
+       orfind u = ri <= qHes suchthat defined(r_1[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R bits;
+         return(r_1)
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       x_O_15: bits <- cst_bits;
+ {85}  find [unique]  suchthat defined(r_2) && (x1_1 = sspre) && (x2_1 = r) then
+         return(r_2)
+       orfind  suchthat defined(r_3) && (x1_1 = ee) && (x2_1 = r_2) then
+         return(r_3)
+       orfind  suchthat defined(r_4) && (x1_1 = se) && (x2_1 = r_3) then
+         return(r_4)
+       orfind  suchthat defined(r_5) && (x1_1 = ssi) && (x2_1 = r_4) then
+         return(r_5)
+       orfind  suchthat defined(r_6) && (x1_1 = r_5) && (x2_1 = th4) then
+         return(r_6)
+       orfind u_2 = ri_2 <= qHmix suchthat defined(x1_1[ri_2], x2_1[ri_2], x_O_15[ri_2], r_7[ri_2]) && (x1_1 = x1_1[ri_2]) && (x2_1 = x2_1[ri_2]) then
+         return(r_7[u_2])
+       else
+         r_7 <-R bits;
+         return(r_7)
+     ))
+
+
+Applying simplify
+  - Simplification pass
+    - Replaced defined condition x1_1[ri_2], x2_1[ri_2], x_O_15[ri_2], r_7[ri_2] with r_7[ri_2], x2_1[ri_2], x1_1[ri_2] in find at 85
+    - Replaced defined condition r_6 with an empty condition in find at 85
+    - Replaced defined condition r_5 with an empty condition in find at 85
+    - Replaced defined condition r_4 with an empty condition in find at 85
+    - Replaced defined condition r_3 with an empty condition in find at 85
+    - Replaced defined condition r_2 with an empty condition in find at 85
+yields
+
+Game 13 is
+     start() :=
+     a <-R Z;
+     b <-R Z;
+     ga: G <- exp(g, a);
+     gb: G <- exp(g, b);
+     es: G <- exp(g, mult(b, a));
+     ck0 <-R bits;
+     sspre <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     r <-R bits;
+     r_2 <-R bits;
+     r_3 <-R bits;
+     r_4 <-R bits;
+     r_5 <-R bits;
+     r_6 <-R bits;
+     rk: bits <- r_6;
+     return(ga, gb, ck0, sspre, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       find [unique]  suchthat (x1 = es) && (x2 = ck0) then
+         return(r)
+       orfind u = ri <= qHes suchthat defined(r_1[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R bits;
+         return(r_1)
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       x_O_15: bits <- cst_bits;
+       find [unique]  suchthat (x1_1 = sspre) && (x2_1 = r) then
+         return(r_2)
+       orfind  suchthat (x1_1 = ee) && (x2_1 = r_2) then
+         return(r_3)
+       orfind  suchthat (x1_1 = se) && (x2_1 = r_3) then
+         return(r_4)
+       orfind  suchthat (x1_1 = ssi) && (x2_1 = r_4) then
+         return(r_5)
+       orfind  suchthat (x1_1 = r_5) && (x2_1 = th4) then
+         return(r_6)
+       orfind u_2 = ri_2 <= qHmix suchthat defined(r_7[ri_2], x2_1[ri_2], x1_1[ri_2]) && (x1_1 = x1_1[ri_2]) && (x2_1 = x2_1[ri_2]) then
+         return(r_7[u_2])
+       else
+         r_7 <-R bits;
+         return(r_7)
+     ))
+
+
+Applying move all binders
+  - Move assignment to x_O_15
+yields
+
+Game 14 is
+     start() :=
+     a <-R Z;
+     b <-R Z;
+     ga: G <- exp(g, a);
+     gb: G <- exp(g, b);
+     es: G <- exp(g, mult(b, a));
+     ck0 <-R bits;
+     sspre <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     r <-R bits;
+     r_2 <-R bits;
+     r_3 <-R bits;
+     r_4 <-R bits;
+     r_5 <-R bits;
+     r_6 <-R bits;
+     rk: bits <- r_6;
+     return(ga, gb, ck0, sspre, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       find [unique]  suchthat (x1 = es) && (x2 = ck0) then
+         return(r)
+       orfind u = ri <= qHes suchthat defined(r_1[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R bits;
+         return(r_1)
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       find [unique]  suchthat (x1_1 = sspre) && (x2_1 = r) then
+         return(r_2)
+       orfind  suchthat (x1_1 = ee) && (x2_1 = r_2) then
+         return(r_3)
+       orfind  suchthat (x1_1 = se) && (x2_1 = r_3) then
+         return(r_4)
+       orfind  suchthat (x1_1 = ssi) && (x2_1 = r_4) then
+         return(r_5)
+       orfind  suchthat (x1_1 = r_5) && (x2_1 = th4) then
+         return(r_6)
+       orfind u_2 = ri_2 <= qHmix suchthat defined(r_7[ri_2], x2_1[ri_2], x1_1[ri_2]) && (x1_1 = x1_1[ri_2]) && (x2_1 = x2_1[ri_2]) then
+         return(r_7[u_2])
+       else
+         r_7 <-R bits;
+         return(r_7)
+     ))
+
+
+Applying remove assignments of binder es
+  - Remove assignments on es (definition removed, all usages removed)
+yields
+
+Game 15 is
+     start() :=
+     a <-R Z;
+     b <-R Z;
+     ga: G <- exp(g, a);
+     gb: G <- exp(g, b);
+     ck0 <-R bits;
+     sspre <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     r <-R bits;
+     r_2 <-R bits;
+     r_3 <-R bits;
+     r_4 <-R bits;
+     r_5 <-R bits;
+     r_6 <-R bits;
+     rk: bits <- r_6;
+     return(ga, gb, ck0, sspre, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       find [unique]  suchthat (x1 = exp(g, mult(b, a))) && (x2 = ck0) then
+         return(r)
+       orfind u = ri <= qHes suchthat defined(r_1[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R bits;
+         return(r_1)
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       find [unique]  suchthat (x1_1 = sspre) && (x2_1 = r) then
+         return(r_2)
+       orfind  suchthat (x1_1 = ee) && (x2_1 = r_2) then
+         return(r_3)
+       orfind  suchthat (x1_1 = se) && (x2_1 = r_3) then
+         return(r_4)
+       orfind  suchthat (x1_1 = ssi) && (x2_1 = r_4) then
+         return(r_5)
+       orfind  suchthat (x1_1 = r_5) && (x2_1 = th4) then
+         return(r_6)
+       orfind u_2 = ri_2 <= qHmix suchthat defined(r_7[ri_2], x2_1[ri_2], x1_1[ri_2]) && (x1_1 = x1_1[ri_2]) && (x2_1 = x2_1[ri_2]) then
+         return(r_7[u_2])
+       else
+         r_7 <-R bits;
+         return(r_7)
+     ))
+
+
+Applying equivalence cdh(exp) with b, a [probability qHes * pCDH(time_1)]
+  - Equivalence cdh(exp) with variables: b -> b_1, a -> a_1
+yields
+
+Game 16 is
+     start() :=
+     a <-R Z;
+     b <-R Z;
+     ga: G <- exp'(g, a);
+     gb: G <- exp'(g, b);
+     ck0 <-R bits;
+     sspre <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     r <-R bits;
+     r_2 <-R bits;
+     r_3 <-R bits;
+     r_4 <-R bits;
+     r_5 <-R bits;
+     r_6 <-R bits;
+     rk: bits <- r_6;
+     return(ga, gb, ck0, sspre, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       find [unique]  suchthat (m: G <- x1; {43}find  else {44}find  else false) && (x2 = ck0) then
+         return(r)
+       orfind u = ri <= qHes suchthat defined(r_1[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R bits;
+         return(r_1)
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       find [unique]  suchthat (x1_1 = sspre) && (x2_1 = r) then
+         return(r_2)
+       orfind  suchthat (x1_1 = ee) && (x2_1 = r_2) then
+         return(r_3)
+       orfind  suchthat (x1_1 = se) && (x2_1 = r_3) then
+         return(r_4)
+       orfind  suchthat (x1_1 = ssi) && (x2_1 = r_4) then
+         return(r_5)
+       orfind  suchthat (x1_1 = r_5) && (x2_1 = th4) then
+         return(r_6)
+       orfind u_2 = ri_2 <= qHmix suchthat defined(r_7[ri_2], x2_1[ri_2], x1_1[ri_2]) && (x1_1 = x1_1[ri_2]) && (x2_1 = x2_1[ri_2]) then
+         return(r_7[u_2])
+       else
+         r_7 <-R bits;
+         return(r_7)
+     ))
+
+
+Applying simplify (non-expanded game)
+  - Simplification pass
+    - Find at 43 removed (else branch kept if any)
+    - Find at 44 removed (else branch kept if any)
+yields
+
+Game 17 is
+     start() :=
+     a <-R Z;
+     b <-R Z;
+     ga: G <- exp'(g, a);
+     gb: G <- exp'(g, b);
+     ck0 <-R bits;
+     sspre <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     r <-R bits;
+     r_2 <-R bits;
+     r_3 <-R bits;
+     r_4 <-R bits;
+     r_5 <-R bits;
+     r_6 <-R bits;
+     rk: bits <- r_6;
+     return(ga, gb, ck0, sspre, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+ {38}  find [unique]  suchthat (m: G <- x1; false) && (x2 = ck0) then
+         return(r)
+       orfind u = ri <= qHes suchthat defined(r_1[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R bits;
+         return(r_1)
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       find [unique]  suchthat (x1_1 = sspre) && (x2_1 = r) then
+         return(r_2)
+       orfind  suchthat (x1_1 = ee) && (x2_1 = r_2) then
+         return(r_3)
+       orfind  suchthat (x1_1 = se) && (x2_1 = r_3) then
+         return(r_4)
+       orfind  suchthat (x1_1 = ssi) && (x2_1 = r_4) then
+         return(r_5)
+       orfind  suchthat (x1_1 = r_5) && (x2_1 = th4) then
+         return(r_6)
+       orfind u_2 = ri_2 <= qHmix suchthat defined(r_7[ri_2], x2_1[ri_2], x1_1[ri_2]) && (x1_1 = x1_1[ri_2]) && (x2_1 = x2_1[ri_2]) then
+         return(r_7[u_2])
+       else
+         r_7 <-R bits;
+         return(r_7)
+     ))
+
+
+Applying expand
+  - Expand if/find/let
+    - Remove branch 1 in find at 38
+yields
+
+Game 18 is
+     start() :=
+     a <-R Z;
+     b <-R Z;
+     ga: G <- exp'(g, a);
+     gb: G <- exp'(g, b);
+     ck0 <-R bits;
+     sspre <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     r <-R bits;
+     r_2 <-R bits;
+     r_3 <-R bits;
+     r_4 <-R bits;
+     r_5 <-R bits;
+     r_6 <-R bits;
+     rk: bits <- r_6;
+     return(ga, gb, ck0, sspre, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       m: G <- x1;
+       find [unique] u = ri <= qHes suchthat defined(r_1[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R bits;
+         return(r_1)
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       find [unique]  suchthat (x1_1 = sspre) && (x2_1 = r) then
+         return(r_2)
+       orfind  suchthat (x1_1 = ee) && (x2_1 = r_2) then
+         return(r_3)
+       orfind  suchthat (x1_1 = se) && (x2_1 = r_3) then
+         return(r_4)
+       orfind  suchthat (x1_1 = ssi) && (x2_1 = r_4) then
+         return(r_5)
+       orfind  suchthat (x1_1 = r_5) && (x2_1 = th4) then
+         return(r_6)
+       orfind u_2 = ri_2 <= qHmix suchthat defined(r_7[ri_2], x2_1[ri_2], x1_1[ri_2]) && (x1_1 = x1_1[ri_2]) && (x2_1 = x2_1[ri_2]) then
+         return(r_7[u_2])
+       else
+         r_7 <-R bits;
+         return(r_7)
+     ))
+
+
+Applying remove assignments of findcond
+  - Remove assignments on m (definition removed, all usages removed)
+yields
+
+Game 19 is
+     start() :=
+     a <-R Z;
+     b <-R Z;
+     ga: G <- exp'(g, a);
+     gb: G <- exp'(g, b);
+     ck0 <-R bits;
+     sspre <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     r <-R bits;
+     r_2 <-R bits;
+     r_3 <-R bits;
+     r_4 <-R bits;
+     r_5 <-R bits;
+     r_6 <-R bits;
+     rk: bits <- r_6;
+     return(ga, gb, ck0, sspre, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       find [unique] u = ri <= qHes suchthat defined(r_1[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R bits;
+         return(r_1)
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       find [unique]  suchthat (x1_1 = sspre) && (x2_1 = r) then
+         return(r_2)
+       orfind  suchthat (x1_1 = ee) && (x2_1 = r_2) then
+         return(r_3)
+       orfind  suchthat (x1_1 = se) && (x2_1 = r_3) then
+         return(r_4)
+       orfind  suchthat (x1_1 = ssi) && (x2_1 = r_4) then
+         return(r_5)
+       orfind  suchthat (x1_1 = r_5) && (x2_1 = th4) then
+         return(r_6)
+       orfind u_2 = ri_2 <= qHmix suchthat defined(r_7[ri_2], x2_1[ri_2], x1_1[ri_2]) && (x1_1 = x1_1[ri_2]) && (x2_1 = x2_1[ri_2]) then
+         return(r_7[u_2])
+       else
+         r_7 <-R bits;
+         return(r_7)
+     ))
+
+
+Applying simplify [probability qHmix / |bits|]
+  - Global dependency analysis on r
+yields
+
+Game 20 is
+     start() :=
+     a <-R Z;
+     b <-R Z;
+     ga: G <- exp'(g, a);
+     gb: G <- exp'(g, b);
+     ck0 <-R bits;
+     sspre <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     r <-R bits;
+     r_2 <-R bits;
+     r_3 <-R bits;
+     r_4 <-R bits;
+     r_5 <-R bits;
+     r_6 <-R bits;
+     rk: bits <- r_6;
+     return(ga, gb, ck0, sspre, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       find [unique] u = ri <= qHes suchthat defined(r_1[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R bits;
+         return(r_1)
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       find [unique]  suchthat (x1_1 = ee) && (x2_1 = r_2) then
+         return(r_3)
+       orfind  suchthat (x1_1 = se) && (x2_1 = r_3) then
+         return(r_4)
+       orfind  suchthat (x1_1 = ssi) && (x2_1 = r_4) then
+         return(r_5)
+       orfind  suchthat (x1_1 = r_5) && (x2_1 = th4) then
+         return(r_6)
+       orfind u_2 = ri_2 <= qHmix suchthat defined(r_7[ri_2], x2_1[ri_2], x1_1[ri_2]) && (x1_1 = x1_1[ri_2]) && (x2_1 = x2_1[ri_2]) then
+         return(r_7[u_2])
+       else
+         r_7 <-R bits;
+         return(r_7)
+     ))
+
+
+Applying simplify [probability qHmix / |bits|]
+  - Global dependency analysis on r_2
+yields
+
+Game 21 is
+     start() :=
+     a <-R Z;
+     b <-R Z;
+     ga: G <- exp'(g, a);
+     gb: G <- exp'(g, b);
+     ck0 <-R bits;
+     sspre <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     r <-R bits;
+     r_2 <-R bits;
+     r_3 <-R bits;
+     r_4 <-R bits;
+     r_5 <-R bits;
+     r_6 <-R bits;
+     rk: bits <- r_6;
+     return(ga, gb, ck0, sspre, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       find [unique] u = ri <= qHes suchthat defined(r_1[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R bits;
+         return(r_1)
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       find [unique]  suchthat (x1_1 = se) && (x2_1 = r_3) then
+         return(r_4)
+       orfind  suchthat (x1_1 = ssi) && (x2_1 = r_4) then
+         return(r_5)
+       orfind  suchthat (x1_1 = r_5) && (x2_1 = th4) then
+         return(r_6)
+       orfind u_2 = ri_2 <= qHmix suchthat defined(r_7[ri_2], x2_1[ri_2], x1_1[ri_2]) && (x1_1 = x1_1[ri_2]) && (x2_1 = x2_1[ri_2]) then
+         return(r_7[u_2])
+       else
+         r_7 <-R bits;
+         return(r_7)
+     ))
+
+
+Applying simplify [probability qHmix / |bits|]
+  - Global dependency analysis on r_3
+yields
+
+Game 22 is
+     start() :=
+     a <-R Z;
+     b <-R Z;
+     ga: G <- exp'(g, a);
+     gb: G <- exp'(g, b);
+     ck0 <-R bits;
+     sspre <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     r <-R bits;
+     r_2 <-R bits;
+     r_3 <-R bits;
+     r_4 <-R bits;
+     r_5 <-R bits;
+     r_6 <-R bits;
+     rk: bits <- r_6;
+     return(ga, gb, ck0, sspre, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       find [unique] u = ri <= qHes suchthat defined(r_1[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R bits;
+         return(r_1)
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       find [unique]  suchthat (x1_1 = ssi) && (x2_1 = r_4) then
+         return(r_5)
+       orfind  suchthat (x1_1 = r_5) && (x2_1 = th4) then
+         return(r_6)
+       orfind u_2 = ri_2 <= qHmix suchthat defined(r_7[ri_2], x2_1[ri_2], x1_1[ri_2]) && (x1_1 = x1_1[ri_2]) && (x2_1 = x2_1[ri_2]) then
+         return(r_7[u_2])
+       else
+         r_7 <-R bits;
+         return(r_7)
+     ))
+
+
+Applying simplify [probability qHmix / |bits|]
+  - Global dependency analysis on r_4
+yields
+
+Game 23 is
+     start() :=
+     a <-R Z;
+     b <-R Z;
+     ga: G <- exp'(g, a);
+     gb: G <- exp'(g, b);
+     ck0 <-R bits;
+     sspre <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     r <-R bits;
+     r_2 <-R bits;
+     r_3 <-R bits;
+     r_4 <-R bits;
+     r_5 <-R bits;
+     r_6 <-R bits;
+     rk: bits <- r_6;
+     return(ga, gb, ck0, sspre, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       find [unique] u = ri <= qHes suchthat defined(r_1[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R bits;
+         return(r_1)
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       find [unique]  suchthat (x1_1 = r_5) && (x2_1 = th4) then
+         return(r_6)
+       orfind u_2 = ri_2 <= qHmix suchthat defined(r_7[ri_2], x2_1[ri_2], x1_1[ri_2]) && (x1_1 = x1_1[ri_2]) && (x2_1 = x2_1[ri_2]) then
+         return(r_7[u_2])
+       else
+         r_7 <-R bits;
+         return(r_7)
+     ))
+
+
+Applying simplify [probability qHmix / |bits|]
+  - Global dependency analysis on r_5
+yields
+
+Game 24 is
+     start() :=
+     a <-R Z;
+     b <-R Z;
+     ga: G <- exp'(g, a);
+     gb: G <- exp'(g, b);
+     ck0 <-R bits;
+     sspre <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+ {18}r <-R bits;
+ {19}r_2 <-R bits;
+ {20}r_3 <-R bits;
+ {21}r_4 <-R bits;
+ {22}r_5 <-R bits;
+     r_6 <-R bits;
+     rk: bits <- r_6;
+     return(ga, gb, ck0, sspre, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       find [unique] u = ri <= qHes suchthat defined(r_1[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R bits;
+         return(r_1)
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       find [unique] u_2 = ri_2 <= qHmix suchthat defined(r_7[ri_2], x2_1[ri_2], x1_1[ri_2]) && (x1_1 = x1_1[ri_2]) && (x2_1 = x2_1[ri_2]) then
+         return(r_7[u_2])
+       else
+         r_7 <-R bits;
+         return(r_7)
+     ))
+
+
+Applying simplify
+  - Simplification pass
+    - Remove random number generation at 22
+    - Remove random number generation at 21
+    - Remove random number generation at 20
+    - Remove random number generation at 19
+    - Remove random number generation at 18
+yields
+
+Game 25 is
+     start() :=
+     a <-R Z;
+     b <-R Z;
+     ga: G <- exp'(g, a);
+     gb: G <- exp'(g, b);
+     ck0 <-R bits;
+     sspre <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     r_6 <-R bits;
+     rk: bits <- r_6;
+     return(ga, gb, ck0, sspre, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHes do
+       ch1(x1: G, x2: bits) :=
+       find [unique] u = ri <= qHes suchthat defined(r_1[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R bits;
+         return(r_1)
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       find [unique] u_2 = ri_2 <= qHmix suchthat defined(r_7[ri_2], x2_1[ri_2], x1_1[ri_2]) && (x1_1 = x1_1[ri_2]) && (x2_1 = x2_1[ri_2]) then
+         return(r_7[u_2])
+       else
+         r_7 <-R bits;
+         return(r_7)
+     ))
+
+
+Proved secrecy of rk in game 25
+Adv[Game 1: secrecy of rk] <= (10 * qHmix + 20) / |bits| + 2 * qHes * pCDH(time_1) + Adv[Game 25: secrecy of rk]
+Adv[Game 25: secrecy of rk] <= 0
+RESULT Proved secrecy of rk up to probability (20 + 10 * qHmix) / |bits| + 2 * qHes * pCDH(time_1)
+RESULT time_1 = time + (qHes - 1) * time(exp)
+All queries proved.

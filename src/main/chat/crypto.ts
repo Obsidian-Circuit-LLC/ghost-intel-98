@@ -1,8 +1,11 @@
 /**
  * Chat crypto primitives (Phase 1) — thin, audited-library-only wrappers. NO bespoke primitives.
  *
- *  - Classical leg via Node's built-in `crypto` (the same engine the vault trusts for AES-256-GCM /
- *    scrypt): X25519 ECDH, Ed25519 sign/verify, ChaCha20-Poly1305 AEAD, HKDF-SHA-256, SHA-256.
+ *  - Symmetric/KDF via Node's built-in `crypto` (the same engine the vault trusts for AES-256-GCM /
+ *    scrypt): ChaCha20-Poly1305 AEAD, HKDF-SHA-256, SHA-256, HMAC-SHA-256.
+ *  - X25519 ECDH + Ed25519 sign/verify via `@noble/curves` (NOT Node's JWK path) — see the note at
+ *    the X25519 section: the JWK round-trip copies private keys into immutable V8 strings that
+ *    zeroize() can never reach, so we use noble's Uint8Array-end-to-end API to keep secrets wipeable.
  *  - PQ leg: ML-KEM-1024 delegated to an injected `MlkemProvider` — production wires the AWS-LC sidecar
  *    (FIPS-validated only where a FIPS-build helper is shipped; see services/mlkem-sidecar.ts). Tests
  *    inject an in-process reference. crypto.ts

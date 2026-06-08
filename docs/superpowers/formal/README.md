@@ -28,6 +28,15 @@ Either leg alone suffices, so RK stays secret unless **both** primitives break �
 The KDF/MixKey chain is abstracted as a 2-input random oracle (the dual-PRF property of the fixed MixKey
 arg roles); the parameter (ML-KEM-1024 vs 768) does not enter the proof, only the concrete `Penc` bound.
 
+**Full-chain refinement (2026-06-08, `chat-handshake-fullchain-{dhleg,kemleg}.cv`).** The two leg files
+above collapse the schedule to `RK = ROM(es, ss)`. The full-chain files model the **actual implemented
+5-step chain** (`handshake.ts:174-217`): `CK1=MixKey(es,CK0) → ss_pre → ee → se → ss_I → RK`. Both legs
+re-proved with **every** non-surviving secret handed to the adversary (DH leg ≤ `(20+10·qHmix)/|bits| +
+2·qHes·pCDH`; KEM leg ≤ `(12+8·qHmix)/|bits| + 2·qHpre/|kemss| + 2·Penc`) — confirming the dual-PRF
+saturation holds over the real chain, not just the collapsed core. (Authentication and the full
+transcript/signature/AEAD layer remain symbolic-only; the end-to-end computational model is the next
+Gate-1 step — see `model-code-correspondence.md`.)
+
 ### ProVerif results (2026-06-08, first_contact mode, perfect-primitive symbolic model)
 
 | Goal | Query | Result |

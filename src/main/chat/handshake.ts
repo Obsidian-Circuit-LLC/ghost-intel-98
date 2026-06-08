@@ -7,7 +7,7 @@
  *   adversarial threat models until the formal-verification gate passes.
  *
  * Initiator I (dialer/invitee) ⇄ Responder R (inviter/listener). Produces a forward-secret root key
- * + session id consumed by session.ts. Hybrid: X25519 (es/ee/se) ⊕ ML-KEM-768 (ss_pre to R's signed
+ * + session id consumed by session.ts. Hybrid: X25519 (es/ee/se) ⊕ ML-KEM-1024 (ss_pre to R's signed
  * prekey, ss_I to I's per-handshake ephemeral). Token `mac_T` pre-gate rejects unauthenticated Msg1
  * before any asymmetric op; verify-before-encap; durable one-time prekey/token consumption.
  */

@@ -1,0 +1,1477 @@
+Doing expand get, insert and prove unique annotations... No change.
+Doing simplify (non-expanded game)... No change.
+Doing expand... Done.
+Doing remove assignments of findcond... Done.
+Doing simplify... Run simplify 1 time(s). Fixpoint reached.
+No change.
+Doing move all binders... No change.
+Doing SA rename new without array accesses and remove assignments of findcond... No change.
+Doing merge branches... No change.
+Proof of (one-session) secrecy of rk failed:
+  rk is not defined only by restrictions or assignments.
+Trying equivalence ind_cca2(encap)... Failed.
+Doing remove assignments of binder sk... Done.
+Trying equivalence ind_cca2(encap) with seed, kseed... Transf. OK Proba. computed Transf. done Succeeded.
+Doing simplify (non-expanded game)... Done.
+Doing expand... Done.
+Doing remove assignments of findcond... Done.
+Doing simplify... Run simplify 2 time(s). Fixpoint reached.
+Done.
+Doing move all binders... No change.
+Doing SA rename new without array accesses and remove assignments of findcond... Done.
+Doing merge branches... No change.
+Trying equivalence rom(Hpre)... Transf. OK Proba. computed Transf. done Succeeded.
+Doing simplify (non-expanded game)... Done.
+Doing expand... Done.
+Doing remove assignments of findcond... Done.
+Doing simplify... Doing global dependency analysis on k1_1 inside simplify... Done. Restarting simplify
+Eliminated collisions between k1_1 and x1 Probability: qHpre / |kemss|
+(k1_1 collides with a value independent of k1_1[...] with probability at most 1 / |kemss|;
+ x1 does not depend on k1_1[...])
+Run simplify 2 time(s). Fixpoint reached.
+Done.
+Doing move all binders... Done.
+Doing SA rename new without array accesses and remove assignments of findcond... Done.
+Doing merge branches... No change.
+Trying equivalence rom(Hmix)... Transf. OK Proba. computed Transf. done Succeeded.
+Doing simplify (non-expanded game)... Eliminated collisions between th4 and r Probability: 1 / |bits|
+Eliminated collisions between ssi and ee Probability: 1 / |bits|
+Eliminated collisions between ssi and se Probability: 1 / |bits|
+Eliminated collisions between se and ee Probability: 1 / |bits|
+Done.
+Doing expand... Eliminated collisions between r_4 and se Probability: 1 / |bits|
+Eliminated collisions between r_4 and ssi Probability: 1 / |bits|
+Done.
+Doing remove assignments of findcond... Done.
+Doing simplify... Doing global dependency analysis on r_4 inside simplify... At 104, returned message r_4 depends on r_4.
+No change
+Doing global dependency analysis on th4 inside simplify... At 35, returned message th4 depends on th4.
+No change
+Doing global dependency analysis on ssi inside simplify... At 34, returned message ssi depends on ssi.
+No change
+Doing global dependency analysis on r_3 inside simplify... At 92, returned message r_3 depends on r_3.
+No change
+Doing global dependency analysis on se inside simplify... At 33, returned message se depends on se.
+No change
+Doing global dependency analysis on r_2 inside simplify... At 80, returned message r_2 depends on r_2.
+No change
+Doing global dependency analysis on ee inside simplify... At 32, returned message ee depends on ee.
+No change
+Doing global dependency analysis on r inside simplify... Done. Restarting simplify
+Eliminated collisions between r and x2_1 Probability: qHmix / |bits|
+(r collides with a value independent of r[...] with probability at most 1 / |bits|;
+ x2_1 does not depend on r[...])
+Doing global dependency analysis on r_4 inside simplify... At 92, returned message r_4 depends on r_4.
+No change
+Doing global dependency analysis on th4 inside simplify... At 35, returned message th4 depends on th4.
+No change
+Doing global dependency analysis on ssi inside simplify... At 34, returned message ssi depends on ssi.
+No change
+Doing global dependency analysis on r_3 inside simplify... At 80, returned message r_3 depends on r_3.
+No change
+Doing global dependency analysis on se inside simplify... At 33, returned message se depends on se.
+No change
+Doing global dependency analysis on r_2 inside simplify... Done. Restarting simplify
+Eliminated collisions between r_2 and x2_1 Probability: qHmix / |bits|
+(r_2 collides with a value independent of r_2[...] with probability at most 1 / |bits|;
+ x2_1 does not depend on r_2[...])
+Doing global dependency analysis on r_4 inside simplify... At 80, returned message r_4 depends on r_4.
+No change
+Doing global dependency analysis on th4 inside simplify... At 35, returned message th4 depends on th4.
+No change
+Doing global dependency analysis on ssi inside simplify... At 34, returned message ssi depends on ssi.
+No change
+Doing global dependency analysis on r_3 inside simplify... Done. Restarting simplify
+Eliminated collisions between r_3 and x2_1 Probability: qHmix / |bits|
+(r_3 collides with a value independent of r_3[...] with probability at most 1 / |bits|;
+ x2_1 does not depend on r_3[...])
+Doing global dependency analysis on r_4 inside simplify... Done. Restarting simplify
+Eliminated collisions between r_4 and x1_1 Probability: qHmix / |bits|
+(r_4 collides with a value independent of r_4[...] with probability at most 1 / |bits|;
+ x1_1 does not depend on r_4[...])
+Run simplify 2 time(s). Fixpoint reached.
+Done.
+Doing move all binders... Done.
+Doing SA rename new without array accesses and remove assignments of findcond... No change.
+Doing merge branches... No change.
+Proved one-session secrecy of rk
+Proved secrecy of rk
+===================== Proof starts =======================
+Initial state
+Game 1 is
+     start() :=
+     kp <-R hkpre;
+     km <-R hkmix;
+     seed <-R keyseed;
+     pk: pkey <- pkgen(seed);
+     sk: skey <- skgen(seed);
+     enc: encapoutput <- (pk_1: pkey <- pk; kseed <-R encapseed; encap_r(pk_1, kseed));
+ {18}let pair(sspre: kemss, ct: ciphertext) = enc in
+     ck0 <-R bits;
+     es <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     ck1: bits <- Hmix(km, es, ck0);
+     ck2: bits <- Hpre(kp, sspre, ck1);
+     ck3: bits <- Hmix(km, ee, ck2);
+     ck4: bits <- Hmix(km, se, ck3);
+     ck5: bits <- Hmix(km, ssi, ck4);
+     rk: bits <- Hmix(km, ck5, th4);
+     return(pk, ct, ck0, es, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHpre do
+       ch1(x1: kemss, x2: bits) :=
+       return(Hpre(kp, x1, x2))
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       return(Hmix(km, x1_1, x2_1))
+     ) | (
+       foreach i <= Ndec do
+       cdec(cc: ciphertext) :=
+       if cc <> ct then
+       return(decap(cc, sk))
+     ))
+
+
+Applying expand
+  - Expand if/find/let
+    - Simplify pattern pair(sspre: kemss, ct: ciphertext) (bijective tuple expanded) at 18
+yields
+
+Game 2 is
+     start() :=
+     kp <-R hkpre;
+     km <-R hkmix;
+     seed <-R keyseed;
+     pk: pkey <- pkgen(seed);
+     sk: skey <- skgen(seed);
+     pk_1: pkey <- pk;
+     kseed <-R encapseed;
+     enc: encapoutput <- encap_r(pk_1, kseed);
+     ct: ciphertext <- 2-proj-pair(enc);
+     sspre: kemss <- 1-proj-pair(enc);
+     ck0 <-R bits;
+     es <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     ck1: bits <- Hmix(km, es, ck0);
+     ck2: bits <- Hpre(kp, sspre, ck1);
+     ck3: bits <- Hmix(km, ee, ck2);
+     ck4: bits <- Hmix(km, se, ck3);
+     ck5: bits <- Hmix(km, ssi, ck4);
+     rk: bits <- Hmix(km, ck5, th4);
+     return(pk, ct, ck0, es, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHpre do
+       ch1(x1: kemss, x2: bits) :=
+       return(Hpre(kp, x1, x2))
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       return(Hmix(km, x1_1, x2_1))
+     ) | (
+       foreach i <= Ndec do
+       cdec(cc: ciphertext) :=
+       if cc <> ct then
+       return(decap(cc, sk))
+     ))
+
+
+Applying remove assignments of findcond
+  - Remove assignments on pk_1 (definition removed, all usages removed)
+yields
+
+Game 3 is
+     start() :=
+     kp <-R hkpre;
+     km <-R hkmix;
+     seed <-R keyseed;
+     pk: pkey <- pkgen(seed);
+     sk: skey <- skgen(seed);
+     kseed <-R encapseed;
+     enc: encapoutput <- encap_r(pk, kseed);
+     ct: ciphertext <- 2-proj-pair(enc);
+     sspre: kemss <- 1-proj-pair(enc);
+     ck0 <-R bits;
+     es <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     ck1: bits <- Hmix(km, es, ck0);
+     ck2: bits <- Hpre(kp, sspre, ck1);
+     ck3: bits <- Hmix(km, ee, ck2);
+     ck4: bits <- Hmix(km, se, ck3);
+     ck5: bits <- Hmix(km, ssi, ck4);
+     rk: bits <- Hmix(km, ck5, th4);
+     return(pk, ct, ck0, es, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHpre do
+       ch1(x1: kemss, x2: bits) :=
+       return(Hpre(kp, x1, x2))
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       return(Hmix(km, x1_1, x2_1))
+     ) | (
+       foreach i <= Ndec do
+       cdec(cc: ciphertext) :=
+       if cc <> ct then
+       return(decap(cc, sk))
+     ))
+
+
+Applying remove assignments of binder sk
+  - Remove assignments on sk (definition removed, all usages removed)
+yields
+
+Game 4 is
+     start() :=
+     kp <-R hkpre;
+     km <-R hkmix;
+     seed <-R keyseed;
+     pk: pkey <- pkgen(seed);
+     kseed <-R encapseed;
+     enc: encapoutput <- encap_r(pk, kseed);
+     ct: ciphertext <- 2-proj-pair(enc);
+     sspre: kemss <- 1-proj-pair(enc);
+     ck0 <-R bits;
+     es <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     ck1: bits <- Hmix(km, es, ck0);
+     ck2: bits <- Hpre(kp, sspre, ck1);
+     ck3: bits <- Hmix(km, ee, ck2);
+     ck4: bits <- Hmix(km, se, ck3);
+     ck5: bits <- Hmix(km, ssi, ck4);
+     rk: bits <- Hmix(km, ck5, th4);
+     return(pk, ct, ck0, es, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHpre do
+       ch1(x1: kemss, x2: bits) :=
+       return(Hpre(kp, x1, x2))
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       return(Hmix(km, x1_1, x2_1))
+     ) | (
+       foreach i <= Ndec do
+       cdec(cc: ciphertext) :=
+       if cc <> ct then
+       return(decap(cc, skgen(seed)))
+     ))
+
+
+Applying equivalence ind_cca2(encap) with seed, kseed [probability Penc(time_1, 1, 1, Ndec)]
+  - Equivalence ind_cca2(encap) with variables: kseed -> kseed_1, seed -> seed_1
+yields
+
+Game 5 is
+     start() :=
+     kp <-R hkpre;
+     km <-R hkmix;
+     seed_1 <-R keyseed;
+     pk: pkey <- pkgen2(seed_1);
+     kseed_1 <-R encapseed;
+     k1_1 <-R kemss;
+     enc: encapoutput <- (pk_R: pkey <- pk; if {14}(pk_R = pkgen2(seed_1)) then encoded_i2: encoded_Nc_t <- encode_idx_seed(); v_3: encapoutput <- encap_r2(pk_R, kseed_1); ctxt: ciphertext <- 2-proj-pair(v_3); k1: kemss <- cst_kemss; pair(k1_1, ctxt) else encap_r(pk_R, kseed_1));
+     ct: ciphertext <- 2-proj-pair(enc);
+     sspre: kemss <- 1-proj-pair(enc);
+     ck0 <-R bits;
+     es <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     ck1: bits <- Hmix(km, es, ck0);
+     ck2: bits <- Hpre(kp, sspre, ck1);
+     ck3: bits <- Hmix(km, ee, ck2);
+     ck4: bits <- Hmix(km, se, ck3);
+     ck5: bits <- Hmix(km, ssi, ck4);
+     rk: bits <- Hmix(km, ck5, th4);
+     return(pk, ct, ck0, es, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHpre do
+       ch1(x1: kemss, x2: bits) :=
+       return(Hpre(kp, x1, x2))
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       return(Hmix(km, x1_1, x2_1))
+     ) | (
+       foreach i <= Ndec do
+       cdec(cc: ciphertext) :=
+       if cc <> ct then
+       return((enc_1: ciphertext <- cc; if defined(k1, ctxt, encoded_i2) && (encoded_i2 = encode_idx_seed()) && (ctxt = enc_1) then injbot(k1_1) else decap2(enc_1, skgen2(seed_1))))
+     ))
+
+
+Applying simplify (non-expanded game)
+  - Simplification pass
+    - Replaced (pk_R = pkgen2(seed_1)) with true at 14
+yields
+
+Game 6 is
+     start() :=
+     kp <-R hkpre;
+     km <-R hkmix;
+     seed_1 <-R keyseed;
+     pk: pkey <- pkgen2(seed_1);
+     kseed_1 <-R encapseed;
+     k1_1 <-R kemss;
+     enc: encapoutput <- (pk_R: pkey <- pk; {13}if true then encoded_i2: encoded_Nc_t <- encode_idx_seed(); v_3: encapoutput <- encap_r2(pk_R, kseed_1); ctxt: ciphertext <- 2-proj-pair(v_3); k1: kemss <- cst_kemss; pair(k1_1, ctxt) else encap_r(pk_R, kseed_1));
+     ct: ciphertext <- 2-proj-pair(enc);
+     sspre: kemss <- 1-proj-pair(enc);
+     ck0 <-R bits;
+     es <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     ck1: bits <- Hmix(km, es, ck0);
+     ck2: bits <- Hpre(kp, sspre, ck1);
+     ck3: bits <- Hmix(km, ee, ck2);
+     ck4: bits <- Hmix(km, se, ck3);
+     ck5: bits <- Hmix(km, ssi, ck4);
+     rk: bits <- Hmix(km, ck5, th4);
+     return(pk, ct, ck0, es, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHpre do
+       ch1(x1: kemss, x2: bits) :=
+       return(Hpre(kp, x1, x2))
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       return(Hmix(km, x1_1, x2_1))
+     ) | (
+       foreach i <= Ndec do
+       cdec(cc: ciphertext) :=
+       if cc <> ct then
+       return((enc_1: ciphertext <- cc; {116}if defined(k1, ctxt, encoded_i2) && (encoded_i2 = encode_idx_seed()) && (ctxt = enc_1) then injbot(k1_1) else decap2(enc_1, skgen2(seed_1))))
+     ))
+
+
+Applying expand
+  - Expand if/find/let
+    - Transformed find at 13 into a test
+    - Test at 13 always true
+    - Remove branch 1 in find at 116
+    - Find at 116 removed (else branch kept if any)
+yields
+
+Game 7 is
+     start() :=
+     kp <-R hkpre;
+     km <-R hkmix;
+     seed_1 <-R keyseed;
+     pk: pkey <- pkgen2(seed_1);
+     kseed_1 <-R encapseed;
+     k1_1 <-R kemss;
+     pk_R: pkey <- pk;
+     encoded_i2: encoded_Nc_t <- encode_idx_seed();
+     v_3: encapoutput <- encap_r2(pk_R, kseed_1);
+     ctxt: ciphertext <- 2-proj-pair(v_3);
+     k1: kemss <- cst_kemss;
+     enc: encapoutput <- pair(k1_1, ctxt);
+     ct: ciphertext <- 2-proj-pair(enc);
+     sspre: kemss <- 1-proj-pair(enc);
+     ck0 <-R bits;
+     es <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     ck1: bits <- Hmix(km, es, ck0);
+     ck2: bits <- Hpre(kp, sspre, ck1);
+     ck3: bits <- Hmix(km, ee, ck2);
+     ck4: bits <- Hmix(km, se, ck3);
+     ck5: bits <- Hmix(km, ssi, ck4);
+     rk: bits <- Hmix(km, ck5, th4);
+     return(pk, ct, ck0, es, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHpre do
+       ch1(x1: kemss, x2: bits) :=
+       return(Hpre(kp, x1, x2))
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       return(Hmix(km, x1_1, x2_1))
+     ) | (
+       foreach i <= Ndec do
+       cdec(cc: ciphertext) :=
+       if cc <> ct then
+       enc_1: ciphertext <- cc;
+       return(decap2(enc_1, skgen2(seed_1)))
+     ))
+
+
+Applying remove assignments of findcond
+  - Remove assignments on pk_R (definition removed, all usages removed)
+  - Remove assignments on encoded_i2 (definition removed, all usages removed)
+  - Remove assignments on k1 (definition removed, all usages removed)
+  - Remove assignments on enc_1 (definition removed, all usages removed)
+yields
+
+Game 8 is
+     start() :=
+     kp <-R hkpre;
+     km <-R hkmix;
+     seed_1 <-R keyseed;
+     pk: pkey <- pkgen2(seed_1);
+     kseed_1 <-R encapseed;
+     k1_1 <-R kemss;
+     v_3: encapoutput <- encap_r2(pk, kseed_1);
+     ctxt: ciphertext <- 2-proj-pair(v_3);
+     enc: encapoutput <- pair(k1_1, ctxt);
+     ct: ciphertext <- {22}2-proj-pair(enc);
+     sspre: kemss <- {25}1-proj-pair(enc);
+     ck0 <-R bits;
+     es <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     ck1: bits <- Hmix(km, es, ck0);
+     ck2: bits <- Hpre(kp, sspre, ck1);
+     ck3: bits <- Hmix(km, ee, ck2);
+     ck4: bits <- Hmix(km, se, ck3);
+     ck5: bits <- Hmix(km, ssi, ck4);
+     rk: bits <- Hmix(km, ck5, th4);
+     return(pk, ct, ck0, es, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHpre do
+       ch1(x1: kemss, x2: bits) :=
+       return(Hpre(kp, x1, x2))
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       return(Hmix(km, x1_1, x2_1))
+     ) | (
+       foreach i <= Ndec do
+       cdec(cc: ciphertext) :=
+       if cc <> ct then
+       return(decap2(cc, skgen2(seed_1)))
+     ))
+
+
+Applying simplify
+  - Simplification pass
+    - Replaced 2-proj-pair(enc) with ctxt at 22
+    - Replaced 1-proj-pair(enc) with k1_1 at 25
+yields
+
+Game 9 is
+     start() :=
+     kp <-R hkpre;
+     km <-R hkmix;
+     seed_1 <-R keyseed;
+     pk: pkey <- pkgen2(seed_1);
+     kseed_1 <-R encapseed;
+     k1_1 <-R kemss;
+     v_3: encapoutput <- encap_r2(pk, kseed_1);
+     ctxt: ciphertext <- 2-proj-pair(v_3);
+     enc: encapoutput <- pair(k1_1, ctxt);
+     ct: ciphertext <- ctxt;
+     sspre: kemss <- k1_1;
+     ck0 <-R bits;
+     es <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     ck1: bits <- Hmix(km, es, ck0);
+     ck2: bits <- Hpre(kp, sspre, ck1);
+     ck3: bits <- Hmix(km, ee, ck2);
+     ck4: bits <- Hmix(km, se, ck3);
+     ck5: bits <- Hmix(km, ssi, ck4);
+     rk: bits <- Hmix(km, ck5, th4);
+     return(pk, ct, ck0, es, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHpre do
+       ch1(x1: kemss, x2: bits) :=
+       return(Hpre(kp, x1, x2))
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       return(Hmix(km, x1_1, x2_1))
+     ) | (
+       foreach i <= Ndec do
+       cdec(cc: ciphertext) :=
+       if cc <> ct then
+       return(decap2(cc, skgen2(seed_1)))
+     ))
+
+
+Applying SA rename new without array accesses and remove assignments of findcond
+  - Remove assignments on enc (definition removed, all usages removed)
+  - Remove assignments on ct (definition removed, all usages removed)
+  - Remove assignments on sspre (definition removed, all usages removed)
+yields
+
+Game 10 is
+     start() :=
+     kp <-R hkpre;
+     km <-R hkmix;
+     seed_1 <-R keyseed;
+     pk: pkey <- pkgen2(seed_1);
+     kseed_1 <-R encapseed;
+     k1_1 <-R kemss;
+     v_3: encapoutput <- encap_r2(pk, kseed_1);
+     ctxt: ciphertext <- 2-proj-pair(v_3);
+     ck0 <-R bits;
+     es <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     ck1: bits <- Hmix(km, es, ck0);
+     ck2: bits <- Hpre(kp, k1_1, ck1);
+     ck3: bits <- Hmix(km, ee, ck2);
+     ck4: bits <- Hmix(km, se, ck3);
+     ck5: bits <- Hmix(km, ssi, ck4);
+     rk: bits <- Hmix(km, ck5, th4);
+     return(pk, ctxt, ck0, es, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHpre do
+       ch1(x1: kemss, x2: bits) :=
+       return(Hpre(kp, x1, x2))
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       return(Hmix(km, x1_1, x2_1))
+     ) | (
+       foreach i <= Ndec do
+       cdec(cc: ciphertext) :=
+       if cc <> ctxt then
+       return(decap2(cc, skgen2(seed_1)))
+     ))
+
+
+Applying equivalence rom(Hpre)
+  - Equivalence rom(Hpre) with variables: kp -> hk
+yields
+
+Game 11 is
+     start() :=
+     km <-R hkmix;
+     seed_1 <-R keyseed;
+     pk: pkey <- pkgen2(seed_1);
+     kseed_1 <-R encapseed;
+     k1_1 <-R kemss;
+     v_3: encapoutput <- encap_r2(pk, kseed_1);
+     ctxt: ciphertext <- 2-proj-pair(v_3);
+     ck0 <-R bits;
+     es <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     ck1: bits <- Hmix(km, es, ck0);
+     ck2: bits <- (x_O_1: kemss <- k1_1; x_O: bits <- ck1; {32}find [unique]  else r <-R bits; r);
+     ck3: bits <- Hmix(km, ee, ck2);
+     ck4: bits <- Hmix(km, se, ck3);
+     ck5: bits <- Hmix(km, ssi, ck4);
+     rk: bits <- Hmix(km, ck5, th4);
+     return(pk, ctxt, ck0, es, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHpre do
+       ch1(x1: kemss, x2: bits) :=
+       return((x_O_3: kemss <- x1; x_O_2: bits <- x2; find [unique]  suchthat defined(x_O_1, x_O, r) && (x_O_3 = x_O_1) && (x_O_2 = x_O) then r orfind u = ri <= qHpre suchthat defined(x_O_3[ri], x_O_2[ri], r_1[ri]) && (x_O_3 = x_O_3[ri]) && (x_O_2 = x_O_2[ri]) then r_1[u] else r_1 <-R bits; r_1))
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       return(Hmix(km, x1_1, x2_1))
+     ) | (
+       foreach i <= Ndec do
+       cdec(cc: ciphertext) :=
+       if cc <> ctxt then
+       return(decap2(cc, skgen2(seed_1)))
+     ))
+
+
+Applying simplify (non-expanded game)
+  - Simplification pass
+    - Find at 32 removed (else branch kept if any)
+yields
+
+Game 12 is
+     start() :=
+     km <-R hkmix;
+     seed_1 <-R keyseed;
+     pk: pkey <- pkgen2(seed_1);
+     kseed_1 <-R encapseed;
+     k1_1 <-R kemss;
+     v_3: encapoutput <- encap_r2(pk, kseed_1);
+     ctxt: ciphertext <- 2-proj-pair(v_3);
+     ck0 <-R bits;
+     es <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     ck1: bits <- Hmix(km, es, ck0);
+     ck2: bits <- (x_O_1: kemss <- k1_1; x_O: bits <- ck1; r <-R bits; r);
+     ck3: bits <- Hmix(km, ee, ck2);
+     ck4: bits <- Hmix(km, se, ck3);
+     ck5: bits <- Hmix(km, ssi, ck4);
+     rk: bits <- Hmix(km, ck5, th4);
+     return(pk, ctxt, ck0, es, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHpre do
+       ch1(x1: kemss, x2: bits) :=
+       return((x_O_3: kemss <- x1; x_O_2: bits <- x2; find [unique]  suchthat defined(x_O_1, x_O, r) && (x_O_3 = x_O_1) && (x_O_2 = x_O) then r orfind u = ri <= qHpre suchthat defined(x_O_3[ri], x_O_2[ri], r_1[ri]) && (x_O_3 = x_O_3[ri]) && (x_O_2 = x_O_2[ri]) then r_1[u] else r_1 <-R bits; r_1))
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       return(Hmix(km, x1_1, x2_1))
+     ) | (
+       foreach i <= Ndec do
+       cdec(cc: ciphertext) :=
+       if cc <> ctxt then
+       return(decap2(cc, skgen2(seed_1)))
+     ))
+
+
+Applying expand
+  - Expand if/find/let
+yields
+
+Game 13 is
+     start() :=
+     km <-R hkmix;
+     seed_1 <-R keyseed;
+     pk: pkey <- pkgen2(seed_1);
+     kseed_1 <-R encapseed;
+     k1_1 <-R kemss;
+     v_3: encapoutput <- encap_r2(pk, kseed_1);
+     ctxt: ciphertext <- 2-proj-pair(v_3);
+     ck0 <-R bits;
+     es <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     ck1: bits <- Hmix(km, es, ck0);
+     x_O_1: kemss <- k1_1;
+     x_O: bits <- ck1;
+     r <-R bits;
+     ck2: bits <- r;
+     ck3: bits <- Hmix(km, ee, ck2);
+     ck4: bits <- Hmix(km, se, ck3);
+     ck5: bits <- Hmix(km, ssi, ck4);
+     rk: bits <- Hmix(km, ck5, th4);
+     return(pk, ctxt, ck0, es, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHpre do
+       ch1(x1: kemss, x2: bits) :=
+       x_O_3: kemss <- x1;
+       x_O_2: bits <- x2;
+       find [unique]  suchthat defined(x_O_1, x_O, r) && (x_O_3 = x_O_1) && (x_O_2 = x_O) then
+         return(r)
+       orfind u = ri <= qHpre suchthat defined(x_O_3[ri], x_O_2[ri], r_1[ri]) && (x_O_3 = x_O_3[ri]) && (x_O_2 = x_O_2[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R bits;
+         return(r_1)
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       return(Hmix(km, x1_1, x2_1))
+     ) | (
+       foreach i <= Ndec do
+       cdec(cc: ciphertext) :=
+       if cc <> ctxt then
+       return(decap2(cc, skgen2(seed_1)))
+     ))
+
+
+Applying remove assignments of findcond
+  - Remove assignments on x_O_1 (definition removed, all usages removed)
+  - Remove assignments on x_O (definition removed, all usages removed)
+  - Remove assignments on ck2 (definition removed, all usages removed)
+  - Remove assignments on x_O_3 (definition point kept, all usages removed)
+  - Remove assignments on x_O_2 (definition removed, all usages removed)
+yields
+
+Game 14 is
+     start() :=
+     km <-R hkmix;
+     seed_1 <-R keyseed;
+     pk: pkey <- pkgen2(seed_1);
+     kseed_1 <-R encapseed;
+     k1_1 <-R kemss;
+     v_3: encapoutput <- encap_r2(pk, kseed_1);
+     ctxt: ciphertext <- 2-proj-pair(v_3);
+     ck0 <-R bits;
+     es <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     ck1: bits <- Hmix(km, es, ck0);
+     r <-R bits;
+     ck3: bits <- Hmix(km, ee, r);
+     ck4: bits <- Hmix(km, se, ck3);
+     ck5: bits <- Hmix(km, ssi, ck4);
+     rk: bits <- Hmix(km, ck5, th4);
+     return(pk, ctxt, ck0, es, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHpre do
+       ch1(x1: kemss, x2: bits) :=
+       x_O_3: kemss <- cst_kemss;
+       find [unique]  suchthat defined(r) && (x1 = k1_1) && (x2 = ck1) then
+         return(r)
+       orfind u = ri <= qHpre suchthat defined(x1[ri], x2[ri], x_O_3[ri], r_1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R bits;
+         return(r_1)
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       return(Hmix(km, x1_1, x2_1))
+     ) | (
+       foreach i <= Ndec do
+       cdec(cc: ciphertext) :=
+       if cc <> ctxt then
+       return(decap2(cc, skgen2(seed_1)))
+     ))
+
+
+Applying simplify [probability qHpre / |kemss|]
+  - Global dependency analysis on k1_1
+yields
+
+Game 15 is
+     start() :=
+     km <-R hkmix;
+     seed_1 <-R keyseed;
+     pk: pkey <- pkgen2(seed_1);
+     kseed_1 <-R encapseed;
+  {8}k1_1 <-R kemss;
+     v_3: encapoutput <- encap_r2(pk, kseed_1);
+     ctxt: ciphertext <- 2-proj-pair(v_3);
+     ck0 <-R bits;
+     es <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     ck1: bits <- Hmix(km, es, ck0);
+     r <-R bits;
+     ck3: bits <- Hmix(km, ee, r);
+     ck4: bits <- Hmix(km, se, ck3);
+     ck5: bits <- Hmix(km, ssi, ck4);
+     rk: bits <- Hmix(km, ck5, th4);
+     return(pk, ctxt, ck0, es, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHpre do
+       ch1(x1: kemss, x2: bits) :=
+       x_O_3: kemss <- cst_kemss;
+ {63}  find [unique] u = ri <= qHpre suchthat defined(x1[ri], x2[ri], x_O_3[ri], r_1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R bits;
+         return(r_1)
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       return(Hmix(km, x1_1, x2_1))
+     ) | (
+       foreach i <= Ndec do
+       cdec(cc: ciphertext) :=
+       if cc <> ctxt then
+       return(decap2(cc, skgen2(seed_1)))
+     ))
+
+
+Applying simplify
+  - Simplification pass
+    - Replaced defined condition x1[ri], x2[ri], x_O_3[ri], r_1[ri] with r_1[ri], x2[ri], x1[ri] in find at 63
+    - Remove random number generation at 8
+yields
+
+Game 16 is
+     start() :=
+     km <-R hkmix;
+     seed_1 <-R keyseed;
+     pk: pkey <- pkgen2(seed_1);
+     kseed_1 <-R encapseed;
+     v_3: encapoutput <- encap_r2(pk, kseed_1);
+     ctxt: ciphertext <- 2-proj-pair(v_3);
+     ck0 <-R bits;
+     es <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     ck1: bits <- Hmix(km, es, ck0);
+     r <-R bits;
+     ck3: bits <- Hmix(km, ee, r);
+     ck4: bits <- Hmix(km, se, ck3);
+     ck5: bits <- Hmix(km, ssi, ck4);
+     rk: bits <- Hmix(km, ck5, th4);
+     return(pk, ctxt, ck0, es, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHpre do
+       ch1(x1: kemss, x2: bits) :=
+       x_O_3: kemss <- cst_kemss;
+       find [unique] u = ri <= qHpre suchthat defined(r_1[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R bits;
+         return(r_1)
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       return(Hmix(km, x1_1, x2_1))
+     ) | (
+       foreach i <= Ndec do
+       cdec(cc: ciphertext) :=
+       if cc <> ctxt then
+       return(decap2(cc, skgen2(seed_1)))
+     ))
+
+
+Applying move all binders
+  - Move assignment to x_O_3
+yields
+
+Game 17 is
+     start() :=
+     km <-R hkmix;
+     seed_1 <-R keyseed;
+     pk: pkey <- pkgen2(seed_1);
+     kseed_1 <-R encapseed;
+     v_3: encapoutput <- encap_r2(pk, kseed_1);
+     ctxt: ciphertext <- 2-proj-pair(v_3);
+     ck0 <-R bits;
+     es <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     ck1: bits <- Hmix(km, es, ck0);
+     r <-R bits;
+     ck3: bits <- Hmix(km, ee, r);
+     ck4: bits <- Hmix(km, se, ck3);
+     ck5: bits <- Hmix(km, ssi, ck4);
+     rk: bits <- Hmix(km, ck5, th4);
+     return(pk, ctxt, ck0, es, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHpre do
+       ch1(x1: kemss, x2: bits) :=
+       find [unique] u = ri <= qHpre suchthat defined(r_1[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R bits;
+         return(r_1)
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       return(Hmix(km, x1_1, x2_1))
+     ) | (
+       foreach i <= Ndec do
+       cdec(cc: ciphertext) :=
+       if cc <> ctxt then
+       return(decap2(cc, skgen2(seed_1)))
+     ))
+
+
+Applying SA rename new without array accesses and remove assignments of findcond
+  - Remove assignments on ck1 (definition removed, all usages removed)
+yields
+
+Game 18 is
+     start() :=
+     km <-R hkmix;
+     seed_1 <-R keyseed;
+     pk: pkey <- pkgen2(seed_1);
+     kseed_1 <-R encapseed;
+     v_3: encapoutput <- encap_r2(pk, kseed_1);
+     ctxt: ciphertext <- 2-proj-pair(v_3);
+     ck0 <-R bits;
+     es <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     r <-R bits;
+     ck3: bits <- Hmix(km, ee, r);
+     ck4: bits <- Hmix(km, se, ck3);
+     ck5: bits <- Hmix(km, ssi, ck4);
+     rk: bits <- Hmix(km, ck5, th4);
+     return(pk, ctxt, ck0, es, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHpre do
+       ch1(x1: kemss, x2: bits) :=
+       find [unique] u = ri <= qHpre suchthat defined(r_1[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R bits;
+         return(r_1)
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       return(Hmix(km, x1_1, x2_1))
+     ) | (
+       foreach i <= Ndec do
+       cdec(cc: ciphertext) :=
+       if cc <> ctxt then
+       return(decap2(cc, skgen2(seed_1)))
+     ))
+
+
+Applying equivalence rom(Hmix)
+  - Equivalence rom(Hmix) with variables: km -> hk
+yields
+
+Game 19 is
+     start() :=
+     seed_1 <-R keyseed;
+     pk: pkey <- pkgen2(seed_1);
+     kseed_1 <-R encapseed;
+     v_3: encapoutput <- encap_r2(pk, kseed_1);
+     ctxt: ciphertext <- 2-proj-pair(v_3);
+     ck0 <-R bits;
+     es <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     r <-R bits;
+     ck3: bits <- (x_O_5: bits <- ee; x_O_4: bits <- r; {26}find [unique]  else r_2 <-R bits; r_2);
+     ck4: bits <- (x_O_7: bits <- se; x_O_6: bits <- ck3; {34}if defined(x_O_5, x_O_4, r_2) && {35}((x_O_7 = x_O_5) && (x_O_6 = x_O_4)) then r_2 else r_3 <-R bits; r_3);
+     ck5: bits <- (x_O_9: bits <- ssi; x_O_8: bits <- ck4; {50}find [unique]  suchthat defined(x_O_5, x_O_4, r_2) && {51}((x_O_9 = x_O_5) && (x_O_8 = x_O_4)) then r_2 orfind  suchthat defined(x_O_7, x_O_6, r_3) && {59}((x_O_9 = x_O_7) && (x_O_8 = x_O_6)) then r_3 else r_4 <-R bits; r_4);
+     rk: bits <- (x_O_11: bits <- ck5; x_O_10: bits <- th4; {74}find [unique]  suchthat defined(x_O_5, x_O_4, r_2) && {75}((x_O_11 = x_O_5) && (x_O_10 = x_O_4)) then r_2 orfind  suchthat defined(x_O_7, x_O_6, r_3) && (x_O_11 = x_O_7) && (x_O_10 = x_O_6) then r_3 orfind  suchthat defined(x_O_9, x_O_8, r_4) && (x_O_11 = x_O_9) && (x_O_10 = x_O_8) then r_4 else r_5 <-R bits; r_5);
+     return(pk, ctxt, ck0, es, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHpre do
+       ch1(x1: kemss, x2: bits) :=
+       find [unique] u = ri <= qHpre suchthat defined(r_1[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R bits;
+         return(r_1)
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       return((x_O_13: bits <- x1_1; x_O_12: bits <- x2_1; find [unique]  suchthat defined(x_O_5, x_O_4, r_2) && (x_O_13 = x_O_5) && (x_O_12 = x_O_4) then r_2 orfind  suchthat defined(x_O_7, x_O_6, r_3) && (x_O_13 = x_O_7) && (x_O_12 = x_O_6) then r_3 orfind  suchthat defined(x_O_9, x_O_8, r_4) && (x_O_13 = x_O_9) && (x_O_12 = x_O_8) then r_4 orfind  suchthat defined(x_O_11, x_O_10, r_5) && (x_O_13 = x_O_11) && (x_O_12 = x_O_10) then r_5 orfind u_2 = ri_2 <= qHmix suchthat defined(x_O_13[ri_2], x_O_12[ri_2], r_6[ri_2]) && (x_O_13 = x_O_13[ri_2]) && (x_O_12 = x_O_12[ri_2]) then r_6[u_2] else r_6 <-R bits; r_6))
+     ) | (
+       foreach i <= Ndec do
+       cdec(cc: ciphertext) :=
+       if cc <> ctxt then
+       return(decap2(cc, skgen2(seed_1)))
+     ))
+
+
+Applying simplify (non-expanded game) [probability 4 / |bits|]
+  - Simplification pass
+    - Find at 26 removed (else branch kept if any)
+    - Replaced ((x_O_7 = x_O_5) && (x_O_6 = x_O_4)) with false at 35
+    - Remove branch 1 in find at 34
+    - Find at 34 removed (else branch kept if any)
+    - Replaced ((x_O_9 = x_O_7) && (x_O_8 = x_O_6)) with false at 59
+    - Remove branch 2 in find at 50
+    - Replaced ((x_O_9 = x_O_5) && (x_O_8 = x_O_4)) with false at 51
+    - Remove branch 1 in find at 50
+    - Find at 50 removed (else branch kept if any)
+    - Replaced ((x_O_11 = x_O_5) && (x_O_10 = x_O_4)) with false at 75
+    - Remove branch 1 in find at 74
+yields
+
+Game 20 is
+     start() :=
+     seed_1 <-R keyseed;
+     pk: pkey <- pkgen2(seed_1);
+     kseed_1 <-R encapseed;
+     v_3: encapoutput <- encap_r2(pk, kseed_1);
+     ctxt: ciphertext <- 2-proj-pair(v_3);
+     ck0 <-R bits;
+     es <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     r <-R bits;
+     ck3: bits <- (x_O_5: bits <- ee; x_O_4: bits <- r; r_2 <-R bits; r_2);
+     ck4: bits <- (x_O_7: bits <- se; x_O_6: bits <- ck3; r_3 <-R bits; r_3);
+     ck5: bits <- (x_O_9: bits <- ssi; x_O_8: bits <- ck4; r_4 <-R bits; r_4);
+     rk: bits <- (x_O_11: bits <- ck5; x_O_10: bits <- th4; {47}find [unique]  suchthat defined(x_O_7, x_O_6, r_3) && (x_O_11 = x_O_7) && (x_O_10 = x_O_6) then r_3 orfind  suchthat defined(x_O_9, x_O_8, r_4) && (x_O_11 = x_O_9) && (x_O_10 = x_O_8) then r_4 else r_5 <-R bits; r_5);
+     return(pk, ctxt, ck0, es, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHpre do
+       ch1(x1: kemss, x2: bits) :=
+       find [unique] u = ri <= qHpre suchthat defined(r_1[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R bits;
+         return(r_1)
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       return((x_O_13: bits <- x1_1; x_O_12: bits <- x2_1; find [unique]  suchthat defined(x_O_5, x_O_4, r_2) && (x_O_13 = x_O_5) && (x_O_12 = x_O_4) then r_2 orfind  suchthat defined(x_O_7, x_O_6, r_3) && (x_O_13 = x_O_7) && (x_O_12 = x_O_6) then r_3 orfind  suchthat defined(x_O_9, x_O_8, r_4) && (x_O_13 = x_O_9) && (x_O_12 = x_O_8) then r_4 orfind  suchthat defined(x_O_11, x_O_10, r_5) && (x_O_13 = x_O_11) && (x_O_12 = x_O_10) then r_5 orfind u_2 = ri_2 <= qHmix suchthat defined(x_O_13[ri_2], x_O_12[ri_2], r_6[ri_2]) && (x_O_13 = x_O_13[ri_2]) && (x_O_12 = x_O_12[ri_2]) then r_6[u_2] else r_6 <-R bits; r_6))
+     ) | (
+       foreach i <= Ndec do
+       cdec(cc: ciphertext) :=
+       if cc <> ctxt then
+       return(decap2(cc, skgen2(seed_1)))
+     ))
+
+
+Applying expand [probability 2 / |bits|]
+  - Expand if/find/let
+    - Remove branch 2 in find at 47
+    - Remove branch 1 in find at 47
+    - Find at 47 removed (else branch kept if any)
+yields
+
+Game 21 is
+     start() :=
+     seed_1 <-R keyseed;
+     pk: pkey <- pkgen2(seed_1);
+     kseed_1 <-R encapseed;
+     v_3: encapoutput <- encap_r2(pk, kseed_1);
+     ctxt: ciphertext <- 2-proj-pair(v_3);
+     ck0 <-R bits;
+     es <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     r <-R bits;
+     x_O_5: bits <- ee;
+     x_O_4: bits <- r;
+     r_2 <-R bits;
+     ck3: bits <- r_2;
+     x_O_7: bits <- se;
+     x_O_6: bits <- ck3;
+     r_3 <-R bits;
+     ck4: bits <- r_3;
+     x_O_9: bits <- ssi;
+     x_O_8: bits <- ck4;
+     r_4 <-R bits;
+     ck5: bits <- r_4;
+     x_O_11: bits <- ck5;
+     x_O_10: bits <- th4;
+     r_5 <-R bits;
+     rk: bits <- r_5;
+     return(pk, ctxt, ck0, es, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHpre do
+       ch1(x1: kemss, x2: bits) :=
+       find [unique] u = ri <= qHpre suchthat defined(r_1[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R bits;
+         return(r_1)
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       x_O_13: bits <- x1_1;
+       x_O_12: bits <- x2_1;
+       find [unique]  suchthat defined(x_O_5, x_O_4, r_2) && (x_O_13 = x_O_5) && (x_O_12 = x_O_4) then
+         return(r_2)
+       orfind  suchthat defined(x_O_7, x_O_6, r_3) && (x_O_13 = x_O_7) && (x_O_12 = x_O_6) then
+         return(r_3)
+       orfind  suchthat defined(x_O_9, x_O_8, r_4) && (x_O_13 = x_O_9) && (x_O_12 = x_O_8) then
+         return(r_4)
+       orfind  suchthat defined(x_O_11, x_O_10, r_5) && (x_O_13 = x_O_11) && (x_O_12 = x_O_10) then
+         return(r_5)
+       orfind u_2 = ri_2 <= qHmix suchthat defined(x_O_13[ri_2], x_O_12[ri_2], r_6[ri_2]) && (x_O_13 = x_O_13[ri_2]) && (x_O_12 = x_O_12[ri_2]) then
+         return(r_6[u_2])
+       else
+         r_6 <-R bits;
+         return(r_6)
+     ) | (
+       foreach i <= Ndec do
+       cdec(cc: ciphertext) :=
+       if cc <> ctxt then
+       return(decap2(cc, skgen2(seed_1)))
+     ))
+
+
+Applying remove assignments of findcond
+  - Remove assignments on x_O_5 (definition removed, all usages removed)
+  - Remove assignments on x_O_4 (definition removed, all usages removed)
+  - Remove assignments on ck3 (definition removed, all usages removed)
+  - Remove assignments on x_O_7 (definition removed, all usages removed)
+  - Remove assignments on x_O_6 (definition removed, all usages removed)
+  - Remove assignments on ck4 (definition removed, all usages removed)
+  - Remove assignments on x_O_9 (definition removed, all usages removed)
+  - Remove assignments on x_O_8 (definition removed, all usages removed)
+  - Remove assignments on ck5 (definition removed, all usages removed)
+  - Remove assignments on x_O_11 (definition removed, all usages removed)
+  - Remove assignments on x_O_10 (definition removed, all usages removed)
+  - Remove assignments on x_O_13 (definition point kept, all usages removed)
+  - Remove assignments on x_O_12 (definition removed, all usages removed)
+yields
+
+Game 22 is
+     start() :=
+     seed_1 <-R keyseed;
+     pk: pkey <- pkgen2(seed_1);
+     kseed_1 <-R encapseed;
+     v_3: encapoutput <- encap_r2(pk, kseed_1);
+     ctxt: ciphertext <- 2-proj-pair(v_3);
+     ck0 <-R bits;
+     es <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     r <-R bits;
+     r_2 <-R bits;
+     r_3 <-R bits;
+     r_4 <-R bits;
+     r_5 <-R bits;
+     rk: bits <- r_5;
+     return(pk, ctxt, ck0, es, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHpre do
+       ch1(x1: kemss, x2: bits) :=
+       find [unique] u = ri <= qHpre suchthat defined(r_1[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R bits;
+         return(r_1)
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       x_O_13: bits <- cst_bits;
+       find [unique]  suchthat defined(r_2) && (x1_1 = ee) && (x2_1 = r) then
+         return(r_2)
+       orfind  suchthat defined(r_3) && (x1_1 = se) && (x2_1 = r_2) then
+         return(r_3)
+       orfind  suchthat defined(r_4) && (x1_1 = ssi) && (x2_1 = r_3) then
+         return(r_4)
+       orfind  suchthat defined(r_5) && (x1_1 = r_4) && (x2_1 = th4) then
+         return(r_5)
+       orfind u_2 = ri_2 <= qHmix suchthat defined(x1_1[ri_2], x2_1[ri_2], x_O_13[ri_2], r_6[ri_2]) && (x1_1 = x1_1[ri_2]) && (x2_1 = x2_1[ri_2]) then
+         return(r_6[u_2])
+       else
+         r_6 <-R bits;
+         return(r_6)
+     ) | (
+       foreach i <= Ndec do
+       cdec(cc: ciphertext) :=
+       if cc <> ctxt then
+       return(decap2(cc, skgen2(seed_1)))
+     ))
+
+
+Applying simplify [probability qHmix / |bits|]
+  - Global dependency analysis on r
+yields
+
+Game 23 is
+     start() :=
+     seed_1 <-R keyseed;
+     pk: pkey <- pkgen2(seed_1);
+     kseed_1 <-R encapseed;
+     v_3: encapoutput <- encap_r2(pk, kseed_1);
+     ctxt: ciphertext <- 2-proj-pair(v_3);
+     ck0 <-R bits;
+     es <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     r <-R bits;
+     r_2 <-R bits;
+     r_3 <-R bits;
+     r_4 <-R bits;
+     r_5 <-R bits;
+     rk: bits <- r_5;
+     return(pk, ctxt, ck0, es, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHpre do
+       ch1(x1: kemss, x2: bits) :=
+       find [unique] u = ri <= qHpre suchthat defined(r_1[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R bits;
+         return(r_1)
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       x_O_13: bits <- cst_bits;
+       find [unique]  suchthat defined(r_3) && (x1_1 = se) && (x2_1 = r_2) then
+         return(r_3)
+       orfind  suchthat defined(r_4) && (x1_1 = ssi) && (x2_1 = r_3) then
+         return(r_4)
+       orfind  suchthat defined(r_5) && (x1_1 = r_4) && (x2_1 = th4) then
+         return(r_5)
+       orfind u_2 = ri_2 <= qHmix suchthat defined(x1_1[ri_2], x2_1[ri_2], x_O_13[ri_2], r_6[ri_2]) && (x1_1 = x1_1[ri_2]) && (x2_1 = x2_1[ri_2]) then
+         return(r_6[u_2])
+       else
+         r_6 <-R bits;
+         return(r_6)
+     ) | (
+       foreach i <= Ndec do
+       cdec(cc: ciphertext) :=
+       if cc <> ctxt then
+       return(decap2(cc, skgen2(seed_1)))
+     ))
+
+
+Applying simplify [probability qHmix / |bits|]
+  - Global dependency analysis on r_2
+yields
+
+Game 24 is
+     start() :=
+     seed_1 <-R keyseed;
+     pk: pkey <- pkgen2(seed_1);
+     kseed_1 <-R encapseed;
+     v_3: encapoutput <- encap_r2(pk, kseed_1);
+     ctxt: ciphertext <- 2-proj-pair(v_3);
+     ck0 <-R bits;
+     es <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     r <-R bits;
+     r_2 <-R bits;
+     r_3 <-R bits;
+     r_4 <-R bits;
+     r_5 <-R bits;
+     rk: bits <- r_5;
+     return(pk, ctxt, ck0, es, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHpre do
+       ch1(x1: kemss, x2: bits) :=
+       find [unique] u = ri <= qHpre suchthat defined(r_1[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R bits;
+         return(r_1)
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       x_O_13: bits <- cst_bits;
+       find [unique]  suchthat defined(r_4) && (x1_1 = ssi) && (x2_1 = r_3) then
+         return(r_4)
+       orfind  suchthat defined(r_5) && (x1_1 = r_4) && (x2_1 = th4) then
+         return(r_5)
+       orfind u_2 = ri_2 <= qHmix suchthat defined(x1_1[ri_2], x2_1[ri_2], x_O_13[ri_2], r_6[ri_2]) && (x1_1 = x1_1[ri_2]) && (x2_1 = x2_1[ri_2]) then
+         return(r_6[u_2])
+       else
+         r_6 <-R bits;
+         return(r_6)
+     ) | (
+       foreach i <= Ndec do
+       cdec(cc: ciphertext) :=
+       if cc <> ctxt then
+       return(decap2(cc, skgen2(seed_1)))
+     ))
+
+
+Applying simplify [probability qHmix / |bits|]
+  - Global dependency analysis on r_3
+yields
+
+Game 25 is
+     start() :=
+     seed_1 <-R keyseed;
+     pk: pkey <- pkgen2(seed_1);
+     kseed_1 <-R encapseed;
+     v_3: encapoutput <- encap_r2(pk, kseed_1);
+     ctxt: ciphertext <- 2-proj-pair(v_3);
+     ck0 <-R bits;
+     es <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     r <-R bits;
+     r_2 <-R bits;
+     r_3 <-R bits;
+     r_4 <-R bits;
+     r_5 <-R bits;
+     rk: bits <- r_5;
+     return(pk, ctxt, ck0, es, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHpre do
+       ch1(x1: kemss, x2: bits) :=
+       find [unique] u = ri <= qHpre suchthat defined(r_1[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R bits;
+         return(r_1)
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       x_O_13: bits <- cst_bits;
+       find [unique]  suchthat defined(r_5) && (x1_1 = r_4) && (x2_1 = th4) then
+         return(r_5)
+       orfind u_2 = ri_2 <= qHmix suchthat defined(x1_1[ri_2], x2_1[ri_2], x_O_13[ri_2], r_6[ri_2]) && (x1_1 = x1_1[ri_2]) && (x2_1 = x2_1[ri_2]) then
+         return(r_6[u_2])
+       else
+         r_6 <-R bits;
+         return(r_6)
+     ) | (
+       foreach i <= Ndec do
+       cdec(cc: ciphertext) :=
+       if cc <> ctxt then
+       return(decap2(cc, skgen2(seed_1)))
+     ))
+
+
+Applying simplify [probability qHmix / |bits|]
+  - Global dependency analysis on r_4
+yields
+
+Game 26 is
+     start() :=
+     seed_1 <-R keyseed;
+     pk: pkey <- pkgen2(seed_1);
+     kseed_1 <-R encapseed;
+     v_3: encapoutput <- encap_r2(pk, kseed_1);
+     ctxt: ciphertext <- 2-proj-pair(v_3);
+     ck0 <-R bits;
+     es <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+ {20}r <-R bits;
+ {21}r_2 <-R bits;
+ {22}r_3 <-R bits;
+ {23}r_4 <-R bits;
+     r_5 <-R bits;
+     rk: bits <- r_5;
+     return(pk, ctxt, ck0, es, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHpre do
+       ch1(x1: kemss, x2: bits) :=
+       find [unique] u = ri <= qHpre suchthat defined(r_1[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R bits;
+         return(r_1)
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       x_O_13: bits <- cst_bits;
+ {69}  find [unique] u_2 = ri_2 <= qHmix suchthat defined(x1_1[ri_2], x2_1[ri_2], x_O_13[ri_2], r_6[ri_2]) && (x1_1 = x1_1[ri_2]) && (x2_1 = x2_1[ri_2]) then
+         return(r_6[u_2])
+       else
+         r_6 <-R bits;
+         return(r_6)
+     ) | (
+       foreach i <= Ndec do
+       cdec(cc: ciphertext) :=
+       if cc <> ctxt then
+       return(decap2(cc, skgen2(seed_1)))
+     ))
+
+
+Applying simplify
+  - Simplification pass
+    - Replaced defined condition x1_1[ri_2], x2_1[ri_2], x_O_13[ri_2], r_6[ri_2] with r_6[ri_2], x2_1[ri_2], x1_1[ri_2] in find at 69
+    - Remove random number generation at 23
+    - Remove random number generation at 22
+    - Remove random number generation at 21
+    - Remove random number generation at 20
+yields
+
+Game 27 is
+     start() :=
+     seed_1 <-R keyseed;
+     pk: pkey <- pkgen2(seed_1);
+     kseed_1 <-R encapseed;
+     v_3: encapoutput <- encap_r2(pk, kseed_1);
+     ctxt: ciphertext <- 2-proj-pair(v_3);
+     ck0 <-R bits;
+     es <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     r_5 <-R bits;
+     rk: bits <- r_5;
+     return(pk, ctxt, ck0, es, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHpre do
+       ch1(x1: kemss, x2: bits) :=
+       find [unique] u = ri <= qHpre suchthat defined(r_1[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R bits;
+         return(r_1)
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       x_O_13: bits <- cst_bits;
+       find [unique] u_2 = ri_2 <= qHmix suchthat defined(r_6[ri_2], x2_1[ri_2], x1_1[ri_2]) && (x1_1 = x1_1[ri_2]) && (x2_1 = x2_1[ri_2]) then
+         return(r_6[u_2])
+       else
+         r_6 <-R bits;
+         return(r_6)
+     ) | (
+       foreach i <= Ndec do
+       cdec(cc: ciphertext) :=
+       if cc <> ctxt then
+       return(decap2(cc, skgen2(seed_1)))
+     ))
+
+
+Applying move all binders
+  - Move assignment to x_O_13
+yields
+
+Game 28 is
+     start() :=
+     seed_1 <-R keyseed;
+     pk: pkey <- pkgen2(seed_1);
+     kseed_1 <-R encapseed;
+     v_3: encapoutput <- encap_r2(pk, kseed_1);
+     ctxt: ciphertext <- 2-proj-pair(v_3);
+     ck0 <-R bits;
+     es <-R bits;
+     ee <-R bits;
+     se <-R bits;
+     ssi <-R bits;
+     th4 <-R bits;
+     r_5 <-R bits;
+     rk: bits <- r_5;
+     return(pk, ctxt, ck0, es, ee, se, ssi, th4);
+     ((
+       foreach iH <= qHpre do
+       ch1(x1: kemss, x2: bits) :=
+       find [unique] u = ri <= qHpre suchthat defined(r_1[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R bits;
+         return(r_1)
+     ) | (
+       foreach iH_1 <= qHmix do
+       ch1_1(x1_1: bits, x2_1: bits) :=
+       find [unique] u_2 = ri_2 <= qHmix suchthat defined(r_6[ri_2], x2_1[ri_2], x1_1[ri_2]) && (x1_1 = x1_1[ri_2]) && (x2_1 = x2_1[ri_2]) then
+         return(r_6[u_2])
+       else
+         r_6 <-R bits;
+         return(r_6)
+     ) | (
+       foreach i <= Ndec do
+       cdec(cc: ciphertext) :=
+       if cc <> ctxt then
+       return(decap2(cc, skgen2(seed_1)))
+     ))
+
+
+Proved secrecy of rk in game 28
+Adv[Game 1: secrecy of rk] <= (8 * qHmix + 12) / |bits| + 2 * qHpre / |kemss| + 2 * Penc(time_1, 1, 1, Ndec) + Adv[Game 28: secrecy of rk]
+Adv[Game 28: secrecy of rk] <= 0
+RESULT Proved secrecy of rk up to probability (12 + 8 * qHmix) / |bits| + 2 * qHpre / |kemss| + 2 * Penc(time_1, 1, 1, Ndec)
+RESULT time_1 = time + time(context for game 4) = time(2-proj-pair) + time(1-proj-pair) + (1 + qHpre) * time(Hpre) + (5 + qHmix) * time(Hmix) + time
+All queries proved.

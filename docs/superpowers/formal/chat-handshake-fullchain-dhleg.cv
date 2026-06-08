@@ -1,0 +1,71 @@
+(* ============================================================================
+   DCS98 chat handshake — CryptoVerif, FULL 5-step MixKey chain, DH leg.
+
+   Advance over chat-handshake-hybrid-dhleg.cv: that abstracted the whole key
+   schedule to RK = ROM(es, ss). This models the ACTUAL implemented chain
+   (handshake.ts:174-217):
+
+     CK0 = HKDF(PROTO, TH1, init)        -- public inputs ⇒ known to adversary
+     CK1 = MixKey(es,     CK0)           -- es = X25519 g^{ab}   (handshake.ts:176)
+     CK2 = MixKey(ss_pre, CK1)           -- ML-KEM to R's prekey (:177)
+     CK3 = MixKey(ee,     CK2)           -- DH(xe_R, xe_I)       (:197)
+     CK4 = MixKey(se,     CK3)           -- DH(xe_R, xs_I)       (:198)
+     CK5 = MixKey(ss_I,   CK4)           -- ML-KEM to I ephem.   (:199)
+     RK  = HKDF(CK5, TH4, root)          -- (:217)
+
+   MixKey is HKDF with secret=IKM, CK=salt (the dual-PRF arg roles, crypto-audit
+   H-1), modelled as a random oracle. Claim (DH leg of the hybrid): RK ≈ random
+   under CDH even if the adversary is handed EVERY non-es secret (ss_pre, ee, se,
+   ss_I) and the public chaining inputs. This shows the real multi-step chain
+   "saturates" on the single surviving secret es — the dual-PRF property over the
+   actual chain, not a collapsed 2-input ROM.
+
+   Run: cryptoverif chat-handshake-fullchain-dhleg.cv
+   ============================================================================ *)
+
+proof {
+  crypto rom(Hes);
+  crypto rom(Hmix);
+  crypto cdh(exp);
+  success
+}
+
+type Z   [large,bounded].
+type G   [large,bounded].
+type bits [large,fixed].   (* chaining keys and the non-es shared secrets *)
+type hk1t [fixed].
+type hk2t [fixed].
+
+expand DH_basic(G, Z, g, exp, exp', mult).
+proba pCDH.
+expand CDH(G, Z, g, exp, exp', mult, pCDH).
+
+(* First mix consumes the DH secret es:G; the rest of the chain mixes bits-secrets. *)
+expand ROM_hash_2(hk1t, G,    bits, bits, Hes,  oracle_es,  qHes).
+expand ROM_hash_2(hk2t, bits, bits, bits, Hmix, oracle_mix, qHmix).
+
+query secret rk.
+
+channel start, c.
+
+process
+  in(start, ());
+  new ke: hk1t;  new km: hk2t;   (* ROM keys *)
+  new a: Z;  new b: Z;
+  let ga: G = exp(g, a) in
+  let gb: G = exp(g, b) in
+  let es: G = exp(gb, a) in       (* the one surviving secret *)
+  new ck0:   bits;                (* = HKDF(PROTO,TH1,init): public chaining seed *)
+  new sspre: bits;               (* every non-es secret is handed to the adversary below *)
+  new ee:    bits;
+  new se:    bits;
+  new ssi:   bits;
+  new th4:   bits;               (* transcript hash: public *)
+  let ck1: bits = Hes(ke, es, ck0) in
+  let ck2: bits = Hmix(km, sspre, ck1) in
+  let ck3: bits = Hmix(km, ee,    ck2) in
+  let ck4: bits = Hmix(km, se,    ck3) in
+  let ck5: bits = Hmix(km, ssi,   ck4) in
+  let rk:  bits = Hmix(km, ck5,   th4) in
+  out(c, (ga, gb, ck0, sspre, ee, se, ssi, th4));
+  (oracle_es(ke) | oracle_mix(km))
