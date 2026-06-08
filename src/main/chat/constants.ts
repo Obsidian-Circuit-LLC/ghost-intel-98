@@ -3,12 +3,12 @@
  * domain-separation tags. Centralized so the handshake, invite, and prekey code can't drift on a
  * label (a mismatch silently breaks interop or, worse, a security binding).
  *
- * EXPERIMENTAL: the v3 handshake these feed is pending formal verification (ProVerif/CryptoVerif).
+ * EXPERIMENTAL: the v4 handshake these feed is pending formal verification (ProVerif/CryptoVerif).
  * See docs/superpowers/formal/.
  */
 const tag = (s: string): Uint8Array => new TextEncoder().encode(s);
 
-export const SUITE_ID = tag('dcs98-chat/v3/x25519+mlkem1024+ed25519');
+export const SUITE_ID = tag('dcs98-chat/v4/x25519+mlkem1024+ed25519');
 export const PROTO_LABEL = tag('dcs98-chat/handshake/v3');
 
 // Signature domain-separation (crypto-audit H-2): every Ed25519 use under an identity key gets a
@@ -18,6 +18,9 @@ export const DS_PREKEY = tag('dcs98-chat/ds/prekey/v1');
 export const DS_HS_INIT = tag('dcs98-chat/ds/hs-init/v1');
 export const DS_HS_RESP = tag('dcs98-chat/ds/hs-resp/v1');
 export const DS_MAC_T = tag('dcs98-chat/ds/mac-t/v1');
+export const DS_HS_REJECT = tag('dcs98-chat/ds/hs-reject/v1');
+export const DS_MAC_R = tag('dcs98-chat/ds/mac-r/v1');
+export const RECONNECT_GATE = tag('dcs98-chat/reconnect-gate/v4');
 
 // MixKey step labels + derive labels (all distinct ⇒ hk1≠hk2≠RK≠SID).
 export const MIX_INIT = tag('dcs98-chat/mix/init');
