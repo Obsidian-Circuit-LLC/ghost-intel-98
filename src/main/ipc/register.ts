@@ -68,6 +68,7 @@ import { encryptAll, decryptAll } from '../storage/encryption-migrate';
 import { buildSummaryHtml, renderCasePdf, type ReportImages } from '../services/export';
 import { timelineCsv, linksCsv, entitiesCsv, attachmentsCsv } from '../services/csv';
 import * as search from '../services/search';
+import * as memory from '../services/memory';
 import { markConsented, assertAllConsented } from '../security/consent';
 import { getSecretBackend, rewrapSecretsForVault } from '../secrets';
 import { homedir } from 'node:os';
@@ -999,6 +1000,12 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   });
   safeHandle(channels.localAi.start, () => localAi.ensureRuntime());
   safeHandle(channels.localAi.stop, () => { localAi.stop(); });
+
+  safeHandle(channels.memory.status, () => memory.status());
+  safeHandle(channels.memory.reindexAll, () => memory.reindexAll((p) => {
+    const win = getWindow();
+    if (win) win.webContents.send(channels.memory.onProgress, p);
+  }));
 }
 
 /** Reminder tick: every 30s, pull due reminders, fire notifications + emit IPC to renderer.

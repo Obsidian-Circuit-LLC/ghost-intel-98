@@ -17,6 +17,7 @@ import { channels } from '@shared/ipc-contracts';
 import { secretStore } from '../secrets';
 import { settingsStore } from '../storage/json-fs';
 import { validateAiEndpoint } from '../security/validate';
+import { recall, formatRecall } from './memory/retriever';
 
 interface SessionMeta {
   controller: AbortController;
@@ -57,6 +58,18 @@ export async function chat(streamId: string, req: AiChatRequest, getWindow: () =
           req.context
       });
     }
+    // Local vector memory (opt-in, Ollama only): recall relevant case/conversation material and
+    // inject it as context. Best-effort — a memory failure must never break the chat.
+    if (s.ai.useMemory && provider === 'ollama') {
+      try {
+        const lastUser = [...req.messages].reverse().find((m) => m.role === 'user');
+        if (lastUser) {
+          const block = formatRecall(await recall(lastUser.content, { k: 6 }));
+          if (block) messages.push({ role: 'system', content: block });
+        }
+      } catch { /* memory is best-effort */ }
+    }
+
     messages.push(...req.messages);
 
     if (provider === 'ollama') {

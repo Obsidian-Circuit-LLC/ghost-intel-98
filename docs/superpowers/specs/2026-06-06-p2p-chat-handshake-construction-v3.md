@@ -1,11 +1,20 @@
-# DCS98 chat handshake — construction v3 (FREEZE CANDIDATE, pending formal verification)
+# DCS98 chat handshake — construction v3 (IMPLEMENTED at ML-KEM-1024; symbolic model run 2026-06-08)
 
-**Status:** Folds in the full v2 re-gate fix-list. Intended to be the frozen wire spec **after**
-ProVerif (symbolic) + CryptoVerif (computational) sign-off. Supersedes v2. NOT yet implemented.
+**Status:** Folds in the full v2 re-gate fix-list. Supersedes v2. **Implemented and shipped** (v3.10–v3.12;
+the ML-KEM leg was migrated from the original 768 draft to **ML-KEM-1024** via the AWS-LC sidecar — see the
+2026-06-07 operator decision). The ProVerif symbolic model (`../formal/chat-handshake.pv`) was completed and
+**run green on 2026-06-08** (ProVerif 2.05); the CryptoVerif computational bound (G2 hybrid IND) remains the
+open item. The construction therefore stays labelled EXPERIMENTAL until G2 + external audit land.
+
+> **Parameter note (768 vs 1024 and the proofs).** The migration to ML-KEM-1024 does **not** alter either
+> formal model. In the symbolic model ML-KEM is an *ideal* KEM (perfect `encap`/`decap`), so the parameter is
+> immaterial. In the computational model the assumption is `IND-CCA(ML-KEM)` for whichever parameter ships;
+> 1024 changes only the concrete-security margin (the ε), not the structure of the reduction. The labels below
+> read "1024" to match shipped code; no proof step depends on the choice.
 
 ## Primitives & notation
 
-X25519 `DH(a,B)`; Ed25519 `Sign/Verify`; ML-KEM-768 `Encap(K)->(ct,ss)`, `Decap(ct,sk)->ss`;
+X25519 `DH(a,B)`; Ed25519 `Sign/Verify`; ML-KEM-1024 `Encap(K)->(ct,ss)`, `Decap(ct,sk)->ss`;
 HMAC-SHA256 `MAC(key,msg)`; HKDF-SHA256. **MixKey (arg roles fixed, crypto-audit H-1):**
 `CK ← HKDF(ikm = secret, salt = CK, info = <step-label>, len = 32)` — the new secret is IKM, CK is
 salt; this is what makes "secure if EITHER X25519 or ML-KEM survives" hold. Implemented as
@@ -23,7 +32,7 @@ salt; this is what makes "secure if EITHER X25519 or ML-KEM survives" hold. Impl
 - **R's signed KEM prekeys:** each `= (prekey_id, is_last_resort: bool, pk_pre)` with
   `sig_pre = Sign(is_R, DS_PREKEY ‖ suite_id ‖ is_R ‖ prekey_id ‖ is_last_resort ‖ pk_pre)`. A pool of
   one-time prekeys + one rotating last-resort. One-time secrets are deleted on consumption.
-- **Per-handshake ephemerals:** I → `xe_I` (X25519) + `ek_I` (ML-KEM-768). R → `xe_R` (X25519).
+- **Per-handshake ephemerals:** I → `xe_I` (X25519) + `ek_I` (ML-KEM-1024). R → `xe_R` (X25519).
 
 ## Invite (R self-signs the WHOLE payload — H-6)
 

@@ -64,3 +64,8 @@ resources/mlkem/*/mlkem-helper.exe
 # Bundled ExifTool (operator-supplied per platform; see resources/exiftool/README-EXIFTOOL.txt).
 # The README is committed; the binaries/Perl distribution are not.
 resources/exiftool/*/
+
+# Bundled local-AI resources (embedding model staged by `pnpm fetch:embed`; see README-LOCAL-AI.txt).
+# The README is committed; the model blobs + marker are build/CI-supplied, not committed.
+resources/local-ai/models/
+resources/local-ai/EMBED_MODEL_PRESENT

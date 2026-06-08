@@ -343,6 +343,9 @@ export interface AppSettings {
     /** TTS engine: 'system' = Web Speech / OS voices; 'piper' = bundled offline neural voice; 'auto'
      *  = prefer Piper when installed, else system. Default 'auto'. */
     ttsEngine: 'auto' | 'system' | 'piper';
+    /** When true, the assistant retrieves relevant case/conversation memory (local vector search
+     *  over the bundled embedding model) and injects it as context. Offline; default off. */
+    useMemory: boolean;
   };
   mail: {
     accounts: { id: string; label: string; imapHost: string; imapPort: number; smtpHost: string; smtpPort: number; user: string; secureRef: string | null }[];
@@ -473,7 +476,8 @@ export const defaultSettings: AppSettings = {
     ttsEnabled: false,
     ttsVoiceUri: null,
     ttsRate: 1,
-    ttsEngine: 'auto'
+    ttsEngine: 'auto',
+    useMemory: false
   },
   mail: { accounts: [] },
   browser: { homepage: 'about:blank' },

@@ -1,0 +1,240 @@
+Linear part:
+expn(expn(gX,x),y) = expn(expn(gX,y),x)
+Completing equations...
+Completed equations:
+expn(expn(gX,x),y) = expn(expn(gX,y),x)
+Convergent part: No equation.
+Process 0 (that is, the initial process):
+{1}new isI: skey;
+{2}new isR: skey;
+{3}new xsI: exp;
+{4}new xsR: exp;
+{5}new preSk: kemsk;
+{6}new pid: bitstring;
+{7}new tok: bitstring;
+{8}let pkPre: kempk = kempub(preSk) in
+{9}let sigPre: bitstring = sign((DS_PREKEY,SUITE,sp2b(spk(isR)),pid,LR_FALSE,kp2b(pkPre)),isR) in
+{10}out(net, spk(isI));
+{11}out(net, spk(isR));
+{12}out(net, g2b(expn(gX,xsR)));
+{13}out(net, (pid,kp2b(pkPre),sigPre));
+{14}out(prekeycell, (pid,preSk,tok));
+(
+    {15}!
+    {16}let isI_1: skey = isI in
+    {17}let xsI_1: exp = xsI in
+    {18}let isRpub: spkey = spk(isR) in
+    {19}let xsRpub: G = expn(gX,xsR) in
+    {20}let pid_1: bitstring = pid in
+    {21}let tok_1: bitstring = tok in
+    {22}new xeI: exp;
+    {23}new ekIsk: kemsk;
+    {24}new c: coins;
+    {25}let xeIpub: G = expn(gX,xeI) in
+    {26}let ekI: kempk = kempub(ekIsk) in
+    {27}let ctPre: bitstring = encap(pkPre,c) in
+    {28}let ssPre: key = encapss(pkPre,c) in
+    {29}let th0: bitstring = h((PROTO,SUITE,MODE_FIRST)) in
+    {30}let th1: bitstring = h((th0,TAG_I,TAG_R,sp2b(isRpub),g2b(xsRpub),pid_1,LR_FALSE,kp2b(pkPre),sigPre,g2b(xeIpub),kp2b(ekI),ctPre)) in
+    {31}let macT: bitstring = h((tok_1,DS_MAC,th1)) in
+    {32}let aadTok: bitstring = h((tok_1,th1)) in
+    {33}let es: G = expn(xsRpub,xeI) in
+    {34}let ck0: key = hkdf(proto_key,th1,MIX_INIT) in
+    {35}let ck1: key = hkdf(dh2k(es),k2b(ck0),MIX_ES) in
+    {36}let ck2: key = hkdf(ssPre,k2b(ck1),MIX_SSPRE) in
+    {37}let hk1: key = hkdf(ck2,th1,DRV_HK1) in
+    {38}let sigI: bitstring = sign((DS_HS_INIT,th1),isI_1) in
+    {39}let cidI: bitstring = aenc(hk1,(g2b(expn(gX,xsI_1)),sp2b(spk(isI_1)),sigI,s_id),aadTok) in
+    {40}event I_running_R(spk(isI_1),isRpub,th1);
+    {41}out(net, (MODE_FIRST,SUITE,g2b(xeIpub),kp2b(ekI),pid_1,ctPre,macT,cidI));
+    {42}in(net, (xeRb: bitstring,ctI: bitstring,nextPre: bitstring,cconfR: bitstring));
+    {43}let xeR: G = b2g(xeRb) in
+    {44}let ssI: key = decap(ctI,ekIsk) in
+    {45}let ee: G = expn(xeR,xeI) in
+    {46}let se: G = expn(xeR,xsI_1) in
+    {47}let ck3: key = hkdf(dh2k(ee),k2b(ck2),MIX_EE) in
+    {48}let ck4: key = hkdf(dh2k(se),k2b(ck3),MIX_SE) in
+    {49}let ck5: key = hkdf(ssI,k2b(ck4),MIX_SSI) in
+    {50}let th2: bitstring = h((th1,cidI)) in
+    {51}let th3: bitstring = h((th2,xeRb,ctI,nextPre)) in
+    {52}let hk2: key = hkdf(ck5,th3,DRV_HK2) in
+    {53}let confplain: bitstring = adec(cconfR,hk2,MIX_INIT) in
+    {54}let (sigR: bitstring,=s_id) = confplain in
+    {55}let (=DS_HS_RESP,=th3) = checksign(sigR,isRpub) in
+    {56}event I_commit_R(spk(isI_1),isRpub,th3);
+    {57}let th4: bitstring = h((th3,cconfR)) in
+    {58}let rk: key = hkdf(ck5,th4,DRV_ROOT) in
+    {59}out(net, aenc(rk,s_rk,RK_AAD))
+) | (
+    {60}!
+    {61}let isR_1: skey = isR in
+    {62}let xsR_1: exp = xsR in
+    {63}in(prekeycell, (pid_2: bitstring,preSk_1: kemsk,tok_2: bitstring));
+    {64}let pkPre_1: kempk = kempub(preSk_1) in
+    {65}let sigPre_1: bitstring = sign((DS_PREKEY,SUITE,sp2b(spk(isR_1)),pid_2,LR_FALSE,kp2b(pkPre_1)),isR_1) in
+    {66}in(net, (=MODE_FIRST,=SUITE,xeI_1: G,ekI_1: kempk,=pid_2,ctPre_1: bitstring,macT_1: bitstring,cidI_1: bitstring));
+    {67}let th0_1: bitstring = h((PROTO,SUITE,MODE_FIRST)) in
+    {68}let th1_1: bitstring = h((th0_1,TAG_I,TAG_R,sp2b(spk(isR_1)),g2b(expn(gX,xsR_1)),pid_2,LR_FALSE,kp2b(pkPre_1),sigPre_1,g2b(xeI_1),kp2b(ekI_1),ctPre_1)) in
+    {69}let aadTok_1: bitstring = h((tok_2,th1_1)) in
+    {70}if (macT_1 = h((tok_2,DS_MAC,th1_1))) then
+    {71}let ssPre_1: key = decap(ctPre_1,preSk_1) in
+    {72}let es_1: G = expn(xeI_1,xsR_1) in
+    {73}let ck0_1: key = hkdf(proto_key,th1_1,MIX_INIT) in
+    {74}let ck1_1: key = hkdf(dh2k(es_1),k2b(ck0_1),MIX_ES) in
+    {75}let ck2_1: key = hkdf(ssPre_1,k2b(ck1_1),MIX_SSPRE) in
+    {76}let hk1_1: key = hkdf(ck2_1,th1_1,DRV_HK1) in
+    {77}let idplain: bitstring = adec(cidI_1,hk1_1,aadTok_1) in
+    {78}let (xsIb: bitstring,isIb: bitstring,sigI_1: bitstring,sent: bitstring) = idplain in
+    {79}let (=DS_HS_INIT,=th1_1) = checksign(sigI_1,sp2b2spk(isIb)) in
+    {80}event R_commit_I(sp2b2spk(isIb),spk(isR_1),th1_1);
+    {81}new cR: coins;
+    {82}let ctI_1: bitstring = encap(ekI_1,cR) in
+    {83}let ssI_1: key = encapss(ekI_1,cR) in
+    {84}new xeR_1: exp;
+    {85}let xeRpub: G = expn(gX,xeR_1) in
+    {86}let ee_1: G = expn(xeI_1,xeR_1) in
+    {87}let se_1: G = expn(b2g(xsIb),xeR_1) in
+    {88}let ck3_1: key = hkdf(dh2k(ee_1),k2b(ck2_1),MIX_EE) in
+    {89}let ck4_1: key = hkdf(dh2k(se_1),k2b(ck3_1),MIX_SE) in
+    {90}let ck5_1: key = hkdf(ssI_1,k2b(ck4_1),MIX_SSI) in
+    {91}let th2_1: bitstring = h((th1_1,cidI_1)) in
+    {92}new npid: bitstring;
+    {93}new npSk: kemsk;
+    {94}let npPub: kempk = kempub(npSk) in
+    {95}let npSig: bitstring = sign((DS_PREKEY,SUITE,sp2b(spk(isR_1)),npid,LR_FALSE,kp2b(npPub)),isR_1) in
+    {96}let nextPre_1: bitstring = (npid,LR_FALSE,kp2b(npPub),npSig) in
+    {97}let th3_1: bitstring = h((th2_1,g2b(xeRpub),ctI_1,nextPre_1)) in
+    {98}let sigR_1: bitstring = sign((DS_HS_RESP,th3_1),isR_1) in
+    {99}let hk2_1: key = hkdf(ck5_1,th3_1,DRV_HK2) in
+    {100}let cconfR_1: bitstring = aenc(hk2_1,(sigR_1,sent),MIX_INIT) in
+    {101}event R_running_I(sp2b2spk(isIb),spk(isR_1),th3_1);
+    {102}out(net, (g2b(xeRpub),ctI_1,nextPre_1,cconfR_1))
+)
+
+--  Process 1 (that is, process 0, with let moved downwards):
+{1}new isI: skey;
+{2}new isR: skey;
+{3}new xsI: exp;
+{4}new xsR: exp;
+{5}new preSk: kemsk;
+{6}new pid: bitstring;
+{7}new tok: bitstring;
+{10}out(net, spk(isI));
+{11}out(net, spk(isR));
+{12}out(net, g2b(expn(gX,xsR)));
+{8}let pkPre: kempk = kempub(preSk) in
+{9}let sigPre: bitstring = sign((DS_PREKEY,SUITE,sp2b(spk(isR)),pid,LR_FALSE,kp2b(pkPre)),isR) in
+{13}out(net, (pid,kp2b(pkPre),sigPre));
+{14}out(prekeycell, (pid,preSk,tok));
+(
+    {15}!
+    {22}new xeI: exp;
+    {23}new ekIsk: kemsk;
+    {24}new c: coins;
+    {29}let th0: bitstring = h((PROTO,SUITE,MODE_FIRST)) in
+    {27}let ctPre: bitstring = encap(pkPre,c) in
+    {26}let ekI: kempk = kempub(ekIsk) in
+    {25}let xeIpub: G = expn(gX,xeI) in
+    {20}let pid_1: bitstring = pid in
+    {19}let xsRpub: G = expn(gX,xsR) in
+    {18}let isRpub: spkey = spk(isR) in
+    {30}let th1: bitstring = h((th0,TAG_I,TAG_R,sp2b(isRpub),g2b(xsRpub),pid_1,LR_FALSE,kp2b(pkPre),sigPre,g2b(xeIpub),kp2b(ekI),ctPre)) in
+    {16}let isI_1: skey = isI in
+    {40}event I_running_R(spk(isI_1),isRpub,th1);
+    {38}let sigI: bitstring = sign((DS_HS_INIT,th1),isI_1) in
+    {34}let ck0: key = hkdf(proto_key,th1,MIX_INIT) in
+    {33}let es: G = expn(xsRpub,xeI) in
+    {35}let ck1: key = hkdf(dh2k(es),k2b(ck0),MIX_ES) in
+    {28}let ssPre: key = encapss(pkPre,c) in
+    {36}let ck2: key = hkdf(ssPre,k2b(ck1),MIX_SSPRE) in
+    {37}let hk1: key = hkdf(ck2,th1,DRV_HK1) in
+    {21}let tok_1: bitstring = tok in
+    {32}let aadTok: bitstring = h((tok_1,th1)) in
+    {17}let xsI_1: exp = xsI in
+    {39}let cidI: bitstring = aenc(hk1,(g2b(expn(gX,xsI_1)),sp2b(spk(isI_1)),sigI,s_id),aadTok) in
+    {31}let macT: bitstring = h((tok_1,DS_MAC,th1)) in
+    {41}out(net, (MODE_FIRST,SUITE,g2b(xeIpub),kp2b(ekI),pid_1,ctPre,macT,cidI));
+    {42}in(net, (xeRb: bitstring,ctI: bitstring,nextPre: bitstring,cconfR: bitstring));
+    {43}let xeR: G = b2g(xeRb) in
+    {44}let ssI: key = decap(ctI,ekIsk) in
+    {50}let th2: bitstring = h((th1,cidI)) in
+    {51}let th3: bitstring = h((th2,xeRb,ctI,nextPre)) in
+    {45}let ee: G = expn(xeR,xeI) in
+    {47}let ck3: key = hkdf(dh2k(ee),k2b(ck2),MIX_EE) in
+    {46}let se: G = expn(xeR,xsI_1) in
+    {48}let ck4: key = hkdf(dh2k(se),k2b(ck3),MIX_SE) in
+    {49}let ck5: key = hkdf(ssI,k2b(ck4),MIX_SSI) in
+    {52}let hk2: key = hkdf(ck5,th3,DRV_HK2) in
+    {53}let confplain: bitstring = adec(cconfR,hk2,MIX_INIT) in
+    {54}let (sigR: bitstring,=s_id) = confplain in
+    {55}let (=DS_HS_RESP,=th3) = checksign(sigR,isRpub) in
+    {56}event I_commit_R(spk(isI_1),isRpub,th3);
+    {57}let th4: bitstring = h((th3,cconfR)) in
+    {58}let rk: key = hkdf(ck5,th4,DRV_ROOT) in
+    {59}out(net, aenc(rk,s_rk,RK_AAD))
+) | (
+    {60}!
+    {63}in(prekeycell, (pid_2: bitstring,preSk_1: kemsk,tok_2: bitstring));
+    {66}in(net, (=MODE_FIRST,=SUITE,xeI_1: G,ekI_1: kempk,=pid_2,ctPre_1: bitstring,macT_1: bitstring,cidI_1: bitstring));
+    {67}let th0_1: bitstring = h((PROTO,SUITE,MODE_FIRST)) in
+    {64}let pkPre_1: kempk = kempub(preSk_1) in
+    {61}let isR_1: skey = isR in
+    {65}let sigPre_1: bitstring = sign((DS_PREKEY,SUITE,sp2b(spk(isR_1)),pid_2,LR_FALSE,kp2b(pkPre_1)),isR_1) in
+    {62}let xsR_1: exp = xsR in
+    {68}let th1_1: bitstring = h((th0_1,TAG_I,TAG_R,sp2b(spk(isR_1)),g2b(expn(gX,xsR_1)),pid_2,LR_FALSE,kp2b(pkPre_1),sigPre_1,g2b(xeI_1),kp2b(ekI_1),ctPre_1)) in
+    {70}if (macT_1 = h((tok_2,DS_MAC,th1_1))) then
+    {71}let ssPre_1: key = decap(ctPre_1,preSk_1) in
+    {73}let ck0_1: key = hkdf(proto_key,th1_1,MIX_INIT) in
+    {72}let es_1: G = expn(xeI_1,xsR_1) in
+    {74}let ck1_1: key = hkdf(dh2k(es_1),k2b(ck0_1),MIX_ES) in
+    {75}let ck2_1: key = hkdf(ssPre_1,k2b(ck1_1),MIX_SSPRE) in
+    {76}let hk1_1: key = hkdf(ck2_1,th1_1,DRV_HK1) in
+    {69}let aadTok_1: bitstring = h((tok_2,th1_1)) in
+    {77}let idplain: bitstring = adec(cidI_1,hk1_1,aadTok_1) in
+    {78}let (xsIb: bitstring,isIb: bitstring,sigI_1: bitstring,sent: bitstring) = idplain in
+    {79}let (=DS_HS_INIT,=th1_1) = checksign(sigI_1,sp2b2spk(isIb)) in
+    {80}event R_commit_I(sp2b2spk(isIb),spk(isR_1),th1_1);
+    {81}new cR: coins;
+    {84}new xeR_1: exp;
+    {87}let se_1: G = expn(b2g(xsIb),xeR_1) in
+    {92}new npid: bitstring;
+    {93}new npSk: kemsk;
+    {94}let npPub: kempk = kempub(npSk) in
+    {95}let npSig: bitstring = sign((DS_PREKEY,SUITE,sp2b(spk(isR_1)),npid,LR_FALSE,kp2b(npPub)),isR_1) in
+    {96}let nextPre_1: bitstring = (npid,LR_FALSE,kp2b(npPub),npSig) in
+    {91}let th2_1: bitstring = h((th1_1,cidI_1)) in
+    {85}let xeRpub: G = expn(gX,xeR_1) in
+    {82}let ctI_1: bitstring = encap(ekI_1,cR) in
+    {97}let th3_1: bitstring = h((th2_1,g2b(xeRpub),ctI_1,nextPre_1)) in
+    {101}event R_running_I(sp2b2spk(isIb),spk(isR_1),th3_1);
+    {86}let ee_1: G = expn(xeI_1,xeR_1) in
+    {88}let ck3_1: key = hkdf(dh2k(ee_1),k2b(ck2_1),MIX_EE) in
+    {89}let ck4_1: key = hkdf(dh2k(se_1),k2b(ck3_1),MIX_SE) in
+    {83}let ssI_1: key = encapss(ekI_1,cR) in
+    {90}let ck5_1: key = hkdf(ssI_1,k2b(ck4_1),MIX_SSI) in
+    {99}let hk2_1: key = hkdf(ck5_1,th3_1,DRV_HK2) in
+    {98}let sigR_1: bitstring = sign((DS_HS_RESP,th3_1),isR_1) in
+    {100}let cconfR_1: bitstring = aenc(hk2_1,(sigR_1,sent),MIX_INIT) in
+    {102}out(net, (g2b(xeRpub),ctI_1,nextPre_1,cconfR_1))
+)
+
+-- Query inj-event(R_commit_I(a,b,t)) ==> inj-event(I_running_R(a,b,t)) in process 1.
+Translating the process into Horn clauses...
+Completing...
+200 rules inserted. Base: 179 rules (69 with conclusion selected). Queue: 54 rules.
+400 rules inserted. Base: 282 rules (69 with conclusion selected). Queue: 74 rules.
+600 rules inserted. Base: 399 rules (89 with conclusion selected). Queue: 62 rules.
+800 rules inserted. Base: 562 rules (91 with conclusion selected). Queue: 195 rules.
+1000 rules inserted. Base: 665 rules (91 with conclusion selected). Queue: 230 rules.
+1200 rules inserted. Base: 790 rules (91 with conclusion selected). Queue: 252 rules.
+1400 rules inserted. Base: 866 rules (94 with conclusion selected). Queue: 280 rules.
+1600 rules inserted. Base: 920 rules (99 with conclusion selected). Queue: 332 rules.
+1800 rules inserted. Base: 948 rules (99 with conclusion selected). Queue: 359 rules.
+2000 rules inserted. Base: 1001 rules (99 with conclusion selected). Queue: 415 rules.
+2200 rules inserted. Base: 1078 rules (99 with conclusion selected). Queue: 441 rules.
+2400 rules inserted. Base: 1121 rules (99 with conclusion selected). Queue: 491 rules.
+2600 rules inserted. Base: 1167 rules (99 with conclusion selected). Queue: 490 rules.
+2800 rules inserted. Base: 1234 rules (99 with conclusion selected). Queue: 481 rules.
+3000 rules inserted. Base: 1314 rules (99 with conclusion selected). Queue: 465 rules.
+3200 rules inserted. Base: 1382 rules (99 with conclusion selected). Queue: 427 rules.
+3400 rules inserted. Base: 1472 rules (99 with conclusion selected). Queue: 331 rules.
