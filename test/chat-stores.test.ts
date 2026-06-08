@@ -76,6 +76,17 @@ describe('PrekeyStore', () => {
     expect(verifyKemPrekey(pk, id.publicKeys.ed25519)).toBe(true);
     expect(await store.remaining()).toBe(1);
   });
+
+  it('retains a prekeyId→contact index after the one-time secret is consumed', async () => {
+    const id = generateIdentity();
+    const store = new PrekeyStore(await tmp('prekeys.json'), id);
+    const pk = await store.issueNext('contact-abc');
+    expect(await store.identifyContact(pk.prekeyId)).toBe('contact-abc');
+    await store.consume(pk.prekeyId);
+    expect(await store.lookup(pk.prekeyId)).toBeNull();
+    expect(await store.identifyContact(pk.prekeyId)).toBe('contact-abc');
+  });
+
 });
 
 describe('ContactStore', () => {
