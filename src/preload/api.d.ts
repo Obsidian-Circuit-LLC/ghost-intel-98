@@ -130,6 +130,8 @@ export interface GhostApi {
     deleteReminder(id: string, rid: string): Promise<void>;
     exportBundle(id: string): Promise<string | null>;
     importBundle(): Promise<{ caseId: string } | null>;
+    stageEvidence(id: string): Promise<number | null>;
+    exportToDesktop(id: string): Promise<string | null>;
   };
   files: {
     getPathForFile(file: File): string;

@@ -16,7 +16,7 @@
 
 import { app, ipcMain, shell, dialog, BrowserWindow } from 'electron';
 import { writeFile, rename, lstat, rm, readFile, stat, realpath } from 'node:fs/promises';
-import { basename, dirname, sep } from 'node:path';
+import { basename, dirname, join, sep } from 'node:path';
 import { channels } from '@shared/ipc-contracts';
 import type { MailAccount, MailSendInput, SshHostProfile, AiChatRequest, MediaTrack } from '@shared/post-mvp-types';
 import type { MediaUrlResult, CaseRecord } from '@shared/types';
@@ -610,6 +610,31 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
       : await dialog.showOpenDialog({ properties: ['openFile'] });
     if (result.canceled || result.filePaths.length === 0) return null;
     return backup.importCase(result.filePaths[0]);
+  });
+  // Copy evidence files from their original locations into this case (the DCS98 case folder).
+  safeHandle(channels.cases.stageEvidence, async (...args) => {
+    const id = ensureUuid(args[0], 'caseId');
+    const win = getWindow();
+    const result = win
+      ? await dialog.showOpenDialog(win, { properties: ['openFile', 'multiSelections'], title: 'Add evidence files to this case' })
+      : await dialog.showOpenDialog({ properties: ['openFile', 'multiSelections'] });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    const list = result.filePaths.map((p) => ({ sourcePath: p, originalName: basename(p) }));
+    const added = await fileStore.importDropped(id, list);
+    return added.length;
+  });
+  // One-click: export the case bundle (.ghost, includes all evidence) straight to the Desktop.
+  safeHandle(channels.cases.exportToDesktop, async (...args) => {
+    const id = ensureUuid(args[0], 'caseId');
+    const rec = await caseStore.read(id);
+    const stem = rec.reference?.trim() ? `${rec.reference.trim()}-${rec.title}` : rec.title;
+    const dest = join(app.getPath('desktop'), sanitiseSaveDefault(`${stem}.ghost`));
+    try {
+      const st = await lstat(dest);
+      if (st.isSymbolicLink()) throw new Error('Refusing to write to a symbolic link.');
+    } catch (err) { if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err; }
+    await backup.exportCase(id, dest);
+    return basename(dest);
   });
 
   // ---- whiteboard ----

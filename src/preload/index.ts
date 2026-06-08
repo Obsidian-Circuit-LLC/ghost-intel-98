@@ -25,7 +25,9 @@ const api = {
     addReminder: (id: string, r: unknown) => ipcRenderer.invoke(channels.cases.addReminder, id, r),
     deleteReminder: (id: string, rid: string) => ipcRenderer.invoke(channels.cases.deleteReminder, id, rid),
     exportBundle: (id: string) => ipcRenderer.invoke(channels.cases.exportBundle, id),
-    importBundle: () => ipcRenderer.invoke(channels.cases.importBundle)
+    importBundle: () => ipcRenderer.invoke(channels.cases.importBundle),
+    stageEvidence: (id: string) => ipcRenderer.invoke(channels.cases.stageEvidence, id),
+    exportToDesktop: (id: string) => ipcRenderer.invoke(channels.cases.exportToDesktop, id)
   },
   files: {
     /** Translate a renderer-side File (from a drop event) into the absolute OS path the main process needs. */

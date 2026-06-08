@@ -113,6 +113,26 @@ export function CaseDetail({ record, onChange, onArchive, onRefresh, onUpdateFie
             Open whiteboard…
           </button>
         </div>
+        <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
+          <button title="Copy evidence files from your computer into this case folder" onClick={async () => {
+            try {
+              const n = await window.api.cases.stageEvidence(record.id);
+              if (n != null) { toast.success(`Added ${n} file${n === 1 ? '' : 's'} to the case.`); void onRefresh(); }
+            } catch (err) { toast.error(`Copy failed: ${(err as Error).message}`); }
+          }}>Copy Evidence…</button>
+          <button title="Save this case — with all its evidence — as a .ghost zip (choose where)" onClick={async () => {
+            try { const name = await window.api.cases.exportBundle(record.id); if (name) toast.success(`Zipped to ${name}.`); }
+            catch (err) { toast.error(`Zip failed: ${(err as Error).message}`); }
+          }}>Zip Files</button>
+          <button title="Export this case — with all its evidence — straight to your Desktop" onClick={async () => {
+            try { const name = await window.api.cases.exportToDesktop(record.id); if (name) toast.success(`Exported ${name} to your Desktop.`); }
+            catch (err) { toast.error(`Export failed: ${(err as Error).message}`); }
+          }}>Export to Desktop</button>
+          <button title="Import a .ghost case file (with its evidence) as a new case" onClick={async () => {
+            try { const r = await window.api.cases.importBundle(); if (r) { toast.success('Case imported.'); void onRefresh(); } }
+            catch (err) { toast.error(`Import failed: ${(err as Error).message}`); }
+          }}>Import Case…</button>
+        </div>
       </fieldset>
 
       <fieldset>

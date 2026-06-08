@@ -50,7 +50,9 @@ export const channels = {
     addReminder: 'cases:addReminder',
     deleteReminder: 'cases:deleteReminder',
     exportBundle: 'cases:exportBundle',
-    importBundle: 'cases:importBundle'
+    importBundle: 'cases:importBundle',
+    stageEvidence: 'cases:stageEvidence',
+    exportToDesktop: 'cases:exportToDesktop'
   },
   notes: {
     list: 'notes:list',
