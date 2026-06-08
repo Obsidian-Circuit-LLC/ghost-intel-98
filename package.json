@@ -118,6 +118,10 @@
       {
         "from": "resources/mlkem",
         "to": "mlkem"
+      },
+      {
+        "from": "resources/exiftool",
+        "to": "exiftool"
       }
     ],
     "win": {

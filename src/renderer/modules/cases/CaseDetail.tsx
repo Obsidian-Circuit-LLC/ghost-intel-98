@@ -320,6 +320,7 @@ function AttachmentRow({ caseId, att, onRefresh }: {
 }): JSX.Element {
   const [showDetails, setShowDetails] = useState(false);
   const [meta, setMeta] = useState<ExtractedAttachmentMeta | null>(null);
+  const [exif, setExif] = useState<{ available: boolean; tags?: Record<string, unknown> } | null>(null);
   const [showGps, setShowGps] = useState(false);
   const [sharing, setSharing] = useState(false);
 
@@ -338,6 +339,10 @@ function AttachmentRow({ caseId, att, onRefresh }: {
     if (next && !meta) {
       try { setMeta(await window.api.files.extractAttachmentMeta(caseId, att.fileName)); }
       catch (err) { toast.error(`Could not read metadata: ${(err as Error).message}`); }
+    }
+    if (next && !exif) {
+      try { setExif(await window.api.files.exif(caseId, att.fileName)); }
+      catch { setExif({ available: false }); } // ExifTool optional — silently hide if unavailable
     }
   }
 
@@ -390,6 +395,19 @@ function AttachmentRow({ caseId, att, onRefresh }: {
                 ? <span>GPS: {meta.gps.lat.toFixed(5)}, {meta.gps.lon.toFixed(5)}</span>
                 : <button onClick={() => setShowGps(true)}>Show location</button>}
             </div>
+          )}
+          {exif?.available && exif.tags && Object.keys(exif.tags).length > 0 && (
+            <details style={{ marginTop: 4 }}>
+              <summary style={{ cursor: 'pointer' }}>ExifTool — {Object.keys(exif.tags).length} tags</summary>
+              <div style={{ maxHeight: 220, overflow: 'auto', marginTop: 4, fontFamily: 'monospace' }}>
+                {Object.entries(exif.tags).map(([k, v]) => (
+                  <div key={k} style={{ display: 'flex', gap: 6 }}>
+                    <span style={{ color: '#555', minWidth: 180, flexShrink: 0 }}>{k}</span>
+                    <span style={{ wordBreak: 'break-word' }}>{typeof v === 'object' ? JSON.stringify(v) : String(v)}</span>
+                  </div>
+                ))}
+              </div>
+            </details>
           )}
         </div>
       )}

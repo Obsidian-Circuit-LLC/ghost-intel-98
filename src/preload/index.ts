@@ -43,6 +43,7 @@ const api = {
     readEml: (id: string, name: string) => ipcRenderer.invoke(channels.files.readEml, id, name),
     mediaUrl: (id: string, name: string) => ipcRenderer.invoke(channels.files.mediaUrl, id, name),
     extractAttachmentMeta: (id: string, name: string) => ipcRenderer.invoke(channels.files.extractAttachmentMeta, id, name),
+    exif: (id: string, name: string) => ipcRenderer.invoke(channels.files.exif, id, name),
     renameAttachment: (id: string, name: string, newName: string) => ipcRenderer.invoke(channels.files.renameAttachment, id, name, newName),
     pickOpen: (opts?: { multi?: boolean; filters?: { name: string; extensions: string[] }[] }) =>
       ipcRenderer.invoke(channels.files.pickOpen, opts),

@@ -52,6 +52,7 @@ import * as entities from '../storage/entities';
 import * as bioStore from '../storage/bio-images';
 import * as ftp from '../services/ftp';
 import * as backup from '../services/backup';
+import * as exiftool from '../services/exiftool';
 import * as whiteboard from '../storage/whiteboard';
 import * as mediaLib from '../media/library';
 import { adHocAllowlist } from '../media/protocol';
@@ -461,6 +462,8 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   });
   safeHandle(channels.files.extractAttachmentMeta, (...args) =>
     fileStore.extractAttachmentMeta(ensureUuid(args[0], 'caseId'), ensureFileName(args[1], 'fileName')));
+  safeHandle(channels.files.exif, (...args) =>
+    exiftool.readExif(ensureUuid(args[0], 'caseId'), ensureFileName(args[1], 'fileName')));
   safeHandle(channels.files.renameAttachment, (...args) =>
     fileStore.renameAttachment(ensureUuid(args[0], 'caseId'), ensureFileName(args[1], 'fileName'), ensureFileName(args[2], 'newName')));
 

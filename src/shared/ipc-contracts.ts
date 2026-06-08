@@ -172,6 +172,7 @@ export const channels = {
     readEml: 'files:readEml',
     mediaUrl: 'files:mediaUrl',
     extractAttachmentMeta: 'files:extractAttachmentMeta',
+    exif: 'files:exif',
     renameAttachment: 'files:renameAttachment',
     pickOpen: 'files:pickOpen',
     pickSave: 'files:pickSave'

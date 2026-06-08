@@ -144,6 +144,7 @@ export interface GhostApi {
     readEml(id: string, name: string): Promise<EmlPreview>;
     mediaUrl(id: string, name: string): Promise<MediaUrlResult>;
     extractAttachmentMeta(id: string, name: string): Promise<ExtractedAttachmentMeta>;
+    exif(id: string, name: string): Promise<{ available: boolean; tags?: Record<string, unknown> }>;
     renameAttachment(id: string, name: string, newName: string): Promise<string>;
     pickOpen(opts?: { multi?: boolean; filters?: { name: string; extensions: string[] }[] }): Promise<string[]>;
     pickSave(opts?: { defaultName?: string; filters?: { name: string; extensions: string[] }[] }): Promise<string | null>;
