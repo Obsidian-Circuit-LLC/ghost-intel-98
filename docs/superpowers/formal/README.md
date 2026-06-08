@@ -3,17 +3,19 @@
 **Status (2026-06-08): ProVerif symbolic COMPLETE; CryptoVerif — hybrid secrecy (full chain) AND
 computational mutual authentication PROVED.** Under **CryptoVerif 2.12**: the hybrid IND bound on the key
 schedule (2-input core `chat-handshake-hybrid-*.cv` and the **actual 5-step chain**
-`chat-handshake-fullchain-*.cv`), and **injective mutual authentication** (`chat-handshake-auth.cv`,
-output `cryptoverif-auth-2026-06-08.txt`) — both directions under Ed25519 UF-CMA, no replay / no UKS,
-with R-authenticates-I injectivity shown to rest on single-use prekeys (the TOCTOU fix). The symbolic
-model (`chat-handshake.pv`, `proverif-output-2026-06-08.txt`) was completed and run under ProVerif 2.05.
+`chat-handshake-fullchain-*.cv`), **injective mutual authentication** (`chat-handshake-auth.cv`) — both directions under Ed25519 UF-CMA, no
+replay / no UKS, R-authenticates-I injectivity shown to rest on single-use prekeys (the TOCTOU fix); and
+**KCI resistance** (`chat-handshake-kci-reveal{R,I}.cv`) — each party still authenticates its peer with
+its OWN long-term key revealed to the adversary. The symbolic model (`chat-handshake.pv`,
+`proverif-output-2026-06-08.txt`) was completed and run under ProVerif 2.05.
 
 **This does NOT clear the EXPERIMENTAL / not-formally-verified banner.** Remaining (see
-`model-code-correspondence.md` §2): (3) **KCI** computationally (long-term-key reveal oracles); (4)
-**forward-secrecy** computational bounds; (5) a single end-to-end model unifying the auth proof with the
-AEAD/secrecy layer (the auth model abstracts the c_idI/c_confR AEAD, modelling Sig_I/Sig_R in clear).
-Beyond the formal kit, an **external audit** and the **FIPS-validated module build** are external gates
-that cannot be self-cleared. The banner stays until those land — the flip is the operator's call.
+`model-code-correspondence.md` §2): (4) **forward-secrecy** computational bounds (corrupt statics after
+the session, re-check RK secrecy); (5) a single end-to-end model unifying the auth proof with the
+AEAD/secrecy layer (the auth model abstracts the c_idI/c_confR AEAD, modelling Sig_I/Sig_R in clear);
+plus the **fuzzing harness** and the **noble constant-time audit**. Beyond the formal kit, an **external
+audit** and the **FIPS-validated module build** are external gates that cannot be self-cleared. The
+banner stays until those land — the flip is the operator's call.
 
 ### CryptoVerif results (2026-06-08, hybrid key-schedule core, ROM key derivation)
 
