@@ -940,6 +940,47 @@ input.ga98-text, select.ga98-text {
 .ga98-sticky-swatch[data-color="green"]  { background: #8fe08f; }
 .ga98-sticky-swatch[data-color="white"]  { background: #ffffff; }
 
+/* ── Desktop Clock widget ──────────────────────────────────────────────────── */
+.ga98-clock {
+  position: fixed; z-index: 9001; pointer-events: auto; user-select: none;
+  background: var(--ga98-grey);
+  border-top: 2px solid var(--ga98-shadow-light); border-left: 2px solid var(--ga98-shadow-light);
+  border-bottom: 2px solid var(--ga98-shadow-dark); border-right: 2px solid var(--ga98-shadow-dark);
+  box-shadow: 2px 2px 6px rgba(0,0,0,0.35);
+}
+.ga98-clock-bar {
+  display: flex; align-items: center; gap: 2px; padding: 1px 2px; cursor: grab;
+  background: linear-gradient(90deg, #000080, #1084d0); color: #fff;
+}
+.ga98-clock-bar:active { cursor: grabbing; }
+.ga98-clock-title { font-size: 11px; font-weight: bold; padding-left: 3px; }
+.ga98-clock-btn {
+  min-width: 18px; height: 16px; padding: 0 3px; font-size: 11px; line-height: 1;
+  background: var(--ga98-grey); color: #000;
+  border-top: 1px solid var(--ga98-shadow-light); border-left: 1px solid var(--ga98-shadow-light);
+  border-bottom: 1px solid var(--ga98-shadow-dark); border-right: 1px solid var(--ga98-shadow-dark);
+  cursor: pointer;
+}
+.ga98-clock-btn:active { border-color: var(--ga98-shadow-dark) var(--ga98-shadow-light) var(--ga98-shadow-light) var(--ga98-shadow-dark); }
+.ga98-clock-body { padding: 6px; }
+.ga98-clock-analog { width: 144px; height: 144px; margin: 0 auto; }
+.ga98-clock-digital { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 4px; }
+.ga98-clock-time {
+  font-family: 'Courier New', monospace; font-size: 26px; font-weight: bold; letter-spacing: 1px;
+  color: #00ff66; background: #001a08; padding: 6px 12px;
+  border-top: 2px solid var(--ga98-shadow-dark); border-left: 2px solid var(--ga98-shadow-dark);
+  border-bottom: 2px solid var(--ga98-shadow-light); border-right: 2px solid var(--ga98-shadow-light);
+}
+.ga98-clock-fmt { font-size: 10px; padding: 1px 8px; cursor: pointer; }
+.ga98-clock-pill {
+  position: fixed; z-index: 9001; pointer-events: auto; cursor: grab;
+  width: 30px; height: 30px; font-size: 16px; line-height: 1; padding: 0;
+  background: var(--ga98-grey);
+  border-top: 2px solid var(--ga98-shadow-light); border-left: 2px solid var(--ga98-shadow-light);
+  border-bottom: 2px solid var(--ga98-shadow-dark); border-right: 2px solid var(--ga98-shadow-dark);
+  box-shadow: 2px 2px 5px rgba(0,0,0,0.35);
+}
+
 /* ── Solitaire (Klondike) ──────────────────────────────────────────────────── */
 .ga98-sol { position: relative; height: 100%; display: flex; flex-direction: column; background: #047a32; overflow: auto; user-select: none; }
 .ga98-sol-bar { display: flex; align-items: center; gap: 6px; padding: 4px 6px; background: var(--ga98-grey); border-bottom: 1px solid var(--ga98-shadow-dark); font-size: 11px; }
