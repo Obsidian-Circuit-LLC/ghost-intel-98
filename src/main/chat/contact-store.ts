@@ -122,6 +122,18 @@ export class ContactStore {
     return found ? fromStored(found).identity : null;
   }
 
+  /** The per-contact reconnect gate key (RGK), or null if none held. Part of ContactPinStore so the
+   *  reconnect pre-gate (rev-4 §3) can key mac_R verification by contactId. */
+  async getReconnectKey(cid: string): Promise<Uint8Array | null> {
+    return (await this.getById(cid))?.reconnectGateKey ?? null;
+  }
+
+  /** Whether R has already verified one valid mac_R from this contact (the enforcement-bootstrap flag).
+   *  False for an unknown contact. R enforces the mac_R gate only once this is true → no lockout. */
+  async isRgkConfirmed(cid: string): Promise<boolean> {
+    return (await this.getById(cid))?.rgkPeerConfirmed ?? false;
+  }
+
   /** Pin a peer on first contact. If a contact with the same contactId already exists with a DIFFERENT
    *  identity, refuse (MITM/key-change) — never silently overwrite. */
   pin(peer: IdentityPublic, opts: { onion?: string; displayName?: string } = {}): Promise<void> {

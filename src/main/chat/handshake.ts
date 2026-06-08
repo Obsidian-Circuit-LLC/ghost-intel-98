@@ -24,7 +24,7 @@ import {
   type IdentityKeyPair, type IdentityPublic, type KemPrekey
 } from './identity';
 import {
-  PROTO_LABEL, SUITE_ID, DS_HS_INIT, DS_HS_RESP, DS_MAC_T,
+  PROTO_LABEL, SUITE_ID, DS_HS_INIT, DS_HS_RESP, DS_MAC_T, DS_MAC_R,
   MIX_INIT, MIX_ES, MIX_SSPRE, MIX_EE, MIX_SE, MIX_SSI, DRV_HK1, DRV_HK2, DRV_ROOT, DRV_SID,
   RECONNECT_GATE,
   concatBytes
@@ -59,10 +59,18 @@ export interface ResponderInviteStore {
   release(prekeyId: Uint8Array): Promise<void>;
   /** A fresh signed prekey to hand the peer for next time (rotation). */
   issueNext(): Promise<KemPrekey>;
+  /** Which contact (cid) a given prekeyId was issued to; null if unknown. Cheap index lookup — no
+   *  crypto, no reservation — used by the reconnect pre-gate before any asymmetric work (rev-4 §3). */
+  identifyContact(prekeyId: Uint8Array): Promise<string | null>;
 }
 export interface ContactPinStore {
   get(peerEd25519: Uint8Array): Promise<IdentityPublic | null>;
   pin(peer: IdentityPublic): Promise<void>;
+  /** The per-contact reconnect gate key (RGK), or null if none held (rev-4 §3). */
+  getReconnectKey(cid: string): Promise<Uint8Array | null>;
+  /** Whether R has already verified one valid mac_R from this contact (the enforcement-bootstrap
+   *  flag). R enforces the mac_R pre-gate only once this is true → no mid-handshake lockout. */
+  isRgkConfirmed(cid: string): Promise<boolean>;
 }
 
 export interface InitiatorOpts {
@@ -71,6 +79,9 @@ export interface InitiatorOpts {
   prekey: KemPrekey;          // from the invite (first contact) or stored rotation (reconnect)
   token?: Uint8Array;         // present iff first_contact
   mode: HandshakeMode;
+  /** Per-contact reconnect gate key (RGK), if held. On a reconnect, I ALWAYS includes mac_R whenever
+   *  it holds an RGK for the contact (rev-4 §3). Ignored on first_contact. */
+  reconnectGateKey?: Uint8Array;
 }
 export interface ResponderOpts {
   identity: IdentityKeyPair;
@@ -86,6 +97,9 @@ export interface HandshakeResult {
   mode: HandshakeMode;
   /** Per-contact reconnect gate key (32 bytes) — persisted by the engine for future reconnect DoS-pre-gating. */
   reconnectGateKey?: Uint8Array;
+  /** Responder-only: a valid mac_R was verified on this reconnect Msg1. The engine reads this to set
+   *  the contact's rgkPeerConfirmed flag (Task 3.1). Undefined/false otherwise. */
+  peerMacRVerified?: boolean;
 }
 
 // ---- small framed I/O over a ChatStream (one Handshake frame at a time) ----
@@ -199,7 +213,22 @@ async function initiatorHandshakeImpl(stream: ChatStream, opts: InitiatorOpts): 
   const cIdI = aeadSeal(hk1, NONCE0, idPayload, aad);
   const macT = firstContact ? hmacSha256(sha256(opts.token as Uint8Array), concatBytes(DS_MAC_T, th1)) : new Uint8Array(0);
 
-  io.send(concatBytes(modeByte, xeI.publicKey, ekI.publicKey, prekey.prekeyId, enc.cipherText, macT, cIdI));
+  // Reconnect gate slot (rev-4 §3): I ALWAYS sends mac_R whenever it holds an RGK for the contact.
+  // mac_R is keyed over the Msg1 CLEARTEXT (NOT th1: th1 binds R's prekey block, which is consumed/gone
+  // in the strand-recovery case — the gate must run before R touches the prekey). A 1-byte presence flag
+  // lets an RGK-less initiator (the bootstrap fail-open case) send an empty slot unambiguously before cIdI.
+  let macRSlot = new Uint8Array(0);
+  if (!firstContact) {
+    const rgk = opts.reconnectGateKey;
+    if (rgk) {
+      const macRInput = concatBytes(DS_MAC_R, th0, prekey.prekeyId, xeI.publicKey, ekI.publicKey, enc.cipherText);
+      macRSlot = concatBytes(Uint8Array.of(1), hmacSha256(rgk, macRInput));
+    } else {
+      macRSlot = Uint8Array.of(0);
+    }
+  }
+
+  io.send(concatBytes(modeByte, xeI.publicKey, ekI.publicKey, prekey.prekeyId, enc.cipherText, macT, macRSlot, cIdI));
   const th2 = h(th1, cIdI);
 
   // ---- Msg2 ----
@@ -254,14 +283,49 @@ async function responderHandshakeImpl(stream: ChatStream, opts: ResponderOpts): 
   const prekeyId = msg1.take(PREKEY_ID_LEN);
   const ctPre = msg1.take(MLKEM_CT_LEN);
   const macT = firstContact ? msg1.take(MAC_LEN) : new Uint8Array(0);
+  // Reconnect gate slot: 1-byte presence flag, then 32-byte mac_R when present (mirrors the initiator).
+  let macR = new Uint8Array(0);
+  let macRPresent = false;
+  if (!firstContact) {
+    macRPresent = msg1.byte() === 1;
+    if (macRPresent) macR = msg1.take(MAC_LEN);
+  }
   const cIdI = msg1.rest();
+
+  const th0 = h(PROTO_LABEL, SUITE_ID, Uint8Array.of(modeByte));
+
+  // ---- Reconnect mac_R pre-gate + enforcement bootstrap (rev-4 §3) ----
+  // Runs BEFORE lookup()/mlkemDecapsulate()/ECDH. mac_R is keyed over the Msg1 CLEARTEXT (NOT th1 —
+  // th1 binds R's prekey block, consumed/gone in strand recovery; the gate must run before R touches
+  // the prekey). R ENFORCES the gate only after it has already verified one valid mac_R from this
+  // contact (rgkPeerConfirmed) → it never enforces against a peer it hasn't seen pass the gate (no
+  // lockout). Until confirmed it fails open, but verifies a present mac_R cheaply so a valid one flips
+  // the flag (peerMacRVerified). An attacker can't forge a valid mac_R (HMAC under the secret RGK).
+  let peerMacRVerified = false;
+  if (!firstContact) {
+    const cid = await invites.identifyContact(prekeyId);
+    const rgk = cid ? await contacts.getReconnectKey(cid) : null;
+    const confirmed = cid ? await contacts.isRgkConfirmed(cid) : false;
+    if (rgk) {
+      const macRInput = concatBytes(DS_MAC_R, th0, prekeyId, xeI, ekIpub, ctPre);
+      const expect = hmacSha256(rgk, macRInput);
+      const ok = macRPresent && constantTimeEqual(macR, expect);
+      if (confirmed) {
+        // Enforce: a confirmed peer MUST present a valid mac_R. Cheap close before any asymmetric op.
+        if (!ok) throw new HandshakeError('reconnect gate failed (mac_R missing or invalid)');
+        peerMacRVerified = true;
+      } else if (ok) {
+        // Bootstrap: not yet enforcing, but a valid mac_R is observed → signal it so the engine confirms.
+        peerMacRVerified = true;
+      }
+    }
+  }
 
   const rec = await invites.lookup(prekeyId);
   if (!rec) throw new HandshakeError('unknown or consumed prekey');
   const { prekey, secretKey, token } = rec;
   try {
 
-  const th0 = h(PROTO_LABEL, SUITE_ID, Uint8Array.of(modeByte));
   const th1 = h(
     th0, ROLE_I, ROLE_R, encodeIdentityPublic(identity.publicKeys), prekey.prekeyId,
     Uint8Array.of(prekey.isLastResort ? 1 : 0), prekey.publicKey, prekey.signature, xeI, ekIpub, ctPre
@@ -329,7 +393,7 @@ async function responderHandshakeImpl(stream: ChatStream, opts: ResponderOpts): 
   const reconnectGateKey = hkdf(rk, sid, RECONNECT_GATE, 32);
   zeroize(xeR.secretKey, secretKey, ssPre, encI.sharedSecret, ck, hk1, hk2, rk);
   io.detach(); // hand the stream to the Connection; stop this handshake reader (avoids dropping Msg1)
-  return { session, peer, mode: firstContact ? 'first_contact' : 'reconnect', reconnectGateKey };
+  return { session, peer, mode: firstContact ? 'first_contact' : 'reconnect', reconnectGateKey, peerMacRVerified };
   } catch (e) {
     // Abort before durable consume() ⇒ release the one-time-prekey reservation so a failed/forged Msg1
     // can't strand it (consume() already cleared it on the success path, so this is then a no-op).

@@ -23,14 +23,19 @@ const hex = (u: Uint8Array): string => Buffer.from(u).toString('hex');
 /** In-memory responder invite store: prekeyId → {prekey, secret, token}. */
 function makeInviteStore(responder: IdentityKeyPair): ResponderInviteStore & {
   issueFirstContact(): Promise<{ prekey: KemPrekey; token: Uint8Array }>;
+  bindContact(prekeyId: Uint8Array, cid: string): void;
 } {
   const map = new Map<string, { prekey: KemPrekey; secretKey: Uint8Array; token: Uint8Array | null }>();
+  const pidToCid = new Map<string, string>();
   return {
     async issueFirstContact() {
       const { prekey, secretKey } = await generateKemPrekey(responder);
       const token = randomBytes(32);
       map.set(hex(prekey.prekeyId), { prekey, secretKey, token });
       return { prekey, token };
+    },
+    bindContact(prekeyId, cid) {
+      pidToCid.set(hex(prekeyId), cid);
     },
     async lookup(prekeyId) {
       return map.get(hex(prekeyId)) ?? null;
@@ -43,18 +48,38 @@ function makeInviteStore(responder: IdentityKeyPair): ResponderInviteStore & {
       const { prekey, secretKey } = await generateKemPrekey(responder);
       map.set(hex(prekey.prekeyId), { prekey, secretKey, token: null });
       return prekey;
+    },
+    async identifyContact(prekeyId) {
+      return pidToCid.get(hex(prekeyId)) ?? null;
     }
   };
 }
 
-function makePinStore(): ContactPinStore {
+function makePinStore(): ContactPinStore & {
+  setReconnectKey(cid: string, rgk: Uint8Array): void;
+  setRgkConfirmed(cid: string, v: boolean): void;
+} {
   const map = new Map<string, IdentityPublic>();
+  const rgks = new Map<string, Uint8Array>();
+  const confirmed = new Map<string, boolean>();
   return {
     async get(ed) {
       return map.get(hex(ed)) ?? null;
     },
     async pin(peer) {
       map.set(hex(peer.ed25519), peer);
+    },
+    async getReconnectKey(cid) {
+      return rgks.get(cid) ?? null;
+    },
+    async isRgkConfirmed(cid) {
+      return confirmed.get(cid) ?? false;
+    },
+    setReconnectKey(cid, rgk) {
+      rgks.set(cid, rgk);
+    },
+    setRgkConfirmed(cid, v) {
+      confirmed.set(cid, v);
     }
   };
 }
@@ -212,6 +237,87 @@ describe('chat handshake — reconnect gate key (RGK)', () => {
 
     // The two sides must agree on the RGK (same rk + sid inputs)
     expect(hex(iRes.reconnectGateKey!)).toBe(hex(rRes.reconnectGateKey!));
+  });
+});
+
+describe('chat handshake — mac_R gate + enforcement bootstrap (rev-4 §3)', () => {
+  /**
+   * Drive a full first_contact (to establish the pin + rotation prekey + RGK), then a reconnect with
+   * the mac_R gate active. The knobs express the four bootstrap behaviors:
+   *  - correctRGK: I holds the matching RGK (default true)
+   *  - initiatorHasRGK: I holds any RGK at all (if false, I sends no mac_R — keyless reconnect)
+   *  - forgedMacR: I holds a WRONG (attacker) RGK so its mac_R fails verify on R
+   *  - rStartsConfirmed: whether R already has rgkPeerConfirmed set for this contact
+   */
+  async function runReconnect(opts: {
+    correctRGK?: boolean;
+    initiatorHasRGK?: boolean;
+    forgedMacR?: boolean;
+    rStartsConfirmed: boolean;
+  }): Promise<{ rRes: import('../src/main/chat/handshake').HandshakeResult; iRes: import('../src/main/chat/handshake').HandshakeResult; rConfirmedAfter: boolean }> {
+    const initiatorHasRGK = opts.initiatorHasRGK ?? true;
+    const correctRGK = opts.correctRGK ?? true;
+    const forgedMacR = opts.forgedMacR ?? false;
+
+    const initiatorId = generateIdentity();
+    const responderId = generateIdentity();
+    const invites = makeInviteStore(responderId);
+    const contacts = makePinStore();
+    const { prekey, token } = await invites.issueFirstContact();
+
+    // first contact — establishes pin + rotation prekey + a shared RGK on both sides
+    const [fa, fb] = createPipe();
+    const [rFirst, iFirst] = await Promise.all([
+      responderHandshake(fb, { identity: responderId, invites, contacts }),
+      initiatorHandshake(fa, { identity: initiatorId, responderPublic: responderId.publicKeys, prekey, token, mode: 'first_contact' })
+    ]);
+    const rotation = iFirst.nextPrekey as KemPrekey;
+    const cid = contactId(initiatorId.publicKeys);
+    invites.bindContact(rotation.prekeyId, cid);
+
+    // Seed R's view: it holds the real RGK for this contact, confirmed per the knob.
+    const realRGK = rFirst.reconnectGateKey as Uint8Array;
+    contacts.setReconnectKey(cid, realRGK);
+    contacts.setRgkConfirmed(cid, opts.rStartsConfirmed);
+
+    // I's view: the RGK it presents on reconnect (correct, forged, or none).
+    let initiatorRGK: Uint8Array | undefined;
+    if (initiatorHasRGK) {
+      initiatorRGK = forgedMacR || !correctRGK ? randomBytes(32) : (iFirst.reconnectGateKey as Uint8Array);
+    }
+
+    const [ra, rb] = createPipe();
+    const [rRes, iRes] = await Promise.all([
+      responderHandshake(rb, { identity: responderId, invites, contacts }),
+      initiatorHandshake(ra, {
+        identity: initiatorId,
+        responderPublic: responderId.publicKeys,
+        prekey: rotation,
+        mode: 'reconnect',
+        reconnectGateKey: initiatorRGK
+      })
+    ]);
+    return { rRes, iRes, rConfirmedAfter: !!rRes.peerMacRVerified };
+  }
+
+  it('I sends mac_R whenever it holds RGK; an unconfirmed R accepts it ungated and confirms', async () => {
+    const { rConfirmedAfter } = await runReconnect({ correctRGK: true, rStartsConfirmed: false });
+    expect(rConfirmedAfter).toBe(true); // R signalled the valid mac_R so the engine sets rgkPeerConfirmed
+  });
+
+  it('a CONFIRMED R rejects a wrong/missing mac_R at the pre-gate (before asymmetric work)', async () => {
+    await expect(runReconnect({ correctRGK: false, rStartsConfirmed: true }))
+      .rejects.toThrow(/mac_R|reconnect gate/i);
+  });
+
+  it('an UNCONFIRMED R does NOT require mac_R (fail open): a keyless I still completes ungated', async () => {
+    const { iRes } = await runReconnect({ initiatorHasRGK: false, rStartsConfirmed: false });
+    expect(iRes.session).toBeTruthy(); // no lockout — the rev-4 bootstrap safety property
+  });
+
+  it('an attacker cannot flip rgkPeerConfirmed with a forged mac_R', async () => {
+    const { rConfirmedAfter } = await runReconnect({ forgedMacR: true, rStartsConfirmed: false });
+    expect(rConfirmedAfter).toBe(false); // forged mac_R fails verify → flag stays false
   });
 });
 
