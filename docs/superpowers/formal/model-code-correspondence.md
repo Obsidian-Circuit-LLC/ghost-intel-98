@@ -43,14 +43,24 @@ consumption (the C-2/TOCTOU property, `:287`).
   X25519 (CDH) or ML-KEM (IND-CCA2) survives, with **every** other mixed secret handed to the adversary
   — the dual-PRF "one good secret saturates the chain" property over the real chain. ✓
 
+**Computational authentication (`chat-handshake-auth.cv`):** **injective agreement both directions**
+proved under Ed25519 UF-CMA — R-authenticates-I and I-authenticates-R, i.e. mutual authentication with
+**no replay and no UKS** (each accept maps 1:1 to a matching peer run on the session-unique ephemerals).
+Identities are pinned (the TOFU safety-number model). Notably, R-auth-I injectivity is proved to rest on
+**single-use prekeys**: with the prekey replicated it fails (replayable Msg1); with single-use (the
+durable `consume()`, `:287`) it holds — the computational counterpart of the ProVerif finding and the
+TOCTOU fix. ✓
+
 **NOT yet covered (the gap that keeps "formally verified" from being claimable):**
-1. ~~The full 5-step MixKey chain~~ — **DONE** (fullchain files above).
-2. **Computational authentication** (mutual auth / KCI / UKS) — only symbolic so far. *Now the largest
-   remaining piece.*
-3. The **transcript binding + signatures + AEAD key-confirmation** inside a computational model (Sig_I /
-   Sig_R over TH1/TH3, c_idI/c_confR), i.e. a PQXDH-grade end-to-end model.
+1. ~~The full 5-step MixKey chain~~ — **DONE** (fullchain files).
+2. ~~Computational mutual authentication / UKS / replay~~ — **DONE** (`chat-handshake-auth.cv`).
+3. **KCI** (key-compromise impersonation) computationally — selective long-term-key reveal oracles; not
+   yet modelled.
 4. **Forward secrecy** computational bounds (the ee/ss_I legs after static-key compromise).
-This is the end-to-end CryptoVerif model — the substantial remaining Gate-1 work (multi-session).
+5. **AEAD layer abstracted in the auth model** — Sig_I/Sig_R are modelled in clear; the c_idI/c_confR
+   AEAD provides identity-confidentiality (G2′, symbolic-only so far) + key-confirmation, not auth. A
+   single end-to-end model unifying auth + the AEAD/secrecy layer is the remaining consolidation.
+These (3–5) plus an external audit + the FIPS module build remain before the banner can change.
 
 ## 3. Implementation audit (tools are blind to this)
 

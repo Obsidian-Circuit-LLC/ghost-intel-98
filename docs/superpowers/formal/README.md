@@ -1,17 +1,19 @@
 # DCS98 chat handshake — formal verification plan
 
-**Status (2026-06-08): ProVerif model COMPLETED + RUN; CryptoVerif hybrid-IND core PROVED (both legs).**
-The symbolic model (`chat-handshake.pv`) was completed and run under **ProVerif 2.05**
-(`proverif-output-2026-06-08.txt`); the computational hybrid bound on the key schedule was proved under
-**CryptoVerif 2.12** in two legs (`chat-handshake-hybrid-dhleg.cv`, `chat-handshake-hybrid-kemleg.cv`;
-outputs `cryptoverif-dhleg-2026-06-08.txt`, `cryptoverif-kemleg-2026-06-08.txt`).
+**Status (2026-06-08): ProVerif symbolic COMPLETE; CryptoVerif — hybrid secrecy (full chain) AND
+computational mutual authentication PROVED.** Under **CryptoVerif 2.12**: the hybrid IND bound on the key
+schedule (2-input core `chat-handshake-hybrid-*.cv` and the **actual 5-step chain**
+`chat-handshake-fullchain-*.cv`), and **injective mutual authentication** (`chat-handshake-auth.cv`,
+output `cryptoverif-auth-2026-06-08.txt`) — both directions under Ed25519 UF-CMA, no replay / no UKS,
+with R-authenticates-I injectivity shown to rest on single-use prekeys (the TOCTOU fix). The symbolic
+model (`chat-handshake.pv`, `proverif-output-2026-06-08.txt`) was completed and run under ProVerif 2.05.
 
-**This does NOT clear the EXPERIMENTAL / not-formally-verified banner.** Two gaps remain by construction:
-(1) the CryptoVerif models prove the **hybrid key-schedule core** (RK = ROM(es, ss)), *not* the full
-wire protocol end-to-end (transcript binding, signatures, the exact multi-step MixKey chain, the message
-choreography) — a PQXDH-grade end-to-end computational model is still future work; and (2) an **external
-audit** and the **FIPS-validated module build** are external gates that cannot be self-cleared. The banner
-stays until those land.
+**This does NOT clear the EXPERIMENTAL / not-formally-verified banner.** Remaining (see
+`model-code-correspondence.md` §2): (3) **KCI** computationally (long-term-key reveal oracles); (4)
+**forward-secrecy** computational bounds; (5) a single end-to-end model unifying the auth proof with the
+AEAD/secrecy layer (the auth model abstracts the c_idI/c_confR AEAD, modelling Sig_I/Sig_R in clear).
+Beyond the formal kit, an **external audit** and the **FIPS-validated module build** are external gates
+that cannot be self-cleared. The banner stays until those land — the flip is the operator's call.
 
 ### CryptoVerif results (2026-06-08, hybrid key-schedule core, ROM key derivation)
 
