@@ -395,11 +395,9 @@ export const defaultShortcuts: AccessShortcut[] = [
   { id: 'alarm', label: 'Alarm', kind: 'module', target: 'alarm', icon: 'alarm' },
   { id: 'ai', label: 'AI Assistant', kind: 'module', target: 'ai-assistant', icon: 'sparkle' },
   { id: 'search', label: 'Search', kind: 'module', target: 'search', icon: 'search' },
-  { id: 'solitaire', label: 'Solitaire', kind: 'module', target: 'solitaire', icon: 'cards' },
-  { id: 'minesweeper', label: 'Minesweeper', kind: 'module', target: 'minesweeper', icon: 'game' },
-  { id: 'chess', label: 'Chess', kind: 'module', target: 'chess', icon: 'game' },
-  { id: 'pinball', label: 'Pinball', kind: 'module', target: 'pinball', icon: 'game' },
   { id: 'help', label: 'RTFM', kind: 'module', target: 'help', icon: 'help' }
+  // Games (Solitaire/Minesweeper/Chess/Pinball) are surfaced via the Access "Games ▸" submenu, not
+  // as desktop/flat shortcuts — see AccessMenu.tsx.
   // Settings is always available via the Access menu footer ("Settings…"), so it is
   // intentionally NOT a duplicate editable shortcut here.
 ];
@@ -413,11 +411,8 @@ export const REQUIRED_MODULE_SHORTCUTS: readonly AccessShortcut[] = [
   { id: 'media-player', label: 'Jukebox', kind: 'module', target: 'media-player', icon: 'music' },
   { id: 'geoint', label: 'GeoINT', kind: 'module', target: 'geoint', icon: 'globe' },
   { id: 'bookmarks', label: 'Bookmarks', kind: 'module', target: 'bookmarks', icon: 'bookmark' },
-  { id: 'briefcase', label: 'Briefcase', kind: 'module', target: 'briefcase', icon: 'briefcase' },
-  { id: 'solitaire', label: 'Solitaire', kind: 'module', target: 'solitaire', icon: 'cards' },
-  { id: 'minesweeper', label: 'Minesweeper', kind: 'module', target: 'minesweeper', icon: 'game' },
-  { id: 'chess', label: 'Chess', kind: 'module', target: 'chess', icon: 'game' },
-  { id: 'pinball', label: 'Pinball', kind: 'module', target: 'pinball', icon: 'game' }
+  { id: 'briefcase', label: 'Briefcase', kind: 'module', target: 'briefcase', icon: 'briefcase' }
+  // Games are in the Access "Games ▸" submenu (AccessMenu.tsx), not seeded as shortcuts.
 ];
 
 /** Repairs a persisted shortcut list (returns NEW arrays, never mutates inputs):
