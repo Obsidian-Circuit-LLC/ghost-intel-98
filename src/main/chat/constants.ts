@@ -22,6 +22,14 @@ export const DS_HS_REJECT = tag('dcs98-chat/ds/hs-reject/v1');
 export const DS_MAC_R = tag('dcs98-chat/ds/mac-r/v1');
 export const RECONNECT_GATE = tag('dcs98-chat/reconnect-gate/v4');
 
+// hs_type discriminants carried in the responder's reply message.
+export const HS_MSG2 = 0;   // responder reply: accept (Msg2)
+export const HS_REJECT = 1; // responder reply: prekey_unknown recovery (Reject)
+// FRAMING INVARIANT (spec §4, rev-4 N-1): mac_R, TH_R0, and Sig_R_reject concatenate
+// prekey_id ‖ xe_I ‖ ek_I ‖ ct_pre (and TH_R0 also offered_prekey ‖ is_last_resort) by RAW
+// concatenation under a DS prefix. This is unambiguous ONLY because every field is fixed-width.
+// Any future variable-width field MUST be length-prefixed before concatenation.
+
 // MixKey step labels + derive labels (all distinct ⇒ hk1≠hk2≠RK≠SID).
 export const MIX_INIT = tag('dcs98-chat/mix/init');
 export const MIX_ES = tag('dcs98-chat/mix/es');
