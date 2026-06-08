@@ -26,6 +26,7 @@ import {
 import {
   PROTO_LABEL, SUITE_ID, DS_HS_INIT, DS_HS_RESP, DS_MAC_T,
   MIX_INIT, MIX_ES, MIX_SSPRE, MIX_EE, MIX_SE, MIX_SSI, DRV_HK1, DRV_HK2, DRV_ROOT, DRV_SID,
+  RECONNECT_GATE,
   concatBytes
 } from './constants';
 import { Session } from './session';
@@ -83,6 +84,8 @@ export interface HandshakeResult {
   /** R's rotation prekey for next time (initiator only) — caller persists it. */
   nextPrekey?: KemPrekey;
   mode: HandshakeMode;
+  /** Per-contact reconnect gate key (32 bytes) — persisted by the engine for future reconnect DoS-pre-gating. */
+  reconnectGateKey?: Uint8Array;
 }
 
 // ---- small framed I/O over a ChatStream (one Handshake frame at a time) ----
@@ -231,9 +234,10 @@ async function initiatorHandshakeImpl(stream: ChatStream, opts: InitiatorOpts): 
   const sid = hkdf(ck, th4, DRV_SID, 16);
   const session = new Session(sid, rk, 'initiator');
 
+  const reconnectGateKey = hkdf(rk, sid, RECONNECT_GATE, 32);
   zeroize(xeI.secretKey, ekI.secretKey, es, enc.sharedSecret, ssI, ck, hk1, hk2, rk);
   io.detach(); // hand the stream to the Connection; stop this handshake reader (avoids dropping Msg1)
-  return { session, peer: responderPublic, nextPrekey, mode };
+  return { session, peer: responderPublic, nextPrekey, mode, reconnectGateKey };
 }
 
 async function responderHandshakeImpl(stream: ChatStream, opts: ResponderOpts): Promise<HandshakeResult> {
@@ -322,9 +326,10 @@ async function responderHandshakeImpl(stream: ChatStream, opts: ResponderOpts): 
   const sid = hkdf(ck, th4, DRV_SID, 16);
   const session = new Session(sid, rk, 'responder');
 
+  const reconnectGateKey = hkdf(rk, sid, RECONNECT_GATE, 32);
   zeroize(xeR.secretKey, secretKey, ssPre, encI.sharedSecret, ck, hk1, hk2, rk);
   io.detach(); // hand the stream to the Connection; stop this handshake reader (avoids dropping Msg1)
-  return { session, peer, mode: firstContact ? 'first_contact' : 'reconnect' };
+  return { session, peer, mode: firstContact ? 'first_contact' : 'reconnect', reconnectGateKey };
   } catch (e) {
     // Abort before durable consume() ⇒ release the one-time-prekey reservation so a failed/forged Msg1
     // can't strand it (consume() already cleared it on the success path, so this is then a no-op).
