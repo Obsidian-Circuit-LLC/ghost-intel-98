@@ -18,9 +18,9 @@ interface AccessMenuProps {
 /** Games live in their own "Games ▸" submenu (not on the desktop, not flat in the menu). */
 const GAMES: { module: ModuleKey; label: string }[] = [
   { module: 'solitaire', label: 'Solitaire' },
-  { module: 'minesweeper', label: 'Minesweeper' },
+  { module: 'minesweeper', label: 'Mine Detector' },
   { module: 'chess', label: 'Chess' },
-  { module: 'pinball', label: 'Pinball' }
+  { module: 'pinball', label: 'DCS Space Ball' }
 ];
 const GAME_TARGETS = new Set<string>(GAMES.map((g) => g.module));
 

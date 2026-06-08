@@ -50,9 +50,9 @@ const moduleTitles: Record<ModuleKey, string> = {
   bookmarks: 'Bookmarks',
   markets: 'Markets',
   solitaire: 'Solitaire',
-  minesweeper: 'Minesweeper',
+  minesweeper: 'Mine Detector',
   chess: 'Chess',
-  pinball: 'Pinball',
+  pinball: 'DCS Space Ball',
   chat: 'Chat (beta)',
   help: 'RTFM'
 };
