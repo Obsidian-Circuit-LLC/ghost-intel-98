@@ -248,16 +248,20 @@ describe('chat handshake — mac_R gate + enforcement bootstrap (rev-4 §3)', ()
    *  - initiatorHasRGK: I holds any RGK at all (if false, I sends no mac_R — keyless reconnect)
    *  - forgedMacR: I holds a WRONG (attacker) RGK so its mac_R fails verify on R
    *  - rStartsConfirmed: whether R already has rgkPeerConfirmed set for this contact
+   *  - rHasRGK: whether R's store returns an RGK for the (resolved) cid (default true). When false,
+   *    the cid still resolves but getReconnectKey returns null → R runs ungated.
    */
   async function runReconnect(opts: {
     correctRGK?: boolean;
     initiatorHasRGK?: boolean;
     forgedMacR?: boolean;
     rStartsConfirmed: boolean;
+    rHasRGK?: boolean;
   }): Promise<{ rRes: import('../src/main/chat/handshake').HandshakeResult; iRes: import('../src/main/chat/handshake').HandshakeResult; rConfirmedAfter: boolean }> {
     const initiatorHasRGK = opts.initiatorHasRGK ?? true;
     const correctRGK = opts.correctRGK ?? true;
     const forgedMacR = opts.forgedMacR ?? false;
+    const rHasRGK = opts.rHasRGK ?? true;
 
     const initiatorId = generateIdentity();
     const responderId = generateIdentity();
@@ -275,9 +279,9 @@ describe('chat handshake — mac_R gate + enforcement bootstrap (rev-4 §3)', ()
     const cid = contactId(initiatorId.publicKeys);
     invites.bindContact(rotation.prekeyId, cid);
 
-    // Seed R's view: it holds the real RGK for this contact, confirmed per the knob.
+    // Seed R's view: it holds the real RGK for this contact (unless rHasRGK is false), confirmed per the knob.
     const realRGK = rFirst.reconnectGateKey as Uint8Array;
-    contacts.setReconnectKey(cid, realRGK);
+    if (rHasRGK) contacts.setReconnectKey(cid, realRGK);
     contacts.setRgkConfirmed(cid, opts.rStartsConfirmed);
 
     // I's view: the RGK it presents on reconnect (correct, forged, or none).
@@ -318,6 +322,25 @@ describe('chat handshake — mac_R gate + enforcement bootstrap (rev-4 §3)', ()
   it('an attacker cannot flip rgkPeerConfirmed with a forged mac_R', async () => {
     const { rConfirmedAfter } = await runReconnect({ forgedMacR: true, rStartsConfirmed: false });
     expect(rConfirmedAfter).toBe(false); // forged mac_R fails verify → flag stays false
+  });
+
+  it('gated happy path: a CONFIRMED R + valid mac_R passes the gate AND the handshake COMPLETES', async () => {
+    const { rRes, iRes, rConfirmedAfter } = await runReconnect({ correctRGK: true, rStartsConfirmed: true });
+    expect(rConfirmedAfter).toBe(true); // gate enforced and passed
+    // a REAL session on both sides — not just the flag: exchange messages both directions
+    expect(iRes.session).toBeTruthy();
+    expect(rRes.session).toBeTruthy();
+    expect(await bothExchange(iRes.session, rRes.session, 'reconnect hello I')).toBe('reconnect hello I');
+    expect(await bothExchange(rRes.session, iRes.session, 'reconnect hello R')).toBe('reconnect hello R');
+  });
+
+  it('cid resolves but getReconnectKey returns null → ungated (no enforce), handshake COMPLETES', async () => {
+    // rStartsConfirmed:true would normally enforce, but with no RGK the fail-closed guard would fire —
+    // so this case (cid resolves, store has no RGK) must be UNCONFIRMED to take the ungated path.
+    const { iRes, rRes } = await runReconnect({ rHasRGK: false, rStartsConfirmed: false });
+    expect(iRes.session).toBeTruthy();
+    expect(rRes.session).toBeTruthy();
+    expect(await bothExchange(iRes.session, rRes.session, 'ungated hello')).toBe('ungated hello');
   });
 });
 

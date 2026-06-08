@@ -217,7 +217,7 @@ async function initiatorHandshakeImpl(stream: ChatStream, opts: InitiatorOpts): 
   // mac_R is keyed over the Msg1 CLEARTEXT (NOT th1: th1 binds R's prekey block, which is consumed/gone
   // in the strand-recovery case — the gate must run before R touches the prekey). A 1-byte presence flag
   // lets an RGK-less initiator (the bootstrap fail-open case) send an empty slot unambiguously before cIdI.
-  let macRSlot = new Uint8Array(0);
+  let macRSlot: Uint8Array = new Uint8Array(0);
   if (!firstContact) {
     const rgk = opts.reconnectGateKey;
     if (rgk) {
@@ -284,7 +284,7 @@ async function responderHandshakeImpl(stream: ChatStream, opts: ResponderOpts): 
   const ctPre = msg1.take(MLKEM_CT_LEN);
   const macT = firstContact ? msg1.take(MAC_LEN) : new Uint8Array(0);
   // Reconnect gate slot: 1-byte presence flag, then 32-byte mac_R when present (mirrors the initiator).
-  let macR = new Uint8Array(0);
+  let macR: Uint8Array = new Uint8Array(0);
   let macRPresent = false;
   if (!firstContact) {
     macRPresent = msg1.byte() === 1;
@@ -306,6 +306,13 @@ async function responderHandshakeImpl(stream: ChatStream, opts: ResponderOpts): 
     const cid = await invites.identifyContact(prekeyId);
     const rgk = cid ? await contacts.getReconnectKey(cid) : null;
     const confirmed = cid ? await contacts.isRgkConfirmed(cid) : false;
+    // Fail-CLOSED guard (defense-in-depth): a confirmed contact MUST have a usable RGK. If the store
+    // ever returned confirmed=true with rgk=null (a future store-writer bug), the `if (rgk)` gate below
+    // would silently FALL THROUGH to the ungated path and FAIL OPEN. Close the gate here instead.
+    // Note: this close (and the confirmed-bad-mac close inside the gate) happens BEFORE lookup(), whereas
+    // an unknown/consumed prekey closes AFTER lookup() — the two are timing-distinguishable. That is an
+    // accepted property of a cheap DoS pre-gate, not a leak of the RGK or any per-attempt secret.
+    if (confirmed && !rgk) throw new HandshakeError('reconnect gate failed (confirmed contact missing RGK)');
     if (rgk) {
       const macRInput = concatBytes(DS_MAC_R, th0, prekeyId, xeI, ekIpub, ctPre);
       const expect = hmacSha256(rgk, macRInput);
