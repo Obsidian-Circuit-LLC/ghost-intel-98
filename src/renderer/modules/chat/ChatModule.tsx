@@ -42,6 +42,17 @@ export function ChatModule(): JSX.Element {
   const selectedKindRef = useRef<'contact' | 'group'>('contact');
   useEffect(() => { selectedRef.current = selected; selectedKindRef.current = selectedKind; }, [selected, selectedKind]);
 
+  // First-run instructions. The "don't show again" flag is a non-sensitive UI preference, so it lives
+  // in localStorage (renderer-only, no IPC) — same pattern as the Markets intro.
+  const [showHelp, setShowHelp] = useState(false);
+  useEffect(() => {
+    try { if (localStorage.getItem('ga98.chat.introSeen') !== '1') setShowHelp(true); } catch { /* storage blocked */ }
+  }, []);
+  function dismissHelp(forever: boolean): void {
+    if (forever) { try { localStorage.setItem('ga98.chat.introSeen', '1'); } catch { /* storage blocked */ } }
+    setShowHelp(false);
+  }
+
   const refreshContacts = useCallback(() => {
     void window.api.chat.listContacts().then(setContacts).catch(() => {});
   }, []);
@@ -185,10 +196,13 @@ export function ChatModule(): JSX.Element {
 
   return (
     <div className="ga98-stack" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ padding: '6px 8px', background: '#fff3b0', border: '2px solid #b8860b', color: '#5b4500', fontSize: 12 }}>
-        ⚠ <b>EXPERIMENTAL — beta.</b> The encryption here is <b>not yet formally verified</b>. Use it to
-        shake out bugs, <b>not</b> for real adversarial security. Runs over Tor; nothing leaves your
-        machine except onion traffic to your contact.
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '6px 8px', background: '#fff3b0', border: '2px solid #b8860b', color: '#5b4500', fontSize: 12 }}>
+        <div style={{ flex: 1 }}>
+          ⚠ <b>EXPERIMENTAL — beta.</b> The encryption here is <b>not yet formally verified</b>. Use it to
+          shake out bugs, <b>not</b> for real adversarial security. Runs over Tor; nothing leaves your
+          machine except onion traffic to your contact.
+        </div>
+        <button onClick={() => setShowHelp(true)} title="How to use chat" style={{ minWidth: 28, flexShrink: 0 }}>?</button>
       </div>
 
       {!running ? (
@@ -360,6 +374,50 @@ export function ChatModule(): JSX.Element {
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {showHelp && (
+        <div className="ga98-dialog-veil">
+          <div className="window" style={{ width: 480, maxHeight: '88%', display: 'flex', flexDirection: 'column' }}>
+            <div className="title-bar">
+              <div className="title-bar-text">How to use Chat</div>
+              <div className="title-bar-controls ga98-titlebar-buttons">
+                <button aria-label="Close" onClick={() => dismissHelp(false)} />
+              </div>
+            </div>
+            <div className="window-body ga98-stack" style={{ overflow: 'auto' }}>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <div style={{ fontSize: 34, lineHeight: 1 }}>💬</div>
+                <div style={{ fontSize: 12, lineHeight: 1.5 }}>
+                  <p style={{ marginTop: 0 }}><b>Chat</b> is a peer-to-peer, end-to-end-encrypted messenger that runs over Tor — no server, no account, no phone number. You and your contact connect directly through onion addresses.</p>
+                </div>
+              </div>
+              <fieldset>
+                <legend>Getting started</legend>
+                <ol style={{ margin: '4px 0 0 16px', padding: 0, fontSize: 12, lineHeight: 1.6 }}>
+                  <li><b>Enable chat</b> — starts Tor and publishes your onion address (this is network egress; off by default).</li>
+                  <li><b>Share an invite</b> — click <b>Create invite</b>, then <b>Copy link</b>, and send it to your contact over a channel you trust.</li>
+                  <li><b>Accept an invite</b> — paste a link a contact sent you into <b>Accept invite</b>; they appear in your contacts.</li>
+                  <li><b>Verify the safety number</b> — compare it out-of-band (call / in person). Matching numbers mean no machine-in-the-middle; a later change is a loud warning.</li>
+                  <li><b>Message &amp; send files</b> — pick a contact and type; the 📎 button sends a file (hash-verified, held in an encrypted quarantine until you save it).</li>
+                  <li><b>Groups</b> — create a group and pick members; messages fan out over your existing 1:1 sessions.</li>
+                </ol>
+              </fieldset>
+              <fieldset>
+                <legend>Good to know</legend>
+                <ul style={{ margin: '4px 0 0 16px', padding: 0, fontSize: 12, lineHeight: 1.6 }}>
+                  <li>Both people must have chat <b>enabled and open</b> to connect — there is no offline server holding messages.</li>
+                  <li>History is encrypted at rest and sealed when you lock the vault.</li>
+                  <li>⚠ The handshake crypto is <b>experimental / not yet formally verified</b> — for dogfooding, not real adversarial security yet.</li>
+                </ul>
+              </fieldset>
+              <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', marginTop: 6 }}>
+                <button onClick={() => dismissHelp(true)}>Don&rsquo;t show this again</button>
+                <button onClick={() => dismissHelp(false)} style={{ fontWeight: 'bold' }}>Got it</button>
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -18,6 +18,23 @@ function id(): string { return crypto.randomUUID(); }
 function isImage(name: string): boolean { return IMAGE_EXT.includes((name.split('.').pop() ?? '').toLowerCase()); }
 function center(n: WhiteboardNode): { x: number; y: number } { return { x: n.x + n.w / 2, y: n.y + n.h / 2 }; }
 
+/** Tile colour palette (node.color stores the key; ≤16 chars per the validator). Clicking a node's
+ *  swatch cycles through these. 'default' is the original grey/white. */
+const NODE_COLORS: { key: string; body: string; head: string }[] = [
+  { key: 'default', body: '#ffffff', head: '#607d8b' },
+  { key: 'yellow', body: '#fff9c4', head: '#f9a825' },
+  { key: 'green', body: '#e8f5e9', head: '#43a047' },
+  { key: 'blue', body: '#e3f2fd', head: '#1e88e5' },
+  { key: 'pink', body: '#fce4ec', head: '#d81b60' },
+  { key: 'orange', body: '#ffe0b2', head: '#fb8c00' },
+  { key: 'grey', body: '#cfd8dc', head: '#455a64' }
+];
+function nodeColor(key?: string): { body: string; head: string } { return NODE_COLORS.find((c) => c.key === key) ?? NODE_COLORS[0]; }
+function nextColorKey(key?: string): string {
+  const i = NODE_COLORS.findIndex((c) => c.key === (key ?? 'default'));
+  return NODE_COLORS[(i + 1) % NODE_COLORS.length].key;
+}
+
 export function WhiteboardModule({ caseId }: Props): JSX.Element {
   const [nodes, setNodes] = useState<WhiteboardNode[]>([]);
   const [edges, setEdges] = useState<WhiteboardEdge[]>([]);
@@ -178,6 +195,7 @@ export function WhiteboardModule({ caseId }: Props): JSX.Element {
             <NodeView key={n.id} node={n} caseId={caseId} connecting={connectMode} isSource={connectFrom === n.id}
               onMouseDown={(e) => onNodeMouseDown(e, n)} onClick={() => onNodeClick(n)}
               onDelete={() => removeNode(n.id)}
+              onCycleColor={() => setNodes((ns) => ns.map((x) => x.id === n.id ? { ...x, color: nextColorKey(x.color) } : x))}
               onEditText={async () => {
                 const t = await promptDialog('Edit text:', n.text ?? '', 'Edit node');
                 if (t !== null) setNodes((ns) => ns.map((x) => x.id === n.id ? { ...x, text: t } : x));
@@ -189,22 +207,28 @@ export function WhiteboardModule({ caseId }: Props): JSX.Element {
   );
 }
 
-function NodeView({ node, caseId, connecting, isSource, onMouseDown, onClick, onDelete, onEditText }: {
+function NodeView({ node, caseId, connecting, isSource, onMouseDown, onClick, onDelete, onCycleColor, onEditText }: {
   node: WhiteboardNode; caseId: string; connecting: boolean; isSource: boolean;
-  onMouseDown: (e: React.MouseEvent) => void; onClick: () => void; onDelete: () => void; onEditText: () => void;
+  onMouseDown: (e: React.MouseEvent) => void; onClick: () => void; onDelete: () => void; onCycleColor: () => void; onEditText: () => void;
 }): JSX.Element {
+  const pal = nodeColor(node.color);
   return (
     <div
       onMouseDown={onMouseDown}
       onClick={onClick}
       style={{
         position: 'absolute', left: node.x, top: node.y, width: node.w, height: node.h,
-        background: '#fff', border: `2px solid ${isSource ? '#000080' : '#607d8b'}`,
+        background: pal.body, border: `2px solid ${isSource ? '#000080' : pal.head}`,
         boxShadow: '2px 2px 6px rgba(0,0,0,0.3)', display: 'flex', flexDirection: 'column',
         cursor: connecting ? 'pointer' : 'move', overflow: 'hidden', fontSize: 12
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', background: '#607d8b', color: '#fff', fontSize: 10, padding: '1px 4px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: pal.head, color: '#fff', fontSize: 10, padding: '1px 4px' }}>
+        <span
+          onMouseDown={(e) => { e.stopPropagation(); onCycleColor(); }}
+          title="Change tile colour"
+          style={{ width: 11, height: 11, flexShrink: 0, borderRadius: 2, cursor: 'pointer', background: nodeColor(nextColorKey(node.color)).head, border: '1px solid rgba(255,255,255,0.85)' }}
+        />
         <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{node.type}</span>
         <span style={{ cursor: 'pointer' }} onMouseDown={(e) => { e.stopPropagation(); onDelete(); }} title="Delete">×</span>
       </div>

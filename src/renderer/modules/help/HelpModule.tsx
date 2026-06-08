@@ -270,15 +270,41 @@ function OpChildSafetyPane(): JSX.Element {
   );
 }
 
+const HACKTIVISM_INTRO: string[] = [
+  'Modern hacktivist movements are increasingly driven by geopolitical events and ideological conflicts. Unlike nation-state actors, hacktivists are not constrained by diplomatic obligations, strategic deterrence, or the political consequences that accompany official military and intelligence operations.',
+  'Nation-states typically operate below the threshold that could trigger kinetic escalation, relying on restraint, plausible deniability, and carefully calibrated actions. Hacktivists often operate outside those boundaries, which can increase the risk of unintended consequences, collateral damage, and escalation.',
+  'The Ten Nodes of Hacktivism are a proposed ethical framework: a set of principles designed to encourage discipline, accountability, and respect for human life, while reducing the likelihood that cyber operations harm innocent people or contribute to broader conflict. Understanding the potential consequences of tampering with critical infrastructure, today’s hacktivists are encouraged to weigh the impact of their actions carefully — both on themselves and on the wider public.'
+];
+
+const TEN_NODES: string[] = [
+  'Innocent civilians or commercial infrastructure can never be collateral during an operation.',
+  'Hospitals, schools, and industrial control systems that could potentially cause loss of life must never be considered targets under any circumstances.',
+  'We do not steal from the general working-class public nor from the innocent. Therefore, we do not cause economic hardship to the public. Under this condition, if money is acquired, it must be anonymously redistributed back to society as charity.',
+  'We do not steal data from the innocent. Services shared must be left the way they were found. Therefore, if we intrude, we touch nothing out of scope and leave systems as we found them.',
+  'We must respect what we stand for.',
+  'We must respect each other. Just because someone disagrees with you or subscribes to different beliefs, whether political or otherwise, does not make them your enemy. Fight corruption, not over personal ideology.',
+  'We must not jeopardize the OPSEC of our fellow people.',
+  'We must not steal each other’s achievements or claim responsibility for actions we did not perform.',
+  'We must never allow ourselves to be absorbed into state or corporate power structures, nor act as unofficial enforcement arms. Cooperation is permissible only when there is a clear and imminent risk to human life, particularly the exploitation or endangerment of children or acts of terrorism.',
+  'We police ourselves. Accountability is internal, deliberate, and proportional. Violations are addressed through investigation, correction, and, when necessary, separation. No mob justice. No public theatrics.'
+];
+
 function HacktivistEthosPane(): JSX.Element {
   return (
     <div className="ga98-stack">
       <fieldset>
-        <legend>Hacktivist Ethos</legend>
-        <p style={{ fontSize: 12, color: '#555' }}>
-          This section is reserved for the Hacktivist Ethos doctrine. The content is being finalised
-          and will appear here in a forthcoming update.
-        </p>
+        <legend>Hacktivist Ethos — The Ten Nodes of Hacktivism</legend>
+        <div style={{ fontSize: 12 }}>
+          <p style={{ marginTop: 0, fontWeight: 'bold' }}>Introduction</p>
+          {HACKTIVISM_INTRO.map((p, i) => (
+            <p key={i} style={{ margin: '0 0 8px' }}>{p}</p>
+          ))}
+          <p style={{ margin: '12px 0 4px', fontWeight: 'bold' }}>The Ten Nodes</p>
+          <ol style={{ margin: 0, paddingLeft: 18 }}>
+            {TEN_NODES.map((n, i) => <li key={i} style={{ marginBottom: 6 }}>{n}</li>)}
+          </ol>
+          <p style={{ margin: '12px 0 0', fontStyle: 'italic', opacity: 0.8 }}>— GhostExodus</p>
+        </div>
       </fieldset>
     </div>
   );
