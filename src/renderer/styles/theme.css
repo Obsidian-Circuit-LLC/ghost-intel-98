@@ -962,16 +962,12 @@ input.ga98-text, select.ga98-text {
   cursor: pointer;
 }
 .ga98-clock-btn:active { border-color: var(--ga98-shadow-dark) var(--ga98-shadow-light) var(--ga98-shadow-light) var(--ga98-shadow-dark); }
-.ga98-clock-body { padding: 6px; }
-.ga98-clock-analog { width: 144px; height: 144px; margin: 0 auto; }
-.ga98-clock-digital { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 4px; }
-.ga98-clock-time {
-  font-family: 'Courier New', monospace; font-size: 26px; font-weight: bold; letter-spacing: 1px;
-  color: #00ff66; background: #001a08; padding: 6px 12px;
-  border-top: 2px solid var(--ga98-shadow-dark); border-left: 2px solid var(--ga98-shadow-dark);
-  border-bottom: 2px solid var(--ga98-shadow-light); border-right: 2px solid var(--ga98-shadow-light);
-}
-.ga98-clock-fmt { font-size: 10px; padding: 1px 8px; cursor: pointer; }
+/* Classic "Date/Time" layout: digital time + date on the left, analog face on the right. */
+.ga98-clock-body { display: flex; align-items: center; gap: 8px; padding: 8px 10px; }
+.ga98-clock-left { flex: 1; min-width: 0; }
+.ga98-clock-time { font-family: 'Courier New', monospace; font-size: 30px; font-weight: bold; color: #000; line-height: 1.05; }
+.ga98-clock-date { font-size: 11px; color: #000; margin-top: 4px; white-space: nowrap; }
+.ga98-clock-analog { width: 104px; height: 104px; flex: 0 0 auto; }
 .ga98-clock-pill {
   position: fixed; z-index: 9001; pointer-events: auto; cursor: grab;
   width: 30px; height: 30px; font-size: 16px; line-height: 1; padding: 0;

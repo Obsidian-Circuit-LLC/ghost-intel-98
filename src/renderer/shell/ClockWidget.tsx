@@ -1,19 +1,19 @@
 /**
- * Desktop Clock — a Win98-style clock widget pinned to the desktop (like the Sticky Notes layer).
+ * Desktop Date/Time — a Win98-style clock widget pinned to the desktop (like the Sticky Notes layer).
  *
- * Two faces: DIGITAL (12h or 24h) and ANALOG (clock face with numbers + hour/minute/second hands).
- * Draggable anywhere on the desktop; HIDE collapses it to a small 🕐 pill, click to reveal — so the
- * time can be hidden or revealed at will. Position + face + 12/24h + hidden state persist in
+ * One window, classic "Date/Time" layout: digital time + full date on the LEFT, an analog clock face
+ * (numbers + hour/minute/second hands) on the RIGHT — both shown at once. A 12h/24h toggle in the
+ * titlebar; HIDE (—) collapses it to a small 🕐 pill, click to reveal — so the time can be hidden or
+ * revealed at will. Draggable anywhere on the desktop. Position + 12/24h + hidden state persist in
  * localStorage: a pure, non-sensitive UI preference, so (like the sticky-notes controls position) it
  * never crosses the encrypted store / IPC boundary. Off by default — enabled from the Access menu.
  */
 import { useEffect, useRef, useState } from 'react';
 
-type Face = 'digital' | 'analog';
-interface ClockPrefs { x: number; y: number; face: Face; hour12: boolean; hidden: boolean }
+interface ClockPrefs { x: number; y: number; hour12: boolean; hidden: boolean }
 
 const KEY = 'ga98.clock.prefs';
-const W = 168, H = 168, PILL = 30, TASKBAR_H = 32;
+const W = 300, H = 132, PILL = 30, TASKBAR_H = 32;
 export const CLOCK_ENABLED_KEY = 'ga98.clock.enabled';
 
 function clamp(x: number, y: number, w: number, h: number): { x: number; y: number } {
@@ -23,17 +23,23 @@ function clamp(x: number, y: number, w: number, h: number): { x: number; y: numb
 }
 
 function load(): ClockPrefs {
-  const def: ClockPrefs = { ...clamp(window.innerWidth - W - 16, 16, W, H), face: 'analog', hour12: true, hidden: false };
+  const def: ClockPrefs = { ...clamp(window.innerWidth - W - 16, 16, W, H), hour12: true, hidden: false };
   try {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       const p = JSON.parse(raw) as Partial<ClockPrefs>;
-      const face: Face = p.face === 'digital' ? 'digital' : 'analog';
       const pos = clamp(typeof p.x === 'number' ? p.x : def.x, typeof p.y === 'number' ? p.y : def.y, W, H);
-      return { ...pos, face, hour12: p.hour12 !== false, hidden: p.hidden === true };
+      return { ...pos, hour12: p.hour12 !== false, hidden: p.hidden === true };
     }
   } catch { /* malformed preference — fall through to default */ }
   return def;
+}
+
+function pad(n: number): string { return n < 10 ? `0${n}` : String(n); }
+function digitalTime(now: Date, hour12: boolean): string {
+  const h = now.getHours(), m = now.getMinutes(), s = now.getSeconds();
+  // 12h matches the classic applet: no leading zero on the hour, no AM/PM suffix.
+  return hour12 ? `${(h % 12) || 12}:${pad(m)}:${pad(s)}` : `${pad(h)}:${pad(m)}:${pad(s)}`;
 }
 
 function Hand({ angle, len, width, color }: { angle: number; len: number; width: number; color: string }): JSX.Element {
@@ -126,25 +132,22 @@ export function ClockWidget(): JSX.Element | null {
     );
   }
 
-  const digital = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: prefs.hour12 });
+  const date = now.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: '2-digit' });
 
   return (
     <div className="ga98-clock" style={{ left: prefs.x, top: prefs.y, width: W }}>
       <div className="ga98-clock-bar" onPointerDown={startDrag}>
-        <span className="ga98-clock-title">Clock</span>
+        <span className="ga98-clock-title">Date/Time</span>
         <span style={{ flex: 1 }} />
-        <button className="ga98-clock-btn" title={prefs.face === 'analog' ? 'Switch to digital' : 'Switch to analog'} onClick={() => update({ face: prefs.face === 'analog' ? 'digital' : 'analog' })}>{prefs.face === 'analog' ? '🔢' : '🕓'}</button>
+        <button className="ga98-clock-btn" title="Toggle 12 / 24 hour" onClick={() => update({ hour12: !prefs.hour12 })}>{prefs.hour12 ? '12h' : '24h'}</button>
         <button className="ga98-clock-btn" title="Hide the clock" onClick={() => update({ hidden: true })}>—</button>
       </div>
       <div className="ga98-clock-body">
-        {prefs.face === 'analog'
-          ? <div className="ga98-clock-analog"><AnalogFace now={now} /></div>
-          : (
-            <div className="ga98-clock-digital">
-              <div className="ga98-clock-time">{digital}</div>
-              <button className="ga98-clock-fmt" title="Toggle 12 / 24 hour" onClick={() => update({ hour12: !prefs.hour12 })}>{prefs.hour12 ? '12h' : '24h'}</button>
-            </div>
-          )}
+        <div className="ga98-clock-left">
+          <div className="ga98-clock-time">{digitalTime(now, prefs.hour12)}</div>
+          <div className="ga98-clock-date">{date}</div>
+        </div>
+        <div className="ga98-clock-analog"><AnalogFace now={now} /></div>
       </div>
     </div>
   );
