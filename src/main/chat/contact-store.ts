@@ -21,6 +21,8 @@ export interface Contact {
   nextPrekey: KemPrekey | null;
   /** Per-contact gate key for the v4 reconnect-gate protocol. */
   reconnectGateKey: Uint8Array | null;
+  /** True once the peer has confirmed receipt of the RGK; epoch-bound (reset with reconnectGateKey). */
+  rgkPeerConfirmed: boolean;
 }
 
 interface StoredContact {
@@ -33,6 +35,7 @@ interface StoredContact {
   lastSeen: number | null;
   nextPrekey: string | null; // b64 encodeKemPrekey
   reconnectGateKey: string | null; // b64
+  rgkPeerConfirmed: boolean;
 }
 
 const b64 = (u: Uint8Array): string => Buffer.from(u).toString('base64');
@@ -55,7 +58,8 @@ function toStored(c: Contact): StoredContact {
     verified: c.verified,
     lastSeen: c.lastSeen,
     nextPrekey: c.nextPrekey ? b64(encodeKemPrekey(c.nextPrekey)) : null,
-    reconnectGateKey: c.reconnectGateKey ? b64(c.reconnectGateKey) : null
+    reconnectGateKey: c.reconnectGateKey ? b64(c.reconnectGateKey) : null,
+    rgkPeerConfirmed: c.rgkPeerConfirmed
   };
 }
 function fromStored(s: StoredContact): Contact {
@@ -74,7 +78,8 @@ function fromStored(s: StoredContact): Contact {
     verified: s.verified,
     lastSeen: s.lastSeen,
     nextPrekey,
-    reconnectGateKey: s.reconnectGateKey ? unb64(s.reconnectGateKey) : null
+    reconnectGateKey: s.reconnectGateKey ? unb64(s.reconnectGateKey) : null,
+    rgkPeerConfirmed: s.rgkPeerConfirmed ?? false
   };
 }
 
@@ -141,7 +146,8 @@ export class ContactStore {
           verified: false,
           lastSeen: null,
           nextPrekey: null,
-          reconnectGateKey: null
+          reconnectGateKey: null,
+          rgkPeerConfirmed: false
         })
       );
       await this.write(list);
@@ -149,13 +155,27 @@ export class ContactStore {
   }
 
   /** Patch mutable fields of an existing contact. */
-  update(id: string, patch: Partial<Pick<Contact, 'onion' | 'displayName' | 'verified' | 'lastSeen' | 'nextPrekey' | 'reconnectGateKey'>>): Promise<void> {
+  update(id: string, patch: Partial<Pick<Contact, 'onion' | 'displayName' | 'verified' | 'lastSeen' | 'nextPrekey' | 'reconnectGateKey' | 'rgkPeerConfirmed'>>): Promise<void> {
     return this.serialize(async () => {
       const list = await this.read();
       const c = list.find((x) => x.contactId === id);
       if (!c) throw new ContactError(`unknown contact ${id}`);
       const merged = fromStored(c);
       Object.assign(merged, patch);
+      Object.assign(c, toStored(merged));
+      await this.write(list);
+    });
+  }
+
+  /** Atomically clear reconnectGateKey and rgkPeerConfirmed (epoch reset, rev-4 §3). */
+  resetReconnectEpoch(id: string): Promise<void> {
+    return this.serialize(async () => {
+      const list = await this.read();
+      const c = list.find((x) => x.contactId === id);
+      if (!c) throw new ContactError(`unknown contact ${id}`);
+      const merged = fromStored(c);
+      merged.reconnectGateKey = null;
+      merged.rgkPeerConfirmed = false;
       Object.assign(c, toStored(merged));
       await this.write(list);
     });

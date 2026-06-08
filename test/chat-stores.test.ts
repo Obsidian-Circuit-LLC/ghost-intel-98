@@ -148,4 +148,19 @@ describe('ContactStore', () => {
     const c = await store.getById(id);
     expect(Array.from(c!.reconnectGateKey!)).toEqual(Array.from(rgk));
   });
+
+  it('persists rgkPeerConfirmed and defaults it false; clears RGK+flag on identity re-pin', async () => {
+    const store = new ContactStore(await tmp('contacts.json'));
+    const peer = generateIdentity().publicKeys;
+    await store.pin(peer);
+    const id = contactId(peer);
+    expect((await store.getById(id))!.rgkPeerConfirmed).toBe(false);
+    await store.update(id, { reconnectGateKey: new Uint8Array(32).fill(7), rgkPeerConfirmed: true });
+    expect((await store.getById(id))!.rgkPeerConfirmed).toBe(true);
+    // re-pin to a NEW identity epoch must clear both (epoch-bound flag, rev-4 §3)
+    await store.resetReconnectEpoch(id);
+    const c = await store.getById(id);
+    expect(c!.reconnectGateKey).toBeNull();
+    expect(c!.rgkPeerConfirmed).toBe(false);
+  });
 });
