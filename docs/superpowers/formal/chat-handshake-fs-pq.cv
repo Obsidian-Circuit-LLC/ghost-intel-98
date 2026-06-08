@@ -1,0 +1,75 @@
+(* ============================================================================
+   DCS98 chat handshake — CryptoVerif, FORWARD SECRECY, post-quantum leg.
+
+   Companion to chat-handshake-fs-classical.cv. Here the surviving forward-secret
+   contributor is the ML-KEM shared secret ss_I, encapsulated to I's per-handshake
+   ephemeral ek_I (whose secret is deleted, handshake.ts:221). EVERYTHING else is
+   handed to the adversary: full static compromise (es, se) AND all X25519 broken
+   including the ephemeral DH ee, AND the other KEM secret ss_pre. RK stays secret
+   via ss_I alone, under IND-CCA2 with a decapsulation oracle.
+
+   Chain (handshake.ts:174-217): CK1..CK4 mix revealed secrets (adversary-computable);
+   CK5 = MixKey(ss_I, CK4) with ss_I IND-CCA2-random ⇒ CK5 unknown ⇒ RK random.
+
+   With chat-handshake-fs-classical.cv: forward secrecy holds if EITHER the ephemeral
+   DH OR the ephemeral KEM survives, even under full long-term-key compromise — the
+   hybrid FS guarantee. (The one-time prekey ss_pre gives a third FS contributor when
+   it is a true one-time, not the last-resort; the last-resort path is the documented
+   FS-degraded case.)
+
+   Run: cryptoverif chat-handshake-fs-pq.cv
+   ============================================================================ *)
+
+proof {
+  crypto ind_cca2(encap);
+  crypto rom(Hpre);
+  crypto rom(Hmix);
+  success
+}
+
+type keyseed [large,fixed].
+type pkey [bounded].
+type skey [bounded].
+type kemss [large,fixed].      (* ML-KEM shared secret ss_I (to I's ephemeral ek_I) *)
+type ciphertext [bounded].
+type encapoutput [bounded].
+type bits [large,fixed].
+type hkpre [fixed].
+type hkmix [fixed].
+
+proba Penc.
+proba Pkeycoll.
+proba Pctxtcoll.
+expand IND_CCA2_KEM(keyseed, pkey, skey, kemss, ciphertext, encapoutput, pkgen, skgen, encap, pair, decap, injbot, Penc, Pkeycoll, Pctxtcoll).
+
+expand ROM_hash_2(hkpre, kemss, bits, bits, Hpre, oracle_pre, qHpre).
+expand ROM_hash_2(hkmix, bits,  bits, bits, Hmix, oracle_mix, qHmix).
+
+query secret rk.
+
+param Ndec.
+channel start, c, cdec, cdecret.
+
+process
+  in(start, ());
+  new kp: hkpre; new km: hkmix;
+  new seed: keyseed;
+  let pk: pkey = pkgen(seed) in
+  let sk: skey = skgen(seed) in
+  let enc: encapoutput = encap(pk) in
+  let pair(ssi: kemss, ct: ciphertext) = enc in   (* ss_I — the surviving FS secret *)
+  new ck0: bits;
+  new es:  bits;                 (* static + all X25519 (incl. ephemeral ee) handed over below *)
+  new sspre: bits;
+  new ee:  bits;
+  new se:  bits;
+  new th4: bits;
+  let ck1: bits = Hmix(km, es,    ck0) in
+  let ck2: bits = Hmix(km, sspre, ck1) in
+  let ck3: bits = Hmix(km, ee,    ck2) in
+  let ck4: bits = Hmix(km, se,    ck3) in
+  let ck5: bits = Hpre(kp, ssi,   ck4) in
+  let rk:  bits = Hmix(km, ck5,   th4) in
+  out(c, (pk, ct, ck0, es, sspre, ee, se, th4));
+  ( oracle_pre(kp) | oracle_mix(km)
+  | (! Ndec in(cdec, cc: ciphertext); if cc <> ct then out(cdecret, decap(cc, sk))) )

@@ -56,17 +56,21 @@ key does not let the adversary impersonate the peer to them. Proved both directi
 R-authenticates-I still holds (rests on skI); with skI revealed, I-authenticates-R still holds (rests on
 skR). Each is the injective query of the surviving direction. ✓
 
+**Forward secrecy (`chat-handshake-fs-{classical,pq}.cv`):** RK stays secret under **full long-term-key
+compromise** (statics handed to the adversary) because the chain mixes secrets that used deleted
+ephemerals. Hybrid, both legs proved: classical FS via `ee` (ephemeral-ephemeral DH, CDH) with all
+statics + ML-KEM revealed; PQ FS via `ss_I` (ML-KEM to the deleted ephemeral ek_I, IND-CCA2 + decap
+oracle) with all X25519 incl. `ee` revealed. FS holds if EITHER ephemeral primitive survives. ✓
+
 **NOT yet covered (the gap that keeps "formally verified" from being claimable):**
 1. ~~The full 5-step MixKey chain~~ — **DONE** (fullchain files).
 2. ~~Computational mutual authentication / UKS / replay~~ — **DONE** (`chat-handshake-auth.cv`).
 3. ~~KCI (key-compromise impersonation)~~ — **DONE** (`chat-handshake-kci-reveal{R,I}.cv`).
-4. **Forward secrecy** computational bounds (the ee/ss_I legs after static-key compromise) — the
-   fullchain secrecy files assume static keys uncompromised; an FS model corrupts statics *after* the
-   session and re-checks RK secrecy.
+4. ~~Forward secrecy (computational, hybrid)~~ — **DONE** (`chat-handshake-fs-{classical,pq}.cv`).
 5. **AEAD layer abstracted in the auth model** — Sig_I/Sig_R are modelled in clear; the c_idI/c_confR
    AEAD provides identity-confidentiality (G2′, symbolic-only so far) + key-confirmation, not auth. A
    single end-to-end model unifying auth + the AEAD/secrecy layer is the remaining consolidation.
-These (4–5) plus the **fuzzing harness** (§3 parsers) and the **noble constant-time audit**, then an
+Item 5, plus the **fuzzing harness** (§3 parsers) and the **noble constant-time audit**, then an
 external audit + the FIPS module build, remain before the banner can change.
 
 ## 3. Implementation audit (tools are blind to this)
