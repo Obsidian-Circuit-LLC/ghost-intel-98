@@ -1,0 +1,106 @@
+(* ============================================================================
+   DCS98 chat handshake — CryptoVerif, COMPUTATIONAL mutual authentication.
+
+   Upgrades authentication from symbolic (ProVerif) to computational. The handshake
+   authenticates via two transcript signatures (handshake.ts):
+     Sig_I = Sign(is_I, DS_HS_INIT ‖ TH1)   (:180, verified R :276)
+     Sig_R = Sign(is_R, DS_HS_RESP ‖ TH3)   (:302, verified I :210)
+   TH1 binds R's identity+prekey and I's ephemerals (xe_I, ek_I, ct_pre); TH3 binds
+   TH1 plus R's ephemerals (xe_R, ct_I). The two distinct DS_ prefixes are the
+   concatI/concatR domain-separation (disjoint).
+
+   Goal: INJECTIVE AGREEMENT both directions under Ed25519 UF-CMA — i.e. mutual
+   authentication with no replay / no UKS (each accept maps 1:1 to a matching run on
+   the same session-unique ephemerals). Identities are pinned (TOFU safety number);
+   we model the pinned 1:1 case, the protocol's threat model.
+
+   Modelling choices (faithful for AUTH; orthogonal properties proved elsewhere):
+   - KEM publics / ciphertexts (ek_I‖ct_pre, ct_I) are session-fresh nonces bound
+     into the signed transcript — for authentication only their binding matters.
+   - Sig_I/Sig_R travel inside c_idI/c_confR (AEAD) on the wire; the AEAD provides
+     identity-confidentiality (G2′, proved symbolically) and key-confirmation, not
+     authentication — the signatures authenticate, so they are modelled in clear here.
+   - RK secrecy / the hybrid bound: chat-handshake-fullchain-{dhleg,kemleg}.cv.
+
+   Run: cryptoverif chat-handshake-auth.cv
+   ============================================================================ *)
+
+proof {
+  crypto uf_cma(sign) rkI;
+  crypto uf_cma(sign) rkR;
+  auto
+}
+
+param NI, NR.
+
+type keyseed [large,fixed].
+type pkey [bounded].
+type skey [bounded].
+type signed [bounded].
+type signature [bounded].
+type host [bounded].
+type nonce [large,fixed].
+
+(* DS_HS_INIT context (TH1 binders) vs DS_HS_RESP context (TH3 binders) — disjoint ⇒ a Sig_I can
+   never be replayed as a Sig_R and vice versa (the DS_ prefix domain separation).
+   TH1 binds R's one-time prekeyId (handshake.ts:170); modelling that + single-use prekeys is what
+   restores INJECTIVE R-authenticates-I (the durable consume() at :287 / the TOCTOU fix). *)
+fun concatI(host, host, nonce, nonce, nonce): signed [data].          (* (I, R, prekeyId, xe_I, kem_I) *)
+fun concatR(host, host, nonce, nonce, nonce, nonce): signed [data].   (* (I, R, prekeyId, xe_I, xe_R, kem_R) *)
+equation forall a:host,b:host,p:nonce,x:nonce,k:nonce, a2:host,b2:host,p2:nonce,x2:nonce,y2:nonce,k2:nonce;
+  concatI(a,b,p,x,k) <> concatR(a2,b2,p2,x2,y2,k2).
+
+proba Psign.
+proba Psigncoll.
+expand UF_CMA_proba_signature(keyseed, pkey, skey, signed, signature, skgen, pkgen, sign, check, Psign, Psigncoll).
+
+const I, R: host.
+
+event Irun(host, host, nonce, nonce, nonce).            (* I committed to Msg1 (prekeyId, xe_I, kem_I) *)
+event Raccept(host, host, nonce, nonce, nonce).         (* R verified Sig_I over those *)
+event Rrun(host, host, nonce, nonce, nonce, nonce).     (* R committed to Msg2 (prekeyId, xe_I, xe_R, kem_R) *)
+event Iaccept(host, host, nonce, nonce, nonce, nonce).  (* I verified Sig_R over those *)
+
+(* R authenticates I: every R-accept has a unique matching I-run (kills replay + UKS).
+   INJECTIVE here relies on single-use prekeys (durable consume()). *)
+query a: host, b: host, p: nonce, xi: nonce, ki: nonce;
+  inj-event(Raccept(a, b, p, xi, ki)) ==> inj-event(Irun(a, b, p, xi, ki)).
+(* I authenticates R. *)
+query a: host, b: host, p: nonce, xi: nonce, xr: nonce, kr: nonce;
+  inj-event(Iaccept(a, b, p, xi, xr, kr)) ==> inj-event(Rrun(a, b, p, xi, xr, kr)).
+
+param Npre.
+channel cI0, cI2, cI3, cPre0, cPre, cR1, cR2, start, cstart.
+
+let processI(skI: skey, pkR: pkey) =
+  in(cI0, (prekeyId: nonce));                      (* prekeyId from R's invite *)
+  new xeI: nonce;
+  new kemI: nonce;                                 (* ek_I ‖ ct_pre *)
+  event Irun(I, R, prekeyId, xeI, kemI);
+  let sI: signature = sign(concatI(I, R, prekeyId, xeI, kemI), skI) in
+  out(cI2, (xeI, kemI, sI));
+  in(cI3, (xeR: nonce, kemR: nonce, sR: signature));
+  if check(concatR(I, R, prekeyId, xeI, xeR, kemR), pkR, sR) then
+  event Iaccept(I, R, prekeyId, xeI, xeR, kemR).
+
+(* ONE one-time prekey per instance: no inner replication ⇒ each prekeyId is consumed at most once
+   (models the durable consume() at handshake.ts:287). A replayed Msg1 finds the prekey gone. *)
+let processR(skR: skey, pkI: pkey) =
+  in(cPre0, ());                                   (* mint one one-time prekey *)
+  new prekeyId: nonce;
+  out(cPre, prekeyId);                             (* publish the one-time prekeyId (invite) *)
+  in(cR1, (xeI: nonce, kemI: nonce, sI: signature));
+  if check(concatI(I, R, prekeyId, xeI, kemI), pkI, sI) then
+  event Raccept(I, R, prekeyId, xeI, kemI);
+  new xeR: nonce;
+  new kemR: nonce;                                 (* ct_I *)
+  event Rrun(I, R, prekeyId, xeI, xeR, kemR);
+  let sR: signature = sign(concatR(I, R, prekeyId, xeI, xeR, kemR), skR) in
+  out(cR2, (xeR, kemR, sR)).
+
+process
+  in(start, ());
+  new rkI: keyseed; let skI = skgen(rkI) in let pkI = pkgen(rkI) in
+  new rkR: keyseed; let skR = skgen(rkR) in let pkR = pkgen(rkR) in
+  out(cstart, (pkI, pkR));
+  ( (! NI processI(skI, pkR)) | (! Npre processR(skR, pkI)) )
