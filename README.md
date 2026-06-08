@@ -32,11 +32,26 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`DCS98-Setup-3.13.0-beta.1.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the **experimental** Tor P2P chat — see Status.)*
+> **Install:** download [`DCS98-Setup-3.13.1-beta.1.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the **experimental** Tor P2P chat — see Status.)*
 
 ## Status
 
-**v3.13.0-beta.1** — current release. Dogfooding feedback turned into features:
+**v3.13.1-beta.1** — current release. Pinball playability fix + formal-verification milestone:
+
+- **Pinball geometry corrected.** The v3.13.0 flippers were too close for their length — they overlapped,
+  leaving **no center drain gap**, and the assembly was off-center. Re-centered with a real ~1.5-ball drain
+  gap; **slingshots** now hug the flippers (no slip-through dead zone); and **inlane/outlane guide rails**
+  turn the open sides into a flipper-feeding inlane and a narrow drain. *(Physics feel — gravity, flipper
+  strength, kicks — may still be tuned in a follow-up.)*
+- **Chat handshake formal verification advanced.** The **CryptoVerif** hybrid bound is now proved (both
+  legs): the session root key is indistinguishable from random if **either** X25519 (CDH) **or** ML-KEM
+  (IND-CCA2) survives — alongside the completed ProVerif symbolic run. This is the key-schedule core, not
+  the full wire protocol end-to-end, so the handshake **stays EXPERIMENTAL / not formally verified** (an
+  end-to-end model, external audit, and FIPS build remain). Banner unchanged.
+
+454 automated tests. *Everything from v3.13.0 carries forward.*
+
+**v3.13.0-beta.1** — Dogfooding feedback turned into features:
 
 - **Search results are clickable.** A hit on a note opens that note in Notepad, a file hit opens the
   document viewer, a metadata hit opens the case — straight to the exact result.
@@ -256,14 +271,14 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/dcs98/releases) and run it.
 
-Direct link to the current release: [`DCS98-Setup-3.13.0-beta.1.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.13.0-beta.1/DCS98-Setup-3.13.0-beta.1.exe)
+Direct link to the current release: [`DCS98-Setup-3.13.1-beta.1.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.13.1-beta.1/DCS98-Setup-3.13.1-beta.1.exe)
 (experimental P2P chat + Piper TTS; the chat crypto is unverified — see Status). The last
 fully-stable build is [`DCS98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.6.8/DCS98-Setup-3.6.8.exe).
 
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\DCS98-Setup-3.13.0-beta.1.exe -Algorithm SHA256
+Get-FileHash .\DCS98-Setup-3.13.1-beta.1.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
@@ -301,8 +316,13 @@ To uninstall: Settings → Apps → Dead Cyber Society 98 → Uninstall.
 
 ## Releases & changelog
 
-The current build is **v3.13.0-beta.1**. Each release page carries its own notes + SHA-256.
+The current build is **v3.13.1-beta.1**. Each release page carries its own notes + SHA-256.
 
+- **v3.13.1-beta.1** — **Pinball playability fix + formal-verification milestone.** Corrected the pinball
+  flipper geometry (v3.13.0 flippers overlapped → no drain gap); slingshots now hug the flippers and
+  inlane/outlane guide rails replace the open sides. Separately, the **CryptoVerif** hybrid IND-of-RK
+  proof landed (both legs: RK secret if **either** X25519 or ML-KEM holds) — key-schedule core only, so
+  the chat handshake stays EXPERIMENTAL. **454 tests.**
 - **v3.13.0-beta.1** — **Dogfooding features.** Clickable search results (jump to the exact note/file/case);
   **Chess vs computer** (pick side + Easy/Medium/Hard alpha-beta); **Pinball rebuilt** into a Space-Cadet-style
   table (power plunger, slingshots, drop targets, rank ladder, wormhole **multiball**, SFX); and **offline AI
