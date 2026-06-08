@@ -1,0 +1,433 @@
+Doing expand get, insert and prove unique annotations... No change.
+Doing simplify (non-expanded game)... No change.
+Doing expand... Done.
+Doing remove assignments of findcond... No change.
+Doing simplify... Run simplify 1 time(s). Fixpoint reached.
+No change.
+Doing move all binders... No change.
+Doing SA rename new without array accesses and remove assignments of findcond... No change.
+Doing merge branches... No change.
+Proof of forall kr, xr, xi, p: nonce, b, a: host; inj-event(Iaccept(a, b, p, xi, xr, kr)) ==> inj-event(Rrun(a, b, p, xi, xr, kr)) failed:
+  Found Iaccept(I, R, prekeyId_1, xeI_1, xeR_2, kemR_2) at 68
+  but could not prove inj-event(Rrun(a, b, p, xi, xr, kr))
+Trying equivalence uf_cma(sign) with rkR... Failed.
+Doing remove assignments of binder skR... Done.
+Doing remove assignments of binder pkR... Done.
+Trying equivalence uf_cma(sign) with rkR... Transf. OK Proba. computed Transf. done Succeeded.
+Doing simplify (non-expanded game)... Applied collision r <-R keyseed; forall Y: pkey; return((pkgen(r) = Y)) <=(Psigncoll)=> return(false) if Y independent-of r with r -> rkI, Y -> pkgen2(rkR) Probability: Psigncoll
+Done.
+Doing expand... Done.
+Doing remove assignments of findcond... Done.
+Doing simplify... Doing global dependency analysis on prekeyId_2 inside simplify... At 97, returned message prekeyId_2 depends on prekeyId_2.
+No change
+Doing global dependency analysis on xeI_1 inside simplify... At 39, returned message xeI_1 depends on xeI_1.
+No change
+Doing global dependency analysis on xeR_3 inside simplify... At 155, returned message xeR_3 depends on xeR_3.
+No change
+Doing global dependency analysis on kemR_3 inside simplify... At 157, returned message kemR_3 depends on kemR_3.
+No change
+Doing global dependency analysis on prekeyId_2 inside simplify... At 117, returned message prekeyId_2 depends on prekeyId_2.
+No change
+Doing global dependency analysis on xeI_1 inside simplify... At 39, returned message xeI_1 depends on xeI_1.
+No change
+Doing global dependency analysis on xeR_3 inside simplify... At 175, returned message xeR_3 depends on xeR_3.
+No change
+Doing global dependency analysis on kemR_3 inside simplify... At 177, returned message kemR_3 depends on kemR_3.
+No change
+Run simplify 2 time(s). Fixpoint reached.
+Done.
+Doing move all binders... No change.
+Doing SA rename new without array accesses and remove assignments of findcond... No change.
+Doing merge branches... No change.
+Eliminated collisions between xeI_1 and xeI_1 Probability: 0.5 / |nonce| * NI * NI
+Proved query forall kr, xr, xi, p: nonce, b, a: host; inj-event(Iaccept(a, b, p, xi, xr, kr)) ==> inj-event(Rrun(a, b, p, xi, xr, kr)) up to probability 0.5 * NI^2 / |nonce|
+===================== Proof starts =======================
+Initial state
+Game 1 is
+     start() :=
+     rkI <-R keyseed;
+     skI: skey <- skgen(rkI);
+     pkI: pkey <- pkgen(rkI);
+     rkR <-R keyseed;
+     skR: skey <- skgen(rkR);
+     pkR: pkey <- pkgen(rkR);
+     return(pkI, pkR, skI);
+     ((
+       foreach i <= NI do
+       cI0(prekeyId_1: nonce) :=
+       xeI_1 <-R nonce;
+       kemI_1 <-R nonce;
+       event Irun(I, R, prekeyId_1, xeI_1, kemI_1);
+       sI_1: signature <- (m_2: signed <- concatI(I, R, prekeyId_1, xeI_1, kemI_1); r_2 <-R sign_seed; sign_r(m_2, skI, r_2));
+       return(xeI_1, kemI_1, sI_1);
+       cI3(xeR_2: nonce, kemR_2: nonce, sR_2: signature) :=
+       if check(concatR(I, R, prekeyId_1, xeI_1, xeR_2, kemR_2), pkR, sR_2) then
+       event Iaccept(I, R, prekeyId_1, xeI_1, xeR_2, kemR_2)
+     ) | (
+       foreach i_1 <= Npre do
+       cPre0() :=
+       prekeyId_2 <-R nonce;
+       return(prekeyId_2);
+       cR1(xeI_2: nonce, kemI_2: nonce, sI_2: signature) :=
+       if check(concatI(I, R, prekeyId_2, xeI_2, kemI_2), pkI, sI_2) then
+       event Raccept(I, R, prekeyId_2, xeI_2, kemI_2);
+       xeR_3 <-R nonce;
+       kemR_3 <-R nonce;
+       event Rrun(I, R, prekeyId_2, xeI_2, xeR_3, kemR_3);
+       sR_3: signature <- (m_3: signed <- concatR(I, R, prekeyId_2, xeI_2, xeR_3, kemR_3); r_3 <-R sign_seed; sign_r(m_3, skR, r_3));
+       return(xeR_3, kemR_3, sR_3)
+     ))
+
+
+Applying expand
+  - Expand if/find/let
+yields
+
+Game 2 is
+     start() :=
+     rkI <-R keyseed;
+     skI: skey <- skgen(rkI);
+     pkI: pkey <- pkgen(rkI);
+     rkR <-R keyseed;
+     skR: skey <- skgen(rkR);
+     pkR: pkey <- pkgen(rkR);
+     return(pkI, pkR, skI);
+     ((
+       foreach i <= NI do
+       cI0(prekeyId_1: nonce) :=
+       xeI_1 <-R nonce;
+       kemI_1 <-R nonce;
+       m_2: signed <- concatI(I, R, prekeyId_1, xeI_1, kemI_1);
+       r_2 <-R sign_seed;
+       sI_1: signature <- sign_r(m_2, skI, r_2);
+       return(xeI_1, kemI_1, sI_1);
+       cI3(xeR_2: nonce, kemR_2: nonce, sR_2: signature) :=
+       if check(concatR(I, R, prekeyId_1, xeI_1, xeR_2, kemR_2), pkR, sR_2) then
+       event Iaccept(I, R, prekeyId_1, xeI_1, xeR_2, kemR_2)
+     ) | (
+       foreach i_1 <= Npre do
+       cPre0() :=
+       prekeyId_2 <-R nonce;
+       return(prekeyId_2);
+       cR1(xeI_2: nonce, kemI_2: nonce, sI_2: signature) :=
+       if check(concatI(I, R, prekeyId_2, xeI_2, kemI_2), pkI, sI_2) then
+       xeR_3 <-R nonce;
+       kemR_3 <-R nonce;
+       event Rrun(I, R, prekeyId_2, xeI_2, xeR_3, kemR_3);
+       m_3: signed <- concatR(I, R, prekeyId_2, xeI_2, xeR_3, kemR_3);
+       r_3 <-R sign_seed;
+       sR_3: signature <- sign_r(m_3, skR, r_3);
+       return(xeR_3, kemR_3, sR_3)
+     ))
+
+
+Applying remove assignments of binder skR
+  - Remove assignments on skR (definition removed, all usages removed)
+yields
+
+Game 3 is
+     start() :=
+     rkI <-R keyseed;
+     skI: skey <- skgen(rkI);
+     pkI: pkey <- pkgen(rkI);
+     rkR <-R keyseed;
+     pkR: pkey <- pkgen(rkR);
+     return(pkI, pkR, skI);
+     ((
+       foreach i <= NI do
+       cI0(prekeyId_1: nonce) :=
+       xeI_1 <-R nonce;
+       kemI_1 <-R nonce;
+       m_2: signed <- concatI(I, R, prekeyId_1, xeI_1, kemI_1);
+       r_2 <-R sign_seed;
+       sI_1: signature <- sign_r(m_2, skI, r_2);
+       return(xeI_1, kemI_1, sI_1);
+       cI3(xeR_2: nonce, kemR_2: nonce, sR_2: signature) :=
+       if check(concatR(I, R, prekeyId_1, xeI_1, xeR_2, kemR_2), pkR, sR_2) then
+       event Iaccept(I, R, prekeyId_1, xeI_1, xeR_2, kemR_2)
+     ) | (
+       foreach i_1 <= Npre do
+       cPre0() :=
+       prekeyId_2 <-R nonce;
+       return(prekeyId_2);
+       cR1(xeI_2: nonce, kemI_2: nonce, sI_2: signature) :=
+       if check(concatI(I, R, prekeyId_2, xeI_2, kemI_2), pkI, sI_2) then
+       xeR_3 <-R nonce;
+       kemR_3 <-R nonce;
+       event Rrun(I, R, prekeyId_2, xeI_2, xeR_3, kemR_3);
+       m_3: signed <- concatR(I, R, prekeyId_2, xeI_2, xeR_3, kemR_3);
+       r_3 <-R sign_seed;
+       sR_3: signature <- sign_r(m_3, skgen(rkR), r_3);
+       return(xeR_3, kemR_3, sR_3)
+     ))
+
+
+Applying remove assignments of binder pkR
+  - Remove assignments on pkR (definition removed, all usages removed)
+yields
+
+Game 4 is
+     start() :=
+     rkI <-R keyseed;
+     skI: skey <- skgen(rkI);
+     pkI: pkey <- pkgen(rkI);
+     rkR <-R keyseed;
+     return(pkI, pkgen(rkR), skI);
+     ((
+       foreach i <= NI do
+       cI0(prekeyId_1: nonce) :=
+       xeI_1 <-R nonce;
+       kemI_1 <-R nonce;
+       m_2: signed <- concatI(I, R, prekeyId_1, xeI_1, kemI_1);
+       r_2 <-R sign_seed;
+       sI_1: signature <- sign_r(m_2, skI, r_2);
+       return(xeI_1, kemI_1, sI_1);
+       cI3(xeR_2: nonce, kemR_2: nonce, sR_2: signature) :=
+       if check(concatR(I, R, prekeyId_1, xeI_1, xeR_2, kemR_2), pkgen(rkR), sR_2) then
+       event Iaccept(I, R, prekeyId_1, xeI_1, xeR_2, kemR_2)
+     ) | (
+       foreach i_1 <= Npre do
+       cPre0() :=
+       prekeyId_2 <-R nonce;
+       return(prekeyId_2);
+       cR1(xeI_2: nonce, kemI_2: nonce, sI_2: signature) :=
+       if check(concatI(I, R, prekeyId_2, xeI_2, kemI_2), pkI, sI_2) then
+       xeR_3 <-R nonce;
+       kemR_3 <-R nonce;
+       event Rrun(I, R, prekeyId_2, xeI_2, xeR_3, kemR_3);
+       m_3: signed <- concatR(I, R, prekeyId_2, xeI_2, xeR_3, kemR_3);
+       r_3 <-R sign_seed;
+       sR_3: signature <- sign_r(m_3, skgen(rkR), r_3);
+       return(xeR_3, kemR_3, sR_3)
+     ))
+
+
+Applying equivalence uf_cma(sign) with rkR [probability Psign(time_1, Npre)]
+  - Equivalence uf_cma(sign) with variables: r_3 -> r2, rkR -> r_1
+yields
+
+Game 5 is
+     start() :=
+     rkI <-R keyseed;
+     skI: skey <- skgen(rkI);
+     pkI: pkey <- pkgen(rkI);
+     rkR <-R keyseed;
+     return(pkI, pkgen2(rkR), skI);
+     ((
+       foreach i <= NI do
+       cI0(prekeyId_1: nonce) :=
+       xeI_1 <-R nonce;
+       kemI_1 <-R nonce;
+       m_2: signed <- concatI(I, R, prekeyId_1, xeI_1, kemI_1);
+       r_2 <-R sign_seed;
+       sI_1: signature <- sign_r(m_2, skI, r_2);
+       return(xeI_1, kemI_1, sI_1);
+       cI3(xeR_2: nonce, kemR_2: nonce, sR_2: signature) :=
+       if (m1: signed <- concatR(I, R, prekeyId_1, xeI_1, xeR_2, kemR_2); si1: signature <- sR_2; find u_1 = ri_1 <= Npre suchthat defined(x[ri_1]) && (m1 = x[ri_1]) && check2(m1, pkgen2(rkR), si1) then true else false) then
+       event Iaccept(I, R, prekeyId_1, xeI_1, xeR_2, kemR_2)
+     ) | (
+       foreach i_1 <= Npre do
+       cPre0() :=
+       prekeyId_2 <-R nonce;
+       return(prekeyId_2);
+       cR1(xeI_2: nonce, kemI_2: nonce, sI_2: signature) :=
+       if (m_4: signed <- concatI(I, R, prekeyId_2, xeI_2, kemI_2); y: pkey <- pkI; si: signature <- sI_2; {120}find u = ri <= Npre suchthat defined(x[ri]) && {122}((y = pkgen2(rkR)) && (m_4 = x[ri]) && check2(m_4, y, si)) then true else {142}if {143}(y = pkgen2(rkR)) then false else check(m_4, y, si)) then
+       xeR_3 <-R nonce;
+       kemR_3 <-R nonce;
+       event Rrun(I, R, prekeyId_2, xeI_2, xeR_3, kemR_3);
+       m_3: signed <- concatR(I, R, prekeyId_2, xeI_2, xeR_3, kemR_3);
+       r_3 <-R sign_seed;
+       sR_3: signature <- (x: signed <- m_3; sign_r2(x, skgen2(rkR), r_3));
+       return(xeR_3, kemR_3, sR_3)
+     ))
+
+
+Applying simplify (non-expanded game) [probability Psigncoll]
+  - Simplification pass
+    - Replaced ((y = pkgen2(rkR)) && (m_4 = x[ri]) && check2(m_4, y, si)) with false at 122
+    - Remove branch 1 in find at 120
+    - Find at 120 removed (else branch kept if any)
+    - Replaced (y = pkgen2(rkR)) with false at 143
+    - Remove branch 1 in find at 142
+    - Find at 142 removed (else branch kept if any)
+yields
+
+Game 6 is
+     start() :=
+     rkI <-R keyseed;
+     skI: skey <- skgen(rkI);
+     pkI: pkey <- pkgen(rkI);
+     rkR <-R keyseed;
+     return(pkI, pkgen2(rkR), skI);
+     ((
+       foreach i <= NI do
+       cI0(prekeyId_1: nonce) :=
+       xeI_1 <-R nonce;
+       kemI_1 <-R nonce;
+       m_2: signed <- concatI(I, R, prekeyId_1, xeI_1, kemI_1);
+       r_2 <-R sign_seed;
+       sI_1: signature <- sign_r(m_2, skI, r_2);
+       return(xeI_1, kemI_1, sI_1);
+       cI3(xeR_2: nonce, kemR_2: nonce, sR_2: signature) :=
+ {46}  if (m1: signed <- concatR(I, R, prekeyId_1, xeI_1, xeR_2, kemR_2); si1: signature <- sR_2; find u_1 = ri_1 <= Npre suchthat defined(x[ri_1]) && (m1 = x[ri_1]) && check2(m1, pkgen2(rkR), si1) then true else false) then
+       event Iaccept(I, R, prekeyId_1, xeI_1, xeR_2, kemR_2)
+     ) | (
+       foreach i_1 <= Npre do
+       cPre0() :=
+       prekeyId_2 <-R nonce;
+       return(prekeyId_2);
+       cR1(xeI_2: nonce, kemI_2: nonce, sI_2: signature) :=
+       if (m_4: signed <- concatI(I, R, prekeyId_2, xeI_2, kemI_2); y: pkey <- pkI; si: signature <- sI_2; check(m_4, y, si)) then
+       xeR_3 <-R nonce;
+       kemR_3 <-R nonce;
+       event Rrun(I, R, prekeyId_2, xeI_2, xeR_3, kemR_3);
+       m_3: signed <- concatR(I, R, prekeyId_2, xeI_2, xeR_3, kemR_3);
+       r_3 <-R sign_seed;
+       sR_3: signature <- (x: signed <- m_3; sign_r2(x, skgen2(rkR), r_3));
+       return(xeR_3, kemR_3, sR_3)
+     ))
+
+
+Applying expand
+  - Expand if/find/let
+    - Test at 46 always false
+    - Test at 46 always true
+yields
+
+Game 7 is
+     start() :=
+     rkI <-R keyseed;
+     skI: skey <- skgen(rkI);
+     pkI: pkey <- pkgen(rkI);
+     rkR <-R keyseed;
+     return(pkI, pkgen2(rkR), skI);
+     ((
+       foreach i <= NI do
+       cI0(prekeyId_1: nonce) :=
+       xeI_1 <-R nonce;
+       kemI_1 <-R nonce;
+       m_2: signed <- concatI(I, R, prekeyId_1, xeI_1, kemI_1);
+       r_2 <-R sign_seed;
+       sI_1: signature <- sign_r(m_2, skI, r_2);
+       return(xeI_1, kemI_1, sI_1);
+       cI3(xeR_2: nonce, kemR_2: nonce, sR_2: signature) :=
+       m1: signed <- concatR(I, R, prekeyId_1, xeI_1, xeR_2, kemR_2);
+       si1: signature <- sR_2;
+       find u_1 = ri_1 <= Npre suchthat defined(x[ri_1]) && (m1 = x[ri_1]) && check2(m1, pkgen2(rkR), si1) then
+       event Iaccept(I, R, prekeyId_1, xeI_1, xeR_2, kemR_2)
+     ) | (
+       foreach i_1 <= Npre do
+       cPre0() :=
+       prekeyId_2 <-R nonce;
+       return(prekeyId_2);
+       cR1(xeI_2: nonce, kemI_2: nonce, sI_2: signature) :=
+       m_4: signed <- concatI(I, R, prekeyId_2, xeI_2, kemI_2);
+       y: pkey <- pkI;
+       si: signature <- sI_2;
+       if check(m_4, y, si) then
+       xeR_3 <-R nonce;
+       kemR_3 <-R nonce;
+       event Rrun(I, R, prekeyId_2, xeI_2, xeR_3, kemR_3);
+       m_3: signed <- concatR(I, R, prekeyId_2, xeI_2, xeR_3, kemR_3);
+       r_3 <-R sign_seed;
+       x: signed <- m_3;
+       sR_3: signature <- sign_r2(x, skgen2(rkR), r_3);
+       return(xeR_3, kemR_3, sR_3)
+     ))
+
+
+Applying remove assignments of findcond
+  - Remove assignments on y (definition removed, all usages removed)
+  - Remove assignments on si (definition removed, all usages removed)
+  - Remove assignments on x (definition removed, all usages removed)
+  - Remove assignments on si1 (definition removed, all usages removed)
+yields
+
+Game 8 is
+     start() :=
+     rkI <-R keyseed;
+     skI: skey <- skgen(rkI);
+     pkI: pkey <- pkgen(rkI);
+     rkR <-R keyseed;
+     return(pkI, pkgen2(rkR), skI);
+     ((
+       foreach i <= NI do
+       cI0(prekeyId_1: nonce) :=
+       xeI_1 <-R nonce;
+       kemI_1 <-R nonce;
+       m_2: signed <- concatI(I, R, prekeyId_1, xeI_1, kemI_1);
+       r_2 <-R sign_seed;
+       sI_1: signature <- sign_r(m_2, skI, r_2);
+       return(xeI_1, kemI_1, sI_1);
+       cI3(xeR_2: nonce, kemR_2: nonce, sR_2: signature) :=
+       m1: signed <- concatR(I, R, prekeyId_1, xeI_1, xeR_2, kemR_2);
+ {58}  find u_1 = ri_1 <= Npre suchthat defined(m_3[ri_1], r_3[ri_1]) && {61}((m1 = m_3[ri_1]) && check2(m1, pkgen2(rkR), sR_2)) then
+       event Iaccept(I, R, prekeyId_1, xeI_1, xeR_2, kemR_2)
+     ) | (
+       foreach i_1 <= Npre do
+       cPre0() :=
+       prekeyId_2 <-R nonce;
+       return(prekeyId_2);
+       cR1(xeI_2: nonce, kemI_2: nonce, sI_2: signature) :=
+       m_4: signed <- concatI(I, R, prekeyId_2, xeI_2, kemI_2);
+       if check(m_4, pkI, sI_2) then
+       xeR_3 <-R nonce;
+       kemR_3 <-R nonce;
+       event Rrun(I, R, prekeyId_2, xeI_2, xeR_3, kemR_3);
+       m_3: signed <- concatR(I, R, prekeyId_2, xeI_2, xeR_3, kemR_3);
+       r_3 <-R sign_seed;
+       sR_3: signature <- sign_r2(m_3, skgen2(rkR), r_3);
+       return(xeR_3, kemR_3, sR_3)
+     ))
+
+
+Applying simplify
+  - Simplification pass
+    - Replaced ((m1 = m_3[ri_1]) && check2(m1, pkgen2(rkR), sR_2)) with ((prekeyId_1 = prekeyId_2[ri_1]) && (xeI_1 = xeI_2[ri_1]) && (xeR_2 = xeR_3[ri_1]) && (kemR_2 = kemR_3[ri_1]) && check2(m1, pkgen2(rkR), sR_2)) at 61
+    - Replaced defined condition m_3[ri_1], r_3[ri_1] with kemR_3[ri_1], xeR_3[ri_1], xeI_2[ri_1], prekeyId_2[ri_1] in find at 58
+yields
+
+Game 9 is
+     start() :=
+     rkI <-R keyseed;
+     skI: skey <- skgen(rkI);
+     pkI: pkey <- pkgen(rkI);
+     rkR <-R keyseed;
+     return(pkI, pkgen2(rkR), skI);
+     ((
+       foreach i <= NI do
+       cI0(prekeyId_1: nonce) :=
+       xeI_1 <-R nonce;
+       kemI_1 <-R nonce;
+       m_2: signed <- concatI(I, R, prekeyId_1, xeI_1, kemI_1);
+       r_2 <-R sign_seed;
+       sI_1: signature <- sign_r(m_2, skI, r_2);
+       return(xeI_1, kemI_1, sI_1);
+       cI3(xeR_2: nonce, kemR_2: nonce, sR_2: signature) :=
+       m1: signed <- concatR(I, R, prekeyId_1, xeI_1, xeR_2, kemR_2);
+       find u_1 = ri_1 <= Npre suchthat defined(kemR_3[ri_1], xeR_3[ri_1], xeI_2[ri_1], prekeyId_2[ri_1]) && (prekeyId_1 = prekeyId_2[ri_1]) && (xeI_1 = xeI_2[ri_1]) && (xeR_2 = xeR_3[ri_1]) && (kemR_2 = kemR_3[ri_1]) && check2(m1, pkgen2(rkR), sR_2) then
+       event Iaccept(I, R, prekeyId_1, xeI_1, xeR_2, kemR_2)
+     ) | (
+       foreach i_1 <= Npre do
+       cPre0() :=
+       prekeyId_2 <-R nonce;
+       return(prekeyId_2);
+       cR1(xeI_2: nonce, kemI_2: nonce, sI_2: signature) :=
+       m_4: signed <- concatI(I, R, prekeyId_2, xeI_2, kemI_2);
+       if check(m_4, pkI, sI_2) then
+       xeR_3 <-R nonce;
+       kemR_3 <-R nonce;
+       event Rrun(I, R, prekeyId_2, xeI_2, xeR_3, kemR_3);
+       m_3: signed <- concatR(I, R, prekeyId_2, xeI_2, xeR_3, kemR_3);
+       r_3 <-R sign_seed;
+       sR_3: signature <- sign_r2(m_3, skgen2(rkR), r_3);
+       return(xeR_3, kemR_3, sR_3)
+     ))
+
+
+Proved forall kr, xr, xi, p: nonce, b, a: host; inj-event(Iaccept(a, b, p, xi, xr, kr)) ==> inj-event(Rrun(a, b, p, xi, xr, kr)) in game 9 up to probability 0.5 * NI^2 / |nonce|
+Adv[Game 1: forall kr, xr, xi, p: nonce, b, a: host; inj-event(Iaccept(a, b, p, xi, xr, kr)) ==> inj-event(Rrun(a, b, p, xi, xr, kr))] <= Psigncoll + Psign(time_1, Npre) + Adv[Game 9: forall kr, xr, xi, p: nonce, b, a: host; inj-event(Iaccept(a, b, p, xi, xr, kr)) ==> inj-event(Rrun(a, b, p, xi, xr, kr))]
+Adv[Game 9: forall kr, xr, xi, p: nonce, b, a: host; inj-event(Iaccept(a, b, p, xi, xr, kr)) ==> inj-event(Rrun(a, b, p, xi, xr, kr))] <= 0.5 * NI^2 / |nonce|
+RESULT Proved forall kr, xr, xi, p: nonce, b, a: host; inj-event(Iaccept(a, b, p, xi, xr, kr)) ==> inj-event(Rrun(a, b, p, xi, xr, kr)) up to probability Psigncoll + Psign(time_1, Npre) + 0.5 * NI^2 / |nonce|
+RESULT time_1 = time(skgen) + time(pkgen) + (NI + Npre) * time(concatI) + NI * time(sign_r) + (NI + Npre) * time(concatR) + NI * time(([1,NI])) + Npre * time(([1,Npre])) + time + (NI + Npre - 1) * time(check)
+All queries proved.
