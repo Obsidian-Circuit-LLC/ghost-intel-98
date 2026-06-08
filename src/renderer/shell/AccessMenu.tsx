@@ -9,6 +9,7 @@ import { moduleTitles } from './Desktop';
 import { glyphFor } from './Icon';
 import { playClick } from '../audio/synth';
 import { confirmDialog } from '../state/dialogs';
+import { CLOCK_ENABLED_KEY } from './ClockWidget';
 import logoUrl from '../assets/logo.png';
 
 interface AccessMenuProps {
@@ -28,6 +29,8 @@ export function AccessMenu({ onClose }: AccessMenuProps): JSX.Element {
   const settings = useSettings((s) => s.settings);
   const open = useWindows((s) => s.open);
   const [gamesOpen, setGamesOpen] = useState(false);
+  let clockOn = false;
+  try { clockOn = localStorage.getItem(CLOCK_ENABLED_KEY) === '1'; } catch { /* storage off */ }
 
   // Drop the footer 'Settings' launcher's duplicate, and any game shortcuts (games live in the Games
   // submenu now). Done at render time so existing installs are fixed too, not just fresh ones.
@@ -115,6 +118,22 @@ export function AccessMenu({ onClose }: AccessMenuProps): JSX.Element {
               ))}
             </div>
           )}
+        </div>
+        <div className="ga98-access-separator" />
+        <div
+          className="ga98-access-entry"
+          role="menuitem"
+          tabIndex={0}
+          onClick={() => {
+            if (settings?.soundEnabled) playClick();
+            window.dispatchEvent(new Event('ga98:toggle-clock'));
+            onClose();
+          }}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { window.dispatchEvent(new Event('ga98:toggle-clock')); onClose(); } }}
+        >
+          <span className="ga98-access-entry-glyph" aria-hidden="true">🕐</span>
+          <span style={{ flex: 1 }}>Desktop Clock</span>
+          {clockOn && <span aria-hidden="true" style={{ opacity: 0.8 }}>✓</span>}
         </div>
         <div className="ga98-access-separator" />
         <div

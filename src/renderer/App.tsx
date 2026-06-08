@@ -15,6 +15,7 @@ import { Shortcuts } from './shell/Shortcuts';
 import { Welcome } from './shell/Welcome';
 import { LockScreen } from './shell/LockScreen';
 import { StickyNotes } from './shell/StickyNotes';
+import { ClockWidget } from './shell/ClockWidget';
 import { playBoot, playLegacyStartup, playReminder, playMouseClick } from './audio/synth';
 import { toast } from './state/toasts';
 import defaultWallpaper from './assets/wallpaper.jpg';
@@ -136,6 +137,7 @@ export function App(): JSX.Element {
               </Window>
             ))}
           <StickyNotes />
+          <ClockWidget />
           <Taskbar />
           <Welcome />
         </>
