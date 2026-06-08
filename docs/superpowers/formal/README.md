@@ -1,10 +1,29 @@
 # DCS98 chat handshake — formal verification plan
 
-**Status: DRAFT scaffolds, NOT YET RUN.** These artifacts were authored from construction v3
-(`../specs/2026-06-06-p2p-chat-handshake-construction-v3.md`) without a ProVerif/CryptoVerif install
-in the loop. They are a starting point for the operator (the formal-methods authority) to complete,
-run, and iterate. **Nothing here is a verification result.** `handshake.ts` must not be implemented
-until these (or equivalent) pass.
+**Status (2026-06-08): ProVerif model COMPLETED + RUN; CryptoVerif still TODO.** The symbolic model
+(`chat-handshake.pv`) was completed from construction v3 and run under **ProVerif 2.05** — full output in
+`proverif-output-2026-06-08.txt`. The computational (CryptoVerif) hybrid-IND proof has **not** been
+authored/run yet. The construction therefore stays **EXPERIMENTAL / not formally verified**: the symbolic
+layer is necessary but not sufficient, and an external audit + FIPS build remain separate external gates.
+
+### ProVerif results (2026-06-08, first_contact mode, perfect-primitive symbolic model)
+
+| Goal | Query | Result |
+|---|---|---|
+| G1b — I authenticates R | `inj-event(I_commit_R) ==> inj-event(R_running_I)` | **proved (injective)** |
+| G1a — R authenticates I | `inj-event(R_commit_I) ==> inj-event(I_running_R)` | **non-injective proved; injective not proved** |
+| G2′ — identity-payload secrecy | `not attacker(s_id)` | **proved** |
+| RK secrecy (perfect primitives) | `not attacker(s_rk)` | **proved** |
+
+The one gap is informative, not a tooling artifact: in a 1-RTT design R contributes no fresh nonce into
+`TH1` before Msg1, so R's **no-double-accept** cannot come from the signed transcript alone — it rests on
+**durable one-time-prekey consumption** (modelled here as a consumable private-channel cell; this is the
+formal counterpart of the C-2 / TOCTOU property patched in `prekey-store.ts`). `preciseActions` did not
+lift the injective proof, confirming the dependency is structural.
+
+These artifacts were authored from construction v3
+(`../specs/2026-06-06-p2p-chat-handshake-construction-v3.md`). `handshake.ts` is already implemented; the
+remaining computational proof is what would let the EXPERIMENTAL banner be reconsidered.
 
 This follows the PQXDH precedent (Bhargavan et al., USENIX Security 2024), which used **both**
 ProVerif (symbolic) and CryptoVerif (computational) — neither alone is sufficient.
@@ -52,7 +71,8 @@ TODO before it runs/proves anything:
 
 ## CryptoVerif plan (`chat-handshake.cv` — TODO to author)
 
-Goal: `RK` is indistinguishable from random under `IND-CCA(ML-KEM-768) ∨ GapDH(X25519)`.
+Goal: `RK` is indistinguishable from random under `IND-CCA(ML-KEM-1024) ∨ GapDH(X25519)` (the shipped
+parameter; the proof structure is parameter-independent — 1024 only changes the concrete bound).
 - Model `MixKey` as HKDF with the **fixed arg roles** (secret = IKM, CK = salt) — this is what makes
   the extract a dual-PRF so one good secret saturates the chain (crypto-audit H-1). Encode HKDF-Extract
   as a `ROM`/PRF and prove the chain pseudorandom if any mixed secret is unknown.
