@@ -25,9 +25,9 @@ non-injectively only — disclosed, structurally explained, and discharged compu
 | # | Sev | Finding | Status |
 |---|---|---|---|
 | CRIT-1 | **Critical** | Handshake→session handoff dropped the peer's first post-handshake message and desynced the ratchet: `acceptInbound`/`connect` `await`ed `contacts.update` before `attach()`, the transport doesn't buffer for late subscribers, and `HandshakeIO` stayed subscribed and swallowed the frame. | **FIXED** (commit 1e36a8b): attach synchronously before any await; `HandshakeIO.detach()` on success; reproducing regression test (red/green verified). |
-| HIGH-1 | High | Reconnect-prekey strand: a stream drop after the responder durably `consume()`s the one-time reconnect prekey but before the initiator persists the new rotation prekey permanently locks out reconnect (`unknown or consumed prekey`), recoverable only by a fresh out-of-band invite. | **DEFERRED — design decision.** Rec: keep the previous reconnect prekey valid one extra round, OR have the initiator fall back to a fresh invite flow on `prekey_unknown` instead of hard-failing. Don't durably consume until Msg2 send is confirmed. |
-| HIGH-2 | High→Med | Injective R-auth-I rests on durable single-use consumption, but the lookup→consume reservation is **in-memory only**; a crash in that window leaves the one-time prekey on disk with the reservation gone, so a replayed Msg1 can be served twice → reused `ss_pre` → PQ-FS degradation for those sessions. (Narrow crash window + requires a captured-Msg1 replay → effectively Medium.) | **DEFERRED — design decision.** Rec: make the reservation durable (WAL), OR fold an R-contributed fresh nonce into TH1 so injectivity comes from the transcript (wire change → bump SUITE_ID, re-run proofs). |
-| MED-1 | Medium | **Silent pin-before-verify.** `handshake.ts:280` `contacts.pin(peer)` on first contact unconditionally; the session is fully usable before any safety-number comparison. Every auth/KCI proof *assumes* `is_R` is pinned-as-verified; shipped UX makes verification optional. This is the place shipped behaviour is weaker than the proofs assume. | **OPEN — operator/UX decision.** Rec: surface `contact.verified` (the field exists) — mark unverified contacts loudly and/or gate first send until the safety number is compared; OR narrow the claim to "authenticated **given** out-of-band verification." Fixable without touching a proof. |
+| HIGH-1 | High | Reconnect-prekey strand: dial-on-demand reconnect (`engine.ts:131,155`) burns a one-time prekey; a drop after the responder durably `consume()`s it but before the initiator persists the new rotation prekey permanently locks out reconnect (`unknown or consumed prekey`), recoverable only by a fresh invite. **Reachable in normal use.** | **OPEN — needs protocol work (do NOT rush).** Confirmed real + reachable. The clean fix is the **spec-anticipated `prekey_unknown` recovery flow** (Med-7 in the construction spec): R sends a typed rejection + current prekey, I retries — a new wire message. NOTE: the initiator currently only sees a generic "stream closed" (R's reason isn't conveyed), so no safe initiator-side minimal patch exists. A "make the reconnect prekey reusable" hack would reopen the replay/double-accept window → rejected. **Scope with MED-2 as a reconnect-hardening workstream (recovery flow + DoS pre-gate + formal model), then re-verify.** |
+| HIGH-2 | ~~High~~ → **Info** | *Claimed:* in-memory reservation lost on crash → replayed Msg1 served twice → `ss_pre` reuse. | **VERIFIED NOT EXPLOITABLE (audit over-stated).** `consume()` is a durable fsync delete at `handshake.ts:287` that runs BEFORE Msg2 (`:305`) and session establishment (`:309`). Case analysis: crash *before* consume ⇒ prekey survives but **no session was established** (a later replay/retry is the first completed use — one session); crash *after* consume ⇒ prekey durably gone ⇒ replay rejected. There is **no window where a session completes yet the prekey survives**, so no double-session across crashes. The in-memory reservation only needs to cover concurrent same-process replay (it does). **No change.** |
+| MED-1 | Medium | **Silent pin-before-verify.** `handshake.ts:280` pins TOFU unconditionally; the auth proofs assume `is_R` is verified, but the shipped UX had no way to ever mark a contact verified. | **FIXED** (commit c243c4c): `chat.setVerified` + IPC + a prominent red UNVERIFIED banner with a confirm-gated "Mark as verified" (requires out-of-band safety-number comparison); shows "✔ verified" after. Shipped behaviour now matches the proofs' assumption. |
 | MED-2 | Medium | Reconnect mode is covered by **no** formal model (all .pv/.cv are first_contact) and has **no cheap pre-gate** (the `mac_T` gate is first_contact-only) → asymmetric-work / KEM-pipe-HOL DoS amplification on forged reconnect Msg1. | **DEFERRED.** Rec: add reconnect to `chat-handshake.pv` (pinned-static, mode=reconnect, re-assert downgrade + agreement); add a reconnect pre-gate (MAC under a key both sides share from the prior session). Until then, drop reconnect from "verified." |
 | MED-3 | Medium | `chat-handshake-unified.cv` derives hk1, hk2, RK from one chain key; the code derives **hk1 at the intermediate CK2** (es+ss_pre only) and hk2/RK at CK5. The model's collapse is a *sound over-approximation* for RK secrecy but misrepresents what protects c_idI. | **DOC** — annotate the model; the conclusion (RK secret through the AEAD layers) stands. |
 | LOW-1 | Low | `mac_T` token pre-gate modelled as a plain hash (`chat-handshake.pv`), not a keyed MAC → its DoS-resistance (C-1) is not formally covered. AEAD AAD=`H(T)` provides a second token check, so not exploitable. | DOC / optional MAC model. |
@@ -46,13 +46,26 @@ posture (no-provider/ hash-mismatch/ oversize/ timeout all fail closed; secrets 
 the hybrid structure (each leg hands the other primitive to the adversary). The dual-PRF MixKey arg
 roles (secret=IKM, CK=salt) are implemented correctly and match the models.
 
+## Disposition (2026-06-08, after follow-up verification + fixes)
+
+- **CRIT-1 — FIXED** (1e36a8b) with a red/green regression test.
+- **MED-1 — FIXED** (c243c4c): unverified contacts are now surfaced + verifiable.
+- **HIGH-2 — VERIFIED NOT EXPLOITABLE** and downgraded to Info: the durable-consume-before-completion
+  ordering means a surviving prekey implies no completed session, so there is no cross-crash
+  double-session. No change. (Lesson: a self-run audit's findings still need independent verification —
+  this one was over-stated; an external auditor's fresh eyes remain the un-self-clearable gate.)
+- **HIGH-1 — OPEN, real, reachable.** The correct fix is the spec's `prekey_unknown` recovery flow; it is
+  protocol work and must be scoped + re-verified with reconnect mode (MED-2), not hot-patched.
+- **MED-2/3, LOW-1..4, INFO — documentation / scoped protocol+model work** (see table).
+
 ## Bottom line
 
 The cryptographic composition is sound; the one Critical was **plumbing around** the crypto (the
-handshake→session frame handoff), now fixed with a regression guard. The remaining findings are
-**availability** (HIGH-1), a **narrow crash-window FS degradation** (HIGH-2), a **deployment-vs-proof
-gap in verification UX** (MED-1), and **model-fidelity/coverage** items (MED-2/3, LOW-*) — none is a
-confirmed cryptographic break of the shipped first_contact path. Honest verified scope:
+handshake→session frame handoff), now fixed with a regression guard, and the verification-UX gap (MED-1)
+is closed. The one remaining substantive issue is **HIGH-1 reconnect availability**, whose correct fix is
+the spec-anticipated recovery flow — protocol work to be done with the reconnect formal model, not
+rushed. The earlier-claimed crash-window FS issue (HIGH-2) was **verified to be a non-issue**. None of the
+findings is a confirmed cryptographic break of the shipped first_contact path. Honest verified scope:
 **symbolic (first_contact) + computational (key-schedule, mutual auth, KCI, FS, unified KDF→AEAD, G2′);
 reconnect mode, the keyed-MAC DoS gate, and the storage-level injectivity invariant remain unverified.**
 The EXPERIMENTAL banner's *external* gates (independent audit, FIPS module) are unmet by definition; the
