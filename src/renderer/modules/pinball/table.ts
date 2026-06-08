@@ -11,12 +11,14 @@ export const H = 760;
 export const BALL_R = 8;
 export const BOTTOM_DRAIN = H + 16;
 
-export const LEFT_PIVOT: V = { x: 150, y: 676 };
-export const RIGHT_PIVOT: V = { x: 236, y: 676 };
-export const FLIP_LEN = 62;
-// Rest angles point the flippers slightly up-and-inward; active angles swing them up.
-export const REST_ANG_L = 0.42, UP_ANG_L = -0.46;
-export const REST_ANG_R = Math.PI - 0.42, UP_ANG_R = Math.PI + 0.46;
+// Flippers centred on the table (x=210) with a ~1.5-ball drain gap between the tips at rest, and
+// meeting near the top of the swing. (Earlier values overlapped the flippers — no drain gap.)
+export const LEFT_PIVOT: V = { x: 158, y: 690 };
+export const RIGHT_PIVOT: V = { x: 262, y: 690 };
+export const FLIP_LEN = 56;
+// Rest angles point the flippers down-and-inward leaving a centre drain; active angles swing them up.
+export const REST_ANG_L = 0.78, UP_ANG_L = -0.18;
+export const REST_ANG_R = Math.PI - 0.78, UP_ANG_R = Math.PI + 0.18;
 
 // Launch lane (far right), where the plunger fires the ball up and over into the playfield.
 export const LANE_X = 386;
@@ -25,12 +27,12 @@ export const LANE_BALL_Y = 690;
 /** Static walls (zero-width segments). */
 export const WALLS: Seg[] = [
   { a: { x: 14, y: 130 }, b: { x: 14, y: 540 } },     // left wall
-  { a: { x: 14, y: 540 }, b: { x: 120, y: 706 } },    // lower-left funnel → left flipper
+  { a: { x: 14, y: 540 }, b: { x: 140, y: 700 } },    // lower-left funnel → left flipper
   { a: { x: 14, y: 130 }, b: { x: 80, y: 56 } },      // top-left arch
   { a: { x: 80, y: 56 }, b: { x: 300, y: 48 } },      // top
   { a: { x: 300, y: 48 }, b: { x: 372, y: 120 } },    // top-right arch
   { a: { x: 372, y: 150 }, b: { x: 372, y: 700 } },   // launch-lane divider
-  { a: { x: 372, y: 540 }, b: { x: 264, y: 706 } },   // lower-right funnel → right flipper
+  { a: { x: 372, y: 540 }, b: { x: 280, y: 700 } },   // lower-right funnel → right flipper
   { a: { x: 402, y: 80 }, b: { x: 402, y: 710 } },    // launch-lane outer wall
   { a: { x: 402, y: 80 }, b: { x: 360, y: 58 } },     // lane top cap
   { a: { x: 360, y: 58 }, b: { x: 312, y: 96 } }      // one-way deflector: launched ball curls left into play
