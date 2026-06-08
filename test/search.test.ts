@@ -28,4 +28,9 @@ describe('searchRecord (pure field matcher)', () => {
   it('returns nothing for a non-match', () => {
     expect(searchRecord(rec, 'zzzznotpresent')).toHaveLength(0);
   });
+  it("tags every record-field hit with kind 'case' for deep-link navigation", () => {
+    const hits = searchRecord(rec, 'acme');
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits.every((h) => h.kind === 'case')).toBe(true);
+  });
 });

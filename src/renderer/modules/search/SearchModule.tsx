@@ -4,7 +4,7 @@
  * export the result set to a text file.
  */
 import { useState } from 'react';
-import type { SearchResult } from '@shared/types';
+import type { SearchHit, SearchResult } from '@shared/types';
 import { useWindows } from '../../state/store';
 import { toast } from '../../state/toasts';
 
@@ -30,6 +30,18 @@ export function SearchModule(): JSX.Element {
       const saved = await window.api.export.text(`search-${q.trim().slice(0, 30)}.txt`, `Search: ${q}\n\n${text}`);
       if (saved) toast.success(`Saved ${saved}.`);
     } catch (err) { toast.error(`Export failed: ${(err as Error).message}`); }
+  }
+
+  /** Deep-link a result hit to the exact case / note / file it came from. */
+  function navigateToHit(r: SearchResult, h: SearchHit): void {
+    const open = useWindows.getState().open;
+    if (h.kind === 'note' && h.noteName) {
+      open({ module: 'notepad', title: `Notepad 98 — ${h.noteName}`, props: { caseId: r.caseId, initialNoteName: h.noteName } });
+    } else if (h.kind === 'file' && h.fileName) {
+      open({ module: 'doc-viewer', title: h.originalName ?? h.fileName, props: { caseId: r.caseId, fileName: h.fileName, originalName: h.originalName ?? h.fileName }, width: 900, height: 680 });
+    } else {
+      open({ module: 'cases', title: `My Cases — ${r.caseTitle}`, props: { caseId: r.caseId } });
+    }
   }
 
   const total = results?.reduce((n, r) => n + r.hits.length, 0) ?? 0;
@@ -59,7 +71,14 @@ export function SearchModule(): JSX.Element {
             </div>
             <ul style={{ margin: 0, padding: '4px 6px', listStyle: 'none', fontSize: 12 }}>
               {r.hits.map((h, i) => (
-                <li key={i} style={{ padding: '1px 0' }}>
+                <li
+                  key={i}
+                  style={{ padding: '2px 4px', cursor: 'pointer', borderRadius: 2 }}
+                  onClick={() => navigateToHit(r, h)}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = '#cfe2ff'; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+                  title={h.kind === 'note' ? 'Open this note' : h.kind === 'file' ? 'Open this file' : 'Open this case'}
+                >
                   <span style={{ fontSize: 10, opacity: 0.6 }}>[{h.field}]</span> {h.snippet}
                 </li>
               ))}
