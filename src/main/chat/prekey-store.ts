@@ -8,7 +8,8 @@
  */
 import { secureReadText, secureWriteFile } from '../storage/secure-fs';
 import {
-  generateKemPrekey, encodeKemPrekey, decodeKemPrekey, type IdentityKeyPair, type KemPrekey
+  generateKemPrekey, encodeKemPrekey, decodeKemPrekey, type IdentityKeyPair, type KemPrekey,
+  type KemPrekeyKeyPair
 } from './identity';
 import { randomBytes } from './crypto';
 
@@ -171,6 +172,23 @@ export class PrekeyStore {
     return this.serialize(async () => {
       const f = await this.read();
       return f.issued[hex(prekeyId)] ?? null;
+    });
+  }
+
+  /**
+   * Mint a fresh one-time prekey for a reconnect offer WITHOUT consuming anything from the pool.
+   * The returned prekey is pushed to oneTime and recorded in the issued index under `cid`.
+   * It will be consumed normally if a subsequent retry handshake completes.
+   */
+  offerCurrent(cid: string): Promise<KemPrekeyKeyPair> {
+    return this.serialize(async () => {
+      const f = await this.read();
+      const s = await this.mint(null);
+      f.oneTime.push(s);
+      f.issued[s.pid] = cid;
+      f.issued = trimIssued(f.issued);
+      await this.write(f);
+      return { prekey: decodeKemPrekey(unb64(s.enc)), secretKey: unb64(s.sk) };
     });
   }
 

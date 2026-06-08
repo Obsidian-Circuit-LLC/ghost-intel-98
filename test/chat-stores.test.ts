@@ -87,6 +87,16 @@ describe('PrekeyStore', () => {
     expect(await store.identifyContact(pk.prekeyId)).toBe('contact-abc');
   });
 
+  it('offerCurrent returns a fresh one-time prekey without consuming anything', async () => {
+    const id = generateIdentity();
+    const store = new PrekeyStore(await tmp('prekeys.json'), id);
+    await store.ensurePool(1);
+    const before = await store.remaining();
+    const offered = await store.offerCurrent('cid-x');
+    expect(verifyKemPrekey(offered.prekey, id.publicKeys.ed25519)).toBe(true);
+    expect(await store.remaining()).toBe(before + 1); // offered prekey added, none consumed
+    expect(await store.identifyContact(offered.prekey.prekeyId)).toBe('cid-x');
+  });
 });
 
 describe('ContactStore', () => {
