@@ -27,15 +27,19 @@ export const LANE_BALL_Y = 690;
 /** Static walls (zero-width segments). */
 export const WALLS: Seg[] = [
   { a: { x: 14, y: 130 }, b: { x: 14, y: 540 } },     // left wall
-  { a: { x: 14, y: 540 }, b: { x: 140, y: 700 } },    // lower-left funnel → left flipper
+  { a: { x: 14, y: 540 }, b: { x: 112, y: 706 } },    // lower-left funnel (widened for the outlane)
   { a: { x: 14, y: 130 }, b: { x: 80, y: 56 } },      // top-left arch
   { a: { x: 80, y: 56 }, b: { x: 300, y: 48 } },      // top
   { a: { x: 300, y: 48 }, b: { x: 372, y: 120 } },    // top-right arch
   { a: { x: 372, y: 150 }, b: { x: 372, y: 700 } },   // launch-lane divider
-  { a: { x: 372, y: 540 }, b: { x: 280, y: 700 } },   // lower-right funnel → right flipper
+  { a: { x: 372, y: 540 }, b: { x: 308, y: 706 } },   // lower-right funnel (widened for the outlane)
   { a: { x: 402, y: 80 }, b: { x: 402, y: 710 } },    // launch-lane outer wall
   { a: { x: 402, y: 80 }, b: { x: 360, y: 58 } },     // lane top cap
-  { a: { x: 360, y: 58 }, b: { x: 312, y: 96 } }      // one-way deflector: launched ball curls left into play
+  { a: { x: 360, y: 58 }, b: { x: 312, y: 96 } },     // one-way deflector: launched ball curls left into play
+  // Inlane/outlane guide rails: split each side into a ball-feeding inlane (onto the flipper) and a
+  // narrow outlane (drains past the flipper) — so the ball can't freely drain down the open sides.
+  { a: { x: 118, y: 640 }, b: { x: 140, y: 702 } },   // left guide rail
+  { a: { x: 302, y: 640 }, b: { x: 280, y: 702 } }    // right guide rail
 ];
 
 export interface Bumper { p: V; r: number; score: number; kick: number }
@@ -47,8 +51,8 @@ export const BUMPERS: Bumper[] = [
 
 export interface Sling { a: V; b: V; kick: number; score: number }
 export const SLINGS: Sling[] = [
-  { a: { x: 96, y: 612 }, b: { x: 150, y: 650 }, kick: 6.2, score: 50 },   // left slingshot
-  { a: { x: 290, y: 612 }, b: { x: 236, y: 650 }, kick: 6.2, score: 50 }   // right slingshot
+  { a: { x: 124, y: 628 }, b: { x: 178, y: 666 }, kick: 6.2, score: 50 },  // left slingshot (hugs the left flipper)
+  { a: { x: 296, y: 628 }, b: { x: 242, y: 666 }, kick: 6.2, score: 50 }   // right slingshot (hugs the right flipper)
 ];
 
 export interface DropTarget { seg: Seg; score: number }
