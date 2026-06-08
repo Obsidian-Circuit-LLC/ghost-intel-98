@@ -70,8 +70,9 @@ oracle) with all X25519 incl. `ee` revealed. FS holds if EITHER ephemeral primit
 5. **AEAD layer abstracted in the auth model** — Sig_I/Sig_R are modelled in clear; the c_idI/c_confR
    AEAD provides identity-confidentiality (G2′, symbolic-only so far) + key-confirmation, not auth. A
    single end-to-end model unifying auth + the AEAD/secrecy layer is the remaining consolidation.
-Item 5, plus the **fuzzing harness** (§3 parsers) and the **noble constant-time audit**, then an
-external audit + the FIPS module build, remain before the banner can change.
+Item 5, plus the **noble constant-time audit** (§3 residual), then an external audit + the FIPS module
+build, remain before the banner can change. (The fuzzing harness — §3 — is **done**:
+`test/chat-fuzz.test.ts`.)
 
 ## 3. Implementation audit (tools are blind to this)
 
@@ -90,10 +91,14 @@ for the symmetric/compare paths.
   un-wipeable copies of key material (GC'd buffers, immutable strings). Inherent JS limitation; the
   reason noble (Uint8Array end-to-end) is used over Node's JWK path (`crypto.ts:53-55`).
 
-**Untrusted-input parsers (fuzz targets, look robust on read):** `FrameDecoder.push` (`wire.ts:86`,
-validates version + known-type + length-cap *before* buffering), `decodeKemPrekey` (`identity.ts:171`,
-length + flag checked), `Cursor.take` (`handshake.ts:133`, bounds-checked). A fuzzing harness over these
-is open Gate-1 work.
+**Untrusted-input parsers — FUZZED (`test/chat-fuzz.test.ts`, ~7.5k seeded inputs).** `FrameDecoder.push`
+(`wire.ts:86`), `decodeKemPrekey` (`identity.ts:171`), `decodeIdentityPublic` (`identity.ts:83`), and
+`parseInvite` (`invite.ts:94`): for any input each either returns a canonical result or throws **only its
+declared error type** — no unexpected exception, no OOM on a hostile declared length, split-invariant for
+the streaming decoder, strict-canonical round-trip. **No findings** — the parsers validate
+version/known-type/length-cap *before* buffering and reject non-canonical encodings. `Cursor.take`
+(`handshake.ts:133`) is bounds-checked and exercised via the handshake's truncation handling (internal;
+not separately exported).
 
 ## 4. Doc↔code drift found + fixed (2026-06-08)
 
