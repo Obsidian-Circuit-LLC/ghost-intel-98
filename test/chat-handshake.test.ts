@@ -184,6 +184,37 @@ describe('chat handshake (v3) — reconnect', () => {
   });
 });
 
+describe('chat handshake — reconnect gate key (RGK)', () => {
+  it('both sides derive a 32-byte reconnectGateKey that is byte-equal', async () => {
+    const initiatorId = generateIdentity();
+    const responderId = generateIdentity();
+    const invites = makeInviteStore(responderId);
+    const contacts = makePinStore();
+    const { prekey, token } = await invites.issueFirstContact();
+
+    const [sa, sb] = createPipe();
+    const [rRes, iRes] = await Promise.all([
+      responderHandshake(sb, { identity: responderId, invites, contacts }),
+      initiatorHandshake(sa, {
+        identity: initiatorId,
+        responderPublic: responderId.publicKeys,
+        prekey,
+        token,
+        mode: 'first_contact'
+      })
+    ]);
+
+    // Both results must carry a 32-byte reconnectGateKey
+    expect(iRes.reconnectGateKey).toBeDefined();
+    expect(rRes.reconnectGateKey).toBeDefined();
+    expect(iRes.reconnectGateKey!.length).toBe(32);
+    expect(rRes.reconnectGateKey!.length).toBe(32);
+
+    // The two sides must agree on the RGK (same rk + sid inputs)
+    expect(hex(iRes.reconnectGateKey!)).toBe(hex(rRes.reconnectGateKey!));
+  });
+});
+
 describe('chat handshake — guards', () => {
   it('initiator rejects a prekey not signed by the responder', async () => {
     const initiatorId = generateIdentity();
