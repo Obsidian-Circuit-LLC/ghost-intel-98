@@ -19,6 +19,16 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#ifdef _WIN32
+#include <io.h>
+#include <fcntl.h>
+#endif
+#ifndef STDIN_FILENO
+#define STDIN_FILENO 0
+#endif
+#ifndef STDOUT_FILENO
+#define STDOUT_FILENO 1
+#endif
 
 #define MLKEM_NID   NID_MLKEM1024
 #define PUB_LEN     1568
@@ -119,6 +129,12 @@ done:
 }
 
 int main(void) {
+#ifdef _WIN32
+  /* Windows opens stdin/stdout in TEXT mode by default, which would mangle the binary length-prefixed
+   * protocol (CRLF translation + Ctrl-Z as EOF). Force binary mode. */
+  _setmode(_fileno(stdin), _O_BINARY);
+  _setmode(_fileno(stdout), _O_BINARY);
+#endif
   uint8_t hdr[5];
   uint8_t payload[MAX_PAYLOAD];
   for (;;) {

@@ -29,7 +29,22 @@ if [ ! -f "$AWSLC/build/crypto/libcrypto.a" ]; then
 fi
 
 mkdir -p "$OUT"
-cc -O2 -I"$AWSLC/include" -o "$OUT/$BIN" "$HERE/mlkem-helper.c" "$AWSLC/build/crypto/libcrypto.a" -lpthread -ldl
+if [ "$PLATFORM" = "win-x64" ]; then
+  # Cross-compile from Linux with mingw-w64 (verified working; functional, NOT the FIPS module).
+  # Requires a mingw cross-build of AWS-LC (libcrypto.a), e.g.:
+  #   cmake -GNinja -B "$AWSLC/build-win" -S "$AWSLC" -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
+  #     -DBUILD_TESTING=OFF -DOPENSSL_NO_ASM=ON -DCMAKE_SYSTEM_NAME=Windows -DCMAKE_SYSTEM_PROCESSOR=AMD64 \
+  #     -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++ \
+  #     -DCMAKE_RC_COMPILER=x86_64-w64-mingw32-windres
+  #   ninja -C "$AWSLC/build-win" crypto
+  # -lpthread = mingw winpthreads (AWS-LC's cross build uses the pthread threading impl); -static makes
+  # the .exe standalone (no libgcc/winpthread DLLs). NOTE: Windows stdio MUST be binary (handled in
+  # mlkem-helper.c via _setmode) — without it the length-prefixed protocol corrupts.
+  x86_64-w64-mingw32-gcc -O2 -I"$AWSLC/include" -o "$OUT/$BIN" "$HERE/mlkem-helper.c" \
+    "$AWSLC/build-win/crypto/libcrypto.a" -lpthread -lws2_32 -lbcrypt -ladvapi32 -lcrypt32 -static -static-libgcc
+else
+  cc -O2 -I"$AWSLC/include" -o "$OUT/$BIN" "$HERE/mlkem-helper.c" "$AWSLC/build/crypto/libcrypto.a" -lpthread -ldl
+fi
 echo "built $OUT/$BIN"
 sha256sum "$OUT/$BIN" || shasum -a 256 "$OUT/$BIN"
 echo "→ pin this hash in scripts/fetch-mlkem.mjs (PINNED) and src/main/services/mlkem-sidecar.ts (PINNED_SHA256)"
