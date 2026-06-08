@@ -46,11 +46,13 @@ that never depend on a third-party staying up:
   pop bumpers, a drop-target bank, rollover lanes that rank you up (Cadet → Fleet Admiral), a ramp combo,
   a **wormhole lock → multiball**, fast tip-velocity flippers, a space theme, and synthesized SFX.
   *(Physics feel still wants an interactive tuning pass.)*
-- **Local AI memory (offline RAG).** Opt-in: the bundled assistant now recalls relevant notes, file text,
-  entities, and past conversations from your own corpus and cites them — a local vector index built with a
-  **bundled embedding model**, served over loopback, **encrypted at rest** in your vault, fully offline,
-  deterministic retrieval. Enable + rebuild the index under **Settings → Case Memory**. *(The Windows
-  installer bundles the embedding model; the installer is correspondingly larger.)*
+- **Local AI memory (offline RAG).** Opt-in: the assistant recalls relevant notes, file text, entities,
+  and past conversations from your own corpus and cites them — a local vector index, served over
+  **loopback only**, **encrypted at rest** in your vault, with **deterministic** retrieval and zero
+  telemetry/egress. Enable + rebuild the index under **Settings → Case Memory**. The embedding model
+  (`nomic-embed-text`, ~262 MB) ships **in the installer**; it goes live through the local-AI runtime
+  (the bundled runtime, or any Ollama you already run on `127.0.0.1:11434` with the model pulled). *(The
+  bundled model is why this installer is larger.)*
 
 454 automated tests. The chat handshake construction is **unchanged** and **remains EXPERIMENTAL / not
 formally verified** (see below). *Everything from v3.12.x carries forward.*
