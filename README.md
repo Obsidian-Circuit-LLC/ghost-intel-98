@@ -32,11 +32,30 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`DCS98-Setup-3.11.1-beta.1.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the **experimental** Tor P2P chat — see Status.)*
+> **Install:** download [`DCS98-Setup-3.12.0-beta.1.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the **experimental** Tor P2P chat — see Status.)*
 
 ## Status
 
-**v3.11.1-beta.1** — current release. Fixes invisible checkboxes:
+**v3.12.0-beta.1** — current release. A large one — post-quantum hardening, games, and case tooling:
+
+- **PQ hardening — ML-KEM-1024 via AWS-LC.** The chat handshake's ML-KEM leg moves from the
+  unaudited pure-JS ML-KEM-768 to **ML-KEM-1024** (CNSA 2.0 / FIPS-203 category 5), served by a native
+  **AWS-LC** sidecar behind a fail-closed seam in `crypto.ts` — addressing the implementation
+  side-channel + parameter-strength gaps that formal verification can't see. The handshake construction
+  is unchanged and still **EXPERIMENTAL / not formally verified**. *(The Windows installer bundles a
+  functional cross-built helper; the FIPS-validated module build is a CI follow-up — see release notes.)*
+- **Games.** **Minesweeper**, **Chess** (full legal-move engine — castling, en passant, promotion,
+  check/checkmate/stalemate), and a Win98-style **Pinball**, grouped under a new Access **"Games ▸"**
+  submenu (off the desktop).
+- **Case evidence migration.** Four buttons in the case detail — **Copy Evidence / Zip Files / Export to
+  Desktop / Import Case** — for moving cases + their evidence between app users.
+- **ExifTool metadata.** Rich attachment metadata in the ⓘ panel via an optional bundled ExifTool.
+- **RTFM Hacktivist Ethos** content ("The Ten Nodes of Hacktivism", by GhostExodus), **whiteboard tile
+  colours**, and a **chat first-run guide** (Don't-show-again).
+
+434 automated tests. *Everything from v3.11.x and earlier carries forward unchanged.*
+
+**v3.11.1-beta.1** — Fixes invisible checkboxes:
 
 - **Checkboxes are visible again.** 98.css draws a checkbox's box via an `input + label` sibling
   element and hides the real input; DCS98's checkboxes nest the input inside the label, so the box
@@ -199,14 +218,14 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/dcs98/releases) and run it.
 
-Direct link to the current release: [`DCS98-Setup-3.11.1-beta.1.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.11.1-beta.1/DCS98-Setup-3.11.1-beta.1.exe)
+Direct link to the current release: [`DCS98-Setup-3.12.0-beta.1.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.12.0-beta.1/DCS98-Setup-3.12.0-beta.1.exe)
 (experimental P2P chat + Piper TTS; the chat crypto is unverified — see Status). The last
 fully-stable build is [`DCS98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.6.8/DCS98-Setup-3.6.8.exe).
 
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\DCS98-Setup-3.11.1-beta.1.exe -Algorithm SHA256
+Get-FileHash .\DCS98-Setup-3.12.0-beta.1.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
@@ -244,8 +263,15 @@ To uninstall: Settings → Apps → Dead Cyber Society 98 → Uninstall.
 
 ## Releases & changelog
 
-The current build is **v3.11.1-beta.1**. Each release page carries its own notes + SHA-256.
+The current build is **v3.12.0-beta.1**. Each release page carries its own notes + SHA-256.
 
+- **v3.12.0-beta.1** — **PQ hardening + games + case tooling.** Chat's ML-KEM leg → **ML-KEM-1024 via an
+  AWS-LC native sidecar** (CNSA 2.0 / FIPS-203 cat 5), fail-closed behind `crypto.ts`; construction
+  unchanged + still EXPERIMENTAL (Windows bundles a functional cross-built helper; FIPS module = CI
+  follow-up). **Games:** Minesweeper, Chess (full legal-move engine), Win98 **Pinball**, under a new
+  Access **"Games ▸"** submenu (off the desktop). **Case migration:** Copy Evidence / Zip Files / Export
+  to Desktop / Import Case buttons. **ExifTool** attachment metadata (optional bundled binary). RTFM
+  **Ten Nodes of Hacktivism** content, **whiteboard tile colours**, **chat first-run guide**. **434 tests.**
 - **v3.11.1-beta.1** — **Fix: invisible checkboxes.** 98.css hides the native checkbox and redraws it
   via an `input + label` sibling element; DCS98 nests the input inside its label, so the box never drew
   and every checkbox (Settings incl. the new Legacy sound pack toggle, GeoINT, Mail TLS, case tasks, …)
@@ -391,7 +417,7 @@ This starts the Vite dev server (HMR) and the Electron main process.
 
 ```bash
 pnpm build        # type-check + bundle main / preload / renderer
-pnpm test         # vitest suite (429 tests as of v3.9.1-beta.1)
+pnpm test         # vitest suite (434 tests as of v3.12.0-beta.1)
 pnpm package      # platform installer for the current host
 pnpm package:win  # cross-build Windows NSIS installer
 ```
