@@ -1,6 +1,6 @@
 {
   "name": "dcs98",
-  "version": "3.12.0-beta.1",
+  "version": "3.12.1-beta.1",
   "private": true,
   "description": "Dead Cyber Society 98 (DCS98) — Windows 98–inspired OSINT/case-management desktop app. Electron + React + TypeScript.",
   "author": {

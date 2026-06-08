@@ -32,11 +32,28 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`DCS98-Setup-3.12.0-beta.1.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the **experimental** Tor P2P chat — see Status.)*
+> **Install:** download [`DCS98-Setup-3.12.1-beta.1.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the **experimental** Tor P2P chat — see Status.)*
 
 ## Status
 
-**v3.12.0-beta.1** — current release. A large one — post-quantum hardening, games, and case tooling:
+**v3.12.1-beta.1** — current release. Security patch from an adversarial (black-team) pass on the v3.12.0 chat crypto:
+
+- **Fixed (HIGH): one-time prekey double-consume.** Under the engine's concurrent inbound dispatch, a peer
+  replaying the handshake's first message on two streams could get the *same* one-time prekey served to two
+  sessions — a post-quantum-forward-secrecy / replay regression. Now reserved atomically on lookup and
+  released on abort (with a regression test).
+- **Hardening:** the ML-KEM sidecar rejects oversized frames and kills a wedged helper; the helper zeroizes
+  the decryption secret key + shared secrets; chat-enable is serialized (no orphaned processes on a
+  double-trigger); and the helper-binary SHA-256 verify-before-exec is now live.
+- **Honesty:** corrected code comments that called the ML-KEM helper "FIPS-validated" — the shipped Windows
+  helper is a functional **non-FIPS** build (the FIPS-validated module is a CI follow-up).
+
+The chat handshake **construction** held up under the black team (hybrid soundness at ML-KEM-1024, KEM-tamper
+caught by AEAD key-confirmation) but **remains EXPERIMENTAL / not formally verified** — a black team finds
+attacks, it cannot prove their absence; clearing that flag requires the ProVerif + CryptoVerif proofs and an
+external audit. 435 automated tests.
+
+**v3.12.0-beta.1** — a large one — post-quantum hardening, games, and case tooling:
 
 - **PQ hardening — ML-KEM-1024 via AWS-LC.** The chat handshake's ML-KEM leg moves from the
   unaudited pure-JS ML-KEM-768 to **ML-KEM-1024** (CNSA 2.0 / FIPS-203 category 5), served by a native
@@ -218,14 +235,14 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/dcs98/releases) and run it.
 
-Direct link to the current release: [`DCS98-Setup-3.12.0-beta.1.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.12.0-beta.1/DCS98-Setup-3.12.0-beta.1.exe)
+Direct link to the current release: [`DCS98-Setup-3.12.1-beta.1.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.12.1-beta.1/DCS98-Setup-3.12.1-beta.1.exe)
 (experimental P2P chat + Piper TTS; the chat crypto is unverified — see Status). The last
 fully-stable build is [`DCS98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.6.8/DCS98-Setup-3.6.8.exe).
 
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\DCS98-Setup-3.12.0-beta.1.exe -Algorithm SHA256
+Get-FileHash .\DCS98-Setup-3.12.1-beta.1.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
@@ -263,8 +280,14 @@ To uninstall: Settings → Apps → Dead Cyber Society 98 → Uninstall.
 
 ## Releases & changelog
 
-The current build is **v3.12.0-beta.1**. Each release page carries its own notes + SHA-256.
+The current build is **v3.12.1-beta.1**. Each release page carries its own notes + SHA-256.
 
+- **v3.12.1-beta.1** — **Security patch (black-team remediation).** Fixes a **HIGH** one-time-prekey
+  double-consume TOCTOU in the chat handshake (concurrent inbound replay could reuse a one-time prekey —
+  a PQ-FS/replay regression; now reserve-on-lookup + release-on-abort, with a regression test), plus
+  sidecar hardening (oversized-frame reject, wedged-helper kill, live SHA-256 verify-before-exec), helper
+  secret-zeroize, serialized chat-enable, and corrected FIPS comments (the Windows helper is a non-FIPS
+  build). Construction held up but stays EXPERIMENTAL / not formally verified. **435 tests.**
 - **v3.12.0-beta.1** — **PQ hardening + games + case tooling.** Chat's ML-KEM leg → **ML-KEM-1024 via an
   AWS-LC native sidecar** (CNSA 2.0 / FIPS-203 cat 5), fail-closed behind `crypto.ts`; construction
   unchanged + still EXPERIMENTAL (Windows bundles a functional cross-built helper; FIPS module = CI
@@ -417,7 +440,7 @@ This starts the Vite dev server (HMR) and the Electron main process.
 
 ```bash
 pnpm build        # type-check + bundle main / preload / renderer
-pnpm test         # vitest suite (434 tests as of v3.12.0-beta.1)
+pnpm test         # vitest suite (435 tests as of v3.12.1-beta.1)
 pnpm package      # platform installer for the current host
 pnpm package:win  # cross-build Windows NSIS installer
 ```
