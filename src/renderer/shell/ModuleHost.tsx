@@ -27,6 +27,7 @@ import { BriefcaseModule } from '../modules/briefcase/BriefcaseModule';
 import { SolitaireModule } from '../modules/solitaire/SolitaireModule';
 import { MinesweeperModule } from '../modules/minesweeper/MinesweeperModule';
 import { ChessModule } from '../modules/chess/ChessModule';
+import { PinballModule } from '../modules/pinball/PinballModule';
 import { ChatModule } from '../modules/chat/ChatModule';
 import { HelpModule } from '../modules/help/HelpModule';
 import { ComingSoon } from '../modules/coming-soon/ComingSoon';
@@ -77,6 +78,8 @@ export function ModuleHost({ spec }: { spec: WindowSpec }): JSX.Element {
       return <MinesweeperModule />;
     case 'chess':
       return <ChessModule />;
+    case 'pinball':
+      return <PinballModule />;
     case 'doc-viewer':
       return (
         <DocViewerModule

@@ -52,6 +52,7 @@ const moduleTitles: Record<ModuleKey, string> = {
   solitaire: 'Solitaire',
   minesweeper: 'Minesweeper',
   chess: 'Chess',
+  pinball: 'Pinball',
   chat: 'Chat (beta)',
   help: 'RTFM'
 };

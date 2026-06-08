@@ -398,6 +398,7 @@ export const defaultShortcuts: AccessShortcut[] = [
   { id: 'solitaire', label: 'Solitaire', kind: 'module', target: 'solitaire', icon: 'cards' },
   { id: 'minesweeper', label: 'Minesweeper', kind: 'module', target: 'minesweeper', icon: 'game' },
   { id: 'chess', label: 'Chess', kind: 'module', target: 'chess', icon: 'game' },
+  { id: 'pinball', label: 'Pinball', kind: 'module', target: 'pinball', icon: 'game' },
   { id: 'help', label: 'RTFM', kind: 'module', target: 'help', icon: 'help' }
   // Settings is always available via the Access menu footer ("Settings…"), so it is
   // intentionally NOT a duplicate editable shortcut here.
@@ -415,7 +416,8 @@ export const REQUIRED_MODULE_SHORTCUTS: readonly AccessShortcut[] = [
   { id: 'briefcase', label: 'Briefcase', kind: 'module', target: 'briefcase', icon: 'briefcase' },
   { id: 'solitaire', label: 'Solitaire', kind: 'module', target: 'solitaire', icon: 'cards' },
   { id: 'minesweeper', label: 'Minesweeper', kind: 'module', target: 'minesweeper', icon: 'game' },
-  { id: 'chess', label: 'Chess', kind: 'module', target: 'chess', icon: 'game' }
+  { id: 'chess', label: 'Chess', kind: 'module', target: 'chess', icon: 'game' },
+  { id: 'pinball', label: 'Pinball', kind: 'module', target: 'pinball', icon: 'game' }
 ];
 
 /** Repairs a persisted shortcut list (returns NEW arrays, never mutates inputs):

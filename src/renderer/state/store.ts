@@ -31,6 +31,7 @@ export type ModuleKey =
   | 'solitaire'
   | 'minesweeper'
   | 'chess'
+  | 'pinball'
   | 'chat'
   | 'help';
 
