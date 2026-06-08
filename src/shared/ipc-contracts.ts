@@ -289,8 +289,16 @@ export const channels = {
     start: 'localAi:start',
     stop: 'localAi:stop',
     onProgress: 'localAi:onProgress'
+  },
+  memory: {
+    reindexAll: 'memory:reindexAll',
+    status: 'memory:status',
+    onProgress: 'memory:onProgress'
   }
 } as const;
+
+export interface MemoryStatus { model: string; cases: number; chunks: number }
+export interface MemoryProgress { done: number; total: number; label: string }
 
 export interface AuthStatus { enabled: boolean; unlocked: boolean }
 
@@ -429,4 +437,8 @@ export interface ApiContracts {
   [channels.localAi.start]: { args: []; returns: void };
   [channels.localAi.stop]: { args: []; returns: void };
   [channels.localAi.onProgress]: { args: [(payload: LocalAiProgress) => void]; returns: () => void };
+
+  [channels.memory.reindexAll]: { args: []; returns: { cases: number; chunks: number } };
+  [channels.memory.status]: { args: []; returns: MemoryStatus };
+  [channels.memory.onProgress]: { args: [(payload: MemoryProgress) => void]; returns: () => void };
 }

@@ -1,6 +1,6 @@
 {
   "name": "dcs98",
-  "version": "3.12.1-beta.1",
+  "version": "3.13.0-beta.1",
   "private": true,
   "description": "Dead Cyber Society 98 (DCS98) — Windows 98–inspired OSINT/case-management desktop app. Electron + React + TypeScript.",
   "author": {
@@ -20,8 +20,9 @@
     "fetch:tor": "node scripts/fetch-tor.mjs",
     "fetch:piper": "node scripts/fetch-piper.mjs",
     "fetch:mlkem": "node scripts/fetch-mlkem.mjs",
-    "package": "pnpm fetch:tor && pnpm fetch:piper && pnpm fetch:mlkem && pnpm build && electron-builder",
-    "package:win": "pnpm fetch:tor && pnpm fetch:piper && pnpm fetch:mlkem && pnpm build && electron-builder --win --x64",
+    "fetch:embed": "node scripts/fetch-embed.mjs",
+    "package": "pnpm fetch:tor && pnpm fetch:piper && pnpm fetch:mlkem && pnpm fetch:embed && pnpm build && electron-builder",
+    "package:win": "pnpm fetch:tor && pnpm fetch:piper && pnpm fetch:mlkem && pnpm fetch:embed && pnpm build && electron-builder --win --x64",
     "package:linux": "pnpm build && electron-builder --linux",
     "postinstall": "echo 'skipping native rebuild — ssh2 runs pure-JS; cpu-features (optional) is intentionally skipped'"
   },
@@ -122,6 +123,10 @@
       {
         "from": "resources/exiftool",
         "to": "exiftool"
+      },
+      {
+        "from": "resources/local-ai",
+        "to": "local-ai"
       }
     ],
     "win": {

@@ -252,7 +252,15 @@ export interface CreateCaseInput {
   tags?: string[];
 }
 
-export interface SearchHit { field: string; snippet: string }
+export interface SearchHit {
+  field: string;
+  snippet: string;
+  /** Structured navigation target so the UI can deep-link to the exact hit. */
+  kind?: 'case' | 'note' | 'file';
+  noteName?: string; // when kind === 'note'
+  fileName?: string; // when kind === 'file' — internal storage name (doc-viewer needs this)
+  originalName?: string; // when kind === 'file' — user-facing name
+}
 export interface SearchResult { caseId: string; caseTitle: string; hits: SearchHit[] }
 
 export type WhiteboardNodeType = 'text' | 'link' | 'image' | 'file';
@@ -335,6 +343,9 @@ export interface AppSettings {
     /** TTS engine: 'system' = Web Speech / OS voices; 'piper' = bundled offline neural voice; 'auto'
      *  = prefer Piper when installed, else system. Default 'auto'. */
     ttsEngine: 'auto' | 'system' | 'piper';
+    /** When true, the assistant retrieves relevant case/conversation memory (local vector search
+     *  over the bundled embedding model) and injects it as context. Offline; default off. */
+    useMemory: boolean;
   };
   mail: {
     accounts: { id: string; label: string; imapHost: string; imapPort: number; smtpHost: string; smtpPort: number; user: string; secureRef: string | null }[];
@@ -465,7 +476,8 @@ export const defaultSettings: AppSettings = {
     ttsEnabled: false,
     ttsVoiceUri: null,
     ttsRate: 1,
-    ttsEngine: 'auto'
+    ttsEngine: 'auto',
+    useMemory: false
   },
   mail: { accounts: [] },
   browser: { homepage: 'about:blank' },

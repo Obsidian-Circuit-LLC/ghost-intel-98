@@ -289,6 +289,23 @@ function ShortcutsPane({ s, setS, latest, patch }: {
 
 function AiPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSettings>) => Promise<void> }): JSX.Element {
   const [apiKeyDraft, setApiKeyDraft] = useState('');
+  const [memStatus, setMemStatus] = useState<{ model: string; cases: number; chunks: number } | null>(null);
+  const [memBusy, setMemBusy] = useState(false);
+  const [memProgress, setMemProgress] = useState<string>('');
+
+  useEffect(() => { void window.api.memory.status().then(setMemStatus).catch(() => undefined); }, []);
+  useEffect(() => window.api.memory.onProgress((p) => setMemProgress(`${p.done}/${p.total} · ${p.label}`)), []);
+
+  async function rebuildIndex(): Promise<void> {
+    setMemBusy(true); setMemProgress('starting…');
+    try {
+      const r = await window.api.memory.reindexAll();
+      setMemStatus(await window.api.memory.status());
+      toast.success(`Memory index rebuilt: ${r.cases} case(s), ${r.chunks} chunk(s).`);
+    } catch (err) {
+      toast.error(`Reindex failed: ${(err as Error).message}`);
+    } finally { setMemBusy(false); setMemProgress(''); }
+  }
 
   return (
     <>
@@ -330,6 +347,25 @@ function AiPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSettings>)
         in plaintext — it lives encrypted in <code>secrets.enc</code> and is read by the
         main process at request time.
       </p>
+      </fieldset>
+      <fieldset>
+        <legend>Case Memory (local, offline)</legend>
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input type="checkbox" checked={s.ai.useMemory}
+            onChange={(e) => void patch({ ai: { ...s.ai, useMemory: e.target.checked } })} />
+          Let the assistant recall relevant notes, files, entities &amp; past conversations
+        </label>
+        <p style={{ fontSize: 11, color: '#444', margin: '6px 0' }}>
+          Builds a local vector index of your cases and conversations using the bundled embedding
+          model ({memStatus?.model ?? 'nomic-embed-text'}). Everything stays on this machine
+          (loopback only) and is encrypted at rest with your vault. Retrieval is deterministic.
+        </p>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <button onClick={() => void rebuildIndex()} disabled={memBusy}>{memBusy ? 'Rebuilding…' : 'Rebuild memory index'}</button>
+          <span style={{ fontSize: 11, color: '#444' }}>
+            {memBusy ? memProgress : memStatus ? `${memStatus.cases} case(s) · ${memStatus.chunks} chunk(s) indexed` : ''}
+          </span>
+        </div>
       </fieldset>
     </>
   );

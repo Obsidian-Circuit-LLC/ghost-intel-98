@@ -5,7 +5,7 @@
 
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import { channels } from '../shared/ipc-contracts';
-import type { LocalAiStatus, LocalAiProgress } from '../shared/ipc-contracts';
+import type { LocalAiStatus, LocalAiProgress, MemoryStatus, MemoryProgress } from '../shared/ipc-contracts';
 
 const api = {
   cases: {
@@ -321,6 +321,15 @@ const api = {
       const listener = (_e: unknown, payload: LocalAiProgress): void => cb(payload);
       ipcRenderer.on(channels.localAi.onProgress, listener);
       return () => ipcRenderer.removeListener(channels.localAi.onProgress, listener);
+    }
+  },
+  memory: {
+    status: (): Promise<MemoryStatus> => ipcRenderer.invoke(channels.memory.status),
+    reindexAll: (): Promise<{ cases: number; chunks: number }> => ipcRenderer.invoke(channels.memory.reindexAll),
+    onProgress: (cb: (p: MemoryProgress) => void): (() => void) => {
+      const listener = (_e: unknown, payload: MemoryProgress): void => cb(payload);
+      ipcRenderer.on(channels.memory.onProgress, listener);
+      return () => ipcRenderer.removeListener(channels.memory.onProgress, listener);
     }
   }
 } as const;

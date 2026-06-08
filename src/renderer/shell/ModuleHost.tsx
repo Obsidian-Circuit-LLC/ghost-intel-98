@@ -37,7 +37,12 @@ export function ModuleHost({ spec }: { spec: WindowSpec }): JSX.Element {
     case 'cases':
       return <CasesModule initialCaseId={spec.props?.['caseId'] as string | undefined} />;
     case 'notepad':
-      return <NotepadModule initialCaseId={(spec.props?.['caseId'] as string | undefined) ?? null} />;
+      return (
+        <NotepadModule
+          initialCaseId={(spec.props?.['caseId'] as string | undefined) ?? null}
+          initialNoteName={spec.props?.['initialNoteName'] as string | undefined}
+        />
+      );
     case 'calendar':
       return <CalendarModule />;
     case 'reminders':

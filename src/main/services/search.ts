@@ -20,7 +20,7 @@ function snippet(text: string, needle: string): string {
 export function searchRecord(rec: CaseRecord, needle: string): SearchHit[] {
   const hits: SearchHit[] = [];
   const add = (field: string, text: string): void => {
-    if (text && text.toLowerCase().includes(needle)) hits.push({ field, snippet: snippet(text, needle) });
+    if (text && text.toLowerCase().includes(needle)) hits.push({ field, snippet: snippet(text, needle), kind: 'case' });
   };
   add('title', rec.title);
   add('reference', rec.reference);
@@ -45,13 +45,13 @@ export async function query(q: string): Promise<SearchResult[]> {
     for (const n of rec.notes) {
       try {
         const body = await noteStore.read(id, n.name);
-        if (body.toLowerCase().includes(needle)) hits.push({ field: `note:${n.name}`, snippet: snippet(body, needle) });
+        if (body.toLowerCase().includes(needle)) hits.push({ field: `note:${n.name}`, snippet: snippet(body, needle), kind: 'note', noteName: n.name });
       } catch { /* skip unreadable note */ }
     }
     for (const a of rec.attachments) {
       try {
         const r = await fileStore.readAttachmentText(id, a.fileName);
-        if (r.text && r.text.toLowerCase().includes(needle)) hits.push({ field: `file:${a.originalName}`, snippet: snippet(r.text, needle) });
+        if (r.text && r.text.toLowerCase().includes(needle)) hits.push({ field: `file:${a.originalName}`, snippet: snippet(r.text, needle), kind: 'file', fileName: a.fileName, originalName: a.originalName });
       } catch { /* skip unreadable / binary attachment */ }
     }
     if (hits.length) out.push({ caseId: id, caseTitle: rec.title, hits });
