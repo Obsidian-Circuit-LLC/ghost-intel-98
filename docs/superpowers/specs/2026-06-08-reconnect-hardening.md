@@ -87,6 +87,19 @@ session** (no token needed):
   `mac_T` is for first_contact. **Gate failure ⇒ a different, cheap close** (not the recovery Reject of
   §2, which is reserved for a pre-gate-*authenticated* peer whose prekey is merely stale).
 
+**Contact identification before asymmetric work (the keying chicken-and-egg).** `mac_R` is keyed per
+contact (RGK), but R learns the peer identity only by decrypting `c_idI` (asymmetric). Like first_contact
+(where `mac_T` is found via the cleartext `prekey_id` → prekey→token), R resolves the contact from the
+**cleartext `prekey_id`**: when R mints a reconnect rotation prekey (`issueNext` during a handshake, where
+R already knows the peer `cid`), it records a **non-secret issuance index** `prekey_id → cid`, retained
+even after the one-time *secret* is FS-deleted on consume. On a reconnect Msg1, R resolves `prekey_id →
+cid → RGK` from this index and verifies `mac_R` before any asymmetric op — and crucially this **still
+works in the strand case** (secret consumed, index retained), so R can authenticate the stale-prekey peer
+and send the recovery Reject. A truly unknown `prekey_id` (not in the index) can't be gated or identified
+→ cheap close. Privacy: `prekey_id` is already cleartext in v3 Msg1 and R issues a fresh one each
+reconnect, so there's no new cross-reconnect linkability (only a strand's own retries reuse one id,
+bounded by the retry cap). The index is local + encrypted at rest, capped/TTL'd.
+
 ### 4. Transcript + downgrade (extends v3 H-5/H-3/G7)
 
 `TH0 = H(PROTO ‖ suite_id ‖ mode)` (unchanged — binds mode). `hs_type` (§1) is folded into the responder
