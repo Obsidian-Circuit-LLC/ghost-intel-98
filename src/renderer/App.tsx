@@ -3,7 +3,7 @@
  * No router — the "modules" are windows, not URLs.
  */
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth, useSettings, useWindows } from './state/store';
 import { Desktop } from './shell/Desktop';
 import { Taskbar } from './shell/Taskbar';
@@ -16,9 +16,10 @@ import { Welcome } from './shell/Welcome';
 import { LockScreen } from './shell/LockScreen';
 import { StickyNotes } from './shell/StickyNotes';
 import { ClockWidget } from './shell/ClockWidget';
-import { playBoot, playLegacyStartup, playReminder, playMouseClick } from './audio/synth';
+import { SplashScreen } from './shell/SplashScreen';
+import { playReminder, playMouseClick } from './audio/synth';
 import { toast } from './state/toasts';
-import defaultWallpaper from './assets/wallpaper.jpg';
+import defaultWallpaper from './assets/wallpaper-dcs98.jpg';
 
 export function App(): JSX.Element {
   const windows = useWindows((s) => s.windows);
@@ -33,16 +34,13 @@ export function App(): JSX.Element {
   const authStatus = useAuth((s) => s.status);
   const refreshAuth = useAuth((s) => s.refresh);
 
+  // The boot splash covers the screen on launch; auth + settings load underneath it.
+  const [splashDone, setSplashDone] = useState(false);
+
   useEffect(() => {
     void loadSettings();
     void refreshAuth();
   }, [loadSettings, refreshAuth]);
-
-  useEffect(() => {
-    if (settings?.startupSoundEnabled && settings.soundEnabled) {
-      if (settings.legacySounds) playLegacyStartup(); else playBoot();
-    }
-  }, [settings?.startupSoundEnabled, settings?.soundEnabled, settings?.legacySounds]);
 
   // Global retro mouse-click on every <button>. Delegated at the document so it covers
   // buttons in any module/dialog without per-component wiring. Read soundEnabled live
@@ -144,6 +142,7 @@ export function App(): JSX.Element {
       )}
       <Toaster />
       <DialogHost />
+      {!splashDone && <SplashScreen onDone={() => setSplashDone(true)} />}
     </div>
   );
 }
