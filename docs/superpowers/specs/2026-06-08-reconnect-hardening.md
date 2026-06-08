@@ -72,9 +72,13 @@ session** (no token needed):
 - At **first_contact** completion, both sides derive + persist a per-contact **reconnect gate key**
   `RGK = HKDF(RK, SID, "dcs98-chat/reconnect-gate/v4", 32)` from that session. Stored in the contact row,
   encrypted at rest.
-- Reconnect Msg1 carries `mac_R = HMAC(RGK, DS_MAC_R ‖ TH1)`. R verifies it with **one HMAC before any
-  asymmetric op or prekey lookup** — a forged reconnect Msg1 is rejected cheaply, bounding the
-  asymmetric-work + sidecar-HOL DoS.
+- Reconnect Msg1 carries `mac_R = HMAC(RGK, DS_MAC_R ‖ TH0 ‖ prekey_id ‖ xe_I ‖ ek_I ‖ ct_pre)`. R
+  verifies it with **one HMAC before any asymmetric op or prekey lookup**, bounding the asymmetric-work +
+  sidecar-HOL DoS. **It is keyed over the Msg1 CLEARTEXT fields, NOT over TH1** — deliberately: TH1 binds
+  R's prekey block, which is unavailable in the strand-recovery case (the prekey is consumed/gone), and
+  the gate must run before R touches the prekey at all. The full transcript binding (incl. the prekey) is
+  still provided by the signatures over TH1/TH3 later; `mac_R` is only the cheap DoS gate, so binding the
+  Msg1 cleartext (which already fixes xe_I/ek_I/ct_pre/prekey_id/mode) is sufficient for its job.
 - **RGK is STABLE (derived once at first_contact), NOT rotated per reconnect.** Rationale: a per-reconnect
   rotation desyncs on a half-completed reconnect (R rotates, I doesn't) → I's `mac_R` fails the gate → a
   *new* lockout, defeating the purpose. Both sides always agree on the first_contact RGK, so a stable key
