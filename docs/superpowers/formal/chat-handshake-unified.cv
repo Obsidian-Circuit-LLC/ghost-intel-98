@@ -92,6 +92,11 @@ process
   new ck0: bits;                 (* public chaining seed (hash of public TH1) *)
   new sspre: bits;               (* classical leg: ML-KEM secret handed to adversary *)
   let ck:  ckt     = Hes(hke, es, ck0) in
+  (* Audit note (MED-3, internal-audit-2026-06-08): the CODE derives hk1 at the INTERMEDIATE chain
+     state CK2 (init+es+ss_pre only, handshake.ts:178) and hk2/RK at the FINAL CK5 (:201,217). This
+     model collapses them onto one ck. That is a SOUND OVER-APPROXIMATION for the `secret rk` query
+     (it hands the adversary an hk1 tied to the full chain — strictly more than the code leaks), but a
+     reader should know c_idI is really protected by CK2, not CK5. *)
   let hk1: aeadkey = Hkey(hkk, ck, LBL_HK1) in
   let hk2: aeadkey = Hkey(hkk, ck, LBL_HK2) in
   let rk:  bits    = Hrk(hkr, ck, LBL_ROOT) in

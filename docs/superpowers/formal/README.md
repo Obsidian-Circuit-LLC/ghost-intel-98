@@ -13,16 +13,21 @@ the presence of the chain-derived AEAD encryptions (c_idI/c_confR), so the layer
 IND$-CPA with the chain-derived (secret) AEAD key. The symbolic model (`chat-handshake.pv`,
 `proverif-output-2026-06-08.txt`) was completed and run under ProVerif 2.05.
 
-**In-house Gate 1 is complete** (see `model-code-correspondence.md`): symbolic + computational secrecy
-(hybrid, full chain), mutual auth, KCI, forward secrecy, the unified KDF→AEAD composition, **computational
-G2′** (`chat-handshake-g2prime.cv`, IND$-CPA), the model-to-code correspondence, the fuzzing harness, and
-the constant-time audit (incl. a LOW `@noble` classical-leg timing finding + recommendation).
+**In-house Gate 1 — verified + internally audited.** Proved (see `model-code-correspondence.md`):
+symbolic (first_contact) + computational secrecy (hybrid, full 5-step chain), mutual auth, KCI, forward
+secrecy, unified KDF→AEAD, **computational G2′** (`chat-handshake-g2prime.cv`), with the model-to-code
+correspondence, fuzz harness, and constant-time audit. An **internal adversarial audit**
+(`internal-audit-2026-06-08.md`) then found + **fixed a Critical** handshake→session handoff bug, and
+recorded open HIGH/MEDIUM items (reconnect-prekey strand; crash-window injectivity; silent
+pin-before-verify UX). **Not yet verified:** reconnect mode, the `mac_T` keyed-MAC DoS property, the
+storage-level injectivity invariant.
 
-**This still does NOT clear the EXPERIMENTAL / not-formally-verified banner.** Two **external** gates
-remain and cannot be self-cleared: a third-party cryptographic **audit** and the **FIPS-validated module
-build**. The banner stays until those land — the flip is the operator's call (staged wording recommended:
-"formally verified (symbolic + computational), pending external audit" now → drop "experimental" after
-the audit).
+**This does NOT clear the EXPERIMENTAL banner.** The remaining gates are **external** and not
+self-clearable: an **independent** third-party audit and the **FIPS-validated module build**. A simulated
+in-house audit does not substitute for the independence an external audit provides — so user-facing text
+must not say "externally audited" or "FIPS-validated." The operator may drop "EXPERIMENTAL" on accepted
+internal-review risk with honest wording ("formally verified (symbolic + computational), internally
+reviewed; not independently audited; not FIPS-validated"); the flip is the operator's call.
 
 ### CryptoVerif results (2026-06-08, hybrid key-schedule core, ROM key derivation)
 

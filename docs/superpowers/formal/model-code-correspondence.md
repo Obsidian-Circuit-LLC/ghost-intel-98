@@ -78,12 +78,25 @@ compose; deriving the AEAD keys from the chain doesn't compromise the root key. 
    hk1 as the secret random the chain models discharge, `secret idsecret` is proved. Composition:
    {hk1 secret (chain/unified models)} + {IND$-CPA hides a fixed-length plaintext (this)} ⇒ G2′,
    computationally. (Symbolic G2′ also holds: `chat-handshake.pv`, `not attacker(s_id)`.)
-**In-house Gate 1 is now complete** (items 1–6 above; fuzzing harness `test/chat-fuzz.test.ts`; const-time
-audit §3 incl. the noble LOW finding + recommendation). **Remaining are external gates only:** a
-third-party cryptographic **audit** and the **FIPS-validated module build** — neither self-clearable. The
-EXPERIMENTAL banner stays until those land; the flip is the operator's call (staged wording recommended:
-"formally verified (symbolic + computational), pending external audit" now → drop "experimental" after
-the audit).
+**In-house Gate 1 — completed with an internal adversarial audit** (`internal-audit-2026-06-08.md`).
+The audit (red-team + crypto-audit + skeptic + full re-verification) found one **Critical** —a
+handshake→session frame-handoff bug that dropped the first message— now **FIXED** (commit 1e36a8b, with
+a regression test). It also recorded HIGH/MEDIUM items that are NOT closed and NOT cryptographic breaks
+of the shipped first_contact path: reconnect-prekey strand (availability), a narrow crash-window FS
+degradation in storage-level injectivity, and the **silent pin-before-verify** UX gap (shipped behaviour
+weaker than the proofs' pinning assumption). See the audit report for status + recommendations.
+
+**Honest verified scope** (narrowed from "Gate 1 complete"): **symbolic (first_contact) + computational
+(key-schedule full chain, mutual auth, KCI, forward secrecy, unified KDF→AEAD, G2′).** NOT yet verified:
+**reconnect mode**, the **`mac_T` keyed-MAC DoS property**, and the **storage-level injectivity invariant**
+(the models assume single-use; the durable guarantee lives in `prekey-store.ts`, with a crash window).
+
+**Remaining gates are EXTERNAL and cannot be self-cleared:** an independent third-party **audit** and the
+**FIPS-validated module build**. A *simulated/in-house* audit (this report) does not satisfy the external
+gate — it lacks blind-spot independence — so user-facing text must not claim "externally audited" or
+"FIPS-validated." The operator may drop "EXPERIMENTAL" on accepted internal-review risk with honest
+wording: e.g. "formally verified (symbolic + computational), internally adversarially reviewed; not
+independently audited; not FIPS-validated."
 
 ## 3. Implementation audit (tools are blind to this)
 
