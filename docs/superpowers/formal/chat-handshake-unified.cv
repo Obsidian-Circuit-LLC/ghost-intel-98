@@ -31,7 +31,7 @@ proof {
   crypto cdh(exp);
   crypto rom(Hkey);
   crypto rom(Hrk);
-  crypto ind_cpa(enc);
+  crypto inddollar_cpa(enc);
   simplify;
   success
 }
@@ -55,11 +55,14 @@ expand ROM_hash_2(hke_t, G,   bits, ckt,     Hes,  oracle_es,  qHes).
 expand ROM_hash_2(hkk_t, ckt, bits, aeadkey, Hkey, oracle_key, qHkey).
 expand ROM_hash_2(hkr_t, ckt, bits, bits,    Hrk,  oracle_rk,  qHrk).
 
-(* AEAD (IND-CPA + INT-CTXT) for c_idI / c_confR *)
+(* AEAD modelled as IND$-CPA (ciphertext ≈ random bytes) — faithful to ChaCha20-Poly1305 (stream-cipher
+   output) and the assumption needed to prove the c_idI PLAINTEXT secret (G2'): a ciphertext-vs-random
+   indistinguishable AEAD hides its message value, not just message-vs-message (plain IND-CPA). *)
 proba Penc. proba Pencctxt.
-expand AEAD(aeadkey, cleartext, ciphertext, add_data, enc, dec, injbot, Z, Penc, Pencctxt).
-(* cleartext is fixed-length ⇒ all plaintexts share one length ⇒ Z (the length-only leak of IND-CPA) is
-   constant. Asserting it lets the dependency analysis see c_idI is independent of the plaintext value. *)
+type cipher_stream [bounded].
+expand AEAD_INDdollar_CPA(aeadkey, cleartext, ciphertext, add_data, cipher_stream, enc, dec, injbot, Z, enc_len, truncate, Penc, Pencctxt).
+(* cleartext is fixed-length ⇒ all plaintexts share one length ⇒ Z (the only thing IND$-CPA leaks, via
+   enc_len(Z(x))) is constant. Asserting it lets the analysis see c_idI is independent of the value. *)
 const z_const: cleartext.
 equation forall x: cleartext; Z(x) = z_const.
 
@@ -73,6 +76,9 @@ const LBL_HK1, LBL_HK2, LBL_ROOT: bits.
    left as polish — `query secret` on an AEAD'd message is the wrong idiom (IND-CPA gives ciphertext
    indistinguishability, not value-secrecy); it needs a real-or-random encoding. *)
 query secret rk.
+(* G2' (c_idI identity confidentiality) is proved in chat-handshake-g2prime.cv: there hk1 is a secret
+   random (discharged here / in the chain models) and the IND$-CPA AEAD hides the fixed-length identity
+   payload. Here we keep the AEAD encryptions present and prove RK secret THROUGH them — the composition. *)
 
 channel start, c.
 

@@ -1,0 +1,130 @@
+Doing expand get, insert and prove unique annotations... No change.
+Doing simplify (non-expanded game)... No change.
+Doing expand... Done.
+Doing remove assignments of findcond... Done.
+Doing simplify... Run simplify 1 time(s). Fixpoint reached.
+No change.
+Doing move all binders... No change.
+Doing SA rename new without array accesses and remove assignments of findcond... No change.
+Doing merge branches... No change.
+Proof of (one-session) secrecy of idsecret failed:
+  at 14, bad usage(s) of cidI, which may depend on idsecret.
+Trying equivalence inddollar_cpa(enc)... Transf. OK Proba. computed Transf. done Succeeded.
+Doing simplify (non-expanded game)... No change.
+Doing expand... Done.
+Doing remove assignments of findcond... Done.
+Doing simplify... Run simplify 2 time(s). Fixpoint reached.
+Done.
+Doing move all binders... No change.
+Doing SA rename new without array accesses and remove assignments of findcond... No change.
+Doing merge branches... No change.
+Doing simplify... Run simplify 1 time(s). Fixpoint reached.
+No change.
+Proved one-session secrecy of idsecret
+Proved secrecy of idsecret
+===================== Proof starts =======================
+Initial state
+Game 1 is
+     start() :=
+     hk1 <-R aeadkey;
+     idsecret <-R cleartext;
+     aad <-R add_data;
+     cidI: ciphertext <- (m: cleartext <- idsecret; d: add_data <- aad; k: aeadkey <- hk1; r <-R enc_seed; enc_r(m, d, k, r));
+     return(aad, cidI)
+
+
+Applying expand
+  - Expand if/find/let
+yields
+
+Game 2 is
+     start() :=
+     hk1 <-R aeadkey;
+     idsecret <-R cleartext;
+     aad <-R add_data;
+     m: cleartext <- idsecret;
+     d: add_data <- aad;
+     k: aeadkey <- hk1;
+     r <-R enc_seed;
+     cidI: ciphertext <- enc_r(m, d, k, r);
+     return(aad, cidI)
+
+
+Applying remove assignments of findcond
+  - Remove assignments on m (definition removed, all usages removed)
+  - Remove assignments on d (definition removed, all usages removed)
+  - Remove assignments on k (definition removed, all usages removed)
+yields
+
+Game 3 is
+     start() :=
+     hk1 <-R aeadkey;
+     idsecret <-R cleartext;
+     aad <-R add_data;
+     r <-R enc_seed;
+     cidI: ciphertext <- enc_r(idsecret, aad, hk1, r);
+     return(aad, cidI)
+
+
+Applying equivalence inddollar_cpa(enc) [probability Penc(time_1, 1)]
+  - Equivalence inddollar_cpa(enc) with variables: hk1 -> k_1, r -> r_1
+yields
+
+Game 4 is
+     start() :=
+     idsecret <-R cleartext;
+     aad <-R add_data;
+     s <-R cipher_stream;
+     cidI: ciphertext <- (x: cleartext <- idsecret; d_1: add_data <- aad; truncate(s, enc_len(Z(x))));
+     return(aad, cidI)
+
+
+Applying expand
+  - Expand if/find/let
+yields
+
+Game 5 is
+     start() :=
+     idsecret <-R cleartext;
+     aad <-R add_data;
+     s <-R cipher_stream;
+     x: cleartext <- idsecret;
+     d_1: add_data <- aad;
+     cidI: ciphertext <- truncate(s, enc_len(Z(x)));
+     return(aad, cidI)
+
+
+Applying remove assignments of findcond
+  - Remove assignments on x (definition removed, all usages removed)
+  - Remove assignments on d_1 (definition removed, all usages removed)
+yields
+
+Game 6 is
+     start() :=
+     idsecret <-R cleartext;
+     aad <-R add_data;
+     s <-R cipher_stream;
+     cidI: ciphertext <- {6}truncate(s, enc_len(Z(idsecret)));
+     return(aad, cidI)
+
+
+Applying simplify
+  - Simplification pass
+    - Replaced truncate(s, enc_len(Z(idsecret))) with truncate(s, enc_len(z_const)) at 6
+yields
+
+Game 7 is
+     start() :=
+     idsecret <-R cleartext;
+     aad <-R add_data;
+     s <-R cipher_stream;
+     cidI: ciphertext <- truncate(s, enc_len(z_const));
+     return(aad, cidI)
+
+
+Proved secrecy of idsecret in game 7
+Adv[Game 1: secrecy of idsecret] <= 2 * Penc(time_1, 1) + Adv[Game 7: secrecy of idsecret]
+Adv[Game 7: secrecy of idsecret] <= 0
+RESULT Proved secrecy of idsecret up to probability 2 * Penc(time_1, 1)
+RESULT time_1 = time
+All queries proved.

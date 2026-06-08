@@ -8,14 +8,21 @@ replay / no UKS, R-authenticates-I injectivity shown to rest on single-use preke
 its OWN long-term key revealed; and **hybrid forward secrecy** (`chat-handshake-fs-{classical,pq}.cv`) —
 RK secret under full long-term-key compromise if either the ephemeral DH (`ee`) or the ephemeral KEM
 (`ss_I`) survives; and the **unified KDF→AEAD model** (`chat-handshake-unified.cv`) — RK stays secret in
-the presence of the chain-derived AEAD encryptions (c_idI/c_confR), so the layers compose. The symbolic
-model (`chat-handshake.pv`, `proverif-output-2026-06-08.txt`) was completed and run under ProVerif 2.05.
+the presence of the chain-derived AEAD encryptions (c_idI/c_confR), so the layers compose; and
+**computational G2′** (`chat-handshake-g2prime.cv`) — the c_idI identity payload is confidential under
+IND$-CPA with the chain-derived (secret) AEAD key. The symbolic model (`chat-handshake.pv`,
+`proverif-output-2026-06-08.txt`) was completed and run under ProVerif 2.05.
 
-**This does NOT clear the EXPERIMENTAL / not-formally-verified banner.** Remaining (see
-`model-code-correspondence.md`): a fully machine-checked **computational G2′** (real-or-random; G2′ is
-already symbolic + follows from a secret AEAD key + IND-CPA) and the **noble constant-time audit**.
-Beyond the formal kit, an **external audit** and the **FIPS-validated module build** are external gates
-that cannot be self-cleared. The banner stays until those land — the flip is the operator's call.
+**In-house Gate 1 is complete** (see `model-code-correspondence.md`): symbolic + computational secrecy
+(hybrid, full chain), mutual auth, KCI, forward secrecy, the unified KDF→AEAD composition, **computational
+G2′** (`chat-handshake-g2prime.cv`, IND$-CPA), the model-to-code correspondence, the fuzzing harness, and
+the constant-time audit (incl. a LOW `@noble` classical-leg timing finding + recommendation).
+
+**This still does NOT clear the EXPERIMENTAL / not-formally-verified banner.** Two **external** gates
+remain and cannot be self-cleared: a third-party cryptographic **audit** and the **FIPS-validated module
+build**. The banner stays until those land — the flip is the operator's call (staged wording recommended:
+"formally verified (symbolic + computational), pending external audit" now → drop "experimental" after
+the audit).
 
 ### CryptoVerif results (2026-06-08, hybrid key-schedule core, ROM key derivation)
 

@@ -73,13 +73,17 @@ compose; deriving the AEAD keys from the chain doesn't compromise the root key. 
 3. ~~KCI (key-compromise impersonation)~~ — **DONE** (`chat-handshake-kci-reveal{R,I}.cv`).
 4. ~~Forward secrecy (computational, hybrid)~~ — **DONE** (`chat-handshake-fs-{classical,pq}.cv`).
 5. ~~Unified KDF→AEAD secrecy composition~~ — **DONE** (`chat-handshake-unified.cv`).
-   *Residual polish:* a fully machine-checked **computational G2′** (c_idI identity confidentiality).
-   G2′ is proven symbolically (`chat-handshake.pv`, `not attacker(s_id)`); computationally it follows
-   from hk1 secret (same derivation as the proven-secret RK) + AEAD IND-CPA, but the single-query
-   encoding needs a real-or-random game (`query secret` on an AEAD'd message is the wrong idiom). Not a
-   new property — confidentiality under a secret key + IND-CPA.
-Remaining: the G2′ real-or-random polish (5), the **noble constant-time audit** (§3 residual), then an
-external audit + the FIPS module build. (Fuzzing harness — §3 — **done**: `test/chat-fuzz.test.ts`.)
+6. ~~Computational G2′ (c_idI identity confidentiality)~~ — **DONE** (`chat-handshake-g2prime.cv`):
+   modelling the AEAD as **IND$-CPA** (ciphertext ≈ random — faithful to ChaCha20-Poly1305) and taking
+   hk1 as the secret random the chain models discharge, `secret idsecret` is proved. Composition:
+   {hk1 secret (chain/unified models)} + {IND$-CPA hides a fixed-length plaintext (this)} ⇒ G2′,
+   computationally. (Symbolic G2′ also holds: `chat-handshake.pv`, `not attacker(s_id)`.)
+**In-house Gate 1 is now complete** (items 1–6 above; fuzzing harness `test/chat-fuzz.test.ts`; const-time
+audit §3 incl. the noble LOW finding + recommendation). **Remaining are external gates only:** a
+third-party cryptographic **audit** and the **FIPS-validated module build** — neither self-clearable. The
+EXPERIMENTAL banner stays until those land; the flip is the operator's call (staged wording recommended:
+"formally verified (symbolic + computational), pending external audit" now → drop "experimental" after
+the audit).
 
 ## 3. Implementation audit (tools are blind to this)
 
@@ -89,14 +93,24 @@ pinned-identity check (`:283`). AEAD tag verification, HKDF, SHA-256, HMAC all r
 (OpenSSL) code. No secret-dependent `===` / branch on key bytes found in the handshake path. **Clean**
 for the symmetric/compare paths.
 
-*Residual (documented limitations, not bugs):*
-- **X25519 / Ed25519 via `@noble/curves`** (`crypto.ts:20,57-90`) run in V8 JIT; source-level constant
-  time can be defeated by the JIT (the classical-leg analogue of the KyberSlash concern). ML-KEM itself
-  is out-of-process in AWS-LC (constant-time-designed). A timing audit of the noble curve ops on the
-  target build is open work.
-- **Zeroization** (`crypto.ts:199`, used `handshake.ts:221,311`) is best-effort: V8 may keep
-  un-wipeable copies of key material (GC'd buffers, immutable strings). Inherent JS limitation; the
-  reason noble (Uint8Array end-to-end) is used over Node's JWK path (`crypto.ts:53-55`).
+**`@noble/curves` constant-time audit (classical leg) — FINDING, LOW severity.** `@noble/curves` **2.2.0**
+backs X25519/Ed25519 (`crypto.ts:20,57-90`). Its own README is explicit: *"Field operations are not
+constant-time"* and it targets only *algorithmic* constant time, noting JIT + GC make real
+constant-timeness "extremely hard." So noble makes **no constant-time guarantee**. The secret-dependent
+call sites are: `x25519.getSharedSecret` (ECDH, `:69`), `ed25519.sign` (`:83`), and the `getPublicKey`
+scalar-mults (`:62,79`). This is a residual **timing side-channel on the classical leg**.
+*Severity LOW for DCS98's threat model:* the handshake runs these once per session over high-latency,
+noisy **Tor** (remote timing impractical); a local co-resident attacker can read process memory anyway;
+and the PQ leg (the harvest-now-decrypt-later concern) is ML-KEM in **out-of-process AWS-LC**
+(constant-time-designed C), unaffected.
+*Recommendation (operator):* to close it symmetrically, route X25519/Ed25519 through the **same AWS-LC
+sidecar** as ML-KEM (constant-time-designed C), or accept the residual under the threat model. Either way
+it is a documented residual, not a correctness bug. A hardware-timing measurement on the shipped Windows
+build is the remaining empirical step (cannot be done from source review).
+
+*Other residual:* **zeroization** (`crypto.ts:199`, used `handshake.ts:221,311`) is best-effort — V8 may
+keep un-wipeable copies (GC'd buffers, immutable strings); inherent JS limit (the reason noble's
+Uint8Array-end-to-end API is used over Node's JWK path, `crypto.ts:53-55`).
 
 **Untrusted-input parsers — FUZZED (`test/chat-fuzz.test.ts`, ~7.5k seeded inputs).** `FrameDecoder.push`
 (`wire.ts:86`), `decodeKemPrekey` (`identity.ts:171`), `decodeIdentityPublic` (`identity.ts:83`), and

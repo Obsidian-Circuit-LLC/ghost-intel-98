@@ -1,0 +1,48 @@
+(* ============================================================================
+   DCS98 chat handshake — CryptoVerif, COMPUTATIONAL G2' (identity confidentiality).
+
+   G2': a network eavesdropper cannot learn which identity is inside c_idI — I's
+   identity bundle (xs_I ‖ is_I ‖ Sig_I) is confidential (handshake.ts:181,183).
+
+   This is a MODULAR step. Its premise — that the AEAD key hk1 is a secret, uniformly
+   random key — is exactly what the chain models discharge: hk1 = HKDF(CK2, TH1,
+   DRV_HK1) and the fullchain/unified models prove the chain key CK (hence hk1, by
+   the same ROM step that yields the proven-secret RK) is secret. Taking hk1 as that
+   secret random here, G2' reduces to: an IND$-CPA AEAD (ciphertext ≈ random — the
+   faithful model of ChaCha20-Poly1305, a stream cipher) hides a fixed-length
+   plaintext. Proved: secret idsecret.
+
+   Composition: {hk1 secret (chain models)} + {this} ⇒ computational G2'.
+
+   Run: cryptoverif chat-handshake-g2prime.cv
+   ============================================================================ *)
+
+proof {
+  crypto inddollar_cpa(enc);
+  simplify;
+  success
+}
+
+type aeadkey [large,fixed].
+type cleartext [large,fixed].   (* fixed-length identity bundle xs_I‖is_I‖Sig_I (32+32+64) *)
+type ciphertext [bounded].
+type add_data [bounded].
+type cipher_stream [bounded].
+
+proba Penc. proba Pencctxt.
+expand AEAD_INDdollar_CPA(aeadkey, cleartext, ciphertext, add_data, cipher_stream, enc, dec, injbot, Z, enc_len, truncate, Penc, Pencctxt).
+(* fixed-length plaintext ⇒ Z (the only thing IND$-CPA leaks, via enc_len(Z(x))) is constant. *)
+const z_const: cleartext.
+equation forall x: cleartext; Z(x) = z_const.
+
+query secret idsecret.
+
+channel start, c.
+
+process
+  in(start, ());
+  new hk1: aeadkey;              (* hk1 — secret random, discharged by the chain models *)
+  new idsecret: cleartext;       (* I's identity bundle + Sig_I — the G2' target *)
+  new aad: add_data;             (* = H(token); public AAD *)
+  let cidI: ciphertext = enc(idsecret, aad, hk1) in
+  out(c, (aad, cidI))            (* eavesdropper sees the AAD and the ciphertext only *)
