@@ -55,6 +55,13 @@ function toStored(c: Contact): StoredContact {
   };
 }
 function fromStored(s: StoredContact): Contact {
+  // The pinned identity is classical (Ed25519+X25519) and survives a KEM parameter change. A stored
+  // rotation prekey from a prior parameter set (e.g. ML-KEM-768 before the 1024 swap) won't decode at
+  // the new sizes — drop it (→ null) rather than throw; the next session re-fetches a current prekey.
+  let nextPrekey: KemPrekey | null = null;
+  if (s.nextPrekey) {
+    try { nextPrekey = decodeKemPrekey(unb64(s.nextPrekey)); } catch { nextPrekey = null; }
+  }
   return {
     contactId: s.contactId,
     identity: { ed25519: unb64(s.ed), x25519: unb64(s.x) },
@@ -62,7 +69,7 @@ function fromStored(s: StoredContact): Contact {
     displayName: s.displayName,
     verified: s.verified,
     lastSeen: s.lastSeen,
-    nextPrekey: s.nextPrekey ? decodeKemPrekey(unb64(s.nextPrekey)) : null
+    nextPrekey
   };
 }
 

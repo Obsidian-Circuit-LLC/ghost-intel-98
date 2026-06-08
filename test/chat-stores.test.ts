@@ -27,7 +27,7 @@ describe('PrekeyStore', () => {
     const rec = await store.lookup(prekey.prekeyId);
     expect(rec).not.toBeNull();
     expect(Array.from(rec!.token as Uint8Array)).toEqual(Array.from(token));
-    expect(Array.from(rec!.secretKey)).toHaveLength(2400);
+    expect(Array.from(rec!.secretKey)).toHaveLength(3168);
 
     await store.consume(prekey.prekeyId);
     expect(await store.lookup(prekey.prekeyId)).toBeNull(); // gone after consume

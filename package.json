@@ -19,15 +19,15 @@
     "test:watch": "vitest",
     "fetch:tor": "node scripts/fetch-tor.mjs",
     "fetch:piper": "node scripts/fetch-piper.mjs",
-    "package": "pnpm fetch:tor && pnpm fetch:piper && pnpm build && electron-builder",
-    "package:win": "pnpm fetch:tor && pnpm fetch:piper && pnpm build && electron-builder --win --x64",
+    "fetch:mlkem": "node scripts/fetch-mlkem.mjs",
+    "package": "pnpm fetch:tor && pnpm fetch:piper && pnpm fetch:mlkem && pnpm build && electron-builder",
+    "package:win": "pnpm fetch:tor && pnpm fetch:piper && pnpm fetch:mlkem && pnpm build && electron-builder --win --x64",
     "package:linux": "pnpm build && electron-builder --linux",
     "postinstall": "echo 'skipping native rebuild — ssh2 runs pure-JS; cpu-features (optional) is intentionally skipped'"
   },
   "dependencies": {
     "98.css": "^0.1.20",
     "@noble/curves": "2.2.0",
-    "@noble/post-quantum": "0.6.1",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "adm-zip": "^0.5.17",
@@ -52,6 +52,7 @@
     "zustand": "^5.0.2"
   },
   "devDependencies": {
+    "@noble/post-quantum": "0.6.1",
     "@types/adm-zip": "^0.5.8",
     "@types/leaflet": "^1.9.21",
     "@types/mailparser": "^3.4.6",
@@ -113,6 +114,10 @@
       {
         "from": "resources/piper",
         "to": "piper"
+      },
+      {
+        "from": "resources/mlkem",
+        "to": "mlkem"
       }
     ],
     "win": {

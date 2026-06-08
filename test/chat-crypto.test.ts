@@ -19,9 +19,9 @@ import {
   X25519_PUBLIC_LEN,
   X25519_SECRET_LEN,
   ED25519_SIG_LEN,
-  MLKEM768_PUBLIC_LEN,
-  MLKEM768_SECRET_LEN,
-  MLKEM768_CT_LEN,
+  MLKEM_PUBLIC_LEN,
+  MLKEM_SECRET_LEN,
+  MLKEM_CT_LEN,
   SHARED_SECRET_LEN,
   AEAD_KEY_LEN,
   AEAD_NONCE_LEN
@@ -67,21 +67,21 @@ describe('chat crypto primitives', () => {
     expect(ed25519Verify(new Uint8Array(64), msg, kp.publicKey)).toBe(false); // garbage sig
   });
 
-  it('ML-KEM-768 keygen/encapsulate/decapsulate agree on the shared secret', () => {
-    const kp = mlkemKeygen();
-    expect(kp.publicKey.length).toBe(MLKEM768_PUBLIC_LEN);
-    expect(kp.secretKey.length).toBe(MLKEM768_SECRET_LEN);
-    const { cipherText, sharedSecret } = mlkemEncapsulate(kp.publicKey);
-    expect(cipherText.length).toBe(MLKEM768_CT_LEN);
+  it('ML-KEM-1024 keygen/encapsulate/decapsulate agree on the shared secret', async () => {
+    const kp = await mlkemKeygen();
+    expect(kp.publicKey.length).toBe(MLKEM_PUBLIC_LEN);
+    expect(kp.secretKey.length).toBe(MLKEM_SECRET_LEN);
+    const { cipherText, sharedSecret } = await mlkemEncapsulate(kp.publicKey);
+    expect(cipherText.length).toBe(MLKEM_CT_LEN);
     expect(sharedSecret.length).toBe(SHARED_SECRET_LEN);
-    const recovered = mlkemDecapsulate(cipherText, kp.secretKey);
+    const recovered = await mlkemDecapsulate(cipherText, kp.secretKey);
     expect(Array.from(recovered)).toEqual(Array.from(sharedSecret));
   });
 
-  it('ML-KEM-768 rejects wrong-length public key / ciphertext', () => {
-    const kp = mlkemKeygen();
-    expect(() => mlkemEncapsulate(new Uint8Array(10))).toThrow(CryptoError);
-    expect(() => mlkemDecapsulate(new Uint8Array(10), kp.secretKey)).toThrow(CryptoError);
+  it('ML-KEM-1024 rejects wrong-length public key / ciphertext', async () => {
+    const kp = await mlkemKeygen();
+    await expect(mlkemEncapsulate(new Uint8Array(10))).rejects.toThrow(CryptoError);
+    await expect(mlkemDecapsulate(new Uint8Array(10), kp.secretKey)).rejects.toThrow(CryptoError);
   });
 
   it('AEAD seals + opens, and rejects tamper / wrong nonce / wrong AAD', () => {

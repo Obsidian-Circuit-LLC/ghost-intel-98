@@ -18,7 +18,7 @@ import {
   ED25519_PUBLIC_LEN,
   ED25519_SIG_LEN,
   X25519_PUBLIC_LEN,
-  MLKEM768_PUBLIC_LEN,
+  MLKEM_PUBLIC_LEN,
   type KeyPair
 } from './crypto';
 import { DS_PREKEY, SUITE_ID, concatBytes } from './constants';
@@ -119,18 +119,18 @@ export function safetyNumber(a: IdentityPublic, b: IdentityPublic): string {
 
 // ---------- signed KEM prekeys (v3 — PQ forward secrecy) ----------
 
-/** A responder's signed ML-KEM-768 prekey. One-time prekeys are consumed on use; a single rotating
+/** A responder's signed ML-KEM-1024 prekey. One-time prekeys are consumed on use; a single rotating
  *  last-resort (`isLastResort`) covers availability (FS-degraded — see the handshake spec). */
 export interface KemPrekey {
   prekeyId: Uint8Array; // PREKEY_ID_LEN bytes
   isLastResort: boolean;
-  publicKey: Uint8Array; // ML-KEM-768 public (MLKEM768_PUBLIC_LEN)
+  publicKey: Uint8Array; // ML-KEM-1024 public (MLKEM_PUBLIC_LEN)
   signature: Uint8Array; // Ed25519 over the canonical signed message (DS_PREKEY‖suite‖is_R‖id‖flag‖pk)
 }
 
 export interface KemPrekeyKeyPair {
   prekey: KemPrekey;
-  secretKey: Uint8Array; // ML-KEM-768 secret — must be deleted on consumption (durable)
+  secretKey: Uint8Array; // ML-KEM-1024 secret — must be deleted on consumption (durable)
 }
 
 /** Canonical message an `is_R` signs to vouch for a prekey (binds suite + identity + id + flag + pk). */
@@ -138,8 +138,8 @@ function prekeySignedMessage(isR: Uint8Array, prekeyId: Uint8Array, isLastResort
   return concatBytes(DS_PREKEY, SUITE_ID, isR, prekeyId, Uint8Array.of(isLastResort ? 1 : 0), pk);
 }
 
-export function generateKemPrekey(identity: IdentityKeyPair, isLastResort = false): KemPrekeyKeyPair {
-  const kp = mlkemKeygen();
+export async function generateKemPrekey(identity: IdentityKeyPair, isLastResort = false): Promise<KemPrekeyKeyPair> {
+  const kp = await mlkemKeygen();
   const prekeyId = randomBytes(PREKEY_ID_LEN);
   const signature = ed25519Sign(
     prekeySignedMessage(identity.publicKeys.ed25519, prekeyId, isLastResort, kp.publicKey),
@@ -150,7 +150,7 @@ export function generateKemPrekey(identity: IdentityKeyPair, isLastResort = fals
 
 /** Verify a prekey's signature under the responder's Ed25519 identity. Reject before any Encap. */
 export function verifyKemPrekey(prekey: KemPrekey, isRed25519: Uint8Array): boolean {
-  if (prekey.prekeyId.length !== PREKEY_ID_LEN || prekey.publicKey.length !== MLKEM768_PUBLIC_LEN) return false;
+  if (prekey.prekeyId.length !== PREKEY_ID_LEN || prekey.publicKey.length !== MLKEM_PUBLIC_LEN) return false;
   return ed25519Verify(
     prekey.signature,
     prekeySignedMessage(isRed25519, prekey.prekeyId, prekey.isLastResort, prekey.publicKey),
@@ -159,10 +159,10 @@ export function verifyKemPrekey(prekey: KemPrekey, isRed25519: Uint8Array): bool
 }
 
 /** Canonical fixed-layout encoding of a prekey (for the invite + transcript). */
-export const KEM_PREKEY_LEN = PREKEY_ID_LEN + 1 + MLKEM768_PUBLIC_LEN + ED25519_SIG_LEN;
+export const KEM_PREKEY_LEN = PREKEY_ID_LEN + 1 + MLKEM_PUBLIC_LEN + ED25519_SIG_LEN;
 
 export function encodeKemPrekey(p: KemPrekey): Uint8Array {
-  if (p.prekeyId.length !== PREKEY_ID_LEN || p.publicKey.length !== MLKEM768_PUBLIC_LEN || p.signature.length !== ED25519_SIG_LEN) {
+  if (p.prekeyId.length !== PREKEY_ID_LEN || p.publicKey.length !== MLKEM_PUBLIC_LEN || p.signature.length !== ED25519_SIG_LEN) {
     throw new IdentityError('prekey has wrong component length');
   }
   return concatBytes(p.prekeyId, Uint8Array.of(p.isLastResort ? 1 : 0), p.publicKey, p.signature);
@@ -174,7 +174,7 @@ export function decodeKemPrekey(bytes: Uint8Array): KemPrekey {
   const prekeyId = bytes.slice(off, (off += PREKEY_ID_LEN));
   const flag = bytes[off];
   off += 1;
-  const publicKey = bytes.slice(off, (off += MLKEM768_PUBLIC_LEN));
+  const publicKey = bytes.slice(off, (off += MLKEM_PUBLIC_LEN));
   const signature = bytes.slice(off, (off += ED25519_SIG_LEN));
   if (flag !== 0 && flag !== 1) throw new IdentityError('invalid is_last_resort flag');
   return { prekeyId, isLastResort: flag === 1, publicKey, signature };

@@ -3,11 +3,13 @@
  *
  *  - Classical leg via Node's built-in `crypto` (the same engine the vault trusts for AES-256-GCM /
  *    scrypt): X25519 ECDH, Ed25519 sign/verify, ChaCha20-Poly1305 AEAD, HKDF-SHA-256, SHA-256.
- *  - PQ leg via `@noble/post-quantum` ML-KEM-768 (self-audited; swap to an audited native binding
- *    later behind this module — it is the ONLY place ML-KEM is referenced).
+ *  - PQ leg: ML-KEM-1024 delegated to an injected `MlkemProvider` — production wires the AWS-LC
+ *    FIPS-validated sidecar (services/mlkem-sidecar.ts); tests inject an in-process reference. crypto.ts
+ *    holds NO ML-KEM implementation; this is the single ML-KEM seam, and the wrappers are async
+ *    because the provider runs out-of-process.
  *
  * This module deliberately stops at primitives + a generic KDF. The PQ-hybrid HANDSHAKE that
- * composes X25519 ⊕ ML-KEM-768 (PQXDH-style) is built in handshake.ts and frozen only after the
+ * composes X25519 ⊕ ML-KEM-1024 (PQXDH-style) is built in handshake.ts and frozen only after the
  * formalist + crypto-auditor gate — it is NOT defined here.
  *
  * All inputs/outputs are raw `Uint8Array`. Everything here is deterministic given its inputs, except
@@ -15,7 +17,6 @@
  */
 import * as nodeCrypto from 'node:crypto';
 import { ed25519, x25519 } from '@noble/curves/ed25519.js';
-import { ml_kem768 } from '@noble/post-quantum/ml-kem.js';
 
 // ---- sizes (bytes) — used by upper layers to bound/validate wire + stored material ----
 export const X25519_PUBLIC_LEN = 32;
@@ -23,9 +24,11 @@ export const X25519_SECRET_LEN = 32;
 export const ED25519_PUBLIC_LEN = 32;
 export const ED25519_SECRET_LEN = 32;
 export const ED25519_SIG_LEN = 64;
-export const MLKEM768_PUBLIC_LEN = 1184;
-export const MLKEM768_SECRET_LEN = 2400;
-export const MLKEM768_CT_LEN = 1088;
+// ML-KEM-1024 (FIPS 203, Category 5 — CNSA 2.0). Generic names so a future parameter change is a
+// value edit, not a rename.
+export const MLKEM_PUBLIC_LEN = 1568;
+export const MLKEM_SECRET_LEN = 3168;
+export const MLKEM_CT_LEN = 1568;
 export const SHARED_SECRET_LEN = 32;
 export const AEAD_KEY_LEN = 32;
 export const AEAD_NONCE_LEN = 12;
@@ -85,22 +88,53 @@ export function ed25519Verify(signature: Uint8Array, message: Uint8Array, public
   }
 }
 
-// ---- ML-KEM-768 (PQ KEM) — the only reference to the PQ library ----
+// ---- ML-KEM-1024 (PQ KEM) — delegated to an injected provider; the only ML-KEM seam ----
 
-export function mlkemKeygen(): KeyPair {
-  const kp = ml_kem768.keygen();
-  return { publicKey: kp.publicKey, secretKey: kp.secretKey };
+/** The ML-KEM backend. Production: the AWS-LC FIPS sidecar (services/mlkem-sidecar.ts). Tests: an
+ *  in-process reference. Out-of-process ⇒ all three operations are async. */
+export interface MlkemProvider {
+  keygen(): Promise<KeyPair>;
+  encapsulate(peerPublic: Uint8Array): Promise<{ cipherText: Uint8Array; sharedSecret: Uint8Array }>;
+  decapsulate(cipherText: Uint8Array, secretKey: Uint8Array): Promise<Uint8Array>;
 }
 
-export function mlkemEncapsulate(peerPublic: Uint8Array): { cipherText: Uint8Array; sharedSecret: Uint8Array } {
-  if (peerPublic.length !== MLKEM768_PUBLIC_LEN) throw new CryptoError('bad ML-KEM public key length');
-  const { cipherText, sharedSecret } = ml_kem768.encapsulate(peerPublic);
-  return { cipherText, sharedSecret };
+let mlkemProvider: MlkemProvider | null = null;
+
+/** Install (or clear, with null) the ML-KEM provider. chat.enable() wires the sidecar; chat.disable()
+ *  and the quit teardown clear it. With no provider, every ML-KEM op fails closed — there is no
+ *  in-process fallback by design. */
+export function setMlkemProvider(provider: MlkemProvider | null): void {
+  mlkemProvider = provider;
 }
 
-export function mlkemDecapsulate(cipherText: Uint8Array, secretKey: Uint8Array): Uint8Array {
-  if (cipherText.length !== MLKEM768_CT_LEN) throw new CryptoError('bad ML-KEM ciphertext length');
-  return ml_kem768.decapsulate(cipherText, secretKey);
+function requireMlkem(): MlkemProvider {
+  if (!mlkemProvider) throw new CryptoError('ML-KEM provider unavailable (chat crypto not initialized)');
+  return mlkemProvider;
+}
+
+export async function mlkemKeygen(): Promise<KeyPair> {
+  const kp = await requireMlkem().keygen();
+  if (kp.publicKey.length !== MLKEM_PUBLIC_LEN || kp.secretKey.length !== MLKEM_SECRET_LEN) {
+    throw new CryptoError('ML-KEM keygen returned wrong key sizes');
+  }
+  return kp;
+}
+
+export async function mlkemEncapsulate(peerPublic: Uint8Array): Promise<{ cipherText: Uint8Array; sharedSecret: Uint8Array }> {
+  if (peerPublic.length !== MLKEM_PUBLIC_LEN) throw new CryptoError('bad ML-KEM public key length');
+  const r = await requireMlkem().encapsulate(peerPublic);
+  if (r.cipherText.length !== MLKEM_CT_LEN || r.sharedSecret.length !== SHARED_SECRET_LEN) {
+    throw new CryptoError('ML-KEM encapsulate returned wrong sizes');
+  }
+  return r;
+}
+
+export async function mlkemDecapsulate(cipherText: Uint8Array, secretKey: Uint8Array): Promise<Uint8Array> {
+  if (cipherText.length !== MLKEM_CT_LEN) throw new CryptoError('bad ML-KEM ciphertext length');
+  if (secretKey.length !== MLKEM_SECRET_LEN) throw new CryptoError('bad ML-KEM secret key length');
+  const ss = await requireMlkem().decapsulate(cipherText, secretKey);
+  if (ss.length !== SHARED_SECRET_LEN) throw new CryptoError('ML-KEM decapsulate returned wrong size');
+  return ss;
 }
 
 // ---- symmetric: AEAD, KDF, hash, RNG, zeroize ----

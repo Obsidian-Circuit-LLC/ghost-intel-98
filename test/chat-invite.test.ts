@@ -12,9 +12,9 @@ import { generateIdentity, generateKemPrekey, type IdentityKeyPair, type KemPrek
 
 const ONION = `${'a'.repeat(56)}.onion`;
 
-function sample(): { responder: IdentityKeyPair; prekey: KemPrekey; token: Uint8Array; link: string } {
+async function sample(): Promise<{ responder: IdentityKeyPair; prekey: KemPrekey; token: Uint8Array; link: string }> {
   const responder = generateIdentity();
-  const { prekey } = generateKemPrekey(responder);
+  const { prekey } = await generateKemPrekey(responder);
   const token = mintInviteToken();
   const link = createInvite({ responder, onion: ONION, prekey, token });
   return { responder, prekey, token, link };
@@ -28,11 +28,11 @@ function relink(payload: Uint8Array): string {
 }
 
 describe('chat invite links (v3)', () => {
-  it('round-trips onion, responder identity, prekey, token', () => {
-    const { responder, prekey, token, link } = sample();
+  it('round-trips onion, responder identity, prekey, token', async () => {
+    const { responder, prekey, token, link } = await sample();
     expect(link.startsWith(INVITE_PREFIX)).toBe(true);
     const p = parseInvite(link);
-    expect(p.version).toBe(2);
+    expect(p.version).toBe(3);
     expect(p.onion).toBe(ONION);
     expect(Array.from(p.token)).toEqual(Array.from(token));
     expect(Array.from(p.responderPublic.ed25519)).toEqual(Array.from(responder.publicKeys.ed25519));
@@ -46,15 +46,15 @@ describe('chat invite links (v3)', () => {
     expect(isValidOnionV3(`${'A'.repeat(56)}.onion`)).toBe(false);
   });
 
-  it('rejects bad onion / wrong-length token on create', () => {
+  it('rejects bad onion / wrong-length token on create', async () => {
     const responder = generateIdentity();
-    const { prekey } = generateKemPrekey(responder);
+    const { prekey } = await generateKemPrekey(responder);
     expect(() => createInvite({ responder, onion: 'nope.onion', prekey, token: mintInviteToken() })).toThrow(InviteError);
     expect(() => createInvite({ responder, onion: ONION, prekey, token: new Uint8Array(16) })).toThrow(InviteError);
   });
 
-  it('rejects a tampered xs_R (whole-invite signature catches it)', () => {
-    const { link } = sample();
+  it('rejects a tampered xs_R (whole-invite signature catches it)', async () => {
+    const { link } = await sample();
     const payload = payloadOf(link);
     // xs_R sits inside the identity bundle: after version(1)+onionLen(1)+onion(62)+ed25519(32).
     const xsROffset = 2 + 56 + 32; // onion is 56 chars + '.onion' = 62; ed25519 is 32 → xs_R starts here
@@ -62,8 +62,8 @@ describe('chat invite links (v3)', () => {
     expect(() => parseInvite(relink(payload))).toThrow(InviteError);
   });
 
-  it('rejects a tampered onion / token (signature catches it)', () => {
-    const { link } = sample();
+  it('rejects a tampered onion / token (signature catches it)', async () => {
+    const { link } = await sample();
     const p1 = payloadOf(link);
     p1[3] ^= 0x01; // flip an onion byte
     expect(() => parseInvite(relink(p1))).toThrow(InviteError);
@@ -72,17 +72,17 @@ describe('chat invite links (v3)', () => {
     expect(() => parseInvite(relink(p2))).toThrow(InviteError);
   });
 
-  it('accepts a link with trailing padding / whitespace', () => {
-    const { link } = sample();
+  it('accepts a link with trailing padding / whitespace', async () => {
+    const { link } = await sample();
     expect(() => parseInvite(`${link}==`)).not.toThrow();
     expect(parseInvite(`${link}\n`).onion).toBe(ONION);
   });
 
-  it('rejects malformed links: bad prefix, bad base64, truncation, version', () => {
+  it('rejects malformed links: bad prefix, bad base64, truncation, version', async () => {
     expect(() => parseInvite('https://example.com/x')).toThrow(InviteError);
     expect(() => parseInvite(`${INVITE_PREFIX}!!!`)).toThrow(InviteError);
     expect(() => parseInvite(`${INVITE_PREFIX}AAAA`)).toThrow(InviteError);
-    const { link } = sample();
+    const { link } = await sample();
     const payload = payloadOf(link);
     payload[0] = 1; // wrong version
     expect(() => parseInvite(relink(payload))).toThrow(InviteError);

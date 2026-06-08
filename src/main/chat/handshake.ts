@@ -15,7 +15,7 @@ import {
   x25519Keygen, x25519Ecdh, mlkemKeygen, mlkemEncapsulate, mlkemDecapsulate,
   ed25519Sign, ed25519Verify, hkdf, sha256, hmacSha256, aeadSeal, aeadOpen,
   zeroize, constantTimeEqual,
-  X25519_PUBLIC_LEN, MLKEM768_PUBLIC_LEN, MLKEM768_CT_LEN, ED25519_PUBLIC_LEN, ED25519_SIG_LEN,
+  X25519_PUBLIC_LEN, MLKEM_PUBLIC_LEN, MLKEM_CT_LEN, ED25519_PUBLIC_LEN, ED25519_SIG_LEN,
   AEAD_NONCE_LEN
 } from './crypto';
 import {
@@ -159,8 +159,8 @@ async function initiatorHandshakeImpl(stream: ChatStream, opts: InitiatorOpts): 
 
   const io = new HandshakeIO(stream);
   const xeI = x25519Keygen();
-  const ekI = mlkemKeygen();
-  const enc = mlkemEncapsulate(prekey.publicKey); // (ct_pre, ss_pre)
+  const ekI = await mlkemKeygen();
+  const enc = await mlkemEncapsulate(prekey.publicKey); // (ct_pre, ss_pre)
   const modeByte = Uint8Array.of(firstContact ? MODE_FIRST : MODE_RECONNECT);
 
   const th0 = h(PROTO_LABEL, SUITE_ID, modeByte);
@@ -187,11 +187,11 @@ async function initiatorHandshakeImpl(stream: ChatStream, opts: InitiatorOpts): 
   // ---- Msg2 ----
   const msg2 = new Cursor(await io.recv());
   const xeR = msg2.take(X25519_PUBLIC_LEN);
-  const ctI = msg2.take(MLKEM768_CT_LEN);
+  const ctI = msg2.take(MLKEM_CT_LEN);
   const nextPrekeyBytes = msg2.take(KEM_PREKEY_LEN);
   const cConfR = msg2.rest();
 
-  const ssI = mlkemDecapsulate(ctI, ekI.secretKey);
+  const ssI = await mlkemDecapsulate(ctI, ekI.secretKey);
   ck = mixKey(ck, x25519Ecdh(xeI, xeR), MIX_EE);
   ck = mixKey(ck, x25519Ecdh(x25519Pair(identity), xeR), MIX_SE);
   ck = mixKey(ck, ssI, MIX_SSI);
@@ -230,9 +230,9 @@ async function responderHandshakeImpl(stream: ChatStream, opts: ResponderOpts): 
   if (modeByte !== MODE_FIRST && modeByte !== MODE_RECONNECT) throw new HandshakeError('bad mode');
   const firstContact = modeByte === MODE_FIRST;
   const xeI = msg1.take(X25519_PUBLIC_LEN);
-  const ekIpub = msg1.take(MLKEM768_PUBLIC_LEN);
+  const ekIpub = msg1.take(MLKEM_PUBLIC_LEN);
   const prekeyId = msg1.take(PREKEY_ID_LEN);
-  const ctPre = msg1.take(MLKEM768_CT_LEN);
+  const ctPre = msg1.take(MLKEM_CT_LEN);
   const macT = firstContact ? msg1.take(MAC_LEN) : new Uint8Array(0);
   const cIdI = msg1.rest();
 
@@ -254,7 +254,7 @@ async function responderHandshakeImpl(stream: ChatStream, opts: ResponderOpts): 
   }
 
   let ck = hkdf(PROTO_LABEL, th1, MIX_INIT, 32);
-  const ssPre = mlkemDecapsulate(ctPre, secretKey);
+  const ssPre = await mlkemDecapsulate(ctPre, secretKey);
   ck = mixKey(ck, x25519Ecdh(x25519Pair(identity), xeI), MIX_ES);
   ck = mixKey(ck, ssPre, MIX_SSPRE);
   const hk1 = hkdf(ck, th1, DRV_HK1, 32);
@@ -287,7 +287,7 @@ async function responderHandshakeImpl(stream: ChatStream, opts: ResponderOpts): 
 
   // ---- Msg2 (only after all checks pass) ----
   const xeR = x25519Keygen();
-  const encI = mlkemEncapsulate(ekIpub); // (ct_I, ss_I)
+  const encI = await mlkemEncapsulate(ekIpub); // (ct_I, ss_I)
   const nextPrekey = await invites.issueNext();
   const nextPrekeyBytes = encodeKemPrekey(nextPrekey);
 

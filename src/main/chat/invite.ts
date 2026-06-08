@@ -26,7 +26,7 @@ import {
   type KemPrekey
 } from './identity';
 
-export const INVITE_VERSION = 2;
+export const INVITE_VERSION = 3; // v3: ML-KEM-1024 prekey (larger); v2 (ML-KEM-768) invites rejected
 export const INVITE_TOKEN_LEN = 32;
 export const INVITE_PREFIX = 'dcs98chat://invite/';
 const MAX_ONION_LEN = 255;

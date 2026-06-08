@@ -71,26 +71,26 @@ describe('chat identity (v3)', () => {
 });
 
 describe('chat KEM prekeys (v3)', () => {
-  it('generates a signed prekey that verifies under the identity', () => {
+  it('generates a signed prekey that verifies under the identity', async () => {
     const id = generateIdentity();
-    const { prekey, secretKey } = generateKemPrekey(id);
-    expect(prekey.publicKey.length).toBe(1184);
-    expect(secretKey.length).toBe(2400);
+    const { prekey, secretKey } = await generateKemPrekey(id);
+    expect(prekey.publicKey.length).toBe(1568);
+    expect(secretKey.length).toBe(3168);
     expect(prekey.isLastResort).toBe(false);
     expect(verifyKemPrekey(prekey, id.publicKeys.ed25519)).toBe(true);
   });
 
-  it('marks a last-resort prekey and still verifies', () => {
+  it('marks a last-resort prekey and still verifies', async () => {
     const id = generateIdentity();
-    const { prekey } = generateKemPrekey(id, true);
+    const { prekey } = await generateKemPrekey(id, true);
     expect(prekey.isLastResort).toBe(true);
     expect(verifyKemPrekey(prekey, id.publicKeys.ed25519)).toBe(true);
   });
 
-  it('rejects a prekey under the wrong identity or with a tampered field', () => {
+  it('rejects a prekey under the wrong identity or with a tampered field', async () => {
     const id = generateIdentity();
     const other = generateIdentity();
-    const { prekey } = generateKemPrekey(id);
+    const { prekey } = await generateKemPrekey(id);
     expect(verifyKemPrekey(prekey, other.publicKeys.ed25519)).toBe(false); // wrong signer
     const tampered = { ...prekey, isLastResort: !prekey.isLastResort }; // flip signed flag
     expect(verifyKemPrekey(tampered, id.publicKeys.ed25519)).toBe(false);
@@ -98,9 +98,9 @@ describe('chat KEM prekeys (v3)', () => {
     expect(verifyKemPrekey(tamperedPk, id.publicKeys.ed25519)).toBe(false);
   });
 
-  it('encodes/decodes a prekey round-trip', () => {
+  it('encodes/decodes a prekey round-trip', async () => {
     const id = generateIdentity();
-    const { prekey } = generateKemPrekey(id, true);
+    const { prekey } = await generateKemPrekey(id, true);
     const enc = encodeKemPrekey(prekey);
     expect(enc.length).toBe(KEM_PREKEY_LEN);
     const dec = decodeKemPrekey(enc);

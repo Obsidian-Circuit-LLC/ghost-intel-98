@@ -14,6 +14,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['test/**/*.test.ts'],
+    setupFiles: ['./test/setup-mlkem.ts'], // install the in-process ML-KEM-1024 provider for chat crypto
     globals: false
   }
 });

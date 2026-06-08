@@ -22,12 +22,12 @@ const hex = (u: Uint8Array): string => Buffer.from(u).toString('hex');
 
 /** In-memory responder invite store: prekeyId → {prekey, secret, token}. */
 function makeInviteStore(responder: IdentityKeyPair): ResponderInviteStore & {
-  issueFirstContact(): { prekey: KemPrekey; token: Uint8Array };
+  issueFirstContact(): Promise<{ prekey: KemPrekey; token: Uint8Array }>;
 } {
   const map = new Map<string, { prekey: KemPrekey; secretKey: Uint8Array; token: Uint8Array | null }>();
   return {
-    issueFirstContact() {
-      const { prekey, secretKey } = generateKemPrekey(responder);
+    async issueFirstContact() {
+      const { prekey, secretKey } = await generateKemPrekey(responder);
       const token = randomBytes(32);
       map.set(hex(prekey.prekeyId), { prekey, secretKey, token });
       return { prekey, token };
@@ -39,7 +39,7 @@ function makeInviteStore(responder: IdentityKeyPair): ResponderInviteStore & {
       map.delete(hex(prekeyId)); // one-time
     },
     async issueNext() {
-      const { prekey, secretKey } = generateKemPrekey(responder);
+      const { prekey, secretKey } = await generateKemPrekey(responder);
       map.set(hex(prekey.prekeyId), { prekey, secretKey, token: null });
       return prekey;
     }
@@ -70,7 +70,7 @@ describe('chat handshake (v3, EXPERIMENTAL) — first contact', () => {
     const responderId = generateIdentity();
     const invites = makeInviteStore(responderId);
     const contacts = makePinStore();
-    const { prekey, token } = invites.issueFirstContact();
+    const { prekey, token } = await invites.issueFirstContact();
 
     const [sa, sb] = createPipe();
     const [rRes, iRes] = await Promise.all([
@@ -102,7 +102,7 @@ describe('chat handshake (v3, EXPERIMENTAL) — first contact', () => {
     const responderId = generateIdentity();
     const invites = makeInviteStore(responderId);
     const contacts = makePinStore();
-    const { prekey } = invites.issueFirstContact();
+    const { prekey } = await invites.issueFirstContact();
 
     const [sa, sb] = createPipe();
     const results = await Promise.allSettled([
@@ -124,7 +124,7 @@ describe('chat handshake (v3, EXPERIMENTAL) — first contact', () => {
     const invites = makeInviteStore(responderId);
     const contacts = makePinStore();
     // a prekey signed by the responder but never registered in the store
-    const { prekey } = generateKemPrekey(responderId);
+    const { prekey } = await generateKemPrekey(responderId);
 
     const [sa, sb] = createPipe();
     const results = await Promise.allSettled([
@@ -147,7 +147,7 @@ describe('chat handshake (v3) — reconnect', () => {
     const responderId = generateIdentity();
     const invites = makeInviteStore(responderId);
     const contacts = makePinStore();
-    const { prekey, token } = invites.issueFirstContact();
+    const { prekey, token } = await invites.issueFirstContact();
 
     // first contact establishes the pin + hands a rotation prekey
     const [fa, fb] = createPipe();
@@ -188,7 +188,7 @@ describe('chat handshake — guards', () => {
     const initiatorId = generateIdentity();
     const responderId = generateIdentity();
     const imposter = generateIdentity();
-    const { prekey } = generateKemPrekey(imposter); // signed by the wrong identity
+    const { prekey } = await generateKemPrekey(imposter); // signed by the wrong identity
     const [sa] = createPipe();
     await expect(
       initiatorHandshake(sa, {

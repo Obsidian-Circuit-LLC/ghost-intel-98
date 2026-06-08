@@ -22,12 +22,15 @@ import { ContactStore } from '../chat/contact-store';
 import { MessageStore } from '../chat/message-store';
 import { GroupStore } from '../chat/group-store';
 import { safetyNumber, contactId, type IdentityKeyPair } from '../chat/identity';
+import { setMlkemProvider } from '../chat/crypto';
+import { MlkemSidecar } from './mlkem-sidecar';
 
 const VIRT_PORT = 9001;
 
 let engine: ChatEngine | null = null;
 let identity: IdentityKeyPair | null = null;
 let contactStore: ContactStore | null = null;
+let mlkem: MlkemSidecar | null = null;
 let stallTimer: ReturnType<typeof setInterval> | null = null;
 
 /** Reap inbound transfers idle longer than this (slow-loris / stalled-peer memory guard). */
@@ -92,6 +95,14 @@ export async function enable(getWindow: () => BrowserWindow | null): Promise<{ o
   await mkdir(join(dir, 'groups', 'messages'), { recursive: true });
   await mkdir(quarantineDir(), { recursive: true });
 
+  // The ML-KEM provider must be live BEFORE any prekey is minted (ensurePool → keygen). Start the
+  // AWS-LC FIPS sidecar and install it as crypto.ts's ML-KEM backend; fail-closed if it won't start.
+  // If anything later in enable() throws, stop it so the helper process can't orphan.
+  const km = new MlkemSidecar();
+  await km.start();
+  mlkem = km;
+  setMlkemProvider(km);
+  try {
   const identityStore = new ChatIdentityStore(join(dir, 'identity.json'));
   identity = await identityStore.loadOrCreate();
   const prekeys = new PrekeyStore(join(dir, 'prekeys.json'), identity);
@@ -150,6 +161,12 @@ export async function enable(getWindow: () => BrowserWindow | null): Promise<{ o
   if (typeof stallTimer.unref === 'function') stallTimer.unref();
   getWindow()?.webContents.send(channels.chat.onTorStatus, { status: 'online', onion: engine.onionAddress() });
   return { onion: engine.onionAddress() };
+  } catch (e) {
+    setMlkemProvider(null);
+    try { km.stop(); } catch { /* already gone */ }
+    mlkem = null;
+    throw e;
+  }
 }
 
 export async function disable(): Promise<void> {
@@ -158,6 +175,9 @@ export async function disable(): Promise<void> {
   engine = null;
   identity = null;
   contactStore = null;
+  setMlkemProvider(null);
+  mlkem?.stop();
+  mlkem = null;
 }
 
 /** Delete quarantine bins that no message-history row references — leftovers from a crash mid-transfer

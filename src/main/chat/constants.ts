@@ -8,7 +8,7 @@
  */
 const tag = (s: string): Uint8Array => new TextEncoder().encode(s);
 
-export const SUITE_ID = tag('dcs98-chat/v3/x25519+mlkem768+ed25519');
+export const SUITE_ID = tag('dcs98-chat/v3/x25519+mlkem1024+ed25519');
 export const PROTO_LABEL = tag('dcs98-chat/handshake/v3');
 
 // Signature domain-separation (crypto-audit H-2): every Ed25519 use under an identity key gets a

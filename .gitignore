@@ -55,3 +55,8 @@ resources/tor/win-x64/
 
 # Bundled Piper TTS binary + voice model (operator/CI-fetched + verified; see scripts/fetch-piper.mjs)
 resources/piper/win-x64/
+
+# Bundled ML-KEM-1024 helper binaries (built per-platform; see tools/mlkem-helper/build.sh).
+# The README + C source ARE committed; the compiled binaries are not.
+resources/mlkem/*/mlkem-helper
+resources/mlkem/*/mlkem-helper.exe
