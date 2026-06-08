@@ -1,0 +1,67 @@
+(* ============================================================================
+   DCS98 chat handshake — CryptoVerif, FORWARD SECRECY, classical leg.
+
+   Forward secrecy: a session's RK stays secret even if the long-term keys are
+   compromised AFTER the session. The chain mixes secrets that used DELETED
+   ephemerals: ee = DH(xe_I, xe_R) (both per-handshake, zeroized handshake.ts:221,
+   311) and ss_I (ML-KEM to I's deleted ephemeral ek_I). FS is hybrid — it holds if
+   EITHER the ephemeral DH or the ephemeral KEM survives.
+
+   This file = the classical FS leg: the surviving secret is the ephemeral-ephemeral
+   DH `ee` (CDH on xe_I, xe_R). EVERYTHING else is handed to the adversary —
+   modelling full static compromise (es, se, both via the now-known static keys) AND
+   ML-KEM fully broken (ss_pre, ss_I). RK stays secret via `ee` alone.
+
+   Chain (handshake.ts:174-217): CK1=MixKey(es,CK0) → ss_pre → ee → se → ss_I → RK.
+   es, ss_pre precede ee and are revealed ⇒ CK2 is adversary-computable; ee then
+   re-randomizes the chain. The companion PQ FS leg is chat-handshake-fs-pq.cv.
+
+   Run: cryptoverif chat-handshake-fs-classical.cv
+   ============================================================================ *)
+
+proof {
+  crypto rom(Hee);
+  crypto rom(Hmix);
+  crypto cdh(exp);
+  success
+}
+
+type Z   [large,bounded].
+type G   [large,bounded].
+type bits [large,fixed].
+type hkee [fixed].
+type hkmix [fixed].
+
+expand DH_basic(G, Z, g, exp, exp', mult).
+proba pCDH.
+expand CDH(G, Z, g, exp, exp', mult, pCDH).
+
+expand ROM_hash_2(hkee,  G,    bits, bits, Hee,  oracle_ee,  qHee).
+expand ROM_hash_2(hkmix, bits, bits, bits, Hmix, oracle_mix, qHmix).
+
+query secret rk.
+
+channel start, c.
+
+process
+  in(start, ());
+  new ke: hkee; new km: hkmix;
+  new xeI: Z; new xeR: Z;          (* per-handshake ephemerals (their secrets are deleted) *)
+  let geI: G = exp(g, xeI) in
+  let geR: G = exp(g, xeR) in
+  let ee:  G = exp(geR, xeI) in     (* ephemeral-ephemeral DH — the surviving FS secret *)
+  new ck0:   bits;                  (* public chaining seed *)
+  new es:    bits;                  (* static-key-derived ⇒ adversary computes it post-compromise *)
+  new sspre: bits;                  (* ML-KEM fully broken in this leg ⇒ given *)
+  new se:    bits;                  (* static-key-derived ⇒ given *)
+  new ssi:   bits;                  (* given *)
+  new th4:   bits;
+  let ck1: bits = Hmix(km, es,    ck0) in
+  let ck2: bits = Hmix(km, sspre, ck1) in
+  let ck3: bits = Hee (ke, ee,    ck2) in
+  let ck4: bits = Hmix(km, se,    ck3) in
+  let ck5: bits = Hmix(km, ssi,   ck4) in
+  let rk:  bits = Hmix(km, ck5,   th4) in
+  (* hand the adversary the ephemeral publics AND every non-ee secret (statics + KEM) *)
+  out(c, (geI, geR, ck0, es, sspre, se, ssi, th4));
+  (oracle_ee(ke) | oracle_mix(km))
