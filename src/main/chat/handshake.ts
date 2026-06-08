@@ -26,7 +26,7 @@ import {
 import {
   PROTO_LABEL, SUITE_ID, DS_HS_INIT, DS_HS_RESP, DS_MAC_T, DS_MAC_R,
   MIX_INIT, MIX_ES, MIX_SSPRE, MIX_EE, MIX_SE, MIX_SSI, DRV_HK1, DRV_HK2, DRV_ROOT, DRV_SID,
-  RECONNECT_GATE,
+  RECONNECT_GATE, HS_MSG2, HS_REJECT,
   concatBytes
 } from './constants';
 import { Session } from './session';
@@ -231,18 +231,30 @@ async function initiatorHandshakeImpl(stream: ChatStream, opts: InitiatorOpts): 
   io.send(concatBytes(modeByte, xeI.publicKey, ekI.publicKey, prekey.prekeyId, enc.cipherText, macT, macRSlot, cIdI));
   const th2 = h(th1, cIdI);
 
+  // ---- Responder reply (Msg2 or Reject) ----
+  const reply = new Cursor(await io.recv());
+  // Typed responder reply (rev-4 Task 2.3): read the hs_type discriminant first and branch. The same
+  // byte is folded into th3 below so Sig_R covers it — a flipped type breaks the signature check.
+  const hsType = reply.byte();
+  if (hsType === HS_REJECT) {
+    // Task 2.4 replaces this with the real prekey_unknown recovery path.
+    throw new HandshakeError('unexpected reject (recovery not yet implemented)');
+  }
+  if (hsType !== HS_MSG2) {
+    throw new HandshakeError('unknown hs_type in responder reply');
+  }
+
   // ---- Msg2 ----
-  const msg2 = new Cursor(await io.recv());
-  const xeR = msg2.take(X25519_PUBLIC_LEN);
-  const ctI = msg2.take(MLKEM_CT_LEN);
-  const nextPrekeyBytes = msg2.take(KEM_PREKEY_LEN);
-  const cConfR = msg2.rest();
+  const xeR = reply.take(X25519_PUBLIC_LEN);
+  const ctI = reply.take(MLKEM_CT_LEN);
+  const nextPrekeyBytes = reply.take(KEM_PREKEY_LEN);
+  const cConfR = reply.rest();
 
   const ssI = await mlkemDecapsulate(ctI, ekI.secretKey);
   ck = mixKey(ck, x25519Ecdh(xeI, xeR), MIX_EE);
   ck = mixKey(ck, x25519Ecdh(x25519Pair(identity), xeR), MIX_SE);
   ck = mixKey(ck, ssI, MIX_SSI);
-  const th3 = h(th2, xeR, ctI, nextPrekeyBytes);
+  const th3 = h(th2, Uint8Array.of(hsType), xeR, ctI, nextPrekeyBytes);
   const hk2 = hkdf(ck, th3, DRV_HK2, 32);
 
   let confPt: Uint8Array;
@@ -386,12 +398,16 @@ async function responderHandshakeImpl(stream: ChatStream, opts: ResponderOpts): 
   ck = mixKey(ck, x25519Ecdh(xeR, xeI), MIX_EE);
   ck = mixKey(ck, x25519Ecdh(xeR, xsI), MIX_SE);
   ck = mixKey(ck, encI.sharedSecret, MIX_SSI);
-  const th3 = h(th2, xeR.publicKey, encI.cipherText, nextPrekeyBytes);
+  // Typed responder reply (rev-4 Task 2.3): a 1-byte hs_type discriminant lets R answer a reconnect
+  // Msg1 with either an accept (HS_MSG2) or a recovery Reject (HS_REJECT, Task 2.4). Fold the SAME byte
+  // into th3 BEFORE Sig_R so the type can't be flipped on the wire (Sig_R covers DS_HS_RESP‖th3).
+  const hsType = Uint8Array.of(HS_MSG2);
+  const th3 = h(th2, hsType, xeR.publicKey, encI.cipherText, nextPrekeyBytes);
   const hk2 = hkdf(ck, th3, DRV_HK2, 32);
   const sigR = ed25519Sign(concatBytes(DS_HS_RESP, th3), ed25519Pair(identity));
   const cConfR = aeadSeal(hk2, NONCE0, sigR, new Uint8Array(0));
 
-  io.send(concatBytes(xeR.publicKey, encI.cipherText, nextPrekeyBytes, cConfR));
+  io.send(concatBytes(hsType, xeR.publicKey, encI.cipherText, nextPrekeyBytes, cConfR));
   const th4 = h(th3, cConfR);
   const rk = hkdf(ck, th4, DRV_ROOT, 32);
   const sid = hkdf(ck, th4, DRV_SID, 16);

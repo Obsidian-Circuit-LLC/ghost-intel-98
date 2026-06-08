@@ -17,6 +17,8 @@ import {
 } from '../src/main/chat/identity';
 import { encodeEnvelope, decodeEnvelope } from '../src/main/chat/session';
 import { randomBytes } from '../src/main/chat/crypto';
+import { HEADER_LEN } from '../src/main/chat/wire';
+import type { ChatStream } from '../src/main/chat/transport';
 
 const hex = (u: Uint8Array): string => Buffer.from(u).toString('hex');
 
@@ -191,6 +193,60 @@ describe('chat handshake (v3) — reconnect', () => {
     ]);
     expect(contactId(rRes.peer)).toBe(contactId(initiatorId.publicKeys));
     expect(await bothExchange(iRes.session, rRes.session, 'reconnected')).toBe('reconnected');
+  });
+
+  /** Wrap a ChatStream so its FIRST non-empty outbound frame has its payload byte 0 transformed by
+   *  `mut`. The responder sends exactly one handshake frame (the Msg2/Reject reply), so this lands on
+   *  the hs_type discriminant — letting a test flip it to an unknown value before the initiator parses. */
+  function tamperFirstReplyByte(inner: ChatStream, mut: (b: number) => number): ChatStream {
+    let done = false;
+    return {
+      send(data: Uint8Array): void {
+        if (!done && data.length > HEADER_LEN) {
+          done = true;
+          const copy = data.slice();
+          copy[HEADER_LEN] = mut(copy[HEADER_LEN]) & 0xff;
+          inner.send(copy);
+          return;
+        }
+        inner.send(data);
+      },
+      onData(cb) { inner.onData(cb); },
+      onClose(cb) { inner.onClose(cb); },
+      close() { inner.close(); },
+      get closed() { return inner.closed; }
+    };
+  }
+
+  /** Run first_contact then a reconnect, tampering the responder reply's hs_type byte via `mut`.
+   *  Returns the initiator's settled promise so the test can assert it rejects. */
+  async function runReconnectWithTamperedReply(mut: (b: number) => number): Promise<unknown> {
+    const initiatorId = generateIdentity();
+    const responderId = generateIdentity();
+    const invites = makeInviteStore(responderId);
+    const contacts = makePinStore();
+    const { prekey, token } = await invites.issueFirstContact();
+
+    const [fa, fb] = createPipe();
+    const [, iFirst] = await Promise.all([
+      responderHandshake(fb, { identity: responderId, invites, contacts }),
+      initiatorHandshake(fa, { identity: initiatorId, responderPublic: responderId.publicKeys, prekey, token, mode: 'first_contact' })
+    ]);
+    const rotation = iFirst.nextPrekey as KemPrekey;
+
+    const [ra, rb] = createPipe();
+    const tamperedRb = tamperFirstReplyByte(rb, mut);
+    const [, iRes] = await Promise.allSettled([
+      responderHandshake(tamperedRb, { identity: responderId, invites, contacts }),
+      initiatorHandshake(ra, { identity: initiatorId, responderPublic: responderId.publicKeys, prekey: rotation, mode: 'reconnect' })
+    ]);
+    if (iRes.status === 'rejected') throw iRes.reason;
+    return iRes.value;
+  }
+
+  it('initiator rejects an unknown hs_type in the responder reply', async () => {
+    await expect(runReconnectWithTamperedReply(() => 0x7f))
+      .rejects.toThrow(/hs_type|unexpected reply/i);
   });
 
   it('rejects reconnect when the peer identity is not pinned', async () => {
