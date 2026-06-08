@@ -1,0 +1,582 @@
+Doing expand get, insert and prove unique annotations... No change.
+Doing simplify (non-expanded game)... No change.
+Doing expand... Done.
+Doing remove assignments of findcond... Done.
+Doing simplify... Run simplify 1 time(s). Fixpoint reached.
+No change.
+Doing move all binders... No change.
+Doing SA rename new without array accesses and remove assignments of findcond... No change.
+Doing merge branches... No change.
+Proof of (one-session) secrecy of rk failed:
+  rk is not defined only by restrictions or assignments.
+Trying equivalence ind_cca2(encap)... Failed.
+Doing remove assignments of binder sk... Done.
+Trying equivalence ind_cca2(encap) with seed, kseed... Transf. OK Proba. computed Transf. done Succeeded.
+Doing simplify (non-expanded game)... Done.
+Doing expand... Done.
+Doing remove assignments of findcond... Done.
+Doing simplify... Run simplify 2 time(s). Fixpoint reached.
+Done.
+Doing move all binders... No change.
+Doing SA rename new without array accesses and remove assignments of findcond... Done.
+Doing merge branches... No change.
+Trying equivalence rom(H)... Transf. OK Proba. computed Transf. done Succeeded.
+Doing simplify (non-expanded game)... Done.
+Doing expand... Done.
+Doing remove assignments of findcond... Done.
+Doing simplify... Doing global dependency analysis on es inside simplify... At 22, returned message es depends on es.
+No change
+Doing global dependency analysis on k1_1 inside simplify... Done. Restarting simplify
+Eliminated collisions between k1_1 and x2 Probability: qH / |kemss|
+(k1_1 collides with a value independent of k1_1[...] with probability at most 1 / |kemss|;
+ x2 does not depend on k1_1[...])
+Run simplify 2 time(s). Fixpoint reached.
+Done.
+Doing move all binders... Done.
+Doing SA rename new without array accesses and remove assignments of findcond... No change.
+Doing merge branches... No change.
+Proved one-session secrecy of rk
+Proved secrecy of rk
+===================== Proof starts =======================
+Initial state
+Game 1 is
+     start() :=
+     seed <-R keyseed;
+     pk: pkey <- pkgen(seed);
+     sk: skey <- skgen(seed);
+     enc: encapoutput <- (pk_1: pkey <- pk; kseed <-R encapseed; encap_r(pk_1, kseed));
+ {16}let pair(ss: kemss, ct: ciphertext) = enc in
+     hk <-R hashkey;
+     es <-R esT;
+     rk: D <- H(hk, es, ss);
+     return(pk, ct, es);
+     ((
+       foreach iH <= qH do
+       ch1(x1: esT, x2: kemss) :=
+       return(H(hk, x1, x2))
+     ) | (
+       foreach i <= Ndec do
+       cdec(cc: ciphertext) :=
+       if cc <> ct then
+       return(decap(cc, sk))
+     ))
+
+
+Applying expand
+  - Expand if/find/let
+    - Simplify pattern pair(ss: kemss, ct: ciphertext) (bijective tuple expanded) at 16
+yields
+
+Game 2 is
+     start() :=
+     seed <-R keyseed;
+     pk: pkey <- pkgen(seed);
+     sk: skey <- skgen(seed);
+     pk_1: pkey <- pk;
+     kseed <-R encapseed;
+     enc: encapoutput <- encap_r(pk_1, kseed);
+     ct: ciphertext <- 2-proj-pair(enc);
+     ss: kemss <- 1-proj-pair(enc);
+     hk <-R hashkey;
+     es <-R esT;
+     rk: D <- H(hk, es, ss);
+     return(pk, ct, es);
+     ((
+       foreach iH <= qH do
+       ch1(x1: esT, x2: kemss) :=
+       return(H(hk, x1, x2))
+     ) | (
+       foreach i <= Ndec do
+       cdec(cc: ciphertext) :=
+       if cc <> ct then
+       return(decap(cc, sk))
+     ))
+
+
+Applying remove assignments of findcond
+  - Remove assignments on pk_1 (definition removed, all usages removed)
+yields
+
+Game 3 is
+     start() :=
+     seed <-R keyseed;
+     pk: pkey <- pkgen(seed);
+     sk: skey <- skgen(seed);
+     kseed <-R encapseed;
+     enc: encapoutput <- encap_r(pk, kseed);
+     ct: ciphertext <- 2-proj-pair(enc);
+     ss: kemss <- 1-proj-pair(enc);
+     hk <-R hashkey;
+     es <-R esT;
+     rk: D <- H(hk, es, ss);
+     return(pk, ct, es);
+     ((
+       foreach iH <= qH do
+       ch1(x1: esT, x2: kemss) :=
+       return(H(hk, x1, x2))
+     ) | (
+       foreach i <= Ndec do
+       cdec(cc: ciphertext) :=
+       if cc <> ct then
+       return(decap(cc, sk))
+     ))
+
+
+Applying remove assignments of binder sk
+  - Remove assignments on sk (definition removed, all usages removed)
+yields
+
+Game 4 is
+     start() :=
+     seed <-R keyseed;
+     pk: pkey <- pkgen(seed);
+     kseed <-R encapseed;
+     enc: encapoutput <- encap_r(pk, kseed);
+     ct: ciphertext <- 2-proj-pair(enc);
+     ss: kemss <- 1-proj-pair(enc);
+     hk <-R hashkey;
+     es <-R esT;
+     rk: D <- H(hk, es, ss);
+     return(pk, ct, es);
+     ((
+       foreach iH <= qH do
+       ch1(x1: esT, x2: kemss) :=
+       return(H(hk, x1, x2))
+     ) | (
+       foreach i <= Ndec do
+       cdec(cc: ciphertext) :=
+       if cc <> ct then
+       return(decap(cc, skgen(seed)))
+     ))
+
+
+Applying equivalence ind_cca2(encap) with seed, kseed [probability Penc(time_1, 1, 1, Ndec)]
+  - Equivalence ind_cca2(encap) with variables: kseed -> kseed_1, seed -> seed_1
+yields
+
+Game 5 is
+     start() :=
+     seed_1 <-R keyseed;
+     pk: pkey <- pkgen2(seed_1);
+     kseed_1 <-R encapseed;
+     k1_1 <-R kemss;
+     enc: encapoutput <- (pk_R: pkey <- pk; if {12}(pk_R = pkgen2(seed_1)) then encoded_i2: encoded_Nc_t <- encode_idx_seed(); v_3: encapoutput <- encap_r2(pk_R, kseed_1); ctxt: ciphertext <- 2-proj-pair(v_3); k1: kemss <- cst_kemss; pair(k1_1, ctxt) else encap_r(pk_R, kseed_1));
+     ct: ciphertext <- 2-proj-pair(enc);
+     ss: kemss <- 1-proj-pair(enc);
+     hk <-R hashkey;
+     es <-R esT;
+     rk: D <- H(hk, es, ss);
+     return(pk, ct, es);
+     ((
+       foreach iH <= qH do
+       ch1(x1: esT, x2: kemss) :=
+       return(H(hk, x1, x2))
+     ) | (
+       foreach i <= Ndec do
+       cdec(cc: ciphertext) :=
+       if cc <> ct then
+       return((enc_1: ciphertext <- cc; if defined(k1, ctxt, encoded_i2) && (encoded_i2 = encode_idx_seed()) && (ctxt = enc_1) then injbot(k1_1) else decap2(enc_1, skgen2(seed_1))))
+     ))
+
+
+Applying simplify (non-expanded game)
+  - Simplification pass
+    - Replaced (pk_R = pkgen2(seed_1)) with true at 12
+yields
+
+Game 6 is
+     start() :=
+     seed_1 <-R keyseed;
+     pk: pkey <- pkgen2(seed_1);
+     kseed_1 <-R encapseed;
+     k1_1 <-R kemss;
+     enc: encapoutput <- (pk_R: pkey <- pk; {11}if true then encoded_i2: encoded_Nc_t <- encode_idx_seed(); v_3: encapoutput <- encap_r2(pk_R, kseed_1); ctxt: ciphertext <- 2-proj-pair(v_3); k1: kemss <- cst_kemss; pair(k1_1, ctxt) else encap_r(pk_R, kseed_1));
+     ct: ciphertext <- 2-proj-pair(enc);
+     ss: kemss <- 1-proj-pair(enc);
+     hk <-R hashkey;
+     es <-R esT;
+     rk: D <- H(hk, es, ss);
+     return(pk, ct, es);
+     ((
+       foreach iH <= qH do
+       ch1(x1: esT, x2: kemss) :=
+       return(H(hk, x1, x2))
+     ) | (
+       foreach i <= Ndec do
+       cdec(cc: ciphertext) :=
+       if cc <> ct then
+       return((enc_1: ciphertext <- cc; {69}if defined(k1, ctxt, encoded_i2) && (encoded_i2 = encode_idx_seed()) && (ctxt = enc_1) then injbot(k1_1) else decap2(enc_1, skgen2(seed_1))))
+     ))
+
+
+Applying expand
+  - Expand if/find/let
+    - Transformed find at 11 into a test
+    - Test at 11 always true
+    - Remove branch 1 in find at 69
+    - Find at 69 removed (else branch kept if any)
+yields
+
+Game 7 is
+     start() :=
+     seed_1 <-R keyseed;
+     pk: pkey <- pkgen2(seed_1);
+     kseed_1 <-R encapseed;
+     k1_1 <-R kemss;
+     pk_R: pkey <- pk;
+     encoded_i2: encoded_Nc_t <- encode_idx_seed();
+     v_3: encapoutput <- encap_r2(pk_R, kseed_1);
+     ctxt: ciphertext <- 2-proj-pair(v_3);
+     k1: kemss <- cst_kemss;
+     enc: encapoutput <- pair(k1_1, ctxt);
+     ct: ciphertext <- 2-proj-pair(enc);
+     ss: kemss <- 1-proj-pair(enc);
+     hk <-R hashkey;
+     es <-R esT;
+     rk: D <- H(hk, es, ss);
+     return(pk, ct, es);
+     ((
+       foreach iH <= qH do
+       ch1(x1: esT, x2: kemss) :=
+       return(H(hk, x1, x2))
+     ) | (
+       foreach i <= Ndec do
+       cdec(cc: ciphertext) :=
+       if cc <> ct then
+       enc_1: ciphertext <- cc;
+       return(decap2(enc_1, skgen2(seed_1)))
+     ))
+
+
+Applying remove assignments of findcond
+  - Remove assignments on pk_R (definition removed, all usages removed)
+  - Remove assignments on encoded_i2 (definition removed, all usages removed)
+  - Remove assignments on k1 (definition removed, all usages removed)
+  - Remove assignments on enc_1 (definition removed, all usages removed)
+yields
+
+Game 8 is
+     start() :=
+     seed_1 <-R keyseed;
+     pk: pkey <- pkgen2(seed_1);
+     kseed_1 <-R encapseed;
+     k1_1 <-R kemss;
+     v_3: encapoutput <- encap_r2(pk, kseed_1);
+     ctxt: ciphertext <- 2-proj-pair(v_3);
+     enc: encapoutput <- pair(k1_1, ctxt);
+     ct: ciphertext <- {20}2-proj-pair(enc);
+     ss: kemss <- {23}1-proj-pair(enc);
+     hk <-R hashkey;
+     es <-R esT;
+     rk: D <- H(hk, es, ss);
+     return(pk, ct, es);
+     ((
+       foreach iH <= qH do
+       ch1(x1: esT, x2: kemss) :=
+       return(H(hk, x1, x2))
+     ) | (
+       foreach i <= Ndec do
+       cdec(cc: ciphertext) :=
+       if cc <> ct then
+       return(decap2(cc, skgen2(seed_1)))
+     ))
+
+
+Applying simplify
+  - Simplification pass
+    - Replaced 2-proj-pair(enc) with ctxt at 20
+    - Replaced 1-proj-pair(enc) with k1_1 at 23
+yields
+
+Game 9 is
+     start() :=
+     seed_1 <-R keyseed;
+     pk: pkey <- pkgen2(seed_1);
+     kseed_1 <-R encapseed;
+     k1_1 <-R kemss;
+     v_3: encapoutput <- encap_r2(pk, kseed_1);
+     ctxt: ciphertext <- 2-proj-pair(v_3);
+     enc: encapoutput <- pair(k1_1, ctxt);
+     ct: ciphertext <- ctxt;
+     ss: kemss <- k1_1;
+     hk <-R hashkey;
+     es <-R esT;
+     rk: D <- H(hk, es, ss);
+     return(pk, ct, es);
+     ((
+       foreach iH <= qH do
+       ch1(x1: esT, x2: kemss) :=
+       return(H(hk, x1, x2))
+     ) | (
+       foreach i <= Ndec do
+       cdec(cc: ciphertext) :=
+       if cc <> ct then
+       return(decap2(cc, skgen2(seed_1)))
+     ))
+
+
+Applying SA rename new without array accesses and remove assignments of findcond
+  - Remove assignments on enc (definition removed, all usages removed)
+  - Remove assignments on ct (definition removed, all usages removed)
+  - Remove assignments on ss (definition removed, all usages removed)
+yields
+
+Game 10 is
+     start() :=
+     seed_1 <-R keyseed;
+     pk: pkey <- pkgen2(seed_1);
+     kseed_1 <-R encapseed;
+     k1_1 <-R kemss;
+     v_3: encapoutput <- encap_r2(pk, kseed_1);
+     ctxt: ciphertext <- 2-proj-pair(v_3);
+     hk <-R hashkey;
+     es <-R esT;
+     rk: D <- H(hk, es, k1_1);
+     return(pk, ctxt, es);
+     ((
+       foreach iH <= qH do
+       ch1(x1: esT, x2: kemss) :=
+       return(H(hk, x1, x2))
+     ) | (
+       foreach i <= Ndec do
+       cdec(cc: ciphertext) :=
+       if cc <> ctxt then
+       return(decap2(cc, skgen2(seed_1)))
+     ))
+
+
+Applying equivalence rom(H)
+  - Equivalence rom(H) with variables: hk -> hk_1
+yields
+
+Game 11 is
+     start() :=
+     seed_1 <-R keyseed;
+     pk: pkey <- pkgen2(seed_1);
+     kseed_1 <-R encapseed;
+     k1_1 <-R kemss;
+     v_3: encapoutput <- encap_r2(pk, kseed_1);
+     ctxt: ciphertext <- 2-proj-pair(v_3);
+     es <-R esT;
+     rk: D <- (x_O_1: esT <- es; x_O: kemss <- k1_1; {21}find [unique]  else r <-R D; r);
+     return(pk, ctxt, es);
+     ((
+       foreach iH <= qH do
+       ch1(x1: esT, x2: kemss) :=
+       return((x_O_3: esT <- x1; x_O_2: kemss <- x2; find [unique]  suchthat defined(x_O_1, x_O, r) && (x_O_3 = x_O_1) && (x_O_2 = x_O) then r orfind u = ri <= qH suchthat defined(x_O_3[ri], x_O_2[ri], r_1[ri]) && (x_O_3 = x_O_3[ri]) && (x_O_2 = x_O_2[ri]) then r_1[u] else r_1 <-R D; r_1))
+     ) | (
+       foreach i <= Ndec do
+       cdec(cc: ciphertext) :=
+       if cc <> ctxt then
+       return(decap2(cc, skgen2(seed_1)))
+     ))
+
+
+Applying simplify (non-expanded game)
+  - Simplification pass
+    - Find at 21 removed (else branch kept if any)
+yields
+
+Game 12 is
+     start() :=
+     seed_1 <-R keyseed;
+     pk: pkey <- pkgen2(seed_1);
+     kseed_1 <-R encapseed;
+     k1_1 <-R kemss;
+     v_3: encapoutput <- encap_r2(pk, kseed_1);
+     ctxt: ciphertext <- 2-proj-pair(v_3);
+     es <-R esT;
+     rk: D <- (x_O_1: esT <- es; x_O: kemss <- k1_1; r <-R D; r);
+     return(pk, ctxt, es);
+     ((
+       foreach iH <= qH do
+       ch1(x1: esT, x2: kemss) :=
+       return((x_O_3: esT <- x1; x_O_2: kemss <- x2; find [unique]  suchthat defined(x_O_1, x_O, r) && (x_O_3 = x_O_1) && (x_O_2 = x_O) then r orfind u = ri <= qH suchthat defined(x_O_3[ri], x_O_2[ri], r_1[ri]) && (x_O_3 = x_O_3[ri]) && (x_O_2 = x_O_2[ri]) then r_1[u] else r_1 <-R D; r_1))
+     ) | (
+       foreach i <= Ndec do
+       cdec(cc: ciphertext) :=
+       if cc <> ctxt then
+       return(decap2(cc, skgen2(seed_1)))
+     ))
+
+
+Applying expand
+  - Expand if/find/let
+yields
+
+Game 13 is
+     start() :=
+     seed_1 <-R keyseed;
+     pk: pkey <- pkgen2(seed_1);
+     kseed_1 <-R encapseed;
+     k1_1 <-R kemss;
+     v_3: encapoutput <- encap_r2(pk, kseed_1);
+     ctxt: ciphertext <- 2-proj-pair(v_3);
+     es <-R esT;
+     x_O_1: esT <- es;
+     x_O: kemss <- k1_1;
+     r <-R D;
+     rk: D <- r;
+     return(pk, ctxt, es);
+     ((
+       foreach iH <= qH do
+       ch1(x1: esT, x2: kemss) :=
+       x_O_3: esT <- x1;
+       x_O_2: kemss <- x2;
+       find [unique]  suchthat defined(x_O_1, x_O, r) && (x_O_3 = x_O_1) && (x_O_2 = x_O) then
+         return(r)
+       orfind u = ri <= qH suchthat defined(x_O_3[ri], x_O_2[ri], r_1[ri]) && (x_O_3 = x_O_3[ri]) && (x_O_2 = x_O_2[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R D;
+         return(r_1)
+     ) | (
+       foreach i <= Ndec do
+       cdec(cc: ciphertext) :=
+       if cc <> ctxt then
+       return(decap2(cc, skgen2(seed_1)))
+     ))
+
+
+Applying remove assignments of findcond
+  - Remove assignments on x_O_1 (definition removed, all usages removed)
+  - Remove assignments on x_O (definition removed, all usages removed)
+  - Remove assignments on x_O_3 (definition point kept, all usages removed)
+  - Remove assignments on x_O_2 (definition removed, all usages removed)
+yields
+
+Game 14 is
+     start() :=
+     seed_1 <-R keyseed;
+     pk: pkey <- pkgen2(seed_1);
+     kseed_1 <-R encapseed;
+     k1_1 <-R kemss;
+     v_3: encapoutput <- encap_r2(pk, kseed_1);
+     ctxt: ciphertext <- 2-proj-pair(v_3);
+     es <-R esT;
+     r <-R D;
+     rk: D <- r;
+     return(pk, ctxt, es);
+     ((
+       foreach iH <= qH do
+       ch1(x1: esT, x2: kemss) :=
+       x_O_3: esT <- cst_esT;
+       find [unique]  suchthat defined(r) && (x1 = es) && (x2 = k1_1) then
+         return(r)
+       orfind u = ri <= qH suchthat defined(x1[ri], x2[ri], x_O_3[ri], r_1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R D;
+         return(r_1)
+     ) | (
+       foreach i <= Ndec do
+       cdec(cc: ciphertext) :=
+       if cc <> ctxt then
+       return(decap2(cc, skgen2(seed_1)))
+     ))
+
+
+Applying simplify [probability qH / |kemss|]
+  - Global dependency analysis on k1_1
+yields
+
+Game 15 is
+     start() :=
+     seed_1 <-R keyseed;
+     pk: pkey <- pkgen2(seed_1);
+     kseed_1 <-R encapseed;
+  {7}k1_1 <-R kemss;
+     v_3: encapoutput <- encap_r2(pk, kseed_1);
+     ctxt: ciphertext <- 2-proj-pair(v_3);
+     es <-R esT;
+     r <-R D;
+     rk: D <- r;
+     return(pk, ctxt, es);
+     ((
+       foreach iH <= qH do
+       ch1(x1: esT, x2: kemss) :=
+       x_O_3: esT <- cst_esT;
+ {28}  find [unique] u = ri <= qH suchthat defined(x1[ri], x2[ri], x_O_3[ri], r_1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R D;
+         return(r_1)
+     ) | (
+       foreach i <= Ndec do
+       cdec(cc: ciphertext) :=
+       if cc <> ctxt then
+       return(decap2(cc, skgen2(seed_1)))
+     ))
+
+
+Applying simplify
+  - Simplification pass
+    - Replaced defined condition x1[ri], x2[ri], x_O_3[ri], r_1[ri] with r_1[ri], x2[ri], x1[ri] in find at 28
+    - Remove random number generation at 7
+yields
+
+Game 16 is
+     start() :=
+     seed_1 <-R keyseed;
+     pk: pkey <- pkgen2(seed_1);
+     kseed_1 <-R encapseed;
+     v_3: encapoutput <- encap_r2(pk, kseed_1);
+     ctxt: ciphertext <- 2-proj-pair(v_3);
+     es <-R esT;
+     r <-R D;
+     rk: D <- r;
+     return(pk, ctxt, es);
+     ((
+       foreach iH <= qH do
+       ch1(x1: esT, x2: kemss) :=
+       x_O_3: esT <- cst_esT;
+       find [unique] u = ri <= qH suchthat defined(r_1[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R D;
+         return(r_1)
+     ) | (
+       foreach i <= Ndec do
+       cdec(cc: ciphertext) :=
+       if cc <> ctxt then
+       return(decap2(cc, skgen2(seed_1)))
+     ))
+
+
+Applying move all binders
+  - Move assignment to x_O_3
+yields
+
+Game 17 is
+     start() :=
+     seed_1 <-R keyseed;
+     pk: pkey <- pkgen2(seed_1);
+     kseed_1 <-R encapseed;
+     v_3: encapoutput <- encap_r2(pk, kseed_1);
+     ctxt: ciphertext <- 2-proj-pair(v_3);
+     es <-R esT;
+     r <-R D;
+     rk: D <- r;
+     return(pk, ctxt, es);
+     ((
+       foreach iH <= qH do
+       ch1(x1: esT, x2: kemss) :=
+       find [unique] u = ri <= qH suchthat defined(r_1[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+         return(r_1[u])
+       else
+         r_1 <-R D;
+         return(r_1)
+     ) | (
+       foreach i <= Ndec do
+       cdec(cc: ciphertext) :=
+       if cc <> ctxt then
+       return(decap2(cc, skgen2(seed_1)))
+     ))
+
+
+Proved secrecy of rk in game 17
+Adv[Game 1: secrecy of rk] <= 2 * qH / |kemss| + 2 * Penc(time_1, 1, 1, Ndec) + Adv[Game 17: secrecy of rk]
+Adv[Game 17: secrecy of rk] <= 0
+RESULT Proved secrecy of rk up to probability 2 * qH / |kemss| + 2 * Penc(time_1, 1, 1, Ndec)
+RESULT time_1 = time + time(context for game 4) = time(2-proj-pair) + time(1-proj-pair) + (1 + qH) * time(H) + time
+All queries proved.

@@ -1,10 +1,32 @@
 # DCS98 chat handshake — formal verification plan
 
-**Status (2026-06-08): ProVerif model COMPLETED + RUN; CryptoVerif still TODO.** The symbolic model
-(`chat-handshake.pv`) was completed from construction v3 and run under **ProVerif 2.05** — full output in
-`proverif-output-2026-06-08.txt`. The computational (CryptoVerif) hybrid-IND proof has **not** been
-authored/run yet. The construction therefore stays **EXPERIMENTAL / not formally verified**: the symbolic
-layer is necessary but not sufficient, and an external audit + FIPS build remain separate external gates.
+**Status (2026-06-08): ProVerif model COMPLETED + RUN; CryptoVerif hybrid-IND core PROVED (both legs).**
+The symbolic model (`chat-handshake.pv`) was completed and run under **ProVerif 2.05**
+(`proverif-output-2026-06-08.txt`); the computational hybrid bound on the key schedule was proved under
+**CryptoVerif 2.12** in two legs (`chat-handshake-hybrid-dhleg.cv`, `chat-handshake-hybrid-kemleg.cv`;
+outputs `cryptoverif-dhleg-2026-06-08.txt`, `cryptoverif-kemleg-2026-06-08.txt`).
+
+**This does NOT clear the EXPERIMENTAL / not-formally-verified banner.** Two gaps remain by construction:
+(1) the CryptoVerif models prove the **hybrid key-schedule core** (RK = ROM(es, ss)), *not* the full
+wire protocol end-to-end (transcript binding, signatures, the exact multi-step MixKey chain, the message
+choreography) — a PQXDH-grade end-to-end computational model is still future work; and (2) an **external
+audit** and the **FIPS-validated module build** are external gates that cannot be self-cleared. The banner
+stays until those land.
+
+### CryptoVerif results (2026-06-08, hybrid key-schedule core, ROM key derivation)
+
+The headline G2 property — *RK is indistinguishable from random if **either** the X25519 leg **or** the
+ML-KEM leg survives* — is the one thing symbolic ProVerif cannot express. CryptoVerif proves it as two
+independent legs (each models the worst case for the other primitive):
+
+| Leg | Assumption | Adversary additionally given | Result |
+|---|---|---|---|
+| DH  | CDH (X25519) | the ML-KEM shared secret `ss` | **`secret rk` proved**, ≤ `2·qH·pCDH` |
+| KEM | IND-CCA2 (ML-KEM) | the X25519 secret `es` + a decap oracle | **`secret rk` proved**, ≤ `2·qH/|kemss| + 2·Penc` |
+
+Either leg alone suffices, so RK stays secret unless **both** primitives break — the hybrid guarantee.
+The KDF/MixKey chain is abstracted as a 2-input random oracle (the dual-PRF property of the fixed MixKey
+arg roles); the parameter (ML-KEM-1024 vs 768) does not enter the proof, only the concrete `Penc` bound.
 
 ### ProVerif results (2026-06-08, first_contact mode, perfect-primitive symbolic model)
 
@@ -69,7 +91,11 @@ TODO before it runs/proves anything:
   harvested `ct_pre`; secrecy of that `ss_pre` must **FAIL** — confirming the documented FS
   degradation rather than hiding it. A model that "proves" last-resort FS is a wrong model.
 
-## CryptoVerif plan (`chat-handshake.cv` — TODO to author)
+## CryptoVerif approach (realized as two leg files — see results table above)
+
+The plan below was realized as `chat-handshake-hybrid-dhleg.cv` + `chat-handshake-hybrid-kemleg.cv`
+(key-schedule core). A full end-to-end computational model of the whole handshake remains future work.
+
 
 Goal: `RK` is indistinguishable from random under `IND-CCA(ML-KEM-1024) ∨ GapDH(X25519)` (the shipped
 parameter; the proof structure is parameter-independent — 1024 only changes the concrete bound).

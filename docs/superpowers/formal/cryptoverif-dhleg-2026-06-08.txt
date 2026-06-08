@@ -1,0 +1,361 @@
+Doing expand get, insert and prove unique annotations... No change.
+Doing simplify (non-expanded game)... No change.
+Doing expand... No change.
+Doing remove assignments of findcond... No change.
+Doing simplify... Run simplify 2 time(s). Fixpoint reached.
+Done.
+Doing move all binders... No change.
+Doing SA rename new without array accesses and remove assignments of findcond... No change.
+Doing merge branches... No change.
+Proof of (one-session) secrecy of rk failed:
+  rk is not defined only by restrictions or assignments.
+Trying equivalence rom(H)... Transf. OK Proba. computed Transf. done Succeeded.
+Doing simplify (non-expanded game)... Done.
+Doing expand... Done.
+Doing remove assignments of findcond... Done.
+Doing simplify... Doing global dependency analysis on ss inside simplify... At 25, returned message ss depends on ss.
+No change
+Doing global dependency analysis on ss inside simplify... At 25, returned message ss depends on ss.
+No change
+Run simplify 2 time(s). Fixpoint reached.
+Done.
+Doing move all binders... Done.
+Doing SA rename new without array accesses and remove assignments of findcond... No change.
+Doing merge branches... No change.
+Trying equivalence cdh(exp)... Failed.
+Doing remove assignments of binder es... Done.
+Trying equivalence cdh(exp) with b, a... Transf. OK Proba. computed Transf. done Succeeded.
+Doing simplify (non-expanded game)... Done.
+Doing expand... Done.
+Doing remove assignments of findcond... Done.
+Doing simplify... Run simplify 1 time(s). Fixpoint reached.
+No change.
+Doing move all binders... No change.
+Doing SA rename new without array accesses and remove assignments of findcond... No change.
+Doing merge branches... No change.
+Proved one-session secrecy of rk
+Proved secrecy of rk
+===================== Proof starts =======================
+Initial state
+Game 1 is
+     start() :=
+     hk <-R hashkey;
+     a <-R Z;
+     b <-R Z;
+     ga: G <- exp(g, a);
+     gb: G <- exp(g, b);
+     es: G <- {14}exp(gb, a);
+     ss <-R kemss;
+     rk: D <- H(hk, es, ss);
+     return(ga, gb, ss);
+     foreach iH <= qH do
+     ch1(x1: G, x2: kemss) :=
+     return(H(hk, x1, x2))
+
+
+Applying simplify
+  - Simplification pass
+    - Replaced exp(gb, a) with exp(g, mult(b, a)) at 14
+yields
+
+Game 2 is
+     start() :=
+     hk <-R hashkey;
+     a <-R Z;
+     b <-R Z;
+     ga: G <- exp(g, a);
+     gb: G <- exp(g, b);
+     es: G <- exp(g, mult(b, a));
+     ss <-R kemss;
+     rk: D <- H(hk, es, ss);
+     return(ga, gb, ss);
+     foreach iH <= qH do
+     ch1(x1: G, x2: kemss) :=
+     return(H(hk, x1, x2))
+
+
+Applying equivalence rom(H)
+  - Equivalence rom(H) with variables: hk -> hk_1
+yields
+
+Game 3 is
+     start() :=
+     a <-R Z;
+     b <-R Z;
+     ga: G <- exp(g, a);
+     gb: G <- exp(g, b);
+     es: G <- exp(g, mult(b, a));
+     ss <-R kemss;
+     rk: D <- (x_O_1: G <- es; x_O: kemss <- ss; {24}find [unique]  else r <-R D; r);
+     return(ga, gb, ss);
+     foreach iH <= qH do
+     ch1(x1: G, x2: kemss) :=
+     return((x_O_3: G <- x1; x_O_2: kemss <- x2; find [unique]  suchthat defined(x_O_1, x_O, r) && (x_O_3 = x_O_1) && (x_O_2 = x_O) then r orfind u = ri <= qH suchthat defined(x_O_3[ri], x_O_2[ri], r_1[ri]) && (x_O_3 = x_O_3[ri]) && (x_O_2 = x_O_2[ri]) then r_1[u] else r_1 <-R D; r_1))
+
+
+Applying simplify (non-expanded game)
+  - Simplification pass
+    - Find at 24 removed (else branch kept if any)
+yields
+
+Game 4 is
+     start() :=
+     a <-R Z;
+     b <-R Z;
+     ga: G <- exp(g, a);
+     gb: G <- exp(g, b);
+     es: G <- exp(g, mult(b, a));
+     ss <-R kemss;
+     rk: D <- (x_O_1: G <- es; x_O: kemss <- ss; r <-R D; r);
+     return(ga, gb, ss);
+     foreach iH <= qH do
+     ch1(x1: G, x2: kemss) :=
+     return((x_O_3: G <- x1; x_O_2: kemss <- x2; find [unique]  suchthat defined(x_O_1, x_O, r) && (x_O_3 = x_O_1) && (x_O_2 = x_O) then r orfind u = ri <= qH suchthat defined(x_O_3[ri], x_O_2[ri], r_1[ri]) && (x_O_3 = x_O_3[ri]) && (x_O_2 = x_O_2[ri]) then r_1[u] else r_1 <-R D; r_1))
+
+
+Applying expand
+  - Expand if/find/let
+yields
+
+Game 5 is
+     start() :=
+     a <-R Z;
+     b <-R Z;
+     ga: G <- exp(g, a);
+     gb: G <- exp(g, b);
+     es: G <- exp(g, mult(b, a));
+     ss <-R kemss;
+     x_O_1: G <- es;
+     x_O: kemss <- ss;
+     r <-R D;
+     rk: D <- r;
+     return(ga, gb, ss);
+     foreach iH <= qH do
+     ch1(x1: G, x2: kemss) :=
+     x_O_3: G <- x1;
+     x_O_2: kemss <- x2;
+     find [unique]  suchthat defined(x_O_1, x_O, r) && (x_O_3 = x_O_1) && (x_O_2 = x_O) then
+       return(r)
+     orfind u = ri <= qH suchthat defined(x_O_3[ri], x_O_2[ri], r_1[ri]) && (x_O_3 = x_O_3[ri]) && (x_O_2 = x_O_2[ri]) then
+       return(r_1[u])
+     else
+       r_1 <-R D;
+       return(r_1)
+
+
+Applying remove assignments of findcond
+  - Remove assignments on x_O_1 (definition removed, all usages removed)
+  - Remove assignments on x_O (definition removed, all usages removed)
+  - Remove assignments on x_O_3 (definition point kept, all usages removed)
+  - Remove assignments on x_O_2 (definition removed, all usages removed)
+yields
+
+Game 6 is
+     start() :=
+     a <-R Z;
+     b <-R Z;
+     ga: G <- exp(g, a);
+     gb: G <- exp(g, b);
+     es: G <- exp(g, mult(b, a));
+     ss <-R kemss;
+     r <-R D;
+     rk: D <- r;
+     return(ga, gb, ss);
+     foreach iH <= qH do
+     ch1(x1: G, x2: kemss) :=
+     x_O_3: G <- cst_G;
+ {30}find [unique]  suchthat defined(r) && (x1 = es) && (x2 = ss) then
+       return(r)
+     orfind u = ri <= qH suchthat defined(x1[ri], x2[ri], x_O_3[ri], r_1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+       return(r_1[u])
+     else
+       r_1 <-R D;
+       return(r_1)
+
+
+Applying simplify
+  - Simplification pass
+    - Replaced defined condition x1[ri], x2[ri], x_O_3[ri], r_1[ri] with r_1[ri], x2[ri], x1[ri] in find at 30
+    - Replaced defined condition r with an empty condition in find at 30
+yields
+
+Game 7 is
+     start() :=
+     a <-R Z;
+     b <-R Z;
+     ga: G <- exp(g, a);
+     gb: G <- exp(g, b);
+     es: G <- exp(g, mult(b, a));
+     ss <-R kemss;
+     r <-R D;
+     rk: D <- r;
+     return(ga, gb, ss);
+     foreach iH <= qH do
+     ch1(x1: G, x2: kemss) :=
+     x_O_3: G <- cst_G;
+     find [unique]  suchthat (x1 = es) && (x2 = ss) then
+       return(r)
+     orfind u = ri <= qH suchthat defined(r_1[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+       return(r_1[u])
+     else
+       r_1 <-R D;
+       return(r_1)
+
+
+Applying move all binders
+  - Move assignment to x_O_3
+yields
+
+Game 8 is
+     start() :=
+     a <-R Z;
+     b <-R Z;
+     ga: G <- exp(g, a);
+     gb: G <- exp(g, b);
+     es: G <- exp(g, mult(b, a));
+     ss <-R kemss;
+     r <-R D;
+     rk: D <- r;
+     return(ga, gb, ss);
+     foreach iH <= qH do
+     ch1(x1: G, x2: kemss) :=
+     find [unique]  suchthat (x1 = es) && (x2 = ss) then
+       return(r)
+     orfind u = ri <= qH suchthat defined(r_1[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+       return(r_1[u])
+     else
+       r_1 <-R D;
+       return(r_1)
+
+
+Applying remove assignments of binder es
+  - Remove assignments on es (definition removed, all usages removed)
+yields
+
+Game 9 is
+     start() :=
+     a <-R Z;
+     b <-R Z;
+     ga: G <- exp(g, a);
+     gb: G <- exp(g, b);
+     ss <-R kemss;
+     r <-R D;
+     rk: D <- r;
+     return(ga, gb, ss);
+     foreach iH <= qH do
+     ch1(x1: G, x2: kemss) :=
+     find [unique]  suchthat (x1 = exp(g, mult(b, a))) && (x2 = ss) then
+       return(r)
+     orfind u = ri <= qH suchthat defined(r_1[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+       return(r_1[u])
+     else
+       r_1 <-R D;
+       return(r_1)
+
+
+Applying equivalence cdh(exp) with b, a [probability qH * pCDH(time_1)]
+  - Equivalence cdh(exp) with variables: b -> b_1, a -> a_1
+yields
+
+Game 10 is
+     start() :=
+     a <-R Z;
+     b <-R Z;
+     ga: G <- exp'(g, a);
+     gb: G <- exp'(g, b);
+     ss <-R kemss;
+     r <-R D;
+     rk: D <- r;
+     return(ga, gb, ss);
+     foreach iH <= qH do
+     ch1(x1: G, x2: kemss) :=
+     find [unique]  suchthat (m: G <- x1; {27}find  else {28}find  else false) && (x2 = ss) then
+       return(r)
+     orfind u = ri <= qH suchthat defined(r_1[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+       return(r_1[u])
+     else
+       r_1 <-R D;
+       return(r_1)
+
+
+Applying simplify (non-expanded game)
+  - Simplification pass
+    - Find at 27 removed (else branch kept if any)
+    - Find at 28 removed (else branch kept if any)
+yields
+
+Game 11 is
+     start() :=
+     a <-R Z;
+     b <-R Z;
+     ga: G <- exp'(g, a);
+     gb: G <- exp'(g, b);
+     ss <-R kemss;
+     r <-R D;
+     rk: D <- r;
+     return(ga, gb, ss);
+     foreach iH <= qH do
+     ch1(x1: G, x2: kemss) :=
+ {22}find [unique]  suchthat (m: G <- x1; false) && (x2 = ss) then
+       return(r)
+     orfind u = ri <= qH suchthat defined(r_1[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+       return(r_1[u])
+     else
+       r_1 <-R D;
+       return(r_1)
+
+
+Applying expand
+  - Expand if/find/let
+    - Remove branch 1 in find at 22
+yields
+
+Game 12 is
+     start() :=
+     a <-R Z;
+     b <-R Z;
+     ga: G <- exp'(g, a);
+     gb: G <- exp'(g, b);
+     ss <-R kemss;
+     r <-R D;
+     rk: D <- r;
+     return(ga, gb, ss);
+     foreach iH <= qH do
+     ch1(x1: G, x2: kemss) :=
+     m: G <- x1;
+     find [unique] u = ri <= qH suchthat defined(r_1[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+       return(r_1[u])
+     else
+       r_1 <-R D;
+       return(r_1)
+
+
+Applying remove assignments of findcond
+  - Remove assignments on m (definition removed, all usages removed)
+yields
+
+Game 13 is
+     start() :=
+     a <-R Z;
+     b <-R Z;
+     ga: G <- exp'(g, a);
+     gb: G <- exp'(g, b);
+     ss <-R kemss;
+     r <-R D;
+     rk: D <- r;
+     return(ga, gb, ss);
+     foreach iH <= qH do
+     ch1(x1: G, x2: kemss) :=
+     find [unique] u = ri <= qH suchthat defined(r_1[ri], x2[ri], x1[ri]) && (x1 = x1[ri]) && (x2 = x2[ri]) then
+       return(r_1[u])
+     else
+       r_1 <-R D;
+       return(r_1)
+
+
+Proved secrecy of rk in game 13
+Adv[Game 1: secrecy of rk] <= 2 * qH * pCDH(time_1) + Adv[Game 13: secrecy of rk]
+Adv[Game 13: secrecy of rk] <= 0
+RESULT Proved secrecy of rk up to probability 2 * qH * pCDH(time_1)
+RESULT time_1 = time + (qH - 1) * time(exp)
+All queries proved.

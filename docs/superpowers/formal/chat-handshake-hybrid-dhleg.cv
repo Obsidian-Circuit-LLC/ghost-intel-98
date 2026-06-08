@@ -1,0 +1,56 @@
+(* ============================================================================
+   DCS98 chat handshake — CryptoVerif (computational), HYBRID proof, DH leg.
+
+   Claim (one half of G2): the root key RK is indistinguishable from random as
+   long as the X25519 leg survives — EVEN IF the ML-KEM shared secret is fully
+   known to the adversary. We model that worst case by handing the KEM shared
+   secret `ss` to the adversary and still proving `secret rk`.
+
+   Key schedule abstraction: the MixKey/HKDF chain is a random oracle over BOTH
+   mixed secrets, RK = H(es, ss) with es = g^{ab} (X25519) and ss the ML-KEM
+   shared secret. (This is the dual-PRF property of the fixed MixKey arg roles,
+   modelled as a ROM here.) Under CDH the adversary cannot compute es, so it
+   cannot query the oracle at (es, ss), hence RK stays random.
+
+   The KEM leg (symmetric: RK secret under IND-CCA ML-KEM even if es is known)
+   is the companion file. Together they give "secure if EITHER primitive holds".
+
+   Run: cryptoverif chat-handshake-hybrid-dhleg.cv
+   ============================================================================ *)
+
+proof {
+  crypto rom(H);
+  crypto cdh(exp);
+  success
+}
+
+type Z [large,bounded].
+type G [large,bounded].
+type kemss [large,fixed].   (* ML-KEM shared secret *)
+type D [large,fixed].       (* derived root key RK *)
+type hashkey [fixed].
+
+expand DH_basic(G, Z, g, exp, exp', mult).
+proba pCDH.
+expand CDH(G, Z, g, exp, exp', mult, pCDH).
+
+(* HKDF/MixKey chain over both mixed secrets, as a random oracle. *)
+expand ROM_hash_2(hashkey, G, kemss, D, H, hashoracle, qH).
+
+query secret rk.
+
+channel start, c.
+
+process
+  in(start, ());
+  new hk: hashkey;
+  new a: Z;
+  new b: Z;
+  let ga: G = exp(g, a) in
+  let gb: G = exp(g, b) in
+  let es: G = exp(gb, a) in        (* X25519 shared secret g^{ab} *)
+  new ss: kemss;                   (* ML-KEM shared secret *)
+  let rk: D = H(hk, es, ss) in     (* RK = MixKey(es, ss) *)
+  (* worst case for this leg: adversary learns the DH publics AND the KEM secret *)
+  out(c, (ga, gb, ss));
+  hashoracle(hk)

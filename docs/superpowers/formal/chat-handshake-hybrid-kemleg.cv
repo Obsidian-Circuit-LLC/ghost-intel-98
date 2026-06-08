@@ -1,0 +1,63 @@
+(* ============================================================================
+   DCS98 chat handshake — CryptoVerif (computational), HYBRID proof, KEM leg.
+
+   Claim (the other half of G2): the root key RK is indistinguishable from random
+   as long as the ML-KEM leg survives — EVEN IF the X25519 shared secret is fully
+   known to the adversary. We model that worst case by handing the DH secret `es`
+   to the adversary and still proving `secret rk`, while giving the adversary a
+   decapsulation oracle (full IND-CCA2, not merely CPA).
+
+   Key schedule abstraction: RK = H(es, ss), a random oracle over both mixed
+   secrets; ss is a genuine ML-KEM encapsulated secret. Under IND-CCA2 the
+   encapsulated ss is indistinguishable from random to the adversary (who sees
+   pk, the ciphertext, es, and a decap oracle), so RK = H(es, ss) stays random.
+
+   Companion to chat-handshake-hybrid-dhleg.cv. Together: secure if EITHER the
+   X25519 OR the ML-KEM primitive holds.
+
+   Run: cryptoverif chat-handshake-hybrid-kemleg.cv
+   ============================================================================ *)
+
+proof {
+  crypto ind_cca2(encap);
+  crypto rom(H);
+  success
+}
+
+type keyseed [large,fixed].
+type pkey [bounded].
+type skey [bounded].
+type kemss [large,fixed].      (* ML-KEM shared secret *)
+type ciphertext [bounded].
+type encapoutput [bounded].
+type esT [large,fixed].        (* X25519 shared secret, here handed to the adversary *)
+type D [large,fixed].          (* derived root key RK *)
+type hashkey [fixed].
+
+proba Penc.
+proba Pkeycoll.
+proba Pctxtcoll.
+expand IND_CCA2_KEM(keyseed, pkey, skey, kemss, ciphertext, encapoutput, pkgen, skgen, encap, pair, decap, injbot, Penc, Pkeycoll, Pctxtcoll).
+
+(* HKDF/MixKey chain over both mixed secrets, as a random oracle. *)
+expand ROM_hash_2(hashkey, esT, kemss, D, H, hashoracle, qH).
+
+query secret rk.
+
+param Ndec.
+channel start, c, cdec, cdecret.
+
+process
+  in(start, ());
+  new seed: keyseed;
+  let pk: pkey = pkgen(seed) in
+  let sk: skey = skgen(seed) in
+  let enc: encapoutput = encap(pk) in
+  let pair(ss: kemss, ct: ciphertext) = enc in
+  new hk: hashkey;
+  new es: esT;                      (* DH secret — handed to the adversary below *)
+  let rk: D = H(hk, es, ss) in      (* RK = MixKey(es, ss) *)
+  out(c, (pk, ct, es));
+  ( hashoracle(hk)
+  | (! Ndec in(cdec, cc: ciphertext); if cc <> ct then out(cdecret, decap(cc, sk)))
+  )
