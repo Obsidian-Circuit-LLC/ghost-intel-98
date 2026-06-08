@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { mkdtemp } from 'node:fs/promises';
-import { PrekeyStore, RECENT_CAP } from '../src/main/chat/prekey-store';
+import { PrekeyStore, RECENT_CAP, MINT_CAP } from '../src/main/chat/prekey-store';
 import { ContactStore } from '../src/main/chat/contact-store';
 import { generateIdentity, contactId, verifyKemPrekey } from '../src/main/chat/identity';
 
@@ -87,7 +87,6 @@ describe('PrekeyStore', () => {
     expect(await store.identifyContact(pk.prekeyId)).toBe('contact-abc');
   });
 
-  const MINT_CAP = 4; // per-cid outstanding-unconsumed cap (spec open-q #4); recent[] >= MINT_CAP
   it('coupling invariant: RECENT_CAP (store source-of-truth) >= MINT_CAP', () => {
     expect(RECENT_CAP).toBeGreaterThanOrEqual(MINT_CAP);
   });
@@ -108,15 +107,24 @@ describe('PrekeyStore', () => {
     for (const pid of ids) expect(await store.identifyContact(pid)).toBe('cid-strand'); // all resolve
   });
 
-  it('offerCurrent returns a fresh one-time prekey without consuming anything', async () => {
+  it('offerCurrent re-offers the newest unconsumed issued prekey WITHOUT minting', async () => {
     const id = generateIdentity();
     const store = new PrekeyStore(await tmp('prekeys.json'), id);
-    await store.ensurePool(1);
+    const pending = await store.issueNext('cid-x');        // the prior rotation, unconsumed
     const before = await store.remaining();
     const offered = await store.offerCurrent('cid-x');
     expect(verifyKemPrekey(offered.prekey, id.publicKeys.ed25519)).toBe(true);
-    expect(await store.remaining()).toBe(before + 1); // offered prekey added, none consumed
-    expect(await store.identifyContact(offered.prekey.prekeyId)).toBe('cid-x');
+    expect(offered.prekey.prekeyId).toEqual(pending.prekeyId); // re-offer, not a fresh mint
+    expect(await store.remaining()).toBe(before);              // nothing minted, nothing consumed
+  });
+  it('offerCurrent mints only when the contact has no unconsumed issued prekey; per-cid mint cap', async () => {
+    const id = generateIdentity();
+    const store = new PrekeyStore(await tmp('prekeys.json'), id);
+    const first = await store.offerCurrent('cid-y');         // none yet → mint one
+    expect(await store.identifyContact(first.prekey.prekeyId)).toBe('cid-y');
+    // exceed the per-cid outstanding cap → cheap fail, not unbounded mint
+    for (let i = 0; i < MINT_CAP; i++) await store.issueNext('cid-y');
+    await expect(store.offerCurrent('cid-y')).rejects.toThrow(/mint cap|rate/i);
   });
 });
 
