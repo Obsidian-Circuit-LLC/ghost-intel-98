@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { mkdtemp } from 'node:fs/promises';
-import { PrekeyStore } from '../src/main/chat/prekey-store';
+import { PrekeyStore, RECENT_CAP } from '../src/main/chat/prekey-store';
 import { ContactStore } from '../src/main/chat/contact-store';
 import { generateIdentity, contactId, verifyKemPrekey } from '../src/main/chat/identity';
 
@@ -85,6 +85,27 @@ describe('PrekeyStore', () => {
     await store.consume(pk.prekeyId);
     expect(await store.lookup(pk.prekeyId)).toBeNull();
     expect(await store.identifyContact(pk.prekeyId)).toBe('contact-abc');
+  });
+
+  const MINT_CAP = 4; // per-cid outstanding-unconsumed cap (spec open-q #4); recent[] >= MINT_CAP
+  it('coupling invariant: RECENT_CAP (store source-of-truth) >= MINT_CAP', () => {
+    expect(RECENT_CAP).toBeGreaterThanOrEqual(MINT_CAP);
+  });
+
+  it('per-contact index: a quiet contact resolves after heavy churn on OTHER contacts', async () => {
+    const id = generateIdentity();
+    const store = new PrekeyStore(await tmp('prekeys.json'), id);
+    const quiet = await store.issueNext('cid-quiet');           // the id our quiet peer will present
+    for (let i = 0; i < 1000; i++) await store.issueNext(`cid-other-${i}`); // churn elsewhere
+    expect(await store.identifyContact(quiet.prekeyId)).toBe('cid-quiet'); // NOT evicted
+  }, 60000); // 1000 ML-KEM-1024 mints ~20s; the assertion is what's under test, not the runtime
+
+  it('per-contact index retains >= MINT_CAP recent ids per contact (coupling invariant)', async () => {
+    const id = generateIdentity();
+    const store = new PrekeyStore(await tmp('prekeys.json'), id);
+    const ids = [];
+    for (let i = 0; i < MINT_CAP; i++) ids.push((await store.issueNext('cid-strand')).prekeyId);
+    for (const pid of ids) expect(await store.identifyContact(pid)).toBe('cid-strand'); // all resolve
   });
 
   it('offerCurrent returns a fresh one-time prekey without consuming anything', async () => {
