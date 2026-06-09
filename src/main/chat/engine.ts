@@ -19,6 +19,7 @@ import { createInvite, parseInvite } from './invite';
 import { contactId, type IdentityKeyPair, type IdentityPublic } from './identity';
 import type { PrekeyStore } from './prekey-store';
 import type { ContactStore } from './contact-store';
+import { ContactError } from './contact-store';
 /** The mutable-field patch shape ContactStore.update accepts — derived so the engine's RGK-persistence
  *  patches stay in lockstep with the store's signature (3.1-a/b). */
 type ContactPatch = Parameters<ContactStore['update']>[1];
@@ -136,9 +137,17 @@ export class ChatEngine {
     // epoch-bound invariant). pin() refuses an identity CHANGE (MITM guard), so a successful re-pin is
     // always the SAME identity re-accepting a fresh invite — exactly the "restart this contact's RGK
     // epoch" case. resetReconnectEpoch throws on an unknown contact, so it only runs once the row exists.
-    await this.d.contacts.resetReconnectEpoch(cid).catch(() => { /* row absent — nothing to reset */ });
-    // (3.1-a) Persist the RGK from this completed handshake (initiator role also returns one).
-    const patch: ContactPatch = { lastSeen: this.d.now() };
+    // (review I-1a) Narrow the swallow: only the expected absent-row case (ContactError, thrown when the
+    // contact row doesn't exist yet) is benign here — a genuine store-write I/O fault is a DIFFERENT
+    // error and MUST propagate, since silently swallowing it could leave rgkPeerConfirmed stale-true into
+    // the new epoch (violating the epoch-bound invariant, spec §3).
+    await this.d.contacts.resetReconnectEpoch(cid).catch((e) => { if (!(e instanceof ContactError)) throw e; });
+    // (3.1-a) Persist the RGK from this completed handshake (initiator role also returns one). This is
+    // the legitimate first_contact epoch establishment — the one place the engine writes the RGK.
+    // (review I-1b) Belt-and-suspenders: ALWAYS clear rgkPeerConfirmed in the SAME patch that installs
+    // the new first_contact RGK, so the epoch-bound invariant holds atomically even if the reset write
+    // above failed (first_contact legitimately starts unconfirmed).
+    const patch: ContactPatch = { lastSeen: this.d.now(), rgkPeerConfirmed: false };
     if (res.nextPrekey) patch.nextPrekey = res.nextPrekey;
     if (res.reconnectGateKey) patch.reconnectGateKey = res.reconnectGateKey;
     await this.d.contacts.update(cid, patch);
@@ -296,11 +305,14 @@ export class ChatEngine {
     // peer sends right after the handshake isn't lost in the gap before we're listening: the handshake
     // reader has detached, and the transport does not buffer for a late subscriber.
     this.attach(cid, stream, res.session);
-    // (3.1-a) Persist the rotation prekey AND the freshly-derived RGK from this reconnect (initiator role
-    // returns reconnectGateKey on every successful handshake).
+    // (3.1-a, review C-1) Persist the rotation prekey + lastSeen only. The RGK is STABLE — derived once
+    // at first_contact and NEVER rotated per reconnect (rev-4 spec §3). The handshake returns a freshly
+    // derived reconnectGateKey on every reconnect too, but the engine DISCARDS it and keeps the stable
+    // first_contact RGK: rotating it desyncs I and R on a half-completed reconnect (Msg2 dropped in
+    // flight — R completes + would-rotate while I throws before persisting), re-introducing the HIGH-1
+    // permanent cheap-close lockout this workstream exists to fix.
     const patch: ContactPatch = { lastSeen: this.d.now() };
     if (res.nextPrekey) patch.nextPrekey = res.nextPrekey;
-    if (res.reconnectGateKey) patch.reconnectGateKey = res.reconnectGateKey;
     await this.d.contacts.update(cid, patch);
     return this.conns.get(cid) as Connection;
   }
@@ -318,11 +330,14 @@ export class ChatEngine {
       // the gap before the Connection subscribes and be lost (the handshake reader has detached; the
       // transport doesn't replay for late subscribers). See the handshake→session handoff fix.
       this.attach(cid, stream, res.session);
-      // (3.1-a/b) Persist the RGK (responder role returns one too) and, when R verified a valid mac_R on
-      // this reconnect, flip rgkPeerConfirmed — the enforcement-bootstrap: from now on R ENFORCES the
-      // mac_R gate for this contact. .catch() guards the brief window where the row isn't fully written.
+      // (3.1-a/b, review C-1) Persist the RGK ONLY on first_contact — that is the legitimate epoch
+      // establishment. The RGK is STABLE and is NEVER overwritten on a reconnect (rev-4 spec §3); doing
+      // so would desync I and R on a half-completed reconnect and re-introduce the HIGH-1 lockout. The
+      // confirm flip is SEPARATE from the RGK and MUST still happen on reconnect: when R verified a valid
+      // mac_R, flip rgkPeerConfirmed — the enforcement-bootstrap, from now on R ENFORCES the mac_R gate
+      // for this contact. .catch() guards the brief window where the row isn't fully written.
       const patch: ContactPatch = { lastSeen: this.d.now() };
-      if (res.reconnectGateKey) patch.reconnectGateKey = res.reconnectGateKey;
+      if (res.mode === 'first_contact' && res.reconnectGateKey) patch.reconnectGateKey = res.reconnectGateKey;
       if (res.peerMacRVerified) patch.rgkPeerConfirmed = true;
       await this.d.contacts.update(cid, patch).catch(() => { /* not yet a full contact row */ });
     } catch {

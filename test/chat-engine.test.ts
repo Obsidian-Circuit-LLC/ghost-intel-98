@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { mkdtemp } from 'node:fs/promises';
 import { ChatEngine, type ChatEngineEvents, type QuarantineSink } from '../src/main/chat/engine';
-import { InMemoryNetwork, InMemoryTransport } from '../src/main/chat/transport';
+import { InMemoryNetwork, InMemoryTransport, type Transport, type ChatStream } from '../src/main/chat/transport';
 import { PrekeyStore } from '../src/main/chat/prekey-store';
 import { ContactStore } from '../src/main/chat/contact-store';
 import { MessageStore } from '../src/main/chat/message-store';
@@ -289,7 +289,7 @@ describe('ChatEngine — file transfer (Phase 2) over the in-memory network', ()
 describe('ChatEngine — reconnect hardening (handshake v4, Task 3.1) RGK wiring', () => {
   /** A richer harness that exposes each engine's stores + a controllable logical clock so the RGK
    *  persistence / confirmation / rate-limiter wiring can be asserted directly. */
-  async function makeNode(net: InMemoryNetwork, onion: string, identity: IdentityKeyPair, events: ChatEngineEvents = {}): Promise<{
+  async function makeNode(net: InMemoryNetwork, onion: string, identity: IdentityKeyPair, events: ChatEngineEvents = {}, transport?: Transport): Promise<{
     engine: ChatEngine;
     contacts: ContactStore;
     prekeys: PrekeyStore;
@@ -303,7 +303,7 @@ describe('ChatEngine — reconnect hardening (handshake v4, Task 3.1) RGK wiring
     const prekeys = new PrekeyStore(join(dir, 'prekeys.json'), identity);
     const engine = new ChatEngine({
       identity,
-      transport: new InMemoryTransport(net, onion),
+      transport: transport ?? new InMemoryTransport(net, onion),
       prekeys,
       contacts,
       messages: new MessageStore(join(dir, 'messages')),
@@ -438,6 +438,91 @@ describe('ChatEngine — reconnect hardening (handshake v4, Task 3.1) RGK wiring
     // The re-pin must have reset the epoch: confirm flag cleared, and a fresh RGK installed.
     expect((await B.contacts.getById(cidA_onB))?.rgkPeerConfirmed).toBe(false);
     expect((await B.contacts.getById(cidA_onB))?.reconnectGateKey).not.toBeNull();
+
+    await A.engine.stop();
+    await B.engine.stop();
+  });
+
+  // ---- harness: drop the responder→initiator direction on ONE dial, mid-handshake ----
+  // Wraps a real Transport and, on the FIRST dial after `armDrop()`, hands back a ChatStream that
+  // (a) lets the initiator's outbound bytes (Msg1) reach the responder normally, but (b) SWALLOWS every
+  // inbound byte from the responder (so the initiator never receives Msg2), then (c) closes the stream
+  // shortly after — so the initiator's handshake throws `stream closed during handshake` AFTER the
+  // responder has already received Msg1, completed, and (under the C-1 bug) rotated/persisted its RGK.
+  // This is the exact half-completed-reconnect interleaving C-1 broke.
+  class DropResponderDirectionOnceTransport implements Transport {
+    private armed = false;
+    constructor(private readonly inner: Transport) {}
+    armDrop(): void { this.armed = true; }
+    onConnection(handler: (s: ChatStream) => void): void { this.inner.onConnection(handler); }
+    onionAddress(): string | null { return this.inner.onionAddress(); }
+    start(): Promise<void> { return this.inner.start(); }
+    stop(): Promise<void> { return this.inner.stop(); }
+    async dial(onion: string): Promise<ChatStream> {
+      const real = await this.inner.dial(onion);
+      if (!this.armed) return real;
+      this.armed = false; // one-shot
+      let dataCb: ((d: Uint8Array) => void) | null = null;
+      // Subscribe to the real stream but DISCARD inbound bytes — the responder's Msg2 never surfaces.
+      real.onData(() => { /* dropped: responder→initiator direction is severed */ });
+      // After a couple of macrotasks (Msg1 delivered to R, R replies + resolves), close the initiator
+      // side so its handshake reader fails instead of hanging forever.
+      setTimeout(() => { try { real.close(); } catch { /* already closed */ } }, 30);
+      const wrapper: ChatStream = {
+        get closed() { return real.closed; },
+        send: (d) => real.send(d), // outbound (Msg1) still reaches the responder
+        onData: (cb) => { dataCb = cb; void dataCb; }, // captured but never invoked
+        onClose: (cb) => real.onClose(cb),
+        close: () => real.close()
+      };
+      return wrapper;
+    }
+  }
+
+  it('a reconnect interrupted after R sends Msg2 but before I processes it does NOT lock I out (RGK stays stable; C-1 regression)', async () => {
+    const net = new InMemoryNetwork();
+    const idA = generateIdentity();
+    const idB = generateIdentity();
+    const aMsgs: { cid: string; text: string }[] = [];
+    const A = await makeNode(net, ONION_A, idA, { onMessage: (cid, m) => aMsgs.push({ cid, text: m.text }) }); // A = responder (R)
+    const dropTransport = new DropResponderDirectionOnceTransport(new InMemoryTransport(net, ONION_B));
+    const B = await makeNode(net, ONION_B, idB, {}, dropTransport); // B = initiator (I)
+    await A.engine.start();
+    await B.engine.start();
+
+    const link = await A.engine.createInvite();
+    const cidA_onB = await B.engine.acceptInvite(link); // first_contact: installs the STABLE epoch RGK on both
+    await flush(20);
+    const cidB_onA = contactId(idB.publicKeys);
+
+    const rgkBefore = (await B.contacts.getById(cidA_onB))?.reconnectGateKey;
+    expect(rgkBefore).not.toBeNull();
+
+    // Bootstrap the confirm flag with one clean reconnect, so A is ENFORCING the gate before the
+    // interrupted attempt (this is the regime where a desync would be fatal — a cheap-close lockout).
+    B.engine.dropConnections();
+    await B.engine.send(cidA_onB, 'clean reconnect (confirm A)');
+    await flush(40);
+    expect(await A.contacts.isRgkConfirmed(cidB_onA)).toBe(true);
+
+    // Now the HALF-COMPLETED reconnect: drop R→I so B's handshake throws after A completed.
+    B.engine.dropConnections();
+    dropTransport.armDrop();
+    await expect(B.engine.send(cidA_onB, 'doomed mid-flight reconnect')).rejects.toBeTruthy();
+    await flush(60);
+
+    // B never persisted anything from the failed handshake → it still holds the SAME stable RGK.
+    const rgkAfter = (await B.contacts.getById(cidA_onB))?.reconnectGateKey;
+    expect(rgkAfter).toEqual(rgkBefore);
+
+    // The crux: the NEXT reconnect from B must STILL SUCCEED. Under the C-1 bug A rotated its RGK on the
+    // half-completed attempt while B kept RGK0 → B's mac_R would fail A's enforced gate → permanent
+    // cheap-close lockout. With the fix (A's RGK stable), B's RGK0 mac_R still matches → success.
+    B.engine.dropConnections();
+    await B.engine.send(cidA_onB, 'recovery reconnect must succeed');
+    await flush(60);
+    const aHist = await A.engine.history(cidB_onA);
+    expect(aHist.some((m) => m.text === 'recovery reconnect must succeed')).toBe(true);
 
     await A.engine.stop();
     await B.engine.stop();
