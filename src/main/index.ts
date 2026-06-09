@@ -28,6 +28,10 @@ protocol.registerSchemesAsPrivileged([
 ]);
 import { registerIpc, startReminderTicker } from './ipc/register';
 import * as vault from './services/vault';
+import { loadPlugins } from './plugins/loader';
+import { registerPluginProtocol } from './plugins/protocol';
+import { buildContextDeps, refreshPluginNetSnapshot } from './plugins/wire-deps';
+import { settingsStore } from './storage/json-fs';
 import { shutdownAllSessions } from './services/ssh';
 import { shutdownAll as shutdownAllFtp } from './services/ftp';
 import { cancelAll as cancelAllAiStreams } from './services/ai';
@@ -227,6 +231,17 @@ app.whenReady().then(async () => {
   await migrateUserDataIfNeeded();
   await ensureDataLayout();
   await vault.refreshEnabled(); // populate the lock-gate cache before any IPC can fire
+
+  // Load plugins after the vault is refreshed so secure-fs reads work, and before
+  // IPC is registered so plugin handlers are available when the renderer connects.
+  const settings = await settingsStore.read();
+  refreshPluginNetSnapshot(settings.plugins);
+  await loadPlugins({
+    isEnabled: (id) => settings.plugins?.[id]?.enabled ?? true,
+    contextDeps: buildContextDeps()
+  });
+  registerPluginProtocol();
+
   lockDownWebContents();
   registerMediaProtocol(); // ga98media:// for local audio playback
   registerModelProtocol(); // ga98model:// serves the bundled Vosk model (offline STT)
