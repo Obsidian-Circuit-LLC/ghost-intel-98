@@ -1,0 +1,111 @@
+(* ============================================================================
+   DCS98 chat reconnect-hardening (handshake v4) — CryptoVerif, COMPUTATIONAL
+   reconnect mac_R DoS-gate unforgeability.   [Task F.2]
+
+   The reconnect Msg1 carries a cheap DoS gate `mac_R` that R verifies BEFORE
+   doing any asymmetric work (KEM decaps / DH). The shipped tag (handshake.ts)
+   is keyed over the Msg1 CLEARTEXT, FLATTENED:
+
+     mac_R = HMAC(RGK, DS_MAC_R ‖ th0 ‖ prekey_id ‖ xe_I ‖ ek_I ‖ ct_pre)
+
+   where RGK = HKDF(RK, SID, RECONNECT_GATE, 32) and RK is the proven-secret
+   root key. (The ProVerif model F.1 folded these fields through an
+   intermediate hash TH_R0; the CODE flattens them. We model the FLATTENED
+   form here so this artifact matches the implementation byte-for-byte; F.3
+   documents folded≡flattened under the symbolic/PRF abstraction.)
+
+   --- Composition ---------------------------------------------------------
+   The reconnect key schedule is the SAME chain as first_contact
+   (es/ee/se/ss_pre/ss_I); the existing hybrid-secrecy / auth / KCI / FS
+   proofs (chat-handshake-{hybrid,auth,kci,fs}*.cv) therefore transfer
+   UNCHANGED. RK secrecy is established by those chain proofs; RGK is one
+   ROM/PRF step off RK, so here RGK is justified as a FRESH SECRET RANDOM KEY
+   not held by the adversary. This file ADDS only the mac_R gate assumption
+   (SUF-CMA / PRF MAC) on top of that established secrecy; it does NOT re-prove
+   RK secrecy.
+
+   --- What this proves ----------------------------------------------------
+   The QUALITATIVE gate property (design goal 4): a party WITHOUT RGK cannot
+   produce a verifying mac_R for a reconnect Msg1 against a confirmed contact,
+   even after observing many legitimate (msg, mac_R) pairs and requesting MACs
+   on chosen messages (the MAC oracle). I.e. R's verify only accepts on
+   messages the honest party actually MAC'd ⇒ zero asymmetric work for a
+   forged reconnect Msg1.
+
+   NOT proved here (out of scope, by design): the QUANTITATIVE DoS-amplification
+   bound. That is the rate-limiter engineering constant (Task 2.5), an
+   operational parameter, NOT a CryptoVerif theorem.
+
+   Run: cryptoverif chat-handshake-macr.cv
+   ============================================================================ *)
+
+(* Standard SUF-CMA proof: rewrite the honest MAC under the suf_cma equiv keyed
+   by the one secret gate key RGK, then let CryptoVerif close the correspondence. *)
+proof {
+  crypto suf_cma(mac);
+  success;
+  auto
+}
+
+param NI, NR, NV.
+
+(* Msg1-cleartext field types. The KEM publics / ciphertexts and ephemerals are
+   session-fresh values bound into the MAC'd message; for gate unforgeability
+   only their binding matters, so each is a fresh nonce. *)
+type nonce [large,fixed].
+
+(* SUF-CMA MAC over the flattened Msg1-cleartext input. *)
+type mkey   [large,fixed].
+type macinput [bounded].
+type macres [bounded].
+
+proba Pmac.
+expand SUF_CMA_proba_mac(mkey, macinput, macres, mac, check, Pmac).
+
+(* The flattened MAC input:  DS_MAC_R ‖ th0 ‖ prekey_id ‖ xe_I ‖ ek_I ‖ ct_pre.
+   DS_MAC_R is a fixed domain-separation tag; modelled by using a single
+   dedicated injective constructor (so this tag's preimage space is disjoint
+   from any other use of the key, matching the unique DS_MAC_R prefix). *)
+fun macr_msg(nonce, nonce, nonce, nonce, nonce): macinput [data].
+(*           th0,   pkid,  xe_I,  ek_I,  ct_pre                                *)
+
+(* Events for the gate-unforgeability correspondence.
+   Imacr : the honest initiator produced a mac_R over message m (MAC oracle).
+   Raccept : R's gate verify ACCEPTED a (m, tag) pair. *)
+event Imacr(macinput).
+event Raccept(macinput).
+
+(* GATE UNFORGEABILITY: every R-accept of a mac_R corresponds to an honest
+   MAC over that EXACT flattened message. An adversary without RGK cannot make
+   R accept a message the honest party never MAC'd ⇒ no asymmetric work is
+   triggered by a forged reconnect Msg1. *)
+query m: macinput;
+  event(Raccept(m)) ==> event(Imacr(m)).
+
+channel cI, cIout, cR, cRout, start, cstart.
+
+(* Honest initiator MAC oracle: the adversary chooses the Msg1-cleartext fields
+   (it controls the wire), the honest party returns the gate tag under RGK. This
+   is exactly the chosen-message MAC oracle of SUF-CMA. *)
+let processI(k_rgk: mkey) =
+  in(cI, (th0: nonce, pkid: nonce, xeI: nonce, ekI: nonce, ctpre: nonce));
+  let m: macinput = macr_msg(th0, pkid, xeI, ekI, ctpre) in
+  event Imacr(m);
+  let t: macres = mac(m, k_rgk) in
+  out(cIout, t).
+
+(* R's DoS gate: receives a candidate (Msg1-cleartext, tag) from the adversary
+   and runs the cheap verify. On accept it commits Raccept(m) — the point
+   AFTER which asymmetric work would begin. *)
+let processR(k_rgk: mkey) =
+  in(cR, (th0: nonce, pkid: nonce, xeI: nonce, ekI: nonce, ctpre: nonce, t: macres));
+  let m: macinput = macr_msg(th0, pkid, xeI, ekI, ctpre) in
+  if check(m, k_rgk, t) then
+  event Raccept(m);
+  out(cRout, ()).
+
+process
+  in(start, ());
+  new k_rgk: mkey;          (* RGK = HKDF(RK, SID, RECONNECT_GATE) — fresh secret *)
+  out(cstart, ());
+  ( (! NI processI(k_rgk)) | (! NV processR(k_rgk)) )
