@@ -23,7 +23,8 @@ import { registerModelProtocol } from './voice/model-protocol';
 //  - ga98model: serve the bundled Vosk speech model to vosk-browser (offline STT)
 protocol.registerSchemesAsPrivileged([
   { scheme: 'ga98media', privileges: { stream: true, supportFetchAPI: true, secure: true, standard: true } },
-  { scheme: 'ga98model', privileges: { stream: true, supportFetchAPI: true, secure: true, standard: true } }
+  { scheme: 'ga98model', privileges: { stream: true, supportFetchAPI: true, secure: true, standard: true } },
+  { scheme: 'dcs98-plugin', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }
 ]);
 import { registerIpc, startReminderTicker } from './ipc/register';
 import * as vault from './services/vault';
