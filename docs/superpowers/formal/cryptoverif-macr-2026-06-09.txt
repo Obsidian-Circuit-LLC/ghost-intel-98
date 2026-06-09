@@ -1,0 +1,247 @@
+Doing expand get, insert and prove unique annotations... No change.
+Doing simplify (non-expanded game)... No change.
+Doing expand... Done.
+Doing remove assignments of findcond... Done.
+Doing simplify... Run simplify 1 time(s). Fixpoint reached.
+No change.
+Doing move all binders... No change.
+Doing SA rename new without array accesses and remove assignments of findcond... No change.
+Doing merge branches... No change.
+Proof of forall m: macinput; event(Raccept(m)) ==> event(Imacr(m)) failed:
+  Found Raccept(m_4) at 61
+  but could not prove event(Imacr(m))
+Trying equivalence suf_cma(mac)... Transf. OK Proba. computed Transf. done Succeeded.
+Doing simplify (non-expanded game)... No change.
+Doing expand... Done.
+Doing remove assignments of findcond... Done.
+Doing simplify... Run simplify 2 time(s). Fixpoint reached.
+Done.
+Doing move all binders... Done.
+Doing SA rename new without array accesses and remove assignments of findcond... No change.
+Doing merge branches... No change.
+Proved query forall m: macinput; event(Raccept(m)) ==> event(Imacr(m))
+===================== Proof starts =======================
+Initial state
+Game 1 is
+     start() :=
+     k_rgk_1 <-R mkey;
+     return();
+     ((
+       foreach i <= NI do
+       cI(th0_1: nonce, pkid_1: nonce, xeI_1: nonce, ekI_1: nonce, ctpre_1: nonce) :=
+       m_3: macinput <- macr_msg(th0_1, pkid_1, xeI_1, ekI_1, ctpre_1);
+       event Imacr(m_3);
+       t_1: macres <- (m_1: macinput <- m_3; k: mkey <- k_rgk_1; r <-R mac_seed; mac_r(m_1, k, r));
+       return(t_1)
+     ) | (
+       foreach i_1 <= NV do
+       cR(th0_2: nonce, pkid_2: nonce, xeI_2: nonce, ekI_2: nonce, ctpre_2: nonce, t_2: macres) :=
+       m_4: macinput <- macr_msg(th0_2, pkid_2, xeI_2, ekI_2, ctpre_2);
+       if check(m_4, k_rgk_1, t_2) then
+       event Raccept(m_4);
+       return()
+     ))
+
+
+Applying expand
+  - Expand if/find/let
+yields
+
+Game 2 is
+     start() :=
+     k_rgk_1 <-R mkey;
+     return();
+     ((
+       foreach i <= NI do
+       cI(th0_1: nonce, pkid_1: nonce, xeI_1: nonce, ekI_1: nonce, ctpre_1: nonce) :=
+       m_3: macinput <- macr_msg(th0_1, pkid_1, xeI_1, ekI_1, ctpre_1);
+       event Imacr(m_3);
+       m_1: macinput <- m_3;
+       k: mkey <- k_rgk_1;
+       r <-R mac_seed;
+       t_1: macres <- mac_r(m_1, k, r);
+       return(t_1)
+     ) | (
+       foreach i_1 <= NV do
+       cR(th0_2: nonce, pkid_2: nonce, xeI_2: nonce, ekI_2: nonce, ctpre_2: nonce, t_2: macres) :=
+       m_4: macinput <- macr_msg(th0_2, pkid_2, xeI_2, ekI_2, ctpre_2);
+       if check(m_4, k_rgk_1, t_2) then
+       event Raccept(m_4);
+       return()
+     ))
+
+
+Applying remove assignments of findcond
+  - Remove assignments on m_1 (definition removed, all usages removed)
+  - Remove assignments on k (definition removed, all usages removed)
+yields
+
+Game 3 is
+     start() :=
+     k_rgk_1 <-R mkey;
+     return();
+     ((
+       foreach i <= NI do
+       cI(th0_1: nonce, pkid_1: nonce, xeI_1: nonce, ekI_1: nonce, ctpre_1: nonce) :=
+       m_3: macinput <- macr_msg(th0_1, pkid_1, xeI_1, ekI_1, ctpre_1);
+       event Imacr(m_3);
+       r <-R mac_seed;
+       t_1: macres <- mac_r(m_3, k_rgk_1, r);
+       return(t_1)
+     ) | (
+       foreach i_1 <= NV do
+       cR(th0_2: nonce, pkid_2: nonce, xeI_2: nonce, ekI_2: nonce, ctpre_2: nonce, t_2: macres) :=
+       m_4: macinput <- macr_msg(th0_2, pkid_2, xeI_2, ekI_2, ctpre_2);
+       if check(m_4, k_rgk_1, t_2) then
+       event Raccept(m_4);
+       return()
+     ))
+
+
+Applying equivalence suf_cma(mac) [probability Pmac(time_1, NI, NV, 0)]
+  - Equivalence suf_cma(mac) with variables: k_rgk_1 -> k_1, r -> r_1
+yields
+
+Game 4 is
+     start() :=
+     k_rgk_1 <-R mkey;
+     return();
+     ((
+       foreach i <= NI do
+       cI(th0_1: nonce, pkid_1: nonce, xeI_1: nonce, ekI_1: nonce, ctpre_1: nonce) :=
+       m_3: macinput <- macr_msg(th0_1, pkid_1, xeI_1, ekI_1, ctpre_1);
+       event Imacr(m_3);
+       r_1 <-R mac_seed;
+       t_1: macres <- (x: macinput <- m_3; ma2: macres <- mac_r'(x, k_rgk_1, r_1); ma2);
+       return(t_1)
+     ) | (
+       foreach i_1 <= NV do
+       cR(th0_2: nonce, pkid_2: nonce, xeI_2: nonce, ekI_2: nonce, ctpre_2: nonce, t_2: macres) :=
+       m_4: macinput <- macr_msg(th0_2, pkid_2, xeI_2, ekI_2, ctpre_2);
+ {59}  if (m_5: macinput <- m_4; ma: macres <- t_2; find u = ri <= NI suchthat defined(x[ri], ma2[ri]) && (m_5 = x[ri]) && (ma = ma2[ri]) then true else false) then
+       event Raccept(m_4);
+       return()
+     ))
+
+
+Applying expand
+  - Expand if/find/let
+    - Test at 59 always false
+    - Test at 59 always true
+yields
+
+Game 5 is
+     start() :=
+     k_rgk_1 <-R mkey;
+     return();
+     ((
+       foreach i <= NI do
+       cI(th0_1: nonce, pkid_1: nonce, xeI_1: nonce, ekI_1: nonce, ctpre_1: nonce) :=
+       m_3: macinput <- macr_msg(th0_1, pkid_1, xeI_1, ekI_1, ctpre_1);
+       event Imacr(m_3);
+       r_1 <-R mac_seed;
+       x: macinput <- m_3;
+       ma2: macres <- mac_r'(x, k_rgk_1, r_1);
+       t_1: macres <- ma2;
+       return(t_1)
+     ) | (
+       foreach i_1 <= NV do
+       cR(th0_2: nonce, pkid_2: nonce, xeI_2: nonce, ekI_2: nonce, ctpre_2: nonce, t_2: macres) :=
+       m_4: macinput <- macr_msg(th0_2, pkid_2, xeI_2, ekI_2, ctpre_2);
+       m_5: macinput <- m_4;
+       ma: macres <- t_2;
+       find u = ri <= NI suchthat defined(x[ri], ma2[ri]) && (m_5 = x[ri]) && (ma = ma2[ri]) then
+       event Raccept(m_4);
+       return()
+     ))
+
+
+Applying remove assignments of findcond
+  - Remove assignments on m_5 (definition removed, all usages removed)
+  - Remove assignments on ma (definition removed, all usages removed)
+  - Remove assignments on x (definition removed, all usages removed)
+  - Remove assignments on t_1 (definition removed, all usages removed)
+yields
+
+Game 6 is
+     start() :=
+     k_rgk_1 <-R mkey;
+     return();
+     ((
+       foreach i <= NI do
+       cI(th0_1: nonce, pkid_1: nonce, xeI_1: nonce, ekI_1: nonce, ctpre_1: nonce) :=
+       m_3: macinput <- macr_msg(th0_1, pkid_1, xeI_1, ekI_1, ctpre_1);
+       event Imacr(m_3);
+       r_1 <-R mac_seed;
+       ma2: macres <- mac_r'(m_3, k_rgk_1, r_1);
+       return(ma2)
+     ) | (
+       foreach i_1 <= NV do
+       cR(th0_2: nonce, pkid_2: nonce, xeI_2: nonce, ekI_2: nonce, ctpre_2: nonce, t_2: macres) :=
+       m_4: macinput <- macr_msg(th0_2, pkid_2, xeI_2, ekI_2, ctpre_2);
+ {53}  find u = ri <= NI suchthat defined(m_3[ri], r_1[ri], ma2[ri]) && {57}((m_4 = m_3[ri]) && (t_2 = ma2[ri])) then
+       event Raccept(m_4);
+       return()
+     ))
+
+
+Applying simplify
+  - Simplification pass
+    - Replaced ((m_4 = m_3[ri]) && (t_2 = ma2[ri])) with ((th0_2 = th0_1[ri]) && (pkid_2 = pkid_1[ri]) && (xeI_2 = xeI_1[ri]) && (ekI_2 = ekI_1[ri]) && (ctpre_2 = ctpre_1[ri]) && (t_2 = ma2[ri])) at 57
+    - Replaced defined condition m_3[ri], r_1[ri], ma2[ri] with ma2[ri], ctpre_1[ri], ekI_1[ri], xeI_1[ri], pkid_1[ri], th0_1[ri] in find at 53
+yields
+
+Game 7 is
+     start() :=
+     k_rgk_1 <-R mkey;
+     return();
+     ((
+       foreach i <= NI do
+       cI(th0_1: nonce, pkid_1: nonce, xeI_1: nonce, ekI_1: nonce, ctpre_1: nonce) :=
+       m_3: macinput <- macr_msg(th0_1, pkid_1, xeI_1, ekI_1, ctpre_1);
+       event Imacr(m_3);
+       r_1 <-R mac_seed;
+       ma2: macres <- mac_r'(m_3, k_rgk_1, r_1);
+       return(ma2)
+     ) | (
+       foreach i_1 <= NV do
+       cR(th0_2: nonce, pkid_2: nonce, xeI_2: nonce, ekI_2: nonce, ctpre_2: nonce, t_2: macres) :=
+       m_4: macinput <- macr_msg(th0_2, pkid_2, xeI_2, ekI_2, ctpre_2);
+       find u = ri <= NI suchthat defined(ma2[ri], ctpre_1[ri], ekI_1[ri], xeI_1[ri], pkid_1[ri], th0_1[ri]) && (th0_2 = th0_1[ri]) && (pkid_2 = pkid_1[ri]) && (xeI_2 = xeI_1[ri]) && (ekI_2 = ekI_1[ri]) && (ctpre_2 = ctpre_1[ri]) && (t_2 = ma2[ri]) then
+       event Raccept(m_4);
+       return()
+     ))
+
+
+Applying move all binders
+  - Move assignment to m_4
+yields
+
+Game 8 is
+     start() :=
+     k_rgk_1 <-R mkey;
+     return();
+     ((
+       foreach i <= NI do
+       cI(th0_1: nonce, pkid_1: nonce, xeI_1: nonce, ekI_1: nonce, ctpre_1: nonce) :=
+       m_3: macinput <- macr_msg(th0_1, pkid_1, xeI_1, ekI_1, ctpre_1);
+       event Imacr(m_3);
+       r_1 <-R mac_seed;
+       ma2: macres <- mac_r'(m_3, k_rgk_1, r_1);
+       return(ma2)
+     ) | (
+       foreach i_1 <= NV do
+       cR(th0_2: nonce, pkid_2: nonce, xeI_2: nonce, ekI_2: nonce, ctpre_2: nonce, t_2: macres) :=
+       find u = ri <= NI suchthat defined(ma2[ri], ctpre_1[ri], ekI_1[ri], xeI_1[ri], pkid_1[ri], th0_1[ri]) && (th0_2 = th0_1[ri]) && (pkid_2 = pkid_1[ri]) && (xeI_2 = xeI_1[ri]) && (ekI_2 = ekI_1[ri]) && (ctpre_2 = ctpre_1[ri]) && (t_2 = ma2[ri]) then
+       m_4: macinput <- macr_msg(th0_2, pkid_2, xeI_2, ekI_2, ctpre_2);
+       event Raccept(m_4);
+       return()
+     ))
+
+
+Proved forall m: macinput; event(Raccept(m)) ==> event(Imacr(m)) in game 8
+Adv[Game 1: forall m: macinput; event(Raccept(m)) ==> event(Imacr(m))] <= Pmac(time_1, NI, NV, 0) + Adv[Game 8: forall m: macinput; event(Raccept(m)) ==> event(Imacr(m))]
+Adv[Game 8: forall m: macinput; event(Raccept(m)) ==> event(Imacr(m))] <= 0
+RESULT Proved forall m: macinput; event(Raccept(m)) ==> event(Imacr(m)) up to probability Pmac(time_1, NI, NV, 0)
+RESULT time_1 = (NI + NV) * time(macr_msg) + NI * time(([1,NI])) + NV * time(([1,NV])) + time
+All queries proved.
