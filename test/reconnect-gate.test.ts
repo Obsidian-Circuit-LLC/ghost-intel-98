@@ -63,6 +63,28 @@ describe('ReconnectRateLimiter (Task 2.5 / N-3) — pure unit', () => {
     expect(admitted).toBe(rl.tighterWindow);
   });
 
+  it('M-1: constructing with tighterWindow >= reservedWindow throws', () => {
+    expect(() => new ReconnectRateLimiter({ now: () => 0, reservedWindow: 8, tighterWindow: 8 })).toThrow(/tighterWindow must be < reservedWindow/);
+    expect(() => new ReconnectRateLimiter({ now: () => 0, reservedWindow: 8, tighterWindow: 16 })).toThrow(/tighterWindow must be < reservedWindow/);
+    // A correctly-ordered config does NOT throw.
+    expect(() => new ReconnectRateLimiter({ now: () => 0, reservedWindow: 32, tighterWindow: 8 })).not.toThrow();
+  });
+
+  it('M-3: a NaN-returning now() does NOT allow-all — admissions fail closed (DoS gate stays armed)', () => {
+    const rl = new ReconnectRateLimiter({ now: () => Number.NaN });
+    // Recognized path: must be denied (not silently admitted) even far below the window count.
+    for (let i = 0; i < 100; i++) {
+      expect(rl.admit({ recognized: true, fp: `n${i}` }).allowed).toBe(false);
+    }
+    // Unrecognized path: likewise denied.
+    for (let i = 0; i < 100; i++) {
+      expect(rl.admit({ recognized: false, fp: `m${i}` }).allowed).toBe(false);
+    }
+    // Infinity is also non-finite → fail closed.
+    const rlInf = new ReconnectRateLimiter({ now: () => Number.POSITIVE_INFINITY });
+    expect(rlInf.admit({ recognized: true, fp: 'inf' }).allowed).toBe(false);
+  });
+
   it('is deterministic: no internal clock — identical injected ticks give identical decisions', () => {
     const seq = () => {
       const rl = new ReconnectRateLimiter({ now: () => 0 });
