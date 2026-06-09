@@ -21,10 +21,10 @@ import {
 import {
   encodeIdentityPublic, encodeKemPrekey, decodeKemPrekey, verifyKemPrekey, ed25519Pair, x25519Pair,
   KEM_PREKEY_LEN, PREKEY_ID_LEN,
-  type IdentityKeyPair, type IdentityPublic, type KemPrekey
+  type IdentityKeyPair, type IdentityPublic, type KemPrekey, type KemPrekeyKeyPair
 } from './identity';
 import {
-  PROTO_LABEL, SUITE_ID, DS_HS_INIT, DS_HS_RESP, DS_MAC_T, DS_MAC_R,
+  PROTO_LABEL, SUITE_ID, DS_HS_INIT, DS_HS_RESP, DS_HS_REJECT, DS_MAC_T, DS_MAC_R,
   MIX_INIT, MIX_ES, MIX_SSPRE, MIX_EE, MIX_SE, MIX_SSI, DRV_HK1, DRV_HK2, DRV_ROOT, DRV_SID,
   RECONNECT_GATE, HS_MSG2, HS_REJECT,
   concatBytes
@@ -59,6 +59,11 @@ export interface ResponderInviteStore {
   release(prekeyId: Uint8Array): Promise<void>;
   /** A fresh signed prekey to hand the peer for next time (rotation). */
   issueNext(): Promise<KemPrekey>;
+  /** Offer a CURRENT signed prekey for in-band reconnect recovery (HIGH-1) WITHOUT consuming it. Used
+   *  on the Reject path when a presented rotation prekey resolved to a cid but is already consumed
+   *  (the strand). Re-offers the contact's still-live prekey (or mints one under a per-cid cap); the
+   *  returned prekey is consumed only if/when I completes the retry handshake against it (Task 1.2-R). */
+  offerCurrent(cid: string): Promise<KemPrekeyKeyPair>;
   /** Which contact (cid) a given prekeyId was issued to; null if unknown. Cheap index lookup — no
    *  crypto, no reservation — used by the reconnect pre-gate before any asymmetric work (rev-4 §3). */
   identifyContact(prekeyId: Uint8Array): Promise<string | null>;
@@ -100,6 +105,10 @@ export interface HandshakeResult {
   /** Responder-only: a valid mac_R was verified on this reconnect Msg1. The engine reads this to set
    *  the contact's rgkPeerConfirmed flag (Task 3.1). Undefined/false otherwise. */
   peerMacRVerified?: boolean;
+  /** Initiator-only: this session was established via the in-band reconnect recovery path — R sent an
+   *  authenticated Reject (the presented rotation prekey was already consumed) and I retried against
+   *  the offered prekey (HIGH-1 self-heal, Task 2.4). Undefined/false on the normal path. */
+  usedOfferedPrekey?: boolean;
 }
 
 // ---- small framed I/O over a ChatStream (one Handshake frame at a time) ----
@@ -181,110 +190,170 @@ function h(...parts: Uint8Array[]): Uint8Array {
   return sha256(concatBytes(...parts));
 }
 
+/** A verified Reject the responder returned on a reconnect attempt (HIGH-1 recovery, Task 2.4): the
+ *  presented prekey resolved to this contact but was already consumed, so R offered a current one. */
+interface RejectOutcome {
+  kind: 'reject';
+  offered: KemPrekey;
+}
+type AttemptOutcome = HandshakeResult | RejectOutcome;
+
 async function initiatorHandshakeImpl(stream: ChatStream, opts: InitiatorOpts): Promise<HandshakeResult> {
-  const { identity, responderPublic, prekey, mode } = opts;
+  const { identity, responderPublic, mode } = opts;
   const firstContact = mode === 'first_contact';
   if (firstContact && (!opts.token || opts.token.length !== TOKEN_LEN)) {
     throw new HandshakeError('first_contact requires a 32-byte token');
   }
-  if (!verifyKemPrekey(prekey, responderPublic.ed25519)) throw new HandshakeError('responder prekey signature invalid');
 
   const io = new HandshakeIO(stream);
-  const xeI = x25519Keygen();
-  const ekI = await mlkemKeygen();
-  const enc = await mlkemEncapsulate(prekey.publicKey); // (ct_pre, ss_pre)
   const modeByte = Uint8Array.of(firstContact ? MODE_FIRST : MODE_RECONNECT);
-
   const th0 = h(PROTO_LABEL, SUITE_ID, modeByte);
-  const th1 = h(
-    th0, ROLE_I, ROLE_R, encodeIdentityPublic(responderPublic), prekey.prekeyId,
-    Uint8Array.of(prekey.isLastResort ? 1 : 0), prekey.publicKey, prekey.signature, xeI.publicKey, ekI.publicKey, enc.cipherText
-  );
 
-  let ck = hkdf(PROTO_LABEL, th1, MIX_INIT, 32);
-  const es = x25519Ecdh(xeI, responderPublic.x25519);
-  ck = mixKey(ck, es, MIX_ES);
-  ck = mixKey(ck, enc.sharedSecret, MIX_SSPRE);
-  const hk1 = hkdf(ck, th1, DRV_HK1, 32);
+  // One Msg1→reply round against a given prekey. Returns a completed HandshakeResult (HS_MSG2) or a
+  // VERIFIED RejectOutcome (HS_REJECT). Fresh ephemerals each call so a retry never reuses xe_I/ek_I.
+  // `usedOfferedPrekey` is threaded onto the result so the caller's retry session is tagged.
+  const runAttempt = async (prekey: KemPrekey, usedOfferedPrekey: boolean): Promise<AttemptOutcome> => {
+    if (!verifyKemPrekey(prekey, responderPublic.ed25519)) throw new HandshakeError('responder prekey signature invalid');
 
-  const sigI = ed25519Sign(concatBytes(DS_HS_INIT, th1), ed25519Pair(identity));
-  const idPayload = concatBytes(identity.publicKeys.x25519, identity.publicKeys.ed25519, sigI);
-  const aad = firstContact ? sha256(opts.token as Uint8Array) : new Uint8Array(0);
-  const cIdI = aeadSeal(hk1, NONCE0, idPayload, aad);
-  const macT = firstContact ? hmacSha256(sha256(opts.token as Uint8Array), concatBytes(DS_MAC_T, th1)) : new Uint8Array(0);
+    const xeI = x25519Keygen();
+    const ekI = await mlkemKeygen();
+    const enc = await mlkemEncapsulate(prekey.publicKey); // (ct_pre, ss_pre)
 
-  // Reconnect gate slot (rev-4 §3): I ALWAYS sends mac_R whenever it holds an RGK for the contact.
-  // mac_R is keyed over the Msg1 CLEARTEXT (NOT th1: th1 binds R's prekey block, which is consumed/gone
-  // in the strand-recovery case — the gate must run before R touches the prekey). A 1-byte presence flag
-  // lets an RGK-less initiator (the bootstrap fail-open case) send an empty slot unambiguously before cIdI.
-  let macRSlot: Uint8Array = new Uint8Array(0);
-  if (!firstContact) {
-    const rgk = opts.reconnectGateKey;
-    if (rgk) {
-      const macRInput = concatBytes(DS_MAC_R, th0, prekey.prekeyId, xeI.publicKey, ekI.publicKey, enc.cipherText);
-      macRSlot = concatBytes(Uint8Array.of(1), hmacSha256(rgk, macRInput));
-    } else {
-      macRSlot = Uint8Array.of(0);
+    const th1 = h(
+      th0, ROLE_I, ROLE_R, encodeIdentityPublic(responderPublic), prekey.prekeyId,
+      Uint8Array.of(prekey.isLastResort ? 1 : 0), prekey.publicKey, prekey.signature, xeI.publicKey, ekI.publicKey, enc.cipherText
+    );
+
+    let ck = hkdf(PROTO_LABEL, th1, MIX_INIT, 32);
+    const es = x25519Ecdh(xeI, responderPublic.x25519);
+    ck = mixKey(ck, es, MIX_ES);
+    ck = mixKey(ck, enc.sharedSecret, MIX_SSPRE);
+    const hk1 = hkdf(ck, th1, DRV_HK1, 32);
+
+    const sigI = ed25519Sign(concatBytes(DS_HS_INIT, th1), ed25519Pair(identity));
+    const idPayload = concatBytes(identity.publicKeys.x25519, identity.publicKeys.ed25519, sigI);
+    const aad = firstContact ? sha256(opts.token as Uint8Array) : new Uint8Array(0);
+    const cIdI = aeadSeal(hk1, NONCE0, idPayload, aad);
+    const macT = firstContact ? hmacSha256(sha256(opts.token as Uint8Array), concatBytes(DS_MAC_T, th1)) : new Uint8Array(0);
+
+    // TH_R0 = H(MIX_INIT ‖ TH0 ‖ prekey_id ‖ xe_I ‖ ek_I ‖ ct_pre) — the Msg1 CLEARTEXT transcript,
+    // used below to reconstruct/verify Sig_R_reject on a Reject (F-5: TH_R0, NOT TH1 — TH1 binds R's
+    // prekey block, gone in the strand case). NB: this is distinct from the mac_R input layout (Task
+    // 2.2), which flattens the same fields directly under DS_MAC_R; only the Reject signature folds them
+    // through TH_R0 (matching the proven model's thR0).
+    const thR0 = h(MIX_INIT, th0, prekey.prekeyId, xeI.publicKey, ekI.publicKey, enc.cipherText);
+    // Reconnect gate slot (rev-4 §3): I ALWAYS sends mac_R whenever it holds an RGK for the contact.
+    // mac_R is keyed over the Msg1 CLEARTEXT (NOT th1: th1 binds R's prekey block, which is consumed/gone
+    // in the strand-recovery case — the gate must run before R touches the prekey). A 1-byte presence flag
+    // lets an RGK-less initiator (the bootstrap fail-open case) send an empty slot unambiguously before cIdI.
+    let macRSlot: Uint8Array = new Uint8Array(0);
+    if (!firstContact) {
+      const rgk = opts.reconnectGateKey;
+      if (rgk) {
+        const macRInput = concatBytes(DS_MAC_R, th0, prekey.prekeyId, xeI.publicKey, ekI.publicKey, enc.cipherText);
+        macRSlot = concatBytes(Uint8Array.of(1), hmacSha256(rgk, macRInput));
+      } else {
+        macRSlot = Uint8Array.of(0);
+      }
     }
+
+    io.send(concatBytes(modeByte, xeI.publicKey, ekI.publicKey, prekey.prekeyId, enc.cipherText, macT, macRSlot, cIdI));
+    const th2 = h(th1, cIdI);
+
+    // ---- Responder reply (Msg2 or Reject) ----
+    const reply = new Cursor(await io.recv());
+    // Typed responder reply (rev-4 Task 2.3): read the hs_type discriminant first and branch. The same
+    // byte is folded into th3 below so Sig_R covers it — a flipped type breaks the signature check.
+    const hsType = reply.byte();
+    if (hsType === HS_REJECT) {
+      // ---- Reject recovery (Task 2.4): verify Sig_R_reject over TH_R0, then return the offered prekey
+      // for the caller to retry against. Reject never reaches a session on this attempt. ----
+      if (firstContact) throw new HandshakeError('unexpected reject on first_contact');
+      const offeredBytes = reply.take(KEM_PREKEY_LEN);
+      const isLastByte = reply.byte();
+      const sigReject = reply.rest();
+      if (sigReject.length !== ED25519_SIG_LEN) throw new HandshakeError('reject signature malformed');
+      if (isLastByte !== 0 && isLastByte !== 1) throw new HandshakeError('reject is_last_resort flag invalid');
+      // Sig_R_reject = Sign(is_R, DS_HS_REJECT ‖ TH_R0 ‖ offered_prekey ‖ is_last_resort), TH_R0 from
+      // THIS attempt's Msg1 cleartext (replaying a Reject onto a different Msg1 ⇒ TH_R0 mismatch ⇒ fail).
+      if (!ed25519Verify(sigReject, concatBytes(DS_HS_REJECT, thR0, offeredBytes, Uint8Array.of(isLastByte)), responderPublic.ed25519)) {
+        throw new HandshakeError('reject signature invalid');
+      }
+      const offered = decodeKemPrekey(offeredBytes);
+      // Defensive: the signed flag must agree with the offered prekey's own flag, and the offered
+      // prekey must itself be signed by R (verify-before-use).
+      if ((offered.isLastResort ? 1 : 0) !== isLastByte) throw new HandshakeError('reject is_last_resort flag mismatch');
+      if (!verifyKemPrekey(offered, responderPublic.ed25519)) throw new HandshakeError('offered prekey signature invalid');
+      zeroize(xeI.secretKey, ekI.secretKey, es, enc.sharedSecret, ck, hk1);
+      return { kind: 'reject', offered };
+    }
+    if (hsType !== HS_MSG2) {
+      throw new HandshakeError('unknown hs_type in responder reply');
+    }
+
+    // ---- Msg2 ----
+    const xeR = reply.take(X25519_PUBLIC_LEN);
+    const ctI = reply.take(MLKEM_CT_LEN);
+    const nextPrekeyBytes = reply.take(KEM_PREKEY_LEN);
+    const cConfR = reply.rest();
+
+    const ssI = await mlkemDecapsulate(ctI, ekI.secretKey);
+    ck = mixKey(ck, x25519Ecdh(xeI, xeR), MIX_EE);
+    ck = mixKey(ck, x25519Ecdh(x25519Pair(identity), xeR), MIX_SE);
+    ck = mixKey(ck, ssI, MIX_SSI);
+    const th3 = h(th2, Uint8Array.of(hsType), xeR, ctI, nextPrekeyBytes);
+    const hk2 = hkdf(ck, th3, DRV_HK2, 32);
+
+    let confPt: Uint8Array;
+    try {
+      confPt = aeadOpen(hk2, NONCE0, cConfR, new Uint8Array(0));
+    } catch {
+      throw new HandshakeError('Msg2 confirmation failed to open');
+    }
+    const sigR = confPt.slice(0, ED25519_SIG_LEN);
+    if (!ed25519Verify(sigR, concatBytes(DS_HS_RESP, th3), responderPublic.ed25519)) {
+      throw new HandshakeError('responder signature invalid');
+    }
+    const nextPrekey = decodeKemPrekey(nextPrekeyBytes);
+    if (!verifyKemPrekey(nextPrekey, responderPublic.ed25519)) throw new HandshakeError('rotation prekey signature invalid');
+
+    const th4 = h(th3, cConfR);
+    const rk = hkdf(ck, th4, DRV_ROOT, 32);
+    const sid = hkdf(ck, th4, DRV_SID, 16);
+    const session = new Session(sid, rk, 'initiator');
+
+    const reconnectGateKey = hkdf(rk, sid, RECONNECT_GATE, 32);
+    zeroize(xeI.secretKey, ekI.secretKey, es, enc.sharedSecret, ssI, ck, hk1, hk2, rk);
+    return { session, peer: responderPublic, nextPrekey, mode, reconnectGateKey, usedOfferedPrekey };
+  };
+
+  // First attempt against the presented prekey. On HS_REJECT, retry ONCE against the offered prekey
+  // (one-retry-per-dial cap): a SECOND Reject (the retry also rejected) is a hard fail — no infinite
+  // loop, no further attempts on this dial. (Reject on first_contact is impossible — handled above.)
+  let outcome = await runAttempt(opts.prekey, false);
+  if ('kind' in outcome) {
+    const retry = await runAttempt(outcome.offered, true);
+    if ('kind' in retry) {
+      throw new HandshakeError('reconnect failed — request a fresh invite');
+    }
+    outcome = retry;
   }
 
-  io.send(concatBytes(modeByte, xeI.publicKey, ekI.publicKey, prekey.prekeyId, enc.cipherText, macT, macRSlot, cIdI));
-  const th2 = h(th1, cIdI);
-
-  // ---- Responder reply (Msg2 or Reject) ----
-  const reply = new Cursor(await io.recv());
-  // Typed responder reply (rev-4 Task 2.3): read the hs_type discriminant first and branch. The same
-  // byte is folded into th3 below so Sig_R covers it — a flipped type breaks the signature check.
-  const hsType = reply.byte();
-  if (hsType === HS_REJECT) {
-    // Task 2.4 replaces this with the real prekey_unknown recovery path.
-    throw new HandshakeError('unexpected reject (recovery not yet implemented)');
-  }
-  if (hsType !== HS_MSG2) {
-    throw new HandshakeError('unknown hs_type in responder reply');
-  }
-
-  // ---- Msg2 ----
-  const xeR = reply.take(X25519_PUBLIC_LEN);
-  const ctI = reply.take(MLKEM_CT_LEN);
-  const nextPrekeyBytes = reply.take(KEM_PREKEY_LEN);
-  const cConfR = reply.rest();
-
-  const ssI = await mlkemDecapsulate(ctI, ekI.secretKey);
-  ck = mixKey(ck, x25519Ecdh(xeI, xeR), MIX_EE);
-  ck = mixKey(ck, x25519Ecdh(x25519Pair(identity), xeR), MIX_SE);
-  ck = mixKey(ck, ssI, MIX_SSI);
-  const th3 = h(th2, Uint8Array.of(hsType), xeR, ctI, nextPrekeyBytes);
-  const hk2 = hkdf(ck, th3, DRV_HK2, 32);
-
-  let confPt: Uint8Array;
-  try {
-    confPt = aeadOpen(hk2, NONCE0, cConfR, new Uint8Array(0));
-  } catch {
-    throw new HandshakeError('Msg2 confirmation failed to open');
-  }
-  const sigR = confPt.slice(0, ED25519_SIG_LEN);
-  if (!ed25519Verify(sigR, concatBytes(DS_HS_RESP, th3), responderPublic.ed25519)) {
-    throw new HandshakeError('responder signature invalid');
-  }
-  const nextPrekey = decodeKemPrekey(nextPrekeyBytes);
-  if (!verifyKemPrekey(nextPrekey, responderPublic.ed25519)) throw new HandshakeError('rotation prekey signature invalid');
-
-  const th4 = h(th3, cConfR);
-  const rk = hkdf(ck, th4, DRV_ROOT, 32);
-  const sid = hkdf(ck, th4, DRV_SID, 16);
-  const session = new Session(sid, rk, 'initiator');
-
-  const reconnectGateKey = hkdf(rk, sid, RECONNECT_GATE, 32);
-  zeroize(xeI.secretKey, ekI.secretKey, es, enc.sharedSecret, ssI, ck, hk1, hk2, rk);
   io.detach(); // hand the stream to the Connection; stop this handshake reader (avoids dropping Msg1)
-  return { session, peer: responderPublic, nextPrekey, mode, reconnectGateKey };
+  return outcome;
 }
 
 async function responderHandshakeImpl(stream: ChatStream, opts: ResponderOpts): Promise<HandshakeResult> {
   const { identity, invites, contacts } = opts;
   const io = new HandshakeIO(stream);
 
+  // R answers each Msg1 it receives on this dial. Normally one round (accept → Msg2). On the HIGH-1
+  // recovery path R answers an unresolvable-but-known prekey with a Reject (offering a current prekey)
+  // and LOOPS to await the initiator's retry Msg1 (the SAME dial owns the stream). The one-retry-per-
+  // dial cap lives on the INITIATOR (it sends at most one retry, then closes); when it gives up, the
+  // close terminates this recv and the dial ends. R itself imposes no per-dial Reject count here — the
+  // mac_R DoS pre-gate + offerCurrent's per-cid mint cap bound abuse.
+  for (;;) {
   // ---- Msg1 ----
   const msg1 = new Cursor(await io.recv());
   const modeByte = msg1.byte();
@@ -314,8 +383,9 @@ async function responderHandshakeImpl(stream: ChatStream, opts: ResponderOpts): 
   // lockout). Until confirmed it fails open, but verifies a present mac_R cheaply so a valid one flips
   // the flag (peerMacRVerified). An attacker can't forge a valid mac_R (HMAC under the secret RGK).
   let peerMacRVerified = false;
+  let cid: string | null = null;
   if (!firstContact) {
-    const cid = await invites.identifyContact(prekeyId);
+    cid = await invites.identifyContact(prekeyId);
     const rgk = cid ? await contacts.getReconnectKey(cid) : null;
     const confirmed = cid ? await contacts.isRgkConfirmed(cid) : false;
     // Fail-CLOSED guard (defense-in-depth): a confirmed contact MUST have a usable RGK. If the store
@@ -341,7 +411,33 @@ async function responderHandshakeImpl(stream: ChatStream, opts: ResponderOpts): 
   }
 
   const rec = await invites.lookup(prekeyId);
-  if (!rec) throw new HandshakeError('unknown or consumed prekey');
+  if (!rec) {
+    // HIGH-1 in-band recovery (Task 2.4): on a RECONNECT where the presented prekey is gone (consumed/
+    // stale) but it still resolves to a known contact (cid), R has not lost the relationship — the
+    // initiator just raced R's durable consume (the strand). Instead of closing (permanent
+    // unreachability without a fresh out-of-band invite), send an AUTHENTICATED Reject offering a
+    // current prekey, bound to THIS Msg1 via TH_R0, and abort WITHOUT consuming anything. The gate
+    // (mac_R) has already been satisfied above. first_contact / unknown-cid still hard-fail.
+    if (!firstContact && cid) {
+      const offeredKp = await invites.offerCurrent(cid);
+      const offered = offeredKp.prekey;
+      // TH_R0 = H(MIX_INIT ‖ TH0 ‖ prekey_id ‖ xe_I ‖ ek_I ‖ ct_pre) — the Msg1 CLEARTEXT transcript
+      // (F-5: NOT TH1, which binds R's now-consumed prekey block). Same th0 the mac_R gate used.
+      const thR0 = h(MIX_INIT, th0, prekeyId, xeI, ekIpub, ctPre);
+      const offeredBytes = encodeKemPrekey(offered);
+      const isLastByte = Uint8Array.of(offered.isLastResort ? 1 : 0);
+      // Sig_R_reject = Sign(is_R, DS_HS_REJECT ‖ TH_R0 ‖ offered_prekey ‖ is_last_resort). DS_HS_REJECT
+      // is DISTINCT from DS_HS_RESP (accept) so an accept Sig_R can never be lifted onto a reject frame.
+      const sigReject = ed25519Sign(concatBytes(DS_HS_REJECT, thR0, offeredBytes, isLastByte), ed25519Pair(identity));
+      io.send(concatBytes(Uint8Array.of(HS_REJECT), offeredBytes, isLastByte, sigReject));
+      // Reject consumes NOTHING: offerCurrent neither consumes nor reserves; the offered prekey is
+      // consumed only if/when I completes the retry handshake against it. Loop to await I's retry Msg1
+      // (against the offered prekey, which now resolves → accept). If I gives up (one-retry cap) it
+      // closes the stream → the next io.recv() rejects and the dial ends.
+      continue;
+    }
+    throw new HandshakeError('unknown or consumed prekey');
+  }
   const { prekey, secretKey, token } = rec;
   try {
 
@@ -423,6 +519,7 @@ async function responderHandshakeImpl(stream: ChatStream, opts: ResponderOpts): 
     await invites.release(prekeyId);
     throw e;
   }
+  } // end per-Msg1 loop (only re-entered via `continue` on the recovery-Reject path)
 }
 
 const ROLE_I = new TextEncoder().encode('I');
