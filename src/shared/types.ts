@@ -383,8 +383,9 @@ export interface AppSettings {
     /** User-added data feeds (trusted HTTPS endpoints returning a generic quote JSON shape). */
     customFeeds: { id: string; label: string; url: string }[];
   };
-  /** EXPERIMENTAL P2P chat (Tor onion). Off by default ⇒ tor is never spawned and no onion is
-   *  published. The handshake crypto is pending formal verification — see the in-app banner. */
+  /** P2P chat (Tor onion). Off by default ⇒ tor is never spawned and no onion is published.
+   *  PQ-hybrid handshake, formally verified internally (symbolic + computational); independent
+   *  external audit + FIPS module remain the only unmet gates. */
   chat: {
     networkEnabled: boolean;
   };

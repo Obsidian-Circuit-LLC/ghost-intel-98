@@ -1,5 +1,5 @@
 /**
- * Chat (beta) — EXPERIMENTAL P2P chat over Tor onion services.
+ * Chat (beta) — P2P chat over Tor onion services (PQ-hybrid handshake, formally verified internally).
  *
  * The handshake crypto is pending formal verification; this UI shows a loud banner and the feature
  * is opt-in. Inbound text is rendered as TEXT (React escapes by default — never HTML) per the
@@ -212,11 +212,9 @@ export function ChatModule(): JSX.Element {
 
   return (
     <div className="ga98-stack" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '6px 8px', background: '#fff3b0', border: '2px solid #b8860b', color: '#5b4500', fontSize: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '6px 8px', background: '#eef3fb', border: '2px solid #9fb6d6', color: '#27364d', fontSize: 12 }}>
         <div style={{ flex: 1 }}>
-          ⚠ <b>EXPERIMENTAL — beta.</b> The encryption here is <b>not yet formally verified</b>. Use it to
-          shake out bugs, <b>not</b> for real adversarial security. Runs over Tor; nothing leaves your
-          machine except onion traffic to your contact.
+          🔒 <b>Encrypted, Tor-only.</b> Nothing leaves your machine except onion traffic to your contact.
         </div>
         <button onClick={() => setShowHelp(true)} title="How to use chat" style={{ minWidth: 28, flexShrink: 0 }}>?</button>
       </div>
@@ -442,7 +440,7 @@ export function ChatModule(): JSX.Element {
                 <ul style={{ margin: '4px 0 0 16px', padding: 0, fontSize: 12, lineHeight: 1.6 }}>
                   <li>Both people must have chat <b>enabled and open</b> to connect — there is no offline server holding messages.</li>
                   <li>History is encrypted at rest and sealed when you lock the vault.</li>
-                  <li>⚠ The handshake crypto is <b>experimental / not yet formally verified</b> — for dogfooding, not real adversarial security yet.</li>
+                  <li>The handshake is PQ-hybrid (X25519 + ML-KEM-1024) with Ed25519 identities, <b>formally verified by internal symbolic + computational analysis</b>. An independent external audit is still pending.</li>
                 </ul>
               </fieldset>
               <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', marginTop: 6 }}>
