@@ -36,3 +36,12 @@ export interface PluginStatus {
   loaded: boolean;
   error?: string;
 }
+
+/**
+ * The deliberately minimal surface exposed to plugin renderers via window.apiPlugins.
+ * Intentionally omits `status` — plugins do not get the diagnostics channel.
+ */
+export interface PluginBridgeApi {
+  listVerified(): Promise<VerifiedPluginInfo[]>;
+  invoke(id: string, name: string, args: unknown[]): Promise<unknown>;
+}

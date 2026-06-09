@@ -2,7 +2,7 @@
  * Ambient typings for window.api. The renderer imports this so every call is typed.
  */
 
-import type { VerifiedPluginInfo, PluginStatus } from '../shared/plugin-types';
+import type { VerifiedPluginInfo, PluginStatus, PluginBridgeApi } from '../shared/plugin-types';
 import type {
   AppSettings,
   AttachmentBytesResult,
@@ -387,6 +387,8 @@ export interface GhostApi {
 declare global {
   interface Window {
     api: GhostApi;
+    /** Minimal plugin-renderer surface — listVerified + invoke only; no status/diagnostics. */
+    apiPlugins: PluginBridgeApi;
   }
 }
 

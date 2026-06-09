@@ -1,10 +1,16 @@
 import * as React from 'react';
 import { registerModule } from '../state/registry';
-import type { VerifiedPluginInfo } from '../../shared/plugin-types';
+import type { VerifiedPluginInfo, PluginBridgeApi } from '../../shared/plugin-types';
+
+interface Dcs98PluginBridge {
+  React: typeof React;
+  registerModule: typeof registerModule;
+  api: PluginBridgeApi | undefined;
+}
 
 export function installPluginBridge(): void {
-  const api = (window as unknown as { apiPlugins?: unknown }).apiPlugins;
-  (window as unknown as { dcs98Plugin: unknown }).dcs98Plugin = { React, registerModule, api };
+  const api = (window as unknown as { apiPlugins?: PluginBridgeApi }).apiPlugins;
+  (window as unknown as { dcs98Plugin: Dcs98PluginBridge }).dcs98Plugin = { React, registerModule, api };
 }
 
 export type ChunkImporter = (url: string) => Promise<unknown>;
