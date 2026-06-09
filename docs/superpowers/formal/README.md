@@ -1,7 +1,9 @@
 # DCS98 chat handshake — formal verification plan
 
-**Status (2026-06-08): ProVerif symbolic COMPLETE; CryptoVerif — hybrid secrecy (full chain) AND
-computational mutual authentication PROVED.** Under **CryptoVerif 2.12**: the hybrid IND bound on the key
+**Status (2026-06-09): first_contact ProVerif symbolic COMPLETE; CryptoVerif hybrid secrecy (full chain)
++ mutual auth + KCI + FS + unified + G2′ PROVED; reconnect mode ADDED — symbolic reconnect+Reject model
+and computational `mac_R` gate proof both reproduced (see the reconnect-hardening section below).** Under
+**CryptoVerif 2.12** (first_contact): the hybrid IND bound on the key
 schedule (2-input core `chat-handshake-hybrid-*.cv` and the **actual 5-step chain**
 `chat-handshake-fullchain-*.cv`), **injective mutual authentication** (`chat-handshake-auth.cv`) — both directions under Ed25519 UF-CMA, no
 replay / no UKS, R-authenticates-I injectivity shown to rest on single-use prekeys (the TOCTOU fix); **KCI resistance** (`chat-handshake-kci-reveal{R,I}.cv`) — each party still authenticates its peer with
@@ -19,8 +21,35 @@ secrecy, unified KDF→AEAD, **computational G2′** (`chat-handshake-g2prime.cv
 correspondence, fuzz harness, and constant-time audit. An **internal adversarial audit**
 (`internal-audit-2026-06-08.md`) then found + **fixed a Critical** handshake→session handoff bug, and
 recorded open HIGH/MEDIUM items (reconnect-prekey strand; crash-window injectivity; silent
-pin-before-verify UX). **Not yet verified:** reconnect mode, the `mac_T` keyed-MAC DoS property, the
-storage-level injectivity invariant.
+pin-before-verify UX).
+
+**Reconnect-hardening (v4) added 2026-06-09 — reconnect mode now verified (symbolic + computational).**
+Two new artifacts, both reproduced on branch `feat/reconnect-hardening-v4` (see the per-artifact verdicts
+below and §1b/3b of `model-code-correspondence.md`):
+
+- `chat-handshake-reconnect.pv` → `proverif-reconnect-2026-06-09.txt` — symbolic reconnect mode + the
+  authenticated-Reject recovery branch. **8 RESULT lines, all as expected:** I-auth-R **injective proved**;
+  R-auth-I **non-injective proved, injective cannot be proved** (the expected outcome — no R-fresh nonce in
+  TH1, same as first_contact, lifted via single-use prekey consumption); recovery soundness
+  `I_retry_with ⇒ R_sent_reject` **true**; `s_id`/`s_rk`/`s_retry` secrecy **all true**. Downgrade /
+  `Sig_R↔Sig_R_reject` non-substitution is discharged constructively (cross-mode first_contact signer
+  reachable), not by a separate query.
+- `chat-handshake-macr.cv` → `cryptoverif-macr-2026-06-09.txt` — computational `mac_R` DoS-gate
+  unforgeability. **"All queries proved"**: `event(Raccept(m)) ⇒ event(Imacr(m))` up to `Pmac` (SUF-CMA on
+  the HMAC) — a party without RGK triggers zero asymmetric work. This is the *qualitative* gate property
+  only; the quantitative amplification bound is the rate-limiter engineering constant, NOT a theorem.
+
+This **closes HIGH-1** (reconnect strand → permanent lockout, fixed by the in-band Reject/retry recovery +
+the RGK-stable fix) and **MED-2** (reconnect had no model + no DoS pre-gate) from the internal audit. Two
+honest caveats carry: the **availability** property (unconfirmed-R-never-blocks / no-worse-than-HIGH-1) is
+an **argued liveness** property, not a tool theorem; and the **on-path-replay reserved-bucket** residual
+(audit N-3) is an **operator-accepted** degraded-migration-availability residual, not a lockout/break.
+
+**Verified scope (updated 2026-06-09):** symbolic (first_contact AND reconnect incl. Reject) +
+computational (key-schedule full chain, mutual auth, KCI, FS, unified KDF→AEAD, G2′, reconnect `mac_R`
+gate). The reconnect chain is the same chain as first_contact, so secrecy/auth/KCI/FS transfer unchanged.
+**Still NOT verified:** the first_contact `mac_T` keyed-MAC DoS property (the *reconnect* `mac_R` gate IS
+now proved; `mac_T` is a separate, still-unmodelled gate) and the storage-level injectivity invariant.
 
 **This does NOT clear the EXPERIMENTAL banner.** The remaining gates are **external** and not
 self-clearable: an **independent** third-party audit and the **FIPS-validated module build**. A simulated
