@@ -246,9 +246,11 @@ it('a second Reject in one dial is a hard fail (one-retry-per-dial cap)', async 
 - [ ] **Step 4** — Run → PASS; handshake suite green.
 - [ ] **Step 5** — Commit: `fix(chat): in-band reconnect recovery, Sig_R_reject over TH_R0 (HIGH-1, F-5)`.
 
-### Task 2.5: split + deduped ungated-path rate-limiter (N-3) + last-resort-on-reconnect reject
+### Task 2.5: split + deduped ungated-path rate-limiter (N-3) + last-resort-on-reconnect reject + offerCurrent re-offer-first (#40)
 
-**Files:** Create `src/main/chat/reconnect-gate.ts`; modify `handshake.ts`; Test `test/reconnect-gate.test.ts`
+**Files:** Create `src/main/chat/reconnect-gate.ts`; modify `handshake.ts`, `prekey-store.ts`; Test `test/reconnect-gate.test.ts`, `test/chat-stores.test.ts`
+
+- [ ] **Step 0 — offerCurrent re-offer-FIRST refinement (#40, spec §2 fidelity).** The shipped 1.2-R `offerCurrent` checks the per-cid count cap BEFORE re-offering, so a legit stranded peer at ≥cap unconsumed prekeys is refused recovery — contradicting spec §2 ("first returns the newest unconsumed"). Rework `offerCurrent(cid)` to: **(1) re-offer** the newest unconsumed issued prekey for `cid` (current, else newest unconsumed in recent[]) — return it, never throw, no mint, no consume; **(2) mint** only when the cid has NO unconsumed issued prekey; **(3) remove the in-store `PrekeyError('mint cap')` throw** entirely — the mint bound now lives in re-offer-first (≤1 outstanding offerCurrent-mint per cid) + the per-dial responder reject cap (Task 2.4, already shipped) + the rate-limiter below. Rewrite the 1.2-R cap-throw test: replace the `rejects.toThrow(/mint cap|rate/i)` case with one asserting re-offer-first never throws when an unconsumed prekey exists (issue N>cap, all unconsumed → offerCurrent returns the newest, no throw, remaining unchanged). Keep the "mint only when none unconsumed" + "re-offer without minting" tests. Commit this as its own step: `fix(chat): offerCurrent re-offers first, drop in-store mint-cap throw (#40, spec §2)`.
 
 - [ ] **Step 1 — failing tests:**
 

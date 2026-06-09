@@ -99,19 +99,24 @@ When R, on a `reconnect` Msg1 whose `prekey_id` it can **identify as one it issu
 the pre-gate (§3) passes:
 
 - R does NOT close. R selects a **current prekey** to offer via `offerCurrent(cid)`:
-  - **Re-offer, don't churn (fixes F-1).** `offerCurrent` first returns the contact's **newest
-    already-issued, still-unconsumed one-time prekey** (typically the very rotation prekey R minted in the
-    prior aborted Msg2 — the one I never received), looked up through the per-contact issuance index (§3).
-    It mints a **new** one-time prekey only when the contact has no unconsumed issued prekey at all. This
-    re-offer is **idempotent across the retries *within a single dial*** that did not reach R's
-    `issueNext` — but note (rev-2 correction) it is **NOT idempotent across multiple dials**: a dial whose
-    recovery retry *itself* strands consumes the re-offered prekey and mints a fresh rotation, so the next
-    dial re-offers a different (newer) prekey. The no-mint-churn security property therefore rests on the
-    **per-`cid` mint rate-limit** (≤ a few outstanding unconsumed issued prekeys per contact; open
-    question #4), **not** on cross-dial idempotency — that is what actually bounds churn to ≤1 mint per
-    dial per contact and caps the outstanding set. Exhaustion of the bucket → cheap close, not an
-    unbounded mint loop. **Dependency:** this lookup only works if F-8's `issueNext(cid)` populates the
-    per-contact index (so the pending rotation maps to this `cid`); F-1 and F-8 must land together.
+  - **Re-offer FIRST, mint only when none (fixes F-1).** `offerCurrent` **first** returns the contact's
+    **newest already-issued, still-unconsumed one-time prekey** (typically the very rotation prekey R
+    minted in the prior aborted Msg2 — the one I never received), looked up through the per-contact
+    issuance index (§3); it mints a **new** one-time prekey **only when the contact has no unconsumed
+    issued prekey at all**. It does **NOT** itself throw on a per-cid count cap — re-offer must never be
+    refused when an unconsumed prekey exists, else a legitimate stranded peer at a high outstanding count
+    is denied recovery (the rev-4 §2-fidelity correction to the earlier cap-first ordering). This re-offer
+    is idempotent across the retries *within a single dial* that did not reach R's `issueNext`; across
+    multiple dials a fresh mint can occur (a dial whose retry itself strands), so churn is bounded **not**
+    by an in-store throw but by three composed limits: (i) re-offer-first caps each cid to **≤1
+    offerCurrent-minted outstanding prekey** at a time (the next call re-offers it, no new mint until it is
+    consumed); (ii) the **per-dial responder reject cap** (§2 / Task 2.4: at most a small fixed number of
+    Rejects — hence offerCurrent calls — per dial); and (iii) the **global ungated-path rate-limit** (§3 /
+    Task 2.5) bounding how often a reconnect (hence offerCurrent) can be reached across dials. The per-cid
+    mint *frequency* therefore lives at the rate-limiter (Task 2.5) + the per-dial cap, not as an
+    outstanding-count throw inside the store. **Dependency:** this lookup only works if F-8's
+    `issueNext(cid)` populates the per-contact index (so the pending rotation maps to this `cid`); F-1 and
+    F-8 land together.
   - When the one-time pool is genuinely exhausted, offer the rotating last-resort (`is_last_resort =
     true`, signed) — surfaced to I per H-3, never silent.
 - R sends `Reject = hs_type(REJECT) ‖ offered_prekey(signed) ‖ is_last_resort ‖ Sig_R_reject`, where
@@ -381,11 +386,13 @@ in memory at a handshake's completion. The migration is therefore **lazy establi
    the strand case), (b) redirect I to an attacker-chosen prekey, or (c) be used to silently downgrade I to
    last-resort (is_last_resort signed + I-side policy).
 3. **No new strand / no double-accept** — the offered prekey is consumed only on a completed retry; the
-   reject path consumes nothing. The no-mint-churn property rests on the **per-`cid` mint rate-limit**
-   (≤ a few outstanding unconsumed issued prekeys per contact), **not** on cross-dial idempotency, which
-   does not hold (rev-2 F-1 correction): `offerCurrent` re-offers within a dial but mints ≤1 per dial that
-   reaches `issueNext`, and the bucket bounds the outstanding set. One-retry-per-dial cap prevents loops.
-   R-auth-I injectivity preserved (single-use consumption unchanged for the prekey actually used).
+   reject path consumes nothing. `offerCurrent` **re-offers first** (never refuses a re-offer when an
+   unconsumed prekey exists — §2) and mints only when none exist. The no-mint-churn property rests on three
+   composed limits — (i) re-offer-first ⇒ ≤1 offerCurrent-minted outstanding prekey per cid at a time;
+   (ii) the per-dial responder reject cap (Task 2.4); (iii) the global ungated-path rate-limit (Task 2.5) —
+   **not** on an in-store count-throw and **not** on cross-dial idempotency (which does not hold).
+   One-retry-per-dial (initiator) cap prevents the initiator looping. R-auth-I injectivity preserved
+   (single-use consumption unchanged for the prekey actually used).
 4. **DoS gate (qualitative, provable) + amplification bound (engineering, not a theorem).** *Provable:* a
    party without a contact's RGK cannot produce a valid `mac_R` (SUF-CMA on HMAC), so R does **zero**
    asymmetric work for a forged Msg1 against a **confirmed-enforcing v4 contact** (`rgkPeerConfirmed` true,
@@ -525,17 +532,17 @@ are implementable and safe — but #1 is worth an explicit call before freeze.
    half-completed reconnect and reintroduces a lockout (§3). Note enforcement *activation* is separate from
    RGK *rotation*: activation uses the enforcement bootstrap (R enforces after directly verifying one
    `mac_R` — §3), not a rotation. Rotation, if ever wanted, is out of scope for v4.
-4. **Rate-limit constants (tunable, not blocking):** the per-cid mint bucket (F-1) and the **split**
-   ungated-path buckets (F-8/N-3/§3) need concrete N-concurrent / M-per-logical-tick values. Proposed
-   conservative defaults: per-cid mint ≤ 4 outstanding unconsumed issued prekeys; **reserved**
+4. **Rate-limit constants (tunable, not blocking):** the **split** ungated-path buckets (F-8/N-3/§3) need
+   concrete N-concurrent / M-per-logical-tick values. Proposed conservative defaults: **reserved**
    store-resolvable bucket ≤ 8 concurrent / 32 per window; **tighter** unresolvable-id bucket ≤ 2
    concurrent / 8 per window (so a garbage flood throttles fast without starving recognizable legacy
-   migrations). The **reserved-bucket dedup seen-set MUST be sized ≥ the reserved bucket's window** so its
-   eviction can't out-pace the bucket it protects (else an attacker cycling ≥ seen-set-size distinct
-   captures could re-admit evicted ones — stays within the stated distinct-capture residual, but the
-   sizing keeps it tight). Engineering knobs, adjustable post-deploy without a wire change.
-5. **Per-contact index bound (tunable, but COUPLED to #4):** goal 7 requires per-`cid` retention with
-   `current` pinned; the `recent[]` tail length is a knob, but the **retention-coupling invariant**
-   requires `len(recent[]) ≥ the per-`cid` mint cap of #4` (so every outstanding-permitted id stays
-   resolvable — not independently tunable). Proposed: `recent[] = 4`, matching the mint cap of 4. If you
-   raise the mint cap, raise `recent[]` to match.
+   migrations); the **per-dial responder reject cap** (Task 2.4) = 2. The **reserved-bucket dedup seen-set
+   MUST be sized ≥ the reserved bucket's window** so its eviction can't out-pace the bucket it protects
+   (else an attacker cycling ≥ seen-set-size distinct captures could re-admit evicted ones — stays within
+   the stated distinct-capture residual, but the sizing keeps it tight). `offerCurrent` does **not** carry
+   its own count-throw (re-offer-first + the per-dial cap + these buckets bound minting — §2/goal 3).
+   Engineering knobs, adjustable post-deploy without a wire change.
+5. **Per-contact index bound (tunable):** goal 7 requires per-`cid` retention with `current` pinned; the
+   `recent[]` tail length is a knob. The **retention-coupling invariant** requires `len(recent[]) ≥` the
+   max plausible outstanding-unconsumed prekeys per contact, so every outstanding-permitted id stays
+   resolvable. Proposed: `recent[] = 4` (matches the prior per-cid mint-cap intent of 4).
