@@ -28,7 +28,7 @@ import { app } from 'electron';
 import { join } from 'node:path';
 import type { ContextDeps } from './context';
 import { resolveInside } from './paths';
-import { isPublicHttpUrl } from '../security/validate';
+import { isPublicHttpUrl, assertResolvedPublic } from '../security/validate';
 import { secretStore } from '../secrets/index';
 import * as entities from '../storage/entities';
 import { caseStore } from '../storage/json-fs';
@@ -70,16 +70,44 @@ export function buildContextDeps(): ContextDeps {
       return url;
     },
 
-    // rawFetch: direct fetch, fully gated behind the egress capability check in context.ts
-    // (isNetworkEnabled + validateUrl are called BEFORE rawFetch is reached).
+    // rawFetch: SSRF-hardened fetch mirroring the geoint safeFetch pattern.
+    // Defense-in-depth stack:
+    //   1. isPublicHttpUrl (textual host check) — already enforced upstream by validateUrl, but
+    //      re-applied here at every hop for defense in depth.
+    //   2. assertResolvedPublic (DNS-resolve check) — rejects public hostnames that resolve to
+    //      private/loopback/metadata addresses (DNS rebinding / CNAME-to-private bypass).
+    //   3. redirect: 'manual' — prevents the runtime from silently following a 3xx to an
+    //      internal host; each Location header is re-validated (textual + DNS) before following.
+    //   4. Hop limit (max 5) — prevents redirect-loop DoS.
     // TODO(osint-plugin): route through bundled Tor SOCKS before OSINT plugin ships real lookups.
     async rawFetch(url, init) {
+      const MAX_HOPS = 5;
       const method = init.method ?? 'GET';
       const headers = init.headers ?? {};
       const body = init.body;
-      const res = await fetch(url, { method, headers, body });
-      const text = await res.text();
-      return { status: res.status, body: text, finalUrl: res.url };
+      let current = url;
+      for (let hop = 0; hop < MAX_HOPS; hop++) {
+        // Textual SSRF guard (defense in depth — also checked upstream by validateUrl).
+        if (!isPublicHttpUrl(current)) {
+          throw new Error(`plugin egress: URL rejected by SSRF validator (hop ${hop}) — ${current}`);
+        }
+        // DNS-resolve guard: rejects any hostname whose resolved addresses include private/loopback/metadata IPs.
+        await assertResolvedPublic(new URL(current).hostname);
+        const res = await fetch(current, { method, headers, body, redirect: 'manual' });
+        if (res.status >= 300 && res.status < 400) {
+          const loc = res.headers.get('location');
+          if (!loc) {
+            // No Location header — return this redirect response as-is.
+            const text = await res.text();
+            return { status: res.status, body: text, finalUrl: current };
+          }
+          current = new URL(loc, current).toString();
+          continue;
+        }
+        const text = await res.text();
+        return { status: res.status, body: text, finalUrl: current };
+      }
+      throw new Error('plugin egress: too many redirects');
     },
 
     // Secrets backend: scoped by the context layer to plugin:${id}:${name} keys.

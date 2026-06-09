@@ -10,7 +10,7 @@
  *   4. validateUrl accepts a real public URL and rejects loopback/private URLs.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -125,5 +125,121 @@ describe('refreshPluginNetSnapshot()', () => {
     refreshPluginNetSnapshot({});
     const deps = buildContextDeps();
     expect(deps.isNetworkEnabled('any')).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// rawFetch SSRF hardening: redirect re-validation + hop-limit
+//
+// Mocking strategy:
+//   - globalThis.fetch is spied upon so no real network calls occur.
+//   - assertResolvedPublic (the DNS-resolve guard) is mocked via vi.mock at the
+//     module level (vi.mock is hoisted by vitest) so tests are deterministic and
+//     offline. vi.mocked() gives a typed handle to reconfigure it per test.
+//   - isPublicHttpUrl (the textual guard) is left un-mocked so its real logic
+//     exercises the defense-in-depth path.
+// ---------------------------------------------------------------------------
+
+// Hoist the validate-module mock. vi.mock is hoisted to the top of the file by
+// vitest, so this runs before any imports are resolved.
+vi.mock('../src/main/security/validate', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../src/main/security/validate')>();
+  return {
+    ...real,
+    // Default: resolves without throwing (simulates a non-private resolved address).
+    assertResolvedPublic: vi.fn().mockResolvedValue(undefined)
+  };
+});
+
+// Import the mocked validate module at the top level (safe because vi.mock is hoisted).
+import * as validateMod from '../src/main/security/validate';
+
+describe('rawFetch SSRF hardening', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    // Reset the DNS mock to the default (non-throwing) behaviour after each test.
+    vi.mocked(validateMod.assertResolvedPublic).mockResolvedValue(undefined);
+  });
+
+  it('rejects a redirect whose Location resolves to a private/loopback address (textual check)', async () => {
+    // fetch returns a 302 whose Location is a literal loopback IP.
+    // isPublicHttpUrl catches this at the textual layer before assertResolvedPublic is called.
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('', {
+        status: 302,
+        headers: { location: 'http://127.0.0.1/internal' }
+      }) as Response
+    );
+
+    const deps = buildContextDeps();
+    await expect(
+      deps.rawFetch('https://public.example.com/api', { method: 'GET' })
+    ).rejects.toThrow(/SSRF validator/);
+
+    fetchSpy.mockRestore();
+  });
+
+  it('rejects a redirect whose Location is a private CNAME (DNS rebind) — assertResolvedPublic throws', async () => {
+    // Simulate: first hop 302s to a "public-looking" hostname that resolves to a private IP.
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('', {
+        status: 302,
+        headers: { location: 'https://internal.attacker.com/secret' }
+      }) as Response
+    );
+
+    // DNS mock: assertResolvedPublic throws for the redirect target host.
+    vi.mocked(validateMod.assertResolvedPublic).mockImplementation((hostname: string) => {
+      if (hostname === 'internal.attacker.com') {
+        return Promise.reject(new Error('refusing to fetch internal.attacker.com — resolves to a private address'));
+      }
+      return Promise.resolve();
+    });
+
+    const deps = buildContextDeps();
+    await expect(
+      deps.rawFetch('https://public.example.com/api', { method: 'GET' })
+    ).rejects.toThrow(/resolves to a private address/);
+
+    fetchSpy.mockRestore();
+  });
+
+  it('enforces the hop limit (more than MAX_HOPS redirects → throws)', async () => {
+    // Every fetch call returns a 302 pointing back to the same public URL — infinite loop.
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('', {
+        status: 302,
+        headers: { location: 'https://public.example.com/loop' }
+      }) as Response
+    );
+
+    const deps = buildContextDeps();
+    await expect(
+      deps.rawFetch('https://public.example.com/loop', { method: 'GET' })
+    ).rejects.toThrow(/too many redirects/);
+
+    // Confirm fetch was called exactly MAX_HOPS (5) times before the limit was hit.
+    expect(fetchSpy).toHaveBeenCalledTimes(5);
+
+    fetchSpy.mockRestore();
+  });
+
+  it('follows legitimate redirects and returns the final URL + body', async () => {
+    // Two hops: public → public → final 200 response.
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        new Response('', { status: 302, headers: { location: 'https://cdn.example.com/resource' } }) as Response
+      )
+      .mockResolvedValueOnce(
+        new Response('{"ok":true}', { status: 200 }) as Response
+      );
+
+    const deps = buildContextDeps();
+    const result = await deps.rawFetch('https://public.example.com/api', { method: 'GET' });
+    expect(result.status).toBe(200);
+    expect(result.body).toBe('{"ok":true}');
+    expect(result.finalUrl).toBe('https://cdn.example.com/resource');
+
+    fetchSpy.mockRestore();
   });
 });
