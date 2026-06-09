@@ -389,6 +389,9 @@ export interface AppSettings {
   chat: {
     networkEnabled: boolean;
   };
+  /** Signed-plugin registry. Keys are plugin IDs; values carry per-plugin flags and
+   *  free-form settings. Empty by default — no plugins are bundled. */
+  plugins: Record<string, { enabled: boolean; networkEnabled: boolean; settings?: Record<string, unknown> }>;
 }
 
 export const defaultShortcuts: AccessShortcut[] = [
@@ -493,5 +496,6 @@ export const defaultSettings: AppSettings = {
     },
     customFeeds: []
   },
-  chat: { networkEnabled: false }
+  chat: { networkEnabled: false },
+  plugins: {}
 };

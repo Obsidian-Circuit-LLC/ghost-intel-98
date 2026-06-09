@@ -12,7 +12,7 @@
     <!-- 'wasm-unsafe-eval' permits WebAssembly compilation (vosk-browser offline STT) — it does
          NOT permit JS eval(). ga98model: in connect-src lets the vosk worker fetch the bundled
          model archive. -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https: http:; media-src 'self' blob: ga98media: https: http:; connect-src 'self' ga98model: http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-src https://www.google.com https://maps.google.com https://www.instantstreetview.com; worker-src 'self' blob:; form-action 'none';" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' dcs98-plugin:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https: http:; media-src 'self' blob: ga98media: https: http:; connect-src 'self' ga98model: dcs98-plugin: http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-src https://www.google.com https://maps.google.com https://www.instantstreetview.com; worker-src 'self' blob:; form-action 'none';" />
     <title>Dead Cyber Society 98</title>
   </head>
   <body>
