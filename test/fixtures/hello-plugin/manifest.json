@@ -1,0 +1,3 @@
+{ "id": "hello", "name": "Hello", "version": "1.0.0", "targetApiVersion": 1,
+  "modules": [{ "key": "hello:panel", "title": "Hello", "glyph": "👋" }],
+  "capabilities": [], "main": "main.js", "renderer": "renderer.js" }

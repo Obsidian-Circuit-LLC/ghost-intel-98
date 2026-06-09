@@ -50,6 +50,9 @@ coverage/
 # Internal audit/working notes — never published
 .redteam/
 
+# Dev signing keypair (private keys — NEVER commit)
+.plugin-devkey.json
+
 # Bundled Tor expert bundle (operator/CI-fetched + verified; see scripts/fetch-tor.mjs)
 resources/tor/win-x64/
 
