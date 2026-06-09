@@ -2,13 +2,14 @@ import { describe, it, expect } from 'vitest';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { mkdtemp } from 'node:fs/promises';
-import { ChatEngine, type ChatEngineEvents, type QuarantineSink } from '../src/main/chat/engine';
+import { ChatEngine, type ChatEngineEvents, type ChatEngineDeps, type QuarantineSink, type ContactStatus, ReconnectFailedError } from '../src/main/chat/engine';
 import { InMemoryNetwork, InMemoryTransport, type Transport, type ChatStream } from '../src/main/chat/transport';
 import { PrekeyStore } from '../src/main/chat/prekey-store';
 import { ContactStore } from '../src/main/chat/contact-store';
 import { MessageStore } from '../src/main/chat/message-store';
 import { GroupStore } from '../src/main/chat/group-store';
 import { generateIdentity, contactId, type IdentityKeyPair } from '../src/main/chat/identity';
+import { HandshakeError } from '../src/main/chat/handshake';
 
 const flush = (ms = 0): Promise<void> => new Promise((r) => setTimeout(r, ms));
 const ONION_A = `${'a'.repeat(56)}.onion`;
@@ -526,5 +527,194 @@ describe('ChatEngine — reconnect hardening (handshake v4, Task 3.1) RGK wiring
 
     await A.engine.stop();
     await B.engine.stop();
+  });
+});
+
+// ---- Task 3.2: actionable reconnect-failure surfacing ----
+
+describe('ChatEngine — Task 3.2: terminal reconnect failure surfaces actionable status + typed error', () => {
+  it('send rejects with ReconnectFailedError and emits needs-reinvite status when initiator handshake throws reconnect-failed', async () => {
+    const net = new InMemoryNetwork();
+    const idA = generateIdentity();
+    const idB = generateIdentity();
+    const cidA = contactId(idA.publicKeys);
+
+    // Capture status events emitted to the UI
+    const statusEvents: { cid: string; status: ContactStatus }[] = [];
+
+    // Register a dummy A node so dial(ONION_A) succeeds (the injected handshake runs instead of real HS).
+    const dummyATransport = new InMemoryTransport(net, ONION_A);
+    dummyATransport.onConnection(() => { /* drop inbound */ });
+    await dummyATransport.start();
+
+    const dir = await mkdtemp(join(tmpdir(), 'dcs98-t32b-'));
+    let n = 0;
+    const contactsB = new ContactStore(join(dir, 'contacts.json'));
+    const prekeysB = new PrekeyStore(join(dir, 'prekeys-b.json'), idB);
+
+    // Pin A's contact entry so the engine can attempt a reconnect
+    await contactsB.pin(idA.publicKeys, { onion: ONION_A });
+    // Provide a dummy nextPrekey (the overridden initiatorHandshake ignores it and throws immediately)
+    const dummyNextPrekey = (await prekeysB.issueFirstContactInvite()).prekey;
+    await contactsB.update(cidA, { nextPrekey: dummyNextPrekey, lastSeen: 1717000000000 });
+
+    const terminalError = new HandshakeError('reconnect failed — request a fresh invite');
+    const failingHandshake: ChatEngineDeps['initiatorHandshake'] = async () => { throw terminalError; };
+
+    const engineB = new ChatEngine({
+      identity: idB,
+      transport: new InMemoryTransport(net, ONION_B),
+      prekeys: prekeysB,
+      contacts: contactsB,
+      messages: new MessageStore(join(dir, 'messages')),
+      groups: new GroupStore(join(dir, 'groups.json')),
+      groupMessages: new MessageStore(join(dir, 'gmsgs'), undefined, /^[0-9a-f]{32}$/),
+      now: () => 1717000000000 + n,
+      newId: () => `b2-${(n += 1)}`,
+      events: {
+        onContactStatus: (cid, status) => statusEvents.push({ cid, status })
+      },
+      initiatorHandshake: failingHandshake
+    });
+    await engineB.start();
+
+    // send() should reject with a ReconnectFailedError (not a silent generic Error)
+    let caught: unknown;
+    try {
+      await engineB.send(cidA, 'this will fail');
+    } catch (e) {
+      caught = e;
+    }
+
+    // 1. The error is a ReconnectFailedError with a user-readable message
+    expect(caught).toBeInstanceOf(ReconnectFailedError);
+    const rfe = caught as ReconnectFailedError;
+    expect(rfe.message).toMatch(/request a fresh invite/i);
+
+    // 2. The engine emitted 'needs-reinvite' status for this contact
+    expect(statusEvents.some((e) => e.cid === cidA && e.status === 'needs-reinvite')).toBe(true);
+
+    await dummyATransport.stop();
+    await engineB.stop();
+  });
+
+  it('send rejects with ReconnectFailedError when last-resort opt-in is required', async () => {
+    const net = new InMemoryNetwork();
+    const idB = generateIdentity();
+    const idA = generateIdentity();
+    const cidA = contactId(idA.publicKeys);
+
+    const statusEvents: { cid: string; status: ContactStatus }[] = [];
+
+    // Register a dummy A node so dial(ONION_A) succeeds.
+    const dummyATransport2 = new InMemoryTransport(net, ONION_A);
+    dummyATransport2.onConnection(() => { /* drop inbound */ });
+    await dummyATransport2.start();
+
+    const dir = await mkdtemp(join(tmpdir(), 'dcs98-t32c-'));
+    let n = 0;
+    const contactsB = new ContactStore(join(dir, 'contacts.json'));
+    const prekeysB = new PrekeyStore(join(dir, 'prekeys-b.json'), idB);
+
+    await contactsB.pin(idA.publicKeys, { onion: ONION_A });
+    const dummyPrekey = (await prekeysB.issueFirstContactInvite()).prekey;
+    await contactsB.update(cidA, { nextPrekey: dummyPrekey, lastSeen: 1717000000000 });
+
+    const optInError = new HandshakeError(
+      'reconnect offered a last-resort (forward-secrecy-degraded) prekey — opt-in required; request a fresh invite'
+    );
+    const failingHandshake: ChatEngineDeps['initiatorHandshake'] = async () => { throw optInError; };
+
+    const engineB = new ChatEngine({
+      identity: idB,
+      transport: new InMemoryTransport(net, ONION_B),
+      prekeys: prekeysB,
+      contacts: contactsB,
+      messages: new MessageStore(join(dir, 'messages')),
+      groups: new GroupStore(join(dir, 'groups.json')),
+      groupMessages: new MessageStore(join(dir, 'gmsgs'), undefined, /^[0-9a-f]{32}$/),
+      now: () => 1717000000000 + n,
+      newId: () => `bopt-${(n += 1)}`,
+      events: {
+        onContactStatus: (cid, status) => statusEvents.push({ cid, status })
+      },
+      initiatorHandshake: failingHandshake
+    });
+    await engineB.start();
+
+    let caught: unknown;
+    try {
+      await engineB.send(cidA, 'this will also fail');
+    } catch (e) {
+      caught = e;
+    }
+
+    expect(caught).toBeInstanceOf(ReconnectFailedError);
+    const rfe = caught as ReconnectFailedError;
+    expect(rfe.message).toMatch(/request a fresh invite/i);
+    expect(statusEvents.some((e) => e.cid === cidA && e.status === 'needs-reinvite')).toBe(true);
+
+    await dummyATransport2.stop();
+    await engineB.stop();
+  });
+
+  it('a transient handshake error (stream closed) does NOT emit needs-reinvite', async () => {
+    const net = new InMemoryNetwork();
+    const idB = generateIdentity();
+    const idA = generateIdentity();
+    const cidA = contactId(idA.publicKeys);
+
+    const statusEvents: { cid: string; status: ContactStatus }[] = [];
+
+    const dir = await mkdtemp(join(tmpdir(), 'dcs98-t32d-'));
+    let n = 0;
+    const contactsB = new ContactStore(join(dir, 'contacts.json'));
+    const prekeysB = new PrekeyStore(join(dir, 'prekeys-bt.json'), idB);
+
+    await contactsB.pin(idA.publicKeys, { onion: ONION_A });
+    const dummyPrekey = (await prekeysB.issueFirstContactInvite()).prekey;
+    await contactsB.update(cidA, { nextPrekey: dummyPrekey, lastSeen: 1717000000000 });
+
+    // A transient error — 'stream closed during handshake' is NOT a terminal reconnect failure.
+    // Register a dummy A transport so dial() succeeds (the injected handshake runs, not transport.dial).
+    const dummyATransport = new InMemoryTransport(net, ONION_A);
+    dummyATransport.onConnection(() => { /* drop inbound */ });
+    await dummyATransport.start();
+
+    const transientError = new HandshakeError('stream closed during handshake');
+    const failingHandshake: ChatEngineDeps['initiatorHandshake'] = async () => { throw transientError; };
+
+    const engineB = new ChatEngine({
+      identity: idB,
+      transport: new InMemoryTransport(net, ONION_B),
+      prekeys: prekeysB,
+      contacts: contactsB,
+      messages: new MessageStore(join(dir, 'messages')),
+      groups: new GroupStore(join(dir, 'groups.json')),
+      groupMessages: new MessageStore(join(dir, 'gmsgs'), undefined, /^[0-9a-f]{32}$/),
+      now: () => 1717000000000 + n,
+      newId: () => `btrans-${(n += 1)}`,
+      events: {
+        onContactStatus: (cid, status) => statusEvents.push({ cid, status })
+      },
+      initiatorHandshake: failingHandshake
+    });
+    await engineB.start();
+
+    let caught: unknown;
+    try {
+      await engineB.send(cidA, 'transient fail');
+    } catch (e) {
+      caught = e;
+    }
+
+    // The error is rethrown as-is (not wrapped in ReconnectFailedError)
+    expect(caught).toBeInstanceOf(HandshakeError);
+    expect(caught).not.toBeInstanceOf(ReconnectFailedError);
+    // needs-reinvite was NOT emitted
+    expect(statusEvents.some((e) => e.status === 'needs-reinvite')).toBe(false);
+
+    await dummyATransport.stop();
+    await engineB.stop();
   });
 });
