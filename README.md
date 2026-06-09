@@ -32,11 +32,34 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`DCS98-Setup-3.13.1-beta.1.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the **experimental** Tor P2P chat — see Status.)*
+> **Install:** download [`DCS98-Setup-3.13.2-beta.1.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake formally verified internally; external audit + FIPS pending. See Status.)*
 
 ## Status
 
-**v3.13.1-beta.1** — current release. Pinball playability fix + formal-verification milestone:
+**v3.13.2-beta.1** — current release. Reconnect hardening verified — chat leaves EXPERIMENTAL — plus a Win98 boot splash and theme polish:
+
+- **Tor P2P chat: reconnect path formally verified; the EXPERIMENTAL banner is gone.** This closes the two
+  remaining internal audit findings on the handshake — **HIGH-1** (a dropped reconnect could permanently
+  strand a contact, recoverable only by a fresh out-of-band invite) and **MED-2** (reconnect had no formal
+  model and no DoS pre-gate). Reconnect now self-heals in-band (an authenticated `prekey_unknown` Reject +
+  one bounded retry), is DoS-gated by a per-contact keyed MAC with an enforcement bootstrap and a
+  split/deduped rate-limiter, and keeps its gate key **stable per epoch**. It is verified to the same
+  standard as first-contact: **ProVerif** symbolic (reconnect + Reject — injective I-auth-R, recovery
+  soundness, downgrade/substitution resistance) and **CryptoVerif** computational (`mac_R` gate
+  unforgeability). The design cleared three independent adversarial-review passes before implementation.
+  The in-app **EXPERIMENTAL / "not formally verified" banner is removed**; the handshake is now formally
+  verified *internally* — an **independent external audit and a FIPS module remain the only unmet gates**,
+  so the build does not claim "externally audited" or "FIPS-validated."
+- **Win98 boot splash.** A DCS 98 startup screen (the grayscale storm/flame logo) now plays before the
+  login screen while the startup jingle sounds, then fades to the desktop.
+- **New default wallpaper.** The desktop default is now the blue 256-color-era DCS 98 scene. Only the
+  default changes — any wallpaper you set yourself is untouched.
+- **Date/Time desktop widget** (analog + digital, draggable, opt-in) and **game renames** — Minesweeper →
+  **Mine Detector**, Pinball → **DCS Space Ball**.
+
+505 automated tests. *Everything from v3.13.1 carries forward (incl. the corrected pinball geometry).*
+
+**v3.13.1-beta.1** — Pinball playability fix + formal-verification milestone:
 
 - **Pinball geometry corrected.** The v3.13.0 flippers were too close for their length — they overlapped,
   leaving **no center drain gap**, and the assembly was off-center. Re-centered with a real ~1.5-ball drain
@@ -271,14 +294,14 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/dcs98/releases) and run it.
 
-Direct link to the current release: [`DCS98-Setup-3.13.1-beta.1.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.13.1-beta.1/DCS98-Setup-3.13.1-beta.1.exe)
-(experimental P2P chat + Piper TTS; the chat crypto is unverified — see Status). The last
-fully-stable build is [`DCS98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.6.8/DCS98-Setup-3.6.8.exe).
+Direct link to the current release: [`DCS98-Setup-3.13.2-beta.1.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.13.2-beta.1/DCS98-Setup-3.13.2-beta.1.exe)
+(Tor P2P chat + Piper TTS; the chat handshake is formally verified internally — external audit + FIPS
+pending — see Status). The last fully-stable build is [`DCS98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.6.8/DCS98-Setup-3.6.8.exe).
 
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\DCS98-Setup-3.13.1-beta.1.exe -Algorithm SHA256
+Get-FileHash .\DCS98-Setup-3.13.2-beta.1.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
@@ -312,17 +335,26 @@ To uninstall: Settings → Apps → Dead Cyber Society 98 → Uninstall.
 | DialTerm | SSH / Telnet / FTP client (ssh2 + xterm.js) with a 90s dial-up handshake animation; key-based auth preferred; passwords encrypted at rest; plaintext-protocol warnings |
 | EyeSpy | Authorized camera streams — manual URL entry **and bulk import** (CSV/JSON/URL-list) of your own/public feeds (HLS / MJPEG / HTTP refresh; RTSP requires a local ffmpeg→HLS bridge). **No discovery / scanning / brute-force code paths exist** |
 | AI Assistant | Pluggable Ollama (local, default model `qwen3-abliterated:4b`) / OpenAI-compatible providers, with an in-app **"Set up local AI"** wizard; **saved-conversation memory**; case context opt-in per message; API keys encrypted. **Offline voice conversation** — push-to-talk + hands-free, **on-device Vosk** STT (model operator-supplied in `resources/vosk/`) and on-device **TTS** for replies; **STFU** stops generation. TTS has a bundled offline **Piper** neural-voice engine (selectable alongside OS voices; zero egress) |
-| **Chat** *(beta, experimental)* | Opt-in **Tor-only P2P chat** — invite-link **1:1** with a PQ-hybrid X25519 + ML-KEM-1024 handshake (no hosting, loopback-only sockets), **file attachments** (hash-verified, encrypted quarantine + explicit save), **small groups** (client-side fan-out), and **case-aware sharing** from the case module. ⚠ The handshake crypto is **EXPERIMENTAL / not formally verified** (loud in-app banner); off by default. Bundled SHA-256-verified Tor (`resources/tor/` via `scripts/fetch-tor.mjs`) |
+| **Chat** *(beta)* | Opt-in **Tor-only P2P chat** — invite-link **1:1** with a PQ-hybrid X25519 + ML-KEM-1024 handshake (no hosting, loopback-only sockets), **file attachments** (hash-verified, encrypted quarantine + explicit save), **small groups** (client-side fan-out), and **case-aware sharing** from the case module. The handshake (first-contact **and** reconnect) is **formally verified internally** — ProVerif symbolic + CryptoVerif computational; independent external audit + FIPS module remain the only unmet gates. Off by default. Bundled SHA-256-verified Tor (`resources/tor/` via `scripts/fetch-tor.mjs`) |
 
 ## Releases & changelog
 
-The current build is **v3.13.1-beta.1**. Each release page carries its own notes + SHA-256.
+The current build is **v3.13.2-beta.1**. Each release page carries its own notes + SHA-256.
 
+- **v3.13.2-beta.1** — **Reconnect hardening verified; chat leaves EXPERIMENTAL; Win98 boot splash.**
+  Closes audit findings **HIGH-1** (reconnect could permanently strand a contact) and **MED-2** (reconnect
+  had no formal model / no DoS pre-gate): reconnect now self-heals in-band (authenticated Reject + one
+  retry), is DoS-gated by a per-contact keyed MAC (enforcement bootstrap + split/deduped rate-limiter) with
+  a stable-per-epoch gate key, and is verified to first-contact standard — **ProVerif** symbolic
+  (reconnect + Reject) + **CryptoVerif** computational (`mac_R` unforgeability), after three adversarial
+  review passes. The **EXPERIMENTAL chat banner is removed** (handshake formally verified internally;
+  external audit + FIPS the only unmet gates). Also: a **Win98 boot splash** before the login screen, a new
+  blue **256-color default wallpaper**, a **Date/Time** desktop widget, and game renames (**Mine Detector**,
+  **DCS Space Ball**). **505 tests.**
 - **v3.13.1-beta.1** — **Pinball playability fix + formal-verification milestone.** Corrected the pinball
   flipper geometry (v3.13.0 flippers overlapped → no drain gap); slingshots now hug the flippers and
   inlane/outlane guide rails replace the open sides. Separately, the **CryptoVerif** hybrid IND-of-RK
-  proof landed (both legs: RK secret if **either** X25519 or ML-KEM holds) — key-schedule core only, so
-  the chat handshake stays EXPERIMENTAL. **505 tests.**
+  proof landed (both legs: RK secret if **either** X25519 or ML-KEM holds) — key-schedule core only. **454 tests.**
 - **v3.13.0-beta.1** — **Dogfooding features.** Clickable search results (jump to the exact note/file/case);
   **Chess vs computer** (pick side + Easy/Medium/Hard alpha-beta); **Pinball rebuilt** into a Space-Cadet-style
   table (power plunger, slingshots, drop targets, rank ladder, wormhole **multiball**, SFX); and **offline AI
@@ -486,7 +518,7 @@ This starts the Vite dev server (HMR) and the Electron main process.
 
 ```bash
 pnpm build        # type-check + bundle main / preload / renderer
-pnpm test         # vitest suite (505 tests as of v3.13.1-beta.1)
+pnpm test         # vitest suite (505 tests as of v3.13.2-beta.1)
 pnpm package      # platform installer for the current host
 pnpm package:win  # cross-build Windows NSIS installer
 ```
