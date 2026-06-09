@@ -4,7 +4,8 @@ import {
   responderHandshake,
   HandshakeError,
   type ResponderInviteStore,
-  type ContactPinStore
+  type ContactPinStore,
+  type HandshakeResult
 } from '../src/main/chat/handshake';
 import { createPipe } from '../src/main/chat/transport';
 import {
@@ -16,8 +17,10 @@ import {
   type KemPrekey
 } from '../src/main/chat/identity';
 import { encodeEnvelope, decodeEnvelope } from '../src/main/chat/session';
-import { randomBytes } from '../src/main/chat/crypto';
+import { randomBytes, sha256, ed25519Sign, MLKEM_CT_LEN, X25519_PUBLIC_LEN, MLKEM_PUBLIC_LEN } from '../src/main/chat/crypto';
+import { ed25519Pair, encodeKemPrekey } from '../src/main/chat/identity';
 import { HEADER_LEN } from '../src/main/chat/wire';
+import { MIX_INIT, PROTO_LABEL, SUITE_ID, DS_HS_REJECT, HS_REJECT, concatBytes } from '../src/main/chat/constants';
 import type { ChatStream } from '../src/main/chat/transport';
 
 const hex = (u: Uint8Array): string => Buffer.from(u).toString('hex');
@@ -53,6 +56,18 @@ function makeInviteStore(responder: IdentityKeyPair): ResponderInviteStore & {
     },
     async identifyContact(prekeyId) {
       return pidToCid.get(hex(prekeyId)) ?? null;
+    },
+    async offerCurrent(cid) {
+      // Re-offer the contact's current still-live prekey (no consume); else mint one and index it.
+      for (const [pid, c] of pidToCid) {
+        if (c !== cid) continue;
+        const rec = map.get(pid);
+        if (rec) return { prekey: rec.prekey, secretKey: rec.secretKey };
+      }
+      const { prekey, secretKey } = await generateKemPrekey(responder);
+      map.set(hex(prekey.prekeyId), { prekey, secretKey, token: null });
+      pidToCid.set(hex(prekey.prekeyId), cid);
+      return { prekey, secretKey };
     }
   };
 }
@@ -397,6 +412,175 @@ describe('chat handshake — mac_R gate + enforcement bootstrap (rev-4 §3)', ()
     expect(iRes.session).toBeTruthy();
     expect(rRes.session).toBeTruthy();
     expect(await bothExchange(iRes.session, rRes.session, 'ungated hello')).toBe('ungated hello');
+  });
+});
+
+describe('chat handshake — in-band reconnect recovery (Reject→retry, HIGH-1 / F-5)', () => {
+  /**
+   * Set up a pinned contact + a rotation prekey + a shared RGK, then DURABLY CONSUME the rotation
+   * prekey in R's store before the reconnect (the HIGH-1 strand: R consumed the one-time prekey after
+   * a dropped stream, before I persisted the next rotation). On the reconnect, R's lookup() returns
+   * null while identifyContact() still resolves the cid → R must take the Reject recovery path.
+   *
+   * `wrapResponderStream` lets a test tamper/capture/replay the Reject frame.
+   * `responderLookupAlwaysNull` forces R to reject on EVERY attempt (drives the double-reject cap).
+   */
+  async function setupConsumedReconnect(): Promise<{
+    initiatorId: IdentityKeyPair;
+    responderId: IdentityKeyPair;
+    invites: ReturnType<typeof makeInviteStore>;
+    contacts: ReturnType<typeof makePinStore>;
+    rotation: KemPrekey;
+    initiatorRGK: Uint8Array;
+    cid: string;
+  }> {
+    const initiatorId = generateIdentity();
+    const responderId = generateIdentity();
+    const invites = makeInviteStore(responderId);
+    const contacts = makePinStore();
+    const { prekey, token } = await invites.issueFirstContact();
+
+    const [fa, fb] = createPipe();
+    const [rFirst, iFirst] = await Promise.all([
+      responderHandshake(fb, { identity: responderId, invites, contacts }),
+      initiatorHandshake(fa, { identity: initiatorId, responderPublic: responderId.publicKeys, prekey, token, mode: 'first_contact' })
+    ]);
+    const rotation = iFirst.nextPrekey as KemPrekey;
+    const cid = contactId(initiatorId.publicKeys);
+    invites.bindContact(rotation.prekeyId, cid);
+    contacts.setReconnectKey(cid, rFirst.reconnectGateKey as Uint8Array);
+    contacts.setRgkConfirmed(cid, true);
+    return { initiatorId, responderId, invites, contacts, rotation, initiatorRGK: iFirst.reconnectGateKey as Uint8Array, cid };
+  }
+
+  /** Wrap R's stream with an outbound-frame transform applied to each handshake payload (post HEADER). */
+  function wrapResponderStream(inner: ChatStream, onSend: (payload: Uint8Array) => Uint8Array | null): ChatStream {
+    return {
+      send(data: Uint8Array): void {
+        if (data.length > HEADER_LEN) {
+          const header = data.slice(0, HEADER_LEN);
+          const payload = data.slice(HEADER_LEN);
+          const out = onSend(payload);
+          if (out === null) return; // swallow this frame
+          inner.send(concatBytes(header, out));
+          return;
+        }
+        inner.send(data);
+      },
+      onData(cb) { inner.onData(cb); },
+      onClose(cb) { inner.onClose(cb); },
+      close() { inner.close(); },
+      get closed() { return inner.closed; }
+    };
+  }
+
+  async function runReconnectWithConsumedPrekey(): Promise<{ iRes: HandshakeResult; rRes: HandshakeResult }> {
+    const { initiatorId, responderId, invites, contacts, rotation, initiatorRGK } = await setupConsumedReconnect();
+    // The strand: R durably consumed the rotation prekey before I retried.
+    await invites.consume(rotation.prekeyId);
+
+    const [ra, rb] = createPipe();
+    const [rRes, iRes] = await Promise.all([
+      responderHandshake(rb, { identity: responderId, invites, contacts }),
+      initiatorHandshake(ra, { identity: initiatorId, responderPublic: responderId.publicKeys, prekey: rotation, mode: 'reconnect', reconnectGateKey: initiatorRGK })
+    ]);
+    return { iRes, rRes };
+  }
+
+  it('reconnect self-heals when the rotation prekey was already consumed (Reject→retry)', async () => {
+    const { iRes, rRes } = await runReconnectWithConsumedPrekey();
+    expect(iRes.session).toBeTruthy();
+    expect(iRes.usedOfferedPrekey).toBe(true);
+    // a REAL completed session against the offered prekey, both directions
+    expect(await bothExchange(iRes.session, rRes.session, 'healed I')).toBe('healed I');
+    expect(await bothExchange(rRes.session, iRes.session, 'healed R')).toBe('healed R');
+  });
+
+  async function runReconnectWithForgedReject(): Promise<HandshakeResult> {
+    const { initiatorId, responderId, invites, contacts, rotation, initiatorRGK } = await setupConsumedReconnect();
+    await invites.consume(rotation.prekeyId);
+
+    const [ra, rb] = createPipe();
+    // Flip a byte in the Reject's trailing Sig_R_reject (last 64 bytes) so verification fails.
+    const tampered = wrapResponderStream(rb, (payload) => {
+      if (payload[0] !== HS_REJECT) return payload;
+      const copy = payload.slice();
+      copy[copy.length - 1] ^= 0x01;
+      return copy;
+    });
+    const [, iRes] = await Promise.allSettled([
+      responderHandshake(tampered, { identity: responderId, invites, contacts }),
+      initiatorHandshake(ra, { identity: initiatorId, responderPublic: responderId.publicKeys, prekey: rotation, mode: 'reconnect', reconnectGateKey: initiatorRGK })
+    ]);
+    if (iRes.status === 'rejected') throw iRes.reason;
+    return iRes.value;
+  }
+
+  it('initiator rejects a forged Reject (bad Sig_R_reject)', async () => {
+    await expect(runReconnectWithForgedReject()).rejects.toThrow(/reject signature|invalid/i);
+  });
+
+  /**
+   * Capture a GENUINE Reject from dial A (against rotationA), then replay it verbatim as the response
+   * to dial B (a fresh Msg1 against rotationB). I reconstructs TH_R0 from dial B's own Msg1 cleartext,
+   * which differs from dial A's → the captured Sig_R_reject (bound to TH_R0(A)) fails verification.
+   */
+  async function runReplayRejectOntoDifferentMsg1(): Promise<HandshakeResult> {
+    // Dial A — capture a real Reject.
+    const A = await setupConsumedReconnect();
+    await A.invites.consume(A.rotation.prekeyId);
+    let capturedReject: Uint8Array | null = null;
+    const [aRa, aRb] = createPipe();
+    const aWrapped = wrapResponderStream(aRb, (payload) => {
+      if (payload[0] === HS_REJECT && !capturedReject) capturedReject = payload.slice();
+      return payload;
+    });
+    await Promise.allSettled([
+      responderHandshake(aWrapped, { identity: A.responderId, invites: A.invites, contacts: A.contacts }),
+      initiatorHandshake(aRa, { identity: A.initiatorId, responderPublic: A.responderId.publicKeys, prekey: A.rotation, mode: 'reconnect', reconnectGateKey: A.initiatorRGK })
+    ]);
+    if (!capturedReject) throw new Error('test setup: no Reject captured from dial A');
+
+    // Dial B — a fresh reconnect; R is forced to answer with the CAPTURED (dial-A) Reject.
+    const B = await setupConsumedReconnect();
+    await B.invites.consume(B.rotation.prekeyId);
+    const [bRa, bRb] = createPipe();
+    const bWrapped = wrapResponderStream(bRb, (payload) => {
+      if (payload[0] === HS_REJECT) return capturedReject; // splice dial-A's Reject onto dial B
+      return payload;
+    });
+    const [, iRes] = await Promise.allSettled([
+      responderHandshake(bWrapped, { identity: B.responderId, invites: B.invites, contacts: B.contacts }),
+      initiatorHandshake(bRa, { identity: B.initiatorId, responderPublic: B.responderId.publicKeys, prekey: B.rotation, mode: 'reconnect', reconnectGateKey: B.initiatorRGK })
+    ]);
+    if (iRes.status === 'rejected') throw iRes.reason;
+    return iRes.value;
+  }
+
+  it('a Reject is bound to THIS Msg1 (TH_R0): replaying it onto a different Msg1 is rejected', async () => {
+    await expect(runReplayRejectOntoDifferentMsg1()).rejects.toThrow(/reject signature|invalid/i);
+  });
+
+  /**
+   * Force R to reject on EVERY attempt (its store's lookup always returns null) so the retry ALSO gets
+   * a Reject. The initiator's one-retry-per-dial cap must turn the second Reject into a hard fail.
+   */
+  async function runReconnectDoubleReject(): Promise<HandshakeResult> {
+    const { initiatorId, responderId, invites, contacts, rotation, initiatorRGK } = await setupConsumedReconnect();
+    // lookup ALWAYS null → R rejects the first Msg1 AND the retry's Msg1.
+    const alwaysReject: ResponderInviteStore = { ...invites, async lookup() { return null; } };
+
+    const [ra, rb] = createPipe();
+    const [, iRes] = await Promise.allSettled([
+      responderHandshake(rb, { identity: responderId, invites: alwaysReject, contacts }),
+      initiatorHandshake(ra, { identity: initiatorId, responderPublic: responderId.publicKeys, prekey: rotation, mode: 'reconnect', reconnectGateKey: initiatorRGK })
+    ]);
+    if (iRes.status === 'rejected') throw iRes.reason;
+    return iRes.value;
+  }
+
+  it('a second Reject in one dial is a hard fail (one-retry-per-dial cap)', async () => {
+    await expect(runReconnectDoubleReject()).rejects.toThrow(/reconnect failed|fresh invite/i);
   });
 });
 
