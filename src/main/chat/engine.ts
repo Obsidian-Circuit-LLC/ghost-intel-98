@@ -10,7 +10,8 @@
  */
 import { Connection } from './connection';
 import type { Transport, ChatStream } from './transport';
-import { initiatorHandshake, responderHandshake } from './handshake';
+import { initiatorHandshake as _initiatorHandshake, responderHandshake, HandshakeError } from './handshake';
+import type { InitiatorOpts, HandshakeResult } from './handshake';
 import { ReconnectRateLimiter } from './reconnect-gate';
 import { encodeEnvelope, decodeEnvelope, TRANSFER_ID_LEN, GROUP_ID_LEN, type MessageContent } from './session';
 import { chunkFile, FileReceiver } from './transfer';
@@ -26,7 +27,18 @@ type ContactPatch = Parameters<ContactStore['update']>[1];
 import type { MessageStore, ChatMessage, ChatFileMeta, FileStatus } from './message-store';
 import type { GroupStore, ChatGroup } from './group-store';
 
-export type ContactStatus = 'online' | 'connecting' | 'offline';
+export type ContactStatus = 'online' | 'connecting' | 'offline' | 'needs-reinvite';
+
+/** Thrown by `send`/`sendFile` when a reconnect hard-fails with a condition the user must act on
+ *  (link expired, or a last-resort prekey was offered without the user opting in). The `message`
+ *  is human-readable and safe to surface in the UI. The contact status will also have been set to
+ *  `'needs-reinvite'` via `onContactStatus` before this error propagates. */
+export class ReconnectFailedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ReconnectFailedError';
+  }
+}
 
 /** Caller-supplied sink for a fully received + hash-verified file. Implemented by the electron
  *  service (writes to a quarantine dir under dataRoot); injected so the engine stays fs-free. Returns
@@ -69,10 +81,25 @@ export interface ChatEngineDeps {
   newId(): string;
   quarantine?: QuarantineSink;
   events?: ChatEngineEvents;
+  /** Injectable initiator handshake implementation — defaults to the real `initiatorHandshake`. Override
+   *  in tests to simulate terminal reconnect failures without crypto. */
+  initiatorHandshake?: (stream: ChatStream, opts: InitiatorOpts) => Promise<HandshakeResult>;
 }
 
 const hex = (b: Uint8Array): string => Buffer.from(b).toString('hex');
 const unhex = (h: string): Uint8Array => new Uint8Array(Buffer.from(h, 'hex'));
+
+/** The two confirmed-terminal reconnect error messages that mean the contact link is irreversibly
+ *  exhausted and the user must request a fresh invite. Matched conservatively by exact prefix so a
+ *  future new terminal message doesn't silently slip through as transient. */
+const TERMINAL_RECONNECT_PREFIXES: readonly string[] = [
+  'reconnect failed — request a fresh invite',
+  'reconnect offered a last-resort',
+] as const;
+
+function isTerminalReconnectError(message: string): boolean {
+  return TERMINAL_RECONNECT_PREFIXES.some((prefix) => message.startsWith(prefix));
+}
 
 export class ChatEngine {
   private conns = new Map<string, Connection>();
@@ -123,7 +150,7 @@ export class ChatEngine {
   async acceptInvite(link: string): Promise<string> {
     const inv = parseInvite(link);
     const stream = await this.d.transport.dial(inv.onion);
-    const res = await initiatorHandshake(stream, {
+    const res = await _initiatorHandshake(stream, {
       identity: this.d.identity,
       responderPublic: inv.responderPublic,
       prekey: inv.prekey,
@@ -294,13 +321,31 @@ export class ChatEngine {
     // (3.1-d) Dial-on-demand reconnect orchestration: pass the stored RGK so I sends mac_R whenever it
     // holds one for this contact (the responder reads getReconnectKey/isRgkConfirmed via the
     // ContactPinStore it was given). undefined when no RGK is held yet (bootstrap fail-open).
-    const res = await initiatorHandshake(stream, {
-      identity: this.d.identity,
-      responderPublic: c.identity,
-      prekey: c.nextPrekey,
-      mode: 'reconnect',
-      reconnectGateKey: c.reconnectGateKey ?? undefined
-    });
+    // Use the injectable handshake (defaulting to the real impl) so tests can inject terminal failures
+    // without requiring real crypto scaffolding.
+    const hs = this.d.initiatorHandshake ?? _initiatorHandshake;
+    let res: HandshakeResult;
+    try {
+      res = await hs(stream, {
+        identity: this.d.identity,
+        responderPublic: c.identity,
+        prekey: c.nextPrekey,
+        mode: 'reconnect',
+        reconnectGateKey: c.reconnectGateKey ?? undefined
+      });
+    } catch (err) {
+      // (3.2) Distinguish terminal reconnect failures (user must request a fresh invite) from transient
+      // errors (network hiccup, stream closed, etc.). Terminal errors are HandshakeError instances whose
+      // messages indicate the link is irreversibly exhausted — the two confirmed-terminal cases:
+      //   • 'reconnect failed — request a fresh invite'         (double-reject: link exhausted)
+      //   • 'reconnect offered a last-resort ... opt-in required' (forward-secrecy-degraded path)
+      // All other errors are treated as transient and rethrown as-is.
+      if (err instanceof HandshakeError && isTerminalReconnectError(err.message)) {
+        this.d.events?.onContactStatus?.(cid, 'needs-reinvite');
+        throw new ReconnectFailedError(err.message);
+      }
+      throw err;
+    }
     // Attach (subscribe the Connection to the stream) SYNCHRONOUSLY before any await, so a message the
     // peer sends right after the handshake isn't lost in the gap before we're listening: the handshake
     // reader has detached, and the transport does not buffer for a late subscriber.
