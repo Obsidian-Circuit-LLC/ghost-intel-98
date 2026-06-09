@@ -295,6 +295,11 @@ export const channels = {
     reindexAll: 'memory:reindexAll',
     status: 'memory:status',
     onProgress: 'memory:onProgress'
+  },
+  plugins: {
+    listVerified: 'plugins:listVerified',
+    invoke: 'plugins:invoke',
+    status: 'plugins:status'
   }
 } as const;
 
@@ -442,4 +447,8 @@ export interface ApiContracts {
   [channels.memory.reindexAll]: { args: []; returns: { cases: number; chunks: number } };
   [channels.memory.status]: { args: []; returns: MemoryStatus };
   [channels.memory.onProgress]: { args: [(payload: MemoryProgress) => void]; returns: () => void };
+
+  [channels.plugins.listVerified]: { args: []; returns: import('./plugin-types').VerifiedPluginInfo[] };
+  [channels.plugins.invoke]: { args: [string, string, unknown[]]; returns: unknown };
+  [channels.plugins.status]: { args: []; returns: import('./plugin-types').PluginStatus[] };
 }

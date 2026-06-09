@@ -332,9 +332,19 @@ const api = {
       ipcRenderer.on(channels.memory.onProgress, listener);
       return () => ipcRenderer.removeListener(channels.memory.onProgress, listener);
     }
+  },
+  plugins: {
+    listVerified: () => ipcRenderer.invoke(channels.plugins.listVerified),
+    invoke: (id: string, name: string, args: unknown[]) => ipcRenderer.invoke(channels.plugins.invoke, id, name, args),
+    status: () => ipcRenderer.invoke(channels.plugins.status)
   }
 } as const;
 
 contextBridge.exposeInMainWorld('api', api);
+
+contextBridge.exposeInMainWorld('apiPlugins', {
+  listVerified: () => ipcRenderer.invoke(channels.plugins.listVerified),
+  invoke: (id: string, name: string, args: unknown[]) => ipcRenderer.invoke(channels.plugins.invoke, id, name, args)
+});
 
 export type GhostApi = typeof api;

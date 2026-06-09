@@ -70,6 +70,8 @@ import { timelineCsv, linksCsv, entitiesCsv, attachmentsCsv } from '../services/
 import * as search from '../services/search';
 import * as memory from '../services/memory';
 import { markConsented, assertAllConsented } from '../security/consent';
+import { getVerified, getStatus } from '../plugins/loader';
+import { invokePluginHandler } from '../plugins/invoke';
 import { getSecretBackend, rewrapSecretsForVault } from '../secrets';
 import { homedir } from 'node:os';
 
@@ -1007,6 +1009,12 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     const win = getWindow();
     if (win) win.webContents.send(channels.memory.onProgress, p);
   }));
+
+  // ---- plugins ----
+  safeHandle(channels.plugins.listVerified, async () => getVerified());
+  safeHandle(channels.plugins.status, async () => getStatus());
+  safeHandle(channels.plugins.invoke, async (id: unknown, name: unknown, args: unknown) =>
+    invokePluginHandler(String(id), String(name), Array.isArray(args) ? args : []));
 }
 
 /** Reminder tick: every 30s, pull due reminders, fire notifications + emit IPC to renderer.
