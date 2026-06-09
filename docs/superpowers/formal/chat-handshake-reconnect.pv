@@ -1,0 +1,463 @@
+(* ============================================================================
+   DCS98 chat handshake — RECONNECT mode + authenticated Reject recovery
+   ProVerif model (symbolic / Dolev-Yao).  Spec: 2026-06-08-reconnect-hardening.md
+   (rev 4).  Companion to chat-handshake.pv (first_contact).
+
+   WHY A SIBLING FILE (justification, per Task F.1):
+     The reconnect mode diverges from first_contact in shape (pinned statics, no
+     TOFU pin; mac_R DoS pre-gate with the enforce-after-confirm bootstrap; an
+     hs_type-tagged responder reply that is EITHER Msg2 (accept) OR a Reject;
+     TH_R0 = Msg1-CLEARTEXT transcript, distinct from TH1).  Folding all of that
+     into chat-handshake.pv would bloat its single happy-path process and tangle
+     the two modes' transcripts.  BUT the downgrade queries (no mode coercion;
+     no Sig_R <-> Sig_R_reject substitution) require BOTH a first_contact signer
+     and the reconnect signer to be reachable by the attacker in ONE process, so
+     a cross-mode lift is actually in scope.  So this file keeps the reconnect
+     processes self-contained AND includes a minimal first_contact RESPONDER
+     SIGNER (firstContactSigner) whose only job is to emit a genuine first_contact
+     Sig_R, so the attacker may attempt to lift it onto a reconnect frame (and
+     vice-versa).  chat-handshake.pv is left as the canonical first_contact proof.
+
+   GATE STATUS: this model must PROVE before Task 2.4 (the Reject impl) is written.
+   A failing query here is a real DESIGN finding, escalated, not papered over.
+
+   WHAT THIS DISCHARGES (reconnect mode):
+     R1  reconnect mutual authentication / injective agreement, both directions
+         (I-auth-R injective; R-auth-I non-injective, resting on one-time-prekey
+          consumption EXACTLY as in chat-handshake.pv — documented, not a defect)
+     R2  recovery soundness: a forged/replayed Reject cannot make I complete
+         against an attacker-chosen prekey; a genuine Reject cannot be replayed
+         onto a DIFFERENT Msg1 (TH_R0 binds this Msg1's cleartext)
+     R5  downgrade resistance: no mode coercion (first_contact<->reconnect), no
+         hs_type coercion (MSG2<->REJECT), no last-resort coercion, and NO
+         Sig_R <-> Sig_R_reject substitution (distinct DS prefixes)
+     R3/R6 no-double-accept: the offered prekey is consumed only on a completed
+         retry (consumable-cell semantics, as first_contact)
+     RK  / s_id secrecy under perfect primitives, reconnect chain
+
+   WHAT THIS DOES *NOT* PROVE (stated honestly, per the charter + the spec):
+     - The DoS *availability* / "unconfirmed-R-never-blocks" / "no worse-than-
+       HIGH-1 lockout" properties are LIVENESS arguments, not trace-safety
+       properties ProVerif decides.  We do NOT fake a liveness query.  Instead we
+       model the enforcement bootstrap faithfully (rgkPeerConfirmed: R enforces
+       mac_R only after verifying one; I always sends it) and assert the SAFETY
+       consequence that IS expressible: an unconfirmed R that takes the UNGATED
+       path (no mac_R required) still authenticates and keeps secrecy — i.e. the
+       fail-open path does not weaken auth/secrecy.  Availability is argued in the
+       spec (§3/§6), not here.
+     - The quantitative DoS amplification bound (rate-limit constants) — an
+       engineering bound, not a symbolic property.
+     - R-auth-I INJECTIVITY — non-injective only in ProVerif (no R-fresh nonce in
+       TH1); injectivity rests on durable single-use prekey consumption and is
+       lifted in CryptoVerif, mirroring chat-handshake.pv.
+   ============================================================================ *)
+
+set preciseActions = true.
+
+(* ---- channels ---- *)
+free net: channel.                  (* attacker-controlled onion stream *)
+free prekeycell: channel [private]. (* one-time prekey secret, consumable once (reconnect rotation prekey) *)
+free fcprekeycell: channel [private].(* first_contact prekey cell (for the cross-mode signer) *)
+
+(* ---- primitive types ---- *)
+type skey.   type spkey.
+type exp.    type G.
+type kemsk.  type kempk.
+type coins.
+type key.
+
+(* ---- Diffie-Hellman (X25519) ---- *)
+const gX: G.
+fun expn(G, exp): G.
+equation forall x: exp, y: exp; expn(expn(gX, x), y) = expn(expn(gX, y), x).
+fun dh2k(G): key [data].
+
+(* ---- Ed25519 signatures ---- *)
+fun spk(skey): spkey.
+fun sign(bitstring, skey): bitstring.
+reduc forall m: bitstring, k: skey; checksign(sign(m, k), spk(k)) = m.
+reduc forall m: bitstring, k: skey; getmess(sign(m, k)) = m.
+
+(* ---- ML-KEM (perfect KEM in the symbolic model) ---- *)
+fun kempub(kemsk): kempk.
+fun encap(kempk, coins): bitstring.
+fun encapss(kempk, coins): key.
+reduc forall sk: kemsk, c: coins;
+  decap(encap(kempub(sk), c), sk) = encapss(kempub(sk), c).
+
+(* ---- hash, HKDF, AEAD, HMAC ---- *)
+fun h(bitstring): bitstring.
+fun hkdf(key, bitstring, bitstring): key.
+fun aenc(key, bitstring, bitstring): bitstring.
+reduc forall k: key, m: bitstring, a: bitstring; adec(aenc(k, m, a), k, a) = m.
+(* HMAC as a keyed one-way function over the RGK key sort; verification = equality.
+   RGK lives in the 'key' sort (it is HKDF output). *)
+fun hmac(key, bitstring): bitstring.
+
+(* ---- sort -> bitstring tags ---- *)
+fun g2b(G): bitstring [data].
+fun k2b(key): bitstring [data].
+fun sp2b(spkey): bitstring [data].
+fun kp2b(kempk): bitstring [data].
+fun b2g(bitstring): G
+  reduc forall x: G; b2g(g2b(x)) = x.
+fun sp2b2spk(bitstring): spkey
+  reduc forall x: spkey; sp2b2spk(sp2b(x)) = x.
+fun kp2b2kp(bitstring): kempk
+  reduc forall x: kempk; kp2b2kp(kp2b(x)) = x.
+
+(* ---- domain-separation constants ---- *)
+const PROTO: bitstring.
+const SUITE: bitstring.
+const MODE_FIRST: bitstring.        (* mode = first_contact *)
+const MODE_RECON: bitstring.        (* mode = reconnect *)
+const TAG_I, TAG_R: bitstring.
+const DS_INVITE, DS_PREKEY, DS_HS_INIT, DS_HS_RESP: bitstring.
+const DS_HS_REJECT: bitstring.      (* NEW: reject-signature prefix (must NOT equal DS_HS_RESP) *)
+const LR_FALSE, LR_TRUE: bitstring.
+const HS_MSG2, HS_REJECT: bitstring.(* hs_type discriminants *)
+const MIX_INIT, MIX_ES, MIX_SSPRE, MIX_EE, MIX_SE, MIX_SSI: bitstring.
+const DRV_HK1, DRV_HK2, DRV_ROOT, RK_AAD: bitstring.
+const DS_MAC: bitstring.            (* first_contact token MAC label *)
+const DS_MAC_R: bitstring.          (* NEW: reconnect mac_R label *)
+const RECONNECT_GATE: bitstring.    (* NEW: RGK = HKDF(RK, SID, RECONNECT_GATE) *)
+const proto_key: key.
+
+(* ---- events for correspondence ---- *)
+(* reconnect auth events (suffix _rc to keep them distinct from any fc events) *)
+event I_running_R_rc(spkey, spkey, bitstring).   (* I before Msg1: (is_I, is_R, TH1) *)
+event R_commit_I_rc(spkey, spkey, bitstring).    (* R after verifying Sig_I over TH1 *)
+event R_running_I_rc(spkey, spkey, bitstring).   (* R before Msg2: (is_I, is_R, TH3) *)
+event I_commit_R_rc(spkey, spkey, bitstring).    (* I after verifying Sig_R over TH3 *)
+
+(* recovery-branch events *)
+event I_retry_with(spkey, bitstring).  (* I, after accepting a Reject: (is_R, offered_prekey) *)
+event R_sent_reject(spkey, bitstring, bitstring). (* R: (is_R, TH_R0, offered_prekey) *)
+
+(* ---- security queries ---- *)
+
+(* R1a: R authenticates I (non-injective is the surviving form; injective queried
+        too so the output records EXACTLY which holds, like chat-handshake.pv). *)
+query a: spkey, b: spkey, t: bitstring;
+  inj-event(R_commit_I_rc(a, b, t)) ==> inj-event(I_running_R_rc(a, b, t)).
+query a: spkey, b: spkey, t: bitstring;
+  event(R_commit_I_rc(a, b, t)) ==> event(I_running_R_rc(a, b, t)).
+
+(* R1b: I authenticates R, injective (kills replay/UKS on the I->R direction,
+        and — because TH3 folds hs_type(MSG2) — pins the accept branch). *)
+query a: spkey, b: spkey, t: bitstring;
+  inj-event(I_commit_R_rc(a, b, t)) ==> inj-event(R_running_I_rc(a, b, t)).
+
+(* R2 (recovery soundness, anti-forge/anti-redirect): if I retries against an
+   offered prekey claimed under R's pinned identity, R genuinely sent that Reject
+   (so a network attacker cannot synthesise a Reject that redirects I to an
+   attacker-chosen prekey).  Bound on the offered_prekey, under pinned is_R. *)
+query rpk: spkey, op: bitstring, th: bitstring;
+  event(I_retry_with(rpk, op)) ==> event(R_sent_reject(rpk, th, op)).
+(* NB: this is the load-bearing recovery query.  R_sent_reject is emitted ONLY by
+   the honest R, keyed to a specific TH_R0; I_retry_with fires only after I checks
+   Sig_R_reject under the pinned is_R.  Non-injective is the right shape (a genuine
+   Reject MAY legitimately be acted on; what must NOT happen is I acting on one R
+   never produced, or one bound to a different Msg1 — the latter is covered by the
+   TH_R0 binding inside R_sent_reject's transcript, see the s_op secrecy probe). *)
+
+(* R2 (anti-replay onto a different Msg1) is structurally enforced by TH_R0 being
+   inside Sig_R_reject which I reconstructs from THIS dial's xe_I/ek_I/ct_pre/
+   prekey_id; we additionally probe it via the attacker-prekey secrecy sentinel
+   below: if a forged/redirected Reject could make I complete, s_retry leaks. *)
+
+(* R5 (downgrade / secrecy):
+   s_id   — identity-payload confidentiality on the reconnect path (G2' analogue)
+   s_rk   — reconnect root-key secrecy under perfect primitives
+   s_retry— a sentinel I encrypts under the key it derives ONLY on a Reject-driven
+            retry that completed against R's pinned identity; if an attacker could
+            forge/redirect a Reject to an attacker-controlled prekey and make I
+            complete, the attacker would learn s_retry.  Secrecy of s_retry ==
+            "no attacker-prekey completion via a bogus Reject". *)
+free s_id: bitstring [private].   query attacker(s_id).
+free s_rk: bitstring [private].   query attacker(s_rk).
+free s_retry: bitstring [private].   query attacker(s_retry).
+
+(* Sig_R <-> Sig_R_reject NON-substitution is exercised constructively: the
+   responder reject branch and the accept branch (and the cross-mode first_contact
+   signer) are all reachable; if the distinct DS prefixes DID NOT separate them,
+   the attacker could lift an accept Sig_R onto the reject frame and I_retry_with
+   would fire for an op the honest R never rejected -> R2 query fails.  We do NOT
+   add a separate "substitution" event: the DS-prefix separation is what makes R2
+   and R1b hold, so their proof IS the non-substitution proof.  This is noted so a
+   later reader does not think the property is unmodelled. *)
+
+(* ============================================================================
+   PROCESSES
+   ============================================================================ *)
+
+(* ----------------------------------------------------------------------------
+   RESPONDER R — reconnect.  Pinned-static identities (knows I's is_I, xs_I).
+   Branches into ACCEPT (Msg2) or REJECT depending on whether the presented
+   prekey resolves to a live secret.  We model BOTH outcomes nondeterministically
+   so the attacker can drive either; the cell delivers a prekey only for the
+   accept strand, the reject strand is reached when the cell is empty / stale.
+
+   NOTE: TH0 for reconnect = h((PROTO, SUITE, MODE_RECON)) is inlined at each use
+   site (ProVerif letfun-without-args is not a process; inlining keeps it simple).
+   ---------------------------------------------------------------------------- *)
+
+(* shared accept tail (verify-before-encap, build Msg2, hs_type=MSG2 in TH3).
+   Defined BEFORE its callers so the macro is in scope. *)
+let responderR_accept_post(isR: skey, xsR: exp, isIpub: spkey, xsIpub: G,
+      preSk: kemsk, pkPre: kempk, sigPre: bitstring, pid: bitstring,
+      xeI: G, ekI: kempk, ctPre: bitstring, cidI: bitstring,
+      th0: bitstring, thR0: bitstring) =
+  (* recompute TH1 (binds R's consumed prekey block — the full transcript) *)
+  let th1 = h((th0, TAG_I, TAG_R, sp2b(spk(isR)), g2b(expn(gX, xsR)),
+               pid, LR_FALSE, kp2b(pkPre), sigPre, g2b(xeI), kp2b(ekI), ctPre)) in
+  let ssPre = decap(ctPre, preSk) in
+  let es = expn(xeI, xsR) in
+  let ck0 = hkdf(proto_key, th1, MIX_INIT) in
+  let ck1 = hkdf(dh2k(es), k2b(ck0), MIX_ES) in
+  let ck2 = hkdf(ssPre, k2b(ck1), MIX_SSPRE) in
+  let hk1 = hkdf(ck2, th1, DRV_HK1) in
+  (* reconnect aad: bind TH1 (no token on reconnect) *)
+  let aadTok = h((MODE_RECON, th1)) in
+  let idplain = adec(cidI, hk1, aadTok) in
+  let (xsIb: bitstring, isIb: bitstring, sigI: bitstring, sent: bitstring) = idplain in
+  (* PINNED-STATIC CHECK: the decrypted identity must be the pinned peer.
+     (no TOFU on reconnect — both sides already know the statics) *)
+  let (=DS_HS_INIT, =th1) = checksign(sigI, sp2b2spk(isIb)) in
+  if sp2b2spk(isIb) = isIpub then
+  if b2g(xsIb) = xsIpub then
+  event R_commit_I_rc(isIpub, spk(isR), th1);
+  new cR: coins;
+  let ctI = encap(ekI, cR) in
+  let ssI = encapss(ekI, cR) in
+  new xeR: exp;
+  let xeRpub = expn(gX, xeR) in
+  let ee = expn(xeI, xeR) in
+  let se = expn(b2g(xsIb), xeR) in
+  let ck3 = hkdf(dh2k(ee), k2b(ck2), MIX_EE) in
+  let ck4 = hkdf(dh2k(se), k2b(ck3), MIX_SE) in
+  let ck5 = hkdf(ssI, k2b(ck4), MIX_SSI) in
+  let th2 = h((th1, cidI)) in
+  new npid: bitstring; new npSk: kemsk;
+  let npPub = kempub(npSk) in
+  let npSig = sign((DS_PREKEY, SUITE, sp2b(spk(isR)), npid, LR_FALSE, kp2b(npPub)), isR) in
+  let nextPre = (npid, LR_FALSE, kp2b(npPub), npSig) in
+  (* hs_type(MSG2) folded into TH3 -> Sig_R can't be flipped to a reject *)
+  let th3 = h((th2, HS_MSG2, g2b(xeRpub), ctI, nextPre)) in
+  let sigR = sign((DS_HS_RESP, th3), isR) in
+  let hk2 = hkdf(ck5, th3, DRV_HK2) in
+  let cconfR = aenc(hk2, (sigR, sent), MIX_INIT) in
+  event R_running_I_rc(isIpub, spk(isR), th3);
+  out(net, (HS_MSG2, g2b(xeRpub), ctI, nextPre, cconfR)).
+
+(* ACCEPT strand entry: prekey resolves -> full Msg2.  ENFORCEMENT BOOTSTRAP:
+   mac_R = HMAC(RGK, DS_MAC_R ‖ TH_R0).  R requires it ONLY if confirmed=LR_TRUE;
+   if confirmed=LR_FALSE R fails OPEN (ungated path).  We run BOTH copies at top
+   level so the SAFETY of the fail-open path is in scope. *)
+let responderR_accept(isR: skey, xsR: exp, isIpub: spkey, xsIpub: G, rgk: key, confirmed: bitstring) =
+  in(prekeycell, (pid: bitstring, preSk: kemsk, dummy: bitstring));
+  let pkPre = kempub(preSk) in
+  let sigPre = sign((DS_PREKEY, SUITE, sp2b(spk(isR)), pid, LR_FALSE, kp2b(pkPre)), isR) in
+  in(net, (=MODE_RECON, =SUITE, xeI: G, ekI: kempk, =pid, ctPre: bitstring,
+           macR: bitstring, cidI: bitstring));
+  let th0 = h((PROTO, SUITE, MODE_RECON)) in
+  let thR0 = h((MIX_INIT, th0, pid, g2b(xeI), kp2b(ekI), ctPre)) in
+  let expectMacR = hmac(rgk, (DS_MAC_R, thR0)) in
+  if confirmed = LR_TRUE then
+    ( if macR = expectMacR then  (* confirmed -> mandatory gate *)
+        responderR_accept_post(isR, xsR, isIpub, xsIpub, preSk, pkPre, sigPre,
+                               pid, xeI, ekI, ctPre, cidI, th0, thR0) )
+  else
+    ( (* unconfirmed -> ungated: proceed without requiring mac_R (fail-open) *)
+      responderR_accept_post(isR, xsR, isIpub, xsIpub, preSk, pkPre, sigPre,
+                             pid, xeI, ekI, ctPre, cidI, th0, thR0) ).
+
+(* REJECT tail: offer a CURRENT prekey + Sig_R_reject over TH_R0.  Consumes
+   nothing.  Defined before its caller. *)
+let responderR_reject_post(isR: skey, xsR: exp, thR0: bitstring) =
+  (* offer a CURRENT prekey (signed) — the pending rotation, modelled as fresh.
+     NOT last-resort (reconnect Msg1 must not carry/offer last-resort at the gate;
+     here R offers a one-time current prekey, is_last_resort = LR_FALSE). *)
+  new opid: bitstring; new opSk: kemsk;
+  let opPub = kempub(opSk) in
+  let opSig = sign((DS_PREKEY, SUITE, sp2b(spk(isR)), opid, LR_FALSE, kp2b(opPub)), isR) in
+  let offered_prekey = (opid, LR_FALSE, kp2b(opPub), opSig) in
+  (* Sig_R_reject = Sign(is_R, DS_HS_REJECT ‖ TH_R0 ‖ offered_prekey ‖ is_last_resort) *)
+  let sigRej = sign((DS_HS_REJECT, thR0, offered_prekey, LR_FALSE), isR) in
+  event R_sent_reject(spk(isR), thR0, offered_prekey);
+  out(net, (HS_REJECT, offered_prekey, LR_FALSE, sigRej)).
+
+(* REJECT strand entry: prekey does NOT resolve (consumed/stale) but R identifies
+   the contact (modelled as R knowing the pinned peer).  Same gate disposition as
+   the accept strand. *)
+let responderR_reject(isR: skey, xsR: exp, isIpub: spkey, xsIpub: G, rgk: key, confirmed: bitstring) =
+  in(net, (=MODE_RECON, =SUITE, xeI: G, ekI: kempk, pid: bitstring, ctPre: bitstring,
+           macR: bitstring, cidI: bitstring));
+  let th0 = h((PROTO, SUITE, MODE_RECON)) in
+  let thR0 = h((MIX_INIT, th0, pid, g2b(xeI), kp2b(ekI), ctPre)) in
+  let expectMacR = hmac(rgk, (DS_MAC_R, thR0)) in
+  if confirmed = LR_TRUE then
+    ( if macR = expectMacR then
+        responderR_reject_post(isR, xsR, thR0) )
+  else
+    ( responderR_reject_post(isR, xsR, thR0) ).
+
+(* ----------------------------------------------------------------------------
+   INITIATOR I — reconnect.  Pinned statics for R.  Sends Msg1 with mac_R (it
+   holds RGK).  Then receives an hs_type-tagged reply and dispatches:
+     HS_MSG2   -> verify Sig_R over TH3, complete (I_commit_R_rc)
+     HS_REJECT -> verify Sig_R_reject over reconstructed TH_R0 + offered prekey's
+                  own sig, then RETRY ONCE with the offered prekey.
+   ---------------------------------------------------------------------------- *)
+let initiatorI(isI: skey, xsI: exp, isRpub: spkey, xsRpub: G,
+               pid: bitstring, pkPre: kempk, sigPre: bitstring, rgk: key) =
+  new xeI: exp; new ekIsk: kemsk; new c: coins;
+  let xeIpub = expn(gX, xeI) in
+  let ekI = kempub(ekIsk) in
+  let ctPre = encap(pkPre, c) in
+  let ssPre = encapss(pkPre, c) in
+  let th0 = h((PROTO, SUITE, MODE_RECON)) in
+  (* mac_R over TH_R0 (Msg1-cleartext) *)
+  let thR0 = h((MIX_INIT, th0, pid, g2b(xeIpub), kp2b(ekI), ctPre)) in
+  let macR = hmac(rgk, (DS_MAC_R, thR0)) in
+  let th1 = h((th0, TAG_I, TAG_R, sp2b(isRpub), g2b(xsRpub),
+               pid, LR_FALSE, kp2b(pkPre), sigPre, g2b(xeIpub), kp2b(ekI), ctPre)) in
+  let es = expn(xsRpub, xeI) in
+  let ck0 = hkdf(proto_key, th1, MIX_INIT) in
+  let ck1 = hkdf(dh2k(es), k2b(ck0), MIX_ES) in
+  let ck2 = hkdf(ssPre, k2b(ck1), MIX_SSPRE) in
+  let hk1 = hkdf(ck2, th1, DRV_HK1) in
+  let sigI = sign((DS_HS_INIT, th1), isI) in
+  let aadTok = h((MODE_RECON, th1)) in
+  let cidI = aenc(hk1, (g2b(expn(gX, xsI)), sp2b(spk(isI)), sigI, s_id), aadTok) in
+  event I_running_R_rc(spk(isI), isRpub, th1);
+  out(net, (MODE_RECON, SUITE, g2b(xeIpub), kp2b(ekI), pid, ctPre, macR, cidI));
+  (* receive hs_type-tagged reply *)
+  in(net, (hsType: bitstring, rest: bitstring));
+  if hsType = HS_MSG2 then
+    ( let (xeRb: bitstring, ctI: bitstring, nextPre: bitstring, cconfR: bitstring) = rest in
+      let xeR = b2g(xeRb) in
+      let ssI = decap(ctI, ekIsk) in
+      let ee = expn(xeR, xeI) in
+      let se = expn(xeR, xsI) in
+      let ck3 = hkdf(dh2k(ee), k2b(ck2), MIX_EE) in
+      let ck4 = hkdf(dh2k(se), k2b(ck3), MIX_SE) in
+      let ck5 = hkdf(ssI, k2b(ck4), MIX_SSI) in
+      let th2 = h((th1, cidI)) in
+      let th3 = h((th2, HS_MSG2, xeRb, ctI, nextPre)) in
+      let hk2 = hkdf(ck5, th3, DRV_HK2) in
+      let confplain = adec(cconfR, hk2, MIX_INIT) in
+      let (sigR: bitstring, =s_id) = confplain in
+      (* verify Sig_R over TH3 under R's PINNED identity (DS_HS_RESP prefix) *)
+      let (=DS_HS_RESP, =th3) = checksign(sigR, isRpub) in
+      event I_commit_R_rc(spk(isI), isRpub, th3);
+      let th4 = h((th3, cconfR)) in
+      let rk = hkdf(ck5, th4, DRV_ROOT) in
+      out(net, aenc(rk, s_rk, RK_AAD)) )
+  else if hsType = HS_REJECT then
+    ( let (offered_prekey: bitstring, isLast: bitstring, sigRej: bitstring) = rest in
+      (* reconstruct TH_R0 from THIS dial's Msg1 cleartext (anti-replay binding) *)
+      let thR0chk = h((MIX_INIT, th0, pid, g2b(xeIpub), kp2b(ekI), ctPre)) in
+      (* verify Sig_R_reject under pinned is_R, DS_HS_REJECT prefix, over
+         TH_R0 ‖ offered_prekey ‖ is_last_resort *)
+      let (=DS_HS_REJECT, =thR0chk, =offered_prekey, =isLast) = checksign(sigRej, isRpub) in
+      (* policy: refuse last-resort unless opted-in (model: only retry on LR_FALSE) *)
+      if isLast = LR_FALSE then
+      (* verify the offered prekey's OWN signature under pinned is_R *)
+      let (opid: bitstring, =LR_FALSE, opPubb: bitstring, opSig: bitstring) = offered_prekey in
+      let (=DS_PREKEY, =SUITE, =sp2b(isRpub), =opid, =LR_FALSE, =opPubb) = checksign(opSig, isRpub) in
+      event I_retry_with(isRpub, offered_prekey);
+      (* RETRY ONCE with the offered prekey (fresh ephemerals).  The sentinel
+         s_retry is encrypted under the key derived ONLY if this retry completes
+         against R's pinned identity; if a forged/redirected Reject pointed I at
+         an attacker prekey, the attacker would learn s_retry. *)
+      let opPub = kp2b2kp(opPubb) in
+      new xeI2: exp; new ekIsk2: kemsk; new c2: coins;
+      let xeI2pub = expn(gX, xeI2) in
+      let ekI2 = kempub(ekIsk2) in
+      let ctPre2 = encap(opPub, c2) in
+      let ssPre2 = encapss(opPub, c2) in
+      let th1b = h((th0, TAG_I, TAG_R, sp2b(isRpub), g2b(xsRpub),
+                    opid, LR_FALSE, opPubb, opSig, g2b(xeI2pub), kp2b(ekI2), ctPre2)) in
+      let es2 = expn(xsRpub, xeI2) in
+      let ck0b = hkdf(proto_key, th1b, MIX_INIT) in
+      let ck1b = hkdf(dh2k(es2), k2b(ck0b), MIX_ES) in
+      let ck2b = hkdf(ssPre2, k2b(ck1b), MIX_SSPRE) in
+      let hk1b = hkdf(ck2b, th1b, DRV_HK1) in
+      let sigI2 = sign((DS_HS_INIT, th1b), isI) in
+      let aadTok2 = h((MODE_RECON, th1b)) in
+      let thR0b = h((MIX_INIT, th0, opid, g2b(xeI2pub), kp2b(ekI2), ctPre2)) in
+      let macR2 = hmac(rgk, (DS_MAC_R, thR0b)) in
+      let cidI2 = aenc(hk1b, (g2b(expn(gX, xsI)), sp2b(spk(isI)), sigI2, s_retry), aadTok2) in
+      out(net, (MODE_RECON, SUITE, g2b(xeI2pub), kp2b(ekI2), opid, ctPre2, macR2, cidI2)) ).
+
+(* ----------------------------------------------------------------------------
+   CROSS-MODE first_contact RESPONDER SIGNER.
+   Its ONLY job: emit a genuine first_contact Sig_R (DS_HS_RESP over a
+   first_contact TH3 that folds NO hs_type, mode = MODE_FIRST) so the attacker may
+   try to lift it onto a reconnect frame (and vice-versa).  Minimal — just enough
+   to put a real first_contact Sig_R on the wire under the SAME is_R key.
+   ---------------------------------------------------------------------------- *)
+let firstContactSigner(isR: skey, xsR: exp) =
+  in(fcprekeycell, (pid: bitstring, preSk: kemsk, tok: bitstring));
+  let pkPre = kempub(preSk) in
+  let sigPre = sign((DS_PREKEY, SUITE, sp2b(spk(isR)), pid, LR_FALSE, kp2b(pkPre)), isR) in
+  in(net, (=MODE_FIRST, =SUITE, xeI: G, ekI: kempk, =pid, ctPre: bitstring,
+           macT: bitstring, cidI: bitstring));
+  let th0 = h((PROTO, SUITE, MODE_FIRST)) in
+  let th1 = h((th0, TAG_I, TAG_R, sp2b(spk(isR)), g2b(expn(gX, xsR)),
+               pid, LR_FALSE, kp2b(pkPre), sigPre, g2b(xeI), kp2b(ekI), ctPre)) in
+  let ssPre = decap(ctPre, preSk) in
+  let es = expn(xeI, xsR) in
+  let ck0 = hkdf(proto_key, th1, MIX_INIT) in
+  let ck1 = hkdf(dh2k(es), k2b(ck0), MIX_ES) in
+  let ck2 = hkdf(ssPre, k2b(ck1), MIX_SSPRE) in
+  new cR: coins; let ctI = encap(ekI, cR) in let ssI = encapss(ekI, cR) in
+  new xeR: exp; let xeRpub = expn(gX, xeR) in
+  let ee = expn(xeI, xeR) in
+  let ck3 = hkdf(dh2k(ee), k2b(ck2), MIX_EE) in
+  let ck5 = hkdf(ssI, k2b(ck3), MIX_SSI) in
+  let th2 = h((th1, cidI)) in
+  (* first_contact TH3: NO hs_type folded (positional, as v3) *)
+  let th3fc = h((th2, g2b(xeRpub), ctI)) in
+  let sigRfc = sign((DS_HS_RESP, th3fc), isR) in
+  out(net, (g2b(xeRpub), ctI, sigRfc)).
+
+(* ============================================================================
+   TOP-LEVEL
+   We expose, under ONE pinned (is_I, is_R) pair and a shared RGK:
+     - the reconnect initiator (sends mac_R, handles MSG2 + REJECT)
+     - the reconnect responder ACCEPT strand  (confirmed AND unconfirmed copies)
+     - the reconnect responder REJECT strand  (confirmed AND unconfirmed copies)
+     - the cross-mode first_contact signer (real Sig_R on the same key)
+   RGK is derived deterministically by both sides from a session RK/SID (modelled
+   as a fresh shared secret) via the RECONNECT_GATE label.  The attacker does NOT
+   get RGK (it is the DoS key), but DOES get everything on net.  We DELIBERATELY
+   run both confirmed and unconfirmed responder copies so the SAFETY of the
+   fail-open (unconfirmed/ungated) path is in scope.
+   ============================================================================ *)
+process
+  new isI: skey; new isR: skey; new xsI: exp; new xsR: exp;
+  (* a session secret both sides shared -> deterministic RGK (no exchange) *)
+  new sessRK: key; new sessSID: bitstring;
+  let rgk = hkdf(sessRK, sessSID, RECONNECT_GATE) in
+  (* prekey secrets for the accept strands + the fc signer *)
+  new preSk: kemsk; new pid: bitstring;
+  new fcPreSk: kemsk; new fcPid: bitstring; new fcTok: bitstring;
+  let pkPre = kempub(preSk) in
+  let sigPre = sign((DS_PREKEY, SUITE, sp2b(spk(isR)), pid, LR_FALSE, kp2b(pkPre)), isR) in
+  let fcPkPre = kempub(fcPreSk) in
+  (* publish pinned identities + statics + signed prekey blocks (all public) *)
+  out(net, spk(isI)); out(net, spk(isR));
+  out(net, g2b(expn(gX, xsI)));        (* I's static pub (pinned on reconnect) *)
+  out(net, g2b(expn(gX, xsR)));        (* R's static pub (pinned on reconnect) *)
+  out(net, (pid, kp2b(pkPre), sigPre));
+  (* hand single-use prekey secrets to the accept strands / fc signer *)
+  out(prekeycell, (pid, preSk, LR_FALSE));
+  out(fcprekeycell, (fcPid, fcPreSk, fcTok));
+  ( !initiatorI(isI, xsI, spk(isR), expn(gX, xsR), pid, pkPre, sigPre, rgk)
+  | !responderR_accept(isR, xsR, spk(isI), expn(gX, xsI), rgk, LR_TRUE)   (* confirmed/gated *)
+  | !responderR_accept(isR, xsR, spk(isI), expn(gX, xsI), rgk, LR_FALSE)  (* unconfirmed/ungated *)
+  | !responderR_reject(isR, xsR, spk(isI), expn(gX, xsI), rgk, LR_TRUE)
+  | !responderR_reject(isR, xsR, spk(isI), expn(gX, xsI), rgk, LR_FALSE)
+  | !firstContactSigner(isR, xsR) )
