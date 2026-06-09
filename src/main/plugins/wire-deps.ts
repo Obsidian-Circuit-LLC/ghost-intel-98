@@ -35,6 +35,26 @@ import { caseStore } from '../storage/json-fs';
 import { caseDir } from '../storage/paths';
 import { secureReadText, secureWriteFile } from '../storage/secure-fs';
 
+/**
+ * Strip credential-bearing headers from a header map. Used when a plugin egress redirect
+ * crosses to a different origin, so the original request's secrets are never forwarded to a
+ * host they were not intended for (Authorization/Cookie/Proxy-Authorization + any X-*auth* /
+ * X-*api-key* header, case-insensitive).
+ */
+function stripCredentialHeaders(headers: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(headers)) {
+    const n = k.toLowerCase();
+    const isCred =
+      n === 'authorization' ||
+      n === 'cookie' ||
+      n === 'proxy-authorization' ||
+      (n.startsWith('x-') && (n.includes('auth') || /api-?key/.test(n)));
+    if (!isCred) out[k] = v;
+  }
+  return out;
+}
+
 /** Per-plugin network-enable snapshot. Populated by refreshPluginNetSnapshot at startup. */
 let _pluginNetSnapshot: Record<string, { networkEnabled?: boolean }> = {};
 
@@ -79,12 +99,16 @@ export function buildContextDeps(): ContextDeps {
     //   3. redirect: 'manual' — prevents the runtime from silently following a 3xx to an
     //      internal host; each Location header is re-validated (textual + DNS) before following.
     //   4. Hop limit (max 5) — prevents redirect-loop DoS.
+    //   5. Cross-origin credential strip + RFC 7231 method downgrade — a redirect to a different
+    //      origin drops Authorization/Cookie/Proxy-Authorization/X-*auth*/X-*api-key* headers, and
+    //      301/302/303 downgrade non-GET methods to GET (dropping the body); 307/308 preserve.
     // TODO(osint-plugin): route through bundled Tor SOCKS before OSINT plugin ships real lookups.
     async rawFetch(url, init) {
       const MAX_HOPS = 5;
-      const method = init.method ?? 'GET';
-      const headers = init.headers ?? {};
-      const body = init.body;
+      const originalOrigin = new URL(url).origin;
+      let method = init.method ?? 'GET';
+      let headers: Record<string, string> = { ...(init.headers ?? {}) };
+      let body = init.body;
       let current = url;
       for (let hop = 0; hop < MAX_HOPS; hop++) {
         // Textual SSRF guard (defense in depth — also checked upstream by validateUrl).
@@ -101,7 +125,20 @@ export function buildContextDeps(): ContextDeps {
             const text = await res.text();
             return { status: res.status, body: text, finalUrl: current };
           }
-          current = new URL(loc, current).toString();
+          const next = new URL(loc, current).toString();
+          // RFC 7231: 301/302/303 downgrade a non-GET/HEAD method to GET and drop the body;
+          // only 307/308 preserve method + body.
+          const m = method.toUpperCase();
+          if (res.status !== 307 && res.status !== 308 && m !== 'GET' && m !== 'HEAD') {
+            method = 'GET';
+            body = undefined;
+          }
+          // Credential-leak guard: a redirect that crosses to a different origin must not carry
+          // the original request's credential headers to the new host.
+          if (new URL(next).origin !== originalOrigin) {
+            headers = stripCredentialHeaders(headers);
+          }
+          current = next;
           continue;
         }
         const text = await res.text();

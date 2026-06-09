@@ -242,4 +242,73 @@ describe('rawFetch SSRF hardening', () => {
 
     fetchSpy.mockRestore();
   });
+
+  it('strips credential headers when a redirect crosses to a different origin', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        new Response('', { status: 302, headers: { location: 'https://evil.example.net/steal' } }) as Response
+      )
+      .mockResolvedValueOnce(new Response('ok', { status: 200 }) as Response);
+
+    const deps = buildContextDeps();
+    await deps.rawFetch('https://api.example.com/data', {
+      method: 'GET',
+      headers: { Authorization: 'Bearer secret', Cookie: 'sid=abc', 'X-Api-Key': 'k', 'User-Agent': 'dcs98' }
+    });
+
+    // Second hop (cross-origin) must NOT carry the credential headers, but keeps benign ones.
+    const secondInit = fetchSpy.mock.calls[1][1] as { headers: Record<string, string> };
+    expect(secondInit.headers.Authorization).toBeUndefined();
+    expect(secondInit.headers.Cookie).toBeUndefined();
+    expect(secondInit.headers['X-Api-Key']).toBeUndefined();
+    expect(secondInit.headers['User-Agent']).toBe('dcs98');
+
+    fetchSpy.mockRestore();
+  });
+
+  it('preserves credential headers on a same-origin redirect', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        new Response('', { status: 302, headers: { location: 'https://api.example.com/v2/data' } }) as Response
+      )
+      .mockResolvedValueOnce(new Response('ok', { status: 200 }) as Response);
+
+    const deps = buildContextDeps();
+    await deps.rawFetch('https://api.example.com/data', {
+      method: 'GET',
+      headers: { Authorization: 'Bearer secret' }
+    });
+
+    const secondInit = fetchSpy.mock.calls[1][1] as { headers: Record<string, string> };
+    expect(secondInit.headers.Authorization).toBe('Bearer secret');
+
+    fetchSpy.mockRestore();
+  });
+
+  it('downgrades POST→GET and drops the body on a 302 (RFC 7231); preserves both on 307', async () => {
+    // 302: POST with body → GET, no body on the next hop.
+    const spy302 = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        new Response('', { status: 302, headers: { location: 'https://api.example.com/next' } }) as Response
+      )
+      .mockResolvedValueOnce(new Response('ok', { status: 200 }) as Response);
+    const deps = buildContextDeps();
+    await deps.rawFetch('https://api.example.com/submit', { method: 'POST', body: 'payload' });
+    const next302 = spy302.mock.calls[1][1] as { method: string; body?: string };
+    expect(next302.method).toBe('GET');
+    expect(next302.body).toBeUndefined();
+    spy302.mockRestore();
+
+    // 307: POST with body preserved.
+    const spy307 = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        new Response('', { status: 307, headers: { location: 'https://api.example.com/next' } }) as Response
+      )
+      .mockResolvedValueOnce(new Response('ok', { status: 200 }) as Response);
+    await deps.rawFetch('https://api.example.com/submit', { method: 'POST', body: 'payload' });
+    const next307 = spy307.mock.calls[1][1] as { method: string; body?: string };
+    expect(next307.method).toBe('POST');
+    expect(next307.body).toBe('payload');
+    spy307.mockRestore();
+  });
 });
