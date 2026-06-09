@@ -10,7 +10,9 @@
  */
 import { Connection } from './connection';
 import type { Transport, ChatStream } from './transport';
-import { initiatorHandshake, responderHandshake } from './handshake';
+import { initiatorHandshake as _initiatorHandshake, responderHandshake, HandshakeError } from './handshake';
+import type { InitiatorOpts, HandshakeResult } from './handshake';
+import { ReconnectRateLimiter } from './reconnect-gate';
 import { encodeEnvelope, decodeEnvelope, TRANSFER_ID_LEN, GROUP_ID_LEN, type MessageContent } from './session';
 import { chunkFile, FileReceiver } from './transfer';
 import { randomBytes } from './crypto';
@@ -18,10 +20,25 @@ import { createInvite, parseInvite } from './invite';
 import { contactId, type IdentityKeyPair, type IdentityPublic } from './identity';
 import type { PrekeyStore } from './prekey-store';
 import type { ContactStore } from './contact-store';
+import { ContactError } from './contact-store';
+/** The mutable-field patch shape ContactStore.update accepts — derived so the engine's RGK-persistence
+ *  patches stay in lockstep with the store's signature (3.1-a/b). */
+type ContactPatch = Parameters<ContactStore['update']>[1];
 import type { MessageStore, ChatMessage, ChatFileMeta, FileStatus } from './message-store';
 import type { GroupStore, ChatGroup } from './group-store';
 
-export type ContactStatus = 'online' | 'connecting' | 'offline';
+export type ContactStatus = 'online' | 'connecting' | 'offline' | 'needs-reinvite';
+
+/** Thrown by `send`/`sendFile` when a reconnect hard-fails with a condition the user must act on
+ *  (link expired, or a last-resort prekey was offered without the user opting in). The `message`
+ *  is human-readable and safe to surface in the UI. The contact status will also have been set to
+ *  `'needs-reinvite'` via `onContactStatus` before this error propagates. */
+export class ReconnectFailedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ReconnectFailedError';
+  }
+}
 
 /** Caller-supplied sink for a fully received + hash-verified file. Implemented by the electron
  *  service (writes to a quarantine dir under dataRoot); injected so the engine stays fs-free. Returns
@@ -64,10 +81,25 @@ export interface ChatEngineDeps {
   newId(): string;
   quarantine?: QuarantineSink;
   events?: ChatEngineEvents;
+  /** Injectable initiator handshake implementation — defaults to the real `initiatorHandshake`. Override
+   *  in tests to simulate terminal reconnect failures without crypto. */
+  initiatorHandshake?: (stream: ChatStream, opts: InitiatorOpts) => Promise<HandshakeResult>;
 }
 
 const hex = (b: Uint8Array): string => Buffer.from(b).toString('hex');
 const unhex = (h: string): Uint8Array => new Uint8Array(Buffer.from(h, 'hex'));
+
+/** The two confirmed-terminal reconnect error messages that mean the contact link is irreversibly
+ *  exhausted and the user must request a fresh invite. Matched conservatively by exact prefix so a
+ *  future new terminal message doesn't silently slip through as transient. */
+const TERMINAL_RECONNECT_PREFIXES: readonly string[] = [
+  'reconnect failed — request a fresh invite',
+  'reconnect offered a last-resort',
+] as const;
+
+function isTerminalReconnectError(message: string): boolean {
+  return TERMINAL_RECONNECT_PREFIXES.some((prefix) => message.startsWith(prefix));
+}
 
 export class ChatEngine {
   private conns = new Map<string, Connection>();
@@ -76,6 +108,10 @@ export class ChatEngine {
   private pendingAcks = new Map<string, string>(); // `${cid}:${counter}` → messageId
   // in-flight inbound transfers keyed by transferId(hex)
   private receivers = new Map<string, { cid: string; rx: FileReceiver; msgId: string; lastActivity: number }>();
+  // ONE GLOBAL (across-dials) reconnect rate-limiter for the responder's UNGATED reconnect branch
+  // (Task 2.5 / 3.1-e). Injected `now` reuses the engine's own clock — NO new Date.now() call site —
+  // so the gate stays deterministic/mockable; the tick affects only allow/deny, never any key/transcript.
+  private readonly reconnectLimiter = new ReconnectRateLimiter({ now: () => this.d.now() });
 
   constructor(private readonly d: ChatEngineDeps) {}
 
@@ -94,6 +130,14 @@ export class ChatEngine {
     return this.d.transport.onionAddress();
   }
 
+  /** Test/diagnostic hook (3.1-h): close every live connection without tearing down the transport, so a
+   *  subsequent send/sendFile re-dials and exercises the dial-on-demand reconnect path. The onClose
+   *  handler each Connection carries removes it from `conns` and emits offline. */
+  dropConnections(): void {
+    for (const c of [...this.conns.values()]) c.close();
+    this.conns.clear();
+  }
+
   /** Mint a first-contact invite link to hand out-of-band. */
   async createInvite(): Promise<string> {
     const onion = this.d.transport.onionAddress();
@@ -106,7 +150,7 @@ export class ChatEngine {
   async acceptInvite(link: string): Promise<string> {
     const inv = parseInvite(link);
     const stream = await this.d.transport.dial(inv.onion);
-    const res = await initiatorHandshake(stream, {
+    const res = await _initiatorHandshake(stream, {
       identity: this.d.identity,
       responderPublic: inv.responderPublic,
       prekey: inv.prekey,
@@ -115,7 +159,25 @@ export class ChatEngine {
     });
     const cid = contactId(res.peer);
     await this.d.contacts.pin(res.peer, { onion: inv.onion });
-    if (res.nextPrekey) await this.d.contacts.update(cid, { nextPrekey: res.nextPrekey, lastSeen: this.d.now() });
+    // (3.1-f) A fresh first_contact invite restarts the RGK epoch: clear any prior RGK + confirm flag
+    // BEFORE installing this handshake's RGK, so the new epoch starts with rgkPeerConfirmed=false (the
+    // epoch-bound invariant). pin() refuses an identity CHANGE (MITM guard), so a successful re-pin is
+    // always the SAME identity re-accepting a fresh invite — exactly the "restart this contact's RGK
+    // epoch" case. resetReconnectEpoch throws on an unknown contact, so it only runs once the row exists.
+    // (review I-1a) Narrow the swallow: only the expected absent-row case (ContactError, thrown when the
+    // contact row doesn't exist yet) is benign here — a genuine store-write I/O fault is a DIFFERENT
+    // error and MUST propagate, since silently swallowing it could leave rgkPeerConfirmed stale-true into
+    // the new epoch (violating the epoch-bound invariant, spec §3).
+    await this.d.contacts.resetReconnectEpoch(cid).catch((e) => { if (!(e instanceof ContactError)) throw e; });
+    // (3.1-a) Persist the RGK from this completed handshake (initiator role also returns one). This is
+    // the legitimate first_contact epoch establishment — the one place the engine writes the RGK.
+    // (review I-1b) Belt-and-suspenders: ALWAYS clear rgkPeerConfirmed in the SAME patch that installs
+    // the new first_contact RGK, so the epoch-bound invariant holds atomically even if the reset write
+    // above failed (first_contact legitimately starts unconfirmed).
+    const patch: ContactPatch = { lastSeen: this.d.now(), rgkPeerConfirmed: false };
+    if (res.nextPrekey) patch.nextPrekey = res.nextPrekey;
+    if (res.reconnectGateKey) patch.reconnectGateKey = res.reconnectGateKey;
+    await this.d.contacts.update(cid, patch);
     this.attach(cid, stream, res.session);
     return cid;
   }
@@ -256,17 +318,47 @@ export class ChatEngine {
     if (!c?.onion || !c.nextPrekey) throw new Error('cannot reconnect: no onion / rotation prekey for contact');
     this.d.events?.onContactStatus?.(cid, 'connecting');
     const stream = await this.d.transport.dial(c.onion);
-    const res = await initiatorHandshake(stream, {
-      identity: this.d.identity,
-      responderPublic: c.identity,
-      prekey: c.nextPrekey,
-      mode: 'reconnect'
-    });
+    // (3.1-d) Dial-on-demand reconnect orchestration: pass the stored RGK so I sends mac_R whenever it
+    // holds one for this contact (the responder reads getReconnectKey/isRgkConfirmed via the
+    // ContactPinStore it was given). undefined when no RGK is held yet (bootstrap fail-open).
+    // Use the injectable handshake (defaulting to the real impl) so tests can inject terminal failures
+    // without requiring real crypto scaffolding.
+    const hs = this.d.initiatorHandshake ?? _initiatorHandshake;
+    let res: HandshakeResult;
+    try {
+      res = await hs(stream, {
+        identity: this.d.identity,
+        responderPublic: c.identity,
+        prekey: c.nextPrekey,
+        mode: 'reconnect',
+        reconnectGateKey: c.reconnectGateKey ?? undefined
+      });
+    } catch (err) {
+      // (3.2) Distinguish terminal reconnect failures (user must request a fresh invite) from transient
+      // errors (network hiccup, stream closed, etc.). Terminal errors are HandshakeError instances whose
+      // messages indicate the link is irreversibly exhausted — the two confirmed-terminal cases:
+      //   • 'reconnect failed — request a fresh invite'         (double-reject: link exhausted)
+      //   • 'reconnect offered a last-resort ... opt-in required' (forward-secrecy-degraded path)
+      // All other errors are treated as transient and rethrown as-is.
+      if (err instanceof HandshakeError && isTerminalReconnectError(err.message)) {
+        this.d.events?.onContactStatus?.(cid, 'needs-reinvite');
+        throw new ReconnectFailedError(err.message);
+      }
+      throw err;
+    }
     // Attach (subscribe the Connection to the stream) SYNCHRONOUSLY before any await, so a message the
     // peer sends right after the handshake isn't lost in the gap before we're listening: the handshake
     // reader has detached, and the transport does not buffer for a late subscriber.
     this.attach(cid, stream, res.session);
-    if (res.nextPrekey) await this.d.contacts.update(cid, { nextPrekey: res.nextPrekey, lastSeen: this.d.now() });
+    // (3.1-a, review C-1) Persist the rotation prekey + lastSeen only. The RGK is STABLE — derived once
+    // at first_contact and NEVER rotated per reconnect (rev-4 spec §3). The handshake returns a freshly
+    // derived reconnectGateKey on every reconnect too, but the engine DISCARDS it and keeps the stable
+    // first_contact RGK: rotating it desyncs I and R on a half-completed reconnect (Msg2 dropped in
+    // flight — R completes + would-rotate while I throws before persisting), re-introducing the HIGH-1
+    // permanent cheap-close lockout this workstream exists to fix.
+    const patch: ContactPatch = { lastSeen: this.d.now() };
+    if (res.nextPrekey) patch.nextPrekey = res.nextPrekey;
+    await this.d.contacts.update(cid, patch);
     return this.conns.get(cid) as Connection;
   }
 
@@ -275,14 +367,24 @@ export class ChatEngine {
       const res = await responderHandshake(stream, {
         identity: this.d.identity,
         invites: this.d.prekeys,
-        contacts: this.d.contacts
+        contacts: this.d.contacts,
+        rateLimiter: this.reconnectLimiter // (3.1-e) the one global ungated-reconnect DoS bound
       });
       const cid = contactId(res.peer); // peer already pinned inside the handshake
       // Attach SYNCHRONOUSLY before the await below — otherwise the peer's first message can arrive in
       // the gap before the Connection subscribes and be lost (the handshake reader has detached; the
       // transport doesn't replay for late subscribers). See the handshake→session handoff fix.
       this.attach(cid, stream, res.session);
-      await this.d.contacts.update(cid, { lastSeen: this.d.now() }).catch(() => { /* not yet a full contact row */ });
+      // (3.1-a/b, review C-1) Persist the RGK ONLY on first_contact — that is the legitimate epoch
+      // establishment. The RGK is STABLE and is NEVER overwritten on a reconnect (rev-4 spec §3); doing
+      // so would desync I and R on a half-completed reconnect and re-introduce the HIGH-1 lockout. The
+      // confirm flip is SEPARATE from the RGK and MUST still happen on reconnect: when R verified a valid
+      // mac_R, flip rgkPeerConfirmed — the enforcement-bootstrap, from now on R ENFORCES the mac_R gate
+      // for this contact. .catch() guards the brief window where the row isn't fully written.
+      const patch: ContactPatch = { lastSeen: this.d.now() };
+      if (res.mode === 'first_contact' && res.reconnectGateKey) patch.reconnectGateKey = res.reconnectGateKey;
+      if (res.peerMacRVerified) patch.rgkPeerConfirmed = true;
+      await this.d.contacts.update(cid, patch).catch(() => { /* not yet a full contact row */ });
     } catch {
       try { stream.close(); } catch { /* already closed */ }
     }

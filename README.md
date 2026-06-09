@@ -322,7 +322,7 @@ The current build is **v3.13.1-beta.1**. Each release page carries its own notes
   flipper geometry (v3.13.0 flippers overlapped → no drain gap); slingshots now hug the flippers and
   inlane/outlane guide rails replace the open sides. Separately, the **CryptoVerif** hybrid IND-of-RK
   proof landed (both legs: RK secret if **either** X25519 or ML-KEM holds) — key-schedule core only, so
-  the chat handshake stays EXPERIMENTAL. **454 tests.**
+  the chat handshake stays EXPERIMENTAL. **505 tests.**
 - **v3.13.0-beta.1** — **Dogfooding features.** Clickable search results (jump to the exact note/file/case);
   **Chess vs computer** (pick side + Easy/Medium/Hard alpha-beta); **Pinball rebuilt** into a Space-Cadet-style
   table (power plunger, slingshots, drop targets, rank ladder, wormhole **multiball**, SFX); and **offline AI
@@ -486,7 +486,7 @@ This starts the Vite dev server (HMR) and the Electron main process.
 
 ```bash
 pnpm build        # type-check + bundle main / preload / renderer
-pnpm test         # vitest suite (435 tests as of v3.12.1-beta.1)
+pnpm test         # vitest suite (505 tests as of v3.13.1-beta.1)
 pnpm package      # platform installer for the current host
 pnpm package:win  # cross-build Windows NSIS installer
 ```
