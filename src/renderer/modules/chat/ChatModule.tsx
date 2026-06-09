@@ -12,7 +12,7 @@ import { toast } from '../../state/toasts';
 import { confirmDialog } from '../../state/dialogs';
 import type { ChatContactDTO, ChatMessageDTO, ChatGroupDTO } from '../../../preload/api';
 
-type Status = 'online' | 'connecting' | 'offline';
+type Status = 'online' | 'connecting' | 'offline' | 'needs-reinvite';
 
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
@@ -303,7 +303,7 @@ export function ChatModule(): JSX.Element {
                     onClick={() => open(c.contactId)}
                     style={{ padding: '4px 6px', cursor: 'pointer', fontSize: 12, background: active ? 'navy' : undefined, color: active ? '#fff' : undefined }}
                   >
-                    {statuses[c.contactId] === 'online' ? '🟢' : statuses[c.contactId] === 'connecting' ? '🟡' : '⚪'} {c.displayName}
+                    {statuses[c.contactId] === 'online' ? '🟢' : statuses[c.contactId] === 'connecting' ? '🟡' : statuses[c.contactId] === 'needs-reinvite' ? <span title="Link expired — request a fresh invite out-of-band">⚠</span> : '⚪'} {c.displayName}
                     {c.verified ? ' ✔' : ''}
                   </div>
                 );
@@ -347,6 +347,11 @@ export function ChatModule(): JSX.Element {
                     )}
                     <div style={{ marginTop: 2 }}>safety number (compare out-of-band):</div>
                     <div style={{ fontFamily: 'monospace', fontSize: 10 }}>{sel.safetyNumber}</div>
+                    {statuses[sel.contactId] === 'needs-reinvite' && (
+                      <div style={{ marginTop: 3, padding: '4px 6px', background: '#fff8e0', border: '1px solid #c8a000', color: '#5a4000', fontSize: 10 }}>
+                        ⚠ <b>Link expired — reconnect failed terminally.</b> Request a fresh invite from this contact out-of-band, then accept it below.
+                      </div>
+                    )}
                   </div>
                 )}
                 {selGroup && (

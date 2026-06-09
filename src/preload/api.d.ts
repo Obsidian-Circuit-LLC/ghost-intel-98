@@ -196,7 +196,7 @@ export interface GhostApi {
     groupHistory(groupId: string): Promise<ChatMessageDTO[]>;
     sendGroup(groupId: string, text: string): Promise<string>;
     onMessage(cb: (p: { contactId: string; message: ChatMessageDTO }) => void): () => void;
-    onContactStatus(cb: (p: { contactId: string; status: 'online' | 'connecting' | 'offline' }) => void): () => void;
+    onContactStatus(cb: (p: { contactId: string; status: 'online' | 'connecting' | 'offline' | 'needs-reinvite' }) => void): () => void;
     onDelivery(cb: (p: { contactId: string; messageId: string; state: 'sent' | 'delivered' }) => void): () => void;
     onFileStatus(cb: (p: { contactId: string; transferId: string; status: 'transferring' | 'complete' | 'failed'; progress?: { received: number; total: number } }) => void): () => void;
     onGroupMessage(cb: (p: { groupId: string; message: ChatMessageDTO }) => void): () => void;
