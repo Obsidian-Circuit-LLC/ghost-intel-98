@@ -1,7 +1,7 @@
 /**
  * Tor transport (Phase 1) — runs the bundled C-tor as a controlled sidecar and implements the
  * `Transport` seam: publish a STABLE v3 onion service (loopback target) + dial peer onions via Tor's
- * local SOCKS port. EXPERIMENTAL (the handshake riding on top is unverified).
+ * local SOCKS port. (The handshake riding on top is formally verified internally; external audit pending.)
  *
  * Structure: the protocol DRIVERS (`performSocksConnect`, `controlExchange`) and the pure helpers
  * (`torPaths`, `buildTorrc`) are electron-free and unit-testable over the in-memory pipe. The

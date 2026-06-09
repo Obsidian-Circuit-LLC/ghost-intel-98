@@ -3,7 +3,8 @@
  * to resolved tor paths + per-user stores under dataRoot/chat, gated on settings.chat.networkEnabled
  * (off by default ⇒ tor is never spawned). Pushes engine events to the renderer window.
  *
- * ⚠ EXPERIMENTAL — the handshake is pending formal verification; the renderer shows a banner.
+ * The handshake is formally verified internally (symbolic + computational); independent external
+ * audit + FIPS module remain the only unmet gates.
  */
 import { app, dialog, type BrowserWindow } from 'electron';
 import { basename, join } from 'node:path';

@@ -1,10 +1,10 @@
 /**
  * Chat handshake (Phase 1, v3) — interactive PQ-hybrid mutually-authenticated key exchange.
  *
- * ⚠ EXPERIMENTAL — the construction (see docs/superpowers/specs/...-v3.md) is PENDING formal
- *   verification (ProVerif/CryptoVerif, docs/superpowers/formal/). This implementation is for
- *   functional testing only; it is NOT yet a verified-secure handshake. Do not rely on it for real
- *   adversarial threat models until the formal-verification gate passes.
+ * Formally verified internally — symbolic (ProVerif: first_contact + reconnect/Reject) and
+ *   computational (CryptoVerif: key schedule, mutual auth, KCI, FS, unified KDF→AEAD, mac_R gate),
+ *   under docs/superpowers/formal/. Audit findings HIGH-1 + MED-2 are closed. The only unmet gates
+ *   are an independent external audit and a FIPS module — NOT "externally audited"/"FIPS-validated".
  *
  * Initiator I (dialer/invitee) ⇄ Responder R (inviter/listener). Produces a forward-secret root key
  * + session id consumed by session.ts. Hybrid: X25519 (es/ee/se) ⊕ ML-KEM-1024 (ss_pre to R's signed

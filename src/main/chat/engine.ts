@@ -1,6 +1,7 @@
 /**
  * Chat engine (Phase 1) — ties identity + Transport + handshake + stores + Connection into one
- * object the IPC layer drives. EXPERIMENTAL (the handshake is pending formal verification).
+ * object the IPC layer drives. The handshake is formally verified internally (symbolic + computational);
+ * independent external audit + FIPS module remain the only unmet gates.
  *
  * Responsibilities: publish our onion (via Transport) + accept inbound (responder handshake → wrap
  * in Connection → persist/route); create invites; accept invites (initiator handshake, first

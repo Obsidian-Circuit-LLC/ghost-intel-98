@@ -1,7 +1,7 @@
 /**
  * Chat (beta) — P2P chat over Tor onion services (PQ-hybrid handshake, formally verified internally).
  *
- * The handshake crypto is pending formal verification; this UI shows a loud banner and the feature
+ * The handshake crypto is formally verified internally (external audit + FIPS pending); the feature
  * is opt-in. Inbound text is rendered as TEXT (React escapes by default — never HTML) per the
  * threat model. All transport/crypto lives in the main process; this is a thin client over
  * window.api.chat.

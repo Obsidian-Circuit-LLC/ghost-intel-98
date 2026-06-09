@@ -238,7 +238,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   // (drains SSH sessions, cancels AI streams) rather than killing the process abruptly.
   safeHandle(channels.system.quit, () => { app.quit(); });
 
-  // ---- chat (EXPERIMENTAL P2P over Tor) — NOT in GATE_EXEMPT (requires an unlocked vault) ----
+  // ---- chat (P2P over Tor) — NOT in GATE_EXEMPT (requires an unlocked vault) ----
   const ensureContactId = (v: unknown): string => {
     if (typeof v !== 'string' || !/^[0-9a-f]{64}$/.test(v)) throw new Error('Invalid contactId');
     return v;

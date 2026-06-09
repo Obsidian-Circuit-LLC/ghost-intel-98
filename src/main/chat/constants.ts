@@ -3,7 +3,8 @@
  * domain-separation tags. Centralized so the handshake, invite, and prekey code can't drift on a
  * label (a mismatch silently breaks interop or, worse, a security binding).
  *
- * EXPERIMENTAL: the v4 handshake these feed is pending formal verification (ProVerif/CryptoVerif).
+ * The v4 handshake these feed is formally verified internally (ProVerif symbolic + CryptoVerif
+ * computational); independent external audit + FIPS module remain the only unmet gates.
  * See docs/superpowers/formal/.
  */
 const tag = (s: string): Uint8Array => new TextEncoder().encode(s);
