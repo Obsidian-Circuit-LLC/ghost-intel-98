@@ -1,10 +1,12 @@
 import { app } from 'electron';
-import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { readdirSync, readFileSync, existsSync, statSync, lstatSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { Module } from 'node:module';
 import { parseManifest } from './manifest';
 import { canonicalPluginHash, verifyPluginSignature, type PluginAsset } from './verify';
 import { getPinnedKeysets, isApiCompatible, type TrustKeyset } from './trust';
 import { createPluginContext, type ContextDeps } from './context';
+import { resolveInside } from './paths';
 import type { VerifiedPluginInfo, PluginStatus } from '../../shared/plugin-types';
 
 const MAX_SIG_BYTES = 8192; // ML-DSA-65 sig ~3309 + Ed25519 64; generous cap, bound before verify
@@ -33,7 +35,9 @@ function readAssets(dir: string): PluginAsset[] {
     for (const name of readdirSync(join(adir, rel))) {
       const r = rel ? `${rel}/${name}` : name;
       const full = join(adir, r);
-      if (statSync(full).isDirectory()) walk(r);
+      const lst = lstatSync(full);
+      if (lst.isSymbolicLink()) throw new Error('symlink asset rejected: ' + r);
+      if (lst.isDirectory()) walk(r);
       else {
         if (seen.has(r)) throw new Error(`duplicate asset path: ${r}`);
         seen.add(r);
@@ -58,8 +62,8 @@ export async function loadPlugins(opts: LoaderOptions): Promise<void> {
       if (manifest.id !== id) throw new Error(`manifest.id "${manifest.id}" != dir "${id}"`);
       if (!isApiCompatible(manifest.targetApiVersion)) throw new Error('incompatible API version');
 
-      const mainBuf = readFileSync(join(dir, manifest.main));
-      const rendBuf = readFileSync(join(dir, manifest.renderer));
+      const mainBuf = readFileSync(resolveInside(dir, manifest.main));
+      const rendBuf = readFileSync(resolveInside(dir, manifest.renderer));
       const sig = readFileSync(join(dir, 'signature.bin'));
       if (sig.length > MAX_SIG_BYTES) throw new Error('signature too large');
       const hash = canonicalPluginHash({ manifest: manifestBuf, main: mainBuf, renderer: rendBuf, assets: readAssets(dir) });
@@ -67,8 +71,16 @@ export async function loadPlugins(opts: LoaderOptions): Promise<void> {
 
       if (!opts.isEnabled(id)) { status.push({ id, loaded: false }); continue; }
 
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const mod = require(join(dir, manifest.main)) as { register?: (ctx: unknown) => void };
+      const mainPath = resolveInside(dir, manifest.main); // path-confinement (FIX 2); also used for compile
+      const m = new Module(mainPath, undefined) as Module & {
+        _compile(code: string, filename: string): unknown;
+      };
+      m.filename = mainPath;
+      // _nodeModulePaths is internal but stable; allows plugin to require node builtins / its own deps
+      (m as unknown as { paths: string[] }).paths =
+        (Module as unknown as { _nodeModulePaths(d: string): string[] })._nodeModulePaths(dirname(mainPath));
+      m._compile(mainBuf.toString('utf8'), mainPath); // compiles EXACT bytes that were hashed+verified
+      const mod = (m as unknown as { exports: { register?: (ctx: unknown) => void } }).exports;
       if (typeof mod.register !== 'function') throw new Error('main entry has no register(ctx)');
       const ctx = createPluginContext(manifest.id, manifest.capabilities, fullDeps(opts.contextDeps), handlers);
       mod.register(ctx);
