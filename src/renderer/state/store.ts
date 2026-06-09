@@ -37,7 +37,7 @@ export type ModuleKey =
 
 export interface WindowSpec {
   id: string;
-  module: ModuleKey;
+  module: string;
   title: string;
   /** Module-specific props (e.g. { caseId: '…' } for the case-detail variant). */
   props?: Record<string, unknown>;

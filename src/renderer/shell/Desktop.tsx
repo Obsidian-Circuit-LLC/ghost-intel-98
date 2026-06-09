@@ -6,6 +6,7 @@
 import { useEffect, useState } from 'react';
 import { Icon, glyphFor, glyphNodeFor } from './Icon';
 import { useSettings, useWindows, type ModuleKey } from '../state/store';
+import { getModule } from '../state/registry';
 import { playClick } from '../audio/synth';
 
 // Left-column desktop icons (auto-flow grid). Shred is intentionally NOT here — it's pinned to
@@ -28,34 +29,6 @@ const cornerShortcuts: { module: ModuleKey; label: string }[] = [
   { module: 'shred', label: 'Shred' }
 ];
 
-const moduleTitles: Record<ModuleKey, string> = {
-  cases: 'My Cases',
-  notepad: 'Notepad 98',
-  briefcase: 'Briefcase',
-  calendar: 'Calendar',
-  reminders: 'Reminders',
-  alarm: 'Alarm',
-  shred: 'Shred',
-  settings: 'Settings',
-  'net-explorer': 'Net Explorer',
-  mail: 'Mail',
-  dialterm: 'DialTerm',
-  eyespy: 'EyeSpy',
-  'ai-assistant': 'AI Assistant',
-  'doc-viewer': 'Document Viewer',
-  search: 'Search',
-  whiteboard: 'Whiteboard',
-  'media-player': 'Jukebox',
-  geoint: 'GeoINT',
-  bookmarks: 'Bookmarks',
-  markets: 'Markets',
-  solitaire: 'Solitaire',
-  minesweeper: 'Mine Detector',
-  chess: 'Chess',
-  pinball: 'DCS Space Ball',
-  chat: 'Chat (beta)',
-  help: 'RTFM'
-};
 
 export function Desktop(): JSX.Element {
   const [selected, setSelected] = useState<string | null>(null);
@@ -78,7 +51,7 @@ export function Desktop(): JSX.Element {
       onSelect={() => setSelected(s.module)}
       onActivate={() => {
         if (settings?.soundEnabled) playClick();
-        open({ module: s.module, title: moduleTitles[s.module] });
+        open({ module: s.module, title: getModule(s.module)?.title ?? s.module });
       }}
     />
   );
@@ -95,4 +68,3 @@ export function Desktop(): JSX.Element {
   );
 }
 
-export { moduleTitles };

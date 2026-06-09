@@ -9,6 +9,9 @@ import '98.css';
 import './styles/theme.css';
 import './styles/98.overrides.css';
 import { App } from './App';
+import { registerBuiltins } from './modules/register-builtins';
+
+registerBuiltins();
 
 const container = document.getElementById('root');
 if (!container) {

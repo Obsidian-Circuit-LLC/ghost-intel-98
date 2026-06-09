@@ -3,7 +3,7 @@
  */
 
 import type { MouseEvent, ReactNode } from 'react';
-import type { ModuleKey } from '../state/store';
+import { getModule } from '../state/registry';
 
 interface IconProps {
   label: string;
@@ -75,7 +75,7 @@ export function NotepadGlyph(): JSX.Element {
 }
 
 /** Custom hand-drawn SVG glyph for modules that have one (falls through to the emoji otherwise). */
-export function glyphNodeFor(m: ModuleKey): ReactNode | undefined {
+export function glyphNodeFor(m: string): ReactNode | undefined {
   if (m === 'cases') return <MyComputerGlyph />;
   if (m === 'notepad') return <NotepadGlyph />;
   return undefined;
@@ -107,35 +107,6 @@ export function Icon(props: IconProps): JSX.Element {
   );
 }
 
-const GLYPHS: Record<ModuleKey, string> = {
-  cases: '📁',
-  notepad: '🗒',
-  calendar: '📅',
-  reminders: '🔔',
-  alarm: '⏰',
-  shred: '🗑',
-  settings: '⚙',
-  'net-explorer': '🌐',
-  mail: '✉',
-  dialterm: '📞',
-  eyespy: '📷',
-  'ai-assistant': '✨',
-  'doc-viewer': '📄',
-  search: '🔍',
-  whiteboard: '🗺',
-  'media-player': '🎵',
-  geoint: '🌍',
-  bookmarks: '🔖',
-  markets: '📈',
-  briefcase: '💼',
-  solitaire: '🃏',
-  minesweeper: '💣',
-  chess: '♟',
-  pinball: '🕹',
-  chat: '💬',
-  help: '?'
-};
-
-export function glyphFor(m: ModuleKey): string {
-  return GLYPHS[m] ?? '■';
+export function glyphFor(m: string): string {
+  return getModule(m)?.glyph ?? '▢';
 }

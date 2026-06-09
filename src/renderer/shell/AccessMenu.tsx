@@ -5,7 +5,7 @@
 
 import { useState } from 'react';
 import { useSettings, useWindows, type ModuleKey } from '../state/store';
-import { moduleTitles } from './Desktop';
+import { getModule } from '../state/registry';
 import { glyphFor } from './Icon';
 import { playClick } from '../audio/synth';
 import { confirmDialog } from '../state/dialogs';
@@ -40,7 +40,7 @@ export function AccessMenu({ onClose }: AccessMenuProps): JSX.Element {
 
   function openModule(mod: ModuleKey, label: string): void {
     if (settings?.soundEnabled) playClick();
-    open({ module: mod, title: moduleTitles[mod] ?? label });
+    open({ module: mod, title: getModule(mod)?.title ?? label });
     onClose();
   }
 
@@ -50,7 +50,7 @@ export function AccessMenu({ onClose }: AccessMenuProps): JSX.Element {
     if (settings?.soundEnabled) playClick();
     if (s.kind === 'module') {
       const mod = s.target as ModuleKey;
-      open({ module: mod, title: moduleTitles[mod] ?? s.label });
+      open({ module: mod, title: getModule(mod)?.title ?? s.label });
     } else {
       void window.api.system.openExternal(s.target);
     }
