@@ -1,140 +1,156 @@
-# `authorized-target-egress` — Design Spec
+# `authorized-target-egress` — Design Spec (v2, post-red-team)
 
-**Status:** design — to be red-teamed, then operator-reviewed, before any plan.
+**Status:** design — revised after an adversarial red-team pass (3 critical / 5 high / 4 medium, all addressed below). Awaiting operator review (one open decision: §3.1 non-HTTP egress).
 **Date:** 2026-06-10
 **Author:** Obsidian Circuit (with Claude)
 **Part of:** Platform v1.1 (public MIT core). Sibling capability `persistent-background-connection` (Telegram) is a separate, later design.
+**Red-team:** `red-teamer` opus pass, 2026-06-10 — verdict on v1 was "does not meet either goal"; this v2 closes the must-fix list.
 
-**Goal:** Add a plugin capability that lets a signed first-party plugin (the OSINT plugin's bundled offensive scanner) send attack traffic to **authorized** targets — including the private/loopback ranges the normal `egress` gate rejects — with per-request scope enforcement owned by DCS98 and a tamper-evident audit of every request.
+**Goal:** A plugin capability that lets a signed first-party plugin (the OSINT plugin's bundled offensive scanner) send attack traffic to **authorized** targets — including private/loopback ranges the normal `egress` gate rejects — with per-request scope enforcement owned by DCS98 and a **genuinely tamper-evident** audit of every proxied request.
 
-**Architecture:** The capability is backed by four units in the DCS98 main process: a `ScopeManifest` (the authorization), a pure `ScopeEnforcer` (allow/deny decision), an `AuthorizedEgressProxy` (a loopback proxy the scanner routes through, enforcing the decision per-request), and `EngagementAudit` (every decision → immutable timeline). The scanner subprocess reaches targets only through the proxy.
+**Architecture:** Four units in DCS98 main: a `ScopeManifest` (authorization), a pure `ScopeEnforcer` (allow/deny over the *full resolved address set*), an `AuthorizedEgressProxy` (a loopback CONNECT proxy that **pins connections to the validated IP** and the scanner routes all TCP through), and `EngagementAudit` (an append-only, hash-chained, signed-at-write log). The scanner reaches HTTP/TCP targets only through the proxy.
 
-**Threat model (stated up front, governs the whole design):** The scanner is *our own PQ-hybrid-signed, first-party code* running in a subprocess with raw OS sockets. The signature is the boundary against malicious code. This capability therefore defends against **operator accident** — a stale/expired scope, a fat-fingered target, a crawler or redirect wandering out of scope — and provides a **tamper-evident record of exactly what was attacked**. The proxy is enforcement-against-accident + audit, **not** a hard sandbox against a malicious scanner. (A true OS network jail was considered and rejected for v1: OS-specific, brittle on Windows, overkill for signed first-party code.)
+**Threat model (governs everything):** the scanner is our own PQ-hybrid-signed, first-party code with raw OS sockets; the signature is the boundary against malicious code. This capability defends against **operator accident** (stale/expired scope, fat-fingered target, crawl/redirect/DNS drift) and provides a **tamper-evident record of what was attacked**. *The red-team correctly noted v1 leaned on the same trusted-scanner code path for the audit it was supposed to make trustworthy.* v2 fixes that by (a) pinning enforcement to DCS98-observed facts (the IP we dialed), not scanner claims, and (b) making the audit tamper-evident against everything except the scanner deliberately bypassing the proxy — which is the explicitly-accepted malicious-first-party case, surfaced honestly (§3.1, §8).
 
 ---
 
 ## 1. Components
 
 ### 1.1 `ScopeManifest` (`src/main/offensive/scope-manifest.ts`)
-The authorization document, ported from deep-eye's `core/scope_manifest.py` (clean, stdlib-only logic).
-
 ```typescript
 export interface ScopeManifest {
-  manifestId: string;                 // stable id, appears in every audit event
+  manifestId: string;
   mode: 'engagement' | 'bounty' | 'self' | 'lab';
-  expiresAt: string;                  // ISO-8601 UTC; MANDATORY, no never-expire
-  include: ScopeRule[];               // at least one
-  exclude: ScopeRule[];               // exclusions always win
-  requiresSignedAuthorization?: boolean; // if true, a valid signed token is required to grant
-  attestation?: { operator: string; attestedAt: string }; // local-authored attestation
+  expiresAt: string;          // ISO-8601 UTC; MANDATORY, must be in the future at load
+  notBefore?: string;         // optional ISO-8601; scope inactive before this
+  include: ScopeRule[];       // ≥1
+  exclude: ScopeRule[];       // exclusions always win
+  attestation?: { operator: string; attestedAt: string };
 }
 export type ScopeRule =
-  | { kind: 'domain'; value: string }   // 'example.com' or '*.example.com'
+  | { kind: 'domain'; value: string }   // 'example.com' or '*.example.com' (leftmost-only wildcard)
   | { kind: 'cidr'; value: string };    // IPv4/IPv6 CIDR
-// NOTE: ASN rules are DEFERRED to when the IP-intelligence dataset (BGP/RIR, the Team-Cymru-class
-// tier-2 tool) exists. Resolving a target IP→ASN is impossible without it, and an unenforceable
-// ASN *exclude* rule would be a fail-OPEN hole. v1 therefore REJECTS any manifest containing an ASN
-// rule (clear error: "ASN scope rules require the IP-intelligence dataset, not yet available").
+// ASN rules DEFERRED (no IP-intel dataset yet → would be fail-OPEN on excludes); v2 REJECTS asn rules.
+export function contentHash(m: ScopeManifest): string; // canonical SHA-256 over normalized manifest
 ```
-`parseScopeManifest(raw): ScopeManifest` validates: non-empty `manifestId`, known `mode`, parseable not-already-expired `expiresAt`, ≥1 `include` rule, well-formed rules (valid CIDR, domain syntax), and **rejects any `asn`-kind rule** (deferred — see note). Throws `ScopeManifestError` on any malformation (fail-closed).
+**`requiresSignedAuthorization` is NOT a manifest field** (red-team Finding 8c: an artifact must not self-assert whether it needs to be signed). Whether a signature is required is **policy** in settings (§2, §5).
 
-### 1.2 `ScopeEnforcer` (`src/main/offensive/scope-enforcer.ts`)
-Pure decision function — the single source of truth, no I/O:
+`parseScopeManifest(raw)` validates and **normalizes** fail-closed: non-empty `manifestId`; known `mode`; `expiresAt` parses and is in the future; `notBefore ≤ expiresAt` if present; ≥1 `include`; every rule well-formed; **rejects any `asn` rule** with a clear error. Throws `ScopeManifestError` otherwise.
+
+### 1.2 `ScopeEnforcer` (`src/main/offensive/scope-enforcer.ts`) — pure, no I/O
 ```typescript
 export type ScopeDecision = { allow: true } | { allow: false; reason: string };
-export function decide(manifest: ScopeManifest, target: ResolvedTarget, now: number): ScopeDecision;
-// ResolvedTarget = { host: string; ip: string }
+export interface ResolvedTarget { host: string; ips: string[]; }   // ALL resolved addresses
+export function decide(m: ScopeManifest, t: ResolvedTarget, now: number): ScopeDecision;
 ```
-Decision order (deny-by-default): **expired** (`now >= expiresAt`) → **excluded** (any exclude rule matches → deny) → **included** (some include rule matches → allow) → **deny**. Matching: domain uses exact or `*.`-suffix on the request host; CIDR uses *subnet containment* (the resolved target IP ∈ the CIDR; for an excluded CIDR, any IP-in-CIDR denies). `now` is injected (determinism). Fully unit-testable in isolation.
+Order (deny-by-default): **time-invalid** (`now >= expiresAt`, or `notBefore` set and `now < notBefore`) → **any IP excluded** (any address matches any exclude → deny) → **host excluded** → **every IP must be includable**: deny unless *the host matches an include domain rule* **or** *every resolved IP is inside some include CIDR* (red-team Finding 4 — checking one IP is unsafe; require the whole set). `now` injected.
+
+**Exact, tested matching semantics (red-team Findings 5, 6):**
+- **Domain:** lowercase; strip exactly one trailing dot; convert to punycode (ASCII) before compare; split on `.` and match on **label boundaries** (never `endsWith`/substring on raw strings). `example.com` matches only `example.com`. `*.example.com` matches `a.example.com`, `a.b.example.com` — **not** the apex `example.com` (needs its own rule) and not `evil-example.com`/`example.com.attacker.com`. `*` is permitted **only** as the leftmost label; reject otherwise.
+- **Address:** parse every target IP and every CIDR to a canonical integer form; **map IPv4-mapped-IPv6 (`::ffff:a.b.c.d`) to IPv4** and strip IPv6 zone-ids **before** containment (reuse `validate.ts`'s existing canonicalization — `ipv6ToMappedIPv4`, etc.); integer containment, not string. Excludes evaluated on the normalized address (so a `10.0.0.0/8` exclude catches `::ffff:10.0.0.5`).
 
 ### 1.3 `AuthorizedEgressProxy` (`src/main/offensive/egress-proxy.ts`)
-A loopback HTTP + HTTPS-CONNECT proxy bound to `127.0.0.1:<ephemeral>`, started when a scan begins and torn down when it ends. For **every** request (initial, crawl-discovered, redirect hop):
-1. Extract the target host; DNS-resolve to IP(s) (reuse the resolver behind `assertResolvedPublic`).
-2. `ScopeEnforcer.decide(manifest, resolvedTarget, now)`.
-3. **Deny → respond `403` to the scanner** and emit a `denied` audit event. **Allow →** forward the request, emit an `allowed` audit event, and apply the rate limiter (configurable req/s; the proxy is the chokepoint deep-eye lacks).
-The proxy never bypasses `decide`; redirects are re-checked because they pass back through the proxy as new requests. The proxy holds no secrets and forwards no credentials cross-origin (it inherits the platform's existing cross-origin credential-strip rule).
+A loopback HTTP + HTTPS-CONNECT proxy on `127.0.0.1:<ephemeral>`, started per scan. For **every** request (initial, crawl-discovered, every redirect hop):
+1. Extract host; **resolve once** to the full IP set.
+2. `decide(manifest, {host, ips}, now())`.
+3. **Deny → `403` to the scanner + a `denied` audit event.** **Allow →** dial the upstream using a **fixed-`lookup` agent that returns ONLY one of the just-validated IPs** — *no re-resolution between check and connect* (red-team Finding 1, the critical TOCTOU/rebind fix). Carry the original Host/SNI for TLS. Emit an `allowed` audit event recording the **IP DCS98 actually dialed** (not a scanner claim). Apply the rate limiter (§4).
+Redirects: each hop is a fresh resolve-all + decide + pin against **both** host and IP dimensions; deny if either is out of scope (red-team Finding 10). Cross-origin credential strip is inherited from the platform egress rule. Non-HTTP redirects (meta-refresh/JS) are out of audit scope (documented).
 
 ### 1.4 `EngagementAudit` (`src/main/offensive/engagement-audit.ts`)
-`record(caseId, event)` appends to the case's **immutable timeline** (`caseStore.addTimeline`). Event shape: `{ manifestId, target, ip, method, decision: 'allowed'|'denied', reason?, attackType?, at }`. Logged for **both** allowed and denied requests — the timeline is the tamper-evident attack record (far better than deep-eye's plaintext log). Optionally PQ-signs the audit batch on engagement close (reuse signing primitives) for an externally-verifiable record.
+**Not** the case `timeline.json` (red-team Findings 2, 3, 11 — that file is plaintext, full-rewrite O(n²), unsigned). Instead a dedicated **append-only** audit log per engagement under the vault: one JSON line per event, fsync-batched, **hash-chained** (`h_n = SHA-256(h_{n-1} ∥ canonical(event_n))`) with a separately-persisted head pointer, and **each event (or small batch) signed at write time** with a key the scanner subprocess cannot read (reuse the offline/loader trust material; key isolation per §8). Load-time verification detects truncation, reordering, or edits. Structured event type:
+```typescript
+interface AuditEvent {
+  seq: number; prevHash: string;
+  manifestId: string; manifestContentHash: string;
+  host: string; dialedIp: string; port: number; method: string;  // DCS98-observed facts
+  decision: 'allowed' | 'denied'; reason?: string;
+  attackType?: string;          // SCANNER-ASSERTED, UNVERIFIED — labeled as such
+  at: string;
+}
+```
+A one-line summary of each event is *also* mirrored into the case timeline for the operator's at-a-glance view, but the **audit log is the authority**. Honest completeness statement (carried into §8): the audit is **complete only for traffic that goes through the proxy** and **tamper-evident against the operator/UI and disk-level edits**, not against the scanner deliberately using raw sockets (the accepted malicious-first-party case).
 
 ---
 
 ## 2. Two-provenance scope model
-
-**Local-authored (default).** The operator authors a `ScopeManifest` in a DCS98 form (targets/CIDRs, exclude list, mandatory expiry). On save, an `attestation` is recorded and an operator-attestation event is written to the timeline ("I am authorized to test these targets — <operator>, <time>"). Stored in the vault.
-
-**Signed authorization (optional layer).** A `ScopeManifest` may be delivered as a signed token: the canonical hash of the manifest bytes is verified with the **existing `verifyPluginSignature` primitives** (Ed25519 ∥ ML-DSA-65) against a configured **issuer** public key (per-engagement or in settings — distinct from the plugin trust root). If `requiresSignedAuthorization` is true, the capability is **not granted** unless a valid issuer signature is present and unexpired. No new crypto; no AGPL Shadowbroker. This gives third-party-attested authorization for engagements that need it (client/bounty sign-off).
-
-The capability is granted by the loader **only** when: the manifest parses, is unexpired, and — if `requiresSignedAuthorization` — verifies against an authorized issuer key.
+- **Local-authored (default).** Operator authors a `ScopeManifest` in DCS98 (targets/CIDRs, excludes, mandatory expiry). On save, an `attestation` is recorded and an operator-attestation event is written. Stored in the vault.
+- **Signed authorization (optional, policy-gated).** A manifest may be delivered as a signed token. **Distinct signing domain `DCS98-SCOPE-v1`** (red-team Finding 8b — must never collide with the plugin trust root's `DCS98-PLUGIN-v1`). The signed payload binds `{ manifestContentHash, engagementId, issuedAt, nonce, expiresAt }` and is verified with the existing hybrid primitives against a **configured issuer key** (`settings.offensive.issuerKeys`, separate from the plugin trust root). **Anti-replay:** the `(issuerKeyId, nonce)` pair is recorded; reuse is rejected; `engagementId` binds the token to one engagement (red-team Finding 8a). Whether a signature is **required** is `settings.offensive.requireSignedAuthorization` (policy), not a manifest field. If required and absent/invalid/replayed/expired → capability not granted.
 
 ---
 
 ## 3. Capability wiring
+- Add `'authorized-target-egress'` to `CAPABILITIES` (`src/shared/plugin-types.ts`) + a scoped `attackEgress?` surface on `PluginContext`: `{ proxyUrl(): string; scopeContentHash(): string }`. Distinct from `egress`: permits private/loopback, **only** for in-scope targets, **only** through the pinning proxy.
+- `wire-deps.ts` builds it **only** when a valid, time-active manifest is loaded and (if policy requires) a valid signed token is present. The plugin spawns the scanner configured to use `proxyUrl()` and **with `NO_PROXY` explicitly cleared/empty in the subprocess env** (red-team Finding 7 — a default `NO_PROXY=localhost` would silently bypass the gate for the loopback targets this exists to hit).
 
-- Add `'authorized-target-egress'` to `CAPABILITIES` (`src/shared/plugin-types.ts`) and a scoped surface to `PluginContext` (`src/main/plugins/context.ts`): `attackEgress?: { proxyUrl(): string; scopeDecision(target): ScopeDecision }`. Distinct from `egress` — it *permits* private/loopback, but only for in-scope targets, and only through the proxy.
-- `wire-deps.ts` builds the surface only when a valid `ScopeManifest` is loaded for the engagement. The plugin spawns its scanner subprocess configured to use `attackEgress.proxyUrl()` as its HTTP/S proxy (deep-eye's `proxy` config). The scanner sees a normal proxy; the gate is invisible to it and unbypassable *by accident*.
-- The capability request renders a distinct, loud authorization surface (not the generic capability grant): it names the engagement and scope.
+### 3.1 Non-HTTP egress — the honesty boundary (OPEN DECISION for operator)
+A cooperative `HTTP(S)_PROXY` only gates HTTP(S) clients that honor it. deep-eye's **web-vuln engine (the 45+ checks: SQLi/XSS/SSTI/XXE/etc.) is HTTP** and will route through the CONNECT proxy. But its **raw-socket recon** (port scans, raw DNS, banner grabs) and WebSocket modules do **not** honor an HTTP proxy and would egress ungated + unaudited. Two honest options, **operator to choose**:
+- **(A) Constrain + disclose (recommended for v1):** in the DCS98 integration, **disable deep-eye's raw-socket recon modules**; route only its HTTP(S) engine (forced through the CONNECT proxy, `NO_PROXY` cleared). Audit/scope then cover the HTTP attack surface fully; any residual non-HTTP path is disabled, not silently bypassing. We **enumerate every deep-eye module** by transport during integration and gate the build to HTTP-only. Loud disclosure in the authorization UI: "scope + audit cover HTTP(S) attack traffic; raw-socket scanning is disabled in this build."
+- **(B) OS-level jail for the subprocess:** revisit the rejected netns/firewall approach *specifically* so all subprocess TCP (raw included) is forced through the gate — true coverage of raw scans, at the cost of OS-specific complexity (Windows WFP) and brittleness. Larger effort.
+The capability's claims must match the choice; the spec will not claim "all attack traffic gated" under (A).
 
 ---
 
 ## 4. Authorization moment, Tor, rate-limiting
-
-- **Per-scan confirmation (default):** before each scan, DCS98 shows "Send attack traffic to `<target(s)>` under engagement `<manifestId>`, expiring `<date>` — <scope summary>? Confirm." Recorded to the timeline. **User-preference toggle** (`settings.offensive.confirmMode: 'per-scan' | 'per-session'`) switches to confirm-once-per-engagement-session (one confirmation covers scans within that loaded-engagement session; re-arming on a new session or scope change). Default `per-scan`.
-- **Tor:** opt-out for offense (default **direct-to-target** through the proxy — attack traffic over Tor is hostile to the network and slow). An option chains an external pentest proxy (Burp/ZAP) *downstream* of `AuthorizedEgressProxy`. The choice is explicit and recorded; never a silent direct-egress surprise.
-- **Rate-limiting:** enforced at the proxy, configurable req/s (`settings.offensive.rateLimitPerSec`), since deep-eye doesn't honor its own. Disclosed in the confirmation prompt.
+- **Per-scan confirmation (default):** before each scan, DCS98 shows target(s), `manifestId`, expiry, scope summary, **and the transport-coverage disclosure (§3.1)** → explicit confirm, recorded with the **manifest content hash**.
+- **Per-session toggle** (`settings.offensive.confirmMode`): one confirmation covers scans **bound to the active manifest content hash**; **any change to the content hash re-arms** (red-team Finding 9 — bind to content, not `manifestId`). Default `per-scan`.
+- **Tor:** opt-out for offense; default **direct-to-target** through the proxy; option chains an external pentest proxy (Burp/ZAP) downstream. Explicit + recorded.
+- **Rate-limiting:** enforced at the proxy, configurable req/s (deep-eye doesn't honor its own). Disclosed in the prompt.
 
 ---
 
-## 5. Settings additions (`src/shared/types.ts`)
+## 5. Settings (`src/shared/types.ts`)
 ```typescript
 offensive: {
-  confirmMode: 'per-scan' | 'per-session'; // default 'per-scan'
-  rateLimitPerSec: number;                 // default e.g. 10
-  downstreamProxy?: string | null;         // optional Burp/ZAP, default null (direct)
-  issuerKeys?: { edPubHex: string; pqPubHex: string }[]; // authorized scope-signing issuers
+  confirmMode: 'per-scan' | 'per-session';        // default 'per-scan'
+  rateLimitPerSec: number;                         // default 10
+  downstreamProxy?: string | null;                 // optional Burp/ZAP; default null (direct)
+  requireSignedAuthorization: boolean;             // POLICY; default false
+  issuerKeys?: { keyId: string; edPubHex: string; pqPubHex: string }[]; // authorized scope signers
 };
 ```
-Defaults are fail-safe: `per-scan`, no downstream proxy, no issuer keys (so any `requiresSignedAuthorization` manifest is refused until an issuer is configured).
+Fail-safe defaults: `per-scan`, no downstream proxy, signatures not required only because no issuer is configured — but **if `requireSignedAuthorization` is true and `issuerKeys` empty, every signed-required manifest is refused** (fail-closed).
 
 ---
 
-## 6. Error handling (all fail-closed)
+## 6. Error handling — all fail-CLOSED (red-team Finding 12 — table expanded)
 
 | Condition | Behavior |
 |---|---|
-| No manifest loaded | Capability not granted; scanner cannot egress |
-| Manifest expired | Not granted; denial logged |
-| `requiresSignedAuthorization` but no/invalid signature | Not granted; denial logged |
-| Target not in scope (incl. crawl/redirect drift) | Proxy `403` + `denied` audit event; scan continues against in-scope targets only |
-| Proxy unreachable / down | Scanner cannot egress (correct — no ungated path) |
-| Malformed manifest | `ScopeManifestError`, not granted |
+| No manifest / expired / `notBefore` not reached | Capability not granted; logged |
+| Policy requires signature; absent/invalid/replayed/expired/wrong-issuer | Not granted; logged |
+| Target host or any resolved IP out of scope (incl. crawl/redirect/rebind) | Proxy `403` + `denied` event; scan continues against in-scope targets only |
+| **Resolver timeout / DNS error mid-request** | **Deny** (can't validate → can't dial) + logged |
+| **`decide()` throws / rate-limiter state error** | **Deny** + logged |
+| **Audit write fails** | **Deny the request** (no audit → no forward), bounded so it can't wedge the proxy |
+| **Wall-clock moves backward during a session** | Session invalidated; re-confirm required (anti clock-rollback) |
+| Proxy unreachable/down | Scanner cannot egress (no ungated path *for proxied traffic*; see §3.1 for raw) |
+| Malformed manifest | `ScopeManifestError`; not granted |
 | Scan confirmation declined | Scan does not start |
 
 ---
 
 ## 7. Testing
-
-- **`ScopeEnforcer` decision matrix** (pure unit): expired; exclude-wins-over-include; `*.`-wildcard domain; CIDR subnet containment (in/out); excluded-CIDR IP-in-CIDR denies; deny-by-default for unmatched; injected `now`.
-- **`parseScopeManifest`**: rejects missing/already-past expiry, empty include, bad CIDR/domain, unknown mode, **and any `asn`-kind rule** (deferred-with-clear-error).
-- **Signed authorization**: valid issuer signature grants; wrong key / tampered manifest / `requiresSignedAuthorization`-with-no-issuer all refuse (reuse the verify test patterns).
-- **`AuthorizedEgressProxy`** (integration, mocked upstream): in-scope request forwarded + `allowed` event; out-of-scope → `403` + `denied` event; redirect to out-of-scope → denied; rate limiter caps throughput; private/loopback target **allowed when in-scope** (the whole point) and **denied when not**.
-- **`EngagementAudit`**: allowed and denied both append timeline events with the right fields.
-- **Confirmation/Tor/rate-limit settings**: defaults are fail-safe; `per-session` arms once.
-
----
-
-## 8. Security invariants
-
-- The normal `egress` capability and its SSRF gate are **unchanged**; this is a separate, deliberately-scoped capability. A plugin without `authorized-target-egress` can never reach private/loopback.
-- Every attack request is enforced (per-request) and recorded (immutable timeline) — the audit is the responsible-use control, and it is owned by DCS98, not the scanner.
-- The honest limit (§ threat model) is stated in code comments and the capability's authorization UI: this is accident-prevention + tamper-evident audit over signed first-party code, not a sandbox.
-- No telemetry; the proxy is loopback-only; outbound is gated by scope, not the public-only SSRF rule.
+- **`ScopeEnforcer`** (pure): expired / notBefore; exclude-wins; **domain semantics** — apex-vs-wildcard, `evil-example.com` rejected, `example.com.attacker.com` rejected, trailing-dot, punycode/IDN confusable, case; **address semantics** — CIDR containment in/out, **IPv4-mapped-IPv6 exclude catches `::ffff:10.x`**, zone-id stripped, IPv6 CIDR; **multi-IP** — deny if *any* resolved IP out of scope; deny-by-default; injected `now`.
+- **`parseScopeManifest`**: rejects missing/past expiry, empty include, bad CIDR/domain, unknown mode, **any asn rule**.
+- **Signed path**: valid issuer grants; wrong key / tampered manifest / replayed nonce / wrong engagementId / expired token / `requireSignedAuthorization`-with-no-issuer all refuse; **`DCS98-SCOPE-v1` vs `DCS98-PLUGIN-v1` cross-domain confusion** test (a plugin signature must not validate a scope token and vice-versa).
+- **Proxy** (integration, mocked upstream + a controllable resolver): in-scope allowed + `allowed` event recording the dialed IP; out-of-scope `403` + `denied`; **DNS-rebind** — resolver returns in-scope on check-query and out-of-scope on a second query → connection still goes to the pinned validated IP, never the rebound one; multi-IP dual-stack denied if either family out of scope; redirect-to-out-of-scope denied; private/loopback **allowed when in-scope** and **denied when not**; rate limiter caps throughput; `NO_PROXY` cleared in spawned env.
+- **`EngagementAudit`**: hash chain verifies; a hand-edited/truncated/reordered log **fails** verification on load; allowed+denied both recorded with DCS98-observed fields; `attackType` flagged unverified.
+- **Per-session re-arm**: content-hash change re-arms; backward clock invalidates session.
 
 ---
 
-## 9. Out of scope (this capability)
+## 8. Security invariants (honest)
+- The normal `egress` capability + its SSRF gate are **unchanged**; a plugin without `authorized-target-egress` can never reach private/loopback.
+- Enforcement keys on **DCS98-observed facts** (the validated, pinned IP we dialed), not scanner assertions; the only scanner-asserted field (`attackType`) is labeled unverified.
+- The audit is **append-only, hash-chained, signed-at-write**, tamper-evident against disk edits and the UI; **complete only for proxied traffic**. Under option §3.1(A), non-HTTP raw scanning is **disabled**, so "proxied traffic" = "the attack surface this build performs." This completeness boundary is stated in code, the spec, and the authorization UI — never overclaimed.
+- A deliberately-malicious first-party scanner using raw sockets to bypass the proxy is **explicitly out of model** (the signature is that boundary) and is surfaced, not hidden.
+- No telemetry; proxy loopback-only; outbound gated by scope, not the public-only SSRF rule.
+
+---
+
+## 9. Out of scope
 - `persistent-background-connection` (Telegram) — separate design.
-- An OS-level network jail (rejected for v1; revisitable if a hard sandbox is ever required).
-- The OSINT plugin itself / the bundled scanner integration (subsystem 2) — this is the platform capability it will target.
-- A scope-issuing authority service (the signed path *verifies* tokens; issuing them is external/product).
-- **ASN scope rules** — deferred until the IP-intelligence (BGP/RIR) dataset exists (a tier-2 OSINT tool). v1 rejects manifests containing them rather than enforce them fail-open.
+- A scope-issuing authority service (the signed path *verifies*; issuing is external/product).
+- **ASN scope rules** — deferred until the IP-intel (BGP/RIR) dataset exists; v2 rejects them rather than enforce fail-open.
+- Option §3.1(B) OS-level jail, unless the operator selects it.
+- The OSINT plugin / bundled-scanner integration itself (subsystem 2) — this is the platform capability it targets.
