@@ -117,14 +117,26 @@ describe('PrekeyStore', () => {
     expect(offered.prekey.prekeyId).toEqual(pending.prekeyId); // re-offer, not a fresh mint
     expect(await store.remaining()).toBe(before);              // nothing minted, nothing consumed
   });
-  it('offerCurrent mints only when the contact has no unconsumed issued prekey; per-cid mint cap', async () => {
+  it('offerCurrent mints only when the contact has no unconsumed issued prekey', async () => {
     const id = generateIdentity();
     const store = new PrekeyStore(await tmp('prekeys.json'), id);
+    const before = await store.remaining();
     const first = await store.offerCurrent('cid-y');         // none yet → mint one
     expect(await store.identifyContact(first.prekey.prekeyId)).toBe('cid-y');
-    // exceed the per-cid outstanding cap → cheap fail, not unbounded mint
-    for (let i = 0; i < MINT_CAP; i++) await store.issueNext('cid-y');
-    await expect(store.offerCurrent('cid-y')).rejects.toThrow(/mint cap|rate/i);
+    expect(await store.remaining()).toBe(before + 1);        // exactly one minted
+  });
+  it('offerCurrent re-offers first and NEVER throws when an unconsumed prekey exists (#40, spec §2)', async () => {
+    const id = generateIdentity();
+    const store = new PrekeyStore(await tmp('prekeys.json'), id);
+    // Issue several prekeys to ONE contact, all unconsumed. A legitimate stranded peer at/over the
+    // old per-cid cap must still recover — re-offer-first never refuses when an unconsumed id exists.
+    const ids = [];
+    for (let i = 0; i < MINT_CAP + 2; i++) ids.push((await store.issueNext('cid-z')).prekeyId);
+    const before = await store.remaining();
+    const offered = await store.offerCurrent('cid-z');       // must NOT throw, must NOT mint/consume
+    expect(verifyKemPrekey(offered.prekey, id.publicKeys.ed25519)).toBe(true);
+    expect(offered.prekey.prekeyId).toEqual(ids[ids.length - 1]); // the NEWEST unconsumed (current)
+    expect(await store.remaining()).toBe(before);            // remaining() unchanged
   });
 });
 
