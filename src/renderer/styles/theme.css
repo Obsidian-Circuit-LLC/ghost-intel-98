@@ -861,8 +861,39 @@ input.ga98-text, select.ga98-text {
 @keyframes ga98-march { 0%, 100% { transform: translateX(-3px); } 50% { transform: translateX(3px); } }
 .ga98-dialstage.active .ga98-marcher { animation: ga98-march 0.5s steps(2, jump-none) infinite; }
 
+/* Boot splash loading bar — Win9x-style scrolling segmented marquee, shown under the
+   startup image while the jingle plays. Indeterminate by design: the work happening here
+   (auth check + settings load) is trivial, so the bar is cosmetic period-flavour, not a
+   real progress readout. */
+.ga98-splash-loader {
+  position: absolute; left: 50%; bottom: 12%; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 9px;
+  pointer-events: none;
+}
+.ga98-splash-loader-label {
+  font-family: 'Pixelated MS Sans Serif', 'MS Sans Serif', Tahoma, sans-serif;
+  font-size: 12px; letter-spacing: 2px; color: #e8eeff;
+  text-shadow: 0 0 6px rgba(120, 170, 255, 0.85), 0 1px 2px #000;
+}
+.ga98-splash-bar {
+  width: 240px; height: 18px; padding: 2px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 2px solid; border-color: #000 #c0c8d8 #c0c8d8 #000; /* sunken Win98 well */
+  box-shadow: 0 0 12px rgba(60, 110, 200, 0.5), inset 1px 1px 0 rgba(0, 0, 0, 0.85);
+}
+.ga98-splash-bar-fill {
+  width: 100%; height: 100%;
+  background: repeating-linear-gradient(90deg,
+    #1084d0 0, #1084d0 12px, transparent 12px, transparent 20px);
+  background-size: 20px 100%;
+  box-shadow: 0 0 6px rgba(80, 140, 255, 0.7);
+  animation: ga98-splash-scroll 0.9s linear infinite;
+}
+@keyframes ga98-splash-scroll { from { background-position-x: 0; } to { background-position-x: 20px; } }
+
 @media (prefers-reduced-motion: reduce) {
-  .ga98-packet, .ga98-node-screen, .ga98-dialstage.active .ga98-marcher { animation: none; }
+  .ga98-packet, .ga98-node-screen, .ga98-dialstage.active .ga98-marcher,
+  .ga98-splash-bar-fill { animation: none; }
 }
 
 /* ── Bookmarks dashboard (offline start.me-style board) ────────────────────── */

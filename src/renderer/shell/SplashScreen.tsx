@@ -1,6 +1,7 @@
 /**
  * Boot splash — the DCS 98 startup screen, shown once on launch BEFORE the lock/login
- * screen, while the startup jingle plays (the Win98 "booting" moment). Overlays everything
+ * screen, while the startup jingle plays (the Win98 "booting" moment), with a Win9x-style
+ * scrolling loading bar (cosmetic/indeterminate — see theme.css). Overlays everything
  * (z above the lock screen) and dismisses itself after a short hold, or on click. The auth
  * check + settings load run underneath, so by the time the splash fades out the lock screen
  * (or desktop) is already mounted behind it — no flash.
@@ -61,6 +62,13 @@ export function SplashScreen({ onDone }: { onDone: () => void }): JSX.Element {
         opacity: hiding ? 0 : 1,
         transition: `opacity ${FADE_MS}ms ease`
       }}
-    />
+    >
+      <div className="ga98-splash-loader" aria-hidden="true">
+        <div className="ga98-splash-loader-label">Starting DCS 98…</div>
+        <div className="ga98-splash-bar">
+          <div className="ga98-splash-bar-fill" />
+        </div>
+      </div>
+    </div>
   );
 }
