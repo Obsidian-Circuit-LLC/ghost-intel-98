@@ -89,7 +89,7 @@ A plugin is a **directory** under `userData/plugins/<id>/` (the distributable fo
   "modules": [                         // renderer UI modules this plugin contributes
     { "key": "osint:graph", "title": "OSINT", "glyph": "🕸" }
   ],
-  "capabilities": ["egress", "secrets", "case-storage", "entity-registry", "timeline"],
+  "capabilities": ["egress", "secrets", "case-storage", "plugin-storage", "entity-registry", "timeline"],
   "main": "main.js",
   "renderer": "renderer.js"
 }
@@ -157,6 +157,17 @@ export interface PluginContext {
   caseStorage?: {
     readSidecar(caseId: string, name: string): Promise<string | null>; // secureReadText
     writeSidecar(caseId: string, name: string, data: string): Promise<void>; // secureWriteFile
+  };
+
+  // capability: 'plugin-storage' — plugin-GLOBAL persistent store spanning all cases,
+  // under userData/plugins/<id>/data/, vault-encrypted at rest. For ingested bulk datasets
+  // (BGP/RIR/GeoIP/threat feeds) and a forward-archive corpus (WHOIS/CT collected over time).
+  // Path-confined to the plugin's own data dir; NO access to other plugins' or core data.
+  storage?: {
+    read(relpath: string): Promise<Uint8Array | null>;        // secureReadFile, path-confined
+    write(relpath: string, data: Uint8Array | string): Promise<void>; // secureWriteFile
+    list(relpath?: string): Promise<string[]>;
+    delete(relpath: string): Promise<void>;
   };
 
   // capability: 'timeline'
@@ -345,7 +356,7 @@ Defaults: `plugins: {}`. Settings remain plaintext (the lock screen needs them p
 
 ## 15. Plugin SDK summary (what subsystem 2 targets)
 
-A plugin author (us) ships a directory with `manifest.json` (id, version, `targetApiVersion: 1`, declared `modules`/`capabilities`), a CJS `main.js` exporting `register(ctx: PluginContext)`, and an ESM `renderer.js` that, on import, calls `window.dcs98Plugin.registerModule({ key, title, glyph, component })` using `window.dcs98Plugin.React`. Main-side work (transforms, network, storage) goes through `ctx`; renderer↔main calls go through `window.dcs98Plugin.api.plugins.invoke(id, name, args)`. Built and signed with the operator's offline keys via `sign-plugin.mjs`. Everything the OSINT plugin needs — gated egress, secrets, entities, per-case sidecars, timeline, a UI module — is in `PluginContext` + the registry.
+A plugin author (us) ships a directory with `manifest.json` (id, version, `targetApiVersion: 1`, declared `modules`/`capabilities`), a CJS `main.js` exporting `register(ctx: PluginContext)`, and an ESM `renderer.js` that, on import, calls `window.dcs98Plugin.registerModule({ key, title, glyph, component })` using `window.dcs98Plugin.React`. Main-side work (transforms, network, storage) goes through `ctx`; renderer↔main calls go through `window.dcs98Plugin.api.plugins.invoke(id, name, args)`. Built and signed with the operator's offline keys via `sign-plugin.mjs`. Everything the OSINT plugin needs — gated egress, secrets, entities, per-case sidecars, a plugin-global store (for ingested bulk datasets + the forward-archive corpus), timeline, a UI module — is in `PluginContext` + the registry.
 
 ---
 
