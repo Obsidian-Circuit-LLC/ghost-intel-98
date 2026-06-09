@@ -19,7 +19,7 @@ import {
 import { encodeEnvelope, decodeEnvelope } from '../src/main/chat/session';
 import { randomBytes, sha256, ed25519Sign, MLKEM_CT_LEN, X25519_PUBLIC_LEN, MLKEM_PUBLIC_LEN } from '../src/main/chat/crypto';
 import { ed25519Pair, encodeKemPrekey } from '../src/main/chat/identity';
-import { HEADER_LEN } from '../src/main/chat/wire';
+import { HEADER_LEN, encodeFrame, FrameType } from '../src/main/chat/wire';
 import { MIX_INIT, PROTO_LABEL, SUITE_ID, DS_HS_REJECT, HS_REJECT, concatBytes } from '../src/main/chat/constants';
 import type { ChatStream } from '../src/main/chat/transport';
 
@@ -633,6 +633,83 @@ describe('chat handshake — in-band reconnect recovery (Reject→retry, HIGH-1 
 
   it('a second Reject in one dial is a hard fail (one-retry-per-dial cap)', async () => {
     await expect(runReconnectDoubleReject()).rejects.toThrow(/reconnect failed|fresh invite/i);
+  });
+
+  /**
+   * I-2 (Task 2.4 review): the per-dial RESPONDER reject cap. The double-reject test above caps on the
+   * INITIATOR side (the honest dialer sends at most one retry). This one caps on the RESPONDER side
+   * against a MALICIOUS initiator that ignores the one-retry rule and keeps pumping stale Msg1s on a
+   * SINGLE dial. For an UNCONFIRMED contact the mac_R gate fails open, so without the cap R would sign
+   * an unbounded number of ed25519 Sig_R_reject (asymmetric work) — one per pumped Msg1.
+   *
+   * The attacker driver: capture ONE genuine reconnect Msg1 from a real initiator, then feed it to a
+   * fresh responder directly, re-feeding the SAME Msg1 every time R answers with a Reject. R must stop
+   * (throw + close) after the per-dial cap rather than signing forever. We assert R rejects with the
+   * cap error AND that it signed no more rejects than the cap allows.
+   */
+  it('R stops after the per-dial reject cap when an initiator pumps stale Msg1s (responder-side cap, I-2)', async () => {
+    const { initiatorId, responderId, invites, contacts, rotation, initiatorRGK, cid } = await setupConsumedReconnect();
+    // UNCONFIRMED contact ⇒ mac_R gate fails open (the attacker-pumpable regime this cap defends).
+    contacts.setRgkConfirmed(cid, false);
+    await invites.consume(rotation.prekeyId);
+
+    // Capture one genuine reconnect Msg1 frame from a real initiator (against the consumed rotation,
+    // so R would Reject it). We only need the frame bytes; let the dial settle however it will.
+    let capturedMsg1: Uint8Array | null = null;
+    const [ca, cb] = createPipe();
+    const iWrapped = wrapResponderStream(ca, (payload) => {
+      if (capturedMsg1 === null) capturedMsg1 = payload.slice(); // first frame I sends is its Msg1
+      return payload;
+    });
+    await Promise.allSettled([
+      responderHandshake(cb, { identity: responderId, invites, contacts }),
+      initiatorHandshake(iWrapped, { identity: initiatorId, responderPublic: responderId.publicKeys, prekey: rotation, mode: 'reconnect', reconnectGateKey: initiatorRGK })
+    ]);
+    if (capturedMsg1 === null) throw new Error('test setup: no Msg1 captured');
+    const msg1Frame = encodeFrame(FrameType.Handshake, capturedMsg1);
+
+    // Fresh stores for the attack dial (so the captured prekeyId still resolves to a known cid but
+    // lookup() returns null → R takes the Reject path on EVERY pumped Msg1).
+    const A = await setupConsumedReconnect();
+    A.contacts.setRgkConfirmed(A.cid, false);
+    // Re-point the attack store's cid index so the CAPTURED prekeyId resolves to a known contact and
+    // offerCurrent has something to mint against; lookup stays null (consumed/stale strand).
+    const attackInvites: ResponderInviteStore = {
+      ...A.invites,
+      async lookup() { return null; },               // always stale ⇒ Reject path
+      async identifyContact() { return A.cid; },      // but still a KNOWN contact ⇒ R offers + signs
+      async offerCurrent(c) { return A.invites.offerCurrent(c); }
+    };
+
+    // Attacker-controlled stream feeding R: deliver msg1Frame, then re-deliver it after every Reject.
+    let rejectsSeen = 0;
+    let rDataCb: ((d: Uint8Array) => void) | null = null;
+    let rClosed = false;
+    const closeCbs: Array<() => void> = [];
+    const attackerStream: ChatStream = {
+      send(data: Uint8Array): void {
+        // R's outbound reply. On this attack every reply is a Reject (lookup always null).
+        if (data.length > HEADER_LEN && data[HEADER_LEN] === HS_REJECT) {
+          rejectsSeen++;
+          // Pump the SAME stale Msg1 again to provoke another Reject (ignores the one-retry rule).
+          if (rDataCb) { const cbk = rDataCb; queueMicrotask(() => cbk(msg1Frame)); }
+        }
+      },
+      onData(cbk: (d: Uint8Array) => void): void { rDataCb = cbk; },
+      onClose(cbk: () => void): void { if (rClosed) cbk(); else closeCbs.push(cbk); },
+      close(): void { if (rClosed) return; rClosed = true; for (const c of closeCbs) c(); },
+      get closed() { return rClosed; }
+    };
+
+    const rPromise = responderHandshake(attackerStream, { identity: A.responderId, invites: attackInvites, contacts: A.contacts });
+    // Kick off the pump with the first stale Msg1.
+    queueMicrotask(() => rDataCb && rDataCb(msg1Frame));
+
+    await expect(rPromise).rejects.toThrow(/too many recovery rejects/i);
+    // R signs exactly the cap (2) then throws BEFORE signing the 3rd — bounded asymmetric work. The
+    // honest self-heal needs only 1 reject per dial; the cap of 2 leaves a safe margin.
+    expect(rejectsSeen).toBe(2);
+    expect(rClosed).toBe(true); // R closed the stream on the cap throw (fail-closed teardown)
   });
 });
 

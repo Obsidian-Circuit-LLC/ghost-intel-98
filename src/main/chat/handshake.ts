@@ -226,16 +226,29 @@ async function initiatorHandshakeImpl(stream: ChatStream, opts: InitiatorOpts): 
     const ekI = await mlkemKeygen();
     const enc = await mlkemEncapsulate(prekey.publicKey); // (ct_pre, ss_pre)
 
+    // Secret-hygiene (Task 2.4 review, I-1): from here on EVERY exit — return OR throw, on the Reject
+    // branch, the Msg2 branch, or any reject-branch validation throw — must wipe this attempt's
+    // ephemeral secrets. The try/finally below guarantees that; ssI/hk2/rk only exist on the Msg2
+    // path, so they are declared here (undefined until assigned) and zeroized only when defined
+    // (zeroize() calls Uint8Array.fill and would throw on undefined). Fresh ephemerals each call ⇒ a
+    // retry never reuses these.
+    let es: Uint8Array | undefined;
+    let ck: Uint8Array | undefined;
+    let hk1: Uint8Array | undefined;
+    let ssI: Uint8Array | undefined;
+    let hk2: Uint8Array | undefined;
+    let rk: Uint8Array | undefined;
+    try {
     const th1 = h(
       th0, ROLE_I, ROLE_R, encodeIdentityPublic(responderPublic), prekey.prekeyId,
       Uint8Array.of(prekey.isLastResort ? 1 : 0), prekey.publicKey, prekey.signature, xeI.publicKey, ekI.publicKey, enc.cipherText
     );
 
-    let ck = hkdf(PROTO_LABEL, th1, MIX_INIT, 32);
-    const es = x25519Ecdh(xeI, responderPublic.x25519);
+    ck = hkdf(PROTO_LABEL, th1, MIX_INIT, 32);
+    es = x25519Ecdh(xeI, responderPublic.x25519);
     ck = mixKey(ck, es, MIX_ES);
     ck = mixKey(ck, enc.sharedSecret, MIX_SSPRE);
-    const hk1 = hkdf(ck, th1, DRV_HK1, 32);
+    hk1 = hkdf(ck, th1, DRV_HK1, 32);
 
     const sigI = ed25519Sign(concatBytes(DS_HS_INIT, th1), ed25519Pair(identity));
     const idPayload = concatBytes(identity.publicKeys.x25519, identity.publicKeys.ed25519, sigI);
@@ -297,10 +310,8 @@ async function initiatorHandshakeImpl(stream: ChatStream, opts: InitiatorOpts): 
       // retries on the is_last_resort=FALSE branch. Default refuse; require explicit opt-in. The engine
       // (Task 3.x) catches this and can surface H-3 / offer the opt-in before re-dialing.
       if (isLastByte === 1 && !opts.allowLastResortRecovery) {
-        zeroize(xeI.secretKey, ekI.secretKey, es, enc.sharedSecret, ck, hk1);
         throw new HandshakeError('reconnect offered a last-resort (forward-secrecy-degraded) prekey — opt-in required; request a fresh invite');
       }
-      zeroize(xeI.secretKey, ekI.secretKey, es, enc.sharedSecret, ck, hk1);
       return { kind: 'reject', offered };
     }
     if (hsType !== HS_MSG2) {
@@ -313,12 +324,12 @@ async function initiatorHandshakeImpl(stream: ChatStream, opts: InitiatorOpts): 
     const nextPrekeyBytes = reply.take(KEM_PREKEY_LEN);
     const cConfR = reply.rest();
 
-    const ssI = await mlkemDecapsulate(ctI, ekI.secretKey);
+    ssI = await mlkemDecapsulate(ctI, ekI.secretKey);
     ck = mixKey(ck, x25519Ecdh(xeI, xeR), MIX_EE);
     ck = mixKey(ck, x25519Ecdh(x25519Pair(identity), xeR), MIX_SE);
     ck = mixKey(ck, ssI, MIX_SSI);
     const th3 = h(th2, Uint8Array.of(hsType), xeR, ctI, nextPrekeyBytes);
-    const hk2 = hkdf(ck, th3, DRV_HK2, 32);
+    hk2 = hkdf(ck, th3, DRV_HK2, 32);
 
     let confPt: Uint8Array;
     try {
@@ -334,13 +345,25 @@ async function initiatorHandshakeImpl(stream: ChatStream, opts: InitiatorOpts): 
     if (!verifyKemPrekey(nextPrekey, responderPublic.ed25519)) throw new HandshakeError('rotation prekey signature invalid');
 
     const th4 = h(th3, cConfR);
-    const rk = hkdf(ck, th4, DRV_ROOT, 32);
+    rk = hkdf(ck, th4, DRV_ROOT, 32);
     const sid = hkdf(ck, th4, DRV_SID, 16);
     const session = new Session(sid, rk, 'initiator');
 
     const reconnectGateKey = hkdf(rk, sid, RECONNECT_GATE, 32);
-    zeroize(xeI.secretKey, ekI.secretKey, es, enc.sharedSecret, ssI, ck, hk1, hk2, rk);
     return { session, peer: responderPublic, nextPrekey, mode, reconnectGateKey, usedOfferedPrekey };
+    } finally {
+      // I-1: wipe THIS attempt's ephemeral secrets on EVERY exit (return or throw, from any branch —
+      // Reject, Msg2, or any validation throw in between). es/ck/hk1 are always set by the time any
+      // throw past key-gen can occur; ssI/hk2/rk only on the Msg2 path. Guard each (zeroize() →
+      // Uint8Array.fill, which throws on undefined). xeI/ekI/enc are created before the try.
+      zeroize(xeI.secretKey, ekI.secretKey, enc.sharedSecret);
+      if (es) zeroize(es);
+      if (ck) zeroize(ck);
+      if (hk1) zeroize(hk1);
+      if (ssI) zeroize(ssI);
+      if (hk2) zeroize(hk2);
+      if (rk) zeroize(rk);
+    }
   };
 
   // First attempt against the presented prekey. On HS_REJECT, retry ONCE against the offered prekey
@@ -366,9 +389,18 @@ async function responderHandshakeImpl(stream: ChatStream, opts: ResponderOpts): 
   // R answers each Msg1 it receives on this dial. Normally one round (accept → Msg2). On the HIGH-1
   // recovery path R answers an unresolvable-but-known prekey with a Reject (offering a current prekey)
   // and LOOPS to await the initiator's retry Msg1 (the SAME dial owns the stream). The one-retry-per-
-  // dial cap lives on the INITIATOR (it sends at most one retry, then closes); when it gives up, the
-  // close terminates this recv and the dial ends. R itself imposes no per-dial Reject count here — the
-  // mac_R DoS pre-gate + offerCurrent's per-cid mint cap bound abuse.
+  // dial cap lives on the INITIATOR (it sends at most one retry, then closes).
+  //
+  // I-2 (Task 2.4 review): R MUST also bound its OWN per-dial Reject signing. For an UNCONFIRMED
+  // contact the mac_R pre-gate fails open by design, so it does not cut off pre-sign; an attacker who
+  // knows a consumed-but-indexed prekeyId could otherwise drive unbounded Reject iterations, each
+  // producing a fresh ed25519 Sig_R_reject (TH_R0 changes with the attacker's fresh ephemerals every
+  // iteration, so offerCurrent's per-cid MINT cap does not bound the SIGNING). Cap rejects per dial at
+  // a small constant: the legitimate flow sends exactly ONE reject per dial, so 2 leaves a safe margin.
+  // NOTE: this counter bounds a SINGLE dial's loop only. GLOBAL bounding of ungated reconnect attempts
+  // across many dials is Task 2.5's rate-limiter.
+  const MAX_REJECTS_PER_DIAL = 2;
+  let rejectCount = 0;
   for (;;) {
   // ---- Msg1 ----
   const msg1 = new Cursor(await io.recv());
@@ -435,6 +467,13 @@ async function responderHandshakeImpl(stream: ChatStream, opts: ResponderOpts): 
     // current prekey, bound to THIS Msg1 via TH_R0, and abort WITHOUT consuming anything. The gate
     // (mac_R) has already been satisfied above. first_contact / unknown-cid still hard-fail.
     if (!firstContact && cid) {
+      // I-2: bound per-dial Reject signing BEFORE minting/signing. The mac_R gate above fails open for
+      // an unconfirmed contact, so without this an attacker driving repeated stale Msg1s on one dial
+      // would extract unbounded ed25519 signatures (asymmetric work). The legitimate self-heal sends
+      // exactly one reject per dial; exceeding the cap is abuse → close the stream.
+      if (++rejectCount > MAX_REJECTS_PER_DIAL) {
+        throw new HandshakeError('reconnect: too many recovery rejects on one dial');
+      }
       const offeredKp = await invites.offerCurrent(cid);
       const offered = offeredKp.prekey;
       // TH_R0 = H(MIX_INIT ‖ TH0 ‖ prekey_id ‖ xe_I ‖ ek_I ‖ ct_pre) — the Msg1 CLEARTEXT transcript
