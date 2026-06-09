@@ -64,6 +64,11 @@ class WindowedCounter {
   private count = 0;
   constructor(private readonly limit: number) {}
   tryAdmit(tick: number): boolean {
+    // FAIL CLOSED on a non-finite tick (M-3). A NaN/Infinity tick from a buggy clock source would
+    // otherwise reset the window every call (NaN !== NaN), silently DISABLING this DoS gate by making
+    // it allow-all. Denying is safer than allow-all for a DoS gate, and safer than throwing (which
+    // could crash the handshake). A non-finite tick can never advance a window, so deny it.
+    if (!Number.isFinite(tick)) return false;
     if (tick !== this.windowTick) {
       this.windowTick = tick;
       this.count = 0;
@@ -98,9 +103,21 @@ export class ReconnectRateLimiter {
     this.now = opts.now;
     this.reservedWindow = opts.reservedWindow ?? DEFAULT_RESERVED_WINDOW;
     this.tighterWindow = opts.tighterWindow ?? DEFAULT_TIGHTER_WINDOW;
+    // M-1: the starvation-resistance property requires the tighter bucket be strictly smaller than the
+    // reserved one. A misconfiguration that inverts this would let an unrecognized-id flood out-budget
+    // legitimate recognized reconnects — exactly the failure this limiter exists to prevent.
+    if (this.tighterWindow >= this.reservedWindow) {
+      throw new Error('reconnect-gate: tighterWindow must be < reservedWindow');
+    }
     // Seen-set >= reserved window. A small headroom factor keeps an id that JUST aged out of the count
     // still recognizable as a replay for a short tail, without unbounded growth.
     this.seenCap = this.reservedWindow * 2;
+    // M-2: make the seen-set >= reserved-window invariant self-enforcing (not merely test-verified).
+    // If eviction could out-pace the bucket, a replayed Msg1 still counting against the window could
+    // fall out of the seen-set and re-spend reserved capacity — defeating the anti-replay guarantee.
+    if (this.seenCap < this.reservedWindow) {
+      throw new Error('reconnect-gate: seenCap must be >= reservedWindow');
+    }
     this.seen = new BoundedSeenSet(this.seenCap);
     this.reserved = new WindowedCounter(this.reservedWindow);
     this.tighter = new WindowedCounter(this.tighterWindow);
