@@ -2,6 +2,7 @@
  * Ambient typings for window.api. The renderer imports this so every call is typed.
  */
 
+import type { VerifiedPluginInfo, PluginStatus } from '../shared/plugin-types';
 import type {
   AppSettings,
   AttachmentBytesResult,
@@ -375,6 +376,11 @@ export interface GhostApi {
     status(): Promise<MemoryStatus>;
     reindexAll(): Promise<{ cases: number; chunks: number }>;
     onProgress(cb: (p: MemoryProgress) => void): () => void;
+  };
+  plugins: {
+    listVerified(): Promise<VerifiedPluginInfo[]>;
+    invoke(id: string, name: string, args: unknown[]): Promise<unknown>;
+    status(): Promise<PluginStatus[]>;
   };
 }
 
