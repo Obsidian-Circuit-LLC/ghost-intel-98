@@ -20,6 +20,7 @@ import {
 } from './crypto';
 import {
   encodeIdentityPublic, encodeKemPrekey, decodeKemPrekey, verifyKemPrekey, ed25519Pair, x25519Pair,
+  contactId,
   KEM_PREKEY_LEN, PREKEY_ID_LEN,
   type IdentityKeyPair, type IdentityPublic, type KemPrekey, type KemPrekeyKeyPair
 } from './identity';
@@ -58,8 +59,10 @@ export interface ResponderInviteStore {
   consume(prekeyId: Uint8Array): Promise<void>;
   /** Release a reservation taken by lookup() when the handshake aborts before consume(). */
   release(prekeyId: Uint8Array): Promise<void>;
-  /** A fresh signed prekey to hand the peer for next time (rotation). */
-  issueNext(): Promise<KemPrekey>;
+  /** A fresh signed prekey to hand the peer for next time (rotation). The cid (the now-verified contact)
+   *  is threaded so the store records pid → cid in its per-contact issuance index (rev-4 §3 / F-8); a
+   *  store may ignore it (back-compat), but the real PrekeyStore uses it to power identifyContact. */
+  issueNext(cid?: string): Promise<KemPrekey>;
   /** Offer a CURRENT signed prekey for in-band reconnect recovery (HIGH-1) WITHOUT consuming it. Used
    *  on the Reject path when a presented rotation prekey resolved to a cid but is already consumed
    *  (the strand). Re-offers the contact's still-live prekey (or mints one under a per-cid cap); the
@@ -587,7 +590,12 @@ async function responderHandshakeImpl(stream: ChatStream, opts: ResponderOpts): 
   // ---- Msg2 (only after all checks pass) ----
   const xeR = x25519Keygen();
   const encI = await mlkemEncapsulate(ekIpub); // (ct_I, ss_I)
-  const nextPrekey = await invites.issueNext();
+  // (3.1-c) Issue the rotation prekey WITH the now-verified contact id so the responder's per-contact
+  // issuance index records pid → cid. Without the cid the index stays empty and the reconnect pre-gate
+  // fails closed for legit reconnects (F-8): identifyContact(rotation pid) would return null, so a
+  // confirmed contact's next reconnect can't be recognized/gated. `peer` is identity-verified above (and
+  // for first_contact it was just pinned), so contactId(peer) is the durable, MITM-checked id.
+  const nextPrekey = await invites.issueNext(contactId(peer));
   const nextPrekeyBytes = encodeKemPrekey(nextPrekey);
 
   ck = mixKey(ck, x25519Ecdh(xeR, xeI), MIX_EE);

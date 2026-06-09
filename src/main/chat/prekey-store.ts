@@ -236,6 +236,16 @@ export class PrekeyStore {
     });
   }
 
+  /** Whether a given prekeyId is the stored LAST-RESORT prekey (signed, reusable, FS-degraded). Cheap
+   *  index check — no crypto, no reservation. The responder reconnect pre-gate (Task 2.5 / N-3) uses it
+   *  to reject a reconnect Msg1 that carries a last-resort prekey_id BEFORE any asymmetric work. */
+  isLastResortId(prekeyId: Uint8Array): Promise<boolean> {
+    return this.serialize(async () => {
+      const f = await this.read();
+      return f.lastResort?.pid === hex(prekeyId);
+    });
+  }
+
   /** Look up which contact was issued a given prekeyId. Returns null if unknown. Survives consume(). */
   identifyContact(prekeyId: Uint8Array): Promise<string | null> {
     return this.serialize(async () => {

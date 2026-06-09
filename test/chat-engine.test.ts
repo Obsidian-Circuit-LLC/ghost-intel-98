@@ -285,3 +285,161 @@ describe('ChatEngine — file transfer (Phase 2) over the in-memory network', ()
     await b.stop();
   });
 });
+
+describe('ChatEngine — reconnect hardening (handshake v4, Task 3.1) RGK wiring', () => {
+  /** A richer harness that exposes each engine's stores + a controllable logical clock so the RGK
+   *  persistence / confirmation / rate-limiter wiring can be asserted directly. */
+  async function makeNode(net: InMemoryNetwork, onion: string, identity: IdentityKeyPair, events: ChatEngineEvents = {}): Promise<{
+    engine: ChatEngine;
+    contacts: ContactStore;
+    prekeys: PrekeyStore;
+    tick: () => number;
+    setTick: (n: number) => void;
+  }> {
+    const dir = await mkdtemp(join(tmpdir(), 'dcs98-rgk-'));
+    let n = 0;
+    let clock = 1717000000000;
+    const contacts = new ContactStore(join(dir, 'contacts.json'));
+    const prekeys = new PrekeyStore(join(dir, 'prekeys.json'), identity);
+    const engine = new ChatEngine({
+      identity,
+      transport: new InMemoryTransport(net, onion),
+      prekeys,
+      contacts,
+      messages: new MessageStore(join(dir, 'messages')),
+      groups: new GroupStore(join(dir, 'groups.json')),
+      groupMessages: new MessageStore(join(dir, 'gmsgs'), undefined, /^[0-9a-f]{32}$/),
+      now: () => clock,
+      newId: () => `${onion[0]}-${(n += 1)}`,
+      events
+    });
+    return { engine, contacts, prekeys, tick: () => clock, setTick: (v: number) => { clock = v; } };
+  }
+
+  it('persists an RGK on the establishing handshake (both roles) and reconnects on demand', async () => {
+    const net = new InMemoryNetwork();
+    const idA = generateIdentity();
+    const idB = generateIdentity();
+    const aMsgs: { cid: string; text: string }[] = [];
+    const A = await makeNode(net, ONION_A, idA, { onMessage: (cid, m) => aMsgs.push({ cid, text: m.text }) });
+    const B = await makeNode(net, ONION_B, idB);
+    await A.engine.start();
+    await B.engine.start();
+
+    const link = await A.engine.createInvite();
+    const cidA_onB = await B.engine.acceptInvite(link); // B initiator, A responder
+    await flush(20);
+    const cidB_onA = contactId(idB.publicKeys);
+
+    // Initiator (B) persisted an RGK for A.
+    expect((await B.contacts.getById(cidA_onB))?.reconnectGateKey).not.toBeNull();
+    // Responder (A) persisted an RGK for B too.
+    expect((await A.contacts.getById(cidB_onA))?.reconnectGateKey).not.toBeNull();
+
+    // Force a reconnect: drop B's live conn, then send → B must re-dial + reconnect-handshake A.
+    B.engine.dropConnections();
+    await B.engine.send(cidA_onB, 'after reconnect');
+    await flush(40);
+    expect(aMsgs.map((m) => m.text)).toContain('after reconnect');
+
+    await A.engine.stop();
+    await B.engine.stop();
+  });
+
+  it('sets rgkPeerConfirmed only after the responder verifies a valid mac_R, gating the NEXT reconnect', async () => {
+    const net = new InMemoryNetwork();
+    const idA = generateIdentity();
+    const idB = generateIdentity();
+    const A = await makeNode(net, ONION_A, idA);
+    const B = await makeNode(net, ONION_B, idB);
+    await A.engine.start();
+    await B.engine.start();
+
+    const link = await A.engine.createInvite();
+    const cidA_onB = await B.engine.acceptInvite(link);
+    await flush(20);
+    const cidB_onA = contactId(idB.publicKeys);
+
+    // After first contact, A (responder) has NOT yet seen a mac_R (first_contact carries none).
+    expect(await A.contacts.isRgkConfirmed(cidB_onA)).toBe(false);
+
+    // Reconnect: B now holds an RGK so it sends a valid mac_R; A verifies it and flips the confirm flag.
+    B.engine.dropConnections();
+    await B.engine.send(cidA_onB, 'reconnect 1');
+    await flush(40);
+    expect(await A.contacts.isRgkConfirmed(cidB_onA)).toBe(true);
+
+    // Now A enforces the gate. A legit B (still holding the same RGK) reconnects again successfully.
+    B.engine.dropConnections();
+    await B.engine.send(cidA_onB, 'reconnect 2 gated');
+    await flush(40);
+    const aHist = await A.engine.history(cidB_onA);
+    expect(aHist.some((m) => m.text === 'reconnect 2 gated')).toBe(true);
+
+    await A.engine.stop();
+    await B.engine.stop();
+  });
+
+  it('issueNext is called WITH the cid: the responder issuance index resolves the rotation pid → cid', async () => {
+    const net = new InMemoryNetwork();
+    const idA = generateIdentity();
+    const idB = generateIdentity();
+    const A = await makeNode(net, ONION_A, idA); // A is responder → A.prekeys gets the issuance index
+    const B = await makeNode(net, ONION_B, idB);
+    await A.engine.start();
+    await B.engine.start();
+
+    const link = await A.engine.createInvite();
+    const cidA_onB = await B.engine.acceptInvite(link);
+    await flush(20);
+    const cidB_onA = contactId(idB.publicKeys);
+
+    // B (initiator) stored the rotation prekey A minted. A's prekey-store issuance index must resolve
+    // that pid back to B's cid — proving issueNext was called WITH the cid on the responder rotation path.
+    const rotation = (await B.contacts.getById(cidA_onB))?.nextPrekey;
+    expect(rotation).toBeTruthy();
+    const resolved = await A.prekeys.identifyContact(rotation!.prekeyId);
+    expect(resolved).toBe(cidB_onA);
+
+    await A.engine.stop();
+    await B.engine.stop();
+  });
+
+  it('a fresh re-pin (new invite) clears RGK + rgkPeerConfirmed (resetReconnectEpoch)', async () => {
+    const net = new InMemoryNetwork();
+    const idA = generateIdentity();
+    const idB = generateIdentity();
+    const A = await makeNode(net, ONION_A, idA);
+    const B = await makeNode(net, ONION_B, idB);
+    await A.engine.start();
+    await B.engine.start();
+
+    const link1 = await A.engine.createInvite();
+    const cidA_onB = await B.engine.acceptInvite(link1);
+    await flush(20);
+
+    // Drive a reconnect so B's side has an RGK and A confirms it — establishes a populated epoch.
+    B.engine.dropConnections();
+    await B.engine.send(cidA_onB, 'establish epoch');
+    await flush(40);
+    expect((await B.contacts.getById(cidA_onB))?.reconnectGateKey).not.toBeNull();
+
+    // Manually mark B's stored confirm flag so we can prove the re-pin clears it (the initiator side's
+    // epoch reset is what we exercise — B re-accepts a fresh invite for the SAME identity A).
+    await B.contacts.update(cidA_onB, { rgkPeerConfirmed: true });
+    expect((await B.contacts.getById(cidA_onB))?.rgkPeerConfirmed).toBe(true);
+
+    // A mints a brand-new first-contact invite; B accepts it again (same identity → re-pin path).
+    const link2 = await A.engine.createInvite();
+    const cidA_onB2 = await B.engine.acceptInvite(link2);
+    expect(cidA_onB2).toBe(cidA_onB);
+    await flush(20);
+
+    // The re-pin must have reset the epoch: confirm flag cleared, and a fresh RGK installed.
+    expect((await B.contacts.getById(cidA_onB))?.rgkPeerConfirmed).toBe(false);
+    expect((await B.contacts.getById(cidA_onB))?.reconnectGateKey).not.toBeNull();
+
+    await A.engine.stop();
+    await B.engine.stop();
+  });
+});
