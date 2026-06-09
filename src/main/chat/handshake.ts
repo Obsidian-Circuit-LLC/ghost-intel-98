@@ -32,6 +32,7 @@ import {
 import { Session } from './session';
 import { FrameDecoder, FrameType, encodeFrame } from './wire';
 import type { ChatStream } from './transport';
+import { ReconnectRateLimiter, ALLOW_ALL_RECONNECT_LIMITER } from './reconnect-gate';
 
 export type HandshakeMode = 'first_contact' | 'reconnect';
 const MODE_FIRST = 0;
@@ -67,6 +68,12 @@ export interface ResponderInviteStore {
   /** Which contact (cid) a given prekeyId was issued to; null if unknown. Cheap index lookup — no
    *  crypto, no reservation — used by the reconnect pre-gate before any asymmetric work (rev-4 §3). */
   identifyContact(prekeyId: Uint8Array): Promise<string | null>;
+  /** Whether a given prekeyId is the LAST-RESORT (signed, reusable, FS-degraded) prekey. Cheap index
+   *  check — no crypto, no reservation. A reconnect Msg1 MUST NOT carry a last-resort prekey_id
+   *  (last-resort is offered only INSIDE a recovery Reject and used on the immediate retry), so the
+   *  responder reconnect pre-gate rejects it BEFORE admission/asymmetric work (Task 2.5 / N-3).
+   *  Optional for back-compat: a store that omits it ⇒ the check is skipped (treated as not last-resort). */
+  isLastResortId?(prekeyId: Uint8Array): Promise<boolean>;
 }
 export interface ContactPinStore {
   get(peerEd25519: Uint8Array): Promise<IdentityPublic | null>;
@@ -99,6 +106,11 @@ export interface ResponderOpts {
   identity: IdentityKeyPair;
   invites: ResponderInviteStore;
   contacts: ContactPinStore;
+  /** GLOBAL (across-dials) reconnect rate-limiter for the UNGATED reconnect branch (Task 2.5 / N-3).
+   *  The engine (Task 3.1) constructs one and threads it through; tests inject one. If omitted, the
+   *  ungated path is NOT rate-limited (allow-all default) so first_contact and existing tests are
+   *  unaffected — first_contact is never rate-limited regardless (it has its own mac_T). */
+  rateLimiter?: ReconnectRateLimiter;
 }
 
 export interface HandshakeResult {
@@ -384,6 +396,11 @@ async function initiatorHandshakeImpl(stream: ChatStream, opts: InitiatorOpts): 
 
 async function responderHandshakeImpl(stream: ChatStream, opts: ResponderOpts): Promise<HandshakeResult> {
   const { identity, invites, contacts } = opts;
+  // Task 2.5 / N-3: GLOBAL (across-dials) rate-limiter for the UNGATED reconnect branch. Allow-all when
+  // none is injected, so first_contact and existing tests are unaffected (first_contact is never
+  // rate-limited regardless — it has its own mac_T pre-gate).
+  const rateLimiter: { admit(input: { recognized: boolean; fp: string }): { allowed: boolean } } =
+    opts.rateLimiter ?? ALLOW_ALL_RECONNECT_LIMITER;
   const io = new HandshakeIO(stream);
 
   // R answers each Msg1 it receives on this dial. Normally one round (accept → Msg2). On the HIGH-1
@@ -432,6 +449,11 @@ async function responderHandshakeImpl(stream: ChatStream, opts: ResponderOpts): 
   // the flag (peerMacRVerified). An attacker can't forge a valid mac_R (HMAC under the secret RGK).
   let peerMacRVerified = false;
   let cid: string | null = null;
+  // gatedEnforced: this reconnect passed the ENFORCED mac_R gate (confirmed contact, valid mac_R). The
+  // mac_R already bounds it cryptographically, so it is NOT subject to the Task 2.5 rate-limiter. Every
+  // other reconnect (unconfirmed contact, no/invalid mac_R, consumed-but-indexed strand id, pure
+  // garbage id) is the UNGATED branch and IS rate-limited below before any asymmetric op.
+  let gatedEnforced = false;
   if (!firstContact) {
     cid = await invites.identifyContact(prekeyId);
     const rgk = cid ? await contacts.getReconnectKey(cid) : null;
@@ -451,9 +473,31 @@ async function responderHandshakeImpl(stream: ChatStream, opts: ResponderOpts): 
         // Enforce: a confirmed peer MUST present a valid mac_R. Cheap close before any asymmetric op.
         if (!ok) throw new HandshakeError('reconnect gate failed (mac_R missing or invalid)');
         peerMacRVerified = true;
+        gatedEnforced = true;
       } else if (ok) {
         // Bootstrap: not yet enforcing, but a valid mac_R is observed → signal it so the engine confirms.
         peerMacRVerified = true;
+      }
+    }
+
+    // ---- Ungated reconnect DoS pre-gate (Task 2.5 / N-3) ----
+    // Only the UNGATED branch (NOT gatedEnforced): the enforced mac_R path is already cryptographically
+    // bounded, so leave it untouched. first_contact has its own mac_T and is never reached here.
+    if (!gatedEnforced) {
+      // (a) A reconnect Msg1 MUST NOT carry a LAST-RESORT prekey_id — last-resort is offered only INSIDE
+      //     a recovery Reject and used on the immediate retry; a reconnect is never INITIATED with one.
+      //     Cheap index check BEFORE admission / any asymmetric op.
+      if (invites.isLastResortId && (await invites.isLastResortId(prekeyId))) {
+        throw new HandshakeError('reconnect presented a last-resort prekey_id (wrong prekey kind for reconnect)');
+      }
+      // (b) GLOBAL rate-limit BEFORE lookup()/decap/ECDH. recognized = R has this id in its issuance
+      //     index (cid !== null) — this is the legit-vs-flood split: it gives the reserved bucket to BOTH
+      //     legacy-first AND strand recovery (a consumed-but-indexed id), while a pure off-path garbage
+      //     id (not in the index) → recognized:false → tighter bucket. fp = sha256(mac_R input), the same
+      //     cleartext fields the gate hashes, so a replayed identical Msg1 dedups against the seen-set.
+      const fp = Buffer.from(sha256(concatBytes(DS_MAC_R, th0, prekeyId, xeI, ekIpub, ctPre))).toString('hex');
+      if (!rateLimiter.admit({ recognized: cid !== null, fp }).allowed) {
+        throw new HandshakeError('reconnect rate-limited');
       }
     }
   }
