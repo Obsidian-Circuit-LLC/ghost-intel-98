@@ -32,11 +32,21 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`DCS98-Setup-3.13.2-beta.1.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake formally verified internally; external audit + FIPS pending. See Status.)*
+> **Install:** download [`DCS98-Setup-3.13.3-beta.1.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake formally verified internally; external audit + FIPS pending. See Status.)*
 
 ## Status
 
-**v3.13.2-beta.1** — current release. Reconnect hardening verified — chat leaves EXPERIMENTAL — plus a Win98 boot splash and theme polish:
+**v3.13.3-beta.1** — current release. New lightning boot splash + Win9x loading bar:
+
+- **New boot splash + loading bar.** The startup screen is now the higher-resolution "Welcome DCS 98"
+  lightning render (the prior grayscale logo was pixelated at full screen), with a Win9x-style scrolling
+  blue-block loading bar and a *Starting DCS 98…* caption playing under it while the startup jingle sounds,
+  then fading to the login screen. The bar is **indeterminate by design** (boot work — auth check + settings
+  load — is near-instant) and respects `prefers-reduced-motion`. Purely presentational.
+
+505 automated tests (unchanged). *Everything from v3.13.2 carries forward — reconnect hardening verified, chat out of EXPERIMENTAL.*
+
+**v3.13.2-beta.1** — Reconnect hardening verified — chat leaves EXPERIMENTAL — plus a Win98 boot splash and theme polish:
 
 - **Tor P2P chat: reconnect path formally verified; the EXPERIMENTAL banner is gone.** This closes the two
   remaining internal audit findings on the handshake — **HIGH-1** (a dropped reconnect could permanently
@@ -294,14 +304,14 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/dcs98/releases) and run it.
 
-Direct link to the current release: [`DCS98-Setup-3.13.2-beta.1.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.13.2-beta.1/DCS98-Setup-3.13.2-beta.1.exe)
+Direct link to the current release: [`DCS98-Setup-3.13.3-beta.1.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.13.3-beta.1/DCS98-Setup-3.13.3-beta.1.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is formally verified internally — external audit + FIPS
 pending — see Status). The last fully-stable build is [`DCS98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.6.8/DCS98-Setup-3.6.8.exe).
 
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\DCS98-Setup-3.13.2-beta.1.exe -Algorithm SHA256
+Get-FileHash .\DCS98-Setup-3.13.3-beta.1.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
@@ -339,8 +349,13 @@ To uninstall: Settings → Apps → Dead Cyber Society 98 → Uninstall.
 
 ## Releases & changelog
 
-The current build is **v3.13.2-beta.1**. Each release page carries its own notes + SHA-256.
+The current build is **v3.13.3-beta.1**. Each release page carries its own notes + SHA-256.
 
+- **v3.13.3-beta.1** — **New lightning boot splash + Win9x loading bar.** The startup screen is now the
+  higher-resolution "Welcome DCS 98" lightning render (the prior grayscale logo was pixelated), with a
+  Win9x-style scrolling blue-block loading bar and a *Starting DCS 98…* caption under it, then a fade to the
+  login screen. Indeterminate by design (boot work is near-instant); respects `prefers-reduced-motion`.
+  Purely presentational — everything from v3.13.2 carries forward. **505 tests.**
 - **v3.13.2-beta.1** — **Reconnect hardening verified; chat leaves EXPERIMENTAL; Win98 boot splash.**
   Closes audit findings **HIGH-1** (reconnect could permanently strand a contact) and **MED-2** (reconnect
   had no formal model / no DoS pre-gate): reconnect now self-heals in-band (authenticated Reject + one
@@ -518,7 +533,7 @@ This starts the Vite dev server (HMR) and the Electron main process.
 
 ```bash
 pnpm build        # type-check + bundle main / preload / renderer
-pnpm test         # vitest suite (505 tests as of v3.13.2-beta.1)
+pnpm test         # vitest suite (505 tests as of v3.13.3-beta.1)
 pnpm package      # platform installer for the current host
 pnpm package:win  # cross-build Windows NSIS installer
 ```
