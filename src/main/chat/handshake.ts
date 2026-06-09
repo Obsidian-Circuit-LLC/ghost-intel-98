@@ -87,6 +87,13 @@ export interface InitiatorOpts {
   /** Per-contact reconnect gate key (RGK), if held. On a reconnect, I ALWAYS includes mac_R whenever
    *  it holds an RGK for the contact (rev-4 §3). Ignored on first_contact. */
   reconnectGateKey?: Uint8Array;
+  /** Opt-in to recovering against a LAST-RESORT offered prekey on the in-band reconnect Reject path
+   *  (Task 2.4, H-3). Default false/undefined = REFUSE: a Reject offering a last-resort prekey throws
+   *  an opt-in-required HandshakeError rather than silently establishing a forward-secrecy-degraded
+   *  session. This matches the spec (§2/H-3) and the proven ProVerif model, which only auto-retries on
+   *  the is_last_resort=FALSE branch (chat-handshake-reconnect.pv). When true, I retries against the
+   *  last-resort prekey as it does for a normal one (FS-degraded session, caller's explicit choice). */
+  allowLastResortRecovery?: boolean;
 }
 export interface ResponderOpts {
   identity: IdentityKeyPair;
@@ -284,6 +291,15 @@ async function initiatorHandshakeImpl(stream: ChatStream, opts: InitiatorOpts): 
       // prekey must itself be signed by R (verify-before-use).
       if ((offered.isLastResort ? 1 : 0) !== isLastByte) throw new HandshakeError('reject is_last_resort flag mismatch');
       if (!verifyKemPrekey(offered, responderPublic.ed25519)) throw new HandshakeError('offered prekey signature invalid');
+      // Last-resort recovery gate (Task 2.4 review, H-3): a last-resort prekey is forward-secrecy-
+      // degraded (it is not one-time — it can be reused across handshakes). The spec (§2/H-3) and the
+      // proven ProVerif model both REFUSE to auto-continue on a last-resort offer: the model only
+      // retries on the is_last_resort=FALSE branch. Default refuse; require explicit opt-in. The engine
+      // (Task 3.x) catches this and can surface H-3 / offer the opt-in before re-dialing.
+      if (isLastByte === 1 && !opts.allowLastResortRecovery) {
+        zeroize(xeI.secretKey, ekI.secretKey, es, enc.sharedSecret, ck, hk1);
+        throw new HandshakeError('reconnect offered a last-resort (forward-secrecy-degraded) prekey — opt-in required; request a fresh invite');
+      }
       zeroize(xeI.secretKey, ekI.secretKey, es, enc.sharedSecret, ck, hk1);
       return { kind: 'reject', offered };
     }

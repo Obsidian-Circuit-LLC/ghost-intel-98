@@ -496,6 +496,58 @@ describe('chat handshake — in-band reconnect recovery (Reject→retry, HIGH-1 
     expect(await bothExchange(rRes.session, iRes.session, 'healed R')).toBe('healed R');
   });
 
+  /**
+   * Drive the LAST-RESORT recovery gate (Task 2.4 review, H-3). The strand is the same as the normal
+   * recovery test, except R's offerCurrent is stubbed to return a LAST-RESORT prekey (FS-degraded:
+   * reusable, not one-time). Spec §2/H-3 + the proven ProVerif model REFUSE to auto-continue on such an
+   * offer; recovery requires an explicit allowLastResortRecovery opt-in on the initiator.
+   */
+  async function runReconnectLastResortReject(allowLastResortRecovery: boolean): Promise<{ iRes: HandshakeResult; rRes: HandshakeResult }> {
+    const { initiatorId, responderId, invites, contacts, rotation, initiatorRGK, cid } = await setupConsumedReconnect();
+    await invites.consume(rotation.prekeyId);
+    // Mint a signed LAST-RESORT prekey, index it to the contact, and force offerCurrent to return it so
+    // R answers the strand with a last-resort offer (and accepts the retry against it when opted in).
+    const lastResort = await generateKemPrekey(responderId, true);
+    invites.bindContact(lastResort.prekey.prekeyId, cid);
+    // The store must be able to look the offered prekey up + decapsulate against it on the retry accept.
+    const lastResortInvites: ResponderInviteStore = {
+      ...invites,
+      async lookup(prekeyId) {
+        if (hex(prekeyId) === hex(lastResort.prekey.prekeyId)) {
+          return { prekey: lastResort.prekey, secretKey: lastResort.secretKey, token: null };
+        }
+        return invites.lookup(prekeyId);
+      },
+      async offerCurrent() {
+        return { prekey: lastResort.prekey, secretKey: lastResort.secretKey };
+      }
+    };
+
+    const [ra, rb] = createPipe();
+    const [rResSettled, iResSettled] = await Promise.allSettled([
+      responderHandshake(rb, { identity: responderId, invites: lastResortInvites, contacts }),
+      initiatorHandshake(ra, {
+        identity: initiatorId, responderPublic: responderId.publicKeys, prekey: rotation,
+        mode: 'reconnect', reconnectGateKey: initiatorRGK, allowLastResortRecovery
+      })
+    ]);
+    if (iResSettled.status === 'rejected') throw iResSettled.reason;
+    if (rResSettled.status === 'rejected') throw rResSettled.reason;
+    return { iRes: iResSettled.value, rRes: rResSettled.value };
+  }
+
+  it('refuses a last-resort Reject offer when allowLastResortRecovery is unset (no silent FS-degraded session, H-3)', async () => {
+    await expect(runReconnectLastResortReject(false)).rejects.toThrow(/last-resort|opt-in/i);
+  });
+
+  it('recovers against a last-resort Reject offer when allowLastResortRecovery is opted in (FS-degraded, by choice)', async () => {
+    const { iRes, rRes } = await runReconnectLastResortReject(true);
+    expect(iRes.session).toBeTruthy();
+    expect(iRes.usedOfferedPrekey).toBe(true);
+    expect(await bothExchange(iRes.session, rRes.session, 'lr I')).toBe('lr I');
+    expect(await bothExchange(rRes.session, iRes.session, 'lr R')).toBe('lr R');
+  });
+
   async function runReconnectWithForgedReject(): Promise<HandshakeResult> {
     const { initiatorId, responderId, invites, contacts, rotation, initiatorRGK } = await setupConsumedReconnect();
     await invites.consume(rotation.prekeyId);
