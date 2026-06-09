@@ -1,6 +1,6 @@
 # `authorized-target-egress` — Design Spec (v2, post-red-team)
 
-**Status:** design — revised after an adversarial red-team pass (3 critical / 5 high / 4 medium, all addressed below). Awaiting operator review (one open decision: §3.1 non-HTTP egress).
+**Status:** design — revised after an adversarial red-team pass (3 critical / 5 high / 4 medium, all addressed below). §3.1 resolved by operator to **option A (HTTP-only v1, raw scanning disabled)**. Awaiting final operator spec review before writing-plans.
 **Date:** 2026-06-10
 **Author:** Obsidian Circuit (with Claude)
 **Part of:** Platform v1.1 (public MIT core). Sibling capability `persistent-background-connection` (Telegram) is a separate, later design.
@@ -82,11 +82,12 @@ A one-line summary of each event is *also* mirrored into the case timeline for t
 - Add `'authorized-target-egress'` to `CAPABILITIES` (`src/shared/plugin-types.ts`) + a scoped `attackEgress?` surface on `PluginContext`: `{ proxyUrl(): string; scopeContentHash(): string }`. Distinct from `egress`: permits private/loopback, **only** for in-scope targets, **only** through the pinning proxy.
 - `wire-deps.ts` builds it **only** when a valid, time-active manifest is loaded and (if policy requires) a valid signed token is present. The plugin spawns the scanner configured to use `proxyUrl()` and **with `NO_PROXY` explicitly cleared/empty in the subprocess env** (red-team Finding 7 — a default `NO_PROXY=localhost` would silently bypass the gate for the loopback targets this exists to hit).
 
-### 3.1 Non-HTTP egress — the honesty boundary (OPEN DECISION for operator)
-A cooperative `HTTP(S)_PROXY` only gates HTTP(S) clients that honor it. deep-eye's **web-vuln engine (the 45+ checks: SQLi/XSS/SSTI/XXE/etc.) is HTTP** and will route through the CONNECT proxy. But its **raw-socket recon** (port scans, raw DNS, banner grabs) and WebSocket modules do **not** honor an HTTP proxy and would egress ungated + unaudited. Two honest options, **operator to choose**:
-- **(A) Constrain + disclose (recommended for v1):** in the DCS98 integration, **disable deep-eye's raw-socket recon modules**; route only its HTTP(S) engine (forced through the CONNECT proxy, `NO_PROXY` cleared). Audit/scope then cover the HTTP attack surface fully; any residual non-HTTP path is disabled, not silently bypassing. We **enumerate every deep-eye module** by transport during integration and gate the build to HTTP-only. Loud disclosure in the authorization UI: "scope + audit cover HTTP(S) attack traffic; raw-socket scanning is disabled in this build."
-- **(B) OS-level jail for the subprocess:** revisit the rejected netns/firewall approach *specifically* so all subprocess TCP (raw included) is forced through the gate — true coverage of raw scans, at the cost of OS-specific complexity (Windows WFP) and brittleness. Larger effort.
-The capability's claims must match the choice; the spec will not claim "all attack traffic gated" under (A).
+### 3.1 Non-HTTP egress — the honesty boundary (RESOLVED → option A)
+A cooperative `HTTP(S)_PROXY` only gates HTTP(S) clients that honor it. deep-eye's **web-vuln engine (the 45+ checks: SQLi/XSS/SSTI/XXE/etc.) is HTTP** and will route through the CONNECT proxy. But its **raw-socket recon** (port scans, raw DNS, banner grabs) and WebSocket modules do **not** honor an HTTP proxy and would egress ungated + unaudited.
+
+**DECISION (operator, 2026-06-10): option A — constrain + disclose.** In the DCS98 integration, **disable deep-eye's raw-socket recon / port-scan / WebSocket modules**; route only its HTTP(S) web-vuln engine, forced through the CONNECT proxy with `NO_PROXY` cleared. Scope + audit then cover **everything the build does**, with no silent bypass. During subsystem-2 integration we **enumerate every deep-eye module by transport** and gate the build to HTTP-only. The authorization UI discloses plainly: "scope + audit cover HTTP(S) attack traffic; raw-socket scanning is disabled in this build." The spec does **not** claim "all attack traffic gated" — it claims "all traffic this build performs is gated," which under option A is the same set.
+
+**Deferred (not v1):** option B — an OS-level jail (Linux netns+nftables / Windows WFP) forcing *all* subprocess TCP (raw scans included) through the gate — is a later increment that would re-enable raw port scanning under full enforcement. It is OS-specific, brittle on Windows, and warrants its own design + red-team. Tracked, not built now.
 
 ---
 
