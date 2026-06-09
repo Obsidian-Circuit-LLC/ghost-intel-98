@@ -20,6 +20,7 @@ import { SplashScreen } from './shell/SplashScreen';
 import { playReminder, playMouseClick } from './audio/synth';
 import { toast } from './state/toasts';
 import defaultWallpaper from './assets/wallpaper-dcs98.jpg';
+import { installPluginBridge, importPluginChunks } from './plugins/load-renderer-plugins';
 
 export function App(): JSX.Element {
   const windows = useWindows((s) => s.windows);
@@ -40,6 +41,8 @@ export function App(): JSX.Element {
   useEffect(() => {
     void loadSettings();
     void refreshAuth();
+    installPluginBridge();
+    void window.api.plugins.listVerified().then((list) => importPluginChunks(list)).catch(() => {});
   }, [loadSettings, refreshAuth]);
 
   // Global retro mouse-click on every <button>. Delegated at the document so it covers
