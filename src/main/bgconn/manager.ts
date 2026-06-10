@@ -15,6 +15,7 @@ export interface ManagerDeps {
   maxReconnects: number;
   maxSessionAgeMs: number;
   workerStopTimeoutMs?: number;
+  ensureTorBootstrapped?: () => Promise<void>;
 }
 interface Live { worker: BgWorker; params: StartParams; startedAt: number; kill: () => void; consentKey: string; }
 
@@ -39,9 +40,13 @@ export class BackgroundConnectionManager {
     if (params.routing !== worker.routing || params.channelSetHash !== worker.channelSetHash) {
       throw new Error('start params do not match the registered worker (routing/channelSet)');
     }
-    if (params.routing === 'tor' && !this.deps.isTorBootstrapped()) throw new Error('tor not bootstrapped');
-    this.pending.add(connId);
+    this.pending.add(connId); // reserve synchronously BEFORE any await — the double-start guard
     try {
+      if (params.routing === 'tor') {
+        // Fail-closed: spawn + verify the separate Tor instance before handing off (spec §3.1).
+        await this.deps.ensureTorBootstrapped?.();
+        if (!this.deps.isTorBootstrapped()) throw new Error('tor not bootstrapped');
+      }
       const lane: Lane = params.routing === 'tor'
         ? laneFor({ routing: 'tor', socksHost: this.deps.socksHost, socksPort: this.deps.socksPort, creds: newSocksCreds() })
         : laneFor({ routing: 'direct' });
