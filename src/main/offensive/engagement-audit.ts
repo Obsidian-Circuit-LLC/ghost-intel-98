@@ -8,27 +8,33 @@ export interface AuditEvent {
   decision: 'allowed' | 'denied'; reason?: string;
   attackType?: string; // SCANNER-ASSERTED, UNVERIFIED
   at: string;
+  sig?: string;
 }
 
 const GENESIS = '0'.repeat(64);
-const canon = (e: AuditEvent): string => JSON.stringify(e);
+const canon = (e: AuditEvent): string => {
+  const { sig, ...rest } = e;  // sig is NOT part of the chained bytes
+  return JSON.stringify(rest);
+};
 const chain = (prevHash: string, e: AuditEvent): string =>
   createHash('sha256').update(prevHash).update(canon(e)).digest('hex');
 
 export class EngagementAudit {
   private seq = 0;
   private prevHash = GENESIS;
-  constructor(private readonly path: string) {
+  constructor(private readonly path: string, private readonly signer?: (head: string) => string) {
     if (existsSync(path)) {
       const r = verifyAuditLog(path);
       this.seq = r.events.length;
       this.prevHash = r.headHash;
     }
   }
-  record(partial: Omit<AuditEvent, 'seq' | 'prevHash'>): AuditEvent {
+  record(partial: Omit<AuditEvent, 'seq' | 'prevHash' | 'sig'>): AuditEvent {
     const e: AuditEvent = { ...partial, seq: this.seq, prevHash: this.prevHash };
+    const head = chain(this.prevHash, e);
+    if (this.signer) e.sig = this.signer(head);
     appendFileSync(this.path, JSON.stringify(e) + '\n');
-    this.prevHash = chain(this.prevHash, e);
+    this.prevHash = head;
     this.seq += 1;
     return e;
   }
@@ -37,7 +43,7 @@ export class EngagementAudit {
 
 export interface AuditVerifyResult { ok: boolean; events: AuditEvent[]; headHash: string; }
 
-export function verifyAuditLog(path: string): AuditVerifyResult {
+export function verifyAuditLog(path: string, verifier?: (sig: string, head: string) => boolean): AuditVerifyResult {
   if (!existsSync(path)) return { ok: true, events: [], headHash: GENESIS };
   const lines = readFileSync(path, 'utf8').split('\n').filter(Boolean);
   const events: AuditEvent[] = [];
@@ -46,8 +52,12 @@ export function verifyAuditLog(path: string): AuditVerifyResult {
     let e: AuditEvent;
     try { e = JSON.parse(lines[i]); } catch { return { ok: false, events, headHash: prev }; }
     if (e.seq !== i || e.prevHash !== prev) return { ok: false, events, headHash: prev };
+    const head = chain(prev, e);
+    if (verifier) {
+      if (!e.sig || !verifier(e.sig, head)) return { ok: false, events, headHash: prev };
+    }
     events.push(e);
-    prev = chain(prev, e);
+    prev = head;
   }
   return { ok: true, events, headHash: prev };
 }
