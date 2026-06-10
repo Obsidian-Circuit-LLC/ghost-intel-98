@@ -73,6 +73,7 @@ import { markConsented, assertAllConsented } from '../security/consent';
 import { getVerified, getStatus } from '../plugins/loader';
 import { invokePluginHandler } from '../plugins/invoke';
 import { getSecretBackend, rewrapSecretsForVault } from '../secrets';
+import { getEngagementController } from '../offensive/controller';
 import { homedir } from 'node:os';
 
 const MAX_SAVE_ATTACHMENT_BYTES = 64 * 1024 * 1024; // 64 MB cap on base64 decoded payload
@@ -1017,46 +1018,30 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     invokePluginHandler(String(id), String(name), Array.isArray(args) ? args : []));
 
   // ---- offensive (authorized-target-egress) ----
-  // Singleton controller. auditDir lives under userData/offensive to keep all engagement
-  // audit logs co-located with app data. onAnchorPublicKey writes the ephemeral verification
-  // anchor to <auditDir>/<manifestId>.anchor — a durable out-of-band file. Full case-timeline
-  // integration is a follow-on task (see DONE_WITH_CONCERNS in the task report).
-  void (async () => {
-    const { mkdirSync: offMkdirSync, writeFileSync: offWriteFileSync } = await import('node:fs');
-    const { EngagementController } = await import('../offensive/engagement-controller');
-    const offensiveDir = join(app.getPath('userData'), 'offensive');
-    try { offMkdirSync(offensiveDir, { recursive: true }); } catch { /* exists */ }
-    const offSettings = (await settingsStore.read()).offensive;
-    const controller = new EngagementController({
-      auditDir: offensiveDir,
-      settings: {
-        confirmMode: offSettings.confirmMode,
-        rateLimitPerSec: offSettings.rateLimitPerSec,
-        requireSignedAuthorization: offSettings.requireSignedAuthorization,
-        issuerKeys: offSettings.issuerKeys ?? [],
-        downstreamProxy: offSettings.downstreamProxy
-      },
-      onAnchorPublicKey: (pubHex, manifestId) => {
-        const anchorPath = join(offensiveDir, `${manifestId}.anchor`);
-        offWriteFileSync(anchorPath, JSON.stringify({ pubHex, manifestId, anchoredAt: new Date().toISOString() }) + '\n', 'utf8');
-      }
-    });
+  // The singleton EngagementController is initialised in index.ts (before loadPlugins) so that
+  // ctx.attackEgress is live from first plugin load. Here we wire IPC handlers that
+  // delegate to the already-initialised singleton via the statically-imported getEngagementController().
+  const requireController = () => {
+    const ctl = getEngagementController();
+    if (!ctl) throw new Error('EngagementController not initialised');
+    return ctl;
+  };
 
-    safeHandle(channels.offensive.loadScope, (...args) => {
-      controller.loadScope(args[0], args[1] as Parameters<typeof controller.loadScope>[1]);
-    });
-    safeHandle(channels.offensive.confirm, () => { controller.confirm(); });
-    safeHandle(channels.offensive.startScan, () => controller.startScan());
-    safeHandle(channels.offensive.stopScan, () => controller.stopScan());
-    safeHandle(channels.offensive.status, () => {
-      const surface = controller.attackEgressSurface();
-      return {
-        proxyPort: surface ? Number(surface.proxyUrl().split(':')[2]) : null,
-        hasScope: true,
-        canScan: surface !== null
-      };
-    });
-  })();
+  safeHandle(channels.offensive.loadScope, (...args) => {
+    const ctl = requireController();
+    ctl.loadScope(args[0], args[1] as Parameters<typeof ctl.loadScope>[1]);
+  });
+  safeHandle(channels.offensive.confirm, () => { requireController().confirm(); });
+  safeHandle(channels.offensive.startScan, () => requireController().startScan());
+  safeHandle(channels.offensive.stopScan, () => requireController().stopScan());
+  safeHandle(channels.offensive.status, () => {
+    const surface = requireController().attackEgressSurface();
+    return {
+      proxyPort: surface ? Number(surface.proxyUrl().split(':')[2]) : null,
+      hasScope: true,
+      canScan: surface !== null
+    };
+  });
 }
 
 /** Reminder tick: every 30s, pull due reminders, fire notifications + emit IPC to renderer.

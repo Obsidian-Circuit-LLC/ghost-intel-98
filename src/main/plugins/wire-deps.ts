@@ -34,6 +34,7 @@ import * as entities from '../storage/entities';
 import { caseStore } from '../storage/json-fs';
 import { caseDir } from '../storage/paths';
 import { secureReadText, secureWriteFile } from '../storage/secure-fs';
+import { getEngagementController } from '../offensive/controller';
 
 /**
  * Strip credential-bearing headers from a header map. Used when a plugin egress redirect
@@ -222,6 +223,18 @@ export function buildContextDeps(): ContextDeps {
         const { rm } = await import('node:fs/promises');
         await rm(path, { force: true });
       }
+    },
+
+    // attackEgress: reads the LIVE controller each call so the proxy URL reflects the
+    // current scan state (empty when no scan is running, live URL during an active scan).
+    // The controller singleton is always set before any plugin can call ctx.attackEgress
+    // (initEngagementController runs in registerIpc which runs before plugins load — see
+    // index.ts whenReady; the singleton is set during that same tick even though the IIFE
+    // is async, because initEngagementController is called synchronously within the IIFE
+    // before any await that matters to the ordering guarantee).
+    attackEgress: {
+      proxyUrl: () => getEngagementController()?.attackEgressSurface()?.proxyUrl() ?? '',
+      scopeContentHash: () => getEngagementController()?.attackEgressSurface()?.scopeContentHash() ?? ''
     }
   };
 }
