@@ -15,10 +15,13 @@ describe('BgconnTor', () => {
     const proc = fakeProc();
     const spawn = vi.fn(() => proc) as never;
     const tor = new BgconnTor({ torExe: '/tor', dataDir: '/d', socksPort: 9250, controlPort: 9251, spawn,
-      writeFile: async () => {} });
+      writeFile: async () => {}, mkdir: async () => {} });
     expect(tor.isBootstrapped()).toBe(false);
     const started = tor.start();
-    proc.stdout.emit('data', Buffer.from('... Bootstrapped 100% (done): Done\n'));
+    // mkdir and writeFile stubs each consume one microtask tick before spawn runs and the
+    // stdout listener is attached.  A macrotask (setImmediate) fires after all pending
+    // microtasks have drained, so the emit is guaranteed to land after the listener is live.
+    setImmediate(() => proc.stdout.emit('data', Buffer.from('... Bootstrapped 100% (done): Done\n')));
     await started;
     expect(tor.isBootstrapped()).toBe(true);
     expect(tor.socksPort()).toBe(9250);
