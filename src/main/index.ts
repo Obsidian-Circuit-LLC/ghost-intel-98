@@ -32,6 +32,7 @@ import { loadPlugins } from './plugins/loader';
 import { registerPluginProtocol } from './plugins/protocol';
 import { buildContextDeps, refreshPluginNetSnapshot } from './plugins/wire-deps';
 import { settingsStore } from './storage/json-fs';
+import { initEngagementController } from './offensive/controller';
 import { shutdownAllSessions } from './services/ssh';
 import { shutdownAll as shutdownAllFtp } from './services/ftp';
 import { cancelAll as cancelAllAiStreams } from './services/ai';
@@ -236,6 +237,31 @@ app.whenReady().then(async () => {
   // IPC is registered so plugin handlers are available when the renderer connects.
   const settings = await settingsStore.read();
   refreshPluginNetSnapshot(settings.plugins);
+
+  // Initialise the process-wide EngagementController singleton BEFORE loadPlugins so that
+  // ctx.attackEgress.proxyUrl() is callable (returns '' when idle) from any plugin setup
+  // that runs during loadPlugins. registerIpc reuses the same singleton — no duplicate construction.
+  {
+    const { mkdirSync: offMkdirSync, writeFileSync: offWriteFileSync } = await import('node:fs');
+    const offensiveDir = join(app.getPath('userData'), 'offensive');
+    try { offMkdirSync(offensiveDir, { recursive: true }); } catch { /* exists */ }
+    const offSettings = settings.offensive;
+    initEngagementController({
+      auditDir: offensiveDir,
+      settings: {
+        confirmMode: offSettings.confirmMode,
+        rateLimitPerSec: offSettings.rateLimitPerSec,
+        requireSignedAuthorization: offSettings.requireSignedAuthorization,
+        issuerKeys: offSettings.issuerKeys ?? [],
+        downstreamProxy: offSettings.downstreamProxy
+      },
+      onAnchorPublicKey: (pubHex, manifestId) => {
+        const anchorPath = join(offensiveDir, `${manifestId}.anchor`);
+        offWriteFileSync(anchorPath, JSON.stringify({ pubHex, manifestId, anchoredAt: new Date().toISOString() }) + '\n', 'utf8');
+      }
+    });
+  }
+
   await loadPlugins({
     isEnabled: (id) => settings.plugins?.[id]?.enabled ?? true,
     contextDeps: buildContextDeps()
