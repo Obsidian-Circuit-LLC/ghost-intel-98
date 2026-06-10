@@ -307,6 +307,14 @@ export const channels = {
     startScan: 'offensive:startScan',
     stopScan: 'offensive:stopScan',
     status: 'offensive:status'
+  },
+  bgconn: {
+    list: 'bgconn:list',
+    start: 'bgconn:start',
+    stop: 'bgconn:stop',
+    configure: 'bgconn:configure',
+    clearCredentials: 'bgconn:clearCredentials',
+    status: 'bgconn:status'
   }
 } as const;
 
@@ -464,4 +472,13 @@ export interface ApiContracts {
   [channels.offensive.startScan]: { args: []; returns: { proxyPort: number } };
   [channels.offensive.stopScan]: { args: []; returns: void };
   [channels.offensive.status]: { args: []; returns: { proxyPort: number | null; hasScope: boolean; canScan: boolean } };
+
+  [channels.bgconn.list]: { args: []; returns: Array<{ connId: string; routing: 'tor' | 'direct'; startedAt: number }> };
+  [channels.bgconn.status]: { args: []; returns: Array<{ connId: string; routing: 'tor' | 'direct'; startedAt: number }> };
+  [channels.bgconn.start]: { args: [string, { phone: string; routing: 'tor' | 'direct'; channelSetHash: string }, boolean]; returns: void };
+  [channels.bgconn.stop]: { args: [string]; returns: void };
+  [channels.bgconn.configure]: { args: [{ idleTeardownAfterMinutes: number | null; defaultRouting: 'tor' | 'direct'; maxReconnects: number; maxSessionAgeMinutes: number }]; returns: void };
+  [channels.bgconn.clearCredentials]: { args: [string, string]; returns: void };
 }
+
+export const BGCONN_LOCK_EXEMPT_CHANNELS = ['bgconn:status', 'bgconn:stop'] as const;

@@ -908,6 +908,7 @@ function mergeSettings(base: AppSettings, patch: Partial<AppSettings>): AppSetti
     ai: { ...base.ai, ...(patch.ai ?? {}) },
     mail: { ...base.mail, ...(patch.mail ?? {}) },
     browser: { ...base.browser, ...(patch.browser ?? {}) },
+    bgconn: { ...base.bgconn, ...(patch.bgconn ?? {}) },
     media: { ...base.media, ...(patch.media ?? {}) },
     geoint: { ...base.geoint, ...(patch.geoint ?? {}) },
     markets: {

@@ -17,7 +17,7 @@
 import { app, ipcMain, shell, dialog, BrowserWindow } from 'electron';
 import { writeFile, rename, lstat, rm, readFile, stat, realpath } from 'node:fs/promises';
 import { basename, dirname, join, sep } from 'node:path';
-import { channels } from '@shared/ipc-contracts';
+import { channels, BGCONN_LOCK_EXEMPT_CHANNELS } from '@shared/ipc-contracts';
 import type { MailAccount, MailSendInput, SshHostProfile, AiChatRequest, MediaTrack } from '@shared/post-mvp-types';
 import type { MediaUrlResult, CaseRecord } from '@shared/types';
 import {
@@ -74,6 +74,9 @@ import { getVerified, getStatus } from '../plugins/loader';
 import { invokePluginHandler } from '../plugins/invoke';
 import { getSecretBackend, rewrapSecretsForVault } from '../secrets';
 import { getEngagementController } from '../offensive/controller';
+import { getBgConnManager } from '../bgconn/singleton';
+import { makeBgConnSecrets, type SecretBackend } from '../bgconn/secrets';
+import { secretStore } from '../secrets/index';
 import { homedir } from 'node:os';
 
 const MAX_SAVE_ATTACHMENT_BYTES = 64 * 1024 * 1024; // 64 MB cap on base64 decoded payload
@@ -133,7 +136,8 @@ function sanitiseMessage(msg: string): string {
 const GATE_EXEMPT = new Set<string>([
   ...Object.values(channels.auth),
   channels.settings.read,
-  channels.system.appInfo
+  channels.system.appInfo,
+  ...BGCONN_LOCK_EXEMPT_CHANNELS
 ]);
 
 function safeHandle(channel: string, fn: Handler): void {
@@ -1041,6 +1045,65 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
       hasScope: true,
       canScan: surface !== null
     };
+  });
+
+  // ---- bgconn (persistent-background-connection) ----
+  const bgSecretBackend: SecretBackend = {
+    get: (k) => secretStore.get(k),
+    set: (k, v) => secretStore.set(k, v),
+    delete: (k) => secretStore.delete(k)
+  };
+  const bgSecrets = makeBgConnSecrets(bgSecretBackend);
+  // 'session' is the canonical secret field (the Telethon session string written post-auth by subsystem 2).
+  const BGCONN_SECRET_FIELDS = ['session'];
+
+  // Runtime guards on renderer-supplied bgconn inputs: a garbage `routing` must NOT fall through to a
+  // DIRECT (clearnet) lane, and `configure` must not persist a 0/negative bound (feature DoS).
+  const isBgRouting = (v: unknown): v is 'tor' | 'direct' => v === 'tor' || v === 'direct';
+  const inRange = (v: unknown, min: number, max: number): boolean =>
+    typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max;
+
+  safeHandle(channels.bgconn.status, () => getBgConnManager()?.list() ?? []);
+  safeHandle(channels.bgconn.list, () => getBgConnManager()?.list() ?? []);
+  safeHandle(channels.bgconn.start, async (...a) => {
+    const connId = String(a[0]);
+    const p = a[1] as { phone?: unknown; routing?: unknown; channelSetHash?: unknown };
+    if (!connId) throw new Error('bgconn: connId required');
+    if (typeof p?.phone !== 'string' || typeof p?.channelSetHash !== 'string' || !isBgRouting(p?.routing)) {
+      throw new Error('bgconn: invalid start params (phone/channelSetHash strings, routing tor|direct)');
+    }
+    const confirmed = a[2] === true;
+    const mgr = getBgConnManager();
+    if (!mgr) throw new Error('bgconn manager not initialised');
+    await mgr.start(connId, { phone: p.phone, routing: p.routing, channelSetHash: p.channelSetHash }, { confirmed });
+  });
+  safeHandle(channels.bgconn.stop, async (...a) => {
+    const connId = String(a[0]);
+    await getBgConnManager()?.stop(connId);
+  });
+  safeHandle(channels.bgconn.configure, async (...a) => {
+    const cfg = a[0] as { idleTeardownAfterMinutes?: unknown; defaultRouting?: unknown; maxReconnects?: unknown; maxSessionAgeMinutes?: unknown };
+    // Whole-replace the bgconn block (mergeSettings whole-replaces bgconn, like offensive/chat) — so
+    // ALL four fields must be present + valid before we persist (a partial would clobber good policy).
+    if (!(cfg?.idleTeardownAfterMinutes === null || inRange(cfg?.idleTeardownAfterMinutes, 0, 10_080))) {
+      throw new Error('bgconn: idleTeardownAfterMinutes must be null or an integer 0..10080');
+    }
+    if (!isBgRouting(cfg?.defaultRouting)) throw new Error('bgconn: invalid defaultRouting');
+    if (!inRange(cfg?.maxReconnects, 1, 100_000)) throw new Error('bgconn: maxReconnects must be an integer 1..100000');
+    if (!inRange(cfg?.maxSessionAgeMinutes, 1, 10_080)) throw new Error('bgconn: maxSessionAgeMinutes must be an integer 1..10080');
+    // NOTE: a live manager captured its policy at construction; bgconn policy changes apply on next
+    // app start (same snapshot semantics as the plugin-net snapshot). Emergency-stop is the live control.
+    settingsStore.update({ bgconn: {
+      idleTeardownAfterMinutes: cfg.idleTeardownAfterMinutes as number | null,
+      defaultRouting: cfg.defaultRouting,
+      maxReconnects: cfg.maxReconnects as number,
+      maxSessionAgeMinutes: cfg.maxSessionAgeMinutes as number
+    } });
+  });
+  safeHandle(channels.bgconn.clearCredentials, async (...a) => {
+    const pluginId = String(a[0]);
+    const connId = String(a[1]);
+    await bgSecrets.clear(pluginId, connId, BGCONN_SECRET_FIELDS);
   });
 }
 

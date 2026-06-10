@@ -401,6 +401,15 @@ export interface AppSettings {
     requireSignedAuthorization: boolean;
     issuerKeys?: { keyId: string; edPubHex: string; pqPubHex: string }[];
   };
+  /** Persistent background connection policy. Controls idle teardown, routing,
+   *  reconnect bounds, and maximum session age. */
+  bgconn: {
+    /** Minutes of inactivity before the connection is torn down. null = never. */
+    idleTeardownAfterMinutes: number | null;
+    defaultRouting: 'tor' | 'direct';
+    maxReconnects: number;
+    maxSessionAgeMinutes: number;
+  };
 }
 
 export const defaultShortcuts: AccessShortcut[] = [
@@ -507,5 +516,6 @@ export const defaultSettings: AppSettings = {
   },
   chat: { networkEnabled: false },
   plugins: {},
-  offensive: { confirmMode: 'per-scan', rateLimitPerSec: 10, downstreamProxy: null, requireSignedAuthorization: false, issuerKeys: [] }
+  offensive: { confirmMode: 'per-scan', rateLimitPerSec: 10, downstreamProxy: null, requireSignedAuthorization: false, issuerKeys: [] },
+  bgconn: { idleTeardownAfterMinutes: 120, defaultRouting: 'tor', maxReconnects: 20, maxSessionAgeMinutes: 720 }
 };

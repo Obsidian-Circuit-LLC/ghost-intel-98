@@ -108,3 +108,20 @@ function fullDeps(partial?: Partial<ContextDeps>): ContextDeps {
     ...partial
   };
 }
+
+const teardowns = new Map<string, Array<() => Promise<void> | void>>();
+
+export function registerTeardown(pluginId: string, fn: () => Promise<void> | void): void {
+  const list = teardowns.get(pluginId) ?? [];
+  list.push(fn);
+  teardowns.set(pluginId, list);
+}
+export async function disablePlugin(pluginId: string): Promise<void> {
+  const list = teardowns.get(pluginId) ?? [];
+  teardowns.delete(pluginId);
+  for (const fn of list) { try { await fn(); } catch (e) { console.error(`[plugin:${pluginId}] teardown`, e); } }
+}
+export async function disableAllPlugins(): Promise<void> {
+  for (const id of [...teardowns.keys()]) await disablePlugin(id);
+}
+export function _resetTeardownsForTest(): void { teardowns.clear(); }
