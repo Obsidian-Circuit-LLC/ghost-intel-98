@@ -49,4 +49,32 @@ describe('AuthorizedEgressProxy', () => {
     expect(v.events.map((e) => e.decision)).toContain('denied');
     expect(v.events.find((e) => e.decision === 'allowed')?.dialedIp).toBe('127.0.0.1');
   });
+
+  it('relays a CHUNKED upstream response intact', async () => {
+    const { createServer } = await import('node:http');
+    const s = createServer((_q, r) => { r.setHeader('Transfer-Encoding', 'chunked'); r.write('hello'); r.write(' world'); r.end(); });
+    await new Promise<void>((res) => s.listen(0, '127.0.0.1', res));
+    const up = (s.address() as { port: number }).port;
+    const { mkdtempSync } = await import('node:fs'); const { tmpdir } = await import('node:os'); const { join } = await import('node:path');
+    const dir = mkdtempSync(join(tmpdir(), 'dcs98-chunk-'));
+    const audit = new EngagementAudit(join(dir, 'c.log'));
+    const manifest = parseScopeManifest({ manifestId: 'e', mode: 'lab', expiresAt: '2999-01-01T00:00:00Z', include: [{ kind: 'cidr', value: '127.0.0.1/32' }] }, NOW);
+    const proxy = new AuthorizedEgressProxy({ manifest, audit, resolveAll: async () => ['127.0.0.1'], now: () => NOW, rateLimitPerSec: 1000 });
+    const { port } = await proxy.start();
+    const got = await viaProxy(port, 'in.scope', up);
+    expect(got.body).toBe('hello world'); // intact, not '5\r\nhello\r\n...'
+    await proxy.stop(); s.close();
+  });
+
+  it('a non-lab domain-include manifest DENIES a metadata-IP target (withDefaultExcludes applied in proxy)', async () => {
+    const { mkdtempSync } = await import('node:fs'); const { tmpdir } = await import('node:os'); const { join } = await import('node:path');
+    const dir = mkdtempSync(join(tmpdir(), 'dcs98-meta-'));
+    const audit = new EngagementAudit(join(dir, 'm.log'));
+    const manifest = parseScopeManifest({ manifestId: 'e', mode: 'engagement', expiresAt: '2999-01-01T00:00:00Z', include: [{ kind: 'domain', value: '*.example.com' }] }, NOW);
+    const proxy = new AuthorizedEgressProxy({ manifest, audit, resolveAll: async () => ['169.254.169.254'], now: () => NOW, rateLimitPerSec: 1000 });
+    const { port } = await proxy.start();
+    const r = await viaProxy(port, 'a.example.com', 80);
+    expect(r.status).toBe(403); // metadata IP excluded by default in non-lab mode
+    await proxy.stop();
+  });
 });
