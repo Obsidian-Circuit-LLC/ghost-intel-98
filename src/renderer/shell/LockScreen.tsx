@@ -4,14 +4,32 @@
  * master password or the one-time recovery key; on success App re-checks auth.status and the
  * desktop mounts.
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { FormEvent } from 'react';
 import { useAuth } from '../state/store';
+
+/** A live background-connection summary, as returned by the lock-exempt bgconn:status channel. */
+interface BgConnStatus {
+  connId: string;
+  routing: 'tor' | 'direct';
+  startedAt: number;
+}
 
 /** Strip the "[auth:unlock] " channel prefix the IPC boundary adds, for a clean message. */
 function cleanError(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err);
   return msg.replace(/^\[[^\]]+\]\s*/, '');
+}
+
+/**
+ * Pure helper: build the human-readable LIVE badge text for the active background
+ * Telegram monitor connections. Empty string when none are live.
+ */
+export function lockScreenBgconnLabel(
+  conns: Array<{ connId: string; routing: string; startedAt: number }>
+): string {
+  if (conns.length === 0) return '';
+  return conns.map((c) => `Telegram monitor: LIVE (${c.routing})`).join(' · ');
 }
 
 export function LockScreen(): JSX.Element {
@@ -20,6 +38,40 @@ export function LockScreen(): JSX.Element {
   const [value, setValue] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [bgConns, setBgConns] = useState<BgConnStatus[]>([]);
+
+  // Poll the lock-exempt bgconn:status channel so the operator can SEE a live monitor while
+  // locked. A failed status call must never break the lock screen: swallow and keep last state.
+  useEffect(() => {
+    let cancelled = false;
+    const poll = async (): Promise<void> => {
+      try {
+        const next = await window.api.bgconn.status();
+        if (!cancelled) setBgConns(next);
+      } catch {
+        /* ignore — leave the last known state intact */
+      }
+    };
+    void poll();
+    const id = setInterval(() => void poll(), 3000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, []);
+
+  // Emergency-stop a live monitor via the lock-exempt bgconn:stop channel, then refresh the list
+  // so the badge updates immediately.
+  const stopConn = async (connId: string): Promise<void> => {
+    try {
+      await window.api.bgconn.stop(connId);
+    } catch {
+      /* ignore */
+    } finally {
+      const next = await window.api.bgconn.status().catch(() => bgConns);
+      setBgConns(next);
+    }
+  };
 
   const submit = async (e: FormEvent): Promise<void> => {
     e.preventDefault();
@@ -74,6 +126,29 @@ export function LockScreen(): JSX.Element {
               <button type="submit" disabled={busy || !value}>{busy ? 'Unlocking…' : 'Unlock'}</button>
             </div>
           </form>
+          {bgConns.length > 0 && (
+            <div
+              className="ga98-lock-bgconn"
+              style={{
+                marginTop: 12,
+                border: '1px solid #808080',
+                borderTop: '1px solid #404040',
+                borderLeft: '1px solid #404040',
+                padding: '6px 8px',
+                background: '#c0c0c0',
+                fontSize: '0.85em'
+              }}
+            >
+              <p style={{ margin: '0 0 6px' }}>{lockScreenBgconnLabel(bgConns)}</p>
+              <div className="field-row" style={{ flexWrap: 'wrap', gap: 6 }}>
+                {bgConns.map((c) => (
+                  <button key={c.connId} type="button" onClick={() => void stopConn(c.connId)}>
+                    Stop {c.connId}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
