@@ -114,6 +114,18 @@ export interface CameraStream {
   caseId: CaseId | null;
   addedAt: string;
   notes: string;
+  // ---- Optional geo metadata ----
+  // Populated opportunistically when a stream is imported (the corpus pull supplies it where
+  // known). Carried here so the library can be grouped/searched by location later WITHOUT
+  // re-tagging the corpus. All optional; absent keys are simply not written. No code path
+  // derives these by probing the network — they come only from the imported feed list.
+  country?: string;
+  region?: string;
+  city?: string;
+  lat?: number;
+  lon?: number;
+  /** Provenance: the dataset/feed name this stream was pulled from. */
+  source?: string;
 }
 
 // ---------- Jukebox (media player) ----------
