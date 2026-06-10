@@ -56,4 +56,14 @@ export class BgconnTor {
       p.kill();
     });
   }
+
+  /** Synchronous SIGKILL backstop for app.on('will-quit'). Unlike stop() this does not await
+   *  graceful exit — it exists to GUARANTEE the tor child is dead before the process exits, even
+   *  if the bounded async before-quit teardown timed out (orphan → install-dir lock → uninstaller fail). */
+  killNow(): void {
+    const p = this.proc;
+    this.proc = null;
+    this.bootstrapped = false;
+    if (p && !p.killed) { try { p.kill('SIGKILL'); } catch { /* */ } }
+  }
 }

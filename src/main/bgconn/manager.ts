@@ -16,6 +16,7 @@ export interface ManagerDeps {
   maxSessionAgeMs: number;
   workerStopTimeoutMs?: number;
   ensureTorBootstrapped?: () => Promise<void>;
+  teardownTor?: () => Promise<void>;
 }
 interface Live { worker: BgWorker; params: StartParams; startedAt: number; kill: () => void; consentKey: string; }
 
@@ -27,6 +28,7 @@ export class BackgroundConnectionManager {
   private lockedSince: number | null = null;
   private reconnects = new Map<string, number>();
   private pending = new Set<string>();
+  private stopping = new Set<string>();
   private lastConsentKey = new Map<string, string>();
   constructor(private readonly deps: ManagerDeps) {}
 
@@ -36,6 +38,7 @@ export class BackgroundConnectionManager {
     const worker = this.workers.get(connId);
     if (!worker) throw new Error(`no worker registered: ${connId}`);
     if (this.live.has(connId) || this.pending.has(connId)) throw new Error('connection already started');
+    if (this.stopping.has(connId)) throw new Error('connection is stopping; retry after teardown completes');
     if (!opts.confirmed) throw new Error('connection not confirmed');
     if (params.routing !== worker.routing || params.channelSetHash !== worker.channelSetHash) {
       throw new Error('start params do not match the registered worker (routing/channelSet)');
@@ -53,6 +56,13 @@ export class BackgroundConnectionManager {
       const { kill } = await worker.start(lane);
       this.live.set(connId, { worker, params, startedAt: this.deps.now(), kill, consentKey: consentKey(params) });
       this.lastConsentKey.set(connId, consentKey(params));
+    } catch (e) {
+      // A failed start must not leave the separate tor circuit up with no authorized session.
+      // Reap it only when this failure leaves zero live sessions (multi-conn: keep tor warm if others live).
+      if (params.routing === 'tor' && this.live.size === 0) {
+        await this.deps.teardownTor?.().catch(() => { /* best-effort */ });
+      }
+      throw e;
     } finally {
       this.pending.delete(connId);
     }
@@ -63,6 +73,7 @@ export class BackgroundConnectionManager {
     const l = this.live.get(connId);
     if (!l) return;
     this.live.delete(connId);
+    this.stopping.add(connId);
     this.reconnects.delete(connId);
     const timeoutMs = this.deps.workerStopTimeoutMs ?? 5000;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -74,6 +85,7 @@ export class BackgroundConnectionManager {
     } finally {
       if (timer) clearTimeout(timer);
       try { l.kill(); } catch { /* */ }
+      this.stopping.delete(connId);
     }
   }
 

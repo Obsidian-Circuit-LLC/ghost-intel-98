@@ -296,7 +296,8 @@ app.whenReady().then(async () => {
       idleTeardownAfterMs: bg.idleTeardownAfterMinutes === null ? null : bg.idleTeardownAfterMinutes * 60_000,
       maxReconnects: bg.maxReconnects,
       maxSessionAgeMs: bg.maxSessionAgeMinutes * 60_000,
-      ensureTorBootstrapped: () => bgTor.start()
+      ensureTorBootstrapped: () => bgTor.start(),
+      teardownTor: () => bgTor.stop()
     });
     setBgConnManager(bgManager);
   }
@@ -359,7 +360,7 @@ app.on('before-quit', (event) => {
   });
 });
 
-app.on('will-quit', () => { localAi.stop(); }); // sync backstop (idempotent)
+app.on('will-quit', () => { localAi.stop(); getBgTor()?.killNow(); }); // sync backstops (idempotent)
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();

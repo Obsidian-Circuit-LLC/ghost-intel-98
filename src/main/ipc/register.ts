@@ -1057,26 +1057,48 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   // 'session' is the canonical secret field (the Telethon session string written post-auth by subsystem 2).
   const BGCONN_SECRET_FIELDS = ['session'];
 
+  // Runtime guards on renderer-supplied bgconn inputs: a garbage `routing` must NOT fall through to a
+  // DIRECT (clearnet) lane, and `configure` must not persist a 0/negative bound (feature DoS).
+  const isBgRouting = (v: unknown): v is 'tor' | 'direct' => v === 'tor' || v === 'direct';
+  const isPosInt = (v: unknown): boolean => typeof v === 'number' && Number.isInteger(v) && v >= 1;
+  const isNonNegInt = (v: unknown): boolean => typeof v === 'number' && Number.isInteger(v) && v >= 0;
+
   safeHandle(channels.bgconn.status, () => getBgConnManager()?.list() ?? []);
   safeHandle(channels.bgconn.list, () => getBgConnManager()?.list() ?? []);
   safeHandle(channels.bgconn.start, async (...a) => {
     const connId = String(a[0]);
-    const params = a[1] as { phone: string; routing: 'tor' | 'direct'; channelSetHash: string };
+    const p = a[1] as { phone?: unknown; routing?: unknown; channelSetHash?: unknown };
+    if (!connId) throw new Error('bgconn: connId required');
+    if (typeof p?.phone !== 'string' || typeof p?.channelSetHash !== 'string' || !isBgRouting(p?.routing)) {
+      throw new Error('bgconn: invalid start params (phone/channelSetHash strings, routing tor|direct)');
+    }
     const confirmed = a[2] === true;
     const mgr = getBgConnManager();
     if (!mgr) throw new Error('bgconn manager not initialised');
-    await mgr.start(connId, params, { confirmed });
+    await mgr.start(connId, { phone: p.phone, routing: p.routing, channelSetHash: p.channelSetHash }, { confirmed });
   });
   safeHandle(channels.bgconn.stop, async (...a) => {
     const connId = String(a[0]);
     await getBgConnManager()?.stop(connId);
   });
   safeHandle(channels.bgconn.configure, async (...a) => {
-    const cfg = a[0] as { idleTeardownAfterMinutes: number | null; defaultRouting: 'tor' | 'direct'; maxReconnects: number; maxSessionAgeMinutes: number };
-    // Whole-replace the bgconn block (mergeSettings whole-replaces bgconn, like offensive/chat).
+    const cfg = a[0] as { idleTeardownAfterMinutes?: unknown; defaultRouting?: unknown; maxReconnects?: unknown; maxSessionAgeMinutes?: unknown };
+    // Whole-replace the bgconn block (mergeSettings whole-replaces bgconn, like offensive/chat) — so
+    // ALL four fields must be present + valid before we persist (a partial would clobber good policy).
+    if (!(cfg?.idleTeardownAfterMinutes === null || isNonNegInt(cfg?.idleTeardownAfterMinutes))) {
+      throw new Error('bgconn: idleTeardownAfterMinutes must be null or a non-negative integer');
+    }
+    if (!isBgRouting(cfg?.defaultRouting)) throw new Error('bgconn: invalid defaultRouting');
+    if (!isPosInt(cfg?.maxReconnects)) throw new Error('bgconn: maxReconnects must be a positive integer');
+    if (!isPosInt(cfg?.maxSessionAgeMinutes)) throw new Error('bgconn: maxSessionAgeMinutes must be a positive integer');
     // NOTE: a live manager captured its policy at construction; bgconn policy changes apply on next
     // app start (same snapshot semantics as the plugin-net snapshot). Emergency-stop is the live control.
-    settingsStore.update({ bgconn: cfg });
+    settingsStore.update({ bgconn: {
+      idleTeardownAfterMinutes: cfg.idleTeardownAfterMinutes as number | null,
+      defaultRouting: cfg.defaultRouting,
+      maxReconnects: cfg.maxReconnects as number,
+      maxSessionAgeMinutes: cfg.maxSessionAgeMinutes as number
+    } });
   });
   safeHandle(channels.bgconn.clearCredentials, async (...a) => {
     const pluginId = String(a[0]);
