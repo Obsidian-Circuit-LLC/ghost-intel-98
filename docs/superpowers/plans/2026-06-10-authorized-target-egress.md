@@ -1142,6 +1142,11 @@ export class EngagementController {
   private session: OffensiveSession;
   private proxy: AuthorizedEgressProxy | null = null;
   private audit: EngagementAudit | null = null;
+  // SECURITY (Task 5 review): seenNonces MUST be DURABLE (restart-surviving) and engagement-scoped —
+  // load from a vault file at construction and persist (append the spent nonce) after a successful
+  // verifyScopeToken, else a spent token replays after a process restart within its TTL. Key entries
+  // as `${issuerKeyId}:${nonce}` when multiple issuers are configured. (In-memory Set shown here is a
+  // placeholder; back it with secure-fs per engagement during implementation.)
   private seenNonces = new Set<string>();
   private now: () => number;
   constructor(private readonly opts: ControllerOptions) {
