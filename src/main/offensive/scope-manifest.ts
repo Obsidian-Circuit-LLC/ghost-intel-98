@@ -69,6 +69,32 @@ export function parseScopeManifest(raw: unknown, now: number = Date.now()): Scop
   return m;
 }
 
+/** Private/loopback/link-local/metadata ranges that must NOT be attacked unless the operator is in
+ *  'lab' mode or explicitly scopes them. Injected into `exclude` for all non-lab modes so a domain
+ *  include rule can't authorize a host that (via DNS) resolves to internal infrastructure. */
+export const DEFAULT_PRIVATE_EXCLUDES: ScopeRule[] = [
+  { kind: 'cidr', value: '127.0.0.0/8' },
+  { kind: 'cidr', value: '10.0.0.0/8' },
+  { kind: 'cidr', value: '172.16.0.0/12' },
+  { kind: 'cidr', value: '192.168.0.0/16' },
+  { kind: 'cidr', value: '169.254.0.0/16' },   // link-local incl. 169.254.169.254 cloud metadata
+  { kind: 'cidr', value: '100.64.0.0/10' },     // CGNAT
+  { kind: 'cidr', value: '0.0.0.0/8' },         // "this network"
+  { kind: 'cidr', value: '::1/128' },           // v6 loopback
+  { kind: 'cidr', value: 'fe80::/10' },         // v6 link-local
+  { kind: 'cidr', value: 'fc00::/7' }           // v6 unique-local
+];
+
+/** Returns a manifest with DEFAULT_PRIVATE_EXCLUDES prepended to `exclude` for non-'lab' modes.
+ *  Idempotent (skips CIDRs already present). 'lab' mode is returned unchanged so loopback labs work. */
+export function withDefaultExcludes(m: ScopeManifest): ScopeManifest {
+  if (m.mode === 'lab') return m;
+  const have = new Set(m.exclude.filter((r) => r.kind === 'cidr').map((r) => r.value));
+  const extra = DEFAULT_PRIVATE_EXCLUDES.filter((r) => !have.has(r.value));
+  if (extra.length === 0) return m;
+  return { ...m, exclude: [...extra, ...m.exclude] };
+}
+
 export function scopeContentHash(m: ScopeManifest): string {
   const sortRules = (rs: ScopeRule[]): ScopeRule[] =>
     [...rs].sort((a, b) => (a.kind + a.value < b.kind + b.value ? -1 : 1));
