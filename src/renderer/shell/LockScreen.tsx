@@ -68,8 +68,12 @@ export function LockScreen(): JSX.Element {
     } catch {
       /* ignore */
     } finally {
-      const next = await window.api.bgconn.status().catch(() => bgConns);
-      setBgConns(next);
+      try {
+        const next = await window.api.bgconn.status();
+        setBgConns(next);
+      } catch {
+        /* leave last-known state; the poll will refresh */
+      }
     }
   };
 

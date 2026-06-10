@@ -59,6 +59,29 @@ describe('manager policy', () => {
     await expect(m.start('c1', { phone: '+1', routing: 'direct', channelSetHash: 'h' }, { confirmed: true })).rejects.toThrow(/do not match/i);
     await expect(m.start('c1', { phone: '+1', routing: 'tor', channelSetHash: 'OTHER' }, { confirmed: true })).rejects.toThrow(/do not match/i);
   });
+  it('finite-guards a NaN max-session-age bound: a session is torn down by the 12h safe default (red-team repro)', async () => {
+    t = Date.parse('2026-06-10T00:00:00Z'); unlocked = true;
+    // A malformed settings.bgconn used to yield maxSessionAgeMs = undefined*60000 = NaN, and
+    // `now - startedAt >= NaN` is always false → the session would run forever. The finite-guard
+    // inside tick() must fall back to the 12h safe default and tear it down.
+    const m = new BackgroundConnectionManager({ ...deps(), maxSessionAgeMs: NaN, idleTeardownAfterMs: NaN });
+    const w = mkWorker('c1'); m.register(w);
+    await m.start('c1', { phone: '+1', routing: 'tor', channelSetHash: 'h' }, { confirmed: true });
+    expect(m.list().length).toBe(1);
+    t += 365 * 24 * 60 * 60_000; // a full year of elapsed time
+    m.tick();
+    expect(m.list().length).toBe(0); // no longer runs forever
+  });
+  it('finite-guards a NaN idle-teardown bound while locked: torn down by the 2h safe default', async () => {
+    t = Date.parse('2026-06-10T00:00:00Z'); unlocked = true;
+    const m = new BackgroundConnectionManager({ ...deps(), maxSessionAgeMs: NaN, idleTeardownAfterMs: NaN });
+    const w = mkWorker('c1'); m.register(w);
+    await m.start('c1', { phone: '+1', routing: 'tor', channelSetHash: 'h' }, { confirmed: true });
+    unlocked = false; t += 60_000; m.tick(); // 1 min locked — survives
+    expect(m.list().length).toBe(1);
+    t += 3 * 60 * 60_000; m.tick();           // 3h locked — past the 2h idle safe default
+    expect(m.list().length).toBe(0);
+  });
   it('stopAll completes promptly even if a worker.stop hangs (bounded teardown)', async () => {
     t = Date.parse('2026-06-10T00:00:00Z'); unlocked = true;
     const hung: any = { connId: 'h1', routing: 'tor', channelSetHash: 'h',

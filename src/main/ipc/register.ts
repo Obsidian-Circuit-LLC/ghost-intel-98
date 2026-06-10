@@ -1060,8 +1060,8 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   // Runtime guards on renderer-supplied bgconn inputs: a garbage `routing` must NOT fall through to a
   // DIRECT (clearnet) lane, and `configure` must not persist a 0/negative bound (feature DoS).
   const isBgRouting = (v: unknown): v is 'tor' | 'direct' => v === 'tor' || v === 'direct';
-  const isPosInt = (v: unknown): boolean => typeof v === 'number' && Number.isInteger(v) && v >= 1;
-  const isNonNegInt = (v: unknown): boolean => typeof v === 'number' && Number.isInteger(v) && v >= 0;
+  const inRange = (v: unknown, min: number, max: number): boolean =>
+    typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max;
 
   safeHandle(channels.bgconn.status, () => getBgConnManager()?.list() ?? []);
   safeHandle(channels.bgconn.list, () => getBgConnManager()?.list() ?? []);
@@ -1085,12 +1085,12 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     const cfg = a[0] as { idleTeardownAfterMinutes?: unknown; defaultRouting?: unknown; maxReconnects?: unknown; maxSessionAgeMinutes?: unknown };
     // Whole-replace the bgconn block (mergeSettings whole-replaces bgconn, like offensive/chat) — so
     // ALL four fields must be present + valid before we persist (a partial would clobber good policy).
-    if (!(cfg?.idleTeardownAfterMinutes === null || isNonNegInt(cfg?.idleTeardownAfterMinutes))) {
-      throw new Error('bgconn: idleTeardownAfterMinutes must be null or a non-negative integer');
+    if (!(cfg?.idleTeardownAfterMinutes === null || inRange(cfg?.idleTeardownAfterMinutes, 0, 10_080))) {
+      throw new Error('bgconn: idleTeardownAfterMinutes must be null or an integer 0..10080');
     }
     if (!isBgRouting(cfg?.defaultRouting)) throw new Error('bgconn: invalid defaultRouting');
-    if (!isPosInt(cfg?.maxReconnects)) throw new Error('bgconn: maxReconnects must be a positive integer');
-    if (!isPosInt(cfg?.maxSessionAgeMinutes)) throw new Error('bgconn: maxSessionAgeMinutes must be a positive integer');
+    if (!inRange(cfg?.maxReconnects, 1, 100_000)) throw new Error('bgconn: maxReconnects must be an integer 1..100000');
+    if (!inRange(cfg?.maxSessionAgeMinutes, 1, 10_080)) throw new Error('bgconn: maxSessionAgeMinutes must be an integer 1..10080');
     // NOTE: a live manager captured its policy at construction; bgconn policy changes apply on next
     // app start (same snapshot semantics as the plugin-net snapshot). Emergency-stop is the live control.
     settingsStore.update({ bgconn: {

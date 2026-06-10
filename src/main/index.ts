@@ -268,7 +268,10 @@ app.whenReady().then(async () => {
   // bgconn: separate Tor instance + connection manager. Constructed (tor NOT spawned here — operator-
   // started lifecycle, spec §4) so getBgConnManager() is live for IPC/tick/teardown and ctx.bgConn is
   // populated for any bgconn-capable plugin. bgTor is spawned lazily by manager.start (ensureTorBootstrapped).
-  {
+  // Wrapped: this block has fallible awaits (freeBgPort can reject, dynamic imports can throw). A
+  // failure here must NOT abort the rest of whenReady (window/IPC/plugins) — leave the singletons
+  // unset (null), which wire-deps + IPC already fail-closed on, so bgconn is inert for the session.
+  try {
     const { BgconnTor } = await import('./bgconn/tor');
     const { BackgroundConnectionManager } = await import('./bgconn/manager');
     const { setBgConnManager } = await import('./bgconn/singleton');
@@ -286,20 +289,23 @@ app.whenReady().then(async () => {
     const [bgSocksPort, bgControlPort] = await Promise.all([freeBgPort(), freeBgPort()]);
     const bgTor = new BgconnTor({ torExe: torPaths(bgBundleDir).torExe, dataDir: bgDataDir, socksPort: bgSocksPort, controlPort: bgControlPort });
     setBgTor(bgTor);
-    const bg = settings.bgconn;
+    const { coerceBgconnPolicy } = await import('./bgconn/policy');
+    const policy = coerceBgconnPolicy(settings.bgconn);
     const bgManager = new BackgroundConnectionManager({
       isTorBootstrapped: () => bgTor.isBootstrapped(),
       now: () => Date.now(), // intentional real-time security timer (idle-teardown/max-session-age); injectable only for test determinism — NOT a verification path
       isVaultUnlocked: () => vault.isUnlocked(),
       socksHost: '127.0.0.1',
       socksPort: bgSocksPort,
-      idleTeardownAfterMs: bg.idleTeardownAfterMinutes === null ? null : bg.idleTeardownAfterMinutes * 60_000,
-      maxReconnects: bg.maxReconnects,
-      maxSessionAgeMs: bg.maxSessionAgeMinutes * 60_000,
+      idleTeardownAfterMs: policy.idleTeardownAfterMs,
+      maxReconnects: policy.maxReconnects,
+      maxSessionAgeMs: policy.maxSessionAgeMs,
       ensureTorBootstrapped: () => bgTor.start(),
       teardownTor: () => bgTor.stop()
     });
     setBgConnManager(bgManager);
+  } catch (err) {
+    console.error('[bgconn] startup wiring failed; capability inert this session', err);
   }
 
   await loadPlugins({

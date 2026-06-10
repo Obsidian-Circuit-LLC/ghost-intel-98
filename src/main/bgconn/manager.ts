@@ -22,6 +22,9 @@ interface Live { worker: BgWorker; params: StartParams; startedAt: number; kill:
 
 const consentKey = (p: StartParams): string => `${p.phone}|${p.routing}|${p.channelSetHash}`;
 
+const SAFE_MAX_SESSION_AGE_MS = 720 * 60_000; // 12h — fail-safe if a non-finite bound slips through
+const SAFE_IDLE_TEARDOWN_MS = 120 * 60_000;   // 2h
+
 export class BackgroundConnectionManager {
   private workers = new Map<string, BgWorker>();
   private live = new Map<string, Live>();
@@ -101,14 +104,20 @@ export class BackgroundConnectionManager {
    *  AND enforces max-session-age so a session can never silently run forever (red-team Finding 6). */
   tick(): void {
     const now = this.deps.now();
+    // Finite-guard the two security bounds: a non-finite (NaN/Infinity) value from a malformed caller
+    // must NOT silently disable teardown — fall back to the fail-safe default instead.
+    const maxAgeMs = Number.isFinite(this.deps.maxSessionAgeMs) ? this.deps.maxSessionAgeMs : SAFE_MAX_SESSION_AGE_MS;
+    const idleMs = this.deps.idleTeardownAfterMs === null
+      ? null
+      : (Number.isFinite(this.deps.idleTeardownAfterMs) ? this.deps.idleTeardownAfterMs : SAFE_IDLE_TEARDOWN_MS);
     // max-session-age: the ENFORCED bound (no worker cooperation needed).
     for (const l of [...this.live.values()]) {
-      if (now - l.startedAt >= this.deps.maxSessionAgeMs) void this.stop(l.worker.connId);
+      if (now - l.startedAt >= maxAgeMs) void this.stop(l.worker.connId);
     }
     const unlocked = this.deps.isVaultUnlocked();
     if (unlocked) { this.lockedSince = null; return; }
     if (this.lockedSince === null) this.lockedSince = now;
-    if (this.deps.idleTeardownAfterMs !== null && now - this.lockedSince >= this.deps.idleTeardownAfterMs) {
+    if (idleMs !== null && now - this.lockedSince >= idleMs) {
       void this.stopAll('idle-teardown');
       this.lockedSince = null;
     }
