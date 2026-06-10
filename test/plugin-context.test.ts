@@ -34,4 +34,39 @@ describe('PluginContext capability scoping', () => {
     await ctx.secrets!.set('shodan', 'k');
     expect(d.secretBackend.set).toHaveBeenCalledWith('plugin:osint:shodan', 'k');
   });
+
+  // Charter check (persistent-background-connection final verification): granting the bgconn
+  // capability must NOT widen or bypass plugin egress. The bgconn network path is the
+  // manager-spawned subprocess over the separate Tor SOCKS — never ctx.egress. So a plugin holding
+  // bgconn but NOT egress has no ctx.egress at all, and one holding BOTH still hits the SSRF gate
+  // on loopback/socks targets.
+  it('persistent-background-connection does NOT grant egress', () => {
+    const d: ContextDeps = {
+      ...deps(true),
+      bgConn: { registerWorker: vi.fn(), secrets: {} as never, isVaultLocked: () => true, noteReconnect: vi.fn() }
+    };
+    const ctx = createPluginContext('tg', ['persistent-background-connection'], d);
+    expect(ctx.bgConn).toBeDefined();
+    expect(ctx.egress).toBeUndefined(); // no egress capability ⇒ no fetch surface
+  });
+
+  it('bgconn + egress: egress.fetch still rejects loopback/socks via the SSRF gate', async () => {
+    const ssrf = (u: string): string => {
+      // Mirror the real wire-deps validator: reject non-public/non-http(s) targets.
+      if (/^socks:/i.test(u) || /127\.0\.0\.1|localhost|::1/i.test(u) || !/^https?:/i.test(u)) {
+        throw new Error(`plugin egress: URL rejected by SSRF validator — ${u}`);
+      }
+      return u;
+    };
+    const d: ContextDeps = {
+      ...deps(true),
+      validateUrl: ssrf,
+      bgConn: { registerWorker: vi.fn(), secrets: {} as never, isVaultLocked: () => true, noteReconnect: vi.fn() }
+    };
+    const ctx = createPluginContext('tg', ['persistent-background-connection', 'egress'], d);
+    expect(ctx.bgConn).toBeDefined();
+    await expect(ctx.egress!.fetch('http://127.0.0.1:9050/x')).rejects.toThrow(/SSRF validator/);
+    await expect(ctx.egress!.fetch('socks://127.0.0.1:9050')).rejects.toThrow(/SSRF validator/);
+    expect(d.rawFetch).not.toHaveBeenCalled(); // gate fires before rawFetch
+  });
 });
