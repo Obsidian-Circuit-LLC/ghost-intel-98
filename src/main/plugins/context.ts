@@ -12,6 +12,7 @@ export interface ContextDeps {
   timelineAppend(caseId: string, event: unknown): Promise<void>;
   caseSidecar: { read(caseId: string, name: string): Promise<string | null>; write(caseId: string, name: string, data: string): Promise<void> };
   pluginStore: { read(id: string, rel: string): Promise<Uint8Array | null>; write(id: string, rel: string, data: Uint8Array | string): Promise<void>; list(id: string, rel?: string): Promise<string[]>; delete(id: string, rel: string): Promise<void> };
+  attackEgress?: { proxyUrl(): string; scopeContentHash(): string };
 }
 
 export interface PluginContext {
@@ -24,6 +25,7 @@ export interface PluginContext {
   timeline?: { append(caseId: string, event: unknown): Promise<void> };
   caseStorage?: { readSidecar(caseId: string, name: string): Promise<string | null>; writeSidecar(caseId: string, name: string, data: string): Promise<void> };
   storage?: { read(rel: string): Promise<Uint8Array | null>; write(rel: string, data: Uint8Array | string): Promise<void>; list(rel?: string): Promise<string[]>; delete(rel: string): Promise<void> };
+  attackEgress?: { proxyUrl(): string; scopeContentHash(): string };
 }
 
 export function createPluginContext(
@@ -79,6 +81,9 @@ export function createPluginContext(
       list: (rel) => deps.pluginStore.list(id, rel),
       delete: (rel) => deps.pluginStore.delete(id, rel)
     };
+  }
+  if (has('authorized-target-egress') && deps.attackEgress) {
+    ctx.attackEgress = deps.attackEgress;
   }
   return ctx;
 }

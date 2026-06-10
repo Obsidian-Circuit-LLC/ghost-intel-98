@@ -1015,6 +1015,48 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.plugins.status, async () => getStatus());
   safeHandle(channels.plugins.invoke, async (id: unknown, name: unknown, args: unknown) =>
     invokePluginHandler(String(id), String(name), Array.isArray(args) ? args : []));
+
+  // ---- offensive (authorized-target-egress) ----
+  // Singleton controller. auditDir lives under userData/offensive to keep all engagement
+  // audit logs co-located with app data. onAnchorPublicKey writes the ephemeral verification
+  // anchor to <auditDir>/<manifestId>.anchor — a durable out-of-band file. Full case-timeline
+  // integration is a follow-on task (see DONE_WITH_CONCERNS in the task report).
+  void (async () => {
+    const { mkdirSync: offMkdirSync, writeFileSync: offWriteFileSync } = await import('node:fs');
+    const { EngagementController } = await import('../offensive/engagement-controller');
+    const offensiveDir = join(app.getPath('userData'), 'offensive');
+    try { offMkdirSync(offensiveDir, { recursive: true }); } catch { /* exists */ }
+    const offSettings = (await settingsStore.read()).offensive;
+    const controller = new EngagementController({
+      auditDir: offensiveDir,
+      settings: {
+        confirmMode: offSettings.confirmMode,
+        rateLimitPerSec: offSettings.rateLimitPerSec,
+        requireSignedAuthorization: offSettings.requireSignedAuthorization,
+        issuerKeys: offSettings.issuerKeys ?? [],
+        downstreamProxy: offSettings.downstreamProxy
+      },
+      onAnchorPublicKey: (pubHex, manifestId) => {
+        const anchorPath = join(offensiveDir, `${manifestId}.anchor`);
+        offWriteFileSync(anchorPath, JSON.stringify({ pubHex, manifestId, anchoredAt: new Date().toISOString() }) + '\n', 'utf8');
+      }
+    });
+
+    safeHandle(channels.offensive.loadScope, (...args) => {
+      controller.loadScope(args[0], args[1] as Parameters<typeof controller.loadScope>[1]);
+    });
+    safeHandle(channels.offensive.confirm, () => { controller.confirm(); });
+    safeHandle(channels.offensive.startScan, () => controller.startScan());
+    safeHandle(channels.offensive.stopScan, () => controller.stopScan());
+    safeHandle(channels.offensive.status, () => {
+      const surface = controller.attackEgressSurface();
+      return {
+        proxyPort: surface ? Number(surface.proxyUrl().split(':')[2]) : null,
+        hasScope: true,
+        canScan: surface !== null
+      };
+    });
+  })();
 }
 
 /** Reminder tick: every 30s, pull due reminders, fire notifications + emit IPC to renderer.

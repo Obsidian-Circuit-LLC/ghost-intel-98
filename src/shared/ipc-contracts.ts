@@ -300,6 +300,13 @@ export const channels = {
     listVerified: 'plugins:listVerified',
     invoke: 'plugins:invoke',
     status: 'plugins:status'
+  },
+  offensive: {
+    loadScope: 'offensive:loadScope',
+    confirm: 'offensive:confirm',
+    startScan: 'offensive:startScan',
+    stopScan: 'offensive:stopScan',
+    status: 'offensive:status'
   }
 } as const;
 
@@ -451,4 +458,10 @@ export interface ApiContracts {
   [channels.plugins.listVerified]: { args: []; returns: import('./plugin-types').VerifiedPluginInfo[] };
   [channels.plugins.invoke]: { args: [string, string, unknown[]]; returns: unknown };
   [channels.plugins.status]: { args: []; returns: import('./plugin-types').PluginStatus[] };
+
+  [channels.offensive.loadScope]: { args: [unknown, unknown?]; returns: void };
+  [channels.offensive.confirm]: { args: []; returns: void };
+  [channels.offensive.startScan]: { args: []; returns: { proxyPort: number } };
+  [channels.offensive.stopScan]: { args: []; returns: void };
+  [channels.offensive.status]: { args: []; returns: { proxyPort: number | null; hasScope: boolean; canScan: boolean } };
 }

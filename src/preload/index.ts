@@ -337,6 +337,13 @@ const api = {
     listVerified: () => ipcRenderer.invoke(channels.plugins.listVerified),
     invoke: (id: string, name: string, args: unknown[]) => ipcRenderer.invoke(channels.plugins.invoke, id, name, args),
     status: () => ipcRenderer.invoke(channels.plugins.status)
+  },
+  offensive: {
+    loadScope: (raw: unknown, token?: unknown) => ipcRenderer.invoke(channels.offensive.loadScope, raw, token),
+    confirm: () => ipcRenderer.invoke(channels.offensive.confirm),
+    startScan: () => ipcRenderer.invoke(channels.offensive.startScan),
+    stopScan: () => ipcRenderer.invoke(channels.offensive.stopScan),
+    status: () => ipcRenderer.invoke(channels.offensive.status)
   }
 } as const;
 

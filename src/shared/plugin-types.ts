@@ -1,7 +1,8 @@
 /** Shared between main, preload, and renderer. The frozen v1 plugin contract surface. */
 
 export const CAPABILITIES = [
-  'egress', 'secrets', 'case-storage', 'plugin-storage', 'entity-registry', 'timeline'
+  'egress', 'secrets', 'case-storage', 'plugin-storage', 'entity-registry', 'timeline',
+  'authorized-target-egress'
 ] as const;
 export type Capability = (typeof CAPABILITIES)[number];
 
