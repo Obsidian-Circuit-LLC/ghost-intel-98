@@ -1173,8 +1173,17 @@ export class EngagementController {
     if (!manifest) throw new Error('no engagement scope loaded');
     if (!this.session.mayScan()) throw new Error('scan not confirmed');
     const hash = this.session.activeContentHash();
-    this.audit = new EngagementAudit(join(this.opts.auditDir, `${manifest.manifestId}.log`));
-    const audit = this.audit;
+    // SECURITY (Task 6 review) — sign-at-write + head anchor are MANDATORY before going live:
+    //   1. Generate an EPHEMERAL per-engagement Ed25519 keypair here; private key stays in this
+    //      main-process object and is NEVER passed to the scanner subprocess.
+    //   2. Anchor the PUBLIC key (hex) into the immutable case timeline at engagement start
+    //      (caseStore.addTimeline) — that is the out-of-band root for later verification.
+    //   3. Pass a signer `(head) => sign(head, sec)` to EngagementAudit so every event is signed.
+    //   4. On load/verify, persist + compare the head hash AND event count out-of-band (vault record)
+    //      so truncation-to-a-valid-prefix and wholesale rewrite are both caught (verifyAuditLog with
+    //      the verifier catches edits; the head/length anchor catches truncation).
+    //   5. GATE: refuse to start the audit/scan if a signer + head anchor cannot be established.
+    const audit = this.makeSignedAudit(manifest.manifestId); // helper that does 1-3 + the gate
     // wrap record() to stamp the active content hash on every event
     const stamping = { record: (e: Parameters<EngagementAudit['record']>[0]) => audit.record({ ...e, manifestContentHash: hash }) } as EngagementAudit;
     this.proxy = new AuthorizedEgressProxy({ manifest, audit: stamping, now: this.now, rateLimitPerSec: this.opts.settings.rateLimitPerSec });
