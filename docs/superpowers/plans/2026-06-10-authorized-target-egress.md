@@ -1120,7 +1120,7 @@ Add `attackEgress?: { proxyUrl(): string; scopeContentHash(): string }` to `Cont
 - [ ] **Step 3c: Implement `src/main/offensive/engagement-controller.ts`**
 ```typescript
 import { join } from 'node:path';
-import { parseScopeManifest, scopeContentHash, type ScopeManifest } from './scope-manifest';
+import { parseScopeManifest, scopeContentHash, withDefaultExcludes, type ScopeManifest } from './scope-manifest';
 import { verifyScopeToken, type ScopeToken } from './scope-token';
 import { OffensiveSession } from './session';
 import { EngagementAudit } from './engagement-audit';
@@ -1150,7 +1150,9 @@ export class EngagementController {
   }
 
   loadScope(raw: unknown, token?: ScopeToken): void {
-    const manifest = parseScopeManifest(raw, this.now());
+    // withDefaultExcludes injects loopback/RFC1918/link-local/metadata excludes for non-'lab'
+    // modes — closes the domain-include-ignores-IP sharp edge (security review of Task 4).
+    const manifest = withDefaultExcludes(parseScopeManifest(raw, this.now()));
     if (this.opts.settings.requireSignedAuthorization) {
       const issuers: TrustKeyset[] = this.opts.settings.issuerKeys.map((k) => ({ edPub: hexToBytes(k.edPubHex), pqPub: hexToBytes(k.pqPubHex) }));
       if (!token) throw new Error('signed authorization required by policy');
