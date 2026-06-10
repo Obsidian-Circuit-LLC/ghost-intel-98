@@ -392,6 +392,15 @@ export interface AppSettings {
   /** Signed-plugin registry. Keys are plugin IDs; values carry per-plugin flags and
    *  free-form settings. Empty by default — no plugins are bundled. */
   plugins: Record<string, { enabled: boolean; networkEnabled: boolean; settings?: Record<string, unknown> }>;
+  /** Authorized-target offensive operations. All actions remain gated behind operator
+   *  confirmation; this block carries the policy for how that gate behaves. */
+  offensive: {
+    confirmMode: 'per-scan' | 'per-session';
+    rateLimitPerSec: number;
+    downstreamProxy?: string | null;
+    requireSignedAuthorization: boolean;
+    issuerKeys?: { keyId: string; edPubHex: string; pqPubHex: string }[];
+  };
 }
 
 export const defaultShortcuts: AccessShortcut[] = [
@@ -497,5 +506,6 @@ export const defaultSettings: AppSettings = {
     customFeeds: []
   },
   chat: { networkEnabled: false },
-  plugins: {}
+  plugins: {},
+  offensive: { confirmMode: 'per-scan', rateLimitPerSec: 10, downstreamProxy: null, requireSignedAuthorization: false, issuerKeys: [] }
 };
