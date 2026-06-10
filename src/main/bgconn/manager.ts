@@ -14,6 +14,7 @@ export interface ManagerDeps {
   idleTeardownAfterMs: number | null;
   maxReconnects: number;
   maxSessionAgeMs: number;
+  workerStopTimeoutMs?: number;
 }
 interface Live { worker: BgWorker; params: StartParams; startedAt: number; kill: () => void; consentKey: string; }
 
@@ -24,6 +25,8 @@ export class BackgroundConnectionManager {
   private live = new Map<string, Live>();
   private lockedSince: number | null = null;
   private reconnects = new Map<string, number>();
+  private pending = new Set<string>();
+  private lastConsentKey = new Map<string, string>();
   constructor(private readonly deps: ManagerDeps) {}
 
   register(w: BgWorker): void { this.workers.set(w.connId, w); }
@@ -31,24 +34,46 @@ export class BackgroundConnectionManager {
   async start(connId: string, params: StartParams, opts: { confirmed: boolean }): Promise<void> {
     const worker = this.workers.get(connId);
     if (!worker) throw new Error(`no worker registered: ${connId}`);
+    if (this.live.has(connId) || this.pending.has(connId)) throw new Error('connection already started');
     if (!opts.confirmed) throw new Error('connection not confirmed');
+    if (params.routing !== worker.routing || params.channelSetHash !== worker.channelSetHash) {
+      throw new Error('start params do not match the registered worker (routing/channelSet)');
+    }
     if (params.routing === 'tor' && !this.deps.isTorBootstrapped()) throw new Error('tor not bootstrapped');
-    const lane: Lane = params.routing === 'tor'
-      ? laneFor({ routing: 'tor', socksHost: this.deps.socksHost, socksPort: this.deps.socksPort, creds: newSocksCreds() })
-      : laneFor({ routing: 'direct' });
-    const { kill } = await worker.start(lane);
-    this.live.set(connId, { worker, params, startedAt: this.deps.now(), kill, consentKey: consentKey(params) });
+    this.pending.add(connId);
+    try {
+      const lane: Lane = params.routing === 'tor'
+        ? laneFor({ routing: 'tor', socksHost: this.deps.socksHost, socksPort: this.deps.socksPort, creds: newSocksCreds() })
+        : laneFor({ routing: 'direct' });
+      const { kill } = await worker.start(lane);
+      this.live.set(connId, { worker, params, startedAt: this.deps.now(), kill, consentKey: consentKey(params) });
+      this.lastConsentKey.set(connId, consentKey(params));
+    } finally {
+      this.pending.delete(connId);
+    }
   }
+  lastConsentKeyFor(connId: string): string | undefined { return this.lastConsentKey.get(connId); }
 
   async stop(connId: string): Promise<void> {
     const l = this.live.get(connId);
     if (!l) return;
     this.live.delete(connId);
-    try { await l.worker.stop(); } finally { try { l.kill(); } catch { /* */ } }
+    this.reconnects.delete(connId);
+    const timeoutMs = this.deps.workerStopTimeoutMs ?? 5000;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        Promise.resolve().then(() => l.worker.stop()).catch(() => { /* worker.stop errors ignored — kill still fires */ }),
+        new Promise<void>((res) => { timer = setTimeout(res, timeoutMs); })
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+      try { l.kill(); } catch { /* */ }
+    }
   }
 
   async stopAll(_reason: string): Promise<void> {
-    for (const connId of [...this.live.keys()]) await this.stop(connId);
+    await Promise.allSettled([...this.live.keys()].map((id) => this.stop(id)));
   }
 
   list(): Array<{ connId: string; routing: Routing; startedAt: number }> {
