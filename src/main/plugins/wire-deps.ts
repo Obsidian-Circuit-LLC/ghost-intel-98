@@ -35,6 +35,8 @@ import { caseStore } from '../storage/json-fs';
 import { caseDir } from '../storage/paths';
 import { secureReadText, secureWriteFile } from '../storage/secure-fs';
 import { getEngagementController } from '../offensive/controller';
+import { getBgConnManager } from '../bgconn/singleton';
+import { makeBgConnSecrets } from '../bgconn/secrets';
 
 /**
  * Strip credential-bearing headers from a header map. Used when a plugin egress redirect
@@ -235,6 +237,20 @@ export function buildContextDeps(): ContextDeps {
     attackEgress: {
       proxyUrl: () => getEngagementController()?.attackEgressSurface()?.proxyUrl() ?? '',
       scopeContentHash: () => getEngagementController()?.attackEgressSurface()?.scopeContentHash() ?? ''
+    },
+
+    // bgConn: reads the LIVE manager each call (mirrors the attackEgress lazy pattern). The manager
+    // singleton is set in index.ts whenReady BEFORE loadPlugins, so it is live from first plugin load.
+    // isVaultLocked fails closed (true) when the manager is somehow not yet constructed.
+    bgConn: {
+      registerWorker: (w) => { getBgConnManager()?.register(w); },
+      secrets: makeBgConnSecrets({
+        get: (k) => secretStore.get(k),
+        set: (k, v) => secretStore.set(k, v),
+        delete: (k) => secretStore.delete(k)
+      }),
+      isVaultLocked: () => getBgConnManager()?.isVaultLocked() ?? true,
+      noteReconnect: (connId) => { getBgConnManager()?.noteReconnect(connId); }
     }
   };
 }

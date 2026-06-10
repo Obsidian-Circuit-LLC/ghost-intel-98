@@ -13,6 +13,12 @@ export interface ContextDeps {
   caseSidecar: { read(caseId: string, name: string): Promise<string | null>; write(caseId: string, name: string, data: string): Promise<void> };
   pluginStore: { read(id: string, rel: string): Promise<Uint8Array | null>; write(id: string, rel: string, data: Uint8Array | string): Promise<void>; list(id: string, rel?: string): Promise<string[]>; delete(id: string, rel: string): Promise<void> };
   attackEgress?: { proxyUrl(): string; scopeContentHash(): string };
+  bgConn?: {
+    registerWorker(w: import('../bgconn/manager').BgWorker): void;
+    secrets: import('../bgconn/secrets').BgConnSecrets;
+    isVaultLocked(): boolean;
+    noteReconnect(connId: string): void;
+  };
 }
 
 export interface PluginContext {
@@ -26,6 +32,12 @@ export interface PluginContext {
   caseStorage?: { readSidecar(caseId: string, name: string): Promise<string | null>; writeSidecar(caseId: string, name: string, data: string): Promise<void> };
   storage?: { read(rel: string): Promise<Uint8Array | null>; write(rel: string, data: Uint8Array | string): Promise<void>; list(rel?: string): Promise<string[]>; delete(rel: string): Promise<void> };
   attackEgress?: { proxyUrl(): string; scopeContentHash(): string };
+  bgConn?: {
+    registerWorker(w: import('../bgconn/manager').BgWorker): void;
+    secrets: import('../bgconn/secrets').BgConnSecrets;
+    isVaultLocked(): boolean;
+    noteReconnect(connId: string): void;
+  };
 }
 
 export function createPluginContext(
@@ -85,5 +97,6 @@ export function createPluginContext(
   if (has('authorized-target-egress') && deps.attackEgress) {
     ctx.attackEgress = deps.attackEgress;
   }
+  if (has('persistent-background-connection') && deps.bgConn) ctx.bgConn = deps.bgConn;
   return ctx;
 }

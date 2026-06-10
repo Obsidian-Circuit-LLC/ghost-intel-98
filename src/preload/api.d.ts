@@ -382,6 +382,25 @@ export interface GhostApi {
     invoke(id: string, name: string, args: unknown[]): Promise<unknown>;
     status(): Promise<PluginStatus[]>;
   };
+  bgconn: {
+    list(): Promise<unknown[]>;
+    /** Lock-exempt: live monitor summaries, callable while the vault is locked. */
+    status(): Promise<Array<{ connId: string; routing: 'tor' | 'direct'; startedAt: number }>>;
+    start(
+      connId: string,
+      params: { phone: string; routing: 'tor' | 'direct'; channelSetHash: string },
+      confirmed: boolean
+    ): Promise<unknown>;
+    /** Lock-exempt: emergency-stop a live monitor while the vault is locked. */
+    stop(connId: string): Promise<void>;
+    configure(cfg: {
+      idleTeardownAfterMinutes: number | null;
+      defaultRouting: 'tor' | 'direct';
+      maxReconnects: number;
+      maxSessionAgeMinutes: number;
+    }): Promise<void>;
+    clearCredentials(pluginId: string, connId: string): Promise<void>;
+  };
 }
 
 declare global {

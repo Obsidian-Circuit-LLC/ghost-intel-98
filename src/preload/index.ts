@@ -344,6 +344,16 @@ const api = {
     startScan: () => ipcRenderer.invoke(channels.offensive.startScan),
     stopScan: () => ipcRenderer.invoke(channels.offensive.stopScan),
     status: () => ipcRenderer.invoke(channels.offensive.status)
+  },
+  bgconn: {
+    list: () => ipcRenderer.invoke(channels.bgconn.list),
+    status: () => ipcRenderer.invoke(channels.bgconn.status),
+    start: (connId: string, params: { phone: string; routing: 'tor' | 'direct'; channelSetHash: string }, confirmed: boolean) =>
+      ipcRenderer.invoke(channels.bgconn.start, connId, params, confirmed),
+    stop: (connId: string) => ipcRenderer.invoke(channels.bgconn.stop, connId),
+    configure: (cfg: { idleTeardownAfterMinutes: number | null; defaultRouting: 'tor' | 'direct'; maxReconnects: number; maxSessionAgeMinutes: number }) =>
+      ipcRenderer.invoke(channels.bgconn.configure, cfg),
+    clearCredentials: (pluginId: string, connId: string) => ipcRenderer.invoke(channels.bgconn.clearCredentials, pluginId, connId)
   }
 } as const;
 

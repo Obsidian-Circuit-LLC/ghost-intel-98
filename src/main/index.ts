@@ -28,7 +28,9 @@ protocol.registerSchemesAsPrivileged([
 ]);
 import { registerIpc, startReminderTicker } from './ipc/register';
 import * as vault from './services/vault';
-import { loadPlugins } from './plugins/loader';
+import { loadPlugins, disableAllPlugins } from './plugins/loader';
+import { getBgConnManager } from './bgconn/singleton';
+import { getBgTor } from './bgconn/tor-singleton';
 import { registerPluginProtocol } from './plugins/protocol';
 import { buildContextDeps, refreshPluginNetSnapshot } from './plugins/wire-deps';
 import { settingsStore } from './storage/json-fs';
@@ -43,6 +45,7 @@ const isDev = !!process.env['ELECTRON_RENDERER_URL'];
 
 let mainWindow: BrowserWindow | null = null;
 let reminderInterval: NodeJS.Timeout | null = null;
+let bgconnTickInterval: NodeJS.Timeout | null = null;
 
 /**
  * Defense-in-depth crash guard. Electron's default uncaughtException handler pops a fatal
@@ -262,6 +265,49 @@ app.whenReady().then(async () => {
     });
   }
 
+  // bgconn: separate Tor instance + connection manager. Constructed (tor NOT spawned here — operator-
+  // started lifecycle, spec §4) so getBgConnManager() is live for IPC/tick/teardown and ctx.bgConn is
+  // populated for any bgconn-capable plugin. bgTor is spawned lazily by manager.start (ensureTorBootstrapped).
+  // Wrapped: this block has fallible awaits (freeBgPort can reject, dynamic imports can throw). A
+  // failure here must NOT abort the rest of whenReady (window/IPC/plugins) — leave the singletons
+  // unset (null), which wire-deps + IPC already fail-closed on, so bgconn is inert for the session.
+  try {
+    const { BgconnTor } = await import('./bgconn/tor');
+    const { BackgroundConnectionManager } = await import('./bgconn/manager');
+    const { setBgConnManager } = await import('./bgconn/singleton');
+    const { setBgTor } = await import('./bgconn/tor-singleton');
+    const { torPaths } = await import('./chat/transport-tor');
+    const bgBase = app.isPackaged ? process.resourcesPath : join(app.getAppPath(), 'resources');
+    const bgBundleDir = join(bgBase, 'tor', 'win-x64');
+    const bgDataDir = join(app.getPath('userData'), 'bgconn', 'tor-data');
+    const net = await import('node:net');
+    const freeBgPort = (): Promise<number> => new Promise((res, rej) => {
+      const s = net.createServer();
+      s.once('error', rej);
+      s.listen(0, '127.0.0.1', () => { const p = (s.address() as import('node:net').AddressInfo).port; s.close(() => res(p)); });
+    });
+    const [bgSocksPort, bgControlPort] = await Promise.all([freeBgPort(), freeBgPort()]);
+    const bgTor = new BgconnTor({ torExe: torPaths(bgBundleDir).torExe, dataDir: bgDataDir, socksPort: bgSocksPort, controlPort: bgControlPort });
+    setBgTor(bgTor);
+    const { coerceBgconnPolicy } = await import('./bgconn/policy');
+    const policy = coerceBgconnPolicy(settings.bgconn);
+    const bgManager = new BackgroundConnectionManager({
+      isTorBootstrapped: () => bgTor.isBootstrapped(),
+      now: () => Date.now(), // intentional real-time security timer (idle-teardown/max-session-age); injectable only for test determinism — NOT a verification path
+      isVaultUnlocked: () => vault.isUnlocked(),
+      socksHost: '127.0.0.1',
+      socksPort: bgSocksPort,
+      idleTeardownAfterMs: policy.idleTeardownAfterMs,
+      maxReconnects: policy.maxReconnects,
+      maxSessionAgeMs: policy.maxSessionAgeMs,
+      ensureTorBootstrapped: () => bgTor.start(),
+      teardownTor: () => bgTor.stop()
+    });
+    setBgConnManager(bgManager);
+  } catch (err) {
+    console.error('[bgconn] startup wiring failed; capability inert this session', err);
+  }
+
   await loadPlugins({
     isEnabled: (id) => settings.plugins?.[id]?.enabled ?? true,
     contextDeps: buildContextDeps()
@@ -275,6 +321,9 @@ app.whenReady().then(async () => {
   createWindow();
   lockDownPartitionSessions();
   reminderInterval = startReminderTicker(() => mainWindow);
+  // bgconn tick: drives idle-teardown + max-session-age enforcement (manager.tick is a no-op
+  // until a worker is live, so this is cheap while nothing is registered).
+  bgconnTickInterval = setInterval(() => { getBgConnManager()?.tick(); }, 30_000);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -295,11 +344,18 @@ app.on('before-quit', (event) => {
     clearInterval(reminderInterval);
     reminderInterval = null;
   }
+  if (bgconnTickInterval) {
+    clearInterval(bgconnTickInterval);
+    bgconnTickInterval = null;
+  }
   const teardown = (async () => {
     await cancelAllAiStreams();
     await shutdownAllSessions();
     await shutdownAllFtp();
     await chat.shutdown().catch(() => { /* tor may not be running */ }); // kills tor.exe → frees the lock
+    await getBgConnManager()?.stopAll('quit').catch(() => { /* */ });   // stops workers (awaited)
+    await getBgTor()?.stop().catch(() => { /* */ });                     // kills the bgconn tor.exe → frees the lock
+    await disableAllPlugins().catch(() => { /* */ });                    // tears down plugin-registered workers
     localAi.stop();
   })();
   // Never let teardown wedge the quit: whichever resolves first, we then quit for real.
@@ -310,7 +366,7 @@ app.on('before-quit', (event) => {
   });
 });
 
-app.on('will-quit', () => { localAi.stop(); }); // sync backstop (idempotent)
+app.on('will-quit', () => { localAi.stop(); getBgTor()?.killNow(); }); // sync backstops (idempotent)
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
