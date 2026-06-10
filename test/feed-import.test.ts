@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseFeedList, inferKind, deriveLabel } from '../src/main/services/feed-import';
+import { parseFeedList, inferKind, deriveLabel, feedToUpsert } from '../src/main/services/feed-import';
 
 describe('inferKind', () => {
   it('maps schemes/extensions to kinds', () => {
@@ -56,5 +56,49 @@ describe('parseFeedList — auto-detect', () => {
 
   it('deriveLabel falls back to the raw string on unparseable input', () => {
     expect(deriveLabel('not a url')).toBe('not a url');
+  });
+});
+
+describe('parseFeedList — optional geo metadata (JSON)', () => {
+  it('extracts country/region/city/lat/lon/source from JSON objects', () => {
+    const json = JSON.stringify([
+      { label: 'Parliament Sq', url: 'https://cam/ps.m3u8', country: 'GB', region: 'England', city: 'London', lat: 51.5007, lon: -0.1246, source: 'tfl-jamcams' }
+    ]);
+    expect(parseFeedList(json)).toEqual([
+      {
+        label: 'Parliament Sq', url: 'https://cam/ps.m3u8', kind: 'hls',
+        country: 'GB', region: 'England', city: 'London', lat: 51.5007, lon: -0.1246, source: 'tfl-jamcams'
+      }
+    ]);
+  });
+
+  it('accepts state/latitude/longitude/lng aliases and coerces numeric strings', () => {
+    const [f] = parseFeedList(JSON.stringify([{ url: 'https://cam/x.m3u8', state: 'CA', latitude: '34.05', longitude: '-118.24' }]));
+    expect(f.region).toBe('CA');
+    expect(f.lat).toBeCloseTo(34.05);
+    expect(f.lon).toBeCloseTo(-118.24);
+  });
+
+  it('omits geo keys entirely when absent (no undefined noise breaking equality)', () => {
+    const [f] = parseFeedList(JSON.stringify([{ url: 'https://cam/y.m3u8' }]));
+    expect(Object.keys(f).sort()).toEqual(['kind', 'label', 'url']);
+  });
+
+  it('drops non-finite lat/lon rather than storing NaN', () => {
+    const [f] = parseFeedList(JSON.stringify([{ url: 'https://cam/z.m3u8', lat: 'north', lon: '' }]));
+    expect('lat' in f).toBe(false);
+    expect('lon' in f).toBe(false);
+  });
+});
+
+describe('feedToUpsert — carries geo through to the store payload', () => {
+  it('passes present geo fields onto the upsert payload', () => {
+    const [f] = parseFeedList(JSON.stringify([{ url: 'https://cam/a.m3u8', city: 'Paris', lat: 48.85, lon: 2.35 }]));
+    expect(feedToUpsert(f)).toEqual({ label: 'cam', url: 'https://cam/a.m3u8', kind: 'hls', city: 'Paris', lat: 48.85, lon: 2.35 });
+  });
+
+  it('returns a clean label/url/kind payload when no geo is present', () => {
+    const [f] = parseFeedList(JSON.stringify([{ url: 'https://cam/b.m3u8' }]));
+    expect(feedToUpsert(f)).toEqual({ label: 'cam', url: 'https://cam/b.m3u8', kind: 'hls' });
   });
 });

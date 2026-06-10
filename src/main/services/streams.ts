@@ -31,6 +31,22 @@ export async function list(): Promise<CameraStream[]> {
   return readAll();
 }
 
+/**
+ * Collect only the geo fields that are actually present and well-formed, so a stream without
+ * location data keeps NO geo keys on disk (rather than a litter of `null`/`NaN`). lat/lon must
+ * be finite numbers or they are dropped.
+ */
+function pickGeo(i: Partial<CameraStream>): Partial<CameraStream> {
+  const g: Partial<CameraStream> = {};
+  if (typeof i.country === 'string' && i.country.trim()) g.country = i.country.trim();
+  if (typeof i.region === 'string' && i.region.trim()) g.region = i.region.trim();
+  if (typeof i.city === 'string' && i.city.trim()) g.city = i.city.trim();
+  if (typeof i.lat === 'number' && Number.isFinite(i.lat)) g.lat = i.lat;
+  if (typeof i.lon === 'number' && Number.isFinite(i.lon)) g.lon = i.lon;
+  if (typeof i.source === 'string' && i.source.trim()) g.source = i.source.trim();
+  return g;
+}
+
 export async function upsert(input: Partial<CameraStream> & { url: string; label: string; kind: CameraStream['kind'] }): Promise<CameraStream> {
   const all = await readAll();
   const id = input.id || `cam-${randomUUID()}`;
@@ -41,7 +57,8 @@ export async function upsert(input: Partial<CameraStream> & { url: string; label
     kind: input.kind,
     caseId: input.caseId ?? null,
     notes: input.notes ?? '',
-    addedAt: input.addedAt ?? new Date().toISOString()
+    addedAt: input.addedAt ?? new Date().toISOString(),
+    ...pickGeo(input)
   };
   const idx = all.findIndex((x) => x.id === id);
   if (idx >= 0) all[idx] = cleaned;

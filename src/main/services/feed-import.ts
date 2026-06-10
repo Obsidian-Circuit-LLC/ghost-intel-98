@@ -1,14 +1,32 @@
 /**
  * EyeSpy bulk feed import — parses a camera-feed list (JSON array, CSV, or a plain
- * one-URL-per-line text file) into normalized {label, url, kind} entries. Pure: no IO.
+ * one-URL-per-line text file) into normalized {label, url, kind, …optional geo} entries.
+ * Pure: no IO.
  *
  * `kind` is inferred from the URL when not given; `label` is derived from the host when
  * not given. Entries without a recognizable URL are dropped. Deduped by URL.
+ *
+ * Optional geo metadata (country/region/city/lat/lon/source) is read from JSON objects only —
+ * the heuristic CSV/plain-text path can't reliably attribute unlabeled columns to geo fields,
+ * so it stays geo-unaware. A geo-aware, header-mapped CSV reader can come later once the corpus
+ * format is known. Geo keys are only emitted when actually present.
  */
 
 import type { CameraStream, StreamKind } from '@shared/post-mvp-types';
 
-export interface ParsedFeed { label: string; url: string; kind: StreamKind }
+export interface ParsedFeed {
+  label: string;
+  url: string;
+  kind: StreamKind;
+  // Optional geo metadata, present only when the source row supplied it. Absent keys are never
+  // emitted, so a geo-less feed stays exactly { label, url, kind }.
+  country?: string;
+  region?: string;
+  city?: string;
+  lat?: number;
+  lon?: number;
+  source?: string;
+}
 
 const KINDS: readonly StreamKind[] = ['hls', 'mjpeg', 'rtsp', 'http', 'mp4'];
 const URLISH = /^[a-z][a-z0-9+.-]*:\/\//i;
@@ -56,6 +74,39 @@ function splitCsvLine(line: string): string[] {
   return out.map((f) => f.trim());
 }
 
+/** A trimmed non-empty string, else undefined. */
+function asStr(v: unknown): string | undefined {
+  return typeof v === 'string' && v.trim() !== '' ? v.trim() : undefined;
+}
+
+/** A finite number from a number or a numeric string, else undefined (drops NaN/Infinity/''). */
+function asNum(v: unknown): number | undefined {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : undefined;
+  if (typeof v === 'string' && v.trim() !== '') {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : undefined;
+  }
+  return undefined;
+}
+
+/** Pull optional geo metadata from a JSON feed object, accepting common key aliases. */
+function extractGeo(o: Record<string, unknown>): Partial<ParsedFeed> {
+  const g: Partial<ParsedFeed> = {};
+  const country = asStr(o['country']);
+  const region = asStr(o['region']) ?? asStr(o['state']);
+  const city = asStr(o['city']);
+  const lat = asNum(o['lat']) ?? asNum(o['latitude']);
+  const lon = asNum(o['lon']) ?? asNum(o['lng']) ?? asNum(o['longitude']);
+  const source = asStr(o['source']);
+  if (country) g.country = country;
+  if (region) g.region = region;
+  if (city) g.city = city;
+  if (lat !== undefined) g.lat = lat;
+  if (lon !== undefined) g.lon = lon;
+  if (source) g.source = source;
+  return g;
+}
+
 /** From a row's fields, locate the URL, an optional explicit kind, and a label. */
 function fieldsToFeed(fields: string[]): ParsedFeed | null {
   const url = fields.find((f) => URLISH.test(f));
@@ -91,7 +142,7 @@ function parseJson(text: string): ParsedFeed[] {
       if (!url) continue;
       const label = [o['label'], o['name'], o['title']].find((v) => typeof v === 'string') as string | undefined;
       const kind = typeof o['kind'] === 'string' ? (o['kind'] as string) : undefined;
-      out.push(toFeed(url, label, kind));
+      out.push({ ...toFeed(url, label, kind), ...extractGeo(o) });
     }
   }
   return out;
@@ -112,7 +163,13 @@ export function parseFeedList(text: string): ParsedFeed[] {
   return deduped;
 }
 
-/** Build a CameraStream upsert payload from a parsed feed (id assigned by the store). */
-export function feedToUpsert(f: ParsedFeed): Pick<CameraStream, 'label' | 'url' | 'kind'> {
-  return { label: f.label, url: f.url, kind: f.kind };
+/**
+ * Build a CameraStream upsert payload from a parsed feed (id assigned by the store). Carries the
+ * optional geo fields through; the store's pickGeo drops anything malformed. A shallow copy keeps
+ * only the keys ParsedFeed actually set, so geo-less feeds stay { label, url, kind }.
+ */
+export function feedToUpsert(
+  f: ParsedFeed
+): Pick<CameraStream, 'label' | 'url' | 'kind' | 'country' | 'region' | 'city' | 'lat' | 'lon' | 'source'> {
+  return { ...f };
 }
