@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterAll, vi } from 'vitest';
-import { rm, readFile } from 'node:fs/promises';
+import { rm, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 // Mirror streams-service.test.ts: redirect the data root to a tmp dir and use the REAL secure-fs
@@ -56,6 +56,17 @@ describe('journal store — entries', () => {
     await journal.remove(a.id);
     expect(await journal.read(a.id)).toBeNull();
     expect((await journal.list()).find((e) => e.id === a.id)).toBeUndefined();
+  });
+
+  it('refuses to overwrite when the on-disk journal is corrupt — no silent data loss', async () => {
+    await journal.save({ id: '', title: 'keep', body: 'precious' });
+    // Corrupt the file so readAll() hits a non-ENOENT parse failure.
+    const file = join(DIR, 'GhostAccess98', 'journal.json');
+    await writeFile(file, '{ not valid json', 'utf8');
+    // save() must reject rather than read [] and clobber the unreadable corpus with just the new entry.
+    await expect(journal.save({ id: '', title: 'new', body: 'b' })).rejects.toThrow();
+    // The corrupt file is left intact — not overwritten with a fresh single-entry array.
+    expect(await readFile(file, 'utf8')).toBe('{ not valid json');
   });
 
   it('stores entries SEPARATELY from the briefcase — neither corpus bleeds into the other', async () => {
