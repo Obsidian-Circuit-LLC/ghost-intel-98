@@ -86,8 +86,12 @@ async function readAll(): Promise<JournalEntry[]> {
     const parsed = JSON.parse(await secureReadText(journalFile())) as unknown;
     return Array.isArray(parsed) ? (parsed as JournalEntry[]) : [];
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
-    return [];
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return []; // never written yet
+    // A non-ENOENT failure (corrupt JSON, decrypt error) must NOT be swallowed as "empty":
+    // save() does readAll → writeAll, so returning [] here would let the next save overwrite
+    // intact-but-unreadable entries with just the new one — silent data loss on the user's sole
+    // copy. Re-throw so callers abort. (Deliberately stricter than briefcase.ts, which swallows.)
+    throw err;
   }
 }
 
