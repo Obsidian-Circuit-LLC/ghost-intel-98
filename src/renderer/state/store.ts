@@ -6,6 +6,10 @@
 import { create } from 'zustand';
 import type { AppSettings } from '@shared/types';
 import type { LocalAiStatus, LocalAiProgress } from '@shared/ipc-contracts';
+// Runtime-only dependency on the registry to resolve a module's preferred default
+// window size. registry.ts imports WindowSpec from here as a type-only import, so this
+// is a one-way runtime edge (store → registry) with no initialization cycle.
+import { getModule } from './registry';
 
 export type ModuleKey =
   | 'cases'
@@ -80,13 +84,14 @@ export const useWindows = create<WindowState>((set) => ({
           focusStack: [...s.focusStack.filter((x) => x !== id), id]
         };
       }
+      const desc = getModule(spec.module);
       const placed: WindowSpec = {
         ...spec,
         id,
         x: spec.x ?? 60 + (s.windows.length % 6) * 30,
         y: spec.y ?? 60 + (s.windows.length % 6) * 30,
-        width: spec.width ?? 760,
-        height: spec.height ?? 520
+        width: spec.width ?? desc?.defaultWidth ?? 760,
+        height: spec.height ?? desc?.defaultHeight ?? 520
       };
       return {
         windows: [...s.windows, placed],

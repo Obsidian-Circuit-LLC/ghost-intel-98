@@ -218,6 +218,7 @@ const api = {
     list: () => ipcRenderer.invoke(channels.streams.list),
     upsert: (input: unknown) => ipcRenderer.invoke(channels.streams.upsert, input),
     delete: (id: string) => ipcRenderer.invoke(channels.streams.delete, id),
+    clear: () => ipcRenderer.invoke(channels.streams.clear),
     import: () => ipcRenderer.invoke(channels.streams.import)
   },
   media: {

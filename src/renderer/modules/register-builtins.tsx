@@ -177,7 +177,7 @@ export function registerBuiltins(): void {
   registerModule({ key: 'doc-viewer',   title: 'Document Viewer',  glyph: '📄', component: DocViewerAdapter,    builtin: true });
   registerModule({ key: 'search',       title: 'Search',           glyph: '🔍', component: SearchAdapter,       builtin: true });
   registerModule({ key: 'whiteboard',   title: 'Whiteboard',       glyph: '🗺', component: WhiteboardAdapter,   builtin: true });
-  registerModule({ key: 'media-player', title: 'Jukebox',          glyph: '🎵', component: MediaPlayerAdapter,  builtin: true });
+  registerModule({ key: 'media-player', title: 'Jukebox',          glyph: '🎵', component: MediaPlayerAdapter,  builtin: true, defaultWidth: 720, defaultHeight: 840 });
   registerModule({ key: 'geoint',       title: 'GeoINT',           glyph: '🌍', component: GeoIntAdapter,       builtin: true });
   registerModule({ key: 'bookmarks',    title: 'Bookmarks',        glyph: '🔖', component: BookmarksAdapter,    builtin: true });
   registerModule({ key: 'markets',      title: 'Markets',          glyph: '📈', component: MarketsAdapter,      builtin: true });

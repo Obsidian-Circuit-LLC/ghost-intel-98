@@ -193,6 +193,7 @@ export const channels = {
     list: 'streams:list',
     upsert: 'streams:upsert',
     delete: 'streams:delete',
+    clear: 'streams:clear',
     import: 'streams:import'
   },
   media: {

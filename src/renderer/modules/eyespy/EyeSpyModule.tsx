@@ -29,7 +29,9 @@ export function EyeSpyModule(): JSX.Element {
 
   async function save(): Promise<void> {
     if (!draft.url || !draft.label) return;
-    const created = await window.api.streams.upsert({
+    const saved = await window.api.streams.upsert({
+      // Carrying the existing id turns this into an in-place edit; absent id → new stream.
+      id: draft.id,
       url: draft.url,
       label: draft.label,
       kind: draft.kind as StreamKind,
@@ -38,7 +40,27 @@ export function EyeSpyModule(): JSX.Element {
     });
     setDraft({ kind: 'hls', label: '', url: '' });
     await refresh();
-    setSelected(created);
+    setSelected(saved);
+  }
+
+  /** Load an existing stream into the form for editing (save() updates it by id). */
+  function edit(s: CameraStream): void {
+    setDraft({ id: s.id, label: s.label, url: s.url, kind: s.kind, caseId: s.caseId, notes: s.notes });
+  }
+
+  /** Purge the entire library in one atomic write (confirmed). */
+  async function purge(): Promise<void> {
+    const ok = await confirmDialog(`Delete ALL ${streams.length} streams? This cannot be undone.`, 'Purge all streams');
+    if (!ok) return;
+    try {
+      const removed = await window.api.streams.clear();
+      setSelected(null);
+      setDraft({ kind: 'hls', label: '', url: '' });
+      await refresh();
+      toast.success(`Purged ${removed} stream${removed === 1 ? '' : 's'}.`);
+    } catch (err) {
+      toast.error(`Purge failed: ${(err as Error).message}`);
+    }
   }
 
   async function importFeeds(): Promise<void> {
@@ -69,7 +91,7 @@ export function EyeSpyModule(): JSX.Element {
     <div className="ga98-split" style={{ height: '100%' }}>
       <div className="ga98-pane">
         <fieldset>
-          <legend>Add stream</legend>
+          <legend>{draft.id ? 'Edit stream' : 'Add stream'}</legend>
           <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: 4 }}>
             <label>Label:</label>
             <input className="ga98-text" value={draft.label ?? ''} onChange={(e) => setDraft({ ...draft, label: e.target.value })} />
@@ -91,10 +113,15 @@ export function EyeSpyModule(): JSX.Element {
             </select>
           </div>
           <div style={{ marginTop: 6, display: 'flex', gap: 6 }}>
-            <button onClick={() => void save()} disabled={!draft.url || !draft.label}>Add</button>
+            <button onClick={() => void save()} disabled={!draft.url || !draft.label}>{draft.id ? 'Save changes' : 'Add'}</button>
+            {draft.id && <button onClick={() => setDraft({ kind: 'hls', label: '', url: '' })}>Cancel</button>}
             <button onClick={() => void importFeeds()} title="Bulk-import your own camera feeds from a CSV, JSON, or plain URL-list file">Import feeds…</button>
           </div>
         </fieldset>
+        <div style={{ display: 'flex', alignItems: 'center', padding: '2px 0' }}>
+          <span style={{ flex: 1, fontSize: 11, opacity: 0.7 }}>{streams.length} stream{streams.length === 1 ? '' : 's'}</span>
+          <button onClick={() => void purge()} disabled={streams.length === 0} title="Delete every stream in the library">Purge all…</button>
+        </div>
         <ul className="ga98-list">
           {streams.map((s) => (
             <li key={s.id} data-selected={selected?.id === s.id} onClick={() => setSelected(s)}>
@@ -102,7 +129,8 @@ export function EyeSpyModule(): JSX.Element {
                 <b>{s.label}</b>
                 <div style={{ fontSize: 10, opacity: 0.7 }}>{s.kind.toUpperCase()} · {s.url}</div>
               </span>
-              <button onClick={(e) => { e.stopPropagation(); void del(s.id); }}>×</button>
+              <button title="Edit this stream" onClick={(e) => { e.stopPropagation(); edit(s); }}>✎</button>
+              <button title="Delete this stream" onClick={(e) => { e.stopPropagation(); void del(s.id); }}>×</button>
             </li>
           ))}
         </ul>

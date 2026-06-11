@@ -864,6 +864,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     return streams.upsert(input);
   });
   safeHandle(channels.streams.delete, (...args) => streams.remove(args[0] as string));
+  safeHandle(channels.streams.clear, () => streams.clear());
   safeHandle(channels.streams.import, async () => {
     const win = getWindow();
     const r = win

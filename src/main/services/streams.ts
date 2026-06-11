@@ -71,3 +71,11 @@ export async function remove(id: string): Promise<void> {
   const all = await readAll();
   await writeAll(all.filter((x) => x.id !== id));
 }
+
+/** Purge the entire stream library in one write. Returns how many were removed. */
+export async function clear(): Promise<number> {
+  const all = await readAll();
+  if (all.length === 0) return 0;
+  await writeAll([]);
+  return all.length;
+}
