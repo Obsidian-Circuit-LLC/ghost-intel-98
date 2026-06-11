@@ -21,6 +21,13 @@
  */
 import * as nodeCrypto from 'node:crypto';
 import { ed25519, x25519 } from '@noble/curves/ed25519.js';
+// AEAD is computed in userspace (@noble) rather than via node:crypto's createCipheriv.
+// Electron's Node links BoringSSL, which does NOT register 'chacha20-poly1305' by name,
+// so createCipheriv('chacha20-poly1305') throws "Unknown cipher" in every packaged build
+// (dev Node links OpenSSL, which does — hence the tests passed while production was broken).
+// @noble is runtime-independent and produces byte-identical ct‖tag, so the wire format and
+// the ProVerif handshake model are unchanged.
+import { chacha20poly1305 } from '@noble/ciphers/chacha.js';
 
 // ---- sizes (bytes) — used by upper layers to bound/validate wire + stored material ----
 export const X25519_PUBLIC_LEN = 32;
@@ -143,17 +150,13 @@ export async function mlkemDecapsulate(cipherText: Uint8Array, secretKey: Uint8A
 
 // ---- symmetric: AEAD, KDF, hash, RNG, zeroize ----
 
-/** ChaCha20-Poly1305 seal → ciphertext‖tag. */
+/** ChaCha20-Poly1305 seal → ciphertext‖tag (IETF: 12-byte nonce, 16-byte tag appended).
+ *  Empty/absent AAD are equivalent, matching the prior node:crypto behaviour. */
 export function aeadSeal(key: Uint8Array, nonce: Uint8Array, plaintext: Uint8Array, aad?: Uint8Array): Uint8Array {
   if (key.length !== AEAD_KEY_LEN) throw new CryptoError('bad AEAD key length');
   if (nonce.length !== AEAD_NONCE_LEN) throw new CryptoError('bad AEAD nonce length');
-  // @types/node lists chacha20-poly1305 under the CCM cipher types (whose setAAD demands a
-  // plaintextLength option); it actually behaves like GCM (AAD, 16-byte tag, no plaintextLength),
-  // so type it as the GCM variant to get the correct optional-AAD signature.
-  const c = nodeCrypto.createCipheriv('chacha20-poly1305', key, nonce, { authTagLength: AEAD_TAG_LEN }) as nodeCrypto.CipherGCM;
-  if (aad && aad.length) c.setAAD(aad);
-  const ct = Buffer.concat([c.update(plaintext), c.final()]);
-  return new Uint8Array(Buffer.concat([ct, c.getAuthTag()]));
+  const aead = aad && aad.length ? chacha20poly1305(key, nonce, aad) : chacha20poly1305(key, nonce);
+  return aead.encrypt(plaintext);
 }
 
 /** Open ciphertext‖tag; throws CryptoError on tag/auth failure (never returns garbage). */
@@ -161,14 +164,9 @@ export function aeadOpen(key: Uint8Array, nonce: Uint8Array, sealed: Uint8Array,
   if (key.length !== AEAD_KEY_LEN) throw new CryptoError('bad AEAD key length');
   if (nonce.length !== AEAD_NONCE_LEN) throw new CryptoError('bad AEAD nonce length');
   if (sealed.length < AEAD_TAG_LEN) throw new CryptoError('AEAD ciphertext too short');
-  const split = sealed.length - AEAD_TAG_LEN;
-  const ct = sealed.subarray(0, split);
-  const tag = sealed.subarray(split);
-  const d = nodeCrypto.createDecipheriv('chacha20-poly1305', key, nonce, { authTagLength: AEAD_TAG_LEN }) as nodeCrypto.DecipherGCM;
-  if (aad && aad.length) d.setAAD(aad);
-  d.setAuthTag(tag);
+  const aead = aad && aad.length ? chacha20poly1305(key, nonce, aad) : chacha20poly1305(key, nonce);
   try {
-    return new Uint8Array(Buffer.concat([d.update(ct), d.final()]));
+    return aead.decrypt(sealed);
   } catch {
     throw new CryptoError('AEAD authentication failed');
   }
