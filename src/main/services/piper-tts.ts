@@ -9,7 +9,8 @@
  */
 import { app } from 'electron';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { readdir, readFile, stat } from 'node:fs/promises';
+import { readdir, readFile, stat, unlink } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { buildPiperArgs, rateToLengthScale, isValidWavHeader, verifySha256 } from './piper-core';
 
@@ -24,7 +25,7 @@ const PINNED_BINARY_SHA256 = process.platform === 'win32'
 /** Per-chunk synthesis timeout — bounds a wedged process. High-quality synth of one sentence-sized
  *  chunk is well under this. */
 const SYNTH_TIMEOUT_MS = 30_000;
-const MAX_SYNTH_BYTES = 32 * 1024 * 1024; // bound stdout buffering against a runaway process
+const MAX_SYNTH_BYTES = 32 * 1024 * 1024; // reject a runaway/oversized synthesized WAV
 
 interface Resolved {
   binary: string;
@@ -90,39 +91,55 @@ export function piperStatus(): Promise<{ available: boolean }> {
 }
 
 /** Synthesize one (already-chunked) text into WAV bytes. Throws if Piper is unavailable, the process
- *  fails/times out, or the output isn't a valid WAV. */
+ *  fails/times out, or the output isn't a valid WAV.
+ *
+ *  Piper writes to a real (SEEKABLE) temp file via `--output_file <path>`, NOT to stdout. When Piper
+ *  streams a WAV to a non-seekable pipe (`--output_file -`) it can't seek back to patch the RIFF /
+ *  `data` chunk length fields, so they're left wrong; the renderer's Web Audio decoder then reads past
+ *  the real PCM and lays static OVER the (still-intelligible) voice. A seekable file gets correct
+ *  headers — the same path that sounds clean when you run Piper natively to a `.wav`. The temp file is
+ *  read once and deleted immediately on every exit path (success, error, timeout, cancel). */
 export async function synthesize(text: string, rate?: number): Promise<Uint8Array> {
   const r = await resolvePaths();
   if (!r) throw new Error('Piper voice is not installed.');
-  const args = buildPiperArgs(r.model, rateToLengthScale(rate));
+  const tmp = join(app.getPath('temp'), `ga98-piper-${randomUUID().slice(0, 8)}.wav`);
+  const args = buildPiperArgs(r.model, rateToLengthScale(rate), tmp);
 
   return await new Promise<Uint8Array>((resolve_, reject) => {
-    const child = spawn(r.binary, args, { stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawn(r.binary, args, { stdio: ['pipe', 'ignore', 'ignore'] });
     active.add(child);
-    const out: Buffer[] = [];
-    let outLen = 0;
     let settled = false;
+    const cleanupTmp = (): void => { void unlink(tmp).catch(() => { /* never written, or already gone */ }); };
     const done = (fn: () => void): void => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
       active.delete(child);
+      cleanupTmp();
       fn();
     };
     const timer = setTimeout(() => { try { child.kill('SIGKILL'); } catch { /* gone */ } done(() => reject(new Error('Piper synthesis timed out'))); }, SYNTH_TIMEOUT_MS);
 
-    child.stdout.on('data', (d: Buffer) => {
-      outLen += d.length;
-      if (outLen > MAX_SYNTH_BYTES) { try { child.kill('SIGKILL'); } catch { /* gone */ } done(() => reject(new Error('Piper output too large'))); return; }
-      out.push(d);
-    });
     child.on('error', (err) => done(() => reject(err)));
-    child.on('close', (code) => done(() => {
-      if (code !== 0) { reject(new Error(`Piper exited with code ${code ?? 'null'}`)); return; }
-      const bytes = new Uint8Array(Buffer.concat(out, outLen));
-      if (!isValidWavHeader(bytes)) { reject(new Error('Piper produced invalid audio')); return; }
-      resolve_(bytes);
-    }));
+    child.on('close', (code) => {
+      // Read the produced WAV BEFORE settling (done() deletes the temp file). A SIGKILL'd/failed
+      // run never reaches the read.
+      void (async () => {
+        if (settled) return;
+        if (code !== 0) { done(() => reject(new Error(`Piper exited with code ${code ?? 'null'}`))); return; }
+        let bytes: Uint8Array;
+        try {
+          const buf = await readFile(tmp);
+          if (buf.length > MAX_SYNTH_BYTES) { done(() => reject(new Error('Piper output too large'))); return; }
+          bytes = new Uint8Array(buf);
+        } catch (err) {
+          done(() => reject(err instanceof Error ? err : new Error('Piper output unreadable')));
+          return;
+        }
+        if (!isValidWavHeader(bytes)) { done(() => reject(new Error('Piper produced invalid audio'))); return; }
+        done(() => resolve_(bytes));
+      })();
+    });
 
     child.stdin.on('error', () => { /* broken pipe if the child died — handled via close/error */ });
     child.stdin.end(text, 'utf8');

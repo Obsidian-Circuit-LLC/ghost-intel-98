@@ -14,8 +14,11 @@ describe('piper-core (main) — pure helpers', () => {
     expect(rateToLengthScale(0.01)).toBe(2);
   });
 
-  it('builds piper args with stdin text + stdout WAV', () => {
+  it('builds piper args with stdin text + WAV output target', () => {
+    // Default (kept for back-compat) streams to stdout.
     expect(buildPiperArgs('/m/voice.onnx', 1)).toEqual(['--model', '/m/voice.onnx', '--length_scale', '1', '--output_file', '-']);
+    // The sidecar passes a seekable file path so the WAV gets correct length headers (no playback static).
+    expect(buildPiperArgs('/m/voice.onnx', 1, '/tmp/out.wav')).toEqual(['--model', '/m/voice.onnx', '--length_scale', '1', '--output_file', '/tmp/out.wav']);
     expect(buildPiperArgs('/m/voice.onnx', 0.5)).toContain('0.5');
     expect(() => buildPiperArgs('', 1)).toThrow();
   });

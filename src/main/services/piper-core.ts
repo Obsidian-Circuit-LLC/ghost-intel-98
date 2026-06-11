@@ -16,12 +16,14 @@ export function rateToLengthScale(rate: number | undefined): number {
   return Math.min(2, Math.max(0.5, lengthScale));
 }
 
-/** Build the Piper CLI args for synthesizing to a WAV stream on stdout. Text is fed via stdin (not an
- *  arg) so it never lands in the process table. `--output_file -` writes WAV to stdout. */
-export function buildPiperArgs(modelPath: string, lengthScale: number): string[] {
+/** Build the Piper CLI args. Text is fed via stdin (not an arg) so it never lands in the process
+ *  table. `output` is the `--output_file` target: the sidecar passes a real (seekable) temp-file path
+ *  so the WAV gets correct length headers; `-` (the default, kept for tests) streams the WAV to stdout,
+ *  whose non-seekable headers are what caused the playback static. */
+export function buildPiperArgs(modelPath: string, lengthScale: number, output = '-'): string[] {
   if (!modelPath) throw new Error('piper: model path required');
   const ls = Number.isFinite(lengthScale) ? lengthScale : 1;
-  return ['--model', modelPath, '--length_scale', String(ls), '--output_file', '-'];
+  return ['--model', modelPath, '--length_scale', String(ls), '--output_file', output];
 }
 
 /** Minimal RIFF/WAVE header sanity check — rejects a non-WAV / truncated blob before the renderer
