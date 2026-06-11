@@ -32,6 +32,7 @@ export type ModuleKey =
   | 'bookmarks'
   | 'markets'
   | 'briefcase'
+  | 'journal'
   | 'solitaire'
   | 'minesweeper'
   | 'chess'

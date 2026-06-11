@@ -19,6 +19,9 @@ import type {
   EntityType,
   ExtractedAttachmentMeta,
   ImageMime,
+  JournalEntry,
+  JournalEntrySummary,
+  JournalEntryInput,
   MediaUrlResult,
   SearchResult,
   Reminder,
@@ -162,6 +165,16 @@ export const channels = {
     read: 'briefcase:read',
     save: 'briefcase:save',
     delete: 'briefcase:delete'
+  },
+  journal: {
+    list: 'journal:list',
+    read: 'journal:read',
+    save: 'journal:save',
+    delete: 'journal:delete',
+    hasPin: 'journal:hasPin',
+    setPin: 'journal:setPin',
+    verifyPin: 'journal:verifyPin',
+    changePin: 'journal:changePin'
   },
   files: {
     importDropped: 'files:importDropped',
@@ -432,6 +445,15 @@ export interface ApiContracts {
   [channels.geoint.removeCaseEvent]: { args: [string, string]; returns: void };
 
   [channels.markets.fetch]: { args: []; returns: MarketSnapshot };
+
+  [channels.journal.list]: { args: []; returns: JournalEntrySummary[] };
+  [channels.journal.read]: { args: [string]; returns: JournalEntry | null };
+  [channels.journal.save]: { args: [JournalEntryInput]; returns: JournalEntry };
+  [channels.journal.delete]: { args: [string]; returns: void };
+  [channels.journal.hasPin]: { args: []; returns: boolean };
+  [channels.journal.setPin]: { args: [string]; returns: void };
+  [channels.journal.verifyPin]: { args: [string]; returns: boolean };
+  [channels.journal.changePin]: { args: [string, string]; returns: boolean };
 
   [channels.reminders.listGlobal]: { args: []; returns: Reminder[] };
   [channels.reminders.upsertGlobal]: { args: [Reminder]; returns: Reminder };

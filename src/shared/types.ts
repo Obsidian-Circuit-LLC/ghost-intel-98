@@ -305,6 +305,24 @@ export interface AccessShortcut {
   icon?: string;
 }
 
+/** A Journal Jots entry — a personal journal note consolidated INSIDE the Journal app. Persisted
+ *  in the journal store (encrypted at rest when login is on); never written to a case or the
+ *  Briefcase. The 4-digit PIN gating the UI is a rate-limited convenience boundary, NOT this
+ *  data's encryption key (the vault DEK is). Zero network. */
+export interface JournalEntry {
+  id: string;
+  title: string;
+  body: string;
+  createdAt: ISODate;
+  updatedAt: ISODate;
+}
+
+/** Lightweight row for the Journal list — body fetched on open. */
+export interface JournalEntrySummary { id: string; title: string; updatedAt: ISODate; bytes: number }
+
+/** What the renderer sends to persist a journal entry (id minted + timestamps managed by the store). */
+export interface JournalEntryInput { id: string; title: string; body: string }
+
 export interface AppSettings {
   soundEnabled: boolean;
   themeIntensity: 'lite' | 'classic' | 'maximum';

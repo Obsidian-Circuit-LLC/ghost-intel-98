@@ -28,6 +28,7 @@ import { GeoIntModule } from './geoint/GeoIntModule';
 import { BookmarksModule } from './bookmarks/BookmarksModule';
 import { MarketsModule } from './markets/MarketsModule';
 import { BriefcaseModule } from './briefcase/BriefcaseModule';
+import { JournalModule } from './journal/JournalModule';
 import { SolitaireModule } from './solitaire/SolitaireModule';
 import { MinesweeperModule } from './minesweeper/MinesweeperModule';
 import { ChessModule } from './chess/ChessModule';
@@ -121,6 +122,10 @@ function BriefcaseAdapter({ spec }: { spec: WindowSpec }): JSX.Element {
   return <BriefcaseModule initialNoteId={spec.props?.['noteId'] as string | undefined} />;
 }
 
+function JournalAdapter({ spec: _spec }: { spec: WindowSpec }): JSX.Element {
+  return <JournalModule />;
+}
+
 function SolitaireAdapter({ spec: _spec }: { spec: WindowSpec }): JSX.Element {
   return <SolitaireModule />;
 }
@@ -182,6 +187,7 @@ export function registerBuiltins(): void {
   registerModule({ key: 'bookmarks',    title: 'Bookmarks',        glyph: '🔖', component: BookmarksAdapter,    builtin: true });
   registerModule({ key: 'markets',      title: 'Markets',          glyph: '📈', component: MarketsAdapter,      builtin: true });
   registerModule({ key: 'briefcase',    title: 'Briefcase',        glyph: '💼', component: BriefcaseAdapter,    builtin: true });
+  registerModule({ key: 'journal',      title: 'Journal Jots',     glyph: '📓', component: JournalAdapter,      builtin: true });
   registerModule({ key: 'solitaire',    title: 'Solitaire',        glyph: '🃏', component: SolitaireAdapter,    builtin: true });
   registerModule({ key: 'minesweeper',  title: 'Mine Detector',    glyph: '💣', component: MinesweeperAdapter,  builtin: true });
   registerModule({ key: 'chess',        title: 'Chess',            glyph: '♟', component: ChessAdapter,        builtin: true });

@@ -40,7 +40,7 @@ describe('registerBuiltins', () => {
     // EXPECTED equals the ModuleKey union from store.ts, sorted.
     const EXPECTED = [
       'ai-assistant', 'alarm', 'bookmarks', 'briefcase', 'calendar', 'cases', 'chat', 'chess',
-      'dialterm', 'doc-viewer', 'eyespy', 'geoint', 'help', 'mail', 'markets', 'media-player',
+      'dialterm', 'doc-viewer', 'eyespy', 'geoint', 'help', 'journal', 'mail', 'markets', 'media-player',
       'minesweeper', 'net-explorer', 'notepad', 'pinball', 'reminders', 'search', 'settings',
       'shred', 'solitaire', 'whiteboard'
     ].sort();

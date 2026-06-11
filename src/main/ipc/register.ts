@@ -46,8 +46,9 @@ import * as bookmarksBoard from '../storage/bookmarks-board';
 import * as stickyNotesStore from '../storage/sticky-notes';
 import * as aiConvos from '../storage/ai-conversations';
 import * as briefcase from '../storage/briefcase';
+import * as journal from '../storage/journal';
 import * as voiceModel from '../voice/model-protocol';
-import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureWhiteboard, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon, ensureSaveToCaseOpts, ensureGeoItem, ensureBookmarkBoard, ensureMarketsSettings, ensureStickyNotes, ensureAiConversation, ensureBriefcaseNote } from '../security/validate';
+import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureWhiteboard, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon, ensureSaveToCaseOpts, ensureGeoItem, ensureBookmarkBoard, ensureMarketsSettings, ensureStickyNotes, ensureAiConversation, ensureBriefcaseNote, ensureJournalEntry, ensurePin } from '../security/validate';
 import * as entities from '../storage/entities';
 import * as bioStore from '../storage/bio-images';
 import * as ftp from '../services/ftp';
@@ -817,6 +818,18 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.briefcase.read, (...args) => briefcase.read(ensureUuid(args[0], 'briefcase note id')));
   safeHandle(channels.briefcase.save, (...args) => briefcase.save(ensureBriefcaseNote(args[0])));
   safeHandle(channels.briefcase.delete, (...args) => briefcase.remove(ensureUuid(args[0], 'briefcase note id')));
+
+  // ---- journal (PIN-gated personal journal; entries stay INSIDE the journal store — never a
+  //      case or the briefcase; encrypted at rest, zero egress). The PIN is a rate-limited UI
+  //      gate over already-vault-encrypted storage, NOT the encryption key (see storage/journal.ts).
+  safeHandle(channels.journal.list, () => journal.list());
+  safeHandle(channels.journal.read, (...args) => journal.read(ensureUuid(args[0], 'journal entry id')));
+  safeHandle(channels.journal.save, (...args) => journal.save(ensureJournalEntry(args[0])));
+  safeHandle(channels.journal.delete, (...args) => journal.remove(ensureUuid(args[0], 'journal entry id')));
+  safeHandle(channels.journal.hasPin, () => journal.hasPin());
+  safeHandle(channels.journal.setPin, (...args) => journal.setPin(ensurePin(args[0])));
+  safeHandle(channels.journal.verifyPin, (...args) => journal.verifyPin(ensurePin(args[0])));
+  safeHandle(channels.journal.changePin, (...args) => journal.changePin(ensurePin(args[0], 'old PIN'), ensurePin(args[1], 'new PIN')));
   safeHandle(channels.bookmarks.fetchFavicon, (...args) =>
     bookmarksBoard.fetchFavicon(validateExternalUrl(String(args[0] ?? ''))));
   safeHandle(channels.bookmarks.exportBoard, async () => {
