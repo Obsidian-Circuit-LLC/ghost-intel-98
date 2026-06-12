@@ -36,7 +36,7 @@ that never depend on a third-party staying up:
 
 ## Status
 
-**v3.14.0-beta.1** — current release. Dogfooding punch-list — a new journal app, a chat fix, and module polish:
+**v3.14.0-beta.1** — current release. A dogfooding punch-list — a new journal app, two audio/crypto fixes, and module polish:
 
 - **Journal Jots** — a new password-protected (4-digit PIN) journal app. Entries are consolidated inside the
   app (they don't land in the Briefcase) and are encrypted at rest with everything else under the optional
@@ -45,12 +45,17 @@ that never depend on a third-party staying up:
 - **Chat invite-accept fix.** The Tor P2P chat's message encryption moved to a runtime-independent
   implementation of the same cipher, resolving an "Unknown cipher" failure that broke accepting invites on
   packaged builds (the algorithm and wire format are unchanged).
+- **Piper TTS no longer plays as static.** Piper now writes its audio to a seekable temp file instead of a
+  stdout pipe, so the WAV length headers are correct and the player stops decoding garbage over the voice.
+  (The Microsoft voices were always clean; this was Piper-specific.)
+- **EyeSpy** gains a Purge-all button, lets you edit an existing stream in place, and now imports geo
+  metadata (city / lat / lon / country / source) from a **header-mapped CSV**, not just JSON.
 - **Jukebox** opens at a sensible size and gains a collapse/expand toggle for a compact "just the deck" view.
-- **EyeSpy** gains a Purge-all button and lets you edit an existing stream in place.
+- **DialTerm** drops the redundant touch-tone dialpad animation, going straight to the AOL-style dial-up client.
 - **Mail** account-setup dialog now closes properly (it could trap you when no account was configured yet);
   **Notepad 98** can delete entries.
 
-675 automated tests. *Everything from v3.13.3 carries forward.*
+681 automated tests. *Everything from v3.13.3 carries forward.*
 
 **v3.13.3-beta.1** — New lightning boot splash + Win9x loading bar:
 
@@ -370,8 +375,10 @@ The current build is **v3.14.0-beta.1**. Each release page carries its own notes
 - **v3.14.0-beta.1** — **Dogfooding punch-list.** New **Journal Jots** app (4-digit-PIN-locked personal
   journal, entries vault-encrypted at rest, kept out of the Briefcase); **chat invite-accept fix** (message
   encryption moved to a runtime-independent cipher implementation, clearing an "Unknown cipher" failure on
-  packaged builds — algorithm/wire format unchanged); **Jukebox** default size + collapse toggle; **EyeSpy**
-  purge-all + edit-a-stream; **Mail** setup-dialog close fix; **Notepad 98** entry delete. **675 tests.**
+  packaged builds — algorithm/wire format unchanged); **Piper TTS static fix** (synth to a seekable temp file
+  so the WAV headers are correct — no more static over the voice); **EyeSpy** purge-all + edit-a-stream +
+  **geo-aware CSV import** (city/lat/lon/country/source); **Jukebox** default size + collapse toggle;
+  **DialTerm** drops the dialpad animation; **Mail** setup-dialog close fix; **Notepad 98** entry delete. **681 tests.**
 - **v3.13.3-beta.1** — **New lightning boot splash + Win9x loading bar.** The startup screen is now the
   higher-resolution "Welcome DCS 98" lightning render (the prior grayscale logo was pixelated), with a
   Win9x-style scrolling blue-block loading bar and a *Starting DCS 98…* caption under it, then a fade to the
@@ -554,7 +561,7 @@ This starts the Vite dev server (HMR) and the Electron main process.
 
 ```bash
 pnpm build        # type-check + bundle main / preload / renderer
-pnpm test         # vitest suite (675 tests as of v3.14.0-beta.1)
+pnpm test         # vitest suite (681 tests as of v3.14.0-beta.1)
 pnpm package      # platform installer for the current host
 pnpm package:win  # cross-build Windows NSIS installer
 ```
