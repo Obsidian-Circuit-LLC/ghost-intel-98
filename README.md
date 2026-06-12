@@ -32,21 +32,29 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`DCS98-Setup-3.14.0-beta.3.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake formally verified internally; external audit + FIPS pending. See Status.)*
+> **Install:** download [`DCS98-Setup-3.14.0-beta.4.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake formally verified internally; external audit + FIPS pending. See Status.)*
 
 ## Status
 
-**v3.14.0-beta.3** — current release. Adds the **EyeSpy location grid** on top of the beta.2 line:
+**v3.14.0-beta.4** — current release. The **EyeSpy redesign** — a finder + a curated 3×3 video wall, replacing the auto-filling grid that flooded when pointed at a large archive:
 
-- **EyeSpy is now a location-organised camera wall.** A left-sidebar **Country → State/Region → City tree**
-  with rolled-up camera counts (variable depth — UK Country→City, US Country→State→City), a **search box**
-  over tree and grid, and a **live tile grid** for the selected node — tiles stream live but are **capped at
-  9 concurrent** and lazy-mounted (the rest show a click-to-play poster; the cap also bounds connections,
-  which matters over Tor). **"Import here"** stamps a selected location onto geo-less feeds (drop an archive
-  straight into "London" or "Dallas"); a per-tile **×** culls duds. No discovery/scanning — it only renders
-  feeds you imported or typed.
+- **Finder (left):** **Countries / Cities** tabs, a global **search box** (hits across the whole library),
+  a **flag + camera count** on every location node (offline emoji, nothing fetched), and a **feed list**
+  whose rows **right-click** to *Add to active square / Play full-screen / Edit / Set location / Delete*.
+- **Curated 3×3 wall (right):** nine slots that start **empty** — click a square to make it active, then
+  right-click a feed to drop it in (the empty slot is the **"＋ Add new feed"** tile). Tiles carry an honest
+  **"as of <time>"** header; **×** clears a square. Nine slots means a 500-feed archive can't flood the view.
+- **Named walls** (save / open / rename / delete, persisted), **one contextual Import button** ("Import…"
+  → "Import to London…" when a node's selected, replacing the redundant pair), and **Set location** to file
+  a bare archive into the tree. No discovery/scanning.
 
-704 automated tests. *Everything from v3.14.0-beta.2 (the boot fix + the beta.1 punch-list) carries forward.*
+712 automated tests. *Everything from v3.14.0-beta.3 carries forward.*
+
+<details><summary>v3.14.0-beta.3 — EyeSpy location grid (superseded by the beta.4 wall)</summary>
+
+A left-sidebar Country→State→City tree with rolled-up counts, search, and a live tile grid (capped at 9, lazy-mounted) for the selected node, with "Import here" location stamping and per-tile delete. **704 tests.** *Superseded by the beta.4 finder + curated wall.*
+
+</details>
 
 <details><summary>v3.14.0-beta.2 — boot-fix re-release of beta.1 (the packaged app launches)</summary>
 
@@ -341,14 +349,14 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/dcs98/releases) and run it.
 
-Direct link to the current release: [`DCS98-Setup-3.14.0-beta.3.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.14.0-beta.3/DCS98-Setup-3.14.0-beta.3.exe)
+Direct link to the current release: [`DCS98-Setup-3.14.0-beta.4.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.14.0-beta.4/DCS98-Setup-3.14.0-beta.4.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is formally verified internally — external audit + FIPS
 pending — see Status). The last fully-stable build is [`DCS98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.6.8/DCS98-Setup-3.6.8.exe).
 
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\DCS98-Setup-3.14.0-beta.3.exe -Algorithm SHA256
+Get-FileHash .\DCS98-Setup-3.14.0-beta.4.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
@@ -386,8 +394,19 @@ To uninstall: Settings → Apps → Dead Cyber Society 98 → Uninstall.
 
 ## Releases & changelog
 
-The current build is **v3.14.0-beta.3**. Each release page carries its own notes + SHA-256.
+The current build is **v3.14.0-beta.4**. Each release page carries its own notes + SHA-256.
 
+- **v3.14.0-beta.4** — **EyeSpy redesign: finder + curated 3×3 wall.** Replaces the auto-filling grid (which
+  flooded when pointed at a large archive) with two surfaces — a **finder** (Countries/Cities tabs, global
+  search, **flag + count** per node, a feed list whose rows **right-click** to *Add to active square / Play /
+  Edit / Set location / Delete*) and a **curated 3×3 wall** of nine slots you build deliberately (click a
+  square active → right-click a feed to drop it in; the empty slot is the "＋ Add new feed" tile; an honest
+  "as of <time>" header; × to clear). **Named walls** persist (save/open/rename/delete); the two redundant
+  import buttons collapse into **one contextual Import** ("Import to London…" when a node's selected);
+  **Set location** files a bare archive into the tree. Built TDD with an adversarial review pass (fixed a
+  wall-save race, a Cities-tab filter that silently showed all cameras, and ghost slots from deleted feeds).
+  Also a source-hygiene fix: control-stripping regexes in `validate.ts` + two test files used raw control
+  bytes (read as binary, broke text tooling) — now escapes, with a CI guard. No discovery/scanning. **712 tests.**
 - **v3.14.0-beta.3** — **EyeSpy location grid.** EyeSpy becomes a location-organised camera wall: a
   **Country → State/Region → City** sidebar tree with rolled-up per-node camera counts (variable depth —
   UK Country→City, US Country→State→City; location-less cameras bucket under "Ungeocoded"), a **search box**
@@ -590,7 +609,7 @@ This starts the Vite dev server (HMR) and the Electron main process.
 
 ```bash
 pnpm build        # type-check + bundle main / preload / renderer
-pnpm test         # vitest suite (704 tests as of v3.14.0-beta.3)
+pnpm test         # vitest suite (712 tests as of v3.14.0-beta.4)
 pnpm package      # platform installer for the current host
 pnpm package:win  # cross-build Windows NSIS installer
 ```
