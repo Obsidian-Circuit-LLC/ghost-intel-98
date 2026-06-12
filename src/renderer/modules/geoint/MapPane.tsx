@@ -32,6 +32,7 @@ export function MapPane({ items, tilesEnabled, tileUrl, tileAttribution, pickMod
   const ref = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map | null>(null);
   const layer = useRef<L.LayerGroup | null>(null);
+  const markers = useRef<Map<string, L.Marker>>(new Map());
   const tiles = useRef<L.TileLayer | null>(null);
   const overlays = useRef<L.TileLayer[]>([]);
   const pickRef = useRef(pickMode);
@@ -90,18 +91,31 @@ export function MapPane({ items, tilesEnabled, tileUrl, tileAttribution, pickMod
     if (m && flyTo) m.setView([flyTo.lat, flyTo.lon], 9);
   }, [flyTo?.key]);
 
+  // Rebuild the marker layer only when the item SET changes (items is memoized upstream, so a pan that
+  // merely re-renders the parent no longer thrashes the layer). Markers are kept by id so focus can
+  // address them without rebuilding.
   useEffect(() => {
     const lg = layer.current;
-    const m = map.current;
-    if (!lg || !m) return;
+    if (!lg) return;
     lg.clearLayers();
+    markers.current.clear();
     for (const it of items) {
       if (it.lat == null || it.lon == null) continue;
       const mk = L.marker([it.lat, it.lon], { icon: pin }).bindPopup(buildPopup(it.title, it.link));
       mk.addTo(lg);
-      if (it.id === focusId) { m.setView([it.lat, it.lon], 6); mk.openPopup(); }
+      markers.current.set(it.id, mk);
     }
-  }, [items, focusId]);
+  }, [items]);
+
+  // Recenter + open the focused marker's popup ONLY when the focus actually changes. Keeping setView out
+  // of the build effect breaks the setView→moveend→onCenterChange→re-render→rebuild loop that flashed the
+  // popup in the centre and made dragging catch.
+  useEffect(() => {
+    const m = map.current;
+    if (!m || !focusId) return;
+    const mk = markers.current.get(focusId);
+    if (mk) { m.setView(mk.getLatLng(), 6); mk.openPopup(); }
+  }, [focusId]);
 
   return (
     <div className="ga98-geo-map-wrap">

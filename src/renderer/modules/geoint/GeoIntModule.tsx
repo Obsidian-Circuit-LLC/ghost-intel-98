@@ -5,7 +5,7 @@
  * (default off): with it off, Refresh is a main-side no-op and the map loads no tiles.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { GeoSnapshot, GeoSourceType, GeoItem } from '@shared/post-mvp-types';
 import { useSettings } from '../../state/store';
 import { toast } from '../../state/toasts';
@@ -148,7 +148,13 @@ export function GeoIntModule(): JSX.Element {
     return () => clearInterval(id);
   }, [net]);
 
-  const items = (snap?.items ?? []).filter((i) => !filter || i.title.toLowerCase().includes(filter.toLowerCase()));
+  // Memoized so its reference is stable across renders that don't change the data — otherwise a fresh
+  // array each render makes MapPane's marker effect clear+rebuild every pan (the drag "catch") and
+  // re-fire the focused-marker setView (a moveend→re-render→rebuild loop that flashed the popup).
+  const items = useMemo(
+    () => (snap?.items ?? []).filter((i) => !filter || i.title.toLowerCase().includes(filter.toLowerCase())),
+    [snap, filter]
+  );
 
   return (
     <div className="ga98-split ga98-geo" style={{ height: '100%' }}>
