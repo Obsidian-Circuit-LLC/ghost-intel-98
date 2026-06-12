@@ -21,6 +21,8 @@ import { Finder } from './Finder';
 import type { FeedAction } from './Finder';
 import { Wall as WallView } from './Wall';
 import { SetLocationDialog } from './SetLocationDialog';
+import { WallSetupDialog } from './WallSetupDialog';
+import type { WallSetupCfg } from './WallSetupDialog';
 import { emptyWall, assignToSlot, clearSlot } from './wall';
 
 /** Geo stamp from a tree node's explicit geo fields. null node = no stamp. */
@@ -41,6 +43,7 @@ export function EyeSpyModule(): JSX.Element {
   const [showForm, setShowForm] = useState<boolean>(false);
   const [draft, setDraft] = useState<Partial<CameraStream>>({ kind: 'hls', label: '', url: '' });
   const [setLocTargets, setSetLocTargets] = useState<CameraStream[] | null>(null);
+  const [wallSetup, setWallSetup] = useState<{ mode: 'new' | 'edit' } | null>(null);
 
   const fullTree = useMemo(() => buildTree(streams), [streams]);
   const tree = useMemo(() => filterTree(fullTree, streams, query), [fullTree, streams, query]);
@@ -186,8 +189,7 @@ export function EyeSpyModule(): JSX.Element {
   const onImport = (): void => void importFeeds(selectedNode ? nodeStamp(selectedNode) : undefined);
 
   function newWall(): void {
-    setWall(emptyWall(`wall-${Date.now()}`, 'Untitled wall', new Date().toISOString()));
-    setActiveSlot(null);
+    setWallSetup({ mode: 'new' });
   }
 
   async function openWall(id: string): Promise<void> {
@@ -196,8 +198,24 @@ export function EyeSpyModule(): JSX.Element {
   }
 
   function renameWall(): void {
-    const name = window.prompt('Rename wall', wallRef.current.name);
-    if (name && name.trim()) persistWall({ ...wallRef.current, name: name.trim() });
+    setWallSetup({ mode: 'edit' });
+  }
+
+  /** Wall Setup submit — New creates a fresh board; Rename patches the current one. */
+  function onWallSetup({ name, country, region, city }: WallSetupCfg): void {
+    if (wallSetup?.mode === 'new') {
+      const base = emptyWall(`wall-${Date.now()}`, name, new Date().toISOString());
+      setActiveSlot(null);
+      persistWall({ ...base, country, region, city });
+    } else {
+      persistWall({ ...wallRef.current, name, country, region, city });
+    }
+    setWallSetup(null);
+  }
+
+  /** Import a whole CCTV feed file stamped under this wall's Country/State/City category. */
+  function onWallImportHere(cfg: WallSetupCfg): void {
+    void importFeeds({ country: cfg.country || undefined, region: cfg.region || undefined, city: cfg.city || undefined });
   }
 
   async function deleteWall(): Promise<void> {
@@ -288,6 +306,18 @@ export function EyeSpyModule(): JSX.Element {
         )}
 
         {setLocTargets && <SetLocationDialog targets={setLocTargets} onApply={(g) => void applyLoc(g)} onClose={() => setSetLocTargets(null)} />}
+
+        {wallSetup && (
+          <WallSetupDialog
+            title={wallSetup.mode === 'new' ? 'New wall' : 'Wall setup'}
+            initial={wallSetup.mode === 'edit'
+              ? { name: wallRef.current.name, country: wallRef.current.country, region: wallRef.current.region, city: wallRef.current.city }
+              : undefined}
+            onSubmit={onWallSetup}
+            onImportHere={onWallImportHere}
+            onClose={() => setWallSetup(null)}
+          />
+        )}
       </div>
     </div>
   );
