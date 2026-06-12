@@ -226,7 +226,12 @@ export function parseFeedList(text: string): ParsedFeed[] {
  * only the keys ParsedFeed actually set, so geo-less feeds stay { label, url, kind }.
  */
 export function feedToUpsert(
-  f: ParsedFeed
+  f: ParsedFeed,
+  stamp?: { country?: string; region?: string; city?: string }
 ): Pick<CameraStream, 'label' | 'url' | 'kind' | 'country' | 'region' | 'city' | 'lat' | 'lon' | 'source'> {
-  return { ...f };
+  const base: Partial<CameraStream> = {};
+  if (stamp?.country) base.country = stamp.country;
+  if (stamp?.region) base.region = stamp.region;
+  if (stamp?.city) base.city = stamp.city;
+  return { ...base, ...f };
 }

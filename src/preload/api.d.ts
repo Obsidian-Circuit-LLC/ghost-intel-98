@@ -288,7 +288,7 @@ export interface GhostApi {
     upsert(input: Partial<CameraStream> & { url: string; label: string; kind: CameraStream['kind'] }): Promise<CameraStream>;
     delete(id: string): Promise<void>;
     clear(): Promise<number>;
-    import(): Promise<{ added: number; skipped: number; total: number }>;
+    import(stamp?: { country?: string; region?: string; city?: string }): Promise<{ added: number; skipped: number; total: number }>;
   };
   media: {
     getSnapshot(): Promise<MediaLibrarySnapshot>;

@@ -229,7 +229,7 @@ const api = {
     upsert: (input: unknown) => ipcRenderer.invoke(channels.streams.upsert, input),
     delete: (id: string) => ipcRenderer.invoke(channels.streams.delete, id),
     clear: () => ipcRenderer.invoke(channels.streams.clear),
-    import: () => ipcRenderer.invoke(channels.streams.import)
+    import: (stamp?: { country?: string; region?: string; city?: string }) => ipcRenderer.invoke(channels.streams.import, stamp)
   },
   media: {
     getSnapshot: () => ipcRenderer.invoke(channels.media.getSnapshot),
