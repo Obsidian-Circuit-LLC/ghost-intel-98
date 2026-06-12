@@ -146,6 +146,7 @@ export function EyeSpyModule(): JSX.Element {
               streams={shown}
               onExpand={setExpanded}
               onAdd={() => { setDraft({ kind: 'hls', label: '', url: '' }); setShowForm(true); }}
+              onDelete={(s) => void del(s.id)}
             />
           )}
         </div>
