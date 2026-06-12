@@ -878,7 +878,8 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   });
   safeHandle(channels.streams.delete, (...args) => streams.remove(args[0] as string));
   safeHandle(channels.streams.clear, () => streams.clear());
-  safeHandle(channels.streams.import, async () => {
+  safeHandle(channels.streams.import, async (...args) => {
+    const stamp = (args[0] ?? undefined) as { country?: string; region?: string; city?: string } | undefined;
     const win = getWindow();
     const r = win
       ? await dialog.showOpenDialog(win, { properties: ['openFile'], filters: [{ name: 'Camera feed list', extensions: ['csv', 'json', 'txt', 'm3u', 'm3u8'] }] })
@@ -890,7 +891,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     let skipped = 0;
     for (const f of feeds) {
       if (!ensureFeedUrl(f.url) || seen.has(f.url.toLowerCase())) { skipped++; continue; }
-      await streams.upsert(feedToUpsert(f));
+      await streams.upsert(feedToUpsert(f, stamp));
       seen.add(f.url.toLowerCase());
       added++;
     }
