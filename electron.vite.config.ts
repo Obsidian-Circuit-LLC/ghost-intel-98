@@ -8,9 +8,10 @@ const sharedAliases = {
 
 export default defineConfig({
   main: {
-    // @noble/curves + @noble/post-quantum are ESM-only; the main bundle is CJS, so they must be
-    // BUNDLED (not externalized) or require() of them throws ERR_REQUIRE_ESM at boot.
-    plugins: [externalizeDepsPlugin({ exclude: ['@noble/curves', '@noble/post-quantum'] })],
+    // @noble/curves, @noble/post-quantum, and @noble/ciphers are ESM-only; the main bundle is CJS,
+    // so they must be BUNDLED (not externalized) or require() of them throws ERR_REQUIRE_ESM at boot.
+    // Any new @noble/* (or other ESM-only) main-process dependency MUST be added here.
+    plugins: [externalizeDepsPlugin({ exclude: ['@noble/curves', '@noble/post-quantum', '@noble/ciphers'] })],
     resolve: { alias: sharedAliases },
     build: {
       outDir: 'out/main',
