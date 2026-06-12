@@ -19,21 +19,34 @@ const { createHash } = require('node:crypto');
 const { writeFileSync, mkdirSync } = require('node:fs');
 const AdmZip = require('adm-zip');
 const countries = require('world-countries');
+// English DICTIONARY word list (an-array-of-english-words, MIT, SCOWL-derived, ~275k lowercase
+// common words). This is a DICTIONARY, not a frequency list: it contains common nouns/verbs/
+// adjectives ("reading", "police", "split", "best", "most", "nice", "march") but NOT proper
+// nouns ("dallas", "london", "tokyo", "moscow" are not dictionary headwords). The previous
+// source (google-10000-english) was a web-FREQUENCY list that included frequent PROPER NOUNS,
+// so it wrongly dropped major cities (London/Paris/Tokyo/Dallas...) — the regression this fixes.
+// Pinned in package.json/pnpm-lock.yaml: no runtime download, no SHA pin needed for this source.
+const DICT = new Set(require('an-array-of-english-words'));
 
 const CITIES_URL = 'https://download.geonames.org/export/dump/cities5000.zip';
 // SHA-256 of cities5000.zip, pinned 2026-06-13. Bump deliberately when GeoNames republishes,
 // re-verifying the new archive. Empty string + GAZ_CAPTURE=1 = capture mode (print the hash).
 const CITIES_SHA256 = '58da751f67748b4d40545058591a9b7c463cbcf45f0188c5376e1fd2bbd18650';
 
-// Common-English-words list (google-10000-english, MIT — ~10k most frequent English words).
-// Used to drop single-token city names that collide with ordinary prose ("Reading", "Best",
-// "Most", "Male", "Police", "Split", "Nice", "March" are all GeoNames cities AND common words),
-// which otherwise mislocate news text — the worst failure class for an OSINT geocoder. The
-// list is SHA-256-pinned with the same fail-closed discipline as cities5000.
-const WORDS_URL =
-  'https://raw.githubusercontent.com/first20hours/google-10000-english/master/google-10000-english-no-swears.txt';
-// SHA-256 of the words list, pinned 2026-06-13. Empty + GAZ_CAPTURE=1 = capture mode.
-const WORDS_SHA256 = 'd6b3e04f1ac30be6525d41474166c0bff28486ecd8c48dcb0ab9c7c9cc05ed86';
+// Curated major cities that MUST appear in the gazetteer (a GeoINT tool that can't locate
+// London/Paris/Tokyo is broken). Doubles as a blocklist-exemption set: a few of these names are
+// ALSO lowercase dictionary headwords ("paris" = plaster of Paris, "berlin" = a carriage/wool,
+// "boston" = a card game), so without exemption the dict-blocklist would drop them. They are
+// always kept regardless of DICT membership. The self-validating guard below asserts presence.
+const MAJOR_CITIES = [
+  'dallas', 'london', 'paris', 'berlin', 'chicago', 'houston', 'madrid', 'rome',
+  'tokyo', 'moscow', 'mumbai', 'toronto', 'sydney', 'boston', 'miami', 'kyiv',
+  'mariupol', 'khartoum', 'lagos', 'cairo'
+];
+const MAJOR_CITY_SET = new Set(MAJOR_CITIES);
+// Common dictionary words that are also GeoNames city names and MUST be dropped (they mislocate
+// ordinary prose — the worst failure class for an OSINT geocoder). The guard asserts absence.
+const MUST_BE_ABSENT = ['reading', 'best', 'most', 'police', 'split', 'nice', 'march'];
 
 // Same normalization the geocoder uses: lowercase Unicode letter-runs joined by single spaces.
 function norm(s) {
@@ -79,18 +92,7 @@ function verifySha(label, buf, pin) {
 }
 
 (async () => {
-  console.log(`[gen-gazetteer] downloading ${WORDS_URL}`);
-  const wordsBuf = await downloadBuffer(WORDS_URL);
-  verifySha('google-10000-english-no-swears.txt', wordsBuf, WORDS_SHA256);
-  // Lowercased Set of common English words. A single-token city name in this set is dropped.
-  const commonWords = new Set(
-    wordsBuf
-      .toString('utf8')
-      .split('\n')
-      .map((w) => w.trim().toLowerCase())
-      .filter(Boolean)
-  );
-  console.log(`[gen-gazetteer] loaded ${commonWords.size} common English words (blocklist)`);
+  console.log(`[gen-gazetteer] loaded ${DICT.size} English dictionary words (blocklist source)`);
 
   console.log(`[gen-gazetteer] downloading ${CITIES_URL}`);
   const zipBuf = await downloadBuffer(CITIES_URL);
@@ -121,12 +123,13 @@ function verifySha(label, buf, pin) {
     if (!key) continue;
     // Drop false-positive names: too short, or a common English stopword.
     if (key.length < 4 || STOPLIST.has(key)) continue;
-    // Drop single-token city names that are common English words ("Reading", "Best", "Most",
-    // "Male", "Police", "Split", "Nice", "March"...). They mislocate ordinary prose. Multi-word
+    // Drop single-token city names that are common English DICTIONARY words ("Reading", "Best",
+    // "Most", "Police", "Split", "Nice", "March"...). They mislocate ordinary prose. Multi-word
     // names ("New York City", "San Francisco") don't collide and are kept; single-token names
-    // NOT in the common list (Mariupol, Khartoum, Kyiv...) are kept. Countries are exempt (added
-    // after this loop, and they overwrite on collision).
-    if (!key.includes(' ') && commonWords.has(key)) continue;
+    // NOT in the dictionary (Mariupol, Khartoum, Kyiv, Dallas, London, Tokyo...) are kept.
+    // Curated MAJOR cities are exempt even if the lowercase form is a dictionary word
+    // ("paris"/"berlin"/"boston"). Countries are exempt (added after this loop, overwrite).
+    if (!key.includes(' ') && DICT.has(key) && !MAJOR_CITY_SET.has(key)) continue;
     cityRows += 1;
     const prev = byKey.get(key);
     if (!prev || pop > prev.pop) byKey.set(key, { name, lat, lon, pop });
@@ -155,6 +158,30 @@ function verifySha(label, buf, pin) {
       const v = byKey.get(k);
       return { name: v.name, lat: v.lat, lon: v.lon };
     });
+
+  // Self-validating coverage guard — fail the build if the blocklist source ever regresses.
+  // (1) Every curated MAJOR city must be PRESENT; (2) every common-word city must be ABSENT.
+  // This catches a future wordlist-source change that breaks coverage (the regression this fixes).
+  const present = new Set(entries.map((e) => norm(e.name)));
+  const missingMajor = MAJOR_CITIES.filter((c) => !present.has(c));
+  const leakedCommon = MUST_BE_ABSENT.filter((c) => present.has(c));
+  if (missingMajor.length || leakedCommon.length) {
+    if (missingMajor.length) {
+      console.error(
+        `[gen-gazetteer] COVERAGE GUARD FAILED — missing MAJOR cities: ${missingMajor.join(', ')}`
+      );
+    }
+    if (leakedCommon.length) {
+      console.error(
+        `[gen-gazetteer] COVERAGE GUARD FAILED — common-word cities not blocked: ${leakedCommon.join(', ')}`
+      );
+    }
+    process.exit(1);
+  }
+  console.log(
+    `[gen-gazetteer] coverage guard passed ✓ (${MAJOR_CITIES.length} major cities present, ` +
+      `${MUST_BE_ABSENT.length} common-word cities absent)`
+  );
 
   mkdirSync('resources/geoint', { recursive: true });
   writeFileSync('resources/geoint/gazetteer.json', JSON.stringify(entries));

@@ -14,6 +14,20 @@ const gaz: GazEntry[] = [
 ];
 const geocode = makeGeocoder(gaz);
 
+// Real major-city coords as the gen-gazetteer.cjs DICTIONARY blocklist now ships them (GeoNames
+// cities5000). These are the cities the FREQUENCY-list blocklist regression wrongly dropped;
+// the dictionary blocklist keeps them (proper nouns aren't dictionary headwords) and the curated
+// MAJOR_CITIES exemption keeps the few that are also lowercase dictionary words (Paris/Berlin/
+// Boston). "police" is a dictionary word and is blocklisted, so it never competes with "Dallas".
+const majorGaz: GazEntry[] = [
+  { name: 'Mariupol', lat: 47.09514, lon: 37.54131 },
+  { name: 'London', lat: 51.50853, lon: -0.12574 },
+  { name: 'Dallas', lat: 32.78306, lon: -96.80667 },
+  { name: 'Paris', lat: 48.85341, lon: 2.3488 },
+  { name: 'Tokyo', lat: 35.6895, lon: 139.69171 }
+];
+const majorGeocode = makeGeocoder(majorGaz);
+
 // FIX 2 regression set. The gen-time blocklist (scripts/gen-gazetteer.cjs) drops common
 // single-token English words ("Reading", "Best", "Most", "Male", "Police", "Split", "Nice",
 // "March"). Defense-in-depth: even if such a word survives, the matcher's capitalization gate
@@ -64,6 +78,55 @@ describe('geocode (phrase-index gazetteer match)', () => {
 
   it('is deterministic across calls', () => {
     expect(geocode('clashes in Mariupol')).toEqual(geocode('clashes in Mariupol'));
+  });
+
+  describe('major cities geocode (regression: DICTIONARY blocklist must not drop proper-noun cities)', () => {
+    it('"shelling reported in Mariupol" → Mariupol', () => {
+      expect(majorGeocode('shelling reported in Mariupol')).toEqual({
+        lat: 47.09514,
+        lon: 37.54131,
+        name: 'Mariupol'
+      });
+    });
+
+    it('"explosion in London today" → London', () => {
+      expect(majorGeocode('explosion in London today')).toEqual({
+        lat: 51.50853,
+        lon: -0.12574,
+        name: 'London'
+      });
+    });
+
+    it('"Dallas police responded" → Dallas ("police" is blocklisted, so Dallas wins)', () => {
+      expect(majorGeocode('Dallas police responded')).toEqual({
+        lat: 32.78306,
+        lon: -96.80667,
+        name: 'Dallas'
+      });
+    });
+
+    it('"summit in Paris" → Paris (Paris is a dict word but exempt as a curated major city)', () => {
+      expect(majorGeocode('summit in Paris')).toEqual({ lat: 48.85341, lon: 2.3488, name: 'Paris' });
+    });
+
+    it('"Tokyo markets fell" → Tokyo', () => {
+      expect(majorGeocode('Tokyo markets fell')).toEqual({ lat: 35.6895, lon: 139.69171, name: 'Tokyo' });
+    });
+  });
+
+  describe('common-word rejection (DICTIONARY blocklist drops common nouns/verbs/adjectives)', () => {
+    it('"officials were reading the report" → null (lowercase; "reading" is blocklisted)', () => {
+      // "reading" is a dictionary word: dropped at gen time AND lowercase fails the cap-gate.
+      expect(majorGeocode('officials were reading the report')).toBeNull();
+    });
+
+    it('"Best Practices For Defense" → null (Best/Practices/Defense are dict words, blocklisted)', () => {
+      expect(majorGeocode('Best Practices For Defense')).toBeNull();
+    });
+
+    it('"the suspect is male" → null', () => {
+      expect(majorGeocode('the suspect is male')).toBeNull();
+    });
   });
 
   describe('capitalization gate (FIX 2): single-token match must be Capitalized in original text', () => {
