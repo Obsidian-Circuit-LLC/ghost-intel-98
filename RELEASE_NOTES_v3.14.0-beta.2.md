@@ -75,5 +75,5 @@ not CI — that's what this beta is for.
 
 ---
 
-**Artifact:** `DCS98-Setup-3.14.0-beta.2.exe` (ARTIFACT_BYTES bytes ≈ ARTIFACT_MB MB, NSIS, x64, unsigned; Tor + Piper + offline AI models bundled)
-**SHA-256:** `ARTIFACT_SHA256`
+**Artifact:** `DCS98-Setup-3.14.0-beta.2.exe` (520,573,056 bytes ≈ 496.5 MB, NSIS, x64, unsigned; Tor + Piper + offline AI models bundled)
+**SHA-256:** `86d57ee3da6c942e2677bedaf16a7119c902594ae0451ae84e615fda0f05f04e`
