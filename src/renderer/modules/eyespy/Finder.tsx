@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { CameraStream } from '@shared/post-mvp-types';
 import { countryFlag, type TreeNode, type CityEntry } from './tree';
 
-export type FeedAction = 'add' | 'play' | 'setloc' | 'delete';
+export type FeedAction = 'add' | 'play' | 'edit' | 'setloc' | 'delete';
 
 export function Finder({ tab, onTab, query, onQuery, tree, cities, feeds, selectedKey, onSelectNode, onFeedAction, onRefresh, onImport, importLabel }: {
   tab: 'countries' | 'cities';
@@ -31,7 +31,7 @@ export function Finder({ tab, onTab, query, onQuery, tree, cities, feeds, select
         <div data-selected={selectedKey === null} onClick={() => onSelectNode(null)} style={{ cursor: 'pointer', padding: '2px 6px', fontWeight: 600 }}>All cameras</div>
         {tab === 'countries'
           ? tree.map((n) => <TreeRow key={n.key} node={n} depth={0} selectedKey={selectedKey} onSelect={onSelectNode} />)
-          : cities.map((c) => <div key={`${c.country ?? ''}/${c.city}`} onClick={() => onSelectNode({ key: `${c.country ?? ''}\0${c.region ?? ''}\0${c.city}`, label: c.city, level: 'city', count: c.count, streamIds: [], children: [], country: c.country, region: c.region, city: c.city })} style={{ cursor: 'pointer', padding: '2px 6px', display: 'flex' }}><span style={{ flex: 1 }}>{c.city}{c.country ? ` · ${c.country}` : ''}</span><span style={{ fontSize: 10, opacity: 0.65 }}>{c.count}</span></div>)}
+          : cities.map((c) => <div key={`${c.country ?? ''}/${c.city}`} onClick={() => onSelectNode({ key: `${c.country?.trim() || 'Ungeocoded'}\0${c.region ?? ''}\0${c.city}`, label: c.city, level: 'city', count: c.count, streamIds: [], children: [], country: c.country, region: c.region, city: c.city })} style={{ cursor: 'pointer', padding: '2px 6px', display: 'flex' }}><span style={{ flex: 1 }}>{c.city}{c.country ? ` · ${c.country}` : ''}</span><span style={{ fontSize: 10, opacity: 0.65 }}>{c.count}</span></div>)}
       </div>
       <div className="ga98-list" style={{ flex: '1 1 60%', overflow: 'auto', borderTop: '1px solid #ccc' }}>
         {feeds.map((s) => (
@@ -72,7 +72,7 @@ function FeedMenu({ x, y, onPick, onClose }: { x: number; y: number; onPick: (a:
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 99 }} />
       <div className="ga98-menu" style={{ position: 'fixed', left: x, top: y, zIndex: 100, background: '#c0c0c0', border: '2px outset #fff' }}>
-        {([['add', 'Add to active square'], ['play', 'Play full-screen'], ['setloc', 'Set location…'], ['delete', 'Delete']] as [FeedAction, string][]).map(([a, label]) => (
+        {([['add', 'Add to active square'], ['play', 'Play full-screen'], ['edit', 'Edit…'], ['setloc', 'Set location…'], ['delete', 'Delete']] as [FeedAction, string][]).map(([a, label]) => (
           <div key={a} onClick={() => onPick(a)} style={{ padding: '3px 12px', cursor: 'pointer' }}>{label}</div>
         ))}
       </div>
