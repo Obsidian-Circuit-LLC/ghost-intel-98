@@ -2,6 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildTree } from '../src/renderer/modules/eyespy/tree';
 import { filterTree, matchStream } from '../src/renderer/modules/eyespy/tree';
+import { findNode } from '../src/renderer/modules/eyespy/tree';
 import type { CameraStream } from '../src/shared/post-mvp-types';
 
 const s = (id: string, geo: Partial<CameraStream>): CameraStream => ({
@@ -67,5 +68,31 @@ describe('filterTree', () => {
     expect(matchStream(streams[1], 'london')).toBe(true);
     expect(matchStream(streams[1], 'cam/b')).toBe(true);
     expect(matchStream(streams[1], 'texas')).toBe(false);
+  });
+});
+
+describe('node geo fields + key safety', () => {
+  it('city node carries country/region/city; UK city has no region; Ungeocoded has no country', () => {
+    const tree = buildTree([
+      s('a', { country: 'United States', region: 'Texas', city: 'Dallas' }),
+      s('b', { country: 'United Kingdom', city: 'London' }),
+      s('z', {})
+    ]);
+    const dallas = findNode(tree, tree.find((n) => n.label === 'United States')!.children[0].children[0].key)!;
+    expect({ country: dallas.country, region: dallas.region, city: dallas.city }).toEqual({ country: 'United States', region: 'Texas', city: 'Dallas' });
+    const london = buildTree([s('b', { country: 'United Kingdom', city: 'London' })])[0].children[0];
+    expect(london.country).toBe('United Kingdom');
+    expect(london.region).toBeUndefined();
+    expect(tree.find((n) => n.label === 'Ungeocoded')!.country).toBeUndefined();
+  });
+  it('a country name containing a slash does not corrupt its node geo', () => {
+    const tree = buildTree([s('a', { country: 'Bosnia/Herzegovina', city: 'Sarajevo' })]);
+    expect(tree[0].country).toBe('Bosnia/Herzegovina');
+    expect(tree[0].children[0].city).toBe('Sarajevo');
+  });
+  it('findNode locates a nested node by key', () => {
+    const tree = buildTree([s('a', { country: 'US', region: 'Texas', city: 'Dallas' })]);
+    const tx = tree[0].children[0];
+    expect(findNode(tree, tx.key)).toBe(tx);
   });
 });
