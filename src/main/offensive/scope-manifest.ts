@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { domainToASCII } from 'node:url';
 
 export class ScopeManifestError extends Error {
   constructor(m: string) { super(m); this.name = 'ScopeManifestError'; }
@@ -29,8 +30,14 @@ function rules(raw: unknown, field: string): ScopeRule[] {
     const o = r as Record<string, unknown>;
     if (o['kind'] === 'asn') throw new ScopeManifestError('asn scope rules require the IP-intelligence dataset, not yet available');
     if (o['kind'] === 'domain') {
-      if (typeof o['value'] !== 'string' || !DOMAIN_RE.test(o['value'])) throw new ScopeManifestError(`${field}[${i}] bad domain`);
-      return { kind: 'domain', value: o['value'] };
+      if (typeof o['value'] !== 'string') throw new ScopeManifestError(`${field}[${i}] bad domain`);
+      // Accept either Unicode (münchen.de) or already-punycode (xn--mnchen-3ya.de) authoring;
+      // store the punycode form. domainToASCII preserves a leading '*.' wildcard and returns ''
+      // on invalid input. Validate the ASCII RESULT against DOMAIN_RE so DOMAIN_RE can keep
+      // rejecting raw non-ASCII bytes while still admitting legitimate IDN rules.
+      const ascii = domainToASCII(o['value']);
+      if (ascii === '' || !DOMAIN_RE.test(ascii)) throw new ScopeManifestError(`${field}[${i}] bad domain`);
+      return { kind: 'domain', value: ascii };
     }
     if (o['kind'] === 'cidr') {
       if (typeof o['value'] !== 'string' || !CIDR_RE.test(o['value'])) throw new ScopeManifestError(`${field}[${i}] bad cidr`);
@@ -85,12 +92,29 @@ export const DEFAULT_PRIVATE_EXCLUDES: ScopeRule[] = [
   { kind: 'cidr', value: 'fc00::/7' }           // v6 unique-local
 ];
 
-/** Returns a manifest with DEFAULT_PRIVATE_EXCLUDES prepended to `exclude` for non-'lab' modes.
- *  Idempotent (skips CIDRs already present). 'lab' mode is returned unchanged so loopback labs work. */
+/** Cloud-metadata excludes that are NON-NEGOTIABLE in every mode, including 'lab'. A 'lab' manifest
+ *  reused against a cloud host must never be able to reach the instance metadata service (IMDS):
+ *  the v4 link-local 169.254.169.254 and the AWS IPv6 IMDS endpoint fd00:ec2::254. DEFAULT_PRIVATE_EXCLUDES
+ *  already covers these for non-lab modes via 169.254.0.0/16, but lab mode skips those broad ranges so
+ *  loopback/RFC1918 labs work — hence the exact metadata addresses are pinned here independently. */
+export const ALWAYS_EXCLUDE: ScopeRule[] = [
+  { kind: 'cidr', value: '169.254.169.254/32' },
+  { kind: 'cidr', value: 'fd00:ec2::254/128' }
+];
+
+/** Returns a manifest with default excludes prepended to `exclude`, idempotently (skips CIDRs already
+ *  present). Non-'lab' modes get ALWAYS_EXCLUDE ∪ DEFAULT_PRIVATE_EXCLUDES. 'lab' mode keeps its broad
+ *  reachability (loopback/RFC1918 labs) but STILL gets ALWAYS_EXCLUDE so a reused lab manifest can never
+ *  hit cloud metadata. */
 export function withDefaultExcludes(m: ScopeManifest): ScopeManifest {
-  if (m.mode === 'lab') return m;
+  const defaults = m.mode === 'lab' ? ALWAYS_EXCLUDE : [...ALWAYS_EXCLUDE, ...DEFAULT_PRIVATE_EXCLUDES];
   const have = new Set(m.exclude.filter((r) => r.kind === 'cidr').map((r) => r.value));
-  const extra = DEFAULT_PRIVATE_EXCLUDES.filter((r) => !have.has(r.value));
+  const seen = new Set<string>();
+  const extra = defaults.filter((r) => {
+    if (have.has(r.value) || seen.has(r.value)) return false;
+    seen.add(r.value);
+    return true;
+  });
   if (extra.length === 0) return m;
   return { ...m, exclude: [...extra, ...m.exclude] };
 }
