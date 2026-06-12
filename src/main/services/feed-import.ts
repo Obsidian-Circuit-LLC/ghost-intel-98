@@ -6,10 +6,11 @@
  * `kind` is inferred from the URL when not given; `label` is derived from the host when
  * not given. Entries without a recognizable URL are dropped. Deduped by URL.
  *
- * Optional geo metadata (country/region/city/lat/lon/source) is read from JSON objects only —
- * the heuristic CSV/plain-text path can't reliably attribute unlabeled columns to geo fields,
- * so it stays geo-unaware. A geo-aware, header-mapped CSV reader can come later once the corpus
- * format is known. Geo keys are only emitted when actually present.
+ * Optional geo metadata (country/region/city/lat/lon/source) is read from JSON objects AND from a
+ * header-mapped CSV: when the first line is a header that names a URL column, columns are mapped by
+ * name (alias-aware, order-independent) so geo columns import too. A header-less list (plain URLs or
+ * positional CSV) stays geo-unaware — it can't reliably attribute unlabeled columns. Geo keys are
+ * only emitted when actually present.
  */
 
 import type { CameraStream, StreamKind } from '@shared/post-mvp-types';
@@ -116,14 +117,70 @@ function fieldsToFeed(fields: string[]): ParsedFeed | null {
   return toFeed(url, label, kind);
 }
 
-function parseLines(text: string): ParsedFeed[] {
+// Header-column aliases. Names are matched case-insensitively; the first column whose name is an
+// alias of a field wins. `url` aliases mirror the JSON reader (url/URL/src/stream); the rest mirror
+// extractGeo's geo aliases plus the label/kind names the positional path already understands.
+type FeedColumn = 'url' | 'label' | 'kind' | 'country' | 'region' | 'city' | 'lat' | 'lon' | 'source';
+const COLUMN_ALIASES: Record<FeedColumn, readonly string[]> = {
+  url: ['url', 'src', 'stream', 'link', 'address'],
+  label: ['label', 'name', 'title'],
+  kind: ['kind', 'type', 'protocol'],
+  country: ['country'],
+  region: ['region', 'state', 'province'],
+  city: ['city', 'town'],
+  lat: ['lat', 'latitude'],
+  lon: ['lon', 'lng', 'long', 'longitude'],
+  source: ['source', 'provider', 'dataset']
+};
+type ColumnMap = Partial<Record<FeedColumn, number>>;
+
+/** If `line` is a header row (no field is itself a URL) that names a URL column, return its
+ *  name→index map (alias-aware, first match wins, order-independent). Otherwise null, so the caller
+ *  falls back to the positional heuristic. */
+function parseHeaderRow(line: string): ColumnMap | null {
+  const names = splitCsvLine(line).map((f) => f.toLowerCase());
+  if (names.some((n) => URLISH.test(n))) return null; // a real URL ⇒ this is data, not a header
+  const map: ColumnMap = {};
+  names.forEach((name, i) => {
+    for (const col of Object.keys(COLUMN_ALIASES) as FeedColumn[]) {
+      if (map[col] === undefined && COLUMN_ALIASES[col].includes(name)) { map[col] = i; break; }
+    }
+  });
+  return map.url !== undefined ? map : null;
+}
+
+/** Build a feed from a CSV data row using a header column map; geo comes from the named columns and
+ *  is emitted only when present + well-formed (asStr/asNum drop blanks and non-finite lat/lon). */
+function mappedRowToFeed(fields: string[], map: ColumnMap): ParsedFeed | null {
+  const at = (c: FeedColumn): string | undefined => {
+    const i = map[c];
+    return i !== undefined ? fields[i] : undefined;
+  };
+  const rawUrl = at('url');
+  if (!rawUrl || !URLISH.test(rawUrl.trim())) return null;
+  const feed = toFeed(rawUrl, at('label'), at('kind'));
+  const geo: Partial<ParsedFeed> = {};
+  const country = asStr(at('country')); if (country) geo.country = country;
+  const region = asStr(at('region')); if (region) geo.region = region;
+  const city = asStr(at('city')); if (city) geo.city = city;
+  const lat = asNum(at('lat')); if (lat !== undefined) geo.lat = lat;
+  const lon = asNum(at('lon')); if (lon !== undefined) geo.lon = lon;
+  const source = asStr(at('source')); if (source) geo.source = source;
+  return { ...feed, ...geo };
+}
+
+/** Parse CSV / plain-text. A header naming a URL column ⇒ a geo-aware header-mapped parse; otherwise
+ *  the positional heuristic (URL/kind/label by shape), which stays geo-unaware. Skips #-comments and
+ *  blank lines. A positional header row drops itself naturally (no field is a URL). */
+function parseCsvOrText(text: string): ParsedFeed[] {
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
+  if (lines.length === 0) return [];
+  const header = parseHeaderRow(lines[0]);
+  const rows = header ? lines.slice(1) : lines;
   const out: ParsedFeed[] = [];
-  for (const raw of text.split(/\r?\n/)) {
-    const line = raw.trim();
-    if (!line || line.startsWith('#')) continue;
-    // Skip a header row like "label,url,kind".
-    if (/^label\s*,/i.test(line) && !URLISH.test(line)) continue;
-    const feed = fieldsToFeed(splitCsvLine(line));
+  for (const line of rows) {
+    const fields = splitCsvLine(line);
+    const feed = header ? mappedRowToFeed(fields, header) : fieldsToFeed(fields);
     if (feed) out.push(feed);
   }
   return out;
@@ -151,7 +208,7 @@ function parseJson(text: string): ParsedFeed[] {
 /** Parse a feed list (auto-detecting JSON vs CSV/plain-text), deduped by URL. */
 export function parseFeedList(text: string): ParsedFeed[] {
   const trimmed = text.trim();
-  const feeds = /^[[{]/.test(trimmed) ? parseJson(text) : parseLines(text);
+  const feeds = /^[[{]/.test(trimmed) ? parseJson(text) : parseCsvOrText(text);
   const seen = new Set<string>();
   const deduped: ParsedFeed[] = [];
   for (const f of feeds) {
