@@ -62,6 +62,9 @@ const TIMEOUT_MS = 30_000;
 let pluginTor: BgconnTor | null = null;
 /** Inject the started, bootstrapped dedicated Tor (set from ensurePluginTor). null ⇒ egress unavailable. */
 export function setPluginTor(t: BgconnTor | null): void { pluginTor = t; }
+/** Returns the live plugin-egress Tor instance, or null if not started. Used by the will-quit
+ *  SIGKILL backstop in index.ts to ensure tor.exe is killed even when async teardown times out. */
+export function getPluginTor(): BgconnTor | null { return pluginTor; }
 export function getPluginTorSocksPort(): number | null { return pluginTor ? pluginTor.socksPort() : null; }
 
 /** A custom Agent whose createConnection tunnels through the plugin Tor SOCKS proxy with a

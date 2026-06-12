@@ -31,6 +31,7 @@ import * as vault from './services/vault';
 import { loadPlugins, disableAllPlugins } from './plugins/loader';
 import { getBgConnManager } from './bgconn/singleton';
 import { getBgTor } from './bgconn/tor-singleton';
+import { getPluginTor } from './plugins/tor-egress';
 import { registerPluginProtocol } from './plugins/protocol';
 import { buildContextDeps, refreshPluginNetSnapshot } from './plugins/wire-deps';
 import { settingsStore } from './storage/json-fs';
@@ -366,7 +367,7 @@ app.on('before-quit', (event) => {
   });
 });
 
-app.on('will-quit', () => { localAi.stop(); getBgTor()?.killNow(); }); // sync backstops (idempotent)
+app.on('will-quit', () => { localAi.stop(); getBgTor()?.killNow(); getPluginTor()?.killNow(); }); // sync backstops (idempotent)
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
