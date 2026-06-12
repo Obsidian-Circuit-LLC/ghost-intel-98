@@ -15,21 +15,40 @@ export class Socks5Error extends Error {
 
 const VER = 0x05;
 const METHOD_NOAUTH = 0x00;
+const METHOD_USERPASS = 0x02;
 const CMD_CONNECT = 0x01;
 const ATYP_IPV4 = 0x01;
 const ATYP_DOMAIN = 0x03;
 const ATYP_IPV6 = 0x04;
 
-/** Client greeting offering only "no authentication". */
-export function buildGreeting(): Uint8Array {
-  return Uint8Array.of(VER, 1, METHOD_NOAUTH);
+/** Client greeting. Default offers only "no authentication" (chat onion dialing).
+ *  `{ auth: true }` additionally offers username/password (RFC 1929) for Tor IsolateSOCKSAuth. */
+export function buildGreeting(opts: { auth?: boolean } = {}): Uint8Array {
+  return opts.auth ? Uint8Array.of(VER, 2, METHOD_NOAUTH, METHOD_USERPASS) : Uint8Array.of(VER, 1, METHOD_NOAUTH);
 }
 
-/** Parse the server's method selection. Returns null if fewer than 2 bytes are available yet. */
-export function parseMethodSelection(buf: Uint8Array): { ok: boolean } | null {
+/** Parse the server's method selection. Returns null until 2 bytes; `ok` iff a method we offered
+ *  was chosen (not 0xFF), and the chosen `method` so the caller knows whether to do the userpass
+ *  sub-negotiation. */
+export function parseMethodSelection(buf: Uint8Array): { ok: boolean; method: number } | null {
   if (buf.length < 2) return null;
   if (buf[0] !== VER) throw new Socks5Error(`bad SOCKS version ${buf[0]}`);
-  return { ok: buf[1] === METHOD_NOAUTH };
+  return { ok: buf[1] !== 0xff, method: buf[1] };
+}
+
+/** RFC 1929 auth request: VER(0x01) ULEN user PLEN pass. */
+export function buildUserPassAuth(user: string, pass: string): Uint8Array {
+  const u = new TextEncoder().encode(user), p = new TextEncoder().encode(pass);
+  if (u.length < 1 || u.length > 255 || p.length < 1 || p.length > 255) throw new Socks5Error('SOCKS credential length out of range');
+  const out = new Uint8Array(1 + 1 + u.length + 1 + p.length);
+  out[0] = 0x01; out[1] = u.length; out.set(u, 2); out[2 + u.length] = p.length; out.set(p, 3 + u.length);
+  return out;
+}
+
+/** RFC 1929 auth reply: VER STATUS. Returns null until 2 bytes; `ok` iff STATUS === 0. */
+export function parseUserPassReply(buf: Uint8Array): { ok: boolean } | null {
+  if (buf.length < 2) return null;
+  return { ok: buf[1] === 0x00 };
 }
 
 /** CONNECT request to a domain (the onion host) + port. */

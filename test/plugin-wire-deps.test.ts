@@ -173,7 +173,7 @@ describe('rawFetch SSRF hardening', () => {
 
     const deps = buildContextDeps();
     await expect(
-      deps.rawFetch('https://public.example.com/api', { method: 'GET' })
+      deps.rawFetch('https://public.example.com/api', { method: 'GET', direct: true })
     ).rejects.toThrow(/SSRF validator/);
 
     fetchSpy.mockRestore();
@@ -198,7 +198,7 @@ describe('rawFetch SSRF hardening', () => {
 
     const deps = buildContextDeps();
     await expect(
-      deps.rawFetch('https://public.example.com/api', { method: 'GET' })
+      deps.rawFetch('https://public.example.com/api', { method: 'GET', direct: true })
     ).rejects.toThrow(/resolves to a private address/);
 
     fetchSpy.mockRestore();
@@ -215,7 +215,7 @@ describe('rawFetch SSRF hardening', () => {
 
     const deps = buildContextDeps();
     await expect(
-      deps.rawFetch('https://public.example.com/loop', { method: 'GET' })
+      deps.rawFetch('https://public.example.com/loop', { method: 'GET', direct: true })
     ).rejects.toThrow(/too many redirects/);
 
     // Confirm fetch was called exactly MAX_HOPS (5) times before the limit was hit.
@@ -235,7 +235,7 @@ describe('rawFetch SSRF hardening', () => {
       );
 
     const deps = buildContextDeps();
-    const result = await deps.rawFetch('https://public.example.com/api', { method: 'GET' });
+    const result = await deps.rawFetch('https://public.example.com/api', { method: 'GET', direct: true });
     expect(result.status).toBe(200);
     expect(result.body).toBe('{"ok":true}');
     expect(result.finalUrl).toBe('https://cdn.example.com/resource');
@@ -253,7 +253,8 @@ describe('rawFetch SSRF hardening', () => {
     const deps = buildContextDeps();
     await deps.rawFetch('https://api.example.com/data', {
       method: 'GET',
-      headers: { Authorization: 'Bearer secret', Cookie: 'sid=abc', 'X-Api-Key': 'k', 'User-Agent': 'dcs98' }
+      headers: { Authorization: 'Bearer secret', Cookie: 'sid=abc', 'X-Api-Key': 'k', 'User-Agent': 'dcs98' },
+      direct: true
     });
 
     // Second hop (cross-origin) must NOT carry the credential headers, but keeps benign ones.
@@ -276,7 +277,8 @@ describe('rawFetch SSRF hardening', () => {
     const deps = buildContextDeps();
     await deps.rawFetch('https://api.example.com/data', {
       method: 'GET',
-      headers: { Authorization: 'Bearer secret' }
+      headers: { Authorization: 'Bearer secret' },
+      direct: true
     });
 
     const secondInit = fetchSpy.mock.calls[1][1] as { headers: Record<string, string> };
@@ -293,7 +295,7 @@ describe('rawFetch SSRF hardening', () => {
       )
       .mockResolvedValueOnce(new Response('ok', { status: 200 }) as Response);
     const deps = buildContextDeps();
-    await deps.rawFetch('https://api.example.com/submit', { method: 'POST', body: 'payload' });
+    await deps.rawFetch('https://api.example.com/submit', { method: 'POST', body: 'payload', direct: true });
     const next302 = spy302.mock.calls[1][1] as { method: string; body?: string };
     expect(next302.method).toBe('GET');
     expect(next302.body).toBeUndefined();
@@ -305,7 +307,7 @@ describe('rawFetch SSRF hardening', () => {
         new Response('', { status: 307, headers: { location: 'https://api.example.com/next' } }) as Response
       )
       .mockResolvedValueOnce(new Response('ok', { status: 200 }) as Response);
-    await deps.rawFetch('https://api.example.com/submit', { method: 'POST', body: 'payload' });
+    await deps.rawFetch('https://api.example.com/submit', { method: 'POST', body: 'payload', direct: true });
     const next307 = spy307.mock.calls[1][1] as { method: string; body?: string };
     expect(next307.method).toBe('POST');
     expect(next307.body).toBe('payload');
