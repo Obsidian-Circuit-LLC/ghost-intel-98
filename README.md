@@ -32,23 +32,19 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`DCS98-Setup-3.14.0-beta.4.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake formally verified internally; external audit + FIPS pending. See Status.)*
+> **Install:** download [`DCS98-Setup-3.14.0-beta.5.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake formally verified internally; external audit + FIPS pending. See Status.)*
 
 ## Status
 
-**v3.14.0-beta.4** — current release. The **EyeSpy redesign** — a finder + a curated 3×3 video wall, replacing the auto-filling grid that flooded when pointed at a large archive:
+**v3.14.0-beta.5** — current release. A targeted **GeoINT map fix** on top of the beta.4 line: the map no longer **flashes a "ghost box" in the centre** and no longer **catches when you click-drag** to pan. Both were one bug — the event list rebuilt every render, so the marker layer thrashed on each pan and the "recenter on the focused event" step drove a recenter→re-render→rebuild loop (which re-opened the focused popup in the centre). Fixed by memoizing the list and moving the recenter into its own focus-only step. No change to GeoINT's data/sources/network gate — purely render wiring.
 
-- **Finder (left):** **Countries / Cities** tabs, a global **search box** (hits across the whole library),
-  a **flag + camera count** on every location node (offline emoji, nothing fetched), and a **feed list**
-  whose rows **right-click** to *Add to active square / Play full-screen / Edit / Set location / Delete*.
-- **Curated 3×3 wall (right):** nine slots that start **empty** — click a square to make it active, then
-  right-click a feed to drop it in (the empty slot is the **"＋ Add new feed"** tile). Tiles carry an honest
-  **"as of <time>"** header; **×** clears a square. Nine slots means a 500-feed archive can't flood the view.
-- **Named walls** (save / open / rename / delete, persisted), **one contextual Import button** ("Import…"
-  → "Import to London…" when a node's selected, replacing the redundant pair), and **Set location** to file
-  a bare archive into the tree. No discovery/scanning.
+712 automated tests. *Everything from v3.14.0-beta.4 (the EyeSpy finder + curated 3×3 wall) carries forward.*
 
-712 automated tests. *Everything from v3.14.0-beta.3 carries forward.*
+<details><summary>v3.14.0-beta.4 — EyeSpy finder + curated 3×3 wall</summary>
+
+The EyeSpy redesign: a **finder** (Countries/Cities tabs, global search, flag + count per node, a feed list whose rows right-click to *Add to active square / Play / Edit / Set location / Delete*) and a **curated 3×3 wall** of named, persisted boards (click a square active, right-click a feed to drop it in; "＋ Add new feed" empty tile; "as of <time>" header; × to clear). One contextual Import button ("Import to London…"), Set location to file a bare archive into the tree. Replaced the beta.3 auto-grid. **712 tests.**
+
+</details>
 
 <details><summary>v3.14.0-beta.3 — EyeSpy location grid (superseded by the beta.4 wall)</summary>
 
@@ -349,14 +345,14 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/dcs98/releases) and run it.
 
-Direct link to the current release: [`DCS98-Setup-3.14.0-beta.4.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.14.0-beta.4/DCS98-Setup-3.14.0-beta.4.exe)
+Direct link to the current release: [`DCS98-Setup-3.14.0-beta.5.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.14.0-beta.5/DCS98-Setup-3.14.0-beta.5.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is formally verified internally — external audit + FIPS
 pending — see Status). The last fully-stable build is [`DCS98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.6.8/DCS98-Setup-3.6.8.exe).
 
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\DCS98-Setup-3.14.0-beta.4.exe -Algorithm SHA256
+Get-FileHash .\DCS98-Setup-3.14.0-beta.5.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
@@ -394,8 +390,14 @@ To uninstall: Settings → Apps → Dead Cyber Society 98 → Uninstall.
 
 ## Releases & changelog
 
-The current build is **v3.14.0-beta.4**. Each release page carries its own notes + SHA-256.
+The current build is **v3.14.0-beta.5**. Each release page carries its own notes + SHA-256.
 
+- **v3.14.0-beta.5** — **GeoINT map fix.** The GeoINT map no longer flashes a "ghost box" in the centre or
+  catches when you click-drag to pan. Both were one bug: the event list was rebuilt as a fresh array every
+  render, so the marker layer cleared+rebuilt on every pan frame and the "recenter on the focused event"
+  step drove a recenter→re-render→rebuild **loop** (re-opening the focused popup in the centre). Fixed by
+  memoizing the list and splitting the recenter into its own focus-only effect. No change to GeoINT's data,
+  sources, or network gate — purely render wiring. **712 tests.**
 - **v3.14.0-beta.4** — **EyeSpy redesign: finder + curated 3×3 wall.** Replaces the auto-filling grid (which
   flooded when pointed at a large archive) with two surfaces — a **finder** (Countries/Cities tabs, global
   search, **flag + count** per node, a feed list whose rows **right-click** to *Add to active square / Play /
@@ -609,7 +611,7 @@ This starts the Vite dev server (HMR) and the Electron main process.
 
 ```bash
 pnpm build        # type-check + bundle main / preload / renderer
-pnpm test         # vitest suite (712 tests as of v3.14.0-beta.4)
+pnpm test         # vitest suite (712 tests as of v3.14.0-beta.5)
 pnpm package      # platform installer for the current host
 pnpm package:win  # cross-build Windows NSIS installer
 ```
