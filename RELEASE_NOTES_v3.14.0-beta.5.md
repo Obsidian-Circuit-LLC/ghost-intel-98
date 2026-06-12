@@ -44,5 +44,5 @@ not CI). `pnpm build` succeeds.
 
 ---
 
-**Artifact:** `DCS98-Setup-3.14.0-beta.5.exe` (ARTIFACT_BYTES bytes ≈ ARTIFACT_MB MB, NSIS, x64, unsigned; Tor + Piper + offline AI models bundled)
-**SHA-256:** `ARTIFACT_SHA256`
+**Artifact:** `DCS98-Setup-3.14.0-beta.5.exe` (520,577,531 bytes ≈ 496.5 MB, NSIS, x64, unsigned; Tor + Piper + offline AI models bundled)
+**SHA-256:** `777c0af3cbc7a38b348f6184cb170d54720790984dce54bf032ea445bd50309f`
