@@ -91,6 +91,56 @@ describe('parseFeedList — optional geo metadata (JSON)', () => {
   });
 });
 
+describe('parseFeedList — geo-aware header-mapped CSV', () => {
+  it('imports geo columns when the header names them (order-independent, alias-aware)', () => {
+    const csv = [
+      'source,city,url,country,lat,lon,label,kind',
+      'tfl-jamcams,London,https://cam/ps.m3u8,GB,51.5007,-0.1246,Parliament Sq,hls'
+    ].join('\n');
+    expect(parseFeedList(csv)).toEqual([
+      {
+        label: 'Parliament Sq', url: 'https://cam/ps.m3u8', kind: 'hls',
+        country: 'GB', city: 'London', lat: 51.5007, lon: -0.1246, source: 'tfl-jamcams'
+      }
+    ]);
+  });
+
+  it('accepts src/state/latitude/longitude/town header aliases and coerces numeric strings', () => {
+    const csv = 'name,src,state,town,latitude,longitude\nGarage,https://cam/g.m3u8,CA,Fresno,36.7,-119.8\n';
+    const [f] = parseFeedList(csv);
+    expect(f.label).toBe('Garage');
+    expect(f.region).toBe('CA');
+    expect(f.city).toBe('Fresno');
+    expect(f.lat).toBeCloseTo(36.7);
+    expect(f.lon).toBeCloseTo(-119.8);
+  });
+
+  it('omits geo for a row whose geo cells are blank (no undefined noise)', () => {
+    const [f] = parseFeedList('url,city,lat,lon\nhttps://cam/x.m3u8,,,\n');
+    expect(Object.keys(f).sort()).toEqual(['kind', 'label', 'url']);
+  });
+
+  it('honors quoted commas inside a geo cell', () => {
+    const [f] = parseFeedList('url,city,country\nhttps://cam/y.m3u8,"Springfield, IL",US\n');
+    expect(f.city).toBe('Springfield, IL');
+    expect(f.country).toBe('US');
+  });
+
+  it('drops non-finite lat/lon from a CSV row rather than storing NaN', () => {
+    const [f] = parseFeedList('url,lat,lon\nhttps://cam/z.m3u8,north,\n');
+    expect('lat' in f).toBe(false);
+    expect('lon' in f).toBe(false);
+  });
+
+  it('falls back to the positional (geo-unaware) path when the header names no URL column', () => {
+    // No url-aliased column ⇒ not treated as a header; the bare header row drops (no URL) and the
+    // data line parses positionally.
+    expect(parseFeedList('label,kind\nhttps://cam/a.m3u8,hls\n')).toEqual([
+      { label: 'cam', url: 'https://cam/a.m3u8', kind: 'hls' }
+    ]);
+  });
+});
+
 describe('feedToUpsert — carries geo through to the store payload', () => {
   it('passes present geo fields onto the upsert payload', () => {
     const [f] = parseFeedList(JSON.stringify([{ url: 'https://cam/a.m3u8', city: 'Paris', lat: 48.85, lon: 2.35 }]));
