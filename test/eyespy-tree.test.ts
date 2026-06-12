@@ -1,6 +1,7 @@
 // test/eyespy-tree.test.ts
 import { describe, it, expect } from 'vitest';
 import { buildTree } from '../src/renderer/modules/eyespy/tree';
+import { filterTree, matchStream } from '../src/renderer/modules/eyespy/tree';
 import type { CameraStream } from '../src/shared/post-mvp-types';
 
 const s = (id: string, geo: Partial<CameraStream>): CameraStream => ({
@@ -44,5 +45,27 @@ describe('buildTree', () => {
     const tx = us.children.find((n) => n.label === 'Texas')!;
     expect([...tx.streamIds].sort()).toEqual(['a', 'b']);
     expect(tx.children.map((c) => c.label)).toEqual(['Dallas']);
+  });
+});
+
+describe('filterTree', () => {
+  const streams = [
+    s('a', { country: 'United States', region: 'Texas', city: 'Dallas' }),
+    s('b', { country: 'United Kingdom', city: 'London' })
+  ];
+  const tree = buildTree(streams);
+
+  it('empty query returns the tree unchanged', () => {
+    expect(filterTree(tree, streams, '')).toBe(tree);
+  });
+  it('prunes to branches matching on city/region/country/url, case-insensitive', () => {
+    const r = filterTree(tree, streams, 'dallas');
+    expect(r.map((n) => n.label)).toEqual(['United States']);
+    expect(r[0].children[0].label).toBe('Texas');
+  });
+  it('matchStream hits label/city/region/country/url', () => {
+    expect(matchStream(streams[1], 'london')).toBe(true);
+    expect(matchStream(streams[1], 'cam/b')).toBe(true);
+    expect(matchStream(streams[1], 'texas')).toBe(false);
   });
 });

@@ -63,3 +63,21 @@ export function buildTree(streams: CameraStream[]): TreeNode[] {
   out.sort((a, b) => cmpLabel(a.label, b.label));
   return out;
 }
+
+export function matchStream(s: CameraStream, qLower: string): boolean {
+  const hay = `${s.label} ${s.city ?? ''} ${s.region ?? ''} ${s.country ?? ''} ${s.url}`.toLowerCase();
+  return hay.includes(qLower);
+}
+
+export function filterTree(nodes: TreeNode[], streams: CameraStream[], q: string): TreeNode[] {
+  const query = q.trim().toLowerCase();
+  if (!query) return nodes;
+  const byId = new Map(streams.map((s) => [s.id, s] as const));
+  const keep = (n: TreeNode): TreeNode | null => {
+    const children = n.children.map(keep).filter((c): c is TreeNode => c !== null);
+    const labelHit = n.label.toLowerCase().includes(query);
+    const streamHit = n.streamIds.some((id) => { const st = byId.get(id); return !!st && matchStream(st, query); });
+    return labelHit || streamHit || children.length > 0 ? { ...n, children } : null;
+  };
+  return nodes.map(keep).filter((c): c is TreeNode => c !== null);
+}
