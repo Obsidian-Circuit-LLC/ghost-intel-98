@@ -16,6 +16,20 @@ import { registerTeardown } from './loader';
  *  can surface three-valued found/not-found/BLOCKED instead of a false negative. */
 export class SocksBlockedError extends Error { constructor(m: string) { super(m); this.name = 'SocksBlockedError'; } }
 
+/**
+ * ACCEPTED RESIDUALS — operator decisions 2026-06-12, intentional and not gated further:
+ *
+ * (1) .onion and name-based targets are permitted on egress. Traffic exits through a remote
+ *     Tor exit node (or, for .onion, never leaves the Tor overlay), so the exit cannot reach
+ *     the user's LAN. Hidden-service sources are within the tool's threat model. The existing
+ *     isPublicHttpUrl textual validator is intentionally not extended with .onion rejection.
+ *
+ * (2) init.direct === true elects the clearnet path per-call. The trust boundary is the plugin
+ *     signature: only a signed, loaded plugin can construct a PluginFetchInit with direct:true.
+ *     This is a disclosed capability, not a gated one — a signed plugin that needs direct egress
+ *     can opt in explicitly; unsigned or capability-missing plugins never reach rawFetch.
+ */
+
 interface SocksTarget { host: string; port: number; user: string; pass: string }
 
 /** Maximum bytes we will buffer during the SOCKS5 handshake. A valid greeting reply (2 B) +
@@ -115,10 +129,11 @@ function makeSocksAgent(socksPort: number, secure: boolean): HttpAgent | HttpsAg
   return agent;
 }
 
-/** Fetch `url` over Tor. Returns a PluginFetchResponse; a Tor-exit refusal / SOCKS / TLS / timeout
- *  failure → { blocked:true } (three-valued), a real HTTP response → status+body. Throws only if
- *  the dedicated Tor isn't available. Does NOT follow redirects — wire-deps owns redirect policy. */
-export function torFetch(url: string, init: PluginFetchInit = {}): Promise<PluginFetchResponse> {
+/** Fetch `url` over Tor. Returns a PluginFetchResponse (extended with an optional `location`
+ *  field on 3xx responses so wire-deps can follow redirects); a Tor-exit refusal / SOCKS / TLS /
+ *  timeout failure → { blocked:true } (three-valued). Throws only if the dedicated Tor isn't
+ *  available. Does NOT follow redirects — wire-deps' followRedirects owns redirect policy. */
+export function torFetch(url: string, init: PluginFetchInit = {}): Promise<PluginFetchResponse & { location?: string }> {
   const socksPort = getPluginTorSocksPort();
   if (socksPort === null) return Promise.reject(new Error('plugin Tor egress not started'));
   const u = new URL(url);
@@ -130,7 +145,13 @@ export function torFetch(url: string, init: PluginFetchInit = {}): Promise<Plugi
     const req = reqFn(url, { method: init.method ?? 'GET', headers: init.headers, agent: agent as never, timeout: TIMEOUT_MS }, (res) => {
       const chunks: Buffer[] = []; let len = 0;
       res.on('data', (c: Buffer) => { len += c.length; if (len > MAX_BODY) { req.destroy(); resolve({ status: res.statusCode ?? 0, body: '', finalUrl: url }); return; } chunks.push(c); });
-      res.on('end', () => resolve({ status: res.statusCode ?? 0, body: Buffer.concat(chunks).toString('utf8'), finalUrl: url }));
+      res.on('end', () => {
+        const status = res.statusCode ?? 0;
+        const body = Buffer.concat(chunks).toString('utf8');
+        // Surface the Location header on 3xx responses so wire-deps followRedirects can follow them.
+        const location = (status >= 300 && status < 400) ? (res.headers['location'] as string | undefined) : undefined;
+        resolve({ status, body, finalUrl: url, ...(location !== undefined ? { location } : {}) });
+      });
       res.on('error', blocked);
     });
     req.on('error', (e) => (e instanceof SocksBlockedError ? blocked() : blocked())); // SOCKS/connection error → blocked
