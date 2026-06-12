@@ -9,6 +9,9 @@ export interface TreeNode {
   count: number;
   streamIds: string[];
   children: TreeNode[];
+  country?: string;   // node's own coords; undefined for the Ungeocoded bucket
+  region?: string;
+  city?: string;
 }
 
 const UNGEO = 'Ungeocoded';
@@ -46,22 +49,31 @@ export function buildTree(streams: CameraStream[]): TreeNode[] {
       for (const [city, ids] of cMap) {
         regionIds.push(...ids);
         if (city) {
-          cityNodes.push({ key: `${country}/${region}/${city}`, label: city, level: 'city', count: ids.length, streamIds: [...ids], children: [] });
+          cityNodes.push({ key: `${country}\0${region}\0${city}`, label: city, level: 'city', count: ids.length, streamIds: [...ids], children: [], country: country === UNGEO ? undefined : country, region: region || undefined, city });
         }
       }
       countryIds.push(...regionIds);
       cityNodes.sort((a, b) => cmpLabel(a.label, b.label));
       if (region) {
-        countryChildren.push({ key: `${country}/${region}`, label: region, level: 'region', count: regionIds.length, streamIds: [...regionIds], children: cityNodes });
+        countryChildren.push({ key: `${country}\0${region}`, label: region, level: 'region', count: regionIds.length, streamIds: [...regionIds], children: cityNodes, country: country === UNGEO ? undefined : country, region });
       } else {
         countryChildren.push(...cityNodes);
       }
     }
     countryChildren.sort((a, b) => cmpLabel(a.label, b.label));
-    out.push({ key: country, label: country, level: 'country', count: countryIds.length, streamIds: countryIds, children: countryChildren });
+    out.push({ key: country, label: country, level: 'country', count: countryIds.length, streamIds: countryIds, children: countryChildren, country: country === UNGEO ? undefined : country });
   }
   out.sort((a, b) => cmpLabel(a.label, b.label));
   return out;
+}
+
+export function findNode(nodes: TreeNode[], key: string): TreeNode | null {
+  for (const n of nodes) {
+    if (n.key === key) return n;
+    const hit = findNode(n.children, key);
+    if (hit) return hit;
+  }
+  return null;
 }
 
 export function matchStream(s: CameraStream, qLower: string): boolean {

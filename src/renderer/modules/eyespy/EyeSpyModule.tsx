@@ -14,28 +14,28 @@ import type { CaseSummary } from '@shared/types';
 import { confirmDialog } from '../../state/dialogs';
 import { toast } from '../../state/toasts';
 import { Viewer } from './Viewer';
-import { buildTree, filterTree, matchStream } from './tree';
+import { buildTree, filterTree, matchStream, findNode } from './tree';
 import type { TreeNode } from './tree';
 import { LocationTree } from './LocationTree';
 import { CameraGrid } from './CameraGrid';
 
-/** Derive a geo stamp from a tree node's key (country/region/city). null node = no stamp. */
+/** Geo stamp from a tree node's explicit geo fields. null node = no stamp. */
 function nodeStamp(n: TreeNode | null): { country?: string; region?: string; city?: string } | undefined {
-  if (!n) return undefined;
-  const [country, region, city] = n.key.split('/');
-  return { country: country === 'Ungeocoded' ? undefined : country, region: region || undefined, city: city || undefined };
+  return n ? { country: n.country, region: n.region, city: n.city } : undefined;
 }
 
 export function EyeSpyModule(): JSX.Element {
   const [streams, setStreams] = useState<CameraStream[]>([]);
   const [cases, setCases] = useState<CaseSummary[]>([]);
-  const [selectedNode, setSelectedNode] = useState<TreeNode | null>(null);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [query, setQuery] = useState<string>('');
   const [expanded, setExpanded] = useState<CameraStream | null>(null);
   const [showForm, setShowForm] = useState<boolean>(false);
   const [draft, setDraft] = useState<Partial<CameraStream>>({ kind: 'hls', label: '', url: '' });
 
-  const tree = useMemo(() => filterTree(buildTree(streams), streams, query), [streams, query]);
+  const fullTree = useMemo(() => buildTree(streams), [streams]);
+  const tree = useMemo(() => filterTree(fullTree, streams, query), [fullTree, streams, query]);
+  const selectedNode = useMemo(() => (selectedKey ? findNode(fullTree, selectedKey) : null), [fullTree, selectedKey]);
   const shown = useMemo(() => {
     const base = selectedNode ? streams.filter((s) => new Set(selectedNode.streamIds).has(s.id)) : streams;
     const q = query.trim().toLowerCase();
@@ -114,10 +114,10 @@ export function EyeSpyModule(): JSX.Element {
       <div className="ga98-pane">
         <LocationTree
           nodes={tree}
-          selectedKey={selectedNode?.key ?? null}
+          selectedKey={selectedKey}
           query={query}
           onQuery={setQuery}
-          onSelect={(n) => { setSelectedNode(n); setExpanded(null); }}
+          onSelect={(n) => { setSelectedKey(n?.key ?? null); setExpanded(null); }}
         />
       </div>
       <div className="ga98-pane" style={{ display: 'flex', flexDirection: 'column', position: 'relative' }}>

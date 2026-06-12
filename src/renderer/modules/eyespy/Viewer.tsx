@@ -23,7 +23,7 @@ export function Viewer({ stream, poster = false }: { stream: CameraStream; poste
       return () => hls.destroy();
     }
     video.src = stream.url;
-    return;
+    return () => { video.src = ''; video.load(); };
   }, [poster, stream.kind, stream.url]);
 
   if (poster) {
