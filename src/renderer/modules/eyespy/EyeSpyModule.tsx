@@ -9,7 +9,7 @@
  * probe or enumerate any network.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CameraStream, StreamKind, Wall } from '@shared/post-mvp-types';
 import type { CaseSummary } from '@shared/types';
 import { confirmDialog } from '../../state/dialogs';
@@ -78,10 +78,18 @@ export function EyeSpyModule(): JSX.Element {
     })();
   }, [refresh]);
 
-  const persistWall = useCallback(async (next: Wall) => {
-    const saved = await window.api.walls.save({ ...next, updatedAt: new Date().toISOString() });
-    setWall(saved);
-    await refreshWalls();
+  const wallRef = useRef(wall);
+  useEffect(() => { wallRef.current = wall; }, [wall]);
+  const saveChain = useRef<Promise<unknown>>(Promise.resolve());
+
+  const persistWall = useCallback((next: Wall) => {
+    const stamped: Wall = { ...next, updatedAt: new Date().toISOString() };
+    wallRef.current = stamped;          // so the next synchronous mutation builds on this, not stale state
+    setWall(stamped);                   // optimistic UI
+    saveChain.current = saveChain.current
+      .then(() => window.api.walls.save(stamped))
+      .then(() => refreshWalls())
+      .catch((e) => toast.error(`Wall save failed: ${(e as Error).message}`));
   }, [refreshWalls]);
 
   async function save(): Promise<void> {
@@ -126,30 +134,43 @@ export function EyeSpyModule(): JSX.Element {
     }
   }
 
-  async function del(id: string): Promise<void> {
+  async function del(id: string): Promise<boolean> {
     const ok = await confirmDialog('Delete this stream?', 'Delete stream');
-    if (!ok) return;
+    if (!ok) return false;
     try {
       await window.api.streams.delete(id);
       setExpanded((e) => (e && e.id === id ? null : e));
       await refresh();
       toast.success('Stream deleted.');
+      return true;
     } catch (err) {
       toast.error(`Delete failed: ${(err as Error).message}`);
+      return false;
     }
   }
 
   function onFeedAction(action: FeedAction, s: CameraStream): void {
     switch (action) {
       case 'add': {
-        const r = assignToSlot(wall, activeSlot, s.id);
+        const r = assignToSlot(wallRef.current, activeSlot, s.id);
         if (r.placed == null) { toast.warn('Wall is full — clear a square first.'); }
-        else { setActiveSlot(r.placed); void persistWall(r.wall); }
+        else { setActiveSlot(r.placed); persistWall(r.wall); }
         break;
       }
       case 'play': setExpanded(s); break;
+      case 'edit':
+        setDraft({ id: s.id, label: s.label, url: s.url, kind: s.kind, caseId: s.caseId, notes: s.notes });
+        setShowForm(true);
+        break;
       case 'setloc': setSetLocTargets([s]); break;
-      case 'delete': void del(s.id); break;
+      case 'delete':
+        void (async () => {
+          const removed = await del(s.id);
+          if (removed && wallRef.current.slots.includes(s.id)) {
+            persistWall({ ...wallRef.current, slots: wallRef.current.slots.map((x) => (x === s.id ? null : x)) });
+          }
+        })();
+        break;
     }
   }
 
@@ -175,8 +196,8 @@ export function EyeSpyModule(): JSX.Element {
   }
 
   function renameWall(): void {
-    const name = window.prompt('Rename wall', wall.name);
-    if (name && name.trim()) void persistWall({ ...wall, name: name.trim() });
+    const name = window.prompt('Rename wall', wallRef.current.name);
+    if (name && name.trim()) persistWall({ ...wallRef.current, name: name.trim() });
   }
 
   async function deleteWall(): Promise<void> {
@@ -192,7 +213,7 @@ export function EyeSpyModule(): JSX.Element {
 
   function fillFromNode(): void {
     if (!selectedNode) return;
-    void persistWall({ ...wall, slots: Array.from({ length: 9 }, (_, i) => selectedNode.streamIds[i] ?? null) });
+    persistWall({ ...wallRef.current, slots: Array.from({ length: 9 }, (_, i) => selectedNode.streamIds[i] ?? null) });
   }
 
   return (
@@ -226,7 +247,7 @@ export function EyeSpyModule(): JSX.Element {
           <div style={{ flex: 1 }}>
             <WallView
               slots={wall.slots} byId={byId} activeSlot={activeSlot} onActivate={setActiveSlot}
-              onClearSlot={(i) => void persistWall(clearSlot(wall, i))}
+              onClearSlot={(i) => persistWall(clearSlot(wallRef.current, i))}
               onAddNew={() => { setDraft({ kind: 'hls', label: '', url: '' }); setShowForm(true); }}
               onExpand={setExpanded}
             />

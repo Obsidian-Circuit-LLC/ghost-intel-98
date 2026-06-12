@@ -27,7 +27,7 @@ export function Wall({ slots, byId, activeSlot, onActivate, onClearSlot, onAddNe
         const active = activeSlot === i;
         const border = active ? '2px solid #2a7' : '1px solid #333';
         if (!stream) {
-          const firstEmpty = slots.findIndex((s) => s == null) === i;
+          const firstEmpty = slots.findIndex((s) => s == null || !byId.has(s)) === i;
           return (
             <div key={i} onClick={() => { onActivate(i); if (firstEmpty) onAddNew(); }}
               style={{ border, background: '#111', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#777', cursor: 'pointer' }}>
