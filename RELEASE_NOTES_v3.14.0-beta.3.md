@@ -58,5 +58,5 @@ Windows install are exercised by **your** run, not CI.
 
 ---
 
-**Artifact:** `DCS98-Setup-3.14.0-beta.3.exe` (ARTIFACT_BYTES bytes ≈ ARTIFACT_MB MB, NSIS, x64, unsigned; Tor + Piper + offline AI models bundled)
-**SHA-256:** `ARTIFACT_SHA256`
+**Artifact:** `DCS98-Setup-3.14.0-beta.3.exe` (520,575,144 bytes ≈ 496.5 MB, NSIS, x64, unsigned; Tor + Piper + offline AI models bundled)
+**SHA-256:** `f8f8fab237b13bbc315bd05aa205c0d722e3f994ee95079b1bc43abde21da74c`
