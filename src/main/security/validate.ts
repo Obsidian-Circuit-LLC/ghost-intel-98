@@ -12,7 +12,7 @@ import { lookup as dnsLookup } from 'node:dns/promises';
 import { homedir } from 'node:os';
 import { isIP, isIPv6 } from 'node:net';
 import { randomUUID } from 'node:crypto';
-import { ENTITY_TYPES, ENTITY_RELATIONSHIPS, TIMELINE_KINDS, IMAGE_MIMES, type EntityType, type EntityRelationship, type TimelineKind, type TimelineEvent, type ImageMime, type Whiteboard, type WhiteboardNode, type WhiteboardEdge, type WhiteboardNodeType } from '@shared/types';
+import { ENTITY_TYPES, ENTITY_RELATIONSHIPS, TIMELINE_KINDS, IMAGE_MIMES, type EntityType, type EntityRelationship, type TimelineKind, type TimelineEvent, type ImageMime, type Whiteboard, type WhiteboardNode, type WhiteboardEdge, type WhiteboardNodeType, type JournalEntryInput } from '@shared/types';
 import type { GeoItem, BookmarkBoard, BookmarkCategory, BookmarkLink, StickyNote, StickyNotesState, AiChatMessage, AiConversationInput, BriefcaseNoteInput } from '@shared/post-mvp-types';
 
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -871,6 +871,31 @@ export function ensureBriefcaseNote(raw: unknown): BriefcaseNoteInput {
   const name = (typeof o.name === 'string' && o.name.trim() ? o.name : 'untitled').slice(0, MAX_BRIEFCASE_NAME);
   const body = typeof o.body === 'string' ? o.body.slice(0, MAX_BRIEFCASE_BODY) : '';
   return { id, name, body };
+}
+
+// ---------- Journal Jots (PIN-gated personal journal) ----------
+
+const MAX_JOURNAL_TITLE = 200;
+const MAX_JOURNAL_BODY = 2 * 1024 * 1024; // 2 MB per entry
+
+/** Clamp a renderer-supplied journal entry before persisting. Same posture as ensureBriefcaseNote:
+ *  bound title/body; body is plain text (textarea, never HTML) so there's no injection surface.
+ *  An id that isn't a UUIDv4 is replaced so a saved entry can always be opened/deleted by id. */
+export function ensureJournalEntry(raw: unknown): JournalEntryInput {
+  const o = (raw ?? {}) as { id?: unknown; title?: unknown; body?: unknown };
+  const id = typeof o.id === 'string' && UUID_V4.test(o.id) ? o.id : randomUUID();
+  const title = (typeof o.title === 'string' && o.title.trim() ? o.title : 'Untitled').slice(0, MAX_JOURNAL_TITLE);
+  const body = typeof o.body === 'string' ? o.body.slice(0, MAX_JOURNAL_BODY) : '';
+  return { id, title, body };
+}
+
+/** A Journal PIN is exactly four ASCII digits — nothing else crosses the IPC boundary. The main
+ *  process is unsandboxed, so this is validated strictly before it reaches the journal store. */
+export function ensurePin(raw: unknown, context = 'PIN'): string {
+  if (typeof raw !== 'string' || !/^[0-9]{4}$/.test(raw)) {
+    throw new ValidationError(`Invalid ${context}: must be exactly 4 digits`);
+  }
+  return raw;
 }
 
 /** SSH private-key paths: must be absolute, must live inside the user's home directory.

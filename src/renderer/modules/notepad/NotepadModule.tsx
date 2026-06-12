@@ -118,6 +118,30 @@ export function NotepadModule({ initialCaseId, initialNoteName }: Props): JSX.El
     setSavedAt(null);
   }, [dirty]);
 
+  // A saved note is open: briefcase → we hold its id; case → its name is in the list.
+  const canDelete = isBriefcase ? briefId !== null : !!target && caseNotes.some((n) => n.name === noteName.trim());
+
+  const deleteNote = useCallback(async (): Promise<void> => {
+    if (!target) return;
+    const label = noteName.trim() || '(untitled)';
+    const ok = await confirmDialog(`Delete "${label}"? This cannot be undone.`, 'Delete note');
+    if (!ok) return;
+    try {
+      if (isBriefcase) {
+        if (!briefId) { toast.warn('This note has not been saved yet.'); return; }
+        await window.api.briefcase.delete(briefId);
+      } else {
+        await window.api.notes.delete(target, noteName.trim());
+      }
+      // Reset to a clean editor so we're not showing a note that no longer exists.
+      setNoteName('untitled'); setBody(''); setBriefId(null); setDirty(false); setSavedAt(null);
+      await refreshNotes();
+      toast.success(`Deleted "${label}".`);
+    } catch (err) {
+      toast.error(`Delete failed: ${(err as Error).message}`);
+    }
+  }, [target, isBriefcase, briefId, noteName, refreshNotes]);
+
   // Listen for global Ctrl-S / Ctrl-N when this module is focused.
   useEffect(() => {
     function onShortcut(e: Event): void {
@@ -135,6 +159,7 @@ export function NotepadModule({ initialCaseId, initialNoteName }: Props): JSX.El
       <div className="ga98-toolbar">
         <button onClick={() => void newNote()} title="Ctrl/Cmd+N">New</button>
         <button onClick={() => void save()} title="Ctrl/Cmd+S">Save</button>
+        <button onClick={() => void deleteNote()} disabled={!canDelete} title="Delete this note">Delete</button>
         <select
           className="ga98-text"
           value={target ?? ''}

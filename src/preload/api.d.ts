@@ -17,6 +17,9 @@ import type {
   EntityRecord,
   EntityRelationship,
   ExtractedAttachmentMeta,
+  JournalEntry,
+  JournalEntrySummary,
+  JournalEntryInput,
   Reminder,
   SearchResult,
   TaskItem,
@@ -259,6 +262,16 @@ export interface GhostApi {
     save(note: BriefcaseNoteInput): Promise<BriefcaseNote>;
     delete(id: string): Promise<void>;
   };
+  journal: {
+    list(): Promise<JournalEntrySummary[]>;
+    read(id: string): Promise<JournalEntry | null>;
+    save(entry: JournalEntryInput): Promise<JournalEntry>;
+    delete(id: string): Promise<void>;
+    hasPin(): Promise<boolean>;
+    setPin(pin: string): Promise<void>;
+    verifyPin(pin: string): Promise<boolean>;
+    changePin(oldPin: string, newPin: string): Promise<boolean>;
+  };
   ssh: {
     listHosts(): Promise<SshHostProfile[]>;
     upsertHost(input: SshHostProfile & { secret?: string }): Promise<SshHostProfile>;
@@ -274,6 +287,7 @@ export interface GhostApi {
     list(): Promise<CameraStream[]>;
     upsert(input: Partial<CameraStream> & { url: string; label: string; kind: CameraStream['kind'] }): Promise<CameraStream>;
     delete(id: string): Promise<void>;
+    clear(): Promise<number>;
     import(): Promise<{ added: number; skipped: number; total: number }>;
   };
   media: {

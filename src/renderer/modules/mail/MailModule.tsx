@@ -25,13 +25,17 @@ export function MailModule(): JSX.Element {
   const [busy, setBusy] = useState<string | null>(null);
   const settings = useSettings((s) => s.settings);
 
-  const loadAccounts = useCallback(async () => {
+  // autoOpenIfEmpty is honoured ONLY on first load. Reloads triggered by closing the
+  // setup dialog must not re-derive showSetup from accounts.length, or an explicit
+  // Cancel/close bounces straight back open when you have no account yet — which reads
+  // as "Cancel doesn't cancel". Decouple the one-time auto-open from the reload.
+  const loadAccounts = useCallback(async (autoOpenIfEmpty = false) => {
     const list = await window.api.mail.listAccounts();
     setAccounts(list);
     setActiveId((prev) => prev ?? list[0]?.id ?? null);
-    if (list.length === 0) setShowSetup(true);
+    if (autoOpenIfEmpty && list.length === 0) setShowSetup(true);
   }, []);
-  useEffect(() => { void loadAccounts(); }, [loadAccounts]);
+  useEffect(() => { void loadAccounts(true); }, [loadAccounts]);
 
   const refreshDrafts = useCallback(async () => {
     if (!activeId) { setDrafts([]); return; }
@@ -232,7 +236,13 @@ function AccountSetup({ accounts, onClose }: { accounts: MailAccount[]; onClose:
   return (
     <div className="ga98-dialog-veil">
       <div className="window" style={{ width: 440 }}>
-        <div className="title-bar"><div className="title-bar-text">Mail account</div></div>
+        <div className="title-bar">
+          <div className="title-bar-text">Mail account</div>
+          {/* Always-available close — never trap the user in account setup. */}
+          <div className="title-bar-controls ga98-titlebar-buttons">
+            <button aria-label="Close" onClick={onClose} />
+          </div>
+        </div>
         <div className="window-body ga98-stack">
           {accounts.length > 0 && (
             <fieldset>
