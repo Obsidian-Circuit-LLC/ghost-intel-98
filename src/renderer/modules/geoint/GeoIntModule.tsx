@@ -11,6 +11,7 @@ import { useSettings } from '../../state/store';
 import { toast } from '../../state/toasts';
 import { MapPane } from './MapPane';
 import { SaveEventDialog } from './SaveEventDialog';
+import { corroborate } from './corroborate';
 
 // A sensible default basemap so the map actually renders the moment the user opts into the
 // network. Nothing is fetched until the "Allow GeoINT network" box is ticked (the egress gate);
@@ -156,6 +157,10 @@ export function GeoIntModule(): JSX.Element {
     [snap, filter]
   );
 
+  // Corroboration count per item (distinct other sources nearby in time). Memoized on the same
+  // `items` reference so it only recomputes when the item set changes — no per-render thrash.
+  const corroboration = useMemo(() => corroborate(items), [items]);
+
   return (
     <div className="ga98-split ga98-geo" style={{ height: '100%' }}>
       <div className="ga98-pane ga98-geo-left">
@@ -252,7 +257,7 @@ export function GeoIntModule(): JSX.Element {
       <div className="ga98-pane ga98-geo-right" style={{ padding: 0, position: 'relative' }}>
         {/* MapPane stays mounted under the Street View overlay so its Leaflet state + center
             tracking survive toggling Street View on/off. */}
-        <MapPane items={items} tilesEnabled={net} tileUrl={activeTileUrl} tileAttribution={activeTileAttribution}
+        <MapPane items={items} corroboration={corroboration} tilesEnabled={net} tileUrl={activeTileUrl} tileAttribution={activeTileAttribution}
           pickMode={pickFor != null} onPick={(la, lo) => void onPick(la, lo)} focusId={focusId} flyTo={flyTo}
           onCenterChange={(lat, lon) => setCenter({ lat, lon })} overlayUrls={overlayUrls} overlayAttribution={LABELS_ATTRIBUTION} />
         {streetView && net && (
