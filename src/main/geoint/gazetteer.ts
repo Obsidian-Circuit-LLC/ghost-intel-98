@@ -10,6 +10,10 @@ import { readFileSync } from 'node:fs';
 import { app } from 'electron';
 import { makeGeocoder, type GazEntry, type Geocoder } from './geocode';
 
+/** Attribution for the bundled gazetteer place data (GeoNames cities5000, CC-BY 4.0).
+ *  Surfaced in the UI by a later task. Country centroids are from world-countries (MIT). */
+export const GAZETTEER_ATTRIBUTION = 'Places © GeoNames (CC-BY 4.0)';
+
 let cached: Geocoder | null = null;
 
 function gazPath(): string {
