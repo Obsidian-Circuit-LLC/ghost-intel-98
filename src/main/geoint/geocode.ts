@@ -25,13 +25,22 @@ export function makeGeocoder(entries: GazEntry[]): Geocoder {
     if (w > maxWords) maxWords = w;
   }
   return (text) => {
-    const words = text ? (text.toLowerCase().match(/\p{L}+/gu) ?? []) : [];
+    // Tokenize the ORIGINAL text preserving case so the cap-gate can inspect proper-noun
+    // signals; match n-grams on the lowercased copy (same normalization as the index).
+    const orig = text ? (text.match(/\p{L}+/gu) ?? []) : [];
+    const low = orig.map((t) => t.toLowerCase());
     let best: GazEntry | null = null; let bestLen = 0;
-    for (let i = 0; i < words.length; i++) {
-      for (let n = Math.min(maxWords, words.length - i); n >= 1; n--) {
-        const phrase = words.slice(i, i + n).join(' ');
+    for (let i = 0; i < low.length; i++) {
+      for (let n = Math.min(maxWords, low.length - i); n >= 1; n--) {
+        const phrase = low.slice(i, i + n).join(' ');
         const hit = index.get(phrase);
-        if (hit) { if (phrase.length > bestLen) { best = hit; bestLen = phrase.length; } break; }
+        if (!hit) continue;
+        // Capitalization gate: a single-token match must appear Capitalized in the original
+        // text (proper-noun signal). Multi-token names are unambiguous and skip the gate.
+        // Rejecting a span continues the inner search for a shorter sub-span at this i.
+        if (n === 1 && !/^\p{Lu}/u.test(orig[i])) continue;
+        if (phrase.length > bestLen) { best = hit; bestLen = phrase.length; }
+        break;
       }
     }
     return best ? { lat: best.lat, lon: best.lon, name: best.name } : null;

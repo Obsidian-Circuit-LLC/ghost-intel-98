@@ -78,7 +78,13 @@ export function parseGeoJson(body: string, sourceId: string): GeoItem[] {
     features?: { geometry?: { type?: string; coordinates?: number[] }; properties?: Record<string, unknown> }[];
   };
   return arr(fc.features)
-    .filter((f) => f.geometry?.type === 'Point' && Array.isArray(f.geometry.coordinates) && f.geometry.coordinates.length >= 2)
+    .filter((f) => {
+      if (f.geometry?.type !== 'Point' || !Array.isArray(f.geometry.coordinates) || f.geometry.coordinates.length < 2) return false;
+      // Drop non-finite or out-of-range coordinates: ["x",10] → NaN lon, [200,5] → off-globe.
+      // A NaN/garbage pin stamped located:'geo' is a silent mislocation in an OSINT tool.
+      const [lon, lat] = f.geometry.coordinates as number[]; // GeoJSON order is [lon, lat]
+      return Number.isFinite(lon) && Number.isFinite(lat) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180;
+    })
     .slice(0, MAX_FEED_ITEMS)
     .map((f) => {
       const [lon, lat] = f.geometry!.coordinates as number[]; // GeoJSON order is [lon, lat]
