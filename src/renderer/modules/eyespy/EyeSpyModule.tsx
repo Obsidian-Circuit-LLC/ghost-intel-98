@@ -8,12 +8,12 @@
  * does not probe or enumerate any network.
  */
 
-import Hls from 'hls.js';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { CameraStream, StreamKind } from '@shared/post-mvp-types';
 import type { CaseSummary } from '@shared/types';
 import { confirmDialog } from '../../state/dialogs';
 import { toast } from '../../state/toasts';
+import { Viewer } from './Viewer';
 
 export function EyeSpyModule(): JSX.Element {
   const [streams, setStreams] = useState<CameraStream[]>([]);
@@ -140,65 +140,4 @@ export function EyeSpyModule(): JSX.Element {
       </div>
     </div>
   );
-}
-
-function Viewer({ stream }: { stream: CameraStream }): JSX.Element {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const [imgTick, setImgTick] = useState(0);
-
-  useEffect(() => {
-    if (stream.kind === 'http') {
-      const t = setInterval(() => setImgTick((n) => n + 1), 2000);
-      return () => clearInterval(t);
-    }
-    return;
-  }, [stream.kind]);
-
-  useEffect(() => {
-    if (stream.kind !== 'hls') return;
-    const video = videoRef.current;
-    if (!video) return;
-    if (Hls.isSupported()) {
-      const hls = new Hls();
-      hls.loadSource(stream.url);
-      hls.attachMedia(video);
-      return () => hls.destroy();
-    }
-    video.src = stream.url;
-    return;
-  }, [stream.kind, stream.url]);
-
-  if (stream.kind === 'rtsp') {
-    return (
-      <div style={{ color: '#fff', padding: 16, fontSize: 12 }}>
-        RTSP streams cannot be played directly in the browser. Run a local
-        <code style={{ margin: '0 4px' }}>ffmpeg → HLS</code>
-        bridge on your network and add the resulting <code>.m3u8</code> URL as an HLS stream.
-        <br /><br />
-        Example:
-        <pre style={{ background: '#222', padding: 8, marginTop: 8 }}>
-{`ffmpeg -rtsp_transport tcp -i ${stream.url} \\
-  -c:v copy -f hls -hls_time 2 -hls_list_size 3 \\
-  /var/www/cam.m3u8`}
-        </pre>
-      </div>
-    );
-  }
-
-  if (stream.kind === 'mjpeg') {
-    return <img alt={stream.label} src={stream.url} style={{ maxWidth: '100%', maxHeight: '100%' }} />;
-  }
-
-  if (stream.kind === 'http') {
-    const sep = stream.url.includes('?') ? '&' : '?';
-    return <img alt={stream.label} src={`${stream.url}${sep}_t=${imgTick}`} style={{ maxWidth: '100%', maxHeight: '100%' }} />;
-  }
-
-  if (stream.kind === 'mp4') {
-    // Direct progressive/streamed MP4 over http(s). CSP media-src allows http(s); a
-    // local file:// path would not load (not in media-src) — point users to a URL.
-    return <video controls autoPlay muted loop src={stream.url} style={{ maxWidth: '100%', maxHeight: '100%' }} />;
-  }
-
-  return <video ref={videoRef} controls autoPlay muted style={{ maxWidth: '100%', maxHeight: '100%' }} />;
 }
