@@ -12,6 +12,15 @@ import { toast } from '../../state/toasts';
 import { MapPane } from './MapPane';
 import { SaveEventDialog } from './SaveEventDialog';
 import { corroborate } from './corroborate';
+import { timeBounds, itemsUpTo } from './timeline';
+import { TimelineBar } from './TimelineBar';
+import { StoryControls } from './StoryControls';
+
+// Category → marker color, mirroring MapPane's CATEGORY_COLOR, for the legend chip row.
+const CATEGORY_COLOR: Record<string, string> = {
+  conflict: '#c0392b', cyber: '#8e44ad', protest: '#e67e22',
+  disaster: '#16a085', crime: '#7f8c8d', politics: '#2980b9'
+};
 
 // A sensible default basemap so the map actually renders the moment the user opts into the
 // network. Nothing is fetched until the "Allow GeoINT network" box is ticked (the egress gate);
@@ -66,6 +75,11 @@ export function GeoIntModule(): JSX.Element {
   }
   const [flyTo, setFlyTo] = useState<{ lat: number; lon: number; key: number } | null>(null);
   const flyKey = useRef(0); // monotonic nonce so repeat searches re-center even on identical coords
+  // Timeline scrubber: cursor (epoch ms) is the "show events up to" point; playing animates it.
+  const [timeCursor, setTimeCursor] = useState(0);
+  const [timePlaying, setTimePlaying] = useState(false);
+  // Story mode: chronological walk through the visible+located events. null = not running.
+  const [story, setStory] = useState<{ index: number; playing: boolean } | null>(null);
   // Street View overlay (embed). Tracks the map center so it opens the spot you're looking at.
   const [streetView, setStreetView] = useState(false);
   const [center, setCenter] = useState<{ lat: number; lon: number }>({ lat: 20, lon: 0 });
@@ -157,9 +171,78 @@ export function GeoIntModule(): JSX.Element {
     [snap, filter]
   );
 
-  // Corroboration count per item (distinct other sources nearby in time). Memoized on the same
-  // `items` reference so it only recomputes when the item set changes — no per-render thrash.
+  // Corroboration count per item (distinct other sources nearby in time). Computed on the FULL
+  // `items` set (not the timeline-filtered subset) so confidence is stable as the cursor moves —
+  // MapPane keys corroboration by id, so a filtered subset of ids is fine.
   const corroboration = useMemo(() => corroborate(items), [items]);
+
+  // Timeline bounds over the full item set. null when no item carries a parseable date.
+  const bounds = useMemo(() => timeBounds(items), [items]);
+  // Clamp/initialize the cursor whenever the bounds change: park it at max (= "all events").
+  useEffect(() => {
+    if (!bounds) return;
+    setTimeCursor((c) => (c < bounds.min || c > bounds.max ? bounds.max : c));
+  }, [bounds?.min, bounds?.max]);
+
+  // The set handed to the map: events at or before the cursor (undated always shown).
+  const visibleItems = useMemo(() => itemsUpTo(items, timeCursor), [items, timeCursor]);
+
+  // Timeline auto-play: advance the cursor toward max in ~200 steps, stopping at max. Paused
+  // while a story runs (story owns the camera). Display-only; no egress, no persisted state.
+  useEffect(() => {
+    if (!timePlaying || !bounds || story) return;
+    const span = bounds.max - bounds.min;
+    const step = span > 0 ? span / 200 : 1;
+    const id = setInterval(() => {
+      setTimeCursor((c) => {
+        const next = c + step;
+        if (next >= bounds.max) { setTimePlaying(false); return bounds.max; }
+        return next;
+      });
+    }, 120);
+    return () => clearInterval(id);
+  }, [timePlaying, bounds?.min, bounds?.max, story]);
+
+  // Story sequence: visible + located items, sorted ascending by published (undated last).
+  const storyItems = useMemo(() => {
+    const located = visibleItems.filter((i) => i.lat != null && i.lon != null);
+    return [...located].sort((a, b) => {
+      const pa = a.published ? Date.parse(a.published) : NaN;
+      const pb = b.published ? Date.parse(b.published) : NaN;
+      const na = Number.isNaN(pa), nb = Number.isNaN(pb);
+      if (na && nb) return 0;
+      if (na) return 1;  // undated sorts last
+      if (nb) return -1;
+      return pa - pb;
+    });
+  }, [visibleItems]);
+
+  // Drive story playback: show the event at story.index (recenter + open its popup by reusing
+  // the existing flyTo + focusId mechanisms), then after a speed delay advance the index. Stops
+  // at the end. Prev/Next/Stop mutate `story` directly; this effect re-shows on every index change.
+  useEffect(() => {
+    if (!story) return;
+    const it = storyItems[story.index];
+    if (!it || it.lat == null || it.lon == null) { setStory(null); return; }
+    flyKey.current += 1;
+    setFlyTo({ lat: it.lat, lon: it.lon, key: flyKey.current });
+    setFocusId(it.id);
+    if (!story.playing) return;
+    const id = setTimeout(() => {
+      setStory((s) => {
+        if (!s) return s;
+        if (s.index >= storyItems.length - 1) return { index: s.index, playing: false };
+        return { index: s.index + 1, playing: true };
+      });
+    }, 2500);
+    return () => clearTimeout(id);
+  }, [story?.index, story?.playing, storyItems]);
+
+  function startStory(): void {
+    if (storyItems.length === 0) { toast.warn('No located events to play.'); return; }
+    setTimePlaying(false);
+    setStory({ index: 0, playing: true });
+  }
 
   return (
     <div className="ga98-split ga98-geo" style={{ height: '100%' }}>
@@ -208,6 +291,26 @@ export function GeoIntModule(): JSX.Element {
               onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void doSearch(); }} style={{ flex: 1 }} />
             <button onClick={() => void doSearch()} disabled={!net || !search.trim() || searching}>{searching ? '…' : 'Go'}</button>
           </div>
+          <div className="field-row" style={{ marginTop: 4 }}>
+            <button onClick={startStory} disabled={storyItems.length === 0}
+              title="Step chronologically through the located events, recentering and opening each">
+              ▶ Play story
+            </button>
+            <span style={{ fontSize: 11, color: '#555' }}>{storyItems.length} located event{storyItems.length === 1 ? '' : 's'}</span>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Legend</legend>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 10px', alignItems: 'center' }}>
+            {Object.entries(CATEGORY_COLOR).map(([cat, color]) => (
+              <span key={cat} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11 }}>
+                <span style={{ display: 'inline-block', width: 11, height: 11, borderRadius: '50%', background: color, border: '1px solid rgba(0,0,0,.5)' }} />
+                {cat}
+              </span>
+            ))}
+          </div>
+          <p style={{ fontSize: 10, color: '#777', margin: '6px 0 0' }}>Places © GeoNames (CC-BY 4.0)</p>
         </fieldset>
 
         <fieldset>
@@ -254,12 +357,13 @@ export function GeoIntModule(): JSX.Element {
         </fieldset>
       </div>
 
-      <div className="ga98-pane ga98-geo-right" style={{ padding: 0, position: 'relative' }}>
+      <div className="ga98-pane ga98-geo-right" style={{ padding: 0, position: 'relative', display: 'flex', flexDirection: 'column' }}>
         {/* MapPane stays mounted under the Street View overlay so its Leaflet state + center
-            tracking survive toggling Street View on/off. */}
-        <MapPane items={items} corroboration={corroboration} tilesEnabled={net} tileUrl={activeTileUrl} tileAttribution={activeTileAttribution}
-          pickMode={pickFor != null} onPick={(la, lo) => void onPick(la, lo)} focusId={focusId} flyTo={flyTo}
-          onCenterChange={(lat, lon) => setCenter({ lat, lon })} overlayUrls={overlayUrls} overlayAttribution={LABELS_ATTRIBUTION} />
+            tracking survive toggling Street View on/off. The timeline/story bars sit below it. */}
+        <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+          <MapPane items={visibleItems} corroboration={corroboration} tilesEnabled={net} tileUrl={activeTileUrl} tileAttribution={activeTileAttribution}
+            pickMode={pickFor != null} onPick={(la, lo) => void onPick(la, lo)} focusId={focusId} flyTo={flyTo}
+            onCenterChange={(lat, lon) => setCenter({ lat, lon })} overlayUrls={overlayUrls} overlayAttribution={LABELS_ATTRIBUTION} />
         {streetView && net && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', background: '#000' }}>
             <div className="ga98-toolbar" style={{ flex: '0 0 auto' }}>
@@ -282,6 +386,27 @@ export function GeoIntModule(): JSX.Element {
             />
           </div>
         )}
+        </div>
+        {story && (
+          <StoryControls
+            count={storyItems.length}
+            index={story.index}
+            playing={story.playing}
+            onPlay={() => setStory((s) => (s ? { ...s, playing: true } : s))}
+            onPause={() => setStory((s) => (s ? { ...s, playing: false } : s))}
+            onPrev={() => setStory((s) => (s ? { index: Math.max(0, s.index - 1), playing: false } : s))}
+            onNext={() => setStory((s) => (s ? { index: Math.min(storyItems.length - 1, s.index + 1), playing: false } : s))}
+            onStop={() => setStory(null)}
+          />
+        )}
+        <TimelineBar
+          bounds={bounds}
+          cursor={timeCursor}
+          playing={timePlaying}
+          onCursor={(t) => { setTimePlaying(false); setTimeCursor(t); }}
+          onTogglePlay={() => setTimePlaying((p) => !p)}
+          onAll={() => { setTimePlaying(false); if (bounds) setTimeCursor(bounds.max); }}
+        />
       </div>
       {saveItem && <SaveEventDialog item={saveItem} onClose={() => setSaveItem(null)} />}
     </div>
