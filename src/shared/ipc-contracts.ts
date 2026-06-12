@@ -209,6 +209,12 @@ export const channels = {
     clear: 'streams:clear',
     import: 'streams:import'
   },
+  walls: {
+    list: 'walls:list',
+    get: 'walls:get',
+    save: 'walls:save',
+    delete: 'walls:delete'
+  },
   media: {
     getSnapshot: 'media:getSnapshot',
     addRoot: 'media:addRoot',

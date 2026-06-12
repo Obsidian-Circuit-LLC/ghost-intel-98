@@ -40,6 +40,7 @@ import type {
   MediaLibrarySnapshot,
   MediaStation,
   MediaTrack,
+  Wall,
   GeoSnapshot,
   GeoSource,
   GeoItem,
@@ -289,6 +290,12 @@ export interface GhostApi {
     delete(id: string): Promise<void>;
     clear(): Promise<number>;
     import(stamp?: { country?: string; region?: string; city?: string }): Promise<{ added: number; skipped: number; total: number }>;
+  };
+  walls: {
+    list(): Promise<Wall[]>;
+    get(id: string): Promise<Wall | null>;
+    save(wall: Partial<Wall> & { name: string; slots: (string | null)[] }): Promise<Wall>;
+    delete(id: string): Promise<void>;
   };
   media: {
     getSnapshot(): Promise<MediaLibrarySnapshot>;

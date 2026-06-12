@@ -35,6 +35,7 @@ import { isEncryptedFile } from '../storage/secure-fs';
 import * as mail from '../services/mail';
 import * as ssh from '../services/ssh';
 import * as streams from '../services/streams';
+import * as walls from '../services/walls';
 import * as ai from '../services/ai';
 import * as localAi from '../services/local-ai';
 import * as chat from '../services/chat';
@@ -897,6 +898,12 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     }
     return { added, skipped, total: feeds.length };
   });
+
+  // ---- walls (EyeSpy) ----
+  safeHandle(channels.walls.list, () => walls.list());
+  safeHandle(channels.walls.get, (...args) => walls.get(args[0] as string));
+  safeHandle(channels.walls.save, (...args) => walls.save(args[0] as Parameters<typeof walls.save>[0]));
+  safeHandle(channels.walls.delete, (...args) => walls.remove(args[0] as string));
 
   // ---- media (Jukebox; vault-gated like everything else — NOT in GATE_EXEMPT) ----
   safeHandle(channels.media.getSnapshot, () => mediaLib.getSnapshot());

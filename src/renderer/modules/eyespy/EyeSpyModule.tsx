@@ -1,23 +1,27 @@
 /**
- * EyeSpy — view manually-added camera streams.
+ * EyeSpy — view manually-added camera streams on a curated 3×3 video wall.
+ * Left: Finder (Countries/Cities tree + feed list, contextual Import). Right: named Wall boards.
  * Supported: HLS (hls.js), MJPEG (<img>), and HTTP still images.
  * RTSP is intentionally not implemented in-app (would require bundling ffmpeg) — the user is
  * pointed to a recommended local ffmpeg→HLS bridge instead. NO discovery, scanning, or
- * unauthorised-access code paths exist in this module. "Import feeds…" bulk-loads the user's
- * OWN feed list from a file they choose (CSV/JSON/URL-list) — it parses a provided file, it
- * does not probe or enumerate any network.
+ * unauthorised-access code paths exist in this module. "Import…" bulk-loads the user's OWN feed
+ * list from a file they choose (CSV/JSON/URL-list) — it parses a provided file, it does not
+ * probe or enumerate any network.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { CameraStream, StreamKind } from '@shared/post-mvp-types';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { CameraStream, StreamKind, Wall } from '@shared/post-mvp-types';
 import type { CaseSummary } from '@shared/types';
 import { confirmDialog } from '../../state/dialogs';
 import { toast } from '../../state/toasts';
 import { Viewer } from './Viewer';
-import { buildTree, filterTree, matchStream, findNode } from './tree';
+import { buildTree, filterTree, matchStream, findNode, citiesOf } from './tree';
 import type { TreeNode } from './tree';
-import { LocationTree } from './LocationTree';
-import { CameraGrid } from './CameraGrid';
+import { Finder } from './Finder';
+import type { FeedAction } from './Finder';
+import { Wall as WallView } from './Wall';
+import { SetLocationDialog } from './SetLocationDialog';
+import { emptyWall, assignToSlot, clearSlot } from './wall';
 
 /** Geo stamp from a tree node's explicit geo fields. null node = no stamp. */
 function nodeStamp(n: TreeNode | null): { country?: string; region?: string; city?: string } | undefined {
@@ -27,26 +31,66 @@ function nodeStamp(n: TreeNode | null): { country?: string; region?: string; cit
 export function EyeSpyModule(): JSX.Element {
   const [streams, setStreams] = useState<CameraStream[]>([]);
   const [cases, setCases] = useState<CaseSummary[]>([]);
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [wallsList, setWallsList] = useState<Wall[]>([]);
+  const [wall, setWall] = useState<Wall>(() => emptyWall(`wall-${Date.now()}`, 'Untitled wall', new Date().toISOString()));
+  const [activeSlot, setActiveSlot] = useState<number | null>(null);
+  const [tab, setTab] = useState<'countries' | 'cities'>('countries');
   const [query, setQuery] = useState<string>('');
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<CameraStream | null>(null);
   const [showForm, setShowForm] = useState<boolean>(false);
   const [draft, setDraft] = useState<Partial<CameraStream>>({ kind: 'hls', label: '', url: '' });
+  const [setLocTargets, setSetLocTargets] = useState<CameraStream[] | null>(null);
 
   const fullTree = useMemo(() => buildTree(streams), [streams]);
   const tree = useMemo(() => filterTree(fullTree, streams, query), [fullTree, streams, query]);
   const selectedNode = useMemo(() => (selectedKey ? findNode(fullTree, selectedKey) : null), [fullTree, selectedKey]);
-  const shown = useMemo(() => {
-    const base = selectedNode ? streams.filter((s) => new Set(selectedNode.streamIds).has(s.id)) : streams;
+  const cities = useMemo(() => citiesOf(streams), [streams]);
+  const byId = useMemo(() => new Map(streams.map((s) => [s.id, s] as const)), [streams]);
+  const feeds = useMemo(() => {
+    // A Cities-tab node carries no streamIds (Finder builds a synthetic node), so for it we match
+    // by geo instead of by id; a normal node filters by its streamIds set.
+    const base = !selectedNode ? streams
+      : selectedNode.streamIds.length ? streams.filter((s) => new Set(selectedNode.streamIds).has(s.id))
+      : streams.filter((s) => (s.city ?? '') === (selectedNode.city ?? '') && (s.country ?? '') === (selectedNode.country ?? ''));
     const q = query.trim().toLowerCase();
     return q ? base.filter((s) => matchStream(s, q)) : base;
   }, [streams, selectedNode, query]);
+  const importLabel = selectedNode ? `Import to ${selectedNode.label}…` : 'Import…';
 
   const refresh = useCallback(async () => {
     setStreams(await window.api.streams.list());
     setCases(await window.api.cases.list());
   }, []);
-  useEffect(() => { void refresh(); }, [refresh]);
+
+  const refreshWalls = useCallback(async () => {
+    setWallsList(await window.api.walls.list());
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+    void (async () => {
+      const list = await window.api.walls.list();
+      setWallsList(list);
+      const latest = [...list].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+      if (latest) setWall(latest);
+      // else: keep the in-memory emptyWall seeded in useState (persisted on first change).
+    })();
+  }, [refresh]);
+
+  const wallRef = useRef(wall);
+  useEffect(() => { wallRef.current = wall; }, [wall]);
+  const saveChain = useRef<Promise<unknown>>(Promise.resolve());
+
+  const persistWall = useCallback((next: Wall) => {
+    const stamped: Wall = { ...next, updatedAt: new Date().toISOString() };
+    wallRef.current = stamped;          // so the next synchronous mutation builds on this, not stale state
+    setWall(stamped);                   // optimistic UI
+    saveChain.current = saveChain.current
+      .then(() => window.api.walls.save(stamped))
+      .then(() => refreshWalls())
+      .catch((e) => toast.error(`Wall save failed: ${(e as Error).message}`));
+  }, [refreshWalls]);
 
   async function save(): Promise<void> {
     if (!draft.url || !draft.label) return;
@@ -62,12 +106,6 @@ export function EyeSpyModule(): JSX.Element {
     setDraft({ kind: 'hls', label: '', url: '' });
     setShowForm(false);
     await refresh();
-  }
-
-  /** Load an existing stream into the form for editing (save() updates it by id). */
-  function edit(s: CameraStream): void {
-    setDraft({ id: s.id, label: s.label, url: s.url, kind: s.kind, caseId: s.caseId, notes: s.notes });
-    setShowForm(true);
   }
 
   /** Purge the entire library in one atomic write (confirmed). */
@@ -96,60 +134,125 @@ export function EyeSpyModule(): JSX.Element {
     }
   }
 
-  async function del(id: string): Promise<void> {
+  async function del(id: string): Promise<boolean> {
     const ok = await confirmDialog('Delete this stream?', 'Delete stream');
-    if (!ok) return;
+    if (!ok) return false;
     try {
       await window.api.streams.delete(id);
       setExpanded((e) => (e && e.id === id ? null : e));
       await refresh();
       toast.success('Stream deleted.');
+      return true;
     } catch (err) {
       toast.error(`Delete failed: ${(err as Error).message}`);
+      return false;
     }
+  }
+
+  function onFeedAction(action: FeedAction, s: CameraStream): void {
+    switch (action) {
+      case 'add': {
+        const r = assignToSlot(wallRef.current, activeSlot, s.id);
+        if (r.placed == null) { toast.warn('Wall is full — clear a square first.'); }
+        else { setActiveSlot(r.placed); persistWall(r.wall); }
+        break;
+      }
+      case 'play': setExpanded(s); break;
+      case 'edit':
+        setDraft({ id: s.id, label: s.label, url: s.url, kind: s.kind, caseId: s.caseId, notes: s.notes });
+        setShowForm(true);
+        break;
+      case 'setloc': setSetLocTargets([s]); break;
+      case 'delete':
+        void (async () => {
+          const removed = await del(s.id);
+          if (removed && wallRef.current.slots.includes(s.id)) {
+            persistWall({ ...wallRef.current, slots: wallRef.current.slots.map((x) => (x === s.id ? null : x)) });
+          }
+        })();
+        break;
+    }
+  }
+
+  const applyLoc = async ({ country, region, city }: { country: string; region: string; city: string }): Promise<void> => {
+    // Spread ...t to preserve label/url/kind/etc.; blank geo clears via the service's pickGeo.
+    for (const t of setLocTargets!) {
+      await window.api.streams.upsert({ ...t, country, region, city });
+    }
+    setSetLocTargets(null);
+    await refresh();
+  };
+
+  const onImport = (): void => void importFeeds(selectedNode ? nodeStamp(selectedNode) : undefined);
+
+  function newWall(): void {
+    setWall(emptyWall(`wall-${Date.now()}`, 'Untitled wall', new Date().toISOString()));
+    setActiveSlot(null);
+  }
+
+  async function openWall(id: string): Promise<void> {
+    const w = await window.api.walls.get(id);
+    if (w) { setWall(w); setActiveSlot(null); }
+  }
+
+  function renameWall(): void {
+    const name = window.prompt('Rename wall', wallRef.current.name);
+    if (name && name.trim()) persistWall({ ...wallRef.current, name: name.trim() });
+  }
+
+  async function deleteWall(): Promise<void> {
+    const ok = await confirmDialog(`Delete wall "${wall.name}"?`, 'Delete wall');
+    if (!ok) return;
+    await window.api.walls.delete(wall.id);
+    const list = await window.api.walls.list();
+    setWallsList(list);
+    const next = [...list].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+    if (next) { setWall(next); } else { setWall(emptyWall(`wall-${Date.now()}`, 'Untitled wall', new Date().toISOString())); }
+    setActiveSlot(null);
+  }
+
+  function fillFromNode(): void {
+    if (!selectedNode) return;
+    persistWall({ ...wallRef.current, slots: Array.from({ length: 9 }, (_, i) => selectedNode.streamIds[i] ?? null) });
   }
 
   return (
     <div className="ga98-split" style={{ height: '100%' }}>
       <div className="ga98-pane">
-        <LocationTree
-          nodes={tree}
-          selectedKey={selectedKey}
-          query={query}
-          onQuery={setQuery}
-          onSelect={(n) => { setSelectedKey(n?.key ?? null); setExpanded(null); }}
+        <Finder
+          tab={tab} onTab={setTab} query={query} onQuery={setQuery} tree={tree} cities={cities} feeds={feeds}
+          selectedKey={selectedKey} onSelectNode={(n) => { setSelectedKey(n?.key ?? null); setExpanded(null); }}
+          onFeedAction={onFeedAction} onRefresh={() => void refresh()} onImport={onImport} importLabel={importLabel}
         />
       </div>
-      <div className="ga98-pane" style={{ display: 'flex', flexDirection: 'column', position: 'relative' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 4px' }}>
-          <span style={{ flex: 1, fontSize: 11 }}>
-            {selectedNode ? `${selectedNode.label} · ${shown.length}` : `All cameras · ${shown.length}`}
-          </span>
-          <button onClick={() => void importFeeds(nodeStamp(selectedNode))} disabled={!selectedNode}
-            title="Bulk-import your own feeds, stamping the selected location onto any feed in the file that has no geo of its own">Import here</button>
-          <button onClick={() => void importFeeds()}
-            title="Bulk-import your own camera feeds from a CSV, JSON, or plain URL-list file">Import feeds…</button>
-          <button onClick={() => void purge()} disabled={streams.length === 0}
-            title="Delete every stream in the library">Purge all…</button>
+      <div className="ga98-pane" style={{ display: 'flex', flexDirection: 'column', padding: 0, position: 'relative' }}>
+        <div style={{ display: 'flex', gap: 4, padding: 4, borderBottom: '1px solid #ccc', alignItems: 'center' }}>
+          <button onClick={newWall}>New</button>
+          <select value={wall.id} onChange={(e) => void openWall(e.target.value)}>
+            {wallsList.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+            {!wallsList.some((w) => w.id === wall.id) && <option value={wall.id}>{wall.name}</option>}
+          </select>
+          <button onClick={renameWall}>Rename</button>
+          <button onClick={() => void deleteWall()} disabled={wallsList.length === 0}>Delete</button>
+          <span style={{ flex: 1 }} />
+          <button onClick={fillFromNode} disabled={!selectedNode}>Fill wall from {selectedNode ? selectedNode.label : '…'}</button>
+          <button onClick={() => void purge()} disabled={streams.length === 0}>Purge all…</button>
         </div>
-        <div style={{ flex: 1, minHeight: 0 }}>
-          {expanded ? (
-            <div style={{ flex: 1, height: '100%', background: '#000', position: 'relative' }}>
-              <div style={{ position: 'absolute', zIndex: 1, margin: 4, display: 'flex', gap: 4 }}>
-                <button onClick={() => setExpanded(null)}>← Back</button>
-                <button onClick={() => edit(expanded)} title="Edit this stream">Edit…</button>
-              </div>
-              <Viewer stream={expanded} />
-            </div>
-          ) : (
-            <CameraGrid
-              streams={shown}
+        {expanded ? (
+          <div style={{ flex: 1, background: '#000', position: 'relative' }}>
+            <button onClick={() => setExpanded(null)} style={{ position: 'absolute', zIndex: 1, margin: 4 }}>← Back</button>
+            <Viewer stream={expanded} />
+          </div>
+        ) : (
+          <div style={{ flex: 1 }}>
+            <WallView
+              slots={wall.slots} byId={byId} activeSlot={activeSlot} onActivate={setActiveSlot}
+              onClearSlot={(i) => persistWall(clearSlot(wallRef.current, i))}
+              onAddNew={() => { setDraft({ kind: 'hls', label: '', url: '' }); setShowForm(true); }}
               onExpand={setExpanded}
-              onAdd={() => { setDraft({ kind: 'hls', label: '', url: '' }); setShowForm(true); }}
-              onDelete={(s) => void del(s.id)}
             />
-          )}
-        </div>
+          </div>
+        )}
 
         {showForm && (
           <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2 }}>
@@ -183,6 +286,8 @@ export function EyeSpyModule(): JSX.Element {
             </fieldset>
           </div>
         )}
+
+        {setLocTargets && <SetLocationDialog targets={setLocTargets} onApply={(g) => void applyLoc(g)} onClose={() => setSetLocTargets(null)} />}
       </div>
     </div>
   );
