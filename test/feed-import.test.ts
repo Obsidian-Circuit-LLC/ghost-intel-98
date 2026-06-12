@@ -152,3 +152,15 @@ describe('feedToUpsert — carries geo through to the store payload', () => {
     expect(feedToUpsert(f)).toEqual({ label: 'cam', url: 'https://cam/b.m3u8', kind: 'hls' });
   });
 });
+
+describe('feedToUpsert location stamp', () => {
+  it('with no stamp, output is the feed unchanged', () => {
+    expect(feedToUpsert({ label: 'x', url: 'https://c/x.m3u8', kind: 'hls' })).toEqual({ label: 'x', url: 'https://c/x.m3u8', kind: 'hls' });
+  });
+  it('stamp fills geo only where the feed lacks it (feed geo wins)', () => {
+    const out = feedToUpsert({ label: 'x', url: 'https://c/x.m3u8', kind: 'hls', city: 'Austin' }, { country: 'United States', region: 'Texas', city: 'Dallas' });
+    expect(out.country).toBe('United States');
+    expect(out.region).toBe('Texas');
+    expect(out.city).toBe('Austin');
+  });
+});
