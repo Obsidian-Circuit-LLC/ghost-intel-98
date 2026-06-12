@@ -231,6 +231,12 @@ const api = {
     clear: () => ipcRenderer.invoke(channels.streams.clear),
     import: (stamp?: { country?: string; region?: string; city?: string }) => ipcRenderer.invoke(channels.streams.import, stamp)
   },
+  walls: {
+    list: () => ipcRenderer.invoke(channels.walls.list),
+    get: (id: string) => ipcRenderer.invoke(channels.walls.get, id),
+    save: (wall: unknown) => ipcRenderer.invoke(channels.walls.save, wall),
+    delete: (id: string) => ipcRenderer.invoke(channels.walls.delete, id)
+  },
   media: {
     getSnapshot: () => ipcRenderer.invoke(channels.media.getSnapshot),
     addRoot: () => ipcRenderer.invoke(channels.media.addRoot),
