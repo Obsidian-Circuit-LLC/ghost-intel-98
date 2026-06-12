@@ -32,11 +32,11 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`DCS98-Setup-3.14.0-beta.1.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake formally verified internally; external audit + FIPS pending. See Status.)*
+> **Install:** download [`DCS98-Setup-3.14.0-beta.2.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake formally verified internally; external audit + FIPS pending. See Status.)*
 
 ## Status
 
-**v3.14.0-beta.1** — current release. A dogfooding punch-list — a new journal app, two audio/crypto fixes, and module polish:
+**v3.14.0-beta.2** — current release. A **build-fix re-release of beta.1**: the packaged app now **launches**. beta.1 crashed at boot with `ERR_REQUIRE_ESM` because the new ESM-only chat-crypto module (`@noble/ciphers`) was being `require()`'d from the CommonJS main bundle; it is now inlined. The feature set is unchanged from beta.1 — a dogfooding punch-list of a new journal app, two audio/crypto fixes, and module polish:
 
 - **Journal Jots** — a new password-protected (4-digit PIN) journal app. Entries are consolidated inside the
   app (they don't land in the Briefcase) and are encrypted at rest with everything else under the optional
@@ -55,7 +55,7 @@ that never depend on a third-party staying up:
 - **Mail** account-setup dialog now closes properly (it could trap you when no account was configured yet);
   **Notepad 98** can delete entries.
 
-681 automated tests. *Everything from v3.13.3 carries forward.*
+690 automated tests. *Everything from v3.13.3 carries forward.*
 
 **v3.13.3-beta.1** — New lightning boot splash + Win9x loading bar:
 
@@ -325,14 +325,14 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/dcs98/releases) and run it.
 
-Direct link to the current release: [`DCS98-Setup-3.14.0-beta.1.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.14.0-beta.1/DCS98-Setup-3.14.0-beta.1.exe)
+Direct link to the current release: [`DCS98-Setup-3.14.0-beta.2.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.14.0-beta.2/DCS98-Setup-3.14.0-beta.2.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is formally verified internally — external audit + FIPS
 pending — see Status). The last fully-stable build is [`DCS98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.6.8/DCS98-Setup-3.6.8.exe).
 
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\DCS98-Setup-3.14.0-beta.1.exe -Algorithm SHA256
+Get-FileHash .\DCS98-Setup-3.14.0-beta.2.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
@@ -370,8 +370,13 @@ To uninstall: Settings → Apps → Dead Cyber Society 98 → Uninstall.
 
 ## Releases & changelog
 
-The current build is **v3.14.0-beta.1**. Each release page carries its own notes + SHA-256.
+The current build is **v3.14.0-beta.2**. Each release page carries its own notes + SHA-256.
 
+- **v3.14.0-beta.2** — **Build-fix re-release of beta.1: the packaged app now launches.** beta.1 crashed at
+  boot (`ERR_REQUIRE_ESM`) because the new ESM-only chat-crypto module (`@noble/ciphers`) was being
+  `require()`'d from the CommonJS main bundle; it is now inlined (added to electron-vite's
+  `externalizeDepsPlugin` exclude list). Feature set unchanged from beta.1; every beta.1 fix — including the
+  chat invite-accept fix it couldn't boot to deliver — is now exercisable on a real install. **690 tests.**
 - **v3.14.0-beta.1** — **Dogfooding punch-list.** New **Journal Jots** app (4-digit-PIN-locked personal
   journal, entries vault-encrypted at rest, kept out of the Briefcase); **chat invite-accept fix** (message
   encryption moved to a runtime-independent cipher implementation, clearing an "Unknown cipher" failure on
@@ -561,7 +566,7 @@ This starts the Vite dev server (HMR) and the Electron main process.
 
 ```bash
 pnpm build        # type-check + bundle main / preload / renderer
-pnpm test         # vitest suite (681 tests as of v3.14.0-beta.1)
+pnpm test         # vitest suite (690 tests as of v3.14.0-beta.2)
 pnpm package      # platform installer for the current host
 pnpm package:win  # cross-build Windows NSIS installer
 ```
