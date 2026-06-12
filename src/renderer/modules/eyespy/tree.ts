@@ -93,3 +93,35 @@ export function filterTree(nodes: TreeNode[], streams: CameraStream[], q: string
   };
   return nodes.map(keep).filter((c): c is TreeNode => c !== null);
 }
+
+// Offline country-name → ISO-3166-alpha-2, then to a regional-indicator flag emoji. No network/assets.
+const COUNTRY_ISO: Record<string, string> = {
+  'united kingdom': 'GB', uk: 'GB', 'great britain': 'GB', england: 'GB',
+  'united states': 'US', usa: 'US', 'united states of america': 'US', 'u.s.': 'US',
+  canada: 'CA', australia: 'AU', germany: 'DE', france: 'FR', netherlands: 'NL',
+  spain: 'ES', italy: 'IT', ireland: 'IE', japan: 'JP', 'new zealand': 'NZ',
+  sweden: 'SE', norway: 'NO', denmark: 'DK', finland: 'FI', poland: 'PL',
+  switzerland: 'CH', austria: 'AT', belgium: 'BE', portugal: 'PT', 'czech republic': 'CZ',
+  mexico: 'MX', brazil: 'BR', 'south korea': 'KR', china: 'CN', india: 'IN', russia: 'RU'
+};
+
+export function countryFlag(name: string | undefined): string {
+  const iso = COUNTRY_ISO[(name ?? '').trim().toLowerCase()];
+  if (!iso) return '';
+  return String.fromCodePoint(...[...iso].map((c) => 0x1f1e6 + (c.charCodeAt(0) - 65)));
+}
+
+export interface CityEntry { city: string; region?: string; country?: string; count: number }
+
+export function citiesOf(streams: CameraStream[]): CityEntry[] {
+  const m = new Map<string, CityEntry>();
+  for (const s of streams) {
+    const city = (s.city ?? '').trim();
+    if (!city) continue;
+    const key = `${(s.country ?? '').toLowerCase()} ${city.toLowerCase()}`;
+    const e = m.get(key) ?? { city, region: (s.region ?? '').trim() || undefined, country: (s.country ?? '').trim() || undefined, count: 0 };
+    e.count += 1;
+    m.set(key, e);
+  }
+  return [...m.values()].sort((a, b) => a.city.localeCompare(b.city, 'en', { numeric: true, sensitivity: 'base' }));
+}
