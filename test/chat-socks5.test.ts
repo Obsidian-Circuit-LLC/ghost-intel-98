@@ -17,8 +17,8 @@ describe('SOCKS5 client codec', () => {
 
   it('parses method selection (waits for 2 bytes; ok only for no-auth)', () => {
     expect(parseMethodSelection(Uint8Array.of(0x05))).toBeNull();
-    expect(parseMethodSelection(Uint8Array.of(0x05, 0x00))).toEqual({ ok: true });
-    expect(parseMethodSelection(Uint8Array.of(0x05, 0xff))).toEqual({ ok: false });
+    expect(parseMethodSelection(Uint8Array.of(0x05, 0x00))).toEqual({ ok: true, method: 0x00 });
+    expect(parseMethodSelection(Uint8Array.of(0x05, 0xff))).toEqual({ ok: false, method: 0xff });
     expect(() => parseMethodSelection(Uint8Array.of(0x04, 0x00))).toThrow(Socks5Error);
   });
 
