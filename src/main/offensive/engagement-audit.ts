@@ -1,4 +1,4 @@
-import { openSync, writeSync, fsyncSync, closeSync, readFileSync, existsSync } from 'node:fs';
+import { openSync, writeSync, fsyncSync, closeSync, readFileSync, existsSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 
 export interface AuditEvent {
@@ -61,14 +61,24 @@ function durableAppend(path: string, line: string, head: HeadPointer): void {
  * after the last durable head. Fail-loud: a shorter chain must never silently pass.
  */
 export class AuditTruncationError extends Error {
+  readonly sidecar?: HeadPointer;
+  readonly reconstructed?: HeadPointer;
+  constructor(sidecar: HeadPointer, reconstructed: HeadPointer);
+  constructor(message: string);
   constructor(
-    readonly sidecar: HeadPointer,
-    readonly reconstructed: HeadPointer,
+    a: HeadPointer | string,
+    reconstructed?: HeadPointer,
   ) {
-    super(
-      `engagement audit tail lost: sidecar head {seq:${sidecar.seq},headHash:${sidecar.headHash}} ` +
-      `is ahead of reconstructed log {seq:${reconstructed.seq},headHash:${reconstructed.headHash}}`,
-    );
+    if (typeof a === 'string') {
+      super(a);
+    } else {
+      super(
+        `engagement audit tail lost: sidecar head {seq:${a.seq},headHash:${a.headHash}} ` +
+        `is ahead of reconstructed log {seq:${reconstructed!.seq},headHash:${reconstructed!.headHash}}`,
+      );
+      this.sidecar = a;
+      this.reconstructed = reconstructed;
+    }
     this.name = 'AuditTruncationError';
   }
 }
@@ -90,8 +100,15 @@ export class EngagementAudit {
           sidecar.seq > reconstructed.seq ||
           (sidecar.seq === reconstructed.seq && sidecar.headHash !== reconstructed.headHash);
         if (divergent) throw new AuditTruncationError(sidecar, reconstructed);
+      } else if (statSync(path).size > 0) {
+        // NEW-2: sidecar-deletion downgrade defence. A non-empty durable log written by THIS code
+        // always has a `.head` sidecar. Its absence on a non-empty log means the sidecar was
+        // deleted — the exact move an attacker would make to truncate the `.log` and then dodge
+        // the tail-truncation check above by removing the durable head it would be compared against.
+        // Absence on a non-empty log == tamper: fail loud. (An empty/absent log is a fresh start.)
+        throw new AuditTruncationError('audit head sidecar missing for a non-empty log — possible truncation/tamper');
       }
-      // No sidecar => fresh/legacy log: proceed as before (back-compat).
+      // No sidecar on an empty log => fresh start: proceed.
       this.seq = reconstructed.seq;
       this.prevHash = reconstructed.headHash;
     }

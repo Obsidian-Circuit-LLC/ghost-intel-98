@@ -160,8 +160,18 @@ export class EngagementController {
       if (!result.ok) {
         throw new Error(`signed authorization required: ${result.reason}`);
       }
-      // Persist durable nonce set after successful verification
-      this.persistNonces();
+      // Persist durable nonce set after successful verification.
+      // M4 persist-window: the nonce was just added to the in-memory seenNonces set (by
+      // verifyScopeToken). If persistNonces throws (disk full, unwritable path), that consumption
+      // is durable in memory but ABSENT on disk => the nonce would be replayable after restart.
+      // Make the inconsistency STICKY: mark the store corrupt before rethrowing so the next signed
+      // load fails closed (cannot trust replay detection) until the engagement is re-attested.
+      try {
+        this.persistNonces();
+      } catch (e) {
+        this.nonceStoreCorrupt = true;
+        throw e;
+      }
     }
 
     this.session.load(manifest, settings.confirmMode);

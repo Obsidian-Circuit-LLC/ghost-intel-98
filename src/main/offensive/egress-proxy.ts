@@ -1,5 +1,5 @@
 import { createServer, request as httpRequest, type Server, type IncomingMessage, type ServerResponse } from 'node:http';
-import type { Socket } from 'node:net';
+import { isIP, type Socket } from 'node:net';
 import { performance } from 'node:perf_hooks';
 import { decide } from './scope-enforcer';
 import { withDefaultExcludes, scopeContentHash, type ScopeManifest } from './scope-manifest';
@@ -87,6 +87,11 @@ export class AuthorizedEgressProxy {
     // WHICH resolved IP gets dialed — never an excluded one even though the host matched.
     const pinned = this.pinNonExcluded(ips);
     if (pinned === null) return { deny: 'all resolved IPs excluded', ips };
+    // NEW-1 belt-and-suspenders: the resolver should only ever hand back canonical IP literals, but
+    // if some future seam returns a non-literal string (e.g. a decimal/hex/octal encoding of an
+    // internal address that the cidr exclude can't match), getaddrinfo on the dial path would accept
+    // it => SSRF. Assert isIP() here so a non-literal can NEVER reach httpRequest/dialPinned.
+    if (isIP(pinned) === 0) return { deny: 'non-literal dial host', ips };
     return { ip: pinned, ips };
   }
 

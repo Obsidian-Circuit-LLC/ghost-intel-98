@@ -136,6 +136,38 @@ describe('AuthorizedEgressProxy', () => {
     expect(allowed?.resolvedIps).toEqual(resolved);
   });
 
+  it('NEW-1: defensive dial check — an in-scope domain whose resolver returns a NON-LITERAL host is DENIED, not dialed', async () => {
+    // Even though decide() would ALLOW (the host matches the domain include) and the bogus string
+    // is not matched by any cidr exclude (net.isIP rejects it, so cidrContains is false), the
+    // belt-and-suspenders isIP check must catch the non-literal pin and DENY the dial.
+    const dir = mkdtempSync(join(tmpdir(), 'dcs98-nonlit-'));
+    const audit = new EngagementAudit(join(dir, 'nl.log'));
+    const manifest = parseScopeManifest({ manifestId: 'e', mode: 'engagement', expiresAt: '2999-01-01T00:00:00Z',
+      include: [{ kind: 'domain', value: '*.example.com' }] }, NOW);
+    // Inject a resolver that returns a non-IP-literal string directly (simulating a resolver seam
+    // that did not canonicalize). The decimal encoding 2852039166 === 169.254.169.254.
+    const proxy = new AuthorizedEgressProxy({ manifest, audit, resolveAll: async () => ['2852039166'], now: () => NOW, rateLimitPerSec: 1000 });
+    const { port } = await proxy.start();
+    const r = await viaProxy(port, 'a.example.com', 80);
+    expect(r.status).toBe(403); // non-literal dial host denied
+    await proxy.stop();
+    const v = verifyAuditLog(join(dir, 'nl.log'));
+    const denied = v.events.find((e) => e.decision === 'denied');
+    expect(denied?.reason).toMatch(/non-literal/);
+  });
+
+  it('NEW-1 regression: canonical 169.254.169.254 is still denied by the exclude path in non-lab mode', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dcs98-metaregress-'));
+    const audit = new EngagementAudit(join(dir, 'mr.log'));
+    const manifest = parseScopeManifest({ manifestId: 'e', mode: 'engagement', expiresAt: '2999-01-01T00:00:00Z',
+      include: [{ kind: 'domain', value: '*.example.com' }] }, NOW);
+    const proxy = new AuthorizedEgressProxy({ manifest, audit, resolveAll: async () => ['169.254.169.254'], now: () => NOW, rateLimitPerSec: 1000 });
+    const { port } = await proxy.start();
+    const r = await viaProxy(port, 'a.example.com', 80);
+    expect(r.status).toBe(403); // excluded by default metadata-IP exclude
+    await proxy.stop();
+  });
+
   it('H4: a forward jump in the AUDIT clock does NOT refill the token bucket (monotonic refill)', async () => {
     const up = await upstream();
     const dir = mkdtempSync(join(tmpdir(), 'dcs98-mono-'));

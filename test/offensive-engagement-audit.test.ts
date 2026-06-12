@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mkdtempSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { EngagementAudit, verifyAuditLog, AuditTruncationError, type AuditEvent } from '../src/main/offensive/engagement-audit';
@@ -120,6 +120,25 @@ describe('EngagementAudit', () => {
     expect(verifyAuditLog(p).ok).toBe(true);          // the shorter chain is a valid prefix...
     expect(verifyAuditLog(p).events.length).toBe(2);  // ...but it is NOT what the durable head claims
     expect(() => new EngagementAudit(p)).toThrow(AuditTruncationError);
+  });
+
+  it('NEW-2: a non-empty .log with the .head sidecar DELETED => constructor throws (downgrade defence)', () => {
+    const p = join(dir, 'sidecargone.log');
+    const a = new EngagementAudit(p);
+    a.record(ev(0)); a.record(ev(1));
+    // Attacker truncates the log AND deletes the sidecar to dodge tail-truncation detection.
+    // A non-empty durable log written by this code ALWAYS has a sidecar, so absence == tamper.
+    rmSync(p + '.head', { force: true });
+    expect(existsSync(p + '.head')).toBe(false);
+    expect(() => new EngagementAudit(p)).toThrow(AuditTruncationError);
+    expect(() => new EngagementAudit(p)).toThrow(/sidecar missing/i);
+  });
+
+  it('NEW-2: an EMPTY .log with no sidecar does NOT throw (fresh start)', () => {
+    const p = join(dir, 'empty.log');
+    writeFileSync(p, ''); // empty file, no sidecar
+    expect(existsSync(p + '.head')).toBe(false);
+    expect(() => new EngagementAudit(p)).not.toThrow();
   });
 
   it('no spurious throw: reconstructing a fully-intact durable log succeeds and resumes at the right seq', () => {

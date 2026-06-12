@@ -69,6 +69,49 @@ describe('pin-dial DoH', () => {
     expect(ips).toEqual(['10.0.0.1', '2001:db8::1']);
     expect(httpsGet).not.toHaveBeenCalled();
   });
+
+  // --- NEW-1: canonicalize resolved IPs (drop non-IP-literal encodings that getaddrinfo would
+  // still accept — decimal/hex/octal forms of e.g. 169.254.169.254 — closing an encoding-SSRF). ---
+
+  it('resolveAll DROPS non-canonical IP encodings from the DoH answer, keeping only IP literals', async () => {
+    // A-record answer mixes a valid dotted-quad with decimal and hex encodings of an internal addr.
+    const httpsGet = vi.fn(async (url: string) =>
+      url.includes('type=AAAA')
+        ? { status: 200, body: dnsJson('host', []) }
+        : { status: 200, body: dnsJson('host', [
+            { type: 1, data: '2852039166' },        // decimal for 169.254.169.254
+            { type: 1, data: '0xa9.0xfe.0xa9.0xfe' },// hex octets for 169.254.169.254
+            { type: 1, data: '203.0.113.5' }         // the only canonical literal
+          ]) }
+    );
+    expect(await resolveAll('host', { httpsGet })).toEqual(['203.0.113.5']);
+  });
+
+  it('resolveAll REJECTS when the DoH answer contains ONLY non-canonical encodings (empty after filter)', async () => {
+    const httpsGet = vi.fn(async (url: string) =>
+      url.includes('type=AAAA')
+        ? { status: 200, body: dnsJson('host', []) }
+        : { status: 200, body: dnsJson('host', [
+            { type: 1, data: '2852039166' },
+            { type: 1, data: '0251.0376.0251.0376' } // octal for 169.254.169.254
+          ]) }
+    );
+    await expect(resolveAll('host', { httpsGet })).rejects.toThrow();
+  });
+
+  it('resolveAll filters non-canonical entries from the SYSTEM-resolver path too', async () => {
+    const systemLookup = vi.fn(async () => [
+      { address: '2852039166', family: 4 }, // non-literal — must be dropped
+      { address: '198.51.100.7', family: 4 }
+    ]);
+    const ips = await resolveAll('host', { useSystemResolver: true, lookup: systemLookup as never });
+    expect(ips).toEqual(['198.51.100.7']);
+  });
+
+  it('resolveAll REJECTS when the SYSTEM-resolver path yields only non-literal addresses', async () => {
+    const systemLookup = vi.fn(async () => [{ address: '0xa9.0xfe.0xa9.0xfe', family: 4 }]);
+    await expect(resolveAll('host', { useSystemResolver: true, lookup: systemLookup as never })).rejects.toThrow();
+  });
 });
 
 describe('pin-dial', () => {

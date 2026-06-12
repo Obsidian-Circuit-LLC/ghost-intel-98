@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ed25519 } from '@noble/curves/ed25519.js';
@@ -98,6 +98,37 @@ describe('EngagementController — M4 nonce store fail-closed + fsync', () => {
 
     const raw = manifest([{ kind: 'cidr', value: '93.184.216.0/24' }]);
     expect(() => ctl.loadScope(raw)).not.toThrow();
+  });
+
+  it('M4 sticky corruption: a persistNonces failure marks the store corrupt so the NEXT signed load fails closed', () => {
+    const auditDir = mkAuditDir();
+    // Start with a valid (empty-array) nonce store so the first load passes verification.
+    writeFileSync(join(auditDir, 'seen-nonces.json'), JSON.stringify([]), 'utf8');
+
+    const ctl = new EngagementController({
+      auditDir,
+      now,
+      settings: {
+        confirmMode: 'per-session',
+        rateLimitPerSec: 10,
+        requireSignedAuthorization: true,
+        issuerKeys
+      }
+    });
+
+    // Force the durable write to fail by replacing the nonce file with a DIRECTORY:
+    // openSync(path, 'w') on a directory throws EISDIR, so persistNonces() throws.
+    rmSync(join(auditDir, 'seen-nonces.json'), { force: true });
+    mkdirSync(join(auditDir, 'seen-nonces.json'));
+
+    const raw = manifest([{ kind: 'cidr', value: '93.184.216.0/24' }]);
+    // The signed load verifies the token (nonce added to in-memory set) then persists — which throws.
+    // The throw propagates as a load failure (NOT the corrupt-store message yet).
+    expect(() => ctl.loadScope(raw, signToken(raw, 'n-persist-fail'))).toThrow();
+
+    // Sticky: because persist failed, the store is now known-inconsistent. A subsequent signed
+    // load must fail CLOSED with the corrupt-store error — even with a fresh, otherwise-valid token.
+    expect(() => ctl.loadScope(raw, signToken(raw, 'n-after'))).toThrow(/replay-protection store is corrupt/);
   });
 
   it('loads with a valid nonce store and persists the consumed nonce (fsynced array file)', () => {

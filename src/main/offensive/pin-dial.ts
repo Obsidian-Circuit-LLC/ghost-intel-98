@@ -1,6 +1,6 @@
 import { lookup as dnsLookup } from 'node:dns/promises';
 import { get as httpsGetRaw } from 'node:https';
-import { connect, type Socket } from 'node:net';
+import { connect, isIP, type Socket } from 'node:net';
 
 type LookupFn = (host: string, opts: { all: true }) => Promise<{ address: string; family: number }[]>;
 
@@ -47,7 +47,16 @@ function parseAnswers(body: string, wanted: number): string[] {
   let json: DnsJsonResponse;
   try { json = JSON.parse(body) as DnsJsonResponse; } catch { return []; }
   if (!Array.isArray(json.Answer)) return [];
-  return json.Answer.filter((a) => a.type === wanted).map((a) => a.data);
+  // NEW-1: canonicalize at the resolver boundary. A hostile/compromised DoH endpoint can return a
+  // non-dotted-quad encoding of an internal address (decimal `2852039166`, hex `0xa9.0xfe.0xa9.0xfe`,
+  // octal `0251.0376.0251.0376` — all === 169.254.169.254). net.isIP rejects these (returns 0), so
+  // the CIDR exclude/metadata guards would never match them, yet getaddrinfo on the dial path WOULD
+  // accept them => SSRF. DROP every answer that is not a valid IP literal here, at the boundary, so
+  // the only strings that ever leave the resolver are canonical IP literals (isIP !== 0).
+  return json.Answer
+    .filter((a) => a.type === wanted)
+    .map((a) => a.data)
+    .filter((data) => isIP(data) !== 0);
 }
 
 async function queryType(host: string, type: 'A' | 'AAAA', endpoint: string, httpsGet: HttpsGetFn): Promise<string[]> {
@@ -106,10 +115,16 @@ export async function resolveAll(host: string, opts: ResolveAllOptions = {}): Pr
   if (opts.useSystemResolver) {
     const lookup = opts.lookup ?? (dnsLookup as unknown as LookupFn);
     const recs = await lookup(host, { all: true });
-    return recs.map((r) => r.address);
+    // NEW-1: apply the same canonicality filter to the system-resolver path. Fail-closed if the
+    // filtered set is empty — only canonical IP literals may leave resolveAll.
+    const sys = recs.map((r) => r.address).filter((addr) => isIP(addr) !== 0);
+    if (sys.length === 0) throw new Error(`system resolution returned no canonical address for ${host}`);
+    return sys;
   }
   const ips = await dohResolve(host, { endpoint: opts.endpoint, httpsGet: opts.httpsGet });
-  if (ips.length === 0) throw new Error(`DoH resolution returned no records for ${host}`);
+  // ips is already canonicality-filtered in parseAnswers; an empty set (no records OR all dropped
+  // as non-canonical) is fail-closed here.
+  if (ips.length === 0) throw new Error(`DoH resolution returned no canonical address for ${host}`);
   return ips;
 }
 
