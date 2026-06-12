@@ -32,11 +32,27 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`DCS98-Setup-3.13.3-beta.1.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake formally verified internally; external audit + FIPS pending. See Status.)*
+> **Install:** download [`DCS98-Setup-3.14.0-beta.1.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake formally verified internally; external audit + FIPS pending. See Status.)*
 
 ## Status
 
-**v3.13.3-beta.1** — current release. New lightning boot splash + Win9x loading bar:
+**v3.14.0-beta.1** — current release. Dogfooding punch-list — a new journal app, a chat fix, and module polish:
+
+- **Journal Jots** — a new password-protected (4-digit PIN) journal app. Entries are consolidated inside the
+  app (they don't land in the Briefcase) and are encrypted at rest with everything else under the optional
+  vault login. The PIN is a rate-limited lock over that already-encrypted storage — a convenience gate, not
+  the encryption boundary (the vault is).
+- **Chat invite-accept fix.** The Tor P2P chat's message encryption moved to a runtime-independent
+  implementation of the same cipher, resolving an "Unknown cipher" failure that broke accepting invites on
+  packaged builds (the algorithm and wire format are unchanged).
+- **Jukebox** opens at a sensible size and gains a collapse/expand toggle for a compact "just the deck" view.
+- **EyeSpy** gains a Purge-all button and lets you edit an existing stream in place.
+- **Mail** account-setup dialog now closes properly (it could trap you when no account was configured yet);
+  **Notepad 98** can delete entries.
+
+675 automated tests. *Everything from v3.13.3 carries forward.*
+
+**v3.13.3-beta.1** — New lightning boot splash + Win9x loading bar:
 
 - **New boot splash + loading bar.** The startup screen is now the higher-resolution "Welcome DCS 98"
   lightning render (the prior grayscale logo was pixelated at full screen), with a Win9x-style scrolling
@@ -304,14 +320,14 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/dcs98/releases) and run it.
 
-Direct link to the current release: [`DCS98-Setup-3.13.3-beta.1.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.13.3-beta.1/DCS98-Setup-3.13.3-beta.1.exe)
+Direct link to the current release: [`DCS98-Setup-3.14.0-beta.1.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.14.0-beta.1/DCS98-Setup-3.14.0-beta.1.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is formally verified internally — external audit + FIPS
 pending — see Status). The last fully-stable build is [`DCS98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.6.8/DCS98-Setup-3.6.8.exe).
 
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\DCS98-Setup-3.13.3-beta.1.exe -Algorithm SHA256
+Get-FileHash .\DCS98-Setup-3.14.0-beta.1.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
@@ -349,8 +365,13 @@ To uninstall: Settings → Apps → Dead Cyber Society 98 → Uninstall.
 
 ## Releases & changelog
 
-The current build is **v3.13.3-beta.1**. Each release page carries its own notes + SHA-256.
+The current build is **v3.14.0-beta.1**. Each release page carries its own notes + SHA-256.
 
+- **v3.14.0-beta.1** — **Dogfooding punch-list.** New **Journal Jots** app (4-digit-PIN-locked personal
+  journal, entries vault-encrypted at rest, kept out of the Briefcase); **chat invite-accept fix** (message
+  encryption moved to a runtime-independent cipher implementation, clearing an "Unknown cipher" failure on
+  packaged builds — algorithm/wire format unchanged); **Jukebox** default size + collapse toggle; **EyeSpy**
+  purge-all + edit-a-stream; **Mail** setup-dialog close fix; **Notepad 98** entry delete. **675 tests.**
 - **v3.13.3-beta.1** — **New lightning boot splash + Win9x loading bar.** The startup screen is now the
   higher-resolution "Welcome DCS 98" lightning render (the prior grayscale logo was pixelated), with a
   Win9x-style scrolling blue-block loading bar and a *Starting DCS 98…* caption under it, then a fade to the
@@ -533,7 +554,7 @@ This starts the Vite dev server (HMR) and the Electron main process.
 
 ```bash
 pnpm build        # type-check + bundle main / preload / renderer
-pnpm test         # vitest suite (505 tests as of v3.13.3-beta.1)
+pnpm test         # vitest suite (675 tests as of v3.14.0-beta.1)
 pnpm package      # platform installer for the current host
 pnpm package:win  # cross-build Windows NSIS installer
 ```

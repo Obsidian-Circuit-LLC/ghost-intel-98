@@ -7,6 +7,11 @@ export interface ModuleDescriptor {
   glyph: string;
   component: React.ComponentType<{ spec: WindowSpec }>;
   builtin: boolean;
+  /** Preferred initial window size when opened without an explicit width/height.
+   *  Lets a module (e.g. the Jukebox) declare a sensible default once, instead of
+   *  every launch site repeating it. Falls back to the global 760×520 if unset. */
+  defaultWidth?: number;
+  defaultHeight?: number;
 }
 
 const registry = new Map<string, ModuleDescriptor>();

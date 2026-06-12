@@ -91,6 +91,10 @@ export function MediaPlayerModule(): JSX.Element {
   const [now, setNow] = useState(0);
   const [dur, setDur] = useState(0);
   const [busy, setBusy] = useState(false);
+  // Collapsed = the compact "just the deck" view: hide the file toolbar + Library/Stations
+  // panes, leaving the LCD/transport/fields/visualizer/seek. Lets the Jukebox shrink to a
+  // WinAmp-shade-style strip without losing playback control.
+  const [collapsed, setCollapsed] = useState(false);
   const [repeat, setRepeat] = useState<RepeatMode>('off');
   const [shuffle, setShuffle] = useState(false);
   // next()/prev()/onEnded read the *latest* repeat+shuffle without re-binding their
@@ -355,8 +359,12 @@ export function MediaPlayerModule(): JSX.Element {
         <label style={{ fontSize: 11, marginLeft: 8 }}>
           <input type="checkbox" checked={visualizer} onChange={toggleVisualizer} /> Viz
         </label>
+        <button onClick={() => setCollapsed((c) => !c)} style={{ marginLeft: 8, minWidth: 0, padding: '0 6px' }}
+          title={collapsed ? 'Expand library & stations' : 'Collapse to the compact player'}
+          aria-pressed={collapsed} aria-label={collapsed ? 'Expand' : 'Collapse'}>{collapsed ? '▼' : '▲'}</button>
       </div>
 
+      {!collapsed && (
       <div className="ga98-toolbar" style={{ marginTop: 6 }}>
         <button onClick={() => void addFolder()} disabled={busy}>Add folder…</button>
         <button onClick={() => void openFiles()} disabled={busy}>Open files…</button>
@@ -364,7 +372,9 @@ export function MediaPlayerModule(): JSX.Element {
         <button onClick={() => void saveQueue()} disabled={busy}>Save queue…</button>
         <button onClick={() => void refresh()} disabled={busy}>{busy ? 'Working…' : 'Refresh'}</button>
       </div>
+      )}
 
+      {!collapsed && (
       <div className="ga98-jukebox-panes">
         <fieldset className="ga98-jukebox-pane">
           <legend>Library ({queue.length})</legend>
@@ -406,6 +416,7 @@ export function MediaPlayerModule(): JSX.Element {
           )}
         </fieldset>
       </div>
+      )}
     </div>
   );
 }

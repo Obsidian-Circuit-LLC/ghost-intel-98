@@ -15,14 +15,12 @@ import '@xterm/xterm/css/xterm.css';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SshHostProfile, DialTermProtocol } from '@shared/post-mvp-types';
 import { useSettings } from '../../state/store';
-import { playDtmf, playDialPickup, playDialTone, playCarrier, playLegacyDialup, playHangup, CARRIER_BEAT } from '../../audio/synth';
+import { playCarrier, playLegacyDialup, playHangup, CARRIER_BEAT } from '../../audio/synth';
 import { toast } from '../../state/toasts';
 import { FtpBrowser } from './FtpBrowser';
 import logoUrl from '../../assets/logo.png';
 
-type ConnState = 'idle' | 'dialing' | 'connecting' | 'open' | 'closed';
-
-const DIALPAD_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '0', '#'];
+type ConnState = 'idle' | 'connecting' | 'open' | 'closed';
 
 const wait = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
@@ -41,8 +39,6 @@ export function DialTermModule(): JSX.Element {
   const [state, setState] = useState<ConnState>('idle');
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [handshakeLog, setHandshakeLog] = useState<string[]>([]);
-  const [dialNumber, setDialNumber] = useState('');
-  const [dialedCount, setDialedCount] = useState(0);
   const termRef = useRef<HTMLDivElement>(null);
   const termInstance = useRef<Terminal | null>(null);
   const fitInstance = useRef<FitAddon | null>(null);
@@ -51,9 +47,9 @@ export function DialTermModule(): JSX.Element {
   // Ref-tracked sessionId so listener callbacks (registered before setSessionId resolves)
   // can filter by the latest value without stale closures.
   const sessionIdRef = useRef<string | null>(null);
-  // Guards against the ~4.7s dial animation outliving the component: if the window is closed
-  // (or Dial is re-invoked) before ssh.connect resolves, the resolved session would otherwise
-  // be set on a dead component and never torn down. mountedRef + a per-dial epoch close that.
+  // Guards against the multi-second connect animation outliving the component: if the window is
+  // closed (or Dial is re-invoked) before ssh.connect resolves, the resolved session would
+  // otherwise be set on a dead component and never torn down. mountedRef + a per-dial epoch close that.
   const mountedRef = useRef(true);
   const dialEpochRef = useRef(0);
   const settings = useSettings((s) => s.settings);
@@ -156,31 +152,17 @@ export function DialTermModule(): JSX.Element {
     const live = (): boolean => mountedRef.current && dialEpochRef.current === epoch;
     const sound = !!settings?.soundEnabled;
     const number = makeDialNumber();
-    setDialNumber(number);
-    setDialedCount(0);
-    setState('dialing');
+    // The touch-tone dialpad phase was removed (GhostExodus: drop the "starting dial" animation,
+    // keep the AOL-style dial-up client). Go straight into the carrier handshake; the ATDT line is
+    // kept as flavour at the head of the negotiation log the DialClient renders.
     setHandshakeLog([
       `ATDT${number}`,
       'CONNECT 33600',
       'PROTOCOL: LAP-M / V.42bis',
-      'NEGOTIATING…'
+      'NEGOTIATING…',
+      'CARRIER DETECT…'
     ]);
-
-    // Dialing: pick up (off-hook click), let the dial tone breathe, then light each key + fire its
-    // genuine DTMF dual-tone in lockstep. The visual advances regardless of the sound setting; only
-    // the tones are gated.
-    if (sound) { playDialPickup(); playDialTone(0.5); }
-    await wait(550);
-    for (let i = 0; i < number.length; i += 1) {
-      setDialedCount(i + 1);
-      if (sound) playDtmf(number[i]);
-      await wait(200);
-    }
-    await wait(250);
-    if (!live()) return; // window closed / re-dialed during the dialing animation
-
     setState('connecting');
-    setHandshakeLog((h) => [...h, 'CARRIER DETECT…']);
     // Start the handshake tones and reveal the negotiation log on the same packet beat the uplink
     // animation runs on, so audio + visuals + log advance in lockstep. The waits pace the log
     // whether or not sound is enabled; when sound is on we then await the carrier's tail.
@@ -257,14 +239,14 @@ export function DialTermModule(): JSX.Element {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div className="ga98-toolbar">
-        <select className="ga98-text" value={activeId ?? ''} onChange={(e) => setActiveId(e.target.value || null)} disabled={state === 'open' || state === 'dialing'}>
+        <select className="ga98-text" value={activeId ?? ''} onChange={(e) => setActiveId(e.target.value || null)} disabled={state === 'open' || state === 'connecting'}>
           <option value="">(no host)</option>
           {hosts.map((h) => <option key={h.id} value={h.id}>{h.label} — {h.username}@{h.host}</option>)}
         </select>
-        <button onClick={() => setShowSetup(true)} disabled={state === 'open' || state === 'dialing'}>Hosts…</button>
+        <button onClick={() => setShowSetup(true)} disabled={state === 'open' || state === 'connecting'}>Hosts…</button>
         {!activeIsFtp && (state === 'open'
           ? <button onClick={() => void hangup()}>Hang up</button>
-          : <button onClick={() => void dial()} disabled={!activeId || state === 'dialing' || state === 'connecting'}>Dial</button>)}
+          : <button onClick={() => void dial()} disabled={!activeId || state === 'connecting'}>Dial</button>)}
         <span style={{ flex: 1 }} />
         <span style={{ fontSize: 11 }}>{activeIsFtp ? 'FTP' : state.toUpperCase()}{activeHost ? ` · ${activeHost.host}:${activeHost.port}` : ''}{sessionId ? ` · ${sessionId.slice(0, 8)}` : ''}</span>
       </div>
@@ -280,8 +262,6 @@ export function DialTermModule(): JSX.Element {
           <FtpBrowser key={activeHost.id} host={activeHost} />
         ) : state === 'open' ? (
           <div ref={termRef} style={{ width: '100%', height: '100%' }} />
-        ) : state === 'dialing' ? (
-          <DialPad number={dialNumber} dialedCount={dialedCount} />
         ) : state === 'connecting' ? (
           <DialClient host={activeHost ? `${activeHost.host}:${activeHost.port}` : 'REMOTE'} log={handshakeLog} />
         ) : (
@@ -318,23 +298,6 @@ export function DialTermModule(): JSX.Element {
           </div>
         </>
       )}
-    </div>
-  );
-}
-
-/** Touch-tone keypad shown while dialing. The key matching the digit currently being dialed
- *  glows; the display fills left-to-right as `dialedCount` advances. Tones fire in the parent. */
-function DialPad({ number, dialedCount }: { number: string; dialedCount: number }): JSX.Element {
-  const activeKey = dialedCount > 0 ? number[dialedCount - 1] : null;
-  return (
-    <div className="ga98-dialpad-wrap">
-      <div className="ga98-dial-display">{number.slice(0, dialedCount) || ' '}</div>
-      <div className="ga98-dialpad">
-        {DIALPAD_KEYS.map((k) => (
-          <div key={k} className={`ga98-dialkey${k === activeKey ? ' active' : ''}`}>{k}</div>
-        ))}
-      </div>
-      <div className="ga98-dial-caption">DIALING…</div>
     </div>
   );
 }

@@ -195,6 +195,16 @@ const api = {
     save: (note: unknown) => ipcRenderer.invoke(channels.briefcase.save, note),
     delete: (id: string) => ipcRenderer.invoke(channels.briefcase.delete, id)
   },
+  journal: {
+    list: () => ipcRenderer.invoke(channels.journal.list),
+    read: (id: string) => ipcRenderer.invoke(channels.journal.read, id),
+    save: (entry: unknown) => ipcRenderer.invoke(channels.journal.save, entry),
+    delete: (id: string) => ipcRenderer.invoke(channels.journal.delete, id),
+    hasPin: () => ipcRenderer.invoke(channels.journal.hasPin),
+    setPin: (pin: string) => ipcRenderer.invoke(channels.journal.setPin, pin),
+    verifyPin: (pin: string) => ipcRenderer.invoke(channels.journal.verifyPin, pin),
+    changePin: (oldPin: string, newPin: string) => ipcRenderer.invoke(channels.journal.changePin, oldPin, newPin)
+  },
   ssh: {
     listHosts: () => ipcRenderer.invoke(channels.ssh.listHosts),
     upsertHost: (input: unknown) => ipcRenderer.invoke(channels.ssh.upsertHost, input),
@@ -218,6 +228,7 @@ const api = {
     list: () => ipcRenderer.invoke(channels.streams.list),
     upsert: (input: unknown) => ipcRenderer.invoke(channels.streams.upsert, input),
     delete: (id: string) => ipcRenderer.invoke(channels.streams.delete, id),
+    clear: () => ipcRenderer.invoke(channels.streams.clear),
     import: () => ipcRenderer.invoke(channels.streams.import)
   },
   media: {
