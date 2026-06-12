@@ -128,6 +128,14 @@ export interface CameraStream {
   source?: string;
 }
 
+export interface Wall {
+  id: string;
+  name: string;
+  slots: (string | null)[]; // fixed length 9; each is a CameraStream id or null (empty)
+  createdAt: string;
+  updatedAt: string;
+}
+
 // ---------- Jukebox (media player) ----------
 
 export interface MediaTrack {
