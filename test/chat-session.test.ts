@@ -73,15 +73,15 @@ describe('chat session — secure channel', () => {
 
   it('rejects replay (same counter twice)', () => {
     const { initiator, responder } = pair();
-    const m0 = initiator.encrypt(enc('hi'));
+    const m0 = initiator.encrypt(enc('\x01\x01hi'));
     responder.decrypt(m0);
     expect(() => responder.decrypt(m0)).toThrow(SessionError); // replay
   });
 
   it('rejects out-of-order delivery (gap)', () => {
     const { initiator, responder } = pair();
-    initiator.encrypt(enc('a')); // m0 (not delivered)
-    const m1 = initiator.encrypt(enc('b'));
+    initiator.encrypt(enc('\x01\x01a')); // m0 (not delivered)
+    const m1 = initiator.encrypt(enc('\x01\x01b'));
     expect(() => responder.decrypt(m1)).toThrow(SessionError); // expected counter 0, got 1
   });
 
@@ -104,7 +104,7 @@ describe('chat session — secure channel', () => {
 
   it('destroy() wipes key state', () => {
     const { initiator } = pair();
-    initiator.encrypt(enc('a'));
+    initiator.encrypt(enc('\x01\x01a'));
     expect(() => initiator.destroy()).not.toThrow();
   });
 });

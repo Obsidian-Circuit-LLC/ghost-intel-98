@@ -636,7 +636,7 @@ function bmId(v: unknown): string {
   return typeof v === 'string' && v.length > 0 && v.length <= 64 ? v : randomUUID();
 }
 function bmText(v: unknown, max: number): string {
-  return typeof v === 'string' ? v.replace(/[ -]/g, ' ').slice(0, max) : '';
+  return typeof v === 'string' ? v.replace(/[\x00-\x1f\x7f]/g, ' ').slice(0, max) : '';
 }
 
 /** Validate + clamp a renderer-supplied bookmark board before it touches disk. URLs must be
