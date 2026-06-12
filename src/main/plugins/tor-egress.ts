@@ -18,34 +18,61 @@ export class SocksBlockedError extends Error { constructor(m: string) { super(m)
 
 interface SocksTarget { host: string; port: number; user: string; pass: string }
 
+/** Maximum bytes we will buffer during the SOCKS5 handshake. A valid greeting reply (2 B) +
+ *  auth reply (2 B) + CONNECT reply (max ~262 B with a domain BND.ADDR) is well under 512 B.
+ *  If a peer pushes more than this the socket is misbehaving — abort with a hard error (NOT
+ *  SocksBlockedError; this is a protocol/abuse condition, not a normal Tor-exit refusal). */
+const SOCKS_HANDSHAKE_MAX_BYTES = 512;
+/** Maximum milliseconds to wait for the full SOCKS5 handshake to complete. The 30 s TIMEOUT_MS
+ *  in torFetch only starts after the tunnel opens; this covers the handshake phase itself. */
+const SOCKS_HANDSHAKE_TIMEOUT_MS = 15_000;
+
 /** Drive the SOCKS5 + RFC 1929 + CONNECT handshake on an already-connected socket. Resolves when
- *  the tunnel is open. Per-request {user,pass} → a distinct Tor circuit (IsolateSOCKSAuth). */
+ *  the tunnel is open. Per-request {user,pass} → a distinct Tor circuit (IsolateSOCKSAuth).
+ *
+ *  DoS hardening: accumulation is bounded at SOCKS_HANDSHAKE_MAX_BYTES; a 15 s deadline covers
+ *  the whole handshake phase. Both caps reject with a plain Error (not SocksBlockedError). */
 export function socksConnect(sock: Duplex, t: SocksTarget): Promise<void> {
   return new Promise((resolve, reject) => {
     type Phase = 'method' | 'auth' | 'connect';
     let phase: Phase = 'method';
-    let buf = new Uint8Array(0);
-    const onErr = (e: unknown): void => { cleanup(); reject(e instanceof Error ? e : new Error(String(e))); };
-    const cleanup = (): void => { sock.removeListener('data', onData); sock.removeListener('error', onErr); };
+    let buf = Buffer.alloc(0);
+    let done = false;
+    const onErr = (e: unknown): void => { if (done) return; done = true; cleanup(); reject(e instanceof Error ? e : new Error(String(e))); };
+    const cleanup = (): void => {
+      clearTimeout(timer);
+      sock.removeListener('data', onData);
+      sock.removeListener('error', onErr);
+    };
+    // Handshake-phase deadline: if CONNECT reply hasn't arrived within 15 s, destroy + reject.
+    const timer = setTimeout(() => {
+      sock.destroy();
+      onErr(new Error('SOCKS: handshake timed out'));
+    }, SOCKS_HANDSHAKE_TIMEOUT_MS);
     function onData(chunk: Buffer): void {
-      buf = Uint8Array.from([...buf, ...chunk]);
+      // Bounded accumulation: reject if the remote sends junk beyond the max handshake size.
+      if (buf.length + chunk.length > SOCKS_HANDSHAKE_MAX_BYTES) {
+        onErr(new Error(`SOCKS: handshake overflow (> ${SOCKS_HANDSHAKE_MAX_BYTES} bytes)`));
+        return;
+      }
+      buf = Buffer.concat([buf, chunk]);
       try {
         if (phase === 'method') {
           const m = parseMethodSelection(buf); if (!m) return;
           if (!m.ok) { onErr(new Error('SOCKS: no acceptable auth method')); return; }
-          buf = buf.subarray(2);
+          buf = Buffer.from(buf.subarray(2));
           if (m.method === 0x02) { phase = 'auth'; sock.write(buildUserPassAuth(t.user, t.pass)); }
           else { phase = 'connect'; sock.write(buildConnectDomain(t.host, t.port)); }
         }
         if (phase === 'auth') {
           const a = parseUserPassReply(buf); if (!a) return;
           if (!a.ok) { onErr(new Error('SOCKS: username/password auth failed')); return; }
-          buf = buf.subarray(2); phase = 'connect'; sock.write(buildConnectDomain(t.host, t.port));
+          buf = Buffer.from(buf.subarray(2)); phase = 'connect'; sock.write(buildConnectDomain(t.host, t.port));
           return;
         }
         if (phase === 'connect') {
           const r = parseConnectReply(buf); if (!r) return;
-          cleanup();
+          if (done) return; done = true; cleanup();
           if (!r.ok) reject(new SocksBlockedError(`Tor exit: ${socksReplyMessage(r.rep)}`)); else resolve();
         }
       } catch (e) { onErr(e); }

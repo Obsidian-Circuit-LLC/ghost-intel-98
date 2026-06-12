@@ -1,6 +1,8 @@
 // test/plugin-tor-egress.test.ts
 import { describe, it, expect, vi } from 'vitest';
 import { socksConnect, SocksBlockedError } from '../src/main/plugins/tor-egress';
+// Override timers globally so the 15 s handshake deadline does not block the overflow test.
+vi.useFakeTimers();
 
 // A fake duplex: records writes, lets the test push reply bytes via emit('data').
 function fakeSock() {
@@ -42,5 +44,18 @@ describe('socksConnect', () => {
     s.emit('data', Uint8Array.of(0x05, 0x02)); await Promise.resolve();
     s.emit('data', Uint8Array.of(0x01, 0x01)); // auth FAIL
     await expect(p).rejects.toThrow(/auth/i);
+  });
+
+  it('rejects with a plain Error (not SocksBlockedError) when > 512 bytes arrive during the handshake', async () => {
+    // The buffer cap is a protocol/abuse guard — a misbehaving proxy that floods the socket
+    // during the handshake must not be treated as a normal Tor-exit refusal (SocksBlockedError).
+    // The test uses fake timers (vi.useFakeTimers at module scope) so the 15 s deadline is never
+    // fired; the overflow is triggered synchronously by the first data emission.
+    const s = fakeSock();
+    const p = socksConnect(s as never, { host: 'example.com', port: 80, user: 'u', pass: 'p' });
+    // Push 513 bytes of garbage in one shot — exceeds the 512-byte cap.
+    s.emit('data', Buffer.alloc(513, 0xff));
+    await expect(p).rejects.toSatisfy((e: unknown) => e instanceof Error && !(e instanceof SocksBlockedError));
+    await expect(p).rejects.toThrow(/overflow/i);
   });
 });
