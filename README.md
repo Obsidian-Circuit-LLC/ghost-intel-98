@@ -32,11 +32,25 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`DCS98-Setup-3.14.0-beta.2.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake formally verified internally; external audit + FIPS pending. See Status.)*
+> **Install:** download [`DCS98-Setup-3.14.0-beta.3.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake formally verified internally; external audit + FIPS pending. See Status.)*
 
 ## Status
 
-**v3.14.0-beta.2** — current release. A **build-fix re-release of beta.1**: the packaged app now **launches**. beta.1 crashed at boot with `ERR_REQUIRE_ESM` because the new ESM-only chat-crypto module (`@noble/ciphers`) was being `require()`'d from the CommonJS main bundle; it is now inlined. The feature set is unchanged from beta.1 — a dogfooding punch-list of a new journal app, two audio/crypto fixes, and module polish:
+**v3.14.0-beta.3** — current release. Adds the **EyeSpy location grid** on top of the beta.2 line:
+
+- **EyeSpy is now a location-organised camera wall.** A left-sidebar **Country → State/Region → City tree**
+  with rolled-up camera counts (variable depth — UK Country→City, US Country→State→City), a **search box**
+  over tree and grid, and a **live tile grid** for the selected node — tiles stream live but are **capped at
+  9 concurrent** and lazy-mounted (the rest show a click-to-play poster; the cap also bounds connections,
+  which matters over Tor). **"Import here"** stamps a selected location onto geo-less feeds (drop an archive
+  straight into "London" or "Dallas"); a per-tile **×** culls duds. No discovery/scanning — it only renders
+  feeds you imported or typed.
+
+704 automated tests. *Everything from v3.14.0-beta.2 (the boot fix + the beta.1 punch-list) carries forward.*
+
+<details><summary>v3.14.0-beta.2 — boot-fix re-release of beta.1 (the packaged app launches)</summary>
+
+beta.1 crashed at boot with `ERR_REQUIRE_ESM` because the new ESM-only chat-crypto module (`@noble/ciphers`) was being `require()`'d from the CommonJS main bundle; beta.2 inlines it. The feature set is the beta.1 dogfooding punch-list — a new journal app, two audio/crypto fixes, and module polish:
 
 - **Journal Jots** — a new password-protected (4-digit PIN) journal app. Entries are consolidated inside the
   app (they don't land in the Briefcase) and are encrypted at rest with everything else under the optional
@@ -56,6 +70,8 @@ that never depend on a third-party staying up:
   **Notepad 98** can delete entries.
 
 690 automated tests. *Everything from v3.13.3 carries forward.*
+
+</details>
 
 **v3.13.3-beta.1** — New lightning boot splash + Win9x loading bar:
 
@@ -325,14 +341,14 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/dcs98/releases) and run it.
 
-Direct link to the current release: [`DCS98-Setup-3.14.0-beta.2.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.14.0-beta.2/DCS98-Setup-3.14.0-beta.2.exe)
+Direct link to the current release: [`DCS98-Setup-3.14.0-beta.3.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.14.0-beta.3/DCS98-Setup-3.14.0-beta.3.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is formally verified internally — external audit + FIPS
 pending — see Status). The last fully-stable build is [`DCS98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.6.8/DCS98-Setup-3.6.8.exe).
 
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\DCS98-Setup-3.14.0-beta.2.exe -Algorithm SHA256
+Get-FileHash .\DCS98-Setup-3.14.0-beta.3.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
@@ -370,8 +386,16 @@ To uninstall: Settings → Apps → Dead Cyber Society 98 → Uninstall.
 
 ## Releases & changelog
 
-The current build is **v3.14.0-beta.2**. Each release page carries its own notes + SHA-256.
+The current build is **v3.14.0-beta.3**. Each release page carries its own notes + SHA-256.
 
+- **v3.14.0-beta.3** — **EyeSpy location grid.** EyeSpy becomes a location-organised camera wall: a
+  **Country → State/Region → City** sidebar tree with rolled-up per-node camera counts (variable depth —
+  UK Country→City, US Country→State→City; location-less cameras bucket under "Ungeocoded"), a **search box**
+  over tree + grid, and a **live tile grid** for the selected node — tiles stream live but are **capped at 9
+  concurrent** and lazy-mounted (over-cap/off-screen tiles show a click-to-play poster; the cap also bounds
+  connections over Tor). **"Import here"** stamps a selected location onto geo-less feeds; a per-tile **×**
+  deletes a stream. Built TDD with an adversarial review pass (fixed a decoder leak, a stale-selection-after-
+  import bug, and a geo-name delimiter corruption before merge). No discovery/scanning. **704 tests.**
 - **v3.14.0-beta.2** — **Build-fix re-release of beta.1: the packaged app now launches.** beta.1 crashed at
   boot (`ERR_REQUIRE_ESM`) because the new ESM-only chat-crypto module (`@noble/ciphers`) was being
   `require()`'d from the CommonJS main bundle; it is now inlined (added to electron-vite's
@@ -566,7 +590,7 @@ This starts the Vite dev server (HMR) and the Electron main process.
 
 ```bash
 pnpm build        # type-check + bundle main / preload / renderer
-pnpm test         # vitest suite (690 tests as of v3.14.0-beta.2)
+pnpm test         # vitest suite (704 tests as of v3.14.0-beta.3)
 pnpm package      # platform installer for the current host
 pnpm package:win  # cross-build Windows NSIS installer
 ```
