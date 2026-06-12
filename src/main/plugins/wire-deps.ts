@@ -11,22 +11,17 @@
  * reflected until a reload; this is acceptable for v1 — gate defaults to false (closed),
  * so nothing leaks from a stale snapshot.
  *
- * rawFetch uses the global fetch API directly. Egress discipline is enforced by the
- * capability layer in context.ts, which calls isNetworkEnabled(id) and validateUrl(url)
- * BEFORE rawFetch is ever reached. rawFetch is therefore only invoked when the plugin has
- * the 'egress' capability, the per-plugin networkEnabled flag is true, and the URL passes
- * the SSRF validator.
- *
- * TODO(osint-plugin): route plugin egress through the bundled Tor SOCKS proxy before the
- * OSINT plugin ships real lookups. The only Tor code today is the chat TorTransport
- * connection-specific SOCKS dialer; there is no generic Tor-routed fetch helper. For v1
- * we use direct fetch — fully gated behind networkEnabled + isPublicHttpUrl validation.
- * This is flagged as DONE_WITH_CONCERNS in the task report.
+ * rawFetch routes through a dedicated compartmented Tor instance by default (ensurePluginTor +
+ * torFetch); init.direct===true keeps the legacy direct path (directFetch, SSRF + credential-strip
+ * + redirect handling unchanged). Egress discipline is enforced by the capability layer in
+ * context.ts, which calls isNetworkEnabled(id) and validateUrl(url) BEFORE rawFetch is reached.
+ * rawFetch is therefore only invoked when the plugin has the 'egress' capability, the per-plugin
+ * networkEnabled flag is true, and the URL passes the SSRF validator.
  */
 
 import { app } from 'electron';
 import { join } from 'node:path';
-import type { ContextDeps } from './context';
+import type { ContextDeps, PluginFetchInit, PluginFetchResponse } from './context';
 import { resolveInside } from './paths';
 import { isPublicHttpUrl, assertResolvedPublic } from '../security/validate';
 import { secretStore } from '../secrets/index';
@@ -37,6 +32,7 @@ import { secureReadText, secureWriteFile } from '../storage/secure-fs';
 import { getEngagementController } from '../offensive/controller';
 import { getBgConnManager } from '../bgconn/singleton';
 import { makeBgConnSecrets } from '../bgconn/secrets';
+import { ensurePluginTor, torFetch } from './tor-egress';
 
 /**
  * Strip credential-bearing headers from a header map. Used when a plugin egress redirect
@@ -72,6 +68,62 @@ export function refreshPluginNetSnapshot(
 }
 
 /**
+ * Direct (non-Tor) fetch path. This is the original rawFetch implementation, factored out
+ * unchanged so it can be called when `init.direct === true`. All SSRF and credential-strip
+ * invariants are preserved verbatim.
+ *
+ * Defense-in-depth stack:
+ *   1. isPublicHttpUrl (textual host check) — also enforced upstream by validateUrl.
+ *   2. assertResolvedPublic (DNS-resolve check) — rejects DNS rebinding / CNAME-to-private.
+ *   3. redirect: 'manual' — each Location re-validated before following.
+ *   4. Hop limit (max 5) — prevents redirect-loop DoS.
+ *   5. Cross-origin credential strip + RFC 7231 method downgrade.
+ */
+async function directFetch(url: string, init: PluginFetchInit): Promise<PluginFetchResponse> {
+  const MAX_HOPS = 5;
+  const originalOrigin = new URL(url).origin;
+  let method = init.method ?? 'GET';
+  let headers: Record<string, string> = { ...(init.headers ?? {}) };
+  let body = init.body;
+  let current = url;
+  for (let hop = 0; hop < MAX_HOPS; hop++) {
+    // Textual SSRF guard (defense in depth — also checked upstream by validateUrl).
+    if (!isPublicHttpUrl(current)) {
+      throw new Error(`plugin egress: URL rejected by SSRF validator (hop ${hop}) — ${current}`);
+    }
+    // DNS-resolve guard: rejects any hostname whose resolved addresses include private/loopback/metadata IPs.
+    await assertResolvedPublic(new URL(current).hostname);
+    const res = await fetch(current, { method, headers, body, redirect: 'manual' });
+    if (res.status >= 300 && res.status < 400) {
+      const loc = res.headers.get('location');
+      if (!loc) {
+        // No Location header — return this redirect response as-is.
+        const text = await res.text();
+        return { status: res.status, body: text, finalUrl: current };
+      }
+      const next = new URL(loc, current).toString();
+      // RFC 7231: 301/302/303 downgrade a non-GET/HEAD method to GET and drop the body;
+      // only 307/308 preserve method + body.
+      const m = method.toUpperCase();
+      if (res.status !== 307 && res.status !== 308 && m !== 'GET' && m !== 'HEAD') {
+        method = 'GET';
+        body = undefined;
+      }
+      // Credential-leak guard: a redirect that crosses to a different origin must not carry
+      // the original request's credential headers to the new host.
+      if (new URL(next).origin !== originalOrigin) {
+        headers = stripCredentialHeaders(headers);
+      }
+      current = next;
+      continue;
+    }
+    const text = await res.text();
+    return { status: res.status, body: text, finalUrl: current };
+  }
+  throw new Error('plugin egress: too many redirects');
+}
+
+/**
  * Build the real ContextDeps object. The caller is responsible for calling
  * refreshPluginNetSnapshot before (or as part of) app startup so that
  * isNetworkEnabled reflects the persisted settings.
@@ -93,61 +145,17 @@ export function buildContextDeps(): ContextDeps {
       return url;
     },
 
-    // rawFetch: SSRF-hardened fetch mirroring the geoint safeFetch pattern.
-    // Defense-in-depth stack:
-    //   1. isPublicHttpUrl (textual host check) — already enforced upstream by validateUrl, but
-    //      re-applied here at every hop for defense in depth.
-    //   2. assertResolvedPublic (DNS-resolve check) — rejects public hostnames that resolve to
-    //      private/loopback/metadata addresses (DNS rebinding / CNAME-to-private bypass).
-    //   3. redirect: 'manual' — prevents the runtime from silently following a 3xx to an
-    //      internal host; each Location header is re-validated (textual + DNS) before following.
-    //   4. Hop limit (max 5) — prevents redirect-loop DoS.
-    //   5. Cross-origin credential strip + RFC 7231 method downgrade — a redirect to a different
-    //      origin drops Authorization/Cookie/Proxy-Authorization/X-*auth*/X-*api-key* headers, and
-    //      301/302/303 downgrade non-GET methods to GET (dropping the body); 307/308 preserve.
-    // TODO(osint-plugin): route through bundled Tor SOCKS before OSINT plugin ships real lookups.
+    // rawFetch: Tor by default; init.direct===true keeps the existing direct-fetch path.
+    // Both paths are gated upstream by isPublicHttpUrl (validateUrl) + the egress cap check.
+    // The direct path applies full SSRF + redirect + credential-strip (see directFetch above).
+    // The Tor path (torFetch) does NOT follow redirects — wire-deps owns redirect policy and
+    // can add it in a follow-up; v1 Tor path returns the first response (no auto-redirect).
+    // Tor-down / SOCKS / exit failures surface as { blocked:true }, never silently fall through
+    // to the direct path — ensurePluginTor rejects and torFetch rejects if Tor is not available.
     async rawFetch(url, init) {
-      const MAX_HOPS = 5;
-      const originalOrigin = new URL(url).origin;
-      let method = init.method ?? 'GET';
-      let headers: Record<string, string> = { ...(init.headers ?? {}) };
-      let body = init.body;
-      let current = url;
-      for (let hop = 0; hop < MAX_HOPS; hop++) {
-        // Textual SSRF guard (defense in depth — also checked upstream by validateUrl).
-        if (!isPublicHttpUrl(current)) {
-          throw new Error(`plugin egress: URL rejected by SSRF validator (hop ${hop}) — ${current}`);
-        }
-        // DNS-resolve guard: rejects any hostname whose resolved addresses include private/loopback/metadata IPs.
-        await assertResolvedPublic(new URL(current).hostname);
-        const res = await fetch(current, { method, headers, body, redirect: 'manual' });
-        if (res.status >= 300 && res.status < 400) {
-          const loc = res.headers.get('location');
-          if (!loc) {
-            // No Location header — return this redirect response as-is.
-            const text = await res.text();
-            return { status: res.status, body: text, finalUrl: current };
-          }
-          const next = new URL(loc, current).toString();
-          // RFC 7231: 301/302/303 downgrade a non-GET/HEAD method to GET and drop the body;
-          // only 307/308 preserve method + body.
-          const m = method.toUpperCase();
-          if (res.status !== 307 && res.status !== 308 && m !== 'GET' && m !== 'HEAD') {
-            method = 'GET';
-            body = undefined;
-          }
-          // Credential-leak guard: a redirect that crosses to a different origin must not carry
-          // the original request's credential headers to the new host.
-          if (new URL(next).origin !== originalOrigin) {
-            headers = stripCredentialHeaders(headers);
-          }
-          current = next;
-          continue;
-        }
-        const text = await res.text();
-        return { status: res.status, body: text, finalUrl: current };
-      }
-      throw new Error('plugin egress: too many redirects');
+      if (init.direct === true) return directFetch(url, init);
+      await ensurePluginTor();
+      return torFetch(url, init);
     },
 
     // Secrets backend: scoped by the context layer to plugin:${id}:${name} keys.
