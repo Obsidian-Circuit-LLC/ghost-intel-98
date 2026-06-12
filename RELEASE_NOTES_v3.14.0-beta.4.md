@@ -66,5 +66,5 @@ before merge. The EyeSpy wall feel and the chat/Piper paths on a real Windows in
 
 ---
 
-**Artifact:** `DCS98-Setup-3.14.0-beta.4.exe` (ARTIFACT_BYTES bytes ≈ ARTIFACT_MB MB, NSIS, x64, unsigned; Tor + Piper + offline AI models bundled)
-**SHA-256:** `ARTIFACT_SHA256`
+**Artifact:** `DCS98-Setup-3.14.0-beta.4.exe` (520,577,846 bytes ≈ 496.5 MB, NSIS, x64, unsigned; Tor + Piper + offline AI models bundled)
+**SHA-256:** `bd073f96b79be56499f040ba666175b26c47b2232390d356b734ca000da0824d`
