@@ -3,15 +3,29 @@
  * native file picker, and inbound attachment download via the save-file dialog.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MailAccount, MailMessage, MailMessageSummary } from '@shared/post-mvp-types';
 import type { MailDraft } from '../../../preload/api';
 import { useSettings } from '../../state/store';
-import { playMailAlert } from '../../audio/synth';
 import { toast } from '../../state/toasts';
 import { confirmDialog } from '../../state/dialogs';
+import mailNotifyUrl from '../../assets/mail-notify.wav';
 
 type LeftView = 'inbox' | 'drafts';
+
+/** Background poll interval for the silent inbox check (2 min). */
+const AUTO_REFRESH_MS = 120_000;
+
+/** Play the tester-supplied new-mail chime. Fire-and-forget; autoplay/no-audio is swallowed. */
+function playMailNotify(): void {
+  try {
+    const a = new Audio(mailNotifyUrl);
+    a.volume = 0.9;
+    void a.play();
+  } catch {
+    /* autoplay/no-audio: ignore */
+  }
+}
 
 export function MailModule(): JSX.Element {
   const [accounts, setAccounts] = useState<MailAccount[]>([]);
@@ -24,6 +38,15 @@ export function MailModule(): JSX.Element {
   const [compose, setCompose] = useState<MailDraft | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const settings = useSettings((s) => s.settings);
+
+  // Shared unseen baseline. A ref (not derived from `inbox` state) so the background interval's
+  // closure can't go stale: both the manual refresh and the silent poll write the new unseen count
+  // here after setInbox, so they share one baseline and never double-fire or miss a transition.
+  const prevUnseenRef = useRef(0);
+  // Per-account priming guard. The first silentCheck after an account becomes active sets the
+  // baseline WITHOUT sounding (prevUnseenRef starts at 0, so an inbox that already has unseen mail
+  // would otherwise chime on initial load). Holds the activeId that has been primed.
+  const primedRef = useRef<string | null>(null);
 
   // autoOpenIfEmpty is honoured ONLY on first load. Reloads triggered by closing the
   // setup dialog must not re-derive showSetup from accounts.length, or an explicit
@@ -48,16 +71,48 @@ export function MailModule(): JSX.Element {
     setBusy('fetching inbox…');
     try {
       const list = await window.api.mail.fetchInbox(activeId, 30);
-      const prevUnseen = inbox.filter((m) => m.unseen).length;
+      const prevUnseen = prevUnseenRef.current;
       setInbox(list);
       const nextUnseen = list.filter((m) => m.unseen).length;
-      if (nextUnseen > prevUnseen && settings?.soundEnabled) playMailAlert();
+      prevUnseenRef.current = nextUnseen;
+      if (nextUnseen > prevUnseen && settings?.soundEnabled) playMailNotify();
     } catch (err) {
       toast.error(`IMAP error: ${(err as Error).message}`);
     } finally {
       setBusy(null);
     }
-  }, [activeId, inbox, settings?.soundEnabled]);
+  }, [activeId, settings?.soundEnabled]);
+
+  // Silent background inbox check: NO busy spinner, NO error toasts. Shares prevUnseenRef with the
+  // manual refresh. The first check per account primes the baseline without sounding.
+  const silentCheck = useCallback(async () => {
+    if (!activeId) return;
+    try {
+      const list = await window.api.mail.fetchInbox(activeId, 30);
+      const next = list.filter((m) => m.unseen).length;
+      setInbox(list);
+      if (primedRef.current !== activeId) {
+        // First check for this account — set the baseline, do not chime.
+        primedRef.current = activeId;
+        prevUnseenRef.current = next;
+        return;
+      }
+      const prev = prevUnseenRef.current;
+      prevUnseenRef.current = next;
+      if (next > prev && settings?.soundEnabled) playMailNotify();
+    } catch {
+      /* silent: transient IMAP errors during background polling shouldn't spam toasts */
+    }
+  }, [activeId, settings?.soundEnabled]);
+
+  // Background auto-refresh: prime immediately on account select, then poll every AUTO_REFRESH_MS.
+  // The interval is torn down and re-primed whenever activeId changes.
+  useEffect(() => {
+    if (!activeId) return;
+    void silentCheck();
+    const handle = setInterval(() => { void silentCheck(); }, AUTO_REFRESH_MS);
+    return () => clearInterval(handle);
+  }, [activeId, silentCheck]);
 
   async function openMessage(uid: number): Promise<void> {
     if (!activeId) return;
