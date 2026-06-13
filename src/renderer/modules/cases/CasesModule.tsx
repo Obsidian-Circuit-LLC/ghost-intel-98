@@ -29,12 +29,37 @@ function compareCases(a: CaseSummary, b: CaseSummary, by: AppSettings['caseSortB
   return dir === 'asc' ? -cmp : cmp;
 }
 
+const UNCATEGORIZED = 'Uncategorized';
+
+/** Bucket the already-filtered+sorted `visible` list by category, preserving the incoming
+ *  per-group order. Group names sort alphabetically (en, base sensitivity) with
+ *  'Uncategorized' pinned last. `c.category` undefined/'' ⇒ Uncategorized. */
+function groupByCategory(visible: CaseSummary[]): { name: string; cases: CaseSummary[] }[] {
+  const buckets = new Map<string, CaseSummary[]>();
+  for (const c of visible) {
+    const name = c.category?.trim() || UNCATEGORIZED;
+    const arr = buckets.get(name);
+    if (arr) arr.push(c); else buckets.set(name, [c]);
+  }
+  return [...buckets.keys()]
+    .sort((a, b) => {
+      if (a === UNCATEGORIZED) return 1;
+      if (b === UNCATEGORIZED) return -1;
+      return a.localeCompare(b, 'en', { sensitivity: 'base' });
+    })
+    .map((name) => ({ name, cases: buckets.get(name)! }));
+}
+
 export function CasesModule({ initialCaseId }: { initialCaseId?: string } = {}): JSX.Element {
   const [cases, setCases] = useState<CaseSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(initialCaseId ?? null);
   const [detail, setDetail] = useState<CaseRecord | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [filter, setFilter] = useState('');
+  // Per-category collapse state, keyed by category name. Default (absent key) = expanded.
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  // Right-click reassign menu: anchored at click coords, carries the target case.
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; c: CaseSummary } | null>(null);
 
   const refreshList = useCallback(async () => {
     const list = await window.api.cases.list();
@@ -74,6 +99,39 @@ export function CasesModule({ initialCaseId }: { initialCaseId?: string } = {}):
       })
       .sort((a, b) => compareCases(a, b, sortBy, sortDir));
   }, [cases, filter, showArchived, sortBy, sortDir]);
+
+  const groups = useMemo(() => groupByCategory(visible), [visible]);
+
+  // Rename a category = bulk-reassign every case currently in that group to a new name.
+  // Disallowed on Uncategorized (it isn't a real category — it's the absence of one).
+  const renameCategory = useCallback(async (current: string, members: CaseSummary[]): Promise<void> => {
+    if (current === UNCATEGORIZED) return;
+    const next = await promptDialog('Rename category', current, 'Rename category');
+    const trimmed = (next ?? '').trim();
+    if (!trimmed || trimmed === current) return;
+    try {
+      for (const c of members) await window.api.cases.update(c.id, { category: trimmed });
+      await refreshList();
+      toast.success(`Category renamed to "${trimmed}".`);
+    } catch (err) {
+      toast.error(`Rename failed: ${(err as Error).message}`);
+    }
+  }, [refreshList]);
+
+  // Reassign a single case into a category (blank ⇒ Uncategorized). Creating a category is
+  // just moving a case into a name that doesn't exist yet — this one affordance covers
+  // create + reassign.
+  const moveToCategory = useCallback(async (c: CaseSummary): Promise<void> => {
+    const next = await promptDialog('Move to category (type a name, or leave blank for Uncategorized):', c.category ?? '', 'Move to category');
+    if (next === null) return; // cancelled
+    try {
+      await window.api.cases.update(c.id, { category: next.trim() });
+      await refreshList();
+      toast.success(next.trim() ? `Moved to "${next.trim()}".` : 'Moved to Uncategorized.');
+    } catch (err) {
+      toast.error(`Move failed: ${(err as Error).message}`);
+    }
+  }, [refreshList]);
 
   const createCase = useCallback(async (): Promise<void> => {
     const title = await promptDialog('Case title?', '', 'New case', 'e.g. Smith v. Acme');
@@ -196,23 +254,71 @@ export function CasesModule({ initialCaseId }: { initialCaseId?: string } = {}):
           <label style={{ fontSize: 11 }}>
             <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} /> Show archived
           </label>
-          <ul className="ga98-list">
-            {visible.length === 0 && <li style={{ color: '#666' }}>No cases. Click <b>New</b>.</li>}
-            {visible.map((c) => (
-              <li key={c.id} data-selected={c.id === selectedId} onClick={() => setSelectedId(c.id)}>
-                {c.primaryBioThumb && (
-                  <img src={c.primaryBioThumb} alt="" style={{ width: 20, height: 20, objectFit: 'cover', marginRight: 4, border: '1px solid #808080' }} />
-                )}
-                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  <b>{c.title}</b>
-                  {c.reference ? <span style={{ opacity: 0.7 }}> [{c.reference}]</span> : null}
-                </span>
-                <span style={{ fontSize: 10 }}>{priorityBadge(c.priority)}</span>
-              </li>
-            ))}
-          </ul>
+          <div style={{ fontSize: 10, color: '#666' }}>Right-click a case to move it into a category.</div>
+          <div className="ga98-list" style={{ listStyle: 'none' }}>
+            {visible.length === 0 && <div style={{ color: '#666', padding: '4px 6px' }}>No cases. Click <b>New</b>.</div>}
+            {groups.map((g) => {
+              const isCollapsed = collapsed[g.name] === true;
+              return (
+                <div key={g.name}>
+                  <div
+                    onClick={() => setCollapsed((s) => ({ ...s, [g.name]: !isCollapsed }))}
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 6px', cursor: 'pointer', fontWeight: 'bold', background: '#d8d8d8', borderBottom: '1px solid #b0b0b0', userSelect: 'none' }}
+                  >
+                    <span style={{ width: 10 }}>{isCollapsed ? '▸' : '▾'}</span>
+                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {g.name} ({g.cases.length})
+                    </span>
+                    {g.name !== UNCATEGORIZED && (
+                      <button
+                        title="Rename this category"
+                        onClick={(e) => { e.stopPropagation(); void renameCategory(g.name, g.cases); }}
+                        style={{ fontSize: 10, padding: '0 4px', minWidth: 0 }}
+                      >
+                        ✎
+                      </button>
+                    )}
+                  </div>
+                  {!isCollapsed && (
+                    <ul className="ga98-list">
+                      {g.cases.map((c) => (
+                        <li
+                          key={c.id}
+                          data-selected={c.id === selectedId}
+                          onClick={() => setSelectedId(c.id)}
+                          onContextMenu={(e) => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY, c }); }}
+                        >
+                          {c.primaryBioThumb && (
+                            <img src={c.primaryBioThumb} alt="" style={{ width: 20, height: 20, objectFit: 'cover', marginRight: 4, border: '1px solid #808080' }} />
+                          )}
+                          <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            <b>{c.title}</b>
+                            {c.reference ? <span style={{ opacity: 0.7 }}> [{c.reference}]</span> : null}
+                          </span>
+                          <span style={{ fontSize: 10 }}>{priorityBadge(c.priority)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
+      {ctxMenu && (
+        <>
+          <div onClick={() => setCtxMenu(null)} style={{ position: 'fixed', inset: 0, zIndex: 99 }} />
+          <div className="ga98-menu" style={{ position: 'fixed', left: ctxMenu.x, top: ctxMenu.y, zIndex: 100, background: '#c0c0c0', border: '2px outset #fff' }}>
+            <div
+              onClick={() => { const c = ctxMenu.c; setCtxMenu(null); void moveToCategory(c); }}
+              style={{ padding: '3px 12px', cursor: 'pointer' }}
+            >
+              Move to category…
+            </div>
+          </div>
+        </>
+      )}
       <div className="ga98-pane">
         {detail ? (
           <CaseDetail
