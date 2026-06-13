@@ -47,6 +47,7 @@ export function EyeSpyModule(): JSX.Element {
   const [draft, setDraft] = useState<Partial<CameraStream>>({ kind: 'hls', label: '', url: '' });
   const [setLocTargets, setSetLocTargets] = useState<CameraStream[] | null>(null);
   const [wallSetup, setWallSetup] = useState<{ mode: 'new' | 'edit' } | null>(null);
+  const [detecting, setDetecting] = useState<boolean>(false);
 
   const fullTree = useMemo(() => buildTree(streams), [streams]);
   const tree = useMemo(() => filterTree(fullTree, streams, query), [fullTree, streams, query]);
@@ -112,6 +113,26 @@ export function EyeSpyModule(): JSX.Element {
     setDraft({ kind: 'hls', label: '', url: '' });
     setShowForm(false);
     await refresh();
+  }
+
+  /** Probe the entered URL to figure out the real stream kind + media endpoint. A bare camera root
+   *  (e.g. an insecam IP:port) usually serves an HTML viewer page, not a stream — detect finds the
+   *  actual MJPEG/JPEG endpoint and fills in the kind + corrected URL so the feed plays inline
+   *  instead of bouncing to Firefox. User-triggered egress to the camera host (see stream-detect.ts). */
+  async function detect(): Promise<void> {
+    const url = (draft.url ?? '').trim();
+    if (!url) return;
+    setDetecting(true);
+    try {
+      const hit = await window.api.streams.detect(url);
+      if (!hit) { toast.warn('No stream detected — pick the kind manually, or try the camera’s video path.'); return; }
+      setDraft((d) => ({ ...d, kind: hit.kind, url: hit.url }));
+      toast.success(`Detected ${hit.kind.toUpperCase()}${hit.url !== url ? ' — URL updated to the stream endpoint.' : '.'}`);
+    } catch (err) {
+      toast.error(`Detect failed: ${(err as Error).message}`);
+    } finally {
+      setDetecting(false);
+    }
   }
 
   /** Purge the entire library in one atomic write (confirmed). */
@@ -285,8 +306,14 @@ export function EyeSpyModule(): JSX.Element {
                 <label>Label:</label>
                 <input className="ga98-text" value={draft.label ?? ''} onChange={(e) => setDraft({ ...draft, label: e.target.value })} />
                 <label>URL:</label>
-                <input className="ga98-text" value={draft.url ?? ''} onChange={(e) => setDraft({ ...draft, url: e.target.value })}
-                  placeholder="https://… or rtsp://… or http://cam/mjpg … or http://cam/view/index.shtml" />
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <input className="ga98-text" style={{ flex: 1 }} value={draft.url ?? ''} onChange={(e) => setDraft({ ...draft, url: e.target.value })}
+                    placeholder="https://… or rtsp://… or http://cam/mjpg … or http://cam/view/index.shtml" />
+                  <button onClick={() => void detect()} disabled={detecting || !(draft.url ?? '').trim()}
+                    title="Probe this URL to find the real stream format + endpoint (for cameras whose page isn't a direct stream)">
+                    {detecting ? 'Detecting…' : 'Detect'}
+                  </button>
+                </div>
                 <label>Kind:</label>
                 <select className="ga98-text" value={draft.kind ?? 'hls'} onChange={(e) => setDraft({ ...draft, kind: e.target.value as StreamKind })}>
                   <option value="hls">HLS (.m3u8)</option>

@@ -32,25 +32,33 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`DCS98-Setup-3.14.0-beta.7.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake formally verified internally; external audit + FIPS pending. See Status.)*
+> **Install:** download [`DCS98-Setup-3.14.0-beta.8.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake formally verified internally; external audit + FIPS pending. See Status.)*
 
 ## Status
 
-**v3.14.0-beta.7** — current release. The **GhostExodus beta.6 field-test punch-list**:
+**v3.14.0-beta.8** — current release. The **GhostExodus beta.7 field-test fixes**:
 
-- **GeoINT** is crash-proof with a way out: a bad/oversized source can no longer take the map down, an
-  **error boundary** + a **Purge cache** button recover a poisoned state (which used to survive reinstall),
-  markers cap at 1,500 with a count banner, default tiles are Google road tiles, and the **Play Story**
-  ▶/⏸/⏹ transport now floats over the map.
-- **Mail:** the **Send** button is always reachable (Compose/Account scroll their body, action row pinned),
-  and the silent refresh dropped to **30 seconds**.
-- **Bookmarks:** category cards **auto-fit their links** again (the accidental height-freeze is gone; old
-  frozen cards self-heal).
-- **EyeSpy:** a **Webpage** stream kind opens a camera's viewer page (`…/index.shtml`) in the bundled
-  Firefox; the **Import** button and wall toolbars no longer scroll off.
-- **Cases:** **categories** — group cases into named, collapsible sections (right-click → *Move to category*).
+- **Mail retrieval fixed:** the inbox now fetches the **newest** messages by sequence, not the oldest unseen
+  slice. A full inbox of unread alerts used to bury a just-arrived message (e.g. a self-sent test) below a
+  retrieval cap so it never appeared — now it shows.
+- **EyeSpy "Detect format":** paste a bare camera URL (insecam-style `IP:port`) and click **Detect** — it
+  probes the host, identifies the real format (MJPEG/JPEG/HLS/MP4), and rewrites the URL to the actual
+  stream endpoint so the feed plays **inline** instead of bouncing to Firefox. *(Detect makes a direct
+  request to the camera host — the same egress as viewing it — and deliberately reaches LAN cameras.)*
+- **GeoINT crash:** the map still hit the recovery screen on some saved states. The recovery now also
+  **resets the saved GeoINT settings** (the one poison that survived reinstall *and* cache-purge), and the
+  error screen now **shows the actual error on-device** so a stuck state can be diagnosed instead of guessed.
 
-810 automated tests. *Everything from v3.14.0-beta.6 carries forward.*
+845 automated tests. *Everything from v3.14.0-beta.7 carries forward.*
+
+<details><summary>v3.14.0-beta.7 — GhostExodus beta.6 field-test punch-list</summary>
+
+- **GeoINT** crash-proofing (error boundary + Purge cache), 1,500-marker cap, default Google tiles, floating
+  **Play Story** transport. **Mail Send** always reachable + 30s refresh. **Bookmarks** cards auto-fit links.
+  **EyeSpy** **Webpage** kind (opens viewer pages in bundled Firefox) + toolbars no longer scroll off.
+  **Cases** **categories** (collapsible grouped sections, right-click to move). 810 tests.
+
+</details>
 
 <details><summary>v3.14.0-beta.6 — GeoINT intelligence map + EyeSpy Wall Setup + Mail notifications</summary>
 
@@ -377,14 +385,14 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/dcs98/releases) and run it.
 
-Direct link to the current release: [`DCS98-Setup-3.14.0-beta.7.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.14.0-beta.7/DCS98-Setup-3.14.0-beta.7.exe)
+Direct link to the current release: [`DCS98-Setup-3.14.0-beta.8.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.14.0-beta.8/DCS98-Setup-3.14.0-beta.8.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is formally verified internally — external audit + FIPS
 pending — see Status). The last fully-stable build is [`DCS98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.6.8/DCS98-Setup-3.6.8.exe).
 
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\DCS98-Setup-3.14.0-beta.7.exe -Algorithm SHA256
+Get-FileHash .\DCS98-Setup-3.14.0-beta.8.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
@@ -422,8 +430,18 @@ To uninstall: Settings → Apps → Dead Cyber Society 98 → Uninstall.
 
 ## Releases & changelog
 
-The current build is **v3.14.0-beta.7**. Each release page carries its own notes + SHA-256.
+The current build is **v3.14.0-beta.8**. Each release page carries its own notes + SHA-256.
 
+- **v3.14.0-beta.8** — **GhostExodus beta.7 field-test fixes.** **Mail retrieval** now fetches the **newest**
+  messages by IMAP sequence instead of the oldest-unseen slice — a full inbox of unread alerts no longer
+  buries a just-arrived message below the cap (the "can send but can't receive" report). **EyeSpy** gains a
+  **Detect format** button: it probes a pasted camera URL, identifies the real format, and rewrites a bare
+  viewer-page URL to the actual MJPEG/JPEG/HLS endpoint so the feed plays inline (a bounded, user-triggered,
+  concurrency-capped direct request to the camera host — the same egress as viewing it; it deliberately
+  reaches LAN cameras). **GeoINT** recovery now also **resets the saved GeoINT settings** — the one poisoned
+  state that survived both reinstall and cache-purge — and the error screen **surfaces the real exception
+  on-device** (no telemetry) so a stuck map can be diagnosed rather than guessed. The new egress probe
+  cleared an adversarial red-team (concurrency cap, redirect/deadline bounds). **845 tests.**
 - **v3.14.0-beta.7** — **GhostExodus beta.6 field-test punch-list.** **GeoINT** is crash-proof with a way
   out: a bad/oversized source (e.g. a FIRMS GeoJSON with an unreplaced `{MAP_KEY}`) can no longer take the
   map down, an **error boundary** + a **Purge cache** button recover a poisoned state that used to survive
@@ -666,7 +684,7 @@ This starts the Vite dev server (HMR) and the Electron main process.
 
 ```bash
 pnpm build        # type-check + bundle main / preload / renderer
-pnpm test         # vitest suite (810 tests as of v3.14.0-beta.7)
+pnpm test         # vitest suite (845 tests as of v3.14.0-beta.8)
 pnpm package      # platform installer for the current host
 pnpm package:win  # cross-build Windows NSIS installer
 ```

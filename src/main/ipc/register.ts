@@ -35,6 +35,7 @@ import { isEncryptedFile } from '../storage/secure-fs';
 import * as mail from '../services/mail';
 import * as ssh from '../services/ssh';
 import * as streams from '../services/streams';
+import { detectStream } from '../services/stream-detect';
 import * as walls from '../services/walls';
 import * as ai from '../services/ai';
 import * as localAi from '../services/local-ai';
@@ -897,6 +898,13 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
       added++;
     }
     return { added, skipped, total: feeds.length };
+  });
+  safeHandle(channels.streams.detect, (...args) => {
+    const url = args[0] as string;
+    // http(s) only. Deliberately allows LAN/loopback (the user's own cameras) — see stream-detect.ts
+    // for the bounded-egress rationale. rtsp can't be probed over HTTP, so it's rejected here.
+    if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) throw new Error('Detect needs an http(s) URL.');
+    return detectStream(url);
   });
 
   // ---- walls (EyeSpy) ----

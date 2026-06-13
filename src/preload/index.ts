@@ -229,7 +229,8 @@ const api = {
     upsert: (input: unknown) => ipcRenderer.invoke(channels.streams.upsert, input),
     delete: (id: string) => ipcRenderer.invoke(channels.streams.delete, id),
     clear: () => ipcRenderer.invoke(channels.streams.clear),
-    import: (stamp?: { country?: string; region?: string; city?: string }) => ipcRenderer.invoke(channels.streams.import, stamp)
+    import: (stamp?: { country?: string; region?: string; city?: string }) => ipcRenderer.invoke(channels.streams.import, stamp),
+    detect: (url: string) => ipcRenderer.invoke(channels.streams.detect, url)
   },
   walls: {
     list: () => ipcRenderer.invoke(channels.walls.list),

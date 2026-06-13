@@ -145,9 +145,19 @@ export async function fetchInbox(id: string, limit = 30): Promise<MailMessageSum
   });
   await client.connect();
   try {
-    await client.mailboxOpen('INBOX');
+    const mbox = await client.mailboxOpen('INBOX');
+    // Fetch the NEWEST `limit` messages by sequence number, not a seen/unseen-filtered slice.
+    // The old code did `fetch({seen:false})` then `break` at `limit` — but IMAP FETCH yields in
+    // ASCENDING sequence order (oldest first), so a full inbox of unseen mail filled every slot
+    // with the OLDEST unseen messages and the just-arrived one (e.g. a self-sent test) was never
+    // retrieved. Sorting by date afterwards can only reorder what was fetched. Sequence `start:*`
+    // is the highest-numbered (= most-recent) messages, which is exactly what an inbox view wants,
+    // independent of the \Seen flag. `unseen` now comes from the actual flag, not the fetch bucket.
+    const total = mbox.exists ?? 0;
+    if (total === 0) return [];
+    const start = Math.max(1, total - limit + 1);
     const out: MailMessageSummary[] = [];
-    for await (const msg of client.fetch({ seen: false }, { envelope: true, internalDate: true, uid: true, bodyStructure: true, source: false })) {
+    for await (const msg of client.fetch(`${start}:*`, { envelope: true, internalDate: true, uid: true, flags: true })) {
       out.push({
         uid: msg.uid,
         from: msg.envelope?.from?.[0]?.address ?? '',
@@ -155,20 +165,7 @@ export async function fetchInbox(id: string, limit = 30): Promise<MailMessageSum
         subject: msg.envelope?.subject ?? '(no subject)',
         date: toIso(msg.internalDate),
         preview: '',
-        unseen: true
-      });
-      if (out.length >= limit) break;
-    }
-    for await (const msg of client.fetch({ seen: true }, { envelope: true, internalDate: true, uid: true })) {
-      if (out.length >= limit * 2) break;
-      out.push({
-        uid: msg.uid,
-        from: msg.envelope?.from?.[0]?.address ?? '',
-        to: msg.envelope?.to?.[0]?.address ?? '',
-        subject: msg.envelope?.subject ?? '(no subject)',
-        date: toIso(msg.internalDate),
-        preview: '',
-        unseen: false
+        unseen: !(msg.flags?.has('\\Seen') ?? false)
       });
     }
     return out.sort((a, b) => b.date.localeCompare(a.date));

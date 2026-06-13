@@ -207,7 +207,8 @@ export const channels = {
     upsert: 'streams:upsert',
     delete: 'streams:delete',
     clear: 'streams:clear',
-    import: 'streams:import'
+    import: 'streams:import',
+    detect: 'streams:detect'
   },
   walls: {
     list: 'walls:list',

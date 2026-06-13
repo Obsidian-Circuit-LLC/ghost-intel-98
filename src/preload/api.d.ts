@@ -290,6 +290,9 @@ export interface GhostApi {
     delete(id: string): Promise<void>;
     clear(): Promise<number>;
     import(stamp?: { country?: string; region?: string; city?: string }): Promise<{ added: number; skipped: number; total: number }>;
+    /** Probe a user-entered camera URL to detect its StreamKind + the real media endpoint when the
+     *  entered URL is an HTML viewer page. Returns null if nothing playable was found. */
+    detect(url: string): Promise<{ kind: CameraStream['kind']; url: string } | null>;
   };
   walls: {
     list(): Promise<Wall[]>;

@@ -53,10 +53,16 @@ const MAX_ITEMS = 5000;
 function GeoIntModuleInner(): JSX.Element {
   const settings = useSettings((s) => s.settings);
   const patch = useSettings((s) => s.patch);
-  const net = settings?.geoint.networkEnabled ?? false;
-  const tileUrl = settings?.geoint.tileServerUrl ?? '';
-  const tileAttribution = settings?.geoint.tileAttribution ?? '';
-  const basemap = settings?.geoint.basemap ?? 'street';
+  // Read the geoint block defensively. `settings?.geoint.networkEnabled` only guards a null
+  // `settings`; if `settings` exists but `.geoint` is missing (a partial/legacy settings object
+  // that slipped past the merge), `settings.geoint.networkEnabled` would throw synchronously during
+  // render and white-screen the whole module before first paint. Reading `settings?.geoint` once and
+  // defaulting the sub-object removes that entire crash class.
+  const g = settings?.geoint;
+  const net = g?.networkEnabled ?? false;
+  const tileUrl = g?.tileServerUrl ?? '';
+  const tileAttribution = g?.tileAttribution ?? '';
+  const basemap = g?.basemap ?? 'street';
   // The map's active layer: street uses the user/default tiles; satellite uses the built-in Esri layer.
   const activeTileUrl = basemap === 'satellite' ? ESRI_SAT_URL : tileUrl;
   const activeTileAttribution = basemap === 'satellite' ? ESRI_SAT_ATTRIBUTION : tileAttribution;
@@ -461,10 +467,19 @@ function GeoIntModuleInner(): JSX.Element {
 // state — a clean mount rather than re-running against the data that just threw.
 export function GeoIntModule(): JSX.Element {
   const [resetKey, setResetKey] = useState(0);
+  const patch = useSettings((s) => s.patch);
   const hardPurge = useCallback(async () => {
+    // Two-part recovery. (1) Purge the on-disk source cache (the FIRMS-style poisoned event set).
     try { await window.api.geoint.purgeCache(); } catch { /* purge is best-effort recovery */ }
-    setResetKey((k) => k + 1); // remount Inner fresh against purged state
-  }, []);
+    // (2) Reset the persisted geoint SETTINGS to type-defaults. A bad persisted setting value is the
+    //     one poison class that survives BOTH reinstall (settings live in AppData) AND purgeCache
+    //     (which only touches the cache) — and it would make the inner render re-throw immediately on
+    //     remount. Overwriting with known-good defaults clears it. Network goes back to off (its
+    //     default); one click re-enables it and the default tiles auto-populate.
+    try { await patch({ geoint: { networkEnabled: false, tileServerUrl: '', tileAttribution: '', basemap: 'street' } }); }
+    catch { /* best-effort */ }
+    setResetKey((k) => k + 1); // remount Inner fresh against purged + reset state
+  }, [patch]);
   return (
     <MapErrorBoundary onPurge={hardPurge}>
       <GeoIntModuleInner key={resetKey} />
