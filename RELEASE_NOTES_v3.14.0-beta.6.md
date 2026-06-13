@@ -67,5 +67,5 @@ Adds `Places © GeoNames (CC-BY 4.0)` attribution.
 
 ---
 
-**Artifact:** `DCS98-Setup-3.14.0-beta.6.exe` (ARTIFACT_BYTES bytes ≈ ARTIFACT_MB MB, NSIS, x64, unsigned; Tor + Piper + offline AI models bundled)
-**SHA-256:** `ARTIFACT_SHA256`
+**Artifact:** `DCS98-Setup-3.14.0-beta.6.exe` (521,396,062 bytes ≈ 497.2 MB, NSIS, x64, unsigned; Tor + Piper + offline AI models bundled)
+**SHA-256:** `a495937dab5b4a089d405cfb6ab30cd82878adc49ab9b25177a70d21267cbb7b`
