@@ -77,6 +77,8 @@ import { getVerified, getStatus } from '../plugins/loader';
 import { invokePluginHandler } from '../plugins/invoke';
 import { getSecretBackend, rewrapSecretsForVault } from '../secrets';
 import { getEngagementController } from '../offensive/controller';
+import { spawn as cpSpawn } from 'node:child_process';
+import { makeEnableSetup, readEngineSid } from '../offensive/confinement/enable-setup';
 import { getBgConnManager } from '../bgconn/singleton';
 import { makeBgConnSecrets, type SecretBackend } from '../bgconn/secrets';
 import { secretStore } from '../secrets/index';
@@ -1077,6 +1079,30 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
       canScan: surface !== null
     };
   });
+
+  // ---- offensive engine enablement (confinement: dedicated user + SYSTEM WFP service, Plan 05a T6) ----
+  // The one-time elevated "Enable offensive engine" setup. enable()/disable() launch the bundled signed
+  // dcs98-confine.exe install/uninstall ELEVATED (UAC) and wait; engineStatus() is a non-elevated probe.
+  const enableSetup = makeEnableSetup({
+    platform: process.platform,
+    readSidFile: () => readEngineSid(),
+    elevate: (exe, args) =>
+      new Promise<void>((resolve, reject) => {
+        // Windows-only path; makeEnableSetup.enable()/disable() refuse on non-win32 before reaching here.
+        const argList = args.map((a) => `'${a.replace(/'/g, "''")}'`).join(',') || "''";
+        const ps = cpSpawn(
+          'powershell.exe',
+          ['-NoProfile', '-NonInteractive', '-Command',
+            `$p = Start-Process -FilePath '${exe.replace(/'/g, "''")}' -ArgumentList ${argList} -Verb RunAs -Wait -PassThru; exit $p.ExitCode`],
+          { windowsHide: true },
+        );
+        ps.on('error', reject);
+        ps.on('exit', (code) => (code === 0 ? resolve() : reject(new Error(`enable-offensive setup exited ${code ?? 'null'}`))));
+      }),
+  });
+  safeHandle(channels.offensive.enableEngine, () => enableSetup.enable());
+  safeHandle(channels.offensive.disableEngine, () => enableSetup.disable());
+  safeHandle(channels.offensive.engineStatus, () => enableSetup.status());
 
   // ---- bgconn (persistent-background-connection) ----
   const bgSecretBackend: SecretBackend = {

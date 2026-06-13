@@ -328,7 +328,10 @@ export const channels = {
     confirm: 'offensive:confirm',
     startScan: 'offensive:startScan',
     stopScan: 'offensive:stopScan',
-    status: 'offensive:status'
+    status: 'offensive:status',
+    enableEngine: 'offensive:enableEngine',
+    disableEngine: 'offensive:disableEngine',
+    engineStatus: 'offensive:engineStatus'
   },
   bgconn: {
     list: 'bgconn:list',
@@ -504,6 +507,9 @@ export interface ApiContracts {
   [channels.offensive.startScan]: { args: []; returns: { proxyPort: number } };
   [channels.offensive.stopScan]: { args: []; returns: void };
   [channels.offensive.status]: { args: []; returns: { proxyPort: number | null; hasScope: boolean; canScan: boolean } };
+  [channels.offensive.enableEngine]: { args: []; returns: { enabled: boolean; engineSid: string | null } };
+  [channels.offensive.disableEngine]: { args: []; returns: { enabled: boolean; engineSid: string | null } };
+  [channels.offensive.engineStatus]: { args: []; returns: { enabled: boolean; engineSid: string | null } };
 
   [channels.bgconn.list]: { args: []; returns: Array<{ connId: string; routing: 'tor' | 'direct'; startedAt: number }> };
   [channels.bgconn.status]: { args: []; returns: Array<{ connId: string; routing: 'tor' | 'direct'; startedAt: number }> };

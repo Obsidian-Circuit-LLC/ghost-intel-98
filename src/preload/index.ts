@@ -362,7 +362,10 @@ const api = {
     confirm: () => ipcRenderer.invoke(channels.offensive.confirm),
     startScan: () => ipcRenderer.invoke(channels.offensive.startScan),
     stopScan: () => ipcRenderer.invoke(channels.offensive.stopScan),
-    status: () => ipcRenderer.invoke(channels.offensive.status)
+    status: () => ipcRenderer.invoke(channels.offensive.status),
+    enableEngine: () => ipcRenderer.invoke(channels.offensive.enableEngine),
+    disableEngine: () => ipcRenderer.invoke(channels.offensive.disableEngine),
+    engineStatus: () => ipcRenderer.invoke(channels.offensive.engineStatus)
   },
   bgconn: {
     list: () => ipcRenderer.invoke(channels.bgconn.list),
