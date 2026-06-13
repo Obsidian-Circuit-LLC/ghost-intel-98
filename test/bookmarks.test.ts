@@ -14,6 +14,15 @@ describe('ensureBookmarkBoard', () => {
     expect(b.categories[0].links[0].url).toBe('https://example.com/');
   });
 
+  it('accepts a legacy board carrying a per-card height (back-compat — auto-fit ignores it at render)', () => {
+    const b = ensureBookmarkBoard({
+      categories: [{ id: 'c1', title: 'Legacy', height: 240, links: [{ id: 'l1', name: 'Ex', url: 'https://example.com' }] }]
+    });
+    expect(b.categories).toHaveLength(1);
+    expect(b.categories[0].height).toBe(240); // validator still carries the field — load doesn't fail
+    expect(b.categories[0].links[0].url).toBe('https://example.com/');
+  });
+
   it('drops non-http(s) links (no javascript:/file:/mailto: on the board)', () => {
     const b = ensureBookmarkBoard({
       categories: [{
