@@ -1,11 +1,15 @@
+import { domainToASCII } from 'node:url';
+
 export function normalizeHost(host: string): string {
   let s = host.trim().toLowerCase();
   if (s.endsWith('.')) s = s.slice(0, -1);
-  try {
-    return new URL(`http://${s}`).hostname;
-  } catch {
-    return s;
-  }
+  // Convert Unicode/IDN labels to their punycode (xn--) ASCII form so that a Unicode
+  // host and a punycode rule (or vice versa) compare equal, and a confusable mixed-script
+  // host maps to a *different* punycode than the Latin rule (so it fails to match).
+  // domainToASCII returns '' on invalid input — fall back to the cleaned string so a
+  // malformed host degrades safely (fail-closed: it simply won't match a valid rule).
+  const ascii = domainToASCII(s);
+  return ascii || s;
 }
 
 export function domainRuleMatches(rule: string, host: string): boolean {

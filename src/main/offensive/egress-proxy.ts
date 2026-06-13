@@ -1,7 +1,9 @@
 import { createServer, request as httpRequest, type Server, type IncomingMessage, type ServerResponse } from 'node:http';
-import type { Socket } from 'node:net';
+import { isIP, type Socket } from 'node:net';
+import { performance } from 'node:perf_hooks';
 import { decide } from './scope-enforcer';
 import { withDefaultExcludes, scopeContentHash, type ScopeManifest } from './scope-manifest';
+import { cidrContains } from './net-match';
 import { resolveAll as defaultResolveAll, dialPinned } from './pin-dial';
 import type { EngagementAudit } from './engagement-audit';
 
@@ -10,6 +12,10 @@ export interface ProxyOptions {
   audit: EngagementAudit;
   resolveAll?: (host: string) => Promise<string[]>;
   now?: () => number;
+  /** Monotonic clock (ms) for the token-bucket refill. Default `performance.now`.
+   *  Distinct from `now` (wall-clock, used for audit timestamps): a wall-clock jump
+   *  must never refill the bucket above its cap (red-team finding H4). */
+  monotonic?: () => number;
   rateLimitPerSec?: number;
 }
 
@@ -34,6 +40,7 @@ export class AuthorizedEgressProxy {
   private lastRefill: number;
   private readonly resolveAll: (host: string) => Promise<string[]>;
   private readonly now: () => number;
+  private readonly mono: () => number;
   private readonly rate: number;
   private readonly manifest: ScopeManifest;
 
@@ -41,38 +48,64 @@ export class AuthorizedEgressProxy {
     this.manifest = withDefaultExcludes(opts.manifest);
     this.resolveAll = opts.resolveAll ?? defaultResolveAll;
     this.now = opts.now ?? Date.now;
+    this.mono = opts.monotonic ?? (() => performance.now());
     this.rate = opts.rateLimitPerSec ?? 10;
     this.tokens = this.rate;
-    this.lastRefill = this.now();
+    this.lastRefill = this.mono();
   }
 
   private take(): boolean {
-    const t = this.now();
-    this.tokens = Math.min(this.rate, this.tokens + ((t - this.lastRefill) / 1000) * this.rate);
+    // Refill off a MONOTONIC clock (H4): a forward wall-clock step must not refill
+    // above the cap. Clamp negative deltas to 0 defensively (a monotonic source
+    // should never go backwards, but a buggy/injected one might).
+    const t = this.mono();
+    const delta = Math.max(0, t - this.lastRefill);
+    this.tokens = Math.min(this.rate, this.tokens + (delta / 1000) * this.rate);
     this.lastRefill = t;
     if (this.tokens >= 1) { this.tokens -= 1; return true; }
     return false;
   }
 
-  private async authorize(host: string): Promise<{ ip: string } | { deny: string }> {
+  /** First resolved IP not matched by any `exclude` cidr rule, or null if all are excluded.
+   *  Belt-and-suspenders on which IP gets dialed: even when `decide()` allowed (host matched
+   *  a domain include), we must never dial an excluded IP (red-team finding M2). */
+  private pinNonExcluded(ips: string[]): string | null {
+    const cidrExcludes = this.manifest.exclude.filter((r) => r.kind === 'cidr');
+    for (const ip of ips) {
+      if (!cidrExcludes.some((r) => cidrContains(r.value, ip))) return ip;
+    }
+    return null;
+  }
+
+  private async authorize(host: string): Promise<{ ip: string; ips: string[] } | { deny: string; ips: string[] }> {
     let ips: string[];
-    try { ips = await this.resolveAll(host); } catch { return { deny: 'resolve failed' }; }
+    try { ips = await this.resolveAll(host); } catch { return { deny: 'resolve failed', ips: [] }; }
     let d;
-    try { d = decide(this.manifest, { host, ips }, this.now()); } catch { return { deny: 'enforcer error' }; }
-    if (!d.allow) return { deny: d.reason };
-    return { ip: ips[0] };
+    try { d = decide(this.manifest, { host, ips }, this.now()); } catch { return { deny: 'enforcer error', ips }; }
+    if (!d.allow) return { deny: d.reason, ips };
+    // decide() is the allow/deny authority; pinNonExcluded is belt-and-suspenders on
+    // WHICH resolved IP gets dialed — never an excluded one even though the host matched.
+    const pinned = this.pinNonExcluded(ips);
+    if (pinned === null) return { deny: 'all resolved IPs excluded', ips };
+    // NEW-1 belt-and-suspenders: the resolver should only ever hand back canonical IP literals, but
+    // if some future seam returns a non-literal string (e.g. a decimal/hex/octal encoding of an
+    // internal address that the cidr exclude can't match), getaddrinfo on the dial path would accept
+    // it => SSRF. Assert isIP() here so a non-literal can NEVER reach httpRequest/dialPinned.
+    if (isIP(pinned) === 0) return { deny: 'non-literal dial host', ips };
+    return { ip: pinned, ips };
   }
 
   /** Fail-closed: returns false if the audit write throws (caller must then DENY). */
   private audit(
     host: string, dialedIp: string, port: number, method: string,
-    decision: 'allowed' | 'denied', reason?: string
+    decision: 'allowed' | 'denied', resolvedIps: string[], reason?: string
   ): boolean {
     try {
       this.opts.audit.record({
         manifestId: this.manifest.manifestId,
         manifestContentHash: scopeContentHash(this.manifest),
         host, dialedIp, port, method, decision, reason,
+        resolvedIps,
         at: new Date(this.now()).toISOString()
       });
       return true;
@@ -88,12 +121,12 @@ export class AuthorizedEgressProxy {
     if (!Number.isInteger(port) || port <= 0 || port > 65535) { res.writeHead(400).end('bad port'); return; }
     const r = await this.authorize(target.hostname);
     if ('deny' in r) {
-      this.audit(target.hostname, '', port, req.method ?? 'GET', 'denied', r.deny);
+      this.audit(target.hostname, '', port, req.method ?? 'GET', 'denied', r.ips, r.deny);
       res.writeHead(403).end('out of scope');
       return;
     }
     // fail-closed: audit BEFORE forwarding; if audit throws, deny.
-    if (!this.audit(target.hostname, r.ip, port, req.method ?? 'GET', 'allowed')) {
+    if (!this.audit(target.hostname, r.ip, port, req.method ?? 'GET', 'allowed', r.ips)) {
       res.writeHead(500).end('audit failed');
       return;
     }
@@ -122,12 +155,12 @@ export class AuthorizedEgressProxy {
     if (!this.take()) { clientSocket.end('HTTP/1.1 429 Too Many Requests\r\n\r\n'); return; }
     const r = await this.authorize(host);
     if ('deny' in r) {
-      this.audit(host, '', port, 'CONNECT', 'denied', r.deny);
+      this.audit(host, '', port, 'CONNECT', 'denied', r.ips, r.deny);
       clientSocket.end('HTTP/1.1 403 Forbidden\r\n\r\n');
       return;
     }
     // fail-closed: audit BEFORE forwarding.
-    if (!this.audit(host, r.ip, port, 'CONNECT', 'allowed')) {
+    if (!this.audit(host, r.ip, port, 'CONNECT', 'allowed', r.ips)) {
       clientSocket.end('HTTP/1.1 500 Internal Server Error\r\n\r\n');
       return;
     }

@@ -20,4 +20,20 @@ describe('domain-match', () => {
   it('matches on labels, never substring', () => {
     expect(domainRuleMatches('example.com', 'xexample.com')).toBe(false);
   });
+  it('normalizes a Unicode host to punycode (H3)', () => {
+    expect(normalizeHost('MÜNCHEN.de.')).toBe('xn--mnchen-3ya.de');
+  });
+  it('a Unicode host matches a punycode rule (H3)', () => {
+    expect(domainRuleMatches('xn--mnchen-3ya.de', 'münchen.de')).toBe(true);
+  });
+  it('a punycode host matches a Unicode rule (H3)', () => {
+    expect(domainRuleMatches('münchen.de', 'xn--mnchen-3ya.de')).toBe(true);
+  });
+  it('a Unicode wildcard rule matches a Unicode subdomain host (H3)', () => {
+    expect(domainRuleMatches('*.münchen.de', 'shop.münchen.de')).toBe(true);
+  });
+  it('a confusable Cyrillic host does NOT match the Latin rule (H3)', () => {
+    // host uses Cyrillic "а" (U+0430); rule is all-Latin ASCII
+    expect(domainRuleMatches('paypal.com', 'pаypal.com')).toBe(false);
+  });
 });
