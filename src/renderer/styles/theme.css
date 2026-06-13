@@ -773,6 +773,9 @@ input.ga98-text, select.ga98-text {
 }
 .ga98-geo-events li[data-active='true'] { background: navy; color: #fff; }
 .ga98-geo-pin { font-size: 16px; line-height: 16px; }
+/* Per-item category/severity dot. Strip Leaflet's default .leaflet-div-icon white box + border so
+   only the inline-styled dot (and its corroboration halo) renders; the glow must not be clipped. */
+.ga98-geo-mk { background: transparent; border: 0; overflow: visible; }
 .ga98-geo-search-pin { font-size: 20px; line-height: 20px; }
 
 /* ── Markets ─────────────────────────────────────────────────────────────── */

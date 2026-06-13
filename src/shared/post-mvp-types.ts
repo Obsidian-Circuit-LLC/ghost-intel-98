@@ -198,6 +198,11 @@ export interface GeoItem {
   place?: string;
   /** How this item got its coordinates (if any). */
   located: 'geo' | 'gazetteer' | 'manual' | 'none';
+  /** Literal-keyword category (conflict/cyber/protest/disaster/crime/politics). Optional — older
+   *  snapshots predate classification and simply omit it. Drives marker color on the map. */
+  category?: string;
+  /** Literal-keyword severity. Optional (back-compat). Drives marker size on the map. */
+  severity?: 'low' | 'medium' | 'high';
 }
 
 export interface GeoSnapshot {

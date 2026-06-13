@@ -11,12 +11,39 @@ import 'leaflet/dist/leaflet.css';
 import type { GeoItem } from '@shared/post-mvp-types';
 import { buildPopup } from './popup';
 
-const pin = L.divIcon({ className: 'ga98-geo-pin', html: '📍', iconSize: [16, 16], iconAnchor: [8, 16] });
-// Distinct icon for the searched location so it reads differently from the item 📍 pins.
+// Marker fill by feed-item category. Falls back to a neutral grey for unknown/undefined.
+const CATEGORY_COLOR: Record<string, string> = {
+  conflict: '#c0392b', cyber: '#8e44ad', protest: '#e67e22',
+  disaster: '#16a085', crime: '#7f8c8d', politics: '#2980b9'
+};
+// Distinct icon for the searched location so it reads differently from the item markers.
 const searchPin = L.divIcon({ className: 'ga98-geo-search-pin', html: '📌', iconSize: [20, 20], iconAnchor: [10, 20] });
 
-export function MapPane({ items, tilesEnabled, tileUrl, tileAttribution, pickMode, onPick, focusId, flyTo, onCenterChange, overlayUrls = [], overlayAttribution = '' }: {
+// Diameter (px) by severity. Undefined/low → 11, medium → 14, high → 18.
+function severityDiameter(sev: GeoItem['severity']): number {
+  return sev === 'high' ? 18 : sev === 'medium' ? 14 : 11;
+}
+
+// Build a per-item round-dot divIcon: fill by category, size by severity, and a white halo + colored
+// glow ring when corroborated (count >= 1). Glow radius grows with the count but is capped so a heavily
+// corroborated cluster doesn't bloom across the map. Self-contained inline styles (Win98-flat dot; the
+// glow is the "resonance"). Sized so iconSize/anchor match the dot's outer box.
+function buildIcon(it: GeoItem, count: number): L.DivIcon {
+  const d = severityDiameter(it.severity);
+  const color = CATEGORY_COLOR[it.category ?? ''] ?? '#555';
+  const glow = count >= 1 ? Math.min(4 + count * 3, 16) : 0; // cap the bloom
+  const ring = count >= 1
+    ? `box-shadow:0 0 0 3px rgba(255,255,255,.7), 0 0 ${glow}px ${glow}px ${color};`
+    : '';
+  const html = `<span style="display:block;width:${d}px;height:${d}px;border-radius:50%;`
+    + `background:${color};border:1px solid rgba(0,0,0,.5);box-sizing:border-box;${ring}"></span>`;
+  return L.divIcon({ className: 'ga98-geo-mk', html, iconSize: [d, d], iconAnchor: [d / 2, d / 2] });
+}
+
+export function MapPane({ items, corroboration, tilesEnabled, tileUrl, tileAttribution, pickMode, onPick, focusId, flyTo, onCenterChange, overlayUrls = [], overlayAttribution = '' }: {
   items: GeoItem[];
+  /** Per-item count of distinct other sources reporting nearby in time (from corroborate()). */
+  corroboration: Map<string, number>;
   tilesEnabled: boolean;
   tileUrl: string;
   tileAttribution: string;
@@ -113,11 +140,11 @@ export function MapPane({ items, tilesEnabled, tileUrl, tileAttribution, pickMod
     markers.current.clear();
     for (const it of items) {
       if (it.lat == null || it.lon == null) continue;
-      const mk = L.marker([it.lat, it.lon], { icon: pin }).bindPopup(buildPopup(it.title, it.link));
+      const mk = L.marker([it.lat, it.lon], { icon: buildIcon(it, corroboration.get(it.id) ?? 0) }).bindPopup(buildPopup(it.title, it.link));
       mk.addTo(lg);
       markers.current.set(it.id, mk);
     }
-  }, [items]);
+  }, [items, corroboration]);
 
   // Recenter + open the focused marker's popup ONLY when the focus actually changes. Keeping setView out
   // of the build effect breaks the setView→moveend→onCenterChange→re-render→rebuild loop that flashed the

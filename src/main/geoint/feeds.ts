@@ -7,6 +7,7 @@
 import { XMLParser } from 'fast-xml-parser';
 import { randomUUID } from 'node:crypto';
 import type { GeoItem, GeoSourceType } from '@shared/post-mvp-types';
+import { classify } from './classify';
 
 type Geocoder = (text: string) => { lat: number; lon: number; name: string } | null;
 
@@ -46,7 +47,8 @@ export function parseRss(body: string, sourceId: string, geocode: Geocoder): Geo
       link: txt(it['link']) || undefined,
       summary: summary || undefined,
       published: txt(it['pubDate']) || undefined,
-      ...locate(title, summary, geo, geocode)
+      ...locate(title, summary, geo, geocode),
+      ...classify(title, summary)
     };
   });
 }
@@ -65,7 +67,8 @@ export function parseAtom(body: string, sourceId: string, geocode: Geocoder): Ge
       link: link || undefined,
       summary: summary || undefined,
       published: txt(e['updated']) || undefined,
-      ...locate(title, summary, null, geocode)
+      ...locate(title, summary, null, geocode),
+      ...classify(title, summary)
     };
   });
 }
@@ -75,21 +78,30 @@ export function parseGeoJson(body: string, sourceId: string): GeoItem[] {
     features?: { geometry?: { type?: string; coordinates?: number[] }; properties?: Record<string, unknown> }[];
   };
   return arr(fc.features)
-    .filter((f) => f.geometry?.type === 'Point' && Array.isArray(f.geometry.coordinates) && f.geometry.coordinates.length >= 2)
+    .filter((f) => {
+      if (f.geometry?.type !== 'Point' || !Array.isArray(f.geometry.coordinates) || f.geometry.coordinates.length < 2) return false;
+      // Drop non-finite or out-of-range coordinates: ["x",10] → NaN lon, [200,5] → off-globe.
+      // A NaN/garbage pin stamped located:'geo' is a silent mislocation in an OSINT tool.
+      const [lon, lat] = f.geometry.coordinates as number[]; // GeoJSON order is [lon, lat]
+      return Number.isFinite(lon) && Number.isFinite(lat) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180;
+    })
     .slice(0, MAX_FEED_ITEMS)
     .map((f) => {
       const [lon, lat] = f.geometry!.coordinates as number[]; // GeoJSON order is [lon, lat]
       const p = f.properties ?? {};
+      const title = clip(String(p['title'] ?? p['name'] ?? 'Untitled'));
+      const summary = typeof p['description'] === 'string' ? clip(p['description'] as string) : undefined;
       return {
         id: randomUUID(),
         sourceId,
-        title: clip(String(p['title'] ?? p['name'] ?? 'Untitled')),
+        title,
         link: typeof p['link'] === 'string' ? p['link'] : undefined,
-        summary: typeof p['description'] === 'string' ? clip(p['description'] as string) : undefined,
+        summary,
         published: typeof p['date'] === 'string' ? (p['date'] as string) : undefined,
         lat,
         lon,
-        located: 'geo' as const
+        located: 'geo' as const,
+        ...classify(title, summary ?? '')
       };
     });
 }
