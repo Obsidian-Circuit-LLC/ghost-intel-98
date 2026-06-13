@@ -20,7 +20,7 @@ export interface ScopeManifest {
 }
 
 const MODES = new Set(['engagement', 'bounty', 'self', 'lab']);
-const CIDR_RE = /^[0-9a-fA-F:.]+\/\d{1,3}$/;
+export const CIDR_RE = /^[0-9a-fA-F:.]+\/\d{1,3}$/;
 const DOMAIN_RE = /^(\*\.)?([a-z0-9-]+\.)+[a-z0-9-]+\.?$/i;
 
 function rules(raw: unknown, field: string): ScopeRule[] {
