@@ -55,4 +55,4 @@ Get-FileHash .\DCS98-Setup-3.14.0-beta.8.exe -Algorithm SHA256
 
 | Artifact | SHA-256 | Size |
 |---|---|---|
-| `DCS98-Setup-3.14.0-beta.8.exe` | _(filled in on publish)_ | _(filled in on publish)_ |
+| `DCS98-Setup-3.14.0-beta.8.exe` | `935612075174497da84d26b8ec28aeba5f0b18b430c0ec59848cdbf4eaad008c` | 498 MB (521,399,277 bytes) |
