@@ -386,19 +386,25 @@ export function GeoIntModule(): JSX.Element {
             />
           </div>
         )}
-        </div>
+        {/* Story transport floats over the map (top-center) so the pause/stop controls
+            stay unmissable during playback. Content-width + inline-flex so the map under
+            it stays draggable; z-index sits above Leaflet tiles/markers (panes 200–500)
+            but below Leaflet's own zoom control (800+). */}
         {story && (
-          <StoryControls
-            count={storyItems.length}
-            index={story.index}
-            playing={story.playing}
-            onPlay={() => setStory((s) => (s ? { ...s, playing: true } : s))}
-            onPause={() => setStory((s) => (s ? { ...s, playing: false } : s))}
-            onPrev={() => setStory((s) => (s ? { index: Math.max(0, s.index - 1), playing: false } : s))}
-            onNext={() => setStory((s) => (s ? { index: Math.min(storyItems.length - 1, s.index + 1), playing: false } : s))}
-            onStop={() => setStory(null)}
-          />
+          <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', zIndex: 600, display: 'inline-flex', background: 'var(--ga98-face,#c0c0c0)', border: '2px outset #fff', padding: 2, boxShadow: '0 1px 4px rgba(0,0,0,.4)' }}>
+            <StoryControls
+              count={storyItems.length}
+              index={story.index}
+              playing={story.playing}
+              onPlay={() => setStory((s) => (s ? { ...s, playing: true } : s))}
+              onPause={() => setStory((s) => (s ? { ...s, playing: false } : s))}
+              onPrev={() => setStory((s) => (s ? { index: Math.max(0, s.index - 1), playing: false } : s))}
+              onNext={() => setStory((s) => (s ? { index: Math.min(storyItems.length - 1, s.index + 1), playing: false } : s))}
+              onStop={() => setStory(null)}
+            />
+          </div>
         )}
+        </div>
         <TimelineBar
           bounds={bounds}
           cursor={timeCursor}
