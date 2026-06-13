@@ -1,10 +1,14 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const DATA = mkdtempSync(join(tmpdir(), 'ga98-geo-'));
 vi.mock('electron', () => ({ app: { getPath: () => DATA, getAppPath: () => DATA } }));
+
+// Mirrors sources.ts: dataRoot() = join(getPath('userData'), 'GhostAccess98'); cache lives under geoint-cache/.
+const CACHE_DIR = join(DATA, 'GhostAccess98', 'geoint-cache');
+const cachePath = (id: string): string => join(CACHE_DIR, `${id}.json`);
 
 import * as store from '../src/main/geoint/sources';
 
@@ -34,6 +38,27 @@ describe('geoint source store', () => {
     ]);
     expect(n).toBe(2);
     expect(await store.listSources()).toHaveLength(2);
+  });
+  it('removeSource deletes the source and its orphaned cache file', async () => {
+    const s = await store.addSource({ label: 'X', url: 'https://x', type: 'rss' });
+    await store.cacheItems(s.id, [{ id: 'i1', sourceId: s.id, title: 'T', located: 'none' }]);
+    expect(existsSync(cachePath(s.id))).toBe(true);
+    await store.removeSource(s.id);
+    expect(await store.listSources()).toHaveLength(0);
+    expect(existsSync(cachePath(s.id))).toBe(false);
+  });
+  it('purgeAll clears every source and removes the whole cache directory', async () => {
+    const a = await store.addSource({ label: 'A', url: 'https://a', type: 'rss' });
+    const b = await store.addSource({ label: 'B', url: 'https://b', type: 'geojson' });
+    await store.cacheItems(a.id, [{ id: 'i1', sourceId: a.id, title: 'T', located: 'none' }]);
+    await store.cacheItems(b.id, [{ id: 'i2', sourceId: b.id, title: 'U', located: 'none' }]);
+    expect(existsSync(CACHE_DIR)).toBe(true);
+    await store.purgeAll();
+    expect(await store.listSources()).toHaveLength(0);
+    expect(existsSync(CACHE_DIR)).toBe(false);
+    // Idempotent: a second purge on a missing cache dir is a no-op (force ignores ENOENT).
+    await store.purgeAll();
+    expect(await store.listSources()).toHaveLength(0);
   });
   it('setItemLocation sets a manual pin and clears it', async () => {
     const s = await store.addSource({ label: 'X', url: 'https://x', type: 'rss' });

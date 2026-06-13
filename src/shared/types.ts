@@ -22,6 +22,9 @@ export interface CaseSummary {
   /** Small base64 data-URI of the case's primary bio thumbnail, if any. Optional + null-safe:
    *  legacy summaries and bio-less cases omit it; the list UI must tolerate undefined. */
   primaryBioThumb?: string;
+  /** User-assigned grouping bucket for the case list. Optional + null-safe: legacy summaries
+   *  omit it; the list UI treats undefined/'' as the "Uncategorized" group. */
+  category?: string;
 }
 
 export type ImageMime = 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif';
@@ -250,6 +253,7 @@ export interface CreateCaseInput {
   status?: CaseStatus;
   priority?: CasePriority;
   tags?: string[];
+  category?: string;
 }
 
 export interface SearchHit {

@@ -31,6 +31,22 @@ describe('timeBounds', () => {
   it('treats unparseable published strings as undated', () => {
     expect(timeBounds([geo('a', 'not-a-date')])).toBeNull();
   });
+
+  // CRITICAL regression guard. The old implementation did Math.min(...ts)/Math.max(...ts);
+  // spreading an item-sized array (130k+ cached events) as call args overflows the engine call
+  // stack (RangeError: Maximum call stack size exceeded) and white-screened the whole GeoINT
+  // module on load. timeBounds must compute min/max in a single pass, no call-spread. Deterministic
+  // generated array: published steps by 1 minute from a fixed epoch, so {min,max} are exact.
+  it('does not throw and returns correct min/max on a 150,000-item array', () => {
+    const N = 150_000;
+    const BASE = T('2020-01-01T00:00:00Z');
+    const STEP = 60_000; // 1 min/item
+    const items: GeoItem[] = new Array(N);
+    for (let i = 0; i < N; i++) items[i] = geo(`i${i}`, new Date(BASE + i * STEP).toISOString());
+    let bounds: { min: number; max: number } | null = null;
+    expect(() => { bounds = timeBounds(items); }).not.toThrow();
+    expect(bounds).toEqual({ min: BASE, max: BASE + (N - 1) * STEP });
+  });
 });
 
 describe('itemsUpTo', () => {

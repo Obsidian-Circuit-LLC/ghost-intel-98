@@ -320,6 +320,7 @@ export interface GhostApi {
     saveToCase(caseId: string, item: GeoItem, opts: { form: 'record' | 'link' | 'note'; entityIds?: string[] }): Promise<{ savedEventId?: string }>;
     listCaseEvents(caseId: string): Promise<SavedGeoEvent[]>;
     removeCaseEvent(caseId: string, eventId: string): Promise<void>;
+    purgeCache(): Promise<void>;
   };
   markets: {
     fetch(): Promise<MarketSnapshot>;

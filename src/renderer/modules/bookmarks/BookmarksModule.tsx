@@ -25,9 +25,6 @@ export function BookmarksModule(): JSX.Element {
   const [editing, setEditing] = useState<Editing | null>(null);
   // Drag state: a card index, or a link with its source category.
   const drag = useRef<{ kind: 'card'; catId: string } | { kind: 'link'; catId: string; linkId: string } | null>(null);
-  // Card-resize: remember the body height at pointerdown so pointerup can tell a deliberate
-  // resize-drag (height changed) from an ordinary click (height identical) and only persist then.
-  const resizeStart = useRef<number>(0);
 
   useEffect(() => {
     void window.api.bookmarks.get().then((b) => { setBoard(b ?? EMPTY); setLoaded(true); });
@@ -64,14 +61,6 @@ export function BookmarksModule(): JSX.Element {
   function deleteLink(catId: string, linkId: string): void {
     mutateCats((cats) => cats.map((c) => c.id === catId ? { ...c, links: c.links.filter((l) => l.id !== linkId) } : c));
   }
-  function setCategoryHeight(catId: string, height: number): void {
-    mutateCats((cats) => cats.map((c) => c.id === catId ? { ...c, height } : c));
-  }
-  // Clear a stored (manually-dragged) height so the card returns to auto-scaling by link count.
-  function clearCategoryHeight(catId: string): void {
-    mutateCats((cats) => cats.map((c) => c.id === catId ? { ...c, height: undefined } : c));
-  }
-
   // --- drag/drop reorganize ---
   function moveCardBefore(targetCatId: string): void {
     const d = drag.current;
@@ -177,23 +166,10 @@ export function BookmarksModule(): JSX.Element {
                 aria-label="Category title"
               />
               <div className="title-bar-controls">
-                {c.height != null && (
-                  <button
-                    aria-label="Fit to contents"
-                    title="Fit this card to its links (clear the manual height)"
-                    onClick={() => clearCategoryHeight(c.id)}
-                    style={{ marginRight: 2 }}
-                  >⤢</button>
-                )}
                 <button aria-label="Close" onClick={() => void deleteCategory(c.id)} />
               </div>
             </div>
-            <div
-              className="window-body ga98-bm-links"
-              style={c.height ? { height: c.height } : undefined}
-              onPointerDown={(e) => { resizeStart.current = e.currentTarget.offsetHeight; }}
-              onPointerUp={(e) => { const h = e.currentTarget.offsetHeight; if (h !== resizeStart.current) setCategoryHeight(c.id, h); }}
-            >
+            <div className="window-body ga98-bm-links">
               {c.links.map((l) => (
                 <div
                   key={l.id}

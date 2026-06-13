@@ -237,7 +237,8 @@ export const channels = {
     setItemLocation: 'geoint:setItemLocation',
     saveToCase: 'geoint:saveToCase',
     listCaseEvents: 'geoint:listCaseEvents',
-    removeCaseEvent: 'geoint:removeCaseEvent'
+    removeCaseEvent: 'geoint:removeCaseEvent',
+    purgeCache: 'geoint:purgeCache'
   },
   markets: {
     fetch: 'markets:fetch'
@@ -449,6 +450,7 @@ export interface ApiContracts {
   [channels.geoint.saveToCase]: { args: [string, GeoItem, { form: 'record' | 'link' | 'note'; entityIds?: string[] }]; returns: { savedEventId?: string } };
   [channels.geoint.listCaseEvents]: { args: [string]; returns: SavedGeoEvent[] };
   [channels.geoint.removeCaseEvent]: { args: [string, string]; returns: void };
+  [channels.geoint.purgeCache]: { args: []; returns: void };
 
   [channels.markets.fetch]: { args: []; returns: MarketSnapshot };
 

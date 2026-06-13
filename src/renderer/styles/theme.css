@@ -893,10 +893,10 @@ input.ga98-text, select.ga98-text {
   font-size: 11px; padding: 0 2px; min-width: 0;
 }
 .ga98-bm-title-input:focus { outline: 1px dotted #fff; background: rgba(255,255,255,0.15); }
-/* No explicit height ⇒ the card grows to fit its links (scales by count). max-height caps a
-   huge category so it scrolls instead of running off-screen; a stored height (manual resize)
-   overrides via inline style, and the title-bar "Fit" button clears it back to auto. */
-.ga98-bm-links { display: flex; flex-direction: column; gap: 1px; padding: 4px; overflow: auto; resize: vertical; min-height: 36px; max-height: 70vh; box-sizing: border-box; }
+/* The card always auto-fits its links: no inline/stored height is ever applied, so it grows to
+   fit its links (scales by count). max-height caps a huge category so it scrolls internally
+   instead of running off-screen. Any legacy `height` persisted on an old board is ignored. */
+.ga98-bm-links { display: flex; flex-direction: column; gap: 1px; padding: 4px; overflow: auto; min-height: 36px; max-height: 70vh; box-sizing: border-box; }
 .ga98-bm-link { display: flex; align-items: center; gap: 4px; padding: 1px 2px; cursor: grab; }
 .ga98-bm-link:hover { background: #d8d8d8; }
 .ga98-bm-icon { width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; }

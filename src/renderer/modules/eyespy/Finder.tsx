@@ -42,9 +42,12 @@ export function Finder({ tab, onTab, query, onQuery, tree, cities, feeds, select
         ))}
         {feeds.length === 0 && <div style={{ padding: 8, fontSize: 11, opacity: 0.6 }}>No feeds here. Import a list or add a stream.</div>}
       </div>
-      <div style={{ display: 'flex', gap: 4, padding: 4, borderTop: '1px solid #ccc' }}>
+      {/* flexShrink:0 pins this action row so the Import button is always reachable — it must
+          never be squeezed off-screen by a long feed/tree list above it. flexWrap lets the two
+          buttons stack on a very narrow pane rather than clip. */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: 4, borderTop: '1px solid #ccc', flexShrink: 0 }}>
         <button onClick={onRefresh}>Refresh</button>
-        <button onClick={onImport} style={{ flex: 1 }} title="Import a CSV/JSON/URL-list of your own feeds">{importLabel}</button>
+        <button onClick={onImport} style={{ flex: 1, minWidth: 120 }} title="Import a CSV/JSON/URL-list of your own feeds">{importLabel}</button>
       </div>
       {menu && <FeedMenu x={menu.x} y={menu.y} onPick={(a) => { onFeedAction(a, menu.s); setMenu(null); }} onClose={() => setMenu(null)} />}
     </div>

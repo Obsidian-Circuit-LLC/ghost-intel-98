@@ -104,7 +104,7 @@ export interface FtpConnectResult extends FtpListing {
 
 // ---------- EyeSpy ----------
 
-export type StreamKind = 'hls' | 'mjpeg' | 'rtsp' | 'http' | 'mp4';
+export type StreamKind = 'hls' | 'mjpeg' | 'rtsp' | 'http' | 'mp4' | 'webpage';
 
 export interface CameraStream {
   id: string;

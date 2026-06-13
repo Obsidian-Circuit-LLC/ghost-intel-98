@@ -7,6 +7,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { dataRoot } from '../storage/paths';
 import { secureReadText, secureWriteFile } from '../storage/secure-fs';
@@ -70,6 +71,21 @@ export async function updateSource(id: string, patch: Partial<GeoSource>): Promi
 }
 export async function removeSource(id: string): Promise<void> {
   await writeSources((await readSources()).filter((x) => x.id !== id));
+  // Best-effort: drop this source's cache file so removing a source doesn't orphan its
+  // cached items on disk. `force` ⇒ a missing file is a no-op, so the delete can't throw
+  // out of source removal.
+  await rm(cacheFile(id), { force: true });
+}
+
+/** Full GeoINT reset — the escape hatch for a poisoned state that survives delete+reinstall.
+ *  Clears the sources list AND removes every per-source cache file by deleting the whole
+ *  geoint-cache directory recursively (`force` ignores a missing dir). Local fs only. */
+export async function purgeAll(): Promise<void> {
+  // Accepted race: a purge concurrent with an in-flight fetchSource can let that fetch re-write
+  // a cache file after the rm. Harmless — writeSources([]) makes it invisible to snapshot() (no
+  // source references it), and the next purge clears it. No locking by design.
+  await writeSources([]);
+  await rm(join(dataRoot(), 'geoint-cache'), { recursive: true, force: true });
 }
 export async function importSources(items: { label: string; url: string; type: GeoSourceType }[]): Promise<number> {
   const list = await readSources();

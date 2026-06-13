@@ -996,6 +996,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.geoint.saveToCase, (...a) => geoSaveToCase(ensureUuid(a[0], 'caseId'), ensureGeoItem(a[1]), ensureSaveToCaseOpts(a[2])));
   safeHandle(channels.geoint.listCaseEvents, (...a) => geoCaseEvents.listCaseEvents(ensureUuid(a[0], 'caseId')));
   safeHandle(channels.geoint.removeCaseEvent, (...a) => geoCaseEvents.removeCaseEvent(ensureUuid(a[0], 'caseId'), ensureUuid(a[1], 'eventId')));
+  safeHandle(channels.geoint.purgeCache, () => geoint.purgeAll());
 
   // ---- Markets (vault-gated; network app-layer gated by settings.markets.networkEnabled) ----
   safeHandle(channels.markets.fetch, async () => {

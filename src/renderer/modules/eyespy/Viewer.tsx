@@ -1,6 +1,7 @@
 import Hls from 'hls.js';
 import { useEffect, useRef, useState } from 'react';
 import type { CameraStream } from '@shared/post-mvp-types';
+import { toast } from '../../state/toasts';
 
 export function Viewer({ stream, poster = false }: { stream: CameraStream; poster?: boolean }): JSX.Element {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -64,6 +65,29 @@ export function Viewer({ stream, poster = false }: { stream: CameraStream; poste
     // Direct progressive/streamed MP4 over http(s). CSP media-src allows http(s); a
     // local file:// path would not load (not in media-src) — point users to a URL.
     return <video controls autoPlay muted loop src={stream.url} style={{ maxWidth: '100%', maxHeight: '100%' }} />;
+  }
+
+  if (stream.kind === 'webpage') {
+    // The URL is the camera's HTML viewer page (e.g. an .shtml MJPEG viewer), not a media
+    // URL — it would render blank as <video>/<img>. We do NOT embed third-party HTML/JS in
+    // the app renderer (an in-app iframe would require broadening the renderer-GLOBAL CSP
+    // frame-src to http:/https:, which would also expose every dcs98-plugin: plugin sharing
+    // this renderer to phishing/clickjacking/exfil). Instead we open the page in the bundled
+    // Firefox via the browser launcher — process-isolated from the app, the same pattern
+    // GeoIntModule/BookmarksModule use for external links. The main-process launchFirefox
+    // path validates http(s) and spawns with shell:false.
+    return (
+      <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, background: '#111', color: '#9ad', fontSize: 12, padding: 16, textAlign: 'center' }}>
+        <div>This is a camera viewer page, not a direct stream. It opens in the secure bundled browser, isolated from the app.</div>
+        <button
+          onClick={() => void window.api.browser.launchFirefox(stream.url, stream.label).catch((e) => toast.error((e as Error).message))}
+          style={{ fontSize: 12, padding: '4px 12px' }}
+        >
+          ⇱ Open in Firefox
+        </button>
+        <div style={{ fontSize: 10, color: '#667', wordBreak: 'break-all', maxWidth: '90%' }}>{stream.url}</div>
+      </div>
+    );
   }
 
   return <video ref={videoRef} controls autoPlay muted style={{ maxWidth: '100%', maxHeight: '100%' }} />;

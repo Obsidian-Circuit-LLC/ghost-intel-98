@@ -32,11 +32,27 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`DCS98-Setup-3.14.0-beta.6.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake formally verified internally; external audit + FIPS pending. See Status.)*
+> **Install:** download [`DCS98-Setup-3.14.0-beta.7.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake formally verified internally; external audit + FIPS pending. See Status.)*
 
 ## Status
 
-**v3.14.0-beta.6** — current release. The **GeoINT intelligence map**, an **EyeSpy Wall Setup** flow, and **Mail auto-refresh + notification**:
+**v3.14.0-beta.7** — current release. The **GhostExodus beta.6 field-test punch-list**:
+
+- **GeoINT** is crash-proof with a way out: a bad/oversized source can no longer take the map down, an
+  **error boundary** + a **Purge cache** button recover a poisoned state (which used to survive reinstall),
+  markers cap at 1,500 with a count banner, default tiles are Google road tiles, and the **Play Story**
+  ▶/⏸/⏹ transport now floats over the map.
+- **Mail:** the **Send** button is always reachable (Compose/Account scroll their body, action row pinned),
+  and the silent refresh dropped to **30 seconds**.
+- **Bookmarks:** category cards **auto-fit their links** again (the accidental height-freeze is gone; old
+  frozen cards self-heal).
+- **EyeSpy:** a **Webpage** stream kind opens a camera's viewer page (`…/index.shtml`) in the bundled
+  Firefox; the **Import** button and wall toolbars no longer scroll off.
+- **Cases:** **categories** — group cases into named, collapsible sections (right-click → *Move to category*).
+
+810 automated tests. *Everything from v3.14.0-beta.6 carries forward.*
+
+<details><summary>v3.14.0-beta.6 — GeoINT intelligence map + EyeSpy Wall Setup + Mail notifications</summary>
 
 - **GeoINT** becomes an intelligence map. The offline gazetteer grew **250 country names → ~61.7k cities**,
   so RSS/Atom articles that name a city now **auto-pin** (this is the fix for "feeds not showing"). Markers
@@ -48,7 +64,7 @@ that never depend on a third-party staying up:
 - **Mail:** silent background **auto-refresh** + an **audio notification** only when new mail arrives.
 - Internal: a security-hardening pass on the not-yet-shipped offensive-egress capability (no user-facing change).
 
-801 automated tests. *Everything from v3.14.0-beta.5 carries forward.*
+</details>
 
 <details><summary>v3.14.0-beta.5 — GeoINT map fix (no ghost box / drag catch)</summary>
 
@@ -361,14 +377,14 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/dcs98/releases) and run it.
 
-Direct link to the current release: [`DCS98-Setup-3.14.0-beta.6.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.14.0-beta.6/DCS98-Setup-3.14.0-beta.6.exe)
+Direct link to the current release: [`DCS98-Setup-3.14.0-beta.7.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.14.0-beta.7/DCS98-Setup-3.14.0-beta.7.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is formally verified internally — external audit + FIPS
 pending — see Status). The last fully-stable build is [`DCS98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.6.8/DCS98-Setup-3.6.8.exe).
 
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\DCS98-Setup-3.14.0-beta.6.exe -Algorithm SHA256
+Get-FileHash .\DCS98-Setup-3.14.0-beta.7.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
@@ -406,8 +422,20 @@ To uninstall: Settings → Apps → Dead Cyber Society 98 → Uninstall.
 
 ## Releases & changelog
 
-The current build is **v3.14.0-beta.6**. Each release page carries its own notes + SHA-256.
+The current build is **v3.14.0-beta.7**. Each release page carries its own notes + SHA-256.
 
+- **v3.14.0-beta.7** — **GhostExodus beta.6 field-test punch-list.** **GeoINT** is crash-proof with a way
+  out: a bad/oversized source (e.g. a FIRMS GeoJSON with an unreplaced `{MAP_KEY}`) can no longer take the
+  map down, an **error boundary** + a **Purge cache** button recover a poisoned state that used to survive
+  reinstall, markers cap at 1,500 with a count banner, default tiles are Google road tiles, and the **Play
+  Story** transport floats over the map. **Mail's Send** button is always reachable (dialogs scroll, action
+  row pinned) and the silent refresh is now **30s**. **Bookmarks** cards **auto-fit their links** again (the
+  accidental height-freeze is gone). **EyeSpy** gains a **Webpage** kind that opens a camera viewer page in
+  the bundled Firefox, and its toolbars no longer scroll off. **Cases** gain **categories** (collapsible
+  grouped sections, right-click to move). Built subagent-driven; the GeoINT hardening and the webpage kind
+  each cleared an adversarial red-team — which caught the first crash-fix wrapping the wrong layer (a
+  call-stack overflow above the error boundary) and an iframe approach that would have holed the renderer
+  CSP the plugin trust model depends on. **810 tests.**
 - **v3.14.0-beta.6** — **GeoINT intelligence map + EyeSpy Wall Setup + Mail notifications.** GeoINT becomes
   an intelligence map: the offline gazetteer grew **250 country names → ~61.7k cities** so city articles
   **auto-pin** (the fix for "feeds not showing"), markers are **colored by category** and sized by severity,
@@ -638,7 +666,7 @@ This starts the Vite dev server (HMR) and the Electron main process.
 
 ```bash
 pnpm build        # type-check + bundle main / preload / renderer
-pnpm test         # vitest suite (801 tests as of v3.14.0-beta.6)
+pnpm test         # vitest suite (810 tests as of v3.14.0-beta.7)
 pnpm package      # platform installer for the current host
 pnpm package:win  # cross-build Windows NSIS installer
 ```
