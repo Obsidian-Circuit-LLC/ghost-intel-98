@@ -1,7 +1,10 @@
 /**
  * EyeSpy — view manually-added camera streams on a curated 3×3 video wall.
  * Left: Finder (Countries/Cities tree + feed list, contextual Import). Right: named Wall boards.
- * Supported: HLS (hls.js), MJPEG (<img>), and HTTP still images.
+ * Supported: HLS (hls.js), MJPEG (<img>), HTTP still images, MP4, and "webpage" — the camera's
+ * own HTML viewer page (e.g. an .shtml MJPEG viewer). The webpage kind does NOT embed third-party
+ * pages in-app; it opens the user-supplied viewer page in the bundled Firefox (process-isolated
+ * from the app). It does not probe, scan, or enumerate anything.
  * RTSP is intentionally not implemented in-app (would require bundling ffmpeg) — the user is
  * pointed to a recommended local ffmpeg→HLS bridge instead. NO discovery, scanning, or
  * unauthorised-access code paths exist in this module. "Import…" bulk-loads the user's OWN feed
@@ -244,7 +247,9 @@ export function EyeSpyModule(): JSX.Element {
         />
       </div>
       <div className="ga98-pane" style={{ display: 'flex', flexDirection: 'column', padding: 0, position: 'relative' }}>
-        <div style={{ display: 'flex', gap: 4, padding: 4, borderBottom: '1px solid #ccc', alignItems: 'center' }}>
+        {/* flexWrap so the wall controls (incl. the long "Fill wall from …" + Purge buttons) wrap
+            to a second row on a narrow pane instead of overflowing off the right edge / forcing a scroll. */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: 4, borderBottom: '1px solid #ccc', alignItems: 'center' }}>
           <button onClick={newWall}>New</button>
           <select value={wall.id} onChange={(e) => void openWall(e.target.value)}>
             {wallsList.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
@@ -281,13 +286,14 @@ export function EyeSpyModule(): JSX.Element {
                 <input className="ga98-text" value={draft.label ?? ''} onChange={(e) => setDraft({ ...draft, label: e.target.value })} />
                 <label>URL:</label>
                 <input className="ga98-text" value={draft.url ?? ''} onChange={(e) => setDraft({ ...draft, url: e.target.value })}
-                  placeholder="https://… or rtsp://… or http://cam/mjpg" />
+                  placeholder="https://… or rtsp://… or http://cam/mjpg … or http://cam/view/index.shtml" />
                 <label>Kind:</label>
                 <select className="ga98-text" value={draft.kind ?? 'hls'} onChange={(e) => setDraft({ ...draft, kind: e.target.value as StreamKind })}>
                   <option value="hls">HLS (.m3u8)</option>
                   <option value="mp4">MP4 (.mp4 video)</option>
                   <option value="mjpeg">MJPEG (multipart)</option>
                   <option value="http">HTTP image (refreshing)</option>
+                  <option value="webpage">Webpage / viewer page (opens in Firefox)</option>
                   <option value="rtsp">RTSP (requires local bridge)</option>
                 </select>
                 <label>Case:</label>

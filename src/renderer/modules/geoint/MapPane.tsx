@@ -5,7 +5,7 @@
  * breakage under bundlers. Pick mode turns a map click into an onPick(lat, lon) call.
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { GeoItem } from '@shared/post-mvp-types';
@@ -18,6 +18,10 @@ const CATEGORY_COLOR: Record<string, string> = {
 };
 // Distinct icon for the searched location so it reads differently from the item markers.
 const searchPin = L.divIcon({ className: 'ga98-geo-search-pin', html: '📌', iconSize: [20, 20], iconAnchor: [10, 20] });
+
+// Hard cap on rendered markers so a huge cache (e.g. thousands of FIRMS points, 2000/source)
+// can't freeze Leaflet. Only the first MAX_MARKERS *located* items get a marker.
+const MAX_MARKERS = 1500;
 
 // Diameter (px) by severity. Undefined/low → 11, medium → 14, high → 18.
 function severityDiameter(sev: GeoItem['severity']): number {
@@ -69,6 +73,13 @@ export function MapPane({ items, corroboration, tilesEnabled, tileUrl, tileAttri
   pickRef.current = pickMode;
   const centerCb = useRef(onCenterChange);
   centerCb.current = onCenterChange;
+  // Latest items, readable by the focus effect without adding `items` to its deps (which would
+  // reintroduce the moveend→rebuild loop). Lets focus on a capped item fall back to setView.
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+  // When the MAX_MARKERS cap truncates the located set, surface how many of how many are shown
+  // (silently hiding events 1501..N is unacceptable in an OSINT tool). null = nothing hidden.
+  const [truncated, setTruncated] = useState<{ shown: number; total: number } | null>(null);
 
   useEffect(() => {
     if (!ref.current || map.current) return;
@@ -138,12 +149,23 @@ export function MapPane({ items, corroboration, tilesEnabled, tileUrl, tileAttri
     if (!lg) return;
     lg.clearLayers();
     markers.current.clear();
+    let placed = 0;
+    let located = 0; // count of items with valid, placeable coords (whether or not capped)
     for (const it of items) {
       if (it.lat == null || it.lon == null) continue;
-      const mk = L.marker([it.lat, it.lon], { icon: buildIcon(it, corroboration.get(it.id) ?? 0) }).bindPopup(buildPopup(it.title, it.link));
-      mk.addTo(lg);
-      markers.current.set(it.id, mk);
+      // Reject non-finite / out-of-range coords BEFORE constructing — a poisoned item
+      // (NaN/Infinity/garbage lat-lon) must never reach L.marker.
+      if (!(Number.isFinite(it.lat) && Number.isFinite(it.lon) && it.lat >= -90 && it.lat <= 90 && it.lon >= -180 && it.lon <= 180)) continue;
+      located++;
+      if (placed >= MAX_MARKERS) continue; // cap so a huge cache can't bog the map (keep counting `located`)
+      try {
+        const mk = L.marker([it.lat, it.lon], { icon: buildIcon(it, corroboration.get(it.id) ?? 0) }).bindPopup(buildPopup(it.title, it.link));
+        mk.addTo(lg);
+        markers.current.set(it.id, mk);
+        placed++;
+      } catch { /* skip a marker that fails to build; never let one bad item crash the layer */ }
     }
+    setTruncated(placed < located ? { shown: placed, total: located } : null);
   }, [items, corroboration]);
 
   // Recenter + open the focused marker's popup ONLY when the focus actually changes. Keeping setView out
@@ -153,12 +175,24 @@ export function MapPane({ items, corroboration, tilesEnabled, tileUrl, tileAttri
     const m = map.current;
     if (!m || !focusId) return;
     const mk = markers.current.get(focusId);
-    if (mk) { m.setView(mk.getLatLng(), 6); mk.openPopup(); }
+    if (mk) { m.setView(mk.getLatLng(), 6); mk.openPopup(); return; }
+    // No marker for this id — it's past the MAX_MARKERS cap (or not yet built). Fall back to
+    // centering on the item's coords by id so "Play story" / focus still works on capped events.
+    const it = itemsRef.current.find((x) => x.id === focusId);
+    if (it && Number.isFinite(it.lat) && Number.isFinite(it.lon)) m.setView([it.lat as number, it.lon as number], 6);
   }, [focusId]);
 
   return (
     <div className="ga98-geo-map-wrap">
       <div ref={ref} className="ga98-geo-map" />
+      {truncated && (
+        <div
+          className="ga98-panel"
+          style={{ position: 'absolute', left: 6, bottom: 6, zIndex: 500, fontSize: 11, padding: '2px 6px', background: 'var(--ga98-face,#c0c0c0)', border: '2px outset #fff', pointerEvents: 'none' }}
+        >
+          Showing {truncated.shown} of {truncated.total} located events
+        </div>
+      )}
       {(!tilesEnabled || !tileUrl) && (
         <div className="ga98-geo-map-placeholder">
           Map tiles disabled. Enable GeoINT network and set a tile-server URL to view the map.

@@ -168,6 +168,18 @@ interface OnDiskCase {
   createdAt: string;
   updatedAt: string;
   archived: boolean;
+  /** Optional grouping bucket. Absent on legacy on-disk files (they parse fine and
+   *  list as ''/"Uncategorized"). */
+  category?: string;
+}
+
+/** Sanitise a free-form category label headed for storage: trim, strip control chars
+ *  ([\x00-\x1f\x7f] — including the NULs/escape sequences untrusted renderer input could
+ *  carry), and cap length so it can't be made unbounded. Empty result ⇒ Uncategorized. */
+const CATEGORY_MAX_LEN = 120;
+function clipCategory(input: string): string {
+  // eslint-disable-next-line no-control-regex
+  return input.replace(/[\x00-\x1f\x7f]/g, '').slice(0, CATEGORY_MAX_LEN).trim();
 }
 
 async function readCaseMeta(id: CaseId): Promise<OnDiskCase> {
@@ -225,7 +237,8 @@ export const caseStore: CaseStore = {
           createdAt: meta.createdAt,
           updatedAt: meta.updatedAt,
           archived: meta.archived,
-          primaryBioThumb
+          primaryBioThumb,
+          category: meta.category ?? ''
         });
       } catch (err) {
         // surface a placeholder so the UI can see something is wrong with this case dir,
@@ -240,7 +253,8 @@ export const caseStore: CaseStore = {
           tags: ['__unreadable__'],
           createdAt: '',
           updatedAt: '',
-          archived: false
+          archived: false,
+          category: ''
         });
       }
     }
@@ -263,7 +277,8 @@ export const caseStore: CaseStore = {
         tags: input.tags ?? [],
         createdAt: ts,
         updatedAt: ts,
-        archived: false
+        archived: false,
+        category: clipCategory(input.category ?? '')
       };
       await writeCaseMeta(meta);
       const seedEvent: TimelineEvent = { id: newId(), at: ts, kind: 'created', message: 'Case opened.' };
@@ -277,7 +292,8 @@ export const caseStore: CaseStore = {
         tags: meta.tags,
         createdAt: meta.createdAt,
         updatedAt: meta.updatedAt,
-        archived: meta.archived
+        archived: meta.archived,
+        category: meta.category
       };
     });
   },
@@ -297,12 +313,18 @@ export const caseStore: CaseStore = {
         status: patch.status ?? meta.status,
         priority: patch.priority ?? meta.priority,
         tags: patch.tags ?? meta.tags,
+        // A patch can explicitly set OR clear the category (clear = ''); only `undefined`
+        // leaves the existing value. Clipped/de-controlled the same way create() does.
+        category: patch.category !== undefined ? clipCategory(patch.category) : (meta.category ?? ''),
         updatedAt: nowIso()
       };
       // No-op guard: only persist + emit when content actually changed, so editing then
       // tabbing away without a change doesn't thrash updatedAt (re-sorts the list) or
       // dilute the AI context (which samples the last 10 timeline events).
       const changed: string[] = (['title', 'reference', 'description', 'status', 'priority'] as const).filter((k) => next[k] !== meta[k]);
+      // category compared with legacy-undefined normalised to '' so listing/touching a legacy
+      // case (no category on disk) is NOT misreported as a change.
+      if ((next.category ?? '') !== (meta.category ?? '')) changed.push('category');
       if (JSON.stringify(next.tags) !== JSON.stringify(meta.tags)) changed.push('tags');
       if (changed.length === 0) return loadFullCase(id);
       await writeCaseMeta(next);
