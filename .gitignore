@@ -72,3 +72,7 @@ resources/exiftool/*/
 # The README is committed; the model blobs + marker are build/CI-supplied, not committed.
 resources/local-ai/models/
 resources/local-ai/EMBED_MODEL_PRESENT
+
+# python bytecode from confinement gate scripts
+scripts/gates/__pycache__/
+__pycache__/
