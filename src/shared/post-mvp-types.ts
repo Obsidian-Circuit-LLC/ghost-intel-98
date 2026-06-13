@@ -134,6 +134,13 @@ export interface Wall {
   slots: (string | null)[]; // fixed length 9; each is a CameraStream id or null (empty)
   createdAt: string;
   updatedAt: string;
+  // ---- Optional location category ----
+  // The wall's Country→State/Region→City scope, entered in the Wall Setup dialog. Names the board
+  // and is the category an "Import CCTV file into this category" stamps imported feeds under. All
+  // optional; absent/blank keys are simply not written (mirrors CameraStream geo + streams pickGeo).
+  country?: string;
+  region?: string;
+  city?: string;
 }
 
 // ---------- Jukebox (media player) ----------

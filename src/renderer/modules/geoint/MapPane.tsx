@@ -12,6 +12,8 @@ import type { GeoItem } from '@shared/post-mvp-types';
 import { buildPopup } from './popup';
 
 const pin = L.divIcon({ className: 'ga98-geo-pin', html: '📍', iconSize: [16, 16], iconAnchor: [8, 16] });
+// Distinct icon for the searched location so it reads differently from the item 📍 pins.
+const searchPin = L.divIcon({ className: 'ga98-geo-search-pin', html: '📌', iconSize: [20, 20], iconAnchor: [10, 20] });
 
 export function MapPane({ items, tilesEnabled, tileUrl, tileAttribution, pickMode, onPick, focusId, flyTo, onCenterChange, overlayUrls = [], overlayAttribution = '' }: {
   items: GeoItem[];
@@ -33,6 +35,7 @@ export function MapPane({ items, tilesEnabled, tileUrl, tileAttribution, pickMod
   const map = useRef<L.Map | null>(null);
   const layer = useRef<L.LayerGroup | null>(null);
   const markers = useRef<Map<string, L.Marker>>(new Map());
+  const searchMarker = useRef<L.Marker | null>(null);
   const tiles = useRef<L.TileLayer | null>(null);
   const overlays = useRef<L.TileLayer[]>([]);
   const pickRef = useRef(pickMode);
@@ -88,7 +91,16 @@ export function MapPane({ items, tilesEnabled, tileUrl, tileAttribution, pickMod
   // coordinates still fire (a new object each time), without re-running on unrelated renders.
   useEffect(() => {
     const m = map.current;
-    if (m && flyTo) m.setView([flyTo.lat, flyTo.lon], 9);
+    if (!m || !flyTo) return;
+    m.setView([flyTo.lat, flyTo.lon], 9);
+    // Drop a single search pin at the hit. Added directly to the map (not the item `layer`
+    // group) so item-layer rebuilds don't clear it; a new search replaces the prior pin.
+    if (searchMarker.current) { searchMarker.current.remove(); searchMarker.current = null; }
+    const sm = L.marker([flyTo.lat, flyTo.lon], { icon: searchPin })
+      .bindPopup(`${flyTo.lat.toFixed(5)}, ${flyTo.lon.toFixed(5)}`)
+      .addTo(m);
+    searchMarker.current = sm;
+    sm.openPopup();
   }, [flyTo?.key]);
 
   // Rebuild the marker layer only when the item SET changes (items is memoized upstream, so a pan that

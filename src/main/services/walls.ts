@@ -8,6 +8,15 @@ import { secureReadText, secureWriteFile } from '../storage/secure-fs';
 
 function wallsFile(): string { return join(dataRoot(), 'walls.json'); }
 
+/** Trimmed location category — omit empty fields (mirrors services/streams.ts pickGeo). */
+function pickGeo(i: Partial<Wall>): Partial<Wall> {
+  const g: Partial<Wall> = {};
+  if (typeof i.country === 'string' && i.country.trim()) g.country = i.country.trim();
+  if (typeof i.region === 'string' && i.region.trim()) g.region = i.region.trim();
+  if (typeof i.city === 'string' && i.city.trim()) g.city = i.city.trim();
+  return g;
+}
+
 async function readAll(): Promise<Wall[]> {
   try { return JSON.parse(await secureReadText(wallsFile())) as Wall[]; }
   catch (err) { const e = err as NodeJS.ErrnoException; if (e.code === 'ENOENT') return []; throw err; }
@@ -27,7 +36,7 @@ export async function save(input: Partial<Wall> & { name: string; slots: (string
   const id = input.id || `wall-${randomUUID()}`;
   const slots = Array.from({ length: 9 }, (_, i) => (input.slots[i] ?? null));
   const idx = all.findIndex((w) => w.id === id);
-  const wall: Wall = { id, name: input.name, slots, createdAt: input.createdAt ?? now, updatedAt: now };
+  const wall: Wall = { id, name: input.name, slots, createdAt: input.createdAt ?? now, updatedAt: now, ...pickGeo(input) };
   if (idx >= 0) all[idx] = wall; else all.push(wall);
   await writeAll(all);
   return wall;

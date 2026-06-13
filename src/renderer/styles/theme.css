@@ -773,6 +773,7 @@ input.ga98-text, select.ga98-text {
 }
 .ga98-geo-events li[data-active='true'] { background: navy; color: #fff; }
 .ga98-geo-pin { font-size: 16px; line-height: 16px; }
+.ga98-geo-search-pin { font-size: 20px; line-height: 20px; }
 
 /* ── Markets ─────────────────────────────────────────────────────────────── */
 .ga98-mkt { display: flex; flex-direction: column; gap: 6px; height: 100%; overflow: auto; padding: 6px; box-sizing: border-box; }
