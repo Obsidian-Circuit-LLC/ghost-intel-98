@@ -77,5 +77,5 @@ The map feel, the EyeSpy wall, Mail, and the installer on a real Windows box are
 
 ---
 
-**Artifact:** `DCS98-Setup-3.14.0-beta.7.exe` (SIZE_BYTES bytes ≈ SIZE_MB MB, NSIS, x64, unsigned; Tor + Piper + offline AI models bundled)
-**SHA-256:** `PENDING_BUILD`
+**Artifact:** `DCS98-Setup-3.14.0-beta.7.exe` (521,398,605 bytes ≈ 497.2 MB, NSIS, x64, unsigned; Tor + Piper + offline AI models bundled)
+**SHA-256:** `e4f6747e2fee488ffc25e3932111da9c6539c4278566e591fc94302b17597c70`
