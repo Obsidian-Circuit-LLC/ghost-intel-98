@@ -247,7 +247,9 @@ export function EyeSpyModule(): JSX.Element {
         />
       </div>
       <div className="ga98-pane" style={{ display: 'flex', flexDirection: 'column', padding: 0, position: 'relative' }}>
-        <div style={{ display: 'flex', gap: 4, padding: 4, borderBottom: '1px solid #ccc', alignItems: 'center' }}>
+        {/* flexWrap so the wall controls (incl. the long "Fill wall from …" + Purge buttons) wrap
+            to a second row on a narrow pane instead of overflowing off the right edge / forcing a scroll. */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: 4, borderBottom: '1px solid #ccc', alignItems: 'center' }}>
           <button onClick={newWall}>New</button>
           <select value={wall.id} onChange={(e) => void openWall(e.target.value)}>
             {wallsList.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
