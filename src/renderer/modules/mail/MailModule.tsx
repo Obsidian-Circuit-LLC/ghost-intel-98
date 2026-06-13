@@ -13,8 +13,8 @@ import mailNotifyUrl from '../../assets/mail-notify.wav';
 
 type LeftView = 'inbox' | 'drafts';
 
-/** Background poll interval for the silent inbox check (2 min). */
-const AUTO_REFRESH_MS = 120_000;
+/** Background poll interval for the silent inbox check (30 s). */
+const AUTO_REFRESH_MS = 30_000;
 
 /** Play the tester-supplied new-mail chime. Fire-and-forget; autoplay/no-audio is swallowed. */
 function playMailNotify(): void {
@@ -290,7 +290,7 @@ function AccountSetup({ accounts, onClose }: { accounts: MailAccount[]; onClose:
 
   return (
     <div className="ga98-dialog-veil">
-      <div className="window" style={{ width: 440 }}>
+      <div className="window" style={{ width: 440, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
         <div className="title-bar">
           <div className="title-bar-text">Mail account</div>
           {/* Always-available close — never trap the user in account setup. */}
@@ -298,7 +298,9 @@ function AccountSetup({ accounts, onClose }: { accounts: MailAccount[]; onClose:
             <button aria-label="Close" onClick={onClose} />
           </div>
         </div>
-        <div className="window-body ga98-stack">
+        <div className="window-body ga98-stack" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+          {/* Scrollable body: fields scroll, the Test/Save/Cancel row below stays pinned and reachable. */}
+          <div className="ga98-stack" style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
           {accounts.length > 0 && (
             <fieldset>
               <legend>Existing</legend>
@@ -351,6 +353,7 @@ function AccountSetup({ accounts, onClose }: { accounts: MailAccount[]; onClose:
               port 465 uses implicit TLS (check TLS).
             </p>
           </fieldset>
+          </div>
           <div style={{ display: 'flex', gap: 4 }}>
             <button onClick={() => void test()}>Test IMAP</button>
             <button onClick={() => void save()} disabled={!draft.user || !draft.password}>Save</button>
@@ -442,7 +445,7 @@ function Compose({ draft: initial, onClose }: { draft: MailDraft; onClose: (save
 
   return (
     <div className="ga98-dialog-veil">
-      <div className="window" style={{ width: 640 }}>
+      <div className="window" style={{ width: 640, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
         <div className="title-bar">
           <div className="title-bar-text">Compose</div>
           {/* Always-available close — the Compose window must never trap the user. */}
@@ -450,26 +453,29 @@ function Compose({ draft: initial, onClose }: { draft: MailDraft; onClose: (save
             <button aria-label="Close" onClick={() => onClose(false)} />
           </div>
         </div>
-        <div className="window-body ga98-stack">
-          <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: 4 }}>
-            <label>To:</label>
-            <input className="ga98-text" value={draft.to} onChange={(e) => setDraft({ ...draft, to: e.target.value })} />
-            <label>Subject:</label>
-            <input className="ga98-text" value={draft.subject} onChange={(e) => setDraft({ ...draft, subject: e.target.value })} />
+        <div className="window-body ga98-stack" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+          {/* Scrollable body: fields scroll, the action row below stays pinned and reachable. */}
+          <div className="ga98-stack" style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: 4 }}>
+              <label>To:</label>
+              <input className="ga98-text" value={draft.to} onChange={(e) => setDraft({ ...draft, to: e.target.value })} />
+              <label>Subject:</label>
+              <input className="ga98-text" value={draft.subject} onChange={(e) => setDraft({ ...draft, subject: e.target.value })} />
+            </div>
+            <textarea className="ga98-text" rows={12} value={draft.body} onChange={(e) => setDraft({ ...draft, body: e.target.value })} placeholder="Message body…" />
+            <fieldset>
+              <legend>Attachments ({draft.attachments.length})</legend>
+              <ul className="ga98-list">
+                {draft.attachments.map((a, i) => (
+                  <li key={i}>
+                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }} title={a.path}>📎 {a.name}</span>
+                    <button onClick={() => removeAttachment(i)}>×</button>
+                  </li>
+                ))}
+              </ul>
+              <button onClick={() => void addAttachment()}>Add file…</button>
+            </fieldset>
           </div>
-          <textarea className="ga98-text" rows={12} value={draft.body} onChange={(e) => setDraft({ ...draft, body: e.target.value })} placeholder="Message body…" />
-          <fieldset>
-            <legend>Attachments ({draft.attachments.length})</legend>
-            <ul className="ga98-list">
-              {draft.attachments.map((a, i) => (
-                <li key={i}>
-                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }} title={a.path}>📎 {a.name}</span>
-                  <button onClick={() => removeAttachment(i)}>×</button>
-                </li>
-              ))}
-            </ul>
-            <button onClick={() => void addAttachment()}>Add file…</button>
-          </fieldset>
           <div style={{ display: 'flex', gap: 4 }}>
             <button onClick={() => void send()} disabled={sending || savingDraft || !draft.to.trim() || !draft.subject.trim()}>
               {sending ? 'Sending…' : 'Send'}
