@@ -32,13 +32,29 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`DCS98-Setup-3.14.0-beta.5.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake formally verified internally; external audit + FIPS pending. See Status.)*
+> **Install:** download [`DCS98-Setup-3.14.0-beta.6.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake formally verified internally; external audit + FIPS pending. See Status.)*
 
 ## Status
 
-**v3.14.0-beta.5** — current release. A targeted **GeoINT map fix** on top of the beta.4 line: the map no longer **flashes a "ghost box" in the centre** and no longer **catches when you click-drag** to pan. Both were one bug — the event list rebuilt every render, so the marker layer thrashed on each pan and the "recenter on the focused event" step drove a recenter→re-render→rebuild loop (which re-opened the focused popup in the centre). Fixed by memoizing the list and moving the recenter into its own focus-only step. No change to GeoINT's data/sources/network gate — purely render wiring.
+**v3.14.0-beta.6** — current release. The **GeoINT intelligence map**, an **EyeSpy Wall Setup** flow, and **Mail auto-refresh + notification**:
 
-712 automated tests. *Everything from v3.14.0-beta.4 (the EyeSpy finder + curated 3×3 wall) carries forward.*
+- **GeoINT** becomes an intelligence map. The offline gazetteer grew **250 country names → ~61.7k cities**,
+  so RSS/Atom articles that name a city now **auto-pin** (this is the fix for "feeds not showing"). Markers
+  are **colored by category** (conflict/cyber/protest/disaster/crime/politics) and sized by severity;
+  events corroborated by **≥2 distinct sources** glow; a **timeline scrubber** plays events over time;
+  **story mode** walks a set of events as a shareable briefing; search drops a 📌. (`Places © GeoNames CC-BY`.)
+- **EyeSpy — Wall Setup:** **New** configures a board by **Country/State/City** and can **import a whole CCTV
+  file into that category**; **Rename** now actually works.
+- **Mail:** silent background **auto-refresh** + an **audio notification** only when new mail arrives.
+- Internal: a security-hardening pass on the not-yet-shipped offensive-egress capability (no user-facing change).
+
+801 automated tests. *Everything from v3.14.0-beta.5 carries forward.*
+
+<details><summary>v3.14.0-beta.5 — GeoINT map fix (no ghost box / drag catch)</summary>
+
+A targeted render-wiring fix: the GeoINT map stopped flashing a "ghost box" in the centre and catching on click-drag (the event list rebuilt every render → marker thrash + a recenter loop; fixed by memoizing + splitting the focus step). **712 tests.**
+
+</details>
 
 <details><summary>v3.14.0-beta.4 — EyeSpy finder + curated 3×3 wall</summary>
 
@@ -345,14 +361,14 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/dcs98/releases) and run it.
 
-Direct link to the current release: [`DCS98-Setup-3.14.0-beta.5.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.14.0-beta.5/DCS98-Setup-3.14.0-beta.5.exe)
+Direct link to the current release: [`DCS98-Setup-3.14.0-beta.6.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.14.0-beta.6/DCS98-Setup-3.14.0-beta.6.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is formally verified internally — external audit + FIPS
 pending — see Status). The last fully-stable build is [`DCS98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.6.8/DCS98-Setup-3.6.8.exe).
 
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\DCS98-Setup-3.14.0-beta.5.exe -Algorithm SHA256
+Get-FileHash .\DCS98-Setup-3.14.0-beta.6.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
@@ -390,8 +406,19 @@ To uninstall: Settings → Apps → Dead Cyber Society 98 → Uninstall.
 
 ## Releases & changelog
 
-The current build is **v3.14.0-beta.5**. Each release page carries its own notes + SHA-256.
+The current build is **v3.14.0-beta.6**. Each release page carries its own notes + SHA-256.
 
+- **v3.14.0-beta.6** — **GeoINT intelligence map + EyeSpy Wall Setup + Mail notifications.** GeoINT becomes
+  an intelligence map: the offline gazetteer grew **250 country names → ~61.7k cities** so city articles
+  **auto-pin** (the fix for "feeds not showing"), markers are **colored by category** and sized by severity,
+  events corroborated by **≥2 sources** glow, a **timeline** plays events over time, **story mode** walks a
+  set as a shareable briefing, and search drops a 📌. Built TDD with an adversarial pass that caught a
+  geocoder that mislocated common-word prose (fixed: English-dictionary blocklist + capitalization gate +
+  self-validating guard) and an O(n²) corroboration freeze (fixed: spatial bucketing). EyeSpy gains a
+  **Wall Setup** dialog (configure New by Country/State/City, import a CCTV file into that category, rename
+  that actually works); Mail gains **silent auto-refresh + a new-mail audio notification**. Plus an internal
+  security-hardening pass on the not-yet-shipped offensive-egress capability. `Places © GeoNames (CC-BY)`.
+  **801 tests.**
 - **v3.14.0-beta.5** — **GeoINT map fix.** The GeoINT map no longer flashes a "ghost box" in the centre or
   catches when you click-drag to pan. Both were one bug: the event list was rebuilt as a fresh array every
   render, so the marker layer cleared+rebuilt on every pan frame and the "recenter on the focused event"
@@ -611,7 +638,7 @@ This starts the Vite dev server (HMR) and the Electron main process.
 
 ```bash
 pnpm build        # type-check + bundle main / preload / renderer
-pnpm test         # vitest suite (712 tests as of v3.14.0-beta.5)
+pnpm test         # vitest suite (801 tests as of v3.14.0-beta.6)
 pnpm package      # platform installer for the current host
 pnpm package:win  # cross-build Windows NSIS installer
 ```
