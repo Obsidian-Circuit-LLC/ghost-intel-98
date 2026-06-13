@@ -776,6 +776,7 @@ input.ga98-text, select.ga98-text {
 /* Per-item category/severity dot. Strip Leaflet's default .leaflet-div-icon white box + border so
    only the inline-styled dot (and its corroboration halo) renders; the glow must not be clipped. */
 .ga98-geo-mk { background: transparent; border: 0; overflow: visible; }
+.ga98-geo-search-pin { font-size: 20px; line-height: 20px; }
 
 /* ── Markets ─────────────────────────────────────────────────────────────── */
 .ga98-mkt { display: flex; flex-direction: column; gap: 6px; height: 100%; overflow: auto; padding: 6px; box-sizing: border-box; }

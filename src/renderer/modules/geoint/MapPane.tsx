@@ -16,6 +16,8 @@ const CATEGORY_COLOR: Record<string, string> = {
   conflict: '#c0392b', cyber: '#8e44ad', protest: '#e67e22',
   disaster: '#16a085', crime: '#7f8c8d', politics: '#2980b9'
 };
+// Distinct icon for the searched location so it reads differently from the item markers.
+const searchPin = L.divIcon({ className: 'ga98-geo-search-pin', html: '📌', iconSize: [20, 20], iconAnchor: [10, 20] });
 
 // Diameter (px) by severity. Undefined/low → 11, medium → 14, high → 18.
 function severityDiameter(sev: GeoItem['severity']): number {
@@ -60,6 +62,7 @@ export function MapPane({ items, corroboration, tilesEnabled, tileUrl, tileAttri
   const map = useRef<L.Map | null>(null);
   const layer = useRef<L.LayerGroup | null>(null);
   const markers = useRef<Map<string, L.Marker>>(new Map());
+  const searchMarker = useRef<L.Marker | null>(null);
   const tiles = useRef<L.TileLayer | null>(null);
   const overlays = useRef<L.TileLayer[]>([]);
   const pickRef = useRef(pickMode);
@@ -115,7 +118,16 @@ export function MapPane({ items, corroboration, tilesEnabled, tileUrl, tileAttri
   // coordinates still fire (a new object each time), without re-running on unrelated renders.
   useEffect(() => {
     const m = map.current;
-    if (m && flyTo) m.setView([flyTo.lat, flyTo.lon], 9);
+    if (!m || !flyTo) return;
+    m.setView([flyTo.lat, flyTo.lon], 9);
+    // Drop a single search pin at the hit. Added directly to the map (not the item `layer`
+    // group) so item-layer rebuilds don't clear it; a new search replaces the prior pin.
+    if (searchMarker.current) { searchMarker.current.remove(); searchMarker.current = null; }
+    const sm = L.marker([flyTo.lat, flyTo.lon], { icon: searchPin })
+      .bindPopup(`${flyTo.lat.toFixed(5)}, ${flyTo.lon.toFixed(5)}`)
+      .addTo(m);
+    searchMarker.current = sm;
+    sm.openPopup();
   }, [flyTo?.key]);
 
   // Rebuild the marker layer only when the item SET changes (items is memoized upstream, so a pan that
