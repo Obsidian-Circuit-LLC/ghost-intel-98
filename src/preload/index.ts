@@ -259,7 +259,8 @@ const api = {
     setItemLocation: (id: string, loc: unknown) => ipcRenderer.invoke(channels.geoint.setItemLocation, id, loc),
     saveToCase: (caseId: string, item: unknown, opts: unknown) => ipcRenderer.invoke(channels.geoint.saveToCase, caseId, item, opts),
     listCaseEvents: (caseId: string) => ipcRenderer.invoke(channels.geoint.listCaseEvents, caseId),
-    removeCaseEvent: (caseId: string, eventId: string) => ipcRenderer.invoke(channels.geoint.removeCaseEvent, caseId, eventId)
+    removeCaseEvent: (caseId: string, eventId: string) => ipcRenderer.invoke(channels.geoint.removeCaseEvent, caseId, eventId),
+    purgeCache: () => ipcRenderer.invoke(channels.geoint.purgeCache)
   },
   markets: {
     fetch: () => ipcRenderer.invoke(channels.markets.fetch)

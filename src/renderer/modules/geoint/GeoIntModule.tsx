@@ -9,7 +9,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { GeoSnapshot, GeoSourceType, GeoItem } from '@shared/post-mvp-types';
 import { useSettings } from '../../state/store';
 import { toast } from '../../state/toasts';
+import { confirmDialog } from '../../state/dialogs';
 import { MapPane } from './MapPane';
+import { MapErrorBoundary } from './MapErrorBoundary';
 import { SaveEventDialog } from './SaveEventDialog';
 import { corroborate } from './corroborate';
 import { timeBounds, itemsUpTo } from './timeline';
@@ -26,8 +28,8 @@ const CATEGORY_COLOR: Record<string, string> = {
 // network. Nothing is fetched until the "Allow GeoINT network" box is ticked (the egress gate);
 // once it is, this fills an empty tile field so the map isn't a blank grey square. The user can
 // replace it with any {z}/{x}/{y} tile server.
-const DEFAULT_TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
-const DEFAULT_TILE_ATTRIBUTION = '© OpenStreetMap contributors';
+const DEFAULT_TILE_URL = 'https://mt0.google.com/vt/lyrs=m&x={x}&y={y}&z={z}';
+const DEFAULT_TILE_ATTRIBUTION = '© Google';
 
 // Built-in satellite basemap (Esri World Imagery). Like the street tiles, it only loads when
 // "Allow GeoINT network" is on. Note Esri's tile path is {z}/{y}/{x} — y before x.
@@ -42,14 +44,20 @@ const LABELS_TRANSPORT_URL = 'https://server.arcgisonline.com/ArcGIS/rest/servic
 const LABELS_PLACES_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}';
 const LABELS_ATTRIBUTION = 'Labels © Esri';
 
-export function GeoIntModule(): JSX.Element {
+// Upper bound on the item set fed into corroborate/timeBounds/visibleItems and the map IPC. A
+// pathological cache (130k+ accumulated events) shouldn't bog the per-item corroboration grid or
+// the marker build even though timeBounds no longer crashes on it. Capping keeps the UI responsive
+// and the payload sane; the Events legend shows the truncation so it's never silent.
+const MAX_ITEMS = 5000;
+
+function GeoIntModuleInner(): JSX.Element {
   const settings = useSettings((s) => s.settings);
   const patch = useSettings((s) => s.patch);
   const net = settings?.geoint.networkEnabled ?? false;
   const tileUrl = settings?.geoint.tileServerUrl ?? '';
   const tileAttribution = settings?.geoint.tileAttribution ?? '';
   const basemap = settings?.geoint.basemap ?? 'street';
-  // The map's active layer: street uses the user/OSM tiles; satellite uses the built-in Esri layer.
+  // The map's active layer: street uses the user/default tiles; satellite uses the built-in Esri layer.
   const activeTileUrl = basemap === 'satellite' ? ESRI_SAT_URL : tileUrl;
   const activeTileAttribution = basemap === 'satellite' ? ESRI_SAT_ATTRIBUTION : tileAttribution;
 
@@ -83,7 +91,7 @@ export function GeoIntModule(): JSX.Element {
   // Street View overlay (embed). Tracks the map center so it opens the spot you're looking at.
   const [streetView, setStreetView] = useState(false);
   const [center, setCenter] = useState<{ lat: number; lon: number }>({ lat: 20, lon: 0 });
-  // Street-name / place-name overlay (off by default; redundant on the OSM 2D map, which already
+  // Street-name / place-name overlay (off by default; redundant on the labeled 2D map, which already
   // labels — the win is on Satellite). Ephemeral per session.
   const [labels, setLabels] = useState(false);
   const overlayUrls = labels && net ? [LABELS_TRANSPORT_URL, LABELS_PLACES_URL] : [];
@@ -126,6 +134,26 @@ export function GeoIntModule(): JSX.Element {
     try { await window.api.geoint.removeSource(id); await load(); }
     catch (err) { toast.error((err as Error).message); }
   }
+  // Full reset: purge ALL sources + cached events (main-side fs), reset tiles to default, and
+  // clear local UI state. The escape hatch for a poisoned cache that survives delete+reinstall.
+  async function purgeAll(): Promise<void> {
+    try {
+      await window.api.geoint.purgeCache();
+      patchGeo({ basemap: 'street', tileServerUrl: DEFAULT_TILE_URL, tileAttribution: DEFAULT_TILE_ATTRIBUTION });
+      setSnap(null);
+      setFocusId(null);
+      setPickFor(null);
+      setStory(null);
+      setSearch('');
+      setTileDraft(DEFAULT_TILE_URL);
+      await load();
+      toast.success('GeoINT cache purged.');
+    } catch (err) { toast.error((err as Error).message); }
+  }
+  async function confirmPurge(): Promise<void> {
+    if (!(await confirmDialog('Purge ALL GeoINT sources and cached events, and reset the map tiles to default? This cannot be undone.', 'Purge GeoINT cache'))) return;
+    await purgeAll();
+  }
   async function refresh(): Promise<void> {
     if (!net) { toast.warn('GeoINT network is off — enable it to fetch sources.'); return; }
     setBusy(true);
@@ -166,10 +194,12 @@ export function GeoIntModule(): JSX.Element {
   // Memoized so its reference is stable across renders that don't change the data — otherwise a fresh
   // array each render makes MapPane's marker effect clear+rebuild every pan (the drag "catch") and
   // re-fire the focused-marker setView (a moveend→re-render→rebuild loop that flashed the popup).
-  const items = useMemo(
-    () => (snap?.items ?? []).filter((i) => !filter || i.title.toLowerCase().includes(filter.toLowerCase())),
-    [snap, filter]
-  );
+  const { items, itemsTotal } = useMemo(() => {
+    const matched = (snap?.items ?? []).filter((i) => !filter || i.title.toLowerCase().includes(filter.toLowerCase()));
+    // Cap after filtering so corroborate/timeBounds/visibleItems and the map IPC stay bounded to
+    // ≤MAX_ITEMS even on a pathological cache. itemsTotal carries the pre-cap count for the notice.
+    return { items: matched.length > MAX_ITEMS ? matched.slice(0, MAX_ITEMS) : matched, itemsTotal: matched.length };
+  }, [snap, filter]);
 
   // Corroboration count per item (distinct other sources nearby in time). Computed on the FULL
   // `items` set (not the timeline-filtered subset) so confidence is stable as the cursor moves —
@@ -268,8 +298,8 @@ export function GeoIntModule(): JSX.Element {
               onChange={(e) => setTileDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') loadTiles(); }} style={{ flex: 1 }} />
             <button onClick={loadTiles} disabled={!net} title="Load this tile server as the 2D map">Load</button>
             <button
-              onClick={() => { setTileDraft(DEFAULT_TILE_URL); patchGeo({ basemap: 'street', tileServerUrl: DEFAULT_TILE_URL, tileAttribution: DEFAULT_TILE_ATTRIBUTION }); setStreetView(false); toast.success('Reset to the default OpenStreetMap tiles.'); }}
-              disabled={!net} title="Reset to the default OpenStreetMap tile server">Reset</button>
+              onClick={() => { setTileDraft(DEFAULT_TILE_URL); patchGeo({ basemap: 'street', tileServerUrl: DEFAULT_TILE_URL, tileAttribution: DEFAULT_TILE_ATTRIBUTION }); setStreetView(false); toast.success('Reset to the default map tiles.'); }}
+              disabled={!net} title="Reset to the default tile server">Reset</button>
           </div>
           <div className="field-row" style={{ marginTop: 4 }}>
             <label style={{ minWidth: 60 }}>View:</label>
@@ -326,6 +356,9 @@ export function GeoIntModule(): JSX.Element {
             <button onClick={() => void addSource()} disabled={!draft.label || !draft.url}>Add</button>
             <button onClick={() => void importOpml()}>Import OPML…</button>
             <button onClick={() => void refresh()} disabled={busy}>{busy ? 'Refreshing…' : 'Refresh'}</button>
+            <span style={{ flex: 1 }} />
+            <button onClick={() => void confirmPurge()} title="Purge ALL GeoINT sources + cached events and reset the map (recovery escape hatch)"
+              style={{ color: '#900', fontWeight: 'bold' }}>Purge cache</button>
           </div>
           <ul className="ga98-list" style={{ marginTop: 6 }}>
             {(snap?.sources ?? []).map((s) => (
@@ -339,7 +372,7 @@ export function GeoIntModule(): JSX.Element {
         </fieldset>
 
         <fieldset style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-          <legend>Events ({items.length})</legend>
+          <legend>Events ({itemsTotal > MAX_ITEMS ? `${items.length} of ${itemsTotal}` : items.length})</legend>
           <input className="ga98-text" placeholder="Filter…" value={filter} onChange={(e) => setFilter(e.target.value)} />
           <ul className="ga98-list ga98-geo-events" style={{ flex: 1, overflow: 'auto', marginTop: 4 }}>
             {items.map((i) => (
@@ -416,5 +449,25 @@ export function GeoIntModule(): JSX.Element {
       </div>
       {saveItem && <SaveEventDialog item={saveItem} onClose={() => setSaveItem(null)} />}
     </div>
+  );
+}
+
+// Thin wrapper: the error boundary wraps the ENTIRE module render tree, not just MapPane. The
+// crash that motivated this (timeBounds spreading 130k+ timestamps as call args, RangeError) threw
+// in GeoIntModuleInner's own body — ABOVE where the old boundary sat — so the whole module white-
+// screened with neither recovery button on screen. With the boundary here, ANY render-time throw in
+// the inner body (timeBounds, corroborate, MapPane, anything) lands on the recovery UI. On recovery,
+// hardPurge clears the on-disk cache, then bumps resetKey so Inner remounts fresh against the purged
+// state — a clean mount rather than re-running against the data that just threw.
+export function GeoIntModule(): JSX.Element {
+  const [resetKey, setResetKey] = useState(0);
+  const hardPurge = useCallback(async () => {
+    try { await window.api.geoint.purgeCache(); } catch { /* purge is best-effort recovery */ }
+    setResetKey((k) => k + 1); // remount Inner fresh against purged state
+  }, []);
+  return (
+    <MapErrorBoundary onPurge={hardPurge}>
+      <GeoIntModuleInner key={resetKey} />
+    </MapErrorBoundary>
   );
 }
