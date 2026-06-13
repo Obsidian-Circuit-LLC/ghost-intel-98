@@ -17,6 +17,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "vitest run",
     "test:watch": "vitest",
+    "gate:confinement": "bash scripts/gates/osint-confinement-netns.sh 18443 203.0.113.0/24",
     "fetch:tor": "node scripts/fetch-tor.mjs",
     "fetch:piper": "node scripts/fetch-piper.mjs",
     "fetch:mlkem": "node scripts/fetch-mlkem.mjs",
