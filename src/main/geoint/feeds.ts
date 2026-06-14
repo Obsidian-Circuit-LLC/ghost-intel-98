@@ -122,6 +122,43 @@ export function parseGeoJson(body: string, sourceId: string): GeoItem[] {
     });
 }
 
+/** True iff lat/lon are finite and on-globe — the same guard parseGeoJson applies, so a
+ *  garbage coordinate never becomes a silently-mislocated 'geo' pin. */
+function inRange(lat: number, lon: number): boolean {
+  return Number.isFinite(lat) && Number.isFinite(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180;
+}
+
+export function parseKml(body: string, sourceId: string, _geocode: Geocoder): GeoItem[] {
+  const doc = xml.parse(body) as Record<string, any>;
+  const root = doc?.kml?.Document ?? doc?.kml?.Folder ?? doc?.kml ?? {};
+  // Placemarks can sit directly under the root or one level down inside Folder(s).
+  const direct = arr(root.Placemark);
+  const nested = arr(root.Folder).flatMap((f: Record<string, unknown>) => arr(f.Placemark));
+  const placemarks = [...direct, ...nested] as Record<string, any>[];
+  const out: GeoItem[] = [];
+  for (const pm of placemarks.slice(0, MAX_FEED_ITEMS)) {
+    const coordStr = pm?.Point?.coordinates;
+    if (coordStr == null) continue; // LineString/Polygon placemarks: no single pin in v1
+    const [lonS, latS] = String(coordStr).trim().split(',');
+    const lon = Number(lonS);
+    const lat = Number(latS);
+    if (!inRange(lat, lon)) continue;
+    const title = txt(pm.name) || 'Untitled';
+    const summary = txt(pm.description);
+    out.push({
+      id: randomUUID(),
+      sourceId,
+      title,
+      summary: summary || undefined,
+      lat,
+      lon,
+      located: 'geo',
+      ...classify(title, summary)
+    });
+  }
+  return out;
+}
+
 export function detectType(url: string, body: string): GeoSourceType {
   const u = url.toLowerCase();
   if (u.endsWith('.geojson') || u.endsWith('.json')) return 'geojson';
