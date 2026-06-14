@@ -47,3 +47,18 @@ describe('fetchInbox flagged', () => {
     expect(out[0].flagged).toBe(true);
   });
 });
+
+import { setFlag } from '../src/main/services/mail';
+
+describe('setFlag', () => {
+  it('adds the flag when value is true', async () => {
+    await setFlag('a1', 7, '\\Flagged', true);
+    const c = calls.find((x) => x.method === 'messageFlagsAdd')!;
+    expect(c.args[0]).toBe('7');
+    expect(c.args[1]).toEqual(['\\Flagged']);
+  });
+  it('removes the flag when value is false', async () => {
+    await setFlag('a1', 7, '\\Flagged', false);
+    expect(calls.some((x) => x.method === 'messageFlagsRemove')).toBe(true);
+  });
+});

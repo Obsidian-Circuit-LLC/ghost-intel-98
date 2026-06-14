@@ -276,6 +276,22 @@ export async function fetchMessage(id: string, uid: number): Promise<MailMessage
   }
 }
 
+export async function setFlag(id: string, uid: number, flag: string, value: boolean): Promise<void> {
+  const { acct, password } = await loadAccountWithPassword(id);
+  const client = makeImapClient({
+    host: acct.imapHost, port: acct.imapPort, secure: acct.imapSecure, user: acct.user, pass: password
+  });
+  await client.connect();
+  try {
+    await client.mailboxOpen('INBOX');
+    const range = String(uid);
+    if (value) await client.messageFlagsAdd(range, [flag], { uid: true });
+    else await client.messageFlagsRemove(range, [flag], { uid: true });
+  } finally {
+    await safeLogout(client);
+  }
+}
+
 export async function sendMail(input: MailSendInput): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
   try {
     // Critical: every attachment path must have come through a user-gesture path
