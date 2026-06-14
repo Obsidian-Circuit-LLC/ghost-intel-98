@@ -5,8 +5,8 @@
  * (default off): with it off, Refresh is a main-side no-op and the map loads no tiles.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { GeoSnapshot, GeoSourceType, GeoItem } from '@shared/post-mvp-types';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { GeoSnapshot, GeoSourceType, GeoXmlMap, GeoItem } from '@shared/post-mvp-types';
 import { useSettings } from '../../state/store';
 import { toast } from '../../state/toasts';
 import { confirmDialog } from '../../state/dialogs';
@@ -74,7 +74,7 @@ function GeoIntModuleInner(): JSX.Element {
   const [busy, setBusy] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveItem, setSaveItem] = useState<GeoItem | null>(null);
-  const [draft, setDraft] = useState<{ label: string; url: string; type: GeoSourceType }>({ label: '', url: '', type: 'rss' });
+  const [draft, setDraft] = useState<{ label: string; url: string; type: GeoSourceType; xmlMap?: GeoXmlMap }>({ label: '', url: '', type: 'rss' });
   const [search, setSearch] = useState('');
   const [searching, setSearching] = useState(false);
   // Custom tile URL is edited locally and applied only when the user clicks Load (rather than
@@ -112,7 +112,16 @@ function GeoIntModuleInner(): JSX.Element {
 
   async function addSource(): Promise<void> {
     if (!draft.label || !draft.url) return;
-    try { await window.api.geoint.addSource(draft); setDraft({ label: '', url: '', type: 'rss' }); await load(); }
+    const isXml = draft.type === 'xml';
+    if (isXml && !(draft.xmlMap?.itemsPath && draft.xmlMap?.lat && draft.xmlMap?.lon)) {
+      toast.error('XML source needs itemsPath, lat and lon paths.');
+      return;
+    }
+    try {
+      await window.api.geoint.addSource(isXml ? draft : { label: draft.label, url: draft.url, type: draft.type });
+      setDraft({ label: '', url: '', type: 'rss' });
+      await load();
+    }
     catch (err) { toast.error((err as Error).message); }
   }
   async function importOpml(): Promise<void> {
@@ -356,8 +365,27 @@ function GeoIntModuleInner(): JSX.Element {
             <input className="ga98-text" placeholder="https://feed…" value={draft.url} onChange={(e) => setDraft({ ...draft, url: e.target.value })} />
             <select className="ga98-text" value={draft.type} onChange={(e) => setDraft({ ...draft, type: e.target.value as GeoSourceType })}>
               <option value="rss">RSS</option><option value="atom">Atom</option><option value="geojson">GeoJSON</option>
+              <option value="kml">KML</option><option value="gpx">GPX</option><option value="xml">XML (custom)</option>
             </select>
           </div>
+          {draft.type === 'xml' && (
+            <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr', gap: 2, marginTop: 4 }}>
+              {(['itemsPath', 'lat', 'lon', 'title', 'summary', 'link', 'date'] as const).map((k) => (
+                <Fragment key={k}>
+                  <label style={{ fontSize: 11 }}>{k}{(k === 'itemsPath' || k === 'lat' || k === 'lon') ? ' *' : ''}</label>
+                  <input
+                    className="ga98-text"
+                    value={draft.xmlMap?.[k] ?? ''}
+                    placeholder={k === 'itemsPath' ? 'root.records.record' : k === 'lat' ? 'pos.@_lat' : ''}
+                    onChange={(e) => setDraft((d) => ({
+                      ...d,
+                      xmlMap: { itemsPath: '', lat: '', lon: '', ...d.xmlMap, [k]: e.target.value }
+                    }))}
+                  />
+                </Fragment>
+              ))}
+            </div>
+          )}
           <div className="field-row" style={{ marginTop: 6, gap: 4 }}>
             <button onClick={() => void addSource()} disabled={!draft.label || !draft.url}>Add</button>
             <button onClick={() => void importOpml()}>Import OPML…</button>
