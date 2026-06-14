@@ -32,24 +32,23 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`DCS98-Setup-3.14.0-beta.8.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake formally verified internally; external audit + FIPS pending. See Status.)*
+> **Install:** download [`DCS98-Setup-3.14.0-beta.9.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake formally verified internally; external audit + FIPS pending. See Status.)*
 
 ## Status
 
-**v3.14.0-beta.8** — current release. The **GhostExodus beta.7 field-test fixes**:
+**v3.14.0-beta.9** — current release. **GeoINT geo-XML formats + Mail actions**:
 
-- **Mail retrieval fixed:** the inbox now fetches the **newest** messages by sequence, not the oldest unseen
-  slice. A full inbox of unread alerts used to bury a just-arrived message (e.g. a self-sent test) below a
-  retrieval cap so it never appeared — now it shows.
-- **EyeSpy "Detect format":** paste a bare camera URL (insecam-style `IP:port`) and click **Detect** — it
-  probes the host, identifies the real format (MJPEG/JPEG/HLS/MP4), and rewrites the URL to the actual
-  stream endpoint so the feed plays **inline** instead of bouncing to Firefox. *(Detect makes a direct
-  request to the camera host — the same egress as viewing it — and deliberately reaches LAN cameras.)*
-- **GeoINT crash:** the map still hit the recovery screen on some saved states. The recovery now also
-  **resets the saved GeoINT settings** (the one poison that survived reinstall *and* cache-purge), and the
-  error screen now **shows the actual error on-device** so a stuck state can be diagnosed instead of guessed.
+- **GeoINT KML / GPX / generic XML sources.** Add a `.kml` or `.gpx` feed URL and Point placemarks /
+  waypoints become map pins (coordinate-range guarded). A new **XML (custom)** source type accepts any
+  structured XML feed via a dot-path field map (itemsPath / lat / lon + optional title / summary / link /
+  date) — so feeds that are neither RSS/Atom nor GeoJSON can still become pins.
+- **Mail: Star, Forward, Delete, Print.** Each open message now has an action row. **Star (★)** toggles the
+  IMAP `\Flagged` flag and shows in the inbox list. **Forward** opens Compose pre-filled with `Fwd:` subject
+  and a quoted body. **Delete** moves the message to the Trash folder (recoverable from webmail). **Print**
+  opens the native OS print dialog with a clean plaintext rendering of the message (HTML body is not used —
+  XSS-safe by design).
 
-845 automated tests. *Everything from v3.14.0-beta.7 carries forward.*
+879 automated tests. *Everything from v3.14.0-beta.8 carries forward.*
 
 <details><summary>v3.14.0-beta.7 — GhostExodus beta.6 field-test punch-list</summary>
 
@@ -385,14 +384,14 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/dcs98/releases) and run it.
 
-Direct link to the current release: [`DCS98-Setup-3.14.0-beta.8.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.14.0-beta.8/DCS98-Setup-3.14.0-beta.8.exe)
+Direct link to the current release: [`DCS98-Setup-3.14.0-beta.9.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.14.0-beta.9/DCS98-Setup-3.14.0-beta.9.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is formally verified internally — external audit + FIPS
 pending — see Status). The last fully-stable build is [`DCS98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.6.8/DCS98-Setup-3.6.8.exe).
 
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\DCS98-Setup-3.14.0-beta.8.exe -Algorithm SHA256
+Get-FileHash .\DCS98-Setup-3.14.0-beta.9.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
@@ -412,7 +411,7 @@ To uninstall: Settings → Apps → Dead Cyber Society 98 → Uninstall.
 | Whiteboard | Per-case pannable/zoomable canvas — text/image/file/link nodes + connectors |
 | **Markets** | Offline-first market overview — crypto (CoinGecko), FX (Frankfurter/ECB), indices/equities/commodities (Yahoo); editable watchlist + bring-your-own custom feeds. Network is **opt-in** (off by default); 60s auto-refresh while on |
 | **Jukebox** | Win98 CD-Player audio player — local **MP3 / OGG / FLAC / WAV / M4A** + **M3U** playlists, spectrum visualizer; internet radio is **opt-in** (off by default). Local files are served through a path-confined internal protocol |
-| **GeoINT** | Pluggable geopolitical-monitoring dashboard — **RSS / Atom / GeoJSON** sources + **OPML** import, a **Leaflet** map (**2D** custom tiles, **Satellite**, **Street View**), offline **gazetteer** geocoding + manual pins. Network is **opt-in** (off by default). Save an event into a case as a record / link / note |
+| **GeoINT** | Pluggable geopolitical-monitoring dashboard — **RSS / Atom / GeoJSON / KML / GPX / XML** sources + **OPML** import, a **Leaflet** map (**2D** custom tiles, **Satellite**, **Street View**), offline **gazetteer** geocoding + manual pins. Network is **opt-in** (off by default). Save an event into a case as a record / link / note |
 | **Bookmarks** | Offline start.me-style link dashboard — **category cards** of named links you organize by **dragging** (cards auto-scale to their link count); per-link icon of your choice (glyph / emoji / **consent-gated favicon**); **Share** the whole board as a portable `.ghostbookmarks` file |
 | Notepad 98 | Plain text editor — saves notes into a case, or into the **Briefcase** when "💼 Briefcase" is picked in the selector |
 | Solitaire | Klondike card game — full drag-and-drop, foundations A→K, Draw 1/3, double-click-to-foundation, and the classic bouncing-card **win cascade**. Self-contained, offline, zero data |
@@ -430,8 +429,18 @@ To uninstall: Settings → Apps → Dead Cyber Society 98 → Uninstall.
 
 ## Releases & changelog
 
-The current build is **v3.14.0-beta.8**. Each release page carries its own notes + SHA-256.
+The current build is **v3.14.0-beta.9**. Each release page carries its own notes + SHA-256.
 
+- **v3.14.0-beta.9** — **GeoINT geo-XML formats + Mail actions.** **GeoINT** gains three new feed types:
+  **KML** (Point placemarks, coordinate-range guarded), **GPX** (waypoints via `@_lat`/`@_lon` attributes),
+  and a generic **XML (custom)** source whose dot-path field map (itemsPath / lat / lon + optional title /
+  summary / link / date) turns any structured XML feed into map pins — with prototype-pollution-safe path
+  walking and gazetteer geocoder fallback when coordinates are absent. **Mail** gains a per-message action
+  row: **Star (★)** toggles the IMAP `\Flagged` flag and persists in the inbox list; **Forward** opens
+  Compose pre-filled with `Fwd:` subject + quoted body; **Delete** moves the message to the server's Trash
+  folder (special-use `\Trash` detected first, then common names, never permanent); **Print** opens the
+  native OS dialog with a clean, XSS-escaped plaintext rendering (the HTML body is intentionally not used).
+  All four actions are IPC-validated (uid sanitisation + flag allowlist). **879 tests.**
 - **v3.14.0-beta.8** — **GhostExodus beta.7 field-test fixes.** **Mail retrieval** now fetches the **newest**
   messages by IMAP sequence instead of the oldest-unseen slice — a full inbox of unread alerts no longer
   buries a just-arrived message below the cap (the "can send but can't receive" report). **EyeSpy** gains a
@@ -684,7 +693,7 @@ This starts the Vite dev server (HMR) and the Electron main process.
 
 ```bash
 pnpm build        # type-check + bundle main / preload / renderer
-pnpm test         # vitest suite (845 tests as of v3.14.0-beta.8)
+pnpm test         # vitest suite (879 tests as of v3.14.0-beta.9)
 pnpm package      # platform installer for the current host
 pnpm package:win  # cross-build Windows NSIS installer
 ```
