@@ -159,6 +159,31 @@ export function parseKml(body: string, sourceId: string, _geocode: Geocoder): Ge
   return out;
 }
 
+export function parseGpx(body: string, sourceId: string, _geocode: Geocoder): GeoItem[] {
+  const doc = xml.parse(body) as Record<string, any>;
+  // Waypoints only in v1. Tracks (trk/trkseg/trkpt) and routes (rte/rtept) are paths, not pins.
+  const wpts = arr(doc?.gpx?.wpt) as Record<string, any>[];
+  const out: GeoItem[] = [];
+  for (const w of wpts.slice(0, MAX_FEED_ITEMS)) {
+    const lat = Number(w['@_lat']);
+    const lon = Number(w['@_lon']);
+    if (!inRange(lat, lon)) continue;
+    const title = txt(w.name) || 'Waypoint';
+    const summary = txt(w.desc);
+    out.push({
+      id: randomUUID(),
+      sourceId,
+      title,
+      summary: summary || undefined,
+      lat,
+      lon,
+      located: 'geo',
+      ...classify(title, summary)
+    });
+  }
+  return out;
+}
+
 export function detectType(url: string, body: string): GeoSourceType {
   const u = url.toLowerCase();
   if (u.endsWith('.geojson') || u.endsWith('.json')) return 'geojson';

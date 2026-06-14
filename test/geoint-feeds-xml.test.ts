@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { getPath } from '../src/main/geoint/feeds';
 import { parseKml } from '../src/main/geoint/feeds';
+import { parseGpx } from '../src/main/geoint/feeds';
 
 const KML = `<?xml version="1.0"?>
 <kml><Document>
@@ -19,6 +20,20 @@ describe('parseKml', () => {
   it('drops out-of-range and non-Point placemarks', () => {
     const items = parseKml(KML, 's1', () => null);
     expect(items.map((i) => i.title)).toEqual(['Paris']);
+  });
+});
+
+const GPX = `<?xml version="1.0"?>
+<gpx>
+  <wpt lat="51.5074" lon="-0.1278"><name>London</name><desc>cam</desc></wpt>
+  <wpt lat="95" lon="0"><name>Bad lat</name></wpt>
+</gpx>`;
+
+describe('parseGpx', () => {
+  it('parses waypoints from @_lat/@_lon attributes', () => {
+    const items = parseGpx(GPX, 's2', () => null);
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ title: 'London', summary: 'cam', lat: 51.5074, lon: -0.1278, located: 'geo' });
   });
 });
 
