@@ -10,8 +10,8 @@ Two independent workstreams bundled into one release:
 
 - **A — GeoINT:** add three feed formats — KML, GPX, and a generic dot-path XML mapper —
   alongside the existing RSS / Atom / GeoJSON.
-- **B — Mail:** add Delete (→ Trash), Forward, and Star (★) actions, plus document the
-  new-mail sound asset swap.
+- **B — Mail:** add Delete (→ Trash), Forward, Star (★), and Print actions, plus document
+  the new-mail sound asset swap.
 
 They touch disjoint subsystems (`src/main/geoint/*` vs `src/main/services/mail.ts` +
 `src/renderer/modules/mail/*`) and could be split into two plans; one spec covers the
@@ -165,12 +165,14 @@ the fields before add, so this is a defensive no-op, not a normal path).
 ```ts
 deleteMessage: 'mail:deleteMessage',
 setFlag: 'mail:setFlag',
+printMessage: 'mail:printMessage',
 ```
 `src/preload/index.ts` + `api.d.ts` — add bindings:
 ```ts
 deleteMessage: (id: string, uid: number) => ipcRenderer.invoke(channels.mail.deleteMessage, id, uid),
 setFlag: (id: string, uid: number, flag: string, value: boolean) =>
   ipcRenderer.invoke(channels.mail.setFlag, id, uid, flag, value),
+printMessage: (id: string, uid: number) => ipcRenderer.invoke(channels.mail.printMessage, id, uid),
 ```
 
 ### Service (`src/main/services/mail.ts`)
@@ -191,6 +193,29 @@ Then `client.messageMove(String(uid), trash, { uid: true })`; `safeLogout` in `f
 **`MailMessageSummary`** (`post-mvp-types.ts`) gains `flagged: boolean`. `fetchInbox` sets it
 from the existing flags fetch: `flagged: msg.flags?.has('\\Flagged') ?? false`.
 
+**`printMessage(id, uid)`** — re-fetch the message with the existing `fetchMessage(id, uid)`
+(prints the real server message, not renderer-supplied content; reuses all its size caps and
+parsing), then render to the printer following the **exact `renderCasePdf` pattern** in
+`export.ts`:
+1. `buildMailPrintHtml(msg)` → self-contained, retro-styled HTML (pure builder, below).
+2. Write to OS temp (`app.getPath('temp')`, **not** `dataRoot` — plaintext must stay off the
+   encrypted vault surface, same rationale as `renderCasePdf`).
+3. Offscreen `BrowserWindow({ show:false, webPreferences:{ sandbox:true, contextIsolation:true,
+   nodeIntegration:false, javascript:false } })`; `loadFile(tmp)`.
+4. `await new Promise<void>((resolve, reject) => win.webContents.print({ printBackground:true },
+   (ok, reason) => ok || reason === 'cancelled' ? resolve() : reject(new Error(reason))))` —
+   **user-cancel resolves quietly** (cancelling a print is not an error).
+5. `finally`: clear a 60 s watchdog timeout, `win.destroy()`, `rm(tmp,{force:true})`.
+
+**`buildMailPrintHtml(msg: MailMessage): string`** — new pure module
+`src/main/services/mail-html.ts` (no Electron import → unit-testable, mirroring `report-html.ts`).
+- Escapes **every** field (`esc()` helper, same approach as `report-html.ts`) — the body is
+  untrusted email content; this is the XSS guard for the print window.
+- Renders the **plaintext** body (`msg.body`) inside a monospace `<pre>`-styled block. Never
+  emits `msg.html` (would defeat escaping). Header block: From / To / Subject / Date.
+- Lists attachment **filenames** only (not embedded); a `[N attachment(s) not printed]` line when
+  present.
+
 ### IPC handlers (`src/main/ipc/register.ts`)
 
 ```ts
@@ -198,6 +223,8 @@ safeHandle(channels.mail.deleteMessage, (...a) =>
   mail.deleteMessage(a[0] as string, ensureUid(a[1])));
 safeHandle(channels.mail.setFlag, (...a) =>
   mail.setFlag(a[0] as string, ensureUid(a[1]), ensureMailFlag(a[2]), a[3] === true));
+safeHandle(channels.mail.printMessage, (...a) =>
+  mail.printMessage(a[0] as string, ensureUid(a[1])));
 ```
 Account id is passed as `a[0] as string` to match the eight existing mail handlers (which all use
 a bare cast); the service enforces account existence (`loadAccountWithPassword` throws on an
@@ -208,7 +235,11 @@ unknown id). Two new validators in `validate.ts` cover the genuinely untrusted a
 ### Renderer (`src/renderer/modules/mail/MailModule.tsx`)
 
 - **List:** show `★` (gold) for `m.flagged` next to the unseen dot.
-- **Preview header action row** (when a message is selected): `Star`/`Unstar`, `Forward`, `Delete`.
+- **Preview header action row** (when a message is selected): `Star`/`Unstar`, `Forward`,
+  `Print`, `Delete`.
+  - Print: `await window.api.mail.printMessage(activeId, selected.uid)`; surface only genuine
+    failures as a toast (the service resolves quietly on user-cancel, so cancelling the dialog
+    shows nothing).
   - Star: `await window.api.mail.setFlag(activeId, selected.uid, '\\Flagged', !flaggedNow)`,
     then optimistically update the summary in `inbox` state and the `selected` view.
   - Delete: `confirmDialog('Move this message to Trash?', 'Delete message')` → `deleteMessage`
@@ -238,26 +269,36 @@ the desired clip at that path. Documented as the single manual step in the plan 
 - Validators: `ensureUid` rejects negatives/non-integers; `ensureMailFlag` rejects an
   arbitrary flag string.
 
+**`test/mail-html.test.ts`** (node, pure — the Electron print path is not unit-tested, matching
+`renderCasePdf`):
+- `buildMailPrintHtml` includes From / Subject / body text.
+- A `<script>` in subject or body is escaped (XSS guard) — the literal `<script` does not appear
+  unescaped in the output.
+- Attachment filenames are listed; the `[N attachment(s) not printed]` line appears when present.
+
 ---
 
 ## Version & docs
 
 - `package.json` → `3.14.0-beta.9`.
 - `README.md` → Status line, changelog entry, version strings, test count.
-- `RELEASE_NOTES_v3.14.0-beta.9.md` → new GeoINT formats, Mail actions, the manual sound-asset
-  swap step, and the v1 limits (GPX waypoints-only, Forward drops attachments).
+- `RELEASE_NOTES_v3.14.0-beta.9.md` → new GeoINT formats, Mail actions (incl. Print), the manual
+  sound-asset swap step, and the v1 limits (GPX waypoints-only, Forward drops attachments,
+  Print is plaintext-body).
 
 ## Verification
 
 - `pnpm typecheck` + full `pnpm test` green (new suites: `geoint-feeds-xml`, `mail-actions`).
 - Manual: add a KML and a GPX source (pins appear); add an XML source with a dot-path map
   (pins appear); star/unstar a message (★ shows, persists across Get-mail); delete moves to
-  Trash and the message survives in webmail; Forward opens Compose with `Fwd:` + quoted body.
+  Trash and the message survives in webmail; Forward opens Compose with `Fwd:` + quoted body;
+  Print opens the native print dialog with the message rendered, and cancelling it shows no error.
 
 ## Out of scope (deliberate)
 
 - GPX tracks/routes (paths, not pins).
 - Generic-XML auto-detection (requires a map; user-selected only).
 - Forwarding server-side attachments.
+- Printing the HTML body / embedded images (plaintext body only, by design — XSS-safe).
 - Sourcing the new-mail audio clip (operator-supplied).
 - The parked GeoINT full reimagining (separate workstream, memory `geoint-reimagine`).
