@@ -29,6 +29,8 @@ export interface MailMessageSummary {
   date: string;
   preview: string;
   unseen: boolean;
+  /** Whether the message carries the IMAP \Flagged flag (the ★ star). */
+  flagged: boolean;
 }
 
 export interface MailAttachment {
