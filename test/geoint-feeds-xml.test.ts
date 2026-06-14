@@ -103,3 +103,81 @@ describe('ensureGeoSource (xml)', () => {
     expect(ensureGeoSource({ label: 'K', url: 'https://example.com/p.kml', type: 'kml' }).type).toBe('kml');
   });
 });
+
+describe('coordinate strictness (no silent (0,0) mislocation)', () => {
+  // KML adversarial inputs
+  it('KML: drops placemark with whitespace-only coordinates ("  ,  ")', () => {
+    const body = `<?xml version="1.0"?>
+<kml><Document>
+  <Placemark><name>Ghost</name><Point><coordinates>  ,  </coordinates></Point></Placemark>
+</Document></kml>`;
+    const items = parseKml(body, 's', () => null);
+    expect(items).toHaveLength(0);
+  });
+
+  it('KML: drops placemark with missing lat ("45,,")', () => {
+    const body = `<?xml version="1.0"?>
+<kml><Document>
+  <Placemark><name>Ghost</name><Point><coordinates>45,,</coordinates></Point></Placemark>
+</Document></kml>`;
+    const items = parseKml(body, 's', () => null);
+    expect(items).toHaveLength(0);
+  });
+
+  it('KML: drops placemark with hex coordinate ("0x10,45")', () => {
+    const body = `<?xml version="1.0"?>
+<kml><Document>
+  <Placemark><name>Ghost</name><Point><coordinates>0x10,45</coordinates></Point></Placemark>
+</Document></kml>`;
+    const items = parseKml(body, 's', () => null);
+    expect(items).toHaveLength(0);
+  });
+
+  it('KML: positive case — normal decimal "-3.0,51.5" parses to located:"geo"', () => {
+    const body = `<?xml version="1.0"?>
+<kml><Document>
+  <Placemark><name>London</name><Point><coordinates>-3.0,51.5,0</coordinates></Point></Placemark>
+</Document></kml>`;
+    const items = parseKml(body, 's', () => null);
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ lat: 51.5, lon: -3.0, located: 'geo' });
+  });
+
+  // GPX adversarial inputs
+  it('GPX: drops waypoint with empty lat/lon attributes (lat="" lon="")', () => {
+    const body = `<?xml version="1.0"?>
+<gpx><wpt lat="" lon=""><name>Ghost</name></wpt></gpx>`;
+    const items = parseGpx(body, 's', () => null);
+    expect(items).toHaveLength(0);
+  });
+
+  it('GPX: drops waypoint with whitespace-only lat attribute (lat="  ")', () => {
+    const body = `<?xml version="1.0"?>
+<gpx><wpt lat="  " lon="0"><name>Ghost</name></wpt></gpx>`;
+    const items = parseGpx(body, 's', () => null);
+    expect(items).toHaveLength(0);
+  });
+
+  it('GPX: positive case — normal decimal lat="51.5074" parses to located:"geo"', () => {
+    const body = `<?xml version="1.0"?>
+<gpx><wpt lat="51.5074" lon="-0.1278"><name>London</name></wpt></gpx>`;
+    const items = parseGpx(body, 's', () => null);
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ lat: 51.5074, lon: -0.1278, located: 'geo' });
+  });
+
+  // XML-mapped adversarial input — must fall through to gazetteer, not stamp (0,0)
+  it('XML-mapped: item with empty mapped coordinate attribute falls back to gazetteer (not (0,0) geo pin)', () => {
+    const body = `<?xml version="1.0"?>
+<root><records>
+  <record><label>Cairo office</label><pos lat="" lon=""/></record>
+</records></root>`;
+    const map: GeoXmlMap = { itemsPath: 'root.records.record', lat: 'pos.@_lat', lon: 'pos.@_lon', title: 'label' };
+    const mockGeocode = (t: string) => (t.includes('Cairo') ? { lat: 30.0444, lon: 31.2357, name: 'Cairo' } : null);
+    const items = parseXmlMapped(body, 's', map, mockGeocode);
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ located: 'gazetteer', place: 'Cairo' });
+    // Must NOT be a (0,0) geo pin
+    expect(items[0].located).not.toBe('geo');
+  });
+});
