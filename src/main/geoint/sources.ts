@@ -12,7 +12,7 @@ import { join } from 'node:path';
 import { dataRoot } from '../storage/paths';
 import { secureReadText, secureWriteFile } from '../storage/secure-fs';
 import type { GeoItem, GeoSnapshot, GeoSource, GeoSourceType } from '@shared/post-mvp-types';
-import { parseRss, parseAtom, parseGeoJson, detectType } from './feeds';
+import { parseRss, parseAtom, parseGeoJson, parseKml, parseGpx, parseXmlMapped, detectType } from './feeds';
 import { geocoder } from './gazetteer';
 import { isPublicHttpUrl, assertResolvedPublic } from '../security/validate';
 import { readTextCapped, FETCH_TIMEOUT_MS } from '../net/limits';
@@ -57,9 +57,9 @@ async function readCache(id: string): Promise<GeoItem[]> {
 export async function _resetForTest(): Promise<void> { await writeSources([]); }
 export async function listSources(): Promise<GeoSource[]> { return readSources(); }
 
-export async function addSource(input: { label: string; url: string; type: GeoSourceType }): Promise<GeoSource> {
+export async function addSource(input: { label: string; url: string; type: GeoSourceType; xmlMap?: GeoSource['xmlMap'] }): Promise<GeoSource> {
   const list = await readSources();
-  const s: GeoSource = { id: randomUUID(), label: input.label, url: input.url, type: input.type, enabled: true };
+  const s: GeoSource = { id: randomUUID(), label: input.label, url: input.url, type: input.type, enabled: true, xmlMap: input.xmlMap };
   list.push(s);
   await writeSources(list);
   return s;
@@ -161,6 +161,9 @@ export async function fetchSource(id: string, networkEnabled: boolean): Promise<
     const geo = geocoder();
     const items =
       type === 'geojson' ? parseGeoJson(body, id)
+      : type === 'kml' ? parseKml(body, id, geo)
+      : type === 'gpx' ? parseGpx(body, id, geo)
+      : type === 'xml' ? (s.xmlMap ? parseXmlMapped(body, id, s.xmlMap, geo) : [])
       : type === 'atom' ? parseAtom(body, id, geo)
       : detectType(s.url, body) === 'atom' ? parseAtom(body, id, geo)
       : parseRss(body, id, geo);

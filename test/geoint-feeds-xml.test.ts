@@ -3,7 +3,9 @@ import { getPath } from '../src/main/geoint/feeds';
 import { parseKml } from '../src/main/geoint/feeds';
 import { parseGpx } from '../src/main/geoint/feeds';
 import { parseXmlMapped } from '../src/main/geoint/feeds';
+import { detectType } from '../src/main/geoint/feeds';
 import type { GeoXmlMap } from '@shared/post-mvp-types';
+import { ensureGeoSource } from '../src/main/security/validate';
 
 const KML = `<?xml version="1.0"?>
 <kml><Document>
@@ -78,5 +80,26 @@ describe('getPath', () => {
     expect(getPath({}, '__proto__.x')).toBeUndefined();
     expect(getPath({ a: {} }, 'a.constructor')).toBeUndefined();
     expect(getPath({ a: {} }, 'a.prototype')).toBeUndefined();
+  });
+});
+
+describe('detectType (kml/gpx)', () => {
+  it('detects kml and gpx by extension', () => {
+    expect(detectType('http://x/places.kml', '')).toBe('kml');
+    expect(detectType('http://x/track.gpx', '')).toBe('gpx');
+  });
+});
+
+describe('ensureGeoSource (xml)', () => {
+  it('accepts an xml source with a valid xmlMap', () => {
+    const r = ensureGeoSource({ label: 'X', url: 'https://example.com/d.xml', type: 'xml', xmlMap: { itemsPath: 'a.b', lat: 'la', lon: 'lo' } });
+    expect(r.type).toBe('xml');
+    expect(r.xmlMap).toMatchObject({ itemsPath: 'a.b', lat: 'la', lon: 'lo' });
+  });
+  it('rejects an xml source missing xmlMap', () => {
+    expect(() => ensureGeoSource({ label: 'X', url: 'https://example.com/d.xml', type: 'xml' })).toThrow();
+  });
+  it('accepts kml/gpx without an xmlMap', () => {
+    expect(ensureGeoSource({ label: 'K', url: 'https://example.com/p.kml', type: 'kml' }).type).toBe('kml');
   });
 });
