@@ -21,6 +21,22 @@ const clip = (s: string): string => (s.length > MAX_FIELD ? s.slice(0, MAX_FIELD
 const txt = (v: unknown): string =>
   clip(v == null ? '' : typeof v === 'object' ? String((v as Record<string, unknown>)['#text'] ?? '') : String(v));
 
+/** Walk a dot-path into a fast-xml-parser object tree. Attributes are addressed with the
+ *  '@_' prefix. When a node is an array (repeated XML element), index into [0] before applying
+ *  the next key. Rejects prototype-polluting segments so a hostile map can't traverse the
+ *  prototype chain. Returns undefined on any missing link. */
+const PROTO_BLOCKLIST = new Set(['__proto__', 'constructor', 'prototype']);
+export function getPath(obj: unknown, path: string): unknown {
+  let cur: unknown = obj;
+  for (const seg of path.split('.')) {
+    if (PROTO_BLOCKLIST.has(seg)) return undefined;
+    if (Array.isArray(cur)) cur = cur[0];
+    if (cur == null || typeof cur !== 'object') return undefined;
+    cur = (cur as Record<string, unknown>)[seg];
+  }
+  return cur;
+}
+
 function locate(
   title: string,
   summary: string,
