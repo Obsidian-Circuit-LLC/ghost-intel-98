@@ -292,6 +292,29 @@ export async function setFlag(id: string, uid: number, flag: string, value: bool
   }
 }
 
+/** Common Trash mailbox names, in priority order, for servers that don't advertise a
+ *  \Trash special-use. */
+const TRASH_NAMES = ['Trash', '[Gmail]/Trash', 'Deleted Items', 'Deleted Messages', 'Deleted'];
+
+export async function deleteMessage(id: string, uid: number): Promise<void> {
+  const { acct, password } = await loadAccountWithPassword(id);
+  const client = makeImapClient({
+    host: acct.imapHost, port: acct.imapPort, secure: acct.imapSecure, user: acct.user, pass: password
+  });
+  await client.connect();
+  try {
+    await client.mailboxOpen('INBOX');
+    const boxes = await client.list();
+    const bySpecial = boxes.find((b) => b.specialUse === '\\Trash');
+    const byName = boxes.find((b) => TRASH_NAMES.includes(b.path));
+    const trash = bySpecial?.path ?? byName?.path;
+    if (!trash) throw new Error('No Trash folder found on this account — delete from webmail.');
+    await client.messageMove(String(uid), trash, { uid: true });
+  } finally {
+    await safeLogout(client);
+  }
+}
+
 export async function sendMail(input: MailSendInput): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
   try {
     // Critical: every attachment path must have come through a user-gesture path

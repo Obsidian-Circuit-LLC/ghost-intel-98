@@ -62,3 +62,25 @@ describe('setFlag', () => {
     expect(calls.some((x) => x.method === 'messageFlagsRemove')).toBe(true);
   });
 });
+
+import { deleteMessage } from '../src/main/services/mail';
+
+describe('deleteMessage', () => {
+  it('moves to the special-use \\Trash mailbox', async () => {
+    MAILBOXES = [{ path: 'INBOX' }, { path: 'Bin', specialUse: '\\Trash' }];
+    await deleteMessage('a1', 7);
+    const c = calls.find((x) => x.method === 'messageMove')!;
+    expect(c.args[0]).toBe('7');
+    expect(c.args[1]).toBe('Bin');
+  });
+  it('falls back to a common Trash name when no special-use is set', async () => {
+    MAILBOXES = [{ path: 'INBOX' }, { path: '[Gmail]/Trash' }];
+    await deleteMessage('a1', 7);
+    expect(calls.find((x) => x.method === 'messageMove')!.args[1]).toBe('[Gmail]/Trash');
+  });
+  it('throws and moves nothing when no Trash folder exists', async () => {
+    MAILBOXES = [{ path: 'INBOX' }];
+    await expect(deleteMessage('a1', 7)).rejects.toThrow(/Trash/);
+    expect(calls.some((x) => x.method === 'messageMove')).toBe(false);
+  });
+});
