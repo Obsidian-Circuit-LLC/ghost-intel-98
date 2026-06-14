@@ -7,12 +7,15 @@
  * drafts API delegated to storage/drafts.ts.
  */
 
+import { BrowserWindow, app } from 'electron';
 import { ImapFlow } from 'imapflow';
 import nodemailer from 'nodemailer';
 import { simpleParser, type ParsedMail, type Attachment as ParsedAttachment } from 'mailparser';
 import { randomUUID } from 'node:crypto';
-import { basename } from 'node:path';
+import { writeFile, rm } from 'node:fs/promises';
+import { basename, join } from 'node:path';
 import type { MailAccount, MailMessage, MailMessageSummary, MailSendInput } from '@shared/post-mvp-types';
+import { buildMailPrintHtml } from './mail-html';
 import { secretStore, SecretsUnavailableError, SecretsCorruptedError } from '../secrets';
 import * as accountStore from '../storage/accounts';
 import * as draftStore from '../storage/drafts';
@@ -312,6 +315,37 @@ export async function deleteMessage(id: string, uid: number): Promise<void> {
     await client.messageMove(String(uid), trash, { uid: true });
   } finally {
     await safeLogout(client);
+  }
+}
+
+/** Print one message via the native print dialog. Re-fetches the message (so we print the real
+ *  server content, with fetchMessage's size caps), renders the pure HTML into a short-lived
+ *  offscreen sandboxed window, and calls webContents.print. Mirrors renderCasePdf in export.ts.
+ *  A user-cancelled dialog is NOT an error. */
+export async function printMessage(id: string, uid: number): Promise<void> {
+  const msg = await fetchMessage(id, uid);
+  const html = buildMailPrintHtml(msg);
+  // Plaintext HTML must live OFF the encrypted-vault surface (same rationale as renderCasePdf):
+  // a crash before the finally-rm must not strand mail content inside dataRoot.
+  const tmp = join(app.getPath('temp'), `ga98-mailprint-${randomUUID().slice(0, 8)}.html`);
+  await writeFile(tmp, html, 'utf8');
+  const win = new BrowserWindow({
+    show: false,
+    webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, javascript: false }
+  });
+  const watchdog = setTimeout(() => { try { win.destroy(); } catch { /* gone */ } }, 60_000);
+  try {
+    await win.loadFile(tmp);
+    await new Promise<void>((resolve, reject) => {
+      win.webContents.print({ printBackground: true }, (ok, reason) => {
+        if (ok || reason === 'cancelled') resolve();
+        else reject(new Error(reason || 'print failed'));
+      });
+    });
+  } finally {
+    clearTimeout(watchdog);
+    try { if (!win.isDestroyed()) win.destroy(); } catch { /* gone */ }
+    await rm(tmp, { force: true });
   }
 }
 
