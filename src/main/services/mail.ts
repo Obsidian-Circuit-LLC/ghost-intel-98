@@ -333,10 +333,15 @@ export async function printMessage(id: string, uid: number): Promise<void> {
     show: false,
     webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, javascript: false }
   });
-  const watchdog = setTimeout(() => { try { win.destroy(); } catch { /* gone */ } }, 60_000);
+  // Captured so the watchdog can settle the print promise (resolve quietly) before destroying the
+  // window — otherwise a timed-out print leaves the awaited promise hanging and the plaintext temp
+  // file un-removed (the finally never runs).
+  let resolvePrint: (() => void) | null = null;
+  const watchdog = setTimeout(() => { resolvePrint?.(); try { if (!win.isDestroyed()) win.destroy(); } catch { /* gone */ } }, 60_000);
   try {
     await win.loadFile(tmp);
     await new Promise<void>((resolve, reject) => {
+      resolvePrint = resolve;
       win.webContents.print({ printBackground: true }, (ok, reason) => {
         if (ok || reason === 'cancelled') resolve();
         else reject(new Error(reason || 'print failed'));
