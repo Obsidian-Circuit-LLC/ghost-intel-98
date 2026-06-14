@@ -173,7 +173,20 @@ export interface MediaLibrarySnapshot {
 
 // ---------- GeoINT ----------
 
-export type GeoSourceType = 'rss' | 'atom' | 'geojson';
+export type GeoSourceType = 'rss' | 'atom' | 'geojson' | 'kml' | 'gpx' | 'xml';
+
+/** Dot-path field map for the generic 'xml' source type. Each value is a dot path into the
+ *  fast-xml-parser object tree; attributes are addressed with the '@_' prefix (e.g. 'point.@_lat').
+ *  itemsPath resolves to the repeated element (array, or a single object treated as one item). */
+export interface GeoXmlMap {
+  itemsPath: string;
+  lat: string;
+  lon: string;
+  title?: string;
+  summary?: string;
+  link?: string;
+  date?: string;
+}
 
 export interface GeoSource {
   id: string;
@@ -181,6 +194,8 @@ export interface GeoSource {
   url: string;
   type: GeoSourceType;
   enabled: boolean;
+  /** Present only when type === 'xml': the dot-path field map used by parseXmlMapped. */
+  xmlMap?: GeoXmlMap;
   lastFetched?: string;
   lastError?: string;
 }
