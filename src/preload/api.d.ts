@@ -43,6 +43,8 @@ import type {
   Wall,
   GeoSnapshot,
   GeoSource,
+  GeoSourceType,
+  GeoXmlMap,
   GeoItem,
   SavedGeoEvent,
   SshHostProfile,
@@ -313,7 +315,7 @@ export interface GhostApi {
   };
   geoint: {
     snapshot(): Promise<GeoSnapshot>;
-    addSource(input: { label: string; url: string; type: 'rss' | 'atom' | 'geojson' }): Promise<GeoSource>;
+    addSource(input: { label: string; url: string; type: GeoSourceType; xmlMap?: GeoXmlMap }): Promise<GeoSource>;
     updateSource(id: string, patch: Partial<GeoSource>): Promise<void>;
     removeSource(id: string): Promise<void>;
     importOpml(): Promise<number>;
