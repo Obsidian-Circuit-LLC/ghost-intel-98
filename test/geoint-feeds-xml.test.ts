@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { getPath } from '../src/main/geoint/feeds';
 import { parseKml } from '../src/main/geoint/feeds';
 import { parseGpx } from '../src/main/geoint/feeds';
+import { parseXmlMapped } from '../src/main/geoint/feeds';
+import type { GeoXmlMap } from '@shared/post-mvp-types';
 
 const KML = `<?xml version="1.0"?>
 <kml><Document>
@@ -34,6 +36,28 @@ describe('parseGpx', () => {
     const items = parseGpx(GPX, 's2', () => null);
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({ title: 'London', summary: 'cam', lat: 51.5074, lon: -0.1278, located: 'geo' });
+  });
+});
+
+const CUSTOM = `<?xml version="1.0"?>
+<root><records>
+  <record><label>Cam A</label><pos lat="40.0" lon="-3.0"/></record>
+  <record><label>Mali office</label><pos/></record>
+</records></root>`;
+
+const MAP: GeoXmlMap = { itemsPath: 'root.records.record', lat: 'pos.@_lat', lon: 'pos.@_lon', title: 'label' };
+const mali = (t: string) => (t.includes('Mali') ? { lat: 17, lon: -4, name: 'Mali' } : null);
+
+describe('parseXmlMapped', () => {
+  it('locates items with mapped coordinates', () => {
+    const items = parseXmlMapped(CUSTOM, 's3', MAP, mali);
+    const a = items.find((i) => i.title === 'Cam A')!;
+    expect(a).toMatchObject({ lat: 40, lon: -3, located: 'geo' });
+  });
+  it('falls back to the gazetteer when coords are absent', () => {
+    const items = parseXmlMapped(CUSTOM, 's3', MAP, mali);
+    const m = items.find((i) => i.title === 'Mali office')!;
+    expect(m).toMatchObject({ lat: 17, lon: -4, located: 'gazetteer', place: 'Mali' });
   });
 });
 

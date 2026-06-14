@@ -6,7 +6,7 @@
 
 import { XMLParser } from 'fast-xml-parser';
 import { randomUUID } from 'node:crypto';
-import type { GeoItem, GeoSourceType } from '@shared/post-mvp-types';
+import type { GeoItem, GeoSourceType, GeoXmlMap } from '@shared/post-mvp-types';
 import { classify } from './classify';
 
 type Geocoder = (text: string) => { lat: number; lon: number; name: string } | null;
@@ -182,6 +182,28 @@ export function parseGpx(body: string, sourceId: string, _geocode: Geocoder): Ge
     });
   }
   return out;
+}
+
+export function parseXmlMapped(body: string, sourceId: string, map: GeoXmlMap, geocode: Geocoder): GeoItem[] {
+  const doc = xml.parse(body) as Record<string, unknown>;
+  const items = arr(getPath(doc, map.itemsPath)) as Record<string, unknown>[];
+  return items.slice(0, MAX_FEED_ITEMS).map((it) => {
+    const title = map.title ? txt(getPath(it, map.title)) : 'Untitled';
+    const summary = map.summary ? txt(getPath(it, map.summary)) : '';
+    const lat = Number(getPath(it, map.lat));
+    const lon = Number(getPath(it, map.lon));
+    const geo = inRange(lat, lon) ? { lat, lon } : null;
+    return {
+      id: randomUUID(),
+      sourceId,
+      title: title || 'Untitled',
+      link: map.link ? txt(getPath(it, map.link)) || undefined : undefined,
+      summary: summary || undefined,
+      published: map.date ? txt(getPath(it, map.date)) || undefined : undefined,
+      ...locate(title, summary, geo, geocode),
+      ...classify(title, summary)
+    };
+  });
 }
 
 export function detectType(url: string, body: string): GeoSourceType {
