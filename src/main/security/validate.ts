@@ -513,18 +513,52 @@ export function ensureFeedUrl(url: string): boolean {
   } catch { return false; }
 }
 
+const GEO_SOURCE_TYPES = ['rss', 'atom', 'geojson', 'kml', 'gpx', 'xml'] as const;
+type GeoSourceTypeLit = (typeof GEO_SOURCE_TYPES)[number];
+
+function ensureXmlMap(v: unknown): import('@shared/post-mvp-types').GeoXmlMap {
+  if (!v || typeof v !== 'object') throw new ValidationError('xml source requires an xmlMap object');
+  const o = v as Record<string, unknown>;
+  const reqStr = (k: string): string => {
+    const x = o[k];
+    if (typeof x !== 'string' || x.trim().length === 0 || x.length > 200) {
+      throw new ValidationError(`xmlMap.${k} must be a 1-200 char string`);
+    }
+    return x.trim();
+  };
+  const optStr = (k: string): string | undefined => {
+    const x = o[k];
+    if (x === undefined) return undefined;
+    if (typeof x !== 'string' || x.length > 200) throw new ValidationError(`xmlMap.${k} must be a string up to 200 chars`);
+    return x.trim() || undefined;
+  };
+  return {
+    itemsPath: reqStr('itemsPath'),
+    lat: reqStr('lat'),
+    lon: reqStr('lon'),
+    title: optStr('title'),
+    summary: optStr('summary'),
+    link: optStr('link'),
+    date: optStr('date')
+  };
+}
+
 /** GeoINT: a pluggable source. Label bounded; URL must be http/https; type enum. */
-export function ensureGeoSource(v: unknown): { label: string; url: string; type: 'rss' | 'atom' | 'geojson' } {
+export function ensureGeoSource(v: unknown): { label: string; url: string; type: GeoSourceTypeLit; xmlMap?: import('@shared/post-mvp-types').GeoXmlMap } {
   if (!v || typeof v !== 'object') throw new ValidationError('source must be an object');
-  const o = v as { label?: unknown; url?: unknown; type?: unknown };
+  const o = v as { label?: unknown; url?: unknown; type?: unknown; xmlMap?: unknown };
   if (typeof o.label !== 'string' || o.label.trim().length === 0 || o.label.length > 200) {
     throw new ValidationError('source.label must be a 1-200 char string');
   }
   if (typeof o.url !== 'string') throw new ValidationError('source.url must be a string');
   const url = validateExternalUrl(o.url);
   if (!isPublicHttpUrl(url)) throw new ValidationError('source.url must be a public http(s) URL (not loopback/private)');
-  if (o.type !== 'rss' && o.type !== 'atom' && o.type !== 'geojson') throw new ValidationError('source.type invalid');
-  return { label: o.label.trim(), url, type: o.type };
+  if (typeof o.type !== 'string' || !GEO_SOURCE_TYPES.includes(o.type as GeoSourceTypeLit)) {
+    throw new ValidationError('source.type invalid');
+  }
+  const type = o.type as GeoSourceTypeLit;
+  if (type === 'xml') return { label: o.label.trim(), url, type, xmlMap: ensureXmlMap(o.xmlMap) };
+  return { label: o.label.trim(), url, type };
 }
 
 /** True iff `raw` is an http(s) URL whose host is NOT loopback/private/link-local/metadata.

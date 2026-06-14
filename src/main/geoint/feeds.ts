@@ -208,6 +208,8 @@ export function parseXmlMapped(body: string, sourceId: string, map: GeoXmlMap, g
 
 export function detectType(url: string, body: string): GeoSourceType {
   const u = url.toLowerCase();
+  if (u.endsWith('.kml')) return 'kml';
+  if (u.endsWith('.gpx')) return 'gpx';
   if (u.endsWith('.geojson') || u.endsWith('.json')) return 'geojson';
   const head = body.slice(0, 512).toLowerCase();
   if (head.includes('<feed') && head.includes('atom')) return 'atom';
