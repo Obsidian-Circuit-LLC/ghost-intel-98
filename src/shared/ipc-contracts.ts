@@ -127,7 +127,10 @@ export const channels = {
     listDrafts: 'mail:listDrafts',
     upsertDraft: 'mail:upsertDraft',
     deleteDraft: 'mail:deleteDraft',
-    saveAttachment: 'mail:saveAttachment'
+    saveAttachment: 'mail:saveAttachment',
+    deleteMessage: 'mail:deleteMessage',
+    setFlag: 'mail:setFlag',
+    printMessage: 'mail:printMessage'
   },
   browser: {
     listBookmarks: 'browser:listBookmarks',

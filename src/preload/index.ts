@@ -156,7 +156,10 @@ const api = {
     listDrafts: (accountId?: string) => ipcRenderer.invoke(channels.mail.listDrafts, accountId),
     upsertDraft: (input: unknown) => ipcRenderer.invoke(channels.mail.upsertDraft, input),
     deleteDraft: (id: string) => ipcRenderer.invoke(channels.mail.deleteDraft, id),
-    saveAttachment: (input: { filename: string; contentBase64: string }) => ipcRenderer.invoke(channels.mail.saveAttachment, input)
+    saveAttachment: (input: { filename: string; contentBase64: string }) => ipcRenderer.invoke(channels.mail.saveAttachment, input),
+    deleteMessage: (id: string, uid: number) => ipcRenderer.invoke(channels.mail.deleteMessage, id, uid),
+    setFlag: (id: string, uid: number, flag: string, value: boolean) => ipcRenderer.invoke(channels.mail.setFlag, id, uid, flag, value),
+    printMessage: (id: string, uid: number) => ipcRenderer.invoke(channels.mail.printMessage, id, uid)
   },
   browser: {
     listBookmarks: () => ipcRenderer.invoke(channels.browser.listBookmarks),

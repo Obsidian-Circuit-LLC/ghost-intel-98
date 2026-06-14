@@ -153,6 +153,60 @@ export function MailModule(): JSX.Element {
     });
   }
 
+  async function toggleStar(): Promise<void> {
+    if (!activeId || !selected) return;
+    const next = !selected.flagged;
+    try {
+      await window.api.mail.setFlag(activeId, selected.uid, '\\Flagged', next);
+      setSelected((s) => (s ? { ...s, flagged: next } : s));
+      setInbox((list) => list.map((m) => (m.uid === selected.uid ? { ...m, flagged: next } : m)));
+    } catch (err) {
+      toast.error(`Could not update star: ${(err as Error).message}`);
+    }
+  }
+
+  async function deleteSelected(): Promise<void> {
+    if (!activeId || !selected) return;
+    const ok = await confirmDialog('Move this message to Trash?', 'Delete message');
+    if (!ok) return;
+    const uid = selected.uid;
+    try {
+      await window.api.mail.deleteMessage(activeId, uid);
+      setSelected(null);
+      setInbox((list) => list.filter((m) => m.uid !== uid));
+      toast.success('Moved to Trash.');
+    } catch (err) {
+      toast.error(`Delete failed: ${(err as Error).message}`);
+    }
+  }
+
+  function forwardSelected(): void {
+    if (!activeId || !selected) return;
+    const subj = selected.subject.startsWith('Fwd:') ? selected.subject : `Fwd: ${selected.subject}`;
+    const attNote = selected.attachments.length
+      ? `\n[Note: ${selected.attachments.length} original attachment(s) not carried over — open the source message to retrieve them.]`
+      : '';
+    const body = `\n\n---------- Forwarded message ----------\nFrom: ${selected.from}\nDate: ${new Date(selected.date).toLocaleString()}\nSubject: ${selected.subject}\n\n${selected.body}${attNote}`;
+    openCompose({
+      id: `dr-${crypto.randomUUID()}`,
+      accountId: activeId,
+      to: '',
+      subject: subj,
+      body,
+      attachments: [],
+      savedAt: new Date().toISOString()
+    });
+  }
+
+  async function printSelected(): Promise<void> {
+    if (!activeId || !selected) return;
+    try {
+      await window.api.mail.printMessage(activeId, selected.uid);
+    } catch (err) {
+      toast.error(`Print failed: ${(err as Error).message}`);
+    }
+  }
+
   async function deleteDraft(id: string): Promise<void> {
     const ok = await confirmDialog('Delete this draft?', 'Delete draft');
     if (!ok) return;
@@ -185,7 +239,7 @@ export function MailModule(): JSX.Element {
               {inbox.length === 0 && <li style={{ color: '#666' }}>No messages — click "Get mail".</li>}
               {inbox.map((m) => (
                 <li key={m.uid} data-selected={selected?.uid === m.uid} onClick={() => void openMessage(m.uid)}>
-                  <span style={{ width: 8 }}>{m.unseen ? '●' : ''}</span>
+                  <span style={{ width: 16 }}>{m.unseen ? '●' : ''}{m.flagged ? <span style={{ color: '#d4a017' }}>★</span> : ''}</span>
                   <div style={{ flex: 1, overflow: 'hidden' }}>
                     <div style={{ fontWeight: m.unseen ? 'bold' : 'normal', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {m.from}
@@ -219,6 +273,12 @@ export function MailModule(): JSX.Element {
         <div className="ga98-pane" style={{ display: 'flex', flexDirection: 'column' }}>
           {selected ? (
             <>
+              <div style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
+                <button onClick={() => void toggleStar()}>{selected.flagged ? 'Unstar' : 'Star'}</button>
+                <button onClick={() => forwardSelected()}>Forward</button>
+                <button onClick={() => void printSelected()}>Print</button>
+                <button onClick={() => void deleteSelected()}>Delete</button>
+              </div>
               <div style={{ borderBottom: '1px solid #999', paddingBottom: 4, marginBottom: 4 }}>
                 <div><b>From:</b> {selected.from}</div>
                 <div><b>Subject:</b> {selected.subject}</div>

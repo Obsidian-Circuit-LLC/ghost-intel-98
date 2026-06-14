@@ -84,3 +84,21 @@ describe('deleteMessage', () => {
     expect(calls.some((x) => x.method === 'messageMove')).toBe(false);
   });
 });
+
+import { ensureUid, ensureMailFlag } from '../src/main/security/validate';
+
+describe('mail validators', () => {
+  it('ensureUid accepts a non-negative integer', () => {
+    expect(ensureUid(7)).toBe(7);
+  });
+  it('ensureUid rejects negatives and non-integers', () => {
+    expect(() => ensureUid(-1)).toThrow();
+    expect(() => ensureUid(1.5)).toThrow();
+    expect(() => ensureUid('7')).toThrow();
+  });
+  it('ensureMailFlag accepts \\Flagged and rejects arbitrary strings', () => {
+    expect(ensureMailFlag('\\Flagged')).toBe('\\Flagged');
+    expect(() => ensureMailFlag('\\Deleted')).toThrow();
+    expect(() => ensureMailFlag('anything')).toThrow();
+  });
+});

@@ -227,6 +227,9 @@ export interface GhostApi {
     upsertDraft(input: Omit<MailDraft, 'id' | 'savedAt'> & { id?: string }): Promise<MailDraft>;
     deleteDraft(id: string): Promise<void>;
     saveAttachment(input: { filename: string; contentBase64: string }): Promise<string | null>;
+    deleteMessage(id: string, uid: number): Promise<void>;
+    setFlag(id: string, uid: number, flag: string, value: boolean): Promise<void>;
+    printMessage(id: string, uid: number): Promise<void>;
   };
   browser: {
     listBookmarks(): Promise<Bookmark[]>;

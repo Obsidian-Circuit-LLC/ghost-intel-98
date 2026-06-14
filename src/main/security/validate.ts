@@ -561,6 +561,20 @@ export function ensureGeoSource(v: unknown): { label: string; url: string; type:
   return { label: o.label.trim(), url, type };
 }
 
+/** A mail message UID as it crosses IPC: a safe non-negative integer. Guards the destructive
+ *  delete/print paths against a malformed renderer arg. */
+export function ensureUid(v: unknown): number {
+  if (typeof v !== 'number' || !Number.isSafeInteger(v) || v < 0) throw new ValidationError('Invalid mail uid');
+  return v;
+}
+
+/** The only IMAP flags the renderer is allowed to toggle. */
+const ALLOWED_MAIL_FLAGS = ['\\Flagged', '\\Seen'];
+export function ensureMailFlag(v: unknown): string {
+  if (typeof v !== 'string' || !ALLOWED_MAIL_FLAGS.includes(v)) throw new ValidationError('Invalid mail flag');
+  return v;
+}
+
 /** True iff `raw` is an http(s) URL whose host is NOT loopback/private/link-local/metadata.
  *  GeoINT fetches sources from the public internet only — this blocks SSRF to internal hosts
  *  (used for manual add, OPML import, and every redirect hop). */
