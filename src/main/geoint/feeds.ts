@@ -128,6 +128,15 @@ function inRange(lat: number, lon: number): boolean {
   return Number.isFinite(lat) && Number.isFinite(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180;
 }
 
+/** Strict coordinate parse: returns NaN for empty/whitespace/non-decimal tokens (Number("")===0,
+ *  Number("0x10")===16 would otherwise pass the finite+range guard and stamp a silent (0,0)/misread
+ *  'geo' pin — forbidden for an OSINT tool). Accepts a plain decimal/float with optional sign/exponent. */
+function strictNum(token: unknown): number {
+  const s = String(token ?? '').trim();
+  if (!/^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(s)) return NaN;
+  return Number(s);
+}
+
 export function parseKml(body: string, sourceId: string, _geocode: Geocoder): GeoItem[] {
   const doc = xml.parse(body) as Record<string, any>;
   const root = doc?.kml?.Document ?? doc?.kml?.Folder ?? doc?.kml ?? {};
@@ -140,8 +149,8 @@ export function parseKml(body: string, sourceId: string, _geocode: Geocoder): Ge
     const coordStr = pm?.Point?.coordinates;
     if (coordStr == null) continue; // LineString/Polygon placemarks: no single pin in v1
     const [lonS, latS] = String(coordStr).trim().split(',');
-    const lon = Number(lonS);
-    const lat = Number(latS);
+    const lon = strictNum(lonS);
+    const lat = strictNum(latS);
     if (!inRange(lat, lon)) continue;
     const title = txt(pm.name) || 'Untitled';
     const summary = txt(pm.description);
@@ -165,8 +174,8 @@ export function parseGpx(body: string, sourceId: string, _geocode: Geocoder): Ge
   const wpts = arr(doc?.gpx?.wpt) as Record<string, any>[];
   const out: GeoItem[] = [];
   for (const w of wpts.slice(0, MAX_FEED_ITEMS)) {
-    const lat = Number(w['@_lat']);
-    const lon = Number(w['@_lon']);
+    const lat = strictNum(w['@_lat']);
+    const lon = strictNum(w['@_lon']);
     if (!inRange(lat, lon)) continue;
     const title = txt(w.name) || 'Waypoint';
     const summary = txt(w.desc);
@@ -190,8 +199,8 @@ export function parseXmlMapped(body: string, sourceId: string, map: GeoXmlMap, g
   return items.slice(0, MAX_FEED_ITEMS).map((it) => {
     const title = map.title ? txt(getPath(it, map.title)) : 'Untitled';
     const summary = map.summary ? txt(getPath(it, map.summary)) : '';
-    const lat = Number(getPath(it, map.lat));
-    const lon = Number(getPath(it, map.lon));
+    const lat = strictNum(getPath(it, map.lat));
+    const lon = strictNum(getPath(it, map.lon));
     const geo = inRange(lat, lon) ? { lat, lon } : null;
     return {
       id: randomUUID(),
