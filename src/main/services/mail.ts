@@ -165,7 +165,8 @@ export async function fetchInbox(id: string, limit = 30): Promise<MailMessageSum
         subject: msg.envelope?.subject ?? '(no subject)',
         date: toIso(msg.internalDate),
         preview: '',
-        unseen: !(msg.flags?.has('\\Seen') ?? false)
+        unseen: !(msg.flags?.has('\\Seen') ?? false),
+        flagged: msg.flags?.has('\\Flagged') ?? false
       });
     }
     return out.sort((a, b) => b.date.localeCompare(a.date));
@@ -212,7 +213,7 @@ export async function fetchMessage(id: string, uid: number): Promise<MailMessage
         to: meta.envelope?.to?.[0]?.address ?? '',
         subject: meta.envelope?.subject ?? '(no subject)',
         date: toIso(meta.internalDate),
-        preview: '', unseen: false,
+        preview: '', unseen: false, flagged: false,
         body: `[Message exceeds the ${MAX_MESSAGE_BYTES} byte in-app size limit. Open in webmail to view.]`,
         attachments: []
       };
@@ -235,7 +236,7 @@ export async function fetchMessage(id: string, uid: number): Promise<MailMessage
         to: msg.envelope?.to?.[0]?.address ?? '',
         subject: `${msg.envelope?.subject ?? '(no subject)'} — [parse failed: ${parseError}]`,
         date: toIso(msg.internalDate),
-        preview: '', unseen: false,
+        preview: '', unseen: false, flagged: false,
         body: source.toString('utf8'),
         attachments: []
       };
@@ -265,7 +266,7 @@ export async function fetchMessage(id: string, uid: number): Promise<MailMessage
       subject: parsed.subject ?? msg.envelope?.subject ?? '(no subject)',
       date: toIso(parsed.date ?? msg.internalDate),
       preview: parsed.text?.slice(0, 200) ?? '',
-      unseen: false,
+      unseen: false, flagged: false,
       body: parsed.text ?? '',
       html: typeof parsed.html === 'string' ? parsed.html : undefined,
       attachments
