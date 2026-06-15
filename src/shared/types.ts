@@ -441,6 +441,7 @@ export const defaultShortcuts: AccessShortcut[] = [
   { id: 'cases', label: 'My Cases', kind: 'module', target: 'cases', icon: 'folder' },
   { id: 'notepad', label: 'Notepad 98', kind: 'module', target: 'notepad', icon: 'note' },
   { id: 'briefcase', label: 'Briefcase', kind: 'module', target: 'briefcase', icon: 'briefcase' },
+  { id: 'journal', label: 'Journal Jots', kind: 'module', target: 'journal', icon: 'note' },
   { id: 'browser', label: 'Net Explorer', kind: 'module', target: 'net-explorer', icon: 'globe' },
   { id: 'mail', label: 'Mail', kind: 'module', target: 'mail', icon: 'mail' },
   { id: 'dialterm', label: 'DialTerm', kind: 'module', target: 'dialterm', icon: 'modem' },
@@ -448,6 +449,7 @@ export const defaultShortcuts: AccessShortcut[] = [
   { id: 'media-player', label: 'Jukebox', kind: 'module', target: 'media-player', icon: 'music' },
   { id: 'geoint', label: 'GeoINT', kind: 'module', target: 'geoint', icon: 'globe' },
   { id: 'bookmarks', label: 'Bookmarks', kind: 'module', target: 'bookmarks', icon: 'bookmark' },
+  { id: 'markets', label: 'Markets', kind: 'module', target: 'markets', icon: 'chart' },
   { id: 'calendar', label: 'Calendar', kind: 'module', target: 'calendar', icon: 'calendar' },
   { id: 'reminders', label: 'Reminders', kind: 'module', target: 'reminders', icon: 'bell' },
   { id: 'alarm', label: 'Alarm', kind: 'module', target: 'alarm', icon: 'alarm' },
@@ -469,7 +471,9 @@ export const REQUIRED_MODULE_SHORTCUTS: readonly AccessShortcut[] = [
   { id: 'media-player', label: 'Jukebox', kind: 'module', target: 'media-player', icon: 'music' },
   { id: 'geoint', label: 'GeoINT', kind: 'module', target: 'geoint', icon: 'globe' },
   { id: 'bookmarks', label: 'Bookmarks', kind: 'module', target: 'bookmarks', icon: 'bookmark' },
-  { id: 'briefcase', label: 'Briefcase', kind: 'module', target: 'briefcase', icon: 'briefcase' }
+  { id: 'briefcase', label: 'Briefcase', kind: 'module', target: 'briefcase', icon: 'briefcase' },
+  { id: 'journal', label: 'Journal Jots', kind: 'module', target: 'journal', icon: 'note' },
+  { id: 'markets', label: 'Markets', kind: 'module', target: 'markets', icon: 'chart' }
   // Games are in the Access "Games ▸" submenu (AccessMenu.tsx), not seeded as shortcuts.
 ];
 
