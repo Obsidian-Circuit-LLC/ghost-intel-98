@@ -159,7 +159,12 @@ const api = {
     saveAttachment: (input: { filename: string; contentBase64: string }) => ipcRenderer.invoke(channels.mail.saveAttachment, input),
     deleteMessage: (id: string, uid: number) => ipcRenderer.invoke(channels.mail.deleteMessage, id, uid),
     setFlag: (id: string, uid: number, flag: string, value: boolean) => ipcRenderer.invoke(channels.mail.setFlag, id, uid, flag, value),
-    printMessage: (id: string, uid: number) => ipcRenderer.invoke(channels.mail.printMessage, id, uid)
+    printMessage: (id: string, uid: number) => ipcRenderer.invoke(channels.mail.printMessage, id, uid),
+    onNewMail: (cb: (payload: { accountId: string; unseenCount: number }) => void) => {
+      const l = (_e: unknown, p: { accountId: string; unseenCount: number }) => cb(p);
+      ipcRenderer.on(channels.mail.onNewMail, l);
+      return () => ipcRenderer.removeListener(channels.mail.onNewMail, l);
+    }
   },
   browser: {
     listBookmarks: () => ipcRenderer.invoke(channels.browser.listBookmarks),

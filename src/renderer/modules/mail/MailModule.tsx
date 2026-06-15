@@ -64,7 +64,7 @@ export function MailModule(): JSX.Element {
       setInbox(list);
       const nextUnseen = list.filter((m) => m.unseen).length;
       prevUnseenRef.current = nextUnseen;
-      if (nextUnseen > prevUnseen && settings?.soundEnabled) playMailNotify();
+      if (nextUnseen > prevUnseen && settings?.soundEnabled && !settings?.mailBackgroundCheck) playMailNotify();
     } catch (err) {
       toast.error(`IMAP error: ${(err as Error).message}`);
     } finally {
@@ -88,7 +88,7 @@ export function MailModule(): JSX.Element {
       }
       const prev = prevUnseenRef.current;
       prevUnseenRef.current = next;
-      if (next > prev && settings?.soundEnabled) playMailNotify();
+      if (next > prev && settings?.soundEnabled && !settings?.mailBackgroundCheck) playMailNotify();
     } catch {
       /* silent: transient IMAP errors during background polling shouldn't spam toasts */
     }

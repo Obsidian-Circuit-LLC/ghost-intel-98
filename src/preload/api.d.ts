@@ -230,6 +230,7 @@ export interface GhostApi {
     deleteMessage(id: string, uid: number): Promise<void>;
     setFlag(id: string, uid: number, flag: string, value: boolean): Promise<void>;
     printMessage(id: string, uid: number): Promise<void>;
+    onNewMail(cb: (payload: { accountId: string; unseenCount: number }) => void): () => void;
   };
   browser: {
     listBookmarks(): Promise<Bookmark[]>;
