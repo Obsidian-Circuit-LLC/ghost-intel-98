@@ -15,11 +15,7 @@ const desktopShortcutDefaults: { module: ModuleKey; label: string }[] = [
   { module: 'cases', label: 'My Cases' },
   { module: 'notepad', label: 'Notepad 98' },
   { module: 'briefcase', label: 'Briefcase' },
-  { module: 'journal', label: 'Journal Jots' },
-  { module: 'media-player', label: 'Jukebox' },
-  { module: 'geoint', label: 'GeoINT' },
   { module: 'bookmarks', label: 'Bookmarks' },
-  { module: 'markets', label: 'Markets' },
   { module: 'calendar', label: 'Calendar' },
   { module: 'reminders', label: 'Reminders' },
   { module: 'chat', label: 'Chat (beta)' }

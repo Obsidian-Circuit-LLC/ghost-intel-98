@@ -77,3 +77,23 @@ describe('reconcileShortcuts', () => {
     expect(shortcuts[0].label).toBe('My Cases');
   });
 });
+
+describe('reconcileShortcuts — journal + markets seeding (beta.10)', () => {
+  it('seeds journal and markets into an install that lacks them', () => {
+    const existing = defaultShortcuts.filter((s) => s.target !== 'journal' && s.target !== 'markets');
+    const { shortcuts, seededShortcuts } = reconcileShortcuts(existing, []);
+    expect(shortcuts.some((s) => s.target === 'journal')).toBe(true);
+    expect(shortcuts.some((s) => s.target === 'markets')).toBe(true);
+    expect(seededShortcuts).toContain('journal');
+    expect(seededShortcuts).toContain('markets');
+  });
+  it('respects a user who deleted journal after it was seeded', () => {
+    const withoutJournal = defaultShortcuts.filter((s) => s.target !== 'journal');
+    const { shortcuts } = reconcileShortcuts(withoutJournal, ['journal']);
+    expect(shortcuts.some((s) => s.target === 'journal')).toBe(false);
+  });
+  it('fresh defaults already include journal and markets', () => {
+    expect(defaultShortcuts.some((s) => s.target === 'journal')).toBe(true);
+    expect(defaultShortcuts.some((s) => s.target === 'markets')).toBe(true);
+  });
+});
