@@ -281,6 +281,13 @@ export function ensureSessionId(id: unknown): string {
   return id;
 }
 
+/** The renderer may only pass a shell CHOICE token, never an executable path. Anything
+ *  not in the allowlist degrades to 'cmd'. The main process maps the token to a fixed
+ *  executable — see services/shell.ts. */
+export function ensureShellProgram(v: unknown): 'cmd' | 'powershell' {
+  return v === 'powershell' ? 'powershell' : 'cmd';
+}
+
 // ---------- bio images ----------
 
 const BIO_ID = /^bio-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
