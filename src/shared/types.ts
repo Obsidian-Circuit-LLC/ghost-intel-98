@@ -351,6 +351,12 @@ export interface AppSettings {
    *  Lets the reconciler introduce new built-in modules to existing installs exactly once,
    *  without re-adding a shortcut the user later deletes. */
   seededShortcuts: string[];
+  /** DialTerm local shell — opt-in (default off). When false the main process refuses
+   *  shell.connect even if the renderer asks. */
+  localShellEnabled: boolean;
+  /** Which local shell to spawn when localShellEnabled. Mapped to a fixed executable by
+   *  the main process; the renderer never supplies an executable path. */
+  localShellProgram: 'cmd' | 'powershell';
   ai: {
     provider: 'ollama' | 'openai-compatible' | 'none';
     endpoint: string;
@@ -519,6 +525,8 @@ export const defaultSettings: AppSettings = {
   caseCategoryCollapsed: {},
   shortcuts: defaultShortcuts,
   seededShortcuts: [],
+  localShellEnabled: false,
+  localShellProgram: 'cmd',
   ai: {
     provider: 'none',
     endpoint: 'http://localhost:11434',
