@@ -10,6 +10,7 @@ import { confirmDialog, promptDialog } from '../../state/dialogs';
 import { toast } from '../../state/toasts';
 import { shortcutBus, type ShortcutEventDetail } from '../../shell/Shortcuts';
 import { useSettings } from '../../state/store';
+import { resolveCollapsed, toggleCollapsed } from './collapse';
 
 const PRIORITY_ORDER: Record<CasePriority, number> = { critical: 3, high: 2, medium: 1, low: 0 };
 const STATUS_ORDER: Record<CaseStatus, number> = { new: 4, open: 3, pending: 2, closed: 1, archived: 0 };
@@ -56,8 +57,6 @@ export function CasesModule({ initialCaseId }: { initialCaseId?: string } = {}):
   const [detail, setDetail] = useState<CaseRecord | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [filter, setFilter] = useState('');
-  // Per-category collapse state, keyed by category name. Default (absent key) = expanded.
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   // Right-click reassign menu: anchored at click coords, carries the target case.
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; c: CaseSummary } | null>(null);
 
@@ -81,6 +80,7 @@ export function CasesModule({ initialCaseId }: { initialCaseId?: string } = {}):
   const sortBy = useSettings((s) => s.settings?.caseSortBy ?? 'updatedAt');
   const sortDir = useSettings((s) => s.settings?.caseSortDir ?? 'desc');
   const patchSettings = useSettings((s) => s.patch);
+  const collapsed = useSettings((s) => s.settings?.caseCategoryCollapsed ?? {});
 
   const visible = useMemo(() => {
     const q = filter.trim().toLowerCase();
@@ -258,11 +258,11 @@ export function CasesModule({ initialCaseId }: { initialCaseId?: string } = {}):
           <div className="ga98-list" style={{ listStyle: 'none' }}>
             {visible.length === 0 && <div style={{ color: '#666', padding: '4px 6px' }}>No cases. Click <b>New</b>.</div>}
             {groups.map((g) => {
-              const isCollapsed = collapsed[g.name] === true;
+              const isCollapsed = resolveCollapsed(collapsed, g.name);
               return (
                 <div key={g.name}>
                   <div
-                    onClick={() => setCollapsed((s) => ({ ...s, [g.name]: !isCollapsed }))}
+                    onClick={() => void patchSettings({ caseCategoryCollapsed: toggleCollapsed(collapsed, g.name) })}
                     style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 6px', cursor: 'pointer', fontWeight: 'bold', background: '#d8d8d8', borderBottom: '1px solid #b0b0b0', userSelect: 'none' }}
                   >
                     <span style={{ width: 10 }}>{isCollapsed ? '▸' : '▾'}</span>
