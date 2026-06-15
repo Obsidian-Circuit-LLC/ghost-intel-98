@@ -130,7 +130,8 @@ export const channels = {
     saveAttachment: 'mail:saveAttachment',
     deleteMessage: 'mail:deleteMessage',
     setFlag: 'mail:setFlag',
-    printMessage: 'mail:printMessage'
+    printMessage: 'mail:printMessage',
+    onNewMail: 'mail:onNewMail'
   },
   browser: {
     listBookmarks: 'browser:listBookmarks',

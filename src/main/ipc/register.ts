@@ -30,6 +30,7 @@ import {
   shredStore
 } from '../storage/json-fs';
 import { showNotification } from '../notifications';
+import { startMailPoller } from '../services/mail-poller';
 import { dataRoot, caseAttachmentsDir } from '../storage/paths';
 import { isEncryptedFile } from '../storage/secure-fs';
 import * as mail from '../services/mail';
@@ -1159,6 +1160,8 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     const connId = String(a[1]);
     await bgSecrets.clear(pluginId, connId, BGCONN_SECRET_FIELDS);
   });
+
+  startMailPoller(getWindow);
 }
 
 /** Reminder tick: every 30s, pull due reminders, fire notifications + emit IPC to renderer.

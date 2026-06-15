@@ -381,6 +381,9 @@ export interface AppSettings {
   mail: {
     accounts: { id: string; label: string; imapHost: string; imapPort: number; smtpHost: string; smtpPort: number; user: string; secureRef: string | null }[];
   };
+  /** Poll configured mail accounts in the background (even when the Mail window is closed).
+   *  Opt-in (default off) — when on, the app makes periodic IMAP fetches while running. */
+  mailBackgroundCheck: boolean;
   browser: {
     homepage: string;
   };
@@ -540,6 +543,7 @@ export const defaultSettings: AppSettings = {
     useMemory: false
   },
   mail: { accounts: [] },
+  mailBackgroundCheck: false,
   browser: { homepage: 'about:blank' },
   media: { streamingEnabled: false, visualizer: true },
   geoint: { networkEnabled: false, tileServerUrl: '', tileAttribution: '', basemap: 'street' },
