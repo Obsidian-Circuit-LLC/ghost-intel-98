@@ -39,6 +39,19 @@ Per the companion data-layer spec, plus two additions. First, **UCDP** is the **
 
 A **layer-control panel** (left or in the rail) toggles each layer; keyed/gated layers show a "needs key / needs setup" state and their attribution + (for ACLED/gdeltcloud) a one-line disclosure of the third-party/licence posture.
 
+### Source roster (open & pluggable)
+
+Each layer is a self-contained `fetch+parse → GeoItem[]` module + a toggle + an attribution string — so the roster is **open**: new verified sources slot in as drop-in layer modules without touching the engine. Confirmed roster (tiers; full details + verification debt in the prior-art file):
+
+- **Authoritative pins, free/no-key:** USGS earthquakes (CC0/public domain), GDACS disasters (GeoRSS), **UCDP** conflict events (CC BY 4.0 — default conflict layer, verified/validated, annual + monthly candidate).
+- **Live signal (chatter), free/no-key:** GDELT GEO 2.0 (news-mention locations — noisy, labeled).
+- **Optional, user-key / third-party (opt-in, disclosed):** NASA FIRMS fires (free MAP_KEY), ACLED conflict (myACLED creds + EULA gate — optional alt to UCDP), gdeltcloud.com (paid GDELT reseller), war-tracker.com (free social-OSINT chatter + AIS maritime — labeled unverified).
+- **Humanitarian context (link-out, appname-gated):** ReliefWeb (UN OCHA — country-centroid disaster markers + report links; report bodies NOT redistributed per its licence).
+- **Non-map advisory:** CISA KEV sidebar.
+- **Excluded:** Cloudflare Radar (aggregate, not points).
+
+**Framing model (GhostExodus):** GDELT = live signal · UCDP = verified conflict validation/history · ReliefWeb = humanitarian context. Every layer surfaces its provenance + an honest authority label (authoritative / chatter / unverified-OSINT) so the user never mistakes social-OSINT for verified data. Because the roster is pluggable, the engine + layer-framework build does NOT block on a final source list — additional feeds are added incrementally as layer modules.
+
 ## 3. CISA KEV advisory sidebar
 
 Per the companion spec — a non-map panel/ticker of recent KEV entries (CVE, vendor, product, dateAdded, ransomware flag). No pins.
