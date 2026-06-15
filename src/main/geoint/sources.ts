@@ -12,11 +12,24 @@ import { join } from 'node:path';
 import { dataRoot } from '../storage/paths';
 import { secureReadText, secureWriteFile } from '../storage/secure-fs';
 import type { GeoItem, GeoSnapshot, GeoSource, GeoSourceType } from '@shared/post-mvp-types';
-import { parseRss, parseAtom, parseGeoJson, parseKml, parseGpx, parseXmlMapped, detectType } from './feeds';
+import { parseRss, parseAtom, parseGeoJson, parseKml, parseGpx, parseXmlMapped, parseJsonFeed, detectType } from './feeds';
 import { geocoder } from './gazetteer';
 import { isPublicHttpUrl } from '../security/validate';
 import { readTextCapped } from '../net/limits';
 import { safeFetch } from '../net/safe-fetch';
+
+/** Geocode the `located:'none'` items a coordinate-less parser (parseJsonFeed) returns, mirroring
+ *  the gazetteer sweep parseRss/parseAtom run inline via locate(): match the gazetteer against
+ *  `title summary`; on a hit stamp lat/lon/place/located:'gazetteer'. Items that are already located
+ *  (or that the gazetteer can't place) pass through untouched. The gazetteer's strictNum/inRange
+ *  guard still applies, so no garbage coordinate becomes a pin. */
+function geocodeUnlocated(items: GeoItem[], geocode: ReturnType<typeof geocoder>): GeoItem[] {
+  return items.map((it) => {
+    if (it.located !== 'none') return it;
+    const g = geocode(`${it.title} ${it.summary ?? ''}`);
+    return g ? { ...it, lat: g.lat, lon: g.lon, place: g.name, located: 'gazetteer' as const } : it;
+  });
+}
 
 const sourcesFile = (): string => join(dataRoot(), 'geoint-sources.json');
 const cacheFile = (id: string): string => join(dataRoot(), 'geoint-cache', `${id}.json`);
@@ -147,6 +160,7 @@ export async function fetchSource(id: string, networkEnabled: boolean): Promise<
       : type === 'gpx' ? parseGpx(body, id, geo)
       : type === 'xml' ? (s.xmlMap ? parseXmlMapped(body, id, s.xmlMap, geo) : [])
       : type === 'atom' ? parseAtom(body, id, geo)
+      : type === 'jsonfeed' ? geocodeUnlocated(parseJsonFeed(body, id), geo)
       : detectType(s.url, body) === 'atom' ? parseAtom(body, id, geo)
       : parseRss(body, id, geo);
     await cacheItems(id, items);

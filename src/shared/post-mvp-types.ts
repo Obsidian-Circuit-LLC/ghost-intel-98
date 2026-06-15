@@ -175,7 +175,7 @@ export interface MediaLibrarySnapshot {
 
 // ---------- GeoINT ----------
 
-export type GeoSourceType = 'rss' | 'atom' | 'geojson' | 'kml' | 'gpx' | 'xml';
+export type GeoSourceType = 'rss' | 'atom' | 'geojson' | 'kml' | 'gpx' | 'xml' | 'jsonfeed';
 
 /** Dot-path field map for the generic 'xml' source type. Each value is a dot path into the
  *  fast-xml-parser object tree; attributes are addressed with the '@_' prefix (e.g. 'point.@_lat').
@@ -220,6 +220,8 @@ export interface GeoItem {
   category?: string;
   /** Literal-keyword severity. Optional (back-compat). Drives marker size on the map. */
   severity?: 'low' | 'medium' | 'high';
+  /** Item image URL (JSON Feed `image`/`banner_image`). Optional; other parsers don't set it yet. */
+  image?: string;
 }
 
 export interface GeoSnapshot {
@@ -230,6 +232,19 @@ export interface GeoSnapshot {
 export interface SavedGeoEvent extends GeoItem {
   /** When this event was saved into a case (ISO). */
   savedAt: string;
+}
+
+/** A trimmed view of a CISA Known Exploited Vulnerabilities (KEV) catalog entry. KEV has ZERO
+ *  geographic fields — it is an advisory list, never a map layer / GeoItem. `knownRansomwareCampaignUse`
+ *  is CISA's own string ('Known' | 'Unknown'); the UI highlights 'Known'. */
+export interface KevEntry {
+  cveID: string;
+  vendorProject: string;
+  product: string;
+  vulnerabilityName: string;
+  dateAdded: string;
+  shortDescription: string;
+  knownRansomwareCampaignUse: string;
 }
 
 // ---------- AI Assistant ----------
