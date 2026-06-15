@@ -343,6 +343,9 @@ export interface AppSettings {
   hasSeenWelcome: boolean;
   caseSortBy: 'updatedAt' | 'createdAt' | 'priority' | 'status' | 'title';
   caseSortDir: 'asc' | 'desc';
+  /** Per-category collapse state for the My Cases sidebar, keyed by category name.
+   *  Absent key = collapsed (closed by default). */
+  caseCategoryCollapsed: Record<string, boolean>;
   shortcuts: AccessShortcut[];
   /** Targets of REQUIRED_MODULE_SHORTCUTS that have been seeded into `shortcuts` at least once.
    *  Lets the reconciler introduce new built-in modules to existing installs exactly once,
@@ -509,6 +512,7 @@ export const defaultSettings: AppSettings = {
   hasSeenWelcome: false,
   caseSortBy: 'updatedAt',
   caseSortDir: 'desc',
+  caseCategoryCollapsed: {},
   shortcuts: defaultShortcuts,
   seededShortcuts: [],
   ai: {
