@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { CameraStream } from '@shared/post-mvp-types';
 import { toast } from '../../state/toasts';
 
-export function Viewer({ stream, poster = false }: { stream: CameraStream; poster?: boolean }): JSX.Element {
+export function Viewer({ stream, poster = false, refreshNonce = 0 }: { stream: CameraStream; poster?: boolean; refreshNonce?: number }): JSX.Element {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [imgTick, setImgTick] = useState(0);
 
@@ -53,12 +53,13 @@ export function Viewer({ stream, poster = false }: { stream: CameraStream; poste
   }
 
   if (stream.kind === 'mjpeg') {
-    return <img alt={stream.label} src={stream.url} style={{ maxWidth: '100%', maxHeight: '100%' }} />;
+    const sep = stream.url.includes('?') ? '&' : '?';
+    return <img alt={stream.label} src={`${stream.url}${sep}_t=${refreshNonce}`} style={{ maxWidth: '100%', maxHeight: '100%' }} />;
   }
 
   if (stream.kind === 'http') {
     const sep = stream.url.includes('?') ? '&' : '?';
-    return <img alt={stream.label} src={`${stream.url}${sep}_t=${imgTick}`} style={{ maxWidth: '100%', maxHeight: '100%' }} />;
+    return <img alt={stream.label} src={`${stream.url}${sep}_t=${imgTick}_${refreshNonce}`} style={{ maxWidth: '100%', maxHeight: '100%' }} />;
   }
 
   if (stream.kind === 'mp4') {

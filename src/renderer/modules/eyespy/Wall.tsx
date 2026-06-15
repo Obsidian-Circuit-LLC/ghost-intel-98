@@ -13,6 +13,7 @@ export function Wall({ slots, byId, activeSlot, onActivate, onClearSlot, onAddNe
   onExpand: (s: CameraStream) => void;
 }): JSX.Element {
   const [now, setNow] = useState('');
+  const [refreshNonce, setRefreshNonce] = useState(0);
   useEffect(() => {
     const tick = (): void => setNow(new Date().toLocaleString(undefined, { weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit' }));
     tick();
@@ -21,7 +22,12 @@ export function Wall({ slots, byId, activeSlot, onActivate, onClearSlot, onAddNe
   }, []);
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gridTemplateRows: 'repeat(3, 1fr)', gap: 4, padding: 4, height: '100%', background: '#1a1a1a' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gridTemplateRows: 'repeat(3, 1fr)', gap: 4, padding: 4, height: '100%', background: '#1a1a1a', position: 'relative' }}>
+      <button
+        title="Reload all camera snapshots now"
+        onClick={() => setRefreshNonce((n) => n + 1)}
+        style={{ position: 'absolute', top: 4, right: 4, zIndex: 5, fontSize: 11, padding: '1px 8px' }}
+      >↻ Refresh tiles</button>
       {slots.map((id, i) => {
         const stream = id ? byId.get(id) : undefined;
         const active = activeSlot === i;
@@ -41,7 +47,7 @@ export function Wall({ slots, byId, activeSlot, onActivate, onClearSlot, onAddNe
               <span>as of {now}</span>
               <button title="Clear this square" onClick={(e) => { e.stopPropagation(); onClearSlot(i); }} style={{ padding: '0 4px', lineHeight: '12px' }}>×</button>
             </div>
-            <div onDoubleClick={() => onExpand(stream)} style={{ height: '100%' }}><Viewer stream={stream} /></div>
+            <div onDoubleClick={() => onExpand(stream)} style={{ height: '100%' }}><Viewer stream={stream} refreshNonce={refreshNonce} /></div>
             <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(0,0,0,0.55)', color: '#fff', fontSize: 10, padding: '1px 4px' }}>{stream.label}</div>
           </div>
         );
