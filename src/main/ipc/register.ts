@@ -52,7 +52,7 @@ import * as aiConvos from '../storage/ai-conversations';
 import * as briefcase from '../storage/briefcase';
 import * as journal from '../storage/journal';
 import * as voiceModel from '../voice/model-protocol';
-import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureShellProgram, ensureWhiteboard, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon, ensureSaveToCaseOpts, ensureGeoItem, ensureThreatLayerId, ensureBookmarkBoard, ensureMarketsSettings, ensureStickyNotes, ensureAiConversation, ensureBriefcaseNote, ensureJournalEntry, ensurePin, ensureUid, ensureMailFlag } from '../security/validate';
+import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureShellProgram, ensureWhiteboard, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon, ensureSaveToCaseOpts, ensureGeoItem, ensureThreatLayerId, ensureKeyedLayerId, ensureLayerKey, isKeyedLayerId, ensureBookmarkBoard, ensureMarketsSettings, ensureStickyNotes, ensureAiConversation, ensureBriefcaseNote, ensureJournalEntry, ensurePin, ensureUid, ensureMailFlag } from '../security/validate';
 import * as entities from '../storage/entities';
 import * as bioStore from '../storage/bio-images';
 import * as ftp from '../services/ftp';
@@ -1042,7 +1042,33 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     const feed = typeof o.feed === 'string' ? o.feed.slice(0, 64) : undefined;
     const country = typeof o.country === 'string' ? o.country.slice(0, 8) : undefined;
     const query = typeof o.query === 'string' ? o.query.slice(0, 256) : undefined;
-    return fetchThreatLayer(layerId, { feed, country, query });
+    // KEY GATE: for keyed layers (firms/gdeltcloud/ucdp) read the API key main-side from secretStore
+    // and refuse (return []) if absent. The renderer never holds the key — it travels only in the
+    // provider header/path inside the layer module. A missing key is a no-op, not an error.
+    let key: string | undefined;
+    if (isKeyedLayerId(layerId)) {
+      key = (await secretStore.get(`geoint.${layerId}.key`)) ?? '';
+      if (!key) return [];
+    }
+    return fetchThreatLayer(layerId, { feed, country, query, key });
+  });
+  safeHandle(channels.geoint.setLayerKey, async (...a) => {
+    // Store a keyed-layer API key in the OS-encrypted secret store (NOT settings.json, which is read
+    // pre-unlock). layerId is allowlisted to the keyed set; the key is validated/bounded.
+    const layerId = ensureKeyedLayerId(a[0]);
+    const key = ensureLayerKey(a[1]);
+    await secretStore.set(`geoint.${layerId}.key`, key);
+  });
+  safeHandle(channels.geoint.hasLayerKey, async (...a) => {
+    const layerId = ensureKeyedLayerId(a[0]);
+    try {
+      const v = await secretStore.get(`geoint.${layerId}.key`);
+      return typeof v === 'string' && v.length > 0;
+    } catch {
+      // Keyring locked/unavailable → treat as "no usable key" rather than surfacing a hard error to
+      // the toggle's needs-key check (the actual fetch will surface the keyring error if attempted).
+      return false;
+    }
   });
 
   // ---- Markets (vault-gated; network app-layer gated by settings.markets.networkEnabled) ----

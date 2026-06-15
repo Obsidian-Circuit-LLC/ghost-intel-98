@@ -130,7 +130,7 @@ describe('ensureThreatLayerId (R6 ids)', () => {
     expect(ensureThreatLayerId('gdacs')).toBe('gdacs');
   });
   it('rejects unknown ids', () => {
-    expect(() => ensureThreatLayerId('firms')).toThrow();
+    expect(() => ensureThreatLayerId('nonsense')).toThrow();
     expect(() => ensureThreatLayerId('../gdacs')).toThrow();
     expect(() => ensureThreatLayerId(123)).toThrow();
   });

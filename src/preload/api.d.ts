@@ -339,11 +339,18 @@ export interface GhostApi {
     removeCaseEvent(caseId: string, eventId: string): Promise<void>;
     purgeCache(): Promise<void>;
     /** Fetch an on-demand, ephemeral threat layer (e.g. USGS earthquakes) as GeoItem[].
-     *  Egress-gated by settings.geoint.networkEnabled — returns [] when network is off. */
+     *  Egress-gated by settings.geoint.networkEnabled — returns [] when network is off. Keyed
+     *  layers (firms/gdeltcloud/ucdp) additionally return [] when no API key is stored. */
     fetchThreatLayer(
-      layerId: 'usgs' | 'gdacs' | 'wartracker' | 'gdelt',
+      layerId: 'usgs' | 'gdacs' | 'wartracker' | 'gdelt' | 'firms' | 'gdeltcloud' | 'ucdp',
       opts: { feed?: string; country?: string; query?: string }
     ): Promise<GeoItem[]>;
+    /** Store the API key/token for a keyed layer in the OS-encrypted secret store (never in
+     *  settings.json). The key is held main-side only; the renderer never reads it back. */
+    setLayerKey(layerId: 'firms' | 'gdeltcloud' | 'ucdp', key: string): Promise<void>;
+    /** True iff a non-empty key is stored for the keyed layer. Drives the "needs key" disabled
+     *  state on the layer toggle. Does NOT return the key itself. */
+    hasLayerKey(layerId: 'firms' | 'gdeltcloud' | 'ucdp'): Promise<boolean>;
   };
   markets: {
     fetch(): Promise<MarketSnapshot>;

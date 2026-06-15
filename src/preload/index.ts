@@ -286,7 +286,9 @@ const api = {
     listCaseEvents: (caseId: string) => ipcRenderer.invoke(channels.geoint.listCaseEvents, caseId),
     removeCaseEvent: (caseId: string, eventId: string) => ipcRenderer.invoke(channels.geoint.removeCaseEvent, caseId, eventId),
     purgeCache: () => ipcRenderer.invoke(channels.geoint.purgeCache),
-    fetchThreatLayer: (layerId: string, opts: { feed?: string; country?: string; query?: string }) => ipcRenderer.invoke(channels.geoint.fetchThreatLayer, layerId, opts)
+    fetchThreatLayer: (layerId: string, opts: { feed?: string; country?: string; query?: string }) => ipcRenderer.invoke(channels.geoint.fetchThreatLayer, layerId, opts),
+    setLayerKey: (layerId: string, key: string) => ipcRenderer.invoke(channels.geoint.setLayerKey, layerId, key),
+    hasLayerKey: (layerId: string) => ipcRenderer.invoke(channels.geoint.hasLayerKey, layerId)
   },
   markets: {
     fetch: () => ipcRenderer.invoke(channels.markets.fetch)

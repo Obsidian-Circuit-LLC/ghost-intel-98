@@ -22,7 +22,11 @@ import { StoryControls } from './StoryControls';
 // GeoINT reimagine (R5): pluggable threat layers. Each is an on-demand, ephemeral fetch into
 // GeoItem[] (held in renderer state, never persisted to the source cache). USGS earthquakes is
 // the first layer. The allowlisted USGS feed tokens MUST mirror src/main/.../threat-layers/usgs.ts.
-type ThreatLayerId = 'usgs' | 'gdacs' | 'wartracker' | 'gdelt';
+type ThreatLayerId = 'usgs' | 'gdacs' | 'wartracker' | 'gdelt' | 'firms' | 'gdeltcloud' | 'ucdp';
+// Layers needing a per-user API key/token (stored main-side in the OS secret store, never echoed
+// back to the renderer). Mirror src/main/security/validate.ts KEYED_LAYER_IDS.
+type KeyedLayerId = 'firms' | 'gdeltcloud' | 'ucdp';
+const KEYED_LAYER_IDS: KeyedLayerId[] = ['firms', 'gdeltcloud', 'ucdp'];
 const USGS_FEED_OPTIONS: { value: string; label: string }[] = [
   { value: 'significant_day', label: 'Significant — past day' },
   { value: 'significant_week', label: 'Significant — past week' },
@@ -137,6 +141,38 @@ function GeoIntModuleInner(): JSX.Element {
   const [layerBusy, setLayerBusy] = useState<ThreatLayerId | null>(null);
   const [layerError, setLayerError] = useState<string | null>(null);
   const enabledLayers = useMemo(() => new Set(layerItems.keys()), [layerItems]);
+
+  // Keyed layers (firms/gdeltcloud/ucdp): whether a key is stored (drives the "needs key" disabled
+  // state) and the in-progress key input per layer (never pre-filled from the store — the stored
+  // key is write-only from the renderer's perspective).
+  const [hasKey, setHasKey] = useState<Record<KeyedLayerId, boolean>>({ firms: false, gdeltcloud: false, ucdp: false });
+  const [keyDraft, setKeyDraft] = useState<Record<KeyedLayerId, string>>({ firms: '', gdeltcloud: '', ucdp: '' });
+  const [keySaving, setKeySaving] = useState<KeyedLayerId | null>(null);
+
+  const refreshKeyState = useCallback(async () => {
+    const next: Record<KeyedLayerId, boolean> = { firms: false, gdeltcloud: false, ucdp: false };
+    for (const id of KEYED_LAYER_IDS) {
+      try { next[id] = await window.api.geoint.hasLayerKey(id); } catch { next[id] = false; }
+    }
+    setHasKey(next);
+  }, []);
+  useEffect(() => { void refreshKeyState(); }, [refreshKeyState]);
+
+  async function saveLayerKey(id: KeyedLayerId): Promise<void> {
+    const key = keyDraft[id].trim();
+    if (!key) { toast.warn('Enter a key first.'); return; }
+    setKeySaving(id);
+    try {
+      await window.api.geoint.setLayerKey(id, key);
+      setKeyDraft((d) => ({ ...d, [id]: '' })); // don't keep the key in renderer state after save
+      await refreshKeyState();
+      toast.success(`${id.toUpperCase()} key saved.`);
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setKeySaving(null);
+    }
+  }
 
   async function toggleLayer(id: ThreatLayerId, on: boolean, opts: { feed?: string; country?: string; query?: string } = {}): Promise<void> {
     if (!on) {
@@ -560,6 +596,90 @@ function GeoIntModuleInner(): JSX.Element {
             {layerBusy === 'gdelt' && <span style={{ fontSize: 11, color: '#555' }}>loading…</span>}
           </div>
           <p style={{ fontSize: 10, color: '#777', margin: '4px 0 0' }}>GDELT DOC — news articles, COUNTRY-LEVEL location (not precise)</p>
+
+          {/* ---- Keyed layers: each needs a per-user API key/token stored in the OS secret store.
+               The toggle is disabled until a key is saved; the key is never echoed back. ---- */}
+          <hr style={{ margin: '8px 0', borderColor: '#ccc' }} />
+          <p style={{ fontSize: 11, color: '#555', margin: '0 0 4px' }}>Keyed layers — store your own API key (encrypted, kept on this device; never sent to the renderer).</p>
+
+          {/* FIRMS */}
+          <div className="field-row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap', marginTop: 4 }}>
+            <label style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4, opacity: net ? 1 : 0.5 }}>
+              <input
+                type="checkbox"
+                checked={enabledLayers.has('firms')}
+                disabled={!net || !hasKey.firms || layerBusy === 'firms'}
+                onChange={(e) => void toggleLayer('firms', e.target.checked)}
+              />
+              NASA FIRMS fires
+            </label>
+            <input
+              className="ga98-text"
+              style={{ width: 150 }}
+              type="password"
+              placeholder={hasKey.firms ? 'key stored — replace' : 'MAP_KEY'}
+              value={keyDraft.firms}
+              onChange={(e) => setKeyDraft((d) => ({ ...d, firms: e.target.value }))}
+              title="FIRMS MAP_KEY (free, email-issued at firms.modaps.eosdis.nasa.gov)"
+            />
+            <button disabled={keySaving === 'firms'} onClick={() => void saveLayerKey('firms')}>Save</button>
+            {layerBusy === 'firms' && <span style={{ fontSize: 11, color: '#555' }}>loading…</span>}
+          </div>
+          <p style={{ fontSize: 10, color: '#777', margin: '4px 0 0' }}>
+            {hasKey.firms ? 'NASA FIRMS — open, cite-on-use' : 'Needs a free MAP_KEY (email-issued). NASA FIRMS — open, cite-on-use.'}
+          </p>
+
+          {/* gdeltcloud */}
+          <div className="field-row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap', marginTop: 6 }}>
+            <label style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4, opacity: net ? 1 : 0.5 }}>
+              <input
+                type="checkbox"
+                checked={enabledLayers.has('gdeltcloud')}
+                disabled={!net || !hasKey.gdeltcloud || layerBusy === 'gdeltcloud'}
+                onChange={(e) => void toggleLayer('gdeltcloud', e.target.checked, { query: gdeltQuery })}
+              />
+              gdeltcloud (3rd-party)
+            </label>
+            <input
+              className="ga98-text"
+              style={{ width: 150 }}
+              type="password"
+              placeholder={hasKey.gdeltcloud ? 'key stored — replace' : 'API key'}
+              value={keyDraft.gdeltcloud}
+              onChange={(e) => setKeyDraft((d) => ({ ...d, gdeltcloud: e.target.value }))}
+              title="gdeltcloud.com API key (Bearer token)"
+            />
+            <button disabled={keySaving === 'gdeltcloud'} onClick={() => void saveLayerKey('gdeltcloud')}>Save</button>
+            {layerBusy === 'gdeltcloud' && <span style={{ fontSize: 11, color: '#555' }}>loading…</span>}
+          </div>
+          <p style={{ fontSize: 10, color: '#900', margin: '4px 0 0' }}>Routes your queries through gdeltcloud (a third party that sees them).</p>
+
+          {/* UCDP */}
+          <div className="field-row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap', marginTop: 6 }}>
+            <label style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4, opacity: net ? 1 : 0.5 }}>
+              <input
+                type="checkbox"
+                checked={enabledLayers.has('ucdp')}
+                disabled={!net || !hasKey.ucdp || layerBusy === 'ucdp'}
+                onChange={(e) => void toggleLayer('ucdp', e.target.checked)}
+              />
+              UCDP GED conflict
+            </label>
+            <input
+              className="ga98-text"
+              style={{ width: 150 }}
+              type="password"
+              placeholder={hasKey.ucdp ? 'token stored — replace' : 'access token'}
+              value={keyDraft.ucdp}
+              onChange={(e) => setKeyDraft((d) => ({ ...d, ucdp: e.target.value }))}
+              title="UCDP access token (x-ucdp-access-token; request from UCDP)"
+            />
+            <button disabled={keySaving === 'ucdp'} onClick={() => void saveLayerKey('ucdp')}>Save</button>
+            {layerBusy === 'ucdp' && <span style={{ fontSize: 11, color: '#555' }}>loading…</span>}
+          </div>
+          <p style={{ fontSize: 10, color: '#777', margin: '4px 0 0' }}>
+            UCDP GED — CC BY 4.0. Cite: Davies, Pettersson &amp; Öberg (2026) JPR; Sundberg &amp; Melander (2013) JPR 50(4).
+          </p>
         </fieldset>
 
         <fieldset style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>

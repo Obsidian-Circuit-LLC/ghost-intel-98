@@ -90,7 +90,7 @@ describe('ensureThreatLayerId', () => {
     expect(ensureThreatLayerId('usgs')).toBe('usgs');
   });
   it('rejects unknown ids', () => {
-    expect(() => ensureThreatLayerId('firms')).toThrow();
+    expect(() => ensureThreatLayerId('nonsense')).toThrow();
     expect(() => ensureThreatLayerId('../usgs')).toThrow();
     expect(() => ensureThreatLayerId(123)).toThrow();
     expect(() => ensureThreatLayerId(undefined)).toThrow();

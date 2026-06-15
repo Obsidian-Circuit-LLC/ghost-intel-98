@@ -291,7 +291,7 @@ describe('ensureThreatLayerId (R7 ids)', () => {
     expect(ensureThreatLayerId('gdelt')).toBe('gdelt');
   });
   it('rejects unknown ids', () => {
-    expect(() => ensureThreatLayerId('firms')).toThrow();
+    expect(() => ensureThreatLayerId('nonsense')).toThrow();
     expect(() => ensureThreatLayerId('../gdelt')).toThrow();
     expect(() => ensureThreatLayerId(123)).toThrow();
   });

@@ -569,13 +569,44 @@ export function ensureGeoSource(v: unknown): { label: string; url: string; type:
 }
 
 /** GeoINT threat-layer id allowlist (extensible). A hostile renderer can call fetchThreatLayer
- *  directly; this rejects any id the dispatcher doesn't know before it reaches the dispatcher. */
-const THREAT_LAYER_IDS = ['usgs', 'gdacs', 'wartracker', 'gdelt'] as const;
+ *  directly; this rejects any id the dispatcher doesn't know before it reaches the dispatcher.
+ *  Keyed layers (firms/gdeltcloud/ucdp) are included — the handler additionally requires a stored
+ *  key for those before egress. */
+const THREAT_LAYER_IDS = ['usgs', 'gdacs', 'wartracker', 'gdelt', 'firms', 'gdeltcloud', 'ucdp'] as const;
 export function ensureThreatLayerId(v: unknown): (typeof THREAT_LAYER_IDS)[number] {
   if (typeof v !== 'string' || !THREAT_LAYER_IDS.includes(v as (typeof THREAT_LAYER_IDS)[number])) {
     throw new ValidationError('unknown threat layer id');
   }
   return v as (typeof THREAT_LAYER_IDS)[number];
+}
+
+/** The subset of threat layers that need a per-user API key/token. setLayerKey/hasLayerKey accept
+ *  ONLY these ids — a key can't be stored for a keyless layer (USGS etc.). The secretStore ref is
+ *  derived as `geoint.<layerId>.key`. */
+export const KEYED_LAYER_IDS = ['firms', 'gdeltcloud', 'ucdp'] as const;
+export type KeyedLayerId = (typeof KEYED_LAYER_IDS)[number];
+export function ensureKeyedLayerId(v: unknown): KeyedLayerId {
+  if (typeof v !== 'string' || !(KEYED_LAYER_IDS as readonly string[]).includes(v)) {
+    throw new ValidationError('unknown keyed threat layer id');
+  }
+  return v as KeyedLayerId;
+}
+
+/** True iff `layerId` is a keyed layer (used main-side to decide whether to read a key + gate). */
+export function isKeyedLayerId(layerId: string): layerId is KeyedLayerId {
+  return (KEYED_LAYER_IDS as readonly string[]).includes(layerId);
+}
+
+/** Validate a renderer-supplied API key/token before it is written to secretStore. Non-empty,
+ *  bounded; the renderer is hostile so we cap the length (a token is short — this only guards
+ *  against a pathological multi-MB write into the encrypted secrets blob). Not trimmed beyond the
+ *  edges: a key with internal structure is preserved verbatim. */
+export function ensureLayerKey(v: unknown): string {
+  if (typeof v !== 'string') throw new ValidationError('layer key must be a string');
+  const k = v.trim();
+  if (k.length === 0) throw new ValidationError('layer key is empty');
+  if (k.length > 4096) throw new ValidationError('layer key too long');
+  return k;
 }
 
 /** A mail message UID as it crosses IPC: a safe non-negative integer. Guards the destructive

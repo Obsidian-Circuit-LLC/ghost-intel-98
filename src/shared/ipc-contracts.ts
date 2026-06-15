@@ -252,7 +252,9 @@ export const channels = {
     listCaseEvents: 'geoint:listCaseEvents',
     removeCaseEvent: 'geoint:removeCaseEvent',
     purgeCache: 'geoint:purgeCache',
-    fetchThreatLayer: 'geoint:fetchThreatLayer'
+    fetchThreatLayer: 'geoint:fetchThreatLayer',
+    setLayerKey: 'geoint:setLayerKey',
+    hasLayerKey: 'geoint:hasLayerKey'
   },
   markets: {
     fetch: 'markets:fetch'
@@ -466,6 +468,8 @@ export interface ApiContracts {
   [channels.geoint.removeCaseEvent]: { args: [string, string]; returns: void };
   [channels.geoint.purgeCache]: { args: []; returns: void };
   [channels.geoint.fetchThreatLayer]: { args: [string, { feed?: string }]; returns: GeoItem[] };
+  [channels.geoint.setLayerKey]: { args: [string, string]; returns: void };
+  [channels.geoint.hasLayerKey]: { args: [string]; returns: boolean };
 
   [channels.markets.fetch]: { args: []; returns: MarketSnapshot };
 
