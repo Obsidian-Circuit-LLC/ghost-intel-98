@@ -11,7 +11,7 @@
 
 - **Engine:** **MapLibre GL JS**, **globe (3D) projection by default**, with a **user toggle to a flat view**. Flat is delivered as MapLibre's flat/mercator projection (same tiles, one engine) — NOT a second map library. (Retaining the *legacy Leaflet* as the flat mode is the higher-maintenance alternative; flagged for the operator, default is MapLibre-handles-both.)
 - **Tiles/terrain:** reuse the gated raster tiles GeoINT already fetches (Google `mt0`, Esri `arcgisonline` satellite/labels — `GeoIntModule.tsx:31/36/43/44`) draped over **open elevation/terrain** (e.g. a free terrain-RGB DEM source). **No Google Maps Platform API key, no billing, no new provider.** All behind the existing off-by-default `settings.geoint.networkEnabled` gate.
-- **Pin layers:** USGS earthquakes (free), GDACS (free), GDELT official GEO 2.0 (free, **default GDELT source**), GDELT-via-gdeltcloud.com (**optional**, user key), NASA FIRMS (user MAP_KEY), **UCDP (free, keyless, CC BY 4.0 — the DEFAULT conflict-events layer)**, ACLED (user creds + EULA-acceptance gate — **optional** alternative conflict source for weekly recency). Cloudflare Radar **excluded**.
+- **Pin layers:** USGS earthquakes (free), GDACS (free), GDELT official GEO 2.0 (free, **default GDELT source**), GDELT-via-gdeltcloud.com (**optional**, user key), NASA FIRMS (user MAP_KEY), **UCDP (free, keyless, CC BY 4.0 — the conflict-events layer)**, war-tracker.com (optional, free social-OSINT chatter + AIS maritime, labeled unverified). **ACLED DROPPED** (operator decision 2026-06-15 — UCDP covers conflict cleanly with no EULA gate/OAuth; removes the legal risk entirely). Cloudflare Radar **excluded**.
 - **CISA KEV:** non-map advisory sidebar.
 - **Command-center right rail:** built this release.
 - **Blip restyle + EyeSpy unlimited cams:** built this release.
@@ -35,7 +35,7 @@
 
 ## 2. Pin layers + layer control
 
-Per the companion data-layer spec, plus two additions. First, **UCDP** is the **default conflict-events layer** (free, keyless, per-point, CC BY 4.0 — redistribution permitted with citation; surfaces the required publication attribution in-UI); **ACLED** becomes an *optional* gated alternative for users wanting its weekly recency. UCDP largely retires the ACLED legal risk for the common case — most users get a clean conflict layer with no EULA gate. Second, the **GDELT layer has two selectable sources** — official GEO 2.0 (default, free, keyless, per-point) and **gdeltcloud.com** (optional, behind the user's own gdeltcloud key; structured Events/Entities; country/admin1 granularity; routes queries through a commercial third party — disclosed in the layer's setup UI). The user-key tier is now: gdeltcloud (optional), FIRMS, ACLED.
+Per the companion data-layer spec, plus two additions. First, **UCDP** is the **conflict-events layer** (free, keyless, per-point, CC BY 4.0 — redistribution permitted with citation; surfaces the required publication attribution in-UI). **ACLED is dropped** (operator decision) — UCDP covers conflict with no EULA gate or OAuth, so the companion spec's ACLED parser/gate is NOT built. Second, the **GDELT layer has two selectable sources** — official GEO 2.0 (default, free, keyless, per-point) and **gdeltcloud.com** (optional, behind the user's own gdeltcloud key; structured Events/Entities; country/admin1 granularity; routes queries through a commercial third party — disclosed in the layer's setup UI). The user-key tier is now: gdeltcloud (optional), FIRMS, ACLED.
 
 A **layer-control panel** (left or in the rail) toggles each layer; keyed/gated layers show a "needs key / needs setup" state and their attribution + (for ACLED/gdeltcloud) a one-line disclosure of the third-party/licence posture.
 
@@ -45,7 +45,7 @@ Each layer is a self-contained `fetch+parse → GeoItem[]` module + a toggle + a
 
 - **Authoritative pins, free/no-key:** USGS earthquakes (CC0/public domain), GDACS disasters (GeoRSS), **UCDP** conflict events (CC BY 4.0 — default conflict layer, verified/validated, annual + monthly candidate).
 - **Live signal (chatter), free/no-key:** GDELT GEO 2.0 (news-mention locations — noisy, labeled).
-- **Optional, user-key / third-party (opt-in, disclosed):** NASA FIRMS fires (free MAP_KEY), ACLED conflict (myACLED creds + EULA gate — optional alt to UCDP), gdeltcloud.com (paid GDELT reseller), war-tracker.com (free social-OSINT chatter + AIS maritime — labeled unverified).
+- **Optional, user-key / third-party (opt-in, disclosed):** NASA FIRMS fires (free MAP_KEY), gdeltcloud.com (paid GDELT reseller), war-tracker.com (free social-OSINT chatter + AIS maritime — labeled unverified). _(ACLED dropped — see above.)_
 - **Humanitarian context (link-out, appname-gated):** ReliefWeb (UN OCHA — country-centroid disaster markers + report links; report bodies NOT redistributed per its licence).
 - **Non-map advisory:** CISA KEV sidebar.
 - **Excluded:** Cloudflare Radar (aggregate, not points).
