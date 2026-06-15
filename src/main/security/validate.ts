@@ -568,6 +568,16 @@ export function ensureGeoSource(v: unknown): { label: string; url: string; type:
   return { label: o.label.trim(), url, type };
 }
 
+/** GeoINT threat-layer id allowlist (extensible). A hostile renderer can call fetchThreatLayer
+ *  directly; this rejects any id the dispatcher doesn't know before it reaches the dispatcher. */
+const THREAT_LAYER_IDS = ['usgs'] as const;
+export function ensureThreatLayerId(v: unknown): (typeof THREAT_LAYER_IDS)[number] {
+  if (typeof v !== 'string' || !THREAT_LAYER_IDS.includes(v as (typeof THREAT_LAYER_IDS)[number])) {
+    throw new ValidationError('unknown threat layer id');
+  }
+  return v as (typeof THREAT_LAYER_IDS)[number];
+}
+
 /** A mail message UID as it crosses IPC: a safe non-negative integer. Guards the destructive
  *  delete/print paths against a malformed renderer arg. */
 export function ensureUid(v: unknown): number {

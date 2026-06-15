@@ -19,6 +19,21 @@ import { timeBounds, itemsUpTo } from './timeline';
 import { TimelineBar } from './TimelineBar';
 import { StoryControls } from './StoryControls';
 
+// GeoINT reimagine (R5): pluggable threat layers. Each is an on-demand, ephemeral fetch into
+// GeoItem[] (held in renderer state, never persisted to the source cache). USGS earthquakes is
+// the first layer. The allowlisted USGS feed tokens MUST mirror src/main/.../threat-layers/usgs.ts.
+type ThreatLayerId = 'usgs';
+const USGS_FEED_OPTIONS: { value: string; label: string }[] = [
+  { value: 'significant_day', label: 'Significant — past day' },
+  { value: 'significant_week', label: 'Significant — past week' },
+  { value: '4.5_day', label: 'M4.5+ — past day' },
+  { value: '4.5_week', label: 'M4.5+ — past week' },
+  { value: '2.5_day', label: 'M2.5+ — past day' },
+  { value: '2.5_week', label: 'M2.5+ — past week' },
+  { value: 'all_day', label: 'All — past day' },
+  { value: 'all_week', label: 'All — past week' }
+];
+
 // Category → marker color, mirroring MapPane's CATEGORY_COLOR, for the legend chip row.
 const CATEGORY_COLOR: Record<string, string> = {
   conflict: '#c0392b', cyber: '#8e44ad', protest: '#e67e22',
@@ -110,6 +125,35 @@ function GeoIntModuleInner(): JSX.Element {
   // labels — the win is on Satellite). Ephemeral per session.
   const [labels, setLabels] = useState(false);
   const overlayUrls = labels && net ? [LABELS_TRANSPORT_URL, LABELS_PLACES_URL] : [];
+
+  // Threat layers (R5): on-demand, ephemeral. `layerItems` holds the fetched GeoItem[] per enabled
+  // layer; toggling a layer off drops its items. `usgsFeed` is the allowlisted feed/timeframe for
+  // USGS. `layerBusy`/`layerError` track the in-flight fetch. None of this is persisted.
+  const [layerItems, setLayerItems] = useState<Map<ThreatLayerId, GeoItem[]>>(new Map());
+  const [usgsFeed, setUsgsFeed] = useState('2.5_day');
+  const [layerBusy, setLayerBusy] = useState<ThreatLayerId | null>(null);
+  const [layerError, setLayerError] = useState<string | null>(null);
+  const enabledLayers = useMemo(() => new Set(layerItems.keys()), [layerItems]);
+
+  async function toggleLayer(id: ThreatLayerId, on: boolean, opts: { feed?: string }): Promise<void> {
+    if (!on) {
+      setLayerItems((m) => { const next = new Map(m); next.delete(id); return next; });
+      return;
+    }
+    if (!net) { toast.warn('GeoINT network is off — enable it to load threat layers.'); return; }
+    setLayerBusy(id);
+    setLayerError(null);
+    try {
+      const fetched = await window.api.geoint.fetchThreatLayer(id, opts);
+      setLayerItems((m) => { const next = new Map(m); next.set(id, fetched); return next; });
+      toast.success(`Loaded ${fetched.length} ${id.toUpperCase()} event${fetched.length === 1 ? '' : 's'}.`);
+    } catch (err) {
+      setLayerError((err as Error).message);
+      toast.error((err as Error).message);
+    } finally {
+      setLayerBusy(null);
+    }
+  }
 
   // Surface a snapshot failure instead of leaving the whole panel silently empty (which read
   // as "GeoINT does nothing"). A locked vault, for instance, now shows the actual reason here.
@@ -219,11 +263,15 @@ function GeoIntModuleInner(): JSX.Element {
   // array each render makes MapPane's marker effect clear+rebuild every pan (the drag "catch") and
   // re-fire the focused-marker setView (a moveend→re-render→rebuild loop that flashed the popup).
   const { items, itemsTotal } = useMemo(() => {
-    const matched = (snap?.items ?? []).filter((i) => !filter || i.title.toLowerCase().includes(filter.toLowerCase()));
+    // Merge snapshot (persisted feed) items with the on-demand threat-layer items so threat pins get
+    // the same markers/popups/timeline/corroboration treatment, uniformly. Layer ids are prefixed
+    // ('usgs:…') so they never collide with snapshot ids.
+    const all = [...(snap?.items ?? []), ...[...layerItems.values()].flat()];
+    const matched = all.filter((i) => !filter || i.title.toLowerCase().includes(filter.toLowerCase()));
     // Cap after filtering so corroborate/timeBounds/visibleItems and the map IPC stay bounded to
     // ≤MAX_ITEMS even on a pathological cache. itemsTotal carries the pre-cap count for the notice.
     return { items: matched.length > MAX_ITEMS ? matched.slice(0, MAX_ITEMS) : matched, itemsTotal: matched.length };
-  }, [snap, filter]);
+  }, [snap, layerItems, filter]);
 
   // Corroboration count per item (distinct other sources nearby in time). Computed on the FULL
   // `items` set (not the timeline-filtered subset) so confidence is stable as the cursor moves —
@@ -412,6 +460,39 @@ function GeoIntModuleInner(): JSX.Element {
               </li>
             ))}
           </ul>
+        </fieldset>
+
+        <fieldset>
+          <legend>Threat Layers</legend>
+          <p style={{ fontSize: 11, color: '#555', margin: '0 0 4px' }}>On-demand public feeds. Toggling a layer on fetches it now (network required); off drops it. Not cached.</p>
+          {layerError && <p style={{ fontSize: 11, color: '#900', margin: '0 0 4px' }}>Layer error: {layerError}</p>}
+          <div className="field-row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+            <label style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4, opacity: net ? 1 : 0.5 }}>
+              <input
+                type="checkbox"
+                checked={enabledLayers.has('usgs')}
+                disabled={!net || layerBusy === 'usgs'}
+                onChange={(e) => void toggleLayer('usgs', e.target.checked, { feed: usgsFeed })}
+              />
+              USGS earthquakes
+            </label>
+            <select
+              className="ga98-text"
+              value={usgsFeed}
+              disabled={!net || layerBusy === 'usgs'}
+              onChange={(e) => {
+                const feed = e.target.value;
+                setUsgsFeed(feed);
+                // If the layer is already on, re-fetch with the new timeframe so the change applies live.
+                if (enabledLayers.has('usgs')) void toggleLayer('usgs', true, { feed });
+              }}
+              title="USGS feed / timeframe"
+            >
+              {USGS_FEED_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+            {layerBusy === 'usgs' && <span style={{ fontSize: 11, color: '#555' }}>loading…</span>}
+          </div>
+          <p style={{ fontSize: 10, color: '#777', margin: '4px 0 0' }}>USGS — U.S. Public Domain</p>
         </fieldset>
 
         <fieldset style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>

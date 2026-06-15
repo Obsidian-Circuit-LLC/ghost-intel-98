@@ -124,14 +124,14 @@ export function parseGeoJson(body: string, sourceId: string): GeoItem[] {
 
 /** True iff lat/lon are finite and on-globe — the same guard parseGeoJson applies, so a
  *  garbage coordinate never becomes a silently-mislocated 'geo' pin. */
-function inRange(lat: number, lon: number): boolean {
+export function inRange(lat: number, lon: number): boolean {
   return Number.isFinite(lat) && Number.isFinite(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180;
 }
 
 /** Strict coordinate parse: returns NaN for empty/whitespace/non-decimal tokens (Number("")===0,
  *  Number("0x10")===16 would otherwise pass the finite+range guard and stamp a silent (0,0)/misread
  *  'geo' pin — forbidden for an OSINT tool). Accepts a plain decimal/float with optional sign/exponent. */
-function strictNum(token: unknown): number {
+export function strictNum(token: unknown): number {
   const s = String(token ?? '').trim();
   if (!/^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(s)) return NaN;
   return Number(s);

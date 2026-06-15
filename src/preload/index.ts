@@ -285,7 +285,8 @@ const api = {
     saveToCase: (caseId: string, item: unknown, opts: unknown) => ipcRenderer.invoke(channels.geoint.saveToCase, caseId, item, opts),
     listCaseEvents: (caseId: string) => ipcRenderer.invoke(channels.geoint.listCaseEvents, caseId),
     removeCaseEvent: (caseId: string, eventId: string) => ipcRenderer.invoke(channels.geoint.removeCaseEvent, caseId, eventId),
-    purgeCache: () => ipcRenderer.invoke(channels.geoint.purgeCache)
+    purgeCache: () => ipcRenderer.invoke(channels.geoint.purgeCache),
+    fetchThreatLayer: (layerId: string, opts: { feed?: string }) => ipcRenderer.invoke(channels.geoint.fetchThreatLayer, layerId, opts)
   },
   markets: {
     fetch: () => ipcRenderer.invoke(channels.markets.fetch)

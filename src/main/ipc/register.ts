@@ -52,7 +52,7 @@ import * as aiConvos from '../storage/ai-conversations';
 import * as briefcase from '../storage/briefcase';
 import * as journal from '../storage/journal';
 import * as voiceModel from '../voice/model-protocol';
-import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureShellProgram, ensureWhiteboard, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon, ensureSaveToCaseOpts, ensureGeoItem, ensureBookmarkBoard, ensureMarketsSettings, ensureStickyNotes, ensureAiConversation, ensureBriefcaseNote, ensureJournalEntry, ensurePin, ensureUid, ensureMailFlag } from '../security/validate';
+import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureShellProgram, ensureWhiteboard, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon, ensureSaveToCaseOpts, ensureGeoItem, ensureThreatLayerId, ensureBookmarkBoard, ensureMarketsSettings, ensureStickyNotes, ensureAiConversation, ensureBriefcaseNote, ensureJournalEntry, ensurePin, ensureUid, ensureMailFlag } from '../security/validate';
 import * as entities from '../storage/entities';
 import * as bioStore from '../storage/bio-images';
 import * as ftp from '../services/ftp';
@@ -64,6 +64,7 @@ import { adHocAllowlist } from '../media/protocol';
 import { parseM3u, toM3u } from '../media/m3u';
 import { parseFeedList, feedToUpsert } from '../services/feed-import';
 import * as geoint from '../geoint/sources';
+import { fetchThreatLayer } from '../geoint/threat-layers';
 import { parseOpml } from '../geoint/feeds';
 import { saveToCase as geoSaveToCase } from '../geoint/save-to-case';
 import * as geoCaseEvents from '../geoint/case-events';
@@ -1029,6 +1030,16 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.geoint.listCaseEvents, (...a) => geoCaseEvents.listCaseEvents(ensureUuid(a[0], 'caseId')));
   safeHandle(channels.geoint.removeCaseEvent, (...a) => geoCaseEvents.removeCaseEvent(ensureUuid(a[0], 'caseId'), ensureUuid(a[1], 'eventId')));
   safeHandle(channels.geoint.purgeCache, () => geoint.purgeAll());
+  safeHandle(channels.geoint.fetchThreatLayer, async (...a) => {
+    // EGRESS GATE: threat layers are on-demand network fetches — no egress unless GeoINT network is on.
+    if (!(await settingsStore.read()).geoint.networkEnabled) return [];
+    const layerId = ensureThreatLayerId(a[0]);
+    // Pass only a validated opts shape: a bounded `feed` string (the layer module allowlists the
+    // token before interpolating it into the URL, so an unknown token can't inject a path).
+    const rawFeed = (a[1] as { feed?: unknown } | undefined)?.feed;
+    const feed = typeof rawFeed === 'string' ? rawFeed.slice(0, 64) : undefined;
+    return fetchThreatLayer(layerId, { feed });
+  });
 
   // ---- Markets (vault-gated; network app-layer gated by settings.markets.networkEnabled) ----
   safeHandle(channels.markets.fetch, async () => {

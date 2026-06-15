@@ -14,27 +14,9 @@ import { secureReadText, secureWriteFile } from '../storage/secure-fs';
 import type { GeoItem, GeoSnapshot, GeoSource, GeoSourceType } from '@shared/post-mvp-types';
 import { parseRss, parseAtom, parseGeoJson, parseKml, parseGpx, parseXmlMapped, detectType } from './feeds';
 import { geocoder } from './gazetteer';
-import { isPublicHttpUrl, assertResolvedPublic } from '../security/validate';
-import { readTextCapped, FETCH_TIMEOUT_MS } from '../net/limits';
-
-/** Fetch following redirects manually, re-validating every hop against the public-URL guard
- *  so an external feed cannot 30x-redirect the request inward (SSRF / cloud metadata). */
-async function safeFetch(url: string, maxHops = 4, headers?: Record<string, string>): Promise<Response> {
-  let current = url;
-  for (let hop = 0; hop < maxHops; hop++) {
-    if (!isPublicHttpUrl(current)) throw new Error('refusing to fetch a non-public URL');
-    await assertResolvedPublic(new URL(current).hostname);
-    const res = await fetch(current, { redirect: 'manual', headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
-    if (res.status >= 300 && res.status < 400) {
-      const loc = res.headers.get('location');
-      if (!loc) return res;
-      current = new URL(loc, current).toString();
-      continue;
-    }
-    return res;
-  }
-  throw new Error('too many redirects');
-}
+import { isPublicHttpUrl } from '../security/validate';
+import { readTextCapped } from '../net/limits';
+import { safeFetch } from '../net/safe-fetch';
 
 const sourcesFile = (): string => join(dataRoot(), 'geoint-sources.json');
 const cacheFile = (id: string): string => join(dataRoot(), 'geoint-cache', `${id}.json`);
