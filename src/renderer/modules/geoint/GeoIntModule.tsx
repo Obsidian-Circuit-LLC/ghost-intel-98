@@ -18,6 +18,7 @@ import { corroborate } from './corroborate';
 import { timeBounds, itemsUpTo } from './timeline';
 import { TimelineBar } from './TimelineBar';
 import { StoryControls } from './StoryControls';
+import { LiveNewsPanel } from './LiveNewsPanel';
 
 // GeoINT reimagine (R5): pluggable threat layers. Each is an on-demand, ephemeral fetch into
 // GeoItem[] (held in renderer state, never persisted to the source cache). USGS earthquakes is
@@ -91,6 +92,10 @@ function GeoIntModuleInner(): JSX.Element {
   const tileUrl = g?.tileServerUrl ?? '';
   const tileAttribution = g?.tileAttribution ?? '';
   const basemap = g?.basemap ?? 'street';
+  // News playlist (R12) — carried through patchGeo so a tile/basemap write never drops it (the
+  // renderer store shallow-replaces the whole geoint block; every write must carry all fields).
+  const newsStreams = g?.newsStreams ?? [];
+  const newsStreamIndex = g?.newsStreamIndex ?? 0;
   // The map's active layer: street uses the user/default tiles; satellite uses the built-in Esri layer.
   const activeTileUrl = basemap === 'satellite' ? ESRI_SAT_URL : tileUrl;
   const activeTileAttribution = basemap === 'satellite' ? ESRI_SAT_ATTRIBUTION : tileAttribution;
@@ -115,6 +120,9 @@ function GeoIntModuleInner(): JSX.Element {
     patchGeo({ basemap: 'street', tileServerUrl: u, tileAttribution: u === DEFAULT_TILE_URL ? DEFAULT_TILE_ATTRIBUTION : tileAttribution });
     toast.success('Map tiles loaded.');
   }
+  // Live News (R12) overlay toggle. Self-contained panel floats over the map; R9 will relocate it
+  // to the command-center rail. Default off so the map is unobstructed until the user opens it.
+  const [liveNews, setLiveNews] = useState(false);
   const [flyTo, setFlyTo] = useState<{ lat: number; lon: number; key: number } | null>(null);
   const flyKey = useRef(0); // monotonic nonce so repeat searches re-center even on identical coords
   // Timeline scrubber: cursor (epoch ms) is the "show events up to" point; playing animates it.
@@ -242,7 +250,7 @@ function GeoIntModuleInner(): JSX.Element {
   // every write must carry all fields — this fills the unchanged ones from current state and
   // applies the delta, so adding basemap (or any future field) can't silently drop the others.
   function patchGeo(p: Partial<{ networkEnabled: boolean; tileServerUrl: string; tileAttribution: string; basemap: 'street' | 'satellite' }>): void {
-    void patch({ geoint: { networkEnabled: net, tileServerUrl: tileUrl, tileAttribution, basemap, ...p } });
+    void patch({ geoint: { networkEnabled: net, tileServerUrl: tileUrl, tileAttribution, basemap, newsStreams, newsStreamIndex, ...p } });
   }
   function setNetwork(enabled: boolean): void {
     // Enabling with no tile server configured yet → drop in the default basemap so the map
@@ -793,6 +801,20 @@ function GeoIntModuleInner(): JSX.Element {
             />
           </div>
         )}
+        {/* Live News (R12) toggle — floats top-right; opens the self-contained video panel overlay. */}
+        <button
+          onClick={() => setLiveNews((v) => !v)}
+          aria-pressed={liveNews}
+          title="Live News video panel"
+          style={{ position: 'absolute', top: 8, right: 8, zIndex: 600, fontSize: 11, padding: '2px 8px' }}
+        >
+          {liveNews ? '✕ News' : '▶ News'}
+        </button>
+        {liveNews && (
+          <div style={{ position: 'absolute', top: 36, right: 8, zIndex: 600, width: 340, maxWidth: 'calc(100% - 16px)', maxHeight: 'calc(100% - 48px)', overflow: 'auto', background: 'var(--ga98-face,#c0c0c0)', border: '2px outset #fff', boxShadow: '0 1px 6px rgba(0,0,0,.45)', padding: 6 }}>
+            <LiveNewsPanel />
+          </div>
+        )}
         {/* Story transport floats over the map (top-center) so the pause/stop controls
             stay unmissable during playback. Content-width + inline-flex so the map under
             it stays draggable; z-index sits above Leaflet tiles/markers (panes 200–500)
@@ -844,7 +866,7 @@ export function GeoIntModule(): JSX.Element {
     //     (which only touches the cache) — and it would make the inner render re-throw immediately on
     //     remount. Overwriting with known-good defaults clears it. Network goes back to off (its
     //     default); one click re-enables it and the default tiles auto-populate.
-    try { await patch({ geoint: { networkEnabled: false, tileServerUrl: '', tileAttribution: '', basemap: 'street' } }); }
+    try { await patch({ geoint: { networkEnabled: false, tileServerUrl: '', tileAttribution: '', basemap: 'street', newsStreams: [{ label: 'Bloomberg TV', url: 'https://www.bloomberg.com/media-manifest/streams/us.m3u8', kind: 'hls' }], newsStreamIndex: 0 } }); }
     catch { /* best-effort */ }
     setResetKey((k) => k + 1); // remount Inner fresh against purged + reset state
   }, [patch]);

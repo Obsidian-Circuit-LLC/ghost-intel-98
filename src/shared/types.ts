@@ -404,6 +404,12 @@ export interface AppSettings {
     /** Active basemap. 'street' uses tileServerUrl (default OSM); 'satellite' uses a built-in
      *  Esri World Imagery layer. Either way, tiles load only when networkEnabled is on. */
     basemap: 'street' | 'satellite';
+    /** Live News video playlist (R12). User-managed list of news streams; HLS plays via hls.js,
+     *  YouTube via a sandboxed youtube-nocookie.com iframe. Like every GeoINT egress, nothing loads
+     *  unless networkEnabled is on. */
+    newsStreams: { label: string; url: string; kind: 'hls' | 'youtube' }[];
+    /** Index of the active stream in newsStreams. */
+    newsStreamIndex: number;
   };
   markets: {
     /** Master opt-in egress gate for the Markets module. Off by default ⇒ no quote is fetched. */
@@ -546,7 +552,14 @@ export const defaultSettings: AppSettings = {
   mailBackgroundCheck: false,
   browser: { homepage: 'about:blank' },
   media: { streamingEnabled: false, visualizer: true },
-  geoint: { networkEnabled: false, tileServerUrl: '', tileAttribution: '', basemap: 'street' },
+  geoint: {
+    networkEnabled: false,
+    tileServerUrl: '',
+    tileAttribution: '',
+    basemap: 'street',
+    newsStreams: [{ label: 'Bloomberg TV', url: 'https://www.bloomberg.com/media-manifest/streams/us.m3u8', kind: 'hls' }],
+    newsStreamIndex: 0
+  },
   markets: {
     networkEnabled: false,
     watchlist: {
