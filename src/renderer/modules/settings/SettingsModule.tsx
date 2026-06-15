@@ -11,6 +11,7 @@ import { toast } from '../../state/toasts';
 import { confirmDialog } from '../../state/dialogs';
 import { useAuth, useSettings } from '../../state/store';
 import { LocalAiPane } from './LocalAiPane';
+import { playMailNotify } from '../../audio/synth';
 import logoUrl from '../../assets/logo.png';
 
 type SectionKey = 'about' | 'sound' | 'theme' | 'cases' | 'shortcuts' | 'ai' | 'browser' | 'terminal' | 'mail' | 'backup' | 'security';
@@ -181,6 +182,8 @@ function SoundPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSetting
       <label><input type="checkbox" checked={s.startupSoundEnabled} onChange={(e) => void patch({ startupSoundEnabled: e.target.checked })} /> Play startup chime on launch</label>
       <br />
       <label><input type="checkbox" checked={s.legacySounds} onChange={(e) => void patch({ legacySounds: e.target.checked })} /> Legacy sound pack (classic dial-up + startup jingle)</label>
+      <br />
+      <button onClick={() => playMailNotify()}>Test "You've got mail" chime</button>
       <p style={{ fontSize: 11, color: '#444', marginTop: 8 }}>
         Sounds are synthesised at runtime via Web Audio by default. The optional <strong>Legacy sound
         pack</strong> swaps the startup chime and DialTerm dial-up for bundled AI-reworked recordings of

@@ -8,6 +8,7 @@
 
 import legacyStartupUrl from '../assets/legacy-startup.mp3';
 import legacyDialupUrl from '../assets/legacy-dialup.mp3';
+import mailNotifyUrl from '../assets/mail-notify.wav';
 
 let ctx: AudioContext | null = null;
 function getCtx(): AudioContext {
@@ -310,4 +311,10 @@ export function playLegacyStartup(): void {
  *  DialTerm connect animation/log can be paced to the audio length. */
 export function playLegacyDialup(): Promise<number> {
   return playSample(legacyDialupUrl, 0.9);
+}
+
+/** New-mail chime (operator-supplied .wav). Uses the same metadata-then-play loader as the
+ *  legacy pack, which is the path proven to work under the packaged file:// origin. */
+export function playMailNotify(): void {
+  void playSample(mailNotifyUrl, 0.9);
 }

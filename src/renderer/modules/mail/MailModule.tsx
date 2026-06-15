@@ -9,23 +9,12 @@ import type { MailDraft } from '../../../preload/api';
 import { useSettings } from '../../state/store';
 import { toast } from '../../state/toasts';
 import { confirmDialog } from '../../state/dialogs';
-import mailNotifyUrl from '../../assets/mail-notify.wav';
+import { playMailNotify } from '../../audio/synth';
 
 type LeftView = 'inbox' | 'drafts';
 
 /** Background poll interval for the silent inbox check (30 s). */
 const AUTO_REFRESH_MS = 30_000;
-
-/** Play the tester-supplied new-mail chime. Fire-and-forget; autoplay/no-audio is swallowed. */
-function playMailNotify(): void {
-  try {
-    const a = new Audio(mailNotifyUrl);
-    a.volume = 0.9;
-    void a.play();
-  } catch {
-    /* autoplay/no-audio: ignore */
-  }
-}
 
 export function MailModule(): JSX.Element {
   const [accounts, setAccounts] = useState<MailAccount[]>([]);
