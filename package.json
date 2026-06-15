@@ -25,7 +25,7 @@
     "package": "pnpm fetch:tor && pnpm fetch:piper && pnpm fetch:mlkem && pnpm fetch:embed && pnpm build && electron-builder",
     "package:win": "pnpm fetch:tor && pnpm fetch:piper && pnpm fetch:mlkem && pnpm fetch:embed && pnpm build && electron-builder --win --x64",
     "package:linux": "pnpm build && electron-builder --linux",
-    "postinstall": "echo 'skipping native rebuild — ssh2 runs pure-JS; cpu-features (optional) is intentionally skipped'"
+    "postinstall": "echo 'native: ssh2 is pure-JS; node-pty is an optional native addon (lazy-loaded, fail-safe) — needs an Electron-ABI rebuild on the Windows packaging host'"
   },
   "dependencies": {
     "98.css": "^0.1.20",
@@ -53,6 +53,9 @@
     "ssh2": "^1.17.0",
     "vosk-browser": "^0.0.8",
     "zustand": "^5.0.2"
+  },
+  "optionalDependencies": {
+    "node-pty": "^1.1.0"
   },
   "devDependencies": {
     "@noble/post-quantum": "0.6.1",
@@ -85,6 +88,9 @@
     },
     "npmRebuild": false,
     "publish": null,
+    "asarUnpack": [
+      "**/node_modules/node-pty/**"
+    ],
     "files": [
       "out/**/*",
       "package.json",
