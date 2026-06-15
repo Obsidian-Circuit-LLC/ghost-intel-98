@@ -49,6 +49,8 @@ const LABELS_ATTRIBUTION = 'Labels © Esri';
 // the marker build even though timeBounds no longer crashes on it. Capping keeps the UI responsive
 // and the payload sane; the Events legend shows the truncation so it's never silent.
 const MAX_ITEMS = 5000;
+// "Play story" dwell: how long each event is shown before auto-advancing to the next (5 s).
+const STORY_ADVANCE_MS = 5000;
 
 function GeoIntModuleInner(): JSX.Element {
   const settings = useSettings((s) => s.settings);
@@ -279,7 +281,7 @@ function GeoIntModuleInner(): JSX.Element {
         if (s.index >= storyItems.length - 1) return { index: s.index, playing: false };
         return { index: s.index + 1, playing: true };
       });
-    }, 2500);
+    }, STORY_ADVANCE_MS);
     return () => clearTimeout(id);
   }, [story?.index, story?.playing, storyItems]);
 
