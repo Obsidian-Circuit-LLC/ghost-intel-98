@@ -438,8 +438,9 @@ function GeoIntModuleInner(): JSX.Element {
             tracking survive toggling Street View on/off. The timeline/story bars sit below it. */}
         <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
           {useMapGL ? (
-            <MapGL items={visibleItems} tilesEnabled={net} tileUrl={activeTileUrl} tileAttribution={activeTileAttribution}
-              overlayUrls={overlayUrls} overlayAttribution={LABELS_ATTRIBUTION} focusId={focusId} />
+            <MapGL items={visibleItems} corroboration={corroboration} tilesEnabled={net} tileUrl={activeTileUrl} tileAttribution={activeTileAttribution}
+              pickMode={pickFor != null} onPick={(la, lo) => void onPick(la, lo)} focusId={focusId} flyTo={flyTo}
+              onCenterChange={(lat, lon) => setCenter({ lat, lon })} overlayUrls={overlayUrls} overlayAttribution={LABELS_ATTRIBUTION} />
           ) : (
           <MapPane items={visibleItems} corroboration={corroboration} tilesEnabled={net} tileUrl={activeTileUrl} tileAttribution={activeTileAttribution}
             pickMode={pickFor != null} onPick={(la, lo) => void onPick(la, lo)} focusId={focusId} flyTo={flyTo}

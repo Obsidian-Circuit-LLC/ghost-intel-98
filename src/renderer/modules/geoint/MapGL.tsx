@@ -21,6 +21,64 @@ import { useEffect, useRef, useState } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type { GeoItem } from '@shared/post-mvp-types';
+import { buildPopup } from './popup';
+
+// Marker fill by feed-item category. Falls back to a neutral grey for unknown/undefined.
+// Ported verbatim from MapPane's CATEGORY_COLOR so the two maps colour identically.
+const CATEGORY_COLOR: Record<string, string> = {
+  conflict: '#c0392b', cyber: '#8e44ad', protest: '#e67e22',
+  disaster: '#16a085', crime: '#7f8c8d', politics: '#2980b9'
+};
+
+// Hard cap on rendered markers so a huge cache (e.g. thousands of FIRMS points, 2000/source)
+// can't freeze the map. Only the first MAX_MARKERS *located* items get a marker — but `located`
+// keeps counting past the cap so the truncation readout is honest. Ported from MapPane.
+const MAX_MARKERS = 1500;
+
+// Diameter (px) by severity. Undefined/low → 11, medium → 14, high → 18. Ported from MapPane.
+function severityDiameter(sev: GeoItem['severity']): number {
+  return sev === 'high' ? 18 : sev === 'medium' ? 14 : 11;
+}
+
+/**
+ * Strict coordinate gate (ported from MapPane). A poisoned item (null/NaN/Infinity/garbage or
+ * out-of-range lat-lon) must NEVER reach a marker — no silent (0,0) pins. Exported so the test
+ * can assert the rejection set directly. Returns true only for finite, in-range lat/lon.
+ */
+export function validCoord(lat: number | null | undefined, lon: number | null | undefined): lat is number {
+  return lat != null && lon != null
+    && Number.isFinite(lat) && Number.isFinite(lon)
+    && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180;
+}
+
+/**
+ * Build a per-item round-dot HTMLElement for a MapLibre Marker: fill by category, size by severity,
+ * and a white halo + colored glow ring when corroborated (count >= 1). Glow radius grows with the
+ * count but is capped so a heavily corroborated cluster doesn't bloom across the map. Mirrors
+ * MapPane's `buildIcon`, but returns a bare element (MapLibre's `new Marker({ element })`) rather
+ * than an L.divIcon. Factored out + exported so the dot styling is unit-testable without a GL context.
+ */
+export function buildIconElement(it: GeoItem, count: number): HTMLElement {
+  const d = severityDiameter(it.severity);
+  const color = CATEGORY_COLOR[it.category ?? ''] ?? '#555';
+  const glow = count >= 1 ? Math.min(4 + count * 3, 16) : 0; // cap the bloom
+  const ring = count >= 1
+    ? `box-shadow:0 0 0 3px rgba(255,255,255,.7), 0 0 ${glow}px ${glow}px ${color};`
+    : '';
+  const el = document.createElement('span');
+  el.className = 'ga98-geo-mk';
+  el.style.cssText = `display:block;width:${d}px;height:${d}px;border-radius:50%;`
+    + `background:${color};border:1px solid rgba(0,0,0,.5);box-sizing:border-box;${ring}`;
+  return el;
+}
+
+/** Build the distinct 📌 search-pin element (mirrors MapPane's searchPin divIcon). */
+function buildSearchPinElement(): HTMLElement {
+  const el = document.createElement('span');
+  el.className = 'ga98-geo-search-pin';
+  el.textContent = '📌';
+  return el;
+}
 
 // Stable source/layer ids so style rebuilds and toggles address the same nodes.
 const BASEMAP_SOURCE = 'geoint-basemap';
@@ -114,25 +172,102 @@ export function createGlobeMap(
   });
 }
 
-// Prop surface mirrors a SUBSET of MapPane's. R2 renders tiles (basemap + label overlays) and the
-// projection toggle; markers/focus/flyTo/pick land in later tasks (still optional so `<MapGL />`
-// works bare).
+/**
+ * Rebuild the item markers on `map`: clear the previous markers (MapLibre markers live directly
+ * on the map, not in a layer-group, so each is removed explicitly + the id map cleared), then for
+ * each VALID item create a category-coloured dot marker with its clean popup at [lng, lat] and add
+ * it to the map, capped at MAX_MARKERS. Returns the truncation readout ({shown,total}) when the cap
+ * hid located events, else null.
+ *
+ * Factored out of the component (like createGlobeMap/buildStyle) so the marker port — coord order,
+ * the strict coord gate, and the cap/truncation count — is unit-testable against a mocked
+ * maplibre-gl without a real GL context or a React renderer.
+ */
+export function rebuildItemMarkers(
+  map: maplibregl.Map,
+  store: Map<string, maplibregl.Marker>,
+  items: GeoItem[],
+  corroboration?: Map<string, number>
+): { shown: number; total: number } | null {
+  for (const mk of store.values()) mk.remove();
+  store.clear();
+  let placed = 0;
+  let located = 0; // items with valid, placeable coords (whether or not capped)
+  for (const it of items) {
+    // Strict coord gate BEFORE constructing — no poisoned (NaN/Infinity/out-of-range) or
+    // unlocated (null) item ever reaches a marker. No silent (0,0) pins (charter invariant).
+    if (!validCoord(it.lat, it.lon)) continue;
+    located++;
+    if (placed >= MAX_MARKERS) continue; // cap so a huge cache can't bog the map (keep counting located)
+    try {
+      const popup = new maplibregl.Popup({ closeButton: true, closeOnClick: true })
+        .setDOMContent(buildPopup(it.title, it.link));
+      // CRITICAL: MapLibre uses [lng, lat] (GeoJSON order), the OPPOSITE of Leaflet's [lat, lng].
+      const mk = new maplibregl.Marker({ element: buildIconElement(it, corroboration?.get(it.id) ?? 0) })
+        .setLngLat([it.lon as number, it.lat as number])
+        .setPopup(popup)
+        .addTo(map);
+      store.set(it.id, mk);
+      placed++;
+    } catch { /* skip a marker that fails to build; never let one bad item crash the layer */ }
+  }
+  return placed < located ? { shown: placed, total: located } : null;
+}
+
+// Prop surface mirrors MapPane's so GeoIntModule can pass the same props to either map. All are
+// optional so `<MapGL />` still mounts bare (R1/R2 tests construct it without props), but the
+// full set (markers, corroboration, pick, focus, flyTo, center-reporting) is now wired (R3).
 export interface MapGLProps {
   items?: GeoItem[];
+  /** Per-item count of distinct other sources reporting nearby in time (from corroborate()). */
+  corroboration?: Map<string, number>;
   tilesEnabled?: boolean;
   tileUrl?: string;
   tileAttribution?: string;
+  /** When true, a map click reports the clicked coords via onPick instead of normal panning. */
+  pickMode?: boolean;
+  onPick?: (lat: number, lon: number) => void;
+  focusId?: string | null;
+  /** Search target: when its `key` changes, fly there and drop a single search pin. */
+  flyTo?: { lat: number; lon: number; key: number } | null;
+  /** Reports the map center after each pan/zoom, so Street View can open the current spot. */
+  onCenterChange?: (lat: number, lon: number) => void;
+  /** Transparent overlay tile URLs (street/place labels) drawn ON TOP of the basemap. */
   overlayUrls?: string[];
   overlayAttribution?: string;
-  focusId?: string | null;
 }
 
 export function MapGL(props: MapGLProps = {}): JSX.Element {
-  const { tilesEnabled, tileUrl, tileAttribution, overlayUrls = [], overlayAttribution } = props;
+  const {
+    items = [], corroboration, tilesEnabled, tileUrl, tileAttribution,
+    pickMode = false, onPick, focusId, flyTo, onCenterChange,
+    overlayUrls = [], overlayAttribution
+  } = props;
   const ref = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
+  // Per-item markers keyed by id, so focus can address a marker without rebuilding the set.
+  // MapLibre markers aren't in a layer-group, so we track + remove them explicitly on rebuild.
+  const markers = useRef<Map<string, maplibregl.Marker>>(new Map());
+  // Single search pin, kept OUTSIDE the item set so item rebuilds don't clear it; replaced on
+  // each new search.
+  const searchMarker = useRef<maplibregl.Marker | null>(null);
+  // pickMode/onCenterChange read through refs so the (once) init effect sees the latest values
+  // without re-creating the map — mirrors MapPane's pickRef/centerCb pattern.
+  const pickRef = useRef(pickMode);
+  pickRef.current = pickMode;
+  const onPickRef = useRef(onPick);
+  onPickRef.current = onPick;
+  const centerCb = useRef(onCenterChange);
+  centerCb.current = onCenterChange;
+  // Latest items, readable by the focus effect without adding `items` to its deps. Lets focus on
+  // a capped item fall back to flying to its coords by id (the MapPane itemsRef fallback).
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
   // Default globe (the GeoINT reimagine headline is the 3D globe). The toggle flips to flat mercator.
   const [projection, setProjection] = useState<Projection>('globe');
+  // When the MAX_MARKERS cap truncates the located set, surface how many of how many are shown
+  // (silently hiding events 1501..N is unacceptable in an OSINT tool). null = nothing hidden.
+  const [truncated, setTruncated] = useState<{ shown: number; total: number } | null>(null);
 
   // Latest style inputs, so the init effect (which must run once, deps []) can read them without
   // re-creating the map, and so the style-sync effect rebuilds from current values.
@@ -143,11 +278,31 @@ export function MapGL(props: MapGLProps = {}): JSX.Element {
     // Guard against double-init: a ref'd map already exists (StrictMode re-run), or the
     // container isn't mounted yet. Same pattern MapPane uses for its Leaflet map.
     if (!ref.current || map.current) return;
-    map.current = createGlobeMap(ref.current, styleOptsRef.current);
+    const m = createGlobeMap(ref.current, styleOptsRef.current);
+    // Pick mode: a click reports its coords (lat, lng) when pick mode is on. MapLibre's
+    // e.lngLat carries .lat/.lng, so the call order matches MapPane's onPick(lat, lon).
+    m.on('click', (e: maplibregl.MapMouseEvent) => {
+      if (pickRef.current) onPickRef.current?.(e.lngLat.lat, e.lngLat.lng);
+    });
+    // Report the center after each pan/zoom so Street View can open the current spot.
+    m.on('moveend', () => { const c = m.getCenter(); centerCb.current?.(c.lat, c.lng); });
+    map.current = m;
     return () => {
       map.current?.remove();
       map.current = null;
     };
+  }, []);
+
+  // Keep MapGL sized to its container. MapLibre, like Leaflet, can render gaps when the pane
+  // grows/shrinks (split-pane drag, window restore from display:none). A ResizeObserver calling
+  // map.resize() is MapLibre's equivalent of Leaflet's invalidateSize. Its own effect so the map
+  // lifecycle isn't torn down on a prop change.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => map.current?.resize());
+    ro.observe(el);
+    return () => ro.disconnect();
   }, []);
 
   // Re-apply the whole style whenever the gate, basemap, or overlays change. setStyle wholesale
@@ -162,9 +317,67 @@ export function MapGL(props: MapGLProps = {}): JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projection, tilesEnabled, tileUrl, tileAttribution, overlayUrls.join('|'), overlayAttribution]);
 
+  // Rebuild the item markers only when the item SET or corroboration changes (mirrors MapPane's
+  // effect deps; items is memoized upstream so a pan that merely re-renders no longer thrashes).
+  // MapLibre markers live directly on the map (no layer-group), so each old marker is removed
+  // explicitly and the id map cleared before rebuilding.
+  useEffect(() => {
+    const m = map.current;
+    if (!m) return;
+    setTruncated(rebuildItemMarkers(m, markers.current, items, corroboration));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, corroboration]);
+
+  // Recenter on a geocoded search hit. The `key` nonce makes repeated searches for the same
+  // coordinates still fire. Drops a single distinct 📌 pin (replaced each search), kept off the
+  // item set so item rebuilds don't clear it.
+  useEffect(() => {
+    const m = map.current;
+    if (!m || !flyTo || !validCoord(flyTo.lat, flyTo.lon)) return;
+    // CRITICAL: [lng, lat] order for the fly center.
+    m.flyTo({ center: [flyTo.lon, flyTo.lat], zoom: 9 });
+    if (searchMarker.current) { searchMarker.current.remove(); searchMarker.current = null; }
+    const popup = new maplibregl.Popup({ closeButton: true, closeOnClick: true })
+      .setText(`${flyTo.lat.toFixed(5)}, ${flyTo.lon.toFixed(5)}`);
+    const sm = new maplibregl.Marker({ element: buildSearchPinElement() })
+      .setLngLat([flyTo.lon, flyTo.lat])
+      .setPopup(popup)
+      .addTo(m);
+    searchMarker.current = sm;
+    sm.togglePopup();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flyTo?.key]);
+
+  // Recenter + open the focused marker's popup ONLY when the focus actually changes. Keeping the
+  // fly out of the build effect avoids a fly→moveend→onCenterChange→re-render→rebuild loop.
+  useEffect(() => {
+    const m = map.current;
+    if (!m || !focusId) return;
+    const mk = markers.current.get(focusId);
+    if (mk) {
+      const ll = mk.getLngLat();
+      m.flyTo({ center: [ll.lng, ll.lat], zoom: 6 });
+      if (!mk.getPopup()?.isOpen()) mk.togglePopup();
+      return;
+    }
+    // No marker for this id — past the MAX_MARKERS cap (or not yet built). Fall back to flying to
+    // the item's coords by id so "Play story" / focus still works on capped events.
+    const it = itemsRef.current.find((x) => x.id === focusId);
+    if (it && validCoord(it.lat, it.lon)) m.flyTo({ center: [it.lon as number, it.lat], zoom: 6 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusId]);
+
   return (
     <div className="ga98-geo-map-wrap" style={{ position: 'relative', width: '100%', height: '100%' }}>
       <div ref={ref} className="ga98-geo-map" style={{ width: '100%', height: '100%' }} />
+      {truncated && (
+        <div
+          className="ga98-panel"
+          style={{ position: 'absolute', left: 6, bottom: 6, zIndex: 500, fontSize: 11, padding: '2px 6px', background: 'var(--ga98-face,#c0c0c0)', border: '2px outset #fff', pointerEvents: 'none' }}
+        >
+          Showing {truncated.shown} of {truncated.total} located events
+        </div>
+      )}
       {/* Globe/Flat projection toggle. Win98-flat button in the top-right corner; above the
           MapLibre canvas. Default globe; one click flips to flat mercator and back. */}
       <button
