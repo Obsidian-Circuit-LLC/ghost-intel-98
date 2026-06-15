@@ -12,6 +12,14 @@ import { classify } from './classify';
 type Geocoder = (text: string) => { lat: number; lon: number; name: string } | null;
 
 const xml = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_', textNodeName: '#text' });
+
+/** Parse XML with the SAME fast-xml-parser config every GeoINT parser uses (ignoreAttributes:false,
+ *  '@_' attr prefix, '#text' text node). Threat-layer modules (e.g. GDACS GeoRSS) reuse this instead
+ *  of constructing a second, differently-configured parser — one parser config, one set of edge cases. */
+export function parseXml(body: string): Record<string, any> {
+  return xml.parse(body) as Record<string, any>;
+}
+
 const arr = <T>(v: T | T[] | undefined | null): T[] => (v == null ? [] : Array.isArray(v) ? v : [v]);
 // Bound per-feed work: cap items and clip each text field, so a hostile feed can't drive a
 // CPU DoS through the per-item gazetteer regex sweep or bloat the cache (red-team L7).

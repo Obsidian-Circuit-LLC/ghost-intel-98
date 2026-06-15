@@ -340,7 +340,7 @@ export interface GhostApi {
     purgeCache(): Promise<void>;
     /** Fetch an on-demand, ephemeral threat layer (e.g. USGS earthquakes) as GeoItem[].
      *  Egress-gated by settings.geoint.networkEnabled — returns [] when network is off. */
-    fetchThreatLayer(layerId: 'usgs', opts: { feed?: string }): Promise<GeoItem[]>;
+    fetchThreatLayer(layerId: 'usgs' | 'gdacs', opts: { feed?: string }): Promise<GeoItem[]>;
   };
   markets: {
     fetch(): Promise<MarketSnapshot>;
