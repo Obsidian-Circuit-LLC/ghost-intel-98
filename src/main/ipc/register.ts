@@ -65,6 +65,7 @@ import { parseM3u, toM3u } from '../media/m3u';
 import { parseFeedList, feedToUpsert } from '../services/feed-import';
 import * as geoint from '../geoint/sources';
 import { fetchThreatLayer } from '../geoint/threat-layers';
+import { fetchKev } from '../geoint/kev';
 import { parseOpml } from '../geoint/feeds';
 import { saveToCase as geoSaveToCase } from '../geoint/save-to-case';
 import * as geoCaseEvents from '../geoint/case-events';
@@ -1069,6 +1070,12 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
       // the toggle's needs-key check (the actual fetch will surface the keyring error if attempted).
       return false;
     }
+  });
+  safeHandle(channels.geoint.fetchKev, async () => {
+    // EGRESS GATE: the CISA KEV catalog is an on-demand network fetch — no egress unless GeoINT
+    // network is on. KEV is an advisory list with no coordinates; it never touches the map.
+    if (!(await settingsStore.read()).geoint.networkEnabled) return [];
+    return fetchKev();
   });
 
   // ---- Markets (vault-gated; network app-layer gated by settings.markets.networkEnabled) ----

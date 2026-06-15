@@ -288,7 +288,8 @@ const api = {
     purgeCache: () => ipcRenderer.invoke(channels.geoint.purgeCache),
     fetchThreatLayer: (layerId: string, opts: { feed?: string; country?: string; query?: string }) => ipcRenderer.invoke(channels.geoint.fetchThreatLayer, layerId, opts),
     setLayerKey: (layerId: string, key: string) => ipcRenderer.invoke(channels.geoint.setLayerKey, layerId, key),
-    hasLayerKey: (layerId: string) => ipcRenderer.invoke(channels.geoint.hasLayerKey, layerId)
+    hasLayerKey: (layerId: string) => ipcRenderer.invoke(channels.geoint.hasLayerKey, layerId),
+    fetchKev: () => ipcRenderer.invoke(channels.geoint.fetchKev)
   },
   markets: {
     fetch: () => ipcRenderer.invoke(channels.markets.fetch)

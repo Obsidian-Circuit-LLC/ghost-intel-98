@@ -47,6 +47,7 @@ import type {
   GeoXmlMap,
   GeoItem,
   SavedGeoEvent,
+  KevEntry,
   SshHostProfile,
   BookmarkBoard,
   MarketSnapshot,
@@ -351,6 +352,10 @@ export interface GhostApi {
     /** True iff a non-empty key is stored for the keyed layer. Drives the "needs key" disabled
      *  state on the layer toggle. Does NOT return the key itself. */
     hasLayerKey(layerId: 'firms' | 'gdeltcloud' | 'ucdp'): Promise<boolean>;
+    /** Fetch the CISA Known Exploited Vulnerabilities catalog as a trimmed advisory list. KEV has
+     *  no coordinates — this never touches the map. Egress-gated by settings.geoint.networkEnabled
+     *  (returns [] when network is off). */
+    fetchKev(): Promise<KevEntry[]>;
   };
   markets: {
     fetch(): Promise<MarketSnapshot>;

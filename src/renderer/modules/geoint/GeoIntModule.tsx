@@ -6,7 +6,7 @@
  */
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { GeoSnapshot, GeoSourceType, GeoXmlMap, GeoItem } from '@shared/post-mvp-types';
+import type { GeoSnapshot, GeoSourceType, GeoXmlMap, GeoItem, KevEntry } from '@shared/post-mvp-types';
 import { useSettings } from '../../state/store';
 import { toast } from '../../state/toasts';
 import { confirmDialog } from '../../state/dialogs';
@@ -148,6 +148,24 @@ function GeoIntModuleInner(): JSX.Element {
   const [hasKey, setHasKey] = useState<Record<KeyedLayerId, boolean>>({ firms: false, gdeltcloud: false, ucdp: false });
   const [keyDraft, setKeyDraft] = useState<Record<KeyedLayerId, string>>({ firms: '', gdeltcloud: '', ucdp: '' });
   const [keySaving, setKeySaving] = useState<KeyedLayerId | null>(null);
+
+  // CISA KEV / Alerts (R8): a non-map advisory list. KEV has no coordinates — these entries never
+  // become pins; they live only in the left-pane panel. On-demand fetch, gated on `net`, not persisted.
+  const [kev, setKev] = useState<KevEntry[]>([]);
+  const [kevBusy, setKevBusy] = useState(false);
+  async function refreshKev(): Promise<void> {
+    if (!net) { toast.warn('GeoINT network is off — enable it to fetch CISA KEV.'); return; }
+    setKevBusy(true);
+    try {
+      const list = await window.api.geoint.fetchKev();
+      setKev(list);
+      toast.success(`Loaded ${list.length} KEV entr${list.length === 1 ? 'y' : 'ies'}.`);
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setKevBusy(false);
+    }
+  }
 
   const refreshKeyState = useCallback(async () => {
     const next: Record<KeyedLayerId, boolean> = { firms: false, gdeltcloud: false, ucdp: false };
@@ -681,6 +699,44 @@ function GeoIntModuleInner(): JSX.Element {
           <p style={{ fontSize: 10, color: '#777', margin: '4px 0 0' }}>
             UCDP GED — CC BY 4.0. Cite: Davies, Pettersson &amp; Öberg (2026) JPR; Sundberg &amp; Melander (2013) JPR 50(4).
           </p>
+        </fieldset>
+
+        <fieldset>
+          <legend>CISA KEV / Alerts</legend>
+          <p style={{ fontSize: 11, color: '#555', margin: '0 0 4px' }}>
+            CISA Known Exploited Vulnerabilities — an advisory catalog (no map location). On-demand; not cached.
+          </p>
+          <div className="field-row" style={{ gap: 6, alignItems: 'center', marginBottom: 4 }}>
+            <button onClick={() => void refreshKev()} disabled={!net || kevBusy}>{kevBusy ? 'Loading…' : 'Refresh'}</button>
+            <span style={{ fontSize: 11, color: '#555' }}>{kev.length > 0 ? `${kev.length} entries` : ''}</span>
+          </div>
+          {kev.length > 0 && (
+            <ul className="ga98-list" style={{ maxHeight: 180, overflow: 'auto' }}>
+              {kev.map((k) => {
+                const ransom = k.knownRansomwareCampaignUse === 'Known';
+                return (
+                  <li key={k.cveID} title={k.shortDescription} style={{ display: 'block', padding: '2px 0' }}>
+                    <button
+                      onClick={() => void window.api.system.openExternal(`https://nvd.nist.gov/vuln/detail/${encodeURIComponent(k.cveID)}`)}
+                      style={{ minWidth: 0, padding: '0 4px', fontWeight: 'bold' }}
+                      title="Open the CVE on NVD"
+                    >
+                      {k.cveID}
+                    </button>
+                    {ransom && (
+                      <span style={{ marginLeft: 6, background: '#c0392b', color: '#fff', fontSize: 9, padding: '0 4px', fontWeight: 'bold' }}>
+                        RANSOMWARE
+                      </span>
+                    )}
+                    <div style={{ fontSize: 11, color: '#333' }}>
+                      <span style={{ opacity: 0.7 }}>{k.vendorProject} {k.product}</span> — {k.vulnerabilityName}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          <p style={{ fontSize: 10, color: '#777', margin: '4px 0 0' }}>CISA KEV — U.S. Public Domain</p>
         </fieldset>
 
         <fieldset style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>

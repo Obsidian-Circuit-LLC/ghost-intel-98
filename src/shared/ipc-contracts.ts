@@ -254,7 +254,8 @@ export const channels = {
     purgeCache: 'geoint:purgeCache',
     fetchThreatLayer: 'geoint:fetchThreatLayer',
     setLayerKey: 'geoint:setLayerKey',
-    hasLayerKey: 'geoint:hasLayerKey'
+    hasLayerKey: 'geoint:hasLayerKey',
+    fetchKev: 'geoint:fetchKev'
   },
   markets: {
     fetch: 'markets:fetch'
