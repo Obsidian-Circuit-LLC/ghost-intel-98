@@ -227,6 +227,22 @@ const api = {
       return () => ipcRenderer.removeListener(channels.ssh.onClose, l);
     }
   },
+  shell: {
+    connect: (program?: 'cmd' | 'powershell') => ipcRenderer.invoke(channels.shell.connect, program),
+    write: (sessionId: string, data: string) => ipcRenderer.invoke(channels.shell.write, sessionId, data),
+    resize: (sessionId: string, cols: number, rows: number) => ipcRenderer.invoke(channels.shell.resize, sessionId, cols, rows),
+    disconnect: (sessionId: string) => ipcRenderer.invoke(channels.shell.disconnect, sessionId),
+    onData: (cb: (payload: { sessionId: string; data: string }) => void) => {
+      const l = (_e: unknown, p: { sessionId: string; data: string }) => cb(p);
+      ipcRenderer.on(channels.shell.onData, l);
+      return () => ipcRenderer.removeListener(channels.shell.onData, l);
+    },
+    onClose: (cb: (payload: { sessionId: string; reason: string }) => void) => {
+      const l = (_e: unknown, p: { sessionId: string; reason: string }) => cb(p);
+      ipcRenderer.on(channels.shell.onClose, l);
+      return () => ipcRenderer.removeListener(channels.shell.onClose, l);
+    }
+  },
   streams: {
     list: () => ipcRenderer.invoke(channels.streams.list),
     upsert: (input: unknown) => ipcRenderer.invoke(channels.streams.upsert, input),

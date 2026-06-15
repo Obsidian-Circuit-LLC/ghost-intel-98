@@ -205,6 +205,14 @@ export const channels = {
     onData: 'ssh:onData',
     onClose: 'ssh:onClose'
   },
+  shell: {
+    connect: 'shell:connect',
+    write: 'shell:write',
+    resize: 'shell:resize',
+    disconnect: 'shell:disconnect',
+    onData: 'shell:onData',
+    onClose: 'shell:onClose'
+  },
   streams: {
     list: 'streams:list',
     upsert: 'streams:upsert',
