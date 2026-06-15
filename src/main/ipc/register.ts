@@ -1034,11 +1034,15 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     // EGRESS GATE: threat layers are on-demand network fetches — no egress unless GeoINT network is on.
     if (!(await settingsStore.read()).geoint.networkEnabled) return [];
     const layerId = ensureThreatLayerId(a[0]);
-    // Pass only a validated opts shape: a bounded `feed` string (the layer module allowlists the
-    // token before interpolating it into the URL, so an unknown token can't inject a path).
-    const rawFeed = (a[1] as { feed?: unknown } | undefined)?.feed;
-    const feed = typeof rawFeed === 'string' ? rawFeed.slice(0, 64) : undefined;
-    return fetchThreatLayer(layerId, { feed });
+    // Pass only a validated/bounded opts shape. Each layer module re-validates its own param before
+    // it touches the URL (USGS allowlists `feed`; war-tracker bounds `country` to ISO2; GDELT
+    // encodeURIComponents + length-bounds `query`), so an unknown/hostile value can't inject a path
+    // or extra query. We still bound here at the boundary (defense in depth).
+    const o = (a[1] ?? {}) as { feed?: unknown; country?: unknown; query?: unknown };
+    const feed = typeof o.feed === 'string' ? o.feed.slice(0, 64) : undefined;
+    const country = typeof o.country === 'string' ? o.country.slice(0, 8) : undefined;
+    const query = typeof o.query === 'string' ? o.query.slice(0, 256) : undefined;
+    return fetchThreatLayer(layerId, { feed, country, query });
   });
 
   // ---- Markets (vault-gated; network app-layer gated by settings.markets.networkEnabled) ----

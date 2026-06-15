@@ -8,10 +8,12 @@
 import type { GeoItem } from '@shared/post-mvp-types';
 import { fetchUsgs } from './usgs';
 import { fetchGdacs } from './gdacs';
+import { fetchWarTracker } from './war-tracker';
+import { fetchGdelt } from './gdelt';
 
-export type ThreatLayerId = 'usgs' | 'gdacs';
+export type ThreatLayerId = 'usgs' | 'gdacs' | 'wartracker' | 'gdelt';
 
-export const THREAT_LAYER_IDS: readonly ThreatLayerId[] = ['usgs', 'gdacs'];
+export const THREAT_LAYER_IDS: readonly ThreatLayerId[] = ['usgs', 'gdacs', 'wartracker', 'gdelt'];
 
 export async function fetchThreatLayer(layerId: ThreatLayerId, opts: object): Promise<GeoItem[]> {
   switch (layerId) {
@@ -19,6 +21,10 @@ export async function fetchThreatLayer(layerId: ThreatLayerId, opts: object): Pr
       return fetchUsgs(opts as { feed?: string });
     case 'gdacs':
       return fetchGdacs(opts);
+    case 'wartracker':
+      return fetchWarTracker(opts as { country?: string });
+    case 'gdelt':
+      return fetchGdelt(opts as { query?: string });
     default:
       throw new Error(`unknown threat layer: ${String(layerId)}`);
   }

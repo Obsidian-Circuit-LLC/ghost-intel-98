@@ -22,7 +22,7 @@ import { StoryControls } from './StoryControls';
 // GeoINT reimagine (R5): pluggable threat layers. Each is an on-demand, ephemeral fetch into
 // GeoItem[] (held in renderer state, never persisted to the source cache). USGS earthquakes is
 // the first layer. The allowlisted USGS feed tokens MUST mirror src/main/.../threat-layers/usgs.ts.
-type ThreatLayerId = 'usgs' | 'gdacs';
+type ThreatLayerId = 'usgs' | 'gdacs' | 'wartracker' | 'gdelt';
 const USGS_FEED_OPTIONS: { value: string; label: string }[] = [
   { value: 'significant_day', label: 'Significant — past day' },
   { value: 'significant_week', label: 'Significant — past week' },
@@ -131,11 +131,14 @@ function GeoIntModuleInner(): JSX.Element {
   // USGS. `layerBusy`/`layerError` track the in-flight fetch. None of this is persisted.
   const [layerItems, setLayerItems] = useState<Map<ThreatLayerId, GeoItem[]>>(new Map());
   const [usgsFeed, setUsgsFeed] = useState('2.5_day');
+  // war-tracker: optional ISO2 country filter; GDELT: free-text query (default a broad crisis query).
+  const [wtCountry, setWtCountry] = useState('');
+  const [gdeltQuery, setGdeltQuery] = useState('(conflict OR airstrike OR crisis OR protest OR earthquake OR flood)');
   const [layerBusy, setLayerBusy] = useState<ThreatLayerId | null>(null);
   const [layerError, setLayerError] = useState<string | null>(null);
   const enabledLayers = useMemo(() => new Set(layerItems.keys()), [layerItems]);
 
-  async function toggleLayer(id: ThreatLayerId, on: boolean, opts: { feed?: string } = {}): Promise<void> {
+  async function toggleLayer(id: ThreatLayerId, on: boolean, opts: { feed?: string; country?: string; query?: string } = {}): Promise<void> {
     if (!on) {
       setLayerItems((m) => { const next = new Map(m); next.delete(id); return next; });
       return;
@@ -507,6 +510,56 @@ function GeoIntModuleInner(): JSX.Element {
             {layerBusy === 'gdacs' && <span style={{ fontSize: 11, color: '#555' }}>loading…</span>}
           </div>
           <p style={{ fontSize: 10, color: '#777', margin: '4px 0 0' }}>GDACS — UN OCHA / EC-JRC</p>
+
+          <div className="field-row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap', marginTop: 6 }}>
+            <label style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4, opacity: net ? 1 : 0.5 }}>
+              <input
+                type="checkbox"
+                checked={enabledLayers.has('wartracker')}
+                disabled={!net || layerBusy === 'wartracker'}
+                onChange={(e) => void toggleLayer('wartracker', e.target.checked, { country: wtCountry })}
+              />
+              War-Tracker (OSINT)
+            </label>
+            <input
+              className="ga98-text"
+              style={{ width: 56 }}
+              placeholder="ISO2"
+              maxLength={2}
+              value={wtCountry}
+              disabled={!net || layerBusy === 'wartracker'}
+              onChange={(e) => setWtCountry(e.target.value.toUpperCase().replace(/[^A-Z]/g, ''))}
+              onBlur={() => { if (enabledLayers.has('wartracker')) void toggleLayer('wartracker', true, { country: wtCountry }); }}
+              title="Optional ISO-3166 alpha-2 country filter (e.g. UA)"
+            />
+            {layerBusy === 'wartracker' && <span style={{ fontSize: 11, color: '#555' }}>loading…</span>}
+          </div>
+          <p style={{ fontSize: 10, color: '#900', margin: '4px 0 0' }}>War-Tracker — unverified social-OSINT (Telegram/LLM-classified)</p>
+
+          <div className="field-row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap', marginTop: 6 }}>
+            <label style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4, opacity: net ? 1 : 0.5 }}>
+              <input
+                type="checkbox"
+                checked={enabledLayers.has('gdelt')}
+                disabled={!net || layerBusy === 'gdelt'}
+                onChange={(e) => void toggleLayer('gdelt', e.target.checked, { query: gdeltQuery })}
+              />
+              GDELT DOC (news)
+            </label>
+            <input
+              className="ga98-text"
+              style={{ flex: 1, minWidth: 120 }}
+              placeholder="GDELT query"
+              maxLength={256}
+              value={gdeltQuery}
+              disabled={!net || layerBusy === 'gdelt'}
+              onChange={(e) => setGdeltQuery(e.target.value)}
+              onBlur={() => { if (enabledLayers.has('gdelt')) void toggleLayer('gdelt', true, { query: gdeltQuery }); }}
+              title="GDELT DOC query (keywords / OR / quotes)"
+            />
+            {layerBusy === 'gdelt' && <span style={{ fontSize: 11, color: '#555' }}>loading…</span>}
+          </div>
+          <p style={{ fontSize: 10, color: '#777', margin: '4px 0 0' }}>GDELT DOC — news articles, COUNTRY-LEVEL location (not precise)</p>
         </fieldset>
 
         <fieldset style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>

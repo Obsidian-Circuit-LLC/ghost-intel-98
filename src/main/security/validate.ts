@@ -570,7 +570,7 @@ export function ensureGeoSource(v: unknown): { label: string; url: string; type:
 
 /** GeoINT threat-layer id allowlist (extensible). A hostile renderer can call fetchThreatLayer
  *  directly; this rejects any id the dispatcher doesn't know before it reaches the dispatcher. */
-const THREAT_LAYER_IDS = ['usgs', 'gdacs'] as const;
+const THREAT_LAYER_IDS = ['usgs', 'gdacs', 'wartracker', 'gdelt'] as const;
 export function ensureThreatLayerId(v: unknown): (typeof THREAT_LAYER_IDS)[number] {
   if (typeof v !== 'string' || !THREAT_LAYER_IDS.includes(v as (typeof THREAT_LAYER_IDS)[number])) {
     throw new ValidationError('unknown threat layer id');
