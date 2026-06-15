@@ -19,6 +19,8 @@ import { timeBounds, itemsUpTo } from './timeline';
 import { TimelineBar } from './TimelineBar';
 import { StoryControls } from './StoryControls';
 import { LiveNewsPanel } from './LiveNewsPanel';
+import { CommandRail } from './CommandRail';
+import { filterByCategories, UNCATEGORIZED } from './threat';
 
 // GeoINT reimagine (R5): pluggable threat layers. Each is an on-demand, ephemeral fetch into
 // GeoItem[] (held in renderer state, never persisted to the source cache). USGS earthquakes is
@@ -137,6 +139,19 @@ function GeoIntModuleInner(): JSX.Element {
   // labels — the win is on Satellite). Ephemeral per session.
   const [labels, setLabels] = useState(false);
   const overlayUrls = labels && net ? [LABELS_TRANSPORT_URL, LABELS_PLACES_URL] : [];
+
+  // Command-center rail (R9): category visibility filter. Only consulted in globe mode (useMapGL);
+  // it hides/shows a category's markers on the map. `null` = "all categories on" (the default — no
+  // category is disabled). Toggling a box off materializes the set as the full category list minus
+  // that key, so subsequent toggles operate on an explicit set. The 2-column path never reads this.
+  const [disabledCategories, setDisabledCategories] = useState<Set<string>>(new Set());
+  const toggleCategory = useCallback((key: string, on: boolean): void => {
+    setDisabledCategories((prev) => {
+      const next = new Set(prev);
+      if (on) next.delete(key); else next.add(key);
+      return next;
+    });
+  }, []);
 
   // Threat layers (R5): on-demand, ephemeral. `layerItems` holds the fetched GeoItem[] per enabled
   // layer; toggling a layer off drops its items. `usgsFeed` is the allowlisted feed/timeframe for
@@ -354,6 +369,22 @@ function GeoIntModuleInner(): JSX.Element {
   // The set handed to the map: events at or before the cursor (undated always shown).
   const visibleItems = useMemo(() => itemsUpTo(items, timeCursor), [items, timeCursor]);
 
+  // Command-center rail (R9): every category key present in the visible set (uncategorized bucketed
+  // under UNCATEGORIZED), and the ENABLED subset = present minus disabledCategories. Used only in
+  // globe mode to (a) feed the rail its filter state and (b) filter the markers handed to MapGL.
+  const enabledCategories = useMemo(() => {
+    const present = new Set<string>();
+    for (const i of visibleItems) present.add(i.category ?? UNCATEGORIZED);
+    for (const d of disabledCategories) present.delete(d);
+    return present;
+  }, [visibleItems, disabledCategories]);
+  // Items fed to MapGL in globe mode: visibleItems minus disabled categories. When nothing is
+  // disabled this is referentially a filtered copy of visibleItems with identical membership.
+  const mapItems = useMemo(
+    () => (disabledCategories.size === 0 ? visibleItems : filterByCategories(visibleItems, enabledCategories)),
+    [visibleItems, enabledCategories, disabledCategories]
+  );
+
   // Timeline auto-play: advance the cursor toward max in ~200 steps, stopping at max. Paused
   // while a story runs (story owns the camera). Display-only; no egress, no persisted state.
   useEffect(() => {
@@ -412,7 +443,7 @@ function GeoIntModuleInner(): JSX.Element {
   }
 
   return (
-    <div className="ga98-split ga98-geo" style={{ height: '100%' }}>
+    <div className={`ga98-split ga98-geo${useMapGL ? ' ga98-geo-3col' : ''}`} style={{ height: '100%' }}>
       <div className="ga98-pane ga98-geo-left">
         {loadError && (
           <div style={{ background: '#fee', color: '#900', padding: '4px 8px', fontSize: 11, border: '1px solid #c00', marginBottom: 4 }}>
@@ -771,7 +802,7 @@ function GeoIntModuleInner(): JSX.Element {
             tracking survive toggling Street View on/off. The timeline/story bars sit below it. */}
         <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
           {useMapGL ? (
-            <MapGL items={visibleItems} corroboration={corroboration} tilesEnabled={net} tileUrl={activeTileUrl} tileAttribution={activeTileAttribution}
+            <MapGL items={mapItems} corroboration={corroboration} tilesEnabled={net} tileUrl={activeTileUrl} tileAttribution={activeTileAttribution}
               pickMode={pickFor != null} onPick={(la, lo) => void onPick(la, lo)} focusId={focusId} flyTo={flyTo}
               onCenterChange={(lat, lon) => setCenter({ lat, lon })} overlayUrls={overlayUrls} overlayAttribution={LABELS_ATTRIBUTION} />
           ) : (
@@ -801,7 +832,10 @@ function GeoIntModuleInner(): JSX.Element {
             />
           </div>
         )}
-        {/* Live News (R12) toggle — floats top-right; opens the self-contained video panel overlay. */}
+        {/* Live News (R12) toggle — floats top-right; opens the self-contained video panel overlay.
+            In globe mode (useMapGL) Live News lives at the top of the command-center rail instead, so
+            this floating overlay only renders on the 2-column (Leaflet) path. */}
+        {!useMapGL && (
         <button
           onClick={() => setLiveNews((v) => !v)}
           aria-pressed={liveNews}
@@ -810,7 +844,8 @@ function GeoIntModuleInner(): JSX.Element {
         >
           {liveNews ? '✕ News' : '▶ News'}
         </button>
-        {liveNews && (
+        )}
+        {!useMapGL && liveNews && (
           <div style={{ position: 'absolute', top: 36, right: 8, zIndex: 600, width: 340, maxWidth: 'calc(100% - 16px)', maxHeight: 'calc(100% - 48px)', overflow: 'auto', background: 'var(--ga98-face,#c0c0c0)', border: '2px outset #fff', boxShadow: '0 1px 6px rgba(0,0,0,.45)', padding: 6 }}>
             <LiveNewsPanel />
           </div>
@@ -843,6 +878,23 @@ function GeoIntModuleInner(): JSX.Element {
           onAll={() => { setTimePlaying(false); if (bounds) setTimeCursor(bounds.max); }}
         />
       </div>
+      {/* Command-center right rail (R9) — 3rd column, GLOBE MODE ONLY. When useMapGL is false this
+          never mounts and the layout stays the live 2-column (controls | map). All data is owned by
+          this module and passed down; the rail mirrors handlers rather than duplicating logic. */}
+      {useMapGL && (
+        <CommandRail
+          visibleItems={visibleItems}
+          corroboration={corroboration}
+          onFocus={(id) => setFocusId(id)}
+          categoryFilter={enabledCategories}
+          onToggleCategory={toggleCategory}
+          basemap={basemap}
+          onBasemap={(b) => { patchGeo({ basemap: b }); setStreetView(false); }}
+          labels={labels}
+          onLabels={setLabels}
+          net={net}
+        />
+      )}
       {saveItem && <SaveEventDialog item={saveItem} onClose={() => setSaveItem(null)} />}
     </div>
   );

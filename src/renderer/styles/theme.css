@@ -761,6 +761,11 @@ input.ga98-text, select.ga98-text {
    Bumped 340→380 so the View row (2D Map / Satellite / Street View / Labels) and the event
    titles get a little breathing room instead of clipping. */
 .ga98-geo { grid-template-columns: 380px 1fr; }
+/* Command-center 3-column layout (R9) — GLOBE MODE ONLY. Applied via the ga98-geo-3col modifier
+   only when useMapGL is true; the 2-column .ga98-geo track above is untouched in the default app.
+   left controls (380px) | center globe (1fr, flexes) | right rail (300px fixed). */
+.ga98-geo-3col { grid-template-columns: 380px 1fr 300px; }
+.ga98-geo-rail { background: #0a0f1a; color: #cdd6e4; }
 .ga98-geo-left { display: flex; flex-direction: column; gap: 6px; overflow-x: hidden; overflow-y: auto; }
 .ga98-geo-left input, .ga98-geo-left select { min-width: 0; }
 .ga98-geo-right { position: relative; }
