@@ -34,6 +34,7 @@ import { dataRoot, caseAttachmentsDir } from '../storage/paths';
 import { isEncryptedFile } from '../storage/secure-fs';
 import * as mail from '../services/mail';
 import * as ssh from '../services/ssh';
+import * as shellSvc from '../services/shell';
 import * as streams from '../services/streams';
 import { detectStream } from '../services/stream-detect';
 import * as walls from '../services/walls';
@@ -50,7 +51,7 @@ import * as aiConvos from '../storage/ai-conversations';
 import * as briefcase from '../storage/briefcase';
 import * as journal from '../storage/journal';
 import * as voiceModel from '../voice/model-protocol';
-import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureWhiteboard, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon, ensureSaveToCaseOpts, ensureGeoItem, ensureBookmarkBoard, ensureMarketsSettings, ensureStickyNotes, ensureAiConversation, ensureBriefcaseNote, ensureJournalEntry, ensurePin, ensureUid, ensureMailFlag } from '../security/validate';
+import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureShellProgram, ensureWhiteboard, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon, ensureSaveToCaseOpts, ensureGeoItem, ensureBookmarkBoard, ensureMarketsSettings, ensureStickyNotes, ensureAiConversation, ensureBriefcaseNote, ensureJournalEntry, ensurePin, ensureUid, ensureMailFlag } from '../security/validate';
 import * as entities from '../storage/entities';
 import * as bioStore from '../storage/bio-images';
 import * as ftp from '../services/ftp';
@@ -276,6 +277,12 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   const ensureMemberIds = (v: unknown): string[] => {
     if (!Array.isArray(v) || v.length === 0 || v.length > 64) throw new Error('Invalid member list');
     return v.map((x) => ensureContactId(x));
+  };
+  // Defense-in-depth: a non-finite or out-of-range cols/rows must never reach pty.resize.
+  const ensureDim = (v: unknown): number => {
+    const n = Math.floor(Number(v));
+    if (!Number.isFinite(n) || n < 1) return 1;
+    return Math.min(n, 1000);
   };
   safeHandle(channels.chat.status, () => chat.status());
   safeHandle(channels.chat.enable, () => chat.enable(getWindow));
@@ -871,6 +878,19 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.ssh.write, (...args) => ssh.write(args[0] as string, args[1] as string));
   safeHandle(channels.ssh.resize, (...args) => ssh.resize(args[0] as string, args[1] as number, args[2] as number));
   safeHandle(channels.ssh.disconnect, (...args) => ssh.disconnect(args[0] as string));
+
+  // ---- shell (DialTerm local shell) — connect handler is the AUTHORITATIVE opt-in gate ----
+  safeHandle(channels.shell.connect, async (...args) => {
+    const settings = await settingsStore.read();
+    if (!settings.localShellEnabled) {
+      throw new Error('Local shell is disabled. Enable it in Settings → Terminal.');
+    }
+    const program = ensureShellProgram(args[0] ?? settings.localShellProgram);
+    return shellSvc.connect(program, getWindow);
+  });
+  safeHandle(channels.shell.write, (...args) => shellSvc.write(ensureSessionId(args[0]), args[1] as string));
+  safeHandle(channels.shell.resize, (...args) => shellSvc.resize(ensureSessionId(args[0]), ensureDim(args[1]), ensureDim(args[2])));
+  safeHandle(channels.shell.disconnect, (...args) => shellSvc.disconnect(ensureSessionId(args[0])));
 
   // ---- streams (EyeSpy) ----
   safeHandle(channels.streams.list, () => streams.list());

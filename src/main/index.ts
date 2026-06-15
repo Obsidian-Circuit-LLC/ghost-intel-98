@@ -37,6 +37,7 @@ import { buildContextDeps, refreshPluginNetSnapshot } from './plugins/wire-deps'
 import { settingsStore } from './storage/json-fs';
 import { initEngagementController } from './offensive/controller';
 import { shutdownAllSessions } from './services/ssh';
+import { shutdownAllShellSessions } from './services/shell';
 import { shutdownAll as shutdownAllFtp } from './services/ftp';
 import { cancelAll as cancelAllAiStreams } from './services/ai';
 import * as localAi from './services/local-ai';
@@ -352,6 +353,7 @@ app.on('before-quit', (event) => {
   const teardown = (async () => {
     await cancelAllAiStreams();
     await shutdownAllSessions();
+    await shutdownAllShellSessions();
     await shutdownAllFtp();
     await chat.shutdown().catch(() => { /* tor may not be running */ }); // kills tor.exe → frees the lock
     await getBgConnManager()?.stopAll('quit').catch(() => { /* */ });   // stops workers (awaited)
