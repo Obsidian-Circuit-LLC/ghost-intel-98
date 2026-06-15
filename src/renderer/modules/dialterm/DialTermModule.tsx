@@ -18,6 +18,7 @@ import { useSettings } from '../../state/store';
 import { playCarrier, playLegacyDialup, playHangup, CARRIER_BEAT } from '../../audio/synth';
 import { toast } from '../../state/toasts';
 import { FtpBrowser } from './FtpBrowser';
+import { nextPortOnProtocolChange } from './port';
 import logoUrl from '../../assets/logo.png';
 
 type ConnState = 'idle' | 'connecting' | 'open' | 'closed';
@@ -480,7 +481,7 @@ function HostSetup({ hosts, onClose }: { hosts: SshHostProfile[]; onClose: () =>
               <label>Protocol:</label>
               <select className="ga98-text" value={draft.protocol ?? 'ssh'} onChange={(e) => {
                 const protocol = e.target.value as DialTermProtocol;
-                const port = protocol === 'telnet' ? 23 : protocol === 'ftp' ? 21 : 22;
+                const port = nextPortOnProtocolChange(draft.port, protocol);
                 setDraft({ ...draft, protocol, port, ...(protocol !== 'ssh' ? { authKind: 'password' as const, keyPath: '' } : {}) });
               }}>
                 <option value="ssh">SSH</option>
@@ -491,6 +492,8 @@ function HostSetup({ hosts, onClose }: { hosts: SshHostProfile[]; onClose: () =>
               <input className="ga98-text" value={draft.host} onChange={(e) => setDraft({ ...draft, host: e.target.value })} />
               <label>Port:</label>
               <input className="ga98-text" type="number" value={draft.port} onChange={(e) => setDraft({ ...draft, port: Number(e.target.value) })} />
+              <label></label>
+              <span style={{ fontSize: 10, color: '#666' }}>Any port 1–65535 (e.g. SSH on 2222).</span>
               <label>Username:</label>
               <input className="ga98-text" value={draft.username} onChange={(e) => setDraft({ ...draft, username: e.target.value })} />
               {(draft.protocol ?? 'ssh') === 'ssh' ? (
