@@ -130,6 +130,49 @@ export function parseGeoJson(body: string, sourceId: string): GeoItem[] {
     });
 }
 
+/** Strip HTML tags to plain text for a JSON Feed item whose only body is `content_html`. Tag
+ *  removal only (no entity decode) — enough for a reading-list summary; the gazetteer sweep then
+ *  runs on the result like any other RSS/Atom summary. */
+const stripHtml = (s: string): string => s.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+
+/** JSON Feed (jsonfeed.org) parser. Mirrors parseRss: same classify()/located:'none' shape, items
+ *  geocoded afterward by the sources.ts pipeline via the gazetteer. Defensive — tolerates missing
+ *  fields and returns [] when `items` isn't an array (a non-feed JSON body, or a hostile shape). */
+export function parseJsonFeed(body: string, sourceId: string): GeoItem[] {
+  let doc: { items?: unknown };
+  try { doc = JSON.parse(body) as { items?: unknown }; } catch { return []; }
+  if (!doc || !Array.isArray(doc.items)) return [];
+  return (doc.items as Record<string, unknown>[]).slice(0, MAX_FEED_ITEMS).map((it) => {
+    const item = (it ?? {}) as Record<string, unknown>;
+    const title = clip(typeof item['title'] === 'string' ? (item['title'] as string) : '');
+    const html = typeof item['content_html'] === 'string' ? (item['content_html'] as string) : '';
+    const summary = clip(
+      typeof item['summary'] === 'string' ? (item['summary'] as string)
+      : typeof item['content_text'] === 'string' ? (item['content_text'] as string)
+      : html ? stripHtml(html)
+      : ''
+    );
+    const url = typeof item['url'] === 'string' ? (item['url'] as string) : undefined;
+    const idKey = (typeof item['id'] === 'string' || typeof item['id'] === 'number')
+      ? String(item['id']) : (url ?? '');
+    const image =
+      typeof item['image'] === 'string' ? (item['image'] as string)
+      : typeof item['banner_image'] === 'string' ? (item['banner_image'] as string)
+      : undefined;
+    return {
+      id: `${sourceId}:${idKey}`,
+      sourceId,
+      title,
+      link: url,
+      summary: summary || undefined,
+      published: typeof item['date_published'] === 'string' ? (item['date_published'] as string) : undefined,
+      image,
+      located: 'none' as const,
+      ...classify(title, summary)
+    };
+  });
+}
+
 /** True iff lat/lon are finite and on-globe — the same guard parseGeoJson applies, so a
  *  garbage coordinate never becomes a silently-mislocated 'geo' pin. */
 export function inRange(lat: number, lon: number): boolean {
@@ -230,7 +273,20 @@ export function detectType(url: string, body: string): GeoSourceType {
   if (u.endsWith('.geojson') || u.endsWith('.json')) return 'geojson';
   const head = body.slice(0, 512).toLowerCase();
   if (head.includes('<feed') && head.includes('atom')) return 'atom';
-  if (head.trimStart().startsWith('{') || head.includes('"featurecollection"')) return 'geojson';
+  // JSON bodies: GeoJSON FeatureCollection wins first (it carries coordinates → map pins). Only
+  // when it is NOT a FeatureCollection do we look for a JSON Feed: a `version` containing 'jsonfeed'
+  // plus an `items` array. Parse the whole body (not just the 512-char head) so the check is robust
+  // to field ordering. Anything else JSON-shaped falls through to geojson as before.
+  if (head.trimStart().startsWith('{') || head.includes('"featurecollection"')) {
+    try {
+      const j = JSON.parse(body) as { type?: unknown; version?: unknown; items?: unknown };
+      if (typeof j?.type === 'string' && j.type.toLowerCase() === 'featurecollection') return 'geojson';
+      if (typeof j?.version === 'string' && j.version.toLowerCase().includes('jsonfeed') && Array.isArray(j?.items)) {
+        return 'jsonfeed';
+      }
+    } catch { /* not parseable JSON — fall through */ }
+    return 'geojson';
+  }
   return 'rss';
 }
 

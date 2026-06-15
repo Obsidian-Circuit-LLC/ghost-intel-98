@@ -461,6 +461,7 @@ function GeoIntModuleInner(): JSX.Element {
             <input className="ga98-text" placeholder="https://feed…" value={draft.url} onChange={(e) => setDraft({ ...draft, url: e.target.value })} />
             <select className="ga98-text" value={draft.type} onChange={(e) => setDraft({ ...draft, type: e.target.value as GeoSourceType })}>
               <option value="rss">RSS</option><option value="atom">Atom</option><option value="geojson">GeoJSON</option>
+              <option value="jsonfeed">JSON Feed</option>
               <option value="kml">KML</option><option value="gpx">GPX</option><option value="xml">XML (custom)</option>
             </select>
           </div>

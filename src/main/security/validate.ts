@@ -520,7 +520,7 @@ export function ensureFeedUrl(url: string): boolean {
   } catch { return false; }
 }
 
-const GEO_SOURCE_TYPES = ['rss', 'atom', 'geojson', 'kml', 'gpx', 'xml'] as const;
+const GEO_SOURCE_TYPES = ['rss', 'atom', 'geojson', 'kml', 'gpx', 'xml', 'jsonfeed'] as const;
 type GeoSourceTypeLit = (typeof GEO_SOURCE_TYPES)[number];
 
 function ensureXmlMap(v: unknown): import('@shared/post-mvp-types').GeoXmlMap {
