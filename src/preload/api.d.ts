@@ -289,6 +289,14 @@ export interface GhostApi {
     onData(cb: (payload: { sessionId: string; data: string }) => void): () => void;
     onClose(cb: (payload: { sessionId: string; reason: string }) => void): () => void;
   };
+  shell: {
+    connect(program?: 'cmd' | 'powershell'): Promise<{ sessionId: string }>;
+    write(sessionId: string, data: string): Promise<void>;
+    resize(sessionId: string, cols: number, rows: number): Promise<void>;
+    disconnect(sessionId: string): Promise<void>;
+    onData(cb: (payload: { sessionId: string; data: string }) => void): () => void;
+    onClose(cb: (payload: { sessionId: string; reason: string }) => void): () => void;
+  };
   streams: {
     list(): Promise<CameraStream[]>;
     upsert(input: Partial<CameraStream> & { url: string; label: string; kind: CameraStream['kind'] }): Promise<CameraStream>;
