@@ -22,7 +22,7 @@ import { StoryControls } from './StoryControls';
 // GeoINT reimagine (R5): pluggable threat layers. Each is an on-demand, ephemeral fetch into
 // GeoItem[] (held in renderer state, never persisted to the source cache). USGS earthquakes is
 // the first layer. The allowlisted USGS feed tokens MUST mirror src/main/.../threat-layers/usgs.ts.
-type ThreatLayerId = 'usgs';
+type ThreatLayerId = 'usgs' | 'gdacs';
 const USGS_FEED_OPTIONS: { value: string; label: string }[] = [
   { value: 'significant_day', label: 'Significant — past day' },
   { value: 'significant_week', label: 'Significant — past week' },
@@ -135,7 +135,7 @@ function GeoIntModuleInner(): JSX.Element {
   const [layerError, setLayerError] = useState<string | null>(null);
   const enabledLayers = useMemo(() => new Set(layerItems.keys()), [layerItems]);
 
-  async function toggleLayer(id: ThreatLayerId, on: boolean, opts: { feed?: string }): Promise<void> {
+  async function toggleLayer(id: ThreatLayerId, on: boolean, opts: { feed?: string } = {}): Promise<void> {
     if (!on) {
       setLayerItems((m) => { const next = new Map(m); next.delete(id); return next; });
       return;
@@ -493,6 +493,20 @@ function GeoIntModuleInner(): JSX.Element {
             {layerBusy === 'usgs' && <span style={{ fontSize: 11, color: '#555' }}>loading…</span>}
           </div>
           <p style={{ fontSize: 10, color: '#777', margin: '4px 0 0' }}>USGS — U.S. Public Domain</p>
+
+          <div className="field-row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap', marginTop: 6 }}>
+            <label style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4, opacity: net ? 1 : 0.5 }}>
+              <input
+                type="checkbox"
+                checked={enabledLayers.has('gdacs')}
+                disabled={!net || layerBusy === 'gdacs'}
+                onChange={(e) => void toggleLayer('gdacs', e.target.checked)}
+              />
+              GDACS disasters
+            </label>
+            {layerBusy === 'gdacs' && <span style={{ fontSize: 11, color: '#555' }}>loading…</span>}
+          </div>
+          <p style={{ fontSize: 10, color: '#777', margin: '4px 0 0' }}>GDACS — UN OCHA / EC-JRC</p>
         </fieldset>
 
         <fieldset style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
