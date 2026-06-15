@@ -22,6 +22,37 @@ import logoUrl from '../../assets/logo.png';
 
 type ConnState = 'idle' | 'connecting' | 'open' | 'closed';
 
+/** Sentinel host id for the "Local Shell" option. Real host ids are uuids (sc-/uuid form), so this
+ *  cannot collide; we reuse activeId as the carrier of selection rather than adding a second state. */
+const LOCAL_SHELL_ID = '__local__';
+
+/** Transport abstraction so the xterm plumbing can target either the SSH session or a local shell
+ *  session. Both backends expose an identical surface (see preload api.d.ts); the only divergence is
+ *  the connect signature, which is handled in dial() (hostId vs. program token). */
+interface DialTransport {
+  write(sessionId: string, data: string): Promise<void>;
+  resize(sessionId: string, cols: number, rows: number): Promise<void>;
+  disconnect(sessionId: string): Promise<void>;
+  onData(cb: (p: { sessionId: string; data: string }) => void): () => void;
+  onClose(cb: (p: { sessionId: string; reason: string }) => void): () => void;
+}
+
+const sshTransport: DialTransport = {
+  write: (sessionId, data) => window.api.ssh.write(sessionId, data),
+  resize: (sessionId, cols, rows) => window.api.ssh.resize(sessionId, cols, rows),
+  disconnect: (sessionId) => window.api.ssh.disconnect(sessionId),
+  onData: (cb) => window.api.ssh.onData(cb),
+  onClose: (cb) => window.api.ssh.onClose(cb)
+};
+
+const shellTransport: DialTransport = {
+  write: (sessionId, data) => window.api.shell.write(sessionId, data),
+  resize: (sessionId, cols, rows) => window.api.shell.resize(sessionId, cols, rows),
+  disconnect: (sessionId) => window.api.shell.disconnect(sessionId),
+  onData: (cb) => window.api.shell.onData(cb),
+  onClose: (cb) => window.api.shell.onClose(cb)
+};
+
 const wait = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 /** A flavour phone number to "dial". Math.random is fine here — this is purely cosmetic
@@ -52,6 +83,9 @@ export function DialTermModule(): JSX.Element {
   // otherwise be set on a dead component and never torn down. mountedRef + a per-dial epoch close that.
   const mountedRef = useRef(true);
   const dialEpochRef = useRef(0);
+  // The active backend for the current/next session. Defaults to ssh so all existing host behaviour
+  // is unchanged; dial() swaps it to shellTransport only when the Local Shell sentinel is selected.
+  const transportRef = useRef<DialTransport>(sshTransport);
   const settings = useSettings((s) => s.settings);
 
   const loadHosts = useCallback(async () => {
@@ -82,7 +116,7 @@ export function DialTermModule(): JSX.Element {
     if (!sid) { setCtxMenu(null); return; }
     try {
       const text = await navigator.clipboard.readText();
-      if (text) await window.api.ssh.write(sid, text);
+      if (text) await transportRef.current.write(sid, text);
     } catch (err) {
       toast.error(`Paste failed: ${(err as Error).message}`);
     }
@@ -101,7 +135,7 @@ export function DialTermModule(): JSX.Element {
     fitInstance.current = fit;
     term.onData((d) => {
       const sid = sessionIdRef.current;
-      if (sid) void window.api.ssh.write(sid, d);
+      if (sid) void transportRef.current.write(sid, d);
     });
     // Ctrl+Shift+C / Ctrl+Shift+V (or Cmd+C / Cmd+V on macOS when selection exists)
     term.attachCustomKeyEventHandler((e) => {
@@ -115,7 +149,7 @@ export function DialTermModule(): JSX.Element {
       try {
         fit.fit();
         const sid = sessionIdRef.current;
-        if (sid) void window.api.ssh.resize(sid, term.cols, term.rows);
+        if (sid) void transportRef.current.resize(sid, term.cols, term.rows);
       } catch (err) {
         // eslint-disable-next-line no-console
         console.warn('[dialterm] resize failed', err);
@@ -136,7 +170,7 @@ export function DialTermModule(): JSX.Element {
     offData.current = null;
     offClose.current = null;
     const sid = sessionIdRef.current;
-    if (sid) void window.api.ssh.disconnect(sid).catch(() => {});
+    if (sid) void transportRef.current.disconnect(sid).catch(() => {});
     sessionIdRef.current = null;
     setSessionId(null);
   }
@@ -148,6 +182,14 @@ export function DialTermModule(): JSX.Element {
 
   async function dial(): Promise<void> {
     if (!activeId) return;
+    const isLocalShell = activeId === LOCAL_SHELL_ID;
+    // Cosmetic gate only — the shell.connect IPC handler is authoritative and refuses regardless.
+    if (isLocalShell && !settings?.localShellEnabled) {
+      toast.error('Local shell is disabled. Enable it in Settings → Terminal.');
+      return;
+    }
+    // Select the backend for this dial. Default stays ssh; only the local-shell sentinel swaps it.
+    transportRef.current = isLocalShell ? shellTransport : sshTransport;
     const epoch = (dialEpochRef.current += 1);
     const live = (): boolean => mountedRef.current && dialEpochRef.current === epoch;
     const sound = !!settings?.soundEnabled;
@@ -183,7 +225,7 @@ export function DialTermModule(): JSX.Element {
       total = beat * 12;
       revealAt = [beat * 3, beat * 6, beat * 9];
     }
-    const lines = ['CARRIER LOCK · 33600', 'LAP-M / V.42bis OK', 'OPENING SSH SESSION…'];
+    const lines = ['CARRIER LOCK · 33600', 'LAP-M / V.42bis OK', isLocalShell ? 'OPENING LOCAL SHELL…' : 'OPENING SSH SESSION…'];
     let elapsed = 0;
     for (let i = 0; i < lines.length; i += 1) {
       await wait(revealAt[i] - elapsed); elapsed = revealAt[i];
@@ -196,12 +238,14 @@ export function DialTermModule(): JSX.Element {
     // Drop any listeners a prior (superseded) dial attempt left registered before re-subscribing.
     offData.current?.();
     offClose.current?.();
-    // Subscribe ONCE per dial attempt; filter strictly by sessionId.
-    offData.current = window.api.ssh.onData(({ data, sessionId: sid }) => {
+    // Subscribe ONCE per dial attempt; filter strictly by sessionId. Sourced from the active
+    // transport so a local-shell session listens on shell:onData/onClose, not ssh:*.
+    const transport = transportRef.current;
+    offData.current = transport.onData(({ data, sessionId: sid }) => {
       if (sid !== sessionIdRef.current) return;
       if (termInstance.current) termInstance.current.write(data);
     });
-    offClose.current = window.api.ssh.onClose(({ reason, sessionId: sid }) => {
+    offClose.current = transport.onClose(({ reason, sessionId: sid }) => {
       if (sid !== sessionIdRef.current) return;
       if (termInstance.current) termInstance.current.write(`\r\n\x1b[31m[disconnected: ${reason}]\x1b[0m\r\n`);
       teardown();
@@ -209,11 +253,13 @@ export function DialTermModule(): JSX.Element {
     });
 
     try {
-      const { sessionId: sid } = await window.api.ssh.connect(activeId);
+      const { sessionId: sid } = isLocalShell
+        ? await window.api.shell.connect(settings?.localShellProgram)
+        : await window.api.ssh.connect(activeId);
       // If the component unmounted or a new dial superseded this one while connect was in
       // flight, the session would be orphaned (teardown ran with a null sessionIdRef). Close it.
       if (!live()) {
-        void window.api.ssh.disconnect(sid).catch(() => {});
+        void transport.disconnect(sid).catch(() => {});
         return;
       }
       sessionIdRef.current = sid;
@@ -233,22 +279,27 @@ export function DialTermModule(): JSX.Element {
     setState('idle');
   }
 
+  const isLocalShellSelected = activeId === LOCAL_SHELL_ID;
   const activeHost = hosts.find((h) => h.id === activeId);
   const activeIsFtp = (activeHost?.protocol ?? 'ssh') === 'ftp';
+  // Cosmetic disable hint; the shell.connect IPC handler is the authoritative gate.
+  const localShellBlocked = isLocalShellSelected && !settings?.localShellEnabled;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div className="ga98-toolbar">
         <select className="ga98-text" value={activeId ?? ''} onChange={(e) => setActiveId(e.target.value || null)} disabled={state === 'open' || state === 'connecting'}>
           <option value="">(no host)</option>
+          <option value={LOCAL_SHELL_ID}>💻 Local Shell</option>
           {hosts.map((h) => <option key={h.id} value={h.id}>{h.label} — {h.username}@{h.host}</option>)}
         </select>
         <button onClick={() => setShowSetup(true)} disabled={state === 'open' || state === 'connecting'}>Hosts…</button>
         {!activeIsFtp && (state === 'open'
           ? <button onClick={() => void hangup()}>Hang up</button>
-          : <button onClick={() => void dial()} disabled={!activeId || state === 'connecting'}>Dial</button>)}
+          : <button onClick={() => void dial()} disabled={!activeId || localShellBlocked || state === 'connecting'}>Dial</button>)}
         <span style={{ flex: 1 }} />
-        <span style={{ fontSize: 11 }}>{activeIsFtp ? 'FTP' : state.toUpperCase()}{activeHost ? ` · ${activeHost.host}:${activeHost.port}` : ''}{sessionId ? ` · ${sessionId.slice(0, 8)}` : ''}</span>
+        {localShellBlocked && <span style={{ fontSize: 11, color: '#900' }}>Local shell disabled — enable in Settings → Terminal</span>}
+        <span style={{ fontSize: 11 }}>{activeIsFtp ? 'FTP' : isLocalShellSelected ? 'LOCAL' : state.toUpperCase()}{activeHost ? ` · ${activeHost.host}:${activeHost.port}` : ''}{sessionId ? ` · ${sessionId.slice(0, 8)}` : ''}</span>
       </div>
       <div
         style={{ flex: 1, background: '#000', color: '#aaffaa', padding: 4, overflow: 'hidden', position: 'relative' }}
@@ -263,7 +314,7 @@ export function DialTermModule(): JSX.Element {
         ) : state === 'open' ? (
           <div ref={termRef} style={{ width: '100%', height: '100%' }} />
         ) : state === 'connecting' ? (
-          <DialClient host={activeHost ? `${activeHost.host}:${activeHost.port}` : 'REMOTE'} log={handshakeLog} />
+          <DialClient host={activeHost ? `${activeHost.host}:${activeHost.port}` : isLocalShellSelected ? 'LOCALHOST' : 'REMOTE'} log={handshakeLog} />
         ) : (
           <pre style={{
             // Override 98.css's global `pre` rule (white sunken text-box) so the
@@ -279,7 +330,11 @@ export function DialTermModule(): JSX.Element {
           }}>
             {state === 'idle' && (activeHost
               ? `Ready to dial ${activeHost.username}@${activeHost.host}:${activeHost.port}\n\nPress Dial to begin the handshake.`
-              : 'Add a host profile via "Hosts…" to begin.')}
+              : isLocalShellSelected
+                ? (localShellBlocked
+                  ? 'Local shell is disabled.\n\nEnable it in Settings → Terminal to begin.'
+                  : `Ready to open a local ${settings?.localShellProgram === 'powershell' ? 'PowerShell' : 'Command Prompt'} shell.\n\nPress Dial to begin.`)
+                : 'Add a host profile via "Hosts…" to begin.')}
             {state === 'closed' && `${handshakeLog.map((l) => `${l}\n`).join('')}\nDisconnected. Press Dial to redial.`}
           </pre>
         )}
@@ -328,7 +383,7 @@ function Marcher(): JSX.Element {
  *  derived from the log so it tracks the (beat-synced) handshake: once we're connecting the number
  *  is dialed (DIAL done), LINK runs through negotiation, and AUTH lights as the SSH session opens. */
 function DialClient({ host, log }: { host: string; log: string[] }): JSX.Element {
-  const stage = log.some((l) => l.startsWith('OPENING SSH')) ? 2 : 1;
+  const stage = log.some((l) => l.startsWith('OPENING SSH') || l.startsWith('OPENING LOCAL SHELL')) ? 2 : 1;
   return (
     <div className="ga98-dialclient">
       <div className="ga98-dialclient-head">

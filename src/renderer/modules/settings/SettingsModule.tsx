@@ -13,7 +13,7 @@ import { useAuth, useSettings } from '../../state/store';
 import { LocalAiPane } from './LocalAiPane';
 import logoUrl from '../../assets/logo.png';
 
-type SectionKey = 'about' | 'sound' | 'theme' | 'cases' | 'shortcuts' | 'ai' | 'browser' | 'mail' | 'backup' | 'security';
+type SectionKey = 'about' | 'sound' | 'theme' | 'cases' | 'shortcuts' | 'ai' | 'browser' | 'terminal' | 'mail' | 'backup' | 'security';
 
 interface Section {
   key: SectionKey;
@@ -29,6 +29,7 @@ const SECTIONS: Section[] = [
   { key: 'shortcuts', label: 'Shortcuts',   glyph: '⚡' },
   { key: 'ai',        label: 'AI Assistant',glyph: '✨' },
   { key: 'browser',   label: 'Browser',     glyph: '🌐' },
+  { key: 'terminal',  label: 'Terminal',    glyph: '💻' },
   { key: 'mail',      label: 'Mail',        glyph: '✉' },
   { key: 'backup',    label: 'Backup',      glyph: '💾' },
   { key: 'security',  label: 'Security',    glyph: '🔒' }
@@ -109,6 +110,7 @@ export function SettingsModule(): JSX.Element {
         {section === 'shortcuts' && <ShortcutsPane s={s} setS={setS} latest={latest} patch={patch} />}
         {section === 'ai' && <AiPane s={s} patch={patch} />}
         {section === 'browser' && <BrowserPane s={s} patch={patch} />}
+        {section === 'terminal' && <TerminalPane s={s} patch={patch} />}
         {section === 'mail' && <MailPane />}
         {section === 'backup' && <BackupPane />}
         {section === 'security' && <SecurityPane />}
@@ -379,6 +381,30 @@ function BrowserPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSetti
         <label>Homepage:</label>
         <input className="ga98-text" value={s.browser.homepage} onChange={(e) => void patch({ browser: { ...s.browser, homepage: e.target.value } })} />
       </div>
+    </fieldset>
+  );
+}
+
+function TerminalPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSettings>) => Promise<void> }): JSX.Element {
+  return (
+    <fieldset>
+      <legend>Terminal</legend>
+      <label>
+        <input type="checkbox" checked={s.localShellEnabled} onChange={(e) => void patch({ localShellEnabled: e.target.checked })} />
+        {' '}Enable local shell in DialTerm (runs local commands with your own privileges)
+      </label>
+      <br />
+      <label>Shell:&nbsp;
+        <select className="ga98-text" value={s.localShellProgram} disabled={!s.localShellEnabled}
+          onChange={(e) => void patch({ localShellProgram: e.target.value as AppSettings['localShellProgram'] })}>
+          <option value="cmd">Command Prompt (cmd.exe)</option>
+          <option value="powershell">PowerShell</option>
+        </select>
+      </label>
+      <p style={{ fontSize: 11, color: '#444', marginTop: 8 }}>
+        Off by default. The local shell runs on your machine with your account's privileges; it is not
+        a remote connection. The terminal backend is loaded only when you open a shell session.
+      </p>
     </fieldset>
   );
 }
