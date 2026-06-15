@@ -162,6 +162,25 @@ refused when `localShellEnabled` is false; a renderer-supplied bad program token
 the default allowlisted shell (never spawns an arbitrary path); cols/rows bounds enforced. A
 `describe.skip` live-PTY integration test documents the manual path.
 
+### D-port — Custom ports in the host editor (added 2026-06-15, GhostExodus)
+
+**Problem.** In the DialTerm SSH-hosts editor the Port field is already a free numeric input
+(`DialTermModule.tsx:438`), but the Protocol dropdown's `onChange` (line 428) overwrites the
+port with the protocol default (SSH→22, Telnet→23, FTP→21) on every protocol change — so a
+custom port feels un-keepable, which reads as "ports are locked to the protocol."
+
+**Design.** Protocol and port are orthogonal (SSH can run on any port), so there is no "custom
+protocol" entry — the three transports stay. Instead: (1) the Protocol `onChange` only fills the
+default port when the current port is empty or still equals a known default (22/23/21);
+a user-entered custom port survives a protocol switch. (2) The port input is bounds-validated
+1–65535 with a short helper hint that any port is allowed. (3) The main-side connect path
+already takes `host.port` as given — confirm it imposes no protocol↔port coupling; if it does,
+remove it.
+
+**Testing.** Pure helper `nextPortOnProtocolChange(currentPort, newProtocol): number` — empty/
+default current → new protocol's default; custom current (e.g. 2222) → unchanged. Port bounds
+clamp/validate test.
+
 ---
 
 ## Workstream E — Background mail: chime fix + main-process poller + toast
