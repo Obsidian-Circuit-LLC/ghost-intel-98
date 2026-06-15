@@ -11,6 +11,7 @@ import { useSettings } from '../../state/store';
 import { toast } from '../../state/toasts';
 import { confirmDialog } from '../../state/dialogs';
 import { MapPane } from './MapPane';
+import { MapGL } from './MapGL';
 import { MapErrorBoundary } from './MapErrorBoundary';
 import { SaveEventDialog } from './SaveEventDialog';
 import { corroborate } from './corroborate';
@@ -51,6 +52,12 @@ const LABELS_ATTRIBUTION = 'Labels © Esri';
 const MAX_ITEMS = 5000;
 // "Play story" dwell: how long each event is shown before auto-advancing to the next (5 s).
 const STORY_ADVANCE_MS = 5000;
+
+// GeoINT reimagine (R1): staging flag for the MapLibre GL globe migration. While false (default),
+// the live Leaflet MapPane renders and nothing regresses; a dev flips this to true to smoke-test
+// the globe skeleton. Subsequent tasks (R2+) wire tiles/markers/flyTo into MapGL and eventually
+// promote it. Kept a plain const for now — no settings surface until the migration is feature-complete.
+const useMapGL = false;
 
 function GeoIntModuleInner(): JSX.Element {
   const settings = useSettings((s) => s.settings);
@@ -430,9 +437,13 @@ function GeoIntModuleInner(): JSX.Element {
         {/* MapPane stays mounted under the Street View overlay so its Leaflet state + center
             tracking survive toggling Street View on/off. The timeline/story bars sit below it. */}
         <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+          {useMapGL ? (
+            <MapGL items={visibleItems} tilesEnabled={net} tileUrl={activeTileUrl} tileAttribution={activeTileAttribution} focusId={focusId} />
+          ) : (
           <MapPane items={visibleItems} corroboration={corroboration} tilesEnabled={net} tileUrl={activeTileUrl} tileAttribution={activeTileAttribution}
             pickMode={pickFor != null} onPick={(la, lo) => void onPick(la, lo)} focusId={focusId} flyTo={flyTo}
             onCenterChange={(lat, lon) => setCenter({ lat, lon })} overlayUrls={overlayUrls} overlayAttribution={LABELS_ATTRIBUTION} />
+          )}
         {streetView && net && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', background: '#000' }}>
             <div className="ga98-toolbar" style={{ flex: '0 0 auto' }}>
