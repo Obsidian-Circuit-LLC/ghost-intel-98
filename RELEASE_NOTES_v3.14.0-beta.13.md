@@ -18,8 +18,8 @@ No code/feature changes from beta.12 (the Ghost Intel 98 rename). Icons/logo onl
 Get-FileHash .\GhostIntel98-Setup-3.14.0-beta.13.exe -Algorithm SHA256
 ```
 
-SHA-256: `__SHA256__`
-Size: `__SIZE__`
+SHA-256: `22747094ff236eb097c2938050fe0ab2c28f110d8eb421e599b8765850243a2c`
+Size: `532247347 bytes (507.6 MB)`
 
 Unsigned — Windows SmartScreen will warn: **More info → Run anyway**.
 
