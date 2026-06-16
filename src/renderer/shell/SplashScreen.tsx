@@ -64,7 +64,7 @@ export function SplashScreen({ onDone }: { onDone: () => void }): JSX.Element {
       }}
     >
       <div className="ga98-splash-loader" aria-hidden="true">
-        <div className="ga98-splash-loader-label">Starting Ghost Intel 98…</div>
+        <div className="ga98-splash-loader-label">Starting…</div>
         <div className="ga98-splash-bar">
           <div className="ga98-splash-bar-fill" />
         </div>
