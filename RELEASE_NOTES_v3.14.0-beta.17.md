@@ -20,8 +20,8 @@
 Get-FileHash .\GhostIntel98-Setup-3.14.0-beta.17.exe -Algorithm SHA256
 ```
 
-SHA-256: `__SHA256__`
-Size: __SIZE__
+SHA-256: `dc4783923dc30566c1c3094a34feba816aaed5e271d9711e1847b169e10cba35`
+Size: 533058938 bytes (508.4 MB)
 
 Unsigned — Windows SmartScreen will warn: **More info → Run anyway**.
 
