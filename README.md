@@ -32,11 +32,33 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`DCS98-Setup-3.14.0-beta.9.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake formally verified internally; external audit + FIPS pending. See Status.)*
+> **Install:** download [`DCS98-Setup-3.14.0-beta.10.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake formally verified internally; external audit + FIPS pending. See Status.)*
 
 ## Status
 
-**v3.14.0-beta.9** — current release. **GeoINT geo-XML formats + Mail actions**:
+**v3.14.0-beta.10** — current release. **GeoINT reimagine + beta.9 field feedback** — a big release with two
+bodies of work:
+
+- **GeoINT reimagined as a 3D command center.** A **3D MapLibre globe** replaces the flat map (toggle back to
+  flat in-app; Leaflet is retained as a fallback this release). A **command-center rail** (Global Threat View,
+  Monitored Situations, Visual Imagery, Situation Feed) and **live threat layers** — USGS earthquakes, GDACS,
+  GDELT-DOC, war-tracker, ReliefWeb, UCDP free/no-key + NASA FIRMS / gdeltcloud / UCDP keyed (key in the OS
+  keyring), plus a **CISA KEV** advisory sidebar. New **JSON Feed** source type + feed images, and a **Live
+  News panel** (HLS + sandboxed YouTube). Each layer is honestly labeled by authority and attribution.
+- **DialTerm — local shell (opt-in, default off).** Run a local cmd/PowerShell terminal; enabling requires a
+  native confirmation dialog. (Ships dark/feature-flagged — the native terminal backend lands in a follow-up
+  Windows build.) Custom host ports survive protocol changes.
+- **Mail.** Fixed the "You've got mail" chime (proven audio loader; Settings has a Test button) and added an
+  **opt-in background mail poller** — chime + Win98 toast even when the Mail window is closed.
+- **EyeSpy.** Unlimited cameras (scrollable, column-configurable wall — no 3×3 cap) + a **Refresh tiles** button.
+- **My Cases / shell.** Category collapse state persists (defaults collapsed); Share/Import moved beneath
+  New/Rename; Journal Jots / GeoINT / Markets / Jukebox moved to the programs menu.
+
+A combined red-team pass (4 adversarial reviews) fixed a local-shell enable-bypass, a cross-origin redirect
+credential leak, a shell session-id validator, an EyeSpy wall-persistence truncation, and an RSS
+coordinate-integrity gap. ~1057 automated tests. *Everything from v3.14.0-beta.9 carries forward.*
+
+<details><summary>v3.14.0-beta.9 — GeoINT geo-XML formats + Mail actions</summary>
 
 - **GeoINT KML / GPX / generic XML sources.** Add a `.kml` or `.gpx` feed URL and Point placemarks /
   waypoints become map pins (coordinate-range guarded). A new **XML (custom)** source type accepts any
@@ -49,6 +71,8 @@ that never depend on a third-party staying up:
   XSS-safe by design).
 
 879 automated tests. *Everything from v3.14.0-beta.8 carries forward.*
+
+</details>
 
 <details><summary>v3.14.0-beta.7 — GhostExodus beta.6 field-test punch-list</summary>
 
@@ -384,14 +408,14 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/dcs98/releases) and run it.
 
-Direct link to the current release: [`DCS98-Setup-3.14.0-beta.9.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.14.0-beta.9/DCS98-Setup-3.14.0-beta.9.exe)
+Direct link to the current release: [`DCS98-Setup-3.14.0-beta.10.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.14.0-beta.10/DCS98-Setup-3.14.0-beta.10.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is formally verified internally — external audit + FIPS
 pending — see Status). The last fully-stable build is [`DCS98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.6.8/DCS98-Setup-3.6.8.exe).
 
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\DCS98-Setup-3.14.0-beta.9.exe -Algorithm SHA256
+Get-FileHash .\DCS98-Setup-3.14.0-beta.10.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
@@ -429,8 +453,23 @@ To uninstall: Settings → Apps → Dead Cyber Society 98 → Uninstall.
 
 ## Releases & changelog
 
-The current build is **v3.14.0-beta.9**. Each release page carries its own notes + SHA-256.
+The current build is **v3.14.0-beta.10**. Each release page carries its own notes + SHA-256.
 
+- **v3.14.0-beta.10** — **GeoINT reimagine + beta.9 field feedback.** A big two-part release. **GeoINT** is
+  reimagined as a 3D command center: a **MapLibre globe** (default; flat Leaflet map retained as an in-app
+  fallback), a command-center rail (Global Threat View / Monitored Situations / Visual Imagery / Situation
+  Feed), and **live threat layers** (USGS, GDACS, GDELT-DOC, war-tracker, ReliefWeb, UCDP free/no-key; NASA
+  FIRMS / gdeltcloud / UCDP keyed via the OS keyring; CISA KEV advisory sidebar) — each honestly labeled by
+  authority + attribution and all behind the off-by-default GeoINT network gate. Adds a **JSON Feed** source
+  type + feed images and a **Live News** panel (HLS + sandboxed YouTube). **DialTerm** gains an opt-in,
+  native-dialog-gated **local shell** (cmd/PowerShell; backend ships feature-flagged) + custom host ports.
+  **Mail** fixes the "You've got mail" chime and adds an opt-in **background mail poller** (chime + Win98
+  toast with the window closed). **EyeSpy** removes the 3×3 cap (scrollable, column-configurable wall) +
+  **Refresh tiles**. **My Cases / shell**: persistent (default-collapsed) category state, Share/Import moved
+  beneath New/Rename, and Journal Jots / GeoINT / Markets / Jukebox moved to the programs menu. A combined
+  red-team pass (4 reviews) fixed a local-shell enable-bypass, a cross-origin redirect credential leak, a
+  shell session-id validator, an EyeSpy wall-persistence truncation, and an RSS coordinate-integrity gap.
+  **~1057 tests.**
 - **v3.14.0-beta.9** — **GeoINT geo-XML formats + Mail actions.** **GeoINT** gains three new feed types:
   **KML** (Point placemarks, coordinate-range guarded), **GPX** (waypoints via `@_lat`/`@_lon` attributes),
   and a generic **XML (custom)** source whose dot-path field map (itemsPath / lat / lon + optional title /
@@ -693,7 +732,7 @@ This starts the Vite dev server (HMR) and the Electron main process.
 
 ```bash
 pnpm build        # type-check + bundle main / preload / renderer
-pnpm test         # vitest suite (879 tests as of v3.14.0-beta.9)
+pnpm test         # vitest suite (1057 tests as of v3.14.0-beta.10)
 pnpm package      # platform installer for the current host
 pnpm package:win  # cross-build Windows NSIS installer
 ```
