@@ -292,6 +292,12 @@ export interface GhostApi {
     onClose(cb: (payload: { sessionId: string; reason: string }) => void): () => void;
   };
   shell: {
+    /** Show a NATIVE confirmation dialog and, only on explicit user approval, enable the local
+     *  shell (and optionally set the program). Returns true iff the shell is now enabled. This is
+     *  the ONLY way to turn the shell on — settings.update strips the enable keys. */
+    requestEnable(program?: 'cmd' | 'powershell'): Promise<boolean>;
+    /** Disable the local shell (safe; no confirmation). Returns false. */
+    disable(): Promise<boolean>;
     connect(program?: 'cmd' | 'powershell'): Promise<{ sessionId: string }>;
     write(sessionId: string, data: string): Promise<void>;
     resize(sessionId: string, cols: number, rows: number): Promise<void>;

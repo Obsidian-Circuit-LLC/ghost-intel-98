@@ -52,7 +52,7 @@ import * as aiConvos from '../storage/ai-conversations';
 import * as briefcase from '../storage/briefcase';
 import * as journal from '../storage/journal';
 import * as voiceModel from '../voice/model-protocol';
-import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureShellProgram, ensureWhiteboard, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon, ensureSaveToCaseOpts, ensureGeoItem, ensureThreatLayerId, ensureKeyedLayerId, ensureLayerKey, isKeyedLayerId, ensureBookmarkBoard, ensureMarketsSettings, ensureStickyNotes, ensureAiConversation, ensureBriefcaseNote, ensureJournalEntry, ensurePin, ensureUid, ensureMailFlag } from '../security/validate';
+import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureShellProgram, ensureWhiteboard, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon, ensureSaveToCaseOpts, ensureGeoItem, ensureThreatLayerId, ensureKeyedLayerId, ensureLayerKey, isKeyedLayerId, ensureBookmarkBoard, ensureMarketsSettings, ensureStickyNotes, ensureAiConversation, ensureBriefcaseNote, ensureJournalEntry, ensurePin, ensureUid, ensureMailFlag, stripProtectedSettings } from '../security/validate';
 import * as entities from '../storage/entities';
 import * as bioStore from '../storage/bio-images';
 import * as ftp from '../services/ftp';
@@ -392,7 +392,10 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   // ---- settings ----
   safeHandle(channels.settings.read, () => settingsStore.read());
   safeHandle(channels.settings.update, (...args) => {
-    const patch = args[0] as Parameters<typeof settingsStore.update>[0];
+    // Strip the shell-enable keys: enabling the DialTerm local shell grants local code execution,
+    // so it must go through the dedicated, native-dialog-confirmed shell:requestEnable path. A
+    // bulk patch (renderer/plugin/XSS) must never be able to set localShellEnabled/localShellProgram.
+    const patch = stripProtectedSettings(args[0] as Parameters<typeof settingsStore.update>[0]);
     // Bound + sanitize renderer-supplied market settings before they're persisted (the rest of
     // the settings patch is shipped by trusted in-app UI; markets carries user URLs + lists).
     if (patch && typeof patch === 'object' && (patch as { markets?: unknown }).markets) {
@@ -883,6 +886,39 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.ssh.disconnect, (...args) => ssh.disconnect(args[0] as string));
 
   // ---- shell (DialTerm local shell) — connect handler is the AUTHORITATIVE opt-in gate ----
+  // Enabling the shell is gated behind a NATIVE confirmation dialog (shell:requestEnable), NOT a
+  // renderer-writable setting — settings.update strips localShellEnabled/localShellProgram. A
+  // plugin/XSS calling requestEnable just pops a dialog the user can reject; no silent enable.
+  safeHandle(channels.shell.requestEnable, async (...args) => {
+    const win = getWindow();
+    const { response } = win
+      ? await dialog.showMessageBox(win, {
+          type: 'warning',
+          buttons: ['Cancel', 'Enable'],
+          defaultId: 0,
+          cancelId: 0,
+          message: 'Enable the DialTerm local shell?',
+          detail: "This lets DCS98 run commands on your computer with your account's privileges. Only enable it if you understand the risk."
+        })
+      : await dialog.showMessageBox({
+          type: 'warning',
+          buttons: ['Cancel', 'Enable'],
+          defaultId: 0,
+          cancelId: 0,
+          message: 'Enable the DialTerm local shell?',
+          detail: "This lets DCS98 run commands on your computer with your account's privileges. Only enable it if you understand the risk."
+        });
+    if (response !== 1) return false; // anything but the explicit 'Enable' button → no-op
+    // Persist main-side (settings.update can't reach these keys). Validate the optional program.
+    const program = ensureShellProgram(args[0] ?? (await settingsStore.read()).localShellProgram);
+    await settingsStore.update({ localShellEnabled: true, localShellProgram: program });
+    return true;
+  });
+  // Disabling is safe — no confirmation needed.
+  safeHandle(channels.shell.disable, async () => {
+    await settingsStore.update({ localShellEnabled: false });
+    return false;
+  });
   safeHandle(channels.shell.connect, async (...args) => {
     const settings = await settingsStore.read();
     if (!settings.localShellEnabled) {

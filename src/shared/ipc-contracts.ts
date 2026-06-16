@@ -207,6 +207,8 @@ export const channels = {
     onClose: 'ssh:onClose'
   },
   shell: {
+    requestEnable: 'shell:requestEnable',
+    disable: 'shell:disable',
     connect: 'shell:connect',
     write: 'shell:write',
     resize: 'shell:resize',
