@@ -32,7 +32,7 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`GhostIntel98-Setup-3.14.0-beta.13.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake formally verified internally; external audit + FIPS pending. See Status.)*
+> **Install:** download [`GhostIntel98-Setup-3.14.0-beta.13.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake formally verified internally; external audit + FIPS pending. See Status.)*
 
 ## Status
 
@@ -412,11 +412,11 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 ## Install on Windows (recommended)
 
-Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/dcs98/releases) and run it.
+Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases) and run it.
 
-Direct link to the current release: [`GhostIntel98-Setup-3.14.0-beta.13.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.14.0-beta.13/GhostIntel98-Setup-3.14.0-beta.13.exe)
+Direct link to the current release: [`GhostIntel98-Setup-3.14.0-beta.13.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.14.0-beta.13/GhostIntel98-Setup-3.14.0-beta.13.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is formally verified internally — external audit + FIPS
-pending — see Status). The last fully-stable build is [`GhostIntel98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.6.8/GhostIntel98-Setup-3.6.8.exe).
+pending — see Status). The last fully-stable build is [`GhostIntel98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.6.8/GhostIntel98-Setup-3.6.8.exe).
 
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
@@ -736,12 +736,12 @@ You only need this section if you want to modify the code or build the installer
 ### Setup
 
 ```bash
-git clone https://github.com/Obsidian-Circuit-LLC/dcs98.git
+git clone https://github.com/Obsidian-Circuit-LLC/ghost-intel-98.git
 cd dcs98
 pnpm install
 ```
 
-> If you have an SSH key registered with GitHub, `git clone git@github.com:Obsidian-Circuit-LLC/dcs98.git` also works. The HTTPS form above requires no key setup.
+> If you have an SSH key registered with GitHub, `git clone git@github.com:Obsidian-Circuit-LLC/ghost-intel-98.git` also works. The HTTPS form above requires no key setup.
 
 ## Run (development)
 

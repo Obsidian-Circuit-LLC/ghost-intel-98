@@ -7,7 +7,7 @@
     "name": "Obsidian Circuit",
     "email": "dev@onna-bugeisha.org"
   },
-  "homepage": "https://github.com/Obsidian-Circuit-LLC/dcs98",
+  "homepage": "https://github.com/Obsidian-Circuit-LLC/ghost-intel-98",
   "license": "MIT",
   "main": "out/main/index.js",
   "scripts": {
