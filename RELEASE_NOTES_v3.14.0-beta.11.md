@@ -23,6 +23,8 @@
   clicked, or appended) and selects it, instead of targeting the last-selected slot.
 
 ### Mail
+- **Reply** — the message toolbar finally has a Reply button (alongside Forward): seeds a compose to
+  the sender with a `Re:` subject and the original quoted.
 - **The chime fires from inside the app** on new mail again (it was being silenced whenever the
   background poller was on). De-duped so one email won't double-chime.
 - **Your chime, your jingle** — the "You've got mail" sound is now user-replaceable. **Settings →
