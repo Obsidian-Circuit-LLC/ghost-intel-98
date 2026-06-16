@@ -32,12 +32,15 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`DCS98-Setup-3.14.0-beta.10.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake formally verified internally; external audit + FIPS pending. See Status.)*
+> **Install:** download [`DCS98-Setup-3.14.0-beta.11.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake formally verified internally; external audit + FIPS pending. See Status.)*
 
 ## Status
 
-**v3.14.0-beta.10** — current release. **GeoINT reimagine + beta.9 field feedback** — a big release with two
-bodies of work:
+**v3.14.0-beta.11** — current release. **GhostExodus field-fix batch** on top of the GeoINT reimagine: an
+outer-space starfield behind the globe + translucent-dark map popups, a responsive GeoINT layout, EyeSpy
+fit-to-screen tiles + double-click + **YouTube camera feeds** + a fixed "Add new feed" wall flow, and a
+Mail chime that finally fires from inside the app — now **user-replaceable** (Settings → open the sounds
+folder, drop in your own jingle). The beta.10 work it builds on:
 
 - **GeoINT reimagined as a 3D command center.** A **3D MapLibre globe** replaces the flat map (toggle back to
   flat in-app; Leaflet is retained as a fallback this release). A **command-center rail** (Global Threat View,
@@ -408,14 +411,14 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/dcs98/releases) and run it.
 
-Direct link to the current release: [`DCS98-Setup-3.14.0-beta.10.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.14.0-beta.10/DCS98-Setup-3.14.0-beta.10.exe)
+Direct link to the current release: [`DCS98-Setup-3.14.0-beta.11.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.14.0-beta.11/DCS98-Setup-3.14.0-beta.11.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is formally verified internally — external audit + FIPS
 pending — see Status). The last fully-stable build is [`DCS98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.6.8/DCS98-Setup-3.6.8.exe).
 
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\DCS98-Setup-3.14.0-beta.10.exe -Algorithm SHA256
+Get-FileHash .\DCS98-Setup-3.14.0-beta.11.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
@@ -453,8 +456,17 @@ To uninstall: Settings → Apps → Dead Cyber Society 98 → Uninstall.
 
 ## Releases & changelog
 
-The current build is **v3.14.0-beta.10**. Each release page carries its own notes + SHA-256.
+The current build is **v3.14.0-beta.11**. Each release page carries its own notes + SHA-256.
 
+- **v3.14.0-beta.11** — **GhostExodus field-fix batch.** **GeoINT:** an offline starfield space background
+  behind the 3D globe, translucent-dark map popups (with the close button no longer overlapping the title),
+  and a responsive 3-column layout so the left controls stop clipping on a non-maximized window. **EyeSpy:**
+  camera tiles + the double-click expanded view now fill the frame (centered, contained) instead of
+  letterboxing; **YouTube** is a supported camera kind (sandboxed youtube-nocookie); and the wall "Add new
+  feed" tile now places the feed onto the wall instead of targeting the last-selected slot. **Mail:** the
+  "You've got mail" chime now fires from inside the app on new mail (de-duped against the background poller),
+  and the chime is **user-replaceable** — Settings → Sound → *Change chime* opens a sounds folder where you
+  drop in your own `.wav`. Default chime refreshed. **~1064 tests.**
 - **v3.14.0-beta.10** — **GeoINT reimagine + beta.9 field feedback.** A big two-part release. **GeoINT** is
   reimagined as a 3D command center: a **MapLibre globe** (default; flat Leaflet map retained as an in-app
   fallback), a command-center rail (Global Threat View / Monitored Situations / Visual Imagery / Situation
@@ -732,7 +744,7 @@ This starts the Vite dev server (HMR) and the Electron main process.
 
 ```bash
 pnpm build        # type-check + bundle main / preload / renderer
-pnpm test         # vitest suite (1057 tests as of v3.14.0-beta.10)
+pnpm test         # vitest suite (1064 tests as of v3.14.0-beta.11)
 pnpm package      # platform installer for the current host
 pnpm package:win  # cross-build Windows NSIS installer
 ```
