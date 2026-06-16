@@ -75,11 +75,11 @@ const MAX_ITEMS = 5000;
 // "Play story" dwell: how long each event is shown before auto-advancing to the next (5 s).
 const STORY_ADVANCE_MS = 5000;
 
-// GeoINT reimagine (R1): staging flag for the MapLibre GL globe migration. While false (default),
-// the live Leaflet MapPane renders and nothing regresses; a dev flips this to true to smoke-test
-// the globe skeleton. Subsequent tasks (R2+) wire tiles/markers/flyTo into MapGL and eventually
-// promote it. Kept a plain const for now — no settings surface until the migration is feature-complete.
-const useMapGL = false;
+// GeoINT reimagine (R4b): the MapLibre GL globe is now the default. The Leaflet `MapPane` path is
+// RETAINED behind `useMapGL = false` as a fallback this release — deletion (of MapPane.tsx and the
+// `leaflet` dependency) is deferred until the globe is confirmed in a built/GPU smoke test. Flip back
+// to false to fall back to the flat Leaflet map. Still a plain const — no settings surface yet.
+const useMapGL = true;
 
 function GeoIntModuleInner(): JSX.Element {
   const settings = useSettings((s) => s.settings);
