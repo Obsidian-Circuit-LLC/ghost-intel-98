@@ -11,7 +11,9 @@ export function Wall({ slots, byId, activeSlot, columns = 3, onActivate, onClear
   columns?: number;
   onActivate: (i: number) => void;
   onClearSlot: (i: number) => void;
-  onAddNew: () => void;
+  /** Open the Add-stream form. `target` = the slot index to fill (an empty tile), or omitted for the
+   *  trailing add tile (append / first empty). */
+  onAddNew: (target?: number) => void;
   onExpand: (s: CameraStream) => void;
 }): JSX.Element {
   const [now, setNow] = useState('');
@@ -37,7 +39,7 @@ export function Wall({ slots, byId, activeSlot, columns = 3, onActivate, onClear
         if (!stream) {
           const firstEmpty = slots.findIndex((s) => s == null || !byId.has(s)) === i;
           return (
-            <div key={i} onClick={() => { onActivate(i); if (firstEmpty) onAddNew(); }}
+            <div key={i} onClick={() => { onActivate(i); if (firstEmpty) onAddNew(i); }}
               style={{ border, background: '#111', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#777', cursor: 'pointer' }}>
               {firstEmpty ? <><div style={{ fontSize: 28 }}>＋</div><div style={{ fontSize: 11 }}>Add new feed</div></> : <span style={{ fontSize: 10 }}>empty</span>}
             </div>
@@ -56,7 +58,7 @@ export function Wall({ slots, byId, activeSlot, columns = 3, onActivate, onClear
       })}
       {/* Trailing add tile — always present so a new camera can be added even when no slot is empty
           (assignToSlot appends, growing the wall). */}
-      <div key="__add__" title="Add a new camera feed" onClick={onAddNew}
+      <div key="__add__" title="Add a new camera feed" onClick={() => onAddNew()}
         style={{ border: '1px dashed #444', background: '#111', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#777', cursor: 'pointer' }}>
         <div style={{ fontSize: 28 }}>➕</div><div style={{ fontSize: 11 }}>Add new feed</div>
       </div>
