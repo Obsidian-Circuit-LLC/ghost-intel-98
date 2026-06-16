@@ -1,7 +1,13 @@
 import Hls from 'hls.js';
 import { useEffect, useRef, useState } from 'react';
 import type { CameraStream } from '@shared/post-mvp-types';
+import { parseYouTubeId, youtubeEmbedSrc } from '@shared/youtube';
 import { toast } from '../../state/toasts';
+
+// Media fills its container and is centred + contained: the whole frame is visible (no crop), scaled
+// up to fit the tile/pane instead of sitting letterboxed in the top-left. Used for every visual kind
+// so a 2-col wall tile, a 6-col tile, and the double-click expanded pane all behave the same.
+const MEDIA_STYLE: React.CSSProperties = { width: '100%', height: '100%', objectFit: 'contain', display: 'block', background: '#000' };
 
 export function Viewer({ stream, poster = false, refreshNonce = 0 }: { stream: CameraStream; poster?: boolean; refreshNonce?: number }): JSX.Element {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -52,20 +58,44 @@ export function Viewer({ stream, poster = false, refreshNonce = 0 }: { stream: C
     );
   }
 
+  if (stream.kind === 'youtube') {
+    // A user-supplied YouTube live/video URL, framed via the sandboxed www.youtube-nocookie.com embed
+    // (the same operator-authorized frame-src exception the GeoINT Live News panel uses). Host-checked
+    // by parseYouTubeId so a youtube-shaped path on a non-youtube host yields no embed.
+    const id = parseYouTubeId(stream.url);
+    if (!id) {
+      return (
+        <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#111', color: '#e88', fontSize: 11, textAlign: 'center', padding: 12 }}>
+          Not a parseable YouTube URL (watch?v=…, youtu.be/…, or /live/…).
+        </div>
+      );
+    }
+    return (
+      <iframe
+        title={stream.label}
+        src={youtubeEmbedSrc(id)}
+        sandbox="allow-scripts allow-same-origin allow-presentation"
+        allow="autoplay; encrypted-media; picture-in-picture"
+        referrerPolicy="no-referrer"
+        style={{ width: '100%', height: '100%', border: 0, display: 'block', background: '#000' }}
+      />
+    );
+  }
+
   if (stream.kind === 'mjpeg') {
     const sep = stream.url.includes('?') ? '&' : '?';
-    return <img alt={stream.label} src={`${stream.url}${sep}_t=${refreshNonce}`} style={{ maxWidth: '100%', maxHeight: '100%' }} />;
+    return <img alt={stream.label} src={`${stream.url}${sep}_t=${refreshNonce}`} style={MEDIA_STYLE} />;
   }
 
   if (stream.kind === 'http') {
     const sep = stream.url.includes('?') ? '&' : '?';
-    return <img alt={stream.label} src={`${stream.url}${sep}_t=${imgTick}_${refreshNonce}`} style={{ maxWidth: '100%', maxHeight: '100%' }} />;
+    return <img alt={stream.label} src={`${stream.url}${sep}_t=${imgTick}_${refreshNonce}`} style={MEDIA_STYLE} />;
   }
 
   if (stream.kind === 'mp4') {
     // Direct progressive/streamed MP4 over http(s). CSP media-src allows http(s); a
     // local file:// path would not load (not in media-src) — point users to a URL.
-    return <video controls autoPlay muted loop src={stream.url} style={{ maxWidth: '100%', maxHeight: '100%' }} />;
+    return <video controls autoPlay muted loop src={stream.url} style={MEDIA_STYLE} />;
   }
 
   if (stream.kind === 'webpage') {
@@ -91,5 +121,5 @@ export function Viewer({ stream, poster = false, refreshNonce = 0 }: { stream: C
     );
   }
 
-  return <video ref={videoRef} controls autoPlay muted style={{ maxWidth: '100%', maxHeight: '100%' }} />;
+  return <video ref={videoRef} controls autoPlay muted style={MEDIA_STYLE} />;
 }

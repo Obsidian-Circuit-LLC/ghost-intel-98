@@ -14,6 +14,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CameraStream, StreamKind, Wall } from '@shared/post-mvp-types';
+import { parseYouTubeId } from '@shared/youtube';
 import type { CaseSummary } from '@shared/types';
 import { confirmDialog } from '../../state/dialogs';
 import { toast } from '../../state/toasts';
@@ -46,6 +47,10 @@ export function EyeSpyModule(): JSX.Element {
   const [expanded, setExpanded] = useState<CameraStream | null>(null);
   const [showForm, setShowForm] = useState<boolean>(false);
   const [draft, setDraft] = useState<Partial<CameraStream>>({ kind: 'hls', label: '', url: '' });
+  // When the Add-stream form was opened from the wall's "Add new feed" tile, the new stream is placed
+  // onto the wall after saving. `addTarget` is the slot to fill (from an empty tile) or null = the
+  // trailing add tile (append / first empty). undefined = the form wasn't opened from the wall.
+  const [addTarget, setAddTarget] = useState<number | null | undefined>(undefined);
   const [setLocTargets, setSetLocTargets] = useState<CameraStream[] | null>(null);
   const [wallSetup, setWallSetup] = useState<{ mode: 'new' | 'edit' } | null>(null);
   const [detecting, setDetecting] = useState<boolean>(false);
@@ -102,7 +107,13 @@ export function EyeSpyModule(): JSX.Element {
 
   async function save(): Promise<void> {
     if (!draft.url || !draft.label) return;
-    await window.api.streams.upsert({
+    // A YouTube feed must be a real, host-checked YouTube URL or it can't be framed.
+    if (draft.kind === 'youtube' && !parseYouTubeId((draft.url ?? '').trim())) {
+      toast.error('Not a parseable YouTube URL (watch?v=…, youtu.be/…, or /live/…).');
+      return;
+    }
+    const isNew = !draft.id;
+    const saved = await window.api.streams.upsert({
       // Carrying the existing id turns this into an in-place edit; absent id → new stream.
       id: draft.id,
       url: draft.url,
@@ -114,6 +125,15 @@ export function EyeSpyModule(): JSX.Element {
     setDraft({ kind: 'hls', label: '', url: '' });
     setShowForm(false);
     await refresh();
+    // If this add was launched from the wall (addTarget defined), place the new feed onto the wall at
+    // the clicked slot (or append for the trailing tile) and select it — so "Add new feed" actually
+    // lands the feed where the tile implies, not on whatever slot was last active.
+    if (isNew && addTarget !== undefined) {
+      const r = assignToSlot(wallRef.current, addTarget, saved.id);
+      setActiveSlot(r.placed);
+      persistWall(r.wall);
+    }
+    setAddTarget(undefined);
   }
 
   /** Probe the entered URL to figure out the real stream kind + media endpoint. A bare camera root
@@ -300,7 +320,7 @@ export function EyeSpyModule(): JSX.Element {
             <WallView
               slots={wall.slots} byId={byId} activeSlot={activeSlot} columns={columns} onActivate={setActiveSlot}
               onClearSlot={(i) => persistWall(clearSlot(wallRef.current, i))}
-              onAddNew={() => { setDraft({ kind: 'hls', label: '', url: '' }); setShowForm(true); }}
+              onAddNew={(target) => { setAddTarget(target ?? null); setDraft({ kind: 'hls', label: '', url: '' }); setShowForm(true); }}
               onExpand={setExpanded}
             />
           </div>
@@ -329,6 +349,7 @@ export function EyeSpyModule(): JSX.Element {
                   <option value="mjpeg">MJPEG (multipart)</option>
                   <option value="http">HTTP image (refreshing)</option>
                   <option value="webpage">Webpage / viewer page (opens in Firefox)</option>
+                  <option value="youtube">YouTube (live / video)</option>
                   <option value="rtsp">RTSP (requires local bridge)</option>
                 </select>
                 <label>Case:</label>
@@ -339,7 +360,7 @@ export function EyeSpyModule(): JSX.Element {
               </div>
               <div style={{ marginTop: 6, display: 'flex', gap: 6 }}>
                 <button onClick={() => void save()} disabled={!draft.url || !draft.label}>{draft.id ? 'Save changes' : 'Add'}</button>
-                <button onClick={() => { setShowForm(false); setDraft({ kind: 'hls', label: '', url: '' }); }}>Cancel</button>
+                <button onClick={() => { setShowForm(false); setDraft({ kind: 'hls', label: '', url: '' }); setAddTarget(undefined); }}>Cancel</button>
                 {draft.id && <button onClick={() => { void del(draft.id as string); setShowForm(false); }}>Delete</button>}
               </div>
             </fieldset>
