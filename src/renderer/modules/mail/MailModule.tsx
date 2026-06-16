@@ -9,7 +9,7 @@ import type { MailDraft } from '../../../preload/api';
 import { useSettings } from '../../state/store';
 import { toast } from '../../state/toasts';
 import { confirmDialog } from '../../state/dialogs';
-import { playMailNotify } from '../../audio/synth';
+import { playMailNotifyDeduped } from '../../audio/synth';
 
 type LeftView = 'inbox' | 'drafts';
 
@@ -64,7 +64,9 @@ export function MailModule(): JSX.Element {
       setInbox(list);
       const nextUnseen = list.filter((m) => m.unseen).length;
       prevUnseenRef.current = nextUnseen;
-      if (nextUnseen > prevUnseen && settings?.soundEnabled && !settings?.mailBackgroundCheck) playMailNotify();
+      // Chime on new mail whenever it's detected in-app. De-duped (synth) against the background
+      // poller so the same mail event won't double-chime if both fire close together.
+      if (nextUnseen > prevUnseen && settings?.soundEnabled) playMailNotifyDeduped();
     } catch (err) {
       toast.error(`IMAP error: ${(err as Error).message}`);
     } finally {
@@ -88,7 +90,10 @@ export function MailModule(): JSX.Element {
       }
       const prev = prevUnseenRef.current;
       prevUnseenRef.current = next;
-      if (next > prev && settings?.soundEnabled && !settings?.mailBackgroundCheck) playMailNotify();
+      // The AUTOMATIC in-app poll defers to the main-process background poller when it's enabled, so
+      // the two timers (different intervals, independent baselines) can't chime ~30 s apart for one
+      // mail. When the background poller is OFF, this poll is the only automatic chime source.
+      if (next > prev && settings?.soundEnabled && !settings?.mailBackgroundCheck) playMailNotifyDeduped();
     } catch {
       /* silent: transient IMAP errors during background polling shouldn't spam toasts */
     }

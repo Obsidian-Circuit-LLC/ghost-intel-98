@@ -11,7 +11,7 @@ import { toast } from '../../state/toasts';
 import { confirmDialog } from '../../state/dialogs';
 import { useAuth, useSettings } from '../../state/store';
 import { LocalAiPane } from './LocalAiPane';
-import { playMailNotify } from '../../audio/synth';
+import { playMailNotify, clearMailChimeCache } from '../../audio/synth';
 import logoUrl from '../../assets/logo.png';
 
 type SectionKey = 'about' | 'sound' | 'theme' | 'cases' | 'shortcuts' | 'ai' | 'browser' | 'terminal' | 'mail' | 'backup' | 'security';
@@ -183,11 +183,32 @@ function SoundPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSetting
       <br />
       <label><input type="checkbox" checked={s.legacySounds} onChange={(e) => void patch({ legacySounds: e.target.checked })} /> Legacy sound pack (classic dial-up + startup jingle)</label>
       <br />
-      <button onClick={() => playMailNotify()}>Test "You've got mail" chime</button>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+        <button onClick={() => playMailNotify()}>Test "You've got mail" chime</button>
+        <button
+          onClick={async () => {
+            try {
+              await window.api.sounds.openFolder();
+              clearMailChimeCache(); // pick up a replacement on the next chime without a restart
+              toast.info('Replace mail-notify.wav in this folder with your own jingle.');
+            } catch (err) {
+              toast.error(`Could not open folder: ${(err as Error).message}`);
+            }
+          }}
+          title="Open the folder holding the mail chime so you can swap in your own .wav"
+        >
+          Change chime (open sounds folder)…
+        </button>
+      </div>
       <p style={{ fontSize: 11, color: '#444', marginTop: 8 }}>
         Sounds are synthesised at runtime via Web Audio by default. The optional <strong>Legacy sound
         pack</strong> swaps the startup chime and DialTerm dial-up for bundled AI-reworked recordings of
         the classic Windows jingle and dial-up handshake — derivative works of their originals, off by default.
+      </p>
+      <p style={{ fontSize: 11, color: '#444', marginTop: 4 }}>
+        The <strong>"You've got mail" chime</strong> is yours to change: click <em>Change chime</em> to
+        open the sounds folder and replace <code>mail-notify.wav</code> with any <code>.wav</code> you
+        like (keep the same filename). It takes effect on the next new mail.
       </p>
     </fieldset>
   );

@@ -264,6 +264,10 @@ const api = {
     save: (wall: unknown) => ipcRenderer.invoke(channels.walls.save, wall),
     delete: (id: string) => ipcRenderer.invoke(channels.walls.delete, id)
   },
+  sounds: {
+    mailChime: () => ipcRenderer.invoke(channels.sounds.mailChime),
+    openFolder: () => ipcRenderer.invoke(channels.sounds.openFolder)
+  },
   media: {
     getSnapshot: () => ipcRenderer.invoke(channels.media.getSnapshot),
     addRoot: () => ipcRenderer.invoke(channels.media.addRoot),

@@ -17,7 +17,7 @@ import { LockScreen } from './shell/LockScreen';
 import { StickyNotes } from './shell/StickyNotes';
 import { ClockWidget } from './shell/ClockWidget';
 import { SplashScreen } from './shell/SplashScreen';
-import { playReminder, playMouseClick, playMailNotify } from './audio/synth';
+import { playReminder, playMouseClick, playMailNotifyDeduped } from './audio/synth';
 import { toast } from './state/toasts';
 import defaultWallpaper from './assets/wallpaper-dcs98.jpg';
 import { installPluginBridge, importPluginChunks } from './plugins/load-renderer-plugins';
@@ -97,7 +97,7 @@ export function App(): JSX.Element {
   // New-mail events from the background poller (main process) → chime + Win98 toast.
   useEffect(() => {
     const off = window.api.mail.onNewMail(({ unseenCount }) => {
-      playMailNotify();
+      if (useSettings.getState().settings?.soundEnabled) playMailNotifyDeduped();
       toast.info(`You've got mail — ${unseenCount} unread`);
     });
     return off;

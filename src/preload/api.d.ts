@@ -321,6 +321,13 @@ export interface GhostApi {
     save(wall: Partial<Wall> & { name: string; slots: (string | null)[] }): Promise<Wall>;
     delete(id: string): Promise<void>;
   };
+  sounds: {
+    /** The user-replaceable "You've got mail" chime as base64 (+ mime), or null to fall back to the
+     *  bundled asset. */
+    mailChime(): Promise<{ base64: string; mime: string } | null>;
+    /** Open the user-writable sounds folder so the chime can be replaced. */
+    openFolder(): Promise<void>;
+  };
   media: {
     getSnapshot(): Promise<MediaLibrarySnapshot>;
     addRoot(): Promise<MediaLibrarySnapshot>;

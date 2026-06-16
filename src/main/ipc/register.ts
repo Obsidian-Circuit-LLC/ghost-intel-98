@@ -39,6 +39,7 @@ import * as shellSvc from '../services/shell';
 import * as streams from '../services/streams';
 import { detectStream } from '../services/stream-detect';
 import * as walls from '../services/walls';
+import * as sounds from '../services/sounds';
 import * as ai from '../services/ai';
 import * as localAi from '../services/local-ai';
 import * as chat from '../services/chat';
@@ -974,6 +975,10 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.walls.get, (...args) => walls.get(args[0] as string));
   safeHandle(channels.walls.save, (...args) => walls.save(args[0] as Parameters<typeof walls.save>[0]));
   safeHandle(channels.walls.delete, (...args) => walls.remove(args[0] as string));
+
+  // ---- sounds (user-replaceable mail chime) ----
+  safeHandle(channels.sounds.mailChime, () => sounds.readMailChime());
+  safeHandle(channels.sounds.openFolder, () => sounds.openSoundsFolder());
 
   // ---- media (Jukebox; vault-gated like everything else — NOT in GATE_EXEMPT) ----
   safeHandle(channels.media.getSnapshot, () => mediaLib.getSnapshot());

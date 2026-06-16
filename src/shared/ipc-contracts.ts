@@ -230,6 +230,10 @@ export const channels = {
     save: 'walls:save',
     delete: 'walls:delete'
   },
+  sounds: {
+    mailChime: 'sounds:mailChime',
+    openFolder: 'sounds:openFolder'
+  },
   media: {
     getSnapshot: 'media:getSnapshot',
     addRoot: 'media:addRoot',

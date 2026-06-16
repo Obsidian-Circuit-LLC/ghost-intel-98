@@ -313,8 +313,59 @@ export function playLegacyDialup(): Promise<number> {
   return playSample(legacyDialupUrl, 0.9);
 }
 
-/** New-mail chime (operator-supplied .wav). Uses the same metadata-then-play loader as the
- *  legacy pack, which is the path proven to work under the packaged file:// origin. */
+// ── New-mail chime (user-replaceable) ───────────────────────────────────────────────────────────
+// The chime is loaded from the user-writable `<userData>/sounds/mail-notify.wav` (seeded from the
+// bundled default) via IPC, then cached as a blob: URL (media-src permits blob:). If the IPC path
+// fails for any reason we fall back to the bundled asset so a chime always plays. The cache is
+// cleared by clearMailChimeCache() — called when the user opens the sounds folder to swap the file —
+// so a replacement takes effect without an app restart.
+
+let mailChimeUrl: string | null = null;
+let mailChimeLoading: Promise<string> | null = null;
+
+async function resolveMailChimeUrl(): Promise<string> {
+  if (mailChimeUrl) return mailChimeUrl;
+  if (mailChimeLoading) return mailChimeLoading;
+  mailChimeLoading = (async () => {
+    try {
+      const res = await window.api.sounds.mailChime();
+      if (res?.base64) {
+        const bytes = Uint8Array.from(atob(res.base64), (c) => c.charCodeAt(0));
+        const blob = new Blob([bytes], { type: res.mime || 'audio/wav' });
+        mailChimeUrl = URL.createObjectURL(blob);
+        return mailChimeUrl;
+      }
+    } catch { /* fall through to the bundled asset */ }
+    mailChimeUrl = mailNotifyUrl; // bundled fallback (guaranteed)
+    return mailChimeUrl;
+  })();
+  return mailChimeLoading;
+}
+
+/** Drop the cached chime so the next play re-reads the (possibly replaced) file. */
+export function clearMailChimeCache(): void {
+  if (mailChimeUrl && mailChimeUrl.startsWith('blob:')) URL.revokeObjectURL(mailChimeUrl);
+  mailChimeUrl = null;
+  mailChimeLoading = null;
+}
+
+/** New-mail chime — plays the user-replaceable chime (bundled fallback). Used by the Settings test
+ *  button, which should ALWAYS sound. */
 export function playMailNotify(): void {
-  void playSample(mailNotifyUrl, 0.9);
+  void resolveMailChimeUrl().then((url) => { void playSample(url, 0.9); });
+}
+
+// De-dup window: the background poller (App.tsx) and an in-app Mail refresh can both detect the same
+// new mail within a moment of each other. Both real paths go through playMailNotifyDeduped so one mail
+// event chimes once, not twice. The Settings test button bypasses this (playMailNotify) so testing
+// always sounds.
+let lastMailNotifyAt = 0;
+const MAIL_NOTIFY_DEDUP_MS = 4000;
+
+/** New-mail chime, de-duplicated within MAIL_NOTIFY_DEDUP_MS. */
+export function playMailNotifyDeduped(): void {
+  const now = Date.now();
+  if (now - lastMailNotifyAt < MAIL_NOTIFY_DEDUP_MS) return;
+  lastMailNotifyAt = now;
+  playMailNotify();
 }
