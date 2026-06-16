@@ -270,7 +270,7 @@ describe('threat-layer id validators', () => {
     expect(() => ensureLayerKey('abc\r\nX-Evil: 1')).toThrow();
     expect(() => ensureLayerKey('abc\ndef')).toThrow();
     expect(() => ensureLayerKey('abc\tdef')).toThrow();
-    expect(() => ensureLayerKey('abcdef')).toThrow();
+    expect(() => ensureLayerKey('abc\u007fdef')).toThrow();
     expect(ensureLayerKey('good-token_123.AB')).toBe('good-token_123.AB');
   });
 });
