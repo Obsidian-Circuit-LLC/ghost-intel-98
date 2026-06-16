@@ -98,10 +98,11 @@ export function CommandRail(props: CommandRailProps): JSX.Element {
       style={{
         flex: '0 0 300px', minWidth: 300, maxWidth: 300, height: '100%',
         overflowY: 'auto', overflowX: 'hidden',
-        // Reserve the 16px Win98 scrollbar's space so the rail's right-edge controls (stream ×, the
-        // HLS dropdown, Add stream) never lay out underneath it.
-        scrollbarGutter: 'stable',
-        background: '#0a0f1a', color: '#cdd6e4', padding: 8, boxSizing: 'border-box'
+        // The 16px Win98 (::-webkit-scrollbar) classic scrollbar is drawn OVER the right padding, so
+        // with a small right padding it bleeds into the content and hides the rail's right-edge
+        // controls (stream ×, HLS dropdown, Add stream). Pad the right by 24px = 16px scrollbar + an
+        // 8px gap matching the left, so content always clears the scrollbar.
+        background: '#0a0f1a', color: '#cdd6e4', padding: '8px 24px 8px 8px', boxSizing: 'border-box'
       }}
     >
       {/* 1 — Live News (relocated from the right-pane "▶ News" overlay to the top of the rail). */}
