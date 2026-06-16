@@ -831,8 +831,8 @@ input.ga98-text, select.ga98-text {
 }
 .ga98-geo-events li[data-active='true'] { background: navy; color: #fff; }
 .ga98-geo-pin { font-size: 16px; line-height: 16px; }
-/* Per-item category/severity dot. Strip Leaflet's default .leaflet-div-icon white box + border so
-   only the inline-styled dot (and its corroboration halo) renders; the glow must not be clipped. */
+/* Per-item category/severity dot (MapLibre marker element). Keep the wrapper transparent/borderless
+   so only the inline-styled dot + its corroboration halo render; the glow must not be clipped. */
 .ga98-geo-mk { background: transparent; border: 0; overflow: visible; }
 .ga98-geo-search-pin { font-size: 20px; line-height: 20px; }
 
@@ -845,7 +845,6 @@ input.ga98-text, select.ga98-text {
 .ga98-mkt-table td { padding: 1px 4px; border-bottom: 1px solid #d8d8d8; }
 .ga98-mkt-px { text-align: right; font-family: 'Courier New', monospace; }
 .ga98-mkt-chg { text-align: right; font-family: 'Courier New', monospace; width: 76px; }
-.leaflet-container { background: #aab; }
 
 /* ── DialTerm dial-up: AOL-style connect client + Uplink route graphic ──────────── */
 

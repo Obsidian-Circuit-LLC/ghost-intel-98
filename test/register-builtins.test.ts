@@ -10,22 +10,6 @@ vi.mock('pdfjs-dist', () => ({ GlobalWorkerOptions: {}, getDocument: vi.fn() }))
 vi.mock('/dcs98/src/renderer/lib/pdf-worker?worker', () => ({ default: class PdfWorkerStub { terminate() {} } }));
 // mammoth (used by DocViewerModule) — mock to prevent potential node issues
 vi.mock('mammoth', () => ({ default: { convertToHtml: vi.fn() } }));
-// leaflet is used by GeoIntModule / MapPane — L.divIcon is called at module load time
-vi.mock('leaflet', () => {
-  const stub = vi.fn(() => ({}));
-  return {
-    default: {
-      divIcon: stub,
-      map: stub,
-      tileLayer: stub,
-      marker: stub,
-      layerGroup: stub,
-      control: { layers: stub },
-    },
-  };
-});
-// leaflet CSS import — no-op in node
-vi.mock('leaflet/dist/leaflet.css', () => ({}));
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { _resetRegistryForTest, listModules } from '../src/renderer/state/registry';

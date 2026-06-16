@@ -6,20 +6,6 @@ import { vi } from 'vitest';
 vi.mock('pdfjs-dist', () => ({ GlobalWorkerOptions: {}, getDocument: vi.fn() }));
 vi.mock('/dcs98/src/renderer/lib/pdf-worker?worker', () => ({ default: class PdfWorkerStub { terminate() {} } }));
 vi.mock('mammoth', () => ({ default: { convertToHtml: vi.fn() } }));
-vi.mock('leaflet', () => {
-  const stub = vi.fn(() => ({}));
-  return {
-    default: {
-      divIcon: stub,
-      map: stub,
-      tileLayer: stub,
-      marker: stub,
-      layerGroup: stub,
-      control: { layers: stub },
-    },
-  };
-});
-vi.mock('leaflet/dist/leaflet.css', () => ({}));
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { _resetRegistryForTest, registerModule } from '../src/renderer/state/registry';
