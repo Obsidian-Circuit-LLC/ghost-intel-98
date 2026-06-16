@@ -32,11 +32,11 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`GhostIntel98-Setup-3.14.0-beta.17.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake formally verified internally; external audit + FIPS pending. See Status.)*
+> **Install:** download [`GhostIntel98-Setup-3.14.0-beta.18.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake formally verified internally; external audit + FIPS pending. See Status.)*
 
 ## Status
 
-**v3.14.0-beta.17** — current release. **Fixes:** the boot-splash loading bar no longer overlaps the subtitle; the GeoINT command rail is no longer hidden under its scrollbar; and a new **"Check for new mail in the background" toggle** (Settings → Mail) finally lets the "You've got mail" chime fire when mail arrives with the Mail window closed. Built on the copyright-safe brand art (beta.16, custom "G" mark, no Microsoft Windows flag).
+**v3.14.0-beta.18** — current release. **The "You've got mail" chime actually plays now** — the default chime was an unusual 192 kHz WAV that the audio engine couldn't decode (silent since beta.12); it's re-encoded to standard PCM, and installs stuck on the old file are repaired automatically. Also re-fixes the GeoINT command rail being clipped by its scrollbar (now padded to clear it). Pair with the **Settings → Mail → "Check for new mail in the background"** toggle (added beta.17) for chimes with the Mail window closed. Built on the copyright-safe brand art (custom "G" mark, no Microsoft Windows flag).
 **new app icon + logo** and beta.12's
 **rename to Ghost Intel 98** (automatic data migration on first
 launch — existing cases, settings, and the encrypted vault carry forward). Otherwise identical to beta.11's
@@ -415,14 +415,14 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases) and run it.
 
-Direct link to the current release: [`GhostIntel98-Setup-3.14.0-beta.17.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.14.0-beta.17/GhostIntel98-Setup-3.14.0-beta.17.exe)
+Direct link to the current release: [`GhostIntel98-Setup-3.14.0-beta.18.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.14.0-beta.18/GhostIntel98-Setup-3.14.0-beta.18.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is formally verified internally — external audit + FIPS
 pending — see Status). The last fully-stable build is [`GhostIntel98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.6.8/GhostIntel98-Setup-3.6.8.exe).
 
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\GhostIntel98-Setup-3.14.0-beta.17.exe -Algorithm SHA256
+Get-FileHash .\GhostIntel98-Setup-3.14.0-beta.18.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
@@ -460,8 +460,9 @@ To uninstall: Settings → Apps → Ghost Intel 98 → Uninstall.
 
 ## Releases & changelog
 
-The current build is **v3.14.0-beta.17**. Each release page carries its own notes + SHA-256.
+The current build is **v3.14.0-beta.18**. Each release page carries its own notes + SHA-256.
 
+- **v3.14.0-beta.18** — **"You've got mail" chime fixed.** The default chime was a 192 kHz WAV the renderer couldn't decode (silent since beta.12) — re-encoded to standard 44.1 kHz PCM, and installs holding the old file are auto-repaired on launch. Command-rail scrollbar clipping re-fixed via right padding (more reliable than `scrollbar-gutter`).
 - **v3.14.0-beta.17** — Boot-splash caption overlap fixed; GeoINT command-rail scrollbar overlap fixed; added the missing **Settings → Mail → "Check for new mail in the background"** toggle so the new-mail chime fires with the Mail window closed.
 - **v3.14.0-beta.16** — **Copyright-safe brand art.** All theme images (wallpaper, boot/login splash, logo, app icon) redrawn with the custom "G" hexagon mark instead of the Microsoft Windows flag. Login/lock screen now uses the boot "Welcome" splash as its backdrop.
 - **v3.14.0-beta.15** — Boot splash caption shortened to "Starting…" (the name is already in the splash art). Art/text only.
@@ -760,7 +761,7 @@ This starts the Vite dev server (HMR) and the Electron main process.
 
 ```bash
 pnpm build        # type-check + bundle main / preload / renderer
-pnpm test         # vitest suite (1064 tests as of v3.14.0-beta.17)
+pnpm test         # vitest suite (1064 tests as of v3.14.0-beta.18)
 pnpm package      # platform installer for the current host
 pnpm package:win  # cross-build Windows NSIS installer
 ```
