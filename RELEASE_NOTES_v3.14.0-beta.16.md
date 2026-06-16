@@ -21,8 +21,8 @@ No code/feature changes beyond wiring the lock screen to the splash backdrop.
 Get-FileHash .\GhostIntel98-Setup-3.14.0-beta.16.exe -Algorithm SHA256
 ```
 
-SHA-256: `__SHA256__`
-Size: __SIZE__
+SHA-256: `d76b289686ef0428c96fd2274e91452ce0571284bdf420d90d90a4dab29a7d1b`
+Size: 533058107 bytes (508.4 MB)
 
 Unsigned — Windows SmartScreen will warn: **More info → Run anyway**.
 
