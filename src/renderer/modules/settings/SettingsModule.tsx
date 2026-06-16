@@ -112,7 +112,7 @@ export function SettingsModule(): JSX.Element {
         {section === 'ai' && <AiPane s={s} patch={patch} />}
         {section === 'browser' && <BrowserPane s={s} patch={patch} />}
         {section === 'terminal' && <TerminalPane s={s} reload={load} />}
-        {section === 'mail' && <MailPane />}
+        {section === 'mail' && <MailPane s={s} patch={patch} />}
         {section === 'backup' && <BackupPane />}
         {section === 'security' && <SecurityPane />}
       </div>
@@ -456,11 +456,26 @@ function TerminalPane({ s, reload }: { s: AppSettings; reload: () => Promise<voi
   );
 }
 
-function MailPane(): JSX.Element {
+function MailPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSettings>) => Promise<void> }): JSX.Element {
   return (
     <fieldset>
       <legend>Mail</legend>
-      <p style={{ fontSize: 12 }}>Add accounts from the Mail module. Each account stores its IMAP/SMTP password in <code>secrets.enc</code>, encrypted via your OS keyring.</p>
+      <p style={{ fontSize: 12, marginTop: 0 }}>Add accounts from the Mail module. Each account stores its IMAP/SMTP password in <code>secrets.enc</code>, encrypted via your OS keyring.</p>
+      <hr style={{ margin: '8px 0', borderColor: '#ccc' }} />
+      <label>
+        <input
+          type="checkbox"
+          checked={s.mailBackgroundCheck}
+          onChange={(e) => void patch({ mailBackgroundCheck: e.target.checked })}
+        />
+        {' '}Check for new mail in the background
+      </label>
+      <p style={{ fontSize: 11, color: '#444', margin: '6px 0 0' }}>
+        When on, Ghost Intel 98 checks your inbox about once a minute even when the Mail window is
+        closed, and plays the “You’ve got mail” chime + a toast when new mail arrives. Off by default
+        (no background network use until you enable it). The chime also needs <strong>Sound → Enable
+        sounds</strong> on; use the <em>Test “You've got mail” chime</em> button there to confirm audio.
+      </p>
     </fieldset>
   );
 }

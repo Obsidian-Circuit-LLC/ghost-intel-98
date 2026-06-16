@@ -908,7 +908,9 @@ input.ga98-text, select.ga98-text {
    (auth check + settings load) is trivial, so the bar is cosmetic period-flavour, not a
    real progress readout. */
 .ga98-splash-loader {
-  position: absolute; left: 50%; bottom: 12%; transform: translateX(-50%);
+  /* Sit low in the dark water band BELOW the baked-in "Ghost Intel 98 / Intelligence Workstation"
+     text so the loading bar never overlaps the subtitle (was bottom:12%, which landed on it). */
+  position: absolute; left: 50%; bottom: 4%; transform: translateX(-50%);
   display: flex; flex-direction: column; align-items: center; gap: 9px;
   pointer-events: none;
 }
