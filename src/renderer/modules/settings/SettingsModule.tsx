@@ -111,7 +111,7 @@ export function SettingsModule(): JSX.Element {
         {section === 'shortcuts' && <ShortcutsPane s={s} setS={setS} latest={latest} patch={patch} />}
         {section === 'ai' && <AiPane s={s} patch={patch} />}
         {section === 'browser' && <BrowserPane s={s} patch={patch} />}
-        {section === 'terminal' && <TerminalPane s={s} patch={patch} />}
+        {section === 'terminal' && <TerminalPane s={s} reload={load} />}
         {section === 'mail' && <MailPane />}
         {section === 'backup' && <BackupPane />}
         {section === 'security' && <SecurityPane />}
@@ -388,25 +388,48 @@ function BrowserPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSetti
   );
 }
 
-function TerminalPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSettings>) => Promise<void> }): JSX.Element {
+function TerminalPane({ s, reload }: { s: AppSettings; reload: () => Promise<void> }): JSX.Element {
+  // Enabling the local shell grants local code execution, so it is gated behind a NATIVE
+  // confirmation dialog in main (shell.requestEnable). settings.update can NOT set the enable
+  // keys, so we never route them through `patch` — we call the dedicated IPC and re-read.
+  const onToggle = async (checked: boolean): Promise<void> => {
+    try {
+      if (checked) await window.api.shell.requestEnable(s.localShellProgram);
+      else await window.api.shell.disable();
+      await reload();
+    } catch (err) {
+      toast.error((err as Error).message);
+    }
+  };
+  const onProgram = async (program: AppSettings['localShellProgram']): Promise<void> => {
+    // Changing the program also goes through requestEnable (re-confirms + persists); only offered
+    // while already enabled. The native dialog is the gate either way.
+    try {
+      await window.api.shell.requestEnable(program);
+      await reload();
+    } catch (err) {
+      toast.error((err as Error).message);
+    }
+  };
   return (
     <fieldset>
       <legend>Terminal</legend>
       <label>
-        <input type="checkbox" checked={s.localShellEnabled} onChange={(e) => void patch({ localShellEnabled: e.target.checked })} />
+        <input type="checkbox" checked={s.localShellEnabled} onChange={(e) => void onToggle(e.target.checked)} />
         {' '}Enable local shell in DialTerm (runs local commands with your own privileges)
       </label>
       <br />
       <label>Shell:&nbsp;
         <select className="ga98-text" value={s.localShellProgram} disabled={!s.localShellEnabled}
-          onChange={(e) => void patch({ localShellProgram: e.target.value as AppSettings['localShellProgram'] })}>
+          onChange={(e) => void onProgram(e.target.value as AppSettings['localShellProgram'])}>
           <option value="cmd">Command Prompt (cmd.exe)</option>
           <option value="powershell">PowerShell</option>
         </select>
       </label>
       <p style={{ fontSize: 11, color: '#444', marginTop: 8 }}>
-        Off by default. The local shell runs on your machine with your account's privileges; it is not
-        a remote connection. The terminal backend is loaded only when you open a shell session.
+        Off by default. Turning it on opens a confirmation prompt. The local shell runs on your
+        machine with your account's privileges; it is not a remote connection. The terminal backend
+        is loaded only when you open a shell session.
       </p>
     </fieldset>
   );

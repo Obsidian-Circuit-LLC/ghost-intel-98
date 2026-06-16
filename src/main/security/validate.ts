@@ -888,6 +888,22 @@ export function ensureMarketsSettings(input: unknown): {
   };
 }
 
+/** Settings keys that a bulk `settings.update` patch may NEVER set. Enabling the DialTerm local
+ *  shell grants local code execution; it must go through the dedicated, native-dialog-confirmed
+ *  `shell:requestEnable` path so a compromised renderer/plugin can't flip it via a merged patch.
+ *  Disabling the shell is safe and remains available via `shell:disable`. */
+const PROTECTED_SETTINGS_KEYS = ['localShellEnabled', 'localShellProgram'] as const;
+
+/** Strip the protected (shell-enable) keys from a renderer-supplied settings patch. Returns a
+ *  shallow copy with those keys removed; non-object patches pass through unchanged. The caller's
+ *  object is never mutated. */
+export function stripProtectedSettings<T>(patch: T): T {
+  if (!patch || typeof patch !== 'object') return patch;
+  const out = { ...(patch as Record<string, unknown>) };
+  for (const k of PROTECTED_SETTINGS_KEYS) delete out[k];
+  return out as T;
+}
+
 /** Jukebox: a remembered library folder path (existence is checked at use time). */
 export function ensureMediaRoot(p: unknown): string {
   if (typeof p !== 'string' || p.length === 0 || p.length > 4096) {

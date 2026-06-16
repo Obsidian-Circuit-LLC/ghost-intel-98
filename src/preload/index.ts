@@ -233,6 +233,8 @@ const api = {
     }
   },
   shell: {
+    requestEnable: (program?: 'cmd' | 'powershell') => ipcRenderer.invoke(channels.shell.requestEnable, program),
+    disable: () => ipcRenderer.invoke(channels.shell.disable),
     connect: (program?: 'cmd' | 'powershell') => ipcRenderer.invoke(channels.shell.connect, program),
     write: (sessionId: string, data: string) => ipcRenderer.invoke(channels.shell.write, sessionId, data),
     resize: (sessionId: string, cols: number, rows: number) => ipcRenderer.invoke(channels.shell.resize, sessionId, cols, rows),
