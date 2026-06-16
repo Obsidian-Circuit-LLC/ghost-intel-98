@@ -1,12 +1,13 @@
 /**
- * Full-screen lock gate. Shown by App whenever the vault is enabled but locked. Renders over
- * the saved wallpaper (settings load pre-unlock, so the retro look persists). Unlock with the
- * master password or the one-time recovery key; on success App re-checks auth.status and the
- * desktop mounts.
+ * Full-screen lock gate. Shown by App whenever the vault is enabled but locked. Renders over the
+ * Ghost Intel 98 "Welcome" splash image (the same boot-splash art) so boot → login share one look.
+ * Unlock with the master password or the one-time recovery key; on success App re-checks auth.status
+ * and the desktop mounts.
  */
 import { useState, useEffect } from 'react';
 import type { FormEvent } from 'react';
 import { useAuth } from '../state/store';
+import splash from '../assets/boot-splash.jpg';
 
 /** A live background-connection summary, as returned by the lock-exempt bgconn:status channel. */
 interface BgConnStatus {
@@ -96,7 +97,10 @@ export function LockScreen(): JSX.Element {
   };
 
   return (
-    <div className="ga98-lock-overlay">
+    <div
+      className="ga98-lock-overlay"
+      style={{ background: `#000 url(${JSON.stringify(splash)}) center / cover no-repeat` }}
+    >
       <div className="window ga98-lock-window">
         <div className="title-bar">
           <div className="title-bar-text">Ghost Intel 98 — Locked</div>
