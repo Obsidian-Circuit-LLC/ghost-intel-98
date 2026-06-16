@@ -764,13 +764,66 @@ input.ga98-text, select.ga98-text {
 /* Command-center 3-column layout (R9) — GLOBE MODE ONLY. Applied via the ga98-geo-3col modifier
    only when useMapGL is true; the 2-column .ga98-geo track above is untouched in the default app.
    left controls (380px) | center globe (1fr, flexes) | right rail (300px fixed). */
-.ga98-geo-3col { grid-template-columns: 380px 1fr 300px; }
+/* minmax(0,…) on the flexible/right tracks so a non-maximized window shrinks the centre globe (and,
+   if needed, the rail) FIRST instead of overflowing the grid and clipping the 380px left controls
+   ("items on the left partially obscured"). Left stays a readable 380px. */
+.ga98-geo-3col { grid-template-columns: 380px minmax(0, 1fr) minmax(0, 300px); }
 .ga98-geo-rail { background: #0a0f1a; color: #cdd6e4; }
 .ga98-geo-left { display: flex; flex-direction: column; gap: 6px; overflow-x: hidden; overflow-y: auto; }
 .ga98-geo-left input, .ga98-geo-left select { min-width: 0; }
+/* Let multi-button control rows (View: 2D / Satellite / Street View / Labels) wrap to a second line
+   inside the left pane rather than overflow-clip on the right at narrower widths. */
+.ga98-geo-left .field-row { flex-wrap: wrap; }
 .ga98-geo-right { position: relative; }
 .ga98-geo-map-wrap { position: relative; height: 100%; width: 100%; }
-.ga98-geo-map { position: absolute; inset: 0; }
+/* The MapLibre canvas is transparent AROUND the globe, so this container background shows there.
+   A starfield (offline, no egress) replaces the bare Win98 grey behind the 3D globe. The in-sphere
+   dark stays the buildStyle() `background` layer (#0a0f1a), so a gate-off globe is still dark. */
+.ga98-geo-map {
+  position: absolute; inset: 0;
+  background-color: #05070e;
+  background-image:
+    radial-gradient(circle at 50% 42%, rgba(38,68,128,0.22), rgba(5,7,14,0) 62%),
+    radial-gradient(1.4px 1.4px at 18px 24px, rgba(255,255,255,0.95), transparent 60%),
+    radial-gradient(1px 1px at 68px 92px, rgba(207,227,255,0.8), transparent 60%),
+    radial-gradient(1.2px 1.2px at 128px 44px, rgba(255,255,255,0.7), transparent 60%),
+    radial-gradient(1px 1px at 162px 128px, rgba(255,244,214,0.85), transparent 60%),
+    radial-gradient(1.6px 1.6px at 104px 168px, rgba(255,255,255,0.9), transparent 60%);
+  background-size:
+    100% 100%,
+    220px 220px, 220px 220px, 220px 220px, 220px 220px, 220px 220px;
+  background-repeat: no-repeat, repeat, repeat, repeat, repeat, repeat;
+}
+/* ── GeoINT globe popup (MapLibre) ─────────────────────────────────────────────
+   MapLibre's default popup is an opaque white box with the close ✕ overlapping the content.
+   Restyle (scoped to the GeoINT map) to a translucent dark card with white text, and pad the
+   right edge so the ✕ no longer sits on top of the title. */
+.ga98-geo-right .maplibregl-popup-content {
+  background: rgba(10, 15, 26, 0.92);
+  color: #eef3fb;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 6px;
+  box-shadow: 0 3px 14px rgba(0, 0, 0, 0.55);
+  padding: 8px 26px 8px 11px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+.ga98-geo-right .maplibregl-popup-content b { color: #fff; }
+.ga98-geo-right .maplibregl-popup-content a { color: #8ec5ff; }
+.ga98-geo-right .maplibregl-popup-close-button {
+  color: #cdd6e4; font-size: 15px; line-height: 15px; width: 18px; height: 18px;
+  top: 3px; right: 3px; border-radius: 3px; background: transparent;
+}
+.ga98-geo-right .maplibregl-popup-close-button:hover { background: rgba(255, 255, 255, 0.14); color: #fff; }
+/* Tint the popup tip to match the dark card, per anchor direction. */
+.ga98-geo-right .maplibregl-popup-anchor-top .maplibregl-popup-tip { border-bottom-color: rgba(10, 15, 26, 0.92); }
+.ga98-geo-right .maplibregl-popup-anchor-bottom .maplibregl-popup-tip { border-top-color: rgba(10, 15, 26, 0.92); }
+.ga98-geo-right .maplibregl-popup-anchor-left .maplibregl-popup-tip { border-right-color: rgba(10, 15, 26, 0.92); }
+.ga98-geo-right .maplibregl-popup-anchor-right .maplibregl-popup-tip { border-left-color: rgba(10, 15, 26, 0.92); }
+.ga98-geo-right .maplibregl-popup-anchor-top-left .maplibregl-popup-tip { border-bottom-color: rgba(10, 15, 26, 0.92); }
+.ga98-geo-right .maplibregl-popup-anchor-top-right .maplibregl-popup-tip { border-bottom-color: rgba(10, 15, 26, 0.92); }
+.ga98-geo-right .maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip { border-top-color: rgba(10, 15, 26, 0.92); }
+.ga98-geo-right .maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip { border-top-color: rgba(10, 15, 26, 0.92); }
 .ga98-geo-map-placeholder {
   position: absolute; inset: 0; z-index: 500;
   display: flex; align-items: center; justify-content: center; text-align: center;
