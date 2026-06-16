@@ -14,8 +14,8 @@ Otherwise identical to beta.14.
 Get-FileHash .\GhostIntel98-Setup-3.14.0-beta.15.exe -Algorithm SHA256
 ```
 
-SHA-256: `__SHA256__`
-Size: __SIZE__
+SHA-256: `81b6f660552d147965592c06681ee3de8e1b53cff2ae1edc0d237a1143508edd`
+Size: 532843897 bytes (508.2 MB)
 
 Unsigned — Windows SmartScreen will warn: **More info → Run anyway**.
 
