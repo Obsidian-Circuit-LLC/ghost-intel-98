@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react';
 import type { CameraStream } from '@shared/post-mvp-types';
 import { Viewer } from './Viewer';
 
-/** Fixed 3×3 video wall. `slots` are CameraStream ids or null; `byId` resolves them. */
-export function Wall({ slots, byId, activeSlot, onActivate, onClearSlot, onAddNew, onExpand }: {
+/** Unlimited, scrollable video wall. `slots` are CameraStream ids or null; `byId` resolves them.
+ *  `columns` sets the grid width; rows auto-grow at a fixed tile height and the container scrolls. */
+export function Wall({ slots, byId, activeSlot, columns = 3, onActivate, onClearSlot, onAddNew, onExpand }: {
   slots: (string | null)[];
   byId: Map<string, CameraStream>;
   activeSlot: number | null;
+  columns?: number;
   onActivate: (i: number) => void;
   onClearSlot: (i: number) => void;
   onAddNew: () => void;
@@ -22,7 +24,7 @@ export function Wall({ slots, byId, activeSlot, onActivate, onClearSlot, onAddNe
   }, []);
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gridTemplateRows: 'repeat(3, 1fr)', gap: 4, padding: 4, height: '100%', background: '#1a1a1a', position: 'relative' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${columns}, 1fr)`, gridAutoRows: 200, gap: 4, padding: 4, height: '100%', overflowY: 'auto', background: '#1a1a1a', position: 'relative' }}>
       <button
         title="Reload all camera snapshots now"
         onClick={() => setRefreshNonce((n) => n + 1)}
@@ -52,6 +54,12 @@ export function Wall({ slots, byId, activeSlot, onActivate, onClearSlot, onAddNe
           </div>
         );
       })}
+      {/* Trailing add tile — always present so a new camera can be added even when no slot is empty
+          (assignToSlot appends, growing the wall). */}
+      <div key="__add__" title="Add a new camera feed" onClick={onAddNew}
+        style={{ border: '1px dashed #444', background: '#111', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#777', cursor: 'pointer' }}>
+        <div style={{ fontSize: 28 }}>➕</div><div style={{ fontSize: 11 }}>Add new feed</div>
+      </div>
     </div>
   );
 }

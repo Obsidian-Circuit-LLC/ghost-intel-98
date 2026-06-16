@@ -26,7 +26,7 @@ import { Wall as WallView } from './Wall';
 import { SetLocationDialog } from './SetLocationDialog';
 import { WallSetupDialog } from './WallSetupDialog';
 import type { WallSetupCfg } from './WallSetupDialog';
-import { emptyWall, assignToSlot, clearSlot } from './wall';
+import { emptyWall, assignToSlot, clearSlot, addStreams } from './wall';
 
 /** Geo stamp from a tree node's explicit geo fields. null node = no stamp. */
 function nodeStamp(n: TreeNode | null): { country?: string; region?: string; city?: string } | undefined {
@@ -39,6 +39,7 @@ export function EyeSpyModule(): JSX.Element {
   const [wallsList, setWallsList] = useState<Wall[]>([]);
   const [wall, setWall] = useState<Wall>(() => emptyWall(`wall-${Date.now()}`, 'Untitled wall', new Date().toISOString()));
   const [activeSlot, setActiveSlot] = useState<number | null>(null);
+  const [columns, setColumns] = useState<number>(3);
   const [tab, setTab] = useState<'countries' | 'cities'>('countries');
   const [query, setQuery] = useState<string>('');
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -179,9 +180,10 @@ export function EyeSpyModule(): JSX.Element {
   function onFeedAction(action: FeedAction, s: CameraStream): void {
     switch (action) {
       case 'add': {
+        // assignToSlot now appends when the wall is full (unlimited wall), so there is no full case.
         const r = assignToSlot(wallRef.current, activeSlot, s.id);
-        if (r.placed == null) { toast.warn('Wall is full — clear a square first.'); }
-        else { setActiveSlot(r.placed); persistWall(r.wall); }
+        setActiveSlot(r.placed);
+        persistWall(r.wall);
         break;
       }
       case 'play': setExpanded(s); break;
@@ -255,7 +257,8 @@ export function EyeSpyModule(): JSX.Element {
 
   function fillFromNode(): void {
     if (!selectedNode) return;
-    persistWall({ ...wallRef.current, slots: Array.from({ length: 9 }, (_, i) => selectedNode.streamIds[i] ?? null) });
+    // Unlimited: fill from ALL of the node's stream ids (no 9-slot cap).
+    persistWall(addStreams(wallRef.current, selectedNode.streamIds));
   }
 
   return (
@@ -279,6 +282,11 @@ export function EyeSpyModule(): JSX.Element {
           <button onClick={renameWall}>Rename</button>
           <button onClick={() => void deleteWall()} disabled={wallsList.length === 0}>Delete</button>
           <span style={{ flex: 1 }} />
+          <label style={{ fontSize: 12 }}>Cols:{' '}
+            <select value={columns} onChange={(e) => setColumns(Number(e.target.value))} title="Number of columns in the camera wall">
+              {[2, 3, 4, 5, 6].map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </label>
           <button onClick={fillFromNode} disabled={!selectedNode}>Fill wall from {selectedNode ? selectedNode.label : '…'}</button>
           <button onClick={() => void purge()} disabled={streams.length === 0}>Purge all…</button>
         </div>
@@ -290,7 +298,7 @@ export function EyeSpyModule(): JSX.Element {
         ) : (
           <div style={{ flex: 1 }}>
             <WallView
-              slots={wall.slots} byId={byId} activeSlot={activeSlot} onActivate={setActiveSlot}
+              slots={wall.slots} byId={byId} activeSlot={activeSlot} columns={columns} onActivate={setActiveSlot}
               onClearSlot={(i) => persistWall(clearSlot(wallRef.current, i))}
               onAddNew={() => { setDraft({ kind: 'hls', label: '', url: '' }); setShowForm(true); }}
               onExpand={setExpanded}
