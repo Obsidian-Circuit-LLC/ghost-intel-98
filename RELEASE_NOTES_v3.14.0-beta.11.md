@@ -40,8 +40,8 @@
 Get-FileHash .\DCS98-Setup-3.14.0-beta.11.exe -Algorithm SHA256
 ```
 
-SHA-256: `__SHA256__`
-Size: `__SIZE__`
+SHA-256: `343eac5a1dedc29beb0b9fdcf4ee5c884aeedf1238a114f45aae586a7fcf2060`
+Size: 533,046,457 bytes (508.4 MB)
 
 Unsigned — Windows SmartScreen will warn: **More info → Run anyway**.
 
