@@ -606,6 +606,11 @@ export function ensureLayerKey(v: unknown): string {
   const k = v.trim();
   if (k.length === 0) throw new ValidationError('layer key is empty');
   if (k.length > 4096) throw new ValidationError('layer key too long');
+  // Defense-in-depth: keyed-layer tokens are interpolated into request headers
+  // (gdeltcloud Authorization, UCDP x-ucdp-access-token). Reject CR/LF and other
+  // control chars so a token can never attempt header/request-line injection —
+  // don't rely solely on undici rejecting CRLF headers at send time.
+  if (/[\u0000-\u001f\u007f]/.test(k)) throw new ValidationError('layer key contains control characters');
   return k;
 }
 
