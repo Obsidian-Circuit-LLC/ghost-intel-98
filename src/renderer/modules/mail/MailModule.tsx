@@ -174,6 +174,25 @@ export function MailModule(): JSX.Element {
     }
   }
 
+  function replySelected(): void {
+    if (!activeId || !selected) return;
+    const subj = /^re:/i.test(selected.subject.trim()) ? selected.subject : `Re: ${selected.subject}`;
+    // Quote the original with the conventional "> " prefix beneath an attribution line. The To field
+    // is seeded from the sender (display-name <addr> form, which the SMTP send path accepts); the user
+    // can edit it before sending.
+    const quoted = selected.body.split('\n').map((l) => `> ${l}`).join('\n');
+    const body = `\n\nOn ${new Date(selected.date).toLocaleString()}, ${selected.from} wrote:\n${quoted}`;
+    openCompose({
+      id: `dr-${crypto.randomUUID()}`,
+      accountId: activeId,
+      to: selected.from,
+      subject: subj,
+      body,
+      attachments: [],
+      savedAt: new Date().toISOString()
+    });
+  }
+
   function forwardSelected(): void {
     if (!activeId || !selected) return;
     const subj = selected.subject.startsWith('Fwd:') ? selected.subject : `Fwd: ${selected.subject}`;
@@ -268,6 +287,7 @@ export function MailModule(): JSX.Element {
           {selected ? (
             <>
               <div style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
+                <button onClick={() => replySelected()}>Reply</button>
                 <button onClick={() => void toggleStar()}>{selected.flagged ? 'Unstar' : 'Star'}</button>
                 <button onClick={() => forwardSelected()}>Forward</button>
                 <button onClick={() => void printSelected()}>Print</button>

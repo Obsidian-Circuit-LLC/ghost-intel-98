@@ -463,10 +463,11 @@ The current build is **v3.14.0-beta.11**. Each release page carries its own note
   and a responsive 3-column layout so the left controls stop clipping on a non-maximized window. **EyeSpy:**
   camera tiles + the double-click expanded view now fill the frame (centered, contained) instead of
   letterboxing; **YouTube** is a supported camera kind (sandboxed youtube-nocookie); and the wall "Add new
-  feed" tile now places the feed onto the wall instead of targeting the last-selected slot. **Mail:** the
-  "You've got mail" chime now fires from inside the app on new mail (de-duped against the background poller),
-  and the chime is **user-replaceable** — Settings → Sound → *Change chime* opens a sounds folder where you
-  drop in your own `.wav`. Default chime refreshed. **~1064 tests.**
+  feed" tile now places the feed onto the wall instead of targeting the last-selected slot. **Mail:** adds a
+  **Reply** button (it previously had only Forward); the "You've got mail" chime now fires from inside the
+  app on new mail (de-duped against the background poller), and the chime is **user-replaceable** — Settings
+  → Sound → *Change chime* opens a sounds folder where you drop in your own `.wav`. Default chime refreshed.
+  **~1064 tests.**
 - **v3.14.0-beta.10** — **GeoINT reimagine + beta.9 field feedback.** A big two-part release. **GeoINT** is
   reimagined as a 3D command center: a **MapLibre globe** (default; flat Leaflet map retained as an in-app
   fallback), a command-center rail (Global Threat View / Monitored Situations / Visual Imagery / Situation
