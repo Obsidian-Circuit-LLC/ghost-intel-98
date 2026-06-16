@@ -98,6 +98,9 @@ export function CommandRail(props: CommandRailProps): JSX.Element {
       style={{
         flex: '0 0 300px', minWidth: 300, maxWidth: 300, height: '100%',
         overflowY: 'auto', overflowX: 'hidden',
+        // Reserve the 16px Win98 scrollbar's space so the rail's right-edge controls (stream ×, the
+        // HLS dropdown, Add stream) never lay out underneath it.
+        scrollbarGutter: 'stable',
         background: '#0a0f1a', color: '#cdd6e4', padding: 8, boxSizing: 'border-box'
       }}
     >
