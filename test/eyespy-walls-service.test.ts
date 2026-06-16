@@ -24,6 +24,20 @@ describe('walls service', () => {
     expect((await walls.list()).length).toBe(1);
     expect((await walls.get(saved.id))?.name).toBe('Renamed');
   });
+  it('persists slots at their actual length (unlimited cameras — not truncated to 9)', async () => {
+    // FIX 4: an 11-slot wall must round-trip with all 11 slots. The old code clamped to 9,
+    // silently dropping cameras 10+ on the variable-length scrollable grid.
+    const eleven = Array.from({ length: 11 }, (_, i) => `cam-${i}`);
+    const saved = await walls.save({ name: 'Big wall', slots: eleven });
+    expect(saved.slots.length).toBe(11);
+    expect(saved.slots).toEqual(eleven);
+    expect((await walls.get(saved.id))?.slots).toEqual(eleven);
+  });
+  it('clamps to a sane maximum slot count', async () => {
+    const huge = Array.from({ length: 500 }, () => null);
+    const saved = await walls.save({ name: 'Huge', slots: huge });
+    expect(saved.slots.length).toBe(200);
+  });
   it('remove deletes by id', async () => {
     const s = await walls.save({ name: 'x', slots: Array(9).fill(null) });
     await walls.remove(s.id);

@@ -8,6 +8,10 @@ import { secureReadText, secureWriteFile } from '../storage/secure-fs';
 
 function wallsFile(): string { return join(dataRoot(), 'walls.json'); }
 
+/** Upper bound on stored slots — the grid is variable-length (unlimited cameras), but a stored
+ *  wall is still clamped so a hostile/buggy renderer can't write an unbounded array to disk. */
+const MAX_SLOTS = 200;
+
 /** Trimmed location category — omit empty fields (mirrors services/streams.ts pickGeo). */
 function pickGeo(i: Partial<Wall>): Partial<Wall> {
   const g: Partial<Wall> = {};
@@ -34,7 +38,9 @@ export async function save(input: Partial<Wall> & { name: string; slots: (string
   const all = await readAll();
   const now = new Date().toISOString();
   const id = input.id || `wall-${randomUUID()}`;
-  const slots = Array.from({ length: 9 }, (_, i) => (input.slots[i] ?? null));
+  // Persist at the wall's ACTUAL length (variable-length scrollable grid — unlimited cameras),
+  // clamped to a sane maximum so a hostile/buggy renderer can't bloat the store.
+  const slots = input.slots.slice(0, MAX_SLOTS).map((s) => s ?? null);
   const idx = all.findIndex((w) => w.id === id);
   const wall: Wall = { id, name: input.name, slots, createdAt: input.createdAt ?? now, updatedAt: now, ...pickGeo(input) };
   if (idx >= 0) all[idx] = wall; else all.push(wall);

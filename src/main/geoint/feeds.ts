@@ -61,9 +61,11 @@ export function parseRss(body: string, sourceId: string, geocode: Geocoder): Geo
   return arr(doc?.rss?.channel?.item).slice(0, MAX_FEED_ITEMS).map((it: Record<string, unknown>) => {
     const title = txt(it['title']);
     const summary = txt(it['description']);
-    const lat = it['geo:lat'] != null ? Number(it['geo:lat']) : NaN;
-    const lon = it['geo:long'] != null ? Number(it['geo:long']) : NaN;
-    const geo = !Number.isNaN(lat) && !Number.isNaN(lon) ? { lat, lon } : null;
+    // strictNum + inRange like every sibling parser — Number('')===0 / Number('0x10')===16
+    // would otherwise stamp a silent (0,0)/misread 'geo' pin. Misread or out-of-range → drop.
+    const lat = strictNum(it['geo:lat']);
+    const lon = strictNum(it['geo:long']);
+    const geo = inRange(lat, lon) ? { lat, lon } : null;
     return {
       id: randomUUID(),
       sourceId,

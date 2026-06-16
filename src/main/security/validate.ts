@@ -275,9 +275,11 @@ export function ensureFtpPath(path: unknown): string {
   return path;
 }
 
-/** A DialTerm session id (server-generated `s-`/`t-`/`f-` + uuid). Bounded string check. */
+/** A DialTerm session id (server-generated `s-`/`t-`/`f-`/`sh-` + uuid). Bounded string check.
+ *  The local shell service mints `sh-<uuid>` — without that prefix here, write/resize/disconnect
+ *  always threw, breaking the feature and leaking the pty (no disconnect could land). */
 export function ensureSessionId(id: unknown): string {
-  if (typeof id !== 'string' || !/^[stf]-[0-9a-f-]{36}$/i.test(id)) throw new ValidationError('Invalid session id');
+  if (typeof id !== 'string' || !/^(s|t|f|sh)-[0-9a-f-]{36}$/i.test(id)) throw new ValidationError('Invalid session id');
   return id;
 }
 

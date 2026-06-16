@@ -37,6 +37,23 @@ describe('feed parsers', () => {
     expect(items.map((i) => i.title)).toEqual(['Good']);
     expect(items.every((i) => Number.isFinite(i.lat) && Number.isFinite(i.lon))).toBe(true);
   });
+  it('RSS geo:lat/geo:long use strictNum + inRange (no silent (0,0)/out-of-range pin)', () => {
+    // FIX 5: an empty <geo:lat></geo:lat> arrives as "" and Number("")===0 — the old code
+    // stamped a silent (0,0) 'geo' pin. strictNum returns NaN for that; inRange drops the
+    // out-of-range case. Such items must fall back (here: gazetteer → 'none'), never a bogus 'geo'.
+    const rss = `<?xml version="1.0"?><rss><channel>
+      <item><title>Empty lat</title><description>d</description><geo:lat></geo:lat><geo:long>5</geo:long></item>
+      <item><title>Out of range</title><description>d</description><geo:lat>999</geo:lat><geo:long>5</geo:long></item>
+      <item><title>Good</title><description>d</description><geo:lat>10.5</geo:lat><geo:long>-4.25</geo:long></item>
+    </channel></rss>`;
+    const items = parseRss(rss, 's5', () => null);
+    const byTitle = Object.fromEntries(items.map((i) => [i.title, i]));
+    expect(byTitle['Empty lat']).toMatchObject({ located: 'none' });
+    expect(byTitle['Empty lat'].lat).toBeUndefined(); // crucially NOT 0
+    expect(byTitle['Out of range']).toMatchObject({ located: 'none' });
+    expect(byTitle['Good']).toMatchObject({ lat: 10.5, lon: -4.25, located: 'geo' });
+    expect(items.filter((i) => i.located === 'geo').every((i) => Number.isFinite(i.lat) && Number.isFinite(i.lon))).toBe(true);
+  });
   it('parses OPML to sources with detected types', () => {
     expect(parseOpml(fx('sources.opml'))).toEqual([
       { label: 'Wire', url: 'http://feeds/wire.xml', type: 'rss' },
