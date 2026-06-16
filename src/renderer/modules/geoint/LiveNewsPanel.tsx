@@ -16,62 +16,17 @@ import Hls from 'hls.js';
 import { useEffect, useRef, useState } from 'react';
 import { useSettings } from '../../state/store';
 import { toast } from '../../state/toasts';
+import { parseYouTubeId, youtubeEmbedSrc } from '@shared/youtube';
+
+// Re-export so existing callers/tests that import parseYouTubeId from this module still resolve.
+// The implementation now lives in the shared, DOM-free module (also used by the EyeSpy Viewer).
+export { parseYouTubeId };
 
 export type NewsStreamKind = 'hls' | 'youtube';
 export interface NewsStream {
   label: string;
   url: string;
   kind: NewsStreamKind;
-}
-
-// Hosts we will treat as YouTube. An arbitrary host that merely *carries* a `watch?v=` query
-// (e.g. evil.com/watch?v=...) is NOT YouTube and must never yield an embeddable id — otherwise
-// we'd frame attacker-controlled content under the youtube-nocookie embed exception.
-const YOUTUBE_HOSTS = new Set([
-  'youtube.com',
-  'www.youtube.com',
-  'm.youtube.com',
-  'youtube-nocookie.com',
-  'www.youtube-nocookie.com',
-  'youtu.be'
-]);
-
-const YT_ID = /^[A-Za-z0-9_-]{11}$/;
-
-/**
- * Extract the 11-char YouTube video id from a watch / youtu.be / live / embed URL.
- * Returns null for any non-YouTube host, any unparseable URL, or any id of the wrong shape.
- * Crucially host-checked: a YouTube-shaped path on a non-YouTube host yields null.
- */
-export function parseYouTubeId(url: string): string | null {
-  let u: URL;
-  try {
-    u = new URL(url.trim());
-  } catch {
-    return null;
-  }
-  if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
-  const host = u.hostname.toLowerCase();
-  if (!YOUTUBE_HOSTS.has(host)) return null;
-
-  let candidate: string | null = null;
-  if (host === 'youtu.be') {
-    // https://youtu.be/<id>
-    candidate = u.pathname.split('/').filter(Boolean)[0] ?? null;
-  } else {
-    const v = u.searchParams.get('v');
-    if (v) {
-      candidate = v;
-    } else {
-      // /live/<id>, /embed/<id>, /shorts/<id>, /v/<id>
-      const parts = u.pathname.split('/').filter(Boolean);
-      if (parts.length >= 2 && (parts[0] === 'live' || parts[0] === 'embed' || parts[0] === 'shorts' || parts[0] === 'v')) {
-        candidate = parts[1];
-      }
-    }
-  }
-  if (candidate && YT_ID.test(candidate)) return candidate;
-  return null;
 }
 
 /**
@@ -113,10 +68,6 @@ function isPublicHost(hostname: string): boolean {
     if (a > 255 || b > 255 || Number(m[3]) > 255 || Number(m[4]) > 255) return false;
   }
   return true;
-}
-
-function youtubeEmbedSrc(id: string): string {
-  return `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&mute=1`;
 }
 
 function HlsVideo({ url }: { url: string }): JSX.Element {
