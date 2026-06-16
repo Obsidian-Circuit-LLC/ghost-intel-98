@@ -265,4 +265,12 @@ describe('threat-layer id validators', () => {
     expect(() => ensureLayerKey(123)).toThrow();
     expect(() => ensureLayerKey('x'.repeat(5000))).toThrow();
   });
+
+  it('ensureLayerKey rejects CR/LF/control chars (header-injection defense)', () => {
+    expect(() => ensureLayerKey('abc\r\nX-Evil: 1')).toThrow();
+    expect(() => ensureLayerKey('abc\ndef')).toThrow();
+    expect(() => ensureLayerKey('abc\tdef')).toThrow();
+    expect(() => ensureLayerKey('abcdef')).toThrow();
+    expect(ensureLayerKey('good-token_123.AB')).toBe('good-token_123.AB');
+  });
 });
