@@ -25,8 +25,8 @@ dropdown, Add stream) were hidden. The rail now pads the right enough to clear t
 Get-FileHash .\GhostIntel98-Setup-3.14.0-beta.18.exe -Algorithm SHA256
 ```
 
-SHA-256: `__SHA256__`
-Size: __SIZE__
+SHA-256: `15053ac0220a9fd6f3cb43154d407c8a5525aaec699742223f1d15afbecabaa2`
+Size: 532740522 bytes (508.1 MB)
 
 Unsigned — Windows SmartScreen will warn: **More info → Run anyway**.
 
