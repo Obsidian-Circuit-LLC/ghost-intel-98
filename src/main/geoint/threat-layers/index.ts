@@ -17,13 +17,14 @@ import { fetchGdelt } from './gdelt';
 import { fetchFirms } from './firms';
 import { fetchGdeltCloud } from './gdeltcloud';
 import { fetchUcdp } from './ucdp';
+import { fetchReliefWeb } from './reliefweb';
 
 export type ThreatLayerId =
   | 'usgs' | 'gdacs' | 'wartracker' | 'gdelt'
-  | 'firms' | 'gdeltcloud' | 'ucdp';
+  | 'firms' | 'gdeltcloud' | 'ucdp' | 'reliefweb';
 
 export const THREAT_LAYER_IDS: readonly ThreatLayerId[] = [
-  'usgs', 'gdacs', 'wartracker', 'gdelt', 'firms', 'gdeltcloud', 'ucdp'
+  'usgs', 'gdacs', 'wartracker', 'gdelt', 'firms', 'gdeltcloud', 'ucdp', 'reliefweb'
 ];
 
 interface ThreatLayerOpts {
@@ -53,6 +54,8 @@ export async function fetchThreatLayer(layerId: ThreatLayerId, opts: ThreatLayer
       return fetchGdeltCloud(opts.key ?? '', { query: opts.query, country: opts.country });
     case 'ucdp':
       return fetchUcdp(opts.key ?? '', { version: opts.version });
+    case 'reliefweb':
+      return fetchReliefWeb(opts);
     default:
       throw new Error(`unknown threat layer: ${String(layerId)}`);
   }

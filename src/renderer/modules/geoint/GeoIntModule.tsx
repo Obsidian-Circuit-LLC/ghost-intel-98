@@ -25,7 +25,7 @@ import { filterByCategories, UNCATEGORIZED } from './threat';
 // GeoINT reimagine (R5): pluggable threat layers. Each is an on-demand, ephemeral fetch into
 // GeoItem[] (held in renderer state, never persisted to the source cache). USGS earthquakes is
 // the first layer. The allowlisted USGS feed tokens MUST mirror src/main/.../threat-layers/usgs.ts.
-type ThreatLayerId = 'usgs' | 'gdacs' | 'wartracker' | 'gdelt' | 'firms' | 'gdeltcloud' | 'ucdp';
+type ThreatLayerId = 'usgs' | 'gdacs' | 'wartracker' | 'gdelt' | 'firms' | 'gdeltcloud' | 'ucdp' | 'reliefweb';
 // Layers needing a per-user API key/token (stored main-side in the OS secret store, never echoed
 // back to the renderer). Mirror src/main/security/validate.ts KEYED_LAYER_IDS.
 type KeyedLayerId = 'firms' | 'gdeltcloud' | 'ucdp';
@@ -654,6 +654,20 @@ function GeoIntModuleInner(): JSX.Element {
             {layerBusy === 'gdelt' && <span style={{ fontSize: 11, color: '#555' }}>loading…</span>}
           </div>
           <p style={{ fontSize: 10, color: '#777', margin: '4px 0 0' }}>GDELT DOC — news articles, COUNTRY-LEVEL location (not precise)</p>
+
+          <div className="field-row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap', marginTop: 6 }}>
+            <label style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4, opacity: net ? 1 : 0.5 }}>
+              <input
+                type="checkbox"
+                checked={enabledLayers.has('reliefweb')}
+                disabled={!net || layerBusy === 'reliefweb'}
+                onChange={(e) => void toggleLayer('reliefweb', e.target.checked)}
+              />
+              ReliefWeb disasters
+            </label>
+            {layerBusy === 'reliefweb' && <span style={{ fontSize: 11, color: '#555' }}>loading…</span>}
+          </div>
+          <p style={{ fontSize: 10, color: '#777', margin: '4px 0 0' }}>ReliefWeb — UN OCHA (links to source reports). Humanitarian — country-level; appname must be registered with ReliefWeb.</p>
 
           {/* ---- Keyed layers: each needs a per-user API key/token stored in the OS secret store.
                The toggle is disabled until a key is saved; the key is never echoed back. ---- */}
