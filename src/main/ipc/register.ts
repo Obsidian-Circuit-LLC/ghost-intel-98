@@ -152,7 +152,7 @@ function safeHandle(channel: string, fn: Handler): void {
   ipcMain.handle(channel, async (_e, ...args) => {
     try {
       if (!GATE_EXEMPT.has(channel) && vault.isEnabledCached() && !vault.isUnlocked()) {
-        const locked = new Error('Locked — unlock Dead Cyber Society 98 to continue.');
+        const locked = new Error('Locked — unlock Ghost Intel 98 to continue.');
         locked.name = 'VaultLocked';
         (locked as Error & { code?: string }).code = 'EVAULTLOCKED';
         throw locked;
@@ -605,7 +605,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.backup.restore, async () => {
     const win = getWindow();
     const result = win
-      ? await dialog.showOpenDialog(win, { properties: ['openFile'], filters: [{ name: 'Dead Cyber Society 98 backup', extensions: ['ga98', 'zip'] }] })
+      ? await dialog.showOpenDialog(win, { properties: ['openFile'], filters: [{ name: 'Ghost Intel 98 backup', extensions: ['ga98', 'zip'] }] })
       : await dialog.showOpenDialog({ properties: ['openFile'] });
     if (result.canceled || result.filePaths.length === 0) return null;
     return backup.restoreBackup(result.filePaths[0]);
@@ -635,12 +635,12 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.cases.importBundle, async () => {
     const win = getWindow();
     const result = win
-      ? await dialog.showOpenDialog(win, { properties: ['openFile'], filters: [{ name: 'Dead Cyber Society 98 case', extensions: ['ghost', 'ga98case', 'zip'] }] })
+      ? await dialog.showOpenDialog(win, { properties: ['openFile'], filters: [{ name: 'Ghost Intel 98 case', extensions: ['ghost', 'ga98case', 'zip'] }] })
       : await dialog.showOpenDialog({ properties: ['openFile'] });
     if (result.canceled || result.filePaths.length === 0) return null;
     return backup.importCase(result.filePaths[0]);
   });
-  // Copy evidence files from their original locations into this case (the DCS98 case folder).
+  // Copy evidence files from their original locations into this case (the Ghost Intel 98 case folder).
   safeHandle(channels.cases.stageEvidence, async (...args) => {
     const id = ensureUuid(args[0], 'caseId');
     const win = getWindow();
@@ -899,7 +899,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
           defaultId: 0,
           cancelId: 0,
           message: 'Enable the DialTerm local shell?',
-          detail: "This lets DCS98 run commands on your computer with your account's privileges. Only enable it if you understand the risk."
+          detail: "This lets Ghost Intel 98 run commands on your computer with your account's privileges. Only enable it if you understand the risk."
         })
       : await dialog.showMessageBox({
           type: 'warning',
@@ -907,7 +907,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
           defaultId: 0,
           cancelId: 0,
           message: 'Enable the DialTerm local shell?',
-          detail: "This lets DCS98 run commands on your computer with your account's privileges. Only enable it if you understand the risk."
+          detail: "This lets Ghost Intel 98 run commands on your computer with your account's privileges. Only enable it if you understand the risk."
         });
     if (response !== 1) return false; // anything but the explicit 'Enable' button → no-op
     // Persist main-side (settings.update can't reach these keys). Validate the optional program.
@@ -1281,7 +1281,7 @@ export function startReminderTicker(getWindow: () => BrowserWindow | null): Node
         const summary = broken.map((b) => `${b.caseId.slice(0, 8)}:${b.reason}`).join(';');
         if (summary !== lastBrokenSummary) {
           lastBrokenSummary = summary;
-          showNotification('Dead Cyber Society 98', `Reminders failed for ${broken.length} case${broken.length === 1 ? '' : 's'}. See Settings → diagnostics.`);
+          showNotification('Ghost Intel 98', `Reminders failed for ${broken.length} case${broken.length === 1 ? '' : 's'}. See Settings → diagnostics.`);
           if (win) win.webContents.send(channels.system.onDiagnostic, { kind: 'reminders-broken', cases: broken });
         }
       } else {
@@ -1290,7 +1290,7 @@ export function startReminderTicker(getWindow: () => BrowserWindow | null): Node
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error('[reminder-ticker]', err);
-      showNotification('Dead Cyber Society 98', 'Reminders failed to fire — see Settings → About → diagnostics');
+      showNotification('Ghost Intel 98', 'Reminders failed to fire — see Settings → About → diagnostics');
     } finally {
       running = false;
     }

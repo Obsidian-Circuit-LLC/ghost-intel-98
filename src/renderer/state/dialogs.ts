@@ -47,7 +47,7 @@ export const useDialogs = create<DialogState>((set, get) => ({
 }));
 
 /** Themed alert. Returns when the user acknowledges. */
-export function alertDialog(message: string, title = 'Dead Cyber Society 98'): Promise<void> {
+export function alertDialog(message: string, title = 'Ghost Intel 98'): Promise<void> {
   return new Promise<void>((resolve) => {
     useDialogs.getState().push({ kind: 'alert', title, message, okLabel: 'OK' }, () => resolve());
   });

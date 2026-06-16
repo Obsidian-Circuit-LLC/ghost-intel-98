@@ -9,7 +9,7 @@ import logoUrl from '../assets/logo.png';
 
 const STEPS = [
   {
-    title: 'Welcome to Dead Cyber Society 98',
+    title: 'Welcome to Ghost Intel 98',
     body: (
       <>
         <p>This is a Windows 98–inspired case-management desktop. Twelve modules covering case files, mail, browser, SSH, camera streams, AI assistance, and more — all local-first, no telemetry, no phone-home.</p>

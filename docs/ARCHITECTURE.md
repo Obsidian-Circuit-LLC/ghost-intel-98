@@ -1,4 +1,4 @@
-# Dead Cyber Society 98 — Architecture
+# Ghost Intel 98 — Architecture
 
 ## Process model
 

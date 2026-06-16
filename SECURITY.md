@@ -1,6 +1,6 @@
 # Security
 
-Dead Cyber Society 98 (DCS98, formerly Ghost Access 98) is built and maintained by Obsidian Circuit. It is an offline-first,
+Ghost Intel 98 (formerly Ghost Access 98) is built and maintained by Obsidian Circuit. It is an offline-first,
 local-only desktop tool: no telemetry, no analytics, no background phone-home, and no network
 egress except actions you explicitly take (opening a link, connecting Mail/SSH/FTP, or an
 opt-in remote AI endpoint).

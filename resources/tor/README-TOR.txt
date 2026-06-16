@@ -1,4 +1,4 @@
-Bundled Tor (C-tor) — DCS98 P2P chat (EXPERIMENTAL)
+Bundled Tor (C-tor) — Ghost Intel 98 P2P chat (EXPERIMENTAL)
 ====================================================
 
 The chat module runs the official Tor Expert Bundle as a controlled sidecar (SOCKS out + an

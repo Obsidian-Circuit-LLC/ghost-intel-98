@@ -219,12 +219,12 @@ export function CasesModule({ initialCaseId }: { initialCaseId?: string } = {}):
               <button disabled={!selectedId} onClick={() => void deleteSelected()}>Delete</button>
             </div>
             <div style={{ display: 'flex', gap: 4 }}>
-              <button disabled={!selectedId} title="Save this case as a shareable .ghost file to send to another Dead Cyber Society 98 user" onClick={async () => {
+              <button disabled={!selectedId} title="Save this case as a shareable .ghost file to send to another Ghost Intel 98 user" onClick={async () => {
                 if (!selectedId) return;
                 try { const saved = await window.api.cases.exportBundle(selectedId); if (saved) toast.success(`Saved shareable case: ${saved}`); }
                 catch (err) { toast.error(`Share failed: ${(err as Error).message}`); }
               }}>Share…</button>
-              <button title="Open a .ghost case file shared by another Dead Cyber Society 98 user" onClick={async () => {
+              <button title="Open a .ghost case file shared by another Ghost Intel 98 user" onClick={async () => {
                 try {
                   const r = await window.api.cases.importBundle();
                   if (r) { await refreshList(); setSelectedId(r.caseId); toast.success('Shared case imported.'); }

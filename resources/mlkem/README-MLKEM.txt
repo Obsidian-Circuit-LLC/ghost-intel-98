@@ -1,4 +1,4 @@
-DCS98 ML-KEM-1024 helper (chat handshake PQ leg)
+Ghost Intel 98 ML-KEM-1024 helper (chat handshake PQ leg)
 ================================================
 
 The chat handshake's ML-KEM-1024 operations are served by a small native helper that links AWS-LC's

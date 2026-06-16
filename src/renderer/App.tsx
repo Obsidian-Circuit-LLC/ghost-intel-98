@@ -112,7 +112,7 @@ export function App(): JSX.Element {
     <div
       className="ga98-screen"
       style={{
-        // Default to the DCS98 flame wallpaper; a user-set wallpaperImage overrides it. The
+        // Default to the Ghost Intel 98 flame wallpaper; a user-set wallpaperImage overrides it. The
         // color paints behind the image so edges blend on aspect ratios that don't fill.
         background: `${settings?.wallpaperColor ?? '#008080'} url(${JSON.stringify(settings?.wallpaperImage ?? defaultWallpaper)}) center / cover no-repeat`
       }}

@@ -359,7 +359,7 @@ export function DialTermModule(): JSX.Element {
 }
 
 /** The three connection stages, in the spirit of a familiar 90s dial-up client's progress panels
- *  (Dial → Link → Auth), with the AOL-style status caption per stage. DCS98-branded — no third-party
+ *  (Dial → Link → Auth), with the AOL-style status caption per stage. Ghost Intel 98-branded — no third-party
  *  marks or mascot. */
 const DIAL_STAGES = ['DIAL', 'LINK', 'AUTH'] as const;
 const DIAL_STATUS = ['Dialing…', 'Connecting…', 'Verifying credentials…'];
@@ -378,8 +378,8 @@ function Marcher(): JSX.Element {
   );
 }
 
-/** DCS98 dial-up connection client shown during the carrier handshake. Familiar dial-up-client
- *  chrome — DCS98 logo header, a three-panel stage stepper, and an AOL-style status caption —
+/** Ghost Intel 98 dial-up connection client shown during the carrier handshake. Familiar dial-up-client
+ *  chrome — Ghost Intel 98 logo header, a three-panel stage stepper, and an AOL-style status caption —
  *  wrapped around the kept uplink packet animation and the live negotiation log. The stepper is
  *  derived from the log so it tracks the (beat-synced) handshake: once we're connecting the number
  *  is dialed (DIAL done), LINK runs through negotiation, and AUTH lights as the SSH session opens. */

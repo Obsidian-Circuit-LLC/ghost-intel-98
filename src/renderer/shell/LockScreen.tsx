@@ -99,7 +99,7 @@ export function LockScreen(): JSX.Element {
     <div className="ga98-lock-overlay">
       <div className="window ga98-lock-window">
         <div className="title-bar">
-          <div className="title-bar-text">Dead Cyber Society 98 — Locked</div>
+          <div className="title-bar-text">Ghost Intel 98 — Locked</div>
         </div>
         <div className="window-body">
           <p style={{ marginTop: 0 }}>

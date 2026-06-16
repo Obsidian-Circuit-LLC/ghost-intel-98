@@ -1,4 +1,4 @@
-DCS98 bundled local-AI resources
+Ghost Intel 98 bundled local-AI resources
 ================================
 
 This directory is populated at BUILD time (not committed to git) and shipped via

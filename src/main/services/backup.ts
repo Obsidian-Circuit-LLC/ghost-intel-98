@@ -85,7 +85,7 @@ export async function exportCase(caseId: string, destPath: string): Promise<void
 export async function importCase(srcPath: string): Promise<{ caseId: string }> {
   const zip = new AdmZip(srcPath);
   const manifestEntry = zip.getEntry('manifest.json');
-  if (!manifestEntry) throw new Error('Not a Dead Cyber Society 98 case bundle (no manifest).');
+  if (!manifestEntry) throw new Error('Not a Ghost Intel 98 case bundle (no manifest).');
   const manifest = JSON.parse(manifestEntry.getData().toString('utf8')) as { kind?: string };
   if (manifest.kind !== 'ga98case') throw new Error('Unrecognized bundle format.');
 

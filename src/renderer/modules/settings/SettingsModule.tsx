@@ -124,9 +124,9 @@ function AboutPane({ info }: { info: { version: string; userData: string; platfo
   return (
     <>
       <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 12 }}>
-        <img src={logoUrl} alt="Dead Cyber Society 98 logo" style={{ width: 96, height: 96, imageRendering: 'pixelated', border: '1px solid #808080' }} />
+        <img src={logoUrl} alt="Ghost Intel 98 logo" style={{ width: 96, height: 96, imageRendering: 'pixelated', border: '1px solid #808080' }} />
         <div>
-          <h3 style={{ margin: '0 0 4px 0' }}>Dead Cyber Society 98</h3>
+          <h3 style={{ margin: '0 0 4px 0' }}>Ghost Intel 98</h3>
           <p style={{ margin: 0 }}>v{info?.version ?? '—'} · {info?.platform ?? '—'}</p>
           <p style={{ margin: 0, fontSize: 11 }}>MIT licensed · © 2026 Obsidian Circuit</p>
         </div>
@@ -641,7 +641,7 @@ function SecurityPane(): JSX.Element {
         <fieldset>
           <legend>Login &amp; encryption</legend>
           <p style={{ marginTop: 4 }}>
-            Protect Dead Cyber Society 98 with a master password. When enabled, all case data is encrypted
+            Protect Ghost Intel 98 with a master password. When enabled, all case data is encrypted
             at rest (AES-256-GCM); the app stays locked until you enter the password.
           </p>
           <p style={{ color: '#900', fontSize: 11 }}>

@@ -1,4 +1,4 @@
-DCS98 — Bundled Piper TTS (offline neural text-to-speech)
+Ghost Intel 98 — Bundled Piper TTS (offline neural text-to-speech)
 =========================================================
 
 The binary and voice model under resources/piper/win-x64/ are NOT committed to the

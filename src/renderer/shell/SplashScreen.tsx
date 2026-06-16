@@ -1,5 +1,5 @@
 /**
- * Boot splash — the DCS 98 startup screen, shown once on launch BEFORE the lock/login
+ * Boot splash — the Ghost Intel 98 startup screen, shown once on launch BEFORE the lock/login
  * screen, while the startup jingle plays (the Win98 "booting" moment), with a Win9x-style
  * scrolling loading bar (cosmetic/indeterminate — see theme.css). Overlays everything
  * (z above the lock screen) and dismisses itself after a short hold, or on click. The auth
@@ -52,7 +52,7 @@ export function SplashScreen({ onDone }: { onDone: () => void }): JSX.Element {
     <div
       className="ga98-splash"
       role="img"
-      aria-label="DCS 98 startup"
+      aria-label="Ghost Intel 98 startup"
       onClick={dismiss}
       style={{
         position: 'fixed',
@@ -64,7 +64,7 @@ export function SplashScreen({ onDone }: { onDone: () => void }): JSX.Element {
       }}
     >
       <div className="ga98-splash-loader" aria-hidden="true">
-        <div className="ga98-splash-loader-label">Starting DCS 98…</div>
+        <div className="ga98-splash-loader-label">Starting Ghost Intel 98…</div>
         <div className="ga98-splash-bar">
           <div className="ga98-splash-bar-fill" />
         </div>

@@ -1,7 +1,7 @@
-DCS98 ExifTool integration (attachment metadata)
+Ghost Intel 98 ExifTool integration (attachment metadata)
 ================================================
 
-DCS98 can read rich file metadata from case attachments using Phil Harvey's ExifTool. When the
+Ghost Intel 98 can read rich file metadata from case attachments using Phil Harvey's ExifTool. When the
 binary is present, the attachment "ⓘ" details panel gains an "ExifTool — N tags" section. ExifTool is
 OPTIONAL and operator-supplied (it is NOT vendored in this repo): if absent, the section is simply
 hidden — nothing else changes.

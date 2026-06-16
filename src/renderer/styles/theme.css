@@ -1,4 +1,4 @@
-/* Dead Cyber Society 98 — theme layer that sits on top of 98.css. */
+/* Ghost Intel 98 — theme layer that sits on top of 98.css. */
 
 :root {
   --ga98-desktop-bg: #008080;
@@ -872,7 +872,7 @@ input.ga98-text, select.ga98-text {
 @keyframes ga98-packet-travel { from { left: -8px; } to { left: 100%; } }
 @keyframes ga98-node-flicker { 0%, 100% { opacity: 1; } 50% { opacity: 0.65; } }
 
-/* DCS98 dial-up connection client — familiar dial-up-client chrome (logo header, three-panel
+/* Ghost Intel 98 dial-up connection client — familiar dial-up-client chrome (logo header, three-panel
    stage stepper, status caption), reskinned to the DialTerm green palette. */
 .ga98-dialclient {
   height: 100%; display: flex; flex-direction: column; gap: 8px; padding: 10px;

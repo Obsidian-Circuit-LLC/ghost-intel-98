@@ -25,7 +25,7 @@ const PER_REQUEST_MS = 4000;
 const OVERALL_DEADLINE_MS = 20000;
 
 // Global in-flight cap. The renderer disables the Detect button while one is running, but that is UX
-// only — a hostile renderer (and DCS98 plugins SHARE the renderer) can ignore it and fire detect()
+// only — a hostile renderer (and Ghost Intel 98 plugins SHARE the renderer) can ignore it and fire detect()
 // thousands of times in parallel, each opening live sockets to an attacker-chosen host. Capping at
 // the service boundary (not the IPC handler) bounds total concurrent outbound sockets regardless of
 // caller, so Detect can't be turned into a socket-exhaustion / amplification driver.

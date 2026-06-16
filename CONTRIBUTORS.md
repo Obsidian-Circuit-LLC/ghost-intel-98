@@ -1,6 +1,6 @@
 # Contributors
 
-Dead Cyber Society 98 (DCS98) is built and maintained by:
+Ghost Intel 98 is built and maintained by:
 
 - **Obsidian Circuit** ([@onna-bugeisha-dev-team](https://github.com/Obsidian-Circuit-LLC)) — author, architecture, and maintenance (Obsidian Circuit).
 

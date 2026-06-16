@@ -140,7 +140,7 @@ export function LocalAiPane(): JSX.Element {
       </p>
       <p style={{ fontSize: 11, color: '#555', marginTop: 4 }}>
         No local runtime detected. Install Ollama (a free, one-click installer), then press
-        <strong> Re-check</strong> — Dead Cyber Society 98 will download the llama3.1 model and
+        <strong> Re-check</strong> — Ghost Intel 98 will download the llama3.1 model and
         configure itself. (Fully automatic and offline-bundled setup arrive in a later build.)
       </p>
       {Attribution}

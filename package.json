@@ -1,8 +1,8 @@
 {
   "name": "dcs98",
-  "version": "3.14.0-beta.11",
+  "version": "3.14.0-beta.12",
   "private": true,
-  "description": "Dead Cyber Society 98 (DCS98) — Windows 98–inspired OSINT/case-management desktop app. Electron + React + TypeScript.",
+  "description": "Ghost Intel 98 — Windows 98–inspired OSINT/case-management desktop app. Electron + React + TypeScript.",
   "author": {
     "name": "Obsidian Circuit",
     "email": "dev@onna-bugeisha.org"
@@ -79,8 +79,8 @@
     "world-countries": "^5.1.0"
   },
   "build": {
-    "appId": "com.deadcybersociety.dcs98",
-    "productName": "Dead Cyber Society 98",
+    "appId": "com.ghostintel.ghostintel98",
+    "productName": "Ghost Intel 98",
     "directories": {
       "output": "release/${version}",
       "buildResources": "resources"
@@ -151,7 +151,7 @@
         }
       ],
       "icon": "resources/icon.ico",
-      "artifactName": "DCS98-Setup-${version}.${ext}"
+      "artifactName": "GhostIntel98-Setup-${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,
@@ -159,7 +159,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Dead Cyber Society 98",
+      "shortcutName": "Ghost Intel 98",
       "installerIcon": "resources/icon.ico",
       "uninstallerIcon": "resources/icon.ico",
       "installerHeaderIcon": "resources/icon.ico"
@@ -170,7 +170,7 @@
       ],
       "category": "Utility",
       "icon": "resources/icon.png",
-      "artifactName": "DCS98-${version}.${ext}"
+      "artifactName": "GhostIntel98-${version}.${ext}"
     }
   }
 }

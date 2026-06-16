@@ -1,10 +1,10 @@
-# Dead Cyber Society 98
+# Ghost Intel 98
 
 A Windows 98–inspired OSINT / case-management desktop application. Built with Electron + React + TypeScript. Runs on Windows 11.
 
-**Dead Cyber Society 98 (DCS98)** looks and feels like a late-1990s desktop environment — grey taskbar, pixel icons, draggable windows with title bars — but it is not a Windows emulator. It is a serious investigative case-management and OSINT tool that happens to wear a retro shell.
+**Ghost Intel 98** looks and feels like a late-1990s desktop environment — grey taskbar, pixel icons, draggable windows with title bars — but it is not a Windows emulator. It is a serious investigative case-management and OSINT tool that happens to wear a retro shell.
 
-> **Formerly "Ghost Access 98."** v3.6.0 renames the program to Dead Cyber Society 98. Your data is migrated forward automatically on first launch (see [Data location](#data-location)).
+> **Formerly "Ghost Access 98."** The program is now **Ghost Intel 98**; your data is migrated forward automatically on first launch (see [Data location](#data-location)).
 
 ## TL;DR
 
@@ -32,11 +32,13 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`DCS98-Setup-3.14.0-beta.11.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake formally verified internally; external audit + FIPS pending. See Status.)*
+> **Install:** download [`GhostIntel98-Setup-3.14.0-beta.12.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake formally verified internally; external audit + FIPS pending. See Status.)*
 
 ## Status
 
-**v3.14.0-beta.11** — current release. **GhostExodus field-fix batch** on top of the GeoINT reimagine: an
+**v3.14.0-beta.12** — current release. **Renamed to Ghost Intel 98** (automatic data migration on first
+launch — existing cases, settings, and the encrypted vault carry forward). Otherwise identical to beta.11's
+**GhostExodus field-fix batch** on top of the GeoINT reimagine: an
 outer-space starfield behind the globe + translucent-dark map popups, a responsive GeoINT layout, EyeSpy
 fit-to-screen tiles + double-click + **YouTube camera feeds** + a fixed "Add new feed" wall flow, and a
 Mail chime that finally fires from inside the app — now **user-replaceable** (Settings → open the sounds
@@ -145,9 +147,9 @@ beta.1 crashed at boot with `ERR_REQUIRE_ESM` because the new ESM-only chat-cryp
 
 **v3.13.3-beta.1** — New lightning boot splash + Win9x loading bar:
 
-- **New boot splash + loading bar.** The startup screen is now the higher-resolution "Welcome DCS 98"
+- **New boot splash + loading bar.** The startup screen is now the higher-resolution "Welcome Ghost Intel 98"
   lightning render (the prior grayscale logo was pixelated at full screen), with a Win9x-style scrolling
-  blue-block loading bar and a *Starting DCS 98…* caption playing under it while the startup jingle sounds,
+  blue-block loading bar and a *Starting Ghost Intel 98…* caption playing under it while the startup jingle sounds,
   then fading to the login screen. The bar is **indeterminate by design** (boot work — auth check + settings
   load — is near-instant) and respects `prefers-reduced-motion`. Purely presentational.
 
@@ -167,12 +169,12 @@ beta.1 crashed at boot with `ERR_REQUIRE_ESM` because the new ESM-only chat-cryp
   The in-app **EXPERIMENTAL / "not formally verified" banner is removed**; the handshake is now formally
   verified *internally* — an **independent external audit and a FIPS module remain the only unmet gates**,
   so the build does not claim "externally audited" or "FIPS-validated."
-- **Win98 boot splash.** A DCS 98 startup screen (the grayscale storm/flame logo) now plays before the
+- **Win98 boot splash.** A Ghost Intel 98 startup screen (the grayscale storm/flame logo) now plays before the
   login screen while the startup jingle sounds, then fades to the desktop.
-- **New default wallpaper.** The desktop default is now the blue 256-color-era DCS 98 scene. Only the
+- **New default wallpaper.** The desktop default is now the blue 256-color-era Ghost Intel 98 scene. Only the
   default changes — any wallpaper you set yourself is untouched.
 - **Date/Time desktop widget** (analog + digital, draggable, opt-in) and **game renames** — Minesweeper →
-  **Mine Detector**, Pinball → **DCS Space Ball**.
+  **Mine Detector**, Pinball → **Ghost Space Ball**.
 
 505 automated tests. *Everything from v3.13.1 carries forward (incl. the corrected pinball geometry).*
 
@@ -251,7 +253,7 @@ external audit. 435 automated tests.
 **v3.11.1-beta.1** — Fixes invisible checkboxes:
 
 - **Checkboxes are visible again.** 98.css draws a checkbox's box via an `input + label` sibling
-  element and hides the real input; DCS98's checkboxes nest the input inside the label, so the box
+  element and hides the real input; Ghost Intel 98's checkboxes nest the input inside the label, so the box
   never drew — every checkbox (Settings, GeoINT, Mail TLS, case tasks, …) rendered as a label with no
   visible box. They still toggled when you clicked the text, but there was nothing to see. A single CSS
   rule restores a real, visible control. This is what made the new **Legacy sound pack** toggle look
@@ -279,10 +281,10 @@ and earlier carries forward unchanged.*
 
 **v3.10.0-beta.1** — DialTerm gets a dial-up *client* and an authentic handshake:
 
-- **DCS98 dial-up connection client** — the DialTerm connecting screen is now a familiar dial-up-client
-  layout: a **DCS98 logo header**, a three-panel **DIAL → LINK → AUTH** stage stepper (with a little
+- **Ghost Intel 98 dial-up connection client** — the DialTerm connecting screen is now a familiar dial-up-client
+  layout: a **Ghost Intel 98 logo header**, a three-panel **DIAL → LINK → AUTH** stage stepper (with a little
   walking "marcher" in the active panel and ✓ on completed stages) and an AOL-style status caption —
-  wrapped around the existing uplink **packet animation** and the live negotiation log. DCS98-branded,
+  wrapped around the existing uplink **packet animation** and the live negotiation log. Ghost Intel 98-branded,
   no third-party marks.
 - **Authentic dial-up handshake** — the DialTerm connect sound is rebuilt to follow a real V-series
   sequence: **dial tone → DTMF dialing → 2100 Hz answer + V.8 "bong" → V.21 negotiation → echo-cancel
@@ -368,7 +370,7 @@ resizable** — drag the grip in a note's bottom-right corner; the size persists
 **v3.6.4** — the **in-app PDF viewer renders again** (it relied on a JS method
 Electron 33's Chromium doesn't ship yet; v3.6.4 polyfills it). This cleared the v3.6.3 known issue.
 
-**v3.6.3** added **desktop polish** — the **DCS98 flame wallpaper** as the default background,
+**v3.6.3** added **desktop polish** — the **Ghost Intel 98 flame wallpaper** as the default background,
 desktop icons in a single **vertical left-edge column**, an authentic Win95 **My Computer** icon for
 **My Cases**, and a **draggable sticky-notes bar** that no longer overlaps the window minimise/close
 buttons.
@@ -380,7 +382,7 @@ bouncing-card win cascade), in the Access menu.
 Briefcase app or save straight there from Notepad 98), GeoINT **street-name labels** + a one-click tile
 **Reset**, and **Shred** pinned to the bottom-right corner like the Recycle Bin.
 
-**v3.6.0** renamed the program to **Dead Cyber Society 98 (DCS98)** (with automatic data migration from the
+**v3.6.0** renamed the program from **Ghost Access 98** (with automatic data migration from the
 old install) and cleared a full field-report punch list:
 
 - **Sticky Notes** *(new module)* — a Win95-style desktop note layer (drag, type, pick icon + color),
@@ -411,20 +413,20 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/dcs98/releases) and run it.
 
-Direct link to the current release: [`DCS98-Setup-3.14.0-beta.11.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.14.0-beta.11/DCS98-Setup-3.14.0-beta.11.exe)
+Direct link to the current release: [`GhostIntel98-Setup-3.14.0-beta.12.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.14.0-beta.12/GhostIntel98-Setup-3.14.0-beta.12.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is formally verified internally — external audit + FIPS
-pending — see Status). The last fully-stable build is [`DCS98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.6.8/DCS98-Setup-3.6.8.exe).
+pending — see Status). The last fully-stable build is [`GhostIntel98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.6.8/GhostIntel98-Setup-3.6.8.exe).
 
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\DCS98-Setup-3.14.0-beta.11.exe -Algorithm SHA256
+Get-FileHash .\GhostIntel98-Setup-3.14.0-beta.12.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
 The installer is **unsigned** (no code-signing certificate yet), so SmartScreen will warn on first run — click **More info → Run anyway**. The app installs per-user (no admin required) and creates a desktop + Start menu shortcut.
 
-To uninstall: Settings → Apps → Dead Cyber Society 98 → Uninstall.
+To uninstall: Settings → Apps → Ghost Intel 98 → Uninstall.
 
 ## Modules
 
@@ -456,7 +458,12 @@ To uninstall: Settings → Apps → Dead Cyber Society 98 → Uninstall.
 
 ## Releases & changelog
 
-The current build is **v3.14.0-beta.11**. Each release page carries its own notes + SHA-256.
+The current build is **v3.14.0-beta.12**. Each release page carries its own notes + SHA-256.
+
+- **v3.14.0-beta.12** — **Renamed to Ghost Intel 98.** Product/display name, window titles, installer, and
+  shortcuts are now Ghost Intel 98 (new app identity `com.ghostintel.ghostintel98`). On first launch the app
+  automatically migrates your existing data directory forward, so cases, settings, sticky notes, and the
+  encrypted vault are preserved. No feature changes vs. beta.11. **~1064 tests.**
 
 - **v3.14.0-beta.11** — **GhostExodus field-fix batch.** **GeoINT:** an offline starfield space background
   behind the 3D globe, translucent-dark map popups (with the close button no longer overlapping the title),
@@ -565,8 +572,8 @@ The current build is **v3.14.0-beta.11**. Each release page carries its own note
   **geo-aware CSV import** (city/lat/lon/country/source); **Jukebox** default size + collapse toggle;
   **DialTerm** drops the dialpad animation; **Mail** setup-dialog close fix; **Notepad 98** entry delete. **681 tests.**
 - **v3.13.3-beta.1** — **New lightning boot splash + Win9x loading bar.** The startup screen is now the
-  higher-resolution "Welcome DCS 98" lightning render (the prior grayscale logo was pixelated), with a
-  Win9x-style scrolling blue-block loading bar and a *Starting DCS 98…* caption under it, then a fade to the
+  higher-resolution "Welcome Ghost Intel 98" lightning render (the prior grayscale logo was pixelated), with a
+  Win9x-style scrolling blue-block loading bar and a *Starting Ghost Intel 98…* caption under it, then a fade to the
   login screen. Indeterminate by design (boot work is near-instant); respects `prefers-reduced-motion`.
   Purely presentational — everything from v3.13.2 carries forward. **505 tests.**
 - **v3.13.2-beta.1** — **Reconnect hardening verified; chat leaves EXPERIMENTAL; Win98 boot splash.**
@@ -578,7 +585,7 @@ The current build is **v3.14.0-beta.11**. Each release page carries its own note
   review passes. The **EXPERIMENTAL chat banner is removed** (handshake formally verified internally;
   external audit + FIPS the only unmet gates). Also: a **Win98 boot splash** before the login screen, a new
   blue **256-color default wallpaper**, a **Date/Time** desktop widget, and game renames (**Mine Detector**,
-  **DCS Space Ball**). **505 tests.**
+  **Ghost Space Ball**). **505 tests.**
 - **v3.13.1-beta.1** — **Pinball playability fix + formal-verification milestone.** Corrected the pinball
   flipper geometry (v3.13.0 flippers overlapped → no drain gap); slingshots now hug the flippers and
   inlane/outlane guide rails replace the open sides. Separately, the **CryptoVerif** hybrid IND-of-RK
@@ -602,7 +609,7 @@ The current build is **v3.14.0-beta.11**. Each release page carries its own note
   to Desktop / Import Case buttons. **ExifTool** attachment metadata (optional bundled binary). RTFM
   **Ten Nodes of Hacktivism** content, **whiteboard tile colours**, **chat first-run guide**. **434 tests.**
 - **v3.11.1-beta.1** — **Fix: invisible checkboxes.** 98.css hides the native checkbox and redraws it
-  via an `input + label` sibling element; DCS98 nests the input inside its label, so the box never drew
+  via an `input + label` sibling element; Ghost Intel 98 nests the input inside its label, so the box never drew
   and every checkbox (Settings incl. the new Legacy sound pack toggle, GeoINT, Mail TLS, case tasks, …)
   rendered with no visible control — they toggled on a text-click but looked absent. One CSS rule in
   `98.overrides.css` restores a real, visible control app-wide. CSS-only. **429 tests.**
@@ -614,9 +621,9 @@ The current build is **v3.14.0-beta.11**. Each release page carries its own note
   could orphan on quit and lock the install dir, breaking the uninstaller — quit now blocks on teardown
   before exiting (already-stuck installs: end `tor.exe` in Task Manager, then uninstall). **429 tests.**
 - **v3.10.0-beta.1** — **DialTerm dial-up client + authentic V-series handshake.** The connecting screen
-  is now a familiar dial-up-*client* layout — **DCS98 logo header**, a three-panel **DIAL → LINK → AUTH**
+  is now a familiar dial-up-*client* layout — **Ghost Intel 98 logo header**, a three-panel **DIAL → LINK → AUTH**
   stage stepper (walking "marcher" + ✓ on completed stages) and an AOL-style status caption — wrapped
-  around the kept uplink **packet animation** + live negotiation log (DCS98-branded; no third-party
+  around the kept uplink **packet animation** + live negotiation log (Ghost Intel 98-branded; no third-party
   marks/mascot). The DialTerm connect **sound** is rebuilt to follow a real handshake: dial tone → DTMF →
   2100 Hz answer + V.8 "bong" → V.21 negotiation → echo-cancel → V.34 line-probe → scrambled-data roar,
   **beat-locked** to the animation (stepper, log, and audio advance together). Reproduced synthetically
@@ -675,7 +682,7 @@ The current build is **v3.14.0-beta.11**. Each release page carries its own note
   doesn't ship — so render threw and the viewer blanked; v3.6.4 adds a spec-faithful polyfill (Map +
   WeakMap) in both the renderer and pdf.js worker realms, guarded to no-op once Chromium ships it.
   Renderer-only. 243 tests (5 new).
-- **v3.6.3** — **Desktop polish**: the **DCS98 flame** image is the default wallpaper (desktop + lock
+- **v3.6.3** — **Desktop polish**: the **Ghost Intel 98 flame** image is the default wallpaper (desktop + lock
   screen); desktop icons flow as a single **vertical left-edge column**; **My Cases** uses an authentic
   Win95 **My Computer** icon (pixel-art SVG); and the **New note / Hide notes** bar is a **draggable**
   widget with a grip handle, defaulted to bottom-centre so it no longer covers the window minimise/close
@@ -688,7 +695,7 @@ The current build is **v3.14.0-beta.11**. Each release page carries its own note
   domain) + a tile **Reset** + the default OSM URL shown as a placeholder; **Shred** moved to the
   bottom-right corner. Red-team: fixed a save/read UUID-validation mismatch in the Briefcase + AI-conversation
   stores. 232 tests.
-- **v3.6.0** — **Renamed to Dead Cyber Society 98 (DCS98)** with automatic data migration from the old
+- **v3.6.0** — **Renamed from Ghost Access 98** with automatic data migration from the old
   install. New: **Sticky Notes** desktop layer; **AI conversation memory** (saved-chat sidebar) + right-click
   copy + default `qwen3-abliterated:4b`; **GeoINT Street View** + custom-tile **Load** button + **2D Map**
   relabel + map-resize fix; **Markets** first-run tutorial. Fixes: **minimize no longer wipes state**
@@ -746,7 +753,7 @@ This starts the Vite dev server (HMR) and the Electron main process.
 
 ```bash
 pnpm build        # type-check + bundle main / preload / renderer
-pnpm test         # vitest suite (1064 tests as of v3.14.0-beta.11)
+pnpm test         # vitest suite (1064 tests as of v3.14.0-beta.12)
 pnpm package      # platform installer for the current host
 pnpm package:win  # cross-build Windows NSIS installer
 ```
@@ -755,12 +762,12 @@ Output lands in `release/`.
 
 ## Data location
 
-Dead Cyber Society 98 stores all user data under your OS userData directory in a `GhostAccess98/` folder
+Ghost Intel 98 stores all user data under your OS userData directory in a `GhostAccess98/` folder
 (the inner folder name is kept stable across the rename so existing data resolves unchanged). Locations:
 
-- Windows: `%APPDATA%\Dead Cyber Society 98\GhostAccess98\`
-- macOS: `~/Library/Application Support/Dead Cyber Society 98/GhostAccess98/`
-- Linux: `~/.config/Dead Cyber Society 98/GhostAccess98/`
+- Windows: `%APPDATA%\Ghost Intel 98\GhostAccess98\`
+- macOS: `~/Library/Application Support/Ghost Intel 98/GhostAccess98/`
+- Linux: `~/.config/Ghost Intel 98/GhostAccess98/`
 
 On first launch after upgrading from **Ghost Access 98**, the app copies your old data
 (`%APPDATA%\Ghost Access 98\…`) into the new location — it **copies, never moves**, leaving the old data

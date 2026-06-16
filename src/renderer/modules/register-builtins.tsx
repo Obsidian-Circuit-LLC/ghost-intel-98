@@ -191,7 +191,7 @@ export function registerBuiltins(): void {
   registerModule({ key: 'solitaire',    title: 'Solitaire',        glyph: '🃏', component: SolitaireAdapter,    builtin: true });
   registerModule({ key: 'minesweeper',  title: 'Mine Detector',    glyph: '💣', component: MinesweeperAdapter,  builtin: true });
   registerModule({ key: 'chess',        title: 'Chess',            glyph: '♟', component: ChessAdapter,        builtin: true });
-  registerModule({ key: 'pinball',      title: 'DCS Space Ball',   glyph: '🕹', component: PinballAdapter,      builtin: true });
+  registerModule({ key: 'pinball',      title: 'Ghost Space Ball',   glyph: '🕹', component: PinballAdapter,      builtin: true });
   registerModule({ key: 'chat',         title: 'Chat (beta)',      glyph: '💬', component: ChatAdapter,         builtin: true });
   registerModule({ key: 'help',         title: 'RTFM',             glyph: '?',  component: HelpAdapter,         builtin: true });
 }

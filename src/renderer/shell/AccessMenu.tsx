@@ -21,7 +21,7 @@ const GAMES: { module: ModuleKey; label: string }[] = [
   { module: 'solitaire', label: 'Solitaire' },
   { module: 'minesweeper', label: 'Mine Detector' },
   { module: 'chess', label: 'Chess' },
-  { module: 'pinball', label: 'DCS Space Ball' }
+  { module: 'pinball', label: 'Ghost Space Ball' }
 ];
 const GAME_TARGETS = new Set<string>(GAMES.map((g) => g.module));
 
@@ -61,7 +61,7 @@ export function AccessMenu({ onClose }: AccessMenuProps): JSX.Element {
     <div className="ga98-access-menu" role="menu" onMouseDown={(e) => e.stopPropagation()}>
       <div className="ga98-access-rail">
         <img src={logoUrl} alt="" className="ga98-access-rail-logo" />
-        <span>Dead Cyber Society 98</span>
+        <span>Ghost Intel 98</span>
       </div>
       <div className="ga98-access-list">
         {items.length === 0 && <div className="ga98-access-entry">(no shortcuts — open Settings)</div>}
@@ -167,7 +167,7 @@ export function AccessMenu({ onClose }: AccessMenuProps): JSX.Element {
   async function shutDown(): Promise<void> {
     if (settings?.soundEnabled) playClick();
     onClose();
-    const ok = await confirmDialog('Close Dead Cyber Society 98?', 'Shut Down');
+    const ok = await confirmDialog('Close Ghost Intel 98?', 'Shut Down');
     if (ok) await window.api.system.quit();
   }
 }

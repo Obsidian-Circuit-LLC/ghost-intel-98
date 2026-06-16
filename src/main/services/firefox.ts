@@ -10,7 +10,7 @@
  *  - The URL is validated (http/https only) before launch and passed as a single argv
  *    element with `shell: false`, so there is no shell-interpolation / argument-injection
  *    surface.
- *  - The child is detached + unref'd so closing Dead Cyber Society 98 doesn't kill the browser.
+ *  - The child is detached + unref'd so closing Ghost Intel 98 doesn't kill the browser.
  *
  * The Firefox Portable payload itself is NOT vendored into the repo (a ~90 MB third-party
  * binary is a distribution/BOM decision for the operator). Drop it into `resources/firefox/`

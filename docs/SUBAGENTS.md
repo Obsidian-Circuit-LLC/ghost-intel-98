@@ -1,6 +1,6 @@
 # Subagent Deployment Plan
 
-Per operator directive, every module of Dead Cyber Society 98 is built with explicit subagent review. Subagents are recorded in commit messages (`Reviewed-by:` trailer) so the audit trail is permanent.
+Per operator directive, every module of Ghost Intel 98 is built with explicit subagent review. Subagents are recorded in commit messages (`Reviewed-by:` trailer) so the audit trail is permanent.
 
 ## When each subagent runs
 

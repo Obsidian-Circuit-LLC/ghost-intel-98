@@ -100,6 +100,6 @@ export function buildSummaryHtml(c: CaseRecord, images?: ReportImages): string {
   ${omitted}
   <h2>Timeline</h2>
   ${list(c.timeline.map((e) => `<span class="ts">${esc(e.at)}</span> [${esc(e.kind)}] ${esc(e.message)}`))}
-  <hr><p class="muted">Exported from Dead Cyber Society 98 · ${esc(c.id)}</p>
+  <hr><p class="muted">Exported from Ghost Intel 98 · ${esc(c.id)}</p>
 </body></html>`;
 }

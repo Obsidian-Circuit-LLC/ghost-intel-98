@@ -92,7 +92,7 @@ function createWindow(): void {
     minWidth: 960,
     minHeight: 600,
     backgroundColor: '#008080',
-    title: 'Dead Cyber Society 98',
+    title: 'Ghost Intel 98',
     icon: iconPath,
     autoHideMenuBar: true,
     show: false,
@@ -234,7 +234,7 @@ function lockDownPartitionSessions(): void {
 
 app.whenReady().then(async () => {
   // FIRST: carry forward data from the pre-rename (Ghost Access 98) userData dir, before any
-  // storage layer reads or creates files in the new (Dead Cyber Society 98) location.
+  // storage layer reads or creates files in the new (Ghost Intel 98) location.
   await migrateUserDataIfNeeded();
   await ensureDataLayout();
   await vault.refreshEnabled(); // populate the lock-gate cache before any IPC can fire
