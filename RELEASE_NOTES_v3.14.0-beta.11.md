@@ -46,6 +46,8 @@ Size: 533,046,457 bytes (508.4 MB)
 Unsigned — Windows SmartScreen will warn: **More info → Run anyway**.
 
 ## Notes
-- The globe space background renders behind the transparent globe canvas; if your GPU/driver paints
-  a fill around the globe instead, report it and it'll move to a MapLibre sky layer.
+- The globe space background is confirmed rendering correctly on the build.
+- Code hygiene on `main` after this build: the now-dead Leaflet map fallback (`MapPane` + the
+  `leaflet` dependency) was removed — the 3D globe has been the only map since beta.10, so this is a
+  no-op for the installer's behaviour.
 - 1064 tests green; typecheck clean.

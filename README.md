@@ -467,7 +467,8 @@ The current build is **v3.14.0-beta.11**. Each release page carries its own note
   **Reply** button (it previously had only Forward); the "You've got mail" chime now fires from inside the
   app on new mail (de-duped against the background poller), and the chime is **user-replaceable** — Settings
   → Sound → *Change chime* opens a sounds folder where you drop in your own `.wav`. Default chime refreshed.
-  **~1064 tests.**
+  Post-build code hygiene: removed the now-dead Leaflet map fallback (the 3D globe has been the only map
+  since beta.10). **~1064 tests.**
 - **v3.14.0-beta.10** — **GeoINT reimagine + beta.9 field feedback.** A big two-part release. **GeoINT** is
   reimagined as a 3D command center: a **MapLibre globe** (default; flat Leaflet map retained as an in-app
   fallback), a command-center rail (Global Threat View / Monitored Situations / Visual Imagery / Situation
