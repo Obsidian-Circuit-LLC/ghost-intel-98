@@ -32,11 +32,12 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`GhostIntel98-Setup-3.14.0-beta.12.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake formally verified internally; external audit + FIPS pending. See Status.)*
+> **Install:** download [`GhostIntel98-Setup-3.14.0-beta.13.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake formally verified internally; external audit + FIPS pending. See Status.)*
 
 ## Status
 
-**v3.14.0-beta.12** — current release. **Renamed to Ghost Intel 98** (automatic data migration on first
+**v3.14.0-beta.13** — current release. **New Ghost Intel 98 app icon + logo.** Built on beta.12's
+**rename to Ghost Intel 98** (automatic data migration on first
 launch — existing cases, settings, and the encrypted vault carry forward). Otherwise identical to beta.11's
 **GhostExodus field-fix batch** on top of the GeoINT reimagine: an
 outer-space starfield behind the globe + translucent-dark map popups, a responsive GeoINT layout, EyeSpy
@@ -413,14 +414,14 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/dcs98/releases) and run it.
 
-Direct link to the current release: [`GhostIntel98-Setup-3.14.0-beta.12.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.14.0-beta.12/GhostIntel98-Setup-3.14.0-beta.12.exe)
+Direct link to the current release: [`GhostIntel98-Setup-3.14.0-beta.13.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.14.0-beta.13/GhostIntel98-Setup-3.14.0-beta.13.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is formally verified internally — external audit + FIPS
 pending — see Status). The last fully-stable build is [`GhostIntel98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/dcs98/releases/download/v3.6.8/GhostIntel98-Setup-3.6.8.exe).
 
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\GhostIntel98-Setup-3.14.0-beta.12.exe -Algorithm SHA256
+Get-FileHash .\GhostIntel98-Setup-3.14.0-beta.13.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
@@ -458,8 +459,9 @@ To uninstall: Settings → Apps → Ghost Intel 98 → Uninstall.
 
 ## Releases & changelog
 
-The current build is **v3.14.0-beta.12**. Each release page carries its own notes + SHA-256.
+The current build is **v3.14.0-beta.13**. Each release page carries its own notes + SHA-256.
 
+- **v3.14.0-beta.13** — **New Ghost Intel 98 app icon + logo** (window/installer/Start-button icon and the in-app logo). Brand art only; no code changes from beta.12.
 - **v3.14.0-beta.12** — **Renamed to Ghost Intel 98.** Product/display name, window titles, installer, and
   shortcuts are now Ghost Intel 98 (new app identity `com.ghostintel.ghostintel98`). On first launch the app
   automatically migrates your existing data directory forward, so cases, settings, sticky notes, and the
@@ -753,7 +755,7 @@ This starts the Vite dev server (HMR) and the Electron main process.
 
 ```bash
 pnpm build        # type-check + bundle main / preload / renderer
-pnpm test         # vitest suite (1064 tests as of v3.14.0-beta.12)
+pnpm test         # vitest suite (1064 tests as of v3.14.0-beta.13)
 pnpm package      # platform installer for the current host
 pnpm package:win  # cross-build Windows NSIS installer
 ```
