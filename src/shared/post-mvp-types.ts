@@ -133,7 +133,7 @@ export interface CameraStream {
 export interface Wall {
   id: string;
   name: string;
-  slots: (string | null)[]; // fixed length 9; each is a CameraStream id or null (empty)
+  slots: (string | null)[]; // variable length (starts at 9, grows unbounded); each is a CameraStream id or null (empty)
   createdAt: string;
   updatedAt: string;
   // ---- Optional location category ----
