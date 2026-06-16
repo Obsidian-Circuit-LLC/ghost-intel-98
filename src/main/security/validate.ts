@@ -572,7 +572,7 @@ export function ensureGeoSource(v: unknown): { label: string; url: string; type:
  *  directly; this rejects any id the dispatcher doesn't know before it reaches the dispatcher.
  *  Keyed layers (firms/gdeltcloud/ucdp) are included — the handler additionally requires a stored
  *  key for those before egress. */
-const THREAT_LAYER_IDS = ['usgs', 'gdacs', 'wartracker', 'gdelt', 'firms', 'gdeltcloud', 'ucdp'] as const;
+const THREAT_LAYER_IDS = ['usgs', 'gdacs', 'wartracker', 'gdelt', 'firms', 'gdeltcloud', 'ucdp', 'reliefweb'] as const;
 export function ensureThreatLayerId(v: unknown): (typeof THREAT_LAYER_IDS)[number] {
   if (typeof v !== 'string' || !THREAT_LAYER_IDS.includes(v as (typeof THREAT_LAYER_IDS)[number])) {
     throw new ValidationError('unknown threat layer id');

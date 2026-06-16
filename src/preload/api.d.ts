@@ -343,7 +343,7 @@ export interface GhostApi {
      *  Egress-gated by settings.geoint.networkEnabled — returns [] when network is off. Keyed
      *  layers (firms/gdeltcloud/ucdp) additionally return [] when no API key is stored. */
     fetchThreatLayer(
-      layerId: 'usgs' | 'gdacs' | 'wartracker' | 'gdelt' | 'firms' | 'gdeltcloud' | 'ucdp',
+      layerId: 'usgs' | 'gdacs' | 'wartracker' | 'gdelt' | 'firms' | 'gdeltcloud' | 'ucdp' | 'reliefweb',
       opts: { feed?: string; country?: string; query?: string }
     ): Promise<GeoItem[]>;
     /** Store the API key/token for a keyed layer in the OS-encrypted secret store (never in
