@@ -51,4 +51,4 @@
 ## Verify the download
 | Artifact | SHA-256 | Size |
 |---|---|---|
-| `DCS98-Setup-3.14.0-beta.10.exe` | `TBD — filled after build` | `TBD` |
+| `DCS98-Setup-3.14.0-beta.10.exe` | `5a1c897a723aa084199ea6eb2cd8042336bf5f7c292bc50faaf777a059978364` | 508.0 MB |
