@@ -10,7 +10,6 @@ import type { GeoSnapshot, GeoSourceType, GeoXmlMap, GeoItem, KevEntry } from '@
 import { useSettings } from '../../state/store';
 import { toast } from '../../state/toasts';
 import { confirmDialog } from '../../state/dialogs';
-import { MapPane } from './MapPane';
 import { MapGL } from './MapGL';
 import { MapErrorBoundary } from './MapErrorBoundary';
 import { SaveEventDialog } from './SaveEventDialog';
@@ -18,7 +17,6 @@ import { corroborate } from './corroborate';
 import { timeBounds, itemsUpTo } from './timeline';
 import { TimelineBar } from './TimelineBar';
 import { StoryControls } from './StoryControls';
-import { LiveNewsPanel } from './LiveNewsPanel';
 import { CommandRail } from './CommandRail';
 import { filterByCategories, UNCATEGORIZED } from './threat';
 
@@ -75,11 +73,8 @@ const MAX_ITEMS = 5000;
 // "Play story" dwell: how long each event is shown before auto-advancing to the next (5 s).
 const STORY_ADVANCE_MS = 5000;
 
-// GeoINT reimagine (R4b): the MapLibre GL globe is now the default. The Leaflet `MapPane` path is
-// RETAINED behind `useMapGL = false` as a fallback this release — deletion (of MapPane.tsx and the
-// `leaflet` dependency) is deferred until the globe is confirmed in a built/GPU smoke test. Flip back
-// to false to fall back to the flat Leaflet map. Still a plain const — no settings surface yet.
-const useMapGL = true;
+// GeoINT renders on the MapLibre GL 3D globe (MapGL). The former Leaflet fallback (MapPane) was
+// removed once the globe was confirmed in a built/GPU smoke test (v3.14.0-beta.11).
 
 function GeoIntModuleInner(): JSX.Element {
   const settings = useSettings((s) => s.settings);
@@ -122,9 +117,6 @@ function GeoIntModuleInner(): JSX.Element {
     patchGeo({ basemap: 'street', tileServerUrl: u, tileAttribution: u === DEFAULT_TILE_URL ? DEFAULT_TILE_ATTRIBUTION : tileAttribution });
     toast.success('Map tiles loaded.');
   }
-  // Live News (R12) overlay toggle. Self-contained panel floats over the map; R9 will relocate it
-  // to the command-center rail. Default off so the map is unobstructed until the user opens it.
-  const [liveNews, setLiveNews] = useState(false);
   const [flyTo, setFlyTo] = useState<{ lat: number; lon: number; key: number } | null>(null);
   const flyKey = useRef(0); // monotonic nonce so repeat searches re-center even on identical coords
   // Timeline scrubber: cursor (epoch ms) is the "show events up to" point; playing animates it.
@@ -443,7 +435,7 @@ function GeoIntModuleInner(): JSX.Element {
   }
 
   return (
-    <div className={`ga98-split ga98-geo${useMapGL ? ' ga98-geo-3col' : ''}`} style={{ height: '100%' }}>
+    <div className="ga98-split ga98-geo ga98-geo-3col" style={{ height: '100%' }}>
       <div className="ga98-pane ga98-geo-left">
         {loadError && (
           <div style={{ background: '#fee', color: '#900', padding: '4px 8px', fontSize: 11, border: '1px solid #c00', marginBottom: 4 }}>
@@ -812,18 +804,12 @@ function GeoIntModuleInner(): JSX.Element {
       </div>
 
       <div className="ga98-pane ga98-geo-right" style={{ padding: 0, position: 'relative', display: 'flex', flexDirection: 'column' }}>
-        {/* MapPane stays mounted under the Street View overlay so its Leaflet state + center
-            tracking survive toggling Street View on/off. The timeline/story bars sit below it. */}
+        {/* MapGL stays mounted under the Street View overlay so its globe state + center tracking
+            survive toggling Street View on/off. The timeline/story bars sit below it. */}
         <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
-          {useMapGL ? (
-            <MapGL items={mapItems} corroboration={corroboration} tilesEnabled={net} tileUrl={activeTileUrl} tileAttribution={activeTileAttribution}
-              pickMode={pickFor != null} onPick={(la, lo) => void onPick(la, lo)} focusId={focusId} flyTo={flyTo}
-              onCenterChange={(lat, lon) => setCenter({ lat, lon })} overlayUrls={overlayUrls} overlayAttribution={LABELS_ATTRIBUTION} />
-          ) : (
-          <MapPane items={visibleItems} corroboration={corroboration} tilesEnabled={net} tileUrl={activeTileUrl} tileAttribution={activeTileAttribution}
+          <MapGL items={mapItems} corroboration={corroboration} tilesEnabled={net} tileUrl={activeTileUrl} tileAttribution={activeTileAttribution}
             pickMode={pickFor != null} onPick={(la, lo) => void onPick(la, lo)} focusId={focusId} flyTo={flyTo}
             onCenterChange={(lat, lon) => setCenter({ lat, lon })} overlayUrls={overlayUrls} overlayAttribution={LABELS_ATTRIBUTION} />
-          )}
         {streetView && net && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', background: '#000' }}>
             <div className="ga98-toolbar" style={{ flex: '0 0 auto' }}>
@@ -844,24 +830,6 @@ function GeoIntModuleInner(): JSX.Element {
               style={{ flex: 1, width: '100%', border: 0 }}
               referrerPolicy="no-referrer"
             />
-          </div>
-        )}
-        {/* Live News (R12) toggle — floats top-right; opens the self-contained video panel overlay.
-            In globe mode (useMapGL) Live News lives at the top of the command-center rail instead, so
-            this floating overlay only renders on the 2-column (Leaflet) path. */}
-        {!useMapGL && (
-        <button
-          onClick={() => setLiveNews((v) => !v)}
-          aria-pressed={liveNews}
-          title="Live News video panel"
-          style={{ position: 'absolute', top: 8, right: 8, zIndex: 600, fontSize: 11, padding: '2px 8px' }}
-        >
-          {liveNews ? '✕ News' : '▶ News'}
-        </button>
-        )}
-        {!useMapGL && liveNews && (
-          <div style={{ position: 'absolute', top: 36, right: 8, zIndex: 600, width: 340, maxWidth: 'calc(100% - 16px)', maxHeight: 'calc(100% - 48px)', overflow: 'auto', background: 'var(--ga98-face,#c0c0c0)', border: '2px outset #fff', boxShadow: '0 1px 6px rgba(0,0,0,.45)', padding: 6 }}>
-            <LiveNewsPanel />
           </div>
         )}
         {/* Story transport floats over the map (top-center) so the pause/stop controls
@@ -892,23 +860,20 @@ function GeoIntModuleInner(): JSX.Element {
           onAll={() => { setTimePlaying(false); if (bounds) setTimeCursor(bounds.max); }}
         />
       </div>
-      {/* Command-center right rail (R9) — 3rd column, GLOBE MODE ONLY. When useMapGL is false this
-          never mounts and the layout stays the live 2-column (controls | map). All data is owned by
-          this module and passed down; the rail mirrors handlers rather than duplicating logic. */}
-      {useMapGL && (
-        <CommandRail
-          visibleItems={visibleItems}
-          corroboration={corroboration}
-          onFocus={(id) => setFocusId(id)}
-          categoryFilter={enabledCategories}
-          onToggleCategory={toggleCategory}
-          basemap={basemap}
-          onBasemap={(b) => { patchGeo({ basemap: b }); setStreetView(false); }}
-          labels={labels}
-          onLabels={setLabels}
-          net={net}
-        />
-      )}
+      {/* Command-center right rail — 3rd column. All data is owned by this module and passed down;
+          the rail mirrors handlers rather than duplicating logic. */}
+      <CommandRail
+        visibleItems={visibleItems}
+        corroboration={corroboration}
+        onFocus={(id) => setFocusId(id)}
+        categoryFilter={enabledCategories}
+        onToggleCategory={toggleCategory}
+        basemap={basemap}
+        onBasemap={(b) => { patchGeo({ basemap: b }); setStreetView(false); }}
+        labels={labels}
+        onLabels={setLabels}
+        net={net}
+      />
       {saveItem && <SaveEventDialog item={saveItem} onClose={() => setSaveItem(null)} />}
     </div>
   );
