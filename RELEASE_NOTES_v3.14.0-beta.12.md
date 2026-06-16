@@ -27,8 +27,8 @@ YouTube feeds / fixed Add-new-feed, Mail Reply + in-app chime + user-replaceable
 Get-FileHash .\GhostIntel98-Setup-3.14.0-beta.12.exe -Algorithm SHA256
 ```
 
-SHA-256: `__SHA256__`
-Size: `__SIZE__`
+SHA-256: `756d1a7636a5fd039dcf8ed8e99c1a304102018dd5705ada428fdbd0b31dd4eb`
+Size: 532,510,128 bytes (507.8 MB)
 
 Unsigned — Windows SmartScreen will warn: **More info → Run anyway**.
 
