@@ -32,11 +32,11 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`GhostIntel98-Setup-3.14.0-beta.19.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake formally verified internally; external audit + FIPS pending. See Status.)*
+> **Install:** download [`GhostIntel98-Setup-3.14.0-beta.20.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake formally verified internally; external audit + FIPS pending. See Status.)*
 
 ## Status
 
-**v3.14.0-beta.19** — current release. GhostExodus field-test batch. **GeoINT:** the right-hand command stack no longer runs off the window edge on narrower widths, and clicking through map "blips" no longer leaves overlapping ✕ close buttons (one popup open at a time). **EyeSpy:** the **➕ Add new feed** tile is reliably clickable and every empty tile now opens the Add form. **Mail:** you can select-and-copy message text and there's an app-wide right-click **Cut / Copy / Paste / Select All** menu (local clipboard only). Built on the copyright-safe brand art (custom "G" mark, no Microsoft Windows flag).
+**v3.14.0-beta.20** — current release. EyeSpy: the camera-feed **right-click menu** now clamps fully into the window, so its bottom options (**Set location…**, **Delete**) are reachable even when you right-click a feed low in a long list. Everything from beta.19 carries forward — **GeoINT** right-hand command stack no longer runs off the window edge and map "blips" no longer stack overlapping ✕ close buttons (one popup at a time); **EyeSpy** ➕ Add-new-feed tile reliably clickable; **Mail** select-and-copy plus an app-wide right-click **Cut / Copy / Paste / Select All** menu (local clipboard only). Built on the copyright-safe brand art (custom "G" mark, no Microsoft Windows flag).
 **new app icon + logo** and beta.12's
 **rename to Ghost Intel 98** (automatic data migration on first
 launch — existing cases, settings, and the encrypted vault carry forward). Otherwise identical to beta.11's
@@ -415,14 +415,14 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases) and run it.
 
-Direct link to the current release: [`GhostIntel98-Setup-3.14.0-beta.19.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.14.0-beta.19/GhostIntel98-Setup-3.14.0-beta.19.exe)
+Direct link to the current release: [`GhostIntel98-Setup-3.14.0-beta.20.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.14.0-beta.20/GhostIntel98-Setup-3.14.0-beta.20.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is formally verified internally — external audit + FIPS
 pending — see Status). The last fully-stable build is [`GhostIntel98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.6.8/GhostIntel98-Setup-3.6.8.exe).
 
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\GhostIntel98-Setup-3.14.0-beta.19.exe -Algorithm SHA256
+Get-FileHash .\GhostIntel98-Setup-3.14.0-beta.20.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
@@ -460,8 +460,9 @@ To uninstall: Settings → Apps → Ghost Intel 98 → Uninstall.
 
 ## Releases & changelog
 
-The current build is **v3.14.0-beta.19**. Each release page carries its own notes + SHA-256.
+The current build is **v3.14.0-beta.20**. Each release page carries its own notes + SHA-256.
 
+- **v3.14.0-beta.20** — **EyeSpy right-click menu fix.** The camera-feed context menu now clamps fully into the window, so its bottom items (**Set location…**, **Delete**) are reachable even when right-clicking a feed low in a long list (previously they fell below the window edge). Follow-up to beta.19.
 - **v3.14.0-beta.19** — **GhostExodus field-test batch.** **GeoINT:** the right command stack no longer overflows the window edge (clipping the Live-News Add-stream controls), and map "blips" no longer stack overlapping ✕ close buttons — one popup open at a time. **EyeSpy:** the **➕ Add new feed** tile is a real, reliably-clickable button and every empty tile now opens the Add form. **Mail:** message text is selectable/copyable and an app-wide right-click **Cut / Copy / Paste / Select All** menu was added (local clipboard only — no egress, no telemetry).
 - **v3.14.0-beta.18** — **"You've got mail" chime fixed.** The default chime was a 192 kHz WAV the renderer couldn't decode (silent since beta.12) — re-encoded to standard 44.1 kHz PCM, and installs holding the old file are auto-repaired on launch. Command-rail scrollbar clipping re-fixed via right padding (more reliable than `scrollbar-gutter`).
 - **v3.14.0-beta.17** — Boot-splash caption overlap fixed; GeoINT command-rail scrollbar overlap fixed; added the missing **Settings → Mail → "Check for new mail in the background"** toggle so the new-mail chime fires with the Mail window closed.

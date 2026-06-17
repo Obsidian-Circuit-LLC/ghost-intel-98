@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import type { CameraStream } from '@shared/post-mvp-types';
 import { countryFlag, type TreeNode, type CityEntry } from './tree';
 
@@ -71,10 +71,25 @@ function TreeRow({ node, depth, selectedKey, onSelect }: { node: TreeNode; depth
 }
 
 function FeedMenu({ x, y, onPick, onClose }: { x: number; y: number; onPick: (a: FeedAction) => void; onClose: () => void }): JSX.Element {
+  const ref = useRef<HTMLDivElement>(null);
+  // Clamp the menu fully into the viewport. Right-clicking a feed low in the (long) list put the
+  // menu's bottom items (Set location, Delete) below the window edge — unreachable. After mount we
+  // measure the menu and shift it up/left so the whole thing stays on-screen (the standard
+  // context-menu flip). Start at the cursor; correct on the first layout pass.
+  const [pos, setPos] = useState<{ left: number; top: number }>({ left: x, top: y });
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const { width, height } = el.getBoundingClientRect();
+    const pad = 4;
+    const left = Math.max(pad, Math.min(x, window.innerWidth - width - pad));
+    const top = Math.max(pad, Math.min(y, window.innerHeight - height - pad));
+    setPos({ left, top });
+  }, [x, y]);
   return (
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 99 }} />
-      <div className="ga98-menu" style={{ position: 'fixed', left: x, top: y, zIndex: 100, background: '#c0c0c0', border: '2px outset #fff' }}>
+      <div ref={ref} className="ga98-menu" style={{ position: 'fixed', left: pos.left, top: pos.top, zIndex: 100, background: '#c0c0c0', border: '2px outset #fff' }}>
         {([['add', 'Add to active square'], ['play', 'Play full-screen'], ['edit', 'Edit…'], ['setloc', 'Set location…'], ['delete', 'Delete']] as [FeedAction, string][]).map(([a, label]) => (
           <div key={a} onClick={() => onPick(a)} style={{ padding: '3px 12px', cursor: 'pointer' }}>{label}</div>
         ))}
