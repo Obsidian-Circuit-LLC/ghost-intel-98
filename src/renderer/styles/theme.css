@@ -22,6 +22,14 @@ html, body, #root {
   background: var(--ga98-desktop-bg);
 }
 
+/* The global user-select:none above gives the Win98 chrome its non-selectable feel, but real
+   CONTENT must stay copyable: editable controls, and anything explicitly marked .ga98-selectable
+   (e.g. the Mail read pane). Without this you cannot highlight a message body to copy it. */
+input, textarea, [contenteditable="true"], .ga98-selectable {
+  user-select: text;
+}
+.ga98-selectable { cursor: text; }
+
 .ga98-screen {
   position: fixed;
   inset: 0;
@@ -769,6 +777,11 @@ input.ga98-text, select.ga98-text {
    ("items on the left partially obscured"). Left stays a readable 380px. */
 .ga98-geo-3col { grid-template-columns: 380px minmax(0, 1fr) minmax(0, 300px); }
 .ga98-geo-rail { background: #0a0f1a; color: #cdd6e4; }
+/* The rail is the grid's 3rd track (minmax(0,300px)). On a narrow window the track shrinks below
+   300px; its inputs/selects must shrink with it (min-width:0) and its control rows must wrap, or the
+   Live-News "Add stream" controls overflow the right edge and get clipped off the window. */
+.ga98-geo-rail input, .ga98-geo-rail select, .ga98-geo-rail .ga98-text { min-width: 0; max-width: 100%; }
+.ga98-geo-rail .field-row { flex-wrap: wrap; }
 .ga98-geo-left { display: flex; flex-direction: column; gap: 6px; overflow-x: hidden; overflow-y: auto; }
 .ga98-geo-left input, .ga98-geo-left select { min-width: 0; }
 /* Let multi-button control rows (View: 2D / Satellite / Street View / Labels) wrap to a second line

@@ -9,7 +9,7 @@
  *  - permission request handler denies camera/mic/geo/notifications by default
  */
 
-import { app, BrowserWindow, protocol, session, shell } from 'electron';
+import { app, BrowserWindow, Menu, protocol, session, shell } from 'electron';
 import { join } from 'node:path';
 import { appendFile, mkdir } from 'node:fs/promises';
 import { channels } from '@shared/ipc-contracts';
@@ -109,6 +109,26 @@ function createWindow(): void {
   });
 
   mainWindow.once('ready-to-show', () => mainWindow?.show());
+
+  // Right-click edit menu (Cut / Copy / Paste / Select All). The app hides the application menu and
+  // sets a global user-select:none for the Win98 feel, so without this there is no discoverable way
+  // to copy a selection or paste into a field (the Mail client motivated this). Built from Electron
+  // roles, which act on the focused editable element / current selection — purely local OS-clipboard
+  // operations, no network egress, no telemetry. Items are contextual: Copy needs a selection;
+  // Cut/Paste need an editable field.
+  mainWindow.webContents.on('context-menu', (_e, params) => {
+    const hasSelection = params.selectionText.trim().length > 0;
+    const template: Electron.MenuItemConstructorOptions[] = [];
+    if (params.isEditable && params.editFlags.canCut) template.push({ role: 'cut' });
+    if (hasSelection && params.editFlags.canCopy) template.push({ role: 'copy' });
+    if (params.isEditable && params.editFlags.canPaste) template.push({ role: 'paste' });
+    if ((params.isEditable && params.editFlags.canSelectAll) || hasSelection) {
+      if (template.length) template.push({ type: 'separator' });
+      template.push({ role: 'selectAll' });
+    }
+    if (template.length === 0) return;
+    Menu.buildFromTemplate(template).popup({ window: mainWindow ?? undefined });
+  });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     // Only let real web URLs escape to the OS browser; everything else gets denied.

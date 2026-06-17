@@ -293,7 +293,7 @@ export function MailModule(): JSX.Element {
                 <button onClick={() => void printSelected()}>Print</button>
                 <button onClick={() => void deleteSelected()}>Delete</button>
               </div>
-              <div style={{ borderBottom: '1px solid #999', paddingBottom: 4, marginBottom: 4 }}>
+              <div className="ga98-selectable" style={{ borderBottom: '1px solid #999', paddingBottom: 4, marginBottom: 4 }}>
                 <div><b>From:</b> {selected.from}</div>
                 <div><b>Subject:</b> {selected.subject}</div>
                 <div style={{ fontSize: 11, opacity: 0.7 }}>{new Date(selected.date).toLocaleString()}</div>
@@ -313,7 +313,7 @@ export function MailModule(): JSX.Element {
                   </div>
                 )}
               </div>
-              <pre style={{ flex: 1, overflow: 'auto', whiteSpace: 'pre-wrap', fontFamily: 'Courier New, monospace', fontSize: 12 }}>
+              <pre className="ga98-selectable" style={{ flex: 1, overflow: 'auto', whiteSpace: 'pre-wrap', fontFamily: 'Courier New, monospace', fontSize: 12 }}>
                 {selected.body}
               </pre>
             </>

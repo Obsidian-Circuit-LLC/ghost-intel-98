@@ -38,10 +38,13 @@ export function Wall({ slots, byId, activeSlot, columns = 3, onActivate, onClear
         const border = active ? '2px solid #2a7' : '1px solid #333';
         if (!stream) {
           const firstEmpty = slots.findIndex((s) => s == null || !byId.has(s)) === i;
+          // EVERY empty tile opens the Add form targeting its slot — not just the first — so no empty
+          // square is a dead click. (Previously only the first-empty tile added; the rest silently
+          // did nothing, reading as "non-responsive".)
           return (
-            <div key={i} onClick={() => { onActivate(i); if (firstEmpty) onAddNew(i); }}
+            <div key={i} onClick={() => { onActivate(i); onAddNew(i); }}
               style={{ border, background: '#111', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#777', cursor: 'pointer' }}>
-              {firstEmpty ? <><div style={{ fontSize: 28 }}>＋</div><div style={{ fontSize: 11 }}>Add new feed</div></> : <span style={{ fontSize: 10 }}>empty</span>}
+              {firstEmpty ? <><div style={{ fontSize: 28 }}>＋</div><div style={{ fontSize: 11 }}>Add new feed</div></> : <><div style={{ fontSize: 20 }}>＋</div><div style={{ fontSize: 10 }}>empty</div></>}
             </div>
           );
         }
@@ -57,11 +60,12 @@ export function Wall({ slots, byId, activeSlot, columns = 3, onActivate, onClear
         );
       })}
       {/* Trailing add tile — always present so a new camera can be added even when no slot is empty
-          (assignToSlot appends, growing the wall). */}
-      <div key="__add__" title="Add a new camera feed" onClick={() => onAddNew()}
-        style={{ border: '1px dashed #444', background: '#111', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#777', cursor: 'pointer' }}>
+          (assignToSlot appends, growing the wall). A real <button> (not a bare <div>) so it is a
+          reliable, focusable click + keyboard target — the div form was reported non-responsive. */}
+      <button key="__add__" type="button" title="Add a new camera feed" onClick={() => onAddNew()}
+        style={{ border: '1px dashed #444', background: '#111', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#777', cursor: 'pointer', width: '100%', height: '100%', padding: 0, font: 'inherit' }}>
         <div style={{ fontSize: 28 }}>➕</div><div style={{ fontSize: 11 }}>Add new feed</div>
-      </div>
+      </button>
     </div>
   );
 }
