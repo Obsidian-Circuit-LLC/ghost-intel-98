@@ -141,6 +141,67 @@ describe('parseFeedList — geo-aware header-mapped CSV', () => {
   });
 });
 
+describe('parseFeedList — nested geo tree (insecam-style Country → Region → City → [urls])', () => {
+  it('walks 3-level nesting, stamping country/region/city + a readable label per leaf', () => {
+    const json = JSON.stringify({
+      Australia: { 'New South Wales': { Sydney: ['http://220.233.144.165:8888/mjpg/video.mjpg'] } }
+    });
+    expect(parseFeedList(json)).toEqual([
+      {
+        url: 'http://220.233.144.165:8888/mjpg/video.mjpg',
+        kind: 'mjpeg',
+        label: 'Sydney · 220.233.144.165:8888',
+        country: 'Australia',
+        region: 'New South Wales',
+        city: 'Sydney'
+      }
+    ]);
+  });
+
+  it('handles multiple cameras in one city and multiple cities/countries', () => {
+    const json = JSON.stringify({
+      Austria: { Niederosterreich: { Erlauf: ['http://85.255.155.178/a', 'http://85.255.155.179/b'] } },
+      Armenia: { Erevan: { Yerevan: ['http://185.79.2.66:8081/c'] } }
+    });
+    const feeds = parseFeedList(json);
+    expect(feeds).toHaveLength(3);
+    expect(feeds.filter((f) => f.country === 'Austria')).toHaveLength(2);
+    expect(feeds.every((f) => !!f.city && !!f.country)).toBe(true);
+    expect(feeds[0]).toMatchObject({ country: 'Austria', region: 'Niederosterreich', city: 'Erlauf' });
+  });
+
+  it('maps 2-level nesting to country + city (no region) and 1-level to country only', () => {
+    const two = parseFeedList(JSON.stringify({ Japan: { Tokyo: ['http://cam.jp/1'] } }))[0];
+    expect(two).toMatchObject({ country: 'Japan', city: 'Tokyo' });
+    expect(two.region).toBeUndefined();
+    const one = parseFeedList(JSON.stringify({ Narnia: ['http://cam.nn/1'] }))[0];
+    expect(one).toMatchObject({ country: 'Narnia' });
+    expect(one.city).toBeUndefined();
+    expect(one.region).toBeUndefined();
+  });
+
+  it('joins extra middle levels into region for deeper trees', () => {
+    const json = JSON.stringify({ US: { California: { 'LA County': { 'Los Angeles': ['http://cam.us/1'] } } } });
+    expect(parseFeedList(json)[0]).toMatchObject({ country: 'US', region: 'California / LA County', city: 'Los Angeles' });
+  });
+
+  it('keeps an explicit per-leaf object name/geo, overriding the path geo', () => {
+    const json = JSON.stringify({
+      UK: { England: { London: [{ url: 'http://cam.uk/1', name: 'Horse Guards Ave', city: 'Westminster' }] } }
+    });
+    const f = parseFeedList(json)[0];
+    expect(f.label).toBe('Horse Guards Ave');
+    expect(f.country).toBe('UK');
+    expect(f.city).toBe('Westminster'); // the leaf object's explicit city overrides the path "London"
+  });
+
+  it('still parses a single flat object (regression)', () => {
+    expect(parseFeedList(JSON.stringify({ url: 'http://cam/x.mp4', label: 'X' }))).toEqual([
+      { url: 'http://cam/x.mp4', kind: 'mp4', label: 'X' }
+    ]);
+  });
+});
+
 describe('feedToUpsert — carries geo through to the store payload', () => {
   it('passes present geo fields onto the upsert payload', () => {
     const [f] = parseFeedList(JSON.stringify([{ url: 'https://cam/a.m3u8', city: 'Paris', lat: 48.85, lon: 2.35 }]));

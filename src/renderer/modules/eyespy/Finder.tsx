@@ -47,7 +47,7 @@ export function Finder({ tab, onTab, query, onQuery, tree, cities, feeds, select
           buttons stack on a very narrow pane rather than clip. */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: 4, borderTop: '1px solid #ccc', flexShrink: 0 }}>
         <button onClick={onRefresh}>Refresh</button>
-        <button onClick={onImport} style={{ flex: 1, minWidth: 120 }} title="Import a CSV/JSON/URL-list of your own feeds">{importLabel}</button>
+        <button onClick={onImport} style={{ flex: 1, minWidth: 120 }} title={'Import your own feeds — JSON array of {url,label,country,region,city,lat,lon}, a nested Country→Region→City JSON tree, or a CSV with a header row. Include country/region/city to auto-file them under the tree. See docs/EYESPY_IMPORT_FORMAT.md.'}>{importLabel}</button>
       </div>
       {menu && <FeedMenu x={menu.x} y={menu.y} onPick={(a) => { onFeedAction(a, menu.s); setMenu(null); }} onClose={() => setMenu(null)} />}
     </div>

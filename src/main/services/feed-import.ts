@@ -186,9 +186,18 @@ function parseCsvOrText(text: string): ParsedFeed[] {
   return out;
 }
 
-function parseJson(text: string): ParsedFeed[] {
-  const data = JSON.parse(text) as unknown;
-  const arr = Array.isArray(data) ? data : [data];
+/** A trimmed string that parses as a URL (scheme://…). */
+function isUrlString(v: unknown): v is string {
+  return typeof v === 'string' && URLISH.test(v.trim());
+}
+
+/** host[:port] for a readable yet unique nested-leaf label; falls back to the raw url. */
+function hostOf(url: string): string {
+  try { return new URL(url).host || url; } catch { return url; }
+}
+
+/** Parse a flat JSON array of URL strings and/or {url,label,…geo} objects (the original shape). */
+function parseJsonArray(arr: unknown[]): ParsedFeed[] {
   const out: ParsedFeed[] = [];
   for (const item of arr) {
     if (typeof item === 'string') {
@@ -203,6 +212,64 @@ function parseJson(text: string): ParsedFeed[] {
     }
   }
   return out;
+}
+
+/** Stamp a feed with the geo implied by its key path in a nested tree. First key = country, last =
+ *  city, any middle keys join into the region. When `enrichLabel`, replace the host-derived label
+ *  with "{City} · {host}" so a name-less leaf is identifiable in the flat "All cameras" view too. */
+function stampPath(feed: ParsedFeed, path: string[], enrichLabel: boolean): ParsedFeed {
+  if (path.length === 0) return feed;
+  const country = path[0];
+  const city = path.length >= 2 ? path[path.length - 1] : undefined;
+  const region = path.length >= 3 ? path.slice(1, -1).join(' / ') : undefined;
+  const out: ParsedFeed = { ...feed };
+  if (country) out.country = country;
+  if (region) out.region = region;
+  if (city) out.city = city;
+  if (enrichLabel) out.label = `${city ?? region ?? country} · ${hostOf(feed.url)}`;
+  return out;
+}
+
+/** Walk a nested geo tree `{ Country: { Region: { City: [url | {url,…}, …] } } }` (variable depth)
+ *  into flat feeds, each stamped with the geo from its key path. This is the insecam-style dump
+ *  shape, where location lives in the nesting rather than in per-row fields. Used when the JSON root
+ *  is an object that does NOT itself carry a top-level URL key. */
+function parseNestedTree(root: Record<string, unknown>): ParsedFeed[] {
+  const out: ParsedFeed[] = [];
+  const walk = (node: unknown, path: string[]): void => {
+    if (isUrlString(node)) { out.push(stampPath(toFeed(node), path, true)); return; }
+    if (Array.isArray(node)) {
+      for (const item of node) {
+        if (isUrlString(item)) { out.push(stampPath(toFeed(item), path, true)); continue; }
+        if (item && typeof item === 'object') {
+          const o = item as Record<string, unknown>;
+          const url = [o['url'], o['URL'], o['src'], o['stream']].find(isUrlString);
+          if (!url) continue;
+          const label = asStr(o['label']) ?? asStr(o['name']) ?? asStr(o['title']);
+          const base = stampPath(toFeed(url, label, asStr(o['kind'])), path, label === undefined);
+          out.push({ ...base, ...extractGeo(o) }); // an explicit per-row geo overrides the path geo
+        }
+      }
+      return;
+    }
+    if (node && typeof node === 'object') {
+      for (const [k, v] of Object.entries(node as Record<string, unknown>)) walk(v, [...path, k]);
+    }
+  };
+  walk(root, []);
+  return out;
+}
+
+function parseJson(text: string): ParsedFeed[] {
+  const data = JSON.parse(text) as unknown;
+  if (Array.isArray(data)) return parseJsonArray(data);
+  if (data && typeof data === 'object') {
+    const o = data as Record<string, unknown>;
+    // A single flat feed object (carries its own URL) vs. a nested geo tree (no top-level URL key).
+    const topUrl = [o['url'], o['URL'], o['src'], o['stream']].find(isUrlString);
+    return topUrl ? parseJsonArray([data]) : parseNestedTree(o);
+  }
+  return [];
 }
 
 /** Parse a feed list (auto-detecting JSON vs CSV/plain-text), deduped by URL. */
