@@ -244,6 +244,23 @@ describe('GeoINT MapGL marker port (R3)', () => {
     expect(el.querySelector('a')?.getAttribute('href')).toBe('https://example.org/q');
   });
 
+  it('hands every created popup to onPopup (single-open tracking wiring)', () => {
+    const m = freshMap();
+    const store = new Map<string, maplibregl.Marker>();
+    const seen: unknown[] = [];
+    rebuildItemMarkers(
+      m as unknown as maplibregl.Map,
+      store as unknown as Map<string, maplibregl.Marker>,
+      [item({ id: 'a', lat: 1, lon: 2 }), item({ id: 'b', lat: 3, lon: 4 })],
+      undefined,
+      (p) => seen.push(p)
+    );
+    // One callback per placed marker's popup, and each is the actual popup attached to its marker.
+    expect(seen).toHaveLength(2);
+    expect(seen[0]).toBe(markers[0].popup);
+    expect(seen[1]).toBe(markers[1].popup);
+  });
+
   it('rejects null / NaN / out-of-range coords — no poisoned marker reaches the map', () => {
     // validCoord is the gate; assert it directly...
     expect(validCoord(null, 5)).toBe(false);

@@ -96,7 +96,10 @@ export function CommandRail(props: CommandRailProps): JSX.Element {
     <div
       className="ga98-pane ga98-geo-rail"
       style={{
-        flex: '0 0 300px', minWidth: 300, maxWidth: 300, height: '100%',
+        // Fill the grid's 3rd track (minmax(0,300px)) and SHRINK with it on a narrow window — a hard
+        // minWidth:300 here forced the item wider than its track and overflowed the right edge,
+        // clipping the Live-News "Add stream" controls (the reported "stack runs off to the right").
+        width: '100%', minWidth: 0, maxWidth: 300, height: '100%',
         overflowY: 'auto', overflowX: 'hidden',
         // The 16px Win98 (::-webkit-scrollbar) classic scrollbar is drawn OVER the right padding, so
         // with a small right padding it bleeds into the content and hides the rail's right-edge

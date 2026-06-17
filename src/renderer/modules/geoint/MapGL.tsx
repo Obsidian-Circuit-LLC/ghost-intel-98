@@ -17,7 +17,7 @@
  * against a mocked `maplibre-gl` (WebGL can't render headlessly).
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type { GeoItem } from '@shared/post-mvp-types';
@@ -187,7 +187,8 @@ export function rebuildItemMarkers(
   map: maplibregl.Map,
   store: Map<string, maplibregl.Marker>,
   items: GeoItem[],
-  corroboration?: Map<string, number>
+  corroboration?: Map<string, number>,
+  onPopup?: (p: maplibregl.Popup) => void
 ): { shown: number; total: number } | null {
   for (const mk of store.values()) mk.remove();
   store.clear();
@@ -202,6 +203,7 @@ export function rebuildItemMarkers(
     try {
       const popup = new maplibregl.Popup({ closeButton: true, closeOnClick: true })
         .setDOMContent(buildPopup(it.title, it.link));
+      onPopup?.(popup); // single-open tracking: opening this closes any other open popup
       // CRITICAL: MapLibre uses [lng, lat] (GeoJSON order), the OPPOSITE of Leaflet's [lat, lng].
       const mk = new maplibregl.Marker({ element: buildIconElement(it, corroboration?.get(it.id) ?? 0) })
         .setLngLat([it.lon as number, it.lat as number])
@@ -251,6 +253,18 @@ export function MapGL(props: MapGLProps = {}): JSX.Element {
   // Single search pin, kept OUTSIDE the item set so item rebuilds don't clear it; replaced on
   // each new search.
   const searchMarker = useRef<maplibregl.Marker | null>(null);
+  // Only ONE popup open at a time. MapLibre's closeOnClick closes popups on a MAP click but NOT
+  // when another marker is clicked, so clicking through co-located "blips" left a stack of popups
+  // with their ✕ close buttons overlapping. Track the currently-open popup; opening any popup
+  // (a marker's or the search pin's) closes the previously-open one.
+  const openPopup = useRef<maplibregl.Popup | null>(null);
+  const trackPopup = useCallback((p: maplibregl.Popup) => {
+    p.on('open', () => {
+      if (openPopup.current && openPopup.current !== p) openPopup.current.remove();
+      openPopup.current = p;
+    });
+    p.on('close', () => { if (openPopup.current === p) openPopup.current = null; });
+  }, []);
   // pickMode/onCenterChange read through refs so the (once) init effect sees the latest values
   // without re-creating the map — mirrors MapPane's pickRef/centerCb pattern.
   const pickRef = useRef(pickMode);
@@ -324,7 +338,7 @@ export function MapGL(props: MapGLProps = {}): JSX.Element {
   useEffect(() => {
     const m = map.current;
     if (!m) return;
-    setTruncated(rebuildItemMarkers(m, markers.current, items, corroboration));
+    setTruncated(rebuildItemMarkers(m, markers.current, items, corroboration, trackPopup));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, corroboration]);
 
@@ -339,6 +353,7 @@ export function MapGL(props: MapGLProps = {}): JSX.Element {
     if (searchMarker.current) { searchMarker.current.remove(); searchMarker.current = null; }
     const popup = new maplibregl.Popup({ closeButton: true, closeOnClick: true })
       .setText(`${flyTo.lat.toFixed(5)}, ${flyTo.lon.toFixed(5)}`);
+    trackPopup(popup); // single-open tracking: the search popup closes any open marker popup
     const sm = new maplibregl.Marker({ element: buildSearchPinElement() })
       .setLngLat([flyTo.lon, flyTo.lat])
       .setPopup(popup)
