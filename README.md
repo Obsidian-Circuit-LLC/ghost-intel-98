@@ -32,7 +32,7 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`GhostIntel98-Setup-3.14.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake formally verified internally; external audit + FIPS pending. See Status.)*
+> **Install:** download [`GhostIntel98-Setup-3.14.1.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **symbolically verified** internally (ProVerif); the CryptoVerif computational proof, an external audit, and a FIPS module are still pending. See Status.)*
 
 ## Status
 
@@ -415,14 +415,14 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases) and run it.
 
-Direct link to the current release: [`GhostIntel98-Setup-3.14.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.14.0/GhostIntel98-Setup-3.14.0.exe)
-(Tor P2P chat + Piper TTS; the chat handshake is formally verified internally — external audit + FIPS
-pending — see Status). The last fully-stable build is [`GhostIntel98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.6.8/GhostIntel98-Setup-3.6.8.exe).
+Direct link to the current release: [`GhostIntel98-Setup-3.14.1.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.14.1/GhostIntel98-Setup-3.14.1.exe)
+(Tor P2P chat + Piper TTS; the chat handshake is **symbolically verified** internally (ProVerif) — the
+CryptoVerif computational proof, an external audit, and a FIPS module are still pending — see Status). The last fully-stable build is [`GhostIntel98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.6.8/GhostIntel98-Setup-3.6.8.exe).
 
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\GhostIntel98-Setup-3.14.0.exe -Algorithm SHA256
+Get-FileHash .\GhostIntel98-Setup-3.14.1.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
@@ -456,12 +456,13 @@ To uninstall: Settings → Apps → Ghost Intel 98 → Uninstall.
 | DialTerm | SSH / Telnet / FTP client (ssh2 + xterm.js) with a 90s dial-up handshake animation; key-based auth preferred; passwords encrypted at rest; plaintext-protocol warnings |
 | EyeSpy | Authorized camera streams — manual URL entry **and bulk import** (CSV/JSON/URL-list) of your own/public feeds (HLS / MJPEG / HTTP refresh; RTSP requires a local ffmpeg→HLS bridge). **No discovery / scanning / brute-force code paths exist** |
 | AI Assistant | Pluggable Ollama (local, default model `qwen3-abliterated:4b`) / OpenAI-compatible providers, with an in-app **"Set up local AI"** wizard; **saved-conversation memory**; case context opt-in per message; API keys encrypted. **Offline voice conversation** — push-to-talk + hands-free, **on-device Vosk** STT (model operator-supplied in `resources/vosk/`) and on-device **TTS** for replies; **STFU** stops generation. TTS has a bundled offline **Piper** neural-voice engine (selectable alongside OS voices; zero egress) |
-| **Chat** *(beta)* | Opt-in **Tor-only P2P chat** — invite-link **1:1** with a PQ-hybrid X25519 + ML-KEM-1024 handshake (no hosting, loopback-only sockets), **file attachments** (hash-verified, encrypted quarantine + explicit save), **small groups** (client-side fan-out), and **case-aware sharing** from the case module. The handshake (first-contact **and** reconnect) is **formally verified internally** — ProVerif symbolic + CryptoVerif computational; independent external audit + FIPS module remain the only unmet gates. Off by default. Bundled SHA-256-verified Tor (`resources/tor/` via `scripts/fetch-tor.mjs`) |
+| **Chat** *(beta)* | Opt-in **Tor-only P2P chat** — invite-link **1:1** with a PQ-hybrid X25519 + ML-KEM-1024 handshake (no hosting, loopback-only sockets), **file attachments** (hash-verified, encrypted quarantine + explicit save), **small groups** (client-side fan-out), and **case-aware sharing** from the case module. The handshake (first-contact **and** reconnect) is **symbolically verified internally** (ProVerif); the **CryptoVerif computational proof is in progress**, and an independent external audit + a FIPS module remain unmet gates. Off by default. Bundled SHA-256-verified Tor (`resources/tor/` via `scripts/fetch-tor.mjs`) |
 
 ## Releases & changelog
 
-The current build is **v3.14.0** (first stable since v3.6.x). Each release page carries its own notes + SHA-256.
+The current build is **v3.14.1** (first stable line since v3.6.x). Each release page carries its own notes + SHA-256.
 
+- **v3.14.1** — **Docs: honest chat-verification wording.** Corrects the Tor P2P chat handshake description to reflect the actual proof state — **symbolically verified (ProVerif)** with the **CryptoVerif computational proof in progress** — instead of implying the computational proof was complete. No code changes; identical app to v3.14.0.
 - **v3.14.0** — **First stable release of the 3.14 line.** Promotes `beta.21` to a production build with no code changes — the full GeoINT command-center redesign, EyeSpy finder + bulk-import (incl. nested geo-tree JSON), Mail copy/paste + background poller, the Tor P2P chat, and the GhostExodus field-test fixes (beta.1 → beta.21) are all folded in and field-tested. 1071 automated tests; typecheck clean. See the per-beta entries below for the detailed feature history.
 - **v3.14.0-beta.21** — **EyeSpy bulk-import: nested geo-tree JSON + documented format.** The feed importer now walks a nested `Country → Region → City → [urls]` JSON tree and files every leaf under the finder tree, so a large scraped dump imports fully categorized in one pass (verified on a 1,644-feed / 65-country list). New `docs/EYESPY_IMPORT_FORMAT.md` documents all accepted shapes (flat JSON array, nested tree, header CSV, URL list); the Import button tooltip links to it.
 - **v3.14.0-beta.20** — **EyeSpy right-click menu fix.** The camera-feed context menu now clamps fully into the window, so its bottom items (**Set location…**, **Delete**) are reachable even when right-clicking a feed low in a long list (previously they fell below the window edge). Follow-up to beta.19.
