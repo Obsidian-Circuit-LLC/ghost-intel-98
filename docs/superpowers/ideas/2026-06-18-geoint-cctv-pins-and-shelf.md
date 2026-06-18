@@ -39,10 +39,10 @@ This reuses existing bones rather than new infrastructure:
 - The toggle gates a **camera layer** distinct from the RSS/event markers; off by default so the map
   isn't flooded.
 
-**Relationship to EyeSpy (design fork to settle before building):** GeoINT shows *where* cameras are
-+ quick-look; EyeSpy stays the *wall/workspace* for sustained viewing. Open question for GhostExodus:
-does clicking a GeoINT camera pin (a) open a standalone quick-view popup, or (b) jump into EyeSpy with
-that stream loaded onto the active wall square? Settle this in the brainstorm before spec.
+**Relationship to EyeSpy (DECIDED 2026-06-18):** GeoINT shows *where* cameras are + quick-look;
+EyeSpy stays the *wall/workspace* for sustained viewing. Pin click → **(a) standalone quick-view
+popup** right on the map (reusing EyeSpy's `Viewer` for playback), NOT a jump into EyeSpy. Keeps the
+two modules decoupled and the map the focus.
 
 **Gating:** this is a "build X" feature → run `superpowers:brainstorming` → spec → plan when the
 scrape lands. Coordinates already flow through `extractGeo`/`pickGeo`; a clustering pass may be needed
