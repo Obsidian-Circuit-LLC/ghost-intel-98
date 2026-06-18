@@ -1,6 +1,6 @@
 import type { Capability } from '../../shared/plugin-types';
 
-export interface PluginFetchInit { method?: string; headers?: Record<string, string>; body?: string; direct?: boolean; }
+export interface PluginFetchInit { method?: string; headers?: Record<string, string>; body?: string; direct?: boolean; caseId?: string; }
 export interface PluginFetchResponse { status: number; body: string; finalUrl: string; blocked?: boolean; }
 
 export interface ContextDeps {

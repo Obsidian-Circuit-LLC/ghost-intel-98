@@ -4,7 +4,7 @@ import { connect as netConnect } from 'node:net';
 import { connect as tlsConnect } from 'node:tls';
 import { Agent as HttpAgent, request as httpRequest } from 'node:http';
 import { Agent as HttpsAgent, request as httpsRequest } from 'node:https';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, createHmac } from 'node:crypto';
 import { app } from 'electron';
 import { join } from 'node:path';
 import { buildGreeting, parseMethodSelection, buildUserPassAuth, parseUserPassReply, buildConnectDomain, parseConnectReply, socksReplyMessage } from '../chat/socks5';
@@ -31,6 +31,24 @@ export class SocksBlockedError extends Error { constructor(m: string) { super(m)
  */
 
 interface SocksTarget { host: string; port: number; user: string; pass: string }
+
+// Per-case SOCKS credential compartment. Tor's IsolateSOCKSAuth maps a distinct {user,pass} to a
+// distinct circuit, so deriving the credential from caseId gives every request in a case the SAME
+// circuit identity and DIFFERENT cases DIFFERENT circuits — cross-case exit correlation becomes
+// structurally impossible. Salt is process-scoped (rotates per restart; no long-lived circuit identity
+// survives a restart). Pure given the salt (deterministic — charter); salt param is for tests.
+const CASE_SOCKS_SALT = randomBytes(32);
+export function deriveCaseCredentials(caseId: string, salt: Buffer = CASE_SOCKS_SALT): { user: string; pass: string } {
+  const ikm = Buffer.concat([salt, Buffer.from(caseId, 'utf8')]);
+  return {
+    user: createHmac('sha256', ikm).update('socks-user').digest('hex').slice(0, 16),
+    pass: createHmac('sha256', ikm).update('socks-pass').digest('hex').slice(0, 32),
+  };
+}
+/** caseId present → case-stable creds; absent → undefined (caller falls back to per-request random). */
+export function credsForCase(caseId?: string, salt?: Buffer): { user: string; pass: string } | undefined {
+  return caseId ? deriveCaseCredentials(caseId, salt) : undefined;
+}
 
 /** Maximum bytes we will buffer during the SOCKS5 handshake. A valid greeting reply (2 B) +
  *  auth reply (2 B) + CONNECT reply (max ~262 B with a domain BND.ADDR) is well under 512 B.
@@ -109,15 +127,17 @@ export function getPluginTor(): BgconnTor | null { return pluginTor; }
 export function getPluginTorSocksPort(): number | null { return pluginTor ? pluginTor.socksPort() : null; }
 
 /** A custom Agent whose createConnection tunnels through the plugin Tor SOCKS proxy with a
- *  per-request credential (→ a distinct Tor circuit), then (for https) TLS-wraps the tunnel. */
-function makeSocksAgent(socksPort: number, secure: boolean): HttpAgent | HttpsAgent {
+ *  per-request credential (→ a distinct Tor circuit), then (for https) TLS-wraps the tunnel.
+ *  If creds is supplied (per-case compartment), those credentials are used; otherwise a fresh
+ *  random credential is generated per-request (original behavior, backward compatible). */
+function makeSocksAgent(socksPort: number, secure: boolean, creds?: { user: string; pass: string }): HttpAgent | HttpsAgent {
   const Base = secure ? HttpsAgent : HttpAgent;
   const agent = new Base({ keepAlive: false, maxSockets: 8 });
   // @ts-expect-error createConnection is the documented Agent override hook
   agent.createConnection = (opts: { host: string; port: number; servername?: string }, cb: (err: Error | null, sock?: unknown) => void): void => {
     const raw = netConnect({ host: '127.0.0.1', port: socksPort });
     raw.once('error', (e) => cb(e));
-    socksConnect(raw, { host: opts.host, port: Number(opts.port), user: randomBytes(8).toString('hex'), pass: randomBytes(16).toString('hex') })
+    socksConnect(raw, { host: opts.host, port: Number(opts.port), user: creds?.user ?? randomBytes(8).toString('hex'), pass: creds?.pass ?? randomBytes(16).toString('hex') })
       .then(() => {
         if (!secure) { cb(null, raw); return; }
         const tls = tlsConnect({ socket: raw, servername: opts.servername ?? opts.host });
@@ -136,9 +156,12 @@ function makeSocksAgent(socksPort: number, secure: boolean): HttpAgent | HttpsAg
 export function torFetch(url: string, init: PluginFetchInit = {}): Promise<PluginFetchResponse & { location?: string }> {
   const socksPort = getPluginTorSocksPort();
   if (socksPort === null) return Promise.reject(new Error('plugin Tor egress not started'));
+  let creds: { user: string; pass: string } | undefined;
+  try { creds = credsForCase(init.caseId); }
+  catch { return Promise.resolve({ status: 0, body: '', finalUrl: url, blocked: true }); } // fail-closed: never a non-case credential
   const u = new URL(url);
   const secure = u.protocol === 'https:';
-  const agent = makeSocksAgent(socksPort, secure);
+  const agent = makeSocksAgent(socksPort, secure, creds);
   const reqFn = secure ? httpsRequest : httpRequest;
   return new Promise((resolve) => {
     const blocked = (): void => resolve({ status: 0, body: '', finalUrl: url, blocked: true });
