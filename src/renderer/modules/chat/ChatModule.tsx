@@ -440,7 +440,7 @@ export function ChatModule(): JSX.Element {
                 <ul style={{ margin: '4px 0 0 16px', padding: 0, fontSize: 12, lineHeight: 1.6 }}>
                   <li>Both people must have chat <b>enabled and open</b> to connect — there is no offline server holding messages.</li>
                   <li>History is encrypted at rest and sealed when you lock the vault.</li>
-                  <li>The handshake is PQ-hybrid (X25519 + ML-KEM-1024) with Ed25519 identities, <b>formally verified by internal symbolic + computational analysis</b>. An independent external audit is still pending.</li>
+                  <li>The handshake is PQ-hybrid (X25519 + ML-KEM-1024) with Ed25519 identities, <b>formally verified internally</b> — symbolic (ProVerif) + computational (CryptoVerif) — and internally adversarially reviewed. It is <b>not</b> independently audited and <b>not</b> FIPS-validated; those two external gates are still pending.</li>
                 </ul>
               </fieldset>
               <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', marginTop: 6 }}>
