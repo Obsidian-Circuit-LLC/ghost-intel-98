@@ -58,8 +58,8 @@ right-click menu clamps fully into the window and the ➕ Add-new-feed tile is r
 Get-FileHash .\GhostIntel98-Setup-3.14.0.exe -Algorithm SHA256
 ```
 
-SHA-256: `TBD`
-Size: TBD bytes (TBD)
+SHA-256: `8e9e4ee901cf015b31337be88f7da5e8e82ca6a787e60ff0438a28d1cb6bfccb`
+Size: 532748468 bytes (508.1 MB)
 
 Unsigned — Windows SmartScreen will warn: **More info → Run anyway**. Installs per-user (no admin) and
 upgrades any `Ghost Intel 98` beta in place.
