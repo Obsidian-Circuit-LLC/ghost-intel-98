@@ -22,8 +22,8 @@ about the shipped binary or its behavior changed from v3.14.0.
 Get-FileHash .\GhostIntel98-Setup-3.14.1.exe -Algorithm SHA256
 ```
 
-SHA-256: `TBD`
-Size: TBD bytes (TBD)
+SHA-256: `278384b21549a330187a535d5d715f7b43078ca7fea6e2445a336347ec1bef7e`
+Size: 532748555 bytes (508.1 MB)
 
 Unsigned — Windows SmartScreen will warn: **More info → Run anyway**. Installs per-user (no admin) and
 upgrades any prior `Ghost Intel 98` build in place.
