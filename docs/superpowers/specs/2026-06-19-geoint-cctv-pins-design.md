@@ -116,8 +116,9 @@ re-fetched only on Refresh.
 
 ## Pin & cluster styling (Win98 hard constraint)
 
-- New `camera` category color, distinct from existing categories (proposed teal `#16a085`; not
-  conflict-red / cyber-purple).
+- New camera marker color, distinct from existing categories — **azure `#00a8e8`** (a local
+  `CAMERA_COLOR` constant in `cctvLayer.ts`, NOT added to `CATEGORY_COLOR`, whose `disaster` is
+  already `#16a085`; cameras render a glyph chip, not a category dot).
 - **Singleton:** inline-SVG camera glyph on a `camera`-colored marker — reads unambiguously as "camera."
 - **Cluster:** Win98 raised-border (`outset`) gray box with the count; gentle size-by-magnitude. No
   flat-modern styling — matches desktop chrome.
