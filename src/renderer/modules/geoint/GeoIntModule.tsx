@@ -6,11 +6,12 @@
  */
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { GeoSnapshot, GeoSourceType, GeoXmlMap, GeoItem, KevEntry } from '@shared/post-mvp-types';
-import { useSettings } from '../../state/store';
+import type { GeoSnapshot, GeoSourceType, GeoXmlMap, GeoItem, KevEntry, CameraStream } from '@shared/post-mvp-types';
+import { useSettings, useWindows } from '../../state/store';
 import { toast } from '../../state/toasts';
-import { confirmDialog } from '../../state/dialogs';
-import { MapGL } from './MapGL';
+import { confirmDialog, alertDialog } from '../../state/dialogs';
+import { MapGL, validCoord } from './MapGL';
+import { cameraWindowAction, cameraWindowId, MAX_CAMERA_WINDOWS } from '../cameraview/cameraWindow';
 import { MapErrorBoundary } from './MapErrorBoundary';
 import { SaveEventDialog } from './SaveEventDialog';
 import { corroborate } from './corroborate';
@@ -132,6 +133,10 @@ function GeoIntModuleInner(): JSX.Element {
   const [labels, setLabels] = useState(false);
   const overlayUrls = labels && net ? [LABELS_TRANSPORT_URL, LABELS_PLACES_URL] : [];
 
+  // CCTV camera layer (off by default; pins are local data so this is NOT behind the network gate).
+  const [showCctv, setShowCctv] = useState(false);
+  const [cctvStreams, setCctvStreams] = useState<CameraStream[]>([]);
+
   // Command-center rail (R9): category visibility filter. Only consulted in globe mode (useMapGL);
   // it hides/shows a category's markers on the map. `null` = "all categories on" (the default — no
   // category is disabled). Toggling a box off materializes the set as the full category list minus
@@ -190,6 +195,38 @@ function GeoIntModuleInner(): JSX.Element {
     setHasKey(next);
   }, []);
   useEffect(() => { void refreshKeyState(); }, [refreshKeyState]);
+
+  const refreshCameras = useCallback(async () => {
+    try {
+      const all = await window.api.streams.list();
+      setCctvStreams(all.filter((s) => validCoord(s.lat, s.lon)));
+    } catch {
+      setCctvStreams([]);
+      setShowCctv(false);
+      void alertDialog('Could not load the camera list.', 'CCTV cameras');
+    }
+  }, []);
+
+  useEffect(() => { void refreshCameras(); }, [refreshCameras]);
+
+  const onCameraOpen = useCallback((streamId: string) => {
+    const stream = cctvStreams.find((s) => s.id === streamId);
+    if (!stream) return;
+    const openIds = useWindows.getState().windows.filter((w) => w.module === 'camera-view').map((w) => w.id);
+    if (cameraWindowAction(openIds, streamId) === 'deny') {
+      void alertDialog(`Close a camera window first (max ${MAX_CAMERA_WINDOWS} open).`, 'CCTV cameras');
+      return;
+    }
+    // open() dedups by id: an already-open camera window is re-focused; otherwise a new one opens.
+    useWindows.getState().open({
+      module: 'camera-view',
+      id: cameraWindowId(streamId),
+      title: stream.label,
+      props: { stream },
+      width: 480,
+      height: 360
+    });
+  }, [cctvStreams]);
 
   async function saveLayerKey(id: KeyedLayerId): Promise<void> {
     const key = keyDraft[id].trim();
@@ -551,6 +588,15 @@ function GeoIntModuleInner(): JSX.Element {
           </ul>
         </fieldset>
 
+        <fieldset style={{ marginTop: 6 }}>
+          <legend>CCTV</legend>
+          <label style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <input type="checkbox" checked={showCctv} onChange={(e) => setShowCctv(e.target.checked)} />
+            CCTV cameras ({cctvStreams.length})
+          </label>
+          <button style={{ marginLeft: 8 }} onClick={() => void refreshCameras()} title="Reload the camera list from EyeSpy">Refresh</button>
+        </fieldset>
+
         <fieldset>
           <legend>Threat Layers</legend>
           <p style={{ fontSize: 11, color: '#555', margin: '0 0 4px' }}>On-demand public feeds. Toggling a layer on fetches it now (network required); off drops it. Not cached.</p>
@@ -809,7 +855,8 @@ function GeoIntModuleInner(): JSX.Element {
         <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
           <MapGL items={mapItems} corroboration={corroboration} tilesEnabled={net} tileUrl={activeTileUrl} tileAttribution={activeTileAttribution}
             pickMode={pickFor != null} onPick={(la, lo) => void onPick(la, lo)} focusId={focusId} flyTo={flyTo}
-            onCenterChange={(lat, lon) => setCenter({ lat, lon })} overlayUrls={overlayUrls} overlayAttribution={LABELS_ATTRIBUTION} />
+            onCenterChange={(lat, lon) => setCenter({ lat, lon })} overlayUrls={overlayUrls} overlayAttribution={LABELS_ATTRIBUTION}
+            cctvStreams={cctvStreams} showCctv={showCctv} onCameraOpen={onCameraOpen} />
         {streetView && net && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', background: '#000' }}>
             <div className="ga98-toolbar" style={{ flex: '0 0 auto' }}>

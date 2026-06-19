@@ -20,8 +20,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import type { GeoItem } from '@shared/post-mvp-types';
+import type { GeoItem, CameraStream } from '@shared/post-mvp-types';
 import { buildPopup } from './popup';
+import { syncCctvLayer } from './cctvLayer';
 
 // Marker fill by feed-item category. Falls back to a neutral grey for unknown/undefined.
 // Ported verbatim from MapPane's CATEGORY_COLOR so the two maps colour identically.
@@ -237,13 +238,20 @@ export interface MapGLProps {
   /** Transparent overlay tile URLs (street/place labels) drawn ON TOP of the basemap. */
   overlayUrls?: string[];
   overlayAttribution?: string;
+  /** All geolocated CCTV streams to cluster onto the map (already validCoord-filtered upstream). */
+  cctvStreams?: CameraStream[];
+  /** When true, render the clustered camera layer. */
+  showCctv?: boolean;
+  /** Click handler for a single camera pin. */
+  onCameraOpen?: (streamId: string) => void;
 }
 
 export function MapGL(props: MapGLProps = {}): JSX.Element {
   const {
     items = [], corroboration, tilesEnabled, tileUrl, tileAttribution,
     pickMode = false, onPick, focusId, flyTo, onCenterChange,
-    overlayUrls = [], overlayAttribution
+    overlayUrls = [], overlayAttribution,
+    cctvStreams = [], showCctv = false, onCameraOpen
   } = props;
   const ref = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
@@ -253,6 +261,15 @@ export function MapGL(props: MapGLProps = {}): JSX.Element {
   // Single search pin, kept OUTSIDE the item set so item rebuilds don't clear it; replaced on
   // each new search.
   const searchMarker = useRef<maplibregl.Marker | null>(null);
+  // Camera (CCTV) markers, kept in their OWN store so they never touch the event-marker set or its
+  // MAX_MARKERS cap. Rebuilt on every viewport change from the clustered cells.
+  const cctvMarkers = useRef<Map<string, maplibregl.Marker>>(new Map());
+  const cctvStreamsRef = useRef(cctvStreams);
+  cctvStreamsRef.current = cctvStreams;
+  const showCctvRef = useRef(showCctv);
+  showCctvRef.current = showCctv;
+  const onCameraOpenRef = useRef(onCameraOpen);
+  onCameraOpenRef.current = onCameraOpen;
   // Only ONE popup open at a time. MapLibre's closeOnClick closes popups on a MAP click but NOT
   // when another marker is clicked, so clicking through co-located "blips" left a stack of popups
   // with their ✕ close buttons overlapping. Track the currently-open popup; opening any popup
@@ -264,6 +281,17 @@ export function MapGL(props: MapGLProps = {}): JSX.Element {
       openPopup.current = p;
     });
     p.on('close', () => { if (openPopup.current === p) openPopup.current = null; });
+  }, []);
+  // Cluster + render the camera layer for the current view. Reads latest props via refs so it can be
+  // a stable (deps []) listener on moveend/zoomend without re-creating the map. A cluster click flies
+  // one step deeper so clusters progressively split toward individual camera pins.
+  const syncCctv = useCallback(() => {
+    const m = map.current;
+    if (!m) return;
+    syncCctvLayer(m, cctvMarkers.current, cctvStreamsRef.current, showCctvRef.current, {
+      onOpen: (id) => onCameraOpenRef.current?.(id),
+      onCluster: (cell) => m.flyTo({ center: [cell.lon, cell.lat], zoom: Math.min(m.getZoom() + 2, 16) })
+    });
   }, []);
   // pickMode/onCenterChange read through refs so the (once) init effect sees the latest values
   // without re-creating the map — mirrors MapPane's pickRef/centerCb pattern.
@@ -300,6 +328,8 @@ export function MapGL(props: MapGLProps = {}): JSX.Element {
     });
     // Report the center after each pan/zoom so Street View can open the current spot.
     m.on('moveend', () => { const c = m.getCenter(); centerCb.current?.(c.lat, c.lng); });
+    m.on('moveend', syncCctv);
+    m.on('zoomend', syncCctv);
     map.current = m;
     return () => {
       map.current?.remove();
@@ -381,6 +411,13 @@ export function MapGL(props: MapGLProps = {}): JSX.Element {
     if (it && validCoord(it.lat, it.lon)) m.flyTo({ center: [it.lon as number, it.lat], zoom: 6 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusId]);
+
+  // Re-render the camera layer when toggled or when the stream set changes (the moveend/zoomend
+  // listeners cover pan/zoom). Refs are assigned during render, so they're current here.
+  useEffect(() => {
+    syncCctv();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showCctv, cctvStreams]);
 
   return (
     <div className="ga98-geo-map-wrap" style={{ position: 'relative', width: '100%', height: '100%' }}>
