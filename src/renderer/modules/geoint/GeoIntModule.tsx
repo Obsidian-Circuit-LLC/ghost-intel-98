@@ -136,6 +136,8 @@ function GeoIntModuleInner(): JSX.Element {
   // CCTV camera layer (off by default; pins are local data so this is NOT behind the network gate).
   const [showCctv, setShowCctv] = useState(false);
   const [cctvStreams, setCctvStreams] = useState<CameraStream[]>([]);
+  // Collapse the left command rail to a thin strip so the map can use the freed width (« hides, » reopens).
+  const [railCollapsed, setRailCollapsed] = useState(false);
 
   // Command-center rail (R9): category visibility filter. Only consulted in globe mode (useMapGL);
   // it hides/shows a category's markers on the map. `null` = "all categories on" (the default — no
@@ -476,8 +478,15 @@ function GeoIntModuleInner(): JSX.Element {
   }
 
   return (
-    <div className="ga98-split ga98-geo ga98-geo-3col" style={{ height: '100%' }}>
+    <div className={`ga98-split ga98-geo ga98-geo-3col${railCollapsed ? ' ga98-geo-railclosed' : ''}`} style={{ height: '100%' }}>
       <div className="ga98-pane ga98-geo-left">
+        <button
+          type="button"
+          className="ga98-geo-rail-toggle"
+          title={railCollapsed ? 'Show panel' : 'Hide panel'}
+          aria-expanded={!railCollapsed}
+          onClick={() => setRailCollapsed((v) => !v)}
+        >{railCollapsed ? '»' : '«'}</button>
         {loadError && (
           <div style={{ background: '#fee', color: '#900', padding: '4px 8px', fontSize: 11, border: '1px solid #c00', marginBottom: 4 }}>
             GeoINT data failed to load: {loadError}
