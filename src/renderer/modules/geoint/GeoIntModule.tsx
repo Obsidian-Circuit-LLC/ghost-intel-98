@@ -196,18 +196,22 @@ function GeoIntModuleInner(): JSX.Element {
   }, []);
   useEffect(() => { void refreshKeyState(); }, [refreshKeyState]);
 
-  const refreshCameras = useCallback(async () => {
+  const refreshCameras = useCallback(async (opts: { silent?: boolean } = {}) => {
     try {
       const all = await window.api.streams.list();
       setCctvStreams(all.filter((s) => validCoord(s.lat, s.lon)));
     } catch {
       setCctvStreams([]);
-      setShowCctv(false);
-      void alertDialog('Could not load the camera list.', 'CCTV cameras');
+      // Only surface the failure when the user explicitly asked (Refresh button). On the silent
+      // mount fetch, fail quietly — no startup dialog for a feature the user hasn't touched.
+      if (!opts.silent) {
+        setShowCctv(false);
+        void alertDialog('Could not load the camera list.', 'CCTV cameras');
+      }
     }
   }, []);
 
-  useEffect(() => { void refreshCameras(); }, [refreshCameras]);
+  useEffect(() => { void refreshCameras({ silent: true }); }, [refreshCameras]);
 
   const onCameraOpen = useCallback((streamId: string) => {
     const stream = cctvStreams.find((s) => s.id === streamId);
