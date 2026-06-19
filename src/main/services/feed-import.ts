@@ -96,8 +96,13 @@ function extractGeo(o: Record<string, unknown>): Partial<ParsedFeed> {
   const country = asStr(o['country']);
   const region = asStr(o['region']) ?? asStr(o['state']);
   const city = asStr(o['city']);
-  const lat = asNum(o['lat']) ?? asNum(o['latitude']);
-  const lon = asNum(o['lon']) ?? asNum(o['lng']) ?? asNum(o['longitude']);
+  // Coordinates may be flat (lat/lon/latitude/…) or nested under a `coordinates` object — the
+  // insecam/TfL scrape shape: { coordinates: { latitude, longitude } }. Flat keys win; the nested
+  // block fills in when they're absent.
+  const coords = o['coordinates'] && typeof o['coordinates'] === 'object'
+    ? (o['coordinates'] as Record<string, unknown>) : undefined;
+  const lat = asNum(o['lat']) ?? asNum(o['latitude']) ?? (coords ? asNum(coords['lat']) ?? asNum(coords['latitude']) : undefined);
+  const lon = asNum(o['lon']) ?? asNum(o['lng']) ?? asNum(o['longitude']) ?? (coords ? asNum(coords['lon']) ?? asNum(coords['lng']) ?? asNum(coords['longitude']) : undefined);
   const source = asStr(o['source']);
   if (country) g.country = country;
   if (region) g.region = region;
@@ -191,6 +196,12 @@ function isUrlString(v: unknown): v is string {
   return typeof v === 'string' && URLISH.test(v.trim());
 }
 
+/** Object keys that may carry a stream URL, in priority order. `stream_url` is the insecam/TfL
+ *  scrape key; the rest are the historical aliases. First key holding a real URL wins. */
+function pickUrl(o: Record<string, unknown>): string | undefined {
+  return [o['url'], o['URL'], o['src'], o['stream'], o['stream_url']].find(isUrlString);
+}
+
 /** host[:port] for a readable yet unique nested-leaf label; falls back to the raw url. */
 function hostOf(url: string): string {
   try { return new URL(url).host || url; } catch { return url; }
@@ -204,7 +215,7 @@ function parseJsonArray(arr: unknown[]): ParsedFeed[] {
       if (URLISH.test(item)) out.push(toFeed(item));
     } else if (item && typeof item === 'object') {
       const o = item as Record<string, unknown>;
-      const url = [o['url'], o['URL'], o['src'], o['stream']].find((v) => typeof v === 'string' && URLISH.test(v)) as string | undefined;
+      const url = pickUrl(o);
       if (!url) continue;
       const label = [o['label'], o['name'], o['title']].find((v) => typeof v === 'string') as string | undefined;
       const kind = typeof o['kind'] === 'string' ? (o['kind'] as string) : undefined;
@@ -243,7 +254,7 @@ function parseNestedTree(root: Record<string, unknown>): ParsedFeed[] {
         if (isUrlString(item)) { out.push(stampPath(toFeed(item), path, true)); continue; }
         if (item && typeof item === 'object') {
           const o = item as Record<string, unknown>;
-          const url = [o['url'], o['URL'], o['src'], o['stream']].find(isUrlString);
+          const url = pickUrl(o);
           if (!url) continue;
           const label = asStr(o['label']) ?? asStr(o['name']) ?? asStr(o['title']);
           const base = stampPath(toFeed(url, label, asStr(o['kind'])), path, label === undefined);
@@ -266,7 +277,7 @@ function parseJson(text: string): ParsedFeed[] {
   if (data && typeof data === 'object') {
     const o = data as Record<string, unknown>;
     // A single flat feed object (carries its own URL) vs. a nested geo tree (no top-level URL key).
-    const topUrl = [o['url'], o['URL'], o['src'], o['stream']].find(isUrlString);
+    const topUrl = pickUrl(o);
     return topUrl ? parseJsonArray([data]) : parseNestedTree(o);
   }
   return [];
