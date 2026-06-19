@@ -32,9 +32,11 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`GhostIntel98-Setup-3.14.4.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
+> **Install:** download [`GhostIntel98-Setup-3.15.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
 
 ## Status
+
+**v3.15.0** — **CCTV cameras on the GeoINT map.** A new toggleable **CCTV camera layer**: tick **"CCTV cameras (N)"** in GeoINT and every catalogued camera with coordinates drops a clustered pin on the map — dense areas (e.g. London) collapse to a Win98 count badge that splits into individual camera pins as you zoom in. Click a camera pin to pop a small draggable **camera window** that plays the live feed (reusing the EyeSpy player); up to 8 windows at once, re-clicking a pin re-focuses its window. The layer reads straight from your EyeSpy library (the coordinates the v3.14.4 importer now lands), is **off by default**, and renders without enabling the GeoINT network — playback is the same direct view EyeSpy already does. Also two GeoINT polish fixes from the field: the map popup's **✕ is sized to match the window title-bar button** (was oversized), and the **left command rail now collapses** to a thin strip (« / ») so the map can use the full width. The camera layer is a pure view over local data — no telemetry, no new network path, no CSP change. *Everything from v3.14.0 carries forward.*
 
 **v3.14.4** — **EyeSpy import: `stream_url` + nested coordinates (patch).** GhostExodus's coordinate-bearing CCTV scrapes (the insecam/TfL "by country" dump shape) imported **zero** cameras: every leaf used a `stream_url` key and a nested `coordinates: {latitude, longitude}` block, neither of which the importer recognized, so all feeds were dropped before categorization. The importer now accepts `stream_url` as a URL key and reads lat/lon from a nested `coordinates` object (flat `lat`/`lon` still win when both are present). Verified end-to-end against the real files: **0 → 2,555 cameras** import, 2,469 carrying coordinates, all filed under their country. This also unblocks the upcoming CCTV-pins-on-GeoINT-map feature, which needs lat/lon in the stream store. Main-process parser change only; geo-less and flat feeds behave exactly as before. *Everything from v3.14.0 carries forward.*
 
@@ -419,7 +421,7 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases) and run it.
 
-Direct link to the current release: [`GhostIntel98-Setup-3.14.4.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.14.4/GhostIntel98-Setup-3.14.4.exe)
+Direct link to the current release: [`GhostIntel98-Setup-3.15.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.15.0/GhostIntel98-Setup-3.15.0.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is **formally verified internally** — symbolic (ProVerif) +
 computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not**
 FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.6.8/GhostIntel98-Setup-3.6.8.exe).
@@ -427,7 +429,7 @@ FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Se
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\GhostIntel98-Setup-3.14.4.exe -Algorithm SHA256
+Get-FileHash .\GhostIntel98-Setup-3.15.0.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
@@ -465,8 +467,9 @@ To uninstall: Settings → Apps → Ghost Intel 98 → Uninstall.
 
 ## Releases & changelog
 
-The current build is **v3.14.4** (first stable line since v3.6.x). Each release page carries its own notes + SHA-256.
+The current build is **v3.15.0** (first stable line since v3.6.x). Each release page carries its own notes + SHA-256.
 
+- **v3.15.0** — **CCTV cameras on the GeoINT map.** A toggleable CCTV camera layer: "CCTV cameras (N)" drops clustered camera pins (Win98 count badges that split into pins as you zoom) for every catalogued camera with coordinates; clicking a pin opens a small draggable window playing the feed (reuses the EyeSpy player; max 8 windows, re-click re-focuses). Reads the EyeSpy library directly, off by default, renders without enabling the GeoINT network (playback is the same direct view EyeSpy does). Plus two GeoINT polish fixes: the map popup ✕ is sized to the window title-bar button, and the left command rail collapses to a thin strip (« / ») to give the map full width. Pure view over local data — no telemetry, no new network path, no CSP change. 1099 automated tests; typecheck clean.
 - **v3.14.4** — **EyeSpy import: `stream_url` key + nested `coordinates`.** GhostExodus's coordinate-bearing CCTV scrapes (insecam/TfL "by country" dumps) imported zero cameras because each leaf used a `stream_url` key and a nested `coordinates: {latitude, longitude}` block the importer didn't recognize. The importer now accepts `stream_url` and reads lat/lon from a nested `coordinates` object (flat `lat`/`lon` win when both present). Verified against the real files: 0 → 2,555 cameras (2,469 with coordinates), all filed under their country. Unblocks the CCTV-pins-on-GeoINT-map feature. Main-process parser change only. 1076 automated tests; typecheck clean.
 - **v3.14.3** — **EyeSpy "All Cameras" finder polish.** A GhostExodus field batch: a **⊟ Collapse all** button, an **even 50/50 split** between the location tree and the feed list, the camera-feed **right-click menu clamps above the taskbar** (its bottom items stay reachable on long lists), and **larger finder text**. Renderer-only; no backend/data change. 1071 automated tests; typecheck clean.
 - **v3.14.2** — **Chat-verification wording corrected to match the formal record.** v3.14.1 mistakenly described the CryptoVerif computational proof as "in progress"; the internal formal kit in fact reproduces **12/12 CryptoVerif models "all queries proved"** (CryptoVerif 2.12) plus ProVerif 4/5, with a three-pass internal adversarial review. The README and the in-app Chat info panel now read: **formally verified internally (symbolic ProVerif + computational CryptoVerif), internally adversarially reviewed; not independently audited and not FIPS-validated** (the two remaining external gates). The chat's EXPERIMENTAL banner stays off — its removal is supported by the reproduced proofs.
