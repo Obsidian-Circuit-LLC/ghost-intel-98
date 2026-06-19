@@ -39,14 +39,18 @@ Field names are matched case-insensitively; any listed alias works.
 
 | Field          | Accepted keys                                   | Notes |
 |----------------|-------------------------------------------------|-------|
-| URL (required) | `url` / `src` / `stream` / `link` / `address`   | Must be a real `scheme://…` URL. |
+| URL (required) | `url` / `src` / `stream` / `stream_url` / `link` / `address` | Must be a real `scheme://…` URL. |
 | Name           | `label` / `name` / `title`                      | Display name. **If omitted, the feed is labelled with the URL host** — which is why a name-less S3/IP list shows every camera identically. |
 | Kind           | `kind` / `type` / `protocol`                    | One of `hls` `mjpeg` `rtsp` `http` `mp4`. If omitted, inferred from the URL (`.mp4`→mp4, `.m3u8`→hls, `.jpg/.png/…`→http, `rtsp://`→rtsp, otherwise mjpeg). |
 | Country        | `country`                                       | Top-level grouping. |
 | Region / State | `region` / `state` / `province`                 | |
 | City           | `city` / `town`                                 | |
-| Latitude       | `lat` / `latitude`                              | Optional. |
+| Latitude       | `lat` / `latitude`                              | Optional. Also read from a nested `coordinates` block (below). |
 | Longitude      | `lon` / `lng` / `long` / `longitude`            | Optional. With lat+lon a camera can also drop a pin on the GeoINT map. |
+
+Coordinates may instead live in a nested `coordinates` object — the common scrape shape
+`{ "coordinates": { "latitude": …, "longitude": … } }`. Flat `lat`/`lon` keys win when both are
+present; otherwise the nested block is used.
 | Source         | `source` / `provider` / `dataset`               | Optional free-text tag. |
 
 ---
@@ -79,6 +83,24 @@ Depth is flexible:
 A leaf may also be an array of `{ "url": …, "name": …, … }` objects — an object's own `name`/geo
 overrides the path. Bare-URL leaves are labelled `"{City} · {host}"`, so prefer the flat-object
 format above if you want to carry real per-camera names.
+
+The leaf objects may use the `stream_url` key and a nested `coordinates` block, so a
+scraped-by-country dump like this imports directly with no reshaping:
+
+```json
+{
+  "United Kingdom": {
+    "Greater London": {
+      "A1 Archway Rd/Bakers Ln": [
+        {
+          "stream_url": "https://s3-eu-west-1.amazonaws.com/jamcams.tfl.gov.uk/00001.09732.mp4",
+          "coordinates": { "latitude": 51.5818, "longitude": -0.15644 }
+        }
+      ]
+    }
+  }
+}
+```
 
 ---
 

@@ -202,6 +202,59 @@ describe('parseFeedList — nested geo tree (insecam-style Country → Region �
   });
 });
 
+describe('parseFeedList — GhostExodus scrape shape (stream_url key + nested coordinates)', () => {
+  it('reads the URL from a stream_url key inside a nested geo tree', () => {
+    const json = JSON.stringify({
+      Argentina: { 'Ciudad Autonoma De Buenos Aires': { 'Buenos Aires': [
+        { stream_url: 'http://190.210.250.149:91/mjpg/video.mjpg', coordinates: { latitude: -34.61315, longitude: -58.37723 } }
+      ] } }
+    });
+    expect(parseFeedList(json)).toEqual([
+      {
+        url: 'http://190.210.250.149:91/mjpg/video.mjpg',
+        kind: 'mjpeg',
+        label: 'Buenos Aires · 190.210.250.149:91',
+        country: 'Argentina',
+        region: 'Ciudad Autonoma De Buenos Aires',
+        city: 'Buenos Aires',
+        lat: -34.61315,
+        lon: -58.37723
+      }
+    ]);
+  });
+
+  it('reads the URL from a stream_url key in a flat JSON array', () => {
+    const [f] = parseFeedList(JSON.stringify([
+      { stream_url: 'https://s3-eu-west-1.amazonaws.com/jamcams.tfl.gov.uk/00001.09732.mp4', coordinates: { latitude: 51.5818, longitude: -0.15644 } }
+    ]));
+    expect(f.url).toBe('https://s3-eu-west-1.amazonaws.com/jamcams.tfl.gov.uk/00001.09732.mp4');
+    expect(f.kind).toBe('mp4');
+    expect(f.lat).toBeCloseTo(51.5818);
+    expect(f.lon).toBeCloseTo(-0.15644);
+  });
+
+  it('extracts lat/lon from a nested coordinates object (latitude/longitude)', () => {
+    const [f] = parseFeedList(JSON.stringify([{ url: 'http://cam/x.mjpg', coordinates: { latitude: 40.18111, longitude: 44.51361 } }]));
+    expect(f.lat).toBeCloseTo(40.18111);
+    expect(f.lon).toBeCloseTo(44.51361);
+  });
+
+  it('tolerates a stream_url leaf with no coordinates (geo from the path only)', () => {
+    const json = JSON.stringify({ Argentina: { Jujuy: { 'La Mendieta': [{ stream_url: 'http://179.62.210.138:8088/x.jpg' }] } } });
+    const f = parseFeedList(json)[0];
+    expect(f.url).toBe('http://179.62.210.138:8088/x.jpg');
+    expect(f).toMatchObject({ country: 'Argentina', region: 'Jujuy', city: 'La Mendieta' });
+    expect('lat' in f).toBe(false);
+    expect('lon' in f).toBe(false);
+  });
+
+  it('lets an explicit flat lat/lon override the nested coordinates block', () => {
+    const [f] = parseFeedList(JSON.stringify([{ url: 'http://cam/x', lat: 1.5, lon: 2.5, coordinates: { latitude: 9.9, longitude: 9.9 } }]));
+    expect(f.lat).toBe(1.5);
+    expect(f.lon).toBe(2.5);
+  });
+});
+
 describe('feedToUpsert — carries geo through to the store payload', () => {
   it('passes present geo fields onto the upsert payload', () => {
     const [f] = parseFeedList(JSON.stringify([{ url: 'https://cam/a.m3u8', city: 'Paris', lat: 48.85, lon: 2.35 }]));
