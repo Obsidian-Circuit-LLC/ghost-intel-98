@@ -784,6 +784,13 @@ input.ga98-text, select.ga98-text {
 .ga98-geo-rail .field-row { flex-wrap: wrap; }
 .ga98-geo-left { display: flex; flex-direction: column; gap: 6px; overflow-x: hidden; overflow-y: auto; }
 .ga98-geo-left input, .ga98-geo-left select { min-width: 0; }
+/* Collapsible left command rail. The « toggle (top-right of the rail) shrinks the rail's grid track
+   to a thin strip showing only the » reopen button, handing the freed width to the map. */
+.ga98-geo-rail-toggle { align-self: flex-end; min-width: 0; padding: 0 6px; height: 18px; line-height: 16px; flex: 0 0 auto; }
+.ga98-geo-3col.ga98-geo-railclosed { grid-template-columns: 22px minmax(0, 1fr) minmax(0, 300px); }
+.ga98-geo-railclosed .ga98-geo-left { overflow: hidden; padding: 2px; gap: 0; }
+.ga98-geo-railclosed .ga98-geo-left > *:not(.ga98-geo-rail-toggle) { display: none; }
+.ga98-geo-railclosed .ga98-geo-rail-toggle { align-self: stretch; width: 100%; padding: 0; }
 /* Let multi-button control rows (View: 2D / Satellite / Street View / Labels) wrap to a second line
    inside the left pane rather than overflow-clip on the right at narrower widths. */
 .ga98-geo-left .field-row { flex-wrap: wrap; }
@@ -817,15 +824,17 @@ input.ga98-text, select.ga98-text {
   border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 6px;
   box-shadow: 0 3px 14px rgba(0, 0, 0, 0.55);
-  padding: 8px 26px 8px 11px;
+  padding: 7px 22px 7px 10px;
   font-size: 12px;
   line-height: 1.35;
 }
 .ga98-geo-right .maplibregl-popup-content b { color: #fff; }
 .ga98-geo-right .maplibregl-popup-content a { color: #8ec5ff; }
+/* Match the app's Win98 title-bar close button (98.css title-bar-controls: 16×14). The default
+   MapLibre ✕ rendered noticeably larger than the window controls; size it to the same 16×14. */
 .ga98-geo-right .maplibregl-popup-close-button {
-  color: #cdd6e4; font-size: 15px; line-height: 15px; width: 18px; height: 18px;
-  top: 3px; right: 3px; border-radius: 3px; background: transparent;
+  color: #cdd6e4; font-size: 12px; line-height: 12px; width: 16px; height: 14px;
+  top: 4px; right: 4px; padding: 0; border-radius: 2px; background: transparent;
 }
 .ga98-geo-right .maplibregl-popup-close-button:hover { background: rgba(255, 255, 255, 0.14); color: #fff; }
 /* Tint the popup tip to match the dark card, per anchor direction. */
