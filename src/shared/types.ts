@@ -377,6 +377,8 @@ export interface AppSettings {
     /** TTS engine: 'system' = Web Speech / OS voices; 'piper' = bundled offline neural voice; 'auto'
      *  = prefer Piper when installed, else system. Default 'auto'. */
     ttsEngine: 'auto' | 'system' | 'piper';
+    /** Chosen user-supplied Piper voice id (the `.onnx` filename), or null for the bundled voice. */
+    piperVoice: string | null;
     /** When true, the assistant retrieves relevant case/conversation memory (local vector search
      *  over the bundled embedding model) and injects it as context. Offline; default off. */
     useMemory: boolean;
@@ -550,6 +552,7 @@ export const defaultSettings: AppSettings = {
     ttsVoiceUri: null,
     ttsRate: 1,
     ttsEngine: 'auto',
+    piperVoice: null,
     useMemory: false
   },
   mail: { accounts: [] },
