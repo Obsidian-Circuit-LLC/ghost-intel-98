@@ -1,5 +1,7 @@
+import { join } from 'node:path';
 import { ensurePluginTor, torFetch } from '../../plugins/tor-egress';
 import { secureReadText, secureWriteFile } from '../../storage/secure-fs';
+import { dataRoot } from '../../storage/paths';
 import { hostFromStreamUrl } from './extract';
 import { resolveHost as resolveHostImpl } from './resolve';
 import { makeHostInfoStore } from './store';
@@ -37,7 +39,7 @@ async function torFetchJson(url: string): Promise<unknown> {
   return JSON.parse(resp.body);
 }
 
-const store = makeHostInfoStore({ readText: secureReadText, writeFile: (p, d) => secureWriteFile(p, d), now: () => Date.now() });
+const store = makeHostInfoStore({ indexPath: () => join(dataRoot(), 'hostinfo', 'index.json'), readText: secureReadText, writeFile: (p, d) => secureWriteFile(p, d), now: () => Date.now() });
 
 export const hostInfoService = makeHostInfoService({
   resolveHost: (streamUrl) => resolveHostImpl(streamUrl, { fetchJson: torFetchJson, now: () => new Date().toISOString() }),
