@@ -7,12 +7,13 @@
  *   resources/piper/<platform>/piper(.exe)
  *   resources/piper/<platform>/<voice>.onnx  (+ <voice>.onnx.json)
  */
-import { app } from 'electron';
+import { app, shell } from 'electron';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { readdir, readFile, stat, unlink } from 'node:fs/promises';
+import { mkdir, readdir, readFile, stat, unlink } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { buildPiperArgs, rateToLengthScale, isValidWavHeader, verifySha256 } from './piper-core';
+import { resolveUserModelPath, userVoicesDir } from './piper-voices';
 
 /** Pinned SHA-256 of the bundled binary (lowercase hex) — verify-before-exec. This is the hash of
  *  the Windows `piper.exe` from rhasspy/piper 2023.11.14-2 (piper_windows_amd64.zip). On non-Windows
@@ -99,11 +100,14 @@ export function piperStatus(): Promise<{ available: boolean }> {
  *  the real PCM and lays static OVER the (still-intelligible) voice. A seekable file gets correct
  *  headers — the same path that sounds clean when you run Piper natively to a `.wav`. The temp file is
  *  read once and deleted immediately on every exit path (success, error, timeout, cancel). */
-export async function synthesize(text: string, rate?: number): Promise<Uint8Array> {
+export async function synthesize(text: string, rate?: number, voiceId?: string): Promise<Uint8Array> {
   const r = await resolvePaths();
   if (!r) throw new Error('Piper voice is not installed.');
+  // A chosen user voice (traversal-safe); a missing/invalid/absent id falls back to the bundled model.
+  const userModel = voiceId ? await resolveUserModelPath(voiceId) : null;
+  const model = userModel ?? r.model;
   const tmp = join(app.getPath('temp'), `ga98-piper-${randomUUID().slice(0, 8)}.wav`);
-  const args = buildPiperArgs(r.model, rateToLengthScale(rate), tmp);
+  const args = buildPiperArgs(model, rateToLengthScale(rate), tmp);
 
   return await new Promise<Uint8Array>((resolve_, reject) => {
     const child = spawn(r.binary, args, { stdio: ['pipe', 'ignore', 'ignore'] });
@@ -150,4 +154,12 @@ export async function synthesize(text: string, rate?: number): Promise<Uint8Arra
 export function cancelActive(): void {
   for (const c of active) { try { c.kill('SIGKILL'); } catch { /* already gone */ } }
   active.clear();
+}
+
+/** Create (if needed) and open the user voices folder so the user can drop in <name>.onnx +
+ *  <name>.onnx.json pairs. */
+export async function revealVoicesFolder(): Promise<void> {
+  const dir = userVoicesDir();
+  await mkdir(dir, { recursive: true });
+  await shell.openPath(dir);
 }

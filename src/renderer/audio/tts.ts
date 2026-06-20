@@ -76,6 +76,8 @@ export interface SpeakOpts {
   voiceURI?: string | null;
   rate?: number;
   onEnd?: () => void;
+  /** Chosen user Piper voice id (passed through to the Piper sidecar); ignored by Web Speech. */
+  piperVoice?: string | null;
 }
 
 export type SpeakResult =

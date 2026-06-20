@@ -83,7 +83,7 @@ export async function speakPiper(text: string, opts: SpeakOpts = {}): Promise<Sp
     try {
       for (const chunk of chunks) {
         if (myToken !== token) return;
-        const wav = await window.api.tts.synthesize(chunk, opts.rate ?? undefined);
+        const wav = await window.api.tts.synthesize(chunk, opts.rate ?? undefined, opts.piperVoice ?? undefined);
         if (myToken !== token) return;
         const buf = await ac.decodeAudioData(wav.slice().buffer);
         if (myToken !== token) return;
