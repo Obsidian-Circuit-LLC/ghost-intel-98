@@ -25,4 +25,14 @@ describe('parseCoordPair', () => {
   it('trims surrounding whitespace', () => {
     expect(parseCoordPair('  10 ', ' 20 ')).toEqual({ ok: true, lat: 10, lon: 20 });
   });
+  it('accepts the inclusive boundaries ±90 / ±180', () => {
+    expect(parseCoordPair('90', '180')).toEqual({ ok: true, lat: 90, lon: 180 });
+    expect(parseCoordPair('-90', '-180')).toEqual({ ok: true, lat: -90, lon: -180 });
+  });
+  it('rejects values just past the boundaries', () => {
+    expect(parseCoordPair('90.0001', '0').ok).toBe(false);
+    expect(parseCoordPair('-90.0001', '0').ok).toBe(false);
+    expect(parseCoordPair('0', '180.0001').ok).toBe(false);
+    expect(parseCoordPair('0', '-180.0001').ok).toBe(false);
+  });
 });
