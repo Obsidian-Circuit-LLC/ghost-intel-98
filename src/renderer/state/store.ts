@@ -39,6 +39,7 @@ export type ModuleKey =
   | 'pinball'
   | 'chat'
   | 'camera-view'
+  | 'host-info'
   | 'help';
 
 export interface WindowSpec {

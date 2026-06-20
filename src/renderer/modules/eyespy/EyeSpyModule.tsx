@@ -18,6 +18,7 @@ import { parseYouTubeId } from '@shared/youtube';
 import type { CaseSummary } from '@shared/types';
 import { confirmDialog } from '../../state/dialogs';
 import { toast } from '../../state/toasts';
+import { useWindows } from '../../state/store';
 import { Viewer } from './Viewer';
 import { buildTree, filterTree, matchStream, findNode, citiesOf } from './tree';
 import type { TreeNode } from './tree';
@@ -220,6 +221,13 @@ export function EyeSpyModule(): JSX.Element {
           }
         })();
         break;
+      case 'resolve': {
+        const id = `hostinfo:${s.id}`;
+        const existing = useWindows.getState().windows.find((w) => w.id === id);
+        if (existing) useWindows.getState().focus(existing.id);
+        else useWindows.getState().open({ module: 'host-info', id, title: `Host: ${s.label}`, props: { stream: s }, width: 460, height: 360 });
+        break;
+      }
     }
   }
 

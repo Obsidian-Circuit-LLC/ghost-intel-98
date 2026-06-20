@@ -407,6 +407,9 @@ const api = {
     configure: (cfg: { idleTeardownAfterMinutes: number | null; defaultRouting: 'tor' | 'direct'; maxReconnects: number; maxSessionAgeMinutes: number }) =>
       ipcRenderer.invoke(channels.bgconn.configure, cfg),
     clearCredentials: (pluginId: string, connId: string) => ipcRenderer.invoke(channels.bgconn.clearCredentials, pluginId, connId)
+  },
+  hostinfo: {
+    resolve: (url: string, opts?: { force?: boolean }) => ipcRenderer.invoke(channels.hostinfo.resolve, url, opts)
   }
 } as const;
 

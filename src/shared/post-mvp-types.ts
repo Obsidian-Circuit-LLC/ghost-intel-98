@@ -388,3 +388,18 @@ export interface BriefcaseNoteSummary { id: string; name: string; updatedAt: str
 
 /** What the renderer sends to persist a briefcase note (timestamps managed by the store). */
 export interface BriefcaseNoteInput { id: string; name: string; body: string }
+
+// ── HostInfo (camera host resolution) ────────────────────────────────────────
+export interface RdapInfo { org?: string; asn?: string; country?: string; range?: string }
+
+/** Result of a Tor-only DNS/RDAP host-resolution lookup for a camera stream URL. */
+export interface HostInfo {
+  host: string;
+  isIpLiteral: boolean;
+  port?: string;
+  ips: string[];
+  ptr?: string;
+  rdap?: RdapInfo;
+  resolvedAt: string;
+  errors: string[];
+}
