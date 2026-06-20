@@ -40,6 +40,7 @@ export type ModuleKey =
   | 'chat'
   | 'camera-view'
   | 'host-info'
+  | 'news-view'
   | 'help';
 
 export interface WindowSpec {
