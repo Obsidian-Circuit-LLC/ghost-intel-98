@@ -1,7 +1,7 @@
 import type { Capability } from '../../shared/plugin-types';
 import type { RecallHit } from '../services/memory';
 
-export interface PluginFetchInit { method?: string; headers?: Record<string, string>; body?: string; direct?: boolean; }
+export interface PluginFetchInit { method?: string; headers?: Record<string, string>; body?: string; direct?: boolean; caseId?: string; }
 
 export interface VectorRecall {
   /** Embed `query` and return top-k chunks across ALL cases (cosine). The caller filters out its
