@@ -824,17 +824,21 @@ input.ga98-text, select.ga98-text {
   border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 6px;
   box-shadow: 0 3px 14px rgba(0, 0, 0, 0.55);
-  padding: 7px 22px 7px 10px;
+  /* Right padding reserves a clear corner for the ✕ so the coordinate text can never sit under it. */
+  padding: 7px 26px 7px 10px;
   font-size: 12px;
   line-height: 1.35;
 }
 .ga98-geo-right .maplibregl-popup-content b { color: #fff; }
 .ga98-geo-right .maplibregl-popup-content a { color: #8ec5ff; }
-/* Match the app's Win98 title-bar close button (98.css title-bar-controls: 16×14). The default
-   MapLibre ✕ rendered noticeably larger than the window controls; size it to the same 16×14. */
+/* A clean, small upper-right square — sized below the Win98 title-bar control and flex-centred so the
+   ✕ glyph stays inside its box and never overlaps the header text. (GhostExodus: the prior 16×14 read
+   as still too big; this is a tighter 13px square with an 11px glyph and wider content clearance.) */
 .ga98-geo-right .maplibregl-popup-close-button {
-  color: #cdd6e4; font-size: 12px; line-height: 12px; width: 16px; height: 14px;
-  top: 4px; right: 4px; padding: 0; border-radius: 2px; background: transparent;
+  display: flex; align-items: center; justify-content: center;
+  box-sizing: border-box; width: 13px; height: 13px; top: 3px; right: 3px;
+  padding: 0; margin: 0; overflow: hidden;
+  color: #cdd6e4; font-size: 11px; line-height: 1; border-radius: 2px; background: transparent;
 }
 .ga98-geo-right .maplibregl-popup-close-button:hover { background: rgba(255, 255, 255, 0.14); color: #fff; }
 /* Tint the popup tip to match the dark card, per anchor direction. */
