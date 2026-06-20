@@ -35,6 +35,7 @@ import { ChessModule } from './chess/ChessModule';
 import { PinballModule } from './pinball/PinballModule';
 import { ChatModule } from './chat/ChatModule';
 import { CameraViewModule } from './cameraview/CameraViewModule';
+import { HostInfoModule } from './hostinfo/HostInfoModule';
 import { HelpModule } from './help/HelpModule';
 
 // ---------------------------------------------------------------------------
@@ -161,6 +162,10 @@ function CameraViewAdapter({ spec }: { spec: WindowSpec }): JSX.Element {
   return <CameraViewModule stream={spec.props?.['stream'] as import('@shared/post-mvp-types').CameraStream} />;
 }
 
+function HostInfoAdapter({ spec }: { spec: WindowSpec }): JSX.Element {
+  return <HostInfoModule stream={spec.props?.['stream'] as import('@shared/post-mvp-types').CameraStream} />;
+}
+
 function HelpAdapter({ spec: _spec }: { spec: WindowSpec }): JSX.Element {
   return <HelpModule />;
 }
@@ -199,5 +204,6 @@ export function registerBuiltins(): void {
   registerModule({ key: 'pinball',      title: 'Ghost Space Ball',   glyph: '🕹', component: PinballAdapter,      builtin: true });
   registerModule({ key: 'chat',         title: 'Chat (beta)',      glyph: '💬', component: ChatAdapter,         builtin: true });
   registerModule({ key: 'camera-view', title: 'Camera', glyph: '📹', component: CameraViewAdapter, builtin: true, defaultWidth: 480, defaultHeight: 360 });
+  registerModule({ key: 'host-info', title: 'Host Info', glyph: '🖥', component: HostInfoAdapter, builtin: true, defaultWidth: 460, defaultHeight: 360 });
   registerModule({ key: 'help',         title: 'RTFM',             glyph: '?',  component: HelpAdapter,         builtin: true });
 }
