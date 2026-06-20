@@ -32,8 +32,8 @@ data-format, or protocol change.
 Get-FileHash .\GhostIntel98-Setup-3.16.1.exe -Algorithm SHA256
 ```
 
-SHA-256: `__SHA256__`
-Size: `__SIZE__`
+SHA-256: `a22be661c0e96afde8cee1b0608050846a9c00825852d8e410420585e5ec1f63`
+Size: 532753630 bytes (508.1 MB)
 
 Unsigned — Windows SmartScreen will warn: **More info → Run anyway**. Installs per-user (no admin) and
 upgrades any prior `Ghost Intel 98` build in place.
