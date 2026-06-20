@@ -537,7 +537,7 @@ export function AiAssistantModule(): JSX.Element {
                   onChange={(e) => void setTts({ piperVoice: e.target.value || null })}
                   title="Piper neural voice. Drop your own <name>.onnx + <name>.onnx.json into the Voices folder to add more."
                 >
-                  <option value="">🧠 Bundled neural</option>
+                  <option value="">🧠 Bundled neural (LJ Speech)</option>
                   {piperVoices.map((v) => (
                     <option key={v.id} value={v.id}>{v.name}</option>
                   ))}
