@@ -33,10 +33,10 @@ alongside the public-domain default. Renderer/main + build only; no crypto/data/
 Get-FileHash .\GhostIntel98-Setup-3.16.2.exe -Algorithm SHA256
 ```
 
-SHA-256: `__SHA256__`
-Size: `__SIZE__`
+SHA-256: `29a20b59c2881015865533a9dce415bca19fffa48ebaf2c561f7e60d915500a8`
+Size: 877640012 bytes (837.0 MB)
 
-The installer is larger (~846 MB) because it carries five voices. Unsigned — Windows SmartScreen will
+The installer is larger (~837 MB) because it carries five voices. Unsigned — Windows SmartScreen will
 warn: **More info → Run anyway**. Installs per-user (no admin) and upgrades any prior `Ghost Intel 98`
 build in place.
 
