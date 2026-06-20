@@ -29,7 +29,7 @@ export function parseInline(text: string): Inline[] {
     // inline code: `...`
     if (c === '`') {
       const end = text.indexOf('`', i + 1);
-      if (end > i) { pushText(); out.push({ t: 'code', v: text.slice(i + 1, end) }); i = end + 1; continue; }
+      if (end > i + 1) { pushText(); out.push({ t: 'code', v: text.slice(i + 1, end) }); i = end + 1; continue; }
     }
     // bold: **...** or __...__
     if ((c === '*' || c === '_') && text[i + 1] === c) {
