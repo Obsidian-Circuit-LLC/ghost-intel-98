@@ -20,6 +20,13 @@ describe('parseInline', () => {
   it('never produces HTML — angle brackets stay literal text', () => {
     expect(parseInline('<script>alert(1)</script>')).toEqual([{ t: 'text', v: '<script>alert(1)</script>' }]);
   });
+  it('handles the underscore forms __bold__ and _italic_', () => {
+    expect(parseInline('__b__')).toEqual([{ t: 'bold', children: [{ t: 'text', v: 'b' }] }]);
+    expect(parseInline('_i_')).toEqual([{ t: 'italic', children: [{ t: 'text', v: 'i' }] }]);
+  });
+  it('empty inline code `` is literal, not an empty code node', () => {
+    expect(parseInline('``')).toEqual([{ t: 'text', v: '``' }]);
+  });
 });
 
 describe('parseMarkdown', () => {
@@ -31,6 +38,9 @@ describe('parseMarkdown', () => {
   });
   it('consecutive bullets become one ul', () => {
     expect(parseMarkdown('* a\n- b')).toEqual([{ t: 'ul', items: [[{ t: 'text', v: 'a' }], [{ t: 'text', v: 'b' }]] }]);
+  });
+  it('+ bullets are recognized too', () => {
+    expect(parseMarkdown('+ a\n+ b')).toEqual([{ t: 'ul', items: [[{ t: 'text', v: 'a' }], [{ t: 'text', v: 'b' }]] }]);
   });
   it('blank line separates paragraphs', () => {
     expect(parseMarkdown('a\n\nb')).toEqual([
