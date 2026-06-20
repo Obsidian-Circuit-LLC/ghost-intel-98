@@ -142,8 +142,10 @@ const api = {
   },
   tts: {
     piperStatus: () => ipcRenderer.invoke(channels.tts.piperStatus),
-    synthesize: (text: string, rate?: number) => ipcRenderer.invoke(channels.tts.synthesize, text, rate),
-    cancel: () => ipcRenderer.invoke(channels.tts.cancel)
+    synthesize: (text: string, rate?: number, voiceId?: string) => ipcRenderer.invoke(channels.tts.synthesize, text, rate, voiceId),
+    cancel: () => ipcRenderer.invoke(channels.tts.cancel),
+    listVoices: () => ipcRenderer.invoke(channels.tts.listVoices),
+    revealVoicesFolder: () => ipcRenderer.invoke(channels.tts.revealVoicesFolder)
   },
   mail: {
     listAccounts: () => ipcRenderer.invoke(channels.mail.listAccounts),

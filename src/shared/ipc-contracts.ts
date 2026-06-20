@@ -114,7 +114,9 @@ export const channels = {
   tts: {
     piperStatus: 'tts:piperStatus',
     synthesize: 'tts:synthesize',
-    cancel: 'tts:cancel'
+    cancel: 'tts:cancel',
+    listVoices: 'tts:listVoices',
+    revealVoicesFolder: 'tts:revealVoicesFolder'
   },
   mail: {
     listAccounts: 'mail:listAccounts',

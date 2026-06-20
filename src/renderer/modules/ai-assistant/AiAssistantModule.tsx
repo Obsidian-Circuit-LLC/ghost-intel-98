@@ -61,6 +61,8 @@ export function AiAssistantModule(): JSX.Element {
   const [voices, setVoices] = useState<TtsVoice[]>([]);
   const [voicesLoaded, setVoicesLoaded] = useState(false);
   const [piperOk, setPiperOk] = useState(false);
+  const [piperVoices, setPiperVoices] = useState<{ id: string; name: string }[]>([]);
+  const loadPiperVoices = (): void => { void window.api.tts.listVoices().then(setPiperVoices).catch(() => setPiperVoices([])); };
   // Voice conversation (offline STT → AI → TTS). Mode is ephemeral per session.
   const [voiceMode, setVoiceMode] = useState<VoiceMode | 'off'>('off');
   const [voiceState, setVoiceState] = useState<VoiceState>('idle');
@@ -132,7 +134,7 @@ export function AiAssistantModule(): JSX.Element {
     return () => { active = false; unsub(); };
   }, []);
 
-  async function setTts(patch: { ttsEnabled?: boolean; ttsVoiceUri?: string | null; ttsRate?: number; ttsEngine?: 'auto' | 'system' | 'piper' }): Promise<void> {
+  async function setTts(patch: { ttsEnabled?: boolean; ttsVoiceUri?: string | null; ttsRate?: number; ttsEngine?: 'auto' | 'system' | 'piper'; piperVoice?: string | null }): Promise<void> {
     if (!settings) return;
     if (patch.ttsEnabled === false) cancelSpeechAll();
     if (patch.ttsEngine) setTtsEnginePref(patch.ttsEngine);
@@ -141,7 +143,7 @@ export function AiAssistantModule(): JSX.Element {
 
   // Probe whether the bundled Piper voice is installed (gates the engine selector) and keep the
   // dispatcher's engine preference in sync with the saved setting.
-  useEffect(() => { void piperAvailable().then(setPiperOk); }, []);
+  useEffect(() => { void piperAvailable().then(setPiperOk); loadPiperVoices(); }, []);
   useEffect(() => { if (settings?.ai.ttsEngine) setTtsEnginePref(settings.ai.ttsEngine); }, [settings?.ai.ttsEngine]);
 
   // Default the "include file contents" toggle by provider — on for local Ollama (data
@@ -269,7 +271,7 @@ export function AiAssistantModule(): JSX.Element {
         if (activeStreamRef.current?.id === streamId) activeStreamRef.current = null;
         const st = useSettings.getState().settings;
         if (!stoppedRef.current && st?.ai.ttsEnabled && acc.trim()) {
-          void speakAuto(acc, { voiceURI: st.ai.ttsVoiceUri, rate: st.ai.ttsRate }).then((r) => {
+          void speakAuto(acc, { voiceURI: st.ai.ttsVoiceUri, rate: st.ai.ttsRate, piperVoice: st.ai.piperVoice }).then((r) => {
             if (!r.spoken && (r.reason === 'remote-blocked' || r.reason === 'no-local-voice')) {
               toast.warn('Voice off: no on-device voice available. Install an offline/Natural voice in Windows settings, or use the bundled Piper voice — cloud voices are blocked by design.');
             }
@@ -381,7 +383,7 @@ export function AiAssistantModule(): JSX.Element {
         mode,
         ask: askOnce,
         speak: (t) => new Promise<void>((res) => {
-          void speakAuto(t, { voiceURI: st?.ai.ttsVoiceUri, rate: st?.ai.ttsRate, onEnd: res }).then((r) => {
+          void speakAuto(t, { voiceURI: st?.ai.ttsVoiceUri, rate: st?.ai.ttsRate, piperVoice: st?.ai.piperVoice, onEnd: res }).then((r) => {
             if (!r.spoken) res();
           });
         }),
@@ -527,7 +529,24 @@ export function AiAssistantModule(): JSX.Element {
               </select>
             )}
             {settings?.ai.ttsEnabled && piperOk && (settings?.ai.ttsEngine ?? 'auto') !== 'system' && (
-              <span style={{ fontSize: 11, opacity: 0.7 }} title="Bundled neural voice — runs entirely on-device, no network.">🧠 offline neural</span>
+              <>
+                <select
+                  className="ga98-text"
+                  style={{ maxWidth: 150 }}
+                  value={settings?.ai.piperVoice ?? ''}
+                  onChange={(e) => void setTts({ piperVoice: e.target.value || null })}
+                  title="Piper neural voice. Drop your own <name>.onnx + <name>.onnx.json into the Voices folder to add more."
+                >
+                  <option value="">🧠 Bundled neural</option>
+                  {piperVoices.map((v) => (
+                    <option key={v.id} value={v.id}>{v.name}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => void window.api.tts.revealVoicesFolder().then(loadPiperVoices)}
+                  title="Open the Voices folder — drop <name>.onnx + <name>.onnx.json pairs in, then reselect."
+                >📁 Voices</button>
+              </>
             )}
             {settings?.ai.ttsEnabled && (!piperOk || (settings?.ai.ttsEngine ?? 'auto') === 'system') && (
               voices.some((v) => !v.remote) ? (
