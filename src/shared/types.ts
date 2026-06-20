@@ -362,6 +362,9 @@ export interface AppSettings {
     endpoint: string;
     model: string;
     defaultSystemPrompt: string;
+    /** Render assistant replies as formatted markdown (bold/italics/bullets/headings) instead of
+     *  raw text. Default true; off shows the plain raw text. */
+    formattedOutput: boolean;
     /** Reference into secrets.enc; the API key itself is never stored here. */
     apiKeyRef: string | null;
     /** Text-to-speech (offline, Web Speech / OS voices). Flat fields so partial settings
@@ -541,6 +544,7 @@ export const defaultSettings: AppSettings = {
     endpoint: 'http://localhost:11434',
     model: 'qwen3-abliterated:4b',
     defaultSystemPrompt: 'You are an investigative case-management assistant. Use only the case data the user has explicitly shared. Be concise.',
+    formattedOutput: true,
     apiKeyRef: null,
     ttsEnabled: false,
     ttsVoiceUri: null,

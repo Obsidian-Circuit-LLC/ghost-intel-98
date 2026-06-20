@@ -366,6 +366,11 @@ function AiPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSettings>)
         <label style={{ alignSelf: 'flex-start' }}>System prompt:</label>
         <textarea className="ga98-text" rows={3} value={s.ai.defaultSystemPrompt}
           onChange={(e) => void patch({ ai: { ...s.ai, defaultSystemPrompt: e.target.value } })} />
+        <label style={{ alignSelf: 'flex-start', display: 'flex', gap: 6, alignItems: 'center' }}>
+          <input type="checkbox" checked={s.ai.formattedOutput}
+            onChange={(e) => void patch({ ai: { ...s.ai, formattedOutput: e.target.checked } })} />
+          Formatted assistant output (bold/italics/bullets)
+        </label>
       </div>
       <p style={{ fontSize: 11, color: '#444', marginTop: 8 }}>
         The API key is sent to the configured endpoint only when you send an AI message.
