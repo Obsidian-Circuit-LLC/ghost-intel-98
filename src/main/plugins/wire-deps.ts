@@ -37,6 +37,7 @@ import { getEngagementController } from '../offensive/controller';
 import { getBgConnManager } from '../bgconn/singleton';
 import { makeBgConnSecrets } from '../bgconn/secrets';
 import { ensurePluginTor, torFetch } from './tor-egress';
+import { recall } from '../services/memory';
 
 /**
  * Strip credential-bearing headers from a header map. Used when a plugin egress redirect
@@ -319,6 +320,10 @@ export function buildContextDeps(): ContextDeps {
       }),
       isVaultLocked: () => getBgConnManager()?.isVaultLocked() ?? true,
       noteReconnect: (connId) => { getBgConnManager()?.noteReconnect(connId); }
-    }
+    },
+
+    // Cross-case vector recall: plugins with the 'vector-recall' cap can query recalled material
+    // across all cases. Falsy caseId ⇒ recall() scans every shard. Loopback embeddings; no egress.
+    vectorRecall: { recallAcrossCases: (query, opts) => recall(query, { k: opts.k, minScore: opts.minScore }) }
   };
 }
