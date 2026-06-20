@@ -256,7 +256,8 @@ const api = {
     delete: (id: string) => ipcRenderer.invoke(channels.streams.delete, id),
     clear: () => ipcRenderer.invoke(channels.streams.clear),
     import: (stamp?: { country?: string; region?: string; city?: string }) => ipcRenderer.invoke(channels.streams.import, stamp),
-    detect: (url: string) => ipcRenderer.invoke(channels.streams.detect, url)
+    detect: (url: string) => ipcRenderer.invoke(channels.streams.detect, url),
+    exportCctv: () => ipcRenderer.invoke(channels.streams.exportCctv)
   },
   walls: {
     list: () => ipcRenderer.invoke(channels.walls.list),

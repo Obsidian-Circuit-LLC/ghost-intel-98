@@ -37,6 +37,7 @@ import * as mail from '../services/mail';
 import * as ssh from '../services/ssh';
 import * as shellSvc from '../services/shell';
 import * as streams from '../services/streams';
+import { streamsToMasterTree } from '../services/cctv-export';
 import { detectStream } from '../services/stream-detect';
 import * as walls from '../services/walls';
 import * as sounds from '../services/sounds';
@@ -969,6 +970,19 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     // for the bounded-egress rationale. rtsp can't be probed over HTTP, so it's rejected here.
     if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) throw new Error('Detect needs an http(s) URL.');
     return detectStream(url);
+  });
+  safeHandle(channels.streams.exportCctv, async () => {
+    const tree = streamsToMasterTree(await streams.list());
+    const win = getWindow();
+    const r = win
+      ? await dialog.showSaveDialog(win, { defaultPath: 'master_CCTV.json' })
+      : await dialog.showSaveDialog({ defaultPath: 'master_CCTV.json' });
+    if (r.canceled || !r.filePath) return null;
+    // Refuse a symlink target so an export can't be redirected to overwrite another file.
+    try { const st = await lstat(r.filePath); if (st.isSymbolicLink()) throw new Error('Refusing to write to a symbolic link.'); }
+    catch (err) { if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err; }
+    await writeFile(r.filePath, JSON.stringify(tree, null, 2), 'utf8');
+    return basename(r.filePath);
   });
 
   // ---- walls (EyeSpy) ----

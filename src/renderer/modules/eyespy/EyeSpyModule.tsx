@@ -247,6 +247,15 @@ export function EyeSpyModule(): JSX.Element {
 
   const onImport = (): void => void importFeeds(selectedNode ? nodeStamp(selectedNode) : undefined);
 
+  const onExport = (): void => void (async () => {
+    try {
+      const name = await window.api.streams.exportCctv();
+      if (name) toast.success(`Exported ${name}.`);
+    } catch (err) {
+      toast.error(`Export failed: ${(err as Error).message}`);
+    }
+  })();
+
   function newWall(): void {
     setWallSetup({ mode: 'new' });
   }
@@ -300,7 +309,7 @@ export function EyeSpyModule(): JSX.Element {
         <Finder
           tab={tab} onTab={setTab} query={query} onQuery={setQuery} tree={tree} cities={cities} feeds={feeds}
           selectedKey={selectedKey} onSelectNode={(n) => { setSelectedKey(n?.key ?? null); setExpanded(null); }}
-          onFeedAction={onFeedAction} onRefresh={() => void refresh()} onImport={onImport} importLabel={importLabel}
+          onFeedAction={onFeedAction} onRefresh={() => void refresh()} onImport={onImport} importLabel={importLabel} onExport={onExport}
         />
       </div>
       <div className="ga98-pane" style={{ display: 'flex', flexDirection: 'column', padding: 0, position: 'relative' }}>

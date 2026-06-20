@@ -222,7 +222,8 @@ export const channels = {
     delete: 'streams:delete',
     clear: 'streams:clear',
     import: 'streams:import',
-    detect: 'streams:detect'
+    detect: 'streams:detect',
+    exportCctv: 'streams:exportCctv'
   },
   walls: {
     list: 'walls:list',
