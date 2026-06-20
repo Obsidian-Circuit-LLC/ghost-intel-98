@@ -10,7 +10,8 @@ function deps(networkEnabled: boolean): ContextDeps {
     entities: {} as never,
     timelineAppend: vi.fn(async () => {}),
     caseSidecar: { read: vi.fn(async () => null), write: vi.fn(async () => {}) },
-    pluginStore: { read: vi.fn(async () => null), write: vi.fn(async () => {}), list: vi.fn(async () => []), delete: vi.fn(async () => {}) }
+    pluginStore: { read: vi.fn(async () => null), write: vi.fn(async () => {}), list: vi.fn(async () => []), delete: vi.fn(async () => {}) },
+    vectorRecall: { recallAcrossCases: async () => [] }
   };
 }
 
@@ -48,6 +49,15 @@ describe('PluginContext capability scoping', () => {
     const ctx = createPluginContext('tg', ['persistent-background-connection'], d);
     expect(ctx.bgConn).toBeDefined();
     expect(ctx.egress).toBeUndefined(); // no egress capability ⇒ no fetch surface
+  });
+
+  it('vector-recall capability gates ctx.vectors', async () => {
+    const ctx = createPluginContext('osint', ['vector-recall'], deps(true));
+    expect(ctx.vectors).toBeDefined();
+    const hits = await ctx.vectors!.recallAcrossCases('q', { k: 3, minScore: 0.8 });
+    expect(Array.isArray(hits)).toBe(true);
+    const bare = createPluginContext('osint', [], deps(true));
+    expect(bare.vectors).toBeUndefined();
   });
 
   it('bgconn + egress: egress.fetch still rejects loopback/socks via the SSRF gate', async () => {

@@ -1,6 +1,14 @@
 import type { Capability } from '../../shared/plugin-types';
+import type { RecallHit } from '../services/memory';
 
 export interface PluginFetchInit { method?: string; headers?: Record<string, string>; body?: string; direct?: boolean; }
+
+export interface VectorRecall {
+  /** Embed `query` and return top-k chunks across ALL cases (cosine). The caller filters out its
+   *  own case. Loopback embeddings only; no egress. */
+  recallAcrossCases(query: string, opts: { k: number; minScore: number }): Promise<RecallHit[]>;
+}
+
 export interface PluginFetchResponse { status: number; body: string; finalUrl: string; blocked?: boolean; }
 
 export interface ContextDeps {
@@ -19,6 +27,7 @@ export interface ContextDeps {
     isVaultLocked(): boolean;
     noteReconnect(connId: string): void;
   };
+  vectorRecall?: { recallAcrossCases(query: string, opts: { k: number; minScore: number }): Promise<RecallHit[]> };
 }
 
 export interface PluginContext {
@@ -38,6 +47,7 @@ export interface PluginContext {
     isVaultLocked(): boolean;
     noteReconnect(connId: string): void;
   };
+  vectors?: VectorRecall;
 }
 
 export function createPluginContext(
@@ -98,5 +108,10 @@ export function createPluginContext(
     ctx.attackEgress = deps.attackEgress;
   }
   if (has('persistent-background-connection') && deps.bgConn) ctx.bgConn = deps.bgConn;
+  if (has('vector-recall') && deps.vectorRecall) {
+    ctx.vectors = {
+      recallAcrossCases: (query, opts) => deps.vectorRecall!.recallAcrossCases(query, opts)
+    };
+  }
   return ctx;
 }

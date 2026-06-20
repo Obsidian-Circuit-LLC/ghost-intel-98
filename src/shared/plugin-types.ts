@@ -2,7 +2,7 @@
 
 export const CAPABILITIES = [
   'egress', 'secrets', 'case-storage', 'plugin-storage', 'entity-registry', 'timeline',
-  'authorized-target-egress', 'persistent-background-connection'
+  'authorized-target-egress', 'persistent-background-connection', 'vector-recall'
 ] as const;
 export type Capability = (typeof CAPABILITIES)[number];
 
