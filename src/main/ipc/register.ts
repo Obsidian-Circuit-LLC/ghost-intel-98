@@ -45,7 +45,7 @@ import * as ai from '../services/ai';
 import * as localAi from '../services/local-ai';
 import * as chat from '../services/chat';
 import * as piperTts from '../services/piper-tts';
-import { listUserVoices } from '../services/piper-voices';
+import { listUserVoices, listBundledVoices } from '../services/piper-voices';
 import * as bookmarks from '../storage/bookmarks';
 import * as history from '../storage/history';
 import * as firefox from '../services/firefox';
@@ -330,7 +330,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.tts.piperStatus, () => piperTts.piperStatus());
   safeHandle(channels.tts.synthesize, (...a) => piperTts.synthesize(ensureTtsText(a[0]), ensureRate(a[1]), typeof a[2] === 'string' ? a[2] : undefined));
   safeHandle(channels.tts.cancel, () => { piperTts.cancelActive(); });
-  safeHandle(channels.tts.listVoices, () => listUserVoices());
+  safeHandle(channels.tts.listVoices, async () => [...await listBundledVoices(), ...await listUserVoices()]);
   safeHandle(channels.tts.revealVoicesFolder, () => piperTts.revealVoicesFolder());
 
   // ---- auth (login / encrypt-at-rest) ----
