@@ -36,6 +36,7 @@ import { PinballModule } from './pinball/PinballModule';
 import { ChatModule } from './chat/ChatModule';
 import { CameraViewModule } from './cameraview/CameraViewModule';
 import { HostInfoModule } from './hostinfo/HostInfoModule';
+import { NewsViewModule } from './geoint/NewsViewModule';
 import { HelpModule } from './help/HelpModule';
 
 // ---------------------------------------------------------------------------
@@ -166,6 +167,10 @@ function HostInfoAdapter({ spec }: { spec: WindowSpec }): JSX.Element {
   return <HostInfoModule stream={spec.props?.['stream'] as import('@shared/post-mvp-types').CameraStream} />;
 }
 
+function NewsViewAdapter({ spec }: { spec: WindowSpec }): JSX.Element {
+  return <NewsViewModule stream={spec.props?.['stream'] as import('./geoint/NewsStreamView').NewsStream} />;
+}
+
 function HelpAdapter({ spec: _spec }: { spec: WindowSpec }): JSX.Element {
   return <HelpModule />;
 }
@@ -205,5 +210,6 @@ export function registerBuiltins(): void {
   registerModule({ key: 'chat',         title: 'Chat (beta)',      glyph: '💬', component: ChatAdapter,         builtin: true });
   registerModule({ key: 'camera-view', title: 'Camera', glyph: '📹', component: CameraViewAdapter, builtin: true, defaultWidth: 480, defaultHeight: 360 });
   registerModule({ key: 'host-info', title: 'Host Info', glyph: '🖥', component: HostInfoAdapter, builtin: true, defaultWidth: 460, defaultHeight: 360 });
+  registerModule({ key: 'news-view', title: 'News', glyph: '📺', component: NewsViewAdapter, builtin: true, defaultWidth: 640, defaultHeight: 480 });
   registerModule({ key: 'help',         title: 'RTFM',             glyph: '?',  component: HelpAdapter,         builtin: true });
 }

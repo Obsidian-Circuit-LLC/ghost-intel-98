@@ -1,33 +1,30 @@
 /**
- * GeoINT — Live News video panel (R12). A user-managed playlist of news streams played inline:
+ * GeoINT — Live News video panel (R12). A user-managed playlist of news streams. Playback is
+ * delegated to the shared <NewsStreamView/> (geoint/NewsStreamView.tsx), which also backs the
+ * pop-out news-view window so both surfaces render identically:
  *   - kind 'hls'     → hls.js into a muted, autoplaying <video> (same pattern as EyeSpy Viewer).
  *   - kind 'youtube' → a sandboxed www.youtube-nocookie.com/embed iframe (the single, operator-
  *                      authorized exception to the renderer frame-src invariant; host-scoped in
  *                      src/renderer/index.html).
  *
- * Like every GeoINT surface, the panel is gated on settings.geoint.networkEnabled: with the
- * network off it loads NOTHING (no HLS chunks, no iframe) and shows a placeholder.
+ * The settings.geoint.networkEnabled gate (network off ⇒ loads NOTHING: no HLS chunks, no iframe)
+ * now lives inside NewsStreamView, so it is enforced on every surface from one place. This panel
+ * only renders the "no stream selected" placeholder before handing a selected stream to the view,
+ * and the ⧉ button pops the selected stream into its own window (geoint/newsWindow.ts).
  *
  * parseYouTubeId / validateStreamUrl are exported as pure functions so they're unit-tested
  * (test/geoint-livenews.test.ts) without rendering.
  */
 
-import Hls from 'hls.js';
-import { useEffect, useRef, useState } from 'react';
-import { useSettings } from '../../state/store';
+import { useState } from 'react';
+import { useSettings, useWindows } from '../../state/store';
 import { toast } from '../../state/toasts';
-import { parseYouTubeId, youtubeEmbedSrc } from '@shared/youtube';
+import { parseYouTubeId } from '@shared/youtube';
+import { NewsStreamView, type NewsStream, type NewsStreamKind } from './NewsStreamView';
+import { newsWindowSpec } from './newsWindow';
 
 // Re-export so existing callers/tests that import parseYouTubeId from this module still resolve.
-// The implementation now lives in the shared, DOM-free module (also used by the EyeSpy Viewer).
 export { parseYouTubeId };
-
-export type NewsStreamKind = 'hls' | 'youtube';
-export interface NewsStream {
-  label: string;
-  url: string;
-  kind: NewsStreamKind;
-}
 
 /**
  * Validate a user-supplied stream URL for the given kind.
@@ -68,36 +65,6 @@ function isPublicHost(hostname: string): boolean {
     if (a > 255 || b > 255 || Number(m[3]) > 255 || Number(m[4]) > 255) return false;
   }
   return true;
-}
-
-function HlsVideo({ url }: { url: string }): JSX.Element {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-    if (Hls.isSupported()) {
-      const hls = new Hls();
-      hls.loadSource(url);
-      hls.attachMedia(video);
-      return () => hls.destroy();
-    }
-    // Safari / native HLS fallback.
-    video.src = url;
-    return () => {
-      video.src = '';
-      video.load();
-    };
-  }, [url]);
-  return (
-    <video
-      ref={videoRef}
-      muted
-      autoPlay
-      playsInline
-      controls
-      style={{ width: '100%', height: '100%', background: '#000' }}
-    />
-  );
 }
 
 export function LiveNewsPanel(): JSX.Element {
@@ -169,8 +136,6 @@ export function LiveNewsPanel(): JSX.Element {
     patchNews({ newsStreams: next, newsStreamIndex: Math.max(0, nextIndex) });
   }
 
-  const ytId = active && active.kind === 'youtube' ? parseYouTubeId(active.url) : null;
-
   return (
     <fieldset className="ga98-livenews">
       <legend>Live News</legend>
@@ -192,7 +157,10 @@ export function LiveNewsPanel(): JSX.Element {
           ))}
         </select>
         {active && (
-          <button title="Remove this stream" onClick={() => removeStream(index)}>✕</button>
+          <>
+            <button title="Pop out to its own window" onClick={() => useWindows.getState().open(newsWindowSpec(active))}>⧉</button>
+            <button title="Remove this stream" onClick={() => removeStream(index)}>✕</button>
+          </>
         )}
       </div>
 
@@ -200,30 +168,12 @@ export function LiveNewsPanel(): JSX.Element {
         className="ga98-livenews-video"
         style={{ position: 'relative', width: '100%', aspectRatio: '16 / 9', background: '#000', marginBottom: 6 }}
       >
-        {!net ? (
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ad', fontSize: 12, textAlign: 'center', padding: 12 }}>
-            Enable the GeoINT network to play live news.
-          </div>
-        ) : !active ? (
+        {!active ? (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ad', fontSize: 12, textAlign: 'center', padding: 12 }}>
             No stream selected. Add one below.
           </div>
-        ) : active.kind === 'hls' ? (
-          <HlsVideo key={active.url} url={active.url} />
-        ) : ytId ? (
-          <iframe
-            key={ytId}
-            title={active.label}
-            src={youtubeEmbedSrc(ytId)}
-            sandbox="allow-scripts allow-same-origin allow-presentation"
-            allow="autoplay; encrypted-media; picture-in-picture"
-            referrerPolicy="no-referrer"
-            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 0 }}
-          />
         ) : (
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#e88', fontSize: 12, textAlign: 'center', padding: 12 }}>
-            Cannot parse a YouTube video id from this stream URL.
-          </div>
+          <NewsStreamView stream={active} />
         )}
       </div>
 
