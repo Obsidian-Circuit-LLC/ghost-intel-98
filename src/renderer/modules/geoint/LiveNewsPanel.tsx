@@ -1,12 +1,16 @@
 /**
- * GeoINT — Live News video panel (R12). A user-managed playlist of news streams played inline:
+ * GeoINT — Live News video panel (R12). A user-managed playlist of news streams. Playback is
+ * delegated to the shared <NewsStreamView/> (geoint/NewsStreamView.tsx), which also backs the
+ * pop-out news-view window so both surfaces render identically:
  *   - kind 'hls'     → hls.js into a muted, autoplaying <video> (same pattern as EyeSpy Viewer).
  *   - kind 'youtube' → a sandboxed www.youtube-nocookie.com/embed iframe (the single, operator-
  *                      authorized exception to the renderer frame-src invariant; host-scoped in
  *                      src/renderer/index.html).
  *
- * Like every GeoINT surface, the panel is gated on settings.geoint.networkEnabled: with the
- * network off it loads NOTHING (no HLS chunks, no iframe) and shows a placeholder.
+ * The settings.geoint.networkEnabled gate (network off ⇒ loads NOTHING: no HLS chunks, no iframe)
+ * now lives inside NewsStreamView, so it is enforced on every surface from one place. This panel
+ * only renders the "no stream selected" placeholder before handing a selected stream to the view,
+ * and the ⧉ button pops the selected stream into its own window (geoint/newsWindow.ts).
  *
  * parseYouTubeId / validateStreamUrl are exported as pure functions so they're unit-tested
  * (test/geoint-livenews.test.ts) without rendering.
