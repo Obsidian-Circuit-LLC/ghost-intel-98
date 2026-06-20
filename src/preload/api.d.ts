@@ -57,7 +57,8 @@ import type {
   AiConversationInput,
   BriefcaseNote,
   BriefcaseNoteSummary,
-  BriefcaseNoteInput
+  BriefcaseNoteInput,
+  HostInfo
 } from '../shared/post-mvp-types';
 
 export interface MailDraft {
@@ -470,6 +471,9 @@ export interface GhostApi {
       maxSessionAgeMinutes: number;
     }): Promise<void>;
     clearCredentials(pluginId: string, connId: string): Promise<void>;
+  };
+  hostinfo: {
+    resolve(url: string, opts?: { force?: boolean }): Promise<HostInfo>;
   };
 }
 

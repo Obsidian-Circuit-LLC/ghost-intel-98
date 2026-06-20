@@ -359,7 +359,8 @@ export const channels = {
     configure: 'bgconn:configure',
     clearCredentials: 'bgconn:clearCredentials',
     status: 'bgconn:status'
-  }
+  },
+  hostinfo: { resolve: 'hostinfo:resolve' }
 } as const;
 
 export interface MemoryStatus { model: string; cases: number; chunks: number }

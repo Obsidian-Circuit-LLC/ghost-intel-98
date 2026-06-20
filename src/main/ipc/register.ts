@@ -86,6 +86,7 @@ import { getBgConnManager } from '../bgconn/singleton';
 import { makeBgConnSecrets, type SecretBackend } from '../bgconn/secrets';
 import { secretStore } from '../secrets/index';
 import { homedir } from 'node:os';
+import { hostInfoService } from '../services/hostinfo/index';
 
 const MAX_SAVE_ATTACHMENT_BYTES = 64 * 1024 * 1024; // 64 MB cap on base64 decoded payload
 const MAX_EXPORT_BYTES = 64 * 1024 * 1024;
@@ -1248,6 +1249,13 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     const pluginId = String(a[0]);
     const connId = String(a[1]);
     await bgSecrets.clear(pluginId, connId, BGCONN_SECRET_FIELDS);
+  });
+
+  // ---- hostinfo (camera host resolution — Tor-only DNS/RDAP recon) ----
+  safeHandle(channels.hostinfo.resolve, async (...args) => {
+    const url = String(args[0] ?? '');
+    const force = !!(args[1] as { force?: boolean } | undefined)?.force;
+    return hostInfoService.resolve(url, { force });
   });
 
   startMailPoller(getWindow);
