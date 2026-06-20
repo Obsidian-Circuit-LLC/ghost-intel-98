@@ -13,7 +13,7 @@ import { mkdir, readdir, readFile, stat, unlink } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { buildPiperArgs, rateToLengthScale, isValidWavHeader, verifySha256 } from './piper-core';
-import { resolveUserModelPath, userVoicesDir } from './piper-voices';
+import { resolveUserModelPath, userVoicesDir, DEFAULT_BUNDLED_ID, resolveBundledModelPath } from './piper-voices';
 
 /** Pinned SHA-256 of the bundled binary (lowercase hex) — verify-before-exec. This is the hash of
  *  the Windows `piper.exe` from rhasspy/piper 2023.11.14-2 (piper_windows_amd64.zip). On non-Windows
@@ -73,8 +73,10 @@ async function resolvePaths(): Promise<Resolved | null> {
   let model: string | null = null;
   try {
     const entries = await readdir(dir);
-    const onnx = entries.find((e) => e.endsWith('.onnx'));
-    if (onnx && entries.includes(`${onnx}.json`)) model = join(dir, onnx);
+    const pick = entries.includes(DEFAULT_BUNDLED_ID) && entries.includes(`${DEFAULT_BUNDLED_ID}.json`)
+      ? DEFAULT_BUNDLED_ID
+      : entries.find((e) => e.endsWith('.onnx') && entries.includes(`${e}.json`));
+    if (pick) model = join(dir, pick);
   } catch {
     return null;
   }
@@ -103,9 +105,9 @@ export function piperStatus(): Promise<{ available: boolean }> {
 export async function synthesize(text: string, rate?: number, voiceId?: string): Promise<Uint8Array> {
   const r = await resolvePaths();
   if (!r) throw new Error('Piper voice is not installed.');
-  // A chosen user voice (traversal-safe); a missing/invalid/absent id falls back to the bundled model.
-  const userModel = voiceId ? await resolveUserModelPath(voiceId) : null;
-  const model = userModel ?? r.model;
+  // Bundled voices win over user voices on an id collision; an unknown/invalid id → the default model.
+  const chosen = voiceId ? (await resolveBundledModelPath(voiceId)) ?? (await resolveUserModelPath(voiceId)) : null;
+  const model = chosen ?? r.model;
   const tmp = join(app.getPath('temp'), `ga98-piper-${randomUUID().slice(0, 8)}.wav`);
   const args = buildPiperArgs(model, rateToLengthScale(rate), tmp);
 
