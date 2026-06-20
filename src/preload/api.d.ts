@@ -214,8 +214,10 @@ export interface GhostApi {
   };
   tts: {
     piperStatus(): Promise<{ available: boolean }>;
-    synthesize(text: string, rate?: number): Promise<Uint8Array>;
+    synthesize(text: string, rate?: number, voiceId?: string): Promise<Uint8Array>;
     cancel(): Promise<void>;
+    listVoices(): Promise<{ id: string; name: string }[]>;
+    revealVoicesFolder(): Promise<void>;
   };
   mail: {
     listAccounts(): Promise<MailAccount[]>;
