@@ -315,6 +315,9 @@ export interface GhostApi {
     /** Probe a user-entered camera URL to detect its StreamKind + the real media endpoint when the
      *  entered URL is an HTML viewer page. Returns null if nothing playable was found. */
     detect(url: string): Promise<{ kind: CameraStream['kind']; url: string } | null>;
+    /** Export the camera library to a master CCTV JSON file (Country→Region→City→[{stream_url,
+     *  coordinates?}]) via a save dialog. Returns the saved filename, or null if cancelled. */
+    exportCctv(): Promise<string | null>;
   };
   walls: {
     list(): Promise<Wall[]>;

@@ -4,7 +4,7 @@ import { countryFlag, type TreeNode, type CityEntry } from './tree';
 
 export type FeedAction = 'add' | 'play' | 'edit' | 'setloc' | 'delete' | 'resolve';
 
-export function Finder({ tab, onTab, query, onQuery, tree, cities, feeds, selectedKey, onSelectNode, onFeedAction, onRefresh, onImport, importLabel }: {
+export function Finder({ tab, onTab, query, onQuery, tree, cities, feeds, selectedKey, onSelectNode, onFeedAction, onRefresh, onImport, importLabel, onExport }: {
   tab: 'countries' | 'cities';
   onTab: (t: 'countries' | 'cities') => void;
   query: string;
@@ -18,6 +18,7 @@ export function Finder({ tab, onTab, query, onQuery, tree, cities, feeds, select
   onRefresh: () => void;
   onImport: () => void;
   importLabel: string;
+  onExport: () => void;
 }): JSX.Element {
   const [menu, setMenu] = useState<{ x: number; y: number; s: CameraStream } | null>(null);
   // Collapse-all: a monotonic counter. Bumping it signals every TreeRow to close (see TreeRow's
@@ -58,6 +59,7 @@ export function Finder({ tab, onTab, query, onQuery, tree, cities, feeds, select
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: 4, borderTop: '1px solid #ccc', flexShrink: 0 }}>
         <button onClick={onRefresh}>Refresh</button>
         <button onClick={onImport} style={{ flex: 1, minWidth: 120 }} title={'Import your own feeds — JSON array of {url,label,country,region,city,lat,lon}, a nested Country→Region→City JSON tree, or a CSV with a header row. Include country/region/city to auto-file them under the tree. See docs/EYESPY_IMPORT_FORMAT.md.'}>{importLabel}</button>
+        <button onClick={onExport} title="Export the whole camera library to a master CCTV JSON file (re-importable).">Export CCTV…</button>
       </div>
       {menu && <FeedMenu x={menu.x} y={menu.y} onPick={(a) => { onFeedAction(a, menu.s); setMenu(null); }} onClose={() => setMenu(null)} />}
     </div>
