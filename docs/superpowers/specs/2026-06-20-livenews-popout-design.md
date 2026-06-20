@@ -52,8 +52,14 @@ export function NewsStreamView({ stream }: { stream: NewsStream }): JSX.Element
   — no `HlsVideo`, no `<iframe>`, no network fetch. A pop-out window is a second surface playing
   the same stream, so it must honor the same gate or it becomes an egress bypass. The gate must NOT
   be a trusting prop; the component reads settings so neither call site can skip it.
-- Renders the existing switch: net-off placeholder → `hls`→`HlsVideo` → `youtube` with a parseable
-  id → `<iframe>` → unparseable-id error placeholder.
+- Renders the existing switch, driven by an exported pure decision function
+  `newsRenderMode(stream, net): 'offline' | 'hls' | 'youtube' | 'bad-youtube-id'` (so the
+  egress-gate behavior is unit-testable without a render harness): net-off → `'offline'`
+  placeholder; `hls` → `HlsVideo`; `youtube` with a parseable id → `<iframe>`; otherwise
+  `'bad-youtube-id'` placeholder.
+- Both call sites place `NewsStreamView` inside a `position:relative` container (the panel's
+  aspect-ratio box; the window's flex-fill box) because the placeholders and the `<iframe>` use
+  `position:absolute; inset:0`.
 - The "no stream selected" placeholder stays in `LiveNewsPanel` (a window always has a stream), so
   `NewsStreamView` always receives a defined `stream`.
 
@@ -138,13 +144,25 @@ useWindows.getState().open({
 
 ## Testing
 
-- `newsWindow.test.ts`: `newsWindowId` is stable for the same `{kind,url}` and distinct across kind
-  or url.
-- `NewsStreamView` (rendered): with `net` off, renders the placeholder and mounts no `<video>` /
-  `<iframe>` (the egress-gate assertion); with `net` on + an `hls` stream, mounts the player.
-- `LiveNewsPanel`: the ⧉ button calls `open` with `module:'news-view'` and the deduped id; inline
-  playback still works after the `NewsStreamView` extraction.
+The vitest env is `node` and the project has no React render harness (no `@testing-library`); it
+tests **pure functions** (cf. `parseYouTubeId`/`validateStreamUrl`). So the load-bearing logic is
+extracted into pure helpers and tested directly; the JSX wrappers are thin and verified by
+typecheck + the operator's manual smoke.
+
+- `newsWindow.test.ts`:
+  - `newsWindowId(stream)` is stable for the same `{kind,url}` and distinct across a differing kind
+    or url.
+  - `newsWindowSpec(stream)` returns `{ module:'news-view', id:newsWindowId(stream), title:label,
+    props:{stream}, width:640, height:480 }` — the exact `open()` argument the ⧉ button passes.
+- `newsstreamview.test.ts` — `newsRenderMode(stream, net)` (the pure decision behind the player):
+  - **`net === false` ⇒ `'offline'` for every kind** (the egress-gate invariant: network off
+    renders no player and no iframe, on every surface).
+  - `net === true` + `kind:'hls'` ⇒ `'hls'`; + `kind:'youtube'` with a parseable url ⇒ `'youtube'`;
+    + `kind:'youtube'` with an unparseable url ⇒ `'bad-youtube-id'`.
 - `register-builtins.test.ts`: updated `EXPECTED` snapshot includes `'news-view'`.
+- `geoint-livenews.test.ts`: unchanged — still imports `parseYouTubeId`/`validateStreamUrl` from
+  `LiveNewsPanel` (the re-export and `validateStreamUrl` stay), proving the refactor didn't break
+  the panel's pure surface.
 
 ## Charter / invariants
 
