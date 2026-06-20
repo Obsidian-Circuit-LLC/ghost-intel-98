@@ -32,17 +32,25 @@ export async function list(): Promise<CameraStream[]> {
 }
 
 /**
- * Collect only the geo fields that are actually present and well-formed, so a stream without
- * location data keeps NO geo keys on disk (rather than a litter of `null`/`NaN`). lat/lon must
- * be finite numbers or they are dropped.
+ * Collect only the geo fields that are present and well-formed, so a stream without location data
+ * keeps NO geo keys on disk (rather than a litter of null/NaN). country/region/city are independent
+ * trimmed strings. lat/lon are kept ONLY as a valid PAIR — both finite and in range
+ * (lat ∈ [-90,90], lon ∈ [-180,180]); a lone or out-of-range coordinate can never produce a map pin
+ * (validCoord), so it is dropped wholesale. This is the main-side trust gate: the untrusted
+ * renderer's own validation is defense-in-depth. Exported for unit testing.
  */
-function pickGeo(i: Partial<CameraStream>): Partial<CameraStream> {
+export function pickGeo(i: Partial<CameraStream>): Partial<CameraStream> {
   const g: Partial<CameraStream> = {};
   if (typeof i.country === 'string' && i.country.trim()) g.country = i.country.trim();
   if (typeof i.region === 'string' && i.region.trim()) g.region = i.region.trim();
   if (typeof i.city === 'string' && i.city.trim()) g.city = i.city.trim();
-  if (typeof i.lat === 'number' && Number.isFinite(i.lat)) g.lat = i.lat;
-  if (typeof i.lon === 'number' && Number.isFinite(i.lon)) g.lon = i.lon;
+  if (
+    typeof i.lat === 'number' && Number.isFinite(i.lat) && i.lat >= -90 && i.lat <= 90 &&
+    typeof i.lon === 'number' && Number.isFinite(i.lon) && i.lon >= -180 && i.lon <= 180
+  ) {
+    g.lat = i.lat;
+    g.lon = i.lon;
+  }
   if (typeof i.source === 'string' && i.source.trim()) g.source = i.source.trim();
   return g;
 }

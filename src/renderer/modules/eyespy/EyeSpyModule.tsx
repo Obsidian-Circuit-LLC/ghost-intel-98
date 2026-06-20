@@ -231,16 +231,30 @@ export function EyeSpyModule(): JSX.Element {
     }
   }
 
-  const applyLoc = async ({ country, region, city }: { country: string; region: string; city: string }): Promise<void> => {
-    // Spread ...t to preserve label/url/kind/etc.; blank geo clears via the service's pickGeo.
+  const applyLoc = async (geo: { country: string; region: string; city: string; coords?: { lat?: number; lon?: number } }): Promise<void> => {
+    // Spread ...t to preserve label/url/kind/etc. Multi-target: no `coords` key ⇒ each camera's
+    // existing lat/lon is preserved. Single-target: `coords` is authoritative — set OR clear (the
+    // service's pickGeo drops undefined/out-of-range coords).
     for (const t of setLocTargets!) {
-      await window.api.streams.upsert({ ...t, country, region, city });
+      const base: Partial<CameraStream> & { url: string; label: string; kind: CameraStream['kind'] } =
+        { ...t, country: geo.country, region: geo.region, city: geo.city };
+      if (geo.coords) { base.lat = geo.coords.lat; base.lon = geo.coords.lon; }
+      await window.api.streams.upsert(base);
     }
     setSetLocTargets(null);
     await refresh();
   };
 
   const onImport = (): void => void importFeeds(selectedNode ? nodeStamp(selectedNode) : undefined);
+
+  const onExport = (): void => void (async () => {
+    try {
+      const name = await window.api.streams.exportCctv();
+      if (name) toast.success(`Exported ${name}.`);
+    } catch (err) {
+      toast.error(`Export failed: ${(err as Error).message}`);
+    }
+  })();
 
   function newWall(): void {
     setWallSetup({ mode: 'new' });
@@ -295,7 +309,7 @@ export function EyeSpyModule(): JSX.Element {
         <Finder
           tab={tab} onTab={setTab} query={query} onQuery={setQuery} tree={tree} cities={cities} feeds={feeds}
           selectedKey={selectedKey} onSelectNode={(n) => { setSelectedKey(n?.key ?? null); setExpanded(null); }}
-          onFeedAction={onFeedAction} onRefresh={() => void refresh()} onImport={onImport} importLabel={importLabel}
+          onFeedAction={onFeedAction} onRefresh={() => void refresh()} onImport={onImport} importLabel={importLabel} onExport={onExport}
         />
       </div>
       <div className="ga98-pane" style={{ display: 'flex', flexDirection: 'column', padding: 0, position: 'relative' }}>
