@@ -20,6 +20,7 @@ import { extractPdfText } from '../../lib/pdfExtract';
 import { loadAttachmentBytes } from '../../lib/attachmentBytes';
 import { createVoskRecognizer } from '../../voice/recognizer';
 import { VoiceConversation, type VoiceMode, type VoiceState } from '../../voice/conversation';
+import { MarkdownView } from './MarkdownView';
 
 interface DisplayMessage extends AiChatMessage {
   id: string;
@@ -56,6 +57,7 @@ export function AiAssistantModule(): JSX.Element {
   const scrollRef = useRef<HTMLDivElement>(null);
   const settings = useSettings((s) => s.settings);
   const patchSettings = useSettings((s) => s.patch);
+  const formatted = useSettings((s) => s.settings?.ai?.formattedOutput ?? true);
   const [voices, setVoices] = useState<TtsVoice[]>([]);
   const [voicesLoaded, setVoicesLoaded] = useState(false);
   const [piperOk, setPiperOk] = useState(false);
@@ -579,7 +581,9 @@ export function AiAssistantModule(): JSX.Element {
             <div style={{ fontSize: 11, fontWeight: 'bold', color: m.role === 'user' ? '#000080' : '#400080' }}>
               {m.role === 'user' ? 'You' : 'Assistant'}{m.streaming ? ' · streaming…' : ''}
             </div>
-            <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontFamily: 'inherit', fontSize: 13 }}>{m.content}</pre>
+            {formatted && m.role === 'assistant'
+              ? <MarkdownView text={m.content} />
+              : <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontFamily: 'inherit', fontSize: 13 }}>{m.content}</pre>}
           </div>
         ))}
       </div>
