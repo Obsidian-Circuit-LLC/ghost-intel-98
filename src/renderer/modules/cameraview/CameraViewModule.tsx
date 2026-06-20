@@ -6,6 +6,7 @@
 
 import type { CameraStream } from '@shared/post-mvp-types';
 import { Viewer } from '../eyespy/Viewer';
+import { HostInfoView } from '../hostinfo/HostInfoView';
 
 /** "<label> — <city · region · country>" using only the location parts that are present. */
 export function cameraHeaderText(stream: CameraStream): string {
@@ -22,6 +23,7 @@ export function CameraViewModule({ stream }: { stream: CameraStream }): JSX.Elem
       <div style={{ flex: 1, minHeight: 0, background: '#000' }}>
         <Viewer stream={stream} />
       </div>
+      <HostInfoView stream={stream} />
     </div>
   );
 }

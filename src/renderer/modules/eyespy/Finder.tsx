@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { CameraStream } from '@shared/post-mvp-types';
 import { countryFlag, type TreeNode, type CityEntry } from './tree';
 
-export type FeedAction = 'add' | 'play' | 'edit' | 'setloc' | 'delete';
+export type FeedAction = 'add' | 'play' | 'edit' | 'setloc' | 'delete' | 'resolve';
 
 export function Finder({ tab, onTab, query, onQuery, tree, cities, feeds, selectedKey, onSelectNode, onFeedAction, onRefresh, onImport, importLabel }: {
   tab: 'countries' | 'cities';
@@ -112,7 +112,7 @@ function FeedMenu({ x, y, onPick, onClose }: { x: number; y: number; onPick: (a:
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 99 }} />
       <div ref={ref} className="ga98-menu" style={{ position: 'fixed', left: pos.left, top: pos.top, zIndex: 100, background: '#c0c0c0', border: '2px outset #fff' }}>
-        {([['add', 'Add to active square'], ['play', 'Play full-screen'], ['edit', 'Edit…'], ['setloc', 'Set location…'], ['delete', 'Delete']] as [FeedAction, string][]).map(([a, label]) => (
+        {([['add', 'Add to active square'], ['play', 'Play full-screen'], ['edit', 'Edit…'], ['setloc', 'Set location…'], ['delete', 'Delete'], ['resolve', 'Resolve host (IP/DNS)']] as [FeedAction, string][]).map(([a, label]) => (
           <div key={a} onClick={() => onPick(a)} style={{ padding: '3px 12px', cursor: 'pointer' }}>{label}</div>
         ))}
       </div>
