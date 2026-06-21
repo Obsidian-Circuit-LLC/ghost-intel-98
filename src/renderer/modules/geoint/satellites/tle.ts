@@ -55,7 +55,7 @@ export function validateTlePair(
   name: string, line1: string, line2: string
 ): { ok: true; record: SatelliteRecord } | { ok: false; error: string } {
   if (!isL1(line1) || !isL2(line2)) {
-    return { ok: false, error: 'Invalid TLE: line 1 must start with "1 " and line 2 with "2 " (≥69 chars each).' };
+    return { ok: false, error: 'Invalid TLE: line 1 must start with "1 " and line 2 with "2 " (≥60 chars each).' };
   }
   return { ok: true, record: makeRecord(name, line1, line2) };
 }
