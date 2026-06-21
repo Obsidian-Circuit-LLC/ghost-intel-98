@@ -32,9 +32,11 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`GhostIntel98-Setup-3.18.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
+> **Install:** download [`GhostIntel98-Setup-3.18.1.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
 
 ## Status
+
+**v3.18.1** — **GeoINT map-popup ✕ polish.** The coordinate/pin popup's close button is now a small **bordered square** with a centered ✕, vertically centered on the pill, sitting in a reserved right-hand gutter so the coordinates can never run under it (it previously read as a wide button bleeding over the text). Renderer CSS only; everything from v3.18.0 carries forward.
 
 **v3.18.0** — **Live ADS-B aircraft and AIS ships on the GeoINT globe.** Two new toggleable real-time layers in GeoINT: **Live Aircraft (ADS-B)** polls [adsb.lol](https://adsb.lol) (free, no key, ODbL) every ~15 s and renders viewport-bounded aircraft as color-coded circle pins by altitude band (ground / low / mid / high); **Live Ships (AIS)** streams from [AISStream.io](https://aisstream.io) (free WebSocket, user-supplied API key) and renders viewport-bounded vessels at up to ~2 s cadence with 10-minute prune. Both layers are in the new **Live Feeds** panel in the left rail (below Space Satellites), disabled until the GeoINT network gate is on; AIS additionally requires a stored API key (same encrypted-key UX as FIRMS/UCDP — store once, key never re-echoed to the renderer). Toggling either layer off or leaving the module clears the feed and stops all traffic. The AIS WebSocket runs exclusively in the main process; the renderer receives only parsed positions over IPC (no CSP `connect-src` change, no renderer socket). New egress hosts: `api.adsb.lol` (REST) and `stream.aisstream.io` (WSS) — both hard-pinned, gated on the existing network opt-in. ADS-B data © adsb.lol contributors (ODbL). **1243 automated tests.** **Everything from v3.17.1 carries forward.**
 
@@ -435,7 +437,7 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases) and run it.
 
-Direct link to the current release: [`GhostIntel98-Setup-3.18.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.18.0/GhostIntel98-Setup-3.18.0.exe)
+Direct link to the current release: [`GhostIntel98-Setup-3.18.1.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.18.1/GhostIntel98-Setup-3.18.1.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is **formally verified internally** — symbolic (ProVerif) +
 computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not**
 FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.6.8/GhostIntel98-Setup-3.6.8.exe).
@@ -443,7 +445,7 @@ FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Se
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\GhostIntel98-Setup-3.18.0.exe -Algorithm SHA256
+Get-FileHash .\GhostIntel98-Setup-3.18.1.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
