@@ -420,6 +420,9 @@ const api = {
   },
   hostinfo: {
     resolve: (url: string, opts?: { force?: boolean }) => ipcRenderer.invoke(channels.hostinfo.resolve, url, opts)
+  },
+  livefeeds: {
+    fetchAdsb: (bounds: unknown) => ipcRenderer.invoke(channels.livefeeds.fetchAdsb, bounds),
   }
 } as const;
 

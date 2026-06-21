@@ -90,6 +90,7 @@ import { makeBgConnSecrets, type SecretBackend } from '../bgconn/secrets';
 import { secretStore } from '../secrets/index';
 import { homedir } from 'node:os';
 import { hostInfoService } from '../services/hostinfo/index';
+import * as adsb from '../services/livefeeds/adsb';
 
 const MAX_SAVE_ATTACHMENT_BYTES = 64 * 1024 * 1024; // 64 MB cap on base64 decoded payload
 const MAX_EXPORT_BYTES = 64 * 1024 * 1024;
@@ -1282,6 +1283,9 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     const force = !!(args[1] as { force?: boolean } | undefined)?.force;
     return hostInfoService.resolve(url, { force });
   });
+
+  // ---- livefeeds (ADS-B + AIS; egress gated by settings.geoint.networkEnabled) ----
+  safeHandle(channels.livefeeds.fetchAdsb, (...a) => adsb.fetchAdsb(a[0] as Parameters<typeof adsb.fetchAdsb>[0]));
 
   startMailPoller(getWindow);
 }

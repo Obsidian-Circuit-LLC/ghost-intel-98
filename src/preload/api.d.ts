@@ -487,6 +487,9 @@ export interface GhostApi {
   hostinfo: {
     resolve(url: string, opts?: { force?: boolean }): Promise<HostInfo>;
   };
+  livefeeds: {
+    fetchAdsb(bounds: { west: number; south: number; east: number; north: number }): Promise<Array<{ id: string; callsign: string | null; lat: number; lon: number; altFt: number | null; gsKt: number | null; trackDeg: number | null; band: 'ground'|'low'|'mid'|'high' }>>;
+  };
 }
 
 declare global {
