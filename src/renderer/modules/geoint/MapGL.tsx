@@ -410,6 +410,7 @@ export function MapGL(props: MapGLProps = {}): JSX.Element {
     });
     map.current = m;
     return () => {
+      if (bboxDebounceRef.current) clearTimeout(bboxDebounceRef.current);
       map.current?.remove();
       map.current = null;
     };
