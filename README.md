@@ -32,9 +32,11 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`GhostIntel98-Setup-3.17.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
+> **Install:** download [`GhostIntel98-Setup-3.17.1.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
 
 ## Status
+
+**v3.17.1** — **Hotfix: GeoINT no longer crashes on load.** v3.17.0 could throw **"Style is not done loading"** and drop GeoINT into its error screen (Reset couldn't recover): the new Space Satellites layer called MapLibre's `addSource` before the map style had finished loading — synchronously at init and from a `styledata` event that fires mid-load. Satellite-layer creation is now guarded by `isStyleLoaded()` and driven off the `load` + a self-guarded `styledata` event, so it only ever adds the source once the style is ready (and still survives basemap/network toggles). Renderer-only; everything from v3.17.0 carries forward.
 
 **v3.17.0** — **Space Satellites on the GeoINT globe.** A new toggleable **Space Satellites layer** in GeoINT: tick **"Show Space Satellites (N)"** and every active satellite in the offline TLE snapshot drops a real-time SGP4-propagated pin on the 3D globe, color-coded by type (Starlink, GPS, weather, comms, earth-obs, space stations, scientific, other). The layer boots from a bundled offline TLE snapshot (no network needed on first toggle); enable the GeoINT network and hit **Refresh** to pull a live catalogue from CelesTrak for the group of your choice (Active Satellites, Starlink, GPS, Space Stations, etc.). Add or paste-import your own TLE sets via the **Space Satellite Manager** panel alongside — user satellites merge with the snapshot on load. A sortable, filterable table shows the propagated set (name, type, altitude, velocity, inclination) with **Track / Center / Details** row actions and a **Export…** JSON download. Per-type checkboxes filter both the table and the globe. Refresh without network enabled toasts guidance rather than fetching. No new egress beyond `celestrak.org`, already behind the existing GeoINT network opt-in. This release also **actually fixes the GeoINT map popup** that v3.16.3 tried to: that "fix" tied MapLibre's own CSS on specificity and lost on load order, leaving a white box with near-invisible coordinates — the popup is now an **opaque black card with light-grey, unobstructed coordinates and a minimal square ✕** (specificity-correct, so it wins regardless of import order). **1226 automated tests.** **Everything from v3.16.3 carries forward.**
 
@@ -431,7 +433,7 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases) and run it.
 
-Direct link to the current release: [`GhostIntel98-Setup-3.17.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.17.0/GhostIntel98-Setup-3.17.0.exe)
+Direct link to the current release: [`GhostIntel98-Setup-3.17.1.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.17.1/GhostIntel98-Setup-3.17.1.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is **formally verified internally** — symbolic (ProVerif) +
 computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not**
 FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.6.8/GhostIntel98-Setup-3.6.8.exe).
@@ -439,7 +441,7 @@ FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Se
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\GhostIntel98-Setup-3.17.0.exe -Algorithm SHA256
+Get-FileHash .\GhostIntel98-Setup-3.17.1.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
