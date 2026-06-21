@@ -56,7 +56,7 @@ import * as aiConvos from '../storage/ai-conversations';
 import * as briefcase from '../storage/briefcase';
 import * as journal from '../storage/journal';
 import * as voiceModel from '../voice/model-protocol';
-import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureShellProgram, ensureWhiteboard, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon, ensureSaveToCaseOpts, ensureGeoItem, ensureThreatLayerId, ensureKeyedLayerId, ensureLayerKey, isKeyedLayerId, ensureBookmarkBoard, ensureMarketsSettings, ensureStickyNotes, ensureAiConversation, ensureBriefcaseNote, ensureJournalEntry, ensurePin, ensureUid, ensureMailFlag, stripProtectedSettings } from '../security/validate';
+import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureShellProgram, ensureWhiteboard, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon, ensureSaveToCaseOpts, ensureGeoItem, ensureThreatLayerId, ensureKeyedLayerId, ensureLayerKey, isKeyedLayerId, ensureBookmarkBoard, ensureMarketsSettings, ensureStickyNotes, ensureAiConversation, ensureBriefcaseNote, ensureJournalEntry, ensurePin, ensureUid, ensureMailFlag, stripProtectedSettings, ensureBounds } from '../security/validate';
 import * as entities from '../storage/entities';
 import * as bioStore from '../storage/bio-images';
 import * as ftp from '../services/ftp';
@@ -1286,12 +1286,12 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   });
 
   // ---- livefeeds (ADS-B + AIS; egress gated by settings.geoint.networkEnabled) ----
-  safeHandle(channels.livefeeds.fetchAdsb, (...a) => adsb.fetchAdsb(a[0] as Parameters<typeof adsb.fetchAdsb>[0]));
-  safeHandle(channels.livefeeds.aisStart, (...a) => ais.startAis(a[0] as any, (positions) => {
+  safeHandle(channels.livefeeds.fetchAdsb, (...a) => adsb.fetchAdsb(ensureBounds(a[0])));
+  safeHandle(channels.livefeeds.aisStart, (...a) => ais.startAis(ensureBounds(a[0]), (positions) => {
     getWindow()?.webContents.send(channels.livefeeds.onAisPositions, { positions });
   }));
   safeHandle(channels.livefeeds.aisStop, () => { ais.stopAis(); });
-  safeHandle(channels.livefeeds.aisSetBbox, (...a) => { ais.setAisBbox(a[0] as any); });
+  safeHandle(channels.livefeeds.aisSetBbox, (...a) => { ais.setAisBbox(ensureBounds(a[0])); });
 
   startMailPoller(getWindow);
 }
