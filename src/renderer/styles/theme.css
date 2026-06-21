@@ -832,20 +832,25 @@ input.ga98-text, select.ga98-text {
   border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 6px;
   box-shadow: 0 3px 14px rgba(0, 0, 0, 0.55);
-  /* Right padding reserves a clear corner for the ✕ so the coordinate text can never sit under it. */
-  padding: 7px 26px 7px 10px;
+  /* Right padding reserves a clear gutter for the ✕ square so coordinate text never runs under it. */
+  padding: 6px 30px 6px 10px;
   font-size: 12px;
   line-height: 1.35;
 }
 .maplibregl-popup .maplibregl-popup-content b { color: #fff; }
 .maplibregl-popup .maplibregl-popup-content a { color: #8ec5ff; }
-/* A clean, small upper-right square — flex-centred so the ✕ glyph stays inside its box and never
-   overlaps the content. 12px box, 10px glyph; the 26px content gutter above clears it with room. */
+/* A small SQUARE button with a centred ✕ — a visible bordered box (like a Win98 close button),
+   vertically centred so on a one-line coordinate pill it sits mid-height, not jammed in the corner.
+   `position:absolute` is set explicitly (not relying on MapLibre's); the 30px content gutter above
+   reserves space so the box never overlaps the coordinates. 14px box, bold 11px ✕. */
 .maplibregl-popup .maplibregl-popup-close-button {
   display: flex; align-items: center; justify-content: center;
-  box-sizing: border-box; width: 12px; height: 12px; top: 3px; right: 3px;
+  box-sizing: border-box; position: absolute;
+  width: 14px; height: 14px; top: 50%; right: 5px; transform: translateY(-50%);
   padding: 0; margin: 0; overflow: hidden;
-  color: #d0d0d0; font-size: 10px; line-height: 1; border-radius: 0; background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.5); border-radius: 0;
+  background: rgba(255, 255, 255, 0.12);
+  color: #f0f0f0; font-size: 11px; line-height: 1; font-weight: bold;
 }
 .maplibregl-popup .maplibregl-popup-close-button:hover { background: rgba(255, 255, 255, 0.14); color: #fff; }
 /* Tint the popup tip to match the dark card, per anchor direction (compound selector: anchor class
