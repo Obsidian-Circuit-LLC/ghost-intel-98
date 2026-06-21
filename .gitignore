@@ -76,3 +76,6 @@ resources/local-ai/EMBED_MODEL_PRESENT
 # python bytecode from confinement gate scripts
 scripts/gates/__pycache__/
 __pycache__/
+
+# Rust build artifacts (confinement native binary; never commit the target/ dir)
+native/dcs98-confine/target/
