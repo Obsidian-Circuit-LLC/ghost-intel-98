@@ -39,9 +39,8 @@ bug-report contact. Renderer + CSS only; no crypto/data/protocol/egress change.
 Get-FileHash .\GhostIntel98-Setup-3.16.3.exe -Algorithm SHA256
 ```
 
-SHA-256: _pending — filled in the follow-up `release: v3.16.3 installer SHA-256 + size` commit once
-the Windows installer is built._
-Size: _pending (≈837 MB, unchanged from v3.16.2 — no new bundled assets)._
+SHA-256: `093edc039bc9ab7ab211847aef580259beb780d760f7d75dfbb2489a5991bab0`
+Size: 877640584 bytes (837.0 MB)
 
 Unsigned — Windows SmartScreen will warn: **More info → Run anyway**. Installs per-user (no admin)
 and upgrades any prior `Ghost Intel 98` build in place.
