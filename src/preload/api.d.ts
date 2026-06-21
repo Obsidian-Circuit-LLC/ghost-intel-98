@@ -321,6 +321,13 @@ export interface GhostApi {
      *  coordinates?}]) via a save dialog. Returns the saved filename, or null if cancelled. */
     exportCctv(): Promise<string | null>;
   };
+  satellites: {
+    list(): Promise<{ id: string; name: string; noradId: number | null; line1: string; line2: string; type: string; tag?: string; notes?: string; active: boolean; addedAt: string }[]>;
+    upsert(input: { id?: string; name: string; noradId: number | null; line1: string; line2: string; type: string; tag?: string; notes?: string; active: boolean }): Promise<{ id: string; name: string; noradId: number | null; line1: string; line2: string; type: string; tag?: string; notes?: string; active: boolean; addedAt: string }>;
+    remove(id: string): Promise<void>;
+    fetchGroup(group: string): Promise<string>;
+    snapshot(): Promise<string>;
+  };
   walls: {
     list(): Promise<Wall[]>;
     get(id: string): Promise<Wall | null>;

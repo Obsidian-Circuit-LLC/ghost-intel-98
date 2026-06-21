@@ -37,6 +37,7 @@ import * as mail from '../services/mail';
 import * as ssh from '../services/ssh';
 import * as shellSvc from '../services/shell';
 import * as streams from '../services/streams';
+import * as satellites from '../services/satellites';
 import { streamsToMasterTree } from '../services/cctv-export';
 import { detectStream } from '../services/stream-detect';
 import * as walls from '../services/walls';
@@ -987,6 +988,13 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     await writeFile(r.filePath, JSON.stringify(tree, null, 2), 'utf8');
     return basename(r.filePath);
   });
+
+  // ---- satellites (GeoINT) ----
+  safeHandle(channels.satellites.list, () => satellites.list());
+  safeHandle(channels.satellites.upsert, (...args) => satellites.upsert(args[0] as Parameters<typeof satellites.upsert>[0]));
+  safeHandle(channels.satellites.remove, (...args) => satellites.remove(String(args[0])));
+  safeHandle(channels.satellites.fetchGroup, (...args) => satellites.fetchGroup(String(args[0])));
+  safeHandle(channels.satellites.snapshot, () => satellites.snapshot());
 
   // ---- walls (EyeSpy) ----
   safeHandle(channels.walls.list, () => walls.list());

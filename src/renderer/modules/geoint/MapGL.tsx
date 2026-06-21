@@ -23,6 +23,9 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import type { GeoItem, CameraStream } from '@shared/post-mvp-types';
 import { buildPopup } from './popup';
 import { syncCctvLayer } from './cctvLayer';
+import { makePropagator } from './satellites/propagate';
+import { ensureSatelliteLayer, updateSatelliteLayer } from './satellites/satelliteLayer';
+import type { PropagatedSat } from './satellites/types';
 
 // Marker fill by feed-item category. Falls back to a neutral grey for unknown/undefined.
 // Ported verbatim from MapPane's CATEGORY_COLOR so the two maps colour identically.
@@ -244,6 +247,17 @@ export interface MapGLProps {
   showCctv?: boolean;
   /** Click handler for a single camera pin. */
   onCameraOpen?: (streamId: string) => void;
+  /** Satellite records to propagate + draw (already merged: snapshot ∪ active user ∪ celestrak). */
+  satRecords?: import('./satellites/types').SatelliteRecord[];
+  showSatellites?: boolean;
+  satVisibleTypes?: Set<import('./satellites/types').SatelliteType> | null;
+  onSatelliteSelect?: (id: string) => void;
+  /** Latest propagated set each tick — the panel table consumes this. */
+  onSatellitesPropagated?: (sats: import('./satellites/types').PropagatedSat[]) => void;
+  /** When set, recenter on this satellite each tick (Track/follow). */
+  trackSatId?: string | null;
+  /** Propagation cadence in ms (default 2000). */
+  satTickMs?: number;
 }
 
 export function MapGL(props: MapGLProps = {}): JSX.Element {
@@ -251,7 +265,9 @@ export function MapGL(props: MapGLProps = {}): JSX.Element {
     items = [], corroboration, tilesEnabled, tileUrl, tileAttribution,
     pickMode = false, onPick, focusId, flyTo, onCenterChange,
     overlayUrls = [], overlayAttribution,
-    cctvStreams = [], showCctv = false, onCameraOpen
+    cctvStreams = [], showCctv = false, onCameraOpen,
+    satRecords = [], showSatellites = false, satVisibleTypes = null,
+    onSatelliteSelect, onSatellitesPropagated, trackSatId = null, satTickMs = 2000
   } = props;
   const ref = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
@@ -270,6 +286,12 @@ export function MapGL(props: MapGLProps = {}): JSX.Element {
   showCctvRef.current = showCctv;
   const onCameraOpenRef = useRef(onCameraOpen);
   onCameraOpenRef.current = onCameraOpen;
+  const satVisibleRef = useRef(satVisibleTypes); satVisibleRef.current = satVisibleTypes;
+  const showSatellitesRef = useRef(showSatellites); showSatellitesRef.current = showSatellites;
+  const onSatSelectRef = useRef(onSatelliteSelect); onSatSelectRef.current = onSatelliteSelect;
+  const onSatPropRef = useRef(onSatellitesPropagated); onSatPropRef.current = onSatellitesPropagated;
+  const trackSatRef = useRef(trackSatId); trackSatRef.current = trackSatId;
+  const propagatorRef = useRef<ReturnType<typeof makePropagator> | null>(null);
   // Only ONE popup open at a time. MapLibre's closeOnClick closes popups on a MAP click but NOT
   // when another marker is clicked, so clicking through co-located "blips" left a stack of popups
   // with their ✕ close buttons overlapping. Track the currently-open popup; opening any popup
@@ -330,6 +352,19 @@ export function MapGL(props: MapGLProps = {}): JSX.Element {
     m.on('moveend', () => { const c = m.getCenter(); centerCb.current?.(c.lat, c.lng); });
     m.on('moveend', syncCctv);
     m.on('zoomend', syncCctv);
+    ensureSatelliteLayer(m, (id) => onSatSelectRef.current?.(id));
+    // Re-ensure the satellite source/layer after every style reload. `setStyle` destroys all
+    // added sources/layers; re-adding them on 'styledata' (the typed post-setStyle event) makes
+    // the satellite layer survive basemap switches and network-gate toggles. The handler is
+    // registered ONCE here in the [] deps init effect — no duplicate listeners on re-render.
+    // ensureSatelliteLayer is idempotent (guards on getSource), so the initial call above is safe.
+    m.on('styledata', () => {
+      ensureSatelliteLayer(m, (id) => onSatSelectRef.current?.(id));
+      // Repopulate immediately so there is no blank gap when the layer is re-created.
+      if (showSatellitesRef.current && propagatorRef.current) {
+        updateSatelliteLayer(m, propagatorRef.current.propagateAt(new Date()), satVisibleRef.current);
+      }
+    });
     map.current = m;
     return () => {
       map.current?.remove();
@@ -418,6 +453,35 @@ export function MapGL(props: MapGLProps = {}): JSX.Element {
     syncCctv();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showCctv, cctvStreams]);
+
+  // Rebuild the propagator when the satellite record set changes. The propagator is read by ref
+  // inside the tick so the interval closure doesn't stale-capture it.
+  useEffect(() => {
+    propagatorRef.current = makePropagator(satRecords);
+  }, [satRecords]);
+
+  // Propagation tick: runs only while showSatellites is true. Clears the layer when off.
+  // Uses new Date() — the documented real-time exception for this feature (satellite positions
+  // are inherently wall-clock dependent and the requirement is stated explicitly in the brief).
+  useEffect(() => {
+    const m = map.current;
+    if (!m || !showSatellites) {
+      if (m && m.getSource('ga98-satellites')) updateSatelliteLayer(m, [], satVisibleRef.current);
+      return;
+    }
+    const tick = (): void => {
+      const mm = map.current; const prop = propagatorRef.current;
+      if (!mm || !prop) return;
+      const sats: PropagatedSat[] = prop.propagateAt(new Date());
+      updateSatelliteLayer(mm, sats, satVisibleRef.current);
+      onSatPropRef.current?.(sats);
+      const tid = trackSatRef.current;
+      if (tid) { const s = sats.find((x) => x.id === tid); if (s) mm.easeTo({ center: [s.lon, s.lat], duration: 400 }); }
+    };
+    tick();
+    const h = setInterval(tick, satTickMs);
+    return () => clearInterval(h);
+  }, [showSatellites, satRecords, satTickMs]);
 
   return (
     <div className="ga98-geo-map-wrap" style={{ position: 'relative', width: '100%', height: '100%' }}>
