@@ -16,8 +16,8 @@ specificity, so it applies regardless of CSS import order.
 Get-FileHash .\GhostIntel98-Setup-3.18.1.exe -Algorithm SHA256
 ```
 
-SHA-256: `__PENDING__`
-Size: `__PENDING__`
+SHA-256: `cef0e98d2ca9c006b2cc4d613ae491aeca554a120832a79f8ca9acf71b0fc6c4`
+Size: 878313368 bytes (837.6 MB)
 
 Unsigned — Windows SmartScreen will warn: **More info → Run anyway**. Installs per-user (no admin)
 and upgrades any prior `Ghost Intel 98` build in place.
