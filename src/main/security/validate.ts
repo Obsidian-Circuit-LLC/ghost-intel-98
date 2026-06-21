@@ -585,7 +585,7 @@ export function ensureThreatLayerId(v: unknown): (typeof THREAT_LAYER_IDS)[numbe
 /** The subset of threat layers that need a per-user API key/token. setLayerKey/hasLayerKey accept
  *  ONLY these ids — a key can't be stored for a keyless layer (USGS etc.). The secretStore ref is
  *  derived as `geoint.<layerId>.key`. */
-export const KEYED_LAYER_IDS = ['firms', 'gdeltcloud', 'ucdp'] as const;
+export const KEYED_LAYER_IDS = ['firms', 'gdeltcloud', 'ucdp', 'ais'] as const;
 export type KeyedLayerId = (typeof KEYED_LAYER_IDS)[number];
 export function ensureKeyedLayerId(v: unknown): KeyedLayerId {
   if (typeof v !== 'string' || !(KEYED_LAYER_IDS as readonly string[]).includes(v)) {

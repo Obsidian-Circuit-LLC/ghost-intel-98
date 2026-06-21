@@ -91,6 +91,7 @@ import { secretStore } from '../secrets/index';
 import { homedir } from 'node:os';
 import { hostInfoService } from '../services/hostinfo/index';
 import * as adsb from '../services/livefeeds/adsb';
+import * as ais from '../services/livefeeds/ais-stream';
 
 const MAX_SAVE_ATTACHMENT_BYTES = 64 * 1024 * 1024; // 64 MB cap on base64 decoded payload
 const MAX_EXPORT_BYTES = 64 * 1024 * 1024;
@@ -1286,6 +1287,11 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
 
   // ---- livefeeds (ADS-B + AIS; egress gated by settings.geoint.networkEnabled) ----
   safeHandle(channels.livefeeds.fetchAdsb, (...a) => adsb.fetchAdsb(a[0] as Parameters<typeof adsb.fetchAdsb>[0]));
+  safeHandle(channels.livefeeds.aisStart, (...a) => ais.startAis(a[0] as any, (positions) => {
+    getWindow()?.webContents.send(channels.livefeeds.onAisPositions, { positions });
+  }));
+  safeHandle(channels.livefeeds.aisStop, () => { ais.stopAis(); });
+  safeHandle(channels.livefeeds.aisSetBbox, (...a) => { ais.setAisBbox(a[0] as any); });
 
   startMailPoller(getWindow);
 }
