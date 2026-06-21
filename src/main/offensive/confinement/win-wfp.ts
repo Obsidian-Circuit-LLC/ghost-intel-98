@@ -1,7 +1,6 @@
 import type { ConfinedHandle, ConfinedIO, PlatformImpl } from './index';
 import type { ConfinementPlan } from './plan';
 import { __registerWin32Impl } from './index';
-import { buildWfpFilterSpec } from './win-wfp-spec';
 import { encodeFrame, FrameDecoder, FRAME, type ControlRequest, type ControlResponse } from './win-pipe';
 
 /** A connected pipe: write bytes, subscribe to bytes, close. Injected so tests use a PassThrough and the
@@ -14,8 +13,9 @@ export interface WinWfpDeps {
 }
 
 /**
- * The Windows arm of spawnConfined. Connects to the SYSTEM-service pipe, sends applyScope (the verbatim
- * buildWfpFilterSpec output), then spawn, demuxes the returned frames into io callbacks, and returns a
+ * The Windows arm of spawnConfined. Connects to the SYSTEM-service pipe, sends applyScope (scalars only:
+ * proxyPort, allowCidrs, sid — the native helper derives the WFP filter policy from them), then spawn,
+ * demuxes the returned frames into io callbacks, and returns a
  * ConfinedHandle whose stop() force-terminates (kill + clearScope, once — `torn` guard).
  *
  * Teardown split (mirrors the netns design + satisfies the lifecycle tests deterministically):
@@ -48,8 +48,7 @@ export function makeSpawnWin32Wfp(deps: WinWfpDeps): PlatformImpl {
     });
 
     const sid = deps.engineSid();
-    const spec = buildWfpFilterSpec(plan, sid);
-    const applied = await call({ op: 'applyScope', proxyPort: plan.proxyPort, allowCidrs: plan.allowCidrs, sid, filters: spec.filters });
+    const applied = await call({ op: 'applyScope', proxyPort: plan.proxyPort, allowCidrs: plan.allowCidrs, sid });
     if (!applied.ok || !applied.scopeId) {
       conn.end();
       throw new Error(`confinement applyScope failed: ${applied.ok ? 'no scopeId' : applied.error}`);
