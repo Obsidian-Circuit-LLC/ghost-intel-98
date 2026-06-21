@@ -261,6 +261,13 @@ const api = {
     detect: (url: string) => ipcRenderer.invoke(channels.streams.detect, url),
     exportCctv: () => ipcRenderer.invoke(channels.streams.exportCctv)
   },
+  satellites: {
+    list: () => ipcRenderer.invoke(channels.satellites.list),
+    upsert: (input: unknown) => ipcRenderer.invoke(channels.satellites.upsert, input),
+    remove: (id: string) => ipcRenderer.invoke(channels.satellites.remove, id),
+    fetchGroup: (group: string) => ipcRenderer.invoke(channels.satellites.fetchGroup, group),
+    snapshot: () => ipcRenderer.invoke(channels.satellites.snapshot)
+  },
   walls: {
     list: () => ipcRenderer.invoke(channels.walls.list),
     get: (id: string) => ipcRenderer.invoke(channels.walls.get, id),
