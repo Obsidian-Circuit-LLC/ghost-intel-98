@@ -44,8 +44,8 @@ forward.
 Get-FileHash .\GhostIntel98-Setup-3.18.0.exe -Algorithm SHA256
 ```
 
-SHA-256: `__PENDING__`
-Size: `__PENDING__`
+SHA-256: `8602d7b7093ea8eebf093d7745a084954a01e3d2faec85c54e498f97a4584a0e`
+Size: 878317349 bytes (837.6 MB)
 
 Unsigned — Windows SmartScreen will warn: **More info → Run anyway**. Installs per-user (no admin)
 and upgrades any prior `Ghost Intel 98` build in place.
