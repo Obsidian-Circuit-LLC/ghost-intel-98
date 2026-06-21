@@ -370,7 +370,14 @@ export const channels = {
     clearCredentials: 'bgconn:clearCredentials',
     status: 'bgconn:status'
   },
-  hostinfo: { resolve: 'hostinfo:resolve' }
+  hostinfo: { resolve: 'hostinfo:resolve' },
+  livefeeds: {
+    fetchAdsb: 'livefeeds:fetchAdsb',
+    aisStart: 'livefeeds:aisStart',
+    aisStop: 'livefeeds:aisStop',
+    aisSetBbox: 'livefeeds:aisSetBbox',
+    onAisPositions: 'livefeeds:onAisPositions'
+  }
 } as const;
 
 export interface MemoryStatus { model: string; cases: number; chunks: number }

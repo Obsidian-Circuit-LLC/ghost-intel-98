@@ -23,6 +23,8 @@ import { filterByCategories, UNCATEGORIZED } from './threat';
 import { SpaceSatellitesPanel } from './satellites/SpaceSatellitesPanel';
 import { SatelliteManager } from './satellites/SatelliteManager';
 import type { SatelliteRecord, PropagatedSat, SatelliteType } from './satellites/types';
+import { LiveFeedsPanel } from './livefeeds/LiveFeedsPanel';
+import type { AircraftPos, ShipPos, Bounds } from '@shared/livefeeds/types';
 
 // GeoINT reimagine (R5): pluggable threat layers. Each is an on-demand, ephemeral fetch into
 // GeoItem[] (held in renderer state, never persisted to the source cache). USGS earthquakes is
@@ -30,8 +32,8 @@ import type { SatelliteRecord, PropagatedSat, SatelliteType } from './satellites
 type ThreatLayerId = 'usgs' | 'gdacs' | 'wartracker' | 'gdelt' | 'firms' | 'gdeltcloud' | 'ucdp' | 'reliefweb';
 // Layers needing a per-user API key/token (stored main-side in the OS secret store, never echoed
 // back to the renderer). Mirror src/main/security/validate.ts KEYED_LAYER_IDS.
-type KeyedLayerId = 'firms' | 'gdeltcloud' | 'ucdp';
-const KEYED_LAYER_IDS: KeyedLayerId[] = ['firms', 'gdeltcloud', 'ucdp'];
+type KeyedLayerId = 'firms' | 'gdeltcloud' | 'ucdp' | 'ais';
+const KEYED_LAYER_IDS: KeyedLayerId[] = ['firms', 'gdeltcloud', 'ucdp', 'ais'];
 const USGS_FEED_OPTIONS: { value: string; label: string }[] = [
   { value: 'significant_day', label: 'Significant — past day' },
   { value: 'significant_week', label: 'Significant — past week' },
@@ -199,11 +201,20 @@ function GeoIntModuleInner(): JSX.Element {
   const [layerError, setLayerError] = useState<string | null>(null);
   const enabledLayers = useMemo(() => new Set(layerItems.keys()), [layerItems]);
 
-  // Keyed layers (firms/gdeltcloud/ucdp): whether a key is stored (drives the "needs key" disabled
+  // Live Feeds state — ADS-B aircraft + AIS ships. Both are ephemeral (per session, not persisted).
+  // `bbox` tracks the viewport bounding box reported by MapGL; used to bound both feeds.
+  const [showAircraft, setShowAircraft] = useState(false);
+  const [showShips, setShowShips] = useState(false);
+  const [aircraft, setAircraft] = useState<AircraftPos[]>([]);
+  const [ships, setShips] = useState<ShipPos[]>([]);
+  const [bbox, setBbox] = useState<Bounds | null>(null);
+  const [aisStatus, setAisStatus] = useState<string | null>(null);
+
+  // Keyed layers (firms/gdeltcloud/ucdp/ais): whether a key is stored (drives the "needs key" disabled
   // state) and the in-progress key input per layer (never pre-filled from the store — the stored
   // key is write-only from the renderer's perspective).
-  const [hasKey, setHasKey] = useState<Record<KeyedLayerId, boolean>>({ firms: false, gdeltcloud: false, ucdp: false });
-  const [keyDraft, setKeyDraft] = useState<Record<KeyedLayerId, string>>({ firms: '', gdeltcloud: '', ucdp: '' });
+  const [hasKey, setHasKey] = useState<Record<KeyedLayerId, boolean>>({ firms: false, gdeltcloud: false, ucdp: false, ais: false });
+  const [keyDraft, setKeyDraft] = useState<Record<KeyedLayerId, string>>({ firms: '', gdeltcloud: '', ucdp: '', ais: '' });
   const [keySaving, setKeySaving] = useState<KeyedLayerId | null>(null);
 
   // CISA KEV / Alerts (R8): a non-map advisory list. KEV has no coordinates — these entries never
@@ -225,13 +236,107 @@ function GeoIntModuleInner(): JSX.Element {
   }
 
   const refreshKeyState = useCallback(async () => {
-    const next: Record<KeyedLayerId, boolean> = { firms: false, gdeltcloud: false, ucdp: false };
+    const next: Record<KeyedLayerId, boolean> = { firms: false, gdeltcloud: false, ucdp: false, ais: false };
     for (const id of KEYED_LAYER_IDS) {
       try { next[id] = await window.api.geoint.hasLayerKey(id); } catch { next[id] = false; }
     }
     setHasKey(next);
   }, []);
   useEffect(() => { void refreshKeyState(); }, [refreshKeyState]);
+
+  // ADS-B poll: when aircraft layer is on AND network is enabled, poll adsb.lol every 15 s
+  // (plus an immediate first fetch). Polling skips if bbox is null (map hasn't reported bounds
+  // yet). On toggle-off the positions are cleared so the layer doesn't linger.
+  const adsbFetchRef = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    if (!showAircraft) { setAircraft([]); return; }
+    if (!net) { toast.warn('GeoINT network is off — enable it for live ADS-B.'); setShowAircraft(false); return; }
+    // Keep a stable fetch fn in a ref so the interval always calls the latest closure.
+    const doFetch = async (): Promise<void> => {
+      if (!bbox) return; // map hasn't reported bounds yet — wait
+      try {
+        const result = await window.api.livefeeds.fetchAdsb(bbox);
+        setAircraft(result as AircraftPos[]);
+      } catch (e) {
+        toast.warn(`ADS-B fetch failed: ${(e as Error).message}`);
+      }
+    };
+    adsbFetchRef.current = () => { void doFetch(); };
+    void doFetch(); // immediate first fetch
+    const id = setInterval(() => { adsbFetchRef.current?.(); }, 15_000);
+    return () => { clearInterval(id); adsbFetchRef.current = null; };
+  }, [showAircraft, net]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Re-fetch ADS-B when the viewport bbox changes (while the layer is on).
+  useEffect(() => {
+    if (!showAircraft || !net || !bbox) return;
+    adsbFetchRef.current?.();
+  }, [bbox]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // AIS lifecycle: start on toggle-on (if net + key), subscribe to position push events,
+  // update bbox on viewport change, and clean up on toggle-off or unmount.
+  useEffect(() => {
+    if (!showShips) {
+      setShips([]);
+      setAisStatus(null);
+      void window.api.livefeeds.aisStop();
+      return;
+    }
+    if (!net) {
+      toast.warn('GeoINT network is off — enable it for live AIS.');
+      setShowShips(false);
+      return;
+    }
+    let unsub: (() => void) | null = null;
+    // Guard against toggle-off (or unmount) arriving during the aisStart IPC round-trip.
+    // Without this, the cleanup runs while `unsub` is still null, the subscription set up
+    // after the await is orphaned (keeps firing setShips), and its handle is lost forever.
+    let cancelled = false;
+    const start = async (): Promise<void> => {
+      const r = await window.api.livefeeds.aisStart(bbox ?? { west: -180, south: -90, east: 180, north: 90 });
+      if (r === 'no-key') {
+        toast.warn('No AISStream key stored — enter your key and click Save to enable live ships.');
+        setAisStatus('No key — store a key below.');
+        setShowShips(false);
+        return;
+      }
+      if (r === 'gate-off') {
+        toast.warn('GeoINT network is off — enable it to start the AIS stream.');
+        setShowShips(false);
+        return;
+      }
+      // Cleanup ran while aisStart was in-flight — stop the stream we just opened and bail.
+      if (cancelled) {
+        void window.api.livefeeds.aisStop();
+        return;
+      }
+      setAisStatus('connecting…');
+      unsub = window.api.livefeeds.onAisPositions(({ positions }) => {
+        setShips(positions as ShipPos[]);
+        setAisStatus(`${positions.length} vessel${positions.length === 1 ? '' : 's'}`);
+      });
+      // Cancellation may have landed between the subscribe call and here — tear down immediately.
+      if (cancelled) {
+        unsub();
+        unsub = null;
+        void window.api.livefeeds.aisStop();
+      }
+    };
+    void start();
+    return () => {
+      cancelled = true;
+      void window.api.livefeeds.aisStop();
+      unsub?.();
+      setShips([]);
+      setAisStatus(null);
+    };
+  }, [showShips, net]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Bbox fan-out to AIS: when the viewport changes while ships are shown, re-subscribe to the
+  // new bounding box so the stream stays viewport-bounded.
+  useEffect(() => {
+    if (!showShips || !net || !bbox) return;
+    void window.api.livefeeds.aisSetBbox(bbox);
+  }, [bbox]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const refreshCameras = useCallback(async (opts: { silent?: boolean } = {}) => {
     try {
@@ -655,6 +760,21 @@ function GeoIntModuleInner(): JSX.Element {
         />
         <SatelliteManager onAdded={() => void loadSatellites()} />
 
+        <LiveFeedsPanel
+          showAircraft={showAircraft}
+          onToggleAircraft={setShowAircraft}
+          aircraftCount={aircraft.length}
+          showShips={showShips}
+          onToggleShips={setShowShips}
+          shipCount={ships.length}
+          net={net}
+          hasAisKey={hasKey.ais}
+          aisKeyDraft={keyDraft.ais}
+          onAisKeyDraft={(v) => setKeyDraft((d) => ({ ...d, ais: v }))}
+          onSaveAisKey={() => void saveLayerKey('ais')}
+          aisStatus={aisStatus}
+        />
+
         <fieldset>
           <legend>Threat Layers</legend>
           <p style={{ fontSize: 11, color: '#555', margin: '0 0 4px' }}>On-demand public feeds. Toggling a layer on fetches it now (network required); off drops it. Not cached.</p>
@@ -921,6 +1041,13 @@ function GeoIntModuleInner(): JSX.Element {
             onSatelliteSelect={(id) => setTrackSatId(id)}
             onSatellitesPropagated={setSatPropagated}
             trackSatId={trackSatId}
+            aircraft={aircraft}
+            showAircraft={showAircraft}
+            onAircraftSelect={(id) => console.debug('[GeoINT] aircraft selected:', id)}
+            ships={ships}
+            showShips={showShips}
+            onShipSelect={(id) => console.debug('[GeoINT] ship selected:', id)}
+            onBboxChange={setBbox}
           />
         {streetView && net && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', background: '#000' }}>

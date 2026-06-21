@@ -374,10 +374,10 @@ export interface GhostApi {
     ): Promise<GeoItem[]>;
     /** Store the API key/token for a keyed layer in the OS-encrypted secret store (never in
      *  settings.json). The key is held main-side only; the renderer never reads it back. */
-    setLayerKey(layerId: 'firms' | 'gdeltcloud' | 'ucdp', key: string): Promise<void>;
+    setLayerKey(layerId: 'firms' | 'gdeltcloud' | 'ucdp' | 'ais', key: string): Promise<void>;
     /** True iff a non-empty key is stored for the keyed layer. Drives the "needs key" disabled
      *  state on the layer toggle. Does NOT return the key itself. */
-    hasLayerKey(layerId: 'firms' | 'gdeltcloud' | 'ucdp'): Promise<boolean>;
+    hasLayerKey(layerId: 'firms' | 'gdeltcloud' | 'ucdp' | 'ais'): Promise<boolean>;
     /** Fetch the CISA Known Exploited Vulnerabilities catalog as a trimmed advisory list. KEV has
      *  no coordinates — this never touches the map. Egress-gated by settings.geoint.networkEnabled
      *  (returns [] when network is off). */
@@ -486,6 +486,13 @@ export interface GhostApi {
   };
   hostinfo: {
     resolve(url: string, opts?: { force?: boolean }): Promise<HostInfo>;
+  };
+  livefeeds: {
+    fetchAdsb(bounds: { west: number; south: number; east: number; north: number }): Promise<Array<{ id: string; callsign: string | null; lat: number; lon: number; altFt: number | null; gsKt: number | null; trackDeg: number | null; band: 'ground'|'low'|'mid'|'high' }>>;
+    aisStart(bounds: { west: number; south: number; east: number; north: number }): Promise<'started' | 'no-key' | 'gate-off'>;
+    aisStop(): Promise<void>;
+    aisSetBbox(bounds: { west: number; south: number; east: number; north: number }): Promise<void>;
+    onAisPositions(cb: (p: { positions: Array<{ id: string; name: string | null; lat: number; lon: number; sogKt: number | null; cogDeg: number | null; type: string; lastSeen: number }> }) => void): () => void;
   };
 }
 

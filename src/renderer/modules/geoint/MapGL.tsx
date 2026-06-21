@@ -26,6 +26,9 @@ import { syncCctvLayer } from './cctvLayer';
 import { makePropagator } from './satellites/propagate';
 import { ensureSatelliteLayer, updateSatelliteLayer } from './satellites/satelliteLayer';
 import type { PropagatedSat } from './satellites/types';
+import { ensureAircraftLayer, updateAircraftLayer } from './livefeeds/aircraftLayer';
+import { ensureShipLayer, updateShipLayer } from './livefeeds/shipLayer';
+import type { AircraftPos, ShipPos, Bounds } from '@shared/livefeeds/types';
 
 // Marker fill by feed-item category. Falls back to a neutral grey for unknown/undefined.
 // Ported verbatim from MapPane's CATEGORY_COLOR so the two maps colour identically.
@@ -258,6 +261,16 @@ export interface MapGLProps {
   trackSatId?: string | null;
   /** Propagation cadence in ms (default 2000). */
   satTickMs?: number;
+  /** Live aircraft positions to render (ADS-B feed). */
+  aircraft?: AircraftPos[];
+  showAircraft?: boolean;
+  onAircraftSelect?: (id: string) => void;
+  /** Live ship positions to render (AIS feed). */
+  ships?: ShipPos[];
+  showShips?: boolean;
+  onShipSelect?: (id: string) => void;
+  /** Reports the viewport bounding box after each pan/zoom (~500 ms debounced). */
+  onBboxChange?: (b: Bounds) => void;
 }
 
 export function MapGL(props: MapGLProps = {}): JSX.Element {
@@ -267,7 +280,10 @@ export function MapGL(props: MapGLProps = {}): JSX.Element {
     overlayUrls = [], overlayAttribution,
     cctvStreams = [], showCctv = false, onCameraOpen,
     satRecords = [], showSatellites = false, satVisibleTypes = null,
-    onSatelliteSelect, onSatellitesPropagated, trackSatId = null, satTickMs = 2000
+    onSatelliteSelect, onSatellitesPropagated, trackSatId = null, satTickMs = 2000,
+    aircraft = [], showAircraft = false, onAircraftSelect,
+    ships = [], showShips = false, onShipSelect,
+    onBboxChange
   } = props;
   const ref = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
@@ -292,6 +308,14 @@ export function MapGL(props: MapGLProps = {}): JSX.Element {
   const onSatPropRef = useRef(onSatellitesPropagated); onSatPropRef.current = onSatellitesPropagated;
   const trackSatRef = useRef(trackSatId); trackSatRef.current = trackSatId;
   const propagatorRef = useRef<ReturnType<typeof makePropagator> | null>(null);
+  const aircraftRef = useRef(aircraft); aircraftRef.current = aircraft;
+  const showAircraftRef = useRef(showAircraft); showAircraftRef.current = showAircraft;
+  const onAircraftSelectRef = useRef(onAircraftSelect); onAircraftSelectRef.current = onAircraftSelect;
+  const shipsRef = useRef(ships); shipsRef.current = ships;
+  const showShipsRef = useRef(showShips); showShipsRef.current = showShips;
+  const onShipSelectRef = useRef(onShipSelect); onShipSelectRef.current = onShipSelect;
+  const onBboxChangeRef = useRef(onBboxChange); onBboxChangeRef.current = onBboxChange;
+  const bboxDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Only ONE popup open at a time. MapLibre's closeOnClick closes popups on a MAP click but NOT
   // when another marker is clicked, so clicking through co-located "blips" left a stack of popups
   // with their ✕ close buttons overlapping. Track the currently-open popup; opening any popup
@@ -365,11 +389,28 @@ export function MapGL(props: MapGLProps = {}): JSX.Element {
       if (showSatellitesRef.current && propagatorRef.current) {
         updateSatelliteLayer(m, propagatorRef.current.propagateAt(new Date()), satVisibleRef.current);
       }
+      // Ensure aircraft + ship layers alongside the satellite layer; both self-guard on
+      // isStyleLoaded() + getSource(), so calling on load + styledata is safe and idempotent.
+      ensureAircraftLayer(m, (id) => onAircraftSelectRef.current?.(id));
+      if (showAircraftRef.current) updateAircraftLayer(m, aircraftRef.current);
+      ensureShipLayer(m, (id) => onShipSelectRef.current?.(id));
+      if (showShipsRef.current) updateShipLayer(m, shipsRef.current);
     };
     m.on('load', ensureSat);
     m.on('styledata', ensureSat);
+    // Debounced bbox reporting: fire ~500 ms after the map settles so rapid panning doesn't
+    // flood the consumer with fetch requests. Piggybacks on the existing moveend registration.
+    m.on('moveend', () => {
+      if (bboxDebounceRef.current !== null) clearTimeout(bboxDebounceRef.current);
+      bboxDebounceRef.current = setTimeout(() => {
+        bboxDebounceRef.current = null;
+        const b = m.getBounds();
+        onBboxChangeRef.current?.({ west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth() });
+      }, 500);
+    });
     map.current = m;
     return () => {
+      if (bboxDebounceRef.current) clearTimeout(bboxDebounceRef.current);
       map.current?.remove();
       map.current = null;
     };
@@ -485,6 +526,21 @@ export function MapGL(props: MapGLProps = {}): JSX.Element {
     const h = setInterval(tick, satTickMs);
     return () => clearInterval(h);
   }, [showSatellites, satRecords, satTickMs]);
+
+  // Update the aircraft layer when the feed or toggle changes. Pass [] when off so
+  // the layer is cleared without removing it (consistent with the satellite pattern).
+  useEffect(() => {
+    const m = map.current;
+    if (!m) return;
+    updateAircraftLayer(m, showAircraft ? aircraft : []);
+  }, [aircraft, showAircraft]);
+
+  // Update the ship layer when the feed or toggle changes.
+  useEffect(() => {
+    const m = map.current;
+    if (!m) return;
+    updateShipLayer(m, showShips ? ships : []);
+  }, [ships, showShips]);
 
   return (
     <div className="ga98-geo-map-wrap" style={{ position: 'relative', width: '100%', height: '100%' }}>

@@ -13,6 +13,7 @@ import { homedir } from 'node:os';
 import { isIP, isIPv6 } from 'node:net';
 import { randomUUID } from 'node:crypto';
 import { ENTITY_TYPES, ENTITY_RELATIONSHIPS, TIMELINE_KINDS, IMAGE_MIMES, type EntityType, type EntityRelationship, type TimelineKind, type TimelineEvent, type ImageMime, type Whiteboard, type WhiteboardNode, type WhiteboardEdge, type WhiteboardNodeType, type JournalEntryInput } from '@shared/types';
+import type { Bounds } from '@shared/livefeeds/types';
 import type { GeoItem, BookmarkBoard, BookmarkCategory, BookmarkLink, StickyNote, StickyNotesState, AiChatMessage, AiConversationInput, BriefcaseNoteInput } from '@shared/post-mvp-types';
 
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -585,7 +586,7 @@ export function ensureThreatLayerId(v: unknown): (typeof THREAT_LAYER_IDS)[numbe
 /** The subset of threat layers that need a per-user API key/token. setLayerKey/hasLayerKey accept
  *  ONLY these ids — a key can't be stored for a keyless layer (USGS etc.). The secretStore ref is
  *  derived as `geoint.<layerId>.key`. */
-export const KEYED_LAYER_IDS = ['firms', 'gdeltcloud', 'ucdp'] as const;
+export const KEYED_LAYER_IDS = ['firms', 'gdeltcloud', 'ucdp', 'ais'] as const;
 export type KeyedLayerId = (typeof KEYED_LAYER_IDS)[number];
 export function ensureKeyedLayerId(v: unknown): KeyedLayerId {
   if (typeof v !== 'string' || !(KEYED_LAYER_IDS as readonly string[]).includes(v)) {
@@ -714,6 +715,29 @@ export function ensureSaveToCaseOpts(v: unknown): { form: 'record' | 'link' | 'n
     entityIds = o.entityIds.map((x) => ensureEntityId(x));
   }
   return { form: o.form, entityIds };
+}
+
+/** GeoINT live-feeds: a bounding box from the renderer. Validates each coordinate is a finite
+ *  number in range and that south <= north. Returns a clean { west, south, east, north } — the
+ *  caller (ADSB URL builder, AIS subscription) never receives an unchecked renderer value. */
+export function ensureBounds(raw: unknown): Bounds {
+  if (!raw || typeof raw !== 'object') throw new ValidationError('bounds must be an object');
+  const o = raw as Record<string, unknown>;
+  const getFinite = (k: string): number => {
+    const v = o[k];
+    if (typeof v !== 'number' || !Number.isFinite(v)) throw new ValidationError(`bounds.${k} must be a finite number`);
+    return v;
+  };
+  const west = getFinite('west');
+  const south = getFinite('south');
+  const east = getFinite('east');
+  const north = getFinite('north');
+  if (south < -90 || south > 90) throw new ValidationError('bounds.south must be in [-90, 90]');
+  if (north < -90 || north > 90) throw new ValidationError('bounds.north must be in [-90, 90]');
+  if (west < -180 || west > 180) throw new ValidationError('bounds.west must be in [-180, 180]');
+  if (east < -180 || east > 180) throw new ValidationError('bounds.east must be in [-180, 180]');
+  if (south > north) throw new ValidationError('bounds.south must be <= bounds.north');
+  return { west, south, east, north };
 }
 
 /** GeoINT: a manual map pin (or null to clear). Coordinates must be finite + in range. */
