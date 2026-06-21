@@ -423,6 +423,14 @@ const api = {
   },
   livefeeds: {
     fetchAdsb: (bounds: unknown) => ipcRenderer.invoke(channels.livefeeds.fetchAdsb, bounds),
+    aisStart: (bounds: unknown) => ipcRenderer.invoke(channels.livefeeds.aisStart, bounds),
+    aisStop: () => ipcRenderer.invoke(channels.livefeeds.aisStop),
+    aisSetBbox: (bounds: unknown) => ipcRenderer.invoke(channels.livefeeds.aisSetBbox, bounds),
+    onAisPositions: (cb: (p: { positions: unknown[] }) => void) => {
+      const l = (_e: unknown, p: { positions: unknown[] }) => cb(p);
+      ipcRenderer.on(channels.livefeeds.onAisPositions, l);
+      return () => ipcRenderer.removeListener(channels.livefeeds.onAisPositions, l);
+    },
   }
 } as const;
 
