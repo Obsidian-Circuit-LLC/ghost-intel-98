@@ -376,8 +376,6 @@ export const channels = {
     aisStart: 'livefeeds:aisStart',
     aisStop: 'livefeeds:aisStop',
     aisSetBbox: 'livefeeds:aisSetBbox',
-    setAisKey: 'livefeeds:setAisKey',
-    hasAisKey: 'livefeeds:hasAisKey',
     onAisPositions: 'livefeeds:onAisPositions'
   }
 } as const;
