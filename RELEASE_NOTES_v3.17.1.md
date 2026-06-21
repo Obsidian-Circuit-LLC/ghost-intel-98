@@ -26,8 +26,8 @@ headless typecheck/build/1226-test gates didn't surface it.
 Get-FileHash .\GhostIntel98-Setup-3.17.1.exe -Algorithm SHA256
 ```
 
-SHA-256: `__PENDING__`
-Size: `__PENDING__`
+SHA-256: `2406260c233ae0f91c2bf2e2463a78cc1bacbf75350bd0c5603e24f5bf368106`
+Size: 878285508 bytes (837.6 MB)
 
 Unsigned — Windows SmartScreen will warn: **More info → Run anyway**. Installs per-user (no admin)
 and upgrades any prior `Ghost Intel 98` build in place.
