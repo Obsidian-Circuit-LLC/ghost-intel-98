@@ -227,6 +227,13 @@ export const channels = {
     detect: 'streams:detect',
     exportCctv: 'streams:exportCctv'
   },
+  satellites: {
+    list: 'satellites:list',
+    upsert: 'satellites:upsert',
+    remove: 'satellites:remove',
+    fetchGroup: 'satellites:fetchGroup',
+    snapshot: 'satellites:snapshot'
+  },
   walls: {
     list: 'walls:list',
     get: 'walls:get',
