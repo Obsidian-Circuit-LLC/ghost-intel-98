@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseAisMessage, pruneVessels } from '../src/renderer/modules/geoint/livefeeds/aisParse';
+import { parseAisMessage, pruneVessels } from '../src/shared/livefeeds/aisParse';
 
 const T = 1_700_000_000_000;
 const msg = {

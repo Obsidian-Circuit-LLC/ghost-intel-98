@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseAdsb } from '../src/renderer/modules/geoint/livefeeds/adsbParse';
+import { parseAdsb } from '../src/shared/livefeeds/adsbParse';
 
 describe('parseAdsb', () => {
   it('maps a normal airborne aircraft, trimming the space-padded flight', () => {

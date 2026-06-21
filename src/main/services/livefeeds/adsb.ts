@@ -3,9 +3,9 @@
 import { safeFetch } from '../../net/safe-fetch';
 import { readTextCapped } from '../../net/limits';
 import { settingsStore } from '../../storage/json-fs';
-import { boundsToRadius } from './bbox';
-import { parseAdsb } from './adsbParse';
-import type { Bounds, AircraftPos } from './types';
+import { boundsToRadius } from '@shared/livefeeds/bbox';
+import { parseAdsb } from '@shared/livefeeds/adsbParse';
+import type { Bounds, AircraftPos } from '@shared/livefeeds/types';
 
 export async function fetchAdsb(bounds: Bounds): Promise<AircraftPos[]> {
   if (!(await settingsStore.read()).geoint?.networkEnabled) return [];

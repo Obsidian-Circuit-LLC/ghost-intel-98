@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { boundsToRadius, boundsToAisSubscription } from '../src/renderer/modules/geoint/livefeeds/bbox';
+import { boundsToRadius, boundsToAisSubscription } from '../src/shared/livefeeds/bbox';
 
 const b = { west: -1, south: 51, east: 1, north: 53 };
 
