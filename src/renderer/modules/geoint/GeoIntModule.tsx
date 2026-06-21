@@ -287,6 +287,10 @@ function GeoIntModuleInner(): JSX.Element {
       return;
     }
     let unsub: (() => void) | null = null;
+    // Guard against toggle-off (or unmount) arriving during the aisStart IPC round-trip.
+    // Without this, the cleanup runs while `unsub` is still null, the subscription set up
+    // after the await is orphaned (keeps firing setShips), and its handle is lost forever.
+    let cancelled = false;
     const start = async (): Promise<void> => {
       const r = await window.api.livefeeds.aisStart(bbox ?? { west: -180, south: -90, east: 180, north: 90 });
       if (r === 'no-key') {
@@ -300,14 +304,26 @@ function GeoIntModuleInner(): JSX.Element {
         setShowShips(false);
         return;
       }
+      // Cleanup ran while aisStart was in-flight — stop the stream we just opened and bail.
+      if (cancelled) {
+        void window.api.livefeeds.aisStop();
+        return;
+      }
       setAisStatus('connecting…');
       unsub = window.api.livefeeds.onAisPositions(({ positions }) => {
         setShips(positions as ShipPos[]);
         setAisStatus(`${positions.length} vessel${positions.length === 1 ? '' : 's'}`);
       });
+      // Cancellation may have landed between the subscribe call and here — tear down immediately.
+      if (cancelled) {
+        unsub();
+        unsub = null;
+        void window.api.livefeeds.aisStop();
+      }
     };
     void start();
     return () => {
+      cancelled = true;
       void window.api.livefeeds.aisStop();
       unsub?.();
       setShips([]);
