@@ -22,11 +22,11 @@ pub fn run() -> anyhow::Result<()> {
 
 /// Accept named-pipe clients and serve each until disconnect.
 fn accept_loop() -> anyhow::Result<()> {
-    // HOST: create the pipe server \\.\pipe\dcs98-confine with a SECURITY_ATTRIBUTES whose DACL admits ONLY
-    // { LocalSystem, the interactive-user SID stored at install }. CreateNamedPipeW (PIPE_ACCESS_DUPLEX,
-    // PIPE_TYPE_BYTE) -> ConnectNamedPipe -> wrap the HANDLE in a Read+Write -> serve_connection(stream).
-    // Loop. A different local user cannot drive the service (DACL).
-    todo!("HOST: CreateNamedPipeW with a tight DACL + ConnectNamedPipe loop -> serve_connection")
+    // HOST: create the named pipe \\.\pipe\dcs98-confine with a SECURITY_ATTRIBUTES DACL that denies by
+    // default and admits ONLY { LocalSystem, the install-time interactive owner SID recorded as
+    // engine.owner by install.rs step 2 }. No other principal may connect — this DACL is the entire
+    // local-attacker boundary for applyScope/spawn/clearScope.
+    todo!("HOST: create pipe server with the LocalSystem+owner-SID-only DACL; ConnectNamedPipe accept loop")
 }
 
 /// Serve one connected client: read control frames, dispatch, write responses; stream child IO as frames.
@@ -56,11 +56,14 @@ pub fn serve_connection<S: Read + Write>(stream: &mut S) -> anyhow::Result<()> {
 /// stream frames follow — matching win-wfp.ts which reads RESPONSE then STDOUT/EXIT).
 fn handle_request<S: Read + Write>(stream: &mut S, req: ControlRequest) -> anyhow::Result<Option<ControlResponse>> {
     match req {
-        ControlRequest::ApplyScope { sid, filters, .. } => Ok(Some(match crate::wfp::apply(&sid, &filters) {
+        ControlRequest::ApplyScope { sid, proxy_port, allow_cidrs } => Ok(Some(match crate::wfp::apply(&sid, proxy_port, &allow_cidrs) {
             Ok(scope_id) => ControlResponse { ok: true, scope_id: Some(scope_id), ..Default::default() },
             Err(e) => ControlResponse::err(format!("WFP apply failed: {e}")),
         })),
         ControlRequest::Spawn { scope_id, cmd, args } => {
+            // CONTRACT: `cmd` MUST be the bundled engine binary, not an arbitrary executable — the jail
+            // confines a known tool. HOST: enforce is_allowed_engine_cmd(&cmd) (compare against the
+            // resolved bundled engine path) and reject otherwise before spawning.
             let mut child = match crate::spawn::create_as_engine_user(&cmd, &args) {
                 Ok(c) => c,
                 Err(e) => return Ok(Some(ControlResponse::err(format!("spawn failed: {e}")))),
