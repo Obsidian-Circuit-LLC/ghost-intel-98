@@ -60,8 +60,6 @@ pub enum ControlRequest {
         proxy_port: u16,
         allow_cidrs: Vec<String>,
         sid: String,
-        /// The WfpFilter[] from buildWfpFilterSpec — deserialized by wfp::Filter.
-        filters: Vec<crate::wfp::Filter>,
     },
     #[serde(rename_all = "camelCase")]
     Spawn {
@@ -117,14 +115,14 @@ mod tests {
 
     #[test]
     fn round_trips_a_control_request() {
-        let payload = br#"{"op":"applyScope","proxyPort":54321,"allowCidrs":["203.0.113.0/24"],"sid":"S-1-5-21-1-2-3-1001","filters":[]}"#;
+        let payload = br#"{"op":"applyScope","proxyPort":54321,"allowCidrs":["203.0.113.0/24"],"sid":"S-1-5-21-1-2-3-1001"}"#;
         let wire = encode_frame(FRAME_REQUEST, payload);
         let mut cur = Cursor::new(wire);
         let f = read_frame(&mut cur).unwrap().unwrap();
         assert_eq!(f.kind, FRAME_REQUEST);
         let req: ControlRequest = serde_json::from_slice(&f.body).unwrap();
         match req {
-            ControlRequest::ApplyScope { proxy_port, allow_cidrs, sid, .. } => {
+            ControlRequest::ApplyScope { proxy_port, allow_cidrs, sid } => {
                 assert_eq!(proxy_port, 54321);
                 assert_eq!(allow_cidrs, vec!["203.0.113.0/24".to_string()]);
                 assert_eq!(sid, "S-1-5-21-1-2-3-1001");

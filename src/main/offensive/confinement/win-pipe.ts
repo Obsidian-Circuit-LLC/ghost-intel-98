@@ -33,7 +33,7 @@ export class FrameDecoder {
 
 /** Control requests the app sends to the service. */
 export type ControlRequest =
-  | { op: 'applyScope'; proxyPort: number; allowCidrs: string[]; sid: string; filters: unknown[] }
+  | { op: 'applyScope'; proxyPort: number; allowCidrs: string[]; sid: string }
   | { op: 'spawn'; scopeId: string; cmd: string; args: string[] }
   | { op: 'kill'; pid: number }
   | { op: 'clearScope'; scopeId: string }

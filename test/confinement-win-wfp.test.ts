@@ -39,9 +39,11 @@ describe('spawnWin32Wfp', () => {
     expect(lines.join('')).toContain('scan line');
     expect(exited).toBe(0);
     expect(svc.seen.map((r) => r.op)).toEqual(['applyScope', 'spawn']);
-    // applyScope carried the engine SID + the filter spec
+    // applyScope carries scalars only: SID + proxyPort + allowCidrs (native derives the policy)
     expect(svc.seen[0].sid).toBe('S-1-5-21-1-2-3-1001');
-    expect(Array.isArray(svc.seen[0].filters)).toBe(true);
+    expect(svc.seen[0].proxyPort).toBe(plan.proxyPort);
+    expect(svc.seen[0].allowCidrs).toEqual(plan.allowCidrs);
+    expect(svc.seen[0].filters).toBeUndefined();
   });
 
   it('stop() sends kill + clearScope and is idempotent', async () => {

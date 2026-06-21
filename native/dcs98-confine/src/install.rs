@@ -57,7 +57,7 @@ pub fn install() -> anyhow::Result<()> {
     //    (weight BASE_DENY) + PERSISTENT IMDS deny (weight IMDS_DENY) — so with NO scope loaded the engine
     //    user still cannot egress at all. (Per-engagement PERMITs are added at runtime by wfp::apply.)
     // 4. CreateServiceW("DCS98Confine", SERVICE_AUTO_START, LocalSystem, "<exe> service"); StartServiceW.
-    // The GUIDs MUST equal win-wfp-spec.ts PROVIDER_GUID/SUBLAYER_GUID (3f1820f3.../88845872...).
+    // The GUIDs MUST equal wfp::PROVIDER_GUID/SUBLAYER_GUID (3f1820f3.../88845872...).
     let _ = confine_dir();
     todo!("HOST: NetUserAdd + DPAPI cred + persistent base-deny WFP + CreateServiceW (see sequence above)")
 }
