@@ -39,8 +39,12 @@ const colorExpr = (): maplibregl.ExpressionSpecification => {
   return m as unknown as maplibregl.ExpressionSpecification;
 };
 
-/** Create the source+layer once and wire feature clicks → onSelect(id). Idempotent. */
+/** Create the source+layer once and wire feature clicks → onSelect(id). Idempotent, and a NO-OP
+ *  until the style is fully loaded — MapLibre's `addSource`/`addLayer` throw "Style is not done
+ *  loading" if called before then (e.g. from a `styledata` event mid-load), which would crash the
+ *  map. Callers re-invoke on `load` + `styledata` until it sticks. */
 export function ensureSatelliteLayer(map: maplibregl.Map, onSelect: (id: string) => void): void {
+  if (!map.isStyleLoaded()) return;
   if (map.getSource(SAT_SOURCE_ID)) return;
   map.addSource(SAT_SOURCE_ID, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
   map.addLayer({

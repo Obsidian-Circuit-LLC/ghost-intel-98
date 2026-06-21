@@ -352,19 +352,22 @@ export function MapGL(props: MapGLProps = {}): JSX.Element {
     m.on('moveend', () => { const c = m.getCenter(); centerCb.current?.(c.lat, c.lng); });
     m.on('moveend', syncCctv);
     m.on('zoomend', syncCctv);
-    ensureSatelliteLayer(m, (id) => onSatSelectRef.current?.(id));
-    // Re-ensure the satellite source/layer after every style reload. `setStyle` destroys all
-    // added sources/layers; re-adding them on 'styledata' (the typed post-setStyle event) makes
-    // the satellite layer survive basemap switches and network-gate toggles. The handler is
-    // registered ONCE here in the [] deps init effect — no duplicate listeners on re-render.
-    // ensureSatelliteLayer is idempotent (guards on getSource), so the initial call above is safe.
-    m.on('styledata', () => {
+    // Ensure (and re-ensure) the satellite source/layer whenever the style is ready. `addSource`
+    // throws "Style is not done loading" if called before the style finishes — so we MUST NOT call it
+    // synchronously at init (the style is still loading) nor on a mid-load `styledata`. Drive it off
+    // `load` (initial, style guaranteed loaded) AND `styledata` (after `setStyle`, which destroys all
+    // added sources/layers so the satellite layer must be re-added on basemap/network toggles).
+    // ensureSatelliteLayer self-guards on isStyleLoaded() + getSource(), so both events are safe and
+    // never double-add. Both handlers registered ONCE here in the [] deps init effect.
+    const ensureSat = (): void => {
       ensureSatelliteLayer(m, (id) => onSatSelectRef.current?.(id));
-      // Repopulate immediately so there is no blank gap when the layer is re-created.
+      // Repopulate immediately so there is no blank gap when the layer is (re-)created.
       if (showSatellitesRef.current && propagatorRef.current) {
         updateSatelliteLayer(m, propagatorRef.current.propagateAt(new Date()), satVisibleRef.current);
       }
-    });
+    };
+    m.on('load', ensureSat);
+    m.on('styledata', ensureSat);
     map.current = m;
     return () => {
       map.current?.remove();
