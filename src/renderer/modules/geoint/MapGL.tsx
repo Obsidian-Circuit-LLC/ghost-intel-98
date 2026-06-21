@@ -287,6 +287,7 @@ export function MapGL(props: MapGLProps = {}): JSX.Element {
   const onCameraOpenRef = useRef(onCameraOpen);
   onCameraOpenRef.current = onCameraOpen;
   const satVisibleRef = useRef(satVisibleTypes); satVisibleRef.current = satVisibleTypes;
+  const showSatellitesRef = useRef(showSatellites); showSatellitesRef.current = showSatellites;
   const onSatSelectRef = useRef(onSatelliteSelect); onSatSelectRef.current = onSatelliteSelect;
   const onSatPropRef = useRef(onSatellitesPropagated); onSatPropRef.current = onSatellitesPropagated;
   const trackSatRef = useRef(trackSatId); trackSatRef.current = trackSatId;
@@ -352,6 +353,18 @@ export function MapGL(props: MapGLProps = {}): JSX.Element {
     m.on('moveend', syncCctv);
     m.on('zoomend', syncCctv);
     ensureSatelliteLayer(m, (id) => onSatSelectRef.current?.(id));
+    // Re-ensure the satellite source/layer after every style reload. `setStyle` destroys all
+    // added sources/layers; re-adding them on 'styledata' (the typed post-setStyle event) makes
+    // the satellite layer survive basemap switches and network-gate toggles. The handler is
+    // registered ONCE here in the [] deps init effect — no duplicate listeners on re-render.
+    // ensureSatelliteLayer is idempotent (guards on getSource), so the initial call above is safe.
+    m.on('styledata', () => {
+      ensureSatelliteLayer(m, (id) => onSatSelectRef.current?.(id));
+      // Repopulate immediately so there is no blank gap when the layer is re-created.
+      if (showSatellitesRef.current && propagatorRef.current) {
+        updateSatelliteLayer(m, propagatorRef.current.propagateAt(new Date()), satVisibleRef.current);
+      }
+    });
     map.current = m;
     return () => {
       map.current?.remove();
