@@ -43,6 +43,7 @@ import { shutdownAll as shutdownAllFtp } from './services/ftp';
 import { cancelAll as cancelAllAiStreams } from './services/ai';
 import * as localAi from './services/local-ai';
 import * as chat from './services/chat';
+import { stopAis } from './services/livefeeds/ais-stream';
 
 const isDev = !!process.env['ELECTRON_RENDERER_URL'];
 
@@ -140,6 +141,12 @@ function createWindow(): void {
     } catch { /* malformed URL — drop */ }
     return { action: 'deny' };
   });
+
+  // AIS teardown on main-side window lifecycle events. stopAis() is idempotent (clears a null
+  // timer / closes a null socket) so firing on initial navigations before AIS is started is safe.
+  mainWindow.webContents.on('render-process-gone', () => { stopAis(); });   // renderer crash
+  mainWindow.webContents.on('did-start-navigation', () => { stopAis(); }); // covers reload (Ctrl+R)
+  mainWindow.on('closed', () => { stopAis(); });                            // window close
 
   // Main-window-only permission allowlist for clipboard access (DialTerm paste needs it).
   // Round-3 audit Critical H5 fix: previous attempt in lockDownWebContents had a startup
