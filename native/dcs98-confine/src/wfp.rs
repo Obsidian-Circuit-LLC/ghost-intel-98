@@ -181,25 +181,26 @@ pub fn derive_scope_filters(sid: &str, proxy_port: u16, allow_cidrs: &[String]) 
     Ok(filters)
 }
 
-/// Apply a filter set for one engagement; returns a fresh scope_id tracking the created filter keys.
-/// All adds happen inside one WFP transaction so a partial scope can never exist.
-pub fn apply(_sid: &str, _filters: &[Filter]) -> anyhow::Result<String> {
-    // HOST: open (or reuse a service-lifetime) engine handle: FwpmEngineOpen0(None, RPC_C_AUTHN_WINNT, ...).
-    // FwpmTransactionBegin0(engine, 0);
-    // for f in filters:
-    //   build FWPM_FILTER_CONDITION0[] from f.conditions:
-    //     AleUserId{sid}      -> FWPM_CONDITION_ALE_USER_ID, FWP_SECURITY_DESCRIPTOR_TYPE built from the SID
-    //                            (ConvertStringSidToSidW + a token-based SD; matchType FWP_MATCH_EQUAL)
-    //     IpRemoteAddress{cidr}-> FWPM_CONDITION_IP_REMOTE_ADDRESS, FWP_V4_ADDR_AND_MASK / FWP_V6_ADDR_AND_MASK
-    //                            from parse_cidr_v4 / parse_cidr_v6 (matchType FWP_MATCH_EQUAL)
-    //     IpRemotePort{port}  -> FWPM_CONDITION_IP_REMOTE_PORT, FWP_UINT16 (matchType FWP_MATCH_EQUAL)
-    //   FWPM_FILTER0 { layerKey: layer_guid(&f.layer)?, subLayerKey: SUBLAYER_GUID, weight: FWP_UINT64(f.weight),
-    //                  action.type: permit_or_block(&f.action)?, providerKey: PROVIDER_GUID, numFilterConditions, filterCondition };
-    //   FwpmFilterAdd0(engine, &filter, None, &mut id) -> collect id
-    // FwpmTransactionCommit0(engine);
-    // record scope_id -> ids; return scope_id (a fresh GUID string).
-    let _ = (&*scopes(), layer_guid, action_is_permit);
-    todo!("HOST: FwpmFilterAdd0 loop in one transaction (see grounded sequence above)")
+/// Apply a scope for one engagement. The filter set is DERIVED here from trusted scalars (never
+/// caller-supplied). Fail-closed: refuses to add permits unless the persistent base-deny is present.
+/// Returns a fresh scope_id tracking the created filter keys.
+pub fn apply(sid: &str, proxy_port: u16, allow_cidrs: &[String]) -> anyhow::Result<String> {
+    let filters = derive_scope_filters(sid, proxy_port, allow_cidrs)?;
+    verify_base_deny_present()?; // fail-closed: no per-scope permits without the persistent deny baseline
+    // HOST: FwpmEngineOpen0; FwpmTransactionBegin0; for f in &filters { build FWPM_FILTER_CONDITION0[]
+    //   (AleUserId->ALE_USER_ID SD, IpRemoteAddress->V4/V6_ADDR_AND_MASK via parse_cidr_*, IpRemotePort->UINT16),
+    //   FWPM_FILTER0 { layer_guid(&f.layer)?, SUBLAYER_GUID, FWP_UINT64(f.weight), action from action_is_permit(&f.action)?,
+    //   PROVIDER_GUID }, FwpmFilterAdd0 -> collect id }; FwpmTransactionCommit0; record scope_id->ids.
+    let _ = (&*scopes(), layer_guid, action_is_permit, &filters);
+    todo!("HOST: FwpmFilterAdd0 loop over the natively-derived `filters` in one transaction")
+}
+
+/// HOST precondition for apply: confirm the PERSISTENT base-deny filters (installed by install.rs step 3,
+/// keyed by PROVIDER_GUID) exist, so per-scope permits are always exceptions to a live deny baseline.
+/// Err (fail-closed) if absent.
+fn verify_base_deny_present() -> anyhow::Result<()> {
+    // HOST: FwpmFilterEnum0 filtered by PROVIDER_GUID; assert base-deny V4+V6 present; else bail.
+    todo!("HOST: verify persistent base-deny (PROVIDER_GUID) present; fail closed if missing")
 }
 
 /// Remove every filter tracked for a scope_id (transaction); idempotent (missing scope_id is a no-op).
