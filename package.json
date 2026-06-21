@@ -1,6 +1,6 @@
 {
   "name": "dcs98",
-  "version": "3.16.2",
+  "version": "3.16.3",
   "private": true,
   "description": "Ghost Intel 98 — Windows 98–inspired OSINT/case-management desktop app. Electron + React + TypeScript.",
   "author": {

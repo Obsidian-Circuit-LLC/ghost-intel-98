@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseMarkdown, parseInline } from '../src/renderer/modules/ai-assistant/markdown';
+import { parseMarkdown, parseInline, stripMarkdown } from '../src/renderer/modules/ai-assistant/markdown';
 
 describe('parseInline', () => {
   it('plain text (with emoji) is a single text node', () => {
@@ -53,5 +53,37 @@ describe('parseMarkdown', () => {
   });
   it('empty input is no blocks', () => {
     expect(parseMarkdown('')).toEqual([]);
+  });
+});
+
+describe('stripMarkdown', () => {
+  it('drops inline markers, keeping the spoken text (matches MarkdownView)', () => {
+    expect(stripMarkdown('**bold** and *italic* and `code`')).toBe('bold and italic and code');
+  });
+  it('drops ATX heading hashes', () => {
+    expect(stripMarkdown('## Mission Brief')).toBe('Mission Brief');
+  });
+  it('renders bullets as one line each, no bullet marker', () => {
+    expect(stripMarkdown('- a\n- b')).toBe('a\nb');
+  });
+  it('flattens nested emphasis', () => {
+    expect(stripMarkdown('**_x_**')).toBe('x');
+  });
+  it('plain text is unchanged', () => {
+    expect(stripMarkdown('hello world')).toBe('hello world');
+  });
+  it('an unmatched single asterisk stays literal (not spoken away)', () => {
+    expect(stripMarkdown('5 * 3 = 15')).toBe('5 * 3 = 15');
+  });
+  it('joins blocks with newlines for the sentence chunker', () => {
+    expect(stripMarkdown('# Title\n\nbody text')).toBe('Title\nbody text');
+  });
+  it('empty / whitespace input yields empty string', () => {
+    expect(stripMarkdown('')).toBe('');
+    expect(stripMarkdown('   \n  ')).toBe('');
+  });
+  it('is deterministic', () => {
+    const s = '# H\n\n**a** *b*\n- one\n- two';
+    expect(stripMarkdown(s)).toBe(stripMarkdown(s));
   });
 });

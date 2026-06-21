@@ -198,6 +198,15 @@ function ManualPane(): JSX.Element {
         <legend>Where things live</legend>
         <p style={{ fontSize: 11 }}>Your data lives under the OS userData folder in a <code>GhostAccess98/</code> directory. Open <b>Settings → About</b> to see the exact path on your machine.</p>
       </fieldset>
+
+      <fieldset>
+        <legend>Found a bug?</legend>
+        <p style={{ fontSize: 12, margin: 0 }}>
+          Report bugs, crashes, or odd behaviour to{' '}
+          <ExtLink href="mailto:contact.bugreport@qwamos.com" />. A short description of what you
+          did, what you expected, and what happened is plenty.
+        </p>
+      </fieldset>
     </div>
   );
 }

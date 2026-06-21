@@ -49,6 +49,41 @@ export function parseInline(text: string): Inline[] {
   return out;
 }
 
+/**
+ * Flatten markdown to plain text — the spoken form for TTS. Reuses the same parser the renderer
+ * uses, so what Piper voices matches exactly what MarkdownView shows: no `*`/`**`/`#`/`` ` ``
+ * markers read aloud. Blocks join on newlines so the Piper sentence chunker keeps natural breaks.
+ * Pure + deterministic.
+ */
+export function stripMarkdown(text: string): string {
+  return parseMarkdown(text).map(blockToText).filter((s) => s.length > 0).join('\n');
+}
+
+function blockToText(b: Block): string {
+  switch (b.t) {
+    case 'p':
+    case 'h':
+      return inlineToText(b.children);
+    case 'ul':
+      return b.items.map(inlineToText).join('\n');
+  }
+}
+
+function inlineToText(nodes: Inline[]): string {
+  return nodes
+    .map((n) => {
+      switch (n.t) {
+        case 'text':
+        case 'code':
+          return n.v;
+        case 'bold':
+        case 'italic':
+          return inlineToText(n.children);
+      }
+    })
+    .join('');
+}
+
 export function parseMarkdown(text: string): Block[] {
   const lines = text.replace(/\r\n/g, '\n').split('\n');
   const blocks: Block[] = [];

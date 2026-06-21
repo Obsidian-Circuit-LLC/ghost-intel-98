@@ -32,9 +32,11 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`GhostIntel98-Setup-3.16.2.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
+> **Install:** download [`GhostIntel98-Setup-3.16.3.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
 
 ## Status
+
+**v3.16.3** — **Field-fix polish: the assistant stops voicing markdown, and the GeoINT map ✕ finally shrinks.** Three cosmetic fixes from the field. **(1) Spoken markdown** — the assistant's Piper/character voices no longer read formatting markers aloud (`**`, `*`, `` ` ``, `#`, `-`): the spoken text now passes through the *same* in-house markdown stripper the on-screen renderer uses, so what you hear matches what you see. **(2) GeoINT popup ✕** — the map pin/popup close button was overlapping the coordinate readout despite two prior sizing passes; root cause was a CSS scope (`.ga98-geo-right`) that never actually matched the popup, so MapLibre's oversized default ✕ kept rendering. The popup styling is now scoped globally to MapLibre's own classes (GeoINT is the only MapLibre surface), so the tight dark card + small ✕ apply for real, clear of the coordinates. **(3) Bug reports** — RTFM gains a "Found a bug?" line with a contact address. No crypto/data/protocol/egress change; renderer + CSS only. **1207 automated tests.** *Everything from v3.16.2 carries forward.*
 
 **v3.16.2** — **Character voices.** The assistant's offline Piper voice now ships with four selectable **character voices** alongside the public-domain default — **Jarvis, HAL 9000, GLaDOS, and Wheatley** — pickable from the voice dropdown in the assistant's TTS controls. The default stays **LJ Speech (public-domain)**, so out-of-the-box behavior is unchanged; the character voices are opt-in. Each bundled voice is **SHA-256 pinned** at build time (fail-closed — a tampered model never ships) and the piper binary keeps its verify-before-exec gate; voice selection is resolved **traversal-safe in the main process** (an invalid pick falls back to the default). You can still add **your own** voices via the v3.16.1 Voices folder. The installer grows to ~837 MB to carry the four extra voices; no runtime network, no telemetry. *Everything from v3.16.0 carries forward.*
 
@@ -427,7 +429,7 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases) and run it.
 
-Direct link to the current release: [`GhostIntel98-Setup-3.15.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.15.0/GhostIntel98-Setup-3.15.0.exe)
+Direct link to the current release: [`GhostIntel98-Setup-3.16.3.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.16.3/GhostIntel98-Setup-3.16.3.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is **formally verified internally** — symbolic (ProVerif) +
 computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not**
 FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.6.8/GhostIntel98-Setup-3.6.8.exe).
@@ -435,7 +437,7 @@ FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Se
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\GhostIntel98-Setup-3.15.0.exe -Algorithm SHA256
+Get-FileHash .\GhostIntel98-Setup-3.16.3.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 

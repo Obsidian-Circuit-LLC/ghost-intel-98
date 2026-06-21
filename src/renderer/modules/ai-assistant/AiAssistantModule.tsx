@@ -21,6 +21,7 @@ import { loadAttachmentBytes } from '../../lib/attachmentBytes';
 import { createVoskRecognizer } from '../../voice/recognizer';
 import { VoiceConversation, type VoiceMode, type VoiceState } from '../../voice/conversation';
 import { MarkdownView } from './MarkdownView';
+import { stripMarkdown } from './markdown';
 
 interface DisplayMessage extends AiChatMessage {
   id: string;
@@ -271,7 +272,7 @@ export function AiAssistantModule(): JSX.Element {
         if (activeStreamRef.current?.id === streamId) activeStreamRef.current = null;
         const st = useSettings.getState().settings;
         if (!stoppedRef.current && st?.ai.ttsEnabled && acc.trim()) {
-          void speakAuto(acc, { voiceURI: st.ai.ttsVoiceUri, rate: st.ai.ttsRate, piperVoice: st.ai.piperVoice }).then((r) => {
+          void speakAuto(stripMarkdown(acc), { voiceURI: st.ai.ttsVoiceUri, rate: st.ai.ttsRate, piperVoice: st.ai.piperVoice }).then((r) => {
             if (!r.spoken && (r.reason === 'remote-blocked' || r.reason === 'no-local-voice')) {
               toast.warn('Voice off: no on-device voice available. Install an offline/Natural voice in Windows settings, or use the bundled Piper voice — cloud voices are blocked by design.');
             }
@@ -383,7 +384,7 @@ export function AiAssistantModule(): JSX.Element {
         mode,
         ask: askOnce,
         speak: (t) => new Promise<void>((res) => {
-          void speakAuto(t, { voiceURI: st?.ai.ttsVoiceUri, rate: st?.ai.ttsRate, piperVoice: st?.ai.piperVoice, onEnd: res }).then((r) => {
+          void speakAuto(stripMarkdown(t), { voiceURI: st?.ai.ttsVoiceUri, rate: st?.ai.ttsRate, piperVoice: st?.ai.piperVoice, onEnd: res }).then((r) => {
             if (!r.spoken) res();
           });
         }),

@@ -815,10 +815,14 @@ input.ga98-text, select.ga98-text {
   background-repeat: no-repeat, repeat, repeat, repeat, repeat, repeat;
 }
 /* ── GeoINT globe popup (MapLibre) ─────────────────────────────────────────────
-   MapLibre's default popup is an opaque white box with the close ✕ overlapping the content.
-   Restyle (scoped to the GeoINT map) to a translucent dark card with white text, and pad the
-   right edge so the ✕ no longer sits on top of the title. */
-.ga98-geo-right .maplibregl-popup-content {
+   MapLibre's default popup is an opaque white box with the close ✕ pinned at right:0/top:0 over
+   only 10px of content padding, so the ✕ sits on top of the text. Restyle to a translucent dark
+   card with white text and reserve a clear right gutter for the ✕.
+   SCOPE: global on `.maplibregl-*`, NOT scoped to a GeoINT pane. MapLibre is used ONLY by GeoINT
+   (MapGL.tsx, cctvLayer.ts), and MapLibre appends popups into the map's own container — a prior
+   `.ga98-geo-right`-scoped version silently failed to reach popups, so the default white ✕ kept
+   overlapping the coordinate readout. A bare selector cannot miss them. */
+.maplibregl-popup-content {
   background: rgba(10, 15, 26, 0.92);
   color: #eef3fb;
   border: 1px solid rgba(255, 255, 255, 0.22);
@@ -829,27 +833,26 @@ input.ga98-text, select.ga98-text {
   font-size: 12px;
   line-height: 1.35;
 }
-.ga98-geo-right .maplibregl-popup-content b { color: #fff; }
-.ga98-geo-right .maplibregl-popup-content a { color: #8ec5ff; }
-/* A clean, small upper-right square — sized below the Win98 title-bar control and flex-centred so the
-   ✕ glyph stays inside its box and never overlaps the header text. (GhostExodus: the prior 16×14 read
-   as still too big; this is a tighter 13px square with an 11px glyph and wider content clearance.) */
-.ga98-geo-right .maplibregl-popup-close-button {
+.maplibregl-popup-content b { color: #fff; }
+.maplibregl-popup-content a { color: #8ec5ff; }
+/* A clean, small upper-right square — flex-centred so the ✕ glyph stays inside its box and never
+   overlaps the content. 12px box, 10px glyph; the 26px content gutter above clears it with room. */
+.maplibregl-popup-close-button {
   display: flex; align-items: center; justify-content: center;
-  box-sizing: border-box; width: 13px; height: 13px; top: 3px; right: 3px;
+  box-sizing: border-box; width: 12px; height: 12px; top: 3px; right: 3px;
   padding: 0; margin: 0; overflow: hidden;
-  color: #cdd6e4; font-size: 11px; line-height: 1; border-radius: 2px; background: transparent;
+  color: #cdd6e4; font-size: 10px; line-height: 1; border-radius: 2px; background: transparent;
 }
-.ga98-geo-right .maplibregl-popup-close-button:hover { background: rgba(255, 255, 255, 0.14); color: #fff; }
+.maplibregl-popup-close-button:hover { background: rgba(255, 255, 255, 0.14); color: #fff; }
 /* Tint the popup tip to match the dark card, per anchor direction. */
-.ga98-geo-right .maplibregl-popup-anchor-top .maplibregl-popup-tip { border-bottom-color: rgba(10, 15, 26, 0.92); }
-.ga98-geo-right .maplibregl-popup-anchor-bottom .maplibregl-popup-tip { border-top-color: rgba(10, 15, 26, 0.92); }
-.ga98-geo-right .maplibregl-popup-anchor-left .maplibregl-popup-tip { border-right-color: rgba(10, 15, 26, 0.92); }
-.ga98-geo-right .maplibregl-popup-anchor-right .maplibregl-popup-tip { border-left-color: rgba(10, 15, 26, 0.92); }
-.ga98-geo-right .maplibregl-popup-anchor-top-left .maplibregl-popup-tip { border-bottom-color: rgba(10, 15, 26, 0.92); }
-.ga98-geo-right .maplibregl-popup-anchor-top-right .maplibregl-popup-tip { border-bottom-color: rgba(10, 15, 26, 0.92); }
-.ga98-geo-right .maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip { border-top-color: rgba(10, 15, 26, 0.92); }
-.ga98-geo-right .maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip { border-top-color: rgba(10, 15, 26, 0.92); }
+.maplibregl-popup-anchor-top .maplibregl-popup-tip { border-bottom-color: rgba(10, 15, 26, 0.92); }
+.maplibregl-popup-anchor-bottom .maplibregl-popup-tip { border-top-color: rgba(10, 15, 26, 0.92); }
+.maplibregl-popup-anchor-left .maplibregl-popup-tip { border-right-color: rgba(10, 15, 26, 0.92); }
+.maplibregl-popup-anchor-right .maplibregl-popup-tip { border-left-color: rgba(10, 15, 26, 0.92); }
+.maplibregl-popup-anchor-top-left .maplibregl-popup-tip { border-bottom-color: rgba(10, 15, 26, 0.92); }
+.maplibregl-popup-anchor-top-right .maplibregl-popup-tip { border-bottom-color: rgba(10, 15, 26, 0.92); }
+.maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip { border-top-color: rgba(10, 15, 26, 0.92); }
+.maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip { border-top-color: rgba(10, 15, 26, 0.92); }
 .ga98-geo-map-placeholder {
   position: absolute; inset: 0; z-index: 500;
   display: flex; align-items: center; justify-content: center; text-align: center;
