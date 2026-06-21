@@ -1,6 +1,9 @@
-//! WFP apply/remove + the INV-C1 probe. The allow/deny POLICY is decided in win-wfp-spec.ts and arrives
-//! here as JSON; this module deserializes it (the structs below must match win-wfp-spec.ts byte-for-byte)
-//! and applies it verbatim. It NEVER invents policy.
+//! WFP apply/remove + the INV-C1 probe. The allow/deny POLICY is DERIVED HERE (`derive_scope_filters`)
+//! from the trusted scalars {engine SID, proxy port, allow-CIDRs} the privileged service receives — the
+//! native side is the single authority and NEVER trusts a caller-supplied filter list (the renderer/main
+//! process is untrusted). The derived set is deny-by-default for the engine SID with permits only for the
+//! loopback proxy + validated scope CIDRs, plus an inviolable top-weight IMDS deny; invalid input
+//! (bad SID, port 0, default-route or IMDS-covering CIDR) fails closed.
 //!
 //! WINDOWS BUILD LOOP. Oracle: compiler + `cargo doc` for
 //! `windows::Win32::NetworkManagement::WindowsFilteringPlatform`. API symbols are grounded in
@@ -21,7 +24,7 @@ use std::collections::HashMap;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::sync::Mutex;
 
-// ---- The JSON model: must match win-wfp-spec.ts WfpCondition / WfpFilter exactly. ----
+// ---- The filter model produced by derive_scope_filters and consumed by the apply() FFI loop. ----
 
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(tag = "field", rename_all = "snake_case")]
