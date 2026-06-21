@@ -20,6 +20,9 @@ import { TimelineBar } from './TimelineBar';
 import { StoryControls } from './StoryControls';
 import { CommandRail } from './CommandRail';
 import { filterByCategories, UNCATEGORIZED } from './threat';
+import { SpaceSatellitesPanel } from './satellites/SpaceSatellitesPanel';
+import { SatelliteManager } from './satellites/SatelliteManager';
+import type { SatelliteRecord, PropagatedSat, SatelliteType } from './satellites/types';
 
 // GeoINT reimagine (R5): pluggable threat layers. Each is an on-demand, ephemeral fetch into
 // GeoItem[] (held in renderer state, never persisted to the source cache). USGS earthquakes is
@@ -138,6 +141,38 @@ function GeoIntModuleInner(): JSX.Element {
   const [cctvStreams, setCctvStreams] = useState<CameraStream[]>([]);
   // Collapse the left command rail to a thin strip so the map can use the freed width (« hides, » reopens).
   const [railCollapsed, setRailCollapsed] = useState(false);
+
+  // Space Satellites layer (off by default). Records come from the offline snapshot + active user
+  // satellites on first toggle-on. CelesTrak refresh is gated on `net` (networkEnabled).
+  const [showSatellites, setShowSatellites] = useState(false);
+  const [satRecords, setSatRecords] = useState<SatelliteRecord[]>([]);
+  const [satPropagated, setSatPropagated] = useState<PropagatedSat[]>([]);
+  const [satVisibleTypes, setSatVisibleTypes] = useState<Set<SatelliteType> | null>(null);
+  const [satGroup, setSatGroup] = useState('active');
+  const [satLastUpdate, setSatLastUpdate] = useState<string | null>(null);
+  const [trackSatId, setTrackSatId] = useState<string | null>(null);
+
+  // Satellite data loader: merges offline snapshot + active user satellites. Called on first
+  // toggle-on (lazy) and after add/import via SatelliteManager.
+  const loadSatellites = useCallback(async () => {
+    const { parseTleText } = await import('./satellites/tle');
+    const snap = parseTleText(await window.api.satellites.snapshot());
+    const users = (await window.api.satellites.list()).filter((u) => u.active)
+      .map((u) => ({ id: u.id, name: u.name, noradId: u.noradId, line1: u.line1, line2: u.line2, type: u.type as SatelliteType, source: 'user' as const, active: true, addedAt: u.addedAt }));
+    setSatRecords([...snap, ...users]);
+  }, []);
+  useEffect(() => { if (showSatellites && satRecords.length === 0) void loadSatellites(); }, [showSatellites, satRecords.length, loadSatellites]);
+
+  // Refresh from CelesTrak — gated on `net` (networkEnabled). Toasts guidance when off.
+  const refreshSatellites = useCallback(async () => {
+    if (!net) { toast.warn('Enable GeoINT network to refresh satellites from CelesTrak.'); return; }
+    try {
+      const { parseTleText } = await import('./satellites/tle');
+      const recs = parseTleText(await window.api.satellites.fetchGroup(satGroup));
+      if (recs.length) { setSatRecords(recs); setSatLastUpdate(new Date().toLocaleTimeString()); }
+      else toast.warn('CelesTrak returned no satellites.');
+    } catch (e) { toast.error(`CelesTrak: ${(e as Error).message}`); }
+  }, [net, satGroup]);
 
   // Command-center rail (R9): category visibility filter. Only consulted in globe mode (useMapGL);
   // it hides/shows a category's markers on the map. `null` = "all categories on" (the default — no
@@ -610,6 +645,16 @@ function GeoIntModuleInner(): JSX.Element {
           <button style={{ marginLeft: 8 }} onClick={() => void refreshCameras()} title="Reload the camera list from EyeSpy">Refresh</button>
         </fieldset>
 
+        <SpaceSatellitesPanel
+          show={showSatellites} onToggle={setShowSatellites}
+          propagated={satPropagated} total={satRecords.length}
+          visibleTypes={satVisibleTypes} onVisibleTypes={setSatVisibleTypes}
+          group={satGroup} onGroup={setSatGroup}
+          onRefresh={() => void refreshSatellites()} lastUpdate={satLastUpdate} networkEnabled={net}
+          onTrack={setTrackSatId} onCenter={(id) => setTrackSatId(id)} onDetails={(id) => setTrackSatId(id)}
+        />
+        <SatelliteManager onAdded={() => void loadSatellites()} />
+
         <fieldset>
           <legend>Threat Layers</legend>
           <p style={{ fontSize: 11, color: '#555', margin: '0 0 4px' }}>On-demand public feeds. Toggling a layer on fetches it now (network required); off drops it. Not cached.</p>
@@ -869,7 +914,14 @@ function GeoIntModuleInner(): JSX.Element {
           <MapGL items={mapItems} corroboration={corroboration} tilesEnabled={net} tileUrl={activeTileUrl} tileAttribution={activeTileAttribution}
             pickMode={pickFor != null} onPick={(la, lo) => void onPick(la, lo)} focusId={focusId} flyTo={flyTo}
             onCenterChange={(lat, lon) => setCenter({ lat, lon })} overlayUrls={overlayUrls} overlayAttribution={LABELS_ATTRIBUTION}
-            cctvStreams={cctvStreams} showCctv={showCctv} onCameraOpen={onCameraOpen} />
+            cctvStreams={cctvStreams} showCctv={showCctv} onCameraOpen={onCameraOpen}
+            satRecords={satRecords}
+            showSatellites={showSatellites}
+            satVisibleTypes={satVisibleTypes}
+            onSatelliteSelect={(id) => setTrackSatId(id)}
+            onSatellitesPropagated={setSatPropagated}
+            trackSatId={trackSatId}
+          />
         {streetView && net && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', background: '#000' }}>
             <div className="ga98-toolbar" style={{ flex: '0 0 auto' }}>
