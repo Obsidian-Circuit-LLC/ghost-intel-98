@@ -455,6 +455,13 @@ export interface AppSettings {
     maxReconnects: number;
     maxSessionAgeMinutes: number;
   };
+  searchlight: {
+    /** Master opt-in egress gate. Off by default ⇒ no probe is sent. */
+    networkEnabled: boolean;
+    /** Concurrent probes over Tor (slower exits) and over clearnet. */
+    torConcurrency: number;
+    clearnetConcurrency: number;
+  };
 }
 
 export const defaultShortcuts: AccessShortcut[] = [
@@ -577,6 +584,7 @@ export const defaultSettings: AppSettings = {
     customFeeds: []
   },
   chat: { networkEnabled: false },
+  searchlight: { networkEnabled: false, torConcurrency: 8, clearnetConcurrency: 16 },
   plugins: {},
   offensive: { confirmMode: 'per-scan', rateLimitPerSec: 10, downstreamProxy: null, requireSignedAuthorization: false, issuerKeys: [] },
   bgconn: { idleTeardownAfterMinutes: 120, defaultRouting: 'tor', maxReconnects: 20, maxSessionAgeMinutes: 720 }
