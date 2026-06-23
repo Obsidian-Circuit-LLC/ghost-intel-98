@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchlightStore } from './store';
 import { SweepPanel } from './panels/SweepPanel';
+import { GraphView } from './panels/GraphView';
 import './searchlight.css';
 
 type Tab = 'dashboard' | 'sweep' | 'graph' | 'whiteboard' | 'reports' | 'cases';
@@ -50,8 +51,10 @@ export function SearchlightModule({ caseId: _caseId }: { caseId?: string }): JSX
           <div className="sl-placeholder">Loading cases…</div>
         ) : tab === 'sweep' ? (
           <SweepPanel />
+        ) : tab === 'graph' ? (
+          <GraphView />
         ) : (
-          <div className="sl-placeholder">{tab} — coming in Tasks 10–12</div>
+          <div className="sl-placeholder">{tab} — coming in Tasks 11–12</div>
         )}
       </div>
     </div>
