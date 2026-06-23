@@ -44,6 +44,7 @@ import { cancelAll as cancelAllAiStreams } from './services/ai';
 import * as localAi from './services/local-ai';
 import * as chat from './services/chat';
 import { stopAis } from './services/livefeeds/ais-stream';
+import { cancelAllSweeps } from './searchlight/sweep';
 
 const isDev = !!process.env['ELECTRON_RENDERER_URL'];
 
@@ -144,9 +145,11 @@ function createWindow(): void {
 
   // AIS teardown on main-side window lifecycle events. stopAis() is idempotent (clears a null
   // timer / closes a null socket) so firing on initial navigations before AIS is started is safe.
-  mainWindow.webContents.on('render-process-gone', () => { stopAis(); });   // renderer crash
-  mainWindow.webContents.on('did-start-navigation', () => { stopAis(); }); // covers reload (Ctrl+R)
-  mainWindow.on('closed', () => { stopAis(); });                            // window close
+  // cancelAllSweeps() is also idempotent — marks all active sweep jobs cancelled so probe workers
+  // drain gracefully instead of pushing results to a dead renderer.
+  mainWindow.webContents.on('render-process-gone', () => { stopAis(); cancelAllSweeps(); });   // renderer crash
+  mainWindow.webContents.on('did-start-navigation', () => { stopAis(); cancelAllSweeps(); }); // covers reload (Ctrl+R)
+  mainWindow.on('closed', () => { stopAis(); cancelAllSweeps(); });                            // window close
 
   // Main-window-only permission allowlist for clipboard access (DialTerm paste needs it).
   // Round-3 audit Critical H5 fix: previous attempt in lockDownWebContents had a startup

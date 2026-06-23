@@ -431,6 +431,28 @@ const api = {
       ipcRenderer.on(channels.livefeeds.onAisPositions, l);
       return () => ipcRenderer.removeListener(channels.livefeeds.onAisPositions, l);
     },
+  },
+  searchlight: {
+    catalog: () => ipcRenderer.invoke(channels.searchlight.catalog),
+    startSweep: (req: { username: string; siteIds: string[]; useTor: boolean }) => ipcRenderer.invoke(channels.searchlight.startSweep, req),
+    cancelSweep: (jobId: string) => ipcRenderer.invoke(channels.searchlight.cancelSweep, jobId),
+    importSites: (jsonText: string) => ipcRenderer.invoke(channels.searchlight.importSites, jsonText),
+    listCases: () => ipcRenderer.invoke(channels.searchlight.listCases),
+    saveCase: (c: unknown) => ipcRenderer.invoke(channels.searchlight.saveCase, c),
+    loadCase: (id: string) => ipcRenderer.invoke(channels.searchlight.loadCase, id),
+    deleteCase: (id: string) => ipcRenderer.invoke(channels.searchlight.deleteCase, id),
+    exportCase: (id: string) => ipcRenderer.invoke(channels.searchlight.exportCase, id),
+    importCase: (jsonText: string) => ipcRenderer.invoke(channels.searchlight.importCase, jsonText),
+    onSweepResult: (cb: (r: unknown) => void) => {
+      const l = (_e: unknown, r: unknown) => cb(r);
+      ipcRenderer.on(channels.searchlight.onSweepResult, l);
+      return () => ipcRenderer.removeListener(channels.searchlight.onSweepResult, l);
+    },
+    onSweepDone: (cb: (f: unknown) => void) => {
+      const l = (_e: unknown, f: unknown) => cb(f);
+      ipcRenderer.on(channels.searchlight.onSweepDone, l);
+      return () => ipcRenderer.removeListener(channels.searchlight.onSweepDone, l);
+    }
   }
 } as const;
 
