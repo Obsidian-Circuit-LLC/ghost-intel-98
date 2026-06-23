@@ -26,11 +26,16 @@ export function classifyError(err: NodeJS.ErrnoException): ProbeErrorType {
 const fail = (error: ProbeErrorType, statusMessage = ''): RawCheckResult =>
   ({ statusCode: 0, statusMessage, elapsed: 0, redirectUrl: null, error, body: '' });
 
-async function guard(targetUrl: string): Promise<URL | null> {
+// On the Tor path, skip the local DNS resolve: the Tor exit resolves the hostname
+// remotely, so a local assertResolvedPublic call would (a) leak which sites are being
+// probed to the local/ISP resolver outside the Tor circuit (OpSec), and (b) provide no
+// SSRF benefit since a private-resolving name cannot reach the LAN through a remote exit.
+// isPublicHttpUrl() still rejects literal private/loopback/non-http targets synchronously.
+async function guard(targetUrl: string, skipDnsResolve: boolean): Promise<URL | null> {
   try {
     if (!isPublicHttpUrl(targetUrl)) return null;
     const u = new URL(targetUrl);
-    await assertResolvedPublic(u.hostname);
+    if (!skipDnsResolve) await assertResolvedPublic(u.hostname);
     return u;
   } catch { return null; }
 }
@@ -86,7 +91,7 @@ export async function probe(
   opts: { fetchBody: boolean; headers?: Record<string, string>; useTor: boolean },
   deps: ProbeDeps = {}
 ): Promise<RawCheckResult> {
-  const u = await guard(targetUrl);
+  const u = await guard(targetUrl, opts.useTor);
   if (!u) return fail('CONNECTION_ERROR', 'blocked non-public target');
   const headers = opts.headers ?? {};
   if (opts.useTor) {

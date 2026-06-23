@@ -1,8 +1,15 @@
 import { describe, it, expect, vi } from 'vitest';
 
+const isPublicHttpUrlSpy = vi.fn((u: string) =>
+  /^https?:\/\//.test(u) && !/localhost|127\.0\.0\.1|10\.|192\.168\./.test(u)
+);
+const assertResolvedPublicSpy = vi.fn(async (h: string) => {
+  if (/127\.0\.0\.1|localhost/.test(h)) throw new Error('private');
+});
+
 vi.mock('../src/main/security/validate', () => ({
-  isPublicHttpUrl: (u: string) => /^https?:\/\//.test(u) && !/localhost|127\.0\.0\.1|10\.|192\.168\./.test(u),
-  assertResolvedPublic: async (h: string) => { if (/127\.0\.0\.1|localhost/.test(h)) throw new Error('private'); }
+  isPublicHttpUrl: (u: string) => isPublicHttpUrlSpy(u),
+  assertResolvedPublic: async (h: string) => assertResolvedPublicSpy(h),
 }));
 
 import { classifyError, probe } from '../src/main/searchlight/probe';
@@ -41,5 +48,34 @@ describe('probe', () => {
     const r = await probe('https://x.com/u', { fetchBody: false, useTor: false }, { clearnetFetch });
     expect(r.statusCode).toBe(404);
     expect(r.body).toBe('');
+  });
+
+  // F2: Tor path must NOT call assertResolvedPublic (DNS leak prevention)
+  it('Tor path with public url skips local DNS resolve (no assertResolvedPublic call)', async () => {
+    assertResolvedPublicSpy.mockClear();
+    // socksPort null => TOR_UNAVAILABLE; enough to confirm no DNS was called
+    const r = await probe(
+      'https://example.com/u',
+      { fetchBody: false, useTor: true },
+      { socksPort: () => null }
+    );
+    expect(assertResolvedPublicSpy).not.toHaveBeenCalled();
+    expect(r.error).toBe('TOR_UNAVAILABLE');
+  });
+
+  // F2: isPublicHttpUrl still guards literal-private targets on the Tor path
+  it('Tor path with literal-private url is rejected before dial (isPublicHttpUrl guard)', async () => {
+    assertResolvedPublicSpy.mockClear();
+    const dial = vi.fn();
+    const r = await probe(
+      'https://127.0.0.1/u',
+      { fetchBody: false, useTor: true },
+      { socksPort: () => 9050, dial: dial as never }
+    );
+    // isPublicHttpUrl returns false for 127.0.0.1 => CONNECTION_ERROR, no dial
+    expect(r.error).toBe('CONNECTION_ERROR');
+    expect(dial).not.toHaveBeenCalled();
+    // assertResolvedPublic also not called (we never reach that branch)
+    expect(assertResolvedPublicSpy).not.toHaveBeenCalled();
   });
 });

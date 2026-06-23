@@ -1304,7 +1304,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   // Never silently fall back to clearnet.
   function searchlightSocksPort(): number | null {
     const t = getBgTor();
-    return t ? t.socksPort() : null;
+    return t && t.isBootstrapped() ? t.socksPort() : null;
   }
 
   safeHandle(channels.searchlight.catalog, async () => slSiteDb.catalog());
