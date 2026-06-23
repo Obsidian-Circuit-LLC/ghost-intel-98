@@ -1,0 +1,6 @@
+.sl-root { display: flex; flex-direction: column; height: 100%; }
+.sl-tabs { display: flex; gap: 2px; padding: 2px; flex: 0 0 auto; }
+.sl-tab { font: inherit; padding: 2px 10px; }
+.sl-tab-active { font-weight: bold; }
+.sl-body { flex: 1 1 auto; overflow: auto; background: #0a0a14; color: #d8d8e0; }
+.sl-placeholder { padding: 16px; opacity: 0.6; }

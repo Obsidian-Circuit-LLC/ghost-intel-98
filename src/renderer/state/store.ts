@@ -41,7 +41,8 @@ export type ModuleKey =
   | 'camera-view'
   | 'host-info'
   | 'news-view'
-  | 'help';
+  | 'help'
+  | 'searchlight';
 
 export interface WindowSpec {
   id: string;
