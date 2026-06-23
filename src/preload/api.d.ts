@@ -60,6 +60,12 @@ import type {
   BriefcaseNoteInput,
   HostInfo
 } from '../shared/post-mvp-types';
+import type {
+  SiteCatalogEntry,
+  SweepResult,
+  SearchlightCase,
+  SearchlightCaseSummary,
+} from '../shared/searchlight/types';
 
 export interface MailDraft {
   id: string;
@@ -493,6 +499,20 @@ export interface GhostApi {
     aisStop(): Promise<void>;
     aisSetBbox(bounds: { west: number; south: number; east: number; north: number }): Promise<void>;
     onAisPositions(cb: (p: { positions: Array<{ id: string; name: string | null; lat: number; lon: number; sogKt: number | null; cogDeg: number | null; type: string; lastSeen: number }> }) => void): () => void;
+  };
+  searchlight: {
+    catalog(): Promise<SiteCatalogEntry[]>;
+    startSweep(req: { username: string; siteIds: string[]; useTor: boolean }): Promise<{ jobId: string; total: number }>;
+    cancelSweep(jobId: string): Promise<void>;
+    importSites(jsonText: string): Promise<{ added: number; rejected: number }>;
+    listCases(): Promise<SearchlightCaseSummary[]>;
+    saveCase(c: SearchlightCase): Promise<void>;
+    loadCase(id: string): Promise<SearchlightCase | null>;
+    deleteCase(id: string): Promise<void>;
+    exportCase(id: string): Promise<string | null>;
+    importCase(jsonText: string): Promise<SearchlightCase>;
+    onSweepResult(cb: (r: SweepResult) => void): () => void;
+    onSweepDone(cb: (f: { jobId: string; status: 'completed' | 'cancelled'; checked: number }) => void): () => void;
   };
 }
 
