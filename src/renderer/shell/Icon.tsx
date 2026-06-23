@@ -74,10 +74,29 @@ export function NotepadGlyph(): JSX.Element {
   );
 }
 
+/**
+ * Magnifier icon for the Searchlight module — simple pixel-style magnifying glass, ~16×16 viewport.
+ */
+export function SearchlightGlyph(): JSX.Element {
+  return (
+    <svg width="28" height="28" viewBox="0 0 16 16" shapeRendering="crispEdges" aria-hidden="true">
+      {/* lens ring */}
+      <circle cx="6" cy="6" r="4" fill="none" stroke="#d8d1ba" strokeWidth="1.5" />
+      {/* lens interior */}
+      <circle cx="6" cy="6" r="2.5" fill="#0f7f96" opacity="0.7" />
+      {/* highlight */}
+      <circle cx="5" cy="5" r="0.8" fill="#bdeef9" opacity="0.8" />
+      {/* handle */}
+      <line x1="9.2" y1="9.2" x2="13.5" y2="13.5" stroke="#d8d1ba" strokeWidth="1.8" strokeLinecap="square" />
+    </svg>
+  );
+}
+
 /** Custom hand-drawn SVG glyph for modules that have one (falls through to the emoji otherwise). */
 export function glyphNodeFor(m: string): ReactNode | undefined {
   if (m === 'cases') return <MyComputerGlyph />;
   if (m === 'notepad') return <NotepadGlyph />;
+  if (m === 'searchlight') return <SearchlightGlyph />;
   return undefined;
 }
 
