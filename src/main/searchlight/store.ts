@@ -3,6 +3,7 @@ import { readdir, unlink } from 'node:fs/promises';
 import { app } from 'electron';
 import { secureReadFile, secureWriteFile } from '../storage/secure-fs';
 import type { SearchlightCase, SearchlightCaseSummary } from '@shared/searchlight/types';
+import { sanitizeImportedCase } from '@shared/searchlight/import-sanitize';
 
 function dir(): string { return join(app.getPath('userData'), 'searchlight', 'cases'); }
 function caseFile(id: string): string { return join(dir(), `${encodeURIComponent(id)}.json`); }
@@ -39,9 +40,10 @@ export async function exportCase(id: string): Promise<string | null> {
 }
 
 export async function importCase(jsonText: string): Promise<SearchlightCase | null> {
-  let c: SearchlightCase;
-  try { c = JSON.parse(jsonText) as SearchlightCase; } catch { return null; }
-  if (!c || typeof c.id !== 'string' || typeof c.name !== 'string') return null;
+  let parsed: unknown;
+  try { parsed = JSON.parse(jsonText); } catch { return null; }
+  const c = sanitizeImportedCase(parsed);
+  if (!c) return null;
   await saveCase(c);
   return c;
 }
