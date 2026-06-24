@@ -535,11 +535,11 @@ function GeoIntModuleInner(): JSX.Element {
 
   // Timeline bounds over the full item set. null when no item carries a parseable date.
   const bounds = useMemo(() => timeBounds(items), [items]);
-  // Clamp/initialize the cursor whenever the bounds change: park it at max (= "all events").
+  // Open the timeline on "show all": seed the cursor to the latest bound whenever bounds
+  // (re)establish. Keep it scrubbable afterward; only seed when the cursor is unset/out of range.
   useEffect(() => {
-    if (!bounds) return;
-    setTimeCursor((c) => (c < bounds.min || c > bounds.max ? bounds.max : c));
-  }, [bounds?.min, bounds?.max]);
+    if (bounds) setTimeCursor((cur) => (cur < bounds.min || cur > bounds.max || cur === 0 ? bounds.max : cur));
+  }, [bounds]);
 
   // The set handed to the map: events at or before the cursor (undated always shown).
   const visibleItems = useMemo(() => itemsUpTo(items, timeCursor), [items, timeCursor]);
