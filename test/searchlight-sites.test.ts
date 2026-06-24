@@ -2,6 +2,49 @@ import { describe, it, expect } from 'vitest';
 import { parseMaigretData, buildProbeUrl, toCatalog, validateImportedSites } from '@shared/searchlight/sites';
 import type { MaigretSiteEntry } from '@shared/searchlight/types';
 
+describe('parseMaigretData engine resolution', () => {
+  const db = {
+    engines: {
+      engine404: { name: 'engine404', site: { checkType: 'status_code' } },
+      engine404message: { name: 'engine404message', site: { checkType: 'message', absenceStrs: ['Not Found'] } },
+    },
+    tags: { social: 'Social' },
+    sites: {
+      Upwork: { engine: 'engine404', urlMain: 'https://upwork.com', url: 'https://upwork.com/fl/{username}', tags: ['freelance'] },
+      Foo: { engine: 'engine404message', url: 'https://foo.test/{username}' },
+      Override: { engine: 'engine404', checkType: 'message', url: 'https://o.test/{username}', presenseStrs: ['hi'] },
+      Unknown: { engine: 'nope', url: 'https://u.test/{username}' },
+      Dead: { engine: 'engine404', disabled: true, url: 'https://d.test/{username}' },
+      Inline: { checkType: 'message', url: 'https://i.test/{username}', absenceStrs: ['gone'] },
+    },
+  };
+
+  it('resolves engine checkType and strings, lets site override, drops disabled, excludes engines/tags keys', () => {
+    const sites = parseMaigretData(db);
+    const byName = Object.fromEntries(sites.map((s) => [s.name, s]));
+    expect(byName.Upwork.checkType).toBe('status_code');
+    expect(byName.Foo.checkType).toBe('message');
+    expect(byName.Foo.absenceStrs).toEqual(['Not Found']);
+    expect(byName.Override.checkType).toBe('message'); // site overrides engine's status_code
+    expect(byName.Override.presenseStrs).toEqual(['hi']);
+    expect(byName.Unknown.checkType).toBe('status_code'); // unknown engine -> coerce default
+    expect(byName.Dead).toBeUndefined();
+    expect(byName.Inline.checkType).toBe('message');
+    expect(sites.find((s) => s.name === 'engine404')).toBeUndefined();
+    expect(sites.find((s) => s.name === 'social')).toBeUndefined();
+  });
+
+  it('carries ignore403 from engine or site', () => {
+    const sites = parseMaigretData({
+      engines: { e: { site: { checkType: 'message', ignore403: true } } },
+      sites: { A: { engine: 'e', url: 'https://a.test/{username}' }, B: { url: 'https://b.test/{username}', ignore403: true } },
+    });
+    const byName = Object.fromEntries(sites.map((s) => [s.name, s]));
+    expect(byName.A.ignore403).toBe(true);
+    expect(byName.B.ignore403).toBe(true);
+  });
+});
+
 const site = (over: Partial<MaigretSiteEntry> = {}): MaigretSiteEntry => ({
   name: 'GitHub', url: 'https://github.com/{username}', urlMain: 'https://github.com', urlProbe: '',
   category: 'coding', tags: ['coding'], checkType: 'status_code', presenseStrs: [], absenceStrs: [],

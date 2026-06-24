@@ -19,6 +19,8 @@ export interface MaigretSiteEntry {
   alexaRank: number;
   headers: Record<string, string>;
   usernameClaimed: string;
+  /** When true, a 403 is a normal response for this site (interpret by content, not 'blocked'). */
+  ignore403?: boolean;
 }
 
 export interface SiteCatalogEntry {
