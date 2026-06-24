@@ -12,6 +12,7 @@
  * handlers (basemap/labels, setFocusId) rather than duplicating logic.
  */
 
+import { useState } from 'react';
 import type { GeoItem } from '@shared/post-mvp-types';
 import { LiveNewsPanel } from './LiveNewsPanel';
 import { deriveThreatLevel, categoryCounts, UNCATEGORIZED } from './threat';
@@ -53,6 +54,12 @@ export interface CommandRailProps {
   onLabels: (on: boolean) => void;
   /** Egress gate — disables the network-dependent imagery buttons when off. */
   net: boolean;
+  /** Vault-persisted set of pinned monitor ids. */
+  pinned: ReadonlySet<string>;
+  /** Pin an item id to the monitor set. */
+  onAddMonitor: (id: string) => void;
+  /** Unpin an item id from the monitor set. */
+  onRemoveMonitor: (id: string) => void;
 }
 
 // Shared dark-panel chrome: keeps the Win98 fieldset/legend conventions but on a dark face so the
@@ -71,8 +78,12 @@ export function CommandRail(props: CommandRailProps): JSX.Element {
   const {
     visibleItems, corroboration, onFocus,
     categoryFilter, onToggleCategory,
-    basemap, onBasemap, labels, onLabels, net
+    basemap, onBasemap, labels, onLabels, net,
+    pinned, onAddMonitor, onRemoveMonitor
   } = props;
+
+  // Context menu state for the Situation Feed right-click.
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; id: string } | null>(null);
 
   const located = visibleItems.filter(isLocated);
   const counts = categoryCounts(visibleItems);
@@ -85,11 +96,12 @@ export function CommandRail(props: CommandRailProps): JSX.Element {
   ];
   const threat = deriveThreatLevel(visibleItems);
 
-  // Monitored situations: corroborated items (>=1 other source agrees on place+time). Sorted by
-  // agreement count desc so the most-corroborated sit on top. Reuses the upstream corroboration memo.
+  // Monitored situations: corroborated items (>=1 other source agrees on place+time) OR pinned.
+  // Sorted by agreement count desc so the most-corroborated sit on top. Reuses the upstream
+  // corroboration memo. The operator can also pin items via right-click → Add to Monitor.
   const situations = visibleItems
     .map((i) => ({ item: i, count: corroboration.get(i.id) ?? 0 }))
-    .filter((s) => s.count >= 1)
+    .filter((s) => s.count >= 1 || pinned.has(s.item.id))
     .sort((a, b) => b.count - a.count);
 
   return (
@@ -105,9 +117,34 @@ export function CommandRail(props: CommandRailProps): JSX.Element {
         // with a small right padding it bleeds into the content and hides the rail's right-edge
         // controls (stream ×, HLS dropdown, Add stream). Pad the right by 24px = 16px scrollbar + an
         // 8px gap matching the left, so content always clears the scrollbar.
-        background: '#0a0f1a', color: '#cdd6e4', padding: '8px 24px 8px 8px', boxSizing: 'border-box'
+        background: '#0a0f1a', color: '#cdd6e4', padding: '8px 24px 8px 8px', boxSizing: 'border-box',
+        position: 'relative'
       }}
+      onClick={() => ctxMenu && setCtxMenu(null)}
     >
+      {/* Right-click context menu for Situation Feed items */}
+      {ctxMenu && (
+        <div
+          style={{
+            position: 'fixed', left: ctxMenu.x, top: ctxMenu.y,
+            background: '#11161f', border: '1px solid #2a3344', color: '#cdd6e4',
+            zIndex: 9999, minWidth: 160, boxShadow: '2px 2px 8px rgba(0,0,0,0.6)'
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {pinned.has(ctxMenu.id) ? (
+            <div
+              style={{ padding: '6px 12px', fontSize: 12, cursor: 'pointer' }}
+              onClick={() => { onRemoveMonitor(ctxMenu.id); setCtxMenu(null); }}
+            >Remove from Monitor</div>
+          ) : (
+            <div
+              style={{ padding: '6px 12px', fontSize: 12, cursor: 'pointer' }}
+              onClick={() => { onAddMonitor(ctxMenu.id); setCtxMenu(null); }}
+            >Add to Monitor</div>
+          )}
+        </div>
+      )}
       {/* 1 — Live News (relocated from the right-pane "▶ News" overlay to the top of the rail). */}
       <div style={railPanelStyle}>
         <div style={railLegendStyle}>Live News</div>
@@ -196,24 +233,26 @@ export function CommandRail(props: CommandRailProps): JSX.Element {
             {visibleItems.map((i) => {
               const cat = i.category ?? UNCATEGORIZED;
               const placeable = isLocated(i);
+              const isPinned = pinned.has(i.id);
               return (
                 <li
                   key={i.id}
                   onClick={() => placeable && onFocus(i.id)}
-                  title={placeable ? 'Click to fly to this event' : 'No location'}
-                  style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '3px 2px', cursor: placeable ? 'pointer' : 'default', borderBottom: '1px solid #1b2230' }}
+                  onContextMenu={(e) => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY, id: i.id }); }}
+                  title={placeable ? 'Click to fly · right-click to pin/unpin monitor' : 'No location · right-click to pin/unpin monitor'}
+                  style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '3px 2px', cursor: placeable ? 'pointer' : 'default', borderBottom: '1px solid #1b2230', background: isPinned ? 'rgba(93,58,125,0.15)' : undefined }}
                 >
                   <span style={{ flex: '0 0 auto', marginTop: 3, width: 8, height: 8, borderRadius: '50%', background: colorFor(cat), border: '1px solid rgba(0,0,0,.5)' }} />
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ fontSize: 11, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i.title}</span>
-                    <span style={{ fontSize: 9, color: '#6b7688' }}>{i.sourceId}{placeable ? '' : ' · no location'}</span>
+                    <span style={{ fontSize: 9, color: '#6b7688' }}>{i.sourceId}{placeable ? '' : ' · no location'}{isPinned ? ' · pinned' : ''}</span>
                   </span>
                 </li>
               );
             })}
           </ul>
         )}
-        <p style={sourceNoteStyle}>Source: same feed + threat-layer items as the Events list (timeline-filtered).</p>
+        <p style={sourceNoteStyle}>Source: same feed + threat-layer items as the Events list (timeline-filtered). Right-click any item to pin to Monitored Situations.</p>
       </div>
     </div>
   );
