@@ -38,6 +38,7 @@ import { CameraViewModule } from './cameraview/CameraViewModule';
 import { HostInfoModule } from './hostinfo/HostInfoModule';
 import { NewsViewModule } from './geoint/NewsViewModule';
 import { HelpModule } from './help/HelpModule';
+import { SearchlightModule } from './searchlight/SearchlightModule';
 
 // ---------------------------------------------------------------------------
 // Adapter components — each has the uniform { spec: WindowSpec } signature and
@@ -175,6 +176,10 @@ function HelpAdapter({ spec: _spec }: { spec: WindowSpec }): JSX.Element {
   return <HelpModule />;
 }
 
+function SearchlightAdapter({ spec }: { spec: WindowSpec }): JSX.Element {
+  return <SearchlightModule caseId={spec.props?.['caseId'] as string | undefined} />;
+}
+
 // ---------------------------------------------------------------------------
 // Registration
 // Titles are VERBATIM from Desktop.tsx moduleTitles.
@@ -212,4 +217,5 @@ export function registerBuiltins(): void {
   registerModule({ key: 'host-info', title: 'Host Info', glyph: '🖥', component: HostInfoAdapter, builtin: true, defaultWidth: 460, defaultHeight: 360 });
   registerModule({ key: 'news-view', title: 'News', glyph: '📺', component: NewsViewAdapter, builtin: true, defaultWidth: 640, defaultHeight: 480 });
   registerModule({ key: 'help',         title: 'RTFM',             glyph: '?',  component: HelpAdapter,         builtin: true });
+  registerModule({ key: 'searchlight', title: 'Searchlight', glyph: '🔎', component: SearchlightAdapter, builtin: true, defaultWidth: 1100, defaultHeight: 720 });
 }

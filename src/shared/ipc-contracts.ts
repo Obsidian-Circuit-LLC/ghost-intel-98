@@ -30,6 +30,7 @@ import type {
   WebLink
 } from './types';
 import type { MediaLibrarySnapshot, MediaStation, MediaTrack, GeoSnapshot, GeoSource, GeoItem, SavedGeoEvent, MarketSnapshot } from './post-mvp-types';
+import type { SiteCatalogEntry, SweepResult, SearchlightCase, SearchlightCaseSummary } from './searchlight/types';
 
 export interface EntityCreateInput { type: EntityType; value: string; notes?: string; aliases?: string[] }
 export interface EntityLinkOpts { relationship?: EntityRelationship; linkIds?: string[]; attachmentFileNames?: string[] }
@@ -377,6 +378,20 @@ export const channels = {
     aisStop: 'livefeeds:aisStop',
     aisSetBbox: 'livefeeds:aisSetBbox',
     onAisPositions: 'livefeeds:onAisPositions'
+  },
+  searchlight: {
+    catalog: 'searchlight:catalog',
+    startSweep: 'searchlight:startSweep',
+    cancelSweep: 'searchlight:cancelSweep',
+    importSites: 'searchlight:importSites',
+    listCases: 'searchlight:listCases',
+    saveCase: 'searchlight:saveCase',
+    loadCase: 'searchlight:loadCase',
+    deleteCase: 'searchlight:deleteCase',
+    exportCase: 'searchlight:exportCase',
+    importCase: 'searchlight:importCase',
+    onSweepResult: 'searchlight:onSweepResult',
+    onSweepDone: 'searchlight:onSweepDone'
   }
 } as const;
 
@@ -554,6 +569,19 @@ export interface ApiContracts {
   [channels.bgconn.stop]: { args: [string]; returns: void };
   [channels.bgconn.configure]: { args: [{ idleTeardownAfterMinutes: number | null; defaultRouting: 'tor' | 'direct'; maxReconnects: number; maxSessionAgeMinutes: number }]; returns: void };
   [channels.bgconn.clearCredentials]: { args: [string, string]; returns: void };
+
+  [channels.searchlight.catalog]: { args: []; returns: SiteCatalogEntry[] };
+  [channels.searchlight.startSweep]: { args: [{ username: string; siteIds: string[]; useTor: boolean }]; returns: { jobId: string; total: number } };
+  [channels.searchlight.cancelSweep]: { args: [string]; returns: void };
+  [channels.searchlight.importSites]: { args: [string]; returns: { added: number; rejected: number } };
+  [channels.searchlight.listCases]: { args: []; returns: SearchlightCaseSummary[] };
+  [channels.searchlight.saveCase]: { args: [SearchlightCase]; returns: void };
+  [channels.searchlight.loadCase]: { args: [string]; returns: SearchlightCase | null };
+  [channels.searchlight.deleteCase]: { args: [string]; returns: void };
+  [channels.searchlight.exportCase]: { args: [string]; returns: string | null };
+  [channels.searchlight.importCase]: { args: [string]; returns: SearchlightCase | null };
+  [channels.searchlight.onSweepResult]: { args: [(r: SweepResult) => void]; returns: () => void };
+  [channels.searchlight.onSweepDone]: { args: [(f: { jobId: string; status: 'completed' | 'cancelled'; checked: number }) => void]; returns: () => void };
 }
 
 export const BGCONN_LOCK_EXEMPT_CHANNELS = ['bgconn:status', 'bgconn:stop'] as const;

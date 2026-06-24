@@ -20,6 +20,7 @@ import { basename, dirname, join, sep } from 'node:path';
 import { channels, BGCONN_LOCK_EXEMPT_CHANNELS } from '@shared/ipc-contracts';
 import type { MailAccount, MailSendInput, SshHostProfile, AiChatRequest, MediaTrack } from '@shared/post-mvp-types';
 import type { MediaUrlResult, CaseRecord } from '@shared/types';
+import type { SearchlightCase } from '@shared/searchlight/types';
 import {
   caseStore,
   consumeDrainDiagnostics,
@@ -92,6 +93,10 @@ import { homedir } from 'node:os';
 import { hostInfoService } from '../services/hostinfo/index';
 import * as adsb from '../services/livefeeds/adsb';
 import * as ais from '../services/livefeeds/ais-stream';
+import * as slSiteDb from '../searchlight/site-db';
+import * as slStore from '../searchlight/store';
+import { startSweep, cancelSweep } from '../searchlight/sweep';
+import { getBgTor } from '../bgconn/tor-singleton';
 
 const MAX_SAVE_ATTACHMENT_BYTES = 64 * 1024 * 1024; // 64 MB cap on base64 decoded payload
 const MAX_EXPORT_BYTES = 64 * 1024 * 1024;
@@ -1292,6 +1297,50 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   }));
   safeHandle(channels.livefeeds.aisStop, () => { ais.stopAis(); });
   safeHandle(channels.livefeeds.aisSetBbox, (...a) => { ais.setAisBbox(ensureBounds(a[0])); });
+
+  // ---- Searchlight (OSINT username sweep; egress gated by settings.searchlight.networkEnabled) ----
+  // Resolve the live bgconn Tor SOCKS port. Returns null when Tor isn't bootstrapped yet —
+  // a Tor sweep with a null port will stall in the probe and surface TOR_UNAVAILABLE per site.
+  // Never silently fall back to clearnet.
+  function searchlightSocksPort(): number | null {
+    const t = getBgTor();
+    return t && t.isBootstrapped() ? t.socksPort() : null;
+  }
+
+  safeHandle(channels.searchlight.catalog, async () => slSiteDb.catalog());
+  safeHandle(channels.searchlight.importSites, async (...a) => slSiteDb.importCustomSites(String(a[0] ?? '')));
+  safeHandle(channels.searchlight.startSweep, async (...a) => {
+    const req = a[0] as { username?: unknown; siteIds?: unknown; useTor?: unknown };
+    const username = String(req?.username ?? '').trim();
+    if (!username) return { jobId: '', total: 0 };
+    const siteIds = Array.isArray(req?.siteIds) ? req.siteIds.filter((x): x is string => typeof x === 'string') : [];
+    const useTor = req?.useTor !== false; // default true
+    const s = (await settingsStore.read()).searchlight;
+    const win = getWindow();
+    return startSweep({ username, siteIds, useTor }, {
+      loadSites: (ids) => slSiteDb.sitesByName(ids),
+      networkEnabled: async () => (await settingsStore.read()).searchlight.networkEnabled,
+      torSocksPort: searchlightSocksPort,
+      defaultConcurrency: (tor) => (tor ? s.torConcurrency : s.clearnetConcurrency),
+      emit: (r) => win?.webContents.send(channels.searchlight.onSweepResult, r),
+      onDone: (f) => win?.webContents.send(channels.searchlight.onSweepDone, f)
+    });
+  });
+  safeHandle(channels.searchlight.cancelSweep, async (...a) => { cancelSweep(ensureUuid(a[0], 'jobId')); });
+  safeHandle(channels.searchlight.listCases, async () => slStore.listCases());
+  safeHandle(channels.searchlight.saveCase, async (...a) => {
+    const c = a[0];
+    if (!c || typeof c !== 'object'
+        || typeof (c as { id?: unknown }).id !== 'string'
+        || typeof (c as { name?: unknown }).name !== 'string') {
+      throw new Error('invalid searchlight case payload');
+    }
+    return slStore.saveCase(c as SearchlightCase);
+  });
+  safeHandle(channels.searchlight.loadCase, async (...a) => slStore.loadCase(ensureUuid(a[0], 'caseId')));
+  safeHandle(channels.searchlight.deleteCase, async (...a) => slStore.deleteCase(ensureUuid(a[0], 'caseId')));
+  safeHandle(channels.searchlight.exportCase, async (...a) => slStore.exportCase(ensureUuid(a[0], 'caseId')));
+  safeHandle(channels.searchlight.importCase, async (...a) => slStore.importCase(String(a[0] ?? '')));
 
   startMailPoller(getWindow);
 }

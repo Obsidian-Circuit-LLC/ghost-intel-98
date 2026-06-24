@@ -18,7 +18,8 @@ const desktopShortcutDefaults: { module: ModuleKey; label: string }[] = [
   { module: 'bookmarks', label: 'Bookmarks' },
   { module: 'calendar', label: 'Calendar' },
   { module: 'reminders', label: 'Reminders' },
-  { module: 'chat', label: 'Chat (beta)' }
+  { module: 'chat', label: 'Chat (beta)' },
+  { module: 'searchlight', label: 'Searchlight' }
 ];
 
 // Pinned to the bottom-right corner (Recycle Bin position).
