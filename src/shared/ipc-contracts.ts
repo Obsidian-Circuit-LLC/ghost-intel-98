@@ -392,7 +392,9 @@ export const channels = {
     importCase: 'searchlight:importCase',
     onSweepResult: 'searchlight:onSweepResult',
     onSweepDone: 'searchlight:onSweepDone',
-    favicon: 'searchlight:favicon'
+    favicon: 'searchlight:favicon',
+    addCustomSite: 'searchlight:addCustomSite',
+    exportSites: 'searchlight:exportSites'
   }
 } as const;
 
@@ -584,6 +586,8 @@ export interface ApiContracts {
   [channels.searchlight.onSweepResult]: { args: [(r: SweepResult) => void]; returns: () => void };
   [channels.searchlight.onSweepDone]: { args: [(f: { jobId: string; status: 'completed' | 'cancelled'; checked: number }) => void]; returns: () => void };
   [channels.searchlight.favicon]: { args: [name: string]; returns: string | null };
+  [channels.searchlight.addCustomSite]: { args: [{ name: string; url: string; category?: string }]; returns: { ok: boolean; reason?: string } };
+  [channels.searchlight.exportSites]: { args: []; returns: string };
 }
 
 export const BGCONN_LOCK_EXEMPT_CHANNELS = ['bgconn:status', 'bgconn:stop'] as const;

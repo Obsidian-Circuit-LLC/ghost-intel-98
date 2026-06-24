@@ -514,6 +514,8 @@ export interface GhostApi {
     onSweepResult(cb: (r: SweepResult) => void): () => void;
     onSweepDone(cb: (f: { jobId: string; status: 'completed' | 'cancelled'; checked: number }) => void): () => void;
     favicon(name: string): Promise<string | null>;
+    addCustomSite(input: { name: string; url: string; category?: string }): Promise<{ ok: boolean; reason?: string }>;
+    exportSites(): Promise<string>;
   };
 }
 

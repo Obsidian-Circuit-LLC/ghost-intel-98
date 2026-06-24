@@ -453,7 +453,9 @@ const api = {
       ipcRenderer.on(channels.searchlight.onSweepDone, l);
       return () => ipcRenderer.removeListener(channels.searchlight.onSweepDone, l);
     },
-    favicon: (name: string) => ipcRenderer.invoke(channels.searchlight.favicon, name)
+    favicon: (name: string) => ipcRenderer.invoke(channels.searchlight.favicon, name),
+    addCustomSite: (i: { name: string; url: string; category?: string }) => ipcRenderer.invoke(channels.searchlight.addCustomSite, i),
+    exportSites: () => ipcRenderer.invoke(channels.searchlight.exportSites)
   }
 } as const;
 

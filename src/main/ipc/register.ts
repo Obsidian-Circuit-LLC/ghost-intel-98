@@ -1343,6 +1343,11 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.searchlight.importCase, async (...a) => slStore.importCase(String(a[0] ?? '')));
   safeHandle(channels.searchlight.favicon, async (...a) =>
     typeof a[0] === 'string' ? slSiteDb.faviconFor(a[0]) : null);
+  safeHandle(channels.searchlight.addCustomSite, async (...a) => {
+    const o = ((a[0] ?? {}) as Record<string, unknown>);
+    return slSiteDb.addCustomSite({ name: String(o.name ?? ''), url: String(o.url ?? ''), category: o.category ? String(o.category) : undefined });
+  });
+  safeHandle(channels.searchlight.exportSites, async () => slSiteDb.exportCustomSitesJson());
 
   startMailPoller(getWindow);
 }

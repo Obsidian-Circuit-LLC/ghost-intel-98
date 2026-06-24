@@ -62,6 +62,35 @@ export async function importCustomSites(rawJsonText: string): Promise<{ added: n
   return { added: sites.length, rejected };
 }
 
+export async function addCustomSite(input: { name: string; url: string; category?: string }): Promise<{ ok: boolean; reason?: string }> {
+  const name = String(input?.name ?? '').trim();
+  const url = String(input?.url ?? '').trim();
+  if (!name) return { ok: false, reason: 'Name is required' };
+  if (!/^https:\/\//i.test(url) || !url.includes('{username}')) {
+    return { ok: false, reason: 'URL must start with https:// and contain {username}' };
+  }
+  const entry: Record<string, unknown> = { url, urlMain: (() => { try { return new URL(url).origin; } catch { return ''; } })() };
+  if (input.category) entry.tags = [String(input.category)];
+  const { sites } = validateImportedSites({ [name]: entry });
+  if (sites.length === 0) return { ok: false, reason: 'Invalid site definition' };
+  const existing = await loadCustom();
+  const byName = new Map(existing.map((s) => [s.name, s]));
+  byName.set(sites[0].name, sites[0]);
+  const merged = [...byName.values()];
+  customCache = merged;
+  const asObj: Record<string, unknown> = {};
+  for (const s of merged) asObj[s.name] = s;
+  await secureWriteFile(customSitesFile(), JSON.stringify(asObj));
+  return { ok: true };
+}
+
+export async function exportCustomSitesJson(): Promise<string> {
+  const custom = await loadCustom();
+  const asObj: Record<string, unknown> = {};
+  for (const s of custom) asObj[s.name] = s;
+  return JSON.stringify({ sites: asObj }, null, 2);
+}
+
 function faviconsPath(): string {
   const base = app.isPackaged ? process.resourcesPath : app.getAppPath();
   return join(base, app.isPackaged ? 'searchlight' : 'resources/searchlight', 'favicons.json');

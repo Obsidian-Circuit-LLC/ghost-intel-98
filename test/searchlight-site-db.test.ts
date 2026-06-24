@@ -7,7 +7,7 @@ const DATA = mkdtempSync(join(tmpdir(), 'sl-db-'));
 vi.mock('electron', () => ({ app: { getPath: () => DATA, getAppPath: () => DATA } }));
 
 import * as db from '../src/main/searchlight/site-db';
-import { parseMaigretData } from '../src/shared/searchlight/sites';
+import { parseMaigretData, validateImportedSites } from '../src/shared/searchlight/sites';
 
 const BUNDLED = { GitHub: { url: 'https://github.com/{username}', tags: ['coding'] }, X: { url: 'https://x.com/{username}', tags: ['social'] } };
 
@@ -43,6 +43,32 @@ describe('site-db', () => {
     const dup = full.filter((s) => s.name === 'Dup');
     expect(dup).toHaveLength(1);
     expect(dup[0].url).toBe('https://custom/{username}');
+  });
+});
+
+describe('custom site add/export', () => {
+  beforeEach(() => db._resetForTest());
+
+  it('adds a valid custom site and surfaces it in the catalog', async () => {
+    const r = await db.addCustomSite({ name: 'MySite', url: 'https://my.test/u/{username}', category: 'forum' });
+    expect(r.ok).toBe(true);
+    const cat = await db.catalog();
+    expect(cat.find((c) => c.name === 'MySite')).toBeTruthy();
+  });
+
+  it('rejects an invalid url and persists nothing', async () => {
+    const r = await db.addCustomSite({ name: 'Bad', url: 'http://no-token.test/' });
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBeTruthy();
+    const cat = await db.catalog();
+    expect(cat.find((c) => c.name === 'Bad')).toBeUndefined();
+  });
+
+  it('exports only custom sites as valid round-trippable JSON', async () => {
+    await db.addCustomSite({ name: 'MySite', url: 'https://my.test/u/{username}' });
+    const json = await db.exportCustomSitesJson();
+    const parsed = validateImportedSites(JSON.parse(json));
+    expect(parsed.sites.find((s) => s.name === 'MySite')).toBeTruthy();
   });
 });
 
