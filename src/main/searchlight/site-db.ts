@@ -113,7 +113,10 @@ function sanitizeFavicons(raw: unknown): Record<string, string> {
   const out: Record<string, string> = {};
   if (raw && typeof raw === 'object') {
     for (const [name, val] of Object.entries(raw as Record<string, unknown>)) {
-      if (typeof val === 'string' && val.startsWith('data:image/')) out[name] = val;
+      // Accept only raster image data-URIs. Exclude SVG (data:image/svg+xml) defensively:
+      // SVG can carry script, and though <img> does not execute it, this keeps the trust
+      // boundary narrow for any future inline/object render path.
+      if (typeof val === 'string' && val.startsWith('data:image/') && !/^data:image\/svg/i.test(val)) out[name] = val;
     }
   }
   return out;

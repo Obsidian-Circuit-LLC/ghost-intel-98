@@ -10,9 +10,9 @@ describe('coordinates flow to master CCTV tree', () => {
     ]);
     const town = tree['Testland']['Reg']['Town'];
     expect(town[0].coordinates).toEqual({ latitude: 12.5, longitude: -7.25 });
-    // geo-less camera lands in an Unknown-ish bucket with no coordinates
-    const flat = JSON.stringify(tree);
-    expect(flat).toContain('cam.test/b');
-    expect(JSON.parse(flat) && tree['Testland']['Reg']['Town'][0].coordinates).toBeTruthy();
+    // geo-less camera lands in the literal Unknown/Unknown/Unknown bucket with NO coordinates key
+    const camB = tree['Unknown']['Unknown']['Unknown'].find((c: any) => c.stream_url === 'https://cam.test/b');
+    expect(camB).toBeTruthy();
+    expect(camB.coordinates).toBeUndefined();
   });
 });

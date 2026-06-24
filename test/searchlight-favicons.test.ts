@@ -10,10 +10,17 @@ describe('searchlight favicons', () => {
     expect(faviconFor('Nope')).toBeNull();
   });
 
-  it('drops non data:image values at load (trust boundary)', () => {
-    loadFavicons(() => ({ Evil: 'javascript:alert(1)', Http: 'http://x/y.png' }));
+  it('drops non data:image and SVG values at load (trust boundary)', () => {
+    loadFavicons(() => ({
+      Evil: 'javascript:alert(1)',
+      Http: 'http://x/y.png',
+      Svg: 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=',
+      Png: 'data:image/png;base64,AAAA',
+    }));
     expect(faviconFor('Evil')).toBeNull();
     expect(faviconFor('Http')).toBeNull();
+    expect(faviconFor('Svg')).toBeNull();
+    expect(faviconFor('Png')).toBe('data:image/png;base64,AAAA');
   });
 
   it('tolerates a missing favicons.json', () => {
