@@ -20,7 +20,7 @@ function coerceEntry(name: string, info: Record<string, unknown>): MaigretSiteEn
     alexaRank: typeof info.alexaRank === 'number' ? info.alexaRank : 99999,
     headers: hdrs,
     usernameClaimed: typeof info.usernameClaimed === 'string' ? info.usernameClaimed : '',
-    ignore403: info.ignore403 === true
+    ...(info.ignore403 === true ? { ignore403: true as const } : {})
   };
 }
 
