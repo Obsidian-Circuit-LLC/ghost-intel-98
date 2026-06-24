@@ -183,12 +183,14 @@ Palette: base `#3d1a5c`, hover `#5d3a7d`, bevel light `#5d3a7d` / dark `#1a0f2a`
 
 ## Workstream F — GeoINT timeline lock + Add to Monitor
 
-- **F1 Lock the timeline slider.** The "slider" is the `TimelineBar` scrubber; far-right =
-  `bounds.max` = the "All / show every event" position. Lock the visible set to the **full**
-  (non-time-filtered) item set permanently and retire the scrubber + Play/Pause/All controls
-  (they are no-ops when locked). Implementation: stop driving the map/feed off `timeCursor`;
-  feed the full located set. Remove the `TimelineBar` render (or render nothing) and the
-  play-timer effect. Keep `corroborate()` and everything else unchanged.
+- **F1 Default the timeline slider to max.** The "slider" is the `TimelineBar` scrubber;
+  far-right = `bounds.max` = the "All / show every event" position, which the operator finds
+  correct. **Keep the scrubber and Play/Pause/All controls** — just make `bounds.max` the
+  *default* cursor position whenever the timeline bounds are (re)established, instead of the
+  current low-end start (`timeCursor` defaults to 0). Implementation: when `bounds` becomes
+  available or changes, seed `timeCursor` to `bounds.max` (an effect keyed on `bounds`, guarded
+  so it doesn't fight an active user scrub or the play timer). The operator can still scrub back
+  manually; the view simply opens on "everything." `corroborate()` and the rest are unchanged.
 - **F2 Add to Monitor.** Right-click a Situation-Feed item (`CommandRail.tsx`) → a small
   context menu (reuse EyeSpy `Finder.tsx`'s `FeedMenu` pattern) with **Add to Monitor**.
   "Monitored Situations" is currently auto-derived (corroboration ≥ 1) and ephemeral. Add a
@@ -237,7 +239,8 @@ persists both; an out-of-range or half pair is dropped; `streamsToMasterTree` em
   entry opens Searchlight; intro card shows once; full DB site count (~3k usable after
   disabled-filter); a found result shows its bundled favicon; add a custom site + export; Graph
   dropdown + scope chips + export buttons render midnight-purple and readable; Whiteboard gone;
-  GeoINT shows all events with no scrubber; right-click feed → Add to Monitor pins it; EyeSpy
+  GeoINT opens showing all events (scrubber defaults to far-right, still scrubbable);
+  right-click feed → Add to Monitor pins it; EyeSpy
   Add-Stream takes lat/long and Export CCTV writes coordinates.
 - Charter: no new egress (favicons bundled), no telemetry, encrypt-at-rest for custom sites +
   pinned monitors, untrusted input coerced at every boundary.
