@@ -23,9 +23,11 @@ import React, {
   useRef,
   useCallback,
   useEffect,
+  useMemo,
 } from 'react';
 import { useSearchlightStore } from '../store';
 import type { GraphNode, GraphEdge } from '@shared/searchlight/types';
+import { useFavicons } from './useFavicons';
 
 // ─── Transform state ───────────────────────────────────────────────────────────
 
@@ -187,6 +189,13 @@ export const GraphView: React.FC = () => {
 
   const nodes: GraphNode[] = activeCase?.graphNodes ?? [];
   const edges: GraphEdge[] = activeCase?.graphEdges ?? [];
+
+  // ── Favicon lookup for result/profile nodes ────────────────────────────────
+  const resultNodeNames = useMemo(
+    () => [...new Set(nodes.filter((n) => n.type === 'result').map((n) => n.label))],
+    [nodes.map((n) => `${n.id}|${n.type}|${n.label}`).join(',')] // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  const graphFavicons = useFavicons(resultNodeNames);
 
   // ── Letter-avatar pre-generation for result nodes (purely local, no network) ─
   const avatarSig = nodes.map((n) => `${n.id}|${n.label}|${n.color ?? ''}`).join(',');
@@ -761,10 +770,10 @@ export const GraphView: React.FC = () => {
                       )
                     )}
 
-                    {/* Icon for non-rect nodes (use avatar for result/circle, icon char for others) */}
-                    {!isRect && et.shape === 'circle' && avatar ? (
+                    {/* Icon for non-rect nodes (favicon preferred for result nodes, else letter avatar, else icon char) */}
+                    {!isRect && et.shape === 'circle' && (graphFavicons[node.label] || avatar) ? (
                       <image
-                        href={avatar}
+                        href={graphFavicons[node.label] ?? avatar}
                         x={-11} y={-11} width={22} height={22}
                         preserveAspectRatio="xMidYMid meet"
                         style={{ imageRendering: 'crisp-edges', pointerEvents: 'none' }}

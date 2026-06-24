@@ -19,6 +19,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { SiteCatalogEntry, SweepResult } from '@shared/searchlight/types';
 import { useSearchlightStore } from '../store';
 import { useSettings } from '../../../state/store';
+import { useFavicons } from './useFavicons';
 
 // ─── Filter type ──────────────────────────────────────────────────────────────
 
@@ -154,6 +155,11 @@ export function SweepPanel(): JSX.Element {
     () => filterResults(allResults, resultBucket, resultSearch),
     [allResults, resultBucket, resultSearch]
   );
+
+  // ── Favicon lookup for visible results ──────────────────────────────────────
+  const visibleResults = filteredResults.slice(0, 500);
+  const visibleSiteNames = useMemo(() => [...new Set(visibleResults.map((r) => r.siteName))], [visibleResults.map((r) => r.siteName).join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
+  const favicons = useFavicons(visibleSiteNames);
 
   const stats = useMemo(() => ({
     found:    allResults.filter((r) => r.status === 'found').length,
@@ -479,7 +485,7 @@ export function SweepPanel(): JSX.Element {
               </tr>
             </thead>
             <tbody>
-              {filteredResults.slice(0, 500).map((r) => {
+              {visibleResults.map((r) => {
                 const isTorMissing = r.status === 'error' && r.error === 'TOR_UNAVAILABLE';
                 const color = statusColor(r);
                 return (
@@ -509,6 +515,9 @@ export function SweepPanel(): JSX.Element {
 
                     {/* Site name */}
                     <td className="sl-sweep-td">
+                      {favicons[r.siteName]
+                        ? <img className="sl-favicon" src={favicons[r.siteName]!} alt="" width={16} height={16} />
+                        : <span className="sl-favicon sl-favicon-fallback" aria-hidden />}
                       <span className={`sl-site-name${r.status === 'found' ? ' sl-site-found' : ''}`}>
                         {r.siteName}
                       </span>
