@@ -19,8 +19,9 @@ export function interpretResult(
     return { found: false, confidence: 'low', status };
   }
 
-  // Anti-bot / rate-limit responses are NOT evidence of absence.
-  if (BLOCKED_CODES.has(result.statusCode)) {
+  // Anti-bot / rate-limit responses are NOT evidence of absence — unless the site
+  // declares ignore403 (403 is a normal response there; interpret by content).
+  if (BLOCKED_CODES.has(result.statusCode) && !(result.statusCode === 403 && site.ignore403)) {
     return { found: false, confidence: 'low', status: 'blocked' };
   }
 

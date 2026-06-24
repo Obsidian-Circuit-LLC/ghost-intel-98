@@ -7,6 +7,7 @@ import type { MaigretSiteEntry, SiteCatalogEntry } from '@shared/searchlight/typ
 
 let bundledCache: MaigretSiteEntry[] | null = null;
 let customCache: MaigretSiteEntry[] | null = null;
+let faviconCache: Record<string, string> | null = null;
 
 /** resources/searchlight/maigret_sites.json — under resourcesPath when packaged, repo root in dev. */
 function bundledPath(): string {
@@ -61,4 +62,68 @@ export async function importCustomSites(rawJsonText: string): Promise<{ added: n
   return { added: sites.length, rejected };
 }
 
-export function _resetForTest(): void { bundledCache = null; customCache = null; }
+export async function addCustomSite(input: { name: string; url: string; category?: string }): Promise<{ ok: boolean; reason?: string }> {
+  const name = String(input?.name ?? '').trim();
+  const url = String(input?.url ?? '').trim();
+  if (!name) return { ok: false, reason: 'Name is required' };
+  if (!/^https:\/\//i.test(url) || !url.includes('{username}')) {
+    return { ok: false, reason: 'URL must start with https:// and contain {username}' };
+  }
+  const entry: Record<string, unknown> = { url, urlMain: (() => { try { return new URL(url).origin; } catch { return ''; } })() };
+  if (input.category) entry.tags = [String(input.category)];
+  const { sites } = validateImportedSites({ [name]: entry });
+  if (sites.length === 0) return { ok: false, reason: 'Invalid site definition' };
+  const existing = await loadCustom();
+  const byName = new Map(existing.map((s) => [s.name, s]));
+  byName.set(sites[0].name, sites[0]);
+  const merged = [...byName.values()];
+  customCache = merged;
+  const asObj: Record<string, unknown> = {};
+  for (const s of merged) asObj[s.name] = s;
+  await secureWriteFile(customSitesFile(), JSON.stringify(asObj));
+  return { ok: true };
+}
+
+export async function exportCustomSitesJson(): Promise<string> {
+  const custom = await loadCustom();
+  const asObj: Record<string, unknown> = {};
+  for (const s of custom) asObj[s.name] = s;
+  return JSON.stringify({ sites: asObj }, null, 2);
+}
+
+function faviconsPath(): string {
+  const base = app.isPackaged ? process.resourcesPath : app.getAppPath();
+  return join(base, app.isPackaged ? 'searchlight' : 'resources/searchlight', 'favicons.json');
+}
+
+export function loadFavicons(readJson?: () => unknown): Record<string, string> {
+  if (readJson) {
+    try { faviconCache = sanitizeFavicons(readJson()); }
+    catch { faviconCache = {}; }
+    return faviconCache;
+  }
+  if (!faviconCache) {
+    try { faviconCache = sanitizeFavicons(JSON.parse(readFileSync(faviconsPath(), 'utf8'))); }
+    catch { faviconCache = {}; }
+  }
+  return faviconCache;
+}
+
+function sanitizeFavicons(raw: unknown): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (raw && typeof raw === 'object') {
+    for (const [name, val] of Object.entries(raw as Record<string, unknown>)) {
+      // Accept only raster image data-URIs. Exclude SVG (data:image/svg+xml) defensively:
+      // SVG can carry script, and though <img> does not execute it, this keeps the trust
+      // boundary narrow for any future inline/object render path.
+      if (typeof val === 'string' && val.startsWith('data:image/') && !/^data:image\/svg/i.test(val)) out[name] = val;
+    }
+  }
+  return out;
+}
+
+export function faviconFor(siteName: string): string | null {
+  return loadFavicons()[siteName] ?? null;
+}
+
+export function _resetForTest(): void { bundledCache = null; customCache = null; faviconCache = null; }

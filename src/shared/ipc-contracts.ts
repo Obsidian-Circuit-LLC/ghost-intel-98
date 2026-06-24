@@ -272,7 +272,11 @@ export const channels = {
     fetchThreatLayer: 'geoint:fetchThreatLayer',
     setLayerKey: 'geoint:setLayerKey',
     hasLayerKey: 'geoint:hasLayerKey',
-    fetchKev: 'geoint:fetchKev'
+    fetchKev: 'geoint:fetchKev',
+    getMonitors: 'geoint:getMonitors',
+    setMonitors: 'geoint:setMonitors',
+    addMonitor: 'geoint:addMonitor',
+    removeMonitor: 'geoint:removeMonitor'
   },
   markets: {
     fetch: 'markets:fetch'
@@ -391,7 +395,10 @@ export const channels = {
     exportCase: 'searchlight:exportCase',
     importCase: 'searchlight:importCase',
     onSweepResult: 'searchlight:onSweepResult',
-    onSweepDone: 'searchlight:onSweepDone'
+    onSweepDone: 'searchlight:onSweepDone',
+    favicon: 'searchlight:favicon',
+    addCustomSite: 'searchlight:addCustomSite',
+    exportSites: 'searchlight:exportSites'
   }
 } as const;
 
@@ -510,6 +517,10 @@ export interface ApiContracts {
   [channels.geoint.fetchThreatLayer]: { args: [string, { feed?: string }]; returns: GeoItem[] };
   [channels.geoint.setLayerKey]: { args: [string, string]; returns: void };
   [channels.geoint.hasLayerKey]: { args: [string]; returns: boolean };
+  [channels.geoint.getMonitors]: { args: []; returns: string[] };
+  [channels.geoint.setMonitors]: { args: [string[]]; returns: void };
+  [channels.geoint.addMonitor]: { args: [string]; returns: string[] };
+  [channels.geoint.removeMonitor]: { args: [string]; returns: string[] };
 
   [channels.markets.fetch]: { args: []; returns: MarketSnapshot };
 
@@ -582,6 +593,9 @@ export interface ApiContracts {
   [channels.searchlight.importCase]: { args: [string]; returns: SearchlightCase | null };
   [channels.searchlight.onSweepResult]: { args: [(r: SweepResult) => void]; returns: () => void };
   [channels.searchlight.onSweepDone]: { args: [(f: { jobId: string; status: 'completed' | 'cancelled'; checked: number }) => void]; returns: () => void };
+  [channels.searchlight.favicon]: { args: [name: string]; returns: string | null };
+  [channels.searchlight.addCustomSite]: { args: [{ name: string; url: string; category?: string }]; returns: { ok: boolean; reason?: string } };
+  [channels.searchlight.exportSites]: { args: []; returns: string };
 }
 
 export const BGCONN_LOCK_EXEMPT_CHANNELS = ['bgconn:status', 'bgconn:stop'] as const;

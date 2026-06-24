@@ -1,10 +1,81 @@
 /* ── Searchlight shell ───────────────────────────────────────────────────── */
-.sl-root { display: flex; flex-direction: column; height: 100%; background: #0a0a14; color: #d8d8e0; }
+.sl-root { display: flex; flex-direction: column; height: 100%; background: #0a0a14; color: #d8d8e0; position: relative; }
 .sl-tabs { display: flex; gap: 2px; padding: 2px; flex: 0 0 auto; background: #c0c0c0; border-bottom: 1px solid #808080; }
 .sl-tab { font: inherit; padding: 2px 10px; cursor: pointer; }
 .sl-tab-active { font-weight: bold; }
 .sl-body { flex: 1 1 auto; overflow: auto; background: #0a0a14; color: #d8d8e0; }
 .sl-placeholder { padding: 16px; opacity: 0.6; }
+
+/* ── Intro splash ────────────────────────────────────────────────────────── */
+.sl-intro-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  background: rgba(5, 3, 18, 0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.sl-intro-card {
+  background: #0d0a1e;
+  border: 2px solid #5d3a7d;
+  box-shadow: inset 1px 1px 0 #7d5aad, inset -1px -1px 0 #1a0f2a, 0 0 32px rgba(93,58,125,0.4);
+  padding: 32px 40px;
+  min-width: 340px;
+  max-width: 480px;
+  text-align: center;
+  color: #e8d8ff;
+  font-family: 'Share Tech Mono', monospace;
+}
+.sl-intro-logo {
+  width: 56px;
+  height: 56px;
+  line-height: 56px;
+  margin: 0 auto 12px;
+  background: #3d1a5c;
+  border: 2px solid #7d5aad;
+  border-radius: 4px;
+  font-size: 28px;
+  font-weight: bold;
+  color: #e8d8ff;
+}
+.sl-intro-card h2 {
+  margin: 0 0 4px;
+  font-size: 20px;
+  letter-spacing: 0.12em;
+  color: #ffffff;
+}
+.sl-intro-sub {
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  color: #a080c0;
+  margin: 0 0 20px;
+  text-transform: uppercase;
+}
+.sl-intro-title {
+  font-size: 13px;
+  color: #c8b8e8;
+  margin: 0 0 8px;
+}
+.sl-intro-fine {
+  font-size: 10px;
+  color: #806090;
+  margin: 8px 0 24px;
+}
+.sl-intro-proceed {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  padding: 7px 20px;
+  background: #3d1a5c;
+  color: #fff;
+  border: 2px solid #7d5aad;
+  border-bottom-color: #1a0f2a;
+  border-right-color: #1a0f2a;
+  cursor: pointer;
+}
+.sl-intro-proceed:hover { background: #5d3a7d; }
+.sl-intro-proceed:active { border-color: #1a0f2a; border-bottom-color: #7d5aad; border-right-color: #7d5aad; background: #2a0f40; }
 
 /* ── SweepPanel root ─────────────────────────────────────────────────────── */
 .sl-sweep-root {
@@ -117,6 +188,17 @@
   animation: sl-fadein 0.2s ease;
 }
 
+/* Custom site row */
+.sl-custom-site-row { margin-top: 2px; }
+.sl-custom-site-input {
+  font-size: 10px;
+  padding: 1px 6px;
+  height: 20px;
+  width: 130px;
+}
+.sl-custom-url-input { width: 240px; }
+.sl-custom-cat-input { width: 120px; }
+
 /* Category scope filter */
 .sl-sweep-cats {
   display: flex;
@@ -137,14 +219,14 @@
   font-size: 9px;
   padding: 1px 8px;
   background: transparent;
-  border: 1px solid #1a2040;
-  color: #4060a0;
+  border: 1px solid #5d3a7d;
+  color: #a080c0;
   cursor: pointer;
   letter-spacing: 0.08em;
   transition: border-color 0.1s, color 0.1s;
 }
-.sl-sweep-cat:hover { border-color: #2a3060; color: #6080c0; }
-.sl-sweep-cat-active { background: rgba(26,111,255,0.12); border-color: #1a6fff; color: #4499ff; }
+.sl-sweep-cat:hover { border-color: #7d5aad; color: #c8a0e0; }
+.sl-sweep-cat-active { background: rgba(93,58,125,0.25); border-color: #7d5aad; color: #e8d8ff; }
 .sl-sweep-cat:disabled { opacity: 0.4; cursor: default; }
 
 /* Network-off notice */
@@ -468,9 +550,9 @@
   top: 100%;
   left: 0;
   margin-top: 2px;
-  background: #d4d0c8;
+  background: #3d1a5c;
   border: 2px solid;
-  border-color: #ffffff #808080 #808080 #ffffff;
+  border-color: #5d3a7d #1a0f2a #1a0f2a #5d3a7d;
   z-index: 100;
   min-width: 200px;
   box-shadow: 2px 2px 6px rgba(0,0,0,0.4);
@@ -490,8 +572,9 @@
   cursor: pointer;
   letter-spacing: 0.05em;
   text-align: left;
+  color: #e8d8ff;
 }
-.sl-graph-add-item:hover { background: #000080; color: #fff !important; }
+.sl-graph-add-item:hover { background: #5d3a7d; color: #fff !important; }
 
 .sl-graph-add-icon {
   width: 20px;
@@ -674,145 +757,9 @@
   50%       { opacity: 0.7; }
 }
 
-/* ── Whiteboard ───────────────────────────────────────────────────────────── */
-
-.sl-wb-root {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  overflow: hidden;
-  background: #0a0015;
-  color: #d8d8e0;
-  font-family: 'Share Tech Mono', monospace;
-  font-size: 12px;
-}
-
-/* Empty state (no active case) */
-.sl-wb-empty-root {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-direction: column;
-  gap: 12px;
-  background: #0a0015;
-}
-.sl-wb-empty-icon { font-size: 48px; opacity: 0.15; }
-.sl-wb-empty-text {
-  font-family: 'Share Tech Mono', monospace;
-  color: #30405a;
-  font-size: 13px;
-  letter-spacing: 0.12em;
-}
-
-/* Toolbar — Win98 chrome over dark panel */
-.sl-wb-toolbar {
-  flex-shrink: 0;
-  padding: 6px 12px;
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  background: #c0c0c0;
-  border-bottom: 2px solid;
-  border-color: #ffffff #808080 #808080 #ffffff;
-  z-index: 10;
-  position: relative;
-}
-
-.sl-wb-toolbar-title {
-  font-family: 'Share Tech Mono', monospace;
-  font-size: 10px;
-  color: #000080;
-  letter-spacing: 0.18em;
-  margin-right: 6px;
-  white-space: nowrap;
-}
-
-.sl-wb-hint {
-  font-family: 'Share Tech Mono', monospace;
-  font-size: 9px;
-  color: #606090;
-  letter-spacing: 0.04em;
-  white-space: nowrap;
-}
-
-.sl-wb-zoom {
-  font-family: 'Share Tech Mono', monospace;
-  font-size: 10px;
-  color: #404870;
-  white-space: nowrap;
-  min-width: 36px;
-  text-align: right;
-}
-
-.sl-wb-ingest-error {
-  font-family: 'Share Tech Mono', monospace;
-  font-size: 10px;
-  color: #ff6040;
-  background: rgba(255,80,40,0.1);
-  border: 1px solid rgba(255,80,40,0.3);
-  padding: 2px 8px;
-  max-width: 300px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.sl-wb-ingest-dismiss {
-  background: transparent;
-  border: none;
-  color: #ff6040;
-  cursor: pointer;
-  font-size: 12px;
-  padding: 0 2px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  opacity: 0.7;
-  transition: opacity 0.1s;
-}
-.sl-wb-ingest-dismiss:hover { opacity: 1; }
-
-/* Canvas — infinite dark grid */
-.sl-wb-canvas {
-  flex: 1;
-  overflow: hidden;
-  position: relative;
-  background: #0d0020;
-  background-image:
-    linear-gradient(rgba(150,150,180,0.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(150,150,180,0.06) 1px, transparent 1px);
-}
-
-/* Empty-state drop-target hint */
-.sl-wb-canvas-hint {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-direction: column;
-  gap: 12px;
-  pointer-events: none;
-}
-
-.sl-wb-canvas-hint-icon {
-  font-size: 48px;
-  opacity: 0.08;
-  color: #8080c0;
-}
-
-.sl-wb-canvas-hint-text {
-  font-family: 'Share Tech Mono', monospace;
-  font-size: 12px;
-  color: rgba(150,150,200,0.25);
-  text-align: center;
-  letter-spacing: 0.08em;
-  line-height: 1.8;
-}
+/* ── Site favicons in Sweep results ──────────────────────────────────────── */
+.sl-favicon { width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin-right: 6px; border-radius: 2px; }
+.sl-favicon-fallback { display: inline-block; background: #2a2050; }
 
 /* ── ReportsPanel ─────────────────────────────────────────────────────────── */
 
@@ -942,6 +889,21 @@
   grid-template-columns: 1fr 1fr;
   gap: 7px;
 }
+
+.sl-rp-export-btn {
+  font-size: 10px;
+  padding: 8px 10px;
+  flex-direction: column;
+  align-items: flex-start;
+  height: auto;
+  gap: 3px;
+  background: #3d1a5c;
+  color: #fff;
+  border-color: #5d3a7d #1a0f2a #1a0f2a #5d3a7d;
+}
+.sl-rp-export-btn:hover { background: #5d3a7d; }
+.sl-rp-export-btn:active { border-color: #1a0f2a #5d3a7d #5d3a7d #1a0f2a; background: #2a0f40; }
+.sl-rp-export-btn:disabled { background: #2a1040; color: #806090; }
 
 .sl-rp-sweep-hint {
   margin-left: 10px;

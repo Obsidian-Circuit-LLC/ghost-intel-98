@@ -341,6 +341,7 @@ export interface AppSettings {
   legacySounds: boolean;
   caseFolderOverride: string | null;
   hasSeenWelcome: boolean;
+  hasSeenSearchlightIntro: boolean;
   caseSortBy: 'updatedAt' | 'createdAt' | 'priority' | 'status' | 'title';
   caseSortDir: 'asc' | 'desc';
   /** Per-category collapse state for the My Cases sidebar, keyed by category name.
@@ -475,6 +476,7 @@ export const defaultShortcuts: AccessShortcut[] = [
   { id: 'eyespy', label: 'EyeSpy', kind: 'module', target: 'eyespy', icon: 'cam' },
   { id: 'media-player', label: 'Jukebox', kind: 'module', target: 'media-player', icon: 'music' },
   { id: 'geoint', label: 'GeoINT', kind: 'module', target: 'geoint', icon: 'globe' },
+  { id: 'searchlight', label: 'Searchlight', kind: 'module', target: 'searchlight', icon: 'search' },
   { id: 'bookmarks', label: 'Bookmarks', kind: 'module', target: 'bookmarks', icon: 'bookmark' },
   { id: 'markets', label: 'Markets', kind: 'module', target: 'markets', icon: 'chart' },
   { id: 'calendar', label: 'Calendar', kind: 'module', target: 'calendar', icon: 'calendar' },
@@ -497,6 +499,7 @@ export const defaultShortcuts: AccessShortcut[] = [
 export const REQUIRED_MODULE_SHORTCUTS: readonly AccessShortcut[] = [
   { id: 'media-player', label: 'Jukebox', kind: 'module', target: 'media-player', icon: 'music' },
   { id: 'geoint', label: 'GeoINT', kind: 'module', target: 'geoint', icon: 'globe' },
+  { id: 'searchlight', label: 'Searchlight', kind: 'module', target: 'searchlight', icon: 'search' },
   { id: 'bookmarks', label: 'Bookmarks', kind: 'module', target: 'bookmarks', icon: 'bookmark' },
   { id: 'briefcase', label: 'Briefcase', kind: 'module', target: 'briefcase', icon: 'briefcase' },
   { id: 'journal', label: 'Journal Jots', kind: 'module', target: 'journal', icon: 'note' },
@@ -541,6 +544,7 @@ export const defaultSettings: AppSettings = {
   legacySounds: false,
   caseFolderOverride: null,
   hasSeenWelcome: false,
+  hasSeenSearchlightIntro: false,
   caseSortBy: 'updatedAt',
   caseSortDir: 'desc',
   caseCategoryCollapsed: {},
