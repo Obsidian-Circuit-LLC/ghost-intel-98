@@ -189,6 +189,20 @@ function GeoIntModuleInner(): JSX.Element {
     });
   }, []);
 
+  // Pinned monitors — vault-persisted set of item ids the operator has right-clicked to pin.
+  const [pinned, setPinnedState] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    window.api.geoint.getMonitors().then((ids) => setPinnedState(new Set(ids))).catch(() => {});
+  }, []);
+  const addMonitor = useCallback(async (id: string) => {
+    const ids = await window.api.geoint.addMonitor(id);
+    setPinnedState(new Set(ids));
+  }, []);
+  const removeMonitor = useCallback(async (id: string) => {
+    const ids = await window.api.geoint.removeMonitor(id);
+    setPinnedState(new Set(ids));
+  }, []);
+
   // Threat layers (R5): on-demand, ephemeral. `layerItems` holds the fetched GeoItem[] per enabled
   // layer; toggling a layer off drops its items. `usgsFeed` is the allowlisted feed/timeframe for
   // USGS. `layerBusy`/`layerError` track the in-flight fetch. None of this is persisted.
@@ -1112,6 +1126,9 @@ function GeoIntModuleInner(): JSX.Element {
         labels={labels}
         onLabels={setLabels}
         net={net}
+        pinned={pinned}
+        onAddMonitor={addMonitor}
+        onRemoveMonitor={removeMonitor}
       />
       {saveItem && <SaveEventDialog item={saveItem} onClose={() => setSaveItem(null)} />}
     </div>
