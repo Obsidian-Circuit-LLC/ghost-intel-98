@@ -341,6 +341,7 @@ export interface AppSettings {
   legacySounds: boolean;
   caseFolderOverride: string | null;
   hasSeenWelcome: boolean;
+  hasSeenSearchlightIntro: boolean;
   caseSortBy: 'updatedAt' | 'createdAt' | 'priority' | 'status' | 'title';
   caseSortDir: 'asc' | 'desc';
   /** Per-category collapse state for the My Cases sidebar, keyed by category name.
@@ -543,6 +544,7 @@ export const defaultSettings: AppSettings = {
   legacySounds: false,
   caseFolderOverride: null,
   hasSeenWelcome: false,
+  hasSeenSearchlightIntro: false,
   caseSortBy: 'updatedAt',
   caseSortDir: 'desc',
   caseCategoryCollapsed: {},
