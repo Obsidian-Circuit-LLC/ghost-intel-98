@@ -2,18 +2,16 @@ import { useEffect, useState } from 'react';
 import { useSearchlightStore } from './store';
 import { SweepPanel } from './panels/SweepPanel';
 import { GraphView } from './panels/GraphView';
-import { Whiteboard } from './panels/Whiteboard';
 import { ReportsPanel } from './panels/ReportsPanel';
 import { CasesPanel } from './panels/CasesPanel';
 import { Dashboard } from './panels/Dashboard';
 import './searchlight.css';
 
-type Tab = 'dashboard' | 'sweep' | 'graph' | 'whiteboard' | 'reports' | 'cases';
+type Tab = 'dashboard' | 'sweep' | 'graph' | 'reports' | 'cases';
 const TABS: { key: Tab; label: string }[] = [
   { key: 'dashboard',  label: 'Dashboard' },
   { key: 'sweep',      label: 'Sweep' },
   { key: 'graph',      label: 'Graph' },
-  { key: 'whiteboard', label: 'Whiteboard' },
   { key: 'reports',    label: 'Reports' },
   { key: 'cases',      label: 'Cases' },
 ];
@@ -83,8 +81,6 @@ export function SearchlightModule({ caseId: _caseId }: { caseId?: string }): JSX
           <SweepPanel />
         ) : tab === 'graph' ? (
           <GraphView />
-        ) : tab === 'whiteboard' ? (
-          <Whiteboard />
         ) : tab === 'reports' ? (
           <ReportsPanel />
         ) : tab === 'cases' ? (
