@@ -219,14 +219,14 @@
   font-size: 9px;
   padding: 1px 8px;
   background: transparent;
-  border: 1px solid #1a2040;
-  color: #4060a0;
+  border: 1px solid #5d3a7d;
+  color: #a080c0;
   cursor: pointer;
   letter-spacing: 0.08em;
   transition: border-color 0.1s, color 0.1s;
 }
-.sl-sweep-cat:hover { border-color: #2a3060; color: #6080c0; }
-.sl-sweep-cat-active { background: rgba(26,111,255,0.12); border-color: #1a6fff; color: #4499ff; }
+.sl-sweep-cat:hover { border-color: #7d5aad; color: #c8a0e0; }
+.sl-sweep-cat-active { background: rgba(93,58,125,0.25); border-color: #7d5aad; color: #e8d8ff; }
 .sl-sweep-cat:disabled { opacity: 0.4; cursor: default; }
 
 /* Network-off notice */
@@ -550,9 +550,9 @@
   top: 100%;
   left: 0;
   margin-top: 2px;
-  background: #d4d0c8;
+  background: #3d1a5c;
   border: 2px solid;
-  border-color: #ffffff #808080 #808080 #ffffff;
+  border-color: #5d3a7d #1a0f2a #1a0f2a #5d3a7d;
   z-index: 100;
   min-width: 200px;
   box-shadow: 2px 2px 6px rgba(0,0,0,0.4);
@@ -572,8 +572,9 @@
   cursor: pointer;
   letter-spacing: 0.05em;
   text-align: left;
+  color: #e8d8ff;
 }
-.sl-graph-add-item:hover { background: #000080; color: #fff !important; }
+.sl-graph-add-item:hover { background: #5d3a7d; color: #fff !important; }
 
 .sl-graph-add-icon {
   width: 20px;
@@ -888,6 +889,21 @@
   grid-template-columns: 1fr 1fr;
   gap: 7px;
 }
+
+.sl-rp-export-btn {
+  font-size: 10px;
+  padding: 8px 10px;
+  flex-direction: column;
+  align-items: flex-start;
+  height: auto;
+  gap: 3px;
+  background: #3d1a5c;
+  color: #fff;
+  border-color: #5d3a7d #1a0f2a #1a0f2a #5d3a7d;
+}
+.sl-rp-export-btn:hover { background: #5d3a7d; }
+.sl-rp-export-btn:active { border-color: #1a0f2a #5d3a7d #5d3a7d #1a0f2a; background: #2a0f40; }
+.sl-rp-export-btn:disabled { background: #2a1040; color: #806090; }
 
 .sl-rp-sweep-hint {
   margin-left: 10px;

@@ -293,14 +293,13 @@ export function ReportsPanel(): JSX.Element {
             ).map(({ format, label, icon, desc }) => (
               <button
                 key={format}
-                className="sl-sweep-btn"
+                className="sl-sweep-btn sl-rp-export-btn"
                 onClick={() => exportAs(format)}
                 disabled={!allResults.length}
-                style={{ flexDirection: 'column', alignItems: 'flex-start', padding: '10px 12px', height: 'auto', gap: 3 }}
               >
                 <span style={{ fontSize: 15 }}>{icon}</span>
                 <span style={{ fontSize: 11 }}>{label}</span>
-                <span style={{ fontSize: 9, opacity: 0.55, textTransform: 'none', fontWeight: 400 }}>{desc}</span>
+                <span style={{ fontSize: 9, opacity: 0.7, textTransform: 'none', fontWeight: 400 }}>{desc}</span>
               </button>
             ))}
           </div>
