@@ -117,6 +117,17 @@
   animation: sl-fadein 0.2s ease;
 }
 
+/* Custom site row */
+.sl-custom-site-row { margin-top: 2px; }
+.sl-custom-site-input {
+  font-size: 10px;
+  padding: 1px 6px;
+  height: 20px;
+  width: 130px;
+}
+.sl-custom-url-input { width: 240px; }
+.sl-custom-cat-input { width: 120px; }
+
 /* Category scope filter */
 .sl-sweep-cats {
   display: flex;
