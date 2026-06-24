@@ -475,6 +475,7 @@ export const defaultShortcuts: AccessShortcut[] = [
   { id: 'eyespy', label: 'EyeSpy', kind: 'module', target: 'eyespy', icon: 'cam' },
   { id: 'media-player', label: 'Jukebox', kind: 'module', target: 'media-player', icon: 'music' },
   { id: 'geoint', label: 'GeoINT', kind: 'module', target: 'geoint', icon: 'globe' },
+  { id: 'searchlight', label: 'Searchlight', kind: 'module', target: 'searchlight', icon: 'search' },
   { id: 'bookmarks', label: 'Bookmarks', kind: 'module', target: 'bookmarks', icon: 'bookmark' },
   { id: 'markets', label: 'Markets', kind: 'module', target: 'markets', icon: 'chart' },
   { id: 'calendar', label: 'Calendar', kind: 'module', target: 'calendar', icon: 'calendar' },
@@ -497,6 +498,7 @@ export const defaultShortcuts: AccessShortcut[] = [
 export const REQUIRED_MODULE_SHORTCUTS: readonly AccessShortcut[] = [
   { id: 'media-player', label: 'Jukebox', kind: 'module', target: 'media-player', icon: 'music' },
   { id: 'geoint', label: 'GeoINT', kind: 'module', target: 'geoint', icon: 'globe' },
+  { id: 'searchlight', label: 'Searchlight', kind: 'module', target: 'searchlight', icon: 'search' },
   { id: 'bookmarks', label: 'Bookmarks', kind: 'module', target: 'bookmarks', icon: 'bookmark' },
   { id: 'briefcase', label: 'Briefcase', kind: 'module', target: 'briefcase', icon: 'briefcase' },
   { id: 'journal', label: 'Journal Jots', kind: 'module', target: 'journal', icon: 'note' },
