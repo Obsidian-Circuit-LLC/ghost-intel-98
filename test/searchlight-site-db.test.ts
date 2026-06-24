@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -7,6 +7,7 @@ const DATA = mkdtempSync(join(tmpdir(), 'sl-db-'));
 vi.mock('electron', () => ({ app: { getPath: () => DATA, getAppPath: () => DATA } }));
 
 import * as db from '../src/main/searchlight/site-db';
+import { parseMaigretData } from '../src/shared/searchlight/sites';
 
 const BUNDLED = { GitHub: { url: 'https://github.com/{username}', tags: ['coding'] }, X: { url: 'https://x.com/{username}', tags: ['social'] } };
 
@@ -42,5 +43,17 @@ describe('site-db', () => {
     const dup = full.filter((s) => s.name === 'Dup');
     expect(dup).toHaveLength(1);
     expect(dup[0].url).toBe('https://custom/{username}');
+  });
+});
+
+describe('bundled Maigret DB', () => {
+  it('parses the full bundled DB to a large engine-resolved catalog', () => {
+    const raw = JSON.parse(readFileSync(join(process.cwd(), 'resources/searchlight/maigret_sites.json'), 'utf8'));
+    expect(raw.engines).toBeTruthy(); // envelope preserved
+    const sites = parseMaigretData(raw);
+    expect(sites.length).toBeGreaterThan(2000); // far above the old ~1,433 subset
+    // engine-backed sites resolved (no checkType defaulted away to status_code en masse):
+    const messageSites = sites.filter((s) => s.checkType === 'message');
+    expect(messageSites.length).toBeGreaterThan(200);
   });
 });
