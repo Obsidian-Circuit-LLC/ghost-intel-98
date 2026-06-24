@@ -5,7 +5,7 @@ describe('searchlight channels', () => {
   it('exposes the expected channel set, all namespaced under searchlight:', () => {
     const g = (channels as Record<string, Record<string, string>>).searchlight;
     expect(g).toBeTruthy();
-    const expected = ['catalog', 'startSweep', 'cancelSweep', 'importSites', 'listCases', 'saveCase', 'loadCase', 'deleteCase', 'exportCase', 'importCase', 'onSweepResult', 'onSweepDone', 'favicon'];
+    const expected = ['catalog', 'startSweep', 'cancelSweep', 'importSites', 'listCases', 'saveCase', 'loadCase', 'deleteCase', 'exportCase', 'importCase', 'onSweepResult', 'onSweepDone', 'favicon', 'addCustomSite', 'exportSites'];
     expect(Object.keys(g).sort()).toEqual([...expected].sort());
     for (const v of Object.values(g)) expect(v.startsWith('searchlight:')).toBe(true);
   });
