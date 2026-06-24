@@ -305,7 +305,11 @@ const api = {
     fetchThreatLayer: (layerId: string, opts: { feed?: string; country?: string; query?: string }) => ipcRenderer.invoke(channels.geoint.fetchThreatLayer, layerId, opts),
     setLayerKey: (layerId: string, key: string) => ipcRenderer.invoke(channels.geoint.setLayerKey, layerId, key),
     hasLayerKey: (layerId: string) => ipcRenderer.invoke(channels.geoint.hasLayerKey, layerId),
-    fetchKev: () => ipcRenderer.invoke(channels.geoint.fetchKev)
+    fetchKev: () => ipcRenderer.invoke(channels.geoint.fetchKev),
+    getMonitors: () => ipcRenderer.invoke(channels.geoint.getMonitors),
+    setMonitors: (ids: string[]) => ipcRenderer.invoke(channels.geoint.setMonitors, ids),
+    addMonitor: (id: string) => ipcRenderer.invoke(channels.geoint.addMonitor, id),
+    removeMonitor: (id: string) => ipcRenderer.invoke(channels.geoint.removeMonitor, id)
   },
   markets: {
     fetch: () => ipcRenderer.invoke(channels.markets.fetch)
