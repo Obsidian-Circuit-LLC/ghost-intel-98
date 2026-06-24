@@ -23,6 +23,9 @@ that never depend on a third-party staying up:
   editable watchlist and bring-your-own feeds, off by default.
 - **GeoINT / EyeSpy / Jukebox** — pluggable geopolitical feeds + map (2D / satellite / **Street View**),
   your own/authorized camera streams, and a Win98 CD-Player audio player.
+- **Searchlight** *(new)* — username-sweep OSINT: check a handle across **1,400+ sites** through **Tor**
+  (clearnet opt-out, network off by default), then work the hits in a relationship graph, an infinite
+  whiteboard, exportable reports, and its own encrypted cases.
 - **Bookmarks** — an offline start.me: drag-organized link board, per-link glyph/emoji/favicon,
   shareable `.ghostbookmarks` file.
 - **Briefcase & Solitaire** — a home for loose notes that aren't tied to a case, and a full Klondike
@@ -32,9 +35,11 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`GhostIntel98-Setup-3.18.1.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
+> **Install:** download [`GhostIntel98-Setup-3.19.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
 
 ## Status
+
+**v3.19.0** — **Searchlight: username-sweep OSINT, Tor-first.** A new top-level **Searchlight** module: enter a username and sweep it across a bundled **1,433-site Maigret database** to find where that handle exists. The sweep runs **through Tor by default** (a clearly-labelled per-sweep **"Direct (clearnet)"** opt-out for sites that hard-block Tor exits), entirely in the main process, and is gated behind a new master network opt-in that is **off by default** — nothing leaves the machine until you turn it on. Results stream in live, Maigret-aware (status-code / page-text presence-absence / redirect heuristics) and bucketed into **Found / Not found / Redirect / Blocked / Error**, so an anti-Tor **403/429** reads as *blocked*, never a false *not found*; if Tor isn't up yet you get a clean **"Tor not ready"** rather than a wall of connection errors. Around the sweep are five more tabs: a **Dashboard**, an SVG **relationship graph** (drag/zoom/pan, auto-import found hits), an **infinite whiteboard** (drag-drop files + sticky notes), **Reports** (HTML / CSV / JSON / TXT export), and its own **Cases** with `.gic` import/export. Everything persists **encrypted at rest** through the vault (no plaintext on disk); imported `.gic`/Maigret `data.json` is **sanitised at the trust boundary** (arrays/types coerced, `javascript:` image payloads dropped) and the generated HTML report is **fully XSS-escaped** with scheme-guarded links. Bring your own site list by importing a Maigret `data.json`. The renderer makes **no network calls**; one new dependency (`react-rnd`); no telemetry. **1,317 automated tests.** *Everything from v3.18.1 carries forward.*
 
 **v3.18.1** — **GeoINT map-popup ✕ polish.** The coordinate/pin popup's close button is now a small **bordered square** with a centered ✕, vertically centered on the pill, sitting in a reserved right-hand gutter so the coordinates can never run under it (it previously read as a wide button bleeding over the text). Renderer CSS only; everything from v3.18.0 carries forward.
 
