@@ -1341,6 +1341,8 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.searchlight.deleteCase, async (...a) => slStore.deleteCase(ensureUuid(a[0], 'caseId')));
   safeHandle(channels.searchlight.exportCase, async (...a) => slStore.exportCase(ensureUuid(a[0], 'caseId')));
   safeHandle(channels.searchlight.importCase, async (...a) => slStore.importCase(String(a[0] ?? '')));
+  safeHandle(channels.searchlight.favicon, async (...a) =>
+    typeof a[0] === 'string' ? slSiteDb.faviconFor(a[0]) : null);
 
   startMailPoller(getWindow);
 }

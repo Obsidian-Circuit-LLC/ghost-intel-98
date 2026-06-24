@@ -7,6 +7,7 @@ import type { MaigretSiteEntry, SiteCatalogEntry } from '@shared/searchlight/typ
 
 let bundledCache: MaigretSiteEntry[] | null = null;
 let customCache: MaigretSiteEntry[] | null = null;
+let faviconCache: Record<string, string> | null = null;
 
 /** resources/searchlight/maigret_sites.json — under resourcesPath when packaged, repo root in dev. */
 function bundledPath(): string {
@@ -61,4 +62,36 @@ export async function importCustomSites(rawJsonText: string): Promise<{ added: n
   return { added: sites.length, rejected };
 }
 
-export function _resetForTest(): void { bundledCache = null; customCache = null; }
+function faviconsPath(): string {
+  const base = app.isPackaged ? process.resourcesPath : app.getAppPath();
+  return join(base, app.isPackaged ? 'searchlight' : 'resources/searchlight', 'favicons.json');
+}
+
+export function loadFavicons(readJson?: () => unknown): Record<string, string> {
+  if (readJson) {
+    try { faviconCache = sanitizeFavicons(readJson()); }
+    catch { faviconCache = {}; }
+    return faviconCache;
+  }
+  if (!faviconCache) {
+    try { faviconCache = sanitizeFavicons(JSON.parse(readFileSync(faviconsPath(), 'utf8'))); }
+    catch { faviconCache = {}; }
+  }
+  return faviconCache;
+}
+
+function sanitizeFavicons(raw: unknown): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (raw && typeof raw === 'object') {
+    for (const [name, val] of Object.entries(raw as Record<string, unknown>)) {
+      if (typeof val === 'string' && val.startsWith('data:image/')) out[name] = val;
+    }
+  }
+  return out;
+}
+
+export function faviconFor(siteName: string): string | null {
+  return loadFavicons()[siteName] ?? null;
+}
+
+export function _resetForTest(): void { bundledCache = null; customCache = null; faviconCache = null; }

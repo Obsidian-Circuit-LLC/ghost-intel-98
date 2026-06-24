@@ -513,6 +513,7 @@ export interface GhostApi {
     importCase(jsonText: string): Promise<SearchlightCase>;
     onSweepResult(cb: (r: SweepResult) => void): () => void;
     onSweepDone(cb: (f: { jobId: string; status: 'completed' | 'cancelled'; checked: number }) => void): () => void;
+    favicon(name: string): Promise<string | null>;
   };
 }
 
