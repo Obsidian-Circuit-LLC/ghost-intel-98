@@ -272,7 +272,11 @@ export const channels = {
     fetchThreatLayer: 'geoint:fetchThreatLayer',
     setLayerKey: 'geoint:setLayerKey',
     hasLayerKey: 'geoint:hasLayerKey',
-    fetchKev: 'geoint:fetchKev'
+    fetchKev: 'geoint:fetchKev',
+    getMonitors: 'geoint:getMonitors',
+    setMonitors: 'geoint:setMonitors',
+    addMonitor: 'geoint:addMonitor',
+    removeMonitor: 'geoint:removeMonitor'
   },
   markets: {
     fetch: 'markets:fetch'
@@ -513,6 +517,10 @@ export interface ApiContracts {
   [channels.geoint.fetchThreatLayer]: { args: [string, { feed?: string }]; returns: GeoItem[] };
   [channels.geoint.setLayerKey]: { args: [string, string]; returns: void };
   [channels.geoint.hasLayerKey]: { args: [string]; returns: boolean };
+  [channels.geoint.getMonitors]: { args: []; returns: string[] };
+  [channels.geoint.setMonitors]: { args: [string[]]; returns: void };
+  [channels.geoint.addMonitor]: { args: [string]; returns: string[] };
+  [channels.geoint.removeMonitor]: { args: [string]; returns: string[] };
 
   [channels.markets.fetch]: { args: []; returns: MarketSnapshot };
 

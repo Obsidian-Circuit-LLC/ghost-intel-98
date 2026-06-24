@@ -388,6 +388,14 @@ export interface GhostApi {
      *  no coordinates — this never touches the map. Egress-gated by settings.geoint.networkEnabled
      *  (returns [] when network is off). */
     fetchKev(): Promise<KevEntry[]>;
+    /** Return the vault-persisted list of pinned monitor ids. */
+    getMonitors(): Promise<string[]>;
+    /** Replace the vault-persisted pinned monitor ids. */
+    setMonitors(ids: string[]): Promise<void>;
+    /** Add a single id to the pinned set; deduped and persisted. Returns the updated list. */
+    addMonitor(id: string): Promise<string[]>;
+    /** Remove a single id from the pinned set; persisted. Returns the updated list. */
+    removeMonitor(id: string): Promise<string[]>;
   };
   markets: {
     fetch(): Promise<MarketSnapshot>;
