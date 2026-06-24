@@ -34,6 +34,39 @@ describe('parseMaigretData engine resolution', () => {
     expect(sites.find((s) => s.name === 'social')).toBeUndefined();
   });
 
+  it('resolves engine {urlMain}/{urlSubpath} placeholders from site fields', () => {
+    const sites = parseMaigretData({
+      engines: {
+        Discourse: { site: { url: '{urlMain}/u/{username}/summary', checkType: 'status_code' } },
+        Forum: { site: { url: '{urlMain}{urlSubpath}/member.php?username={username}' } },
+      },
+      sites: {
+        Moz: { engine: 'Discourse', urlMain: 'https://discourse.mozilla.org' },
+        WithSub: { engine: 'Forum', urlMain: 'https://forum.test', urlSubpath: '/forums' },
+        NoSub: { engine: 'Forum', urlMain: 'https://nosub.test' },
+      },
+    });
+    const byName = Object.fromEntries(sites.map((s) => [s.name, s]));
+    expect(byName.Moz.url).toBe('https://discourse.mozilla.org/u/{username}/summary');
+    expect(buildProbeUrl('adamlui', byName.Moz).url).toBe('https://discourse.mozilla.org/u/adamlui/summary');
+    expect(byName.WithSub.url).toBe('https://forum.test/forums/member.php?username={username}');
+    // urlSubpath absent -> collapses to empty string (Maigret default)
+    expect(byName.NoSub.url).toBe('https://nosub.test/member.php?username={username}');
+  });
+
+  it('leaves no {urlMain}/{urlSubpath} placeholder in any resolved url', () => {
+    // After resolution, every accepted entry's url/urlProbe must be free of engine
+    // placeholders (only {username} may remain, filled later by buildProbeUrl).
+    const sites = parseMaigretData({
+      engines: { Discourse: { site: { url: '{urlMain}/u/{username}/summary' } } },
+      sites: { Moz: { engine: 'Discourse', urlMain: 'https://discourse.mozilla.org' } },
+    });
+    for (const s of sites) {
+      expect(s.url).not.toMatch(/\{urlMain\}|\{urlSubpath\}/);
+      expect(s.urlProbe).not.toMatch(/\{urlMain\}|\{urlSubpath\}/);
+    }
+  });
+
   it('carries ignore403 from engine or site', () => {
     const sites = parseMaigretData({
       engines: { e: { site: { checkType: 'message', ignore403: true } } },
