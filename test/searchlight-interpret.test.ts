@@ -21,6 +21,29 @@ describe('interpretResult', () => {
   it('403/429/503 => blocked (not a false not_found)', () => {
     for (const c of [403, 429, 503]) expect(interpretResult(base, raw({ statusCode: c }), 'u').status).toBe('blocked');
   });
+  it('ignore403 site: 403 falls through to content interpretation, not blocked', () => {
+    // A site with ignore403:true treats 403 as a normal response; content decides.
+    const site: MaigretSiteEntry = { ...base, ignore403: true, checkType: 'status_code' };
+    // status_code path: 403 !== 200, so found=false / not_found (not 'blocked')
+    const r = interpretResult(site, raw({ statusCode: 403 }), 'u');
+    expect(r.status).toBe('not_found');
+    expect(r.found).toBe(false);
+  });
+  it('ignore403 site + message checkType: 403 with presence string => found', () => {
+    // With ignore403 + message check, 403 gets past the blocked guard and body is examined.
+    const site: MaigretSiteEntry = {
+      ...base, ignore403: true, checkType: 'message', presenseStrs: ['ProfilePage'], absenceStrs: []
+    };
+    const r = interpretResult(site, raw({ statusCode: 403, body: 'Welcome to ProfilePage' }), 'u');
+    expect(r.status).toBe('found');
+    expect(r.found).toBe(true);
+  });
+  it('ignore403 does NOT affect 429 or 503 (those remain blocked)', () => {
+    // Only 403 is covered by ignore403; 429/503 still trigger blocked regardless.
+    const site: MaigretSiteEntry = { ...base, ignore403: true };
+    expect(interpretResult(site, raw({ statusCode: 429 }), 'u').status).toBe('blocked');
+    expect(interpretResult(site, raw({ statusCode: 503 }), 'u').status).toBe('blocked');
+  });
   it('TOR_UNAVAILABLE => error', () => {
     expect(interpretResult(base, raw({ error: 'TOR_UNAVAILABLE', statusCode: 0 }), 'u').status).toBe('error');
   });

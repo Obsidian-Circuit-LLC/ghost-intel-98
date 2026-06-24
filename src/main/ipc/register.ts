@@ -97,6 +97,7 @@ import * as slSiteDb from '../searchlight/site-db';
 import * as slStore from '../searchlight/store';
 import { startSweep, cancelSweep } from '../searchlight/sweep';
 import { getBgTor } from '../bgconn/tor-singleton';
+import * as geointMonitor from '../services/geoint-monitor';
 
 const MAX_SAVE_ATTACHMENT_BYTES = 64 * 1024 * 1024; // 64 MB cap on base64 decoded payload
 const MAX_EXPORT_BYTES = 64 * 1024 * 1024;
@@ -1151,6 +1152,13 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     if (!(await settingsStore.read()).geoint.networkEnabled) return [];
     return fetchKev();
   });
+  safeHandle(channels.geoint.getMonitors, () => geointMonitor.loadPinned());
+  safeHandle(channels.geoint.setMonitors, (...a) => {
+    const ids = Array.isArray(a[0]) ? (a[0] as unknown[]).filter((x): x is string => typeof x === 'string') : [];
+    return geointMonitor.setPinned(ids);
+  });
+  safeHandle(channels.geoint.addMonitor, (...a) => geointMonitor.addPinned(typeof a[0] === 'string' ? a[0] : ''));
+  safeHandle(channels.geoint.removeMonitor, (...a) => geointMonitor.removePinned(typeof a[0] === 'string' ? a[0] : ''));
 
   // ---- Markets (vault-gated; network app-layer gated by settings.markets.networkEnabled) ----
   safeHandle(channels.markets.fetch, async () => {
@@ -1341,6 +1349,13 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.searchlight.deleteCase, async (...a) => slStore.deleteCase(ensureUuid(a[0], 'caseId')));
   safeHandle(channels.searchlight.exportCase, async (...a) => slStore.exportCase(ensureUuid(a[0], 'caseId')));
   safeHandle(channels.searchlight.importCase, async (...a) => slStore.importCase(String(a[0] ?? '')));
+  safeHandle(channels.searchlight.favicon, async (...a) =>
+    typeof a[0] === 'string' ? slSiteDb.faviconFor(a[0]) : null);
+  safeHandle(channels.searchlight.addCustomSite, async (...a) => {
+    const o = ((a[0] ?? {}) as Record<string, unknown>);
+    return slSiteDb.addCustomSite({ name: String(o.name ?? ''), url: String(o.url ?? ''), category: o.category ? String(o.category) : undefined });
+  });
+  safeHandle(channels.searchlight.exportSites, async () => slSiteDb.exportCustomSitesJson());
 
   startMailPoller(getWindow);
 }

@@ -25,7 +25,7 @@ import type { TreeNode } from './tree';
 import { Finder } from './Finder';
 import type { FeedAction } from './Finder';
 import { Wall as WallView } from './Wall';
-import { SetLocationDialog } from './SetLocationDialog';
+import { SetLocationDialog, parseCoordPair } from './SetLocationDialog';
 import { WallSetupDialog } from './WallSetupDialog';
 import type { WallSetupCfg } from './WallSetupDialog';
 import { emptyWall, assignToSlot, clearSlot, addStreams } from './wall';
@@ -55,6 +55,8 @@ export function EyeSpyModule(): JSX.Element {
   const [setLocTargets, setSetLocTargets] = useState<CameraStream[] | null>(null);
   const [wallSetup, setWallSetup] = useState<{ mode: 'new' | 'edit' } | null>(null);
   const [detecting, setDetecting] = useState<boolean>(false);
+  const [draftLat, setDraftLat] = useState<string>('');
+  const [draftLon, setDraftLon] = useState<string>('');
 
   const fullTree = useMemo(() => buildTree(streams), [streams]);
   const tree = useMemo(() => filterTree(fullTree, streams, query), [fullTree, streams, query]);
@@ -113,6 +115,11 @@ export function EyeSpyModule(): JSX.Element {
       toast.error('Not a parseable YouTube URL (watch?v=…, youtu.be/…, or /live/…).');
       return;
     }
+    const coordResult = parseCoordPair(draftLat, draftLon);
+    if (!coordResult.ok) {
+      toast.error(coordResult.error);
+      return;
+    }
     const isNew = !draft.id;
     const saved = await window.api.streams.upsert({
       // Carrying the existing id turns this into an in-place edit; absent id → new stream.
@@ -121,9 +128,12 @@ export function EyeSpyModule(): JSX.Element {
       label: draft.label,
       kind: draft.kind as StreamKind,
       caseId: draft.caseId ?? null,
-      notes: draft.notes ?? ''
+      notes: draft.notes ?? '',
+      ...(coordResult.lat != null && coordResult.lon != null ? { lat: coordResult.lat, lon: coordResult.lon } : {})
     });
     setDraft({ kind: 'hls', label: '', url: '' });
+    setDraftLat('');
+    setDraftLon('');
     setShowForm(false);
     await refresh();
     // If this add was launched from the wall (addTarget defined), place the new feed onto the wall at
@@ -210,6 +220,8 @@ export function EyeSpyModule(): JSX.Element {
       case 'play': setExpanded(s); break;
       case 'edit':
         setDraft({ id: s.id, label: s.label, url: s.url, kind: s.kind, caseId: s.caseId, notes: s.notes });
+        setDraftLat(s.lat != null ? String(s.lat) : '');
+        setDraftLon(s.lon != null ? String(s.lon) : '');
         setShowForm(true);
         break;
       case 'setloc': setSetLocTargets([s]); break;
@@ -342,7 +354,7 @@ export function EyeSpyModule(): JSX.Element {
             <WallView
               slots={wall.slots} byId={byId} activeSlot={activeSlot} columns={columns} onActivate={setActiveSlot}
               onClearSlot={(i) => persistWall(clearSlot(wallRef.current, i))}
-              onAddNew={(target) => { setAddTarget(target ?? null); setDraft({ kind: 'hls', label: '', url: '' }); setShowForm(true); }}
+              onAddNew={(target) => { setAddTarget(target ?? null); setDraft({ kind: 'hls', label: '', url: '' }); setDraftLat(''); setDraftLon(''); setShowForm(true); }}
               onExpand={setExpanded}
             />
           </div>
@@ -379,10 +391,14 @@ export function EyeSpyModule(): JSX.Element {
                   <option value="">(none)</option>
                   {cases.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
                 </select>
+                <label>Latitude:</label>
+                <input className="ga98-text" inputMode="decimal" value={draftLat} onChange={(e) => setDraftLat(e.target.value)} placeholder="-90 … 90 (optional)" />
+                <label>Longitude:</label>
+                <input className="ga98-text" inputMode="decimal" value={draftLon} onChange={(e) => setDraftLon(e.target.value)} placeholder="-180 … 180 (optional)" />
               </div>
               <div style={{ marginTop: 6, display: 'flex', gap: 6 }}>
                 <button onClick={() => void save()} disabled={!draft.url || !draft.label}>{draft.id ? 'Save changes' : 'Add'}</button>
-                <button onClick={() => { setShowForm(false); setDraft({ kind: 'hls', label: '', url: '' }); setAddTarget(undefined); }}>Cancel</button>
+                <button onClick={() => { setShowForm(false); setDraft({ kind: 'hls', label: '', url: '' }); setDraftLat(''); setDraftLon(''); setAddTarget(undefined); }}>Cancel</button>
                 {draft.id && <button onClick={() => { void del(draft.id as string); setShowForm(false); }}>Delete</button>}
               </div>
             </fieldset>

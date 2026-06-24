@@ -14,7 +14,7 @@ import { LocalAiPane } from './LocalAiPane';
 import { playMailNotify, clearMailChimeCache } from '../../audio/synth';
 import logoUrl from '../../assets/logo.png';
 
-type SectionKey = 'about' | 'sound' | 'theme' | 'cases' | 'shortcuts' | 'ai' | 'browser' | 'terminal' | 'mail' | 'backup' | 'security';
+type SectionKey = 'about' | 'sound' | 'theme' | 'cases' | 'shortcuts' | 'ai' | 'browser' | 'terminal' | 'mail' | 'backup' | 'security' | 'searchlight';
 
 interface Section {
   key: SectionKey;
@@ -32,8 +32,9 @@ const SECTIONS: Section[] = [
   { key: 'browser',   label: 'Browser',     glyph: '🌐' },
   { key: 'terminal',  label: 'Terminal',    glyph: '💻' },
   { key: 'mail',      label: 'Mail',        glyph: '✉' },
-  { key: 'backup',    label: 'Backup',      glyph: '💾' },
-  { key: 'security',  label: 'Security',    glyph: '🔒' }
+  { key: 'backup',      label: 'Backup',      glyph: '💾' },
+  { key: 'security',   label: 'Security',    glyph: '🔒' },
+  { key: 'searchlight', label: 'Searchlight', glyph: '🔎' }
 ];
 
 function newShortcutId(): string {
@@ -115,6 +116,7 @@ export function SettingsModule(): JSX.Element {
         {section === 'mail' && <MailPane s={s} patch={patch} />}
         {section === 'backup' && <BackupPane />}
         {section === 'security' && <SecurityPane />}
+        {section === 'searchlight' && <SearchlightPane s={s} patch={patch} />}
       </div>
     </div>
   );
@@ -511,6 +513,43 @@ function BackupPane(): JSX.Element {
         Encrypted credentials (Mail / SSH / AI passwords) are OS-keyring-bound and do not transfer to
         another machine — re-enter them there.
       </p>
+    </fieldset>
+  );
+}
+
+function SearchlightPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSettings>) => Promise<void> }): JSX.Element {
+  const sl = s.searchlight;
+  const set = (p: Partial<AppSettings['searchlight']>): void => { void patch({ searchlight: { ...sl, ...p } }); };
+  return (
+    <fieldset>
+      <legend>Searchlight</legend>
+      <label>
+        <input type="checkbox" checked={sl.networkEnabled} onChange={(e) => set({ networkEnabled: e.target.checked })} />
+        {' '}Enable Searchlight network (sweeps). Off = Searchlight sends nothing.
+      </label>
+      <p style={{ fontSize: 11, color: '#444', margin: '6px 0' }}>
+        Sweeps run through Tor by default. A per-sweep clearnet checkbox is in the Sweep panel.
+      </p>
+      <div style={{ display: 'grid', gridTemplateColumns: '160px 80px', gap: 6, alignItems: 'center', marginTop: 8 }}>
+        <label>Tor concurrency:</label>
+        <input
+          className="ga98-text"
+          type="number"
+          min={1}
+          max={64}
+          value={sl.torConcurrency}
+          onChange={(e) => set({ torConcurrency: Math.max(1, Math.min(64, Number(e.target.value) || 1)) })}
+        />
+        <label>Clearnet concurrency:</label>
+        <input
+          className="ga98-text"
+          type="number"
+          min={1}
+          max={64}
+          value={sl.clearnetConcurrency}
+          onChange={(e) => set({ clearnetConcurrency: Math.max(1, Math.min(64, Number(e.target.value) || 1)) })}
+        />
+      </div>
     </fieldset>
   );
 }

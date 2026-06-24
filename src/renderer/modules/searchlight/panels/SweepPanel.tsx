@@ -19,6 +19,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { SiteCatalogEntry, SweepResult } from '@shared/searchlight/types';
 import { useSearchlightStore } from '../store';
 import { useSettings } from '../../../state/store';
+import { useFavicons } from './useFavicons';
 
 // ─── Filter type ──────────────────────────────────────────────────────────────
 
@@ -114,6 +115,12 @@ export function SweepPanel(): JSX.Element {
   const [maigretMsg, setMaigretMsg] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // ── Add custom site form ─────────────────────────────────────────────────
+  const [customName, setCustomName] = useState('');
+  const [customUrl, setCustomUrl] = useState('');
+  const [customCategory, setCustomCategory] = useState('');
+  const [customMsg, setCustomMsg] = useState('');
+
   // ── Load catalog on mount ────────────────────────────────────────────────
 
   const loadCatalog = useCallback(async () => {
@@ -154,6 +161,11 @@ export function SweepPanel(): JSX.Element {
     () => filterResults(allResults, resultBucket, resultSearch),
     [allResults, resultBucket, resultSearch]
   );
+
+  // ── Favicon lookup for visible results ──────────────────────────────────────
+  const visibleResults = filteredResults.slice(0, 500);
+  const visibleSiteNames = useMemo(() => [...new Set(visibleResults.map((r) => r.siteName))], [visibleResults.map((r) => r.siteName).join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
+  const favicons = useFavicons(visibleSiteNames);
 
   const stats = useMemo(() => ({
     found:    allResults.filter((r) => r.status === 'found').length,
@@ -247,6 +259,46 @@ export function SweepPanel(): JSX.Element {
     // Reset so the same file can be re-picked
     if (fileInputRef.current) fileInputRef.current.value = '';
   }, [loadCatalog]);
+
+  // ── Add custom site ──────────────────────────────────────────────────────
+
+  const handleAddCustomSite = useCallback(async () => {
+    const name = customName.trim();
+    const url = customUrl.trim();
+    if (!name || !url) { setCustomMsg('Name and URL are required'); return; }
+    setCustomMsg('Adding...');
+    try {
+      const result = await window.api.searchlight.addCustomSite({ name, url, category: customCategory.trim() || undefined });
+      if (result.ok) {
+        setCustomMsg(`Added "${name}" to catalog`);
+        setCustomName('');
+        setCustomUrl('');
+        setCustomCategory('');
+        await loadCatalog();
+      } else {
+        setCustomMsg(result.reason ?? 'Failed to add site');
+      }
+    } catch {
+      setCustomMsg('Add failed');
+    }
+  }, [customName, customUrl, customCategory, loadCatalog]);
+
+  // ── Export custom sites.json ─────────────────────────────────────────────
+
+  const handleExportSites = useCallback(async () => {
+    try {
+      const json = await window.api.searchlight.exportSites();
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'searchlight-custom-sites.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      // silently ignore; no toast available here
+    }
+  }, []);
 
   // ── Export CSV ───────────────────────────────────────────────────────────
 
@@ -354,6 +406,55 @@ export function SweepPanel(): JSX.Element {
           </button>
           {maigretMsg && (
             <span className="sl-sweep-msg">{maigretMsg}</span>
+          )}
+          <button
+            className="sl-sweep-btn"
+            onClick={() => void handleExportSites()}
+            title="Export custom sites as sites.json"
+          >
+            EXPORT SITES.JSON
+          </button>
+        </div>
+
+        {/* Add custom site row */}
+        <div className="sl-sweep-options-row sl-custom-site-row">
+          <span className="sl-sweep-cats-label">ADD SITE:</span>
+          <input
+            className="sl-sweep-input sl-custom-site-input"
+            type="text"
+            value={customName}
+            onChange={(e) => setCustomName(e.target.value)}
+            placeholder="Site name"
+            disabled={isRunning}
+            spellCheck={false}
+          />
+          <input
+            className="sl-sweep-input sl-custom-site-input sl-custom-url-input"
+            type="text"
+            value={customUrl}
+            onChange={(e) => setCustomUrl(e.target.value)}
+            placeholder="https://site.tld/u/{username}"
+            disabled={isRunning}
+            spellCheck={false}
+          />
+          <input
+            className="sl-sweep-input sl-custom-site-input sl-custom-cat-input"
+            type="text"
+            value={customCategory}
+            onChange={(e) => setCustomCategory(e.target.value)}
+            placeholder="category (optional)"
+            disabled={isRunning}
+            spellCheck={false}
+          />
+          <button
+            className="sl-sweep-btn"
+            onClick={() => void handleAddCustomSite()}
+            disabled={isRunning || !customName.trim() || !customUrl.trim()}
+          >
+            ADD
+          </button>
+          {customMsg && (
+            <span className="sl-sweep-msg">{customMsg}</span>
           )}
         </div>
 
@@ -479,7 +580,7 @@ export function SweepPanel(): JSX.Element {
               </tr>
             </thead>
             <tbody>
-              {filteredResults.slice(0, 500).map((r) => {
+              {visibleResults.map((r) => {
                 const isTorMissing = r.status === 'error' && r.error === 'TOR_UNAVAILABLE';
                 const color = statusColor(r);
                 return (
@@ -509,6 +610,9 @@ export function SweepPanel(): JSX.Element {
 
                     {/* Site name */}
                     <td className="sl-sweep-td">
+                      {favicons[r.siteName]
+                        ? <img className="sl-favicon" src={favicons[r.siteName]!} alt="" width={16} height={16} />
+                        : <span className="sl-favicon sl-favicon-fallback" aria-hidden />}
                       <span className={`sl-site-name${r.status === 'found' ? ' sl-site-found' : ''}`}>
                         {r.siteName}
                       </span>
