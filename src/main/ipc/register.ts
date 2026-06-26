@@ -99,6 +99,7 @@ import { startSweep, cancelSweep } from '../searchlight/sweep';
 import { exportSweepPdf } from '../searchlight/export-pdf';
 import { getBgTor } from '../bgconn/tor-singleton';
 import * as geointMonitor from '../services/geoint-monitor';
+import { applyCctvTorProxy } from '../geoint/cctv-tor';
 
 const MAX_SAVE_ATTACHMENT_BYTES = 64 * 1024 * 1024; // 64 MB cap on base64 decoded payload
 const MAX_EXPORT_BYTES = 64 * 1024 * 1024;
@@ -1160,6 +1161,13 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   });
   safeHandle(channels.geoint.addMonitor, (...a) => geointMonitor.addPinned(typeof a[0] === 'string' ? a[0] : ''));
   safeHandle(channels.geoint.removeMonitor, (...a) => geointMonitor.removePinned(typeof a[0] === 'string' ? a[0] : ''));
+  // Apply (or clear) the Tor SOCKS proxy on the persist:cctv-tor partition before the
+  // renderer mounts a Tor-routed CCTV webview. Returns {ok:false,reason} when the feature
+  // is off or Tor isn't bootstrapped — the renderer must then refuse to load (no clearnet).
+  safeHandle(channels.geoint.cctvTorStatus, (...a) => {
+    const o = ((a[0] ?? {}) as { enabled?: unknown });
+    return applyCctvTorProxy(o.enabled === true);
+  });
 
   // ---- Markets (vault-gated; network app-layer gated by settings.markets.networkEnabled) ----
   safeHandle(channels.markets.fetch, async () => {
