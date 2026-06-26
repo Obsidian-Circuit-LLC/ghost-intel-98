@@ -14,7 +14,7 @@ import { LocalAiPane } from './LocalAiPane';
 import { playMailNotify, clearMailChimeCache } from '../../audio/synth';
 import logoUrl from '../../assets/logo.png';
 
-type SectionKey = 'about' | 'sound' | 'theme' | 'cases' | 'shortcuts' | 'ai' | 'browser' | 'terminal' | 'mail' | 'backup' | 'security' | 'searchlight' | 'geoint';
+type SectionKey = 'about' | 'sound' | 'theme' | 'cases' | 'shortcuts' | 'ai' | 'browser' | 'terminal' | 'mail' | 'backup' | 'security' | 'searchlight' | 'geoint' | 'socmint';
 
 interface Section {
   key: SectionKey;
@@ -35,7 +35,8 @@ const SECTIONS: Section[] = [
   { key: 'backup',      label: 'Backup',      glyph: '💾' },
   { key: 'security',   label: 'Security',    glyph: '🔒' },
   { key: 'searchlight', label: 'Searchlight', glyph: '🔎' },
-  { key: 'geoint',      label: 'GeoINT',      glyph: '🌍' }
+  { key: 'geoint',      label: 'GeoINT',      glyph: '🌍' },
+  { key: 'socmint',     label: 'SOCMINT',     glyph: '📡' }
 ];
 
 function newShortcutId(): string {
@@ -119,6 +120,7 @@ export function SettingsModule(): JSX.Element {
         {section === 'security' && <SecurityPane />}
         {section === 'searchlight' && <SearchlightPane s={s} patch={patch} />}
         {section === 'geoint' && <GeoINTPane s={s} patch={patch} />}
+        {section === 'socmint' && <SocmintPane s={s} patch={patch} />}
       </div>
     </div>
   );
@@ -625,6 +627,134 @@ function GeoINTPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSettin
             reached over Tor will not load rather than expose your IP. Live video over Tor may be slow.
           </span>
         </label>
+      </div>
+    </fieldset>
+  );
+}
+
+function SocmintPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSettings>) => Promise<void> }): JSX.Element {
+  const [burnerId, setBurnerId] = useState('');
+  const [sessionString, setSessionString] = useState('');
+  const [apiId, setApiId] = useState('');
+  const [apiHash, setApiHash] = useState('');
+  const [hasBurner, setHasBurner] = useState<boolean>(false);
+  const [saving, setSaving] = useState(false);
+
+  // Load hasBurner status when the burner ID changes.
+  useEffect(() => {
+    const id = burnerId.trim();
+    if (!id) { setHasBurner(false); return; }
+    void window.api.socmint.hasBurner(id).then(setHasBurner).catch(() => setHasBurner(false));
+  }, [burnerId]);
+
+  const saveBurner = async (): Promise<void> => {
+    const id = burnerId.trim();
+    const sess = sessionString.trim();
+    if (!id) { toast.error('Enter a burner ID.'); return; }
+    if (!sess) { toast.error('Enter a session string.'); return; }
+    setSaving(true);
+    try {
+      const creds: Record<string, string> = { sessionString: sess };
+      if (apiId.trim()) creds.apiId = apiId.trim();
+      if (apiHash.trim()) creds.apiHash = apiHash.trim();
+      await window.api.socmint.setBurner(id, creds);
+      const updated = await window.api.socmint.hasBurner(id);
+      setHasBurner(updated);
+      setSessionString(''); setApiId(''); setApiHash('');
+      toast.success('Burner credentials saved (encrypted).');
+    } catch (err) {
+      toast.error(`Save failed: ${(err as Error).message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <fieldset>
+      <legend>SOCMINT</legend>
+      <div style={{ marginBottom: 12 }}>
+        <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={s.socmint.networkEnabled}
+            onChange={(e) => void patch({ socmint: { ...s.socmint, networkEnabled: e.target.checked } })}
+            style={{ marginTop: 2 }}
+          />
+          <span>
+            Enable SOCMINT network egress (off by default). When off, no collector
+            connects and no Tor circuit is requested for SOCMINT operations.
+          </span>
+        </label>
+        <p style={{ fontSize: 11, color: '#900', margin: '6px 0 0' }}>
+          All SOCMINT traffic routes through Tor (mandatory). Enabling requires a
+          bootstrapped Tor connection — the collector refuses to connect on clearnet.
+        </p>
+      </div>
+      <hr style={{ margin: '10px 0', borderColor: '#ccc' }} />
+      <div>
+        <p style={{ fontSize: 12, margin: '0 0 8px 0', fontWeight: 'bold' }}>Burner identity</p>
+        <p style={{ fontSize: 11, color: '#444', margin: '0 0 8px 0' }}>
+          Burner credentials are stored encrypted via the OS keyring under
+          {' '}<code>socmint.burner.&lt;id&gt;.*</code>. Only a boolean{' '}
+          <strong>has credential</strong> status is shown here — the secret values
+          are never echoed to the UI.
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 6, alignItems: 'center' }}>
+          <label>Burner ID:</label>
+          <input
+            className="ga98-text"
+            value={burnerId}
+            onChange={(e) => setBurnerId(e.target.value)}
+            placeholder="e.g. burner-1"
+            disabled={saving}
+          />
+          <label>Session string:</label>
+          <input
+            className="ga98-text"
+            type="password"
+            value={sessionString}
+            onChange={(e) => setSessionString(e.target.value)}
+            placeholder="(Telegram session string — not echoed)"
+            disabled={saving}
+          />
+          <label>API ID (opt.):</label>
+          <input
+            className="ga98-text"
+            type="password"
+            value={apiId}
+            onChange={(e) => setApiId(e.target.value)}
+            placeholder="(numeric API ID — optional)"
+            disabled={saving}
+          />
+          <label>API Hash (opt.):</label>
+          <input
+            className="ga98-text"
+            type="password"
+            value={apiHash}
+            onChange={(e) => setApiHash(e.target.value)}
+            placeholder="(API hash — optional)"
+            disabled={saving}
+          />
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
+          <button
+            onClick={() => void saveBurner()}
+            disabled={saving || !burnerId.trim() || !sessionString.trim()}
+          >
+            {saving ? 'Saving…' : 'Save burner credentials'}
+          </button>
+          {burnerId.trim() && hasBurner && (
+            <span style={{ fontSize: 11, color: '#008000' }}>✓ credential stored</span>
+          )}
+          {burnerId.trim() && !hasBurner && (
+            <span style={{ fontSize: 11, color: '#888' }}>no credential stored</span>
+          )}
+        </div>
+        <p style={{ fontSize: 11, color: '#444', margin: '8px 0 0' }}>
+          The Telegram collector is built to interface; live validation and library
+          lock are pending the operator smoke test (spec §7). Setting credentials
+          here prepares the identity for when the library is pinned.
+        </p>
       </div>
     </fieldset>
   );
