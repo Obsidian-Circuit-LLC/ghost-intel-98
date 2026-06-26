@@ -11,11 +11,13 @@
  *    Responses rather than throwing into the protocol layer.
  *
  * Mirrors the ga98media:// handler (src/main/media/protocol.ts) and the Tor probe pattern
- * (src/main/searchlight/probe.ts): SOCKS5 CONNECT via socksDial(), then https.request over that
- * socket with createConnection, streaming the response back through Readable.toWeb.
+ * (src/main/searchlight/probe.ts): SOCKS5 CONNECT via socksDial(), then http.request/https.request
+ * (selected on the origin scheme) over that socket with createConnection, streaming the response
+ * back through Readable.toWeb.
  */
 
 import { request as httpsRequest } from 'node:https';
+import { request as httpRequest } from 'node:http';
 import { Readable } from 'node:stream';
 import type { Socket } from 'node:net';
 import { protocol } from 'electron';
@@ -33,6 +35,14 @@ const UA =
 
 /** Headers worth forwarding from the origin response back to the renderer. */
 const PASS_HEADERS = ['content-type', 'content-length', 'content-range', 'accept-ranges', 'cache-control'];
+
+/**
+ * Statuses for which the WHATWG Response constructor forbids a body (throws a TypeError if one
+ * is supplied). The origin is renderer-supplied, so these must be handled explicitly rather
+ * than passed a streaming body. 101/103 are also below the Response init status floor (200);
+ * they are included for completeness and the surrounding try/catch backstops any RangeError.
+ */
+const NULL_BODY_STATUSES = new Set([101, 103, 204, 205, 304]);
 
 /** True iff the bgconn Tor instance exists and is bootstrapped. */
 export function cctvTorReady(): boolean {
@@ -82,7 +92,13 @@ async function proxy(request: Request): Promise<Response> {
       }
     };
 
-    const req = httpsRequest(
+    // Select the transport by origin scheme. Public CCTV/MJPEG cameras are overwhelmingly
+    // plaintext http:// — sending a TLS ClientHello to their port-80 server would fail the
+    // handshake and 502 every such stream. `servername` is a TLS-only option and is ignored
+    // by http.request, so it is harmless to leave in the shared options object.
+    const requestFn = origin.protocol === 'https:' ? httpsRequest : httpRequest;
+
+    const req = requestFn(
       {
         method,
         hostname: origin.hostname,
@@ -121,7 +137,24 @@ async function proxy(request: Request): Promise<Response> {
           const v = res.headers[k];
           if (typeof v === 'string') outHeaders[k] = v;
         }
-        done(new Response(Readable.toWeb(res) as ReadableStream, { status, headers: outHeaders }));
+        // The WHATWG Response constructor throws if a null-body status (101/103/204/205/304)
+        // is paired with a body. The origin is renderer-supplied, so a hostile server can return
+        // one of these to weaponise that throw — and because we are inside an event-emitter
+        // callback, the throw would escape proxy()'s outer .catch and hang the protocol request.
+        // Drain the socket and send a bodyless Response instead. Wrap in try/catch as a final
+        // backstop so this branch upholds the 'handler returns error Responses, never throws'
+        // invariant unconditionally.
+        try {
+          if (NULL_BODY_STATUSES.has(status)) {
+            res.resume();
+            done(new Response(null, { status, headers: outHeaders }));
+          } else {
+            done(new Response(Readable.toWeb(res) as ReadableStream, { status, headers: outHeaders }));
+          }
+        } catch {
+          res.destroy();
+          done(new Response('bad gateway', { status: 502 }));
+        }
       }
     );
 
