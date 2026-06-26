@@ -413,7 +413,11 @@ export const channels = {
     setBurner: 'socmint:setBurner',
     hasBurner: 'socmint:hasBurner',
     startMonitor: 'socmint:startMonitor',
-    stopMonitor: 'socmint:stopMonitor'
+    stopMonitor: 'socmint:stopMonitor',
+    // WhatsApp linking ceremony (WA-T5 — stubs; WA-T6/T7 implement bodies)
+    setWhatsappBurnerPairingCode: 'socmint:setWhatsappBurnerPairingCode',
+    hasWhatsappBurner: 'socmint:hasWhatsappBurner',
+    unlinkWhatsappBurner: 'socmint:unlinkWhatsappBurner'
   }
 } as const;
 
@@ -624,6 +628,13 @@ export interface ApiContracts {
   [channels.socmint.hasBurner]: { args: [string]; returns: boolean };
   [channels.socmint.startMonitor]: { args: [unknown]; returns: { disabled: true } | { started: true; jobId: string } };
   [channels.socmint.stopMonitor]: { args: [string]; returns: void };
+  // WhatsApp linking ceremony — WA-T5 contracts; bodies implemented in WA-T6/T7.
+  // gate-closed → { disabled: true }; gate-open + sealed lib → sealed error (not crash).
+  [channels.socmint.setWhatsappBurnerPairingCode]: { args: [string, string]; returns: { disabled: true } | { pairingCode: string } };
+  // boolean only — never echoes the stored secret value.
+  [channels.socmint.hasWhatsappBurner]: { args: [string]; returns: boolean };
+  // Deletes secretStore entries for the given burnerId; does NOT server-side-unlink (user must).
+  [channels.socmint.unlinkWhatsappBurner]: { args: [string]; returns: void };
 }
 
 export const BGCONN_LOCK_EXEMPT_CHANNELS = ['bgconn:status', 'bgconn:stop'] as const;
