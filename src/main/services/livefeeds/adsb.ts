@@ -18,13 +18,22 @@ export async function fetchAdsb(bounds: Bounds): Promise<AircraftPos[]> {
   let lastStatus = 0;
 
   for (let attempt = 0; attempt <= delays.length; attempt++) {
-    const res = await safeFetch(url, 4, { Accept: 'application/json' });
-    if (res.ok) {
-      return parseAdsb(JSON.parse(await readTextCapped(res)));
+    try {
+      const res = await safeFetch(url, 4, { Accept: 'application/json' });
+      if (res.ok) {
+        return parseAdsb(JSON.parse(await readTextCapped(res)));
+      }
+      lastStatus = res.status;
+      const isRetryable = res.status === 429 || res.status >= 500;
+      if (!isRetryable || attempt === delays.length) break;
+    } catch {
+      // Network-level failure (timeout / DNS / connection refused) — the common "feed down"
+      // case. safeFetch throws here rather than returning a status; treat it as retryable and
+      // (on exhaustion) classify it as 'unavailable' (lastStatus 0) rather than letting a raw
+      // error escape unwrapped — that's the readable-status guarantee this loop exists to give.
+      lastStatus = 0;
+      if (attempt === delays.length) break;
     }
-    lastStatus = res.status;
-    const isRetryable = res.status === 429 || res.status >= 500;
-    if (!isRetryable || attempt === delays.length) break;
     await new Promise<void>((r) => setTimeout(r, delays[attempt]));
   }
 
