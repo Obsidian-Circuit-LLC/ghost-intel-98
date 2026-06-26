@@ -35,9 +35,11 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`GhostIntel98-Setup-3.20.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
+> **Install:** download [`GhostIntel98-Setup-3.21.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
 
 ## Status
+
+**v3.21.0** — **Batch 2 refinements — CCTV-over-Tor streaming.** The `ga98cctv://` privileged-scheme proxy routes CCTV camera streams (HLS / HTTP / MJPEG / MP4) through Tor via a main-process handler — no direct CDN egress, manifests rewritten in-proxy, YouTube/webpages/RTSP are not Tor-routable and show a notice instead of fallback clearnet. Built over subagent-driven Tasks R1–R4 with a whole-branch review; the old webview player approach is fully replaced, and PDF viewing now uses native APIs (no bundled dependency). AIS ships work as before; ADS-B aircraft was disabled after proving unreliable under Tor load. **1,386 automated tests** green; typecheck + build clean. *Everything from v3.20.0 carries forward.*
 
 **v3.20.0** — **Searchlight, refined: the full Maigret corpus, offline favicons, and your own sites.** Searchlight now ships the **complete 3,166-site Maigret database** — engine-backed sites are resolved at parse time, so the ~1,000 sites that inherit their check logic from a shared engine probe correctly instead of returning false negatives. Each result can show the site's **favicon** from a **bundled offline snapshot** (~1,270 icons) — zero runtime egress, no third-party favicon proxy. Add individual sites with a one-field **Add custom site** form (persisted encrypted, exportable as `sites.json`). A dedicated **Settings → Searchlight** pane holds the master network toggle (still **off by default**), and Searchlight now appears in the **Start menu** with a first-run intro card. The **Whiteboard** tab was **removed** (and its `react-rnd` dependency dropped); dropdowns and report buttons are restyled midnight-purple for readability on the dark canvas. **GeoINT** now opens its timeline on **all events** (the scrubber still works) and supports **right-click → Add to Monitor** on any situation-feed item, persisted across sessions through the vault. **EyeSpy** Add-Stream now takes **latitude / longitude**, which flow into the master CCTV export. Built subagent-driven over 14 TDD tasks with a parallel **adversarial whole-branch review** that caught and fixed an engine-placeholder probe bug before merge. **1,336 automated tests.** *Everything from v3.19.0 carries forward.*
 
@@ -444,7 +446,7 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases) and run it.
 
-Direct link to the current release: [`GhostIntel98-Setup-3.20.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.20.0/GhostIntel98-Setup-3.20.0.exe)
+Direct link to the current release: [`GhostIntel98-Setup-3.21.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.21.0/GhostIntel98-Setup-3.21.0.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is **formally verified internally** — symbolic (ProVerif) +
 computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not**
 FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.6.8/GhostIntel98-Setup-3.6.8.exe).
@@ -452,7 +454,7 @@ FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Se
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\GhostIntel98-Setup-3.20.0.exe -Algorithm SHA256
+Get-FileHash .\GhostIntel98-Setup-3.21.0.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
