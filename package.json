@@ -151,10 +151,6 @@
       {
         "from": "resources/searchlight",
         "to": "searchlight"
-      },
-      {
-        "from": "resources/cctv-player",
-        "to": "cctv-player"
       }
     ],
     "win": {
