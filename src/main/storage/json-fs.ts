@@ -938,6 +938,7 @@ function mergeSettings(base: AppSettings, patch: Partial<AppSettings>): AppSetti
       ...(patch.markets ?? {}),
       watchlist: { ...base.markets.watchlist, ...(patch.markets?.watchlist ?? {}) }
     },
+    socmint: { ...base.socmint, ...(patch.socmint ?? {}) },
     shortcuts: reconciled.shortcuts,
     seededShortcuts: reconciled.seededShortcuts,
     hasSeenWelcome: patch.hasSeenWelcome ?? base.hasSeenWelcome,
