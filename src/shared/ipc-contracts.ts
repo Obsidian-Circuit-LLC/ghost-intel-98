@@ -276,7 +276,8 @@ export const channels = {
     getMonitors: 'geoint:getMonitors',
     setMonitors: 'geoint:setMonitors',
     addMonitor: 'geoint:addMonitor',
-    removeMonitor: 'geoint:removeMonitor'
+    removeMonitor: 'geoint:removeMonitor',
+    cctvTorReady: 'geoint:cctvTorReady'
   },
   markets: {
     fetch: 'markets:fetch'
@@ -522,6 +523,7 @@ export interface ApiContracts {
   [channels.geoint.setMonitors]: { args: [string[]]; returns: void };
   [channels.geoint.addMonitor]: { args: [string]; returns: string[] };
   [channels.geoint.removeMonitor]: { args: [string]; returns: string[] };
+  [channels.geoint.cctvTorReady]: { args: []; returns: boolean };
 
   [channels.markets.fetch]: { args: []; returns: MarketSnapshot };
 

@@ -309,7 +309,8 @@ const api = {
     getMonitors: () => ipcRenderer.invoke(channels.geoint.getMonitors),
     setMonitors: (ids: string[]) => ipcRenderer.invoke(channels.geoint.setMonitors, ids),
     addMonitor: (id: string) => ipcRenderer.invoke(channels.geoint.addMonitor, id),
-    removeMonitor: (id: string) => ipcRenderer.invoke(channels.geoint.removeMonitor, id)
+    removeMonitor: (id: string) => ipcRenderer.invoke(channels.geoint.removeMonitor, id),
+    cctvTorReady: () => ipcRenderer.invoke(channels.geoint.cctvTorReady)
   },
   markets: {
     fetch: () => ipcRenderer.invoke(channels.markets.fetch)
