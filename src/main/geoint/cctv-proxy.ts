@@ -17,14 +17,19 @@
  */
 
 import { request as httpsRequest } from 'node:https';
-import { request as httpRequest } from 'node:http';
+import { request as httpRequest, type IncomingMessage } from 'node:http';
 import { Readable } from 'node:stream';
 import type { Socket } from 'node:net';
 import { protocol } from 'electron';
 import { socksDial } from '../searchlight/tor-socks';
 import { getBgTor } from '../bgconn/tor-singleton';
 import { readTextCapped } from '../net/limits';
-import { parseCctvProxyRequest, rewriteHlsManifest } from '@shared/cctv/proxy';
+import {
+  parseCctvProxyRequest,
+  rewriteHlsManifest,
+  bodyLooksLikeHlsManifest,
+  HLS_SNIFF_BYTES
+} from '@shared/cctv/proxy';
 
 // Socket-inactivity time cap. Deliberately longer than the searchlight probe (live video over
 // Tor is slow); it fires only on a stall (no bytes flowing), so it does not truncate a healthy
@@ -47,6 +52,59 @@ const NULL_BODY_STATUSES = new Set([101, 103, 204, 205, 304]);
 /** True iff the bgconn Tor instance exists and is bootstrapped. */
 export function cctvTorReady(): boolean {
   return getBgTor()?.isBootstrapped() ? true : false;
+}
+
+/**
+ * Peeks the first `n` bytes of an origin response WITHOUT consuming them, so the body can be
+ * content-sniffed (for the #EXTM3U HLS tag) before deciding whether to rewrite or stream it.
+ *
+ * The peeked bytes are `unshift()`'d back onto the stream, so the downstream consumer
+ * (`readTextCapped` for a manifest, or `Readable.toWeb` for a pass-through stream) still sees
+ * the complete body — no bytes are dropped. Resolves `{ prefix, full }`:
+ *  - `full: false` — at least `n` bytes were available; `prefix` is the first `n` bytes and the
+ *    stream has been rewound (unshift) to its original position for the consumer to read fully.
+ *  - `full: true`  — the stream ended before `n` bytes; `prefix` is the ENTIRE body and the
+ *    stream is already drained, so the caller must use `prefix` directly as the body.
+ *
+ * Reading the prefix in paused mode (`res.read()`) and unshifting once we have enough bytes means
+ * a hostile origin cannot stall detection: the socket-inactivity timeout on the request still
+ * fires on a stalled stream, surfacing here as an `error` that rejects the peek.
+ */
+function peekPrefix(res: IncomingMessage, n: number): Promise<{ prefix: Buffer; full: boolean }> {
+  return new Promise((resolve, reject) => {
+    const parts: Buffer[] = [];
+    let total = 0;
+    const cleanup = (): void => {
+      res.removeListener('readable', onReadable);
+      res.removeListener('end', onEnd);
+      res.removeListener('error', onError);
+    };
+    const onReadable = (): void => {
+      let chunk: Buffer | null;
+      while ((chunk = res.read() as Buffer | null) !== null) {
+        parts.push(chunk);
+        total += chunk.length;
+        if (total >= n) break;
+      }
+      if (total >= n) {
+        cleanup();
+        const buf = Buffer.concat(parts);
+        res.unshift(buf); // rewind: replay every read byte to the downstream consumer
+        resolve({ prefix: buf.subarray(0, n), full: false });
+      }
+    };
+    const onEnd = (): void => {
+      cleanup();
+      resolve({ prefix: Buffer.concat(parts), full: true });
+    };
+    const onError = (e: Error): void => {
+      cleanup();
+      reject(e);
+    };
+    res.on('readable', onReadable);
+    res.on('end', onEnd);
+    res.on('error', onError);
+  });
 }
 
 async function proxy(request: Request): Promise<Response> {
@@ -111,50 +169,94 @@ async function proxy(request: Request): Promise<Response> {
       (res) => {
         const status = res.statusCode ?? 502;
         const ctype = String(res.headers['content-type'] ?? '').toLowerCase();
-        const isManifest = pathIsHls || ctype.includes('mpegurl');
 
-        if (isManifest) {
-          // Buffer the manifest (size-capped via limits.ts), rewrite every URI onto the proxy.
-          readTextCapped(new Response(Readable.toWeb(res) as ReadableStream))
-            .then((text) =>
-              done(
-                new Response(rewriteHlsManifest(text, originUrl), {
-                  status,
-                  headers: { 'content-type': 'application/vnd.apple.mpegurl' }
-                })
-              )
-            )
-            .catch(() => {
-              res.destroy();
-              done(new Response('bad gateway', { status: 502 }));
-            });
-          return;
-        }
-
-        // Stream the body straight back. Range (206/content-range) passes through for seeking.
+        // Pass-through headers, used for any non-manifest body.
         const outHeaders: Record<string, string> = {};
         for (const k of PASS_HEADERS) {
           const v = res.headers[k];
           if (typeof v === 'string') outHeaders[k] = v;
         }
+
         // The WHATWG Response constructor throws if a null-body status (101/103/204/205/304)
         // is paired with a body. The origin is renderer-supplied, so a hostile server can return
         // one of these to weaponise that throw — and because we are inside an event-emitter
         // callback, the throw would escape proxy()'s outer .catch and hang the protocol request.
-        // Drain the socket and send a bodyless Response instead. Wrap in try/catch as a final
-        // backstop so this branch upholds the 'handler returns error Responses, never throws'
-        // invariant unconditionally.
-        try {
-          if (NULL_BODY_STATUSES.has(status)) {
+        // These responses also carry no body to sniff, so handle them first: drain the socket and
+        // send a bodyless Response. Wrap in try/catch as a final backstop so this branch upholds
+        // the 'handler returns error Responses, never throws' invariant unconditionally.
+        if (NULL_BODY_STATUSES.has(status)) {
+          try {
             res.resume();
             done(new Response(null, { status, headers: outHeaders }));
-          } else {
-            done(new Response(Readable.toWeb(res) as ReadableStream, { status, headers: outHeaders }));
+          } catch {
+            res.destroy();
+            done(new Response('bad gateway', { status: 502 }));
           }
-        } catch {
-          res.destroy();
-          done(new Response('bad gateway', { status: 502 }));
+          return;
         }
+
+        const manifestHeaders = { 'content-type': 'application/vnd.apple.mpegurl' };
+
+        // SECURITY: the rewrite decision must NOT rest on the request path or the origin-supplied
+        // Content-Type alone — a hostile camera host controls both and would otherwise serve a
+        // playlist on a non-.m3u8 path with a non-mpegurl Content-Type to bypass rewriting, after
+        // which hls.js would fetch the manifest's ABSOLUTE segment/EXT-X-KEY URIs directly over
+        // clearnet and deanonymize the viewer. We therefore also content-sniff the body for the
+        // #EXTM3U tag (which hls.js itself requires before it will parse+fetch a playlist) and
+        // rewrite on ANY of the three signals.
+        peekPrefix(res, HLS_SNIFF_BYTES)
+          .then(({ prefix, full }) => {
+            const sniffText = new TextDecoder('utf-8', { fatal: false }).decode(prefix);
+            const isManifest =
+              pathIsHls || ctype.includes('mpegurl') || bodyLooksLikeHlsManifest(sniffText);
+
+            if (full) {
+              // Whole body already drained into `prefix` (stream ended during the peek).
+              if (isManifest) {
+                done(
+                  new Response(rewriteHlsManifest(sniffText, originUrl), {
+                    status,
+                    headers: manifestHeaders
+                  })
+                );
+                return;
+              }
+              try {
+                // Copy out exactly prefix.length bytes (a pooled Buffer may view a larger
+                // ArrayBuffer) so no unrelated heap bytes are exposed in the Response body.
+                done(new Response(new Uint8Array(prefix), { status, headers: outHeaders }));
+              } catch {
+                res.destroy();
+                done(new Response('bad gateway', { status: 502 }));
+              }
+              return;
+            }
+
+            if (isManifest) {
+              // Buffer the manifest (size-capped via limits.ts), rewrite every URI onto the proxy.
+              readTextCapped(new Response(Readable.toWeb(res) as ReadableStream))
+                .then((text) =>
+                  done(new Response(rewriteHlsManifest(text, originUrl), { status, headers: manifestHeaders }))
+                )
+                .catch(() => {
+                  res.destroy();
+                  done(new Response('bad gateway', { status: 502 }));
+                });
+              return;
+            }
+
+            // Stream the body straight back. Range (206/content-range) passes through for seeking.
+            try {
+              done(new Response(Readable.toWeb(res) as ReadableStream, { status, headers: outHeaders }));
+            } catch {
+              res.destroy();
+              done(new Response('bad gateway', { status: 502 }));
+            }
+          })
+          .catch(() => {
+            res.destroy();
+            done(new Response('bad gateway', { status: 502 }));
+          });
       }
     );
 

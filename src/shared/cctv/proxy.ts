@@ -85,6 +85,39 @@ export function cctvRoutableKind(kind: string): boolean {
   return ROUTABLE_KINDS.has(kind);
 }
 
+/**
+ * Number of leading body bytes the main-side proxy buffers to content-sniff the #EXTM3U tag.
+ * 64 bytes covers an optional UTF-8 BOM (3) + the `#EXTM3U` tag (7) with ample slack for any
+ * leading whitespace, while staying small enough never to delay a non-manifest media stream.
+ */
+export const HLS_SNIFF_BYTES = 64;
+
+/**
+ * Content-based HLS manifest detection — the security-critical complement to path/Content-Type
+ * detection.
+ *
+ * RFC 8216 §4.3.3.1 requires every Media Playlist and Master Playlist to begin with the #EXTM3U
+ * tag as its first line. hls.js enforces exactly this gate before it will parse a body as a
+ * playlist and fetch its segment/key URIs (`M3U8Parser`: `if (!string.startsWith('#EXTM3U'))
+ * { playlistParsingError = 'no EXTM3U delimiter' }`). Therefore ANY body hls.js will treat as a
+ * playlist — and from which it will issue ABSOLUTE segment/EXT-X-KEY fetches — begins with
+ * #EXTM3U after the browser strips a leading BOM.
+ *
+ * A hostile camera host fully controls the request path and the response Content-Type, so those
+ * two signals alone are insufficient: serving a playlist on a non-`.m3u8` path with a
+ * non-`mpegurl` Content-Type would let the body bypass URI rewriting and stream verbatim, after
+ * which hls.js would fetch the manifest's absolute `https://attacker/seg.ts` URIs directly over
+ * clearnet — deanonymizing the viewer to the exact host the Tor proxy exists to hide from.
+ * Sniffing the body itself removes the host's control over the rewrite decision.
+ *
+ * This check is deliberately at least as lenient as hls.js (strips a BOM and leading whitespace
+ * before testing), so it can only ever rewrite MORE bodies than hls.js would parse, never fewer.
+ */
+export function bodyLooksLikeHlsManifest(bodyStart: string): boolean {
+  const withoutBom = bodyStart.charCodeAt(0) === 0xfeff ? bodyStart.slice(1) : bodyStart;
+  return withoutBom.trimStart().startsWith('#EXTM3U');
+}
+
 /** Matches URI="..." attributes in HLS tag lines (EXT-X-KEY, EXT-X-MEDIA, etc.). */
 const URI_ATTR_RE = /URI="([^"]*)"/g;
 
