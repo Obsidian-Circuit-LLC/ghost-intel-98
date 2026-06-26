@@ -319,24 +319,48 @@ export async function handleSetWhatsappBurnerPairingCode(
 }
 
 /**
- * Stub: returns true when secretStore holds creds for the given WhatsApp burnerId.
- * Boolean only — never echoes the stored secret.
- * WA-T6 implements the secretStore lookup; this stub returns false as a safe default.
+ * Returns true when secretStore holds a non-empty creds blob for the given WhatsApp burnerId.
+ * Boolean only — never echoes the stored secret value to the renderer.
+ * Returns false on keyring errors; the error will surface properly on the linking call.
+ *
+ * Storage key: socmint.whatsapp.burner.<safeId>.creds  (set by whatsapp-auth.ts)
+ *
+ * @param store  Injectable store for tests; defaults to the production secretStore.
  */
-export async function handleHasWhatsappBurner(burnerId: string): Promise<boolean> {
-  // WA-T6 implements the full secretStore lookup.
-  void WA_BURNER_KEY_PREFIX; // suppress unused-variable lint until WA-T6
+export async function handleHasWhatsappBurner(
+  burnerId: string,
+  store?: { get(key: string): Promise<string | null> },
+): Promise<boolean> {
   if (!burnerId) return false;
-  return false;
+  const s = store ?? (await import('../secrets/index')).secretStore;
+  const safeId = burnerId.replace(/[/\\]/g, '_');
+  try {
+    const v = await s.get(`${WA_BURNER_KEY_PREFIX}${safeId}.creds`);
+    return typeof v === 'string' && v.length > 0;
+  } catch {
+    // Keyring locked / unavailable — treat as "no usable burner" at the check stage;
+    // the real error will surface when the linking ceremony actually runs.
+    return false;
+  }
 }
 
 /**
- * Stub: deletes secretStore entries for the given WhatsApp burnerId.
- * Does NOT perform server-side unlinking — the analyst must do that in
- * WhatsApp → Linked Devices manually before retiring the burner.
- * WA-T6 implements the secretStore deletion.
+ * Deletes both secretStore entries for the given WhatsApp burnerId:
+ *   socmint.whatsapp.burner.<safeId>.creds  — serialised Baileys AuthenticationCreds
+ *   socmint.whatsapp.burner.<safeId>.keys   — serialised Signal key store
+ *
+ * Does NOT perform server-side unlinking — the analyst must do that manually in
+ * WhatsApp → Linked Devices before retiring the burner (per §5.1 of the design).
+ *
+ * @param store  Injectable store for tests; defaults to the production secretStore.
  */
-export async function handleUnlinkWhatsappBurner(burnerId: string): Promise<void> {
-  // WA-T6 implements the full secretStore deletion.
-  void burnerId; // suppress unused-variable lint until WA-T6
+export async function handleUnlinkWhatsappBurner(
+  burnerId: string,
+  store?: { delete(key: string): Promise<void> },
+): Promise<void> {
+  if (!burnerId) return;
+  const s = store ?? (await import('../secrets/index')).secretStore;
+  const safeId = burnerId.replace(/[/\\]/g, '_');
+  await s.delete(`${WA_BURNER_KEY_PREFIX}${safeId}.creds`);
+  await s.delete(`${WA_BURNER_KEY_PREFIX}${safeId}.keys`);
 }
