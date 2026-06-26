@@ -206,3 +206,142 @@
 .sm-item-link:hover { color: #a0d0ff; }
 .sm-item-link-plain { font-size: 11px; opacity: 0.45; font-family: monospace; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
 .sm-item-actions { display: flex; gap: 4px; }
+.sm-item-platform-badge {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: #1a3a1a;
+  border: 1px solid #3a6a3a;
+  color: #80d880;
+  padding: 0 4px;
+  border-radius: 2px;
+}
+
+/* ── Platform selector ───────────────────────────────────────────────────── */
+.sm-platform-bar {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 0;
+  padding: 4px 8px;
+  background: #0d0a1e;
+  border-bottom: 1px solid #2a2040;
+}
+.sm-platform-btn {
+  font: inherit;
+  font-size: 11px;
+  padding: 2px 12px;
+  background: #1a1535;
+  border: 1px solid #3a2060;
+  color: #a090c0;
+  cursor: pointer;
+}
+.sm-platform-btn:first-child { border-radius: 2px 0 0 2px; }
+.sm-platform-btn:last-child { border-radius: 0 2px 2px 0; border-left: none; }
+.sm-platform-active {
+  background: #3d1a5c;
+  color: #e8d8ff;
+  border-color: #7d5aad;
+}
+.sm-platform-active + .sm-platform-btn { border-left: none; }
+
+/* ── WhatsApp deanon warning (§5.1) ─────────────────────────────────────── */
+.sm-wa-warning {
+  flex: 0 0 auto;
+  background: #2a0e0e;
+  border: 2px solid #8b2020;
+  border-left: 6px solid #cc3030;
+  color: #f0c0c0;
+  padding: 8px 12px;
+  font-size: 12px;
+  margin: 4px 8px 0;
+}
+.sm-wa-warning-title {
+  display: block;
+  font-size: 12px;
+  color: #ff8080;
+  margin-bottom: 5px;
+}
+.sm-wa-warning-body {
+  margin: 0;
+  line-height: 1.5;
+  color: #e8b0b0;
+}
+
+/* ── Tor advisory ────────────────────────────────────────────────────────── */
+.sm-wa-tor-advisory {
+  flex: 0 0 auto;
+  background: #1a1a0a;
+  border: 1px solid #6a6a20;
+  border-left: 4px solid #aaaa30;
+  color: #d8d880;
+  padding: 6px 10px;
+  font-size: 11px;
+  margin: 4px 8px 0;
+  line-height: 1.4;
+}
+
+/* ── WhatsApp setup panel elements ──────────────────────────────────────── */
+.sm-wa-field-error {
+  color: #ff9090;
+  font-size: 11px;
+  margin: 2px 0 4px;
+}
+.sm-wa-field-error code {
+  font-family: monospace;
+  background: #200a0a;
+  padding: 0 3px;
+}
+.sm-wa-linked-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0;
+}
+.sm-wa-linked-badge {
+  font-size: 11px;
+  background: #0a2a0a;
+  border: 1px solid #3a7a3a;
+  color: #90e890;
+  padding: 1px 8px;
+  border-radius: 2px;
+}
+.sm-wa-gate-note { color: #e8c080; }
+.sm-wa-pairing-result {
+  margin-top: 10px;
+  padding: 8px 10px;
+  background: #0a0a2a;
+  border: 1px solid #3a3080;
+}
+.sm-wa-pairing-label {
+  font-size: 11px;
+  color: #a0a0d0;
+  margin: 0 0 6px;
+}
+.sm-wa-pairing-code {
+  display: block;
+  font-family: monospace;
+  font-size: 20px;
+  font-weight: bold;
+  letter-spacing: 0.2em;
+  color: #e8e8ff;
+  text-align: center;
+  padding: 8px 0;
+  background: #12124a;
+  border: 2px solid #5050c0;
+  user-select: all;
+}
+.sm-wa-error {
+  margin-top: 8px;
+  padding: 6px 8px;
+  background: #200808;
+  border: 1px solid #7a3030;
+  color: #f0a0a0;
+  font-size: 11px;
+}
+.sm-wa-error strong { color: #ff8080; }
+.sm-wa-unlink-note {
+  margin-top: 8px;
+  font-size: 11px;
+  color: #c0a0a0;
+  line-height: 1.4;
+}

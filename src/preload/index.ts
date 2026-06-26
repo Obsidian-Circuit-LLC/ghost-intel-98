@@ -473,7 +473,16 @@ const api = {
     setBurner: (burnerId: string, credentials: unknown) => ipcRenderer.invoke(channels.socmint.setBurner, burnerId, credentials),
     hasBurner: (burnerId: string) => ipcRenderer.invoke(channels.socmint.hasBurner, burnerId),
     startMonitor: (req: unknown) => ipcRenderer.invoke(channels.socmint.startMonitor, req),
-    stopMonitor: (jobId: string) => ipcRenderer.invoke(channels.socmint.stopMonitor, jobId)
+    stopMonitor: (jobId: string) => ipcRenderer.invoke(channels.socmint.stopMonitor, jobId),
+    // WhatsApp linking ceremony (WA-T5 contracts; bodies implemented in WA-T6/T7; full
+    // register.ts wiring in WA-T10 after operator smoke-test). Exposed here so the
+    // renderer (WA-T8) can call them without type errors.
+    setWhatsappBurnerPairingCode: (burnerId: string, phone: string) =>
+      ipcRenderer.invoke(channels.socmint.setWhatsappBurnerPairingCode, burnerId, phone),
+    hasWhatsappBurner: (burnerId: string) =>
+      ipcRenderer.invoke(channels.socmint.hasWhatsappBurner, burnerId),
+    unlinkWhatsappBurner: (burnerId: string) =>
+      ipcRenderer.invoke(channels.socmint.unlinkWhatsappBurner, burnerId)
   }
 } as const;
 

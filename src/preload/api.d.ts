@@ -542,6 +542,15 @@ export interface GhostApi {
     hasBurner(burnerId: string): Promise<boolean>;
     startMonitor(req: unknown): Promise<{ disabled: true } | { started: true; jobId: string }>;
     stopMonitor(jobId: string): Promise<void>;
+    // WhatsApp linking ceremony (WA-T5 contracts; bodies implemented in WA-T6/T7;
+    // register.ts wiring in WA-T10 after operator smoke-test).
+    /** Egress-gated. Returns { disabled:true } when gate closed; { pairingCode } when gate
+     *  open + library installed; throws sealed message before WA-T9/WA-T10. */
+    setWhatsappBurnerPairingCode(burnerId: string, phone: string): Promise<{ disabled: true } | { pairingCode: string }>;
+    /** Boolean only — never echoes the stored secret value. */
+    hasWhatsappBurner(burnerId: string): Promise<boolean>;
+    /** Deletes secretStore entries for burnerId. User must separately unlink in WhatsApp. */
+    unlinkWhatsappBurner(burnerId: string): Promise<void>;
   };
 }
 
