@@ -400,9 +400,9 @@ export function SweepPanel(): JSX.Element {
             className="sl-sweep-btn"
             onClick={() => fileInputRef.current?.click()}
             disabled={isRunning}
-            title="Import a Maigret data.json to extend the site catalog"
+            title="Import a custom data.json to extend the site catalog"
           >
-            LOAD MAIGRET DB
+            LOAD CUSTOM DB
           </button>
           {maigretMsg && (
             <span className="sl-sweep-msg">{maigretMsg}</span>
