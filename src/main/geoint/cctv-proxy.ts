@@ -7,6 +7,8 @@
  *  - The SOCKS port comes from the bootstrapped bgconn Tor instance; if Tor is not ready the
  *    handler returns 503 and the renderer shows TOR NOT READY (it does not load clearnet).
  *  - HLS manifests are URL-rewritten so every segment/key/media URI stays on this proxy.
+ *  - Redirects (3xx) are followed by RE-DIALLING the target through Tor (bounded hops, http(s)
+ *    only) — the Location header is NEVER forwarded to the renderer, which would egress clearnet.
  *  - Body is size-capped (manifests) and the request is time-capped; the handler returns error
  *    Responses rather than throwing into the protocol layer.
  *
@@ -35,6 +37,11 @@ import {
 // Tor is slow); it fires only on a stall (no bytes flowing), so it does not truncate a healthy
 // stream — it just stops a hung circuit from pinning the socket open forever.
 const TIMEOUT_MS = 30_000;
+
+// Maximum HTTP redirect hops the proxy will follow, each re-dialled through Tor. Bounds both
+// redirect loops and the number of circuits a single stream request can open.
+const MAX_REDIRECTS = 4;
+
 const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
@@ -48,6 +55,11 @@ const PASS_HEADERS = ['content-type', 'content-length', 'content-range', 'accept
  * they are included for completeness and the surrounding try/catch backstops any RangeError.
  */
 const NULL_BODY_STATUSES = new Set([101, 103, 204, 205, 304]);
+
+/** True iff the origin is http(s). The only schemes this proxy will dial. */
+function isHttpOrigin(u: URL): boolean {
+  return u.protocol === 'http:' || u.protocol === 'https:';
+}
 
 /** True iff the bgconn Tor instance exists and is bootstrapped. */
 export function cctvTorReady(): boolean {
@@ -107,25 +119,28 @@ function peekPrefix(res: IncomingMessage, n: number): Promise<{ prefix: Buffer; 
   });
 }
 
-async function proxy(request: Request): Promise<Response> {
-  // 1) Decode + scheme-check the origin (http/https only). Anything else → 400.
-  const originUrl = parseCctvProxyRequest(request.url);
-  if (!originUrl) return new Response('bad request', { status: 400 });
-
-  // 2) Tor SOCKS port, or refuse. NEVER clearnet fallback.
-  const tor = getBgTor();
-  const socksPort = tor?.isBootstrapped() ? tor.socksPort() : null;
-  if (socksPort == null) return new Response('tor unavailable', { status: 503 });
-
+/**
+ * Perform ONE Tor-dialled request to `originUrl`. On a 3xx with a Location header and remaining
+ * hops, re-dial the resolved target through Tor (never forwarding Location to the renderer).
+ * Otherwise content-sniff and either rewrite (HLS manifest) or stream the body back.
+ */
+async function attempt(
+  originUrl: string,
+  socksPort: number,
+  method: 'GET' | 'HEAD',
+  range: string | null,
+  hopsLeft: number
+): Promise<Response> {
   let origin: URL;
   try {
     origin = new URL(originUrl);
   } catch {
     return new Response('bad request', { status: 400 });
   }
+  if (!isHttpOrigin(origin)) return new Response('bad request', { status: 400 });
   const originPort = origin.port ? parseInt(origin.port, 10) : origin.protocol === 'https:' ? 443 : 80;
 
-  // 3) SOCKS5 CONNECT through Tor, then HTTPS over that socket.
+  // SOCKS5 CONNECT through Tor, then HTTP(S) over that socket.
   let socket: Socket;
   try {
     socket = await socksDial(origin.hostname, originPort, socksPort);
@@ -133,12 +148,10 @@ async function proxy(request: Request): Promise<Response> {
     return new Response('bad gateway', { status: 502 });
   }
 
-  const method = request.method === 'HEAD' ? 'HEAD' : 'GET';
-  const range = request.headers.get('range');
   const headers: Record<string, string> = { 'User-Agent': UA, Connection: 'close' };
   if (range) headers.Range = range;
 
-  // HLS detection by path; refined by content-type once the response arrives.
+  // HLS detection by path; refined by content-type and a body content-sniff once the response arrives.
   const pathIsHls = origin.pathname.toLowerCase().endsWith('.m3u8');
 
   return await new Promise<Response>((resolve) => {
@@ -169,6 +182,38 @@ async function proxy(request: Request): Promise<Response> {
       (res) => {
         const status = res.statusCode ?? 502;
         const ctype = String(res.headers['content-type'] ?? '').toLowerCase();
+
+        // REDIRECT: follow it by re-dialling the target THROUGH TOR. We never forward the
+        // Location header to the renderer — doing so would let the renderer (or hls.js)
+        // fetch the redirect target directly over clearnet, defeating the whole proxy. The
+        // target must itself be http(s); anything else is refused. Hops are bounded.
+        const loc = res.headers['location'];
+        if (status >= 300 && status < 400 && typeof loc === 'string' && loc && hopsLeft > 0) {
+          // Make the settle/abort invariant explicit (red-team hardening): we are about to
+          // destroy this socket and hand control to a fresh re-dial, so swallow any late error
+          // raised on the now-dead response rather than letting it surface unhandled (which a
+          // future Electron/Node could turn into a main-process crash). socket.destroy() stays
+          // NO-ARG on purpose — passing an error would make req's 'error' handler fire and settle
+          // a 502 while the recursive attempt() also runs, leaking that Tor circuit. Keep it no-arg.
+          res.on('error', () => { /* dead response post-redirect; intentionally ignored */ });
+          res.resume(); // drain so the socket can close cleanly
+          socket.destroy();
+          let next: URL;
+          try {
+            next = new URL(loc, originUrl);
+          } catch {
+            done(new Response('bad gateway', { status: 502 }));
+            return;
+          }
+          if (!isHttpOrigin(next)) {
+            done(new Response('bad gateway', { status: 502 }));
+            return;
+          }
+          attempt(next.href, socksPort, method, range, hopsLeft - 1)
+            .then(done)
+            .catch(() => done(new Response('bad gateway', { status: 502 })));
+          return;
+        }
 
         // Pass-through headers, used for any non-manifest body.
         const outHeaders: Record<string, string> = {};
@@ -271,6 +316,23 @@ async function proxy(request: Request): Promise<Response> {
     });
     req.end();
   });
+}
+
+async function proxy(request: Request): Promise<Response> {
+  // 1) Decode + scheme-check the origin (http/https only). Anything else → 400.
+  const originUrl = parseCctvProxyRequest(request.url);
+  if (!originUrl) return new Response('bad request', { status: 400 });
+
+  // 2) Tor SOCKS port, or refuse. NEVER clearnet fallback.
+  const tor = getBgTor();
+  const socksPort = tor?.isBootstrapped() ? tor.socksPort() : null;
+  if (socksPort == null) return new Response('tor unavailable', { status: 503 });
+
+  const method = request.method === 'HEAD' ? 'HEAD' : 'GET';
+  const range = request.headers.get('range');
+
+  // 3) Dial through Tor, following bounded redirects (each re-dialled through Tor).
+  return attempt(originUrl, socksPort, method, range, MAX_REDIRECTS);
 }
 
 /** Register the ga98cctv:// handler. Call once, after app is ready. */
