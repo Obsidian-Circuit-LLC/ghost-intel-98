@@ -462,6 +462,18 @@ const api = {
     addCustomSite: (i: { name: string; url: string; category?: string }) => ipcRenderer.invoke(channels.searchlight.addCustomSite, i),
     exportSites: () => ipcRenderer.invoke(channels.searchlight.exportSites),
     exportPdf: (args: { html: string; filename: string }) => ipcRenderer.invoke(channels.searchlight.exportPdf, args)
+  },
+  socmint: {
+    addChannel: (caseId: string, channel: unknown) => ipcRenderer.invoke(channels.socmint.addChannel, caseId, channel),
+    removeChannel: (caseId: string, channelId: string) => ipcRenderer.invoke(channels.socmint.removeChannel, caseId, channelId),
+    listChannels: (caseId: string) => ipcRenderer.invoke(channels.socmint.listChannels, caseId),
+    listItems: (caseId: string) => ipcRenderer.invoke(channels.socmint.listItems, caseId),
+    rankItems: (caseId: string, keyword: string) => ipcRenderer.invoke(channels.socmint.rankItems, caseId, keyword),
+    recordLabel: (caseId: string, label: unknown) => ipcRenderer.invoke(channels.socmint.recordLabel, caseId, label),
+    setBurner: (burnerId: string, credentials: unknown) => ipcRenderer.invoke(channels.socmint.setBurner, burnerId, credentials),
+    hasBurner: (burnerId: string) => ipcRenderer.invoke(channels.socmint.hasBurner, burnerId),
+    startMonitor: (req: unknown) => ipcRenderer.invoke(channels.socmint.startMonitor, req),
+    stopMonitor: (jobId: string) => ipcRenderer.invoke(channels.socmint.stopMonitor, jobId)
   }
 } as const;
 

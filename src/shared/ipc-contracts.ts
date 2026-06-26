@@ -31,6 +31,7 @@ import type {
 } from './types';
 import type { MediaLibrarySnapshot, MediaStation, MediaTrack, GeoSnapshot, GeoSource, GeoItem, SavedGeoEvent, MarketSnapshot } from './post-mvp-types';
 import type { SiteCatalogEntry, SweepResult, SearchlightCase, SearchlightCaseSummary } from './searchlight/types';
+import type { HarvestedItem, MonitoredChannel } from './socmint/types';
 
 export interface EntityCreateInput { type: EntityType; value: string; notes?: string; aliases?: string[] }
 export interface EntityLinkOpts { relationship?: EntityRelationship; linkIds?: string[]; attachmentFileNames?: string[] }
@@ -401,6 +402,18 @@ export const channels = {
     addCustomSite: 'searchlight:addCustomSite',
     exportSites: 'searchlight:exportSites',
     exportPdf: 'searchlight:exportPdf'
+  },
+  socmint: {
+    addChannel: 'socmint:addChannel',
+    removeChannel: 'socmint:removeChannel',
+    listChannels: 'socmint:listChannels',
+    listItems: 'socmint:listItems',
+    rankItems: 'socmint:rankItems',
+    recordLabel: 'socmint:recordLabel',
+    setBurner: 'socmint:setBurner',
+    hasBurner: 'socmint:hasBurner',
+    startMonitor: 'socmint:startMonitor',
+    stopMonitor: 'socmint:stopMonitor'
   }
 } as const;
 
@@ -600,6 +613,17 @@ export interface ApiContracts {
   [channels.searchlight.addCustomSite]: { args: [{ name: string; url: string; category?: string }]; returns: { ok: boolean; reason?: string } };
   [channels.searchlight.exportSites]: { args: []; returns: string };
   [channels.searchlight.exportPdf]: { args: [{ html: string; filename: string }]; returns: { ok: boolean } };
+
+  [channels.socmint.addChannel]: { args: [string, unknown]; returns: MonitoredChannel[] };
+  [channels.socmint.removeChannel]: { args: [string, string]; returns: MonitoredChannel[] };
+  [channels.socmint.listChannels]: { args: [string]; returns: MonitoredChannel[] };
+  [channels.socmint.listItems]: { args: [string]; returns: HarvestedItem[] };
+  [channels.socmint.rankItems]: { args: [string, string]; returns: HarvestedItem[] };
+  [channels.socmint.recordLabel]: { args: [string, unknown]; returns: void };
+  [channels.socmint.setBurner]: { args: [string, unknown]; returns: void };
+  [channels.socmint.hasBurner]: { args: [string]; returns: boolean };
+  [channels.socmint.startMonitor]: { args: [unknown]; returns: { disabled: true } | { started: true; jobId: string } };
+  [channels.socmint.stopMonitor]: { args: [string]; returns: void };
 }
 
 export const BGCONN_LOCK_EXEMPT_CHANNELS = ['bgconn:status', 'bgconn:stop'] as const;

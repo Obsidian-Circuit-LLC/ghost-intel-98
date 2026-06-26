@@ -100,6 +100,13 @@ import { startSweep, cancelSweep } from '../searchlight/sweep';
 import { exportSweepPdf } from '../searchlight/export-pdf';
 import { getBgTor } from '../bgconn/tor-singleton';
 import * as geointMonitor from '../services/geoint-monitor';
+import {
+  handleAddChannel, handleRemoveChannel, handleListChannels,
+  handleListItems, handleRankItems, handleRecordLabel,
+  handleSetBurner, handleHasBurner,
+  handleStartMonitor, handleStopMonitor,
+} from '../socmint/ipc';
+import { makeMtcuteCollector } from '../socmint/collector';
 
 const MAX_SAVE_ATTACHMENT_BYTES = 64 * 1024 * 1024; // 64 MB cap on base64 decoded payload
 const MAX_EXPORT_BYTES = 64 * 1024 * 1024;
@@ -1364,6 +1371,33 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     const o = ((a[0] ?? {}) as Record<string, unknown>);
     return exportSweepPdf(String(o.html ?? ''), String(o.filename ?? 'searchlight-report.pdf'));
   });
+
+  // ---- SOCMINT (Telegram OSINT collector; egress gated by settings.socmint.networkEnabled) ----
+  // Non-egress handlers (channel config, stored-data queries, labels) run regardless of gate.
+  // Only startMonitor touches the network/Tor — it is the sole handler subject to the egress gate.
+  safeHandle(channels.socmint.addChannel, (...a) =>
+    handleAddChannel(ensureUuid(a[0], 'caseId'), a[1]));
+  safeHandle(channels.socmint.removeChannel, (...a) =>
+    handleRemoveChannel(ensureUuid(a[0], 'caseId'), typeof a[1] === 'string' ? a[1] : ''));
+  safeHandle(channels.socmint.listChannels, (...a) =>
+    handleListChannels(ensureUuid(a[0], 'caseId')));
+  safeHandle(channels.socmint.listItems, (...a) =>
+    handleListItems(ensureUuid(a[0], 'caseId')));
+  safeHandle(channels.socmint.rankItems, (...a) =>
+    handleRankItems(ensureUuid(a[0], 'caseId'), typeof a[1] === 'string' ? a[1] : ''));
+  safeHandle(channels.socmint.recordLabel, (...a) =>
+    handleRecordLabel(ensureUuid(a[0], 'caseId'), a[1]));
+  safeHandle(channels.socmint.setBurner, (...a) =>
+    handleSetBurner(typeof a[0] === 'string' ? a[0] : '', a[1]));
+  safeHandle(channels.socmint.hasBurner, (...a) =>
+    handleHasBurner(typeof a[0] === 'string' ? a[0] : ''));
+  safeHandle(channels.socmint.startMonitor, (...a) =>
+    handleStartMonitor(a[0], {
+      networkEnabled: async () => (await settingsStore.read()).socmint.networkEnabled,
+      collectorFactory: makeMtcuteCollector,
+    }));
+  safeHandle(channels.socmint.stopMonitor, (...a) =>
+    handleStopMonitor(typeof a[0] === 'string' ? a[0] : ''));
 
   startMailPoller(getWindow);
 }
