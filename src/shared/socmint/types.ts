@@ -1,4 +1,4 @@
-export type SocmintPlatform = 'telegram';
+export type SocmintPlatform = 'telegram' | 'whatsapp';
 
 export interface HarvestedItem {
   /** SHA-256 hex of `${platform}:${channelId}:${messageId}` — deterministic dedup key. */
