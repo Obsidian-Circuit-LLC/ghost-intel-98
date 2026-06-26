@@ -286,3 +286,57 @@ export async function handleStartMonitor(
 export async function handleStopMonitor(jobId: string): Promise<void> {
   activeJobs.delete(jobId);
 }
+
+// ---------------------------------------------------------------------------
+// WhatsApp linking ceremony — IPC handler stubs (WA-T5)
+// Bodies are implemented in WA-T6 (hasWhatsappBurner / unlinkWhatsappBurner)
+// and WA-T7 (setWhatsappBurnerPairingCode egress gate + sealed adapter).
+// ---------------------------------------------------------------------------
+
+const WA_BURNER_KEY_PREFIX = 'socmint.whatsapp.burner.';
+
+/**
+ * Stub: request a WhatsApp pairing code for the given burnerId + phone number.
+ *
+ * EGRESS GATE: returns { disabled: true } when networkEnabled is false —
+ * never constructs a socket or touches any network path.
+ * When the gate is open, the sealed Baileys adapter is used (see WA-T7);
+ * this stub throws the sealed message so callers see a deliberate seam, not a crash.
+ *
+ * The `deps` parameter is injected for testability (mirrors handleStartMonitor).
+ */
+export async function handleSetWhatsappBurnerPairingCode(
+  _burnerId: string,
+  _phone: string,
+  deps: { networkEnabled: () => Promise<boolean> },
+): Promise<{ disabled: true } | { pairingCode: string }> {
+  // EGRESS GATE — must precede ALL network / library operations.
+  if (!await deps.networkEnabled()) return { disabled: true };
+  // Sealed seam — WA-T7 will replace this throw with the live adapter path.
+  throw new Error(
+    'SOCMINT: WhatsApp library not installed — pending operator supply-chain verification + library lock. Complete §5.5 checklist before unsealing.',
+  );
+}
+
+/**
+ * Stub: returns true when secretStore holds creds for the given WhatsApp burnerId.
+ * Boolean only — never echoes the stored secret.
+ * WA-T6 implements the secretStore lookup; this stub returns false as a safe default.
+ */
+export async function handleHasWhatsappBurner(burnerId: string): Promise<boolean> {
+  // WA-T6 implements the full secretStore lookup.
+  void WA_BURNER_KEY_PREFIX; // suppress unused-variable lint until WA-T6
+  if (!burnerId) return false;
+  return false;
+}
+
+/**
+ * Stub: deletes secretStore entries for the given WhatsApp burnerId.
+ * Does NOT perform server-side unlinking — the analyst must do that in
+ * WhatsApp → Linked Devices manually before retiring the burner.
+ * WA-T6 implements the secretStore deletion.
+ */
+export async function handleUnlinkWhatsappBurner(burnerId: string): Promise<void> {
+  // WA-T6 implements the full secretStore deletion.
+  void burnerId; // suppress unused-variable lint until WA-T6
+}

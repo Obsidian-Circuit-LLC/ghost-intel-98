@@ -10,6 +10,8 @@ describe('socmint channels', () => {
       'listItems', 'rankItems', 'recordLabel',
       'setBurner', 'hasBurner',
       'startMonitor', 'stopMonitor',
+      // WA-T5: WhatsApp linking ceremony channels
+      'setWhatsappBurnerPairingCode', 'hasWhatsappBurner', 'unlinkWhatsappBurner',
     ];
     expect(Object.keys(g).sort()).toEqual([...expected].sort());
     for (const v of Object.values(g)) expect(v.startsWith('socmint:')).toBe(true);
@@ -18,5 +20,16 @@ describe('socmint channels', () => {
   it('channel values are globally unique', () => {
     const all = Object.values(channels as Record<string, Record<string, string>>).flatMap((grp) => Object.values(grp));
     expect(new Set(all).size).toBe(all.length);
+  });
+
+  it('WhatsApp ceremony channels carry the socmint: prefix and distinct values', () => {
+    const g = (channels as Record<string, Record<string, string>>).socmint;
+    const waChs = [
+      g.setWhatsappBurnerPairingCode,
+      g.hasWhatsappBurner,
+      g.unlinkWhatsappBurner,
+    ];
+    for (const ch of waChs) expect(ch.startsWith('socmint:')).toBe(true);
+    expect(new Set(waChs).size).toBe(waChs.length);
   });
 });
