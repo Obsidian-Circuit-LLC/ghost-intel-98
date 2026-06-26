@@ -396,6 +396,8 @@ export interface GhostApi {
     addMonitor(id: string): Promise<string[]>;
     /** Remove a single id from the pinned set; persisted. Returns the updated list. */
     removeMonitor(id: string): Promise<string[]>;
+    /** Returns true when the background Tor circuit is bootstrapped and the ga98cctv:// proxy is usable. */
+    cctvTorReady(): Promise<boolean>;
   };
   markets: {
     fetch(): Promise<MarketSnapshot>;
