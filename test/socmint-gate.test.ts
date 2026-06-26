@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { handleStartMonitor, handleHasWhatsappBurner, handleUnlinkWhatsappBurner } from '../src/main/socmint/ipc';
+import { handleStartMonitor, handleHasWhatsappBurner, handleUnlinkWhatsappBurner, handleSetWhatsappBurnerPairingCode } from '../src/main/socmint/ipc';
+import { WA_SEALED_MESSAGE } from '../src/main/socmint/whatsapp-collector';
 import { setBgTor, _resetBgTorForTest } from '../src/main/bgconn/tor-singleton';
 import type { BgconnTor } from '../src/main/bgconn/tor';
 import { SocmintTorUnavailableError } from '../src/main/socmint/tor-identity';
@@ -182,5 +183,47 @@ describe('socmint:unlinkWhatsappBurner', () => {
       'socmint.whatsapp.burner.burner-1.creds',
       'socmint.whatsapp.burner.burner-1.keys',
     ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// WA-T7: handleSetWhatsappBurnerPairingCode — egress gate
+// ---------------------------------------------------------------------------
+
+describe('socmint:setWhatsappBurnerPairingCode — egress gate', () => {
+  it('returns { disabled: true } when networkEnabled is false (gate closed, no library touched)', async () => {
+    const result = await handleSetWhatsappBurnerPairingCode(
+      'burner-wa',
+      '15551234567',
+      { networkEnabled: async () => false },
+    );
+    expect(result).toEqual({ disabled: true });
+  });
+
+  it('rejects with the sealed-library message when networkEnabled is true (gate open)', async () => {
+    await expect(
+      handleSetWhatsappBurnerPairingCode('burner-wa', '15551234567', {
+        networkEnabled: async () => true,
+      }),
+    ).rejects.toThrow(WA_SEALED_MESSAGE);
+  });
+
+  it('sealed rejection is a deliberate Error instance — not a crash or silent fallback', async () => {
+    let thrown: unknown;
+    try {
+      await handleSetWhatsappBurnerPairingCode('burner-wa', '+447700900000', {
+        networkEnabled: async () => true,
+      });
+    } catch (e) {
+      thrown = e;
+    }
+    expect(thrown).toBeInstanceOf(Error);
+    expect((thrown as Error).message).toBe(WA_SEALED_MESSAGE);
+  });
+
+  it('gate check fires before sealed seam — networkEnabled is always awaited', async () => {
+    const networkEnabled = vi.fn().mockResolvedValue(false);
+    await handleSetWhatsappBurnerPairingCode('burner-wa', '15551234567', { networkEnabled });
+    expect(networkEnabled).toHaveBeenCalledOnce();
   });
 });
