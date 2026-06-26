@@ -68,7 +68,7 @@ function generateHTML(caseName: string, results: SweepResult[]): string {
   tr.error .status{color:#ff3344}
   tr:hover{background:rgba(26,111,255,.04)}
 </style></head><body>
-<h1>GHOST INTEL USERNAME SWEEPER</h1>
+<h1>SEARCHLIGHT</h1>
 <div class="meta">CASE: ${esc(caseName)} · GENERATED: ${new Date().toISOString()} · TOTAL: ${results.length}</div>
 <div class="stats">
   <div><div class="stat-val">${results.length}</div><div class="stat-lbl">TOTAL CHECKED</div></div>
@@ -110,7 +110,7 @@ function generateCSV(results: SweepResult[]): string {
 function generateJSON(caseName: string, results: SweepResult[]): string {
   return JSON.stringify(
     {
-      tool: 'Ghost Intel Username Sweeper',
+      tool: 'Searchlight',
       case: caseName,
       generated: new Date().toISOString(),
       summary: {
@@ -130,7 +130,7 @@ function generateTXT(caseName: string, results: SweepResult[]): string {
   const found = results.filter(isFound);
   return [
     '═══════════════════════════════════════════════════════════',
-    'GHOST INTEL USERNAME SWEEPER — INVESTIGATION REPORT',
+    'SEARCHLIGHT — INVESTIGATION REPORT',
     '═══════════════════════════════════════════════════════════',
     `CASE: ${caseName}`,
     `DATE: ${new Date().toISOString()}`,
@@ -193,11 +193,17 @@ export function ReportsPanel(): JSX.Element {
     });
   };
 
-  const exportAs = (format: 'html' | 'csv' | 'json' | 'txt') => {
+  const exportAs = async (format: 'html' | 'csv' | 'json' | 'txt' | 'pdf') => {
     if (!activeCase || !allResults.length) return;
     const name = activeCase.name;
     const ts = Date.now();
     const slug = name.replace(/\s+/g, '_');
+
+    if (format === 'pdf') {
+      const html = generateHTML(name, allResults);
+      await window.api.searchlight.exportPdf({ html, filename: `searchlight_${slug}_${ts}.pdf` });
+      return;
+    }
 
     const map: Record<'html' | 'csv' | 'json' | 'txt', { content: string; filename: string; mime: string }> = {
       html: {
@@ -289,6 +295,7 @@ export function ReportsPanel(): JSX.Element {
                 { format: 'csv'  as const, label: 'CSV SPREADSHEET', icon: '≡', desc: 'Comma-separated'      },
                 { format: 'json' as const, label: 'JSON DATA',        icon: '{}',desc: 'Structured data'      },
                 { format: 'txt'  as const, label: 'TXT REPORT',       icon: '≣', desc: 'Plain text'           },
+                { format: 'pdf'  as const, label: 'PDF REPORT',       icon: '⎙', desc: 'Printable document'   },
               ] as const
             ).map(({ format, label, icon, desc }) => (
               <button

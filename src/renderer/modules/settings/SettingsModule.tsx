@@ -14,7 +14,7 @@ import { LocalAiPane } from './LocalAiPane';
 import { playMailNotify, clearMailChimeCache } from '../../audio/synth';
 import logoUrl from '../../assets/logo.png';
 
-type SectionKey = 'about' | 'sound' | 'theme' | 'cases' | 'shortcuts' | 'ai' | 'browser' | 'terminal' | 'mail' | 'backup' | 'security' | 'searchlight';
+type SectionKey = 'about' | 'sound' | 'theme' | 'cases' | 'shortcuts' | 'ai' | 'browser' | 'terminal' | 'mail' | 'backup' | 'security' | 'searchlight' | 'geoint';
 
 interface Section {
   key: SectionKey;
@@ -34,7 +34,8 @@ const SECTIONS: Section[] = [
   { key: 'mail',      label: 'Mail',        glyph: '✉' },
   { key: 'backup',      label: 'Backup',      glyph: '💾' },
   { key: 'security',   label: 'Security',    glyph: '🔒' },
-  { key: 'searchlight', label: 'Searchlight', glyph: '🔎' }
+  { key: 'searchlight', label: 'Searchlight', glyph: '🔎' },
+  { key: 'geoint',      label: 'GeoINT',      glyph: '🌍' }
 ];
 
 function newShortcutId(): string {
@@ -117,6 +118,7 @@ export function SettingsModule(): JSX.Element {
         {section === 'backup' && <BackupPane />}
         {section === 'security' && <SecurityPane />}
         {section === 'searchlight' && <SearchlightPane s={s} patch={patch} />}
+        {section === 'geoint' && <GeoINTPane s={s} patch={patch} />}
       </div>
     </div>
   );
@@ -549,6 +551,80 @@ function SearchlightPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppS
           value={sl.clearnetConcurrency}
           onChange={(e) => set({ clearnetConcurrency: Math.max(1, Math.min(64, Number(e.target.value) || 1)) })}
         />
+      </div>
+    </fieldset>
+  );
+}
+
+function GeoINTPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSettings>) => Promise<void> }): JSX.Element {
+  const [aisKeyDraft, setAisKeyDraft] = useState('');
+  const [hasKey, setHasKey] = useState<boolean>(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    void window.api.geoint.hasLayerKey('ais').then(setHasKey).catch(() => setHasKey(false));
+  }, []);
+
+  const saveAisKey = async (): Promise<void> => {
+    const trimmed = aisKeyDraft.trim();
+    if (!trimmed) return;
+    setSaving(true);
+    try {
+      await window.api.geoint.setLayerKey('ais', trimmed);
+      setAisKeyDraft('');
+      const updated = await window.api.geoint.hasLayerKey('ais');
+      setHasKey(updated);
+      toast.success('AIS key saved (encrypted).');
+    } catch (err) {
+      toast.error(`Save failed: ${(err as Error).message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <fieldset>
+      <legend>GeoINT</legend>
+      <div style={{ marginBottom: 12 }}>
+        <label style={{ display: 'block', marginBottom: 4 }}>AISStream.io API key:</label>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <input
+            className="ga98-text"
+            type="password"
+            value={aisKeyDraft}
+            onChange={(e) => setAisKeyDraft(e.target.value)}
+            placeholder={hasKey ? '(key stored — enter new to replace)' : 'Paste AISStream.io key…'}
+            style={{ flex: 1 }}
+            disabled={saving}
+          />
+          <button
+            onClick={() => void saveAisKey()}
+            disabled={saving || !aisKeyDraft.trim()}
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+        {hasKey && (
+          <span style={{ fontSize: 11, color: '#008000', marginTop: 4, display: 'block' }}>✓ key stored</span>
+        )}
+        <p style={{ fontSize: 11, color: '#444', margin: '6px 0 0' }}>
+          AISStream.io key for the Live Ships feed. Stored encrypted; never leaves this machine.
+          The ADS-B aircraft feed needs no key.
+        </p>
+      </div>
+      <div style={{ marginTop: 8 }}>
+        <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={s.geoint.cctvOverTor}
+            onChange={(e) => void patch({ geoint: { ...s.geoint, cctvOverTor: e.target.checked } })}
+            style={{ marginTop: 2 }}
+          />
+          <span>
+            Route CCTV streams through Tor (off by default). When on, a camera that can't be
+            reached over Tor will not load rather than expose your IP. Live video over Tor may be slow.
+          </span>
+        </label>
       </div>
     </fieldset>
   );

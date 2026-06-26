@@ -99,6 +99,8 @@ function GeoIntModuleInner(): JSX.Element {
   // renderer store shallow-replaces the whole geoint block; every write must carry all fields).
   const newsStreams = g?.newsStreams ?? [];
   const newsStreamIndex = g?.newsStreamIndex ?? 0;
+  // CCTV-over-Tor setting (Task 6) — carried through patchGeo alongside other geoint fields.
+  const cctvOverTor = g?.cctvOverTor ?? false;
   // The map's active layer: street uses the user/default tiles; satellite uses the built-in Esri layer.
   const activeTileUrl = basemap === 'satellite' ? ESRI_SAT_URL : tileUrl;
   const activeTileAttribution = basemap === 'satellite' ? ESRI_SAT_ATTRIBUTION : tileAttribution;
@@ -272,7 +274,16 @@ function GeoIntModuleInner(): JSX.Element {
         const result = await window.api.livefeeds.fetchAdsb(bbox);
         setAircraft(result as AircraftPos[]);
       } catch (e) {
-        toast.warn(`ADS-B fetch failed: ${(e as Error).message}`);
+        // Map AdsbError kind (serialised as a string message across the IPC bridge) to
+        // readable user-facing copy instead of the raw "Error invoking remote method" text.
+        const msg: string = (e as Error).message ?? '';
+        if (msg.includes('rate-limited') || msg.includes('429')) {
+          toast.warn('ADS-B rate-limited — retrying');
+        } else if (msg.includes('unavailable') || msg.includes('AdsbError')) {
+          toast.warn('ADS-B feed unavailable');
+        } else {
+          toast.warn(`ADS-B fetch failed: ${msg}`);
+        }
       }
     };
     adsbFetchRef.current = () => { void doFetch(); };
@@ -454,7 +465,7 @@ function GeoIntModuleInner(): JSX.Element {
   // every write must carry all fields — this fills the unchanged ones from current state and
   // applies the delta, so adding basemap (or any future field) can't silently drop the others.
   function patchGeo(p: Partial<{ networkEnabled: boolean; tileServerUrl: string; tileAttribution: string; basemap: 'street' | 'satellite' }>): void {
-    void patch({ geoint: { networkEnabled: net, tileServerUrl: tileUrl, tileAttribution, basemap, newsStreams, newsStreamIndex, ...p } });
+    void patch({ geoint: { networkEnabled: net, tileServerUrl: tileUrl, tileAttribution, basemap, newsStreams, newsStreamIndex, cctvOverTor, ...p } });
   }
   function setNetwork(enabled: boolean): void {
     // Enabling with no tile server configured yet → drop in the default basemap so the map
@@ -1153,7 +1164,7 @@ export function GeoIntModule(): JSX.Element {
     //     (which only touches the cache) — and it would make the inner render re-throw immediately on
     //     remount. Overwriting with known-good defaults clears it. Network goes back to off (its
     //     default); one click re-enables it and the default tiles auto-populate.
-    try { await patch({ geoint: { networkEnabled: false, tileServerUrl: '', tileAttribution: '', basemap: 'street', newsStreams: [{ label: 'Bloomberg TV', url: 'https://www.bloomberg.com/media-manifest/streams/us.m3u8', kind: 'hls' }], newsStreamIndex: 0 } }); }
+    try { await patch({ geoint: { networkEnabled: false, tileServerUrl: '', tileAttribution: '', basemap: 'street', newsStreams: [{ label: 'Bloomberg TV', url: 'https://www.bloomberg.com/media-manifest/streams/us.m3u8', kind: 'hls' }], newsStreamIndex: 0, cctvOverTor: false } }); }
     catch { /* best-effort */ }
     setResetKey((k) => k + 1); // remount Inner fresh against purged + reset state
   }, [patch]);

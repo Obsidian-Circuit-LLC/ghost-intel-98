@@ -396,6 +396,8 @@ export interface GhostApi {
     addMonitor(id: string): Promise<string[]>;
     /** Remove a single id from the pinned set; persisted. Returns the updated list. */
     removeMonitor(id: string): Promise<string[]>;
+    /** Returns true when the background Tor circuit is bootstrapped and the ga98cctv:// proxy is usable. */
+    cctvTorReady(): Promise<boolean>;
   };
   markets: {
     fetch(): Promise<MarketSnapshot>;
@@ -524,6 +526,9 @@ export interface GhostApi {
     favicon(name: string): Promise<string | null>;
     addCustomSite(input: { name: string; url: string; category?: string }): Promise<{ ok: boolean; reason?: string }>;
     exportSites(): Promise<string>;
+    /** Export the current sweep results as a PDF using Electron's printToPDF (dep-free).
+     *  Shows a native save dialog. Returns `{ ok: false }` if the user cancels. */
+    exportPdf(args: { html: string; filename: string }): Promise<{ ok: boolean }>;
   };
 }
 

@@ -309,7 +309,8 @@ const api = {
     getMonitors: () => ipcRenderer.invoke(channels.geoint.getMonitors),
     setMonitors: (ids: string[]) => ipcRenderer.invoke(channels.geoint.setMonitors, ids),
     addMonitor: (id: string) => ipcRenderer.invoke(channels.geoint.addMonitor, id),
-    removeMonitor: (id: string) => ipcRenderer.invoke(channels.geoint.removeMonitor, id)
+    removeMonitor: (id: string) => ipcRenderer.invoke(channels.geoint.removeMonitor, id),
+    cctvTorReady: () => ipcRenderer.invoke(channels.geoint.cctvTorReady)
   },
   markets: {
     fetch: () => ipcRenderer.invoke(channels.markets.fetch)
@@ -459,7 +460,8 @@ const api = {
     },
     favicon: (name: string) => ipcRenderer.invoke(channels.searchlight.favicon, name),
     addCustomSite: (i: { name: string; url: string; category?: string }) => ipcRenderer.invoke(channels.searchlight.addCustomSite, i),
-    exportSites: () => ipcRenderer.invoke(channels.searchlight.exportSites)
+    exportSites: () => ipcRenderer.invoke(channels.searchlight.exportSites),
+    exportPdf: (args: { html: string; filename: string }) => ipcRenderer.invoke(channels.searchlight.exportPdf, args)
   }
 } as const;
 

@@ -35,9 +35,11 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`GhostIntel98-Setup-3.20.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
+> **Install:** download [`GhostIntel98-Setup-3.21.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
 
 ## Status
+
+**v3.21.0** — **Batch 2 refinements — plus CCTV-over-Tor streaming.** Searchlight gains midnight-purple readability, the **SEARCHLIGHT** rename (Dashboard + report headers), a **dependency-free PDF report export** (native `printToPDF` — report export, not an in-app viewer), and a **Load Custom DB** button (the full Maigret corpus is already bundled). GeoINT adds a per-row **remove** button to Monitored Situations and a new **Settings → GeoINT** pane surfacing the encrypted **AIS API key**; the keyless **ADS-B** aircraft feed **remains active** and now **retries with exponential back-off**, surfacing a readable status instead of a raw HTTP 429 (the earlier error was ADS-B rate-limiting, not AIS). The headline: **view CCTV streams over Tor** — a `ga98cctv://` privileged-scheme proxy routes camera streams (HLS / HTTP / MJPEG / MP4) through a main-process Tor SOCKS handler, no direct CDN egress, HLS manifests rewritten in-proxy (with body content-sniffing so a hostile host can't bypass it); YouTube/webpages/RTSP are not Tor-routable and show a notice instead of clearnet; **TOR NOT READY** with no fallback when Tor is down; the `<webview>` lockdown is untouched. Built subagent-driven (Tasks 1–5 + redesign R1–R4) with a parallel **adversarial whole-branch review** that caught and fixed an HLS-deanonymization hole before merge. **1,393 automated tests** green; typecheck + build clean. *Everything from v3.20.0 carries forward.*
 
 **v3.20.0** — **Searchlight, refined: the full Maigret corpus, offline favicons, and your own sites.** Searchlight now ships the **complete 3,166-site Maigret database** — engine-backed sites are resolved at parse time, so the ~1,000 sites that inherit their check logic from a shared engine probe correctly instead of returning false negatives. Each result can show the site's **favicon** from a **bundled offline snapshot** (~1,270 icons) — zero runtime egress, no third-party favicon proxy. Add individual sites with a one-field **Add custom site** form (persisted encrypted, exportable as `sites.json`). A dedicated **Settings → Searchlight** pane holds the master network toggle (still **off by default**), and Searchlight now appears in the **Start menu** with a first-run intro card. The **Whiteboard** tab was **removed** (and its `react-rnd` dependency dropped); dropdowns and report buttons are restyled midnight-purple for readability on the dark canvas. **GeoINT** now opens its timeline on **all events** (the scrubber still works) and supports **right-click → Add to Monitor** on any situation-feed item, persisted across sessions through the vault. **EyeSpy** Add-Stream now takes **latitude / longitude**, which flow into the master CCTV export. Built subagent-driven over 14 TDD tasks with a parallel **adversarial whole-branch review** that caught and fixed an engine-placeholder probe bug before merge. **1,336 automated tests.** *Everything from v3.19.0 carries forward.*
 
@@ -444,7 +446,7 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases) and run it.
 
-Direct link to the current release: [`GhostIntel98-Setup-3.20.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.20.0/GhostIntel98-Setup-3.20.0.exe)
+Direct link to the current release: [`GhostIntel98-Setup-3.21.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.21.0/GhostIntel98-Setup-3.21.0.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is **formally verified internally** — symbolic (ProVerif) +
 computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not**
 FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.6.8/GhostIntel98-Setup-3.6.8.exe).
@@ -452,7 +454,7 @@ FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Se
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\GhostIntel98-Setup-3.20.0.exe -Algorithm SHA256
+Get-FileHash .\GhostIntel98-Setup-3.21.0.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 

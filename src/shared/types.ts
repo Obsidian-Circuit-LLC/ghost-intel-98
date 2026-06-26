@@ -416,6 +416,10 @@ export interface AppSettings {
     newsStreams: { label: string; url: string; kind: 'hls' | 'youtube' }[];
     /** Index of the active stream in newsStreams. */
     newsStreamIndex: number;
+    /** When true, CCTV streams in EyeSpy are routed through the ga98cctv:// main-side Tor proxy.
+     *  A camera that cannot be reached over Tor will not load (no clearnet fallback).
+     *  Off by default — live video over Tor is slow. */
+    cctvOverTor: boolean;
   };
   markets: {
     /** Master opt-in egress gate for the Markets module. Off by default ⇒ no quote is fetched. */
@@ -576,7 +580,8 @@ export const defaultSettings: AppSettings = {
     tileAttribution: '',
     basemap: 'street',
     newsStreams: [{ label: 'Bloomberg TV', url: 'https://www.bloomberg.com/media-manifest/streams/us.m3u8', kind: 'hls' }],
-    newsStreamIndex: 0
+    newsStreamIndex: 0,
+    cctvOverTor: false
   },
   markets: {
     networkEnabled: false,

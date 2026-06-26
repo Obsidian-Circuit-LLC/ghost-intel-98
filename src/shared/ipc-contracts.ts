@@ -276,7 +276,8 @@ export const channels = {
     getMonitors: 'geoint:getMonitors',
     setMonitors: 'geoint:setMonitors',
     addMonitor: 'geoint:addMonitor',
-    removeMonitor: 'geoint:removeMonitor'
+    removeMonitor: 'geoint:removeMonitor',
+    cctvTorReady: 'geoint:cctvTorReady'
   },
   markets: {
     fetch: 'markets:fetch'
@@ -398,7 +399,8 @@ export const channels = {
     onSweepDone: 'searchlight:onSweepDone',
     favicon: 'searchlight:favicon',
     addCustomSite: 'searchlight:addCustomSite',
-    exportSites: 'searchlight:exportSites'
+    exportSites: 'searchlight:exportSites',
+    exportPdf: 'searchlight:exportPdf'
   }
 } as const;
 
@@ -521,6 +523,7 @@ export interface ApiContracts {
   [channels.geoint.setMonitors]: { args: [string[]]; returns: void };
   [channels.geoint.addMonitor]: { args: [string]; returns: string[] };
   [channels.geoint.removeMonitor]: { args: [string]; returns: string[] };
+  [channels.geoint.cctvTorReady]: { args: []; returns: boolean };
 
   [channels.markets.fetch]: { args: []; returns: MarketSnapshot };
 
@@ -596,6 +599,7 @@ export interface ApiContracts {
   [channels.searchlight.favicon]: { args: [name: string]; returns: string | null };
   [channels.searchlight.addCustomSite]: { args: [{ name: string; url: string; category?: string }]; returns: { ok: boolean; reason?: string } };
   [channels.searchlight.exportSites]: { args: []; returns: string };
+  [channels.searchlight.exportPdf]: { args: [{ html: string; filename: string }]; returns: { ok: boolean } };
 }
 
 export const BGCONN_LOCK_EXEMPT_CHANNELS = ['bgconn:status', 'bgconn:stop'] as const;
