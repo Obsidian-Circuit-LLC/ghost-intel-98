@@ -1394,6 +1394,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.socmint.startMonitor, (...a) =>
     handleStartMonitor(a[0], {
       networkEnabled: async () => (await settingsStore.read()).socmint.networkEnabled,
+      transport: async () => (await settingsStore.read()).socmint.transport,
       collectorFactory: makeMtcuteCollector,
     }));
   safeHandle(channels.socmint.stopMonitor, (...a) =>

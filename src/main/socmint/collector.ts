@@ -6,22 +6,22 @@
  *     it decouples the rest of the SOCMINT pipeline from the concrete MTProto library.
  *   - MockCollector is a deterministic, in-memory implementation for tests and dev.
  *     It exposes push() so callers can inject items into active subscribers.
- *   - makeMtcuteCollector builds the correct proxy-config shape from burnerProxyConfig
- *     (so it inherits the Tor-required invariant), but the actual @mtcute/node import
- *     is a sealed seam: connect() throws a clear "not installed" error until the
- *     operator completes the live smoke test and pins the dependency (spec §7).
+ *   - makeMtcuteCollector receives a pre-resolved SocmintTransport (resolved at the
+ *     egress boundary in handleStartMonitor, not here). In 'tor' mode the transport
+ *     was already validated (threw SocmintTorUnavailableError if Tor was down) before
+ *     the collector is constructed. In 'direct' mode it is the operator's explicit
+ *     clearnet choice. connect() is still a sealed seam: it throws 'not installed'
+ *     until the operator completes the live smoke test and pins the dependency (spec §7).
  *
- * Global constraints enforced here:
- *   - Tor-required: connect() calls burnerProxyConfig() which throws
- *     SocmintTorUnavailableError if the bgconn Tor is not bootstrapped. Never
- *     returns a clearnet / no-proxy config.
- *   - Per-burner SOCKS isolation: distinct burnerId → distinct (user, pass) via
- *     deriveBurnerCredentials — Tor's IsolateSOCKSAuth gives each its own circuit.
+ * Global constraints:
+ *   - Transport is resolved by the caller at the egress boundary, not here.
+ *   - Per-burner SOCKS isolation: in 'tor' mode, opts.transport.proxy carries the
+ *     per-burner SOCKS5 creds derived by burnerProxyConfig (IsolateSOCKSAuth isolation).
  *   - No static @mtcute/* import anywhere in this file.
  */
 
 import type { HarvestedItem, MonitoredChannel } from '@shared/socmint/types';
-import { burnerProxyConfig } from './tor-identity';
+import type { SocmintTransport } from './tor-identity';
 
 // ---------------------------------------------------------------------------
 // Interface + events
@@ -97,36 +97,37 @@ export class MockCollector implements SocmintCollector {
 /**
  * Build an mtcute-backed SocmintCollector for the given burner identity.
  *
- * Proxy config is derived via burnerProxyConfig(burnerId) inside connect(), so:
- *   - Tor must be bootstrapped when connect() is called (throws SocmintTorUnavailableError otherwise).
- *   - Distinct burnerIds get distinct SOCKS5 (user, pass) creds — IsolateSOCKSAuth isolation.
+ * Transport is pre-resolved by the caller at the egress boundary (handleStartMonitor).
+ * In 'tor' mode, resolveTransport already validated Tor (threw SocmintTorUnavailableError
+ * if down) and opts.transport.proxy carries the per-burner SOCKS5 config.
+ * In 'direct' mode, this is the operator's explicit clearnet choice — never an automatic
+ * fallback.
  *
  * The @mtcute/node import is lazy and guarded (no static import exists in this module).
  * connect() throws 'SOCMINT: Telegram library not installed — pending operator smoke test +
  * library lock (spec §7)' until the operator has run the live smoke test and pinned the dep.
  *
  * Post-operator-lock TODO (spec §7.3):
- *   const transport = new lib.SocksProxyTcpTransport({
- *     host: proxy.host, port: proxy.port, version: proxy.version,
- *     user: proxy.user, password: proxy.password,
- *   });
- *   const client = new lib.TelegramClient({ transport: () => transport, ... });
+ *   tor  → new SocksProxyTcpTransport(opts.transport.proxy)
+ *   direct → default TCP transport
  */
 export function makeMtcuteCollector(opts: {
   burnerId: string;
+  transport: SocmintTransport;
   harvestedAt: () => string;
 }): SocmintCollector {
   return {
     async connect(): Promise<void> {
-      // Tor-required: throws SocmintTorUnavailableError if bgconn Tor is not bootstrapped.
-      // Never proceeds to a clearnet dial.  Mirrors cctv-proxy.ts 503-on-Tor-down.
-      // The return value is used post-lock to wire the SOCKS5 transport (spec §7.3).
-      burnerProxyConfig(opts.burnerId);
+      // Transport is pre-resolved at the egress boundary by the caller; in 'tor' mode
+      // resolveTransport already threw SocmintTorUnavailableError when Tor was down.
+      // opts.transport.proxy carries the SOCKS5 config for post-lock wiring (spec §7.3).
+      // 'direct' mode is an operator-chosen explicit clearnet dial — never a silent fallback.
+      void opts; // opts.burnerId + opts.transport used post-lock (spec §7.3); referenced here to satisfy TS.
 
       // Sealed seam: lazy guarded import — no static @mtcute/* import exists anywhere.
-      // Post-lock proxy config shape (spec §7.3):
-      //   { host: '127.0.0.1', port: <bgconn socksPort>, version: 5, user, password }
-      // → new SocksProxyTcpTransport({ host, port, version:5, user, password })
+      // Post-lock transport wiring (spec §7.3):
+      //   tor: new SocksProxyTcpTransport(opts.transport.proxy)
+      //   direct: default TCP transport
       try {
         // @ts-expect-error: @mtcute/node is intentionally absent — sealed seam pending operator smoke test (spec §7)
         await import('@mtcute/node');

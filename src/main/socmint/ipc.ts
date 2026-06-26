@@ -28,12 +28,13 @@ import { randomUUID } from 'node:crypto';
 import type { HarvestedItem, MonitoredChannel } from '@shared/socmint/types';
 import type { ItemLabel } from './labels';
 import type { SocmintCollector } from './collector';
+import { resolveTransport, type SocmintTransport } from './tor-identity';
 
 // ---------------------------------------------------------------------------
 // CollectorFactory type — injected by register.ts; injectable for gate tests.
 // ---------------------------------------------------------------------------
 
-export type CollectorFactory = (opts: { burnerId: string; harvestedAt: () => string }) => SocmintCollector;
+export type CollectorFactory = (opts: { burnerId: string; transport: SocmintTransport; harvestedAt: () => string }) => SocmintCollector;
 
 // ---------------------------------------------------------------------------
 // Monitored-channel sidecar (lazy secure-fs, per case)
@@ -136,7 +137,11 @@ export async function handleRankItems(caseId: string, keyword: string): Promise<
   const { rankByRelevance } = await import('./rank');
   const items = await listItems(caseId);
   if (items.length === 0) return [];
-  return rankByRelevance(keyword, items);
+  const ranked = await rankByRelevance(keyword, items);
+  const { recordJob } = await import('./store');
+  const { EMBED_MODEL } = await import('../services/memory/embeddings');
+  await recordJob(caseId, { jobId: randomUUID(), caseId, startedAt: new Date().toISOString(), model: EMBED_MODEL, runtime: 'ollama' });
+  return ranked;
 }
 
 // ---------------------------------------------------------------------------
@@ -227,17 +232,23 @@ const activeJobs = new Map<string, { burnerId: string; caseId: string }>();
  * a collector or touching Tor — when settings.socmint.networkEnabled is false.
  * Callers inject `deps` so this function is independently testable (gate test).
  *
- * When the gate is open, the collector is constructed (which validates Tor via
- * burnerProxyConfig in the sealed adapter). In v1 the sealed seam means connect()
- * throws "not installed" until the operator pins the library (spec §7).
+ * When the gate is open, transport is resolved AT THE EGRESS BOUNDARY via
+ * resolveTransport(). In 'tor' mode this THROWS SocmintTorUnavailableError when
+ * Tor is down — never a silent clearnet fallback. In 'direct' mode this is the
+ * operator's explicit clearnet choice (settings.socmint.transport='direct').
  *
- * @param rawReq   { caseId, burnerId, channelIds, keywords? }
- * @param deps     { networkEnabled, collectorFactory } — injectable for tests
+ * The collector is then constructed with the resolved transport. connect() is the
+ * sealed seam in v1 and is NOT called here; in 'tor' mode Tor was already validated
+ * above via resolveTransport. No invariant is asserted that the code does not enforce.
+ *
+ * @param rawReq   { caseId, burnerId, channelIds?, keywords? }
+ * @param deps     { networkEnabled, transport, collectorFactory } — injectable for tests
  */
 export async function handleStartMonitor(
   rawReq: unknown,
   deps: {
     networkEnabled: () => Promise<boolean>;
+    transport: () => Promise<'direct' | 'tor'>;
     collectorFactory: CollectorFactory;
   },
 ): Promise<{ disabled: true } | { started: true; jobId: string }> {
@@ -245,16 +256,21 @@ export async function handleStartMonitor(
   if (!await deps.networkEnabled()) return { disabled: true };
 
   const req = (rawReq ?? {}) as Record<string, unknown>;
-  const burnerId = typeof req.burnerId === 'string' ? req.burnerId.trim() : '';
-  const caseId  = typeof req.caseId  === 'string' ? req.caseId.trim()  : '';
-  if (!burnerId) throw new Error('socmint:startMonitor requires burnerId');
-  if (!caseId)   throw new Error('socmint:startMonitor requires caseId');
+  const { ensureUuid } = await import('../security/validate');
+  const caseId = ensureUuid(req.caseId, 'caseId'); // trust boundary, matches sibling handlers
+  const rawBurner = typeof req.burnerId === 'string' ? req.burnerId.trim() : '';
+  if (!rawBurner) throw new Error('socmint:startMonitor requires burnerId');
+  const burnerId = rawBurner.replace(/[/\\]/g, '_'); // basename-sanitise (secretStore key safety)
 
-  // Construct the collector (validates proxy config; inherits Tor-required invariant
-  // from burnerProxyConfig inside the collector). connect() is a sealed seam in v1
-  // and is NOT called here — the factory call is sufficient to validate the burner
-  // credentials and Tor availability at construction time for the gate test.
-  deps.collectorFactory({ burnerId, harvestedAt: () => new Date().toISOString() });
+  // Resolve transport AT THE EGRESS BOUNDARY. In 'tor' mode this THROWS
+  // SocmintTorUnavailableError when Tor is down — never a silent clearnet fallback.
+  // In 'direct' mode this is the operator's explicit clearnet choice.
+  const transport = resolveTransport(burnerId, await deps.transport());
+
+  // Construct the collector with the resolved transport. connect() is the sealed seam in
+  // v1 (throws 'not installed') and is NOT called here; in 'tor' mode Tor was already
+  // validated above. No invariant is asserted that the code does not actually enforce.
+  deps.collectorFactory({ burnerId, transport, harvestedAt: () => new Date().toISOString() });
 
   const jobId = randomUUID();
   activeJobs.set(jobId, { burnerId, caseId });

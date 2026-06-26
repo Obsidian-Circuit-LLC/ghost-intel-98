@@ -4,10 +4,16 @@
  * Tests:
  *  1. MockCollector: connect/join/backfill/subscribe/unsubscribe/disconnect.
  *  2. makeMtcuteCollector: connect() rejects with the sealed-seam message when
- *     @mtcute/node is absent (it is always absent in this build).
- *  3. makeMtcuteCollector: burnerProxyConfig carries version:5 and per-burner creds.
- *  4. makeMtcuteCollector: connect() throws SocmintTorUnavailableError when Tor is
- *     not bootstrapped (Tor-required invariant).
+ *     @mtcute/node is absent (it is always absent in this build). This is true
+ *     regardless of transport — Tor resolution moved out of connect() to
+ *     resolveTransport() at the egress boundary (handleStartMonitor).
+ *  3. burnerProxyConfig carries version:5 and per-burner creds (called directly,
+ *     not via collector).
+ *
+ * Note: The Tor-down behavior for the collector (previously tested as
+ * "connect() throws SocmintTorUnavailableError") is no longer valid — transport
+ * resolution was moved to resolveTransport() at the egress boundary. Those
+ * invariants are now covered by resolveTransport tests in socmint-tor-identity.test.ts.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -17,7 +23,6 @@ import { MockCollector, makeMtcuteCollector } from '../src/main/socmint/collecto
 import {
   deriveBurnerCredentials,
   burnerProxyConfig,
-  SocmintTorUnavailableError,
 } from '../src/main/socmint/tor-identity';
 import type { HarvestedItem } from '../src/shared/socmint/types';
 
@@ -197,9 +202,10 @@ describe('makeMtcuteCollector — sealed seam', () => {
     _resetBgTorForTest();
   });
 
-  it('connect() rejects with the sealed-seam error message', async () => {
+  it('connect() rejects with the sealed-seam error message (direct transport)', async () => {
     const collector = makeMtcuteCollector({
       burnerId: 'test-burner',
+      transport: { mode: 'direct' },
       harvestedAt: () => new Date().toISOString(),
     });
     await expect(collector.connect()).rejects.toThrow(
@@ -207,12 +213,25 @@ describe('makeMtcuteCollector — sealed seam', () => {
     );
   });
 
-  it('connect() rejects with an Error instance', async () => {
+  it('connect() rejects with an Error instance (direct transport)', async () => {
     const collector = makeMtcuteCollector({
       burnerId: 'test-burner',
+      transport: { mode: 'direct' },
       harvestedAt: () => '',
     });
     await expect(collector.connect()).rejects.toBeInstanceOf(Error);
+  });
+
+  it('connect() rejects with the sealed-seam error message (tor transport)', async () => {
+    const proxy = burnerProxyConfig('test-burner-tor');
+    const collector = makeMtcuteCollector({
+      burnerId: 'test-burner-tor',
+      transport: { mode: 'tor', proxy },
+      harvestedAt: () => '',
+    });
+    await expect(collector.connect()).rejects.toThrow(
+      'SOCMINT: Telegram library not installed — pending operator smoke test + library lock (spec §7)',
+    );
   });
 
   it('proxy config has version:5 and the correct host for the given burnerId', () => {
@@ -239,45 +258,5 @@ describe('makeMtcuteCollector — sealed seam', () => {
     // Both still share the same loopback SOCKS port.
     expect(cfg1.port).toBe(9999);
     expect(cfg2.port).toBe(9999);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// makeMtcuteCollector — Tor-required invariant
-// ---------------------------------------------------------------------------
-
-describe('makeMtcuteCollector — Tor not bootstrapped', () => {
-  beforeEach(() => {
-    setBgTor(makeMockTor(false, 9999));
-  });
-
-  afterEach(() => {
-    _resetBgTorForTest();
-  });
-
-  it('connect() throws SocmintTorUnavailableError — never falls back to clearnet', async () => {
-    const collector = makeMtcuteCollector({
-      burnerId: 'test-burner',
-      harvestedAt: () => '',
-    });
-    await expect(collector.connect()).rejects.toThrow(SocmintTorUnavailableError);
-  });
-});
-
-describe('makeMtcuteCollector — no Tor instance', () => {
-  beforeEach(() => {
-    _resetBgTorForTest();
-  });
-
-  afterEach(() => {
-    _resetBgTorForTest();
-  });
-
-  it('connect() throws SocmintTorUnavailableError when getBgTor() returns null', async () => {
-    const collector = makeMtcuteCollector({
-      burnerId: 'test-burner',
-      harvestedAt: () => '',
-    });
-    await expect(collector.connect()).rejects.toThrow(SocmintTorUnavailableError);
   });
 });

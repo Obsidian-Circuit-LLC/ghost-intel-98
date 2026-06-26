@@ -31,27 +31,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { HarvestedItem, MonitoredChannel } from '@shared/socmint/types';
 import { useSettings } from '../../state/store';
+import { safeHref } from './safe-href';
 import './socmint.css';
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Scheme-guard: returns a safe href string for http/https URLs, null for all others.
- * This is the sole XSS choke-point for URL rendering. Any non-http(s) value —
- * including javascript:, data:, file:, or unparseable strings — returns null and
- * the caller must render the URL as plain text with no anchor element.
- */
-function safeHref(url: string): string | null {
-  try {
-    const u = new URL(url);
-    if (u.protocol === 'http:' || u.protocol === 'https:') return u.href;
-    return null;
-  } catch {
-    return null;
-  }
-}
 
 // ---------------------------------------------------------------------------
 // ChannelsPanel
