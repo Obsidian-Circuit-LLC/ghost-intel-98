@@ -556,7 +556,7 @@ function SearchlightPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppS
   );
 }
 
-function GeoINTPane({ s: _s, patch: _patch }: { s: AppSettings; patch: (p: Partial<AppSettings>) => Promise<void> }): JSX.Element {
+function GeoINTPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSettings>) => Promise<void> }): JSX.Element {
   const [aisKeyDraft, setAisKeyDraft] = useState('');
   const [hasKey, setHasKey] = useState<boolean>(false);
   const [saving, setSaving] = useState(false);
@@ -612,7 +612,20 @@ function GeoINTPane({ s: _s, patch: _patch }: { s: AppSettings; patch: (p: Parti
           The ADS-B aircraft feed needs no key.
         </p>
       </div>
-      {/* CCTV-over-Tor toggle added in Task 6 */}
+      <div style={{ marginTop: 8 }}>
+        <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={s.geoint.cctvOverTor}
+            onChange={(e) => void patch({ geoint: { ...s.geoint, cctvOverTor: e.target.checked } })}
+            style={{ marginTop: 2 }}
+          />
+          <span>
+            Route CCTV streams through Tor (off by default). When on, a camera that can't be
+            reached over Tor will not load rather than expose your IP. Live video over Tor may be slow.
+          </span>
+        </label>
+      </div>
     </fieldset>
   );
 }

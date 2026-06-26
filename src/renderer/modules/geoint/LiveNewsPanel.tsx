@@ -93,6 +93,7 @@ export function LiveNewsPanel(): JSX.Element {
         basemap: g?.basemap ?? 'street',
         newsStreams: streams,
         newsStreamIndex: index,
+        cctvOverTor: g?.cctvOverTor ?? false,
         ...p
       }
     });
