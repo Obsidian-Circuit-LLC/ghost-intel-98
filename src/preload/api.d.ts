@@ -524,6 +524,9 @@ export interface GhostApi {
     favicon(name: string): Promise<string | null>;
     addCustomSite(input: { name: string; url: string; category?: string }): Promise<{ ok: boolean; reason?: string }>;
     exportSites(): Promise<string>;
+    /** Export the current sweep results as a PDF using Electron's printToPDF (dep-free).
+     *  Shows a native save dialog. Returns `{ ok: false }` if the user cancels. */
+    exportPdf(args: { html: string; filename: string }): Promise<{ ok: boolean }>;
   };
 }
 

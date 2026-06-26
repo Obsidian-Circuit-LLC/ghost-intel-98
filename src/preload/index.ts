@@ -459,7 +459,8 @@ const api = {
     },
     favicon: (name: string) => ipcRenderer.invoke(channels.searchlight.favicon, name),
     addCustomSite: (i: { name: string; url: string; category?: string }) => ipcRenderer.invoke(channels.searchlight.addCustomSite, i),
-    exportSites: () => ipcRenderer.invoke(channels.searchlight.exportSites)
+    exportSites: () => ipcRenderer.invoke(channels.searchlight.exportSites),
+    exportPdf: (args: { html: string; filename: string }) => ipcRenderer.invoke(channels.searchlight.exportPdf, args)
   }
 } as const;
 

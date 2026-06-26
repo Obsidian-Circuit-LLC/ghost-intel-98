@@ -193,11 +193,17 @@ export function ReportsPanel(): JSX.Element {
     });
   };
 
-  const exportAs = (format: 'html' | 'csv' | 'json' | 'txt') => {
+  const exportAs = async (format: 'html' | 'csv' | 'json' | 'txt' | 'pdf') => {
     if (!activeCase || !allResults.length) return;
     const name = activeCase.name;
     const ts = Date.now();
     const slug = name.replace(/\s+/g, '_');
+
+    if (format === 'pdf') {
+      const html = generateHTML(name, allResults);
+      await window.api.searchlight.exportPdf({ html, filename: `searchlight_${slug}_${ts}.pdf` });
+      return;
+    }
 
     const map: Record<'html' | 'csv' | 'json' | 'txt', { content: string; filename: string; mime: string }> = {
       html: {
@@ -289,6 +295,7 @@ export function ReportsPanel(): JSX.Element {
                 { format: 'csv'  as const, label: 'CSV SPREADSHEET', icon: '≡', desc: 'Comma-separated'      },
                 { format: 'json' as const, label: 'JSON DATA',        icon: '{}',desc: 'Structured data'      },
                 { format: 'txt'  as const, label: 'TXT REPORT',       icon: '≣', desc: 'Plain text'           },
+                { format: 'pdf'  as const, label: 'PDF REPORT',       icon: '⎙', desc: 'Printable document'   },
               ] as const
             ).map(({ format, label, icon, desc }) => (
               <button

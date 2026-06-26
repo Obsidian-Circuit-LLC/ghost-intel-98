@@ -96,6 +96,7 @@ import * as ais from '../services/livefeeds/ais-stream';
 import * as slSiteDb from '../searchlight/site-db';
 import * as slStore from '../searchlight/store';
 import { startSweep, cancelSweep } from '../searchlight/sweep';
+import { exportSweepPdf } from '../searchlight/export-pdf';
 import { getBgTor } from '../bgconn/tor-singleton';
 import * as geointMonitor from '../services/geoint-monitor';
 
@@ -1356,6 +1357,10 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     return slSiteDb.addCustomSite({ name: String(o.name ?? ''), url: String(o.url ?? ''), category: o.category ? String(o.category) : undefined });
   });
   safeHandle(channels.searchlight.exportSites, async () => slSiteDb.exportCustomSitesJson());
+  safeHandle(channels.searchlight.exportPdf, async (...a) => {
+    const o = ((a[0] ?? {}) as Record<string, unknown>);
+    return exportSweepPdf(String(o.html ?? ''), String(o.filename ?? 'searchlight-report.pdf'));
+  });
 
   startMailPoller(getWindow);
 }
