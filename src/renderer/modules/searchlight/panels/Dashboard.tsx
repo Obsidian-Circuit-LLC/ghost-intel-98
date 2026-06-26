@@ -52,8 +52,7 @@ export function Dashboard({ onNavigate }: DashboardProps): JSX.Element {
       <div className="sl-dash-header">
         <div className="sl-rp-header-eyebrow">// INTELLIGENCE PLATFORM</div>
         <div className="sl-dash-title">
-          GHOST INTEL{' '}
-          <span className="sl-dash-title-accent">USERNAME SWEEPER</span>
+          <span className="sl-dash-title-accent">SEARCHLIGHT</span>
         </div>
       </div>
 

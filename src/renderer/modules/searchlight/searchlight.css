@@ -93,7 +93,7 @@
 .sl-sweep-toolbar {
   flex-shrink: 0;
   padding: 10px 14px 8px;
-  background: #0d0d1a;
+  background: #0e0a1a;
   border-bottom: 1px solid #1a2040;
 }
 
@@ -113,16 +113,17 @@
 
 .sl-sweep-input {
   flex: 1;
-  background: #070710;
-  border: 1px inset #333355;
-  color: #00e5ff;
+  background: #0a0814;
+  border: 1px inset #5d3a7d;
+  color: #d8c8ff;
   font-family: 'Share Tech Mono', monospace;
   font-size: 13px;
   padding: 3px 8px;
   outline: none;
   min-width: 0;
 }
-.sl-sweep-input:focus { border-color: #1a6fff; }
+.sl-sweep-input::placeholder { color: #7a6aa0; }
+.sl-sweep-input:focus { border-color: #7d5aad; }
 .sl-sweep-input:disabled { opacity: 0.5; }
 
 /* Win98-flavored buttons */
@@ -300,15 +301,16 @@
 
 .sl-sweep-search {
   width: 160px;
-  background: #070710;
-  border: 1px inset #1a2040;
-  color: #c0d0e0;
+  background: #0a0814;
+  border: 1px inset #5d3a7d;
+  color: #d8c8ff;
   font-family: 'Share Tech Mono', monospace;
   font-size: 11px;
   padding: 3px 7px;
   outline: none;
 }
-.sl-sweep-search:focus { border-color: #1a4080; }
+.sl-sweep-search::placeholder { color: #7a6aa0; }
+.sl-sweep-search:focus { border-color: #7d5aad; }
 
 .sl-sweep-bucket {
   font-family: 'Share Tech Mono', monospace;
