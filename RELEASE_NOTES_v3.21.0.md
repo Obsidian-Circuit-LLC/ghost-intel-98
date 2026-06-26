@@ -26,7 +26,7 @@
 
 ## Quality
 
-- **1,301 automated tests** green (down slightly from 3.20.0 due to test consolidation); typecheck + build clean.
+- **1,386 automated tests** green (up from 3.20.0's 1,336); typecheck + build clean.
 - Implemented as subagent-driven batch (Tasks R1–R4) with whole-branch review on R1–R3.
 
 ## Verify the download (unsigned)
