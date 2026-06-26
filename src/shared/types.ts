@@ -467,6 +467,13 @@ export interface AppSettings {
     torConcurrency: number;
     clearnetConcurrency: number;
   };
+  /** SOCMINT collector (Telegram v1). Off by default ⇒ no egress is initiated,
+   *  no collector is constructed, and no Tor circuit is requested. */
+  socmint: {
+    /** Master opt-in egress gate. When false (default) no collector connects and
+     *  no Tor circuit is requested. App-layer enforced at the IPC boundary. */
+    networkEnabled: boolean;
+  };
 }
 
 export const defaultShortcuts: AccessShortcut[] = [
@@ -594,6 +601,7 @@ export const defaultSettings: AppSettings = {
   },
   chat: { networkEnabled: false },
   searchlight: { networkEnabled: false, torConcurrency: 8, clearnetConcurrency: 16 },
+  socmint: { networkEnabled: false },
   plugins: {},
   offensive: { confirmMode: 'per-scan', rateLimitPerSec: 10, downstreamProxy: null, requireSignedAuthorization: false, issuerKeys: [] },
   bgconn: { idleTeardownAfterMinutes: 120, defaultRouting: 'tor', maxReconnects: 20, maxSessionAgeMinutes: 720 }
