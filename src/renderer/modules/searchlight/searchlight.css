@@ -113,17 +113,17 @@
 
 .sl-sweep-input {
   flex: 1;
-  background: #0a0814;
+  background: #e9e1f5;
   border: 1px inset #5d3a7d;
-  color: #d8c8ff;
+  color: #000;
   font-family: 'Share Tech Mono', monospace;
   font-size: 13px;
   padding: 3px 8px;
   outline: none;
   min-width: 0;
 }
-.sl-sweep-input::placeholder { color: #7a6aa0; }
-.sl-sweep-input:focus { border-color: #7d5aad; }
+.sl-sweep-input::placeholder { color: #6a5a85; }
+.sl-sweep-input:focus { border-color: #7d5aad; background: #f3eefb; }
 .sl-sweep-input:disabled { opacity: 0.5; }
 
 /* Win98-flavored buttons */
@@ -338,6 +338,7 @@
 .sl-sweep-results {
   flex: 1;
   overflow: auto;
+  background: #1e0f33;
 }
 
 .sl-sweep-empty {
@@ -358,7 +359,7 @@
   font-size: 12px;
 }
 
-.sl-sweep-thead-row { background: #0d0d1a; position: sticky; top: 0; z-index: 10; }
+.sl-sweep-thead-row { background: #15092a; position: sticky; top: 0; z-index: 10; }
 
 .sl-sweep-th {
   padding: 6px 10px;
