@@ -272,7 +272,16 @@ function GeoIntModuleInner(): JSX.Element {
         const result = await window.api.livefeeds.fetchAdsb(bbox);
         setAircraft(result as AircraftPos[]);
       } catch (e) {
-        toast.warn(`ADS-B fetch failed: ${(e as Error).message}`);
+        // Map AdsbError kind (serialised as a string message across the IPC bridge) to
+        // readable user-facing copy instead of the raw "Error invoking remote method" text.
+        const msg: string = (e as Error).message ?? '';
+        if (msg.includes('rate-limited') || msg.includes('429')) {
+          toast.warn('ADS-B rate-limited — retrying');
+        } else if (msg.includes('unavailable') || msg.includes('AdsbError')) {
+          toast.warn('ADS-B feed unavailable');
+        } else {
+          toast.warn(`ADS-B fetch failed: ${msg}`);
+        }
       }
     };
     adsbFetchRef.current = () => { void doFetch(); };
