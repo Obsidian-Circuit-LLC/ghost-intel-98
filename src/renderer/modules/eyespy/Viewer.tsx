@@ -2,7 +2,7 @@ import Hls from 'hls.js';
 import { useEffect, useRef, useState } from 'react';
 import type { CameraStream } from '@shared/post-mvp-types';
 import { parseYouTubeId, youtubeEmbedSrc } from '@shared/youtube';
-import { cctvProxyUrl, tryCctvProxyUrl, cctvRoutableKind } from '@shared/cctv/proxy';
+import { tryCctvProxyUrl, cctvRoutableKind } from '@shared/cctv/proxy';
 import { toast } from '../../state/toasts';
 import { useSettings } from '../../state/store';
 
@@ -77,7 +77,17 @@ export function Viewer({ stream, poster = false, refreshNonce = 0 }: { stream: C
       if (torReady === null || torReady === false) return;
     }
 
-    const src = cctvOverTor && torReady ? cctvProxyUrl(stream.url) : stream.url;
+    // Use tryCctvProxyUrl (never-throwing variant) so a malformed/scheme-less HLS URL
+    // cannot throw in the effect's commit phase and unmount the React tree.
+    // The render path below shows BadStreamUrl when proxied is null.
+    let src: string;
+    if (cctvOverTor && torReady) {
+      const proxied = tryCctvProxyUrl(stream.url);
+      if (proxied === null) return; // bad URL — bail; render path will show BadStreamUrl
+      src = proxied;
+    } else {
+      src = stream.url;
+    }
 
     if (Hls.isSupported()) {
       const hls = new Hls();
@@ -212,6 +222,10 @@ export function Viewer({ stream, poster = false, refreshNonce = 0 }: { stream: C
   if (cctvOverTor) {
     if (torReady === null) return <div style={{ ...MEDIA_STYLE, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ad', fontSize: 11 }}>Checking Tor…</div>;
     if (!torReady) return <TorNotReady />;
+    // URL validation mirrors the effect guard: tryCctvProxyUrl returns null for
+    // non-http(s) or malformed URLs.  Show BadStreamUrl so the user gets feedback
+    // instead of a blank video element.
+    if (tryCctvProxyUrl(stream.url) === null) return <BadStreamUrl />;
   }
 
   return <video ref={videoRef} controls autoPlay muted style={MEDIA_STYLE} />;
