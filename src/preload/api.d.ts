@@ -396,11 +396,6 @@ export interface GhostApi {
     addMonitor(id: string): Promise<string[]>;
     /** Remove a single id from the pinned set; persisted. Returns the updated list. */
     removeMonitor(id: string): Promise<string[]>;
-    /** Apply (or clear) the Tor SOCKS proxy on the persist:cctv-tor partition before the
-     *  renderer mounts a Tor-routed CCTV webview. `{ ok:false, reason }` when the feature is
-     *  off (`DISABLED`) or Tor isn't bootstrapped (`TOR_UNAVAILABLE`) — the renderer must then
-     *  refuse to load the stream rather than fall back to clearnet. */
-    cctvTorStatus(opts: { enabled: boolean }): Promise<{ ok: boolean; reason?: 'DISABLED' | 'TOR_UNAVAILABLE' }>;
   };
   markets: {
     fetch(): Promise<MarketSnapshot>;
