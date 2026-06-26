@@ -50,4 +50,9 @@ describe('safeHref — blocked schemes and malformed inputs', () => {
   it('returns null for a non-URL string', () => {
     expect(safeHref('not a url')).toBeNull();
   });
+
+  it('returns null for an http URL carrying userinfo (host-spoofing guard)', () => {
+    expect(safeHref('http://display@evil.example/')).toBeNull();
+    expect(safeHref('https://user:pass@evil.example/path')).toBeNull();
+  });
 });
