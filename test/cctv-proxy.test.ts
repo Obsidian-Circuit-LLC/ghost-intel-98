@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   cctvProxyUrl,
+  tryCctvProxyUrl,
   parseCctvProxyRequest,
   cctvRoutableKind,
   rewriteHlsManifest
@@ -41,6 +42,48 @@ describe('cctvProxyUrl', () => {
   it('round-trips an http:// URL', () => {
     const origin = 'http://cam.local/stream?quality=high';
     expect(parseCctvProxyRequest(cctvProxyUrl(origin))).toBe(origin);
+  });
+});
+
+describe('tryCctvProxyUrl', () => {
+  it('returns null for a scheme-less path (e.g. cam/mjpg)', () => {
+    expect(tryCctvProxyUrl('cam/mjpg')).toBeNull();
+  });
+
+  it('returns null for a scheme-less host (e.g. cam.local/stream)', () => {
+    // new URL() treats this as a relative URL and throws — must not propagate
+    expect(tryCctvProxyUrl('cam.local/stream')).toBeNull();
+  });
+
+  it('returns null for an empty string', () => {
+    expect(tryCctvProxyUrl('')).toBeNull();
+  });
+
+  it('returns null for an rtsp:// URL', () => {
+    expect(tryCctvProxyUrl('rtsp://cam.example.com/live')).toBeNull();
+  });
+
+  it('returns null for a file:// URL', () => {
+    expect(tryCctvProxyUrl('file:///etc/passwd')).toBeNull();
+  });
+
+  it('returns the ga98cctv:// proxy URL for a valid http:// URL', () => {
+    const result = tryCctvProxyUrl('http://cam.local/stream');
+    expect(result).not.toBeNull();
+    expect(result!.startsWith('ga98cctv://v1/')).toBe(true);
+  });
+
+  it('returns the ga98cctv:// proxy URL for a valid https:// URL', () => {
+    const result = tryCctvProxyUrl('https://cam.example.com/feed.mjpg');
+    expect(result).not.toBeNull();
+    expect(result!.startsWith('ga98cctv://v1/')).toBe(true);
+  });
+
+  it('round-trips a valid https URL through parseCctvProxyRequest', () => {
+    const origin = 'https://cam.example.com/video.mp4';
+    const proxy = tryCctvProxyUrl(origin);
+    expect(proxy).not.toBeNull();
+    expect(parseCctvProxyRequest(proxy!)).toBe(origin);
   });
 });
 

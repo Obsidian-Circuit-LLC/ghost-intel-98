@@ -2,7 +2,7 @@ import Hls from 'hls.js';
 import { useEffect, useRef, useState } from 'react';
 import type { CameraStream } from '@shared/post-mvp-types';
 import { parseYouTubeId, youtubeEmbedSrc } from '@shared/youtube';
-import { cctvProxyUrl, cctvRoutableKind } from '@shared/cctv/proxy';
+import { cctvProxyUrl, tryCctvProxyUrl, cctvRoutableKind } from '@shared/cctv/proxy';
 import { toast } from '../../state/toasts';
 import { useSettings } from '../../state/store';
 
@@ -16,6 +16,15 @@ function TorNotReady(): JSX.Element {
   return (
     <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#111', color: '#e88', fontSize: 11, textAlign: 'center', padding: 12 }}>
       TOR NOT READY — wait for Tor to bootstrap, then reopen this stream.
+    </div>
+  );
+}
+
+/** Placeholder shown when the camera URL is not a valid http(s) URL and cannot be proxied. */
+function BadStreamUrl(): JSX.Element {
+  return (
+    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#111', color: '#e88', fontSize: 11, textAlign: 'center', padding: 12 }}>
+      Invalid stream URL — only http(s) URLs can be proxied via Tor.
     </div>
   );
 }
@@ -162,7 +171,8 @@ export function Viewer({ stream, poster = false, refreshNonce = 0 }: { stream: C
     if (cctvOverTor) {
       if (torReady === null) return <div style={{ ...MEDIA_STYLE, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ad', fontSize: 11 }}>Checking Tor…</div>;
       if (!torReady) return <TorNotReady />;
-      const proxyUrl = cctvProxyUrl(stream.url);
+      const proxyUrl = tryCctvProxyUrl(stream.url);
+      if (proxyUrl === null) return <BadStreamUrl />;
       const sep = proxyUrl.includes('?') ? '&' : '?';
       return <img alt={stream.label} src={`${proxyUrl}${sep}_t=${refreshNonce}`} style={MEDIA_STYLE} />;
     }
@@ -174,7 +184,8 @@ export function Viewer({ stream, poster = false, refreshNonce = 0 }: { stream: C
     if (cctvOverTor) {
       if (torReady === null) return <div style={{ ...MEDIA_STYLE, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ad', fontSize: 11 }}>Checking Tor…</div>;
       if (!torReady) return <TorNotReady />;
-      const proxyUrl = cctvProxyUrl(stream.url);
+      const proxyUrl = tryCctvProxyUrl(stream.url);
+      if (proxyUrl === null) return <BadStreamUrl />;
       const sep = proxyUrl.includes('?') ? '&' : '?';
       return <img alt={stream.label} src={`${proxyUrl}${sep}_t=${imgTick}_${refreshNonce}`} style={MEDIA_STYLE} />;
     }
@@ -188,7 +199,9 @@ export function Viewer({ stream, poster = false, refreshNonce = 0 }: { stream: C
       if (!torReady) return <TorNotReady />;
       // Direct progressive/streamed MP4 over ga98cctv:// proxy. Range headers pass through
       // the handler for seeking support.
-      return <video controls autoPlay muted loop src={cctvProxyUrl(stream.url)} style={MEDIA_STYLE} />;
+      const proxyUrl = tryCctvProxyUrl(stream.url);
+      if (proxyUrl === null) return <BadStreamUrl />;
+      return <video controls autoPlay muted loop src={proxyUrl} style={MEDIA_STYLE} />;
     }
     // Direct progressive/streamed MP4 over http(s). CSP media-src allows http(s); a
     // local file:// path would not load (not in media-src) — point users to a URL.

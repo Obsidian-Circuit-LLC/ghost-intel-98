@@ -61,6 +61,19 @@ export function parseCctvProxyRequest(requestUrl: string): string | null {
   return decoded;
 }
 
+/**
+ * Like cctvProxyUrl but returns null instead of throwing for invalid or non-http(s) URLs.
+ * Safe to call in a React render body where a synchronous throw would cause an uncaught
+ * render error. Callers should render an error placeholder when null is returned.
+ */
+export function tryCctvProxyUrl(originUrl: string): string | null {
+  try {
+    return cctvProxyUrl(originUrl);
+  } catch {
+    return null;
+  }
+}
+
 /** Kinds that can be routed through the ga98cctv:// proxy. */
 const ROUTABLE_KINDS = new Set(['hls', 'http', 'mjpeg', 'mp4']);
 
