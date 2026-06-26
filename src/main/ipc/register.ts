@@ -105,6 +105,9 @@ import {
   handleListItems, handleRankItems, handleRecordLabel,
   handleSetBurner, handleHasBurner,
   handleStartMonitor, handleStopMonitor,
+  handleSetWhatsappBurnerPairingCode,
+  handleHasWhatsappBurner,
+  handleUnlinkWhatsappBurner,
 } from '../socmint/ipc';
 import { makeMtcuteCollector } from '../socmint/collector';
 
@@ -1399,6 +1402,26 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     }));
   safeHandle(channels.socmint.stopMonitor, (...a) =>
     handleStopMonitor(typeof a[0] === 'string' ? a[0] : ''));
+
+  // WhatsApp linking ceremony (WA-T10 — after operator §5.5 smoke test pass).
+  // Gate-closed → { disabled: true }; gate-open + sealed lib → sealed error, never crash/fallback.
+  // burnerId is basename-sanitised (path-separator stripping) at this boundary.
+  // phone is stripped to digits only; Baileys requestPairingCode expects a digit-only E.164 number.
+  safeHandle(channels.socmint.setWhatsappBurnerPairingCode, async (...a) => {
+    const burnerId = (typeof a[0] === 'string' ? a[0] : '').replace(/[/\\]/g, '_').trim();
+    if (!burnerId) throw new Error('socmint:setWhatsappBurnerPairingCode requires burnerId');
+    const phone = (typeof a[1] === 'string' ? a[1] : '').replace(/\D/g, '').slice(0, 15);
+    if (phone.length < 5) throw new Error('socmint:setWhatsappBurnerPairingCode requires a valid phone number (5+ digits)');
+    return handleSetWhatsappBurnerPairingCode(burnerId, phone, {
+      networkEnabled: async () => (await settingsStore.read()).socmint.networkEnabled,
+    });
+  });
+  // Boolean only — never echoes the stored creds value to the renderer.
+  safeHandle(channels.socmint.hasWhatsappBurner, (...a) =>
+    handleHasWhatsappBurner(typeof a[0] === 'string' ? a[0] : ''));
+  // Deletes both .creds and .keys secretStore entries; no server-side unlink (analyst must do that).
+  safeHandle(channels.socmint.unlinkWhatsappBurner, (...a) =>
+    handleUnlinkWhatsappBurner(typeof a[0] === 'string' ? a[0] : ''));
 
   startMailPoller(getWindow);
 }

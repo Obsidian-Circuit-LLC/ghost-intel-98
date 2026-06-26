@@ -1,5 +1,10 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { channels } from '../src/shared/ipc-contracts';
+import {
+  handleSetWhatsappBurnerPairingCode,
+  handleHasWhatsappBurner,
+  handleUnlinkWhatsappBurner,
+} from '../src/main/socmint/ipc';
 
 describe('socmint channels', () => {
   it('exposes the expected channel set, all namespaced under socmint:', () => {
@@ -31,5 +36,43 @@ describe('socmint channels', () => {
     ];
     for (const ch of waChs) expect(ch.startsWith('socmint:')).toBe(true);
     expect(new Set(waChs).size).toBe(waChs.length);
+  });
+});
+
+// WA-T10: register.ts wiring smoke — verify the three WhatsApp ceremony handlers
+// that register.ts wires via safeHandle are exported and callable from ipc.ts.
+describe('WA-T10: register.ts WhatsApp ceremony wiring', () => {
+  it('handleSetWhatsappBurnerPairingCode is a function (wired via socmint:setWhatsappBurnerPairingCode)', () => {
+    expect(typeof handleSetWhatsappBurnerPairingCode).toBe('function');
+  });
+
+  it('handleHasWhatsappBurner is a function (wired via socmint:hasWhatsappBurner)', () => {
+    expect(typeof handleHasWhatsappBurner).toBe('function');
+  });
+
+  it('handleUnlinkWhatsappBurner is a function (wired via socmint:unlinkWhatsappBurner)', () => {
+    expect(typeof handleUnlinkWhatsappBurner).toBe('function');
+  });
+
+  it('gate-closed: setWhatsappBurnerPairingCode returns { disabled: true } without touching the sealed library', async () => {
+    const result = await handleSetWhatsappBurnerPairingCode(
+      'burner-wa',
+      '15551234567',
+      { networkEnabled: async () => false },
+    );
+    expect(result).toEqual({ disabled: true });
+  });
+
+  it('gate-closed: hasWhatsappBurner returns false for empty burnerId without store access', async () => {
+    // Injected mock store ensures the handler does not call into production secretStore.
+    const mockStore = { get: vi.fn(), delete: vi.fn() };
+    expect(await handleHasWhatsappBurner('', mockStore)).toBe(false);
+    expect(mockStore.get).not.toHaveBeenCalled();
+  });
+
+  it('gate-closed: unlinkWhatsappBurner is a no-op for empty burnerId', async () => {
+    const mockStore = { get: vi.fn(), delete: vi.fn() };
+    await handleUnlinkWhatsappBurner('', mockStore);
+    expect(mockStore.delete).not.toHaveBeenCalled();
   });
 });
