@@ -200,6 +200,14 @@ export function CommandRail(props: CommandRailProps): JSX.Element {
                 style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 2px', cursor: 'pointer', borderBottom: '1px solid #1b2230' }}
               >
                 <span style={{ flex: 1, fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.title}</span>
+                <button
+                  onClick={(e) => { e.stopPropagation(); onRemoveMonitor(item.id); }}
+                  title="Remove from monitor"
+                  style={{
+                    flex: '0 0 auto', fontSize: 10, fontWeight: 'bold', color: '#8fb7e0', background: '#1b2230',
+                    padding: '0 5px', borderRadius: 2, border: 'none', cursor: 'pointer', lineHeight: 1.2
+                  }}
+                >×</button>
                 <span style={{ flex: '0 0 auto', fontSize: 10, fontWeight: 'bold', color: '#8fb7e0', background: '#1b2230', padding: '0 5px', borderRadius: 2 }}>×{count}</span>
               </li>
             ))}
