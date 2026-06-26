@@ -28,9 +28,9 @@ describe('harvestedItemId', () => {
 
   it('differs for different platform', () => {
     const a = harvestedItemId('telegram', '-100', '42');
-    // cast to satisfy the type; functionally we just want proof of distinctness
-    const b = harvestedItemId('telegram' as any, '-100', '42'); // same — sanity check same is same
-    expect(a).toBe(b);
+    // 'signal' is not in SocmintPlatform; cast to prove the hash changes when the prefix changes
+    const b = harvestedItemId('signal' as any, '-100', '42');
+    expect(a).not.toBe(b);
   });
 });
 

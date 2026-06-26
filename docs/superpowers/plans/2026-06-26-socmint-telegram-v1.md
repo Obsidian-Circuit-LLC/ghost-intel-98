@@ -33,11 +33,21 @@ Copy verbatim into every task's awareness. Every task's requirements implicitly 
 
 **Files:**
 - Create: `src/shared/socmint/types.ts`
+- Create: `src/main/socmint/utils.ts` (**`harvestedItemId` lives here, not in `src/shared/`** — see note below)
 - Modify: `src/shared/types.ts` (add `socmint` block to `AppSettings` near the other `networkEnabled` fields ~`:406-465`)
 - Modify: the settings default/persistence path (`src/main/storage/json-fs.ts` defaults ~`:896-920`) so `socmint.networkEnabled` defaults `false`
 - Test: `test/socmint-types.test.ts`
 
+> **Architecture note (implemented, not a deviation):** `harvestedItemId` calls `node:crypto`
+> (`createHash`), which is not available in the renderer-safe `src/shared/` tree. The function
+> lives in `src/main/socmint/utils.ts` (main-process only). All downstream tasks (T2 store, T5
+> collector) **must import `harvestedItemId` from `@main/socmint/utils`**, not from
+> `@shared/socmint/types`. `src/shared/socmint/types.ts` exports only pure-TS interfaces and
+> type aliases.
+
 **Interfaces (Produces):**
+
+`src/shared/socmint/types.ts`:
 ```ts
 export type SocmintPlatform = 'telegram';
 export interface HarvestedItem {
@@ -59,6 +69,10 @@ export interface SocmintJob {
   jobId: string; caseId: string; startedAt: string;
   model?: string; runtime?: string; quantization?: string; // recorded for AI provenance
 }
+```
+
+`src/main/socmint/utils.ts` (main-process only — uses `node:crypto`):
+```ts
 export function harvestedItemId(platform: SocmintPlatform, channelId: string, messageId: string): string;
 ```
 - `harvestedItemId` uses `crypto.createHash('sha256')` (pattern: `src/main/services/memory/chunker.ts:22`). Deterministic.
@@ -69,7 +83,7 @@ export function harvestedItemId(platform: SocmintPlatform, channelId: string, me
 - [ ] Run it, watch it fail.
 - [ ] Implement `src/shared/socmint/types.ts` + the `AppSettings` field + the default.
 - [ ] Run `pnpm typecheck && pnpm test test/socmint-types.test.ts` — pass.
-- [ ] Commit (`src/shared/socmint/types.ts src/shared/types.ts src/main/storage/json-fs.ts test/socmint-types.test.ts`).
+- [ ] Commit (`src/shared/socmint/types.ts src/main/socmint/utils.ts src/shared/types.ts src/main/storage/json-fs.ts test/socmint-types.test.ts`).
 
 ---
 
