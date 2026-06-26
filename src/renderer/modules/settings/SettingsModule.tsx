@@ -682,12 +682,37 @@ function SocmintPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSetti
           />
           <span>
             Enable SOCMINT network egress (off by default). When off, no collector
-            connects and no Tor circuit is requested for SOCMINT operations.
+            connects and no egress is initiated for SOCMINT operations.
           </span>
         </label>
-        <p style={{ fontSize: 11, color: '#900', margin: '6px 0 0' }}>
-          All SOCMINT traffic routes through Tor (mandatory). Enabling requires a
-          bootstrapped Tor connection — the collector refuses to connect on clearnet.
+      </div>
+      <div style={{ marginBottom: 12 }}>
+        <p style={{ fontSize: 12, margin: '0 0 6px 0', fontWeight: 'bold' }}>Collector transport</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer' }}>
+            <input
+              type="radio"
+              name="socmint-transport"
+              value="direct"
+              checked={(s.socmint.transport ?? 'direct') === 'direct'}
+              onChange={() => void patch({ socmint: { ...s.socmint, transport: 'direct' } })}
+            />
+            <span>Direct (clearnet)</span>
+          </label>
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer' }}>
+            <input
+              type="radio"
+              name="socmint-transport"
+              value="tor"
+              checked={(s.socmint.transport ?? 'direct') === 'tor'}
+              onChange={() => void patch({ socmint: { ...s.socmint, transport: 'tor' } })}
+            />
+            <span>Tor (per-burner circuit)</span>
+          </label>
+        </div>
+        <p style={{ fontSize: 11, color: '#444', margin: '6px 0 0' }}>
+          Direct sends traffic over your normal connection; Tor routes each burner through its own circuit.
+          In Tor mode a bootstrapped Tor connection is required — the collector refuses when Tor is down.
         </p>
       </div>
       <hr style={{ margin: '10px 0', borderColor: '#ccc' }} />

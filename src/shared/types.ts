@@ -473,6 +473,11 @@ export interface AppSettings {
     /** Master opt-in egress gate. When false (default) no collector connects and
      *  no Tor circuit is requested. App-layer enforced at the IPC boundary. */
     networkEnabled: boolean;
+    /** Collector transport when networkEnabled. 'direct' = clearnet (DEFAULT; scope is
+     *  public-channel OSINT, not darkweb). 'tor' = route via bgconn Tor with per-burner
+     *  IsolateSOCKSAuth circuit isolation. ALWAYS explicit — the app never silently
+     *  switches/falls back between them; in 'tor' mode a down Tor REFUSES, not clearnet. */
+    transport: 'direct' | 'tor';
   };
 }
 
@@ -602,7 +607,7 @@ export const defaultSettings: AppSettings = {
   },
   chat: { networkEnabled: false },
   searchlight: { networkEnabled: false, torConcurrency: 8, clearnetConcurrency: 16 },
-  socmint: { networkEnabled: false },
+  socmint: { networkEnabled: false, transport: 'direct' },
   plugins: {},
   offensive: { confirmMode: 'per-scan', rateLimitPerSec: 10, downstreamProxy: null, requireSignedAuthorization: false, issuerKeys: [] },
   bgconn: { idleTeardownAfterMinutes: 120, defaultRouting: 'tor', maxReconnects: 20, maxSessionAgeMinutes: 720 }

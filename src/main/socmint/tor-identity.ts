@@ -99,3 +99,26 @@ export function burnerProxyConfig(burnerId: string): BurnerProxyConfig {
     password: pass,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Transport resolution (clearnet vs Tor) — resolved at the egress boundary
+// ---------------------------------------------------------------------------
+
+/** Resolved collector transport. 'direct' = clearnet (operator-chosen, explicit).
+ *  'tor' = per-burner IsolateSOCKSAuth circuit (proxy carries the SOCKS5 creds). */
+export type SocmintTransport =
+  | { mode: 'direct' }
+  | { mode: 'tor'; proxy: BurnerProxyConfig };
+
+/**
+ * Resolve the collector transport for a burner under the chosen mode.
+ * - 'tor':  returns { mode:'tor', proxy } — burnerProxyConfig THROWS
+ *           SocmintTorUnavailableError when the bgconn Tor is not bootstrapped.
+ *           This is the no-silent-clearnet-fallback enforcement point.
+ * - 'direct': returns { mode:'direct' } — clearnet, an EXPLICIT operator choice
+ *           (settings.socmint.transport='direct'), never an automatic fallback.
+ */
+export function resolveTransport(burnerId: string, mode: 'direct' | 'tor'): SocmintTransport {
+  if (mode === 'tor') return { mode: 'tor', proxy: burnerProxyConfig(burnerId) };
+  return { mode: 'direct' };
+}

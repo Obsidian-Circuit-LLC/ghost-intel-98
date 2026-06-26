@@ -16,6 +16,7 @@ import type { BgconnTor } from '../src/main/bgconn/tor';
 import {
   deriveBurnerCredentials,
   burnerProxyConfig,
+  resolveTransport,
   SocmintTorUnavailableError,
 } from '../src/main/socmint/tor-identity';
 
@@ -176,5 +177,90 @@ describe('burnerProxyConfig — no Tor instance', () => {
 
   it('throws SocmintTorUnavailableError when getBgTor() returns null', () => {
     expect(() => burnerProxyConfig('burner-alpha')).toThrow(SocmintTorUnavailableError);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// resolveTransport
+// ---------------------------------------------------------------------------
+
+describe('resolveTransport — tor mode, Tor bootstrapped', () => {
+  beforeEach(() => {
+    setBgTor(makeMockTor(true, 9999));
+  });
+
+  afterEach(() => {
+    _resetBgTorForTest();
+  });
+
+  it('returns { mode: "tor", proxy } with the correct shape when Tor is bootstrapped', () => {
+    const t = resolveTransport('burner-resolve', 'tor');
+    expect(t.mode).toBe('tor');
+    if (t.mode !== 'tor') throw new Error('type narrowing');
+    expect(t.proxy.host).toBe('127.0.0.1');
+    expect(t.proxy.port).toBe(9999);
+    expect(t.proxy.version).toStrictEqual(5);
+    expect(typeof t.proxy.user).toBe('string');
+    expect(typeof t.proxy.password).toBe('string');
+  });
+
+  it('proxy creds match deriveBurnerCredentials for the same burnerId', () => {
+    const t = resolveTransport('burner-resolve-creds', 'tor');
+    if (t.mode !== 'tor') throw new Error('type narrowing');
+    const { user, pass } = deriveBurnerCredentials('burner-resolve-creds');
+    expect(t.proxy.user).toBe(user);
+    expect(t.proxy.password).toBe(pass);
+  });
+});
+
+describe('resolveTransport — tor mode, Tor NOT bootstrapped', () => {
+  beforeEach(() => {
+    setBgTor(makeMockTor(false, 9999));
+  });
+
+  afterEach(() => {
+    _resetBgTorForTest();
+  });
+
+  it('throws SocmintTorUnavailableError when Tor is not bootstrapped', () => {
+    expect(() => resolveTransport('burner-down', 'tor')).toThrow(SocmintTorUnavailableError);
+  });
+});
+
+describe('resolveTransport — tor mode, no Tor instance', () => {
+  beforeEach(() => {
+    _resetBgTorForTest();
+  });
+
+  afterEach(() => {
+    _resetBgTorForTest();
+  });
+
+  it('throws SocmintTorUnavailableError when getBgTor() returns null', () => {
+    expect(() => resolveTransport('burner-null', 'tor')).toThrow(SocmintTorUnavailableError);
+  });
+});
+
+describe('resolveTransport — direct mode', () => {
+  afterEach(() => {
+    _resetBgTorForTest();
+  });
+
+  it('returns { mode: "direct" } and does not touch Tor (works with null tor instance)', () => {
+    _resetBgTorForTest(); // ensure no tor set
+    const t = resolveTransport('burner-direct', 'direct');
+    expect(t.mode).toBe('direct');
+  });
+
+  it('returns { mode: "direct" } even when Tor is down', () => {
+    setBgTor(makeMockTor(false, 9999));
+    const t = resolveTransport('burner-direct-tor-down', 'direct');
+    expect(t.mode).toBe('direct');
+  });
+
+  it('returns { mode: "direct" } even when Tor is bootstrapped (explicit clearnet choice)', () => {
+    setBgTor(makeMockTor(true, 9999));
+    const t = resolveTransport('burner-direct-tor-up', 'direct');
+    expect(t.mode).toBe('direct');
   });
 });
