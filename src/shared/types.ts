@@ -416,9 +416,9 @@ export interface AppSettings {
     newsStreams: { label: string; url: string; kind: 'hls' | 'youtube' }[];
     /** Index of the active stream in newsStreams. */
     newsStreamIndex: number;
-    /** When true, CCTV streams in EyeSpy are routed through the Tor SOCKS proxy via a dedicated
-     *  `persist:cctv-tor` session partition. A camera that cannot be reached over Tor will not load
-     *  (no clearnet fallback). Off by default — live video over Tor is slow. */
+    /** When true, CCTV streams in EyeSpy are routed through the ga98cctv:// main-side Tor proxy.
+     *  A camera that cannot be reached over Tor will not load (no clearnet fallback).
+     *  Off by default — live video over Tor is slow. */
     cctvOverTor: boolean;
   };
   markets: {
