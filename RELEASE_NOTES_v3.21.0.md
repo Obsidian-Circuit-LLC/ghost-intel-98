@@ -73,8 +73,8 @@ ADS-B resilience, and the headline item — routing CCTV stream viewing through 
 Get-FileHash .\GhostIntel98-Setup-3.21.0.exe -Algorithm SHA256
 ```
 
-SHA-256: `[operator fills at release]`
-Size: `[operator fills at release]` bytes
+SHA-256: `f6ab2318c9f220a57e890addf8f01826791eb48c73490b7e08727da67f52fb26`
+Size: 880921592 bytes (840.1 MB)
 
 Unsigned — Windows SmartScreen will warn: **More info → Run anyway**. Installs per-user (no admin)
 and upgrades any prior **Ghost Intel 98** build in place.
