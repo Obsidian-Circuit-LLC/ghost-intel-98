@@ -4,7 +4,8 @@ import {
   tryCctvProxyUrl,
   parseCctvProxyRequest,
   cctvRoutableKind,
-  rewriteHlsManifest
+  rewriteHlsManifest,
+  bodyLooksLikeHlsManifest
 } from '../src/shared/cctv/proxy';
 
 describe('cctvProxyUrl', () => {
@@ -195,5 +196,41 @@ describe('rewriteHlsManifest', () => {
     for (const line of lines) {
       expect(line.startsWith('ga98cctv://')).toBe(true);
     }
+  });
+});
+
+describe('bodyLooksLikeHlsManifest', () => {
+  // Regression for the deanonymization finding: a hostile camera host serving a playlist on a
+  // non-.m3u8 path with a non-mpegurl Content-Type must still be detected as a manifest so its
+  // absolute segment/EXT-X-KEY URIs are rewritten onto ga98cctv:// instead of leaking to clearnet.
+  it('detects a plain master playlist body', () => {
+    expect(bodyLooksLikeHlsManifest('#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nhttps://a/v.m3u8\n')).toBe(true);
+  });
+
+  it('detects a media playlist body', () => {
+    expect(bodyLooksLikeHlsManifest('#EXTM3U\n#EXTINF:10,\nhttps://a/seg0.ts\n')).toBe(true);
+  });
+
+  it('detects a manifest preceded by a UTF-8 BOM', () => {
+    expect(bodyLooksLikeHlsManifest('﻿#EXTM3U\n#EXTINF:10,\nseg0.ts\n')).toBe(true);
+  });
+
+  it('detects a manifest with leading whitespace (at least as lenient as hls.js)', () => {
+    expect(bodyLooksLikeHlsManifest('  \n#EXTM3U\n')).toBe(true);
+  });
+
+  it('returns false for an MPEG-TS segment body', () => {
+    // 0x47 sync byte — a real .ts segment must NOT be misread + corrupted as a manifest.
+    expect(bodyLooksLikeHlsManifest('\x47\x40\x00\x10binary…')).toBe(false);
+  });
+
+  it('returns false for JSON / HTML / plain text', () => {
+    expect(bodyLooksLikeHlsManifest('{"error":"nope"}')).toBe(false);
+    expect(bodyLooksLikeHlsManifest('<html><body>cam</body></html>')).toBe(false);
+    expect(bodyLooksLikeHlsManifest('')).toBe(false);
+  });
+
+  it('returns false for a body that merely contains #EXTM3U later (not first line)', () => {
+    expect(bodyLooksLikeHlsManifest('garbage\n#EXTM3U')).toBe(false);
   });
 });
