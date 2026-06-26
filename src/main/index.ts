@@ -17,13 +17,16 @@ import { ensureDataLayout } from './storage/paths';
 import { migrateUserDataIfNeeded } from './migrate-userdata';
 import { registerMediaProtocol } from './media/protocol';
 import { registerModelProtocol } from './voice/model-protocol';
+import { registerCctvProxy } from './geoint/cctv-proxy';
 
 // Custom schemes. Must be declared before app is ready.
 //  - ga98media: local audio/video streaming
 //  - ga98model: serve the bundled Vosk speech model to vosk-browser (offline STT)
+//  - ga98cctv: proxy CCTV stream bytes through Tor (main-side egress; never clearnet)
 protocol.registerSchemesAsPrivileged([
   { scheme: 'ga98media', privileges: { stream: true, supportFetchAPI: true, secure: true, standard: true } },
   { scheme: 'ga98model', privileges: { stream: true, supportFetchAPI: true, secure: true, standard: true } },
+  { scheme: 'ga98cctv', privileges: { stream: true, supportFetchAPI: true, secure: true, standard: true } },
   { scheme: 'dcs98-plugin', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }
 ]);
 import { registerIpc, startReminderTicker } from './ipc/register';
@@ -350,6 +353,7 @@ app.whenReady().then(async () => {
   lockDownWebContents();
   registerMediaProtocol(); // ga98media:// for local audio playback
   registerModelProtocol(); // ga98model:// serves the bundled Vosk model (offline STT)
+  registerCctvProxy();     // ga98cctv:// routes CCTV stream bytes through Tor (main-side egress)
   registerIpc(() => mainWindow);
   createWindow();
   lockDownPartitionSessions();

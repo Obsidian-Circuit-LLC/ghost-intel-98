@@ -69,6 +69,7 @@ import { adHocAllowlist } from '../media/protocol';
 import { parseM3u, toM3u } from '../media/m3u';
 import { parseFeedList, feedToUpsert } from '../services/feed-import';
 import * as geoint from '../geoint/sources';
+import { cctvTorReady } from '../geoint/cctv-proxy';
 import { fetchThreatLayer } from '../geoint/threat-layers';
 import { fetchKev } from '../geoint/kev';
 import { parseOpml } from '../geoint/feeds';
@@ -1160,6 +1161,8 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   });
   safeHandle(channels.geoint.addMonitor, (...a) => geointMonitor.addPinned(typeof a[0] === 'string' ? a[0] : ''));
   safeHandle(channels.geoint.removeMonitor, (...a) => geointMonitor.removePinned(typeof a[0] === 'string' ? a[0] : ''));
+  // CCTV-over-Tor readiness probe: lets the EyeSpy Viewer show TOR NOT READY before loading a stream.
+  safeHandle(channels.geoint.cctvTorReady, () => cctvTorReady());
 
   // ---- Markets (vault-gated; network app-layer gated by settings.markets.networkEnabled) ----
   safeHandle(channels.markets.fetch, async () => {
