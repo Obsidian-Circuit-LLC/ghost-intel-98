@@ -29,6 +29,7 @@ import type { HarvestedItem, MonitoredChannel } from '@shared/socmint/types';
 import type { ItemLabel } from './labels';
 import type { SocmintCollector } from './collector';
 import { resolveTransport, type SocmintTransport } from './tor-identity';
+import { WA_SEALED_MESSAGE } from './whatsapp-collector';
 
 // ---------------------------------------------------------------------------
 // CollectorFactory type — injected by register.ts; injectable for gate tests.
@@ -296,12 +297,19 @@ export async function handleStopMonitor(jobId: string): Promise<void> {
 const WA_BURNER_KEY_PREFIX = 'socmint.whatsapp.burner.';
 
 /**
- * Stub: request a WhatsApp pairing code for the given burnerId + phone number.
+ * Request a WhatsApp pairing code for the given burnerId + phone number.
  *
- * EGRESS GATE: returns { disabled: true } when networkEnabled is false —
+ * EGRESS GATE (WA-T7): returns { disabled: true } when networkEnabled is false —
  * never constructs a socket or touches any network path.
- * When the gate is open, the sealed Baileys adapter is used (see WA-T7);
- * this stub throws the sealed message so callers see a deliberate seam, not a crash.
+ *
+ * When the gate is open, the sealed Baileys adapter is invoked. Until the operator
+ * completes the §5.5 supply-chain checklist and unseals the library, every call with
+ * an open gate throws WA_SEALED_MESSAGE — a deliberate, named error, never a crash
+ * or a silent clearnet fallback.
+ *
+ * Post-unseal path (§2.8 of the design spec):
+ *   resolveTransport → makeWASocket (with auth + optional SOCKS5 agent) →
+ *   requestPairingCode → return { pairingCode } → persist creds on 'connection:open'.
  *
  * The `deps` parameter is injected for testability (mirrors handleStartMonitor).
  */
@@ -312,10 +320,9 @@ export async function handleSetWhatsappBurnerPairingCode(
 ): Promise<{ disabled: true } | { pairingCode: string }> {
   // EGRESS GATE — must precede ALL network / library operations.
   if (!await deps.networkEnabled()) return { disabled: true };
-  // Sealed seam — WA-T7 will replace this throw with the live adapter path.
-  throw new Error(
-    'SOCMINT: WhatsApp library not installed — pending operator supply-chain verification + library lock. Complete §5.5 checklist before unsealing.',
-  );
+  // Sealed seam: the Baileys library is not installed until the operator completes the
+  // §5.5 supply-chain checklist. Throw the canonical sealed message — not a crash.
+  throw new Error(WA_SEALED_MESSAGE);
 }
 
 /**
