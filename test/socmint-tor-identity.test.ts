@@ -264,3 +264,16 @@ describe('resolveTransport — direct mode', () => {
     expect(t.mode).toBe('direct');
   });
 });
+
+describe('resolveTransport — unknown mode fails closed', () => {
+  afterEach(() => {
+    _resetBgTorForTest();
+  });
+
+  it('THROWS (never falls back to clearnet) on a corrupted/case-variant mode', () => {
+    setBgTor(makeMockTor(true, 9999)); // Tor up — a fallback would silently go clearnet
+    expect(() => resolveTransport('burner-x', 'TOR' as unknown as 'tor')).toThrow(/unknown transport mode/);
+    expect(() => resolveTransport('burner-x', 'on' as unknown as 'tor')).toThrow(/fail closed/);
+    expect(() => resolveTransport('burner-x', '' as unknown as 'tor')).toThrow();
+  });
+});

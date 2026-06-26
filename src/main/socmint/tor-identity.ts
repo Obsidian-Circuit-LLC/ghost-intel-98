@@ -117,8 +117,16 @@ export type SocmintTransport =
  *           This is the no-silent-clearnet-fallback enforcement point.
  * - 'direct': returns { mode:'direct' } — clearnet, an EXPLICIT operator choice
  *           (settings.socmint.transport='direct'), never an automatic fallback.
+ *
+ * FAIL CLOSED: any mode that is not exactly 'tor' or 'direct' (e.g. a corrupted /
+ * tampered / case-variant value in the plaintext settings.json) THROWS rather than
+ * defaulting to clearnet. A user who believes they are on Tor must never be silently
+ * dropped onto clearnet by out-of-band state corruption.
  */
 export function resolveTransport(burnerId: string, mode: 'direct' | 'tor'): SocmintTransport {
   if (mode === 'tor') return { mode: 'tor', proxy: burnerProxyConfig(burnerId) };
-  return { mode: 'direct' };
+  if (mode === 'direct') return { mode: 'direct' };
+  throw new Error(
+    `SOCMINT: unknown transport mode '${String(mode)}' — refusing (fail closed; no clearnet fallback)`,
+  );
 }

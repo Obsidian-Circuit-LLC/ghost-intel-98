@@ -6,8 +6,11 @@
 export function safeHref(url: string): string | null {
   try {
     const u = new URL(url);
-    if (u.protocol === 'http:' || u.protocol === 'https:') return u.href;
-    return null;
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+    // Reject userinfo (e.g. http://display@real-host/) — a harvested permalink could
+    // otherwise render a host-spoofed anchor that misleads an analyst about its target.
+    if (u.username || u.password) return null;
+    return u.href;
   } catch {
     return null;
   }
