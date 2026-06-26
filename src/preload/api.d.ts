@@ -66,6 +66,7 @@ import type {
   SearchlightCase,
   SearchlightCaseSummary,
 } from '../shared/searchlight/types';
+import type { HarvestedItem, MonitoredChannel } from '../shared/socmint/types';
 
 export interface MailDraft {
   id: string;
@@ -529,6 +530,18 @@ export interface GhostApi {
     /** Export the current sweep results as a PDF using Electron's printToPDF (dep-free).
      *  Shows a native save dialog. Returns `{ ok: false }` if the user cancels. */
     exportPdf(args: { html: string; filename: string }): Promise<{ ok: boolean }>;
+  };
+  socmint: {
+    addChannel(caseId: string, channel: MonitoredChannel): Promise<MonitoredChannel[]>;
+    removeChannel(caseId: string, channelId: string): Promise<MonitoredChannel[]>;
+    listChannels(caseId: string): Promise<MonitoredChannel[]>;
+    listItems(caseId: string): Promise<HarvestedItem[]>;
+    rankItems(caseId: string, keyword: string): Promise<HarvestedItem[]>;
+    recordLabel(caseId: string, label: { itemId: string; decision: 'accept' | 'reject'; entityCorrections?: { kind: string; value: string }[]; labeledAt: string }): Promise<void>;
+    setBurner(burnerId: string, credentials: unknown): Promise<void>;
+    hasBurner(burnerId: string): Promise<boolean>;
+    startMonitor(req: unknown): Promise<{ disabled: true } | { started: true; jobId: string }>;
+    stopMonitor(jobId: string): Promise<void>;
   };
 }
 

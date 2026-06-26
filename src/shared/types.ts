@@ -514,7 +514,8 @@ export const REQUIRED_MODULE_SHORTCUTS: readonly AccessShortcut[] = [
   { id: 'bookmarks', label: 'Bookmarks', kind: 'module', target: 'bookmarks', icon: 'bookmark' },
   { id: 'briefcase', label: 'Briefcase', kind: 'module', target: 'briefcase', icon: 'briefcase' },
   { id: 'journal', label: 'Journal Jots', kind: 'module', target: 'journal', icon: 'note' },
-  { id: 'markets', label: 'Markets', kind: 'module', target: 'markets', icon: 'chart' }
+  { id: 'markets', label: 'Markets', kind: 'module', target: 'markets', icon: 'chart' },
+  { id: 'socmint', label: 'SOCMINT', kind: 'module', target: 'socmint', icon: 'search' }
   // Games are in the Access "Games ▸" submenu (AccessMenu.tsx), not seeded as shortcuts.
 ];
 
