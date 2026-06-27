@@ -100,6 +100,20 @@ import { startSweep, cancelSweep } from '../searchlight/sweep';
 import { exportSweepPdf } from '../searchlight/export-pdf';
 import { getBgTor } from '../bgconn/tor-singleton';
 import * as geointMonitor from '../services/geoint-monitor';
+import {
+  handleAddChannel, handleRemoveChannel, handleListChannels,
+  handleListItems, handleRankItems, handleRecordLabel,
+  handleSetBurner, handleHasBurner,
+  handleStartMonitor, handleStopMonitor,
+  handleSetWhatsappBurnerPairingCode,
+  handleHasWhatsappBurner,
+  handleUnlinkWhatsappBurner,
+} from '../socmint/ipc';
+import { makeMtcuteCollector } from '../socmint/collector';
+import {
+  handleXAddAccount, handleXRemoveAccount, handleXListAccounts, handleXHasAccount,
+  handleXCollect, handleXListItems, handleXRankItems,
+} from '../x/ipc';
 
 const MAX_SAVE_ATTACHMENT_BYTES = 64 * 1024 * 1024; // 64 MB cap on base64 decoded payload
 const MAX_EXPORT_BYTES = 64 * 1024 * 1024;
@@ -147,6 +161,10 @@ function sanitiseMessage(msg: string): string {
   if (home) out = out.split(home).join('<home>');
   for (const p of HOME_PATTERNS) out = out.replace(p, '<home>');
   out = out.replace(UUID_RE, '<uuid>');
+  // Redact credential tokens (X cookies/passwords — X spec §5.8) so they can never reach
+  // the renderer through this shared IPC error choke point.
+  out = out.replace(/\b(auth_token|ct0|password)=[^\s&"';,]*/gi, '$1=<redacted>');
+  out = out.replace(/"(auth_token|ct0|password)"\s*:\s*"[^"]*"/gi, '"$1":"<redacted>"');
   return out;
 }
 
@@ -1364,6 +1382,96 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     const o = ((a[0] ?? {}) as Record<string, unknown>);
     return exportSweepPdf(String(o.html ?? ''), String(o.filename ?? 'searchlight-report.pdf'));
   });
+
+  // ---- SOCMINT (Telegram OSINT collector; egress gated by settings.socmint.networkEnabled) ----
+  // Non-egress handlers (channel config, stored-data queries, labels) run regardless of gate.
+  // Only startMonitor touches the network/Tor — it is the sole handler subject to the egress gate.
+  safeHandle(channels.socmint.addChannel, (...a) =>
+    handleAddChannel(ensureUuid(a[0], 'caseId'), a[1]));
+  safeHandle(channels.socmint.removeChannel, (...a) =>
+    handleRemoveChannel(ensureUuid(a[0], 'caseId'), typeof a[1] === 'string' ? a[1] : ''));
+  safeHandle(channels.socmint.listChannels, (...a) =>
+    handleListChannels(ensureUuid(a[0], 'caseId')));
+  safeHandle(channels.socmint.listItems, (...a) =>
+    handleListItems(ensureUuid(a[0], 'caseId')));
+  safeHandle(channels.socmint.rankItems, (...a) =>
+    handleRankItems(ensureUuid(a[0], 'caseId'), typeof a[1] === 'string' ? a[1] : ''));
+  safeHandle(channels.socmint.recordLabel, (...a) =>
+    handleRecordLabel(ensureUuid(a[0], 'caseId'), a[1]));
+  safeHandle(channels.socmint.setBurner, (...a) =>
+    handleSetBurner(typeof a[0] === 'string' ? a[0] : '', a[1]));
+  safeHandle(channels.socmint.hasBurner, (...a) =>
+    handleHasBurner(typeof a[0] === 'string' ? a[0] : ''));
+  safeHandle(channels.socmint.startMonitor, (...a) =>
+    handleStartMonitor(a[0], {
+      networkEnabled: async () => (await settingsStore.read()).socmint.networkEnabled,
+      transport: async () => (await settingsStore.read()).socmint.transport,
+      collectorFactory: makeMtcuteCollector,
+    }));
+  safeHandle(channels.socmint.stopMonitor, (...a) =>
+    handleStopMonitor(typeof a[0] === 'string' ? a[0] : ''));
+
+  // WhatsApp linking ceremony (WA-T10 — after operator §5.5 smoke test pass).
+  // Gate-closed → { disabled: true }; gate-open + sealed lib → sealed error, never crash/fallback.
+  // burnerId is basename-sanitised (path-separator stripping) at this boundary.
+  // phone is stripped to digits only; Baileys requestPairingCode expects a digit-only E.164 number.
+  safeHandle(channels.socmint.setWhatsappBurnerPairingCode, async (...a) => {
+    const burnerId = (typeof a[0] === 'string' ? a[0] : '').replace(/[/\\]/g, '_').trim();
+    if (!burnerId) throw new Error('socmint:setWhatsappBurnerPairingCode requires burnerId');
+    const phone = (typeof a[1] === 'string' ? a[1] : '').replace(/\D/g, '').slice(0, 15);
+    if (phone.length < 5) throw new Error('socmint:setWhatsappBurnerPairingCode requires a valid phone number (5+ digits)');
+    return handleSetWhatsappBurnerPairingCode(burnerId, phone, {
+      networkEnabled: async () => (await settingsStore.read()).socmint.networkEnabled,
+    });
+  });
+  // Boolean only — never echoes the stored creds value to the renderer.
+  safeHandle(channels.socmint.hasWhatsappBurner, (...a) =>
+    handleHasWhatsappBurner(typeof a[0] === 'string' ? a[0] : ''));
+  // Deletes both .creds and .keys secretStore entries; no server-side unlink (analyst must do that).
+  safeHandle(channels.socmint.unlinkWhatsappBurner, (...a) =>
+    handleUnlinkWhatsappBurner(typeof a[0] === 'string' ? a[0] : ''));
+
+  // ---- X/Twitter collector (clearnet quarantine module; egress gated by BOTH flags) ----
+  // Account management: creds stored in secretStore, never echoed to renderer (boolean/IDs only).
+  // Collect: throws XCollectorGatedError when networkEnabled or clearnetAcknowledged is false.
+  safeHandle(channels.x.addAccount, (...a) =>
+    handleXAddAccount(typeof a[0] === 'string' ? a[0] : '', a[1], {
+      getSecret: (k) => secretStore.get(k),
+      setSecret: (k, v) => secretStore.set(k, v),
+      deleteSecret: (k) => secretStore.delete(k),
+    }));
+  safeHandle(channels.x.removeAccount, (...a) =>
+    handleXRemoveAccount(typeof a[0] === 'string' ? a[0] : '', {
+      getSecret: (k) => secretStore.get(k),
+      setSecret: (k, v) => secretStore.set(k, v),
+      deleteSecret: (k) => secretStore.delete(k),
+    }));
+  safeHandle(channels.x.listAccounts, () =>
+    handleXListAccounts({ getSecret: (k) => secretStore.get(k) }));
+  safeHandle(channels.x.hasAccount, (...a) =>
+    handleXHasAccount(typeof a[0] === 'string' ? a[0] : '', {
+      getSecret: (k) => secretStore.get(k),
+    }));
+  // Collect: EGRESS GATE — throws XCollectorGatedError when either flag is false.
+  // socmint/store is lazy-imported inside the dep closures (mirrors other handler patterns).
+  safeHandle(channels.x.collect, (...a) =>
+    handleXCollect(a[0], {
+      networkEnabled: async () => (await settingsStore.read()).x.networkEnabled,
+      clearnetAcknowledged: async () => (await settingsStore.read()).x.clearnetAcknowledged,
+      async upsertItems(caseId, items) {
+        const { upsertItems } = await import('../socmint/store');
+        return upsertItems(caseId, items);
+      },
+      async recordJob(caseId, job) {
+        const { recordJob } = await import('../socmint/store');
+        return recordJob(caseId, job);
+      },
+      getSecret: (k) => secretStore.get(k),
+    }));
+  safeHandle(channels.x.listItems, (...a) =>
+    handleXListItems(ensureUuid(a[0], 'caseId')));
+  safeHandle(channels.x.rankItems, (...a) =>
+    handleXRankItems(ensureUuid(a[0], 'caseId'), typeof a[1] === 'string' ? a[1] : ''));
 
   startMailPoller(getWindow);
 }

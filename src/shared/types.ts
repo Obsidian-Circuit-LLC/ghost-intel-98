@@ -467,6 +467,33 @@ export interface AppSettings {
     torConcurrency: number;
     clearnetConcurrency: number;
   };
+  /** SOCMINT collector (Telegram v1). Off by default ⇒ no egress is initiated,
+   *  no collector is constructed, and no Tor circuit is requested. */
+  socmint: {
+    /** Master opt-in egress gate. When false (default) no collector connects and
+     *  no Tor circuit is requested. App-layer enforced at the IPC boundary. */
+    networkEnabled: boolean;
+    /** Collector transport when networkEnabled. 'direct' = clearnet (DEFAULT; scope is
+     *  public-channel OSINT, not darkweb). 'tor' = route via bgconn Tor with per-burner
+     *  IsolateSOCKSAuth circuit isolation. ALWAYS explicit — the app never silently
+     *  switches/falls back between them; in 'tor' mode a down Tor REFUSES, not clearnet. */
+    transport: 'direct' | 'tor';
+  };
+  /**
+   * X/Twitter collector — clearnet quarantine module (separate from socmint).
+   * Both flags MUST be true before any sidecar path is entered (IPC boundary).
+   * clearnetAcknowledged is set by an explicit confirmation dialog, not the toggle alone —
+   * the dialog states that requests reach x.com over the public internet and cannot be
+   * routed through Tor. Off by default on both axes.
+   */
+  x: {
+    /** Master opt-in egress gate. When false (default) the sidecar is never spawned. */
+    networkEnabled: boolean;
+    /** Persistent confirmation that the operator understands this module uses clearnet
+     *  (no Tor option). Must be set via the confirm dialog before networkEnabled can
+     *  be toggled on. Default false. */
+    clearnetAcknowledged: boolean;
+  };
 }
 
 export const defaultShortcuts: AccessShortcut[] = [
@@ -507,7 +534,8 @@ export const REQUIRED_MODULE_SHORTCUTS: readonly AccessShortcut[] = [
   { id: 'bookmarks', label: 'Bookmarks', kind: 'module', target: 'bookmarks', icon: 'bookmark' },
   { id: 'briefcase', label: 'Briefcase', kind: 'module', target: 'briefcase', icon: 'briefcase' },
   { id: 'journal', label: 'Journal Jots', kind: 'module', target: 'journal', icon: 'note' },
-  { id: 'markets', label: 'Markets', kind: 'module', target: 'markets', icon: 'chart' }
+  { id: 'markets', label: 'Markets', kind: 'module', target: 'markets', icon: 'chart' },
+  { id: 'socmint', label: 'SOCMINT', kind: 'module', target: 'socmint', icon: 'search' }
   // Games are in the Access "Games ▸" submenu (AccessMenu.tsx), not seeded as shortcuts.
 ];
 
@@ -594,6 +622,8 @@ export const defaultSettings: AppSettings = {
   },
   chat: { networkEnabled: false },
   searchlight: { networkEnabled: false, torConcurrency: 8, clearnetConcurrency: 16 },
+  socmint: { networkEnabled: false, transport: 'direct' },
+  x: { networkEnabled: false, clearnetAcknowledged: false },
   plugins: {},
   offensive: { confirmMode: 'per-scan', rateLimitPerSec: 10, downstreamProxy: null, requireSignedAuthorization: false, issuerKeys: [] },
   bgconn: { idleTeardownAfterMinutes: 120, defaultRouting: 'tor', maxReconnects: 20, maxSessionAgeMinutes: 720 }

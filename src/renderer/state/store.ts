@@ -42,7 +42,8 @@ export type ModuleKey =
   | 'host-info'
   | 'news-view'
   | 'help'
-  | 'searchlight';
+  | 'searchlight'
+  | 'socmint';
 
 export interface WindowSpec {
   id: string;

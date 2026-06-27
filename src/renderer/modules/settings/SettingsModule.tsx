@@ -13,8 +13,9 @@ import { useAuth, useSettings } from '../../state/store';
 import { LocalAiPane } from './LocalAiPane';
 import { playMailNotify, clearMailChimeCache } from '../../audio/synth';
 import logoUrl from '../../assets/logo.png';
+import { CLEARNET_DIALOG_TEXT, xNetworkToggleEnabled } from '../x/x-settings-logic';
 
-type SectionKey = 'about' | 'sound' | 'theme' | 'cases' | 'shortcuts' | 'ai' | 'browser' | 'terminal' | 'mail' | 'backup' | 'security' | 'searchlight' | 'geoint';
+type SectionKey = 'about' | 'sound' | 'theme' | 'cases' | 'shortcuts' | 'ai' | 'browser' | 'terminal' | 'mail' | 'backup' | 'security' | 'searchlight' | 'geoint' | 'socmint' | 'x';
 
 interface Section {
   key: SectionKey;
@@ -35,7 +36,9 @@ const SECTIONS: Section[] = [
   { key: 'backup',      label: 'Backup',      glyph: '💾' },
   { key: 'security',   label: 'Security',    glyph: '🔒' },
   { key: 'searchlight', label: 'Searchlight', glyph: '🔎' },
-  { key: 'geoint',      label: 'GeoINT',      glyph: '🌍' }
+  { key: 'geoint',      label: 'GeoINT',      glyph: '🌍' },
+  { key: 'socmint',     label: 'SOCMINT',     glyph: '📡' },
+  { key: 'x',           label: 'X / Twitter', glyph: '✖' }
 ];
 
 function newShortcutId(): string {
@@ -119,6 +122,8 @@ export function SettingsModule(): JSX.Element {
         {section === 'security' && <SecurityPane />}
         {section === 'searchlight' && <SearchlightPane s={s} patch={patch} />}
         {section === 'geoint' && <GeoINTPane s={s} patch={patch} />}
+        {section === 'socmint' && <SocmintPane s={s} patch={patch} />}
+        {section === 'x' && <XPane s={s} patch={patch} />}
       </div>
     </div>
   );
@@ -627,6 +632,416 @@ function GeoINTPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSettin
         </label>
       </div>
     </fieldset>
+  );
+}
+
+function SocmintPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSettings>) => Promise<void> }): JSX.Element {
+  const [burnerId, setBurnerId] = useState('');
+  const [sessionString, setSessionString] = useState('');
+  const [apiId, setApiId] = useState('');
+  const [apiHash, setApiHash] = useState('');
+  const [hasBurner, setHasBurner] = useState<boolean>(false);
+  const [saving, setSaving] = useState(false);
+
+  // Load hasBurner status when the burner ID changes.
+  useEffect(() => {
+    const id = burnerId.trim();
+    if (!id) { setHasBurner(false); return; }
+    void window.api.socmint.hasBurner(id).then(setHasBurner).catch(() => setHasBurner(false));
+  }, [burnerId]);
+
+  const saveBurner = async (): Promise<void> => {
+    const id = burnerId.trim();
+    const sess = sessionString.trim();
+    if (!id) { toast.error('Enter a burner ID.'); return; }
+    if (!sess) { toast.error('Enter a session string.'); return; }
+    setSaving(true);
+    try {
+      const creds: Record<string, string> = { sessionString: sess };
+      if (apiId.trim()) creds.apiId = apiId.trim();
+      if (apiHash.trim()) creds.apiHash = apiHash.trim();
+      await window.api.socmint.setBurner(id, creds);
+      const updated = await window.api.socmint.hasBurner(id);
+      setHasBurner(updated);
+      setSessionString(''); setApiId(''); setApiHash('');
+      toast.success('Burner credentials saved (encrypted).');
+    } catch (err) {
+      toast.error(`Save failed: ${(err as Error).message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <fieldset>
+      <legend>SOCMINT</legend>
+      <div style={{ marginBottom: 12 }}>
+        <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={s.socmint.networkEnabled}
+            onChange={(e) => void patch({ socmint: { ...s.socmint, networkEnabled: e.target.checked } })}
+            style={{ marginTop: 2 }}
+          />
+          <span>
+            Enable SOCMINT network egress (off by default). When off, no collector
+            connects and no egress is initiated for SOCMINT operations.
+          </span>
+        </label>
+      </div>
+      <div style={{ marginBottom: 12 }}>
+        <p style={{ fontSize: 12, margin: '0 0 6px 0', fontWeight: 'bold' }}>Collector transport</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer' }}>
+            <input
+              type="radio"
+              name="socmint-transport"
+              value="direct"
+              checked={(s.socmint.transport ?? 'direct') === 'direct'}
+              onChange={() => void patch({ socmint: { ...s.socmint, transport: 'direct' } })}
+            />
+            <span>Direct (clearnet)</span>
+          </label>
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer' }}>
+            <input
+              type="radio"
+              name="socmint-transport"
+              value="tor"
+              checked={(s.socmint.transport ?? 'direct') === 'tor'}
+              onChange={() => void patch({ socmint: { ...s.socmint, transport: 'tor' } })}
+            />
+            <span>Tor (per-burner circuit)</span>
+          </label>
+        </div>
+        <p style={{ fontSize: 11, color: '#444', margin: '6px 0 0' }}>
+          Direct sends traffic over your normal connection; Tor routes each burner through its own circuit.
+          In Tor mode a bootstrapped Tor connection is required — the collector refuses when Tor is down.
+        </p>
+      </div>
+      <hr style={{ margin: '10px 0', borderColor: '#ccc' }} />
+      <div>
+        <p style={{ fontSize: 12, margin: '0 0 8px 0', fontWeight: 'bold' }}>Burner identity</p>
+        <p style={{ fontSize: 11, color: '#444', margin: '0 0 8px 0' }}>
+          Burner credentials are stored encrypted via the OS keyring under
+          {' '}<code>socmint.burner.&lt;id&gt;.*</code>. Only a boolean{' '}
+          <strong>has credential</strong> status is shown here — the secret values
+          are never echoed to the UI.
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 6, alignItems: 'center' }}>
+          <label>Burner ID:</label>
+          <input
+            className="ga98-text"
+            value={burnerId}
+            onChange={(e) => setBurnerId(e.target.value)}
+            placeholder="e.g. burner-1"
+            disabled={saving}
+          />
+          <label>Session string:</label>
+          <input
+            className="ga98-text"
+            type="password"
+            value={sessionString}
+            onChange={(e) => setSessionString(e.target.value)}
+            placeholder="(Telegram session string — not echoed)"
+            disabled={saving}
+          />
+          <label>API ID (opt.):</label>
+          <input
+            className="ga98-text"
+            type="password"
+            value={apiId}
+            onChange={(e) => setApiId(e.target.value)}
+            placeholder="(numeric API ID — optional)"
+            disabled={saving}
+          />
+          <label>API Hash (opt.):</label>
+          <input
+            className="ga98-text"
+            type="password"
+            value={apiHash}
+            onChange={(e) => setApiHash(e.target.value)}
+            placeholder="(API hash — optional)"
+            disabled={saving}
+          />
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
+          <button
+            onClick={() => void saveBurner()}
+            disabled={saving || !burnerId.trim() || !sessionString.trim()}
+          >
+            {saving ? 'Saving…' : 'Save burner credentials'}
+          </button>
+          {burnerId.trim() && hasBurner && (
+            <span style={{ fontSize: 11, color: '#008000' }}>✓ credential stored</span>
+          )}
+          {burnerId.trim() && !hasBurner && (
+            <span style={{ fontSize: 11, color: '#888' }}>no credential stored</span>
+          )}
+        </div>
+        <p style={{ fontSize: 11, color: '#444', margin: '8px 0 0' }}>
+          The Telegram collector is built to interface; live validation and library
+          lock are pending the operator smoke test (spec §7). Setting credentials
+          here prepares the identity for when the library is pinned.
+        </p>
+      </div>
+    </fieldset>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// X / Twitter collector settings pane (X-7)
+// ---------------------------------------------------------------------------
+
+/**
+ * XPane — gated toggle + clearnet-acknowledgement dialog + account management.
+ *
+ * Gating (spec §3.1):
+ *   - The network-enabled toggle is DISABLED until clearnetAcknowledged=true.
+ *   - clearnetAcknowledged is set only via the explicit confirmation dialog
+ *     (not by the toggle alone). The dialog text is from CLEARNET_DIALOG_TEXT.
+ *
+ * Credentials (spec §5.2):
+ *   - auth_token / ct0 are written to secretStore via x.addAccount().
+ *   - Credential input fields are type="password" and are cleared after save.
+ *   - x.listAccounts() returns IDs only; x.hasAccount() returns boolean only.
+ *   - No credential values are ever displayed or stored in component state after save.
+ */
+function XPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSettings>) => Promise<void> }): JSX.Element {
+  const [newAccountId, setNewAccountId] = useState('');
+  const [newAuthToken, setNewAuthToken] = useState('');
+  const [newCt0, setNewCt0] = useState('');
+  const [newUsername, setNewUsername] = useState('');
+  const [accountList, setAccountList] = useState<string[]>([]);
+  const [credStatus, setCredStatus] = useState<Record<string, boolean>>({});
+  const [saving, setSaving] = useState(false);
+
+  const loadAccounts = useCallback(async (): Promise<void> => {
+    try {
+      const ids = (await window.api.x.listAccounts()) as string[];
+      setAccountList(ids);
+      const pairs = await Promise.all(
+        ids.map(async (id) => {
+          const has = (await window.api.x.hasAccount(id)) as boolean;
+          return [id, has] as const;
+        }),
+      );
+      setCredStatus(Object.fromEntries(pairs));
+    } catch {
+      setAccountList([]);
+      setCredStatus({});
+    }
+  }, []);
+
+  useEffect(() => { void loadAccounts(); }, [loadAccounts]);
+
+  const x = s.x;
+
+  const handleAcknowledge = async (): Promise<void> => {
+    const ok = await confirmDialog(CLEARNET_DIALOG_TEXT, 'X/Twitter Collector — Clearnet Acknowledgement');
+    if (!ok) return;
+    await patch({ x: { ...x, clearnetAcknowledged: true } });
+    toast.info('Clearnet acknowledged. You may now enable the X collector.');
+  };
+
+  const handleNetworkToggle = async (checked: boolean): Promise<void> => {
+    if (checked && !xNetworkToggleEnabled(x.clearnetAcknowledged)) {
+      toast.error('Acknowledge the clearnet warning first (see below).');
+      return;
+    }
+    await patch({ x: { ...x, networkEnabled: checked } });
+  };
+
+  const handleAddAccount = async (): Promise<void> => {
+    const id = newAccountId.trim();
+    if (!id) { toast.error('Enter an account ID.'); return; }
+    if (!newAuthToken.trim() && !newCt0.trim()) {
+      toast.error('Enter at least auth_token or ct0.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const creds: Record<string, string> = {};
+      if (newAuthToken.trim()) creds.auth_token = newAuthToken.trim();
+      if (newCt0.trim()) creds.ct0 = newCt0.trim();
+      if (newUsername.trim()) creds.username = newUsername.trim();
+      await window.api.x.addAccount(id, creds);
+      // Clear credential fields immediately after save — they must not remain in state.
+      setNewAccountId(''); setNewAuthToken(''); setNewCt0(''); setNewUsername('');
+      toast.success('X account credentials saved (encrypted).');
+      await loadAccounts();
+    } catch (err) {
+      toast.error(`Save failed: ${(err as Error).message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRemoveAccount = async (id: string): Promise<void> => {
+    const ok = await confirmDialog(
+      `Remove X account "${id}" and delete all stored credentials?`,
+      'Remove X account',
+    );
+    if (!ok) return;
+    try {
+      await window.api.x.removeAccount(id);
+      toast.success('Account removed.');
+      await loadAccounts();
+    } catch (err) {
+      toast.error(`Remove failed: ${(err as Error).message}`);
+    }
+  };
+
+  return (
+    <>
+      <fieldset>
+        <legend>X / Twitter Collector</legend>
+
+        {/* Clearnet acknowledgement gate */}
+        {!x.clearnetAcknowledged ? (
+          <div style={{ border: '1px solid #c0a000', background: '#fffae0', padding: 10, marginBottom: 12 }}>
+            <p style={{ margin: '0 0 6px 0', fontWeight: 'bold', color: '#7a4d00' }}>
+              Clearnet acknowledgement required
+            </p>
+            <p style={{ margin: '0 0 8px 0', fontSize: 12, color: '#444' }}>
+              The X/Twitter collector makes requests to x.com over your regular internet
+              connection. Unlike SOCMINT (Telegram) it cannot be routed through Tor.
+              You must read and confirm the clearnet disclosure before the network
+              toggle can be enabled.
+            </p>
+            <button onClick={() => void handleAcknowledge()}>
+              View clearnet disclosure and acknowledge…
+            </button>
+          </div>
+        ) : (
+          <p style={{ fontSize: 11, color: '#008000', marginBottom: 8 }}>
+            ✓ Clearnet exposure acknowledged.
+          </p>
+        )}
+
+        {/* Network enable toggle — disabled until clearnetAcknowledged */}
+        <div style={{ marginBottom: 10 }}>
+          <label
+            style={{
+              display: 'flex', gap: 8, alignItems: 'flex-start',
+              cursor: xNetworkToggleEnabled(x.clearnetAcknowledged) ? 'pointer' : 'not-allowed',
+              opacity: xNetworkToggleEnabled(x.clearnetAcknowledged) ? 1 : 0.45,
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={x.networkEnabled}
+              disabled={!xNetworkToggleEnabled(x.clearnetAcknowledged)}
+              onChange={(e) => void handleNetworkToggle(e.target.checked)}
+              style={{ marginTop: 2 }}
+            />
+            <span>
+              Enable X/Twitter network egress (off by default). When off, the sidecar
+              is never spawned and no egress is initiated for X collection.
+            </span>
+          </label>
+          {!xNetworkToggleEnabled(x.clearnetAcknowledged) && (
+            <p style={{ fontSize: 11, color: '#900', margin: '3px 0 0 24px' }}>
+              Requires clearnet acknowledgement above.
+            </p>
+          )}
+        </div>
+
+        <p style={{ fontSize: 11, color: '#444', margin: '0 0 0 0' }}>
+          The X collector uses a Python sidecar (twscrape) that connects to x.com. Both
+          settings.x.networkEnabled and settings.x.clearnetAcknowledged must be true at
+          the IPC gate before any sidecar path is entered (spec §3.1). The sidecar binary
+          is sealed (pending operator lock) — collection is not available until it is
+          installed separately.
+        </p>
+      </fieldset>
+
+      {/* Account credentials */}
+      <fieldset>
+        <legend>X Account Credentials</legend>
+        <p style={{ fontSize: 11, color: '#444', margin: '0 0 8px 0' }}>
+          Credentials (auth_token + ct0) are stored encrypted via the OS keyring under
+          {' '}<code>x.accounts.&lt;id&gt;.*</code>. Only a boolean{' '}
+          <strong>has credential</strong> status is shown here — the secret values
+          are never echoed to the UI (spec §5.2). Provision burner accounts externally
+          on an unlinked device/network before adding them here.
+        </p>
+
+        {/* Existing accounts */}
+        {accountList.length > 0 && (
+          <div style={{ marginBottom: 12 }}>
+            <p style={{ fontSize: 12, fontWeight: 'bold', margin: '0 0 6px 0' }}>Stored accounts</p>
+            <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+              {accountList.map((id) => (
+                <li key={id} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
+                  <code style={{ flex: 1, fontSize: 12 }}>{id}</code>
+                  {credStatus[id]
+                    ? <span style={{ fontSize: 11, color: '#008000' }}>✓ auth_token stored</span>
+                    : <span style={{ fontSize: 11, color: '#888' }}>no auth_token</span>
+                  }
+                  <button onClick={() => void handleRemoveAccount(id)}>Remove</button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Add new account */}
+        <div>
+          <p style={{ fontSize: 12, fontWeight: 'bold', margin: '0 0 6px 0' }}>Add account</p>
+          <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', gap: 6, alignItems: 'center' }}>
+            <label>Account ID:</label>
+            <input
+              className="ga98-text"
+              value={newAccountId}
+              onChange={(e) => setNewAccountId(e.target.value)}
+              placeholder="e.g. burner-x-1"
+              disabled={saving}
+            />
+            <label>auth_token:</label>
+            <input
+              className="ga98-text"
+              type="password"
+              value={newAuthToken}
+              onChange={(e) => setNewAuthToken(e.target.value)}
+              placeholder="(cookie — write-only, not echoed)"
+              disabled={saving}
+              autoComplete="off"
+            />
+            <label>ct0:</label>
+            <input
+              className="ga98-text"
+              type="password"
+              value={newCt0}
+              onChange={(e) => setNewCt0(e.target.value)}
+              placeholder="(CSRF token — write-only, not echoed)"
+              disabled={saving}
+              autoComplete="off"
+            />
+            <label>Username (opt.):</label>
+            <input
+              className="ga98-text"
+              value={newUsername}
+              onChange={(e) => setNewUsername(e.target.value)}
+              placeholder="@handle (optional)"
+              disabled={saving}
+            />
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
+            <button
+              onClick={() => void handleAddAccount()}
+              disabled={saving || !newAccountId.trim() || (!newAuthToken.trim() && !newCt0.trim())}
+            >
+              {saving ? 'Saving…' : 'Save credentials'}
+            </button>
+          </div>
+          <p style={{ fontSize: 11, color: '#444', marginTop: 8 }}>
+            Extract auth_token and ct0 from your browser's cookie jar after logging in to
+            x.com on the burner account. Credentials are stored encrypted; once saved,
+            they are never shown again (boolean status only).
+          </p>
+        </div>
+      </fieldset>
+    </>
   );
 }
 

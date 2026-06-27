@@ -1,0 +1,34 @@
+# twscrape-runner — base version constraints
+#
+# SEALED: this file documents the intended dependency versions.
+# Do NOT 'pip install -r requirements.txt' directly — the build gate
+# (scripts/build-twscrape-runner.sh) downloads packages, generates
+# requirements-lock.txt with --require-hashes pins, and installs from
+# that lockfile.  Never fetch fresh packages at build time without the
+# hash-verification step (spec §5.7 supply-chain requirement).
+#
+# Supply-chain steps (operator must follow before building):
+#   1. Verify pypi.org/project/twscrape/ is owned by vladkens.
+#      Compare the PyPI maintainer to github.com/vladkens/twscrape.
+#      Do NOT install any package named 'twscrape' from any other source.
+#   2. Run scripts/build-twscrape-runner.sh on the target platform host.
+#      The script downloads, hashes, and installs deps, then compiles.
+#   3. Commit the SHA-256 of the output binary into
+#      src/main/x/sidecar-client.ts PINNED_SHA256[<platform>].
+#   4. Run: pnpm typecheck && pnpm test test/x-sidecar-build.test.ts
+#
+# twscrape 0.19.1 released 2026-06-26 (primary source: pypi.org/project/twscrape/).
+# "Updated GraphQL operation IDs for current X API compatibility" — this is the
+# doc_id rotation maintenance cadence (break/patch/break/patch every 2-4 weeks).
+# Monitor the project and rebuild the sidecar when a new twscrape release appears.
+
+# Core scraper (MIT, by vladkens)
+twscrape==0.19.1
+
+# PyInstaller — must match the version used to compile; onedir layout.
+# 6.x required for curl-cffi native-extension support.
+pyinstaller==6.13.0
+
+# pip-tools is used by the build script to generate requirements-lock.txt.
+# Not bundled into the frozen binary; dev/build dependency only.
+pip-tools==7.4.1
