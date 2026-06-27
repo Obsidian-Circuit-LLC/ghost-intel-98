@@ -482,7 +482,18 @@ const api = {
     hasWhatsappBurner: (burnerId: string) =>
       ipcRenderer.invoke(channels.socmint.hasWhatsappBurner, burnerId),
     unlinkWhatsappBurner: (burnerId: string) =>
-      ipcRenderer.invoke(channels.socmint.unlinkWhatsappBurner, burnerId)
+      ipcRenderer.invoke(channels.socmint.unlinkWhatsappBurner, burnerId),
+    /**
+     * Subscribe to live harvested items streamed from an active monitor session.
+     * Each call to the callback receives a single HarvestedItem pushed from main.
+     * Returns an unsubscribe function (call to stop receiving updates).
+     * Items arrive via textContent-safe fields only — renderer must not innerHTML them.
+     */
+    onMonitorItem: (cb: (item: unknown) => void) => {
+      const l = (_e: unknown, item: unknown) => cb(item);
+      ipcRenderer.on(channels.socmint.monitorItem, l);
+      return () => ipcRenderer.removeListener(channels.socmint.monitorItem, l);
+    }
   },
   // X/Twitter collector — clearnet quarantine (X-6).
   // Separate namespace from socmint; gate requires BOTH networkEnabled AND clearnetAcknowledged.

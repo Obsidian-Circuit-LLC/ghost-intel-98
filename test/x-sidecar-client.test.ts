@@ -41,6 +41,7 @@ import {
   sidecarPath,
   __setSidecarPathForTest,
   __setSpawnForTest,
+  __setPinnedShaForTest,
   __resetForTest,
 } from '../src/main/x/sidecar-client';
 import type { RawTweet, XSidecarRequest } from '../src/main/x/sidecar-client';
@@ -66,6 +67,12 @@ const FIXED_JOB_ID = 'test-job-001';
 
 beforeEach(() => {
   __resetForTest();
+  // These tests spawn the mock fixture (test/fixtures/mock-x-sidecar.mjs), whose
+  // hash never equals the production PINNED_SHA256 pin. Neutralise the pin so
+  // verify-before-exec is disabled for the fixture; otherwise runJob short-circuits
+  // with SHA_MISMATCH before spawning. (__resetForTest restores the non-empty
+  // production default, so an explicit empty-pin override is required.)
+  __setPinnedShaForTest({ win32: '', linux: '', darwin: '' });
 });
 
 afterEach(() => {

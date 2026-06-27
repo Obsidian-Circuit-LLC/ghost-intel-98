@@ -110,6 +110,7 @@ import {
   handleUnlinkWhatsappBurner,
 } from '../socmint/ipc';
 import { makeMtcuteCollector } from '../socmint/collector';
+import { makeWhatsAppCollector } from '../socmint/whatsapp-collector';
 import {
   handleXAddAccount, handleXRemoveAccount, handleXListAccounts, handleXHasAccount,
   handleXCollect, handleXListItems, handleXRankItems,
@@ -1407,6 +1408,14 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
       networkEnabled: async () => (await settingsStore.read()).socmint.networkEnabled,
       transport: async () => (await settingsStore.read()).socmint.transport,
       collectorFactory: makeMtcuteCollector,
+      // Platform-selected in handleStartMonitor: platform='whatsapp' → this factory.
+      whatsappCollectorFactory: makeWhatsAppCollector,
+      // Stream each harvested item to the renderer so the UI updates live.
+      // isDestroyed() guard prevents sending to a window that closed mid-session.
+      sendToRenderer: (item) => {
+        const w = getWindow();
+        if (w && !w.isDestroyed()) w.webContents.send(channels.socmint.monitorItem, item);
+      },
     }));
   safeHandle(channels.socmint.stopMonitor, (...a) =>
     handleStopMonitor(typeof a[0] === 'string' ? a[0] : ''));
@@ -1422,6 +1431,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     if (phone.length < 5) throw new Error('socmint:setWhatsappBurnerPairingCode requires a valid phone number (5+ digits)');
     return handleSetWhatsappBurnerPairingCode(burnerId, phone, {
       networkEnabled: async () => (await settingsStore.read()).socmint.networkEnabled,
+      transport: async () => (await settingsStore.read()).socmint.transport,
     });
   });
   // Boolean only — never echoes the stored creds value to the renderer.

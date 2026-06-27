@@ -73,6 +73,17 @@ resources/exiftool/*/
 resources/local-ai/models/
 resources/local-ai/EMBED_MODEL_PRESENT
 
+# twscrape-runner PyInstaller sidecar — per-platform built binaries (operator build gate; not committed)
+resources/twscrape-runner/linux-x64/
+resources/twscrape-runner/mac-x64/
+resources/twscrape-runner/mac-arm64/
+resources/twscrape-runner/win-x64/
+# twscrape-runner build artefacts (venv, vendor cache, PyInstaller work dir, spec file)
+resources/twscrape-runner/.venv-build/
+resources/twscrape-runner/vendor/
+resources/twscrape-runner/.build-work/
+resources/twscrape-runner/twscrape-runner.spec
+
 # python bytecode from confinement gate scripts
 scripts/gates/__pycache__/
 __pycache__/

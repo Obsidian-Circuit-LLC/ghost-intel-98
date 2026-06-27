@@ -29,7 +29,10 @@ import type { HarvestedItem, MonitoredChannel } from '@shared/socmint/types';
 import type { ItemLabel } from './labels';
 import type { SocmintCollector } from './collector';
 import { resolveTransport, type SocmintTransport } from './tor-identity';
-import { WA_SEALED_MESSAGE } from './whatsapp-collector';
+// WA_SEALED_MESSAGE is no longer thrown here (§5.5 de-sealed 2026-06-27); it is
+// still exported by whatsapp-collector.ts for audit-trail purposes.
+import type { WaSocketLike, WaConnectionUpdate } from './whatsapp-collector';
+import type { WhatsAppAuthState } from './whatsapp-auth';
 
 // ---------------------------------------------------------------------------
 // CollectorFactory type — injected by register.ts; injectable for gate tests.
@@ -223,8 +226,29 @@ export async function handleHasBurner(burnerId: string): Promise<boolean> {
 // Monitor lifecycle — startMonitor is the only egress-causing handler
 // ---------------------------------------------------------------------------
 
-/** Active job registry (in-process; reset on restart; v1 only). */
-const activeJobs = new Map<string, { burnerId: string; caseId: string }>();
+/** Active job registry (in-process; reset on restart). */
+const activeJobs = new Map<string, {
+  burnerId: string;
+  caseId: string;
+  collector: SocmintCollector;
+  unsubscribe: () => void;
+}>();
+
+/**
+ * Active pairing-socket registry keyed by burnerId.
+ * Tracks the WhatsApp socket created in handleSetWhatsappBurnerPairingCode so that
+ * handleUnlinkWhatsappBurner can end it and prevent orphaned Tor/SOCKS circuits.
+ *
+ * Lifecycle:
+ *   SUCCESS  — entry is KEPT so handleUnlinkWhatsappBurner can end the socket when
+ *              the analyst retires the burner.  The entry is never silently immortal:
+ *              a RETRY for the same burnerId (see below) also ends it.
+ *   FAILURE  — entry is deleted + sock.end?.() called before re-throw (no orphan).
+ *   RETRY    — if pairingSockets already holds an entry for the same burnerId, the
+ *              prior socket is ended and the entry deleted BEFORE the new socket is
+ *              constructed, preventing double-open circuits on subsequent pairing attempts.
+ */
+const pairingSockets = new Map<string, WaSocketLike>();
 
 /**
  * Start monitoring channels for a case.
@@ -238,21 +262,37 @@ const activeJobs = new Map<string, { burnerId: string; caseId: string }>();
  * Tor is down — never a silent clearnet fallback. In 'direct' mode this is the
  * operator's explicit clearnet choice (settings.socmint.transport='direct').
  *
- * The collector is then constructed with the resolved transport. connect() is the
- * sealed seam in v1 and is NOT called here; in 'tor' mode Tor was already validated
- * above via resolveTransport. No invariant is asserted that the code does not enforce.
+ * The collector is then constructed, connected, and subscribed strictly downstream
+ * of the gate. connect() is the first network-touching operation and runs AFTER
+ * the gate check and transport resolution — never before.
  *
  * @param rawReq   { caseId, burnerId, channelIds?, keywords? }
- * @param deps     { networkEnabled, transport, collectorFactory } — injectable for tests
+ * @param deps     Injectable for tests: networkEnabled, transport, collectorFactory,
+ *                 and optional sendToRenderer for live streaming to the renderer.
  */
 export async function handleStartMonitor(
   rawReq: unknown,
   deps: {
     networkEnabled: () => Promise<boolean>;
     transport: () => Promise<'direct' | 'tor'>;
+    /** Factory for Telegram (and generic) collectors. */
     collectorFactory: CollectorFactory;
+    /**
+     * Optional factory for WhatsApp collectors.
+     * When provided and the request's `platform` is `'whatsapp'`, this factory
+     * is used instead of `collectorFactory`.
+     * Production: makeWhatsAppCollector; tests: mock factory.
+     */
+    whatsappCollectorFactory?: CollectorFactory;
+    /** Optional: stream each harvested item to the renderer window via webContents.send. */
+    sendToRenderer?: (item: HarvestedItem) => void;
+    /**
+     * Test-only: override the upsertItems call so gate tests can inject a failing store
+     * without touching the real filesystem. NEVER set in production.
+     */
+    _upsertItems?: (caseId: string, items: HarvestedItem[]) => Promise<void>;
   },
-): Promise<{ disabled: true } | { started: true; jobId: string }> {
+): Promise<{ disabled: true } | { started: true; jobId: string } | { noChannels: true }> {
   // EGRESS GATE: precedes ALL network/collector operations.
   if (!await deps.networkEnabled()) return { disabled: true };
 
@@ -263,29 +303,97 @@ export async function handleStartMonitor(
   if (!rawBurner) throw new Error('socmint:startMonitor requires burnerId');
   const burnerId = rawBurner.replace(/[/\\]/g, '_'); // basename-sanitise (secretStore key safety)
 
+  // Parse channelIds from the request (trust boundary: filter to strings only).
+  const channelIds = Array.isArray(req.channelIds)
+    ? (req.channelIds as unknown[]).filter((id): id is string => typeof id === 'string')
+    : [];
+
   // Resolve transport AT THE EGRESS BOUNDARY. In 'tor' mode this THROWS
   // SocmintTorUnavailableError when Tor is down — never a silent clearnet fallback.
   // In 'direct' mode this is the operator's explicit clearnet choice.
   const transport = resolveTransport(burnerId, await deps.transport());
 
-  // Construct the collector with the resolved transport. connect() is the sealed seam in
-  // v1 (throws 'not installed') and is NOT called here; in 'tor' mode Tor was already
-  // validated above. No invariant is asserted that the code does not actually enforce.
-  deps.collectorFactory({ burnerId, transport, harvestedAt: () => new Date().toISOString() });
+  // Select the collector factory based on the requested platform.
+  // 'whatsapp' → whatsappCollectorFactory (if wired); everything else → collectorFactory (Telegram).
+  const platform = typeof req.platform === 'string' ? req.platform : 'telegram';
+  const factory =
+    platform === 'whatsapp' && deps.whatsappCollectorFactory != null
+      ? deps.whatsappCollectorFactory
+      : deps.collectorFactory;
+
+  // Construct the collector with the resolved transport.
+  const collector = factory({ burnerId, transport, harvestedAt: () => new Date().toISOString() });
+
+  // Connect — STRICTLY downstream of the gate and transport validation.
+  // Collect join() results so subscribe() receives resolved numeric IDs, not raw
+  // request identifiers (@usernames / invite links) which String(msg.chat.id) would
+  // never match — causing silent zero-harvest for any @username/invite-link channel.
+  // If connect() or any join() throws, attempt best-effort cleanup before re-throwing.
+  const joinedChannels: MonitoredChannel[] = [];
+  try {
+    await collector.connect();
+
+    // Join each monitored channel (sequentially — mtcute enforces per-account rate limits).
+    for (const channelId of channelIds) {
+      const joined = await collector.join(channelId);
+      joinedChannels.push(joined);
+    }
+  } catch (err) {
+    // Best-effort cleanup: disconnect the partially-connected collector so we don't leak
+    // the underlying TCP/Tor connection. Ignore cleanup errors — the original error wins.
+    try { await collector.disconnect(); } catch { /* ignore */ }
+    throw err;
+  }
+
+  // Subscribe to live items. onItem persists each item to the encrypted store and
+  // optionally streams it to the renderer if deps.sendToRenderer is wired.
+  // Fire-and-forget (void) so the synchronous subscribe callback signature is satisfied.
+  // The .catch() on the void invocation ensures upsertItems failures are non-fatal —
+  // an item-level store error must never become an unhandledRejection in the main process.
+  const onItem = async (item: HarvestedItem): Promise<void> => {
+    if (deps._upsertItems) {
+      await deps._upsertItems(caseId, [item]);
+    } else {
+      const { upsertItems } = await import('./store');
+      await upsertItems(caseId, [item]);
+    }
+    deps.sendToRenderer?.(item);
+  };
+  // Pass the resolved IDs (from join()) — these are the numeric chat IDs that
+  // String(msg.chat.id) will match. Passing raw channelIds would yield zero-harvest
+  // for @username/invite-link channels that join() resolves to a different numeric id.
+  const resolvedIds = joinedChannels.map((j) => j.channelId);
+
+  // FAIL-CLOSED: if the resolved watch set is empty (channelIds was empty, or no join()
+  // returned a usable id), subscribing would deliver EVERY incoming message — every chat
+  // and DM the burner is in — to the store and renderer (the `watchedIds.size > 0` guard
+  // in the collector filters fails open when the set is empty).  Instead, disconnect to
+  // release the circuit and return a typed sentinel so the caller can surface a clear error.
+  if (resolvedIds.length === 0) {
+    try { await collector.disconnect(); } catch { /* ignore cleanup error */ }
+    return { noChannels: true };
+  }
+
+  const unsubscribe = collector.subscribe(resolvedIds, (item) => {
+    void onItem(item).catch(() => { /* non-fatal: item dropped from this stream; never echo secrets */ });
+  });
 
   const jobId = randomUUID();
-  activeJobs.set(jobId, { burnerId, caseId });
+  activeJobs.set(jobId, { burnerId, caseId, collector, unsubscribe });
   return { started: true, jobId };
 }
 
 /**
  * Stop an active monitor job by jobId.
- * Removes the job from the registry. No-op if the jobId is unknown.
- * In v1 there is no live connection to close (sealed seam); the registry
- * is cleared so future startMonitor calls can reuse the slot.
+ * Calls the subscriber's unsubscribe function, then disconnects the collector.
+ * No-op if the jobId is unknown (already stopped or never started).
  */
 export async function handleStopMonitor(jobId: string): Promise<void> {
+  const job = activeJobs.get(jobId);
+  if (!job) return;
   activeJobs.delete(jobId);
+  job.unsubscribe();
+  await job.collector.disconnect();
 }
 
 // ---------------------------------------------------------------------------
@@ -299,30 +407,152 @@ const WA_BURNER_KEY_PREFIX = 'socmint.whatsapp.burner.';
 /**
  * Request a WhatsApp pairing code for the given burnerId + phone number.
  *
- * EGRESS GATE (WA-T7): returns { disabled: true } when networkEnabled is false —
+ * EGRESS GATE: returns { disabled: true } when networkEnabled is false —
  * never constructs a socket or touches any network path.
  *
- * When the gate is open, the sealed Baileys adapter is invoked. Until the operator
- * completes the §5.5 supply-chain checklist and unseals the library, every call with
- * an open gate throws WA_SEALED_MESSAGE — a deliberate, named error, never a crash
- * or a silent clearnet fallback.
+ * De-sealed per §5.5 supply-chain verification COMPLETE (operator sign-off 2026-06-27).
+ * Live path (gate open):
+ *   resolveTransport → secretStore-backed auth → makeWASocket (SOCKS5 agent if tor) →
+ *   requestPairingCode(phone) → return { pairingCode }.
+ *   creds.update: auth.saveCreds() (debounced).
+ *   connection.update {connection:'open'}: explicit auth.saveCreds() (belt-and-suspenders).
  *
- * Post-unseal path (§2.8 of the design spec):
- *   resolveTransport → makeWASocket (with auth + optional SOCKS5 agent) →
- *   requestPairingCode → return { pairingCode } → persist creds on 'connection:open'.
+ * CRITICAL: makeWASocket EGRESSES ON CONSTRUCTION — the gate check must complete and
+ * return true BEFORE any socket is constructed.
  *
  * The `deps` parameter is injected for testability (mirrors handleStartMonitor).
  */
 export async function handleSetWhatsappBurnerPairingCode(
-  _burnerId: string,
-  _phone: string,
-  deps: { networkEnabled: () => Promise<boolean> },
+  burnerId: string,
+  phone: string,
+  deps: {
+    networkEnabled: () => Promise<boolean>;
+    /**
+     * Transport mode resolver. REQUIRED — mirrors handleStartMonitor so the pairing
+     * handler honours the operator's transport setting and fails closed in 'tor' mode
+     * when Tor is down. Omitting this would silently default to clearnet (fail-open),
+     * which contradicts the fail-closed transport invariant.
+     */
+    transport: () => Promise<'direct' | 'tor'>;
+    /**
+     * Test-only injection: bypass Baileys, SocksProxyAgent, and secretStore.
+     * NEVER set in production.
+     */
+    _inject?: {
+      createSocket: (proxyUrl: string | null) => WaSocketLike;
+      authState?: WhatsAppAuthState;
+    };
+  },
 ): Promise<{ disabled: true } | { pairingCode: string }> {
   // EGRESS GATE — must precede ALL network / library operations.
   if (!await deps.networkEnabled()) return { disabled: true };
-  // Sealed seam: the Baileys library is not installed until the operator completes the
-  // §5.5 supply-chain checklist. Throw the canonical sealed message — not a crash.
-  throw new Error(WA_SEALED_MESSAGE);
+
+  // Resolve transport at the egress boundary. 'tor' throws SocmintTorUnavailableError
+  // when Tor is down (fail-closed). 'direct' is the operator's explicit clearnet choice.
+  // transport is REQUIRED (not optional) so the pairing handler can never silently
+  // fall through to clearnet when the operator intends 'tor' — fail-closed is the contract.
+  const transportMode = await deps.transport();
+  const transport = resolveTransport(burnerId, transportMode);
+
+  let auth: WhatsAppAuthState;
+  let sock: WaSocketLike;
+
+  if (deps._inject) {
+    // ─── Test path ────────────────────────────────────────────────────────────
+    // Bypass real Baileys, SocksProxyAgent, and secretStore.
+    const [{ makeWhatsAppAuthState }, { buildBaileysProxy }] = await Promise.all([
+      import('./whatsapp-auth'),
+      import('./whatsapp-proxy'),
+    ]);
+    auth =
+      deps._inject.authState ??
+      makeWhatsAppAuthState(burnerId, {
+        read: async () => null,
+        write: async () => {},
+        delete: async () => {},
+      });
+    await auth.initialize();
+    sock = deps._inject.createSocket(buildBaileysProxy(transport));
+  } else {
+    // ─── Production path ─────────────────────────────────────────────────────
+    // Lazy dynamic imports — sealed-seam / ESM footgun guard (no static Baileys import).
+    const [baileysModule, { SocksProxyAgent }, { secretStore: ss }, { makeWhatsAppAuthState }, { buildBaileysProxy }, { buildBaileysSocketConfig }] =
+      await Promise.all([
+        import('@whiskeysockets/baileys'),
+        import('socks-proxy-agent'),
+        import('../secrets/index'),
+        import('./whatsapp-auth'),
+        import('./whatsapp-proxy'),
+        import('./whatsapp-collector'),
+      ]);
+    const { makeWASocket } = baileysModule;
+
+    const authInstance = makeWhatsAppAuthState(burnerId, {
+      read: (k) => ss.get(k),
+      write: (k, v) => ss.set(k, v),
+      delete: (k) => ss.delete(k),
+    });
+    await authInstance.initialize();
+    auth = authInstance;
+
+    const proxyUrl = buildBaileysProxy(transport);
+    const agent = proxyUrl !== null ? new SocksProxyAgent(proxyUrl) : undefined;
+
+    // CRITICAL: makeWASocket EGRESSES ON CONSTRUCTION — only reached after gate check.
+    type BaileysConfig = Parameters<typeof makeWASocket>[0];
+    sock = makeWASocket(
+      buildBaileysSocketConfig(transport, auth, agent) as BaileysConfig,
+    ) as unknown as WaSocketLike;
+  }
+
+  // RETRY GUARD: if a prior pairing socket exists for this burnerId, end it and delete
+  // the registry entry BEFORE constructing the new socket.  Without this, a retry would
+  // overwrite the map entry and leave the old socket un-endable (orphaned circuit).
+  const priorSock = pairingSockets.get(burnerId);
+  if (priorSock !== undefined) {
+    pairingSockets.delete(burnerId);
+    try { priorSock.end?.(); } catch { /* ignore cleanup error */ }
+  }
+
+  // Register the socket in the pairing-socket registry BEFORE any async work that
+  // might throw.  This lets handleUnlinkWhatsappBurner end the socket even if
+  // requestPairingCode errors out — preventing orphaned SOCKS/Tor circuits.
+  pairingSockets.set(burnerId, sock);
+
+  // Register creds.update: persist auth on every Baileys key-ratchet.
+  sock.ev.on('creds.update', () => { void auth.saveCreds(); });
+
+  // Register connection.update: belt-and-suspenders saveCreds on open;
+  // note fatal loggedOut close (the user must re-link the burner).
+  sock.ev.on('connection.update', (update: WaConnectionUpdate) => {
+    if (update.connection === 'open') {
+      void auth.saveCreds();
+    }
+    // Fatal close (401): session invalidated — cannot surface back (pairingCode already returned).
+    // Future: emit an IPC event via webContents when renderer wiring is in place.
+  });
+
+  // requestPairingCode is available immediately after socket construction (before 'open').
+  // Guard against missing method — indicates a library version mismatch.
+  if (typeof sock.requestPairingCode !== 'function') {
+    // Missing method: clean up the socket (remove from registry + close) before throwing.
+    pairingSockets.delete(burnerId);
+    try { sock.end?.(); } catch { /* ignore cleanup error */ }
+    throw new Error(
+      'SOCMINT: WhatsApp socket.requestPairingCode not available — check library version',
+    );
+  }
+
+  // Wrap requestPairingCode: on ANY throw, tear down the socket so no orphan
+  // SOCKS/Tor circuit leaks. The registry entry is removed on failure.
+  try {
+    const pairingCode = await sock.requestPairingCode(phone);
+    return { pairingCode };
+  } catch (err) {
+    pairingSockets.delete(burnerId);
+    try { sock.end?.(); } catch { /* ignore cleanup error */ }
+    throw err;
+  }
 }
 
 /**
@@ -366,6 +596,15 @@ export async function handleUnlinkWhatsappBurner(
   store?: { delete(key: string): Promise<void> },
 ): Promise<void> {
   if (!burnerId) return;
+  // End any lingering pairing socket for this burnerId to release the Tor/SOCKS circuit
+  // BEFORE deleting credentials.  pairingSockets is keyed by the raw burnerId (same value
+  // used in handleSetWhatsappBurnerPairingCode), so no sanitisation is needed for the map
+  // lookup — only the secretStore keys use the sanitised form below.
+  const pairSock = pairingSockets.get(burnerId);
+  if (pairSock !== undefined) {
+    pairingSockets.delete(burnerId);
+    try { pairSock.end?.(); } catch { /* ignore cleanup error */ }
+  }
   const s = store ?? (await import('../secrets/index')).secretStore;
   const safeId = burnerId.replace(/[/\\]/g, '_');
   await s.delete(`${WA_BURNER_KEY_PREFIX}${safeId}.creds`);
