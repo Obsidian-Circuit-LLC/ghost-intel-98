@@ -35,9 +35,11 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`GhostIntel98-Setup-3.22.1.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
+> **Install:** download [`GhostIntel98-Setup-3.22.2.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
 
 ## Status
+
+**v3.22.2** — **Searchlight Connect-Tor + the X / Twitter collector window.** Two dogfooding gaps from the v3.22.0 SOCMINT activation, closed. **(1) Searchlight Tor:** a Tor-mode sweep used to report **"TOR NOT READY"** for every site whenever the bundled Tor hadn't been bootstrapped by the chat module — Searchlight never started Tor itself. It now shows a clear **"Tor is not connected"** notice with a one-click **Connect Tor** button (and a reminder that ticking *Direct (clearnet)* sweeps without Tor); the no-silent-clearnet invariant is unchanged — Tor mode still fails closed, the button just lets you start Tor explicitly. **(2) X / Twitter:** the X collector window was built in v3.22.0 but never registered, so there was no way to open it. It is now a launchable window (Start menu + desktop), separate from the SOCMINT window by design (X is a quarantined clearnet trust domain — the import-graph sentinel still forbids any link between X and the Tor/Telegram transports). The **twscrape sidecar** is now bundled by the packager when present. **Honest platform note:** the X sidecar binary is per-OS and cannot be cross-compiled — the **Linux** sidecar is built and SHA-pinned, but **this Windows build ships without an X sidecar**, so the X window opens and reports **"sidecar not installed"** until you build it on Windows (`scripts\build-twscrape-runner.bat`) and pin its SHA. Built subagent-driven (4 tasks) with a parallel adversarial whole-branch review that caught a broken channel-contract test (fixed) before merge. **1,979 automated tests** green; typecheck + build clean. *Everything from v3.22.1 carries forward.*
 
 **v3.22.1** — **Searchlight readability fix.** The **Sweep results** and **Reports preview** tables now render on the intended **midnight-purple** surface with readable text, instead of white. Root cause was a CSS cascade bug: the bundled `98.css` paints every native `<table>` white, which sat on top of (and hid) the dark results container, so both tables read as white regardless of the container color. The fix restates the dark surface on the table's *class* selectors — which win on specificity — and lifts the few text colors (not-found URL, site name) that were only legible against the accidental white. Cosmetic only; no behavior, dependency, or security-surface change. **1,972 automated tests** green; typecheck + build clean. *Everything from v3.22.0 carries forward.*
 
@@ -450,7 +452,7 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases) and run it.
 
-Direct link to the current release: [`GhostIntel98-Setup-3.22.1.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.22.1/GhostIntel98-Setup-3.22.1.exe)
+Direct link to the current release: [`GhostIntel98-Setup-3.22.2.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.22.2/GhostIntel98-Setup-3.22.2.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is **formally verified internally** — symbolic (ProVerif) +
 computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not**
 FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.6.8/GhostIntel98-Setup-3.6.8.exe).
@@ -458,7 +460,7 @@ FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Se
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\GhostIntel98-Setup-3.22.1.exe -Algorithm SHA256
+Get-FileHash .\GhostIntel98-Setup-3.22.2.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
