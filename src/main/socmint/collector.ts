@@ -348,8 +348,17 @@ export function makeMtcuteCollector(opts: {
 
     async backfill(channelId: string, limit: number): Promise<HarvestedItem[]> {
       if (!client) throw new Error('SOCMINT: connect() must be called before backfill()');
+      // The canonical channelId is mtcute's marked-id string (e.g. "-1001234567890";
+      // see join() and subscribe()'s String(msg.chat.id) filter). mtcute's getHistory
+      // resolves a STRING as a @username (its resolvePeer sends marked-id strings to
+      // contacts.resolveUsername → USERNAME_INVALID), and only a NUMBER triggers
+      // ID-based peer resolution. Coerce the stored marked id back to a number here.
+      const peer = Number(channelId);
+      if (!Number.isFinite(peer)) {
+        throw new Error(`SOCMINT: backfill() requires a numeric channel id, got "${channelId}"`);
+      }
       // getHistory returns ArrayPaginated<Message, offset> which is a Message[] with extras.
-      const messages = await client.getHistory(channelId, { limit });
+      const messages = await client.getHistory(peer, { limit });
       const provenance: HarvestedItem['provenance'] = {
         collectorVersion: '1.0.0',
         jobId: '',

@@ -35,6 +35,69 @@ import { withLock } from '../util/mutex';
 
 const WA_KEY_PREFIX = 'socmint.whatsapp.burner.';
 
+// ---------------------------------------------------------------------------
+// Buffer-safe JSON codec
+// ---------------------------------------------------------------------------
+//
+// AuthenticationCreds and the Signal key store hold Buffer / Uint8Array key
+// material (noiseKey, signedIdentityKey, signedPreKey, advSecretKey, pairing
+// keys, session bytes). Plain JSON.stringify turns a Buffer into
+// {"type":"Buffer","data":[...]} and plain JSON.parse returns a NON-Buffer plain
+// object — so on the next process start Baileys' Noise/Signal crypto operates on
+// non-Buffers and the burner cannot reconnect (re-pair required).
+//
+// These replacer/reviver functions are byte-for-byte compatible with Baileys'
+// own BufferJSON ({ type:'Buffer', data:<base64> }); they are inlined here so the
+// adapter stays a sealed seam (no static @whiskeysockets/baileys import). The
+// serialized form is internal storage only — Baileys never sees it, it only ever
+// receives the in-memory Buffer objects we revive.
+
+interface SerializedBuffer {
+  type: 'Buffer';
+  data: string;
+}
+
+function bufferReplacer(_key: string, value: unknown): unknown {
+  // By the time the replacer runs, a Buffer has already had toJSON() applied,
+  // arriving here as { type:'Buffer', data:[...numbers] }; a Uint8Array arrives
+  // raw. Normalise both into a base64 SerializedBuffer.
+  if (value instanceof Uint8Array) {
+    return { type: 'Buffer', data: Buffer.from(value).toString('base64') };
+  }
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    (value as { type?: unknown }).type === 'Buffer' &&
+    Array.isArray((value as { data?: unknown }).data)
+  ) {
+    const data = (value as { data: number[] }).data;
+    return { type: 'Buffer', data: Buffer.from(data).toString('base64') };
+  }
+  return value;
+}
+
+function bufferReviver(_key: string, value: unknown): unknown {
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    (value as { type?: unknown }).type === 'Buffer' &&
+    typeof (value as { data?: unknown }).data === 'string'
+  ) {
+    return Buffer.from((value as SerializedBuffer).data, 'base64');
+  }
+  return value;
+}
+
+/** Buffer-aware JSON.stringify (Signal/Noise key material survives the round-trip). */
+function serialize(value: unknown): string {
+  return JSON.stringify(value, bufferReplacer);
+}
+
+/** Buffer-aware JSON.parse (revives base64 blobs back into Buffer instances). */
+function deserialize(text: string): unknown {
+  return JSON.parse(text, bufferReviver);
+}
+
 /** Debounce delay in milliseconds.  Exported so tests can advance by exactly this
  *  amount without duplicating the magic number. */
 export const DEBOUNCE_MS = 200;
@@ -166,7 +229,7 @@ export function makeWhatsAppAuthState(
     credsTimer = setTimeout(() => {
       credsTimer = null;
       // Fire-and-forget: a keychain write failure is non-fatal (in-memory is authoritative).
-      void deps.write(credsKey, JSON.stringify(creds));
+      void deps.write(credsKey, serialize(creds));
     }, DEBOUNCE_MS);
   }
 
@@ -174,7 +237,7 @@ export function makeWhatsAppAuthState(
     if (keysTimer !== null) clearTimeout(keysTimer);
     keysTimer = setTimeout(() => {
       keysTimer = null;
-      void deps.write(keysKey, JSON.stringify(keys));
+      void deps.write(keysKey, serialize(keys));
     }, DEBOUNCE_MS);
   }
 
@@ -241,13 +304,13 @@ export function makeWhatsAppAuthState(
         // Repopulate in place so external references stay valid.
         let parsedCreds: WACreds = {};
         if (credsJson) {
-          try { parsedCreds = JSON.parse(credsJson) as WACreds; } catch { /* leave empty */ }
+          try { parsedCreds = deserialize(credsJson) as WACreds; } catch { /* leave empty */ }
         }
         repopulate(creds as Record<string, unknown>, parsedCreds as Record<string, unknown>);
 
         let parsedKeys: WAKeys = {};
         if (keysJson) {
-          try { parsedKeys = JSON.parse(keysJson) as WAKeys; } catch { /* leave empty */ }
+          try { parsedKeys = deserialize(keysJson) as WAKeys; } catch { /* leave empty */ }
         }
         repopulate(keys as Record<string, unknown>, parsedKeys as Record<string, unknown>);
       });
