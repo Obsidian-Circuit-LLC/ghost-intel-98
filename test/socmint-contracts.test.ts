@@ -15,6 +15,8 @@ describe('socmint channels', () => {
       'listItems', 'rankItems', 'recordLabel',
       'setBurner', 'hasBurner',
       'startMonitor', 'stopMonitor',
+      // FIX 5: main→renderer live item push
+      'monitorItem',
       // WA-T5: WhatsApp linking ceremony channels
       'setWhatsappBurnerPairingCode', 'hasWhatsappBurner', 'unlinkWhatsappBurner',
     ];

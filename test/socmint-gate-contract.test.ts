@@ -210,6 +210,7 @@ describe('CONTRACT: gate-before-egress — WhatsApp pairing (handleSetWhatsappBu
       '15551234567',
       {
         networkEnabled: async () => false,
+        transport: async () => 'direct',
         _inject: { createSocket: createSocketSpy },
       },
     );
@@ -226,6 +227,7 @@ describe('CONTRACT: gate-before-egress — WhatsApp pairing (handleSetWhatsappBu
       '15551234567',
       {
         networkEnabled: async () => true,
+        transport: async () => 'direct',
         _inject: { createSocket: createSocketSpy, authState: mockAuthState },
       },
     );
@@ -240,7 +242,7 @@ describe('CONTRACT: gate-before-egress — WhatsApp pairing (handleSetWhatsappBu
     await handleSetWhatsappBurnerPairingCode(
       'wa-pair-check-order',
       '15551234567',
-      { networkEnabled, _inject: { createSocket: createSocketSpy } },
+      { networkEnabled, transport: async () => 'direct', _inject: { createSocket: createSocketSpy } },
     );
     expect(networkEnabled).toHaveBeenCalledTimes(1);
     expect(createSocketSpy).toHaveBeenCalledTimes(0);

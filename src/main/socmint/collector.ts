@@ -330,8 +330,15 @@ export function makeMtcuteCollector(opts: {
       }
 
       // Connect and start the updates loop so onNewMessage fires.
-      await rawClient.connect();
-      await rawClient.startUpdatesLoop?.();
+      // If either throws, call rawClient.disconnect() before re-throwing so we don't
+      // leave a live connection that client=null can never clean up (orphan leak).
+      try {
+        await rawClient.connect();
+        await rawClient.startUpdatesLoop?.();
+      } catch (err) {
+        try { await rawClient.disconnect(); } catch { /* ignore cleanup error */ }
+        throw err;
+      }
       client = rawClient;
     },
 
