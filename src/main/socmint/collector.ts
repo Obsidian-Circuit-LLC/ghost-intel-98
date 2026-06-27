@@ -129,7 +129,6 @@ export function makeMtcuteCollector(opts: {
       //   tor: new SocksProxyTcpTransport(opts.transport.proxy)
       //   direct: default TCP transport
       try {
-        // @ts-expect-error: @mtcute/node is intentionally absent — sealed seam pending operator smoke test (spec §7)
         await import('@mtcute/node');
       } catch {
         throw new Error(
