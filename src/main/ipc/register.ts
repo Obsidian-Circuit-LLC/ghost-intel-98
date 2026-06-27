@@ -110,6 +110,10 @@ import {
   handleUnlinkWhatsappBurner,
 } from '../socmint/ipc';
 import { makeMtcuteCollector } from '../socmint/collector';
+import {
+  handleXAddAccount, handleXRemoveAccount, handleXListAccounts, handleXHasAccount,
+  handleXCollect, handleXListItems, handleXRankItems,
+} from '../x/ipc';
 
 const MAX_SAVE_ATTACHMENT_BYTES = 64 * 1024 * 1024; // 64 MB cap on base64 decoded payload
 const MAX_EXPORT_BYTES = 64 * 1024 * 1024;
@@ -1422,6 +1426,48 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   // Deletes both .creds and .keys secretStore entries; no server-side unlink (analyst must do that).
   safeHandle(channels.socmint.unlinkWhatsappBurner, (...a) =>
     handleUnlinkWhatsappBurner(typeof a[0] === 'string' ? a[0] : ''));
+
+  // ---- X/Twitter collector (clearnet quarantine module; egress gated by BOTH flags) ----
+  // Account management: creds stored in secretStore, never echoed to renderer (boolean/IDs only).
+  // Collect: throws XCollectorGatedError when networkEnabled or clearnetAcknowledged is false.
+  safeHandle(channels.x.addAccount, (...a) =>
+    handleXAddAccount(typeof a[0] === 'string' ? a[0] : '', a[1], {
+      getSecret: (k) => secretStore.get(k),
+      setSecret: (k, v) => secretStore.set(k, v),
+      deleteSecret: (k) => secretStore.delete(k),
+    }));
+  safeHandle(channels.x.removeAccount, (...a) =>
+    handleXRemoveAccount(typeof a[0] === 'string' ? a[0] : '', {
+      getSecret: (k) => secretStore.get(k),
+      setSecret: (k, v) => secretStore.set(k, v),
+      deleteSecret: (k) => secretStore.delete(k),
+    }));
+  safeHandle(channels.x.listAccounts, () =>
+    handleXListAccounts({ getSecret: (k) => secretStore.get(k) }));
+  safeHandle(channels.x.hasAccount, (...a) =>
+    handleXHasAccount(typeof a[0] === 'string' ? a[0] : '', {
+      getSecret: (k) => secretStore.get(k),
+    }));
+  // Collect: EGRESS GATE — throws XCollectorGatedError when either flag is false.
+  // socmint/store is lazy-imported inside the dep closures (mirrors other handler patterns).
+  safeHandle(channels.x.collect, (...a) =>
+    handleXCollect(a[0], {
+      networkEnabled: async () => (await settingsStore.read()).x.networkEnabled,
+      clearnetAcknowledged: async () => (await settingsStore.read()).x.clearnetAcknowledged,
+      async upsertItems(caseId, items) {
+        const { upsertItems } = await import('../socmint/store');
+        return upsertItems(caseId, items);
+      },
+      async recordJob(caseId, job) {
+        const { recordJob } = await import('../socmint/store');
+        return recordJob(caseId, job);
+      },
+      getSecret: (k) => secretStore.get(k),
+    }));
+  safeHandle(channels.x.listItems, (...a) =>
+    handleXListItems(ensureUuid(a[0], 'caseId')));
+  safeHandle(channels.x.rankItems, (...a) =>
+    handleXRankItems(ensureUuid(a[0], 'caseId'), typeof a[1] === 'string' ? a[1] : ''));
 
   startMailPoller(getWindow);
 }
