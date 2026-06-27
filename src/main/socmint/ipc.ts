@@ -29,7 +29,10 @@ import type { HarvestedItem, MonitoredChannel } from '@shared/socmint/types';
 import type { ItemLabel } from './labels';
 import type { SocmintCollector } from './collector';
 import { resolveTransport, type SocmintTransport } from './tor-identity';
-import { WA_SEALED_MESSAGE } from './whatsapp-collector';
+// WA_SEALED_MESSAGE is no longer thrown here (§5.5 de-sealed 2026-06-27); it is
+// still exported by whatsapp-collector.ts for audit-trail purposes.
+import type { WaSocketLike, WaConnectionUpdate } from './whatsapp-collector';
+import type { WhatsAppAuthState } from './whatsapp-auth';
 
 // ---------------------------------------------------------------------------
 // CollectorFactory type — injected by register.ts; injectable for gate tests.
@@ -256,7 +259,15 @@ export async function handleStartMonitor(
   deps: {
     networkEnabled: () => Promise<boolean>;
     transport: () => Promise<'direct' | 'tor'>;
+    /** Factory for Telegram (and generic) collectors. */
     collectorFactory: CollectorFactory;
+    /**
+     * Optional factory for WhatsApp collectors.
+     * When provided and the request's `platform` is `'whatsapp'`, this factory
+     * is used instead of `collectorFactory`.
+     * Production: makeWhatsAppCollector; tests: mock factory.
+     */
+    whatsappCollectorFactory?: CollectorFactory;
     /** Optional: stream each harvested item to the renderer window via webContents.send. */
     sendToRenderer?: (item: HarvestedItem) => void;
   },
@@ -281,8 +292,16 @@ export async function handleStartMonitor(
   // In 'direct' mode this is the operator's explicit clearnet choice.
   const transport = resolveTransport(burnerId, await deps.transport());
 
+  // Select the collector factory based on the requested platform.
+  // 'whatsapp' → whatsappCollectorFactory (if wired); everything else → collectorFactory (Telegram).
+  const platform = typeof req.platform === 'string' ? req.platform : 'telegram';
+  const factory =
+    platform === 'whatsapp' && deps.whatsappCollectorFactory != null
+      ? deps.whatsappCollectorFactory
+      : deps.collectorFactory;
+
   // Construct the collector with the resolved transport.
-  const collector = deps.collectorFactory({ burnerId, transport, harvestedAt: () => new Date().toISOString() });
+  const collector = factory({ burnerId, transport, harvestedAt: () => new Date().toISOString() });
 
   // Connect — STRICTLY downstream of the gate and transport validation.
   // If connect() or any join() throws, attempt best-effort cleanup before re-throwing.
@@ -340,30 +359,119 @@ const WA_BURNER_KEY_PREFIX = 'socmint.whatsapp.burner.';
 /**
  * Request a WhatsApp pairing code for the given burnerId + phone number.
  *
- * EGRESS GATE (WA-T7): returns { disabled: true } when networkEnabled is false —
+ * EGRESS GATE: returns { disabled: true } when networkEnabled is false —
  * never constructs a socket or touches any network path.
  *
- * When the gate is open, the sealed Baileys adapter is invoked. Until the operator
- * completes the §5.5 supply-chain checklist and unseals the library, every call with
- * an open gate throws WA_SEALED_MESSAGE — a deliberate, named error, never a crash
- * or a silent clearnet fallback.
+ * De-sealed per §5.5 supply-chain verification COMPLETE (operator sign-off 2026-06-27).
+ * Live path (gate open):
+ *   resolveTransport → secretStore-backed auth → makeWASocket (SOCKS5 agent if tor) →
+ *   requestPairingCode(phone) → return { pairingCode }.
+ *   creds.update: auth.saveCreds() (debounced).
+ *   connection.update {connection:'open'}: explicit auth.saveCreds() (belt-and-suspenders).
  *
- * Post-unseal path (§2.8 of the design spec):
- *   resolveTransport → makeWASocket (with auth + optional SOCKS5 agent) →
- *   requestPairingCode → return { pairingCode } → persist creds on 'connection:open'.
+ * CRITICAL: makeWASocket EGRESSES ON CONSTRUCTION — the gate check must complete and
+ * return true BEFORE any socket is constructed.
  *
  * The `deps` parameter is injected for testability (mirrors handleStartMonitor).
  */
 export async function handleSetWhatsappBurnerPairingCode(
-  _burnerId: string,
-  _phone: string,
-  deps: { networkEnabled: () => Promise<boolean> },
+  burnerId: string,
+  phone: string,
+  deps: {
+    networkEnabled: () => Promise<boolean>;
+    /** Transport mode resolver; defaults to 'direct' when absent (test convenience). */
+    transport?: () => Promise<'direct' | 'tor'>;
+    /**
+     * Test-only injection: bypass Baileys, SocksProxyAgent, and secretStore.
+     * NEVER set in production.
+     */
+    _inject?: {
+      createSocket: (proxyUrl: string | null) => WaSocketLike;
+      authState?: WhatsAppAuthState;
+    };
+  },
 ): Promise<{ disabled: true } | { pairingCode: string }> {
   // EGRESS GATE — must precede ALL network / library operations.
   if (!await deps.networkEnabled()) return { disabled: true };
-  // Sealed seam: the Baileys library is not installed until the operator completes the
-  // §5.5 supply-chain checklist. Throw the canonical sealed message — not a crash.
-  throw new Error(WA_SEALED_MESSAGE);
+
+  // Resolve transport at the egress boundary. 'tor' throws SocmintTorUnavailableError
+  // when Tor is down (fail-closed). 'direct' is the operator's explicit clearnet choice.
+  const transportMode = deps.transport != null ? await deps.transport() : 'direct';
+  const transport = resolveTransport(burnerId, transportMode);
+
+  let auth: WhatsAppAuthState;
+  let sock: WaSocketLike;
+
+  if (deps._inject) {
+    // ─── Test path ────────────────────────────────────────────────────────────
+    // Bypass real Baileys, SocksProxyAgent, and secretStore.
+    const [{ makeWhatsAppAuthState }, { buildBaileysProxy }] = await Promise.all([
+      import('./whatsapp-auth'),
+      import('./whatsapp-proxy'),
+    ]);
+    auth =
+      deps._inject.authState ??
+      makeWhatsAppAuthState(burnerId, {
+        read: async () => null,
+        write: async () => {},
+        delete: async () => {},
+      });
+    await auth.initialize();
+    sock = deps._inject.createSocket(buildBaileysProxy(transport));
+  } else {
+    // ─── Production path ─────────────────────────────────────────────────────
+    // Lazy dynamic imports — sealed-seam / ESM footgun guard (no static Baileys import).
+    const [baileysModule, { SocksProxyAgent }, { secretStore: ss }, { makeWhatsAppAuthState }, { buildBaileysProxy }, { buildBaileysSocketConfig }] =
+      await Promise.all([
+        import('@whiskeysockets/baileys'),
+        import('socks-proxy-agent'),
+        import('../secrets/index'),
+        import('./whatsapp-auth'),
+        import('./whatsapp-proxy'),
+        import('./whatsapp-collector'),
+      ]);
+    const { makeWASocket } = baileysModule;
+
+    const authInstance = makeWhatsAppAuthState(burnerId, {
+      read: (k) => ss.get(k),
+      write: (k, v) => ss.set(k, v),
+      delete: (k) => ss.delete(k),
+    });
+    await authInstance.initialize();
+    auth = authInstance;
+
+    const proxyUrl = buildBaileysProxy(transport);
+    const agent = proxyUrl !== null ? new SocksProxyAgent(proxyUrl) : undefined;
+
+    // CRITICAL: makeWASocket EGRESSES ON CONSTRUCTION — only reached after gate check.
+    type BaileysConfig = Parameters<typeof makeWASocket>[0];
+    sock = makeWASocket(
+      buildBaileysSocketConfig(transport, auth, agent) as BaileysConfig,
+    ) as unknown as WaSocketLike;
+  }
+
+  // Register creds.update: persist auth on every Baileys key-ratchet.
+  sock.ev.on('creds.update', () => { void auth.saveCreds(); });
+
+  // Register connection.update: belt-and-suspenders saveCreds on open;
+  // note fatal loggedOut close (the user must re-link the burner).
+  sock.ev.on('connection.update', (update: WaConnectionUpdate) => {
+    if (update.connection === 'open') {
+      void auth.saveCreds();
+    }
+    // Fatal close (401): session invalidated — cannot surface back (pairingCode already returned).
+    // Future: emit an IPC event via webContents when renderer wiring is in place.
+  });
+
+  // requestPairingCode is available immediately after socket construction (before 'open').
+  // Guard against missing method (would indicate a library version mismatch).
+  if (typeof sock.requestPairingCode !== 'function') {
+    throw new Error(
+      'SOCMINT: WhatsApp socket.requestPairingCode not available — check library version',
+    );
+  }
+  const pairingCode = await sock.requestPairingCode(phone);
+  return { pairingCode };
 }
 
 /**

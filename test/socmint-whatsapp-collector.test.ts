@@ -53,10 +53,11 @@
  *     30. identifies WhatsApp
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   makeWhatsAppCollector,
   WA_SEALED_MESSAGE,
+  buildBaileysSocketConfig,
   type WaSocketLike,
   type WaConnectionUpdate,
   type WaMessagesUpsert,
@@ -110,19 +111,53 @@ function makeMockSocket(opts: {
   proxyUrl: string | null;
   groupSubject?: string;
   rejectGroupMetadata?: boolean;
+  /**
+   * When false, the mock does NOT auto-emit {connection:'open'} on handler
+   * registration.  Use this in tests that control connection events manually.
+   * Default: true (all existing tests rely on the auto-open behaviour so that
+   * connect() can resolve once the await-open logic is wired).
+   */
+  autoOpen?: boolean;
+  /**
+   * When true, auto-emit a fatal loggedOut close (statusCode 401) instead of
+   * {connection:'open'} — used to test connect() rejection on loggedOut.
+   * Implies autoOpen:false.
+   */
+  fatalClose?: boolean;
 }): WaSocketLike & MockSocketExtras {
   const upsertHandlers: UpsertHandler[] = [];
   const credsHandlers: Array<() => void> = [];
   const connectionHandlers: Array<(u: WaConnectionUpdate) => void> = [];
   let endCalls = 0;
 
+  const emitAutoConnectionEvent = (handler: (u: WaConnectionUpdate) => void): void => {
+    if (opts.fatalClose) {
+      // Emit a fatal loggedOut close (DisconnectReason.loggedOut = 401).
+      queueMicrotask(() =>
+        handler({
+          connection: 'close',
+          lastDisconnect: { error: { output: { statusCode: 401 } } },
+        }),
+      );
+    } else if (opts.autoOpen !== false) {
+      // Default: auto-emit {connection:'open'} so connect() can resolve.
+      queueMicrotask(() => handler({ connection: 'open' }));
+    }
+    // autoOpen:false + !fatalClose → nothing is auto-emitted (caller controls events).
+  };
+
   // Satisfy all WaSocketLike.ev.on overloads via a unified implementation.
   // TypeScript sees the overload signatures; the cast makes the unification work.
   const evOn = (event: string, handler: (...args: unknown[]) => void): void => {
     if (event === 'messages.upsert') upsertHandlers.push(handler as UpsertHandler);
     else if (event === 'creds.update') credsHandlers.push(handler as () => void);
-    else if (event === 'connection.update')
-      connectionHandlers.push(handler as (u: WaConnectionUpdate) => void);
+    else if (event === 'connection.update') {
+      const connHandler = handler as (u: WaConnectionUpdate) => void;
+      connectionHandlers.push(connHandler);
+      // Auto-emit the appropriate connection event (if configured) so that
+      // connect()'s await-open promise can resolve/reject without test coordination.
+      emitAutoConnectionEvent(connHandler);
+    }
   };
 
   const evOff = (event: string, handler: (...args: unknown[]) => void): void => {
@@ -776,7 +811,194 @@ describe('makeWhatsAppCollector — disconnect()', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Suite 10 — WA_SEALED_MESSAGE export invariants (audit trail)
+// Suite 10a — buildBaileysSocketConfig
+// ---------------------------------------------------------------------------
+
+describe('buildBaileysSocketConfig', () => {
+  // Minimal WhatsAppAuthState for config tests — only .state is inspected.
+  const mockState = { creds: {}, keys: { get: async () => ({}), set: async () => {} } };
+  const mockAuth = {
+    state: mockState,
+    initialize: async () => {},
+    saveCreds: async () => {},
+    unlinkSession: async () => {},
+  };
+
+  it('logger.level is "silent" (suppresses key-material output)', () => {
+    const cfg = buildBaileysSocketConfig({ mode: 'direct' }, mockAuth, undefined);
+    expect((cfg.logger as { level: string }).level).toBe('silent');
+  });
+
+  it('syncFullHistory is false (permanent invariant — no history accumulation)', () => {
+    const cfg = buildBaileysSocketConfig({ mode: 'direct' }, mockAuth, undefined);
+    expect(cfg.syncFullHistory).toBe(false);
+  });
+
+  it('direct mode (no agent) → agent and fetchAgent are absent', () => {
+    const cfg = buildBaileysSocketConfig({ mode: 'direct' }, mockAuth, undefined);
+    expect(cfg).not.toHaveProperty('agent');
+    expect(cfg).not.toHaveProperty('fetchAgent');
+  });
+
+  it('tor mode (agent provided) → agent and fetchAgent are set to the provided agent', () => {
+    const fakeAgent = { type: 'socks5-proxy-agent' };
+    const cfg = buildBaileysSocketConfig(
+      {
+        mode: 'tor',
+        proxy: { host: '127.0.0.1', port: 9050, version: 5, user: 'u', password: 'p' },
+      },
+      mockAuth,
+      fakeAgent,
+    );
+    expect(cfg.agent).toBe(fakeAgent);
+    expect(cfg.fetchAgent).toBe(fakeAgent);
+  });
+
+  it('auth.state is passed as the "auth" property (not the full state object)', () => {
+    const cfg = buildBaileysSocketConfig({ mode: 'direct' }, mockAuth, undefined);
+    expect(cfg.auth).toBe(mockState);
+  });
+
+  it('logger is the same object across transport modes (SILENT_LOGGER singleton)', () => {
+    const cfgDirect = buildBaileysSocketConfig({ mode: 'direct' }, mockAuth, undefined);
+    const cfgTor = buildBaileysSocketConfig(
+      { mode: 'tor', proxy: { host: '127.0.0.1', port: 9050, version: 5, user: 'u', password: 'p' } },
+      mockAuth,
+      {},
+    );
+    expect(cfgDirect.logger).toBe(cfgTor.logger);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Suite 10b — connect() awaits connection:open (connect-before-open race fix)
+// ---------------------------------------------------------------------------
+
+describe('makeWhatsAppCollector — connect() awaits connection:open', () => {
+  it('resolves when {connection:"open"} is emitted (default autoOpen mock)', async () => {
+    const collector = makeWhatsAppCollector({
+      burnerId: 'wa-open-1',
+      transport: directTransport(),
+      harvestedAt: () => '',
+      _inject: {
+        createSocket: (proxyUrl) => makeMockSocket({ proxyUrl }), // autoOpen:true by default
+      },
+    });
+    await expect(collector.connect()).resolves.toBeUndefined();
+  });
+
+  it('join() and subscribe() are reachable only after connect() resolves', async () => {
+    let mockSock!: WaSocketLike & MockSocketExtras;
+    const collector = makeWhatsAppCollector({
+      burnerId: 'wa-open-order',
+      transport: directTransport(),
+      harvestedAt: () => '',
+      _inject: {
+        createSocket: (proxyUrl) => {
+          mockSock = makeMockSocket({ proxyUrl }); // autoOpen:true
+          return mockSock;
+        },
+      },
+    });
+    await collector.connect(); // only returns after 'open'
+    // join() and subscribe() are now reachable (sock is non-null inside the closure)
+    const ch = await collector.join('group@g.us');
+    expect(ch.channelId).toBe('group@g.us');
+  });
+
+  it('rejects with "logged out" error on fatal close (statusCode 401)', async () => {
+    const collector = makeWhatsAppCollector({
+      burnerId: 'wa-loggedout',
+      transport: directTransport(),
+      harvestedAt: () => '',
+      _inject: {
+        createSocket: (proxyUrl) => makeMockSocket({ proxyUrl, fatalClose: true }),
+      },
+    });
+    await expect(collector.connect()).rejects.toThrow(/logged out/);
+  });
+
+  it('rejected error on loggedOut is an Error instance', async () => {
+    const collector = makeWhatsAppCollector({
+      burnerId: 'wa-loggedout-type',
+      transport: directTransport(),
+      harvestedAt: () => '',
+      _inject: {
+        createSocket: (proxyUrl) => makeMockSocket({ proxyUrl, fatalClose: true }),
+      },
+    });
+    await expect(collector.connect()).rejects.toBeInstanceOf(Error);
+  });
+
+  it('rejects with "timed out" error when connection:open never fires (fake timers)', async () => {
+    vi.useFakeTimers();
+    try {
+      const collector = makeWhatsAppCollector({
+        burnerId: 'wa-timeout',
+        transport: directTransport(),
+        harvestedAt: () => '',
+        _inject: {
+          createSocket: (proxyUrl) => makeMockSocket({ proxyUrl, autoOpen: false }),
+        },
+      });
+      const connectPromise = collector.connect();
+      // Pre-attach a noop catch so Node.js does not emit an "unhandledRejection" event
+      // while we are mid-advance; the real assertion is made immediately below.
+      connectPromise.catch(() => {});
+      // advanceTimersByTimeAsync flushes pending microtasks (letting auth.initialize()
+      // and socket construction complete), then advances the clock past the 60 s timeout.
+      await vi.advanceTimersByTimeAsync(60_001);
+      await expect(connectPromise).rejects.toThrow(/timed out/);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('non-fatal close (statusCode 503) does NOT reject — waits for reconnect', async () => {
+    // Mock emits a non-fatal close, then open.
+    let connHandlers: Array<(u: WaConnectionUpdate) => void> = [];
+    const customSock: WaSocketLike & MockSocketExtras = {
+      ev: {
+        on: (event: string, handler: (...args: unknown[]) => void) => {
+          if (event === 'connection.update') {
+            connHandlers.push(handler as (u: WaConnectionUpdate) => void);
+            // Auto-schedule: non-fatal close first, then open on next microtask
+            queueMicrotask(() => {
+              (handler as (u: WaConnectionUpdate) => void)({
+                connection: 'close',
+                lastDisconnect: { error: { output: { statusCode: 503 } } },
+              });
+              queueMicrotask(() =>
+                (handler as (u: WaConnectionUpdate) => void)({ connection: 'open' }),
+              );
+            });
+          }
+        },
+        off: (_event: string, _handler: (...args: unknown[]) => void) => {},
+      },
+      groupMetadata: async (_jid: string) => ({ subject: 'Test' }),
+      end: () => {},
+      emitUpsert: () => {},
+      emitCredsUpdate: () => {},
+      emitConnectionUpdate: (u: WaConnectionUpdate) => {
+        for (const h of connHandlers) h(u);
+      },
+      get endCalls() { return 0; },
+      receivedProxyUrl: null,
+    } as unknown as WaSocketLike & MockSocketExtras;
+
+    const collector = makeWhatsAppCollector({
+      burnerId: 'wa-reconnect',
+      transport: directTransport(),
+      harvestedAt: () => '',
+      _inject: { createSocket: () => customSock },
+    });
+    await expect(collector.connect()).resolves.toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Suite 11 — WA_SEALED_MESSAGE export invariants (audit trail)
 // ---------------------------------------------------------------------------
 
 describe('WA_SEALED_MESSAGE — export invariants', () => {

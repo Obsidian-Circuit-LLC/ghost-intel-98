@@ -97,6 +97,8 @@ export interface WaSocketLike {
 // Silent pino-compatible logger — no pino import; matches the Logger interface
 // used by Baileys so it silences all output including key-material logs.
 // ---------------------------------------------------------------------------
+//
+// buildBaileysSocketConfig is placed after SILENT_LOGGER (which it uses).
 
 /** Minimal pino-compatible logger shape (subset Baileys actually calls). */
 type SilentLogger = {
@@ -120,6 +122,45 @@ const SILENT_LOGGER: SilentLogger = {
   fatal: () => {},
   child: () => SILENT_LOGGER,
 };
+
+// ---------------------------------------------------------------------------
+// buildBaileysSocketConfig — pure, exported, unit-testable
+// ---------------------------------------------------------------------------
+
+/**
+ * Build the makeWASocket configuration object.
+ *
+ * Pure function: no Baileys import, no network I/O, no secretStore access.
+ * Exported so ipc.ts can reuse it in handleSetWhatsappBurnerPairingCode
+ * without duplicating the logger / syncFullHistory / agent wiring.
+ *
+ * @param _transport  Pre-resolved transport.  Included for documentation and
+ *                    future use; agent presence already encodes tor vs direct.
+ * @param auth        WhatsApp auth state whose `.state` is passed to makeWASocket.
+ * @param agent       SocksProxyAgent instance (tor mode) or `undefined` (direct).
+ *                    When provided, both `agent` and `fetchAgent` are set so that
+ *                    Baileys' WS upgrade AND its internal fetch calls both route
+ *                    through the same SOCKS5 circuit.
+ * @returns           Plain config object assignable to Parameters<typeof makeWASocket>[0].
+ */
+export function buildBaileysSocketConfig(
+  _transport: SocmintTransport,
+  auth: WhatsAppAuthState,
+  agent: unknown | undefined,
+): Record<string, unknown> {
+  const config: Record<string, unknown> = {
+    // auth.state is structurally compatible at runtime; import type keeps this sealed.
+    auth: auth.state,
+    syncFullHistory: false,
+    // SILENT_LOGGER silences all Baileys output including key-material at default level.
+    logger: SILENT_LOGGER as unknown,
+  };
+  if (agent !== undefined) {
+    config['agent'] = agent;
+    config['fetchAgent'] = agent;
+  }
+  return config;
+}
 
 // ---------------------------------------------------------------------------
 // Collector factory
@@ -205,23 +246,13 @@ export function makeWhatsAppCollector(opts: {
         const proxyUrl = buildBaileysProxy(opts.transport);
         const agent = proxyUrl !== null ? new SocksProxyAgent(proxyUrl) : undefined;
 
-        // Type aliases inside the dynamic-import block to keep casts local.
-        type MakeWASocketFn = typeof makeWASocket;
-        type BaileysConfig = Parameters<MakeWASocketFn>[0];
+        // Type alias inside the dynamic-import block to keep casts local.
+        type BaileysConfig = Parameters<typeof makeWASocket>[0];
 
-        const waSock = makeWASocket({
-          // auth.state is structurally compatible at runtime; cast bypasses strict generics.
-          auth: auth.state as unknown as BaileysConfig['auth'],
-          ...(agent !== undefined
-            ? {
-                agent: agent as BaileysConfig['agent'],
-                fetchAgent: agent as BaileysConfig['agent'],
-              }
-            : {}),
-          syncFullHistory: false,
-          // SILENT_LOGGER matches the pino Logger interface; silences key-material logs.
-          logger: SILENT_LOGGER as unknown as BaileysConfig['logger'],
-        });
+        const waSock = makeWASocket(
+          // buildBaileysSocketConfig returns a plain Record; cast to the library type.
+          buildBaileysSocketConfig(opts.transport, auth, agent) as BaileysConfig,
+        );
 
         // Cast the real WASocket (superset) to our minimal WaSocketLike.
         sock = waSock as unknown as WaSocketLike;
@@ -229,18 +260,42 @@ export function makeWhatsAppCollector(opts: {
 
       waAuth = auth;
 
-      // ── Register event handlers ──────────────────────────────────────────
       // creds.update: persist auth state on every Baileys ratchet.
       sock.ev.on('creds.update', () => {
         void auth.saveCreds();
       });
 
-      // connection.update: informational — does not block connect() resolution.
-      // The linking ceremony (pairing code) is handled by the separate
-      // handleSetWhatsappBurnerPairingCode IPC handler, not here.
-      sock.ev.on('connection.update', (_update: WaConnectionUpdate) => {
-        // Future: emit status events to the renderer via webContents.send if needed.
-        // Disconnect/close is non-fatal — the session persists for reconnect.
+      // Await connection:open before returning — prevents callers from calling join()
+      // or subscribe() before the session is confirmed active (connect-before-open race fix).
+      // Rejects on fatal loggedOut close (DisconnectReason.loggedOut = 401) or 60 s timeout.
+      const CONNECT_TIMEOUT_MS = 60_000;
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => {
+          reject(
+            new Error(
+              'SOCMINT: WhatsApp connect() timed out (60 s) waiting for connection:open',
+            ),
+          );
+        }, CONNECT_TIMEOUT_MS);
+
+        sock!.ev.on('connection.update', (update: WaConnectionUpdate) => {
+          if (update.connection === 'open') {
+            clearTimeout(timer);
+            resolve();
+          } else if (update.connection === 'close') {
+            // DisconnectReason.loggedOut = 401 — session permanently invalidated; re-pair required.
+            // Any other statusCode is a transient disconnect; Baileys will reconnect automatically.
+            const statusCode = (
+              (update.lastDisconnect?.error as { output?: { statusCode?: number } } | undefined)
+                ?.output?.statusCode
+            );
+            if (statusCode === 401) {
+              clearTimeout(timer);
+              reject(new Error('SOCMINT: WhatsApp session logged out — re-pair required'));
+            }
+            // Non-fatal close: keep the timer and wait for Baileys to reconnect and emit 'open'.
+          }
+        });
       });
     },
 

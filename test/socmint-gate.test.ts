@@ -206,31 +206,70 @@ describe('socmint:setWhatsappBurnerPairingCode — egress gate', () => {
     expect(result).toEqual({ disabled: true });
   });
 
-  it('rejects with the sealed-library message when networkEnabled is true (gate open)', async () => {
-    await expect(
-      handleSetWhatsappBurnerPairingCode('burner-wa', '15551234567', {
-        networkEnabled: async () => true,
-      }),
-    ).rejects.toThrow(WA_SEALED_MESSAGE);
+  it('gate-open: socket IS constructed and requestPairingCode is called (_inject)', async () => {
+    // The seam is no longer sealed (§5.5 complete 2026-06-27).
+    // Gate-open path constructs a socket and calls requestPairingCode.
+    const mockSock = {
+      ev: { on: vi.fn(), off: vi.fn() },
+      groupMetadata: vi.fn(),
+      end: vi.fn(),
+      requestPairingCode: vi.fn().mockResolvedValue('ABCD-EFGH'),
+    };
+    const createSocketSpy = vi.fn(() => mockSock);
+    const result = await handleSetWhatsappBurnerPairingCode('burner-wa', '15551234567', {
+      networkEnabled: async () => true,
+      _inject: {
+        createSocket: createSocketSpy,
+        authState: {
+          state: { creds: {}, keys: { get: async () => ({}), set: async () => {} } },
+          initialize: vi.fn().mockResolvedValue(undefined),
+          saveCreds: vi.fn().mockResolvedValue(undefined),
+          unlinkSession: vi.fn().mockResolvedValue(undefined),
+        },
+      },
+    });
+    expect(createSocketSpy).toHaveBeenCalledOnce();
+    expect(mockSock.requestPairingCode).toHaveBeenCalledWith('15551234567');
+    expect(result).toEqual({ pairingCode: 'ABCD-EFGH' });
   });
 
-  it('sealed rejection is a deliberate Error instance — not a crash or silent fallback', async () => {
-    let thrown: unknown;
-    try {
-      await handleSetWhatsappBurnerPairingCode('burner-wa', '+447700900000', {
-        networkEnabled: async () => true,
-      });
-    } catch (e) {
-      thrown = e;
-    }
-    expect(thrown).toBeInstanceOf(Error);
-    expect((thrown as Error).message).toBe(WA_SEALED_MESSAGE);
+  it('gate-open: result has a pairingCode string', async () => {
+    const mockSock = {
+      ev: { on: vi.fn(), off: vi.fn() },
+      groupMetadata: vi.fn(),
+      end: vi.fn(),
+      requestPairingCode: vi.fn().mockResolvedValue('12345678'),
+    };
+    const result = await handleSetWhatsappBurnerPairingCode('burner-wa', '447700900000', {
+      networkEnabled: async () => true,
+      _inject: {
+        createSocket: vi.fn(() => mockSock),
+        authState: {
+          state: { creds: {}, keys: { get: async () => ({}), set: async () => {} } },
+          initialize: vi.fn().mockResolvedValue(undefined),
+          saveCreds: vi.fn().mockResolvedValue(undefined),
+          unlinkSession: vi.fn().mockResolvedValue(undefined),
+        },
+      },
+    });
+    expect(result).toMatchObject({ pairingCode: expect.any(String) });
   });
 
-  it('gate check fires before sealed seam — networkEnabled is always awaited', async () => {
+  it('gate check fires before socket construction — networkEnabled is always awaited first', async () => {
     const networkEnabled = vi.fn().mockResolvedValue(false);
     await handleSetWhatsappBurnerPairingCode('burner-wa', '15551234567', { networkEnabled });
     expect(networkEnabled).toHaveBeenCalledOnce();
+  });
+
+  it('CONTRACT: createSocket is NEVER called when gate is closed (connect-before-gate invariant)', async () => {
+    const createSocketSpy = vi.fn();
+    const result = await handleSetWhatsappBurnerPairingCode('burner-wa', '15551234567', {
+      networkEnabled: async () => false,
+      _inject: { createSocket: createSocketSpy },
+    });
+    expect(result).toEqual({ disabled: true });
+    // The socket must NEVER be constructed before the gate returns open.
+    expect(createSocketSpy).not.toHaveBeenCalled();
   });
 });
 
@@ -389,5 +428,122 @@ describe('socmint:startMonitor — transport assertions (factory arg)', () => {
     // …but carry different per-burner credentials.
     expect(proxy1.user).not.toBe(proxy2.user);
     expect(proxy1.password).not.toBe(proxy2.password);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// W2: handleStartMonitor — WhatsApp platform selection
+// ---------------------------------------------------------------------------
+
+describe('socmint:startMonitor — platform selection (WhatsApp vs Telegram)', () => {
+  it('platform=whatsapp → whatsappCollectorFactory is called; collectorFactory is not', async () => {
+    const waMock = makeMockCollector();
+    const waFactory = vi.fn(() => waMock);
+    const tgFactory = vi.fn(() => makeMockCollector());
+
+    const result = await handleStartMonitor(
+      { caseId: VALID_CASE_ID, burnerId: 'wa-burner', channelIds: [], platform: 'whatsapp' },
+      {
+        networkEnabled: async () => true,
+        transport: async () => 'direct',
+        collectorFactory: tgFactory,
+        whatsappCollectorFactory: waFactory,
+      },
+    );
+
+    expect(waFactory).toHaveBeenCalledOnce();
+    expect(tgFactory).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ started: true, jobId: expect.any(String) });
+  });
+
+  it('platform=telegram → collectorFactory is called; whatsappCollectorFactory is not', async () => {
+    const tgMock = makeMockCollector();
+    const tgFactory = vi.fn(() => tgMock);
+    const waFactory = vi.fn();
+
+    await handleStartMonitor(
+      { caseId: VALID_CASE_ID, burnerId: 'tg-burner', channelIds: [], platform: 'telegram' },
+      {
+        networkEnabled: async () => true,
+        transport: async () => 'direct',
+        collectorFactory: tgFactory,
+        whatsappCollectorFactory: waFactory as unknown as typeof tgFactory,
+      },
+    );
+
+    expect(tgFactory).toHaveBeenCalledOnce();
+    expect(waFactory).not.toHaveBeenCalled();
+  });
+
+  it('platform absent → collectorFactory (telegram) is used by default', async () => {
+    const tgMock = makeMockCollector();
+    const tgFactory = vi.fn(() => tgMock);
+    const waFactory = vi.fn();
+
+    await handleStartMonitor(
+      { caseId: VALID_CASE_ID, burnerId: 'tg-burner', channelIds: [] },
+      {
+        networkEnabled: async () => true,
+        transport: async () => 'direct',
+        collectorFactory: tgFactory,
+        whatsappCollectorFactory: waFactory as unknown as typeof tgFactory,
+      },
+    );
+
+    expect(tgFactory).toHaveBeenCalledOnce();
+    expect(waFactory).not.toHaveBeenCalled();
+  });
+
+  it('gate-closed → whatsappCollectorFactory NOT called even for platform=whatsapp (gate check first)', async () => {
+    const waFactory = vi.fn();
+
+    const result = await handleStartMonitor(
+      { caseId: VALID_CASE_ID, burnerId: 'wa-burner', channelIds: [], platform: 'whatsapp' },
+      {
+        networkEnabled: async () => false,
+        transport: async () => 'direct',
+        collectorFactory: vi.fn(),
+        whatsappCollectorFactory: waFactory as unknown as Parameters<typeof handleStartMonitor>[1]['collectorFactory'],
+      },
+    );
+
+    expect(result).toEqual({ disabled: true });
+    // Gate check fires before factory selection — socket NEVER constructed.
+    expect(waFactory).not.toHaveBeenCalled();
+  });
+
+  it('CONTRACT: connect() on the WA collector is called only after gate returns open', async () => {
+    // This asserts the connect-before-gate invariant for the WhatsApp code path.
+    // makeMockCollector().connect is a vi.fn() that tracks calls.
+    const waMock = makeMockCollector();
+    const waFactory = vi.fn(() => waMock);
+
+    // Gate closed — connect() must NEVER be called.
+    const closedResult = await handleStartMonitor(
+      { caseId: VALID_CASE_ID, burnerId: 'wa-contract', channelIds: [], platform: 'whatsapp' },
+      {
+        networkEnabled: async () => false,
+        transport: async () => 'direct',
+        collectorFactory: vi.fn(),
+        whatsappCollectorFactory: waFactory,
+      },
+    );
+    expect(closedResult).toEqual({ disabled: true });
+    expect(waMock.connect).not.toHaveBeenCalled();
+
+    // Gate open — connect() is called exactly once on the collector.
+    const waMock2 = makeMockCollector();
+    const waFactory2 = vi.fn(() => waMock2);
+    const openResult = await handleStartMonitor(
+      { caseId: VALID_CASE_ID, burnerId: 'wa-contract', channelIds: [], platform: 'whatsapp' },
+      {
+        networkEnabled: async () => true,
+        transport: async () => 'direct',
+        collectorFactory: vi.fn(),
+        whatsappCollectorFactory: waFactory2,
+      },
+    );
+    expect(openResult).toMatchObject({ started: true });
+    expect(waMock2.connect).toHaveBeenCalledOnce();
   });
 });
