@@ -12,6 +12,8 @@
  *   protocol-error     — 1 MB+ garbage line (triggers the per-line cap)
  *   crash-no-frame     — reads ping then exits without any frame
  *   nonfatal-then-done — non-fatal warning then done{count:2, truncated:false}
+ *   hang               — sends pong, then hangs forever (never sends terminal frame);
+ *                        used by X-9 quit-teardown test to verify killSidecar() kills the child
  *
  * Wire protocol: NDJSON over stdin/stdout (spec §2.3).
  * Sends pong on ping, then executes the scenario on the next frame (search/userTweets).
@@ -114,6 +116,13 @@ function runScenario() {
       // Non-fatal warning: fatal:false, does NOT replace terminal frame
       send({ type: 'error', code: 'WARN_PARTIAL_MEDIA', message: 'Media metadata unavailable', fatal: false });
       send({ type: 'done', count: 2, truncated: false });
+      break;
+
+    case 'hang':
+      // Sends pong (already done before runScenario is called), then does nothing.
+      // The process remains alive with stdin open, waiting forever for another line.
+      // The X-9 quit-teardown test calls killSidecar() (SIGKILL) to terminate it;
+      // the client then resolves with SIDECAR_CRASH.
       break;
 
     default:
