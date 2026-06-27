@@ -40,6 +40,7 @@ import { NewsViewModule } from './geoint/NewsViewModule';
 import { HelpModule } from './help/HelpModule';
 import { SearchlightModule } from './searchlight/SearchlightModule';
 import { SocmintModule } from './socmint/SocmintModule';
+import { XCollectorModule } from './x/XCollectorModule';
 
 // ---------------------------------------------------------------------------
 // Adapter components — each has the uniform { spec: WindowSpec } signature and
@@ -185,6 +186,10 @@ function SocmintAdapter({ spec }: { spec: WindowSpec }): JSX.Element {
   return <SocmintModule caseId={spec.props?.['caseId'] as string | undefined} />;
 }
 
+function XCollectorAdapter({ spec }: { spec: WindowSpec }): JSX.Element {
+  return <XCollectorModule caseId={spec.props?.['caseId'] as string | undefined} />;
+}
+
 // ---------------------------------------------------------------------------
 // Registration
 // Titles are VERBATIM from Desktop.tsx moduleTitles.
@@ -224,4 +229,5 @@ export function registerBuiltins(): void {
   registerModule({ key: 'help',         title: 'RTFM',             glyph: '?',  component: HelpAdapter,         builtin: true });
   registerModule({ key: 'searchlight', title: 'Searchlight', glyph: '🔎', component: SearchlightAdapter, builtin: true, defaultWidth: 1100, defaultHeight: 720 });
   registerModule({ key: 'socmint', title: 'SOCMINT', glyph: '📡', component: SocmintAdapter, builtin: true, defaultWidth: 900, defaultHeight: 640 });
+  registerModule({ key: 'x', title: 'X / Twitter', glyph: '✖', component: XCollectorAdapter, builtin: true, defaultWidth: 900, defaultHeight: 640 });
 }

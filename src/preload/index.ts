@@ -461,7 +461,9 @@ const api = {
     favicon: (name: string) => ipcRenderer.invoke(channels.searchlight.favicon, name),
     addCustomSite: (i: { name: string; url: string; category?: string }) => ipcRenderer.invoke(channels.searchlight.addCustomSite, i),
     exportSites: () => ipcRenderer.invoke(channels.searchlight.exportSites),
-    exportPdf: (args: { html: string; filename: string }) => ipcRenderer.invoke(channels.searchlight.exportPdf, args)
+    exportPdf: (args: { html: string; filename: string }) => ipcRenderer.invoke(channels.searchlight.exportPdf, args),
+    torStatus: () => ipcRenderer.invoke(channels.searchlight.torStatus),
+    connectTor: () => ipcRenderer.invoke(channels.searchlight.connectTor)
   },
   socmint: {
     addChannel: (caseId: string, channel: unknown) => ipcRenderer.invoke(channels.socmint.addChannel, caseId, channel),
