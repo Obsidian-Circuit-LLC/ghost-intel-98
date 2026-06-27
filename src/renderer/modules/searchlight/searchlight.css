@@ -241,6 +241,37 @@
   letter-spacing: 0.04em;
 }
 
+/* Tor-not-connected notice (mirrors net-notice; advisory + actionable) */
+.sl-sweep-tor-notice {
+  margin-top: 6px;
+  padding: 4px 10px;
+  background: rgba(192, 64, 0, 0.12);
+  border: 1px solid #803000;
+  color: #ffa040;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.sl-sweep-tor-notice-text { line-height: 1.4; }
+.sl-sweep-tor-notice-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.sl-sweep-tor-hint {
+  font-size: 10px;
+  color: #c08040;
+  letter-spacing: 0.03em;
+}
+.sl-sweep-tor-err {
+  font-size: 10px;
+  color: #ff6060;
+  letter-spacing: 0.03em;
+}
+
 /* ── Progress bar ─────────────────────────────────────────────────────────── */
 .sl-sweep-progress-bar-wrap {
   flex-shrink: 0;
