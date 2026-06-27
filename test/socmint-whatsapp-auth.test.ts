@@ -144,6 +144,54 @@ describe('makeWhatsAppAuthState — creds round-trip', () => {
     });
   });
 
+  it('round-trips Buffer / Uint8Array key material (BufferJSON-equivalent codec)', async () => {
+    const deps = memDeps();
+    const auth1 = makeWhatsAppAuthState('b1', deps);
+    await auth1.initialize();
+
+    // Real Signal/Noise key material: Baileys stores these as Buffers/Uint8Arrays.
+    const noiseKey = Uint8Array.from([1, 2, 3, 4, 5, 250, 251, 252]);
+    const identity = Buffer.from([9, 8, 7, 6]);
+    Object.assign(auth1.state.creds, {
+      noiseKey: { private: noiseKey, public: identity },
+      registered: true,
+    });
+    await auth1.saveCreds();
+    await vi.advanceTimersByTimeAsync(DEBOUNCE_MS + 50);
+
+    // Plain JSON.stringify would have emitted {"type":"Buffer","data":[...]} and
+    // plain JSON.parse would return a non-Buffer plain object — assert we get
+    // genuine Buffers back with byte-identical contents.
+    const auth2 = makeWhatsAppAuthState('b1', deps);
+    await auth2.initialize();
+    const reloaded = auth2.state.creds as {
+      noiseKey: { private: unknown; public: unknown };
+      registered: boolean;
+    };
+    expect(Buffer.isBuffer(reloaded.noiseKey.private)).toBe(true);
+    expect(Buffer.isBuffer(reloaded.noiseKey.public)).toBe(true);
+    expect(Buffer.from(reloaded.noiseKey.private as Buffer)).toEqual(Buffer.from(noiseKey));
+    expect(Buffer.from(reloaded.noiseKey.public as Buffer)).toEqual(identity);
+    expect(reloaded.registered).toBe(true);
+  });
+
+  it('round-trips Buffer values stored in the Signal key store', async () => {
+    const deps = memDeps();
+    const auth1 = makeWhatsAppAuthState('b1', deps);
+    await auth1.initialize();
+
+    const sessionBytes = Uint8Array.from([42, 43, 44, 200, 201]);
+    await auth1.state.keys.set({ session: { 'jid@s.whatsapp.net': sessionBytes } });
+    await vi.advanceTimersByTimeAsync(DEBOUNCE_MS + 50);
+
+    const auth2 = makeWhatsAppAuthState('b1', deps);
+    await auth2.initialize();
+    const got = await auth2.state.keys.get('session', ['jid@s.whatsapp.net']);
+    const val = got['jid@s.whatsapp.net'];
+    expect(Buffer.isBuffer(val)).toBe(true);
+    expect(Buffer.from(val as Buffer)).toEqual(Buffer.from(sessionBytes));
+  });
+
   it('state.creds reference is stable across initialize()', async () => {
     const deps = memDeps();
     deps.store.set(credsKey('b1'), JSON.stringify({ registered: true }));

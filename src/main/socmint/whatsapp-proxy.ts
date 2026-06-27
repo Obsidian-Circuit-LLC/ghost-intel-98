@@ -14,7 +14,7 @@
  * Post-unsealing usage (inside the guarded import block):
  *   const proxyUrl = buildBaileysProxy(transport);
  *   // proxyUrl === null   → clearnet (direct)
- *   // proxyUrl === string → socks5://user:pass@127.0.0.1:port
+ *   // proxyUrl === string → socks5h://user:pass@127.0.0.1:port
  *   const agent = proxyUrl ? new SocksProxyAgent(proxyUrl) : undefined;
  *   const sock = makeWASocket({ auth, agent, fetchAgent: agent,
  *                               syncFullHistory: false,
@@ -39,8 +39,11 @@ import type { SocmintTransport } from './tor-identity';
  * @param transport  Pre-resolved transport (from resolveTransport at the egress boundary).
  * @returns
  *   - `null`  for 'direct' mode — Baileys will use a plain TCP connection.
- *   - A `socks5://user:password@host:port` URL string for 'tor' mode — pass to
+ *   - A `socks5h://user:password@host:port` URL string for 'tor' mode — pass to
  *     `new SocksProxyAgent(url)` inside the sealed connect() block (post-unseal).
+ *     The `socks5h` scheme (not `socks5`) forces remote hostname resolution through
+ *     the Tor SOCKS port; the bare `socks5` scheme leaks a clearnet DNS lookup of
+ *     the target host (deanonymisation side-channel).
  *
  * Throws for any mode that is not exactly 'direct' or 'tor' (fail-closed; no
  * clearnet fallback on unknown/corrupted mode).
@@ -52,7 +55,15 @@ export function buildBaileysProxy(transport: SocmintTransport): string | null {
 
   if (transport.mode === 'tor') {
     const { host, port, user, password } = transport.proxy;
-    return `socks5://${user}:${password}@${host}:${port}`;
+    // socks5h (not socks5): the 'h' defers hostname resolution to the proxy
+    // (Tor's SOCKS5 port). With the bare 'socks5' scheme, socks-proxy-agent sets
+    // shouldLookup=true and performs a CLIENT-SIDE dns.lookup() of the target
+    // host (e.g. web.whatsapp.com) over the local/ISP resolver BEFORE tunnelling
+    // the TCP payload through Tor — a clearnet DNS deanonymisation side-channel.
+    // socks5h sets shouldLookup=false so the hostname travels inside the Tor
+    // circuit. This is the canonical Tor-over-SOCKS configuration and is required
+    // to honour the module's 'NEVER silent clearnet' fail-closed invariant.
+    return `socks5h://${user}:${password}@${host}:${port}`;
   }
 
   // TypeScript exhaustiveness guard + runtime fail-closed enforcement.

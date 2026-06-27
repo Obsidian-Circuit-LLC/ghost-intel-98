@@ -444,6 +444,8 @@ export const channels = {
     hasBurner: 'socmint:hasBurner',
     startMonitor: 'socmint:startMonitor',
     stopMonitor: 'socmint:stopMonitor',
+    /** Main→renderer push: a harvested item arrived from a live monitor session. */
+    monitorItem: 'socmint:monitorItem',
     // WhatsApp linking ceremony (WA-T5 — stubs; WA-T6/T7 implement bodies)
     setWhatsappBurnerPairingCode: 'socmint:setWhatsappBurnerPairingCode',
     hasWhatsappBurner: 'socmint:hasWhatsappBurner',
@@ -667,7 +669,7 @@ export interface ApiContracts {
   [channels.socmint.recordLabel]: { args: [string, unknown]; returns: void };
   [channels.socmint.setBurner]: { args: [string, unknown]; returns: void };
   [channels.socmint.hasBurner]: { args: [string]; returns: boolean };
-  [channels.socmint.startMonitor]: { args: [unknown]; returns: { disabled: true } | { started: true; jobId: string } };
+  [channels.socmint.startMonitor]: { args: [unknown]; returns: { disabled: true } | { started: true; jobId: string } | { noChannels: true } };
   [channels.socmint.stopMonitor]: { args: [string]; returns: void };
   // WhatsApp linking ceremony — WA-T5 contracts; bodies implemented in WA-T6/T7.
   // gate-closed → { disabled: true }; gate-open + sealed lib → sealed error (not crash).
