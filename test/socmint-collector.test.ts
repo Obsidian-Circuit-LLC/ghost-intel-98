@@ -95,6 +95,8 @@ class MockMtcuteClient implements MtcuteClientLike {
     chat: { id: -100999, displayName: 'Mock Channel' },
   };
   historyResult: TgTestMessage[] = [];
+  /** Records the chatId argument passed to the most recent getHistory() call. */
+  lastGetHistoryChatId: string | number | undefined;
 
   async importSession(_session: string): Promise<void> {
     this.importSessionCalled = true;
@@ -113,9 +115,10 @@ class MockMtcuteClient implements MtcuteClientLike {
   }
 
   async getHistory(
-    _chatId: string | number,
+    chatId: string | number,
     _params?: { limit?: number },
   ): Promise<TgTestMessage[]> {
+    this.lastGetHistoryChatId = chatId;
     return this.historyResult;
   }
 
@@ -399,6 +402,38 @@ describe('makeMtcuteCollector — backfill (mock client)', () => {
     expect(items[0].publishedAt).toBe('2026-01-01T00:00:00.000Z');
     expect(items[0].harvestedAt).toBe('2026-01-01T00:02:00Z');
     expect(items[1].text).toBe('Second');
+  });
+
+  it('backfill() passes a NUMBER to getHistory (mtcute resolves strings as @usernames)', async () => {
+    const mockClient = new MockMtcuteClient();
+    mockClient.historyResult = [makeTgMessage({ id: 1 })];
+
+    const collector = makeMtcuteCollector({
+      burnerId: 'test-burner',
+      transport: { mode: 'direct' },
+      harvestedAt: () => '2026-01-01T00:02:00Z',
+      _inject: { createClient: () => mockClient },
+    });
+    await collector.connect();
+    // Stored channelId is the marked-id STRING (join()/subscribe() standardise on it).
+    await collector.backfill('-1001234567890', 10);
+
+    expect(typeof mockClient.lastGetHistoryChatId).toBe('number');
+    expect(mockClient.lastGetHistoryChatId).toBe(-1001234567890);
+  });
+
+  it('backfill() throws on a non-numeric channel id (mtcute number-resolution contract)', async () => {
+    const mockClient = new MockMtcuteClient();
+    const collector = makeMtcuteCollector({
+      burnerId: 'test-burner',
+      transport: { mode: 'direct' },
+      harvestedAt: () => '2026-01-01T00:02:00Z',
+      _inject: { createClient: () => mockClient },
+    });
+    await collector.connect();
+    await expect(collector.backfill('not-a-number', 10)).rejects.toThrow(
+      'requires a numeric channel id',
+    );
   });
 
   it('backfill() produces deterministic item IDs (SHA-256 of platform:channelId:messageId)', async () => {

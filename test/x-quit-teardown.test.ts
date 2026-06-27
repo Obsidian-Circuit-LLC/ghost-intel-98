@@ -36,6 +36,7 @@ import {
   killSidecar,
   __setSidecarPathForTest,
   __setSpawnForTest,
+  __setPinnedShaForTest,
   __resetForTest,
 } from '../src/main/x/sidecar-client';
 import type { XSidecarRequest } from '../src/main/x/sidecar-client';
@@ -58,6 +59,10 @@ function mockSpawn(scenario: string) {
 
 beforeEach(() => {
   __resetForTest();
+  // The mock fixture's hash never matches the production linux pin; neutralise it
+  // so runJob spawns the child instead of short-circuiting with SHA_MISMATCH
+  // (which would leave _activeChild null and make killSidecar a no-op).
+  __setPinnedShaForTest({ win32: '', linux: '', darwin: '' });
 });
 
 afterEach(() => {
