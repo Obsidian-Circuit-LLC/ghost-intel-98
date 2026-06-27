@@ -223,8 +223,13 @@ export async function handleHasBurner(burnerId: string): Promise<boolean> {
 // Monitor lifecycle — startMonitor is the only egress-causing handler
 // ---------------------------------------------------------------------------
 
-/** Active job registry (in-process; reset on restart; v1 only). */
-const activeJobs = new Map<string, { burnerId: string; caseId: string }>();
+/** Active job registry (in-process; reset on restart). */
+const activeJobs = new Map<string, {
+  burnerId: string;
+  caseId: string;
+  collector: SocmintCollector;
+  unsubscribe: () => void;
+}>();
 
 /**
  * Start monitoring channels for a case.
@@ -238,12 +243,13 @@ const activeJobs = new Map<string, { burnerId: string; caseId: string }>();
  * Tor is down — never a silent clearnet fallback. In 'direct' mode this is the
  * operator's explicit clearnet choice (settings.socmint.transport='direct').
  *
- * The collector is then constructed with the resolved transport. connect() is the
- * sealed seam in v1 and is NOT called here; in 'tor' mode Tor was already validated
- * above via resolveTransport. No invariant is asserted that the code does not enforce.
+ * The collector is then constructed, connected, and subscribed strictly downstream
+ * of the gate. connect() is the first network-touching operation and runs AFTER
+ * the gate check and transport resolution — never before.
  *
  * @param rawReq   { caseId, burnerId, channelIds?, keywords? }
- * @param deps     { networkEnabled, transport, collectorFactory } — injectable for tests
+ * @param deps     Injectable for tests: networkEnabled, transport, collectorFactory,
+ *                 and optional sendToRenderer for live streaming to the renderer.
  */
 export async function handleStartMonitor(
   rawReq: unknown,
@@ -251,6 +257,8 @@ export async function handleStartMonitor(
     networkEnabled: () => Promise<boolean>;
     transport: () => Promise<'direct' | 'tor'>;
     collectorFactory: CollectorFactory;
+    /** Optional: stream each harvested item to the renderer window via webContents.send. */
+    sendToRenderer?: (item: HarvestedItem) => void;
   },
 ): Promise<{ disabled: true } | { started: true; jobId: string }> {
   // EGRESS GATE: precedes ALL network/collector operations.
@@ -263,29 +271,62 @@ export async function handleStartMonitor(
   if (!rawBurner) throw new Error('socmint:startMonitor requires burnerId');
   const burnerId = rawBurner.replace(/[/\\]/g, '_'); // basename-sanitise (secretStore key safety)
 
+  // Parse channelIds from the request (trust boundary: filter to strings only).
+  const channelIds = Array.isArray(req.channelIds)
+    ? (req.channelIds as unknown[]).filter((id): id is string => typeof id === 'string')
+    : [];
+
   // Resolve transport AT THE EGRESS BOUNDARY. In 'tor' mode this THROWS
   // SocmintTorUnavailableError when Tor is down — never a silent clearnet fallback.
   // In 'direct' mode this is the operator's explicit clearnet choice.
   const transport = resolveTransport(burnerId, await deps.transport());
 
-  // Construct the collector with the resolved transport. connect() is the sealed seam in
-  // v1 (throws 'not installed') and is NOT called here; in 'tor' mode Tor was already
-  // validated above. No invariant is asserted that the code does not actually enforce.
-  deps.collectorFactory({ burnerId, transport, harvestedAt: () => new Date().toISOString() });
+  // Construct the collector with the resolved transport.
+  const collector = deps.collectorFactory({ burnerId, transport, harvestedAt: () => new Date().toISOString() });
+
+  // Connect — STRICTLY downstream of the gate and transport validation.
+  // If connect() or any join() throws, attempt best-effort cleanup before re-throwing.
+  try {
+    await collector.connect();
+
+    // Join each monitored channel (sequentially — mtcute enforces per-account rate limits).
+    for (const channelId of channelIds) {
+      await collector.join(channelId);
+    }
+  } catch (err) {
+    // Best-effort cleanup: disconnect the partially-connected collector so we don't leak
+    // the underlying TCP/Tor connection. Ignore cleanup errors — the original error wins.
+    try { await collector.disconnect(); } catch { /* ignore */ }
+    throw err;
+  }
+
+  // Subscribe to live items. onItem persists each item to the encrypted store and
+  // optionally streams it to the renderer if deps.sendToRenderer is wired.
+  // Fire-and-forget (void) so the synchronous subscribe callback signature is satisfied;
+  // upsertItems errors are non-fatal for the live stream (items already in store are deduped).
+  const onItem = async (item: HarvestedItem): Promise<void> => {
+    const { upsertItems } = await import('./store');
+    await upsertItems(caseId, [item]);
+    deps.sendToRenderer?.(item);
+  };
+  const unsubscribe = collector.subscribe(channelIds, (item) => { void onItem(item); });
 
   const jobId = randomUUID();
-  activeJobs.set(jobId, { burnerId, caseId });
+  activeJobs.set(jobId, { burnerId, caseId, collector, unsubscribe });
   return { started: true, jobId };
 }
 
 /**
  * Stop an active monitor job by jobId.
- * Removes the job from the registry. No-op if the jobId is unknown.
- * In v1 there is no live connection to close (sealed seam); the registry
- * is cleared so future startMonitor calls can reuse the slot.
+ * Calls the subscriber's unsubscribe function, then disconnects the collector.
+ * No-op if the jobId is unknown (already stopped or never started).
  */
 export async function handleStopMonitor(jobId: string): Promise<void> {
+  const job = activeJobs.get(jobId);
+  if (!job) return;
   activeJobs.delete(jobId);
+  job.unsubscribe();
+  await job.collector.disconnect();
 }
 
 // ---------------------------------------------------------------------------
