@@ -431,7 +431,9 @@ export const channels = {
     favicon: 'searchlight:favicon',
     addCustomSite: 'searchlight:addCustomSite',
     exportSites: 'searchlight:exportSites',
-    exportPdf: 'searchlight:exportPdf'
+    exportPdf: 'searchlight:exportPdf',
+    torStatus: 'searchlight:torStatus',
+    connectTor: 'searchlight:connectTor'
   },
   socmint: {
     addChannel: 'socmint:addChannel',
@@ -660,6 +662,8 @@ export interface ApiContracts {
   [channels.searchlight.addCustomSite]: { args: [{ name: string; url: string; category?: string }]; returns: { ok: boolean; reason?: string } };
   [channels.searchlight.exportSites]: { args: []; returns: string };
   [channels.searchlight.exportPdf]: { args: [{ html: string; filename: string }]; returns: { ok: boolean } };
+  [channels.searchlight.torStatus]: { args: []; returns: { state: 'off' | 'connecting' | 'ready' } };
+  [channels.searchlight.connectTor]: { args: []; returns: { state: 'off' | 'connecting' | 'ready'; error?: string } };
 
   [channels.socmint.addChannel]: { args: [string, unknown]; returns: MonitoredChannel[] };
   [channels.socmint.removeChannel]: { args: [string, string]; returns: MonitoredChannel[] };
