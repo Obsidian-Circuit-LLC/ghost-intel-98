@@ -141,6 +141,11 @@ const PINNED_SHA256: Record<string, string> = {
 type SpawnFn = (cmd: string, args: string[], opts: SpawnOptions) => ChildProcess;
 let _spawnFn: SpawnFn = nodeSpawn as unknown as SpawnFn;
 let _sidecarPathOverride: string | null = null;
+/**
+ * Override the per-platform SHA-256 pins for testing (X-8 hash-mismatch test).
+ * Set to null to restore the production PINNED_SHA256 map.
+ */
+let _pinnedShaOverride: Record<string, string> | null = null;
 
 export function __setSidecarPathForTest(p: string): void {
   _sidecarPathOverride = p;
@@ -148,9 +153,14 @@ export function __setSidecarPathForTest(p: string): void {
 export function __setSpawnForTest(fn: SpawnFn): void {
   _spawnFn = fn;
 }
+/** Override pinned SHA-256 map (test-only; X-8). Lets hash-mismatch tests set a non-empty pin. */
+export function __setPinnedShaForTest(pins: Record<string, string>): void {
+  _pinnedShaOverride = pins;
+}
 export function __resetForTest(): void {
   _spawnFn = nodeSpawn as unknown as SpawnFn;
   _sidecarPathOverride = null;
+  _pinnedShaOverride = null;
 }
 
 // ---------------------------------------------------------------------------
@@ -224,7 +234,8 @@ export async function runJob(
   }
 
   // 2. SHA verify (only when pin is non-empty)
-  const pin = PINNED_SHA256[process.platform] ?? '';
+  const pins = _pinnedShaOverride ?? PINNED_SHA256;
+  const pin = pins[process.platform] ?? '';
   if (pin) {
     const bytes = await readFile(binPath);
     const got = createHash('sha256').update(bytes).digest('hex');
@@ -324,6 +335,10 @@ function _runWithProc(
       if (pingTimer !== null) { clearTimeout(pingTimer); pingTimer = null; }
       reject(e);
     }
+
+    // Suppress EPIPE/ECONNRESET on stdin: these happen when the sidecar exits early
+    // (e.g. bad binary, ENOEXEC); the proc 'exit' or 'error' handler settles the promise.
+    (proc.stdin as NodeJS.WritableStream).on('error', () => { /* handled by proc event handlers */ });
 
     // Write ping and start timeout
     try {
@@ -476,6 +491,21 @@ function _runWithProc(
           totalFromSidecar,
           errorCode: 'SIDECAR_CRASH',
           errorMessage: `X sidecar exited (code ${code}) without sending a terminal frame`,
+          jobId,
+        });
+      }
+    });
+
+    // Spawn-level errors (EACCES, ENOEXEC, ENOENT on the binary path, etc.)
+    // These fire before any stdout/exit event and would otherwise become unhandled exceptions.
+    proc.once('error', (err: NodeJS.ErrnoException) => {
+      if (!settled) {
+        flushBatch();
+        finish({
+          status: 'error',
+          totalFromSidecar,
+          errorCode: err.code ?? 'SPAWN_ERROR',
+          errorMessage: `X sidecar spawn failed: ${err.message}`,
           jobId,
         });
       }
