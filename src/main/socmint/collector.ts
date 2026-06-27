@@ -315,6 +315,10 @@ export function makeMtcuteCollector(opts: {
           apiId,
           apiHash,
           storage: new MemoryStorage(),
+          // logLevel 0 = silent: suppress all mtcute internal log output.
+          // Credentials must never appear in logs; silencing the library logger
+          // removes any risk of the library emitting session strings or API hashes.
+          logLevel: 0,
           ...(transport !== undefined ? { transport } : {}),
         });
 
