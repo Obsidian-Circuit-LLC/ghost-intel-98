@@ -35,9 +35,11 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`GhostIntel98-Setup-3.22.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
+> **Install:** download [`GhostIntel98-Setup-3.22.1.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
 
 ## Status
+
+**v3.22.1** — **Searchlight readability fix.** The **Sweep results** and **Reports preview** tables now render on the intended **midnight-purple** surface with readable text, instead of white. Root cause was a CSS cascade bug: the bundled `98.css` paints every native `<table>` white, which sat on top of (and hid) the dark results container, so both tables read as white regardless of the container color. The fix restates the dark surface on the table's *class* selectors — which win on specificity — and lifts the few text colors (not-found URL, site name) that were only legible against the accidental white. Cosmetic only; no behavior, dependency, or security-surface change. **1,972 automated tests** green; typecheck + build clean. *Everything from v3.22.0 carries forward.*
 
 **v3.22.0** — **SOCMINT activated: Telegram, WhatsApp, and X collectors, live and gated.** The three SOCMINT collectors are now wired live into the gated IPC with their real libraries — **Telegram** (`@mtcute/node` MTProto, public-channel join-then-filter), **WhatsApp** (`@whiskeysockets/baileys`, monitoring-only, pairing-code link), and **X/Twitter** (`twscrape` via a quarantined Python sidecar) — all feeding the shared encrypted `HarvestedItem` pipeline (per-case store, exact-id dedup, local-Ollama relevance ranking, analyst labels). Egress is **off by default** and **gate-before-egress is adversarially verified**: no collector connects, and no Baileys socket is constructed, before the network gate. Transport is **fail-closed** — Tor mode refuses when Tor is down (never a silent clearnet fallback) and routes via **`socks5h://`** so hostnames resolve *inside* the circuit (no DNS-deanonymization side-channel), with per-burner `IsolateSOCKSAuth` isolation; secrets live only in the encrypted `secretStore`, never echoed. Baileys is **supply-chain pinned** against the genuine package (not the Dec-2025 `lotusbail` clone). Built and hardened over multiple subagent-driven passes whose adversarial whole-branch reviews caught and fixed a real **Tor DNS-leak** and an **un-stoppable-circuit leak** before release. **Honest scope:** mock-tested + boot-verified (both ESM-only libs load in the packaged main with no `ERR_REQUIRE_ESM`), but **not** live-smoked against the real platforms — bring your own burner accounts; the X sidecar binary is operator-built. **1,972 automated tests** green; typecheck + build clean. *Everything from v3.21.0 carries forward.*
 
@@ -448,7 +450,7 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases) and run it.
 
-Direct link to the current release: [`GhostIntel98-Setup-3.21.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.21.0/GhostIntel98-Setup-3.21.0.exe)
+Direct link to the current release: [`GhostIntel98-Setup-3.22.1.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.22.1/GhostIntel98-Setup-3.22.1.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is **formally verified internally** — symbolic (ProVerif) +
 computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not**
 FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.6.8/GhostIntel98-Setup-3.6.8.exe).
@@ -456,7 +458,7 @@ FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Se
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\GhostIntel98-Setup-3.21.0.exe -Algorithm SHA256
+Get-FileHash .\GhostIntel98-Setup-3.22.1.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
