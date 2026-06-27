@@ -357,6 +357,9 @@
   width: 100%;
   border-collapse: collapse;
   font-size: 12px;
+  /* 98.css paints every native <table> background:#fff; restate midnight-purple
+     on the class (0,1,0 beats the element rule) so the dark surface actually shows. */
+  background: #1e0f33;
 }
 
 .sl-sweep-thead-row { background: #15092a; position: sticky; top: 0; z-index: 10; }
@@ -367,9 +370,12 @@
   font-family: 'Share Tech Mono', monospace;
   font-size: 9px;
   letter-spacing: 0.14em;
-  color: #30405a;
+  color: #9a86c4;
   font-weight: 400;
   border-bottom: 1px solid #1a2040;
+  /* override 98.css `table > thead > tr > *` silver fill + raised bevel */
+  background: #15092a;
+  box-shadow: none;
 }
 
 .sl-sweep-row {
@@ -422,14 +428,14 @@
   font-family: 'Rajdhani', 'Share Tech Mono', sans-serif;
   font-size: 13px;
   font-weight: 600;
-  color: rgba(180,200,255,0.55);
+  color: rgba(190,205,255,0.78);
 }
 .sl-site-found { color: #d8e8ff; }
 
 .sl-url-cell { max-width: 240px; }
 .sl-url-link {
   font-size: 10px;
-  color: #2a3a70;
+  color: #6f7cc4;
   text-decoration: none;
   display: block;
   overflow: hidden;
