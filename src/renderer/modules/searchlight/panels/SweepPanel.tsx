@@ -152,13 +152,17 @@ export function SweepPanel(): JSX.Element {
   // Cleanup clears the interval on unmount / state change — no leaked timers.
   useEffect(() => {
     if (torState !== 'connecting') return;
+    let cancelled = false;
     const id = setInterval(() => {
       void (async () => {
         const r = await window.api.searchlight.torStatus();
-        setTorState(r.state);
+        if (!cancelled) setTorState(r.state);
       })();
     }, 2000);
-    return () => clearInterval(id);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
   }, [torState]);
 
   const handleConnectTor = useCallback(async () => {
@@ -524,7 +528,7 @@ export function SweepPanel(): JSX.Element {
         )}
 
         {/* Tor-not-connected notice (advisory + actionable; does not block Launch) */}
-        {networkEnabled && !directMode && torState !== 'ready' && (
+        {networkEnabled && !directMode && torState !== 'ready' && torState !== 'unknown' && (
           <div className="sl-sweep-tor-notice">
             <div className="sl-sweep-tor-notice-text">
               Tor is not connected — a Tor sweep will report &quot;TOR NOT READY&quot; for every site.
