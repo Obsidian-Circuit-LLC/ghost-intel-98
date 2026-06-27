@@ -74,7 +74,7 @@ describe('socmint:startMonitor gate', () => {
     const mockCollector = makeMockCollector();
     const factorySpy = vi.fn(() => mockCollector);
     const result = await handleStartMonitor(
-      { caseId: VALID_CASE_ID, burnerId: 'burner-1', channelIds: [] },
+      { caseId: VALID_CASE_ID, burnerId: 'burner-1', channelIds: ['-100001'] },
       {
         networkEnabled: async () => true,
         transport: async () => 'direct',
@@ -127,7 +127,7 @@ describe('socmint:startMonitor — transport: direct with Tor down', () => {
     const mockCollector = makeMockCollector();
     const factorySpy = vi.fn(() => mockCollector);
     const result = await handleStartMonitor(
-      { caseId: VALID_CASE_ID, burnerId: 'burner-direct', channelIds: [] },
+      { caseId: VALID_CASE_ID, burnerId: 'burner-direct', channelIds: ['-100001'] },
       {
         networkEnabled: async () => true,
         transport: async () => 'direct',
@@ -311,7 +311,7 @@ describe('socmint:startMonitor — live wiring (gate open, mock collector)', () 
     const mockCollector = makeMockCollector();
     const factorySpy = vi.fn(() => mockCollector);
     const result = await handleStartMonitor(
-      { caseId: VALID_CASE_ID, burnerId: 'burner-live', channelIds: [] },
+      { caseId: VALID_CASE_ID, burnerId: 'burner-live', channelIds: ['-100001'] },
       { networkEnabled: async () => true, transport: async () => 'direct', collectorFactory: factorySpy },
     );
     expect(result).toMatchObject({ started: true, jobId: expect.any(String) });
@@ -354,21 +354,27 @@ describe('socmint:startMonitor — live wiring (gate open, mock collector)', () 
     expect(mockCollector.subscribe).toHaveBeenCalledWith(['-100001'], expect.any(Function));
   });
 
-  it('subscribe() called with empty channelIds when none supplied', async () => {
+  it('subscribe() is NOT called when channelIds is empty (FINDING 3 fail-closed: no empty-set subscribe)', async () => {
+    // Empty channelIds → resolvedIds is empty → { noChannels: true }; subscribe NEVER called.
+    // An empty subscribe set delivers ALL incoming messages — fail-closed prevents this.
     const mockCollector = makeMockCollector();
     const factorySpy = vi.fn(() => mockCollector);
-    await handleStartMonitor(
+    const result = await handleStartMonitor(
       { caseId: VALID_CASE_ID, burnerId: 'burner-live', channelIds: [] },
       { networkEnabled: async () => true, transport: async () => 'direct', collectorFactory: factorySpy },
     );
-    expect(mockCollector.subscribe).toHaveBeenCalledWith([], expect.any(Function));
+    expect(result).toEqual({ noChannels: true });
+    expect(mockCollector.subscribe).not.toHaveBeenCalled();
+    // Collector was connected (gate open) but cleanly disconnected after channels resolved empty.
+    expect(mockCollector.connect).toHaveBeenCalledOnce();
+    expect(mockCollector.disconnect).toHaveBeenCalledOnce();
   });
 
   it('handleStopMonitor calls disconnect() on the registered collector', async () => {
     const mockCollector = makeMockCollector();
     const factorySpy = vi.fn(() => mockCollector);
     const result = await handleStartMonitor(
-      { caseId: VALID_CASE_ID, burnerId: 'burner-stop', channelIds: [] },
+      { caseId: VALID_CASE_ID, burnerId: 'burner-stop', channelIds: ['-100001'] },
       { networkEnabled: async () => true, transport: async () => 'direct', collectorFactory: factorySpy },
     );
     const { jobId } = result as { started: true; jobId: string };
@@ -471,7 +477,7 @@ describe('socmint:startMonitor — platform selection (WhatsApp vs Telegram)', (
     const tgFactory = vi.fn(() => makeMockCollector());
 
     const result = await handleStartMonitor(
-      { caseId: VALID_CASE_ID, burnerId: 'wa-burner', channelIds: [], platform: 'whatsapp' },
+      { caseId: VALID_CASE_ID, burnerId: 'wa-burner', channelIds: ['group1@g.us'], platform: 'whatsapp' },
       {
         networkEnabled: async () => true,
         transport: async () => 'direct',
@@ -564,7 +570,7 @@ describe('socmint:startMonitor — platform selection (WhatsApp vs Telegram)', (
     const waMock2 = makeMockCollector();
     const waFactory2 = vi.fn(() => waMock2);
     const openResult = await handleStartMonitor(
-      { caseId: VALID_CASE_ID, burnerId: 'wa-contract', channelIds: [], platform: 'whatsapp' },
+      { caseId: VALID_CASE_ID, burnerId: 'wa-contract', channelIds: ['group1@g.us'], platform: 'whatsapp' },
       {
         networkEnabled: async () => true,
         transport: async () => 'direct',
@@ -638,7 +644,7 @@ describe('socmint:startMonitor — FIX 2: subscribe callback catches onItem reje
     };
 
     const result = await handleStartMonitor(
-      { caseId: VALID_CASE_ID, burnerId: 'burner-fix2', channelIds: [] },
+      { caseId: VALID_CASE_ID, burnerId: 'burner-fix2', channelIds: ['-100001'] },
       {
         networkEnabled: async () => true,
         transport: async () => 'direct',
@@ -759,7 +765,7 @@ describe('socmint:startMonitor — FIX 5: sendToRenderer streams items to the re
     };
 
     await handleStartMonitor(
-      { caseId: VALID_CASE_ID, burnerId: 'burner-fix5', channelIds: [] },
+      { caseId: VALID_CASE_ID, burnerId: 'burner-fix5', channelIds: ['-100001'] },
       {
         networkEnabled: async () => true,
         transport: async () => 'direct',
@@ -799,7 +805,7 @@ describe('socmint:startMonitor — FIX 5: sendToRenderer streams items to the re
     };
 
     await handleStartMonitor(
-      { caseId: VALID_CASE_ID, burnerId: 'burner-fix5-fail', channelIds: [] },
+      { caseId: VALID_CASE_ID, burnerId: 'burner-fix5-fail', channelIds: ['-100001'] },
       {
         networkEnabled: async () => true,
         transport: async () => 'direct',
@@ -864,5 +870,177 @@ describe('socmint:setWhatsappBurnerPairingCode — FIX 6: transport required, fa
       },
     });
     expect(result).toEqual({ pairingCode: 'DIRECT-CODE' });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FINDING 1: WhatsApp pairing socket — retry, unlink, and lifecycle
+// ---------------------------------------------------------------------------
+
+describe('socmint:setWhatsappBurnerPairingCode — FINDING 1: pairing socket lifecycle', () => {
+  function makeAuthState() {
+    return {
+      state: { creds: {}, keys: { get: async () => ({}), set: async () => {} } },
+      initialize: vi.fn().mockResolvedValue(undefined),
+      saveCreds: vi.fn().mockResolvedValue(undefined),
+      unlinkSession: vi.fn().mockResolvedValue(undefined),
+    };
+  }
+
+  function makePairingSock() {
+    return {
+      ev: { on: vi.fn(), off: vi.fn() },
+      end: vi.fn(),
+      requestPairingCode: vi.fn().mockResolvedValue('TEST-CODE'),
+    };
+  }
+
+  it('retry for same burnerId ends the prior socket before constructing a new one', async () => {
+    const priorSock = makePairingSock();
+    const newSock = makePairingSock();
+
+    // First call — prior socket registered in pairingSockets on success.
+    await handleSetWhatsappBurnerPairingCode('retry-burner-f1', '15551234567', {
+      networkEnabled: async () => true,
+      transport: async () => 'direct',
+      _inject: { createSocket: vi.fn(() => priorSock), authState: makeAuthState() },
+    });
+    // Prior socket is still open after a successful pairing.
+    expect(priorSock.end).not.toHaveBeenCalled();
+
+    // Second call with the same burnerId — prior socket must be ended BEFORE creating new.
+    await handleSetWhatsappBurnerPairingCode('retry-burner-f1', '15551234567', {
+      networkEnabled: async () => true,
+      transport: async () => 'direct',
+      _inject: { createSocket: vi.fn(() => newSock), authState: makeAuthState() },
+    });
+
+    // Prior socket MUST be ended on retry (prevents orphaned circuit).
+    expect(priorSock.end).toHaveBeenCalledOnce();
+    // New socket must NOT be ended (it is the current active pairing socket).
+    expect(newSock.end).not.toHaveBeenCalled();
+  });
+
+  it('three retries: each prior socket is ended exactly once (no accumulation)', async () => {
+    const socks = [makePairingSock(), makePairingSock(), makePairingSock()];
+    let idx = 0;
+
+    for (const _ of socks) {
+      await handleSetWhatsappBurnerPairingCode('triple-retry-f1', '15551234567', {
+        networkEnabled: async () => true,
+        transport: async () => 'direct',
+        _inject: { createSocket: vi.fn(() => socks[idx++]!), authState: makeAuthState() },
+      });
+    }
+
+    // First and second sockets must each be ended exactly once.
+    expect(socks[0]!.end).toHaveBeenCalledOnce();
+    expect(socks[1]!.end).toHaveBeenCalledOnce();
+    // Last (current) socket must not be ended.
+    expect(socks[2]!.end).not.toHaveBeenCalled();
+  });
+
+  it('unlink ends a lingering pairing socket', async () => {
+    const pairingSock = makePairingSock();
+    const mockStore = { get: vi.fn(), delete: vi.fn().mockResolvedValue(undefined) };
+
+    // Pair the burner — socket stays in pairingSockets on success.
+    await handleSetWhatsappBurnerPairingCode('unlink-burner-f1', '15551234567', {
+      networkEnabled: async () => true,
+      transport: async () => 'direct',
+      _inject: { createSocket: vi.fn(() => pairingSock), authState: makeAuthState() },
+    });
+    expect(pairingSock.end).not.toHaveBeenCalled(); // still open after pairing
+
+    // Unlink: must end the pairing socket to release the Tor/SOCKS circuit.
+    await handleUnlinkWhatsappBurner('unlink-burner-f1', mockStore);
+    expect(pairingSock.end).toHaveBeenCalledOnce();
+  });
+
+  it('second unlink for the same burnerId is a no-op — socket already removed', async () => {
+    const pairingSock = makePairingSock();
+    const mockStore = { get: vi.fn(), delete: vi.fn().mockResolvedValue(undefined) };
+
+    await handleSetWhatsappBurnerPairingCode('double-unlink-f1', '15551234567', {
+      networkEnabled: async () => true,
+      transport: async () => 'direct',
+      _inject: { createSocket: vi.fn(() => pairingSock), authState: makeAuthState() },
+    });
+
+    await handleUnlinkWhatsappBurner('double-unlink-f1', mockStore);
+    await handleUnlinkWhatsappBurner('double-unlink-f1', mockStore); // second call
+
+    // end() called exactly once — not doubled on second unlink.
+    expect(pairingSock.end).toHaveBeenCalledOnce();
+  });
+
+  it('unlink with no prior pairing socket is a no-op (does not throw)', async () => {
+    const mockStore = { get: vi.fn(), delete: vi.fn().mockResolvedValue(undefined) };
+    // No pairing call made — pairingSockets has no entry.
+    await expect(handleUnlinkWhatsappBurner('never-paired-f1', mockStore)).resolves.toBeUndefined();
+    // secretStore deletes still happen.
+    expect(mockStore.delete).toHaveBeenCalledTimes(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FINDING 3: empty channelIds fails CLOSED — subscribe must not be called with []
+// ---------------------------------------------------------------------------
+
+describe('socmint:startMonitor — FINDING 3: empty watch set fails CLOSED', () => {
+  it('channelIds:[] returns { noChannels: true } and never calls subscribe()', async () => {
+    const mc = makeMockCollector();
+    const result = await handleStartMonitor(
+      { caseId: VALID_CASE_ID, burnerId: 'burner-noChannels-f3', channelIds: [] },
+      { networkEnabled: async () => true, transport: async () => 'direct', collectorFactory: vi.fn(() => mc) },
+    );
+    expect(result).toEqual({ noChannels: true });
+    expect(mc.subscribe).not.toHaveBeenCalled();
+  });
+
+  it('channelIds:[] — collector is disconnected after connect() (no lingering circuit)', async () => {
+    const mc = makeMockCollector();
+    await handleStartMonitor(
+      { caseId: VALID_CASE_ID, burnerId: 'burner-disc-f3', channelIds: [] },
+      { networkEnabled: async () => true, transport: async () => 'direct', collectorFactory: vi.fn(() => mc) },
+    );
+    expect(mc.connect).toHaveBeenCalledOnce();
+    expect(mc.disconnect).toHaveBeenCalledOnce();
+  });
+
+  it('non-empty channelIds still resolves { started, jobId } and calls subscribe()', async () => {
+    const mc = makeMockCollector();
+    const result = await handleStartMonitor(
+      { caseId: VALID_CASE_ID, burnerId: 'burner-hasChannels-f3', channelIds: ['-100001'] },
+      { networkEnabled: async () => true, transport: async () => 'direct', collectorFactory: vi.fn(() => mc) },
+    );
+    expect(result).toMatchObject({ started: true, jobId: expect.any(String) });
+    expect(mc.subscribe).toHaveBeenCalledOnce();
+  });
+
+  it('gate-closed with empty channelIds → { disabled: true } (gate check fires first)', async () => {
+    const mc = makeMockCollector();
+    const result = await handleStartMonitor(
+      { caseId: VALID_CASE_ID, burnerId: 'burner-gated-f3', channelIds: [] },
+      { networkEnabled: async () => false, transport: async () => 'direct', collectorFactory: vi.fn(() => mc) },
+    );
+    expect(result).toEqual({ disabled: true });
+    // Gate fires before factory selection — collector never constructed.
+    expect(mc.connect).not.toHaveBeenCalled();
+  });
+
+  it('whatsapp platform with empty channelIds → { noChannels: true } (same invariant)', async () => {
+    const mc = makeMockCollector();
+    const result = await handleStartMonitor(
+      { caseId: VALID_CASE_ID, burnerId: 'burner-wa-f3', channelIds: [], platform: 'whatsapp' },
+      {
+        networkEnabled: async () => true,
+        transport: async () => 'direct',
+        collectorFactory: vi.fn(),
+        whatsappCollectorFactory: vi.fn(() => mc),
+      },
+    );
+    expect(result).toEqual({ noChannels: true });
+    expect(mc.subscribe).not.toHaveBeenCalled();
   });
 });

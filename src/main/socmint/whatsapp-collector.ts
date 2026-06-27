@@ -208,6 +208,10 @@ export function makeWhatsAppCollector(opts: {
 
     async connect(): Promise<void> {
       let auth: WhatsAppAuthState;
+      // createSock is a closure that re-creates a fresh WaSocketLike using the same auth
+      // and proxy config.  It is called once initially and again on 515 (restartRequired)
+      // closes where Baileys cannot auto-reconnect and a fresh socket is required.
+      let createSock: () => WaSocketLike;
 
       if (opts._inject) {
         // ─── Test path ───────────────────────────────────────────────────────
@@ -222,7 +226,7 @@ export function makeWhatsAppCollector(opts: {
         await auth.initialize();
 
         const proxyUrl = buildBaileysProxy(opts.transport);
-        sock = opts._inject.createSocket(proxyUrl);
+        createSock = () => opts._inject!.createSocket(proxyUrl);
       } else {
         // ─── Production path ──────────────────────────────────────────────────
         // Lazy dynamic imports — no static @whiskeysockets/baileys or socks-proxy-agent
@@ -248,27 +252,34 @@ export function makeWhatsAppCollector(opts: {
 
         // Type alias inside the dynamic-import block to keep casts local.
         type BaileysConfig = Parameters<typeof makeWASocket>[0];
+        const config = buildBaileysSocketConfig(opts.transport, auth, agent) as BaileysConfig;
 
-        const waSock = makeWASocket(
-          // buildBaileysSocketConfig returns a plain Record; cast to the library type.
-          buildBaileysSocketConfig(opts.transport, auth, agent) as BaileysConfig,
-        );
-
-        // Cast the real WASocket (superset) to our minimal WaSocketLike.
-        sock = waSock as unknown as WaSocketLike;
+        // createSock is captured by the 515-restart handler so each restart gets a fresh
+        // socket with the same config (no re-importing modules or re-reading secretStore).
+        createSock = () => makeWASocket(config) as unknown as WaSocketLike;
       }
 
       waAuth = auth;
 
-      // creds.update: persist auth state on every Baileys ratchet.
-      sock.ev.on('creds.update', () => {
-        void auth.saveCreds();
-      });
+      // Create the initial socket and register the creds-persistence handler.
+      sock = createSock();
+      sock.ev.on('creds.update', () => { void auth.saveCreds(); });
 
       // Await connection:open before returning — prevents callers from calling join()
       // or subscribe() before the session is confirmed active (connect-before-open race fix).
-      // Rejects on fatal loggedOut close (DisconnectReason.loggedOut = 401) or 60 s timeout.
+      //
+      // Close codes handled:
+      //   401 (loggedOut)        — reject immediately; session permanently invalidated.
+      //   515 (restartRequired)  — Baileys cannot auto-reconnect; recreate the socket and
+      //                            continue waiting.  This is the standard Baileys restart
+      //                            flow and is required for freshly-paired burners whose
+      //                            first startMonitor triggers a server-side session refresh.
+      //   other close codes      — wait; a reconnect or further close event may follow.
+      //   timeout (60 s)         — reject.
       const CONNECT_TIMEOUT_MS = 60_000;
+      const RESTART_REQUIRED = 515; // DisconnectReason.restartRequired
+      const LOGGED_OUT = 401;       // DisconnectReason.loggedOut
+
       await new Promise<void>((resolve, reject) => {
         const timer = setTimeout(() => {
           reject(
@@ -278,24 +289,43 @@ export function makeWhatsAppCollector(opts: {
           );
         }, CONNECT_TIMEOUT_MS);
 
-        sock!.ev.on('connection.update', (update: WaConnectionUpdate) => {
-          if (update.connection === 'open') {
-            clearTimeout(timer);
-            resolve();
-          } else if (update.connection === 'close') {
-            // DisconnectReason.loggedOut = 401 — session permanently invalidated; re-pair required.
-            // Any other statusCode is a transient disconnect; Baileys will reconnect automatically.
-            const statusCode = (
-              (update.lastDisconnect?.error as { output?: { statusCode?: number } } | undefined)
-                ?.output?.statusCode
-            );
-            if (statusCode === 401) {
+        // wire() registers a connection.update handler on socket `s`.  On a 515 close it
+        // tears down `s`, creates a replacement, and calls itself on the new socket so the
+        // outer promise continues waiting for the eventual 'open'.
+        const wire = (s: WaSocketLike): void => {
+          s.ev.on('connection.update', (update: WaConnectionUpdate) => {
+            if (update.connection === 'open') {
               clearTimeout(timer);
-              reject(new Error('SOCMINT: WhatsApp session logged out — re-pair required'));
+              resolve();
+              return;
             }
-            // Non-fatal close: keep the timer and wait for Baileys to reconnect and emit 'open'.
-          }
-        });
+            if (update.connection === 'close') {
+              const statusCode = (
+                (update.lastDisconnect?.error as { output?: { statusCode?: number } } | undefined)
+                  ?.output?.statusCode
+              );
+              if (statusCode === LOGGED_OUT) {
+                clearTimeout(timer);
+                reject(new Error('SOCMINT: WhatsApp session logged out — re-pair required'));
+                return;
+              }
+              if (statusCode === RESTART_REQUIRED) {
+                // 515 restartRequired: Baileys will NOT reconnect on its own — a fresh socket
+                // is mandatory.  End the current socket, create a replacement, register
+                // handlers, then continue waiting for connection:open on the new socket.
+                const prev = sock!;
+                sock = createSock();
+                sock.ev.on('creds.update', () => { void auth.saveCreds(); });
+                wire(sock);
+                try { prev.end?.(); } catch { /* ignore */ }
+                return;
+              }
+              // Other close codes: wait — a reconnect or further close event may follow.
+            }
+          });
+        };
+
+        wire(sock!);
       });
     },
 

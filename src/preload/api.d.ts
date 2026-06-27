@@ -540,7 +540,7 @@ export interface GhostApi {
     recordLabel(caseId: string, label: { itemId: string; decision: 'accept' | 'reject'; entityCorrections?: { kind: string; value: string }[]; labeledAt: string }): Promise<void>;
     setBurner(burnerId: string, credentials: unknown): Promise<void>;
     hasBurner(burnerId: string): Promise<boolean>;
-    startMonitor(req: unknown): Promise<{ disabled: true } | { started: true; jobId: string }>;
+    startMonitor(req: unknown): Promise<{ disabled: true } | { started: true; jobId: string } | { noChannels: true }>;
     stopMonitor(jobId: string): Promise<void>;
     // WhatsApp linking ceremony (WA-T5 contracts; bodies implemented in WA-T6/T7;
     // register.ts wiring in WA-T10 after operator smoke-test).
