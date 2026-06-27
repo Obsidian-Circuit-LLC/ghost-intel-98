@@ -130,7 +130,7 @@ function productionSidecarPath(): string {
  */
 const PINNED_SHA256: Record<string, string> = {
   win32:  '',
-  linux:  '',
+  linux:  '6437f928145d0669e68bf73b0239d7e921cc2910e086564b4e36104e5ee97374',
   darwin: '',
 };
 
