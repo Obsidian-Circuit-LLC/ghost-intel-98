@@ -27,7 +27,7 @@ import type {
   WebLink,
   Whiteboard
 } from '../shared/types';
-import type { EntityCreateInput, EntityLinkOpts, BioAddInput, AuthStatus, LocalAiStatus, LocalAiProgress, MemoryStatus, MemoryProgress } from '../shared/ipc-contracts';
+import type { EntityCreateInput, EntityLinkOpts, BioAddInput, AuthStatus, LocalAiStatus, LocalAiProgress, MemoryStatus, MemoryProgress, XCollectResultShape } from '../shared/ipc-contracts';
 import type {
   AiChatRequest,
   CameraStream,
@@ -66,6 +66,7 @@ import type {
   SearchlightCase,
   SearchlightCaseSummary,
 } from '../shared/searchlight/types';
+import type { HarvestedItem, MonitoredChannel } from '../shared/socmint/types';
 
 export interface MailDraft {
   id: string;
@@ -529,6 +530,74 @@ export interface GhostApi {
     /** Export the current sweep results as a PDF using Electron's printToPDF (dep-free).
      *  Shows a native save dialog. Returns `{ ok: false }` if the user cancels. */
     exportPdf(args: { html: string; filename: string }): Promise<{ ok: boolean }>;
+  };
+  socmint: {
+    addChannel(caseId: string, channel: MonitoredChannel): Promise<MonitoredChannel[]>;
+    removeChannel(caseId: string, channelId: string): Promise<MonitoredChannel[]>;
+    listChannels(caseId: string): Promise<MonitoredChannel[]>;
+    listItems(caseId: string): Promise<HarvestedItem[]>;
+    rankItems(caseId: string, keyword: string): Promise<HarvestedItem[]>;
+    recordLabel(caseId: string, label: { itemId: string; decision: 'accept' | 'reject'; entityCorrections?: { kind: string; value: string }[]; labeledAt: string }): Promise<void>;
+    setBurner(burnerId: string, credentials: unknown): Promise<void>;
+    hasBurner(burnerId: string): Promise<boolean>;
+    startMonitor(req: unknown): Promise<{ disabled: true } | { started: true; jobId: string }>;
+    stopMonitor(jobId: string): Promise<void>;
+    // WhatsApp linking ceremony (WA-T5 contracts; bodies implemented in WA-T6/T7;
+    // register.ts wiring in WA-T10 after operator smoke-test).
+    /** Egress-gated. Returns { disabled:true } when gate closed; { pairingCode } when gate
+     *  open + library installed; throws sealed message before WA-T9/WA-T10. */
+    setWhatsappBurnerPairingCode(burnerId: string, phone: string): Promise<{ disabled: true } | { pairingCode: string }>;
+    /** Boolean only — never echoes the stored secret value. */
+    hasWhatsappBurner(burnerId: string): Promise<boolean>;
+    /** Deletes secretStore entries for burnerId. User must separately unlink in WhatsApp. */
+    unlinkWhatsappBurner(burnerId: string): Promise<void>;
+  };
+  /**
+   * X/Twitter collector — clearnet quarantine module (X-6).
+   * Separate IPC namespace from socmint; gate requires BOTH networkEnabled AND
+   * clearnetAcknowledged before any collection can proceed (spec §3.1).
+   *
+   * Credential values are NEVER returned to the renderer:
+   *   - addAccount stores to secretStore; no return value.
+   *   - listAccounts returns account IDs only (no auth_token / ct0 / password).
+   *   - hasAccount returns a boolean only.
+   */
+  x: {
+    /** Store X account credentials in secretStore under the given accountId. */
+    addAccount(
+      accountId: string,
+      creds: { auth_token?: string; ct0?: string; username?: string },
+    ): Promise<void>;
+    /** Remove all credentials for the given accountId from secretStore. */
+    removeAccount(accountId: string): Promise<void>;
+    /** Returns stored account IDs only — no credential values. */
+    listAccounts(): Promise<string[]>;
+    /**
+     * Returns true when a non-empty auth_token is stored for the given accountId.
+     * Boolean only — never exposes the token value.
+     */
+    hasAccount(accountId: string): Promise<boolean>;
+    /**
+     * Run one X collection job (keyword search or user timeline).
+     * Throws XCollectorGatedError when networkEnabled or clearnetAcknowledged is false.
+     * FAIL-LOUD: partial/breakage-detected/error/sidecar-missing statuses are returned
+     * as explicit XCollectResultShape values, never silently mapped to empty arrays.
+     */
+    collect(req: {
+      caseId: string;
+      mode: 'search' | 'userTweets';
+      query?: string;
+      username?: string;
+      channelLabel?: string;
+      accountId?: string;
+      limit?: number;
+      since?: string;
+      until?: string;
+    }): Promise<XCollectResultShape>;
+    /** List all X-platform harvested items for the given case (platform === 'x' only). */
+    listItems(caseId: string): Promise<HarvestedItem[]>;
+    /** Rank X-platform items for the given case by keyword relevance (loopback-only AI). */
+    rankItems(caseId: string, keyword: string): Promise<HarvestedItem[]>;
   };
 }
 

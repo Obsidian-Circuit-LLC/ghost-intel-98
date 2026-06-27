@@ -31,6 +31,37 @@ import type {
 } from './types';
 import type { MediaLibrarySnapshot, MediaStation, MediaTrack, GeoSnapshot, GeoSource, GeoItem, SavedGeoEvent, MarketSnapshot } from './post-mvp-types';
 import type { SiteCatalogEntry, SweepResult, SearchlightCase, SearchlightCaseSummary } from './searchlight/types';
+import type { HarvestedItem, MonitoredChannel } from './socmint/types';
+
+/**
+ * Status enum for the X/Twitter collector (mirrors XCollectorStatus in
+ * src/main/x/sidecar-client.ts — kept here so the IPC contract type is
+ * self-contained in the shared package without importing from main).
+ */
+export type XCollectorStatus =
+  | 'idle'
+  | 'running'
+  | 'done'
+  | 'partial'
+  | 'error'
+  | 'sidecar-missing'
+  | 'breakage-detected';
+
+/**
+ * IPC result shape for x:collect (mirrors XCollectResult in src/main/x/collector.ts).
+ * Defined here so the shared ApiContracts entry is self-contained.
+ */
+export interface XCollectResultShape {
+  status: XCollectorStatus;
+  itemsAdded: number;
+  itemsSkipped: number;
+  totalFromSidecar: number;
+  truncationReason?: string;
+  truncationMessage?: string;
+  errorCode?: string;
+  errorMessage?: string;
+  jobId: string;
+}
 
 export interface EntityCreateInput { type: EntityType; value: string; notes?: string; aliases?: string[] }
 export interface EntityLinkOpts { relationship?: EntityRelationship; linkIds?: string[]; attachmentFileNames?: string[] }
@@ -401,6 +432,33 @@ export const channels = {
     addCustomSite: 'searchlight:addCustomSite',
     exportSites: 'searchlight:exportSites',
     exportPdf: 'searchlight:exportPdf'
+  },
+  socmint: {
+    addChannel: 'socmint:addChannel',
+    removeChannel: 'socmint:removeChannel',
+    listChannels: 'socmint:listChannels',
+    listItems: 'socmint:listItems',
+    rankItems: 'socmint:rankItems',
+    recordLabel: 'socmint:recordLabel',
+    setBurner: 'socmint:setBurner',
+    hasBurner: 'socmint:hasBurner',
+    startMonitor: 'socmint:startMonitor',
+    stopMonitor: 'socmint:stopMonitor',
+    // WhatsApp linking ceremony (WA-T5 — stubs; WA-T6/T7 implement bodies)
+    setWhatsappBurnerPairingCode: 'socmint:setWhatsappBurnerPairingCode',
+    hasWhatsappBurner: 'socmint:hasWhatsappBurner',
+    unlinkWhatsappBurner: 'socmint:unlinkWhatsappBurner'
+  },
+  // X/Twitter collector — clearnet quarantine module (X-5).
+  // Separate namespace from socmint; gate requires BOTH networkEnabled AND clearnetAcknowledged.
+  x: {
+    addAccount: 'x:addAccount',
+    removeAccount: 'x:removeAccount',
+    listAccounts: 'x:listAccounts',
+    hasAccount: 'x:hasAccount',
+    collect: 'x:collect',
+    listItems: 'x:listItems',
+    rankItems: 'x:rankItems'
   }
 } as const;
 
@@ -600,6 +658,38 @@ export interface ApiContracts {
   [channels.searchlight.addCustomSite]: { args: [{ name: string; url: string; category?: string }]; returns: { ok: boolean; reason?: string } };
   [channels.searchlight.exportSites]: { args: []; returns: string };
   [channels.searchlight.exportPdf]: { args: [{ html: string; filename: string }]; returns: { ok: boolean } };
+
+  [channels.socmint.addChannel]: { args: [string, unknown]; returns: MonitoredChannel[] };
+  [channels.socmint.removeChannel]: { args: [string, string]; returns: MonitoredChannel[] };
+  [channels.socmint.listChannels]: { args: [string]; returns: MonitoredChannel[] };
+  [channels.socmint.listItems]: { args: [string]; returns: HarvestedItem[] };
+  [channels.socmint.rankItems]: { args: [string, string]; returns: HarvestedItem[] };
+  [channels.socmint.recordLabel]: { args: [string, unknown]; returns: void };
+  [channels.socmint.setBurner]: { args: [string, unknown]; returns: void };
+  [channels.socmint.hasBurner]: { args: [string]; returns: boolean };
+  [channels.socmint.startMonitor]: { args: [unknown]; returns: { disabled: true } | { started: true; jobId: string } };
+  [channels.socmint.stopMonitor]: { args: [string]; returns: void };
+  // WhatsApp linking ceremony — WA-T5 contracts; bodies implemented in WA-T6/T7.
+  // gate-closed → { disabled: true }; gate-open + sealed lib → sealed error (not crash).
+  [channels.socmint.setWhatsappBurnerPairingCode]: { args: [string, string]; returns: { disabled: true } | { pairingCode: string } };
+  // boolean only — never echoes the stored secret value.
+  [channels.socmint.hasWhatsappBurner]: { args: [string]; returns: boolean };
+  // Deletes secretStore entries for the given burnerId; does NOT server-side-unlink (user must).
+  [channels.socmint.unlinkWhatsappBurner]: { args: [string]; returns: void };
+
+  // X/Twitter collector — clearnet quarantine module (X-5).
+  // Account management: creds stored in secretStore; never echoed to renderer.
+  [channels.x.addAccount]: { args: [string, unknown]; returns: void };
+  [channels.x.removeAccount]: { args: [string]; returns: void };
+  // Returns account IDs only — no credential values.
+  [channels.x.listAccounts]: { args: []; returns: string[] };
+  // Boolean only — never echoes the stored auth_token.
+  [channels.x.hasAccount]: { args: [string]; returns: boolean };
+  // Egress gate: throws XCollectorGatedError when networkEnabled or clearnetAcknowledged is false.
+  [channels.x.collect]: { args: [unknown]; returns: XCollectResultShape };
+  // X-platform items only (platform === 'x').
+  [channels.x.listItems]: { args: [string]; returns: HarvestedItem[] };
+  [channels.x.rankItems]: { args: [string, string]; returns: HarvestedItem[] };
 }
 
 export const BGCONN_LOCK_EXEMPT_CHANNELS = ['bgconn:status', 'bgconn:stop'] as const;
