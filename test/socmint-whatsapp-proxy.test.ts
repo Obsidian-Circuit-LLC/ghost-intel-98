@@ -7,12 +7,12 @@
  * Coverage:
  *   1.  direct transport  → returns null
  *   2.  tor transport     → returns a non-null string
- *   3.  tor URL           → starts with 'socks5://'
+ *   3.  tor URL           → starts with 'socks5h://' (remote DNS — no clearnet leak)
  *   4.  tor URL           → contains the user credential from the proxy config
  *   5.  tor URL           → contains the password credential from the proxy config
  *   6.  tor URL           → contains the host '127.0.0.1'
  *   7.  tor URL           → contains the port number as a string
- *   8.  tor URL format    → matches socks5://user:password@127.0.0.1:port exactly
+ *   8.  tor URL format    → matches socks5h://user:password@127.0.0.1:port exactly
  *   9.  tor URL           → two distinct proxy configs yield distinct URLs (user/pass differ)
  *   10. unknown mode      → throws (fail-closed; no clearnet fallback)
  *   11. unknown mode      → throws an Error instance
@@ -78,9 +78,17 @@ describe('buildBaileysProxy — tor mode: return value', () => {
     expect(typeof result).toBe('string');
   });
 
-  it('URL starts with socks5://', () => {
+  it('URL starts with socks5h:// (remote hostname resolution — no clearnet DNS leak)', () => {
+    // socks5h (not socks5) defers DNS to the Tor SOCKS port. The bare 'socks5'
+    // scheme makes socks-proxy-agent perform a client-side dns.lookup() of the
+    // target host over the local/ISP resolver — a deanonymisation side-channel.
     const url = buildBaileysProxy(torTransport('wa-t4-burner-a')) as string;
-    expect(url.startsWith('socks5://')).toBe(true);
+    expect(url.startsWith('socks5h://')).toBe(true);
+  });
+
+  it('URL does NOT use the bare socks5:// scheme (which leaks a clearnet DNS lookup)', () => {
+    const url = buildBaileysProxy(torTransport('wa-t4-burner-a')) as string;
+    expect(url.startsWith('socks5://')).toBe(false);
   });
 
   it('URL contains the user credential from the proxy config', () => {
@@ -105,13 +113,13 @@ describe('buildBaileysProxy — tor mode: return value', () => {
     expect(url).toContain('9999');
   });
 
-  it('URL matches socks5://user:password@127.0.0.1:port format exactly', () => {
+  it('URL matches socks5h://user:password@127.0.0.1:port format exactly', () => {
     const burnerId = 'wa-t4-format-check';
     const { user, pass } = deriveBurnerCredentials(burnerId);
     const port = 9050;
     const transport = torTransport(burnerId, port);
     const url = buildBaileysProxy(transport) as string;
-    expect(url).toBe(`socks5://${user}:${pass}@127.0.0.1:${port}`);
+    expect(url).toBe(`socks5h://${user}:${pass}@127.0.0.1:${port}`);
   });
 
   it('distinct burner IDs produce distinct proxy URLs (user/pass isolation)', () => {

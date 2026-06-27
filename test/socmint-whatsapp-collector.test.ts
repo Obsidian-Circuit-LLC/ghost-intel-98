@@ -255,9 +255,9 @@ describe('makeWhatsAppCollector — connect() (live, tor transport)', () => {
       },
     });
     await expect(collector.connect()).resolves.toBeUndefined();
-    // tor transport → proxyUrl is a socks5:// URL
+    // tor transport → proxyUrl is a socks5h:// URL (remote DNS — no clearnet leak)
     expect(captured).not.toBeNull();
-    expect(captured).toMatch(/^socks5:\/\//);
+    expect(captured).toMatch(/^socks5h:\/\//);
   });
 
   it('passes a per-burner SOCKS5 URL (IsolateSOCKSAuth creds embedded)', async () => {
