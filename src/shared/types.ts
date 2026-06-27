@@ -479,6 +479,21 @@ export interface AppSettings {
      *  switches/falls back between them; in 'tor' mode a down Tor REFUSES, not clearnet. */
     transport: 'direct' | 'tor';
   };
+  /**
+   * X/Twitter collector — clearnet quarantine module (separate from socmint).
+   * Both flags MUST be true before any sidecar path is entered (IPC boundary).
+   * clearnetAcknowledged is set by an explicit confirmation dialog, not the toggle alone —
+   * the dialog states that requests reach x.com over the public internet and cannot be
+   * routed through Tor. Off by default on both axes.
+   */
+  x: {
+    /** Master opt-in egress gate. When false (default) the sidecar is never spawned. */
+    networkEnabled: boolean;
+    /** Persistent confirmation that the operator understands this module uses clearnet
+     *  (no Tor option). Must be set via the confirm dialog before networkEnabled can
+     *  be toggled on. Default false. */
+    clearnetAcknowledged: boolean;
+  };
 }
 
 export const defaultShortcuts: AccessShortcut[] = [
@@ -608,6 +623,7 @@ export const defaultSettings: AppSettings = {
   chat: { networkEnabled: false },
   searchlight: { networkEnabled: false, torConcurrency: 8, clearnetConcurrency: 16 },
   socmint: { networkEnabled: false, transport: 'direct' },
+  x: { networkEnabled: false, clearnetAcknowledged: false },
   plugins: {},
   offensive: { confirmMode: 'per-scan', rateLimitPerSec: 10, downstreamProxy: null, requireSignedAuthorization: false, issuerKeys: [] },
   bgconn: { idleTeardownAfterMinutes: 120, defaultRouting: 'tor', maxReconnects: 20, maxSessionAgeMinutes: 720 }
