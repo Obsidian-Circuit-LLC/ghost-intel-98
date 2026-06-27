@@ -1410,6 +1410,12 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
       collectorFactory: makeMtcuteCollector,
       // Platform-selected in handleStartMonitor: platform='whatsapp' → this factory.
       whatsappCollectorFactory: makeWhatsAppCollector,
+      // Stream each harvested item to the renderer so the UI updates live.
+      // isDestroyed() guard prevents sending to a window that closed mid-session.
+      sendToRenderer: (item) => {
+        const w = getWindow();
+        if (w && !w.isDestroyed()) w.webContents.send(channels.socmint.monitorItem, item);
+      },
     }));
   safeHandle(channels.socmint.stopMonitor, (...a) =>
     handleStopMonitor(typeof a[0] === 'string' ? a[0] : ''));

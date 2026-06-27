@@ -737,3 +737,66 @@ describe('burnerProxyConfig — Tor credentials (tor bootstrapped)', () => {
     expect(cfg2.port).toBe(9999);
   });
 });
+
+// ---------------------------------------------------------------------------
+// FIX 4: connect() partial-failure leaks a connected client — disconnect must
+//         be called on startUpdatesLoop() rejection so no orphan connection leaks.
+// ---------------------------------------------------------------------------
+
+describe('makeMtcuteCollector — FIX 4: connect() partial-failure calls rawClient.disconnect()', () => {
+  it('startUpdatesLoop() rejection triggers rawClient.disconnect() exactly once', async () => {
+    let disconnectCount = 0;
+    // Build a minimal MtcuteClientLike whose startUpdatesLoop always rejects.
+    const failingClient: MtcuteClientLike = {
+      async importSession(_: string): Promise<void> {},
+      async connect(): Promise<void> {},
+      async startUpdatesLoop(): Promise<void> {
+        throw new Error('updates loop failed');
+      },
+      async joinChat(): Promise<{ status: 'ok'; chat: { id: number; displayName: string } }> {
+        return { status: 'ok', chat: { id: -100, displayName: 'X' } };
+      },
+      async getHistory(): Promise<[]> { return []; },
+      onNewMessage: { add: () => {}, remove: () => {} },
+      async disconnect(): Promise<void> { disconnectCount++; },
+    };
+
+    const collector = makeMtcuteCollector({
+      burnerId: 'test-burner-fix4',
+      transport: { mode: 'direct' },
+      harvestedAt: () => '',
+      _inject: { createClient: () => failingClient },
+    });
+
+    // connect() should throw (startUpdatesLoop failed)
+    await expect(collector.connect()).rejects.toThrow('updates loop failed');
+
+    // rawClient.disconnect() must be called exactly once to prevent orphan connection
+    expect(disconnectCount).toBe(1);
+  });
+
+  it('connect() rejection (before startUpdatesLoop) also calls rawClient.disconnect()', async () => {
+    let disconnectCount = 0;
+    const failingClient: MtcuteClientLike = {
+      async importSession(_: string): Promise<void> {},
+      async connect(): Promise<void> { throw new Error('connection refused'); },
+      async startUpdatesLoop(): Promise<void> {},
+      async joinChat(): Promise<{ status: 'ok'; chat: { id: number; displayName: string } }> {
+        return { status: 'ok', chat: { id: -100, displayName: 'X' } };
+      },
+      async getHistory(): Promise<[]> { return []; },
+      onNewMessage: { add: () => {}, remove: () => {} },
+      async disconnect(): Promise<void> { disconnectCount++; },
+    };
+
+    const collector = makeMtcuteCollector({
+      burnerId: 'test-burner-fix4b',
+      transport: { mode: 'direct' },
+      harvestedAt: () => '',
+      _inject: { createClient: () => failingClient },
+    });
+
+    await expect(collector.connect()).rejects.toThrow('connection refused');
+    expect(disconnectCount).toBe(1);
+  });
+});

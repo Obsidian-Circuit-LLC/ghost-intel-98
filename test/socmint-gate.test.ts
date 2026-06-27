@@ -10,6 +10,7 @@ import { WA_SEALED_MESSAGE } from '../src/main/socmint/whatsapp-collector';
 import { setBgTor, _resetBgTorForTest } from '../src/main/bgconn/tor-singleton';
 import type { BgconnTor } from '../src/main/bgconn/tor';
 import { SocmintTorUnavailableError, deriveBurnerCredentials } from '../src/main/socmint/tor-identity';
+import type { HarvestedItem } from '../src/shared/socmint/types';
 
 const VALID_CASE_ID = '11111111-1111-4111-8111-111111111111';
 
@@ -22,13 +23,35 @@ function makeMockTor(bootstrapped: boolean, port = 9999): BgconnTor {
   } as unknown as BgconnTor;
 }
 
+/** Build a mock collector whose join() returns a proper MonitoredChannel so that
+ *  handleStartMonitor can collect resolved IDs and pass them to subscribe(). */
 function makeMockCollector() {
   return {
     connect: vi.fn().mockResolvedValue(undefined),
-    join: vi.fn(),
+    join: vi.fn().mockImplementation((channelId: string) =>
+      Promise.resolve({ channelId, label: channelId, keywords: [] }),
+    ),
     backfill: vi.fn(),
     subscribe: vi.fn(() => () => {}),
     disconnect: vi.fn().mockResolvedValue(undefined),
+  };
+}
+
+function makeItem(overrides: Partial<HarvestedItem> = {}): HarvestedItem {
+  return {
+    id: 'test-item',
+    platform: 'telegram',
+    authorHandle: '@user',
+    authorId: '123',
+    text: 'test message',
+    channelId: '-100001',
+    channelLabel: 'Test',
+    messageId: '1',
+    publishedAt: '2026-01-01T00:00:00Z',
+    harvestedAt: '2026-01-01T00:01:00Z',
+    url: '',
+    provenance: { collectorVersion: '1.0.0', jobId: '', caseId: '' },
+    ...overrides,
   };
 }
 
@@ -201,7 +224,7 @@ describe('socmint:setWhatsappBurnerPairingCode — egress gate', () => {
     const result = await handleSetWhatsappBurnerPairingCode(
       'burner-wa',
       '15551234567',
-      { networkEnabled: async () => false },
+      { networkEnabled: async () => false, transport: async () => 'direct' },
     );
     expect(result).toEqual({ disabled: true });
   });
@@ -218,6 +241,7 @@ describe('socmint:setWhatsappBurnerPairingCode — egress gate', () => {
     const createSocketSpy = vi.fn(() => mockSock);
     const result = await handleSetWhatsappBurnerPairingCode('burner-wa', '15551234567', {
       networkEnabled: async () => true,
+      transport: async () => 'direct',
       _inject: {
         createSocket: createSocketSpy,
         authState: {
@@ -242,6 +266,7 @@ describe('socmint:setWhatsappBurnerPairingCode — egress gate', () => {
     };
     const result = await handleSetWhatsappBurnerPairingCode('burner-wa', '447700900000', {
       networkEnabled: async () => true,
+      transport: async () => 'direct',
       _inject: {
         createSocket: vi.fn(() => mockSock),
         authState: {
@@ -257,7 +282,10 @@ describe('socmint:setWhatsappBurnerPairingCode — egress gate', () => {
 
   it('gate check fires before socket construction — networkEnabled is always awaited first', async () => {
     const networkEnabled = vi.fn().mockResolvedValue(false);
-    await handleSetWhatsappBurnerPairingCode('burner-wa', '15551234567', { networkEnabled });
+    await handleSetWhatsappBurnerPairingCode('burner-wa', '15551234567', {
+      networkEnabled,
+      transport: async () => 'direct',
+    });
     expect(networkEnabled).toHaveBeenCalledOnce();
   });
 
@@ -265,6 +293,7 @@ describe('socmint:setWhatsappBurnerPairingCode — egress gate', () => {
     const createSocketSpy = vi.fn();
     const result = await handleSetWhatsappBurnerPairingCode('burner-wa', '15551234567', {
       networkEnabled: async () => false,
+      transport: async () => 'direct',
       _inject: { createSocket: createSocketSpy },
     });
     expect(result).toEqual({ disabled: true });
@@ -545,5 +574,295 @@ describe('socmint:startMonitor — platform selection (WhatsApp vs Telegram)', (
     );
     expect(openResult).toMatchObject({ started: true });
     expect(waMock2.connect).toHaveBeenCalledOnce();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FIX 1: Telegram watched-set uses resolved numeric ids, not raw channelIds
+// ---------------------------------------------------------------------------
+
+describe('socmint:startMonitor — FIX 1: join() resolved id passed to subscribe()', () => {
+  it('subscribe() receives the numeric id returned by join(), not the raw @username', async () => {
+    // Mock collector: join('@alphachannel') resolves to numeric '-100999'
+    const mc = {
+      connect: vi.fn().mockResolvedValue(undefined),
+      join: vi.fn().mockResolvedValue({ channelId: '-100999', label: 'Alpha', keywords: [] }),
+      backfill: vi.fn(),
+      subscribe: vi.fn(() => () => {}),
+      disconnect: vi.fn().mockResolvedValue(undefined),
+    };
+    await handleStartMonitor(
+      { caseId: VALID_CASE_ID, burnerId: 'burner-fix1', channelIds: ['@alphachannel'] },
+      { networkEnabled: async () => true, transport: async () => 'direct', collectorFactory: vi.fn(() => mc) },
+    );
+    // subscribe() must be called with the RESOLVED numeric id, not '@alphachannel'
+    expect(mc.subscribe).toHaveBeenCalledWith(['-100999'], expect.any(Function));
+  });
+
+  it('multiple channels: each resolved id is passed to subscribe()', async () => {
+    const mc = {
+      connect: vi.fn().mockResolvedValue(undefined),
+      join: vi.fn()
+        .mockResolvedValueOnce({ channelId: '-100111', label: 'Chan1', keywords: [] })
+        .mockResolvedValueOnce({ channelId: '-100222', label: 'Chan2', keywords: [] }),
+      backfill: vi.fn(),
+      subscribe: vi.fn(() => () => {}),
+      disconnect: vi.fn().mockResolvedValue(undefined),
+    };
+    await handleStartMonitor(
+      { caseId: VALID_CASE_ID, burnerId: 'burner-fix1-multi', channelIds: ['@chan1', '@chan2'] },
+      { networkEnabled: async () => true, transport: async () => 'direct', collectorFactory: vi.fn(() => mc) },
+    );
+    expect(mc.subscribe).toHaveBeenCalledWith(['-100111', '-100222'], expect.any(Function));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FIX 2: Unhandled onItem rejection — subscribe callback swallows errors
+// ---------------------------------------------------------------------------
+
+describe('socmint:startMonitor — FIX 2: subscribe callback catches onItem rejections', () => {
+  it('a rejecting _upsertItems does not produce an unhandledRejection; monitor stays alive', async () => {
+    let subscribeCb: ((item: HarvestedItem) => void) | undefined;
+    const mc = {
+      connect: vi.fn().mockResolvedValue(undefined),
+      join: vi.fn().mockImplementation((id: string) =>
+        Promise.resolve({ channelId: id, label: id, keywords: [] }),
+      ),
+      backfill: vi.fn(),
+      subscribe: vi.fn((_ids: string[], cb: (item: HarvestedItem) => void) => {
+        subscribeCb = cb;
+        return () => {};
+      }),
+      disconnect: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const result = await handleStartMonitor(
+      { caseId: VALID_CASE_ID, burnerId: 'burner-fix2', channelIds: [] },
+      {
+        networkEnabled: async () => true,
+        transport: async () => 'direct',
+        collectorFactory: vi.fn(() => mc),
+        _upsertItems: async () => { throw new Error('store failure — must be caught'); },
+      },
+    );
+
+    expect(result).toMatchObject({ started: true });
+    expect(subscribeCb).toBeDefined();
+
+    // Track unhandled rejections
+    const unhandled: unknown[] = [];
+    const handler = (r: unknown) => unhandled.push(r);
+    process.on('unhandledRejection', handler);
+
+    try {
+      // Invoke the subscribe callback — _upsertItems rejects, but the .catch() must swallow it
+      subscribeCb!(makeItem());
+      // Flush microtasks and one event-loop tick so any unhandled rejection fires
+      await new Promise<void>((r) => { setImmediate ? setImmediate(r) : setTimeout(r, 0); });
+      // FIX 2: rejection is caught — no unhandledRejection event
+      expect(unhandled).toHaveLength(0);
+    } finally {
+      process.removeListener('unhandledRejection', handler);
+    }
+
+    // Monitor is still alive — stop it cleanly
+    const { jobId } = result as { started: true; jobId: string };
+    await expect(handleStopMonitor(jobId)).resolves.toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FIX 3: WhatsApp pairing-code socket teardown on requestPairingCode failure
+// ---------------------------------------------------------------------------
+
+describe('socmint:setWhatsappBurnerPairingCode — FIX 3: socket lifecycle on failure', () => {
+  it('sock.end() is called when requestPairingCode rejects — no orphan socket', async () => {
+    const mockSock = {
+      ev: { on: vi.fn(), off: vi.fn() },
+      groupMetadata: vi.fn(),
+      end: vi.fn(),
+      requestPairingCode: vi.fn().mockRejectedValue(new Error('pairing server error')),
+    };
+    const createSocketSpy = vi.fn(() => mockSock);
+
+    await expect(
+      handleSetWhatsappBurnerPairingCode('burner-fix3', '15551234567', {
+        networkEnabled: async () => true,
+        transport: async () => 'direct',
+        _inject: {
+          createSocket: createSocketSpy,
+          authState: {
+            state: { creds: {}, keys: { get: async () => ({}), set: async () => {} } },
+            initialize: vi.fn().mockResolvedValue(undefined),
+            saveCreds: vi.fn().mockResolvedValue(undefined),
+            unlinkSession: vi.fn().mockResolvedValue(undefined),
+          },
+        },
+      }),
+    ).rejects.toThrow('pairing server error');
+
+    // Socket MUST be ended to prevent orphaned Tor/SOCKS circuits
+    expect(mockSock.end).toHaveBeenCalled();
+    // createSocket was called (socket was constructed before the failure)
+    expect(createSocketSpy).toHaveBeenCalledOnce();
+  });
+
+  it('sock.end() is NOT called when requestPairingCode succeeds (happy path)', async () => {
+    const mockSock = {
+      ev: { on: vi.fn(), off: vi.fn() },
+      groupMetadata: vi.fn(),
+      end: vi.fn(),
+      requestPairingCode: vi.fn().mockResolvedValue('XXXX-YYYY'),
+    };
+
+    const result = await handleSetWhatsappBurnerPairingCode('burner-fix3-ok', '15551234567', {
+      networkEnabled: async () => true,
+      transport: async () => 'direct',
+      _inject: {
+        createSocket: vi.fn(() => mockSock),
+        authState: {
+          state: { creds: {}, keys: { get: async () => ({}), set: async () => {} } },
+          initialize: vi.fn().mockResolvedValue(undefined),
+          saveCreds: vi.fn().mockResolvedValue(undefined),
+          unlinkSession: vi.fn().mockResolvedValue(undefined),
+        },
+      },
+    });
+
+    expect(result).toEqual({ pairingCode: 'XXXX-YYYY' });
+    // On success the socket is kept alive for the session — end() must NOT be called
+    expect(mockSock.end).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FIX 5: sendToRenderer is called for each harvested item
+// ---------------------------------------------------------------------------
+
+describe('socmint:startMonitor — FIX 5: sendToRenderer streams items to the renderer', () => {
+  it('sendToRenderer receives each item once upsertItems succeeds', async () => {
+    const renderedItems: HarvestedItem[] = [];
+    let subscribeCb: ((item: HarvestedItem) => void) | undefined;
+
+    const mc = {
+      connect: vi.fn().mockResolvedValue(undefined),
+      join: vi.fn().mockImplementation((id: string) =>
+        Promise.resolve({ channelId: id, label: id, keywords: [] }),
+      ),
+      backfill: vi.fn(),
+      subscribe: vi.fn((_ids: string[], cb: (item: HarvestedItem) => void) => {
+        subscribeCb = cb;
+        return () => {};
+      }),
+      disconnect: vi.fn().mockResolvedValue(undefined),
+    };
+
+    await handleStartMonitor(
+      { caseId: VALID_CASE_ID, burnerId: 'burner-fix5', channelIds: [] },
+      {
+        networkEnabled: async () => true,
+        transport: async () => 'direct',
+        collectorFactory: vi.fn(() => mc),
+        sendToRenderer: (item) => renderedItems.push(item),
+        _upsertItems: async () => { /* succeed */ },
+      },
+    );
+
+    expect(subscribeCb).toBeDefined();
+
+    const item = makeItem({ id: 'render-test-item' });
+    subscribeCb!(item);
+
+    // Allow async chain to settle
+    await new Promise<void>((r) => { setImmediate ? setImmediate(r) : setTimeout(r, 0); });
+
+    expect(renderedItems).toHaveLength(1);
+    expect(renderedItems[0].id).toBe('render-test-item');
+  });
+
+  it('sendToRenderer is NOT called when upsertItems rejects (item dropped before render)', async () => {
+    const renderedItems: HarvestedItem[] = [];
+    let subscribeCb: ((item: HarvestedItem) => void) | undefined;
+
+    const mc = {
+      connect: vi.fn().mockResolvedValue(undefined),
+      join: vi.fn().mockImplementation((id: string) =>
+        Promise.resolve({ channelId: id, label: id, keywords: [] }),
+      ),
+      backfill: vi.fn(),
+      subscribe: vi.fn((_ids: string[], cb: (item: HarvestedItem) => void) => {
+        subscribeCb = cb;
+        return () => {};
+      }),
+      disconnect: vi.fn().mockResolvedValue(undefined),
+    };
+
+    await handleStartMonitor(
+      { caseId: VALID_CASE_ID, burnerId: 'burner-fix5-fail', channelIds: [] },
+      {
+        networkEnabled: async () => true,
+        transport: async () => 'direct',
+        collectorFactory: vi.fn(() => mc),
+        sendToRenderer: (item) => renderedItems.push(item),
+        _upsertItems: async () => { throw new Error('store down'); },
+      },
+    );
+
+    subscribeCb!(makeItem());
+    await new Promise<void>((r) => { setImmediate ? setImmediate(r) : setTimeout(r, 0); });
+
+    // sendToRenderer must not be called when upsertItems failed
+    expect(renderedItems).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FIX 6: Pairing handler transport is REQUIRED — fail-closed in 'tor' mode
+// ---------------------------------------------------------------------------
+
+describe('socmint:setWhatsappBurnerPairingCode — FIX 6: transport required, fail-closed', () => {
+  beforeEach(() => {
+    setBgTor(makeMockTor(false)); // Tor NOT bootstrapped
+  });
+
+  afterEach(() => {
+    _resetBgTorForTest();
+  });
+
+  it('rejects with SocmintTorUnavailableError when transport=tor and Tor is down', async () => {
+    const createSocketSpy = vi.fn();
+    await expect(
+      handleSetWhatsappBurnerPairingCode('burner-fix6', '15551234567', {
+        networkEnabled: async () => true,
+        transport: async () => 'tor',
+        _inject: { createSocket: createSocketSpy },
+      }),
+    ).rejects.toThrow(SocmintTorUnavailableError);
+    // Socket must NEVER be constructed when Tor is down (egress prevented before gate)
+    expect(createSocketSpy).not.toHaveBeenCalled();
+  });
+
+  it('succeeds with transport=direct even when Tor is down (operator explicit clearnet)', async () => {
+    const mockSock = {
+      ev: { on: vi.fn(), off: vi.fn() },
+      groupMetadata: vi.fn(),
+      end: vi.fn(),
+      requestPairingCode: vi.fn().mockResolvedValue('DIRECT-CODE'),
+    };
+    const result = await handleSetWhatsappBurnerPairingCode('burner-fix6-direct', '15551234567', {
+      networkEnabled: async () => true,
+      transport: async () => 'direct',
+      _inject: {
+        createSocket: vi.fn(() => mockSock),
+        authState: {
+          state: { creds: {}, keys: { get: async () => ({}), set: async () => {} } },
+          initialize: vi.fn().mockResolvedValue(undefined),
+          saveCreds: vi.fn().mockResolvedValue(undefined),
+          unlinkSession: vi.fn().mockResolvedValue(undefined),
+        },
+      },
+    });
+    expect(result).toEqual({ pairingCode: 'DIRECT-CODE' });
   });
 });

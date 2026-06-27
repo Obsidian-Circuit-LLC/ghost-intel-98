@@ -444,6 +444,8 @@ export const channels = {
     hasBurner: 'socmint:hasBurner',
     startMonitor: 'socmint:startMonitor',
     stopMonitor: 'socmint:stopMonitor',
+    /** Main→renderer push: a harvested item arrived from a live monitor session. */
+    monitorItem: 'socmint:monitorItem',
     // WhatsApp linking ceremony (WA-T5 — stubs; WA-T6/T7 implement bodies)
     setWhatsappBurnerPairingCode: 'socmint:setWhatsappBurnerPairingCode',
     hasWhatsappBurner: 'socmint:hasWhatsappBurner',
