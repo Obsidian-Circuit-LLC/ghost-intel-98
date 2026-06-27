@@ -483,6 +483,25 @@ const api = {
       ipcRenderer.invoke(channels.socmint.hasWhatsappBurner, burnerId),
     unlinkWhatsappBurner: (burnerId: string) =>
       ipcRenderer.invoke(channels.socmint.unlinkWhatsappBurner, burnerId)
+  },
+  // X/Twitter collector — clearnet quarantine (X-6).
+  // Separate namespace from socmint; gate requires BOTH networkEnabled AND clearnetAcknowledged.
+  // Credentials are held main-side only; listAccounts returns IDs, hasAccount returns boolean.
+  x: {
+    addAccount: (accountId: string, creds: unknown) =>
+      ipcRenderer.invoke(channels.x.addAccount, accountId, creds),
+    removeAccount: (accountId: string) =>
+      ipcRenderer.invoke(channels.x.removeAccount, accountId),
+    listAccounts: () =>
+      ipcRenderer.invoke(channels.x.listAccounts),
+    hasAccount: (accountId: string) =>
+      ipcRenderer.invoke(channels.x.hasAccount, accountId),
+    collect: (req: unknown) =>
+      ipcRenderer.invoke(channels.x.collect, req),
+    listItems: (caseId: string) =>
+      ipcRenderer.invoke(channels.x.listItems, caseId),
+    rankItems: (caseId: string, keyword: string) =>
+      ipcRenderer.invoke(channels.x.rankItems, caseId, keyword)
   }
 } as const;
 
