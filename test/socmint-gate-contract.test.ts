@@ -119,7 +119,7 @@ describe('CONTRACT: gate-before-egress — Telegram (handleStartMonitor, platfor
     const collector = makeSpyCollector();
     const collectorFactory = vi.fn(() => collector);
     const result = await handleStartMonitor(
-      { caseId: VALID_CASE_ID, burnerId: 'tg-gate-open', channelIds: [], platform: 'telegram' },
+      { caseId: VALID_CASE_ID, burnerId: 'tg-gate-open', channelIds: ['-100001'], platform: 'telegram' },
       {
         networkEnabled: async () => true,
         transport: async () => 'direct',
@@ -171,7 +171,7 @@ describe('CONTRACT: gate-before-egress — WhatsApp (handleStartMonitor, platfor
     const waMock = makeSpyCollector();
     const waFactory = vi.fn(() => waMock);
     const result = await handleStartMonitor(
-      { caseId: VALID_CASE_ID, burnerId: 'wa-gate-open', channelIds: [], platform: 'whatsapp' },
+      { caseId: VALID_CASE_ID, burnerId: 'wa-gate-open', channelIds: ['group1@g.us'], platform: 'whatsapp' },
       {
         networkEnabled: async () => true,
         transport: async () => 'direct',

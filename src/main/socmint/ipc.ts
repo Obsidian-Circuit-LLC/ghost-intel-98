@@ -237,9 +237,16 @@ const activeJobs = new Map<string, {
 /**
  * Active pairing-socket registry keyed by burnerId.
  * Tracks the WhatsApp socket created in handleSetWhatsappBurnerPairingCode so that
- * a subsequent unlink/stop call can end it and prevent orphaned Tor/SOCKS circuits.
- * Entries are removed on requestPairingCode success (the socket stays open for the
- * session) and on requestPairingCode failure (teardown runs before re-throw).
+ * handleUnlinkWhatsappBurner can end it and prevent orphaned Tor/SOCKS circuits.
+ *
+ * Lifecycle:
+ *   SUCCESS  — entry is KEPT so handleUnlinkWhatsappBurner can end the socket when
+ *              the analyst retires the burner.  The entry is never silently immortal:
+ *              a RETRY for the same burnerId (see below) also ends it.
+ *   FAILURE  — entry is deleted + sock.end?.() called before re-throw (no orphan).
+ *   RETRY    — if pairingSockets already holds an entry for the same burnerId, the
+ *              prior socket is ended and the entry deleted BEFORE the new socket is
+ *              constructed, preventing double-open circuits on subsequent pairing attempts.
  */
 const pairingSockets = new Map<string, WaSocketLike>();
 
@@ -285,7 +292,7 @@ export async function handleStartMonitor(
      */
     _upsertItems?: (caseId: string, items: HarvestedItem[]) => Promise<void>;
   },
-): Promise<{ disabled: true } | { started: true; jobId: string }> {
+): Promise<{ disabled: true } | { started: true; jobId: string } | { noChannels: true }> {
   // EGRESS GATE: precedes ALL network/collector operations.
   if (!await deps.networkEnabled()) return { disabled: true };
 
@@ -356,6 +363,17 @@ export async function handleStartMonitor(
   // String(msg.chat.id) will match. Passing raw channelIds would yield zero-harvest
   // for @username/invite-link channels that join() resolves to a different numeric id.
   const resolvedIds = joinedChannels.map((j) => j.channelId);
+
+  // FAIL-CLOSED: if the resolved watch set is empty (channelIds was empty, or no join()
+  // returned a usable id), subscribing would deliver EVERY incoming message — every chat
+  // and DM the burner is in — to the store and renderer (the `watchedIds.size > 0` guard
+  // in the collector filters fails open when the set is empty).  Instead, disconnect to
+  // release the circuit and return a typed sentinel so the caller can surface a clear error.
+  if (resolvedIds.length === 0) {
+    try { await collector.disconnect(); } catch { /* ignore cleanup error */ }
+    return { noChannels: true };
+  }
+
   const unsubscribe = collector.subscribe(resolvedIds, (item) => {
     void onItem(item).catch(() => { /* non-fatal: item dropped from this stream; never echo secrets */ });
   });
@@ -487,8 +505,17 @@ export async function handleSetWhatsappBurnerPairingCode(
     ) as unknown as WaSocketLike;
   }
 
+  // RETRY GUARD: if a prior pairing socket exists for this burnerId, end it and delete
+  // the registry entry BEFORE constructing the new socket.  Without this, a retry would
+  // overwrite the map entry and leave the old socket un-endable (orphaned circuit).
+  const priorSock = pairingSockets.get(burnerId);
+  if (priorSock !== undefined) {
+    pairingSockets.delete(burnerId);
+    try { priorSock.end?.(); } catch { /* ignore cleanup error */ }
+  }
+
   // Register the socket in the pairing-socket registry BEFORE any async work that
-  // might throw. This lets a subsequent unlink/stop call end the socket even if
+  // might throw.  This lets handleUnlinkWhatsappBurner end the socket even if
   // requestPairingCode errors out — preventing orphaned SOCKS/Tor circuits.
   pairingSockets.set(burnerId, sock);
 
@@ -569,6 +596,15 @@ export async function handleUnlinkWhatsappBurner(
   store?: { delete(key: string): Promise<void> },
 ): Promise<void> {
   if (!burnerId) return;
+  // End any lingering pairing socket for this burnerId to release the Tor/SOCKS circuit
+  // BEFORE deleting credentials.  pairingSockets is keyed by the raw burnerId (same value
+  // used in handleSetWhatsappBurnerPairingCode), so no sanitisation is needed for the map
+  // lookup — only the secretStore keys use the sanitised form below.
+  const pairSock = pairingSockets.get(burnerId);
+  if (pairSock !== undefined) {
+    pairingSockets.delete(burnerId);
+    try { pairSock.end?.(); } catch { /* ignore cleanup error */ }
+  }
   const s = store ?? (await import('../secrets/index')).secretStore;
   const safeId = burnerId.replace(/[/\\]/g, '_');
   await s.delete(`${WA_BURNER_KEY_PREFIX}${safeId}.creds`);

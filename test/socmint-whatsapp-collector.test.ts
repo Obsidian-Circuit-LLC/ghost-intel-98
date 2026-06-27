@@ -998,6 +998,164 @@ describe('makeWhatsAppCollector — connect() awaits connection:open', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Suite 10d — FINDING 2: connect() handles 515 restartRequired with socket restart
+// ---------------------------------------------------------------------------
+
+describe('makeWhatsAppCollector — FINDING 2: 515 restartRequired triggers socket restart', () => {
+  it('515 close triggers a socket restart and connect() eventually resolves', async () => {
+    let callCount = 0;
+    let firstSock: (WaSocketLike & MockSocketExtras) | null = null;
+
+    const collector = makeWhatsAppCollector({
+      burnerId: 'wa-restart-515',
+      transport: directTransport(),
+      harvestedAt: () => '',
+      _inject: {
+        createSocket: (proxyUrl) => {
+          callCount++;
+          if (callCount === 1) {
+            // First socket: emit 515 restartRequired; do NOT auto-emit open.
+            const s = makeMockSocket({ proxyUrl, autoOpen: false });
+            firstSock = s;
+            queueMicrotask(() =>
+              s.emitConnectionUpdate({
+                connection: 'close',
+                lastDisconnect: { error: { output: { statusCode: 515 } } },
+              }),
+            );
+            return s;
+          }
+          // Second socket: auto-emit connection:open (default autoOpen:true).
+          return makeMockSocket({ proxyUrl });
+        },
+      },
+    });
+
+    await expect(collector.connect()).resolves.toBeUndefined();
+    // Factory called twice — once for initial socket, once for the restart.
+    expect(callCount).toBe(2);
+    void firstSock; // suppress unused warning; referenced in next test
+  });
+
+  it('prior (first) socket is ended after 515 restart — no dangling circuit', async () => {
+    let callCount = 0;
+    let firstSock: (WaSocketLike & MockSocketExtras) | null = null;
+
+    const collector = makeWhatsAppCollector({
+      burnerId: 'wa-restart-end-515',
+      transport: directTransport(),
+      harvestedAt: () => '',
+      _inject: {
+        createSocket: (proxyUrl) => {
+          callCount++;
+          if (callCount === 1) {
+            const s = makeMockSocket({ proxyUrl, autoOpen: false });
+            firstSock = s;
+            queueMicrotask(() =>
+              s.emitConnectionUpdate({
+                connection: 'close',
+                lastDisconnect: { error: { output: { statusCode: 515 } } },
+              }),
+            );
+            return s;
+          }
+          return makeMockSocket({ proxyUrl });
+        },
+      },
+    });
+
+    await collector.connect();
+    // Prior socket MUST be ended — prevents the orphaned Tor circuit.
+    expect(firstSock!.endCalls).toBe(1);
+  });
+
+  it('after 515 restart, disconnect() calls end() on the new (active) socket only', async () => {
+    let callCount = 0;
+    let secondSock: (WaSocketLike & MockSocketExtras) | null = null;
+
+    const collector = makeWhatsAppCollector({
+      burnerId: 'wa-restart-disc-515',
+      transport: directTransport(),
+      harvestedAt: () => '',
+      _inject: {
+        createSocket: (proxyUrl) => {
+          callCount++;
+          if (callCount === 1) {
+            const s = makeMockSocket({ proxyUrl, autoOpen: false });
+            queueMicrotask(() =>
+              s.emitConnectionUpdate({
+                connection: 'close',
+                lastDisconnect: { error: { output: { statusCode: 515 } } },
+              }),
+            );
+            return s;
+          }
+          secondSock = makeMockSocket({ proxyUrl });
+          return secondSock;
+        },
+      },
+    });
+
+    await collector.connect();
+    await collector.disconnect();
+    // disconnect() must call end() on the active (second) socket.
+    expect(secondSock!.endCalls).toBe(1);
+  });
+
+  it('401 loggedOut close still rejects promptly — 515 handler does not interfere', async () => {
+    // Verify that the 401 path still rejects correctly when the 515 branch exists.
+    const collector = makeWhatsAppCollector({
+      burnerId: 'wa-401-no-interference',
+      transport: directTransport(),
+      harvestedAt: () => '',
+      _inject: {
+        createSocket: (proxyUrl) => makeMockSocket({ proxyUrl, fatalClose: true }),
+      },
+    });
+    await expect(collector.connect()).rejects.toThrow(/logged out/);
+  });
+
+  it('non-fatal 503 close still waits for reconnect (503 is not restarted, not rejected)', async () => {
+    // A 503 close followed by 'open' must still resolve — unchanged behavior.
+    let connHandlers: Array<(u: WaConnectionUpdate) => void> = [];
+    const customSock: WaSocketLike & MockSocketExtras = {
+      ev: {
+        on: (event: string, handler: (...args: unknown[]) => void) => {
+          if (event === 'connection.update') {
+            connHandlers.push(handler as (u: WaConnectionUpdate) => void);
+            queueMicrotask(() => {
+              (handler as (u: WaConnectionUpdate) => void)({
+                connection: 'close',
+                lastDisconnect: { error: { output: { statusCode: 503 } } },
+              });
+              queueMicrotask(() =>
+                (handler as (u: WaConnectionUpdate) => void)({ connection: 'open' }),
+              );
+            });
+          }
+        },
+        off: (_event: string, _handler: (...args: unknown[]) => void) => {},
+      },
+      groupMetadata: async (_jid: string) => ({ subject: 'Test' }),
+      end: () => {},
+      emitUpsert: () => {},
+      emitCredsUpdate: () => {},
+      emitConnectionUpdate: (u: WaConnectionUpdate) => { for (const h of connHandlers) h(u); },
+      get endCalls() { return 0; },
+      receivedProxyUrl: null,
+    } as unknown as WaSocketLike & MockSocketExtras;
+
+    const collector = makeWhatsAppCollector({
+      burnerId: 'wa-503-wait',
+      transport: directTransport(),
+      harvestedAt: () => '',
+      _inject: { createSocket: () => customSock },
+    });
+    await expect(collector.connect()).resolves.toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Suite 11 — WA_SEALED_MESSAGE export invariants (audit trail)
 // ---------------------------------------------------------------------------
 
