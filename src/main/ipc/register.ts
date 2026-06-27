@@ -98,6 +98,7 @@ import * as slSiteDb from '../searchlight/site-db';
 import * as slStore from '../searchlight/store';
 import { startSweep, cancelSweep } from '../searchlight/sweep';
 import { exportSweepPdf } from '../searchlight/export-pdf';
+import { makeTorConnector } from '../searchlight/tor-connect';
 import { getBgTor } from '../bgconn/tor-singleton';
 import * as geointMonitor from '../services/geoint-monitor';
 import {
@@ -1337,6 +1338,17 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     const t = getBgTor();
     return t && t.isBootstrapped() ? t.socksPort() : null;
   }
+
+  // Explicit Connect-Tor state machine over the bundled bgconn Tor. Reuses the
+  // existing Tor process (no new egress). Lets the renderer start Tor before a
+  // Tor-mode sweep without weakening no-silent-clearnet (Tor mode still surfaces
+  // TOR_UNAVAILABLE until bootstrapped).
+  const slTorConnector = makeTorConnector(() => {
+    const t = getBgTor();
+    return t ? { isBootstrapped: () => t.isBootstrapped(), start: () => t.start() } : null;
+  });
+  safeHandle(channels.searchlight.torStatus, async () => ({ state: slTorConnector.status() }));
+  safeHandle(channels.searchlight.connectTor, async () => slTorConnector.connect());
 
   safeHandle(channels.searchlight.catalog, async () => slSiteDb.catalog());
   safeHandle(channels.searchlight.importSites, async (...a) => slSiteDb.importCustomSites(String(a[0] ?? '')));

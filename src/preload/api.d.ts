@@ -530,6 +530,8 @@ export interface GhostApi {
     /** Export the current sweep results as a PDF using Electron's printToPDF (dep-free).
      *  Shows a native save dialog. Returns `{ ok: false }` if the user cancels. */
     exportPdf(args: { html: string; filename: string }): Promise<{ ok: boolean }>;
+    torStatus(): Promise<{ state: 'off' | 'connecting' | 'ready' }>;
+    connectTor(): Promise<{ state: 'off' | 'connecting' | 'ready'; error?: string }>;
   };
   socmint: {
     addChannel(caseId: string, channel: MonitoredChannel): Promise<MonitoredChannel[]>;

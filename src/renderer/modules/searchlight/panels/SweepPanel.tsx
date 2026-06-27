@@ -107,6 +107,8 @@ export function SweepPanel(): JSX.Element {
 
   const [username, setUsername] = useState('');
   const [directMode, setDirectMode] = useState(false); // default OFF = Tor
+  const [torState, setTorState] = useState<'off' | 'connecting' | 'ready' | 'unknown'>('unknown');
+  const [torErr, setTorErr] = useState<string | null>(null);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<SiteCatalogEntry[]>([]);
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -131,6 +133,45 @@ export function SweepPanel(): JSX.Element {
   useEffect(() => {
     void loadCatalog();
   }, [loadCatalog]);
+
+  // ── Tor connection status (Tor mode + network on) ────────────────────────
+  // Query on mount and whenever the user flips back into Tor mode.
+  useEffect(() => {
+    if (!networkEnabled || directMode) return;
+    let cancelled = false;
+    void (async () => {
+      const r = await window.api.searchlight.torStatus();
+      if (!cancelled) setTorState(r.state);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [networkEnabled, directMode]);
+
+  // While connecting, poll every 2s until Tor leaves the connecting state.
+  // Cleanup clears the interval on unmount / state change — no leaked timers.
+  useEffect(() => {
+    if (torState !== 'connecting') return;
+    let cancelled = false;
+    const id = setInterval(() => {
+      void (async () => {
+        const r = await window.api.searchlight.torStatus();
+        if (!cancelled) setTorState(r.state);
+      })();
+    }, 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [torState]);
+
+  const handleConnectTor = useCallback(async () => {
+    setTorErr(null);
+    setTorState('connecting');
+    const r = await window.api.searchlight.connectTor();
+    setTorState(r.state === 'ready' ? 'ready' : r.state);
+    if (r.error) setTorErr(r.error);
+  }, []);
 
   // ── Derived: categories from catalog ────────────────────────────────────
 
@@ -483,6 +524,28 @@ export function SweepPanel(): JSX.Element {
         {!networkEnabled && (
           <div className="sl-sweep-net-notice">
             Searchlight network is off — enable it in Settings.
+          </div>
+        )}
+
+        {/* Tor-not-connected notice (advisory + actionable; does not block Launch) */}
+        {networkEnabled && !directMode && torState !== 'ready' && torState !== 'unknown' && (
+          <div className="sl-sweep-tor-notice">
+            <div className="sl-sweep-tor-notice-text">
+              Tor is not connected — a Tor sweep will report &quot;TOR NOT READY&quot; for every site.
+            </div>
+            <div className="sl-sweep-tor-notice-actions">
+              <button
+                className="sl-sweep-btn"
+                onClick={() => void handleConnectTor()}
+                disabled={torState === 'connecting'}
+              >
+                {torState === 'connecting' ? 'Starting Tor… (~30–60s)' : 'Connect Tor'}
+              </button>
+              <span className="sl-sweep-tor-hint">
+                …or tick &quot;Direct (clearnet)&quot; to sweep without Tor.
+              </span>
+            </div>
+            {torErr && <div className="sl-sweep-tor-err">{torErr}</div>}
           </div>
         )}
       </div>
