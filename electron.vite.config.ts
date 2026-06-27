@@ -10,8 +10,9 @@ export default defineConfig({
   main: {
     // @noble/curves, @noble/post-quantum, and @noble/ciphers are ESM-only; the main bundle is CJS,
     // so they must be BUNDLED (not externalized) or require() of them throws ERR_REQUIRE_ESM at boot.
-    // Any new @noble/* (or other ESM-only) main-process dependency MUST be added here.
-    plugins: [externalizeDepsPlugin({ exclude: ['@noble/curves', '@noble/post-quantum', '@noble/ciphers'] })],
+    // @mtcute/node, @whiskeysockets/baileys, and socks-proxy-agent are also ESM-only and must be
+    // bundled for the same reason. Any new ESM-only main-process dependency MUST be added here.
+    plugins: [externalizeDepsPlugin({ exclude: ['@noble/curves', '@noble/post-quantum', '@noble/ciphers', '@mtcute/node', '@whiskeysockets/baileys', 'socks-proxy-agent'] })],
     resolve: { alias: sharedAliases },
     build: {
       outDir: 'out/main',

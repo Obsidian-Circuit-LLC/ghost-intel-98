@@ -93,7 +93,6 @@ export function makeWhatsAppCollector(opts: {
       // Post-lock: makeWASocket({ auth, agent?, fetchAgent?, syncFullHistory: false,
       //            logger: pino({level:'silent'}) })
       try {
-        // @ts-expect-error: @whiskeysockets/baileys is intentionally absent — sealed seam pending §5.5 supply-chain checklist
         await import('@whiskeysockets/baileys');
       } catch {
         throw new Error(WA_SEALED_MESSAGE);
