@@ -1,4 +1,22 @@
-export type SocmintPlatform = 'telegram' | 'whatsapp';
+export type SocmintPlatform = 'telegram' | 'whatsapp' | 'x';
+
+/**
+ * Scheme-guard for X/Twitter permalink URLs.
+ * Accepts only https://x.com/* and https://twitter.com/* with no userinfo.
+ * Returns false for any other scheme, host, or malformed input.
+ * Use at the IPC boundary and in the renderer before rendering any harvested url.
+ */
+export function isXUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    if (u.protocol !== 'https:') return false;
+    // Reject userinfo — a harvested permalink could spoof the displayed host.
+    if (u.username || u.password) return false;
+    return u.hostname === 'x.com' || u.hostname === 'twitter.com';
+  } catch {
+    return false;
+  }
+}
 
 export interface HarvestedItem {
   /** SHA-256 hex of `${platform}:${channelId}:${messageId}` — deterministic dedup key. */
