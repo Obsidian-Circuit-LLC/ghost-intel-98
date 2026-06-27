@@ -340,6 +340,27 @@ function _runWithProc(
     // (e.g. bad binary, ENOEXEC); the proc 'exit' or 'error' handler settles the promise.
     (proc.stdin as NodeJS.WritableStream).on('error', () => { /* handled by proc event handlers */ });
 
+    // Raw-stream byte cap: abort an UNTERMINATED mega-line BEFORE readline buffers it all
+    // into memory. The rl.on('line') cap below only fires after a whole line is assembled,
+    // so on its own it cannot prevent the OOM it is meant to guard against. Track bytes
+    // since the last newline across chunks; if an unterminated run exceeds the cap, fail
+    // with PROTOCOL_ERROR. (X spec §2.3 hardening.)
+    let pendingLineBytes = 0;
+    (proc.stdout as NodeJS.ReadableStream).on('data', (chunk: Buffer) => {
+      if (settled) return;
+      const nl = chunk.lastIndexOf(0x0a);
+      pendingLineBytes = nl === -1 ? pendingLineBytes + chunk.length : chunk.length - nl - 1;
+      if (pendingLineBytes > MAX_LINE_BYTES) {
+        finish({
+          status: 'error',
+          totalFromSidecar,
+          errorCode: 'PROTOCOL_ERROR',
+          errorMessage: 'X sidecar: unterminated line exceeded 1 MB cap (spec §2.3)',
+          jobId,
+        });
+      }
+    });
+
     // Write ping and start timeout
     try {
       (proc.stdin as NodeJS.WritableStream).write(JSON.stringify({ type: 'ping' }) + '\n');

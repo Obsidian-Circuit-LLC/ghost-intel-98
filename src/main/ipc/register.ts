@@ -161,6 +161,10 @@ function sanitiseMessage(msg: string): string {
   if (home) out = out.split(home).join('<home>');
   for (const p of HOME_PATTERNS) out = out.replace(p, '<home>');
   out = out.replace(UUID_RE, '<uuid>');
+  // Redact credential tokens (X cookies/passwords — X spec §5.8) so they can never reach
+  // the renderer through this shared IPC error choke point.
+  out = out.replace(/\b(auth_token|ct0|password)=[^\s&"';,]*/gi, '$1=<redacted>');
+  out = out.replace(/"(auth_token|ct0|password)"\s*:\s*"[^"]*"/gi, '"$1":"<redacted>"');
   return out;
 }
 

@@ -244,8 +244,14 @@ async def _collect_search(req: dict) -> None:
         async for tweet in api.search(q, limit=limit):
             _send({'type': 'tweet', 'data': _tweet_to_frame(tweet)})
             count += 1
-        # Successful completion — all up to limit fetched with no error.
-        _done(count, truncated=False)
+        # FAIL-LOUD (spec §4): reaching the requested limit is an INCOMPLETE fetch,
+        # not completion. Only done{truncated:false} when the source exhausted below limit.
+        if count >= limit:
+            _truncated(count, 'limit-reached',
+                       f'Reached the requested limit of {limit} results; more may exist. '
+                       f'Incomplete — do not treat as evidence of absence.')
+        else:
+            _done(count, truncated=False)
     except Exception as e:
         if _is_doc_id_rotation(e):
             _fatal('DOC_ID_ROTATION',
@@ -292,6 +298,8 @@ async def _collect_user_tweets(req: dict) -> None:
             return
 
     count = 0
+    raw = 0
+    seen_in_range = False
     try:
         user = await api.user_by_login(username)
         if user is None:
@@ -299,16 +307,31 @@ async def _collect_user_tweets(req: dict) -> None:
             return
 
         async for tweet in api.user_tweets(user.id, limit=limit):
+            raw += 1
             frame = _tweet_to_frame(tweet)
-            # Tweets are newest-first; once we go past 'until', skip; past 'since', stop.
+            # Tweets are newest-first, EXCEPT a pinned tweet may appear first, out of order.
             if until and frame['date'] > until:
                 continue
             if since and frame['date'] < since:
-                break
+                # Older than the window. If we have NOT yet entered the in-range
+                # chronological stream, this is almost certainly a pinned (old) tweet at
+                # the head — skip it, do NOT end the timeline (the old `break` here dropped
+                # the entire timeline whenever the pinned tweet predated `since`). Once
+                # in-range, an out-of-range tweet means we have passed the window: stop.
+                if seen_in_range:
+                    break
+                continue
+            seen_in_range = True
             _send({'type': 'tweet', 'data': frame})
             count += 1
 
-        _done(count, truncated=False)
+        # FAIL-LOUD (spec §4): the raw generator hitting the limit ⇒ incomplete, not done.
+        if raw >= limit:
+            _truncated(count, 'limit-reached',
+                       f'Reached the requested limit of {limit} timeline tweets; more may exist. '
+                       f'Incomplete — do not treat as evidence of absence.')
+        else:
+            _done(count, truncated=False)
 
     except Exception as e:
         if _is_doc_id_rotation(e):

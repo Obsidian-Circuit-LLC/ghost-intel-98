@@ -51,6 +51,21 @@ const FORBIDDEN_FILES: string[] = [
   resolve(SRC_MAIN, 'socmint', 'collector'),
 ];
 
+/**
+ * Permitted cross-directory in-tree imports for src/main/x/* (canonical, no ext). Any
+ * in-tree (@main / relative) import from x/* that resolves OUTSIDE src/main/x/ and is NOT
+ * in this allowlist fails the sentinel. The plain forbidden-list above only catches a
+ * DIRECT import of a known-bad module; this allowlist additionally forces a conscious
+ * review whenever x/* gains ANY new bridge into another main-process directory — closing
+ * the "quarantine break one hop away through a shared module" gap. Keep this minimal.
+ */
+const ALLOWED_CROSS_DIR: string[] = [
+  resolve(SRC_MAIN, 'socmint', 'store'),
+  resolve(SRC_MAIN, 'socmint', 'rank'),
+  resolve(SRC_MAIN, 'socmint', 'utils'),
+  resolve(SRC_MAIN, 'security', 'validate'),
+];
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -80,6 +95,10 @@ function extractImportPaths(source: string): string[] {
   }
   // require('...')
   for (const m of source.matchAll(/\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)/g)) {
+    paths.push(m[1]);
+  }
+  // export ... from '...' and export * from '...' (re-export edge — was a blind spot)
+  for (const m of source.matchAll(/\bexport\s+[^'"]*\bfrom\s+['"]([^'"]+)['"]/g)) {
     paths.push(m[1]);
   }
   return paths;
@@ -147,6 +166,22 @@ for (const file of xFiles) {
     if (canonical !== null && isForbidden(canonical)) {
       violations.push({ file, importPath: imp, resolvedCanonical: canonical });
     }
+  }
+}
+
+// Cross-directory allowlist scan: any in-tree main import from x/* that leaves src/main/x/
+// and is not explicitly permitted is a quarantine-bridge risk (a shared module could itself
+// reach forbidden Tor/transport code one hop away).
+const X_DIR_PREFIX = resolve(__dirname, '..', 'src', 'main', 'x') + '/';
+const crossDirOutsideAllowlist: Violation[] = [];
+for (const file of xFiles) {
+  const source = readFileSync(file, 'utf8');
+  for (const imp of extractImportPaths(source)) {
+    const canonical = resolveImport(imp, file);
+    if (canonical === null) continue;                               // external / @shared / node:*
+    if (canonical === X_DIR_PREFIX.slice(0, -1) || canonical.startsWith(X_DIR_PREFIX)) continue; // internal to x/
+    if (ALLOWED_CROSS_DIR.includes(canonical)) continue;            // explicitly permitted
+    crossDirOutsideAllowlist.push({ file, importPath: imp, resolvedCanonical: canonical });
   }
 }
 
@@ -238,6 +273,35 @@ describe('X-2: clearnet-quarantine import sentinel — src/main/x/*', () => {
       // Directory has files — the full-set guard above is the enforcer.
       expect(xFiles.length).toBeGreaterThan(0);
     }
+  });
+
+  it('src/main/x/ imports nothing cross-directory outside the allowlist (bridge guard)', () => {
+    if (crossDirOutsideAllowlist.length > 0) {
+      const detail = crossDirOutsideAllowlist
+        .map((v) => `${v.file}: '${v.importPath}' → ${v.resolvedCanonical}`)
+        .join('\n  ');
+      throw new Error(
+        `X-2: src/main/x/ imports an in-tree main module outside the allowlist:\n  ${detail}\n` +
+        'Add to ALLOWED_CROSS_DIR only after confirming it does not transitively reach a ' +
+        'forbidden Tor/transport module.',
+      );
+    }
+    expect(crossDirOutsideAllowlist).toEqual([]);
+  });
+
+  it('the detector itself flags synthetic forbidden imports (positive self-test, incl. export-from)', () => {
+    const synthetic =
+      "import { socksDial } from '../bgconn/socks';\n" +
+      "export * from '../chat/socks5';\n" +
+      "export { x } from '../searchlight/tor-socks';\n";
+    const fakeFile = resolve(SRC_MAIN, 'x', 'synthetic.ts');
+    const flagged = extractImportPaths(synthetic)
+      .map((p) => resolveImport(p, fakeFile))
+      .filter((c): c is string => c !== null && isForbidden(c));
+    // bgconn (dir match) + chat/socks5 (export *) + searchlight/tor-socks (export-from) all caught.
+    expect(flagged).toContain(resolve(SRC_MAIN, 'bgconn', 'socks'));
+    expect(flagged).toContain(resolve(SRC_MAIN, 'chat', 'socks5'));
+    expect(flagged).toContain(resolve(SRC_MAIN, 'searchlight', 'tor-socks'));
   });
 });
 
