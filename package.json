@@ -26,7 +26,12 @@
     "package": "pnpm fetch:tor && pnpm fetch:piper && pnpm fetch:mlkem && pnpm fetch:embed && pnpm fetch:tle-snapshot && pnpm build && electron-builder",
     "package:win": "pnpm fetch:tor && pnpm fetch:piper && pnpm fetch:mlkem && pnpm fetch:embed && pnpm fetch:tle-snapshot && pnpm build && electron-builder --win --x64",
     "package:linux": "pnpm build && electron-builder --linux",
-    "postinstall": "echo 'native: ssh2 is pure-JS; node-pty is an optional native addon (lazy-loaded, fail-safe) — needs an Electron-ABI rebuild on the Windows packaging host'"
+    "postinstall": "echo 'native: ssh2 is pure-JS; node-pty is an optional native addon (lazy-loaded, fail-safe) — needs an Electron-ABI rebuild on the Windows packaging host'",
+    "ml:scan": "tsx scripts/searchlight-ml/scan-soft404.ts",
+    "ml:collect": "tsx scripts/searchlight-ml/collect.ts",
+    "ml:transport": "tsx scripts/searchlight-ml/transport-check.ts",
+    "ml:train": "tsx scripts/searchlight-ml/train.ts",
+    "ml:eval": "tsx scripts/searchlight-ml/eval.ts"
   },
   "dependencies": {
     "98.css": "^0.1.20",
@@ -83,6 +88,7 @@
     "typescript": "^5.7.2",
     "vite": "^5.4.11",
     "vitest": "^2.1.8",
+    "tsx": "^4.19.0",
     "world-countries": "^5.1.0"
   },
   "build": {

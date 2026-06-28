@@ -2,6 +2,7 @@ import type { MaigretSiteEntry, RawCheckResult, SweepStatus, ScorerCtx } from '.
 import { extractSignals } from './signals';
 import { scoreSignals, weightedSum, classify } from './scorer';
 import { predict, blend } from './ml';
+import { buildInteractionFeatures } from './features';
 
 export interface Interpretation {
   found: boolean;
@@ -56,7 +57,14 @@ export function interpretResult(
       // (training range ≈ -15..70), NOT the sigmoid probability. The model's
       // mean/scale for this feature (≈12.5/29.0) standardize the raw sum.
       v.heuristic_score = weightedSum(v);
-      const ml = predict(v, ctx!.model);
+      // Build interaction features (heuristic_score × structural signals) so
+      // infer-time features match the features computed during training by the
+      // corpus pipeline's collect-core.ts / rowToFeatures. Models trained with
+      // the corpus pipeline include these in their feature_schema; the current
+      // vendored Aliens_eye model does not — predict() ignores extra keys not in
+      // feature_schema, so this call is inert for the shipped model.
+      const vWithInteractions = buildInteractionFeatures(v);
+      const ml = predict(vWithInteractions, ctx!.model);
       prob = blend(ml, heuristic, ctx!.model.ml_weight);
     }
     const { status, confidence } = classify(prob, ctx!.thresholds);
