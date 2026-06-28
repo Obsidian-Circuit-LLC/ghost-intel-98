@@ -557,6 +557,56 @@ function SearchlightPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppS
           onChange={(e) => set({ clearnetConcurrency: Math.max(1, Math.min(64, Number(e.target.value) || 1)) })}
         />
       </div>
+
+      <fieldset style={{ marginTop: 12 }}>
+        <legend>Detection scoring</legend>
+        <label>
+          <input
+            type="checkbox"
+            checked={!sl.scorer.lightweightMode}
+            onChange={(e) => set({ scorer: { ...sl.scorer, lightweightMode: !e.target.checked } })}
+          />
+          {' '}Deep scan: inspect page content to cut false positives (recommended)
+        </label>
+        <label style={{ display: 'block', marginTop: 4 }}>
+          <input
+            type="checkbox"
+            checked={sl.scorer.useMl}
+            onChange={(e) => set({ scorer: { ...sl.scorer, useMl: e.target.checked } })}
+          />
+          {' '}Use ML model (blends with heuristics) — experimental; bundled model pending retrain
+        </label>
+        <div style={{ display: 'grid', gridTemplateColumns: '160px 120px', gap: 6, alignItems: 'center', marginTop: 8 }}>
+          <label>Found threshold:</label>
+          <input
+            className="ga98-text"
+            type="number"
+            step={0.01}
+            min={0}
+            max={1}
+            value={sl.scorer.foundThreshold ?? ''}
+            placeholder="model default (0.5559)"
+            onChange={(e) => set({ scorer: { ...sl.scorer, foundThreshold: e.target.value === '' ? null : Number(e.target.value) } })}
+          />
+          <label>Maybe floor:</label>
+          <input
+            className="ga98-text"
+            type="number"
+            step={0.01}
+            min={0}
+            max={1}
+            value={sl.scorer.maybeFloor ?? ''}
+            placeholder="model default (0.3224)"
+            onChange={(e) => set({ scorer: { ...sl.scorer, maybeFloor: e.target.value === '' ? null : Number(e.target.value) } })}
+          />
+        </div>
+        <p style={{ fontSize: 11, color: '#444', margin: '6px 0' }}>
+          Leave thresholds blank to use the model&apos;s own calibrated values.
+        </p>
+        <button onClick={() => set({ scorer: { foundThreshold: null, maybeFloor: null, lightweightMode: false, useMl: false } })}>
+          Reset detection defaults
+        </button>
+      </fieldset>
     </fieldset>
   );
 }

@@ -462,8 +462,10 @@ const api = {
     addCustomSite: (i: { name: string; url: string; category?: string }) => ipcRenderer.invoke(channels.searchlight.addCustomSite, i),
     exportSites: () => ipcRenderer.invoke(channels.searchlight.exportSites),
     exportPdf: (args: { html: string; filename: string }) => ipcRenderer.invoke(channels.searchlight.exportPdf, args),
+    saveReport: (args: { content: string; defaultName: string }) => ipcRenderer.invoke(channels.searchlight.saveReport, args),
     torStatus: () => ipcRenderer.invoke(channels.searchlight.torStatus),
-    connectTor: () => ipcRenderer.invoke(channels.searchlight.connectTor)
+    connectTor: () => ipcRenderer.invoke(channels.searchlight.connectTor),
+    revealSiteDbDir: () => ipcRenderer.invoke(channels.searchlight.revealSiteDbDir)
   },
   socmint: {
     addChannel: (caseId: string, channel: unknown) => ipcRenderer.invoke(channels.socmint.addChannel, caseId, channel),

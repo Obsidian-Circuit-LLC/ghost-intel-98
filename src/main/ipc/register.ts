@@ -97,6 +97,7 @@ import * as ais from '../services/livefeeds/ais-stream';
 import * as slSiteDb from '../searchlight/site-db';
 import * as slStore from '../searchlight/store';
 import { startSweep, cancelSweep } from '../searchlight/sweep';
+import { getModel } from '../searchlight/model-store';
 import { exportSweepPdf } from '../searchlight/export-pdf';
 import { makeTorConnector } from '../searchlight/tor-connect';
 import { getBgTor } from '../bgconn/tor-singleton';
@@ -1360,13 +1361,21 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     const useTor = req?.useTor !== false; // default true
     const s = (await settingsStore.read()).searchlight;
     const win = getWindow();
+    const sc = s.scorer;
+    const model = getModel();
+    const thresholds = {
+      found: sc.foundThreshold ?? model?.thresholds.found ?? 0.5559,
+      notFound: sc.maybeFloor ?? model?.thresholds.not_found ?? 0.3224
+    };
     return startSweep({ username, siteIds, useTor }, {
       loadSites: (ids) => slSiteDb.sitesByName(ids),
       networkEnabled: async () => (await settingsStore.read()).searchlight.networkEnabled,
       torSocksPort: searchlightSocksPort,
       defaultConcurrency: (tor) => (tor ? s.torConcurrency : s.clearnetConcurrency),
       emit: (r) => win?.webContents.send(channels.searchlight.onSweepResult, r),
-      onDone: (f) => win?.webContents.send(channels.searchlight.onSweepDone, f)
+      onDone: (f) => win?.webContents.send(channels.searchlight.onSweepDone, f),
+      scorerCtx: { thresholds, useMl: sc.useMl, model },
+      lightweightMode: sc.lightweightMode
     });
   });
   safeHandle(channels.searchlight.cancelSweep, async (...a) => { cancelSweep(ensureUuid(a[0], 'jobId')); });
@@ -1391,9 +1400,18 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     return slSiteDb.addCustomSite({ name: String(o.name ?? ''), url: String(o.url ?? ''), category: o.category ? String(o.category) : undefined });
   });
   safeHandle(channels.searchlight.exportSites, async () => slSiteDb.exportCustomSitesJson());
+  safeHandle(channels.searchlight.revealSiteDbDir, async () => slSiteDb.revealSiteDbDir());
   safeHandle(channels.searchlight.exportPdf, async (...a) => {
     const o = ((a[0] ?? {}) as Record<string, unknown>);
     return exportSweepPdf(String(o.html ?? ''), String(o.filename ?? 'searchlight-report.pdf'));
+  });
+  safeHandle(channels.searchlight.saveReport, async (...a) => {
+    const o = ((a[0] ?? {}) as Record<string, unknown>);
+    const content = String(o.content ?? '');
+    const defaultName = String(o.defaultName ?? 'searchlight-report.txt');
+    if (content.length > MAX_EXPORT_BYTES) throw new Error('Report content exceeds the export size limit');
+    const savedName = await saveBufferWithDialog(getWindow(), defaultName, Buffer.from(content, 'utf-8'));
+    return { ok: savedName !== null };
   });
 
   // ---- SOCMINT (Telegram OSINT collector; egress gated by settings.socmint.networkEnabled) ----
