@@ -6,9 +6,9 @@
  * 2. isFound(): source uses r.found ?? r.statusCode===200; SweepResult has a first-class
  *    `found: boolean` field — use that directly.
  * 3. jsPDF / jszip PDF path REMOVED (operator decision — deps not installed).
- * 4. Export via browser Blob download (anchor + URL.createObjectURL + revokeObjectURL).
- *    No window.api.files.*, no new IPC.
- * 5. HTML report is built as a downloadable string — NOT injected into the DOM.
+ * 4. Export via window.api.searchlight.saveReport → native platform save-file dialog
+ *    (main-process showSaveDialog + atomic write). No Blob/URL.createObjectURL.
+ * 5. HTML report is built as a string — NOT injected into the DOM.
  * 6. sfx removed (not in searchlight surface).
  * 7. Type of "error" field: ProbeErrorType (string | null), not just string — guarded.
  */
@@ -150,17 +150,6 @@ function generateTXT(caseName: string, results: SweepResult[]): string {
   ].join('\n');
 }
 
-// ─── Blob download helper ─────────────────────────────────────────────────────
-function blobDownload(content: string, filename: string, mime: string): void {
-  const blob = new Blob([content], { type: mime });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
 // ─── Component ────────────────────────────────────────────────────────────────
 export function ReportsPanel(): JSX.Element {
   const cases = useSearchlightStore((s) => s.cases);
@@ -196,39 +185,22 @@ export function ReportsPanel(): JSX.Element {
   const exportAs = async (format: 'html' | 'csv' | 'json' | 'txt' | 'pdf') => {
     if (!activeCase || !allResults.length) return;
     const name = activeCase.name;
-    const ts = Date.now();
     const slug = name.replace(/\s+/g, '_');
 
     if (format === 'pdf') {
       const html = generateHTML(name, allResults);
-      await window.api.searchlight.exportPdf({ html, filename: `searchlight_${slug}_${ts}.pdf` });
+      await window.api.searchlight.exportPdf({ html, filename: `searchlight_${slug}.pdf` });
       return;
     }
 
-    const map: Record<'html' | 'csv' | 'json' | 'txt', { content: string; filename: string; mime: string }> = {
-      html: {
-        content: generateHTML(name, allResults),
-        filename: `ghost_intel_${slug}_${ts}.html`,
-        mime: 'text/html',
-      },
-      csv: {
-        content: generateCSV(allResults),
-        filename: `ghost_intel_${slug}_${ts}.csv`,
-        mime: 'text/csv',
-      },
-      json: {
-        content: generateJSON(name, allResults),
-        filename: `ghost_intel_${slug}_${ts}.json`,
-        mime: 'application/json',
-      },
-      txt: {
-        content: generateTXT(name, allResults),
-        filename: `ghost_intel_${slug}_${ts}.txt`,
-        mime: 'text/plain',
-      },
+    const map: Record<'html' | 'csv' | 'json' | 'txt', { content: string; defaultName: string }> = {
+      html: { content: generateHTML(name, allResults),  defaultName: `ghost_intel_${slug}.html` },
+      csv:  { content: generateCSV(allResults),          defaultName: `ghost_intel_${slug}.csv`  },
+      json: { content: generateJSON(name, allResults),   defaultName: `ghost_intel_${slug}.json` },
+      txt:  { content: generateTXT(name, allResults),    defaultName: `ghost_intel_${slug}.txt`  },
     };
-    const { content, filename, mime } = map[format];
-    blobDownload(content, filename, mime);
+    const { content, defaultName } = map[format];
+    await window.api.searchlight.saveReport({ content, defaultName });
   };
 
   if (!activeCaseId || !activeCase) {
