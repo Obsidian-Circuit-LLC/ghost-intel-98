@@ -1387,6 +1387,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
         || typeof (c as { name?: unknown }).name !== 'string') {
       throw new Error('invalid searchlight case payload');
     }
+    ensureUuid((c as { id: string }).id, 'caseId');
     return slStore.saveCase(c as SearchlightCase);
   });
   safeHandle(channels.searchlight.loadCase, async (...a) => slStore.loadCase(ensureUuid(a[0], 'caseId')));
