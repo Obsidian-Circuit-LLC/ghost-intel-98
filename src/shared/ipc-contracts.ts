@@ -432,6 +432,7 @@ export const channels = {
     addCustomSite: 'searchlight:addCustomSite',
     exportSites: 'searchlight:exportSites',
     exportPdf: 'searchlight:exportPdf',
+    saveReport: 'searchlight:saveReport',
     torStatus: 'searchlight:torStatus',
     connectTor: 'searchlight:connectTor'
   },
@@ -662,6 +663,7 @@ export interface ApiContracts {
   [channels.searchlight.addCustomSite]: { args: [{ name: string; url: string; category?: string }]; returns: { ok: boolean; reason?: string } };
   [channels.searchlight.exportSites]: { args: []; returns: string };
   [channels.searchlight.exportPdf]: { args: [{ html: string; filename: string }]; returns: { ok: boolean } };
+  [channels.searchlight.saveReport]: { args: [{ content: string; defaultName: string }]; returns: { ok: boolean } };
   [channels.searchlight.torStatus]: { args: []; returns: { state: 'off' | 'connecting' | 'ready' } };
   [channels.searchlight.connectTor]: { args: []; returns: { state: 'off' | 'connecting' | 'ready'; error?: string } };
 
