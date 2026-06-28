@@ -56,8 +56,8 @@ export function interpretResult(
       if (presenseStrs.some((s) => body.includes(s))) return finalize(true, 'medium');
       return finalize(false, 'medium');
     }
-    // Fallback: message site with no curating strings — route through scorer if ctx present.
-    if (ctx) return scoreAndClassify();
+    // Fallback: message site with no curating strings at all — route through scorer if ctx present.
+    if (ctx && absenceStrs.length === 0 && presenseStrs.length === 0) return scoreAndClassify();
     return finalize(result.statusCode === 200, 'low');
   }
 
