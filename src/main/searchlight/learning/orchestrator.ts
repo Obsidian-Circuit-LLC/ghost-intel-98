@@ -20,49 +20,18 @@
 
 import type { MlModel } from '@shared/searchlight/types';
 import type { EvalRow, EvalResult } from '@shared/searchlight/ml/eval-core';
+// Import from canonical homes so the types are in scope for TrainGateDeps / runTrainAndGate.
+import type { LabelEntry } from './corpus-store';
+import type { LearningModelMeta } from './trainer';
 
 // ---------------------------------------------------------------------------
-// Types produced by this module (re-exported for use by trainer.ts / handler)
+// Re-exports from canonical homes (corpus-store.ts and trainer.ts)
 // ---------------------------------------------------------------------------
 
-/**
- * A single labelled entry in the personal corpus.
- * Produced by corpus-store.ts (Task 5); defined here for inter-module
- * independence until that module is committed and re-exported from there.
- */
-export interface LabelEntry {
-  /** UUID assigned by the sweep engine to the SweepResult. */
-  resultId: string;
-  /** Feature vector in DATASET_COLUMNS order. */
-  features: number[];
-  /** Ground-truth label: 1 = genuine profile found, 0 = false positive. */
-  label: 0 | 1;
-  /**
-   * Soft-404 flag: true when the site returned HTTP 200 for the probe URL.
-   * Eval-only stratifier — NEVER placed in the feature vector.
-   */
-  soft: boolean;
-  /** Human-readable site name (e.g. "GitHub"). */
-  siteName: string;
-  /** ID of the case this label belongs to. */
-  caseId: string;
-  /** Unix-ms timestamp when the label was recorded. */
-  ts: number;
-}
-
-/**
- * Metadata persisted alongside the model after each retrain cycle.
- * Written via the `writeMeta` dep regardless of verdict; lets the UI show the
- * latest gate result even when ML is disabled or the retrain failed.
- */
-export interface LearningModelMeta {
-  /** Unix-ms timestamp of the retrain (Date.now() at call time). */
-  trainedAt: number;
-  /** Number of user-labelled entries in the corpus at training time. */
-  labelCount: number;
-  /** Gate verdict from the CV evaluation. */
-  verdict: { pass: boolean; reason: string };
-}
+// LabelEntry is canonically defined in corpus-store.ts (Task 5).
+export type { LabelEntry } from './corpus-store';
+// LearningModelMeta is canonically defined in trainer.ts (Task 6).
+export type { LearningModelMeta } from './trainer';
 
 // ---------------------------------------------------------------------------
 // Injected dependency shape

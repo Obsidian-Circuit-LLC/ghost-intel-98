@@ -97,8 +97,13 @@ import * as ais from '../services/livefeeds/ais-stream';
 import * as slSiteDb from '../searchlight/site-db';
 import * as slStore from '../searchlight/store';
 import { startSweep, cancelSweep } from '../searchlight/sweep';
-import { getModel } from '../searchlight/model-store';
+import { getModel, setModelOverride } from '../searchlight/model-store';
 import { runTrainAndGate } from '../searchlight/learning/orchestrator';
+import { loadCorpus, appendLabel } from '../searchlight/learning/corpus-store';
+import type { LabelEntry } from '../searchlight/learning/corpus-store';
+import { trainFromCorpus, writeLearningMeta, metaPath } from '../searchlight/learning/trainer';
+import { evalFromCorpus } from '../searchlight/learning/evaluator';
+import { loadSeedRows } from '../searchlight/learning/seed';
 import { exportSweepPdf } from '../searchlight/export-pdf';
 import { makeTorConnector } from '../searchlight/tor-connect';
 import { getBgTor } from '../bgconn/tor-singleton';
@@ -1415,15 +1420,77 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     const savedName = await saveBufferWithDialog(getWindow(), defaultName, Buffer.from(content, 'utf-8'));
     return { ok: savedName !== null };
   });
-  // searchlight:trainModel — train + gate handler (Task 10 orchestrator).
-  // Full wiring (loadCorpus / loadSeedRows / trainFromCorpus / evalFromCorpus /
-  // writeMeta) is deferred until corpus-store.ts (T5), trainer.ts (T6), and
-  // evaluator.ts (T7) are committed.  The channel is registered now so the
-  // renderer-side call does not produce an unhandled-channel error in the
-  // meantime.
-  safeHandle('searchlight:trainModel', async () => {
-    void runTrainAndGate; // module import verified; full deps wired in follow-up tasks
-    return { verdict: { pass: false, reason: 'not yet wired — pending Tasks 5-7' }, labelCount: 0 };
+  // ---- Searchlight adaptive-learning channels (Task 10) ----
+
+  // Seed CSV path mirrors the model path pattern in model-store.ts.
+  function seedCsvPath(): string {
+    const { app } = require('electron') as typeof import('electron');
+    const base = app.isPackaged ? process.resourcesPath : app.getAppPath();
+    return join(base, app.isPackaged ? 'searchlight' : 'resources/searchlight', 'seed_dataset.csv');
+  }
+
+  // Record a user label for a sweep result (appends to the personal corpus).
+  safeHandle(channels.searchlight.labelResult, async (...a) => {
+    const raw = a[0] as {
+      resultId: string;
+      label: 0 | 1;
+      features: number[];
+      soft: boolean;
+      siteName: string;
+      caseId: string;
+    };
+    if (!raw || typeof raw !== 'object') throw new Error('labelResult: invalid payload');
+    const entry: LabelEntry = {
+      resultId: String(raw.resultId ?? ''),
+      label: raw.label === 1 ? 1 : 0,
+      features: Array.isArray(raw.features) ? (raw.features as number[]) : [],
+      soft: Boolean(raw.soft),
+      siteName: String(raw.siteName ?? ''),
+      caseId: String(raw.caseId ?? ''),
+      ts: Date.now(),
+    };
+    const updated = await appendLabel(entry);
+    return { labelCount: updated.length };
+  });
+
+  // Return the latest retrain metadata (label count, verdict, trainedAt).
+  safeHandle(channels.searchlight.learningStatus, async () => {
+    try {
+      const { secureReadText } = await import('../storage/secure-fs');
+      const text = await secureReadText(metaPath());
+      return JSON.parse(text) as { labelCount: number; verdict: { pass: boolean; reason: string }; trainedAt: number };
+    } catch {
+      // No meta yet (first run or never trained) → return current label count only.
+      const corpus = await loadCorpus();
+      return corpus.length > 0 ? { labelCount: corpus.length } : null;
+    }
+  });
+
+  // Trigger a retrain + gate cycle with the current corpus and vendored seed.
+  safeHandle(channels.searchlight.trainModel, async () => {
+    const corpus = await loadCorpus();
+    // Load the vendored seed CSV (falls back to empty if not yet shipped).
+    let seedRows: ReturnType<typeof loadSeedRows> = [];
+    try {
+      const csv = await readFile(seedCsvPath(), 'utf8');
+      seedRows = loadSeedRows(csv);
+    } catch {
+      // Seed dataset absent (dev environment or pre-ship) — train on corpus only.
+    }
+    const wasEnabled = (await settingsStore.read()).searchlight.scorer.useMl;
+    return runTrainAndGate(corpus, seedRows, {
+      train: trainFromCorpus,
+      eval: evalFromCorpus,
+      setOverride: setModelOverride,
+      writeMeta: writeLearningMeta,
+      wasEnabled,
+    });
+  });
+
+  // Enable or disable the ML scorer (writes through the normal settings path).
+  safeHandle(channels.searchlight.setMlEnabled, async (...a) => {
+    const enabled = a[0] === true;
+    await settingsStore.update({ searchlight: { scorer: { useMl: enabled } } } as Parameters<typeof settingsStore.update>[0]);
   });
 
   // ---- SOCMINT (Telegram OSINT collector; egress gated by settings.socmint.networkEnabled) ----

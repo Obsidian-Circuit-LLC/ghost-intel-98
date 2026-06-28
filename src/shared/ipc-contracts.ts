@@ -435,7 +435,12 @@ export const channels = {
     saveReport: 'searchlight:saveReport',
     torStatus: 'searchlight:torStatus',
     connectTor: 'searchlight:connectTor',
-    revealSiteDbDir: 'searchlight:revealSiteDbDir'
+    revealSiteDbDir: 'searchlight:revealSiteDbDir',
+    // Adaptive-learning channels (Task 10)
+    labelResult: 'searchlight:labelResult',
+    learningStatus: 'searchlight:learningStatus',
+    trainModel: 'searchlight:trainModel',
+    setMlEnabled: 'searchlight:setMlEnabled'
   },
   socmint: {
     addChannel: 'socmint:addChannel',
@@ -668,6 +673,11 @@ export interface ApiContracts {
   [channels.searchlight.torStatus]: { args: []; returns: { state: 'off' | 'connecting' | 'ready' } };
   [channels.searchlight.connectTor]: { args: []; returns: { state: 'off' | 'connecting' | 'ready'; error?: string } };
   [channels.searchlight.revealSiteDbDir]: { args: []; returns: void };
+  // Adaptive-learning channels (Task 10)
+  [channels.searchlight.labelResult]: { args: [{ resultId: string; label: 0 | 1; features: number[]; soft: boolean; siteName: string; caseId: string }]; returns: { labelCount: number } };
+  [channels.searchlight.learningStatus]: { args: []; returns: { labelCount: number; verdict?: { pass: boolean; reason: string }; trainedAt?: number } | null };
+  [channels.searchlight.trainModel]: { args: []; returns: { verdict: { pass: boolean; reason: string }; labelCount: number } };
+  [channels.searchlight.setMlEnabled]: { args: [boolean]; returns: void };
 
   [channels.socmint.addChannel]: { args: [string, unknown]; returns: MonitoredChannel[] };
   [channels.socmint.removeChannel]: { args: [string, string]; returns: MonitoredChannel[] };
