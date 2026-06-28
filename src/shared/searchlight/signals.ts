@@ -200,7 +200,7 @@ export function extractSignals(
 
   v.has_auth_pattern = (matchesAuthPattern(targetUrl) || matchesAuthPattern(redirectUrl)) ? 1 : 0;
   v.redirect_count   = redirectUrl ? 1 : 0;
-  v.response_time    = elapsed;
+  v.response_time    = elapsed / 1000; // ms → seconds: the model was trained on seconds (model.json mean≈0.58); raw ms saturates ML inference
   v.content_length   = body ? body.length : 0;
 
   // ---- Body (only when present) ----

@@ -11,7 +11,7 @@ import type {
 } from './types';
 
 const VALID_SWEEP_STATUS: readonly SweepStatus[] = [
-  'found', 'not_found', 'blocked', 'error', 'unknown',
+  'found', 'maybe', 'not_found', 'blocked', 'error', 'unknown',
 ];
 
 const VALID_PROBE_ERRORS: readonly string[] = [
@@ -97,6 +97,7 @@ function sanitizeResult(raw: unknown): SweepResult | null {
     found: boolVal(raw.found),
     confidence,
     status,
+    probability: typeof raw.probability === 'number' ? raw.probability : undefined,
     timestamp: num(raw.timestamp),
   };
 }

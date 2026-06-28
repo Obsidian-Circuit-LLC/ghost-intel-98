@@ -70,7 +70,7 @@ function sigmoid(x: number): number {
  * Keys absent from `v` contribute zero (not present = neutral for cheap
  * signals; ML layer handles body-signal absence via mean imputation).
  */
-export function scoreSignals(
+export function weightedSum(
   v: SignalVector,
   weights: Record<string, number> = DEFAULT_WEIGHTS,
 ): number {
@@ -79,7 +79,14 @@ export function scoreSignals(
     const val = v[key] ?? 0;
     sum += w * val;
   }
-  return sigmoid(sum / SIGMOID_SCALE);
+  return sum;
+}
+
+export function scoreSignals(
+  v: SignalVector,
+  weights: Record<string, number> = DEFAULT_WEIGHTS,
+): number {
+  return sigmoid(weightedSum(v, weights) / SIGMOID_SCALE);
 }
 
 /**

@@ -1,6 +1,6 @@
 import type { MaigretSiteEntry, RawCheckResult, SweepStatus, ScorerCtx } from './types';
 import { extractSignals } from './signals';
-import { scoreSignals, classify } from './scorer';
+import { scoreSignals, weightedSum, classify } from './scorer';
 import { predict, blend } from './ml';
 
 export interface Interpretation {
@@ -52,8 +52,10 @@ export function interpretResult(
     let prob = heuristic;
     if (ctx!.useMl && ctx!.model) {
       // Set heuristic_score in the vector BEFORE ML inference so the model
-      // receives the feature it was trained with.
-      v.heuristic_score = heuristic;
+      // receives the feature it was trained with: the RAW weighted sum
+      // (training range ≈ -15..70), NOT the sigmoid probability. The model's
+      // mean/scale for this feature (≈12.5/29.0) standardize the raw sum.
+      v.heuristic_score = weightedSum(v);
       const ml = predict(v, ctx!.model);
       prob = blend(ml, heuristic, ctx!.model.ml_weight);
     }
