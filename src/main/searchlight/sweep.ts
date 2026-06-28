@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { buildProbeUrl } from '@shared/searchlight/sites';
 import { interpretResult } from '@shared/searchlight/interpret';
 import type { MaigretSiteEntry, ScorerCtx, SweepResult } from '@shared/searchlight/types';
+import { rowToFeatures, DATASET_COLUMNS } from '@shared/searchlight/ml/collect-core';
 import { probe as defaultProbe } from './probe';
 
 export interface RunSweepArgs {
@@ -17,6 +18,13 @@ export interface RunSweepArgs {
   // live Tor SOCKS port accessor; forwarded to probe so Tor sweeps can dial
   torSocksPort?: () => number | null;
   probeImpl?: typeof defaultProbe;
+  /**
+   * Called synchronously after each probe completes (before emit) so the main
+   * process can capture the feature vector for that result.  The resultId is the
+   * same UUID that appears in the emitted SweepResult.id, enabling labelResult to
+   * look up the vector without trusting renderer-supplied feature values.
+   */
+  captureVector?: (resultId: string, features: number[]) => void;
   /** Scorer context for structural detection. When provided, fallback branches are routed
    *  through the heuristic scorer and ambiguous 'maybe' results trigger phase-2 escalation. */
   scorerCtx?: ScorerCtx;
@@ -47,6 +55,9 @@ export async function runSweep(args: RunSweepArgs): Promise<void> {
         const raw = await probe(probeUrl, { fetchBody, headers: site.headers, useTor }, { socksPort: args.torSocksPort });
         let interp = interpretResult(site, raw, url, scorerCtx);
 
+        // Track the final raw result (may be upgraded by phase-2) for vector capture.
+        let finalRaw = raw;
+
         // Adaptive phase-2 escalation: if the scorer found the result ambiguous ('maybe')
         // and we didn't already fetch the body, do one follow-up GET to collect body signals.
         // On phase-2 failure (throw or error field set), keep the phase-1 interpretation.
@@ -55,6 +66,7 @@ export async function runSweep(args: RunSweepArgs): Promise<void> {
             const raw2 = await probe(probeUrl, { fetchBody: true, headers: site.headers, useTor }, { socksPort: args.torSocksPort });
             if (!raw2.error) {
               interp = interpretResult(site, raw2, url, scorerCtx);
+              finalRaw = raw2;
             }
             // raw2.error → graceful fallback: keep phase-1 interp
           } catch {
@@ -62,8 +74,23 @@ export async function runSweep(args: RunSweepArgs): Promise<void> {
           }
         }
 
+        const resultId = randomUUID();
+
+        // Capture the feature vector in the main process before emitting the result.
+        // Uses the final raw result (phase-2 if triggered, phase-1 otherwise) so the
+        // vector includes all available body signals.
+        if (args.captureVector) {
+          try {
+            const vec = rowToFeatures(site, finalRaw, url);
+            const features = DATASET_COLUMNS.map((c) => vec[c] ?? 0);
+            args.captureVector(resultId, features);
+          } catch {
+            // Vector capture failure is non-fatal — the sweep result is still emitted.
+          }
+        }
+
         emit({
-          id: randomUUID(), jobId, siteName: site.name, username, url,
+          id: resultId, jobId, siteName: site.name, username, url,
           statusCode: raw.statusCode, statusMessage: raw.statusMessage, elapsed: raw.elapsed,
           redirectUrl: raw.redirectUrl, error: raw.error, category: site.category, tags: site.tags,
           checkType: site.checkType, found: interp.found, confidence: interp.confidence,
@@ -100,9 +127,11 @@ export interface StartSweepDeps {
   torSocksPort: () => number | null;
   defaultConcurrency: (useTor: boolean) => number;
   emit: (r: SweepResult) => void;
-  onDone: (final: { jobId: string; status: 'completed' | 'cancelled'; checked: number }) => void;
+  /** May be async so the IPC handler can persist captured vectors after the sweep. */
+  onDone: (final: { jobId: string; status: 'completed' | 'cancelled'; checked: number }) => void | Promise<void>;
   scorerCtx?: ScorerCtx;
   lightweightMode?: boolean;
+  captureVector?: (resultId: string, features: number[]) => void;
 }
 
 /**
@@ -122,11 +151,12 @@ export async function startSweep(
   void runSweep({
     jobId, username: args.username, sites, useTor: args.useTor,
     concurrency: deps.defaultConcurrency(args.useTor), networkEnabled,
-    emit: deps.emit, onDone: (f) => { active.delete(jobId); deps.onDone(f); },
+    emit: deps.emit, onDone: (f) => { active.delete(jobId); void deps.onDone(f); },
     isCancelled: () => entry.cancelled,
     torSocksPort: deps.torSocksPort,
     scorerCtx: deps.scorerCtx,
-    lightweightMode: deps.lightweightMode
+    lightweightMode: deps.lightweightMode,
+    captureVector: deps.captureVector,
   });
   return { jobId, total: sites.length };
 }

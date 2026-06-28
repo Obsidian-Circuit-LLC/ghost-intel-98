@@ -14,6 +14,8 @@
  *     never passed into this module.
  *   - No network egress — all persistence via secureWriteFile.
  *   - soft is an eval-only stratifier; never included in the feature vector.
+ *   - Corpus rows are sorted by resultId before training so that identical corpus
+ *     contents always yield a bit-identical model, regardless of insertion order.
  */
 
 import { join } from 'node:path';
@@ -56,6 +58,42 @@ export function metaPath(): string {
 }
 
 // ---------------------------------------------------------------------------
+// TrainRow — the shape trainModel expects
+// ---------------------------------------------------------------------------
+
+/** A single row for trainModel: feature vector + binary label. */
+export interface TrainRow {
+  features: number[];
+  label: number;
+}
+
+// ---------------------------------------------------------------------------
+// buildTrainRows (exported pure function — independently testable)
+// ---------------------------------------------------------------------------
+
+/**
+ * Convert corpus entries and seed rows into the flat TrainRow[] that trainModel
+ * expects.
+ *
+ * Corpus entries are sorted by resultId (lexicographic) BEFORE concatenation
+ * with seed rows.  This is the global determinism invariant: identical
+ * (corpus, seed) always yields identical TrainRow[] regardless of insertion order,
+ * so the trained model is bit-identical for the same inputs.
+ *
+ * Pure function — no I/O, no Date.now, no Math.random.
+ */
+export function buildTrainRows(corpus: LabelEntry[], seed: EvalRow[]): TrainRow[] {
+  // Sort corpus by resultId so row order is independent of insertion order.
+  const sortedCorpus = [...corpus].sort((a, b) => a.resultId < b.resultId ? -1 : a.resultId > b.resultId ? 1 : 0);
+  const corpusRows: TrainRow[] = sortedCorpus.map((e) => ({
+    features: e.features,
+    label: e.label as number,
+  }));
+  const seedRows: TrainRow[] = seed.map((r) => ({ features: r.features, label: r.label }));
+  return [...corpusRows, ...seedRows];
+}
+
+// ---------------------------------------------------------------------------
 // Train
 // ---------------------------------------------------------------------------
 
@@ -69,14 +107,11 @@ export function metaPath(): string {
  * no training math is reimplemented here.
  *
  * Pure relative to training: NO Date.now / Math.random — trainModel enforces
- * this. The same (corpus, seed) always produces the same MlModel.
+ * this. The same (corpus, seed) always produces the same MlModel because
+ * buildTrainRows sorts corpus rows by resultId before concatenation.
  */
 export function trainFromCorpus(corpus: LabelEntry[], seed: EvalRow[]): MlModel {
-  // Corpus entries carry pre-computed feature vectors in DATASET_COLUMNS order.
-  const corpusRows = corpus.map((e) => ({ features: e.features, label: e.label as number }));
-  // Seed EvalRows also carry pre-projected feature vectors in DATASET_COLUMNS order.
-  const seedRows = seed.map((r) => ({ features: r.features, label: r.label }));
-  const rows = [...corpusRows, ...seedRows];
+  const rows = buildTrainRows(corpus, seed);
   return trainModel(rows, DATASET_COLUMNS);
 }
 

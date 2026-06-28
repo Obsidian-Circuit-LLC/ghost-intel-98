@@ -31,6 +31,17 @@ import type {
 } from './types';
 import type { MediaLibrarySnapshot, MediaStation, MediaTrack, GeoSnapshot, GeoSource, GeoItem, SavedGeoEvent, MarketSnapshot } from './post-mvp-types';
 import type { SiteCatalogEntry, SweepResult, SearchlightCase, SearchlightCaseSummary } from './searchlight/types';
+
+/**
+ * Metadata written after each retrain cycle.
+ * Mirrors LearningModelMeta in src/main/searchlight/learning/trainer.ts.
+ * Defined here so the IPC contract is self-contained in the shared package.
+ */
+export interface LearningModelMeta {
+  trainedAt: number;
+  labelCount: number;
+  verdict: { pass: boolean; reason: string };
+}
 import type { HarvestedItem, MonitoredChannel } from './socmint/types';
 
 /**
@@ -673,11 +684,13 @@ export interface ApiContracts {
   [channels.searchlight.torStatus]: { args: []; returns: { state: 'off' | 'connecting' | 'ready' } };
   [channels.searchlight.connectTor]: { args: []; returns: { state: 'off' | 'connecting' | 'ready'; error?: string } };
   [channels.searchlight.revealSiteDbDir]: { args: []; returns: void };
-  // Adaptive-learning channels (Task 10)
-  [channels.searchlight.labelResult]: { args: [{ resultId: string; label: 0 | 1; features: number[]; soft: boolean; siteName: string; caseId: string }]; returns: { labelCount: number } };
-  [channels.searchlight.learningStatus]: { args: []; returns: { labelCount: number; verdict?: { pass: boolean; reason: string }; trainedAt?: number } | null };
+  // Adaptive-learning channels (Task 10 / Task 11)
+  // labelResult: renderer supplies resultId + label + caseId + siteName only;
+  //   features and soft come from main-process-captured CapturedVector.
+  [channels.searchlight.labelResult]: { args: [{ resultId: string; label: 0 | 1; siteName: string; caseId: string }]; returns: { ok: boolean } };
+  [channels.searchlight.learningStatus]: { args: []; returns: { labelCount: number; meta: LearningModelMeta | null; mlEnabled: boolean } | null };
   [channels.searchlight.trainModel]: { args: []; returns: { verdict: { pass: boolean; reason: string }; labelCount: number } };
-  [channels.searchlight.setMlEnabled]: { args: [boolean]; returns: void };
+  [channels.searchlight.setMlEnabled]: { args: [boolean]; returns: { ok: boolean } };
 
   [channels.socmint.addChannel]: { args: [string, unknown]; returns: MonitoredChannel[] };
   [channels.socmint.removeChannel]: { args: [string, string]; returns: MonitoredChannel[] };
