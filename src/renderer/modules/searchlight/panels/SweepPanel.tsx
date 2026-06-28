@@ -479,6 +479,13 @@ export function SweepPanel(): JSX.Element {
           >
             EXPORT SITES.JSON
           </button>
+          <button
+            className="sl-sweep-btn"
+            onClick={() => void window.api.searchlight.revealSiteDbDir()}
+            title="Open the writable site-database folder. Drop a corrected maigret_sites.json here to override the bundled database."
+          >
+            SITE DB FOLDER
+          </button>
         </div>
 
         {/* Add custom site row */}
