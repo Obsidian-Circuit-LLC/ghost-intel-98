@@ -649,7 +649,7 @@ export function SweepPanel(): JSX.Element {
                 const isTorMissing = r.status === 'error' && r.error === 'TOR_UNAVAILABLE';
                 const color = statusColor(r);
                 return (
-                  <tr key={r.id} className={`sl-sweep-row${r.status === 'found' ? ' sl-row-found' : ''}`}>
+                  <tr key={r.id} className={`sl-sweep-row${r.status === 'found' ? ' sl-row-found' : r.status === 'maybe' ? ' sl-row-maybe' : ''}`}>
                     {/* Status */}
                     <td className="sl-sweep-td">
                       <span className="sl-status-code" style={{ color }}>
@@ -662,7 +662,11 @@ export function SweepPanel(): JSX.Element {
 
                     {/* Match badge */}
                     <td className="sl-sweep-td">
-                      {r.status === 'found' ? (
+                      {(r.status === 'found' || r.status === 'maybe') && r.probability != null ? (
+                        <span className={r.status === 'maybe' ? 'sl-match-maybe' : 'sl-match-badge'}>
+                          ● {Math.round(r.probability * 100)}%
+                        </span>
+                      ) : r.status === 'found' ? (
                         <span className="sl-match-badge">
                           ● {r.confidence === 'high' ? 'CONFIRMED' : r.confidence === 'medium' ? 'LIKELY' : 'POSSIBLE'}
                         </span>
