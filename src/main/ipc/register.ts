@@ -98,6 +98,7 @@ import * as slSiteDb from '../searchlight/site-db';
 import * as slStore from '../searchlight/store';
 import { startSweep, cancelSweep } from '../searchlight/sweep';
 import { getModel } from '../searchlight/model-store';
+import { runTrainAndGate } from '../searchlight/learning/orchestrator';
 import { exportSweepPdf } from '../searchlight/export-pdf';
 import { makeTorConnector } from '../searchlight/tor-connect';
 import { getBgTor } from '../bgconn/tor-singleton';
@@ -1413,6 +1414,16 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     if (content.length > MAX_EXPORT_BYTES) throw new Error('Report content exceeds the export size limit');
     const savedName = await saveBufferWithDialog(getWindow(), defaultName, Buffer.from(content, 'utf-8'));
     return { ok: savedName !== null };
+  });
+  // searchlight:trainModel — train + gate handler (Task 10 orchestrator).
+  // Full wiring (loadCorpus / loadSeedRows / trainFromCorpus / evalFromCorpus /
+  // writeMeta) is deferred until corpus-store.ts (T5), trainer.ts (T6), and
+  // evaluator.ts (T7) are committed.  The channel is registered now so the
+  // renderer-side call does not produce an unhandled-channel error in the
+  // meantime.
+  safeHandle('searchlight:trainModel', async () => {
+    void runTrainAndGate; // module import verified; full deps wired in follow-up tasks
+    return { verdict: { pass: false, reason: 'not yet wired — pending Tasks 5-7' }, labelCount: 0 };
   });
 
   // ---- SOCMINT (Telegram OSINT collector; egress gated by settings.socmint.networkEnabled) ----
