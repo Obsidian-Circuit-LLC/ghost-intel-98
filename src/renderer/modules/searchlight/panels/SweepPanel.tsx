@@ -23,6 +23,7 @@ import {
   sortResults,
   summarizeSweep,
   computeEta,
+  canLabel,
 } from '@shared/searchlight/sweep-panel-utils';
 import { useSearchlightStore } from '../store';
 import { useSettings } from '../../../state/store';
@@ -119,6 +120,13 @@ export function SweepPanel(): JSX.Element {
   const [customUrl, setCustomUrl] = useState('');
   const [customCategory, setCustomCategory] = useState('');
   const [customMsg, setCustomMsg] = useState('');
+  const [labeled, setLabeled] = useState<Set<string>>(new Set()); // result ids labelled this session (inline learning thumbs)
+
+  const labelInline = useCallback((resultId: string, siteName: string, label: 0 | 1): void => {
+    if (!activeCaseId) return;
+    void window.api.searchlight.labelResult({ resultId, label, siteName, caseId: activeCaseId });
+    setLabeled((prev) => new Set(prev).add(resultId)); // immediate feedback
+  }, [activeCaseId]);
 
   // ── Load catalog on mount ────────────────────────────────────────────────
 
@@ -830,6 +838,18 @@ export function SweepPanel(): JSX.Element {
                       >
                         ↗
                       </button>
+                      {canLabel(r.status, activeCaseId) && (
+                        labeled.has(r.id) ? (
+                          <span className="sl-learning-labeled" title="Labelled — teaching the detector">✓</span>
+                        ) : (
+                          <>
+                            <button className="sl-learning-thumb sl-learning-real" title="Label: real match"
+                              onClick={() => labelInline(r.id, r.siteName, 1)}>👍</button>
+                            <button className="sl-learning-thumb sl-learning-fake" title="Label: false positive"
+                              onClick={() => labelInline(r.id, r.siteName, 0)}>👎</button>
+                          </>
+                        )
+                      )}
                     </td>
                   </tr>
                 );
