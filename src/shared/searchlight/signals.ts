@@ -2,6 +2,9 @@
  * Pure structural signal extractor — NO Date.now / Math.random.
  * Same input → identical output (determinism invariant).
  *
+ * Reconciled verbatim to Aliens_eye (© 2021 Aaron Thomas, MIT licence)
+ * analyzer.py / config.py as of Task 9 — see THIRD_PARTY_LICENSES.
+ *
  * Parsing rules (HARD):
  *  - STATIC regexes only — never `new RegExp(untrustedInput)` (ReDoS / main-thread freeze).
  *  - JSON-LD blocks: guarded try/catch; malformed → skip, signal stays 0.
@@ -11,10 +14,11 @@
 import type { MaigretSiteEntry, RawCheckResult, SignalVector } from './types';
 import {
   AUTH_PATH_PATTERNS,
+  ERROR_CLASS_HINTS,
   ERROR_KEYWORDS,
-  ERROR_SECTION_HINTS,
+  META_KEYWORDS,
   POSITIVE_KEYWORDS,
-  PROFILE_SECTION_HINTS,
+  PROFILE_CLASS_HINTS,
 } from './keywords';
 
 // ---------------------------------------------------------------------------
@@ -27,12 +31,17 @@ const RE_TW_TITLE    = /<meta[^>]+property=["']twitter:title["'][^>]+content=["'
 const RE_CANONICAL   = /<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i;
 const RE_OG_TYPE_PROFILE = /<meta[^>]+property=["']og:type["'][^>]+content=["']profile["']/i;
 const RE_JSON_LD_BLOCK   = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
-const RE_META_TAGS       = /<meta[^>]+>/gi;
+const RE_META_CONTENT    = /<meta[^>]+content=["']([^"']+)["'][^>]*/gi;
 const RE_IMG             = /<img\b/gi;
 const RE_INPUT           = /<input\b/gi;
 const RE_FORM            = /<form\b/gi;
-const RE_LINK            = /<a\b/gi;
+// Upstream counts <a href=...> (anchors with href) — exclude plain <a name=...> anchors.
+const RE_LINK_HREF       = /<a\b[^>]+href=/gi;
 const RE_TAGS_STRIP      = /<[^>]*>/g;
+// Class-attribute matching: element has a class="..." attribute containing the hint.
+// These are STATIC patterns — not built from user input.
+const RE_CLASS_PROFILE   = /<[^>]+class=["'][^"']*(?:profile|user|account)[^"']*["']/gi;
+const RE_CLASS_ERROR     = /<[^>]+class=["'][^"']*(?:error|not-found|missing|unavailable)[^"']*["']/gi;
 
 /** Extract all `<script type="application/ld+json">` block text values. */
 function extractJsonLdBlocks(body: string): string[] {
@@ -79,28 +88,39 @@ function countDistinctKeywords(text: string, keywords: string[]): number {
   return count;
 }
 
-/** Extract all <meta …> tag text concatenated. */
-function extractMetaText(body: string): string {
+/**
+ * Extract all `content="..."` attribute values from `<meta ...>` tags.
+ * Upstream uses an HTML parser; we use a static regex on the meta tag content attributes.
+ */
+function extractMetaContentText(body: string): string {
   const parts: string[] = [];
   let m: RegExpExecArray | null;
-  const re = new RegExp(RE_META_TAGS.source, 'gi');
+  const re = new RegExp(RE_META_CONTENT.source, 'gi');
   while ((m = re.exec(body)) !== null) {
-    parts.push(m[0]);
+    parts.push(m[1]);
   }
   return parts.join(' ');
 }
 
 /**
- * Count class/id attribute hits for the given hint list.
- * Looks for hint strings appearing in the body (covers class names, ids, data-attrs).
+ * Count elements whose class attribute contains any hint from PROFILE_CLASS_HINTS.
+ * Uses a static regex — does NOT accept dynamic input.
  */
-function countSectionHits(body: string, hints: string[]): number {
-  const lower = body.toLowerCase();
-  let count = 0;
-  for (const hint of hints) {
-    if (lower.includes(hint)) count++;
-  }
-  return count;
+function countProfileClassHits(body: string): number {
+  // PROFILE_CLASS_HINTS = ['profile', 'user', 'account'] — baked into RE_CLASS_PROFILE.
+  // Suppress unused-import warning; the constant documents intent even though
+  // the regex encodes the values statically.
+  void PROFILE_CLASS_HINTS;
+  return (body.match(RE_CLASS_PROFILE) || []).length;
+}
+
+/**
+ * Count elements whose class attribute contains any hint from ERROR_CLASS_HINTS.
+ * Uses a static regex — does NOT accept dynamic input.
+ */
+function countErrorClassHits(body: string): number {
+  void ERROR_CLASS_HINTS;
+  return (body.match(RE_CLASS_ERROR) || []).length;
 }
 
 /** Strip HTML tags and return plain text. */
@@ -147,6 +167,8 @@ function matchesAuthPattern(url: string | null): boolean {
  * the model's training mean so they contribute neutrally).
  *
  * NO `Date.now`, NO `Math.random` — pure function of its inputs.
+ *
+ * Reconciled to Aliens_eye analyzer.py / config.py verbatim (Task 9).
  */
 export function extractSignals(
   _site: MaigretSiteEntry,
@@ -166,6 +188,16 @@ export function extractSignals(
   const username = usernameFromUrl(targetUrl);
   v.has_username_in_path = username && targetUrl.toLowerCase().split('/').includes(username) ? 1 : 0;
 
+  // is_homepage: path is "" or "/" (no real user-segment — upstream analyzer.py)
+  let isHomepage = false;
+  try {
+    const parsedPath = new URL(targetUrl).pathname;
+    isHomepage = parsedPath === '' || parsedPath === '/';
+  } catch {
+    isHomepage = false;
+  }
+  v.is_homepage = isHomepage ? 1 : 0;
+
   v.has_auth_pattern = (matchesAuthPattern(targetUrl) || matchesAuthPattern(redirectUrl)) ? 1 : 0;
   v.redirect_count   = redirectUrl ? 1 : 0;
   v.response_time    = elapsed;
@@ -178,11 +210,20 @@ export function extractSignals(
     const titleText  = titleMatch ? titleMatch[1] : '';
     v.title_has_username = titleText && username && ci(titleText, username) ? 1 : 0;
 
-    // Meta og:title / twitter:title
+    // Meta content text (all content="..." attribute values concatenated)
+    const metaText = extractMetaContentText(body);
+
+    // Meta og:title / twitter:title — for meta_has_username check
     const ogTitleM  = RE_OG_TITLE.exec(body);
     const twTitleM  = RE_TW_TITLE.exec(body);
-    const metaTitleText = [ogTitleM?.[1] ?? '', twTitleM?.[1] ?? ''].join(' ');
-    v.meta_has_username = username && metaTitleText && ci(metaTitleText, username) ? 1 : 0;
+    // Upstream: username in ALL meta content text (meta_text includes all meta content values)
+    v.meta_has_username = username && metaText && ci(metaText, username) ? 1 : 0;
+
+    // Also use og/twitter title match as a supplementary signal (belt-and-suspenders)
+    if (!v.meta_has_username) {
+      const ogTw = [ogTitleM?.[1] ?? '', twTitleM?.[1] ?? ''].join(' ');
+      v.meta_has_username = username && ogTw && ci(ogTw, username) ? 1 : 0;
+    }
 
     // Canonical URL
     const canonM = RE_CANONICAL.exec(body);
@@ -195,31 +236,34 @@ export function extractSignals(
     // JSON-LD Person
     v.has_json_ld_person = hasJsonLdPerson(body) ? 1 : 0;
 
-    // Keyword counts in full body text
+    // Keyword counts in full body text (tags stripped)
     const bodyText = stripTags(body);
     v.error_keyword_count    = countDistinctKeywords(bodyText, ERROR_KEYWORDS);
     v.positive_keyword_count = countDistinctKeywords(bodyText, POSITIVE_KEYWORDS);
 
-    // Keyword counts in <meta> tag text only
-    const metaText = extractMetaText(body);
+    // Keyword counts in meta content text only.
+    // Upstream uses positive_keywords + meta_keywords for meta_positive_keyword_count.
     v.meta_error_keyword_count    = countDistinctKeywords(metaText, ERROR_KEYWORDS);
-    v.meta_positive_keyword_count = countDistinctKeywords(metaText, POSITIVE_KEYWORDS);
+    v.meta_positive_keyword_count = countDistinctKeywords(metaText, [...POSITIVE_KEYWORDS, ...META_KEYWORDS]);
 
-    // Section hint counts (class/id/data-attr style hits in raw HTML)
-    v.profile_section_count = countSectionHits(body, PROFILE_SECTION_HINTS);
-    v.error_section_count   = countSectionHits(body, ERROR_SECTION_HINTS);
+    // Section hint counts: upstream checks CSS class attribute values specifically.
+    // Static regexes encode PROFILE_CLASS_HINTS and ERROR_CLASS_HINTS verbatim.
+    v.profile_section_count = countProfileClassHits(body);
+    v.error_section_count   = countErrorClassHits(body);
 
-    // Tag counts — static regex, not parameterised
-    v.img_count   = (body.match(RE_IMG)   || []).length;
-    v.input_count = (body.match(RE_INPUT) || []).length;
-    v.form_count  = (body.match(RE_FORM)  || []).length;
-    v.link_count  = (body.match(RE_LINK)  || []).length;
+    // Tag counts — static regexes, not parameterised
+    v.img_count   = (body.match(RE_IMG)       || []).length;
+    v.input_count = (body.match(RE_INPUT)      || []).length;
+    v.form_count  = (body.match(RE_FORM)       || []).length;
+    // Upstream counts <a href=...> (anchors with href attribute)
+    v.link_count  = (body.match(RE_LINK_HREF)  || []).length;
 
-    // Plain-text length
+    // Plain-text length (tags stripped)
     v.text_length = bodyText.length;
 
     // fingerprint_match_found / fingerprint_match_not_found: OMITTED
-    // heuristic_score: OMITTED (added by scorer/interpret layer)
+    // (filled with model mean by ML layer → neutral contribution)
+    // heuristic_score: OMITTED here (set by scorer/interpret layer before ML inference)
   }
 
   return v;

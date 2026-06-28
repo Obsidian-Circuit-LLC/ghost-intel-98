@@ -632,7 +632,7 @@ export const defaultSettings: AppSettings = {
     customFeeds: []
   },
   chat: { networkEnabled: false },
-  searchlight: { networkEnabled: false, torConcurrency: 8, clearnetConcurrency: 16, scorer: { foundThreshold: null, maybeFloor: null, lightweightMode: false, useMl: true } },
+  searchlight: { networkEnabled: false, torConcurrency: 8, clearnetConcurrency: 16, scorer: { foundThreshold: null, maybeFloor: null, lightweightMode: false, useMl: false } },
   socmint: { networkEnabled: false, transport: 'direct' },
   x: { networkEnabled: false, clearnetAcknowledged: false },
   plugins: {},

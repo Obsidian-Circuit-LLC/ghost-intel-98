@@ -155,3 +155,4 @@ Both may land in `3.23.0`; the split is implementation/review structure, not sep
 - Per-site learned fingerprint cache (`fingerprint_match_*` signals).
 - Non-English keyword lists (structure-only fallback ships in v1).
 - macOS sidecar / cross-platform (tracked elsewhere).
+- **Plan-2 retrain required to clear the parity gate:** the as-shipped Aliens_eye model achieves ~42% strict agreement (label=1→found, label=0→not_found) on `seed_dataset.csv` under this port. The missing `fingerprint_match_found`/`fingerprint_match_not_found` features (a learned per-site cache not implemented in Plan 1) leave features #23 and #24 at their training mean — neutral but not accurate. Until a fingerprint-free model is retrained (Plan 2), `useMl` defaults to `false`; the heuristic-only scorer ships and corrects soft-404 false positives. The ML blend code is already in place in `interpret.ts` and can be toggled on via Settings → Searchlight.
