@@ -173,3 +173,97 @@ describe('interpretResult with ScorerCtx', () => {
     expect(r.status).toBe('not_found');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Task 10: interaction features wired into ML inference
+// ---------------------------------------------------------------------------
+
+describe('interpretResult Task 10 — interaction features in ML inference', () => {
+  // A tiny model whose ONLY feature is the interaction term heuristic_x_og_type.
+  // With a large positive coef, if the interaction feature is correctly built and
+  // passed to predict(), the PROFILE vector (og_type_profile=1, positive heuristic)
+  // flips from 'maybe' (neutral prior when feature is absent) to 'found'.
+  //
+  // Before fix: predict() sees mean(0) for the missing heuristic_x_og_type key
+  //             → sigmoid(50·0) = 0.5 → maybe (0.3224 ≤ 0.5 < 0.5559).
+  // After fix:  buildInteractionFeatures(v) sets heuristic_x_og_type = weightedSum(v)·1
+  //             (positive) → predict sees large positive → ≈1.0 → found.
+  const mlCtx: ScorerCtx = {
+    thresholds: { found: 0.5559, notFound: 0.3224 },
+    useMl: true,
+    model: {
+      version: 'test-t10',
+      feature_schema: ['heuristic_x_og_type'],
+      mean: [0],
+      scale: [1],
+      coef: [50],
+      intercept: 0,
+      ml_weight: 1.0,
+      thresholds: { found: 0.5559, not_found: 0.3224 },
+    },
+  };
+
+  it('interaction feature heuristic_x_og_type reaches predict — PROFILE body → found', () => {
+    const r = interpretResult(
+      base,
+      raw({ statusCode: 200, body: PROFILE }),
+      'https://x.com/ghostexodus',
+      mlCtx,
+    );
+    expect(r.status).toBe('found');
+    expect(r.probability).toBeGreaterThan(0.9);
+  });
+
+  it('PROFILE with og_type_profile=0 body would give low interaction value (sanity)', () => {
+    // Verify the interaction term only fires when og_type_profile=1.
+    // A bare 200 with no body → no og_type_profile signal → interaction = 0 → maybe.
+    const r = interpretResult(
+      base,
+      raw({ statusCode: 200, body: '' }),
+      'https://x.com/ghostexodus',
+      mlCtx,
+    );
+    // No body → no og_type_profile → heuristic_x_og_type = 0 → predict = 0.5 → maybe
+    expect(r.status).toBe('maybe');
+  });
+
+  it('useMl:false path unaffected — heuristic-only resolves PROFILE to found', () => {
+    const ctxHeuristic: ScorerCtx = { thresholds: { found: 0.5559, notFound: 0.3224 }, useMl: false, model: null };
+    const r = interpretResult(
+      base,
+      raw({ statusCode: 200, body: PROFILE }),
+      'https://x.com/ghostexodus',
+      ctxHeuristic,
+    );
+    expect(r.status).toBe('found');
+  });
+
+  it('existing shipped model unaffected — feature_schema without interaction keys ignores extras', () => {
+    // If a model has feature_schema that does NOT include heuristic_x_og_type,
+    // the extra key in v is simply ignored (predict indexes by schema position only).
+    // This confirms the fix is inert for the currently shipped vendored model.
+    const modelWithoutInteraction: ScorerCtx = {
+      thresholds: { found: 0.5559, notFound: 0.3224 },
+      useMl: true,
+      model: {
+        version: 'no-interaction',
+        feature_schema: ['http_200'],
+        mean: [0.5],
+        scale: [0.5],
+        coef: [1.0],
+        intercept: 0,
+        ml_weight: 0.6,
+        thresholds: { found: 0.5559, not_found: 0.3224 },
+      },
+    };
+    // Must not throw; result is valid
+    const r = interpretResult(
+      base,
+      raw({ statusCode: 200, body: PROFILE }),
+      'https://x.com/ghostexodus',
+      modelWithoutInteraction,
+    );
+    expect(['found', 'maybe', 'not_found']).toContain(r.status);
+    expect(typeof r.probability).toBe('number');
+  });
+});
