@@ -416,6 +416,9 @@
 .sl-sweep-row:hover { background: rgba(26,111,255,0.055); }
 .sl-row-found { background: rgba(0,255,136,0.018); }
 .sl-row-found:hover { background: rgba(0,255,136,0.04); }
+/* maybe row tint — background restated on CLASS so 98.css element-rule cannot override */
+.sl-row-maybe { background: rgba(216,168,58,0.02); }
+.sl-row-maybe:hover { background: rgba(216,168,58,0.045); }
 
 .sl-sweep-td {
   padding: 5px 10px;
@@ -440,6 +443,18 @@
   border-radius: 2px;
   font-size: 9px;
   color: #00ff88;
+  white-space: nowrap;
+}
+
+/* .sl-match-maybe: amber badge — background restated on CLASS selector so 98.css
+   element-level table/td white fill (0,0,1 specificity) cannot cascade over it. */
+.sl-match-maybe {
+  padding: 1px 6px;
+  background: rgba(216,168,58,0.12);
+  border: 1px solid rgba(216,168,58,0.35);
+  border-radius: 2px;
+  font-size: 9px;
+  color: #d8a83a;
   white-space: nowrap;
 }
 
