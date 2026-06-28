@@ -101,6 +101,8 @@ export interface StartSweepDeps {
   defaultConcurrency: (useTor: boolean) => number;
   emit: (r: SweepResult) => void;
   onDone: (final: { jobId: string; status: 'completed' | 'cancelled'; checked: number }) => void;
+  scorerCtx?: ScorerCtx;
+  lightweightMode?: boolean;
 }
 
 /**
@@ -122,7 +124,9 @@ export async function startSweep(
     concurrency: deps.defaultConcurrency(args.useTor), networkEnabled,
     emit: deps.emit, onDone: (f) => { active.delete(jobId); deps.onDone(f); },
     isCancelled: () => entry.cancelled,
-    torSocksPort: deps.torSocksPort
+    torSocksPort: deps.torSocksPort,
+    scorerCtx: deps.scorerCtx,
+    lightweightMode: deps.lightweightMode
   });
   return { jobId, total: sites.length };
 }
