@@ -1360,13 +1360,22 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     const useTor = req?.useTor !== false; // default true
     const s = (await settingsStore.read()).searchlight;
     const win = getWindow();
+    const sc = s.scorer;
+    // Task 8 will provide getModel(); until then model is null and useMl is forced off.
+    const model = null;
+    const thresholds = {
+      found: sc.foundThreshold ?? (model as null | { thresholds: { found: number } })?.thresholds.found ?? 0.5559,
+      notFound: sc.maybeFloor ?? (model as null | { thresholds: { not_found: number } })?.thresholds.not_found ?? 0.3224
+    };
     return startSweep({ username, siteIds, useTor }, {
       loadSites: (ids) => slSiteDb.sitesByName(ids),
       networkEnabled: async () => (await settingsStore.read()).searchlight.networkEnabled,
       torSocksPort: searchlightSocksPort,
       defaultConcurrency: (tor) => (tor ? s.torConcurrency : s.clearnetConcurrency),
       emit: (r) => win?.webContents.send(channels.searchlight.onSweepResult, r),
-      onDone: (f) => win?.webContents.send(channels.searchlight.onSweepDone, f)
+      onDone: (f) => win?.webContents.send(channels.searchlight.onSweepDone, f),
+      scorerCtx: { thresholds, useMl: false, model: null },
+      lightweightMode: sc.lightweightMode
     });
   });
   safeHandle(channels.searchlight.cancelSweep, async (...a) => { cancelSweep(ensureUuid(a[0], 'jobId')); });

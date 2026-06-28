@@ -466,6 +466,17 @@ export interface AppSettings {
     /** Concurrent probes over Tor (slower exits) and over clearnet. */
     torConcurrency: number;
     clearnetConcurrency: number;
+    /** Structural + ML detection scorer configuration. */
+    scorer: {
+      /** Override the model's found-threshold (null = use model default). */
+      foundThreshold: number | null;
+      /** Override the model's maybe-floor threshold (null = use model default). */
+      maybeFloor: number | null;
+      /** When true, phase-2 body fetch (deep scan) is suppressed for faster sweeps. */
+      lightweightMode: boolean;
+      /** When true, blend heuristic score with ML model prediction. */
+      useMl: boolean;
+    };
   };
   /** SOCMINT collector (Telegram v1). Off by default ⇒ no egress is initiated,
    *  no collector is constructed, and no Tor circuit is requested. */
@@ -621,7 +632,7 @@ export const defaultSettings: AppSettings = {
     customFeeds: []
   },
   chat: { networkEnabled: false },
-  searchlight: { networkEnabled: false, torConcurrency: 8, clearnetConcurrency: 16 },
+  searchlight: { networkEnabled: false, torConcurrency: 8, clearnetConcurrency: 16, scorer: { foundThreshold: null, maybeFloor: null, lightweightMode: false, useMl: true } },
   socmint: { networkEnabled: false, transport: 'direct' },
   x: { networkEnabled: false, clearnetAcknowledged: false },
   plugins: {},
