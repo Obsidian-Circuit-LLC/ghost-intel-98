@@ -42,7 +42,9 @@ describe('scoreSignals + classify', () => {
   it('threshold override flips verdict', () => {
     const v = extractSignals(site(), raw({ body: PROFILE }), 'https://s.com/ghostexodus');
     const p = scoreSignals(v);
-    expect(classify(p, { found: 0.99, notFound: 0.98 }).status).not.toBe('found');
+    // With upstream-baseline weights the PROFILE score is ~0.9965; a found
+    // threshold of 0.999 sits above it and should flip the verdict to maybe.
+    expect(classify(p, { found: 0.999, notFound: 0.998 }).status).not.toBe('found');
   });
 
   it('sigmoid output bounded 0..1 for negative weight', () => {

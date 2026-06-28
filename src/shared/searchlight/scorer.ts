@@ -28,15 +28,9 @@ export const SIGMOID_SCALE = 6;
  *   - has_username_in_path: 2 → 0.2  (username is always in the path for
  *                                      Maigret-style URLs; not discriminating
  *                                      without corroborating body signals)
- *   - profile_section_count: 4 → 1  (fires on raw HTML attributes such as
- *                                     og:type content="profile" and class names,
- *                                     so a count ≥ 2 is common; each hit should
- *                                     contribute less than a dedicated meta tag)
- *   - positive_keyword_count: 1.5 → 1  (POSITIVE_KEYWORDS includes 'profile'
- *                                        which fires on meta tag content;
- *                                        combined with profile_section_count and
- *                                        meta_positive_keyword_count the body
- *                                        keyword should contribute modestly)
+ *
+ * Body-signal weights (profile_section_count, positive_keyword_count) are
+ * held at the upstream detector.py baseline pending Task 9 parity gate.
  */
 export const DEFAULT_WEIGHTS: Record<string, number> = {
   http_200: 1,
@@ -48,12 +42,12 @@ export const DEFAULT_WEIGHTS: Record<string, number> = {
   has_json_ld_person: 5,
   meta_has_username: 5,
   username_in_canonical: 4,
-  profile_section_count: 1,
+  profile_section_count: 4,
   error_section_count: -3,
   meta_error_keyword_count: -3,
   meta_positive_keyword_count: 2,
   error_keyword_count: -2,
-  positive_keyword_count: 1,
+  positive_keyword_count: 1.5,
   title_has_username: 3,
   has_username_in_path: 0.2,
   has_auth_pattern: -4,
