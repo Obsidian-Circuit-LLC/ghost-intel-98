@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- **No new network egress.** Phase-2 `GET` reuses the existing `socksDial`/`safeFetch` to the SAME hosts; the netns/no-egress gate must still pass. No new IPC channels in Plan 1 (the `maybe` status rides the existing `searchlight:onSweepResult`).
+- **No new network egress.** Phase-2 `GET` reuses the existing `socksDial`/`safeFetch` to the SAME hosts; the netns/no-egress gate must still pass. The `maybe` status rides the existing `searchlight:onSweepResult`. Exactly ONE new IPC channel is added — `searchlight.revealSiteDbDir` (Task 14, a local `shell.openPath`, no network) — so the `searchlight` exact-set contract test (`test/searchlight-contracts.test.ts`, if present) and the channel-uniqueness test must be updated in that task.
 - **Determinism.** `signals.ts`, `scorer.ts`, `ml.ts` are pure functions of their inputs — NO `Date.now`/`Math.random` inside them (elapsed is an injected field). Same input → identical output.
 - **Untrusted-HTML safety.** Body parsing runs in main on untrusted HTML: STATIC regexes only, NEVER `new RegExp(untrustedInput)`; guarded `JSON.parse`; bounded by the existing 64 KB `BODY_CAP`.
 - **Model is authoritative & self-describing.** Read `ml_weight`, `thresholds`, `mean`, `scale`, `coef`, `intercept`, `feature_schema` FROM `model.json` (v2.0.0). Never hardcode the `WORKING.md` prose values (0.4 / 0.6 / 0.35) — the shipped model says `ml_weight` 0.6, thresholds 0.5559/0.3224.
@@ -377,14 +377,36 @@ it('determinism', () => { expect(predict({ a: 2 }, M)).toBe(predict({ a: 2 }, M)
 
 ---
 
-### Task 14: Full-suite green + charter gates
+### Task 14: Site-database folder button + drop-in override
+
+**Files:** Modify `src/main/searchlight/site-db.ts` (bundled loader ~lines 12-15, add override + reveal), `src/shared/ipc-contracts.ts` (channel + API contract + exact-set test), `src/main/ipc/register.ts` (handler), `src/preload/index.ts` + `src/preload/api.d.ts` (expose), `src/renderer/modules/searchlight/panels/SweepPanel.tsx` (toolbar button next to `LOAD CUSTOM DB` / `EXPORT SITES.JSON`). Mirrors the Firefox pattern (`firefox.revealFirefoxDir()` + `channels.browser.revealFirefoxDir`).
+
+**Interfaces — Produces:** `revealSiteDbDir(): Promise<void>` and `overrideSitesFile(): string` (= `join(app.getPath('userData'), 'searchlight', 'maigret_sites.json')`) in `site-db.ts`; channel `searchlight.revealSiteDbDir: 'searchlight:revealSiteDbDir'` with API contract `{ args: []; returns: void }`.
+
+**Override-load (fail-safe):** the bundled-DB loader first tries `overrideSitesFile()`; if it exists AND `parseMaigretData(JSON.parse(...))` succeeds, use it; on ANY error (missing/corrupt) fall back to the bundled `maigret_sites.json`. Corruption can never brick the site DB — that is the whole point of the feature.
+
+- [ ] **Step 1: Write the failing test** `test/searchlight-sitedb-override.test.ts` — unit-test the override-selection helper. Refactor the load to call a pure `pickSitesSource(overrideRaw: string | null, bundledRaw: string): MaigretSiteEntry[]` that returns parsed override when valid, else parsed bundled. Test: valid override JSON → override entries; `null` override → bundled; malformed override string → bundled (no throw).
+```typescript
+import { pickSitesSource } from '../src/shared/searchlight/sites';
+it('valid override wins', () => { expect(pickSitesSource(OVERRIDE_JSON, BUNDLED_JSON)[0].name).toBe('OverrideSite'); });
+it('null override → bundled', () => { expect(pickSitesSource(null, BUNDLED_JSON)[0].name).toBe('BundledSite'); });
+it('malformed override → bundled (no throw)', () => { expect(pickSitesSource('{bad', BUNDLED_JSON)[0].name).toBe('BundledSite'); });
+```
+- [ ] **Step 2:** Run → FAIL. Implement `pickSitesSource` in `src/shared/searchlight/sites.ts` (pure, try/catch around the override parse) and wire `site-db.ts`'s bundled loader to read `overrideSitesFile()` (if present) and pass both raws to it. Run → PASS.
+- [ ] **Step 3:** Add `revealSiteDbDir()` to `site-db.ts`: `await mkdir(join(app.getPath('userData'), 'searchlight'), { recursive: true }); const err = await shell.openPath(join(app.getPath('userData'), 'searchlight')); if (err) ...` (mirror `firefox.revealFirefoxDir` + `sounds.ts:93`). Add the channel to `ipc-contracts.ts` (+ API contract entry), register `safeHandle(channels.searchlight.revealSiteDbDir, () => revealSiteDbDir())` in `register.ts`, expose in preload + `api.d.ts`. **Update `test/searchlight-contracts.test.ts`** (if it asserts an exact channel set) to include `revealSiteDbDir`.
+- [ ] **Step 4:** Add the toolbar button in `SweepPanel.tsx` next to `LOAD CUSTOM DB` (grep that label) — `<button onClick={() => void window.api.searchlight.revealSiteDbDir()}>SITE DB FOLDER</button>` with a `title="Open the writable site-database folder. Drop a corrected maigret_sites.json here to override the bundled database."`. `pnpm typecheck` + `npx vitest run test/searchlight-sitedb-override.test.ts test/searchlight-contracts.test.ts test/x-ipc.test.ts` → PASS.
+- [ ] **Step 5:** Commit: `feat(searchlight): site-DB folder button + drop-in override (corruption quick-fix)`.
+
+---
+
+### Task 15: Full-suite green + charter gates
 
 **Files:** none new — verification + any fixes.
 
 - [ ] **Step 1:** `pnpm typecheck` → PASS. `pnpm build` → clean.
 - [ ] **Step 2:** `pnpm test` (full suite) → all green. Record the new total count.
 - [ ] **Step 3:** Determinism check: run the new pure-module suites twice; outputs identical. Confirm no `Date.now`/`Math.random` in `signals.ts`/`scorer.ts`/`ml.ts` (`grep -n "Date.now\|Math.random" src/shared/searchlight/{signals,scorer,ml}.ts` → empty).
-- [ ] **Step 4:** Egress check: confirm no new outbound call site (`grep` shows phase-2 GET reuses `probe`/`safeFetch`/`socksDial` only); no new IPC channel added (channel-uniqueness test still green); body parser uses no `new RegExp(` on dynamic input (`grep -n "new RegExp" src/shared/searchlight/signals.ts` → empty).
+- [ ] **Step 4:** Egress check: confirm no new outbound call site (`grep` shows phase-2 GET reuses `probe`/`safeFetch`/`socksDial` only; the only new channel `searchlight.revealSiteDbDir` is a local `shell.openPath`, no network); channel-uniqueness + searchlight exact-set contract tests green; body parser uses no `new RegExp(` on dynamic input (`grep -n "new RegExp" src/shared/searchlight/signals.ts` → empty).
 - [ ] **Step 5:** Commit any fixes: `test(searchlight): full-suite green + charter gates for detection scorer`.
 
 ---
@@ -392,7 +414,8 @@ it('determinism', () => { expect(predict({ a: 2 }, M)).toBe(predict({ a: 2 }, M)
 ## Self-Review
 
 - **Spec coverage:** signals (T2), heuristic scorer (T3), interpret routing tail-only (T4), adaptive two-phase (T5), settings data layer (T6), ML inference w/ standardization (T7), vendored model + attribution (T8), parity gate + blend (T9), maybe badge+probability (T10), sortable/progress/summary + maybe filter chip (T11), settings UI controls (T12), reports (T13), charter gates (T14). Retrain = Plan 2 (out of scope here). ✓
-- **UI reachability (operator requirement):** maybe tier → badge (T10) + filter chip (T11) + report (T13); thresholds/deep-scan/ML toggle → Settings UI (T12); zero-config by default (deep-scan + ML on, thresholds from model) so a bare sweep already benefits with nothing to configure. ✓
+- **UI reachability (operator requirement):** maybe tier → badge (T10) + filter chip (T11) + report (T13); thresholds/deep-scan/ML toggle → Settings UI (T12); site-DB folder button + drop-in override → Sweep toolbar (T14); zero-config by default (deep-scan + ML on, thresholds from model) so a bare sweep already benefits with nothing to configure. ✓
+- **Site-DB override is fail-safe:** corrupt override → bundled fallback (T14), so the quick-fix feature can never brick the site database. ✓
 - **No new IPC channels** in Plan 1 → no searchlight contract exact-set churn (verified against the file map; `maybe` rides `onSweepResult`). ✓
 - **Type consistency:** `ScorerCtx`, `MlModel`, `SignalVector`, `extractSignals`/`scoreSignals`/`classify`/`predict`/`blend` names are consistent across T2–T9. Thresholds use `{ found, notFound }` in `ScorerCtx`/`classify` but the model file key is `not_found` — conversion happens at resolution (T6/T8); flagged so the implementer maps `not_found → notFound`. ✓
 - **Parity risk handled:** T9 degrades to heuristic-only (useMl=false) rather than shipping a sub-threshold model; suite stays green either way. ✓

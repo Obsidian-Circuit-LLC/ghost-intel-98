@@ -76,6 +76,22 @@ export function toCatalog(sites: MaigretSiteEntry[]): SiteCatalogEntry[] {
   return sites.map((s) => ({ name: s.name, category: s.category, tags: s.tags, checkType: s.checkType }));
 }
 
+/**
+ * Pure helper: choose between a writable override raw JSON string and the bundled raw JSON string.
+ * Returns the parsed override when it can be parsed successfully (any error → fall through to bundled).
+ * `overrideRaw === null` means the override file is absent; falls directly to bundled.
+ * This function never throws — on any parse/validation failure it returns the bundled result.
+ */
+export function pickSitesSource(overrideRaw: string | null, bundledRaw: string): MaigretSiteEntry[] {
+  if (overrideRaw !== null) {
+    try {
+      const parsed = parseMaigretData(JSON.parse(overrideRaw));
+      return parsed;
+    } catch { /* malformed or unparseable → fall through to bundled */ }
+  }
+  try { return parseMaigretData(JSON.parse(bundledRaw)); } catch { return []; }
+}
+
 /** Validate UNTRUSTED imported site data. Each entry must have an https URL
  *  containing the {username} token. Caps the total accepted. */
 export function validateImportedSites(raw: unknown, cap = 5000): { sites: MaigretSiteEntry[]; rejected: number } {
