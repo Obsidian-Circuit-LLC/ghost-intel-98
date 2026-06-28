@@ -27,7 +27,7 @@ import type {
   WebLink,
   Whiteboard
 } from '../shared/types';
-import type { EntityCreateInput, EntityLinkOpts, BioAddInput, AuthStatus, LocalAiStatus, LocalAiProgress, MemoryStatus, MemoryProgress, XCollectResultShape } from '../shared/ipc-contracts';
+import type { EntityCreateInput, EntityLinkOpts, BioAddInput, AuthStatus, LocalAiStatus, LocalAiProgress, MemoryStatus, MemoryProgress, XCollectResultShape, LearningModelMeta } from '../shared/ipc-contracts';
 import type {
   AiChatRequest,
   CameraStream,
@@ -538,6 +538,14 @@ export interface GhostApi {
     /** Open the writable site-database folder in the OS file manager.
      *  Drop a corrected maigret_sites.json there to override the bundled database on next launch. */
     revealSiteDbDir(): Promise<void>;
+    /** Adaptive learning: record a real(1)/not-real(0) label for a captured sweep result. */
+    labelResult(payload: { resultId: string; label: 0 | 1; siteName: string; caseId: string }): Promise<{ ok: boolean }>;
+    /** Current local-learning status: label count, last-train meta, and whether ML is enabled. */
+    learningStatus(): Promise<{ labelCount: number; meta: LearningModelMeta | null; mlEnabled: boolean } | null>;
+    /** Train the local model on the personal corpus + seed, evaluate against the heuristic, return the gate verdict. */
+    trainModel(): Promise<{ verdict: { pass: boolean; reason: string }; labelCount: number }>;
+    /** Enable/disable ML scoring (the operator's explicit confirm after a passing verdict). */
+    setMlEnabled(enabled: boolean): Promise<{ ok: boolean }>;
   };
   socmint: {
     addChannel(caseId: string, channel: MonitoredChannel): Promise<MonitoredChannel[]>;
