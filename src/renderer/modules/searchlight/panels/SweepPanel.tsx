@@ -30,6 +30,7 @@ type FilterBucket = 'all' | 'found' | 'notfound' | 'blocked' | 'redirect' | 'err
 function statusColor(r: SweepResult): string {
   switch (r.status) {
     case 'found':     return '#00ff88';
+    case 'maybe':     return '#d8a83a';
     case 'blocked':   return '#ffc800';
     case 'error':     return '#ff4444';
     case 'not_found': return '#5a6480';
@@ -41,6 +42,7 @@ function statusLabel(r: SweepResult): string {
   if (r.error === 'TOR_UNAVAILABLE') return 'TOR UNAVAIL';
   switch (r.status) {
     case 'found':     return 'FOUND';
+    case 'maybe':     return 'MAYBE';
     case 'not_found': return 'NOT FOUND';
     case 'blocked':   return 'BLOCKED';
     case 'error':     return r.error ?? 'ERROR';
