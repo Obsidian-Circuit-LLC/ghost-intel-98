@@ -4,16 +4,18 @@ import { SweepPanel } from './panels/SweepPanel';
 import { GraphView } from './panels/GraphView';
 import { ReportsPanel } from './panels/ReportsPanel';
 import { CasesPanel } from './panels/CasesPanel';
+import LearningPanel from './panels/LearningPanel';
 import { Dashboard } from './panels/Dashboard';
 import './searchlight.css';
 
-type Tab = 'dashboard' | 'sweep' | 'graph' | 'reports' | 'cases';
+type Tab = 'dashboard' | 'sweep' | 'graph' | 'reports' | 'cases' | 'learning';
 const TABS: { key: Tab; label: string }[] = [
   { key: 'dashboard',  label: 'Dashboard' },
   { key: 'sweep',      label: 'Sweep' },
   { key: 'graph',      label: 'Graph' },
   { key: 'reports',    label: 'Reports' },
   { key: 'cases',      label: 'Cases' },
+  { key: 'learning',   label: 'Learning' },
 ];
 
 export function SearchlightModule({ caseId: _caseId }: { caseId?: string }): JSX.Element {
@@ -85,6 +87,8 @@ export function SearchlightModule({ caseId: _caseId }: { caseId?: string }): JSX
           <ReportsPanel />
         ) : tab === 'cases' ? (
           <CasesPanel />
+        ) : tab === 'learning' ? (
+          <LearningPanel />
         ) : (
           <div className="sl-placeholder">{tab}</div>
         )}

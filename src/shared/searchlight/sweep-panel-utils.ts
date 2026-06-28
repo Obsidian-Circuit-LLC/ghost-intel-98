@@ -26,6 +26,15 @@ export type FilterBucket =
 // ── matchesBucket ─────────────────────────────────────────────────────────────
 
 /** Returns whether a result belongs to the given filter bucket. */
+/**
+ * Whether a result can be labelled inline for adaptive learning: it must be a
+ * found/maybe candidate (the only statuses whose feature vector is captured at
+ * sweep time) AND there must be an active case to attach the label to.
+ */
+export function canLabel(status: string, activeCaseId: string | null): boolean {
+  return activeCaseId != null && (status === 'found' || status === 'maybe');
+}
+
 export function matchesBucket(r: SweepResult, bucket: FilterBucket): boolean {
   const isRedirect = [301, 302, 307, 308].includes(r.statusCode);
   switch (bucket) {

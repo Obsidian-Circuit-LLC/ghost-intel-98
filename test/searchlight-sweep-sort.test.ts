@@ -214,3 +214,14 @@ describe('computeEta', () => {
     expect(eta2!).toBeCloseTo(eta1! * 2, 6);
   });
 });
+
+import { canLabel } from '../src/shared/searchlight/sweep-panel-utils';
+describe('canLabel (inline-thumb gating)', () => {
+  it('allows labelling found/maybe only when a case is active', () => {
+    expect(canLabel('found', 'case-1')).toBe(true);
+    expect(canLabel('maybe', 'case-1')).toBe(true);
+    expect(canLabel('not_found', 'case-1')).toBe(false);
+    expect(canLabel('blocked', 'case-1')).toBe(false);
+    expect(canLabel('found', null)).toBe(false); // no active case → cannot label
+  });
+});
