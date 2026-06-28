@@ -5,8 +5,9 @@
  * 1. useAppStore → useSearchlightStore; Case → SearchlightCase.
  * 2. store.createCase / renameCase / deleteCase / setActiveCaseId / importCase — all present in
  *    the searchlight store. updateCase used for merge logic.
- * 3. Export: window.api.searchlight.exportCase(id) returns JSON text; blob-download as <name>.gic.
- *    No window.electronAPI.saveCaseExport, no window.api.files.*.
+ * 3. Export: window.api.searchlight.exportCase(id) returns JSON text; saved via
+ *    window.api.searchlight.saveReport → native platform save-file dialog (main-process
+ *    showSaveDialog + atomic write). No Blob/URL.createObjectURL.
  * 4. Import: hidden <input type=file accept=".gic,application/json"> → file.text() →
  *    window.api.searchlight.importCase(text) → on success: the store's importCase action is
  *    called (the IPC importCase persists; the store action updates state).
@@ -22,17 +23,6 @@ import { useState, useRef, useCallback } from 'react';
 import type { SearchlightCase } from '@shared/searchlight/types';
 import { sanitizeImportedCase } from '@shared/searchlight/import-sanitize';
 import { useSearchlightStore } from '../store';
-
-// ─── Blob download ────────────────────────────────────────────────────────────
-function blobDownload(content: string, filename: string, mime: string): void {
-  const blob = new Blob([content], { type: mime });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export function CasesPanel(): JSX.Element {
@@ -90,8 +80,8 @@ export function CasesPanel(): JSX.Element {
     try {
       const json = await window.api.searchlight.exportCase(c.id);
       if (json == null) { flash('⚠ Export returned no data.'); return; }
-      const filename = `${c.name.replace(/\s+/g, '_')}_${Date.now()}.gic`;
-      blobDownload(json, filename, 'application/json');
+      const defaultName = `${c.name.replace(/\s+/g, '_')}.gic`;
+      await window.api.searchlight.saveReport({ content: json, defaultName });
     } catch (err) {
       flash(`⚠ Export failed: ${String(err)}`);
     }

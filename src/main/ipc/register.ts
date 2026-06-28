@@ -1404,6 +1404,14 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     const o = ((a[0] ?? {}) as Record<string, unknown>);
     return exportSweepPdf(String(o.html ?? ''), String(o.filename ?? 'searchlight-report.pdf'));
   });
+  safeHandle(channels.searchlight.saveReport, async (...a) => {
+    const o = ((a[0] ?? {}) as Record<string, unknown>);
+    const content = String(o.content ?? '');
+    const defaultName = String(o.defaultName ?? 'searchlight-report.txt');
+    if (content.length > MAX_EXPORT_BYTES) throw new Error('Report content exceeds the export size limit');
+    const savedName = await saveBufferWithDialog(getWindow(), defaultName, Buffer.from(content, 'utf-8'));
+    return { ok: savedName !== null };
+  });
 
   // ---- SOCMINT (Telegram OSINT collector; egress gated by settings.socmint.networkEnabled) ----
   // Non-egress handlers (channel config, stored-data queries, labels) run regardless of gate.
