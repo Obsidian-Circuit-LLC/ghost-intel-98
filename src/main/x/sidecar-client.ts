@@ -129,7 +129,7 @@ function productionSidecarPath(): string {
  * Populated at build time by the X-8 build runner; empty until operator lock.
  */
 const PINNED_SHA256: Record<string, string> = {
-  win32:  '',
+  win32:  '9fc47faf85a4998c8429cbcd071ce4446a4697ee3ed110f4d07e7e35137d5598',
   linux:  '6437f928145d0669e68bf73b0239d7e921cc2910e086564b4e36104e5ee97374',
   darwin: '',
 };

@@ -35,9 +35,11 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`GhostIntel98-Setup-3.22.2.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
+> **Install:** download [`GhostIntel98-Setup-3.22.3.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
 
 ## Status
+
+**v3.22.3** — **X / Twitter collection now works on Windows out of the box.** The Windows `twscrape` sidecar binary — the one piece that couldn't be cross-compiled — is now **built and bundled** in the installer, so the X collector window is no longer "sidecar not installed": it has a real, SHA-256-pinned `twscrape-runner.exe` and its onedir runtime. The binary was produced on a genuine Windows 11 environment (PyInstaller is per-OS — no cross-compilation), verified byte-for-byte against its build hash, and gated at runtime by the existing verify-before-exec check (the app refuses to run a binary whose SHA doesn't match the pin). X remains a **quarantined clearnet trust domain** — separate window, no link to the Tor/Telegram transports — and still gated behind both `settings.x.networkEnabled` and the clearnet acknowledgement, off by default; provisioning burner X cookies is yours. *(macOS sidecar still pending a macOS build host; Linux sidecar was already bundled.)* **1,979 automated tests** green; typecheck + build clean. *Everything from v3.22.2 carries forward.*
 
 **v3.22.2** — **Searchlight Connect-Tor + the X / Twitter collector window.** Two dogfooding gaps from the v3.22.0 SOCMINT activation, closed. **(1) Searchlight Tor:** a Tor-mode sweep used to report **"TOR NOT READY"** for every site whenever the bundled Tor hadn't been bootstrapped by the chat module — Searchlight never started Tor itself. It now shows a clear **"Tor is not connected"** notice with a one-click **Connect Tor** button (and a reminder that ticking *Direct (clearnet)* sweeps without Tor); the no-silent-clearnet invariant is unchanged — Tor mode still fails closed, the button just lets you start Tor explicitly. **(2) X / Twitter:** the X collector window was built in v3.22.0 but never registered, so there was no way to open it. It is now a launchable window (Start menu + desktop), separate from the SOCMINT window by design (X is a quarantined clearnet trust domain — the import-graph sentinel still forbids any link between X and the Tor/Telegram transports). The **twscrape sidecar** is now bundled by the packager when present. **Honest platform note:** the X sidecar binary is per-OS and cannot be cross-compiled — the **Linux** sidecar is built and SHA-pinned, but **this Windows build ships without an X sidecar**, so the X window opens and reports **"sidecar not installed"** until you build it on Windows (`scripts\build-twscrape-runner.bat`) and pin its SHA. Built subagent-driven (4 tasks) with a parallel adversarial whole-branch review that caught a broken channel-contract test (fixed) before merge. **1,979 automated tests** green; typecheck + build clean. *Everything from v3.22.1 carries forward.*
 
@@ -452,7 +454,7 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases) and run it.
 
-Direct link to the current release: [`GhostIntel98-Setup-3.22.2.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.22.2/GhostIntel98-Setup-3.22.2.exe)
+Direct link to the current release: [`GhostIntel98-Setup-3.22.3.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.22.3/GhostIntel98-Setup-3.22.3.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is **formally verified internally** — symbolic (ProVerif) +
 computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not**
 FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.6.8/GhostIntel98-Setup-3.6.8.exe).
@@ -460,7 +462,7 @@ FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Se
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\GhostIntel98-Setup-3.22.2.exe -Algorithm SHA256
+Get-FileHash .\GhostIntel98-Setup-3.22.3.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
