@@ -139,12 +139,47 @@ export async function setModelOverride(m: MlModel | null): Promise<void> {
 
 let modelCache: MlModel | null | undefined = undefined; // undefined = not yet loaded
 
+// ---------------------------------------------------------------------------
+// Override disk reader — extracted for testability (no Electron dependency)
+// ---------------------------------------------------------------------------
+
+/**
+ * Read and validate an override model from a specific path.
+ * Returns the model on success, null on ENOENT or shape-validation failure.
+ * Logs unexpected errors but always returns null rather than throwing.
+ *
+ * Pure I/O + validation: no Electron dependency, no caching. Exported so
+ * tests can exercise the disk-read path without mocking the Electron runtime.
+ */
+export function readOverrideAt(path: string): MlModel | null {
+  try {
+    const json = readFileSync(path, 'utf8');
+    const m = parseModel(json);
+    if (!m) {
+      console.warn('[model-store] userData model.json failed shape validation — using vendored model');
+    }
+    return m;
+  } catch (err: unknown) {
+    // ENOENT is normal (no model trained yet); any other error is unexpected.
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+      console.warn('[model-store] could not read userData model.json:', err);
+    }
+    return null;
+  }
+}
+
 /**
  * Returns the loaded and validated model, or null if the file is absent or
  * the JSON fails shape validation. Cached after the first load.
  *
  * Now routes through pickModel so a trained override takes precedence over the
  * vendored model without any additional logic at call sites.
+ *
+ * Both the override and the vendored model are lazily loaded from disk on first
+ * call and then cached for the lifetime of the process. overrideCache starts as
+ * undefined (not yet probed), becomes null (ENOENT or invalid) or MlModel
+ * (valid trained model). This mirrors the modelCache pattern for the vendored
+ * model so the trained override survives restarts.
  */
 export function getModel(): MlModel | null {
   if (modelCache === undefined) {
@@ -159,6 +194,12 @@ export function getModel(): MlModel | null {
       console.warn('[model-store] could not read model.json:', err);
       modelCache = null;
     }
+  }
+
+  // Rehydrate the trained override from userData on first call after each process start.
+  // undefined = not yet read from disk; null = no override (absent or invalid).
+  if (overrideCache === undefined) {
+    overrideCache = readOverrideAt(userDataModelPath());
   }
 
   return pickModel(overrideCache ?? null, modelCache ?? null);
