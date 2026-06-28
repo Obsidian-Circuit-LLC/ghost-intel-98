@@ -79,7 +79,10 @@ export async function runSweep(args: RunSweepArgs): Promise<void> {
         // Capture the feature vector in the main process before emitting the result.
         // Uses the final raw result (phase-2 if triggered, phase-1 otherwise) so the
         // vector includes all available body signals.
-        if (args.captureVector) {
+        // Only the labelable candidates (found/maybe) are captured — bounded storage:
+        // a full sweep is mostly not_found/blocked/error, which the user never labels,
+        // so capturing them would grow the per-case store by ~thousands every sweep.
+        if (args.captureVector && (interp.status === 'found' || interp.status === 'maybe')) {
           try {
             const vec = rowToFeatures(site, finalRaw, url);
             const features = DATASET_COLUMNS.map((c) => vec[c] ?? 0);

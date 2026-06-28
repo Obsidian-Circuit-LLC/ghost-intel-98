@@ -155,6 +155,15 @@ describe('appendLabel', () => {
     expect(updated).toHaveLength(2);
     expect(updated[0].resultId).toBe('r1');
   });
+
+  it('overwrites by resultId — re-labelling updates, no duplicate', async () => {
+    const io = makeIO([]);
+    await appendLabel(makeEntry('r1', 1), io);
+    const updated = await appendLabel(makeEntry('r1', 0), io); // same resultId, flipped label
+    expect(updated).toHaveLength(1);
+    expect(updated[0].label).toBe(0); // latest verdict wins
+    expect(await loadCorpus(io)).toHaveLength(1);
+  });
 });
 
 // ---------------------------------------------------------------------------
