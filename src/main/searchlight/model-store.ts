@@ -11,7 +11,21 @@
 
 import { join } from 'node:path';
 import { readFileSync } from 'node:fs';
+import { unlink } from 'node:fs/promises';
 import type { MlModel } from '@shared/searchlight/types';
+import { secureWriteFile } from '../storage/secure-fs';
+
+// ---------------------------------------------------------------------------
+// Pure precedence helper — unit-testable without Electron
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns the override model when set, otherwise the vendored model.
+ * Pure: no I/O, no Electron dependency — safe to call in tests.
+ */
+export function pickModel(override: MlModel | null, vendored: MlModel | null): MlModel | null {
+  return override ?? vendored;
+}
 
 // ---------------------------------------------------------------------------
 // Pure parse + validate helper (no Electron dependency — testable in Vitest)
@@ -82,34 +96,122 @@ function modelPath(): string {
 }
 
 // ---------------------------------------------------------------------------
-// Cached loader
+// userData override (written by the trainer, takes precedence over vendored)
+// ---------------------------------------------------------------------------
+
+/**
+ * Path where a trained model override is stored in the user's app data.
+ * Written by the trainer (learning/trainer.ts) via setModelOverride.
+ * Uses a deferred require('electron') so this module stays importable in Vitest.
+ */
+export function userDataModelPath(): string {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { app } = require('electron') as typeof import('electron');
+  return join(app.getPath('userData'), 'searchlight', 'learning', 'model.json');
+}
+
+/** In-memory override cache. undefined = not yet set; null = explicitly cleared; MlModel = active. */
+let overrideCache: MlModel | null | undefined = undefined;
+
+/**
+ * Persist an override model to userData (or remove it) and update the in-memory cache.
+ * Callers: the train handler (Task 10). All persistence goes through secureWriteFile.
+ *
+ * @param m non-null → write to disk + cache; null → remove file + clear cache.
+ */
+export async function setModelOverride(m: MlModel | null): Promise<void> {
+  if (m !== null) {
+    await secureWriteFile(userDataModelPath(), JSON.stringify(m));
+    overrideCache = m;
+  } else {
+    try {
+      await unlink(userDataModelPath());
+    } catch {
+      // File may not exist — that is fine; we are clearing anyway.
+    }
+    overrideCache = null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Vendored-model cached loader
 // ---------------------------------------------------------------------------
 
 let modelCache: MlModel | null | undefined = undefined; // undefined = not yet loaded
 
+// ---------------------------------------------------------------------------
+// Override disk reader — extracted for testability (no Electron dependency)
+// ---------------------------------------------------------------------------
+
+/**
+ * Read and validate an override model from a specific path.
+ * Returns the model on success, null on ENOENT or shape-validation failure.
+ * Logs unexpected errors but always returns null rather than throwing.
+ *
+ * Pure I/O + validation: no Electron dependency, no caching. Exported so
+ * tests can exercise the disk-read path without mocking the Electron runtime.
+ */
+export function readOverrideAt(path: string): MlModel | null {
+  try {
+    const json = readFileSync(path, 'utf8');
+    const m = parseModel(json);
+    if (!m) {
+      console.warn('[model-store] userData model.json failed shape validation — using vendored model');
+    }
+    return m;
+  } catch (err: unknown) {
+    // ENOENT is normal (no model trained yet); any other error is unexpected.
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+      console.warn('[model-store] could not read userData model.json:', err);
+    }
+    return null;
+  }
+}
+
 /**
  * Returns the loaded and validated model, or null if the file is absent or
  * the JSON fails shape validation. Cached after the first load.
+ *
+ * Now routes through pickModel so a trained override takes precedence over the
+ * vendored model without any additional logic at call sites.
+ *
+ * Both the override and the vendored model are lazily loaded from disk on first
+ * call and then cached for the lifetime of the process. overrideCache starts as
+ * undefined (not yet probed), becomes null (ENOENT or invalid) or MlModel
+ * (valid trained model). This mirrors the modelCache pattern for the vendored
+ * model so the trained override survives restarts.
  */
 export function getModel(): MlModel | null {
-  if (modelCache !== undefined) return modelCache;
-
-  try {
-    const json = readFileSync(modelPath(), 'utf8');
-    const m = parseModel(json);
-    if (!m) {
-      console.warn('[model-store] model.json failed shape validation — ML disabled');
+  if (modelCache === undefined) {
+    try {
+      const json = readFileSync(modelPath(), 'utf8');
+      const m = parseModel(json);
+      if (!m) {
+        console.warn('[model-store] model.json failed shape validation — ML disabled');
+      }
+      modelCache = m;
+    } catch (err) {
+      console.warn('[model-store] could not read model.json:', err);
+      modelCache = null;
     }
-    modelCache = m;
-  } catch (err) {
-    console.warn('[model-store] could not read model.json:', err);
-    modelCache = null;
   }
 
-  return modelCache;
+  // Rehydrate the trained override from userData on first call after each process start.
+  // undefined = not yet read from disk; null = no override (absent or invalid).
+  if (overrideCache === undefined) {
+    overrideCache = readOverrideAt(userDataModelPath());
+  }
+
+  return pickModel(overrideCache ?? null, modelCache ?? null);
 }
 
-/** Reset the cache (for testing / retrain reload). */
+/** Reset the vendored model cache (for testing). Does NOT clear the override cache. */
 export function resetModelCache(): void {
   modelCache = undefined;
+}
+
+/** Clear both the vendored-model cache and the override cache (full reset for testing / retrain). */
+export function clearModelCache(): void {
+  modelCache = undefined;
+  overrideCache = undefined;
 }

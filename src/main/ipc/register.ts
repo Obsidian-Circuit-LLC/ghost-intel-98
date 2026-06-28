@@ -97,7 +97,17 @@ import * as ais from '../services/livefeeds/ais-stream';
 import * as slSiteDb from '../searchlight/site-db';
 import * as slStore from '../searchlight/store';
 import { startSweep, cancelSweep } from '../searchlight/sweep';
-import { getModel } from '../searchlight/model-store';
+import { getModel, setModelOverride } from '../searchlight/model-store';
+import { runTrainAndGate } from '../searchlight/learning/orchestrator';
+import { loadCorpus, appendLabel } from '../searchlight/learning/corpus-store';
+import type { LabelEntry } from '../searchlight/learning/corpus-store';
+import { trainFromCorpus, writeLearningMeta, metaPath } from '../searchlight/learning/trainer';
+import { evalFromCorpus } from '../searchlight/learning/evaluator';
+import { loadSeedRows } from '../searchlight/learning/seed';
+import { seedFile } from '../searchlight/learning/paths';
+import { loadVectors, saveVectors } from '../searchlight/learning/vector-store';
+import type { CapturedVector } from '../searchlight/learning/vector-store';
+import { DATASET_COLUMNS } from '@shared/searchlight/ml/collect-core';
 import { exportSweepPdf } from '../searchlight/export-pdf';
 import { makeTorConnector } from '../searchlight/tor-connect';
 import { getBgTor } from '../bgconn/tor-singleton';
@@ -1354,11 +1364,14 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.searchlight.catalog, async () => slSiteDb.catalog());
   safeHandle(channels.searchlight.importSites, async (...a) => slSiteDb.importCustomSites(String(a[0] ?? '')));
   safeHandle(channels.searchlight.startSweep, async (...a) => {
-    const req = a[0] as { username?: unknown; siteIds?: unknown; useTor?: unknown };
+    const req = a[0] as { username?: unknown; siteIds?: unknown; useTor?: unknown; caseId?: unknown };
     const username = String(req?.username ?? '').trim();
     if (!username) return { jobId: '', total: 0 };
     const siteIds = Array.isArray(req?.siteIds) ? req.siteIds.filter((x): x is string => typeof x === 'string') : [];
     const useTor = req?.useTor !== false; // default true
+    // Optional caseId: when provided, captured vectors are persisted to vector-store
+    // after the sweep completes so labelResult can use main-process features.
+    const caseId = typeof req?.caseId === 'string' && req.caseId.length > 0 ? req.caseId : null;
     const s = (await settingsStore.read()).searchlight;
     const win = getWindow();
     const sc = s.scorer;
@@ -1367,15 +1380,48 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
       found: sc.foundThreshold ?? model?.thresholds.found ?? 0.5559,
       notFound: sc.maybeFloor ?? model?.thresholds.not_found ?? 0.3224
     };
+    // Per-sweep in-memory vector buffer: resultId → { features, siteName }
+    const vectorBuffer = new Map<string, { features: number[]; siteName: string }>();
     return startSweep({ username, siteIds, useTor }, {
       loadSites: (ids) => slSiteDb.sitesByName(ids),
       networkEnabled: async () => (await settingsStore.read()).searchlight.networkEnabled,
       torSocksPort: searchlightSocksPort,
       defaultConcurrency: (tor) => (tor ? s.torConcurrency : s.clearnetConcurrency),
-      emit: (r) => win?.webContents.send(channels.searchlight.onSweepResult, r),
-      onDone: (f) => win?.webContents.send(channels.searchlight.onSweepDone, f),
+      emit: (r) => {
+        win?.webContents.send(channels.searchlight.onSweepResult, r);
+        // Tag the buffered vector with the site name once the result is emitted.
+        const entry = vectorBuffer.get(r.id);
+        if (entry) entry.siteName = r.siteName;
+      },
+      onDone: async (f) => {
+        win?.webContents.send(channels.searchlight.onSweepDone, f);
+        // Persist captured vectors to the per-case vector store if a caseId was supplied.
+        if (caseId && vectorBuffer.size > 0) {
+          try {
+            const now = Date.now();
+            const existing = await loadVectors(caseId);
+            const existingIds = new Set(existing.map((v) => v.resultId));
+            const newVectors: CapturedVector[] = [];
+            for (const [resultId, { features, siteName }] of vectorBuffer) {
+              if (!existingIds.has(resultId)) {
+                newVectors.push({ resultId, features, siteName, ts: now });
+              }
+            }
+            if (newVectors.length > 0) {
+              await saveVectors(caseId, [...existing, ...newVectors]);
+            }
+          } catch {
+            // Vector persistence failure is non-fatal — sweep result already delivered.
+          }
+        }
+      },
       scorerCtx: { thresholds, useMl: sc.useMl, model },
-      lightweightMode: sc.lightweightMode
+      lightweightMode: sc.lightweightMode,
+      captureVector: (resultId, features) => {
+        // Buffer the feature vector in memory for this sweep.
+        // siteName is filled in the emit callback once the SweepResult is built.
+        vectorBuffer.set(resultId, { features, siteName: '' });
+      },
     });
   });
   safeHandle(channels.searchlight.cancelSweep, async (...a) => { cancelSweep(ensureUuid(a[0], 'jobId')); });
@@ -1413,6 +1459,90 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     if (content.length > MAX_EXPORT_BYTES) throw new Error('Report content exceeds the export size limit');
     const savedName = await saveBufferWithDialog(getWindow(), defaultName, Buffer.from(content, 'utf-8'));
     return { ok: savedName !== null };
+  });
+  // ---- Searchlight adaptive-learning channels (Task 10 / Task 11) ----
+
+  // Record a user label for a sweep result.
+  // Features and soft are loaded from the main-process-captured vector store;
+  // the renderer only supplies resultId, label, caseId, and siteName.
+  // This prevents renderer-supplied (untrusted) feature vectors from poisoning
+  // the training corpus.
+  safeHandle(channels.searchlight.labelResult, async (...a) => {
+    const raw = a[0] as {
+      resultId?: unknown;
+      label?: unknown;
+      siteName?: unknown;
+      caseId?: unknown;
+    };
+    if (!raw || typeof raw !== 'object') throw new Error('labelResult: invalid payload');
+    const resultId = String(raw.resultId ?? '');
+    const caseId = String(raw.caseId ?? '');
+    if (!resultId || !caseId) throw new Error('labelResult: resultId and caseId are required');
+
+    // Load the main-process-captured feature vector for this result.
+    const vectors = await loadVectors(caseId);
+    const captured = vectors.find((v) => v.resultId === resultId);
+    if (!captured) throw new Error(`labelResult: no captured vector for resultId ${resultId}`);
+
+    // Derive soft from the captured feature vector: soft = (http_200 === 1).
+    const http200Idx = DATASET_COLUMNS.indexOf('http_200');
+    const soft = http200Idx >= 0 && captured.features[http200Idx] === 1;
+
+    const entry: LabelEntry = {
+      resultId,
+      label: raw.label === 1 ? 1 : 0,
+      features: captured.features,
+      soft,
+      siteName: String(raw.siteName ?? captured.siteName),
+      caseId,
+      ts: Date.now(),
+    };
+    await appendLabel(entry);
+    return { ok: true };
+  });
+
+  // Return the latest retrain metadata (label count, meta, mlEnabled).
+  safeHandle(channels.searchlight.learningStatus, async () => {
+    const corpus = await loadCorpus();
+    const labelCount = corpus.length;
+    const mlEnabled = (await settingsStore.read()).searchlight.scorer.useMl;
+    try {
+      const { secureReadText: srt } = await import('../storage/secure-fs');
+      const text = await srt(metaPath());
+      const meta = JSON.parse(text) as { labelCount: number; verdict: { pass: boolean; reason: string }; trainedAt: number };
+      return { labelCount, meta, mlEnabled };
+    } catch {
+      // No meta yet (never trained) — return with null meta.
+      return labelCount > 0 || mlEnabled ? { labelCount, meta: null, mlEnabled } : null;
+    }
+  });
+
+  // Trigger a retrain + gate cycle with the current corpus and vendored seed.
+  safeHandle(channels.searchlight.trainModel, async () => {
+    const corpus = await loadCorpus();
+    // Load the vendored seed CSV (falls back to empty if not yet shipped).
+    let seedRows: ReturnType<typeof loadSeedRows> = [];
+    try {
+      const csv = await readFile(seedFile(), 'utf8');
+      seedRows = loadSeedRows(csv);
+    } catch {
+      // Seed dataset absent (dev environment or pre-ship) — train on corpus only.
+    }
+    const wasEnabled = (await settingsStore.read()).searchlight.scorer.useMl;
+    return runTrainAndGate(corpus, seedRows, {
+      train: trainFromCorpus,
+      eval: evalFromCorpus,
+      setOverride: setModelOverride,
+      writeMeta: writeLearningMeta,
+      wasEnabled,
+    });
+  });
+
+  // Enable or disable the ML scorer (writes through the normal settings path).
+  safeHandle(channels.searchlight.setMlEnabled, async (...a) => {
+    const enabled = a[0] === true;
+    await settingsStore.update({ searchlight: { scorer: { useMl: enabled } } } as Parameters<typeof settingsStore.update>[0]);
+    return { ok: true };
   });
 
   // ---- SOCMINT (Telegram OSINT collector; egress gated by settings.socmint.networkEnabled) ----

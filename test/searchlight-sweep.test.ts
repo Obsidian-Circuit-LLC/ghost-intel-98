@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { runSweep } from '../src/main/searchlight/sweep';
+import { DATASET_COLUMNS } from '@shared/searchlight/ml/collect-core';
 import type { MaigretSiteEntry, SweepResult } from '@shared/searchlight/types';
 
 const mk = (name: string): MaigretSiteEntry => ({
@@ -101,5 +102,28 @@ describe('runSweep', () => {
       scorerCtx: { thresholds: { found: 0.5559, notFound: 0.3224 }, useMl: false, model: null },
       lightweightMode: true, probeImpl: probeImpl as never });
     expect(calls).toEqual([false]);
+  });
+
+  it('captureVector fires ONLY for found/maybe results, not not_found', async () => {
+    const captured: { resultId: string; features: number[] }[] = [];
+    // 'a' → 200 then PROFILE on escalation → found ; 'b' → 404 → not_found
+    const probeImpl = vi.fn(async (url: string, opts: { fetchBody: boolean }) => {
+      if (url.includes('a.com')) {
+        return { statusCode: 200, statusMessage: 'OK', elapsed: 5, redirectUrl: null, error: null,
+                 body: opts.fetchBody ? PROFILE : '' };
+      }
+      return { statusCode: 404, statusMessage: 'NF', elapsed: 5, redirectUrl: null, error: null, body: '' };
+    });
+    const emitted: SweepResult[] = [];
+    await runSweep({ jobId: 'j', username: 'ghostexodus', sites: [mk('a'), mk('b')], useTor: false, concurrency: 1,
+      networkEnabled: true, emit: (r) => emitted.push(r), onDone: () => {}, isCancelled: () => false,
+      scorerCtx: { thresholds: { found: 0.5559, notFound: 0.3224 }, useMl: false, model: null },
+      lightweightMode: false, captureVector: (resultId, features) => captured.push({ resultId, features }),
+      probeImpl: probeImpl as never });
+    // Only the found result ('a') is captured; the not_found ('b') is NOT (bounded storage).
+    expect(captured).toHaveLength(1);
+    const found = emitted.find((r) => r.status === 'found');
+    expect(captured[0].resultId).toBe(found!.id);
+    expect(captured[0].features.length).toBe(DATASET_COLUMNS.length);
   });
 });
