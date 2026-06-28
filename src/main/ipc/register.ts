@@ -97,6 +97,7 @@ import * as ais from '../services/livefeeds/ais-stream';
 import * as slSiteDb from '../searchlight/site-db';
 import * as slStore from '../searchlight/store';
 import { startSweep, cancelSweep } from '../searchlight/sweep';
+import { getModel } from '../searchlight/model-store';
 import { exportSweepPdf } from '../searchlight/export-pdf';
 import { makeTorConnector } from '../searchlight/tor-connect';
 import { getBgTor } from '../bgconn/tor-singleton';
@@ -1361,11 +1362,10 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     const s = (await settingsStore.read()).searchlight;
     const win = getWindow();
     const sc = s.scorer;
-    // Task 8 will provide getModel(); until then model is null and useMl is forced off.
-    const model = null;
+    const model = getModel();
     const thresholds = {
-      found: sc.foundThreshold ?? (model as null | { thresholds: { found: number } })?.thresholds.found ?? 0.5559,
-      notFound: sc.maybeFloor ?? (model as null | { thresholds: { not_found: number } })?.thresholds.not_found ?? 0.3224
+      found: sc.foundThreshold ?? model?.thresholds.found ?? 0.5559,
+      notFound: sc.maybeFloor ?? model?.thresholds.not_found ?? 0.3224
     };
     return startSweep({ username, siteIds, useTor }, {
       loadSites: (ids) => slSiteDb.sitesByName(ids),
@@ -1374,7 +1374,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
       defaultConcurrency: (tor) => (tor ? s.torConcurrency : s.clearnetConcurrency),
       emit: (r) => win?.webContents.send(channels.searchlight.onSweepResult, r),
       onDone: (f) => win?.webContents.send(channels.searchlight.onSweepDone, f),
-      scorerCtx: { thresholds, useMl: false, model: null },
+      scorerCtx: { thresholds, useMl: sc.useMl, model },
       lightweightMode: sc.lightweightMode
     });
   });
