@@ -989,6 +989,7 @@
 /* Stat colour tokens */
 .sl-stat-blue   { color: #4499ff; }
 .sl-stat-green  { color: #00ff88; }
+.sl-stat-amber  { color: #d8a83a; }
 .sl-stat-orange { color: #ff8800; }
 .sl-stat-red    { color: #ff3344; }
 .sl-stat-cyan   { color: #00e5ff; }
