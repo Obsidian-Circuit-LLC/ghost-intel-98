@@ -122,6 +122,8 @@ export interface MlModel {
   intercept: number;
   ml_weight: number;
   thresholds: { found: number; not_found: number };
+  /** Training metadata written by train-core; absent in legacy vendored models. */
+  training?: Record<string, unknown>;
 }
 
 /**
