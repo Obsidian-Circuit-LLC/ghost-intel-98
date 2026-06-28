@@ -434,7 +434,8 @@ export const channels = {
     exportPdf: 'searchlight:exportPdf',
     saveReport: 'searchlight:saveReport',
     torStatus: 'searchlight:torStatus',
-    connectTor: 'searchlight:connectTor'
+    connectTor: 'searchlight:connectTor',
+    revealSiteDbDir: 'searchlight:revealSiteDbDir'
   },
   socmint: {
     addChannel: 'socmint:addChannel',
@@ -666,6 +667,7 @@ export interface ApiContracts {
   [channels.searchlight.saveReport]: { args: [{ content: string; defaultName: string }]; returns: { ok: boolean } };
   [channels.searchlight.torStatus]: { args: []; returns: { state: 'off' | 'connecting' | 'ready' } };
   [channels.searchlight.connectTor]: { args: []; returns: { state: 'off' | 'connecting' | 'ready'; error?: string } };
+  [channels.searchlight.revealSiteDbDir]: { args: []; returns: void };
 
   [channels.socmint.addChannel]: { args: [string, unknown]; returns: MonitoredChannel[] };
   [channels.socmint.removeChannel]: { args: [string, string]; returns: MonitoredChannel[] };

@@ -1400,6 +1400,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     return slSiteDb.addCustomSite({ name: String(o.name ?? ''), url: String(o.url ?? ''), category: o.category ? String(o.category) : undefined });
   });
   safeHandle(channels.searchlight.exportSites, async () => slSiteDb.exportCustomSitesJson());
+  safeHandle(channels.searchlight.revealSiteDbDir, async () => slSiteDb.revealSiteDbDir());
   safeHandle(channels.searchlight.exportPdf, async (...a) => {
     const o = ((a[0] ?? {}) as Record<string, unknown>);
     return exportSweepPdf(String(o.html ?? ''), String(o.filename ?? 'searchlight-report.pdf'));
