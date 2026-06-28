@@ -34,7 +34,7 @@ export function thresholdForRecall(probs: number[], y: number[], targetRecall: n
     }
     const recall = tp + fn > 0 ? tp / (tp + fn) : 0;
     void positives;
-    if (recall >= targetRecall) { best = t; } else { break; }
+    if (recall >= targetRecall) { best = t; break; }
   }
   return best;
 }
