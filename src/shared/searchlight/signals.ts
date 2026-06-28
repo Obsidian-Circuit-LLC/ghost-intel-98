@@ -47,8 +47,8 @@ const RE_CLASS_ERROR     = /<[^>]+class=["'][^"']*(?:error|not-found|missing|una
 function extractJsonLdBlocks(body: string): string[] {
   const blocks: string[] = [];
   let m: RegExpExecArray | null;
-  const re = new RegExp(RE_JSON_LD_BLOCK.source, 'gi'); // fresh instance per call for lastIndex safety
-  while ((m = re.exec(body)) !== null) {
+  RE_JSON_LD_BLOCK.lastIndex = 0; // reset before use (static regex, single-threaded JS)
+  while ((m = RE_JSON_LD_BLOCK.exec(body)) !== null) {
     blocks.push(m[1]);
   }
   return blocks;
@@ -95,8 +95,8 @@ function countDistinctKeywords(text: string, keywords: string[]): number {
 function extractMetaContentText(body: string): string {
   const parts: string[] = [];
   let m: RegExpExecArray | null;
-  const re = new RegExp(RE_META_CONTENT.source, 'gi');
-  while ((m = re.exec(body)) !== null) {
+  RE_META_CONTENT.lastIndex = 0; // reset before use (static regex, single-threaded JS)
+  while ((m = RE_META_CONTENT.exec(body)) !== null) {
     parts.push(m[1]);
   }
   return parts.join(' ');
