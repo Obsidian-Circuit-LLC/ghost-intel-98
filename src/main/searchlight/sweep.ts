@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { buildProbeUrl } from '@shared/searchlight/sites';
 import { interpretResult } from '@shared/searchlight/interpret';
-import type { MaigretSiteEntry, SweepResult } from '@shared/searchlight/types';
+import type { MaigretSiteEntry, ScorerCtx, SweepResult } from '@shared/searchlight/types';
 import { probe as defaultProbe } from './probe';
 
 export interface RunSweepArgs {
@@ -17,6 +17,11 @@ export interface RunSweepArgs {
   // live Tor SOCKS port accessor; forwarded to probe so Tor sweeps can dial
   torSocksPort?: () => number | null;
   probeImpl?: typeof defaultProbe;
+  /** Scorer context for structural detection. When provided, fallback branches are routed
+   *  through the heuristic scorer and ambiguous 'maybe' results trigger phase-2 escalation. */
+  scorerCtx?: ScorerCtx;
+  /** When true, phase-2 body fetch is suppressed (lightweight / fast sweep mode). */
+  lightweightMode?: boolean;
 }
 
 export async function runSweep(args: RunSweepArgs): Promise<void> {
@@ -29,6 +34,8 @@ export async function runSweep(args: RunSweepArgs): Promise<void> {
   let checked = 0;
   let cancelledSeen = false;
 
+  const { scorerCtx, lightweightMode = false } = args;
+
   const worker = async (): Promise<void> => {
     for (;;) {
       if (isCancelled()) { cancelledSeen = true; return; }
@@ -38,15 +45,31 @@ export async function runSweep(args: RunSweepArgs): Promise<void> {
       const fetchBody = site.checkType === 'message';
       try {
         const raw = await probe(probeUrl, { fetchBody, headers: site.headers, useTor }, { socksPort: args.torSocksPort });
-        const interp = interpretResult(site, raw, url);
+        let interp = interpretResult(site, raw, url, scorerCtx);
+
+        // Adaptive phase-2 escalation: if the scorer found the result ambiguous ('maybe')
+        // and we didn't already fetch the body, do one follow-up GET to collect body signals.
+        // On phase-2 failure (throw or error field set), keep the phase-1 interpretation.
+        if (interp.status === 'maybe' && !fetchBody && !lightweightMode && !raw.error) {
+          try {
+            const raw2 = await probe(probeUrl, { fetchBody: true, headers: site.headers, useTor }, { socksPort: args.torSocksPort });
+            if (!raw2.error) {
+              interp = interpretResult(site, raw2, url, scorerCtx);
+            }
+            // raw2.error → graceful fallback: keep phase-1 interp
+          } catch {
+            // phase-2 threw → graceful fallback: keep phase-1 interp
+          }
+        }
+
         emit({
           id: randomUUID(), jobId, siteName: site.name, username, url,
           statusCode: raw.statusCode, statusMessage: raw.statusMessage, elapsed: raw.elapsed,
           redirectUrl: raw.redirectUrl, error: raw.error, category: site.category, tags: site.tags,
           checkType: site.checkType, found: interp.found, confidence: interp.confidence,
-          status: interp.status, timestamp: Date.now()
+          status: interp.status, probability: interp.probability, timestamp: Date.now()
         });
-        checked++;
+        checked++;  // count the site once regardless of how many probe phases ran
       } catch { /* isolate per-site failure */ }
     }
   };
