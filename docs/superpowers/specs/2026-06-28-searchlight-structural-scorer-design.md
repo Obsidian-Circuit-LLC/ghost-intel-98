@@ -52,18 +52,18 @@ Searchlight already does well where Maigret curates per-site `presenseStrs`/`abs
 
 - `src/shared/searchlight/signals.ts` — `extractSignals(site, raw, url): SignalVector`. Computes **cheap signals** always; **body signals** only when `raw.body` is present. Dependency-free, bounded parsing (static regexes + a `<script type="application/ld+json">` scan with guarded `JSON.parse`).
 - `src/shared/searchlight/scorer.ts` — `DEFAULT_WEIGHTS`, `scoreSignals(sig, weights): number` = `sigmoid(Σ weights·signals / SCALE)`; `classify(prob, thresholds): { status: 'found'|'maybe'|'not_found', confidence }`. Pure.
-- `src/shared/searchlight/ml.ts` — `predict(vector, model): number` = `sigmoid(Σ coef·feature + intercept)`. `model = { coef: number[], intercept: number, featureOrder: string[] }`. Pure, deterministic.
+- `src/shared/searchlight/ml.ts` — `predict(vector, model): number` = `sigmoid(Σ coef·z_i + intercept)` where `z_i = (x_i − mean_i) / scale_i` (per-feature standardization). The model is **self-describing** JSON (shape confirmed from the shipped artifact, v2.0.0): `{ version, feature_schema: string[30], mean: number[30], scale: number[30], coef: number[30], intercept: number, ml_weight: number, thresholds: { found: number, not_found: number }, training: {...} }`. `predict` aligns the feature vector to `feature_schema` by name. Pure, deterministic.
 
 ### Integration (single decision authority preserved)
 
 - `interpret.ts`: only the **fallback branches** (the `status_code` / `response_url` / no-string `finalize(statusCode===200, …)` paths) route through the blend. Curated `message` sites and the `blocked`/`error` short-circuits are untouched.
-- **Blend (verbatim Aliens_eye):** `final = 0.4·ml + 0.6·heuristic` when `useMl` and a model is loaded; else heuristic-only. `classify()` at 0.6 / 0.35.
+- **Blend (verbatim Aliens_eye, model-driven):** `final = ml_weight·ml + (1 − ml_weight)·heuristic` when `useMl` and a model is loaded (the shipped model's `ml_weight` is 0.6); else heuristic-only. `classify()` uses the model's own `thresholds` (shipped: found 0.5559, not_found 0.3224) as defaults, overridden by the `foundThreshold`/`maybeFloor` settings when the operator sets them. Hardcode none of these — read from the model.
 
 ### Adaptive two-phase (in `sweep.ts`)
 
 1. Cheap `HEAD` probe → interpret on cheap signals only (no body). **Phase 1 is heuristic-only** — the ML model is never run on a body-less vector (its profile-marker features would be `0`, i.e. out-of-distribution); ML runs only in phase 2 against the full vector.
 2. A clean `404` / redirect-away resolves immediately — **no body fetched**.
-3. A bare `200`-no-redirect scores into the **Maybe band on cheap signals alone, and that Maybe verdict is the escalation trigger** → re-probe `GET` (body) over a fresh circuit → re-interpret with the full signal set, now applying the blend (`0.4·ml + 0.6·heuristic`).
+3. A bare `200`-no-redirect scores into the **Maybe band on cheap signals alone, and that Maybe verdict is the escalation trigger** → re-probe `GET` (body) over a fresh circuit → re-interpret with the full signal set, now applying the model-driven blend (`ml_weight·ml + (1 − ml_weight)·heuristic`).
 4. Phase-2 `GET` failure → **fall back to the phase-1 cheap verdict** (graceful; never worse than today).
 5. `lightweightMode` setting disables escalation entirely (HEAD-only).
 
@@ -84,9 +84,9 @@ Lifted `detector.py` baseline (ratios authoritative; absolute `SCALE` re-derived
 
 **Body signals (phase 2, on escalation):** `og_type_profile` (×6, strongest positive), `has_json_ld_person` (×5), `meta_has_username` (+5), `username_in_canonical` (×4), `profile_section_count` (×4), `error_section_count` (×3 penalty), `meta_error_keyword_count` (×3 penalty), `meta_positive_keyword_count` (×2), `error_keyword_count` (×2 penalty), `positive_keyword_count` (×1.5), `title_has_username` (+), `img_count`/`form_count`/`input_count`/`link_count`/`text_length` (weak).
 
-**Dropped for v1:** `fingerprint_match_found`/`fingerprint_match_not_found` (×2 each) — require Aliens_eye's learned per-site fingerprint cache (a subsystem we don't have); fed `0` (only those two terms lost). A per-site fingerprint cache in the encrypted store is a noted *future* enhancement. `heuristic_score` as a model feature *is* retained — our heuristic score feeds the ML vector exactly as Aliens_eye feeds theirs.
+**Unavailable for v1:** `fingerprint_match_found`/`fingerprint_match_not_found` require Aliens_eye's learned per-site fingerprint cache (a subsystem we don't have). Under standardization, feeding raw `0` is **not** neutral (`(0−mean)/scale` injects a fixed offset); instead set these two features to their training `mean` so they standardize to `0` (neutral, zero contribution). A per-site fingerprint cache is a noted *future* enhancement. `heuristic_score` (feature #30) *is* retained — our heuristic score feeds the ML vector as that feature, computed with Aliens_eye's exact weights and sigmoid scale (their 6.0, not a re-derived value) so it lands in the distribution the model's `mean`/`scale` expect.
 
-**Calibration:** because we drop fingerprints and capture redirect *presence* (not full count), the weighted-sum distribution differs from upstream's; `SCALE` (their 6.0) is **re-derived** so a clean profile lands >0.6 and a soft-404 <0.35 against a fixture set.
+**Calibration:** the heuristic uses Aliens_eye's exact weights and sigmoid `SCALE` = 6.0 (not re-derived), so `heuristic_score` matches the distribution the model was trained against. The heuristic-only path (phase 1, or `useMl=false`) classifies that score against the active thresholds. The **parity test** against `seed_dataset.csv` (below) quantifies any drift introduced by the unavailable fingerprint terms; if drift exceeds tolerance, the remedy is a Plan-2 retrain of a fingerprint-free model fit to our exact feature set — not a hand-tuned `SCALE`.
 
 **English-keyword limitation (accepted):** keyword signals are English-first. Mitigation is structural — `og:type`, JSON-LD, and canonical are language-independent and carry the heaviest weights, so non-English soft-404s are still caught by structure. Keyword lists ship as extensible constants.
 
@@ -94,7 +94,8 @@ Lifted `detector.py` baseline (ratios authoritative; absolute `SCALE` re-derived
 
 ## ML port & feature fidelity
 
-- **No normalization** in Aliens_eye (`vectorize_features()` uses raw `float(features.get(name, 0.0))`), so their `model.json` coefficients apply to raw feature values — a verbatim port transfers exactly **iff** our extractor matches theirs.
+- **Standardization is in the model file:** `vectorize_features()` emits raw values, but `predict` standardizes with the model's stored `mean`/`scale` before the dot product. So a verbatim port needs the extractor to match theirs **and** must apply `(x − mean)/scale` — both `mean` and `scale` ship in `model.json`, so we have everything for an exact port.
+- **Doc-vs-artifact discrepancy (resolved in favor of the artifact):** `WORKING.md`/`detector.py` prose says `ml_weight` 0.4 and thresholds 0.6/0.35; the shipped `model.json` says `ml_weight` 0.6 and thresholds 0.5559/0.3224. The shipped model is what actually runs and is authoritative — read these from the file, never hardcode the prose values.
 - **Feature-fidelity gate (plan task):** obtain `features.py` + both keyword lists **verbatim**; pin as constants; **parity test** — re-vectorize their `seed_dataset.csv` rows through our extractor and confirm `predict()` reproduces the model's outputs within tolerance. This test is the proof the port is faithful.
 - **Charter posture:** shipping the pre-trained model = we never train at build → zero nondeterminism; inference is a pure dot-product + sigmoid over ~30 auditable coefficients in version control (not an opaque blob, no native dep).
 
@@ -112,7 +113,7 @@ Lifted `detector.py` baseline (ratios authoritative; absolute `SCALE` re-derived
 
 - `types.ts`: add `'maybe'` to `SweepStatus` (canonical order `found → maybe → blocked → not_found → unknown → error`); add `probability?: number`; new `SignalVector` type. Confidence for scored results derived from distance to nearest threshold.
 - **Ripple (must be in the same task as the enum change):** `interpret.ts`, SweepPanel rows + filter, `export-pdf.ts` status labels/colors, and the **searchlight contract/interpret tests** (exact-set assertions that bite on enum changes — known prior pain).
-- Settings (threshold knobs only): `searchlight.scorer.foundThreshold` (0.6), `searchlight.scorer.maybeFloor` (0.35), `searchlight.scorer.lightweightMode` (false), `searchlight.scorer.useMl` (true). Settings → Searchlight, with reset-to-defaults.
+- Settings (threshold knobs only): `searchlight.scorer.foundThreshold` and `searchlight.scorer.maybeFloor` default to `null` → use the active model's `thresholds.found`/`thresholds.not_found` (shipped: 0.5559 / 0.3224); an operator-set number overrides. `searchlight.scorer.lightweightMode` (false), `searchlight.scorer.useMl` (true). Settings → Searchlight, with reset-to-defaults (clears the overrides back to the model's values).
 
 ## Sweep-panel UI (full polish)
 
@@ -126,7 +127,7 @@ Lifted `detector.py` baseline (ratios authoritative; absolute `SCALE` re-derived
 ## Testing strategy
 
 - `test/searchlight-signals.test.ts` — cheap signals from synthetic `RawCheckResult`s; body signals from real-profile + soft-404 HTML fixtures; case-insensitive username match; malformed JSON-LD → guarded `0`, no throw; same input → identical vector.
-- `test/searchlight-scorer.test.ts` — **load-bearing regression = the operator's screenshot, verbatim:** real-profile fixture (200 + `og:type` + JSON-LD `Person` + title=username) → **>0.6 found**; soft-404 fixture (200 + "doesn't exist" + error template) → **<0.35 not_found**. Boundary tests at 0.6/0.35; threshold override flips the verdict.
+- `test/searchlight-scorer.test.ts` — **load-bearing regression = the operator's screenshot, verbatim:** real-profile fixture (200 + `og:type` + JSON-LD `Person` + title=username) classifies **found**; soft-404 fixture (200 + "doesn't exist" + error template) classifies **not_found** — under the active model thresholds. Boundary tests at the model's `thresholds`; an operator threshold override flips the verdict.
 - `test/searchlight-ml.test.ts` — `predict()` determinism; **parity test** vs. `seed_dataset.csv`; `useMl=false` → heuristic-only path.
 - `test/searchlight-interpret.test.ts` (extend) — fallback branches route through the blend; **curated `message`-string sites stay byte-for-byte authoritative** (explicit assertion); blocked/error short-circuits unchanged.
 - `test/searchlight-sweep.test.ts` — adaptive two-phase via mocked probe: ambiguous 200 → exactly one phase-2 fetch; clean 404/redirect → zero body fetches; phase-2 failure → phase-1 fallback.
