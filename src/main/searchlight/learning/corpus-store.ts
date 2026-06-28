@@ -121,7 +121,9 @@ export async function appendLabel(
   io: CorpusIO = makeDefaultIO(),
 ): Promise<LabelEntry[]> {
   const existing = await loadCorpus(io);
-  const updated = [...existing, entry];
+  // Overwrite-by-resultId: re-labelling a result updates its entry rather than
+  // appending a duplicate (spec: "overwrite-by-resultId; re-labeling updates").
+  const updated = [...existing.filter((e) => e.resultId !== entry.resultId), entry];
   await io.writeAll(JSON.stringify(updated));
   return updated;
 }
