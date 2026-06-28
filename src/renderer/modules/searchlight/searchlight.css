@@ -1421,3 +1421,60 @@
 .sl-dash-qa-icon   { font-size: 22px; margin-bottom: 7px; }
 .sl-dash-qa-label  { font-family: 'Share Tech Mono', monospace; font-size: 10px; font-weight: 700; color: #c8d0e8; letter-spacing: 0.1em; }
 .sl-dash-qa-desc   { font-family: 'Share Tech Mono', monospace; font-size: 9px; color: #30405a; margin-top: 3px; }
+
+/* ── Adaptive Learning panel ─────────────────────────────────────────────────
+   Backgrounds are restated on CLASS selectors so the bundled 98.css element-level
+   white table/td fill cannot override the midnight-purple surface (see
+   98css-table-white-cascade memory). */
+.sl-learning-root {
+  display: flex; flex-direction: column; height: 100%; overflow: hidden;
+  background: #0a0a14; color: #d8d8e0; font-family: 'Share Tech Mono', monospace; font-size: 12px;
+}
+.sl-learning-toolbar {
+  flex-shrink: 0; padding: 10px 14px; background: #0e0a1a; border-bottom: 1px solid #1a2040;
+  display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+}
+.sl-learning-status-box {
+  padding: 6px 12px; background: rgba(26,111,255,0.08); border: 1px solid rgba(26,111,255,0.18);
+  border-radius: 2px; font-size: 11px; color: #6f9bff; flex: 1; min-width: 220px;
+}
+.sl-learning-progress {
+  position: relative; width: 160px; height: 14px; background: #15092a;
+  border: 1px solid #1a2040; border-radius: 2px; overflow: hidden;
+}
+.sl-learning-progress-fill { height: 100%; background: #3d6a3d; transition: width 0.2s; }
+.sl-learning-progress-text {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 9px; color: #b8c8b8; letter-spacing: 0.05em;
+}
+.sl-learning-train-btn {
+  font-family: inherit; font-size: 11px; padding: 4px 12px; background: #3d1a5c; color: #fff;
+  border: 2px solid; border-color: #5d3a7d #1a0f2a #1a0f2a #5d3a7d; cursor: pointer; white-space: nowrap;
+}
+.sl-learning-train-btn:hover { background: #5d3a7d; }
+.sl-learning-train-btn:active { border-color: #1a0f2a #5d3a7d #5d3a7d #1a0f2a; background: #2a0f40; }
+.sl-learning-train-btn:disabled { background: #2a1040; color: #806090; cursor: default; }
+.sl-learning-queue { flex: 1; overflow: auto; background: #1e0f33; }
+.sl-learning-empty {
+  display: flex; align-items: center; justify-content: center; height: 100%;
+  color: #6a5a8a; font-size: 12px; text-align: center; padding: 40px; letter-spacing: 0.04em;
+}
+.sl-learning-maybe-table { width: 100%; border-collapse: collapse; font-size: 11px; background: #1e0f33; }
+.sl-learning-maybe-row { border-bottom: 1px solid rgba(216,168,58,0.1); }
+.sl-learning-maybe-row:nth-child(even) { background: rgba(216,168,58,0.015); }
+.sl-learning-maybe-row:hover { background: rgba(216,168,58,0.05); }
+.sl-learning-maybe-td { padding: 6px 10px; vertical-align: middle; color: #c8c0d8; }
+.sl-learning-prob-badge {
+  padding: 1px 6px; background: rgba(216,168,58,0.12); border: 1px solid rgba(216,168,58,0.35);
+  border-radius: 2px; font-size: 9px; color: #d8a83a; white-space: nowrap;
+}
+.sl-learning-thumb {
+  background: transparent; border: 1px solid #1a2040; padding: 2px 8px; margin: 0 3px;
+  cursor: pointer; font-size: 11px; border-radius: 2px; transition: border-color 0.1s, background 0.1s;
+}
+.sl-learning-thumb:hover { background: rgba(26,111,255,0.08); }
+.sl-learning-real { color: #00ff88; }
+.sl-learning-real:hover { border-color: #00ff88; }
+.sl-learning-fake { color: #ff5566; }
+.sl-learning-fake:hover { border-color: #ff5566; }
+.sl-learning-labeled { opacity: 0.5; text-decoration: line-through; }

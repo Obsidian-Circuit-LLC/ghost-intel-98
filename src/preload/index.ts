@@ -465,7 +465,12 @@ const api = {
     saveReport: (args: { content: string; defaultName: string }) => ipcRenderer.invoke(channels.searchlight.saveReport, args),
     torStatus: () => ipcRenderer.invoke(channels.searchlight.torStatus),
     connectTor: () => ipcRenderer.invoke(channels.searchlight.connectTor),
-    revealSiteDbDir: () => ipcRenderer.invoke(channels.searchlight.revealSiteDbDir)
+    revealSiteDbDir: () => ipcRenderer.invoke(channels.searchlight.revealSiteDbDir),
+    labelResult: (payload: { resultId: string; label: 0 | 1; siteName: string; caseId: string }) =>
+      ipcRenderer.invoke(channels.searchlight.labelResult, payload),
+    learningStatus: () => ipcRenderer.invoke(channels.searchlight.learningStatus),
+    trainModel: () => ipcRenderer.invoke(channels.searchlight.trainModel),
+    setMlEnabled: (enabled: boolean) => ipcRenderer.invoke(channels.searchlight.setMlEnabled, enabled)
   },
   socmint: {
     addChannel: (caseId: string, channel: unknown) => ipcRenderer.invoke(channels.socmint.addChannel, caseId, channel),
