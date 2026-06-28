@@ -61,7 +61,7 @@ function buildReport(
   result: ReturnType<typeof evaluate>,
   rows: EvalRow[],
 ): string {
-  const { overall, soft, verdict } = result;
+  const { overall, soft, verdict, perFold } = result;
   const positives = rows.filter((r) => r.label === 1).length;
   const negatives = rows.filter((r) => r.label === 0).length;
   const softCount = rows.filter((r) => r.soft).length;
@@ -99,6 +99,33 @@ function buildReport(
   lines.push(`| Precision | ${fmtN(soft.precH)} | ${fmtN(soft.precM)} |`);
   lines.push(`| F1 | ${fmtN(soft.f1H)} | ${fmtN(soft.f1M)} |`);
   lines.push(`| Soft-404 N (held-out) | — | ${soft.softN} |`);
+  lines.push('');
+
+  lines.push('## Per-Fold Breakdown');
+  lines.push('');
+  lines.push('### Overall — Per Fold');
+  lines.push('');
+  lines.push('| Fold | Prec H | Prec ML | F1 H | F1 ML |');
+  lines.push('|---|---|---|---|---|');
+  for (const row of perFold) {
+    lines.push(
+      `| ${row.fold} | ${fmtN(row.overallPrecH)} | ${fmtN(row.overallPrecM)} | ${fmtN(row.overallF1H)} | ${fmtN(row.overallF1M)} |`,
+    );
+  }
+  lines.push(`| **Mean** | **${fmtN(overall.precH)}** | **${fmtN(overall.precM)}** | **${fmtN(overall.f1H)}** | **${fmtN(overall.f1M)}** |`);
+  lines.push('');
+
+  lines.push('### Soft-404 Subset — Per Fold');
+  lines.push('');
+  lines.push('| Fold | Soft N | Prec H | Prec ML | F1 H | F1 ML |');
+  lines.push('|---|---|---|---|---|---|');
+  for (const row of perFold) {
+    const noData = row.softCount === 0;
+    lines.push(
+      `| ${row.fold} | ${row.softCount} | ${noData ? '—' : fmtN(row.softPrecH)} | ${noData ? '—' : fmtN(row.softPrecM)} | ${noData ? '—' : fmtN(row.softF1H)} | ${noData ? '—' : fmtN(row.softF1M)} |`,
+    );
+  }
+  lines.push(`| **Mean** | **${soft.softN}** | **${fmtN(soft.precH)}** | **${fmtN(soft.precM)}** | **${fmtN(soft.f1H)}** | **${fmtN(soft.f1M)}** |`);
   lines.push('');
 
   lines.push('## Gate Verdict');

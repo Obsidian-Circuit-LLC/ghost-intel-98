@@ -43,6 +43,24 @@ export interface EvalRow {
  */
 export type GateInputs = GateArgs;
 
+/** Per-fold diagnostic row (1-based fold index). */
+export interface PerFoldRow {
+  /** 1-based fold number (1 … K_FOLDS). */
+  fold: number;
+  /** Overall held-out metrics for this fold. */
+  overallPrecH: number;
+  overallF1H: number;
+  overallPrecM: number;
+  overallF1M: number;
+  /** Soft-404 subset metrics for this fold (0 when softCount === 0). */
+  softPrecH: number;
+  softF1H: number;
+  softPrecM: number;
+  softF1M: number;
+  /** Number of soft-404 rows in this fold's held-out set. */
+  softCount: number;
+}
+
 /** Return value of evaluate(). */
 export interface EvalResult {
   /** Metrics across ALL held-out rows (mean over 5 folds). */
@@ -51,6 +69,8 @@ export interface EvalResult {
   soft: GateInputs;
   /** Gate verdict — fails if either overall or soft sub-gate fails, or softN < 80. */
   verdict: ReturnType<typeof gateVerdict>;
+  /** Per-fold diagnostic rows (length === K_FOLDS). */
+  perFold: PerFoldRow[];
 }
 
 // ---------------------------------------------------------------------------
@@ -95,6 +115,9 @@ export function evaluate(rows: EvalRow[], featureNames: string[]): EvalResult {
   const softF1M: number[] = [];
 
   let totalSoftN = 0;
+
+  // Per-fold diagnostic rows collected during the loop.
+  const perFold: PerFoldRow[] = [];
 
   for (let fold = 0; fold < K_FOLDS; fold++) {
     // Split into train and test subsets
@@ -162,6 +185,33 @@ export function evaluate(rows: EvalRow[], featureNames: string[]): EvalResult {
       softF1H.push(softHMetrics.f1);
       softPrecM.push(softMlMetrics.precision);
       softF1M.push(softMlMetrics.f1);
+
+      perFold.push({
+        fold: fold + 1,
+        overallPrecH: hMetrics.precision,
+        overallF1H: hMetrics.f1,
+        overallPrecM: mlMetrics.precision,
+        overallF1M: mlMetrics.f1,
+        softPrecH: softHMetrics.precision,
+        softF1H: softHMetrics.f1,
+        softPrecM: softMlMetrics.precision,
+        softF1M: softMlMetrics.f1,
+        softCount,
+      });
+    } else {
+      // No soft-404 rows in this fold's held-out set — record zeroes.
+      perFold.push({
+        fold: fold + 1,
+        overallPrecH: hMetrics.precision,
+        overallF1H: hMetrics.f1,
+        overallPrecM: mlMetrics.precision,
+        overallF1M: mlMetrics.f1,
+        softPrecH: 0,
+        softF1H: 0,
+        softPrecM: 0,
+        softF1M: 0,
+        softCount: 0,
+      });
     }
   }
 
@@ -204,5 +254,5 @@ export function evaluate(rows: EvalRow[], featureNames: string[]): EvalResult {
     verdict = overallVerdict;
   }
 
-  return { overall, soft, verdict };
+  return { overall, soft, verdict, perFold };
 }
