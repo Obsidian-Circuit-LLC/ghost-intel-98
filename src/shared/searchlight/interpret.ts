@@ -1,6 +1,7 @@
 import type { MaigretSiteEntry, RawCheckResult, SweepStatus, ScorerCtx } from './types';
 import { extractSignals } from './signals';
 import { scoreSignals, classify } from './scorer';
+import { predict, blend } from './ml';
 
 export interface Interpretation {
   found: boolean;
@@ -33,12 +34,29 @@ export function interpretResult(
     ({ found, confidence, status: found ? 'found' : 'not_found' });
 
   /**
-   * Route a fallback branch through the structural heuristic scorer.
-   * Only called when ctx is present; ctx is guaranteed non-null at call sites.
+   * Route a fallback branch through the structural scorer (heuristic or
+   * ML-blended, depending on ctx.useMl).
+   *
+   * When useMl is true and a model is loaded:
+   *   1. Compute heuristic score and store as v.heuristic_score (the model
+   *      expects this as feature #30, trained against the same scorer).
+   *   2. Run standardized logistic-regression inference via predict().
+   *   3. Blend: prob = model.ml_weight·ml + (1−ml_weight)·heuristic.
+   *
+   * When useMl is false or no model is available, use heuristic alone.
+   * Either way the result is classified against ctx.thresholds.
    */
   const scoreAndClassify = (): Interpretation => {
     const v = extractSignals(site, result, targetUrl);
-    const prob = scoreSignals(v);
+    const heuristic = scoreSignals(v);
+    let prob = heuristic;
+    if (ctx!.useMl && ctx!.model) {
+      // Set heuristic_score in the vector BEFORE ML inference so the model
+      // receives the feature it was trained with.
+      v.heuristic_score = heuristic;
+      const ml = predict(v, ctx!.model);
+      prob = blend(ml, heuristic, ctx!.model.ml_weight);
+    }
     const { status, confidence } = classify(prob, ctx!.thresholds);
     return { found: status === 'found', confidence, status, probability: prob };
   };
