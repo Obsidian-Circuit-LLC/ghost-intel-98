@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { interpretResult } from '@shared/searchlight/interpret';
-import type { MaigretSiteEntry, RawCheckResult } from '@shared/searchlight/types';
+import type { MaigretSiteEntry, RawCheckResult, ScorerCtx } from '@shared/searchlight/types';
 
 const base: MaigretSiteEntry = {
   name: 'X', url: 'https://x.com/{username}', urlMain: 'https://x.com', urlProbe: '',
@@ -123,5 +123,53 @@ describe('response_url', () => {
     expect(r.found).toBe(false);
     expect(r.status).toBe('not_found');
     expect(r.confidence).toBe('medium');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 4: ScorerCtx integration — heuristic path
+// ---------------------------------------------------------------------------
+
+const PROFILE = `<html><head><title>ghostexodus</title>
+<meta property="og:type" content="profile">
+<link rel="canonical" href="https://s.com/ghostexodus">
+<script type="application/ld+json">{"@type":"Person","name":"ghostexodus"}</script>
+</head><body><img src=a><img src=b>followers joined posts</body></html>`;
+
+const ctx: ScorerCtx = { thresholds: { found: 0.5559, notFound: 0.3224 }, useMl: false, model: null };
+
+describe('interpretResult with ScorerCtx', () => {
+  it('status_code 200 with no body → maybe (was false-positive found)', () => {
+    const r = interpretResult(base, raw({ statusCode: 200, body: '' }), 'https://x.com/admin', ctx);
+    expect(r.status).toBe('maybe');
+  });
+
+  it('status_code 200 with profile body → found', () => {
+    const r = interpretResult(base, raw({ statusCode: 200, body: PROFILE }), 'https://x.com/ghostexodus', ctx);
+    expect(r.status).toBe('found');
+  });
+
+  it('curated message site stays authoritative (unchanged, no ctx influence)', () => {
+    const s = { ...base, checkType: 'message' as const, absenceStrs: ['No such user'] };
+    const r = interpretResult(s, raw({ statusCode: 200, body: 'No such user' }), 'https://x.com/admin', ctx);
+    expect(r.status).toBe('not_found');
+    expect(r.confidence).toBe('high');
+  });
+
+  it('no ctx → legacy behavior preserved', () => {
+    const r = interpretResult(base, raw({ statusCode: 200 }), 'https://x.com/admin');
+    expect(r.status).toBe('found'); // unchanged legacy path
+  });
+
+  it('scorer result carries probability', () => {
+    const r = interpretResult(base, raw({ statusCode: 200, body: PROFILE }), 'https://x.com/ghostexodus', ctx);
+    expect(typeof r.probability).toBe('number');
+    expect(r.probability).toBeGreaterThan(0);
+    expect(r.probability).toBeLessThanOrEqual(1);
+  });
+
+  it('404 with ctx → not_found (blocked/error short-circuits unchanged)', () => {
+    const r = interpretResult(base, raw({ statusCode: 404 }), 'https://x.com/admin', ctx);
+    expect(r.status).toBe('not_found');
   });
 });
