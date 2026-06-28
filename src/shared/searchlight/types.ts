@@ -107,3 +107,31 @@ export interface SearchlightCaseSummary { id: string; name: string; updatedAt: n
 
 /** A flat numeric record keyed by model feature names. */
 export type SignalVector = Record<string, number>;
+
+/**
+ * Logistic-regression model loaded from resources/searchlight/model.json.
+ * Full implementation in ml.ts (Task 7); defined here so ScorerCtx is
+ * importable from the shared types module.
+ */
+export interface MlModel {
+  version: string;
+  feature_schema: string[];
+  mean: number[];
+  scale: number[];
+  coef: number[];
+  intercept: number;
+  ml_weight: number;
+  thresholds: { found: number; not_found: number };
+}
+
+/**
+ * Scorer context injected into interpretResult.
+ * Thresholds use camelCase `notFound` here; the model file uses snake_case
+ * `not_found` — conversion happens at the settings-resolution layer (Task 6).
+ */
+export interface ScorerCtx {
+  thresholds: { found: number; notFound: number };
+  useMl: boolean;
+  /** null until model-store is wired (Tasks 8-9). */
+  model: MlModel | null;
+}

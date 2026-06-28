@@ -1,9 +1,12 @@
-import type { MaigretSiteEntry, RawCheckResult, SweepStatus } from './types';
+import type { MaigretSiteEntry, RawCheckResult, SweepStatus, ScorerCtx } from './types';
+import { extractSignals } from './signals';
+import { scoreSignals, classify } from './scorer';
 
 export interface Interpretation {
   found: boolean;
   confidence: 'high' | 'medium' | 'low';
   status: SweepStatus;
+  probability?: number;
 }
 
 const BLOCKED_CODES = new Set([403, 429, 503]);
@@ -11,7 +14,8 @@ const BLOCKED_CODES = new Set([403, 429, 503]);
 export function interpretResult(
   site: MaigretSiteEntry,
   result: RawCheckResult,
-  targetUrl: string
+  targetUrl: string,
+  ctx?: ScorerCtx
 ): Interpretation {
   if (result.error) {
     // TOR_UNAVAILABLE is an operator-actionable error; network failures are 'unknown'.
@@ -28,6 +32,17 @@ export function interpretResult(
   const finalize = (found: boolean, confidence: 'high' | 'medium' | 'low'): Interpretation =>
     ({ found, confidence, status: found ? 'found' : 'not_found' });
 
+  /**
+   * Route a fallback branch through the structural heuristic scorer.
+   * Only called when ctx is present; ctx is guaranteed non-null at call sites.
+   */
+  const scoreAndClassify = (): Interpretation => {
+    const v = extractSignals(site, result, targetUrl);
+    const prob = scoreSignals(v);
+    const { status, confidence } = classify(prob, ctx!.thresholds);
+    return { found: status === 'found', confidence, status, probability: prob };
+  };
+
   const { checkType, presenseStrs, absenceStrs } = site;
 
   if (checkType === 'message') {
@@ -41,10 +56,15 @@ export function interpretResult(
       if (presenseStrs.some((s) => body.includes(s))) return finalize(true, 'medium');
       return finalize(false, 'medium');
     }
+    // Fallback: message site with no curating strings — route through scorer if ctx present.
+    if (ctx) return scoreAndClassify();
     return finalize(result.statusCode === 200, 'low');
   }
 
   if (checkType === 'response_url') {
+    // Fallback: route through scorer if ctx present (scorer is more comprehensive).
+    if (ctx) return scoreAndClassify();
+    // Legacy path (no ctx).
     const tail = targetUrl.replace(/\/+$/, '').split('/').pop()?.toLowerCase() ?? '';
     if (!tail) {
       // No username segment to compare against; rely on status code alone, low confidence.
@@ -62,5 +82,7 @@ export function interpretResult(
   }
 
   // status_code and unknown fall back to the status code.
+  // Route through scorer if ctx present.
+  if (ctx) return scoreAndClassify();
   return finalize(result.statusCode === 200, checkType === 'status_code' ? 'high' : 'low');
 }
