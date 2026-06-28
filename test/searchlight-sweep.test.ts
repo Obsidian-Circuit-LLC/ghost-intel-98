@@ -7,6 +7,12 @@ const mk = (name: string): MaigretSiteEntry => ({
   checkType: 'status_code', presenseStrs: [], absenceStrs: [], alexaRank: 1, headers: {}, usernameClaimed: ''
 });
 
+const PROFILE = `<html><head><title>ghostexodus</title>
+<meta property="og:type" content="profile">
+<link rel="canonical" href="https://s.com/ghostexodus">
+<script type="application/ld+json">{"@type":"Person","name":"ghostexodus"}</script>
+</head><body><img src=a><img src=b>followers joined posts</body></html>`;
+
 describe('runSweep', () => {
   it('emits NOTHING and completes when networkEnabled is false', async () => {
     const emit = vi.fn(); const onDone = vi.fn();
@@ -52,5 +58,48 @@ describe('runSweep', () => {
     await runSweep({ jobId: 'j', username: 'u', sites: [mk('a'), mk('b'), mk('c'), mk('d')], useTor: false, concurrency: 1, networkEnabled: true, emit: () => {}, onDone, isCancelled: () => cancelled, probeImpl: probeImpl as never });
     expect(probeImpl.mock.calls.length).toBeLessThan(4);
     expect(onDone.mock.calls[0][0].status).toBe('cancelled');
+  });
+
+  it('ambiguous 200 escalates exactly once (HEAD then GET)', async () => {
+    const calls: boolean[] = [];
+    const probeImpl = vi.fn(async (_u: string, opts: { fetchBody: boolean }) => {
+      calls.push(opts.fetchBody);
+      return { statusCode: 200, statusMessage: 'OK', elapsed: 5, redirectUrl: null, error: null,
+               body: opts.fetchBody ? PROFILE : '' };
+    });
+    const emit = vi.fn(); const onDone = vi.fn();
+    await runSweep({ jobId: 'j', username: 'ghostexodus', sites: [mk('a')], useTor: false, concurrency: 1,
+      networkEnabled: true, emit, onDone, isCancelled: () => false,
+      scorerCtx: { thresholds: { found: 0.5559, notFound: 0.3224 }, useMl: false, model: null },
+      lightweightMode: false, probeImpl: probeImpl as never });
+    expect(calls).toEqual([false, true]);
+    expect(emit.mock.calls[0][0].status).toBe('found');
+    expect(onDone).toHaveBeenCalledWith(expect.objectContaining({ checked: 1 }));
+  });
+
+  it('clean 404 does NOT escalate (zero body fetches)', async () => {
+    const calls: boolean[] = [];
+    const probeImpl = vi.fn(async (_u: string, opts: { fetchBody: boolean }) => {
+      calls.push(opts.fetchBody);
+      return { statusCode: 404, statusMessage: 'NF', elapsed: 5, redirectUrl: null, error: null, body: '' };
+    });
+    await runSweep({ jobId: 'j', username: 'u', sites: [mk('a')], useTor: false, concurrency: 1,
+      networkEnabled: true, emit: vi.fn(), onDone: vi.fn(), isCancelled: () => false,
+      scorerCtx: { thresholds: { found: 0.5559, notFound: 0.3224 }, useMl: false, model: null },
+      lightweightMode: false, probeImpl: probeImpl as never });
+    expect(calls).toEqual([false]);
+  });
+
+  it('lightweightMode disables escalation', async () => {
+    const calls: boolean[] = [];
+    const probeImpl = vi.fn(async (_u: string, opts: { fetchBody: boolean }) => {
+      calls.push(opts.fetchBody);
+      return { statusCode: 200, statusMessage: 'OK', elapsed: 5, redirectUrl: null, error: null, body: '' };
+    });
+    await runSweep({ jobId: 'j', username: 'u', sites: [mk('a')], useTor: false, concurrency: 1,
+      networkEnabled: true, emit: vi.fn(), onDone: vi.fn(), isCancelled: () => false,
+      scorerCtx: { thresholds: { found: 0.5559, notFound: 0.3224 }, useMl: false, model: null },
+      lightweightMode: true, probeImpl: probeImpl as never });
+    expect(calls).toEqual([false]);
   });
 });

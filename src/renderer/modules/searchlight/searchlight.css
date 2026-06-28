@@ -365,6 +365,82 @@
   letter-spacing: 0.06em;
 }
 
+/* ── Summary panel ────────────────────────────────────────────────────────── */
+.sl-summary {
+  flex-shrink: 0;
+  padding: 5px 14px;
+  background: #07070f;
+  border-bottom: 1px solid #1a2040;
+  font-family: 'Share Tech Mono', monospace;
+}
+
+.sl-summary-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.sl-summary-stat {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.sl-summary-val {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* summary stat colour tokens — background stated on class so 98.css can't cascade over */
+.sl-summary-found   { color: #00ff88; }
+/* maybe summary — background restated on CLASS (specificity 0,1,0) */
+.sl-summary-maybe   { color: #d8a83a; }
+.sl-summary-blocked { color: #ffc800; }
+.sl-summary-notfound{ color: #5a6480; }
+.sl-summary-error   { color: #ff4444; }
+
+.sl-summary-cats {
+  display: inline-flex;
+  gap: 7px;
+  flex-wrap: wrap;
+  margin-left: 6px;
+  border-left: 1px solid #1a2040;
+  padding-left: 12px;
+}
+
+.sl-summary-cat-chip {
+  font-size: 9px;
+  color: #404870;
+  letter-spacing: 0.05em;
+}
+
+.sl-summary-cat-found { color: #00ff88; }
+/* maybe cat chip — background restated on CLASS */
+.sl-summary-cat-maybe { color: #d8a83a; }
+
+/* ── Sortable column headers ──────────────────────────────────────────────── */
+.sl-sweep-th-sortable {
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.1s;
+}
+.sl-sweep-th-sortable:hover { color: #d8c8ff; }
+.sl-sweep-th-active { color: #c8b8ff !important; }
+
+.sl-sort-caret {
+  font-size: 7px;
+  opacity: 0.55;
+  margin-left: 1px;
+}
+.sl-sweep-th-active .sl-sort-caret { opacity: 0.9; }
+
+/* ── ETA + maybe progress labels ─────────────────────────────────────────── */
+.sl-sweep-eta { color: #404870; }
+.sl-sweep-maybe-count { color: #d8a83a; }
+
 /* ── Results table ────────────────────────────────────────────────────────── */
 .sl-sweep-results {
   flex: 1;
@@ -416,6 +492,9 @@
 .sl-sweep-row:hover { background: rgba(26,111,255,0.055); }
 .sl-row-found { background: rgba(0,255,136,0.018); }
 .sl-row-found:hover { background: rgba(0,255,136,0.04); }
+/* maybe row tint — background restated on CLASS so 98.css element-rule cannot override */
+.sl-row-maybe { background: rgba(216,168,58,0.02); }
+.sl-row-maybe:hover { background: rgba(216,168,58,0.045); }
 
 .sl-sweep-td {
   padding: 5px 10px;
@@ -440,6 +519,18 @@
   border-radius: 2px;
   font-size: 9px;
   color: #00ff88;
+  white-space: nowrap;
+}
+
+/* .sl-match-maybe: amber badge — background restated on CLASS selector so 98.css
+   element-level table/td white fill (0,0,1 specificity) cannot cascade over it. */
+.sl-match-maybe {
+  padding: 1px 6px;
+  background: rgba(216,168,58,0.12);
+  border: 1px solid rgba(216,168,58,0.35);
+  border-radius: 2px;
+  font-size: 9px;
+  color: #d8a83a;
   white-space: nowrap;
 }
 
@@ -898,6 +989,7 @@
 /* Stat colour tokens */
 .sl-stat-blue   { color: #4499ff; }
 .sl-stat-green  { color: #00ff88; }
+.sl-stat-amber  { color: #d8a83a; }
 .sl-stat-orange { color: #ff8800; }
 .sl-stat-red    { color: #ff3344; }
 .sl-stat-cyan   { color: #00e5ff; }
