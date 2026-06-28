@@ -17,15 +17,20 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { SiteCatalogEntry, SweepResult } from '@shared/searchlight/types';
+import {
+  type FilterBucket,
+  matchesBucket,
+  sortResults,
+  summarizeSweep,
+  computeEta,
+} from '@shared/searchlight/sweep-panel-utils';
 import { useSearchlightStore } from '../store';
 import { useSettings } from '../../../state/store';
 import { useFavicons } from './useFavicons';
 
-// ─── Filter type ──────────────────────────────────────────────────────────────
-
-type FilterBucket = 'all' | 'found' | 'notfound' | 'blocked' | 'redirect' | 'error';
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+// matchesBucket, sortResults, summarizeSweep, computeEta imported from sweep-panel-utils
 
 function statusColor(r: SweepResult): string {
   switch (r.status) {
@@ -52,17 +57,6 @@ function statusLabel(r: SweepResult): string {
 
 function isRedirect(r: SweepResult): boolean {
   return [301, 302, 307, 308].includes(r.statusCode);
-}
-
-function matchesBucket(r: SweepResult, bucket: FilterBucket): boolean {
-  switch (bucket) {
-    case 'all':      return true;
-    case 'found':    return r.status === 'found';
-    case 'notfound': return r.status === 'not_found' && !isRedirect(r);
-    case 'blocked':  return r.status === 'blocked';
-    case 'redirect': return isRedirect(r) && r.status === 'not_found';
-    case 'error':    return r.status === 'error' || r.status === 'unknown';
-  }
 }
 
 function filterResults(results: SweepResult[], bucket: FilterBucket, query: string): SweepResult[] {
@@ -117,6 +111,7 @@ export function SweepPanel(): JSX.Element {
   const [resultBucket, setResultBucket] = useState<FilterBucket>('all');
   const [resultSearch, setResultSearch] = useState('');
   const [maigretMsg, setMaigretMsg] = useState('');
+  const [sort, setSort] = useState<{ key: string; dir: 1 | -1 }>({ key: 'status', dir: 1 });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ── Add custom site form ─────────────────────────────────────────────────
@@ -205,18 +200,26 @@ export function SweepPanel(): JSX.Element {
     [allResults, resultBucket, resultSearch]
   );
 
-  // ── Favicon lookup for visible results ──────────────────────────────────────
-  const visibleResults = filteredResults.slice(0, 500);
+  // ── Sorted visible results ───────────────────────────────────────────────────
+  const sortedResults = useMemo(
+    () => sortResults(filteredResults, sort.key, sort.dir),
+    [filteredResults, sort.key, sort.dir],
+  );
+  const visibleResults = sortedResults.slice(0, 500);
   const visibleSiteNames = useMemo(() => [...new Set(visibleResults.map((r) => r.siteName))], [visibleResults.map((r) => r.siteName).join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
   const favicons = useFavicons(visibleSiteNames);
 
+  // ── Stats & summary ──────────────────────────────────────────────────────────
+  const summary = useMemo(() => summarizeSweep(allResults), [allResults]);
+
   const stats = useMemo(() => ({
-    found:    allResults.filter((r) => r.status === 'found').length,
+    found:    summary.found,
+    maybe:    summary.maybe,
     notfound: allResults.filter((r) => r.status === 'not_found' && !isRedirect(r)).length,
-    blocked:  allResults.filter((r) => r.status === 'blocked').length,
+    blocked:  summary.blocked,
     redirect: allResults.filter((r) => isRedirect(r) && r.status === 'not_found').length,
-    error:    allResults.filter((r) => r.status === 'error' || r.status === 'unknown').length,
-  }), [allResults]);
+    error:    summary.error + summary.unknown,
+  }), [allResults, summary]);
 
   // ── Sweep subscription (per active job) ─────────────────────────────────
 
@@ -370,10 +373,29 @@ export function SweepPanel(): JSX.Element {
     URL.revokeObjectURL(url);
   }, [filteredResults, activeJob]);
 
+  // ─── Sort toggle ──────────────────────────────────────────────────────────
+
+  const handleSort = useCallback((key: string) => {
+    setSort((prev) => ({
+      key,
+      dir: prev.key === key ? (-prev.dir as 1 | -1) : 1,
+    }));
+  }, []);
+
   // ─── Render ───────────────────────────────────────────────────────────────
 
   const isRunning = activeJob?.status === 'running';
   const progress = activeJob ? activeJob.checkedSites / Math.max(activeJob.totalSites, 1) : 0;
+
+  // Rolling ETA: elapsedSoFar / checked * remaining (guard div-by-zero)
+  const etaMs = activeJob && isRunning
+    ? computeEta(activeJob.checkedSites, activeJob.totalSites, Date.now() - activeJob.startedAt)
+    : null;
+  const etaLabel = etaMs != null
+    ? etaMs < 60_000
+      ? `~${Math.ceil(etaMs / 1000)}s`
+      : `~${Math.ceil(etaMs / 60_000)}m`
+    : null;
 
   return (
     <div className="sl-sweep-root">
@@ -560,12 +582,16 @@ export function SweepPanel(): JSX.Element {
               SWEEPING: <strong>{activeJob.username.toUpperCase()}</strong>
               &nbsp;·&nbsp;
               <span className="sl-sweep-found-count">{stats.found} FOUND</span>
+              {stats.maybe > 0 && (
+                <span className="sl-sweep-maybe-count">&nbsp;·&nbsp;{stats.maybe} MAYBE</span>
+              )}
             </span>
             <span className="sl-sweep-progress-counts">
               {activeJob.checkedSites}/{activeJob.totalSites}
               {activeJob.status === 'completed' && ' · COMPLETE'}
               {activeJob.status === 'running' && ' · SCANNING...'}
               {activeJob.status === 'cancelled' && ' · CANCELLED'}
+              {etaLabel && isRunning && <span className="sl-sweep-eta">&nbsp;· ETA {etaLabel}</span>}
             </span>
           </div>
           <div className="sl-progress-track">
@@ -591,6 +617,7 @@ export function SweepPanel(): JSX.Element {
             [
               { id: 'all',      label: 'ALL',       count: allResults.length,    accent: undefined },
               { id: 'found',    label: 'FOUND',     count: stats.found,         accent: '#00ff88' },
+              { id: 'maybe',    label: 'MAYBE',     count: stats.maybe,         accent: '#d8a83a' },
               { id: 'notfound', label: 'NOT FOUND', count: stats.notfound,      accent: undefined },
               { id: 'blocked',  label: 'BLOCKED',   count: stats.blocked,       accent: '#ffc800' },
               { id: 'redirect', label: 'REDIRECT',  count: stats.redirect,      accent: undefined },
@@ -619,6 +646,49 @@ export function SweepPanel(): JSX.Element {
         </div>
       )}
 
+      {/* ── Summary panel ── */}
+      {activeJob && allResults.length > 0 && (
+        <div className="sl-summary">
+          <div className="sl-summary-row">
+            <span className="sl-summary-stat sl-summary-found">
+              <span className="sl-summary-val">{summary.found}</span> FOUND
+            </span>
+            {summary.maybe > 0 && (
+              <span className="sl-summary-stat sl-summary-maybe">
+                <span className="sl-summary-val">{summary.maybe}</span> MAYBE
+              </span>
+            )}
+            {summary.blocked > 0 && (
+              <span className="sl-summary-stat sl-summary-blocked">
+                <span className="sl-summary-val">{summary.blocked}</span> BLOCKED
+              </span>
+            )}
+            <span className="sl-summary-stat sl-summary-notfound">
+              <span className="sl-summary-val">{summary.not_found}</span> NOT FOUND
+            </span>
+            {(summary.error + summary.unknown) > 0 && (
+              <span className="sl-summary-stat sl-summary-error">
+                <span className="sl-summary-val">{summary.error + summary.unknown}</span> ERROR
+              </span>
+            )}
+            {Object.keys(summary.byCategory).length > 0 && (
+              <span className="sl-summary-cats">
+                {Object.entries(summary.byCategory)
+                  .sort(([, a], [, b]) => (b.found + b.maybe) - (a.found + a.maybe))
+                  .slice(0, 5)
+                  .map(([cat, counts]) => (
+                    <span key={cat} className="sl-summary-cat-chip">
+                      {cat}: {counts.found > 0 && <span className="sl-summary-cat-found">{counts.found}</span>}
+                      {counts.found > 0 && counts.maybe > 0 && '+'}
+                      {counts.maybe > 0 && <span className="sl-summary-cat-maybe">{counts.maybe}</span>}
+                    </span>
+                  ))}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ── Results table ── */}
       <div className="sl-sweep-results">
         {!activeJob ? (
@@ -639,9 +709,34 @@ export function SweepPanel(): JSX.Element {
           <table className="sl-sweep-table">
             <thead>
               <tr className="sl-sweep-thead-row">
-                {['STATUS', 'MATCH', 'SITE', 'URL', 'CHECK', 'MS', 'CATEGORY', ''].map((h) => (
-                  <th key={h} className="sl-sweep-th">{h}</th>
-                ))}
+                {(
+                  [
+                    { key: 'status',      label: 'STATUS'   },
+                    { key: 'probability', label: 'MATCH'    },
+                    { key: 'site',        label: 'SITE'     },
+                    { key: null,          label: 'URL'      },
+                    { key: null,          label: 'CHECK'    },
+                    { key: 'elapsed',     label: 'MS'       },
+                    { key: 'category',    label: 'CATEGORY' },
+                    { key: null,          label: ''         },
+                  ] as { key: string | null; label: string }[]
+                ).map(({ key, label }) =>
+                  key ? (
+                    <th
+                      key={label || key}
+                      className={`sl-sweep-th sl-sweep-th-sortable${sort.key === key ? ' sl-sweep-th-active' : ''}`}
+                      onClick={() => handleSort(key)}
+                      title={`Sort by ${label}`}
+                    >
+                      {label}
+                      <span className="sl-sort-caret">
+                        {sort.key === key ? (sort.dir === 1 ? ' ▲' : ' ▼') : ' ◇'}
+                      </span>
+                    </th>
+                  ) : (
+                    <th key={label} className="sl-sweep-th">{label}</th>
+                  )
+                )}
               </tr>
             </thead>
             <tbody>
