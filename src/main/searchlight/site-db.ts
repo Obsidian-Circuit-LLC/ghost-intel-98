@@ -1,8 +1,9 @@
 import { join } from 'node:path';
-import { readFileSync } from 'node:fs';
-import { app } from 'electron';
+import { readFileSync, existsSync } from 'node:fs';
+import { mkdir } from 'node:fs/promises';
+import { app, shell } from 'electron';
 import { secureReadFile, secureWriteFile } from '../storage/secure-fs';
-import { parseMaigretData, validateImportedSites, toCatalog } from '@shared/searchlight/sites';
+import { parseMaigretData, validateImportedSites, toCatalog, pickSitesSource } from '@shared/searchlight/sites';
 import type { MaigretSiteEntry, SiteCatalogEntry } from '@shared/searchlight/types';
 
 let bundledCache: MaigretSiteEntry[] | null = null;
@@ -15,14 +16,36 @@ function bundledPath(): string {
   return join(base, app.isPackaged ? 'searchlight' : 'resources/searchlight', 'maigret_sites.json');
 }
 
+/** Writable override path: drop a corrected maigret_sites.json here to replace the bundled database.
+ *  Corruption is never fatal — if this file is missing or malformed, loadBundled() falls back to the
+ *  bundled maigret_sites.json transparently. */
+export function overrideSitesFile(): string {
+  return join(app.getPath('userData'), 'searchlight', 'maigret_sites.json');
+}
+
 export function loadBundled(readJson?: () => unknown): MaigretSiteEntry[] {
   // injection form (tests) caches too, so fullSites() reflects the injected bundled set
   if (readJson) { bundledCache = parseMaigretData(readJson()); return bundledCache; }
   if (!bundledCache) {
-    try { bundledCache = parseMaigretData(JSON.parse(readFileSync(bundledPath(), 'utf8'))); }
+    try {
+      const bundledRaw = readFileSync(bundledPath(), 'utf8');
+      const overridePath = overrideSitesFile();
+      const overrideRaw = existsSync(overridePath) ? readFileSync(overridePath, 'utf8') : null;
+      bundledCache = pickSitesSource(overrideRaw, bundledRaw);
+    }
     catch { bundledCache = []; }
   }
   return bundledCache;
+}
+
+/** Open the writable site-database folder in the OS file manager.
+ *  Creates the folder first (best-effort). The user can drop a corrected maigret_sites.json here
+ *  to override the bundled database on the next app launch. */
+export async function revealSiteDbDir(): Promise<void> {
+  const dir = join(app.getPath('userData'), 'searchlight');
+  await mkdir(dir, { recursive: true });
+  const err = await shell.openPath(dir);
+  if (err) throw new Error(err);
 }
 
 export function customSitesFile(): string { return join(app.getPath('userData'), 'searchlight', 'custom-sites.json'); }

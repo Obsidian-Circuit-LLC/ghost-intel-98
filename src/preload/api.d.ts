@@ -535,6 +535,9 @@ export interface GhostApi {
     saveReport(args: { content: string; defaultName: string }): Promise<{ ok: boolean }>;
     torStatus(): Promise<{ state: 'off' | 'connecting' | 'ready' }>;
     connectTor(): Promise<{ state: 'off' | 'connecting' | 'ready'; error?: string }>;
+    /** Open the writable site-database folder in the OS file manager.
+     *  Drop a corrected maigret_sites.json there to override the bundled database on next launch. */
+    revealSiteDbDir(): Promise<void>;
   };
   socmint: {
     addChannel(caseId: string, channel: MonitoredChannel): Promise<MonitoredChannel[]>;
