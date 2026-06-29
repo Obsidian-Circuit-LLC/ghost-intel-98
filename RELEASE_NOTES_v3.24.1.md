@@ -16,12 +16,13 @@ The sweep's main-process handler reads `scorer.foundThreshold` when you hit **La
 - **Audited the whole class:** `chat`, `offensive`, and `x` had the same latent gap (a new default sub-field would be lost on upgrade) and are now deep-merged too. (`plugins` is a dynamic map and is correctly left as a wholesale replace.)
 - **Defense-in-depth:** the sweep handler now falls back to the canonical default scorer if one is ever missing, so a malformed or partially-migrated settings object can never again hard-break detection.
 - **Regression test** added that reproduces the failure (it fails before the fix) and locks the entire class of nested-settings blocks against recurrence.
+- **CI guard** added: a frozen pre-v3.23.0 `settings.json` fixture is loaded through the real settings-read path, and a completeness check synthesizes a stale block for *every* nested settings object — so any future block left out of the merge fails CI with an actionable message instead of silently dropping fields on upgrade. (The fresh-profile suite never exercised the upgrade path; this closes that gap.)
 
 Your existing settings **heal transparently on next launch** — no reinstall, no reconfiguration, no lost data.
 
 ## Quality
 
-- **2,193 automated tests** passing (the 3 new merge regression tests included), TypeScript strict, clean `pnpm build`.
+- **2,195 automated tests** passing (5 new: the merge regression tests plus the upgrade-path CI guard), TypeScript strict, clean `pnpm build`.
 - No dependency, protocol, crypto, or network-egress change. One main-process logic fix plus a test.
 
 ## Install
