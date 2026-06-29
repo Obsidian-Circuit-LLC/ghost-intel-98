@@ -20,6 +20,7 @@ import { basename, dirname, join, sep } from 'node:path';
 import { channels, BGCONN_LOCK_EXEMPT_CHANNELS } from '@shared/ipc-contracts';
 import type { MailAccount, MailSendInput, SshHostProfile, AiChatRequest, MediaTrack } from '@shared/post-mvp-types';
 import type { MediaUrlResult, CaseRecord } from '@shared/types';
+import { defaultSettings } from '@shared/types';
 import type { SearchlightCase } from '@shared/searchlight/types';
 import {
   caseStore,
@@ -1374,7 +1375,11 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     const caseId = typeof req?.caseId === 'string' && req.caseId.length > 0 ? req.caseId : null;
     const s = (await settingsStore.read()).searchlight;
     const win = getWindow();
-    const sc = s.scorer;
+    // Defense-in-depth: settingsStore.read() deep-merges scorer defaults, so sc is
+    // normally always present. Fall back to the canonical default if a malformed or
+    // partially-migrated settings object ever reaches here, so a missing scorer block
+    // can never again hard-break the sweep (see settings-merge-searchlight regression).
+    const sc = s.scorer ?? defaultSettings.searchlight.scorer;
     const model = getModel();
     const thresholds = {
       found: sc.foundThreshold ?? model?.thresholds.found ?? 0.5559,
