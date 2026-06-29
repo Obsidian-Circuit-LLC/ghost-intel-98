@@ -1,0 +1,32 @@
+{
+  "_comment": "Frozen, realistic Ghost Intel 98 settings.json as written by a build older than v3.23.0. The searchlight block has NO scorer key (it did not exist yet); chat/offensive/x are older subsets missing fields added later. Loaded through settingsStore.read() to prove the upgrade path heals these blocks to defaults instead of dropping fields. Do not regenerate — its value is being stale.",
+  "soundEnabled": true,
+  "themeIntensity": "classic",
+  "wallpaperColor": "#0a0a1a",
+  "wallpaperImage": null,
+  "startupSoundEnabled": true,
+  "legacySounds": false,
+  "caseFolderOverride": null,
+  "hasSeenWelcome": true,
+  "caseSortBy": "updatedAt",
+  "caseSortDir": "desc",
+  "localShellEnabled": false,
+  "localShellProgram": "cmd",
+  "mailBackgroundCheck": false,
+  "searchlight": {
+    "networkEnabled": true,
+    "torConcurrency": 8,
+    "clearnetConcurrency": 16
+  },
+  "chat": {},
+  "offensive": {
+    "confirmMode": "per-session",
+    "rateLimitPerSec": 4
+  },
+  "x": {
+    "networkEnabled": false
+  },
+  "socmint": {
+    "networkEnabled": false
+  }
+}

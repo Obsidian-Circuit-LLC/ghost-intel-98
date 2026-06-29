@@ -919,7 +919,7 @@ export const settingsStore: SettingsStore = {
   }
 };
 
-function mergeSettings(base: AppSettings, patch: Partial<AppSettings>): AppSettings {
+export function mergeSettings(base: AppSettings, patch: Partial<AppSettings>): AppSettings {
   const reconciled = reconcileShortcuts(
     patch.shortcuts ?? base.shortcuts,
     patch.seededShortcuts ?? base.seededShortcuts ?? []
@@ -939,6 +939,22 @@ function mergeSettings(base: AppSettings, patch: Partial<AppSettings>): AppSetti
       watchlist: { ...base.markets.watchlist, ...(patch.markets?.watchlist ?? {}) }
     },
     socmint: { ...base.socmint, ...(patch.socmint ?? {}) },
+    // Flat config objects: deep-merge so a sub-field added to defaults in a later build
+    // survives an older persisted block that predates it (same class as the searchlight
+    // scorer regression). plugins is a dynamic Record, so it is intentionally left to the
+    // wholesale `...patch` spread above — there is no fixed default to preserve.
+    chat: { ...base.chat, ...(patch.chat ?? {}) },
+    offensive: { ...base.offensive, ...(patch.offensive ?? {}) },
+    x: { ...base.x, ...(patch.x ?? {}) },
+    searchlight: {
+      ...base.searchlight,
+      ...(patch.searchlight ?? {}),
+      // scorer is a nested object added in v3.23.0; deep-merge it so a settings.json
+      // persisted by an earlier build (no scorer key) keeps the default scorer block
+      // instead of dropping it. Without this, searchlight.scorer is undefined for every
+      // upgrading user and the sweep IPC handler throws on scorer.foundThreshold.
+      scorer: { ...base.searchlight.scorer, ...(patch.searchlight?.scorer ?? {}) }
+    },
     shortcuts: reconciled.shortcuts,
     seededShortcuts: reconciled.seededShortcuts,
     hasSeenWelcome: patch.hasSeenWelcome ?? base.hasSeenWelcome,
