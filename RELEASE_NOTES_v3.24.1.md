@@ -28,4 +28,5 @@ Your existing settings **heal transparently on next launch** — no reinstall, n
 ## Install
 
 Windows NSIS installer attached.
-SHA-256: `<filled at publish>`
+SHA-256: `3ebe4bcc887065f3a525f508f7e0c10eb059c4fb11d4d6d92f4da885fde6563e`
+Size: 906,314,891 bytes (864 MB)
