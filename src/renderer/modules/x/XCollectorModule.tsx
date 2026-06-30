@@ -47,6 +47,7 @@ import type { XCollectResultShape, XCollectorStatus } from '@shared/ipc-contract
 import { useSettings } from '../../state/store';
 import { safeHref } from '../socmint/safe-href';
 import { xStatusDisplay } from './status-display';
+import { buildXCollectRequest, canCollect as canCollectFn } from './x-collect-request';
 import './x-collector.css';
 
 // ---------------------------------------------------------------------------
@@ -323,10 +324,16 @@ interface XCollectPanelProps {
     query?: string;
     username?: string;
     limit?: number;
+    accountId?: string;
   }): Promise<void>;
   lastResult: XCollectResultShape | null;
   collecting: boolean;
   caseId: string;
+  /** Stored X account IDs (from x.listAccounts) — never carries credentials. */
+  accounts: string[];
+  /** The account ID whose stored cookie this harvest will authenticate with. */
+  selectedAccount: string;
+  onSelectAccount(id: string): void;
 }
 
 function XCollectPanel({
@@ -335,27 +342,32 @@ function XCollectPanel({
   lastResult,
   collecting,
   caseId,
+  accounts,
+  selectedAccount,
+  onSelectAccount,
 }: XCollectPanelProps): JSX.Element {
   const [mode, setMode] = useState<CollectMode>('search');
   const [query, setQuery] = useState('');
   const [username, setUsername] = useState('');
   const [limit, setLimit] = useState('500');
 
-  const canCollect = gateOpen && !collecting && !!caseId && (
-    mode === 'search' ? !!query.trim() : !!username.trim()
-  );
+  const noAccounts = accounts.length === 0;
+  const canCollect = canCollectFn({
+    gateOpen, collecting, caseId, mode, query, username, accountId: selectedAccount,
+  });
 
   const handleCollect = useCallback(async () => {
     if (!canCollect) return;
     const limitNum = parseInt(limit, 10);
-    await onCollect({
+    await onCollect(buildXCollectRequest({
       caseId,
       mode,
-      ...(mode === 'search' ? { query: query.trim() } : {}),
-      ...(mode === 'userTweets' ? { username: username.trim() } : {}),
+      query,
+      username,
+      accountId: selectedAccount,
       ...(Number.isFinite(limitNum) && limitNum > 0 ? { limit: limitNum } : {}),
-    });
-  }, [canCollect, onCollect, caseId, mode, query, username, limit]);
+    }));
+  }, [canCollect, onCollect, caseId, mode, query, username, limit, selectedAccount]);
 
   const status: XCollectorStatus = lastResult?.status ?? 'idle';
   const d = xStatusDisplay(status);
@@ -379,6 +391,30 @@ function XCollectPanel({
           >
             User Timeline
           </button>
+        </div>
+
+        {/* Account selector — the harvest authenticates with this account's stored
+            cookie. Without an account twscrape returns nothing, so collection is
+            gated on a selection (see canCollect). Options are IDs only — no creds. */}
+        <div className="xc-form-row">
+          <label htmlFor="xc-account" className="xc-label">Account</label>
+          {noAccounts ? (
+            <span className="xc-note">
+              No X account stored. Add one in Settings › X Collector (paste your
+              auth_token + ct0 cookie) before collecting.
+            </span>
+          ) : (
+            <select
+              id="xc-account"
+              className="xc-input"
+              value={selectedAccount}
+              onChange={(e) => onSelectAccount(e.target.value)}
+            >
+              {accounts.map((id) => (
+                <option key={id} value={id}>{id}</option>
+              ))}
+            </select>
+          )}
         </div>
 
         {mode === 'search' ? (
@@ -433,6 +469,10 @@ function XCollectPanel({
               ? 'Enable X Collector and acknowledge clearnet use in Settings → X Collector first'
               : !caseId
               ? 'Enter a case ID first'
+              : noAccounts
+              ? 'Add an X account in Settings → X Collector first — collection needs a logged-in account'
+              : !selectedAccount
+              ? 'Select an account to collect with'
               : mode === 'search' && !query.trim()
               ? 'Enter a search query'
               : mode === 'userTweets' && !username.trim()
@@ -534,6 +574,41 @@ export function XCollectorModule({ caseId: propCaseId }: { caseId?: string }): J
   const [rankKeyword, setRankKeyword] = useState('');
   const [ranking, setRanking] = useState(false);
 
+  // Stored X accounts — IDs only (x.listAccounts never returns credentials).
+  // The selected account's cookie is what authenticates a harvest; without one,
+  // twscrape collects nothing, so the Collect button is gated on a selection.
+  const [accounts, setAccounts] = useState<string[]>([]);
+  const [selectedAccount, setSelectedAccount] = useState<string>('');
+
+  const loadAccounts = useCallback(async () => {
+    try {
+      const ids = (await window.api.x.listAccounts()) as string[];
+      setAccounts(ids);
+      // Auto-select when exactly one account exists; otherwise keep any still-valid
+      // selection and fall back to the first when the prior pick was removed.
+      setSelectedAccount((prev) => (prev && ids.includes(prev) ? prev : (ids[0] ?? '')));
+    } catch (err) {
+      console.warn('[XCollector] listAccounts:', err);
+    }
+  }, []);
+
+  // Refresh the account list on mount and whenever the collect tab is shown,
+  // so an account added in Settings appears without reopening the module.
+  useEffect(() => {
+    if (tab === 'collect') void loadAccounts();
+  }, [tab, loadAccounts]);
+
+  // Also refresh when the window regains focus. Accounts are edited in the
+  // separate Settings window; without this, deleting the selected account there
+  // while sitting on the Collect tab would leave a stale selection and silently
+  // re-open the logged-out-harvest path this fix exists to close. On reload,
+  // loadAccounts drops a now-missing selection (→ canCollect blocks).
+  useEffect(() => {
+    const onFocus = (): void => { if (tab === 'collect') void loadAccounts(); };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [tab, loadAccounts]);
+
   // Persistent breakage banner: shown until the operator dismisses it per-session.
   // We track it here so it persists across collect calls.
   const showBreakageBanner =
@@ -564,6 +639,7 @@ export function XCollectorModule({ caseId: propCaseId }: { caseId?: string }): J
     query?: string;
     username?: string;
     limit?: number;
+    accountId?: string;
   }) => {
     if (!gateOpen) return;
     setCollecting(true);
@@ -681,6 +757,9 @@ export function XCollectorModule({ caseId: propCaseId }: { caseId?: string }): J
                 lastResult={lastResult}
                 collecting={collecting}
                 caseId={caseId}
+                accounts={accounts}
+                selectedAccount={selectedAccount}
+                onSelectAccount={setSelectedAccount}
               />
             )}
             {tab === 'items' && (

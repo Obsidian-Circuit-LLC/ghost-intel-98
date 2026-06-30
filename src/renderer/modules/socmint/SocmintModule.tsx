@@ -56,6 +56,12 @@ import { useCallback, useEffect, useState } from 'react';
 import type { HarvestedItem, MonitoredChannel, SocmintPlatform } from '@shared/socmint/types';
 import { useSettings } from '../../state/store';
 import { safeHref } from './safe-href';
+import {
+  buildStartMonitorRequest,
+  canStartMonitor,
+  describeMonitorResult,
+  type StartMonitorResult,
+} from './start-monitor-request';
 import './socmint.css';
 
 // ---------------------------------------------------------------------------
@@ -298,6 +304,7 @@ function WhatsAppSetupPanel({ networkEnabled }: WhatsAppSetupPanelProps): JSX.El
 
 interface ChannelsPanelProps {
   platform: SocmintPlatform;
+  caseId: string;
   channels: MonitoredChannel[];
   newChannelId: string;
   newChannelLabel: string;
@@ -305,9 +312,12 @@ interface ChannelsPanelProps {
   networkEnabled: boolean;
   activeJobId: string | null;
   monitoring: boolean;
+  burnerId: string;
+  monitorMessage: string;
   onChangeNewChannelId(v: string): void;
   onChangeNewChannelLabel(v: string): void;
   onChangeNewChannelKeywords(v: string): void;
+  onChangeBurnerId(v: string): void;
   onAddChannel(): void;
   onRemoveChannel(channelId: string): void;
   onStartMonitor(): void;
@@ -316,6 +326,7 @@ interface ChannelsPanelProps {
 
 function ChannelsPanel({
   platform,
+  caseId,
   channels,
   newChannelId,
   newChannelLabel,
@@ -323,9 +334,12 @@ function ChannelsPanel({
   networkEnabled,
   activeJobId,
   monitoring,
+  burnerId,
+  monitorMessage,
   onChangeNewChannelId,
   onChangeNewChannelLabel,
   onChangeNewChannelKeywords,
+  onChangeBurnerId,
   onAddChannel,
   onRemoveChannel,
   onStartMonitor,
@@ -444,15 +458,31 @@ function ChannelsPanel({
           </div>
         ) : (
           <>
+            {/* Burner identity — REQUIRED by the backend. Must match the burner ID
+                configured in Settings → SOCMINT (Telegram) or the WA Setup tab. */}
+            <div className="sm-form-row">
+              <label htmlFor="sm-burner-id" className="sm-label">Burner ID</label>
+              <input
+                id="sm-burner-id"
+                className="sm-input"
+                value={burnerId}
+                onChange={(e) => onChangeBurnerId(e.target.value)}
+                placeholder={isWhatsApp ? 'burner from WA Setup' : 'burner from Settings → SOCMINT'}
+              />
+            </div>
             <button
               className="sm-btn sm-btn-primary"
               onClick={onStartMonitor}
-              disabled={!networkEnabled || monitoring || channels.length === 0}
+              disabled={!canStartMonitor({
+                networkEnabled, monitoring, caseId, burnerId, channelCount: channels.length,
+              })}
               title={
                 !networkEnabled
                   ? 'Enable SOCMINT network in Settings to start monitoring'
                   : channels.length === 0
                   ? `Add at least one ${isWhatsApp ? 'group' : 'channel'} before starting`
+                  : !burnerId.trim()
+                  ? `Enter the burner ID you configured in ${isWhatsApp ? 'WA Setup' : 'Settings → SOCMINT'}`
                   : undefined
               }
             >
@@ -460,6 +490,11 @@ function ChannelsPanel({
             </button>
             {!networkEnabled && (
               <p className="sm-note">Network disabled — enable in Settings → SOCMINT.</p>
+            )}
+            {/* Surface the last attempt's failure (noChannels / disabled / error)
+                instead of swallowing it. XSS-safe: rendered as a text child. */}
+            {monitorMessage !== '' && (
+              <p className="sm-monitor-error" role="alert">{monitorMessage}</p>
             )}
           </>
         )}
@@ -657,6 +692,13 @@ export function SocmintModule({ caseId: propCaseId }: { caseId?: string }): JSX.
   // Monitor
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [monitoring, setMonitoring] = useState(false);
+  // Burner identity to run the monitor under (configured in Settings → SOCMINT for
+  // Telegram, or the WA Setup tab for WhatsApp). REQUIRED by handleStartMonitor —
+  // without it the backend throws and the button does nothing.
+  const [burnerId, setBurnerId] = useState('');
+  // Visible outcome of the last Start Monitor attempt (noChannels / disabled / error).
+  // Surfacing this is the fix for the previously-swallowed startMonitor failure.
+  const [monitorMessage, setMonitorMessage] = useState('');
 
   const loadChannels = useCallback(async () => {
     if (!caseId) return;
@@ -749,20 +791,39 @@ export function SocmintModule({ caseId: propCaseId }: { caseId?: string }): JSX.
   }, [caseId]);
 
   const handleStartMonitor = useCallback(async () => {
-    if (!caseId || !networkEnabled) return;
+    if (!canStartMonitor({
+      networkEnabled, monitoring, caseId, burnerId, channelCount: channels.length,
+    })) return;
     setMonitoring(true);
+    setMonitorMessage('');
     try {
-      const result = await window.api.socmint.startMonitor({ caseId });
-      if ('jobId' in (result as object)) {
-        setActiveJobId((result as { jobId: string }).jobId);
+      // Send the FULL payload: burnerId + channelIds + platform. Omitting any of
+      // these is what made Start Monitor a dead button before v3.24.2.
+      const req = buildStartMonitorRequest({ caseId, burnerId, channels, platform });
+      const result = await window.api.socmint.startMonitor(req) as StartMonitorResult;
+      const outcome = describeMonitorResult(result);
+      if (outcome.kind === 'started' && outcome.jobId) {
+        setActiveJobId(outcome.jobId);
+      } else {
+        // noChannels / disabled / unexpected — show it instead of swallowing it.
+        setMonitorMessage(outcome.message);
       }
-      // If result is { disabled: true }, the gate is off — handled gracefully (no crash).
     } catch (err) {
+      // A thrown error reaches the operator as a fixed, actionable sentence — NOT
+      // the raw err.message, which can embed burner IDs / channel IDs / local paths
+      // (kept off-screen per the "don't become interesting" posture). The full
+      // error still goes to the dev console for debugging.
       console.warn('[SOCMINT] startMonitor:', err);
+      const raw = err instanceof Error ? err.message : String(err);
+      setMonitorMessage(
+        /tor/i.test(raw)
+          ? 'Monitoring did not start — Tor is the selected transport but is not connected. Connect Tor (or switch to Direct) in Settings → SOCMINT.'
+          : 'Monitoring did not start — check that the Burner ID matches one you set up and that the channels are reachable.',
+      );
     } finally {
       setMonitoring(false);
     }
-  }, [caseId, networkEnabled]);
+  }, [caseId, networkEnabled, monitoring, burnerId, channels, platform]);
 
   const handleStopMonitor = useCallback(async () => {
     if (!activeJobId) return;
@@ -861,6 +922,7 @@ export function SocmintModule({ caseId: propCaseId }: { caseId?: string }): JSX.
             {tab === 'channels' && (
               <ChannelsPanel
                 platform={platform}
+                caseId={caseId}
                 channels={channels}
                 newChannelId={newChannelId}
                 newChannelLabel={newChannelLabel}
@@ -873,6 +935,9 @@ export function SocmintModule({ caseId: propCaseId }: { caseId?: string }): JSX.
                 networkEnabled={networkEnabled}
                 activeJobId={activeJobId}
                 monitoring={monitoring}
+                burnerId={burnerId}
+                onChangeBurnerId={setBurnerId}
+                monitorMessage={monitorMessage}
                 onStartMonitor={handleStartMonitor}
                 onStopMonitor={handleStopMonitor}
               />

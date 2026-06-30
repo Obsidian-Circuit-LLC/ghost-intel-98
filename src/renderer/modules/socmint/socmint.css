@@ -291,6 +291,11 @@
   background: #200a0a;
   padding: 0 3px;
 }
+.sm-monitor-error {
+  color: #ff9090;
+  font-size: 12px;
+  margin: 6px 0 0;
+}
 .sm-wa-linked-status {
   display: flex;
   align-items: center;
