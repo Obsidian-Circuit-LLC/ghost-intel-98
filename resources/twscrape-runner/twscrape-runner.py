@@ -26,9 +26,10 @@ Wire invariants (spec §2.3):
   5. GraphQL 200 with empty data → truncated/error, NEVER done{count:0,truncated:false}.
   6. Doc_id rotation → error{code:'DOC_ID_ROTATION', fatal:true}, never silent.
 
-SEALED: twscrape is not installed in this build.  Any search/userTweets request will
-return error{code:'TWSCRAPE_NOT_INSTALLED', fatal:true} until the operator completes
-the §6 decisions and runs this script through scripts/build-twscrape-runner.sh.
+twscrape import guard: if twscrape is not importable, any search/userTweets request
+returns error{code:'TWSCRAPE_NOT_INSTALLED', fatal:true} (never a silent skip). The
+shipped Windows and Linux sidecars bundle twscrape==0.19.1 (see requirements-lock.txt);
+this guard only fires on a platform/build where it was not installed.
 
 Supply-chain note (spec §5.7): install ONLY from requirements-lock.txt (--require-hashes).
 Verify pypi.org/project/twscrape/ belongs to vladkens before building.
