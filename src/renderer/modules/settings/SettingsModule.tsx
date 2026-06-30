@@ -1000,8 +1000,9 @@ function XPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSettings>) 
           The X collector uses a Python sidecar (twscrape) that connects to x.com. Both
           settings.x.networkEnabled and settings.x.clearnetAcknowledged must be true at
           the IPC gate before any sidecar path is entered (spec §3.1). The sidecar binary
-          is sealed (pending operator lock) — collection is not available until it is
-          installed separately.
+          is built, SHA-256-pinned, and bundled in the Windows and Linux installers
+          (macOS is not yet built); on a platform with no bundled sidecar, collection
+          reports &ldquo;sidecar not installed&rdquo;.
         </p>
       </fieldset>
 

@@ -4,10 +4,12 @@
  * Manages the per-job twscrape-runner process lifecycle:
  *   existsSync → SHA verify → spawn → ping/pong → readline loop → SIGKILL teardown.
  *
- * SEALED: resources/twscrape-runner/ does NOT exist. sidecarPath() points at a
- * non-existent binary; runJob() existsSync-checks and returns
- * { status: 'sidecar-missing' } ("X collector sidecar not installed — pending
- * operator lock") — distinct from a runtime error, no silent skip, no stub.
+ * Sidecar binary: the twscrape-runner is BUILT and SHA-256-pinned for Windows and
+ * Linux and bundled in the installer (resources/twscrape-runner/<platform>/). macOS
+ * is not yet built. runJob() existsSync-checks then SHA-verifies before spawning; if
+ * no binary is present for the platform it returns { status: 'sidecar-missing' }
+ * ("X collector sidecar not installed for this platform") — distinct from a runtime
+ * error, no silent skip, no stub.
  *
  * Wire protocol: NDJSON over stdout (spec §2.3). Each frame is a newline-terminated
  * JSON object. Per-line cap: 1 MB (§2.3). Every job terminates with exactly one of:
@@ -223,12 +225,13 @@ export async function runJob(
 ): Promise<XSidecarResult> {
   const binPath = sidecarPath();
 
-  // 1. Binary absent → sealed-seam result (not a throw; sidecar-missing is a named status)
+  // 1. Binary absent for this platform (e.g. macOS, not yet built) → sidecar-missing
+  //    result (not a throw; sidecar-missing is a named status).
   if (!existsSync(binPath)) {
     return {
       status: 'sidecar-missing',
       totalFromSidecar: 0,
-      errorMessage: 'X collector sidecar not installed — pending operator lock',
+      errorMessage: 'X collector sidecar not installed for this platform',
       jobId,
     };
   }
