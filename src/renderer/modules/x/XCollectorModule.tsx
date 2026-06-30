@@ -162,13 +162,14 @@ function XErrorBanner({
 
 /**
  * Sidecar-missing notice: shown for status='sidecar-missing'.
- * Distinct from an error — the sidecar just hasn't been installed/locked yet.
+ * Distinct from an error — there's just no sidecar binary bundled for this platform
+ * (the Windows and Linux sidecars ship in the installer; macOS is not yet built).
  */
 function XSidecarMissingNotice({ errorMessage }: { errorMessage?: string }): JSX.Element {
   return (
     <div className="xc-missing-notice" role="note">
       <strong>X collector sidecar not installed</strong>
-      {errorMessage !== undefined ? ` — ${errorMessage}` : ' — pending operator lock.'}
+      {errorMessage !== undefined ? ` — ${errorMessage}` : ' — no sidecar binary is bundled for this platform.'}
     </div>
   );
 }

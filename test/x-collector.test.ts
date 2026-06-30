@@ -229,7 +229,7 @@ describe('X-4: collectX — sidecar-missing propagation', () => {
       baseResult: {
         status: 'sidecar-missing',
         totalFromSidecar: 0,
-        errorMessage: 'X collector sidecar not installed — pending operator lock',
+        errorMessage: 'X collector sidecar not installed for this platform',
       },
     });
     const req = makeCollectReq();
