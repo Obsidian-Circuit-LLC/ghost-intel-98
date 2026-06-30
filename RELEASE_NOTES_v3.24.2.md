@@ -27,5 +27,5 @@ No change to the egress model: X collection still requires both the network-enab
 ## Install
 
 Windows NSIS installer attached.
-SHA-256: `SHA_PLACEHOLDER`
-Size: SIZE_PLACEHOLDER bytes
+SHA-256: `4f94b664356f5fe173cd5f589b7ca2fbd4781a40413e04a1de6dce29d66ac1e2`
+Size: 906,314,274 bytes (864 MB)
