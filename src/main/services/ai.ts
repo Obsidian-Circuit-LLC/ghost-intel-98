@@ -17,7 +17,15 @@ import { channels } from '@shared/ipc-contracts';
 import { secretStore } from '../secrets';
 import { settingsStore } from '../storage/json-fs';
 import { validateAiEndpoint } from '../security/validate';
-import { recall, formatRecall } from './memory/retriever';
+import { recall, formatRecall, type RecallHit } from './memory/retriever';
+import { recallProfile } from './memory/profile';
+import type { MemoryItem } from './memory/profile/types';
+
+/** `'global'` always included; `case:<caseId>` appended when the request carries a selected case
+ *  — the same scoping convention the adaptive-memory profile store/reconcile/retriever use. */
+function scopesFor(req: AiChatRequest): string[] {
+  return ['global', ...(req.caseId ? [`case:${req.caseId}`] : [])];
+}
 
 interface SessionMeta {
   controller: AbortController;
@@ -60,12 +68,29 @@ export async function chat(streamId: string, req: AiChatRequest, getWindow: () =
     }
     // Local vector memory (opt-in, Ollama only): recall relevant case/conversation material and
     // inject it as context. Best-effort — a memory failure must never break the chat.
+    // Collected (alongside the adaptive profile below) so the renderer can be shown exactly what
+    // was recalled/injected for this answer (transparency — never silent).
+    let ragHits: RecallHit[] = [];
+    let profileItems: MemoryItem[] = [];
     if (s.ai.useMemory && provider === 'ollama') {
       try {
         const lastUser = [...req.messages].reverse().find((m) => m.role === 'user');
         if (lastUser) {
-          const block = formatRecall(await recall(lastUser.content, { k: 6 }));
+          ragHits = await recall(lastUser.content, { k: 6 });
+          const block = formatRecall(ragHits);
           if (block) messages.push({ role: 'system', content: block });
+
+          // Adaptive long-term profile (opt-in, on top of useMemory): a durable, inspectable,
+          // user-editable set of facts + rolling summary, distinct from the vector-RAG recall
+          // above. Its own try/catch — a profile failure must never take down RAG recall or the
+          // chat itself.
+          if (s.ai.adaptiveMemory) {
+            try {
+              const profile = await recallProfile(lastUser.content, scopesFor(req));
+              profileItems = profile.items;
+              if (profile.block) messages.push({ role: 'system', content: profile.block });
+            } catch { /* adaptive profile is best-effort */ }
+          }
         }
       } catch { /* memory is best-effort */ }
     }
@@ -82,7 +107,10 @@ export async function chat(streamId: string, req: AiChatRequest, getWindow: () =
         emit(getWindow, streamId, { chunk })
       );
     }
-    emit(getWindow, streamId, { done: true });
+    // Recall provenance goes out on the final event — guaranteed to fire exactly once per request
+    // (unlike the first chunk, which never arrives for an empty/failed completion), so the
+    // renderer's "recalled from…" transparency panel always gets told what was/wasn't used.
+    emit(getWindow, streamId, { done: true, recall: { rag: ragHits, profile: profileItems } });
   } catch (err) {
     emit(getWindow, streamId, { error: (err as Error).message, done: true });
   } finally {
@@ -104,7 +132,16 @@ export async function cancelAll(): Promise<void> {
   sessions.clear();
 }
 
-function emit(getWindow: () => BrowserWindow | null, streamId: string, payload: { chunk?: string; done?: boolean; error?: string }): void {
+interface ChatChunkPayload {
+  chunk?: string;
+  done?: boolean;
+  error?: string;
+  /** Emitted on the final (`done`) event when adaptive memory (`useMemory`/`adaptiveMemory`) was
+   *  active — exactly what was recalled/injected into this answer, for renderer-side transparency. */
+  recall?: { rag: RecallHit[]; profile: MemoryItem[] };
+}
+
+function emit(getWindow: () => BrowserWindow | null, streamId: string, payload: ChatChunkPayload): void {
   const win = getWindow();
   if (!win) return;
   win.webContents.send(channels.ai.onChatChunk, { streamId, ...payload });

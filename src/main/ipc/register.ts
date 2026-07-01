@@ -18,7 +18,7 @@ import { app, ipcMain, shell, dialog, BrowserWindow } from 'electron';
 import { writeFile, rename, lstat, rm, readFile, stat, realpath } from 'node:fs/promises';
 import { basename, dirname, join, sep } from 'node:path';
 import { channels, BGCONN_LOCK_EXEMPT_CHANNELS } from '@shared/ipc-contracts';
-import type { MailAccount, MailSendInput, SshHostProfile, AiChatRequest, MediaTrack } from '@shared/post-mvp-types';
+import type { MailAccount, MailSendInput, SshHostProfile, AiChatRequest, MediaTrack, AiConversation } from '@shared/post-mvp-types';
 import type { MediaUrlResult, CaseRecord } from '@shared/types';
 import { defaultSettings } from '@shared/types';
 import type { SearchlightCase } from '@shared/searchlight/types';
@@ -46,6 +46,7 @@ import * as walls from '../services/walls';
 import * as sounds from '../services/sounds';
 import * as ai from '../services/ai';
 import { liveReindex } from '../services/memory/live-reindex.singleton';
+import { learnFromConversation } from '../services/memory/profile';
 import * as localAi from '../services/local-ai';
 import * as chat from '../services/chat';
 import * as piperTts from '../services/piper-tts';
@@ -233,6 +234,20 @@ async function resumeEnableIfNeeded(): Promise<void> {
   } finally {
     vault.endMigration();
   }
+}
+
+/** Best-effort adaptive-memory learning trigger, fired after a conversation settles and is saved
+ *  (never in the chat response's own hot path — this runs off a separate, later IPC call). Gated
+ *  on `useMemory && adaptiveMemory` and Ollama-only, mirroring the injection gate in `ai.ts`. A
+ *  settings-read failure or a learning failure must never surface to the save caller. Conversation
+ *  saves aren't case-linked in this store, so learning is scoped to `'global'` only. */
+async function triggerAdaptiveLearning(convo: AiConversation): Promise<void> {
+  try {
+    const s = await settingsStore.read();
+    if (!s.ai.useMemory || !s.ai.adaptiveMemory || s.ai.provider !== 'ollama') return;
+    const turns = convo.messages.map((m) => `${m.role}: ${m.content}`).join('\n');
+    await learnFromConversation(convo.id, turns, ['global']);
+  } catch { /* adaptive learning is best-effort */ }
 }
 
 // Photos embedded into a case report (summary HTML/PDF). Originals are decrypted here in main and
@@ -940,6 +955,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.aiConvos.save, async (...args) => {
     const result = await aiConvos.save(ensureAiConversation(args[0]));
     liveReindex.conversationsChanged(); // fire-and-forget: never awaited in the response path
+    void triggerAdaptiveLearning(result); // fire-and-forget: never awaited in the response path
     return result;
   });
   safeHandle(channels.aiConvos.delete, (...args) => aiConvos.remove(ensureUuid(args[0], 'conversation id')));

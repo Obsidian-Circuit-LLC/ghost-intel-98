@@ -258,6 +258,9 @@ export interface AiChatRequest {
   /** Concatenated context to prepend (typically: selected case bundle). */
   context?: string;
   messages: AiChatMessage[];
+  /** The case (if any) the user has selected as context for this message — used to scope the
+   *  adaptive-memory profile (`case:<caseId>`) alongside the always-included `global` scope. */
+  caseId?: string;
 }
 
 /** A saved AI conversation (ChatGPT-style memory). Persisted under dataRoot, encrypted at rest

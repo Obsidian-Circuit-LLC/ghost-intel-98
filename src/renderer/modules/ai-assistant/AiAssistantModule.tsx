@@ -237,7 +237,10 @@ export function AiAssistantModule(): JSX.Element {
     setStreaming(true);
     stoppedRef.current = false;
 
-    const req: AiChatRequest = { context, messages: history };
+    // Adaptive-memory scoping: only pass caseId when the user has actually selected a case whose
+    // context loaded successfully (contextCase), so a stale/failed contextCaseId never scopes
+    // learning/recall to a case whose data wasn't actually included in this message.
+    const req: AiChatRequest = { context, messages: history, caseId: contextCase ? contextCaseId : undefined };
 
     // Accumulate the full reply locally so we can speak it on `done` without reading
     // back through React state (avoids StrictMode double-speak + stale closures).
