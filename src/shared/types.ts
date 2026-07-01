@@ -383,6 +383,10 @@ export interface AppSettings {
     /** When true, the assistant retrieves relevant case/conversation memory (local vector search
      *  over the bundled embedding model) and injects it as context. Offline; default off. */
     useMemory: boolean;
+    /** When true (and `useMemory` is on), note/case/conversation saves trigger a debounced
+     *  background reindex so recall reflects the latest content without a manual rebuild.
+     *  Local-only; no-op for non-Ollama providers. Default true. */
+    autoReindex: boolean;
   };
   mail: {
     accounts: { id: string; label: string; imapHost: string; imapPort: number; smtpHost: string; smtpPort: number; user: string; secureRef: string | null }[];
@@ -607,7 +611,8 @@ export const defaultSettings: AppSettings = {
     ttsRate: 1,
     ttsEngine: 'auto',
     piperVoice: null,
-    useMemory: false
+    useMemory: false,
+    autoReindex: true
   },
   mail: { accounts: [] },
   mailBackgroundCheck: false,
