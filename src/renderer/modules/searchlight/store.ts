@@ -43,6 +43,10 @@ export interface SearchlightState {
   cases: SearchlightCase[];
   activeCaseId: string | null;
 
+  // Selected sweep job for the Sweep panel (survives tab-switch unmounts).
+  selectedJobId: string | null;
+  setSelectedJobId(id: string | null): void;
+
   // Hydration (called once on mount from SearchlightModule)
   hydrate(): Promise<void>;
 
@@ -100,6 +104,7 @@ function mutateCaseAndSave(
 export const useSearchlightStore = create<SearchlightState>((set, get) => ({
   cases: [],
   activeCaseId: null,
+  selectedJobId: null,
 
   // ── Hydration ──────────────────────────────────────────────────────────────
 
@@ -139,6 +144,8 @@ export const useSearchlightStore = create<SearchlightState>((set, get) => ({
   // ── Cases ──────────────────────────────────────────────────────────────────
 
   setActiveCaseId: (id) => set({ activeCaseId: id }),
+
+  setSelectedJobId: (id) => set({ selectedJobId: id }),
 
   getActiveCase: () => {
     const { cases, activeCaseId } = get();

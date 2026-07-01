@@ -27,6 +27,8 @@ import {
 } from '@shared/searchlight/sweep-panel-utils';
 import { useSearchlightStore } from '../store';
 import { useSettings } from '../../../state/store';
+import { sweepStream } from '../sweep-stream';
+import { resolveSweepSelection } from '../sweep-selection';
 import { useFavicons } from './useFavicons';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -106,7 +108,19 @@ export function SweepPanel(): JSX.Element {
   const [directMode, setDirectMode] = useState(false); // default OFF = Tor
   const [torState, setTorState] = useState<'off' | 'connecting' | 'ready' | 'unknown'>('unknown');
   const [torErr, setTorErr] = useState<string | null>(null);
-  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const selectedJobId = useSearchlightStore((s) => s.selectedJobId);
+  const setSelectedJobId = useSearchlightStore((s) => s.setSelectedJobId);
+  const activeJobId = selectedJobId;
+
+  // Restore the correct sweep into view: keep the current selection when it belongs to
+  // the active case, otherwise fall back to this case's most recent sweep (or null when it
+  // has none). This runs on tab remount AND on case switch — a stale cross-case pointer must
+  // not blank the panel. Only writes when the resolved value differs (no render loop).
+  useEffect(() => {
+    const resolved = resolveSweepSelection(activeCase?.searches ?? [], selectedJobId);
+    if (resolved !== selectedJobId) setSelectedJobId(resolved);
+  }, [selectedJobId, activeCase, setSelectedJobId]);
+
   const [catalog, setCatalog] = useState<SiteCatalogEntry[]>([]);
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [resultBucket, setResultBucket] = useState<FilterBucket>('all');
@@ -229,34 +243,6 @@ export function SweepPanel(): JSX.Element {
     error:    summary.error + summary.unknown,
   }), [allResults, summary]);
 
-  // ── Sweep subscription (per active job) ─────────────────────────────────
-
-  useEffect(() => {
-    if (!activeJobId || !activeCaseId) return;
-    const job = store.cases
-      .find((c) => c.id === activeCaseId)
-      ?.searches.find((j) => j.id === activeJobId);
-    if (!job || job.status !== 'running') return;
-
-    const offResult = window.api.searchlight.onSweepResult((r: SweepResult) => {
-      if (r.jobId !== activeJobId) return;
-      store.appendSweepResult(activeCaseId, activeJobId, r);
-    });
-
-    const offDone = window.api.searchlight.onSweepDone((f) => {
-      if (f.jobId !== activeJobId) return;
-      const finalStatus = f.status === 'cancelled' ? 'cancelled' : 'completed';
-      store.finishSweepJob(activeCaseId, activeJobId, finalStatus);
-    });
-
-    return () => {
-      offResult();
-      offDone();
-    };
-  // We intentionally run this only when activeJobId changes, not on every store tick.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeJobId, activeCaseId]);
-
   // ── Launch sweep ─────────────────────────────────────────────────────────
 
   const handleLaunch = useCallback(async () => {
@@ -285,14 +271,16 @@ export function SweepPanel(): JSX.Element {
       useTor: !directMode,
     };
     store.addSearchJob(activeCaseId, job);
-    setActiveJobId(jobId);
+    sweepStream.start(activeCaseId, jobId);
+    setSelectedJobId(jobId);
     setResultBucket('all');
-  }, [username, activeCaseId, networkEnabled, activeJob, filteredCatalog, directMode, store]);
+  }, [username, activeCaseId, networkEnabled, activeJob, filteredCatalog, directMode, store, setSelectedJobId]);
 
   const handleCancel = useCallback(async () => {
     if (!activeJobId || !activeCaseId) return;
     await window.api.searchlight.cancelSweep(activeJobId);
     store.finishSweepJob(activeCaseId, activeJobId, 'cancelled');
+    sweepStream.stop(activeJobId);
   }, [activeJobId, activeCaseId, store]);
 
   // ── Maigret import ───────────────────────────────────────────────────────

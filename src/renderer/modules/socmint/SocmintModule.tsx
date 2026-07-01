@@ -54,14 +54,17 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import type { HarvestedItem, MonitoredChannel, SocmintPlatform } from '@shared/socmint/types';
-import { useSettings } from '../../state/store';
+import { useSettings, useWindows } from '../../state/store';
 import { safeHref } from './safe-href';
+import { xLaunchSpec } from './x-launch-spec';
 import {
   buildStartMonitorRequest,
   canStartMonitor,
   describeMonitorResult,
   type StartMonitorResult,
 } from './start-monitor-request';
+import { describeStartMonitorBlock } from './start-monitor-block';
+import { buildCaseOptions, type CaseOption } from './case-options';
 import './socmint.css';
 
 // ---------------------------------------------------------------------------
@@ -352,6 +355,14 @@ function ChannelsPanel({
   const waJidInvalid = isWhatsApp && channelIdTrimmed.length > 0 &&
     !channelIdTrimmed.endsWith('@g.us');
   const canAdd = channelIdTrimmed.length > 0 && !waJidInvalid;
+  const blockReason = describeStartMonitorBlock({
+    networkEnabled,
+    caseId,
+    burnerId,
+    channelCount: channels.length,
+    hasPendingChannelInput: newChannelId.trim().length > 0,
+    isWhatsApp,
+  });
 
   return (
     <div className="sm-channels">
@@ -488,8 +499,8 @@ function ChannelsPanel({
             >
               {monitoring ? 'Starting…' : 'Start Monitor'}
             </button>
-            {!networkEnabled && (
-              <p className="sm-note">Network disabled — enable in Settings → SOCMINT.</p>
+            {blockReason !== '' && (
+              <p className="sm-monitor-hint" role="status">{blockReason}</p>
             )}
             {/* Surface the last attempt's failure (noChannels / disabled / error)
                 instead of swallowing it. XSS-safe: rendered as a text child. */}
@@ -678,6 +689,18 @@ export function SocmintModule({ caseId: propCaseId }: { caseId?: string }): JSX.
     }
   }, [propCaseId]);
 
+  const [caseOptions, setCaseOptions] = useState<CaseOption[]>([]);
+  const [manualEntry, setManualEntry] = useState(false);
+
+  useEffect(() => {
+    if (propCaseId !== undefined) return; // launched from a case → no picker
+    let cancelled = false;
+    void window.api.cases.list()
+      .then((list) => { if (!cancelled) setCaseOptions(buildCaseOptions(list)); })
+      .catch((err) => console.warn('[SOCMINT] cases.list:', err));
+    return () => { cancelled = true; };
+  }, [propCaseId]);
+
   // Channels
   const [channels, setChannels] = useState<MonitoredChannel[]>([]);
   const [newChannelId, setNewChannelId] = useState('');
@@ -846,21 +869,40 @@ export function SocmintModule({ caseId: propCaseId }: { caseId?: string }): JSX.
         </div>
       )}
 
-      {/* Case ID selector — only shown when caseId is not passed as a prop. */}
+      {/* Case selector — dropdown of real cases (value = real CaseId, no phantom-case footgun).
+          Manual entry stays available for advanced/edge use. */}
       {propCaseId === undefined && (
         <div className="sm-case-bar">
-          <label htmlFor="sm-case-id" className="sm-label">Case ID</label>
-          <input
-            id="sm-case-id"
-            className="sm-input"
-            value={caseIdInput}
-            onChange={(e) => setCaseIdInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') handleApplyCaseId(); }}
-            placeholder="Enter case ID…"
-          />
-          <button className="sm-btn" onClick={handleApplyCaseId}>
-            Load
-          </button>
+          <label htmlFor="sm-case-pick" className="sm-label">Case</label>
+          {!manualEntry ? (
+            <>
+              <select
+                id="sm-case-pick"
+                className="sm-input"
+                value={caseId}
+                onChange={(e) => { setCaseId(e.target.value); setCaseIdInput(e.target.value); }}
+              >
+                <option value="">Select a case…</option>
+                {caseOptions.map((o) => (
+                  <option key={o.value} value={o.value}>{o.category} › {o.label}</option>
+                ))}
+              </select>
+              <button className="sm-btn" onClick={() => setManualEntry(true)}>Enter ID…</button>
+            </>
+          ) : (
+            <>
+              <input
+                id="sm-case-id"
+                className="sm-input"
+                value={caseIdInput}
+                onChange={(e) => setCaseIdInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleApplyCaseId(); }}
+                placeholder="Enter case ID…"
+              />
+              <button className="sm-btn" onClick={handleApplyCaseId}>Load</button>
+              <button className="sm-btn" onClick={() => setManualEntry(false)}>Pick from list</button>
+            </>
+          )}
         </div>
       )}
 
@@ -879,6 +921,13 @@ export function SocmintModule({ caseId: propCaseId }: { caseId?: string }): JSX.
           aria-pressed={platform === 'whatsapp'}
         >
           WhatsApp
+        </button>
+        <button
+          className="sm-platform-btn sm-platform-xlaunch"
+          onClick={() => useWindows.getState().open(xLaunchSpec(caseId))}
+          title="Opens the separate X / Twitter collector (clearnet — not routed through Tor)"
+        >
+          X / Twitter ↗
         </button>
       </div>
 
