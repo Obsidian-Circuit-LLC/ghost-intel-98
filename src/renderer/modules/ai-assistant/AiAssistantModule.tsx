@@ -92,10 +92,14 @@ export function AiAssistantModule(): JSX.Element {
     const payload = {
       id: convoIdRef.current,
       title: titleRef.current || messages.find((m) => m.role === 'user')?.content.slice(0, 60) || 'Conversation',
-      messages: messages.map(({ role, content }) => ({ role, content }))
+      messages: messages.map(({ role, content }) => ({ role, content })),
+      // Same guard as the chat request's own `caseId` (only pass it once contextCase has actually
+      // loaded) so adaptive-memory learning scopes to the case this conversation was really
+      // chatted in, instead of always falling back to 'global'.
+      caseId: contextCase ? contextCaseId : undefined
     };
     void window.api.aiConvos.save(payload).then(() => { dirtyRef.current = false; refreshConvos(); }).catch(() => {});
-  }, [streaming, messages, refreshConvos]);
+  }, [streaming, messages, refreshConvos, contextCase, contextCaseId]);
 
   function newChat(): void {
     convoIdRef.current = null;

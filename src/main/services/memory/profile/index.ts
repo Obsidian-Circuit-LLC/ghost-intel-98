@@ -167,6 +167,17 @@ export async function recallProfile(
  * omitting it — and roll that scope's rolling summary forward. Never throws or rejects: a failure
  * anywhere in this pipeline must never break the caller's flow (a conversation save), per the
  * memory charter.
+ *
+ * `reconcile()` is a pure, single-call function: it decays a survivor by
+ * `decayPerDay * daysSince(lastSeenAt)` and returns the decayed confidence WITHOUT advancing
+ * `lastSeenAt` for items no candidate matched this call. Because the renderer auto-saves (and
+ * this then re-runs) on every settled turn of a conversation, not once per session, persisting
+ * that decayed confidence verbatim while leaving `lastSeenAt` untouched would make the very next
+ * call re-decay by the same `daysSince(lastSeenAt)` amount again — compounding per *call* rather
+ * than per real elapsed day, and wiping out unreinforced items within a single chat session. To
+ * keep decay anchored to real elapsed time, every persisted survivor's `lastSeenAt` is checkpointed
+ * to `now` here: the next call (however soon after, in real time) then decays only for whatever
+ * real time actually elapsed since this checkpoint, not for the same window twice.
  */
 export async function learnFromConversation(convoId: string, turns: string, scopes: string[]): Promise<void> {
   try {
@@ -178,7 +189,11 @@ export async function learnFromConversation(convoId: string, turns: string, scop
     const candidates = await extractItems(d.extractorClient, turns, scope, provenance);
 
     const existing = await d.store.byScope(scopes);
-    const survivors = reconcile({ existing, candidates, now, newId: d.newId });
+    const reconciled = reconcile({ existing, candidates, now, newId: d.newId });
+    // Checkpoint the decay: whatever confidence reconcile() just computed is now the baseline
+    // as of `now`, so the next call's `daysSince(lastSeenAt)` starts from zero real-time elapsed
+    // instead of re-decaying the same already-elapsed window.
+    const survivors = reconciled.map((it) => (it.lastSeenAt === now ? it : { ...it, lastSeenAt: now }));
 
     const keep = new Set(survivors.map((it) => it.id));
     const expiredIds = existing.filter((it) => !keep.has(it.id)).map((it) => it.id);
