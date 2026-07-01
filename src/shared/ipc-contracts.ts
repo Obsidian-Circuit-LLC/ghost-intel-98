@@ -396,7 +396,15 @@ export const channels = {
   memory: {
     reindexAll: 'memory:reindexAll',
     status: 'memory:status',
-    onProgress: 'memory:onProgress'
+    onProgress: 'memory:onProgress',
+    // Adaptive-memory profile governance (Task 8) — list/edit/pin/delete/wipe the durable,
+    // inspectable `MemoryItem` profile. `memory:onRecall` is deliberately NOT a channel here:
+    // recall provenance rides the existing `ai:onChatChunk` stream (see ai.ts's `recall` field
+    // on the done event) and preload filters/republishes it as `window.api.memory.onRecall`.
+    profileList: 'memory:profileList',
+    profileUpsert: 'memory:profileUpsert',
+    profileDelete: 'memory:profileDelete',
+    profileWipe: 'memory:profileWipe'
   },
   plugins: {
     listVerified: 'plugins:listVerified',
@@ -486,6 +494,40 @@ export const channels = {
 
 export interface MemoryStatus { model: string; cases: number; chunks: number }
 export interface MemoryProgress { done: number; total: number; label: string }
+
+/**
+ * Mirrors MemoryItem in src/main/services/memory/profile/types.ts — the adaptive-memory profile
+ * item shape. Defined here (rather than imported from main) so preload/renderer stay self-
+ * contained in the shared package, matching the existing MemoryStatus/LearningModelMeta pattern.
+ */
+export interface MemoryItem {
+  id: string;
+  scope: string;
+  text: string;
+  normalized: string;
+  provenance: string[];
+  confidence: number;
+  createdAt: number;
+  lastSeenAt: number;
+  pinned: boolean;
+  source: 'extractor' | 'user';
+}
+
+/** Mirrors RecallHit in src/main/services/memory/retriever.ts. */
+export interface RecallHitShape {
+  caseId: string;
+  caseTitle: string;
+  kind: 'desc' | 'note' | 'file' | 'entity' | 'chat';
+  ref: string;
+  text: string;
+  snippet: string;
+  score: number;
+}
+
+/** Recall-preview payload emitted per generation (see ai.ts's `recall` field on the done event of
+ *  `ai:onChatChunk`) — what was actually recalled/injected (vector-RAG hits + adaptive-profile
+ *  items) for that answer. Governance transparency: never silent about what memory contributed. */
+export interface RecallPreview { rag: RecallHitShape[]; profile: MemoryItem[] }
 
 export interface AuthStatus { enabled: boolean; unlocked: boolean }
 
@@ -646,6 +688,10 @@ export interface ApiContracts {
   [channels.memory.reindexAll]: { args: []; returns: { cases: number; chunks: number } };
   [channels.memory.status]: { args: []; returns: MemoryStatus };
   [channels.memory.onProgress]: { args: [(payload: MemoryProgress) => void]; returns: () => void };
+  [channels.memory.profileList]: { args: [string | undefined]; returns: MemoryItem[] };
+  [channels.memory.profileUpsert]: { args: [Pick<MemoryItem, 'id' | 'scope' | 'text' | 'pinned'>]; returns: MemoryItem[] };
+  [channels.memory.profileDelete]: { args: [string[]]; returns: void };
+  [channels.memory.profileWipe]: { args: [string | undefined]; returns: void };
 
   [channels.plugins.listVerified]: { args: []; returns: import('./plugin-types').VerifiedPluginInfo[] };
   [channels.plugins.invoke]: { args: [string, string, unknown[]]; returns: unknown };

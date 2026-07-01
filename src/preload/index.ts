@@ -5,7 +5,7 @@
 
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import { channels } from '../shared/ipc-contracts';
-import type { LocalAiStatus, LocalAiProgress, MemoryStatus, MemoryProgress } from '../shared/ipc-contracts';
+import type { LocalAiStatus, LocalAiProgress, MemoryStatus, MemoryProgress, MemoryItem, RecallPreview } from '../shared/ipc-contracts';
 
 const api = {
   cases: {
@@ -399,6 +399,22 @@ const api = {
       const listener = (_e: unknown, payload: MemoryProgress): void => cb(payload);
       ipcRenderer.on(channels.memory.onProgress, listener);
       return () => ipcRenderer.removeListener(channels.memory.onProgress, listener);
+    },
+    profileList: (scope?: string): Promise<MemoryItem[]> => ipcRenderer.invoke(channels.memory.profileList, scope),
+    profileUpsert: (item: Pick<MemoryItem, 'id' | 'scope' | 'text' | 'pinned'>): Promise<MemoryItem[]> =>
+      ipcRenderer.invoke(channels.memory.profileUpsert, item),
+    profileDelete: (ids: string[]): Promise<void> => ipcRenderer.invoke(channels.memory.profileDelete, ids),
+    profileWipe: (scope?: string): Promise<void> => ipcRenderer.invoke(channels.memory.profileWipe, scope),
+    // Recall-preview transparency (Task 8): NOT its own IPC channel — `ai.ts` already emits
+    // `{rag, profile}` as a `recall` field on the final `ai:onChatChunk` event of every
+    // generation (Task 7). This filters/republishes that same stream under `memory.onRecall` so
+    // the Memory panel (Task 10) can subscribe without reaching into the chat-stream plumbing.
+    onRecall: (cb: (r: RecallPreview) => void): (() => void) => {
+      const listener = (_e: unknown, payload: { recall?: RecallPreview }): void => {
+        if (payload.recall) cb(payload.recall);
+      };
+      ipcRenderer.on(channels.ai.onChatChunk, listener);
+      return () => ipcRenderer.removeListener(channels.ai.onChatChunk, listener);
     }
   },
   plugins: {

@@ -27,7 +27,7 @@ import type {
   WebLink,
   Whiteboard
 } from '../shared/types';
-import type { EntityCreateInput, EntityLinkOpts, BioAddInput, AuthStatus, LocalAiStatus, LocalAiProgress, MemoryStatus, MemoryProgress, XCollectResultShape, LearningModelMeta } from '../shared/ipc-contracts';
+import type { EntityCreateInput, EntityLinkOpts, BioAddInput, AuthStatus, LocalAiStatus, LocalAiProgress, MemoryStatus, MemoryProgress, MemoryItem, RecallPreview, XCollectResultShape, LearningModelMeta } from '../shared/ipc-contracts';
 import type {
   AiChatRequest,
   CameraStream,
@@ -476,6 +476,16 @@ export interface GhostApi {
     status(): Promise<MemoryStatus>;
     reindexAll(): Promise<{ cases: number; chunks: number }>;
     onProgress(cb: (p: MemoryProgress) => void): () => void;
+    /** List every learned item, or just those in `scope` when given. */
+    profileList(scope?: string): Promise<MemoryItem[]>;
+    /** User edit/pin (source:'user', confidence:1); returns the full post-upsert item set. */
+    profileUpsert(item: Pick<MemoryItem, 'id' | 'scope' | 'text' | 'pinned'>): Promise<MemoryItem[]>;
+    /** Erase specific learned items by id. */
+    profileDelete(ids: string[]): Promise<void>;
+    /** Erase every item in `scope`, or the entire profile when `scope` is omitted. */
+    profileWipe(scope?: string): Promise<void>;
+    /** Fired once per chat generation with exactly what was recalled/injected (RAG + profile). */
+    onRecall(cb: (r: RecallPreview) => void): () => void;
   };
   plugins: {
     listVerified(): Promise<VerifiedPluginInfo[]>;

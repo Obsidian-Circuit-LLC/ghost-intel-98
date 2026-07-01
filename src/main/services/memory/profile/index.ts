@@ -25,7 +25,7 @@ import { reconcile } from './reconcile';
 import { extractItems, type ExtractorClient } from './extractor';
 import { summarizeTurns, mergeSummary, type SummarizerClient } from './summarizer';
 import { selectProfileItems, formatProfileBlock } from './profile-retriever';
-import type { MemoryItem } from './types';
+import { normalizeItemText, type MemoryItem, type MemoryScope } from './types';
 
 // ---------- Real loopback-Ollama completion client (shared by extractor + summarizer) ----------
 
@@ -210,4 +210,55 @@ export async function learnFromConversation(convoId: string, turns: string, scop
     // caller's flow (the conversation-save path is not the response hot path, but this is still
     // never allowed to surface — see the memory charter).
   }
+}
+
+// ---------- Governance (list / edit / pin / delete / wipe) ----------
+//
+// Unlike recall/learn above, these are direct, deterministic reads/writes on the profile store —
+// there is nothing best-effort about "the user asked to see/edit/erase what was learned", so
+// none of the functions below swallow errors: a failure here must surface to the renderer as a
+// real error, not a silent no-op, per the memory charter's "nothing learned is silent" invariant.
+
+/** List every item in `scope`, or every item in the profile when `scope` is omitted — the
+ *  read side of the governance UI (Task 10's Memory panel "Learned" browser). */
+export async function profileList(scope?: MemoryScope): Promise<MemoryItem[]> {
+  const d = getDeps();
+  return scope === undefined ? d.store.all() : d.store.byScope([scope]);
+}
+
+/** User-authored edit/pin: always `source: 'user'`, always `confidence: 1` (user-authoritative,
+ *  never subject to reconcile's extractor-confidence gain/decay), text is normalized the same
+ *  way extractor candidates are so a user edit still dedupes/matches correctly. Existing
+ *  `provenance`/`createdAt` are preserved when editing an item that already exists; a brand-new
+ *  id starts a fresh item with `provenance: ['user']`. Returns the full post-upsert item set. */
+export async function profileUpsert(item: Pick<MemoryItem, 'id' | 'scope' | 'text' | 'pinned'>): Promise<MemoryItem[]> {
+  const d = getDeps();
+  const now = d.now();
+  const prior = (await d.store.byScope([item.scope])).find((it) => it.id === item.id);
+  const upserted: MemoryItem = {
+    id: item.id,
+    scope: item.scope,
+    text: item.text,
+    normalized: normalizeItemText(item.text),
+    provenance: prior?.provenance ?? ['user'],
+    confidence: 1,
+    createdAt: prior?.createdAt ?? now,
+    lastSeenAt: now,
+    pinned: item.pinned,
+    source: 'user'
+  };
+  await d.store.put([upserted]);
+  return d.store.all();
+}
+
+/** Erase specific items by id — irreversible, per the "erasable" governance invariant. */
+export async function profileDelete(ids: string[]): Promise<void> {
+  const d = getDeps();
+  await d.store.remove(ids);
+}
+
+/** Erase every item in `scope`, or the entire profile when `scope` is omitted. */
+export async function profileWipe(scope?: MemoryScope): Promise<void> {
+  const d = getDeps();
+  await d.store.wipe(scope);
 }

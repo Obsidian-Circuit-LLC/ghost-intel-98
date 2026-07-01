@@ -46,7 +46,8 @@ import * as walls from '../services/walls';
 import * as sounds from '../services/sounds';
 import * as ai from '../services/ai';
 import { liveReindex } from '../services/memory/live-reindex.singleton';
-import { learnFromConversation } from '../services/memory/profile';
+import { learnFromConversation, profileList, profileUpsert, profileDelete, profileWipe } from '../services/memory/profile';
+import type { MemoryItem } from '@shared/ipc-contracts';
 import * as localAi from '../services/local-ai';
 import * as chat from '../services/chat';
 import * as piperTts from '../services/piper-tts';
@@ -1319,6 +1320,26 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     const win = getWindow();
     if (win) win.webContents.send(channels.memory.onProgress, p);
   }));
+
+  // ---- adaptive-memory profile governance (list/edit/pin/delete/wipe) ----
+  // Nothing here is best-effort: every learned item must stay inspectable/editable/erasable, so
+  // (unlike recallProfile/learnFromConversation) these delegate straight to the facade and let
+  // safeHandle's normal error path surface any failure to the renderer.
+  safeHandle(channels.memory.profileList, (...args) =>
+    profileList(typeof args[0] === 'string' ? args[0] : undefined));
+  safeHandle(channels.memory.profileUpsert, (...args) => {
+    const raw = args[0] as Partial<MemoryItem> | undefined;
+    if (!raw || typeof raw.id !== 'string' || typeof raw.scope !== 'string' || typeof raw.text !== 'string' || typeof raw.pinned !== 'boolean') {
+      throw new Error('profileUpsert: expected { id, scope, text, pinned }');
+    }
+    return profileUpsert({ id: raw.id, scope: raw.scope, text: raw.text, pinned: raw.pinned });
+  });
+  safeHandle(channels.memory.profileDelete, (...args) => {
+    const ids = Array.isArray(args[0]) ? (args[0] as unknown[]).filter((x): x is string => typeof x === 'string') : [];
+    return profileDelete(ids);
+  });
+  safeHandle(channels.memory.profileWipe, (...args) =>
+    profileWipe(typeof args[0] === 'string' ? args[0] : undefined));
 
   // ---- plugins ----
   safeHandle(channels.plugins.listVerified, async () => getVerified());
