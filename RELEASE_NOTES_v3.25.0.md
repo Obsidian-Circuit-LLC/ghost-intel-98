@@ -13,7 +13,7 @@ Four casework-blocking papercuts reported from the field, fixed. **The underlyin
 
 ## The fix
 
-- **Searchlight: the selected sweep job now lives in the store**, not local component state, so it survives the panel unmounting and remounting. A mount-independent stream manager keeps writing incoming results into the store whether or not the Sweep tab is on screen — a sweep keeps collecting while you're on another tab, and switching back shows the same job, with every result collected while you were away.
+- **Searchlight: the selected sweep job now lives in the store**, not local component state, so it survives the panel unmounting and remounting. A mount-independent stream manager keeps writing incoming results into the store whether or not the Sweep tab is on screen — a sweep keeps collecting while you're on another tab, and switching back shows the same job, with every result collected while you were away. The selection is scoped to the active case, so switching between cases shows each case's own sweep rather than a blank panel.
 - **SOCMINT Start Monitor now names the next concrete step in plain language** directly under the button — pick a case, add a channel, enter a burner — instead of a silently disabled control.
 - **SOCMINT case selection is now a dropdown of your real, existing cases** (via the same `window.api.cases.list()` the rest of the app uses) instead of a typed Case ID.
 - **A new "X / Twitter ↗" button inside SOCMINT** opens the existing X collector window. X remains a quarantined clearnet trust domain in its own separate window — this is a launcher, not an embed, and does not add any new network egress or link between the X and Tor/Telegram transports.
@@ -22,11 +22,11 @@ No change to the egress model, the encryption model, or any collector's IPC cont
 
 ## Quality
 
-- **2,244 automated tests** passing, TypeScript strict (`pnpm typecheck` clean), clean `pnpm build`.
+- **2,249 automated tests** passing, TypeScript strict (`pnpm typecheck` clean), clean `pnpm build`.
 - No dependency, protocol, crypto, or network-egress change.
 
 ## Install
 
 Windows NSIS installer attached.
-SHA-256: `TBD — filled at build time`
-Size: `TBD — filled at build time`
+SHA-256: `07ed212a2e1dd0f5734a4fc998ac520f847cf269d3b844c761de43ba9c9d26c7`
+Size: 906,320,292 bytes (~864 MiB)
