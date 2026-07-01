@@ -1,0 +1,196 @@
+import { describe, it, expect, afterEach, vi } from 'vitest';
+
+// __setProfileFacadeDepsForTest lazily builds real defaults for any dep it isn't given (see
+// index.ts), which touches dataRoot()/app.getPath — mock electron so that path never needs a
+// real Electron runtime, matching the convention used throughout test/*.
+vi.mock('electron', () => ({ app: { getPath: () => '/tmp/ga98-memory-profile-facade-test' } }));
+
+import {
+  recallProfile,
+  learnFromConversation,
+  __setProfileFacadeDepsForTest,
+  __resetProfileFacadeForTest
+} from '../src/main/services/memory/profile/index';
+import { createProfileStore, type ProfileStoreIO } from '../src/main/services/memory/profile/profile-store';
+import { normalizeItemText, type MemoryItem } from '../src/main/services/memory/profile/types';
+import type { ExtractorClient } from '../src/main/services/memory/profile/extractor';
+import type { SummarizerClient } from '../src/main/services/memory/profile/summarizer';
+
+function makeFakeStoreIO(initial: MemoryItem[] = []): ProfileStoreIO {
+  let text: string | null = initial.length ? JSON.stringify(initial) : null;
+  return {
+    async read() { return text; },
+    async write(t: string) { text = t; }
+  };
+}
+
+function makeFakeSummaryIO(initial: Record<string, string> = {}) {
+  let text: string | null = Object.keys(initial).length ? JSON.stringify(initial) : null;
+  return {
+    async read() { return text; },
+    async write(t: string) { text = t; }
+  };
+}
+
+function item(over: Partial<MemoryItem>): MemoryItem {
+  return {
+    id: 'i1',
+    scope: 'global',
+    text: 'Prefers Tor-only egress',
+    normalized: normalizeItemText('Prefers Tor-only egress'),
+    provenance: ['note:foo'],
+    confidence: 0.5,
+    createdAt: 1000,
+    lastSeenAt: 1000,
+    pinned: false,
+    source: 'extractor',
+    ...over
+  };
+}
+
+function idFactory(prefix = 'new'): () => string {
+  let n = 0;
+  return () => `${prefix}-${n++}`;
+}
+
+const noopSummarizer: SummarizerClient = { complete: async () => '' };
+
+afterEach(() => {
+  __resetProfileFacadeForTest();
+});
+
+describe('learnFromConversation', () => {
+  it('extracts, reconciles, and persists candidates from a fake extractor', async () => {
+    const store = createProfileStore(makeFakeStoreIO());
+    const extractorClient: ExtractorClient = { complete: async () => '["Uses Tor-only egress"]' };
+    __setProfileFacadeDepsForTest({
+      store,
+      extractorClient,
+      summarizerClient: noopSummarizer,
+      summaryIo: makeFakeSummaryIO(),
+      now: () => 1000,
+      newId: idFactory()
+    });
+
+    await learnFromConversation('convo-1', 'user: I only use Tor.\nassistant: noted.', ['global']);
+
+    const all = await store.all();
+    expect(all).toHaveLength(1);
+    expect(all[0]).toMatchObject({
+      scope: 'global',
+      text: 'Uses Tor-only egress',
+      provenance: ['conversation:convo-1'],
+      source: 'extractor'
+    });
+  });
+
+  it('scopes new candidates to the most specific (last) scope', async () => {
+    const store = createProfileStore(makeFakeStoreIO());
+    const extractorClient: ExtractorClient = { complete: async () => '["Works the night shift"]' };
+    __setProfileFacadeDepsForTest({
+      store,
+      extractorClient,
+      summarizerClient: noopSummarizer,
+      summaryIo: makeFakeSummaryIO(),
+      now: () => 1000,
+      newId: idFactory()
+    });
+
+    await learnFromConversation('convo-1', 'turns', ['global', 'case:c1']);
+
+    const all = await store.all();
+    expect(all).toHaveLength(1);
+    expect(all[0].scope).toBe('case:c1');
+  });
+
+  it('a throwing extractor client leaves the store unchanged and does not reject', async () => {
+    const preExisting = [item({ id: 'a', lastSeenAt: 1000 })];
+    const store = createProfileStore(makeFakeStoreIO(preExisting));
+    const extractorClient: ExtractorClient = {
+      complete: async () => {
+        throw new Error('ollama unreachable');
+      }
+    };
+    __setProfileFacadeDepsForTest({
+      store,
+      extractorClient,
+      summarizerClient: noopSummarizer,
+      summaryIo: makeFakeSummaryIO(),
+      now: () => 1000, // same clock as preExisting.lastSeenAt → zero decay, so "unchanged" is exact
+      newId: idFactory()
+    });
+
+    await expect(learnFromConversation('convo-1', 'turns', ['global'])).resolves.toBeUndefined();
+
+    const all = await store.all();
+    expect(all).toEqual(preExisting);
+  });
+
+  it('a throwing store also does not reject (fully best-effort)', async () => {
+    const brokenIO: ProfileStoreIO = {
+      read: async () => { throw new Error('disk unreadable'); },
+      write: async () => { throw new Error('disk unwritable'); }
+    };
+    const store = createProfileStore(brokenIO);
+    const extractorClient: ExtractorClient = { complete: async () => '["Some fact"]' };
+    __setProfileFacadeDepsForTest({
+      store,
+      extractorClient,
+      summarizerClient: noopSummarizer,
+      summaryIo: makeFakeSummaryIO(),
+      now: () => 1000,
+      newId: idFactory()
+    });
+
+    await expect(learnFromConversation('convo-1', 'turns', ['global'])).resolves.toBeUndefined();
+  });
+
+  it('rolls the scope summary forward via the summarizer client', async () => {
+    const store = createProfileStore(makeFakeStoreIO());
+    const summaryIo = makeFakeSummaryIO({ global: 'Prior summary.' });
+    __setProfileFacadeDepsForTest({
+      store,
+      extractorClient: { complete: async () => '[]' },
+      summarizerClient: { complete: async () => 'New distilled fact.' },
+      summaryIo,
+      now: () => 1000,
+      newId: idFactory()
+    });
+
+    await learnFromConversation('convo-1', 'turns', ['global']);
+
+    const { summary } = await recallProfile('anything', ['global']);
+    expect(summary).toContain('Prior summary.');
+    expect(summary).toContain('New distilled fact.');
+  });
+});
+
+describe('recallProfile', () => {
+  it("returns block === '' when the store is empty", async () => {
+    __setProfileFacadeDepsForTest({
+      store: createProfileStore(makeFakeStoreIO()),
+      summaryIo: makeFakeSummaryIO(),
+      now: () => 1000,
+      newId: idFactory()
+    });
+
+    const out = await recallProfile('anything', ['global']);
+    expect(out.items).toEqual([]);
+    expect(out.summary).toBe('');
+    expect(out.block).toBe('');
+  });
+
+  it('returns the in-scope items and a non-empty block when the profile has content', async () => {
+    const existing = [item({ id: 'a', scope: 'global' }), item({ id: 'b', scope: 'case:other' })];
+    __setProfileFacadeDepsForTest({
+      store: createProfileStore(makeFakeStoreIO(existing)),
+      summaryIo: makeFakeSummaryIO(),
+      now: () => 1000,
+      newId: idFactory()
+    });
+
+    const out = await recallProfile('anything', ['global']);
+    expect(out.items.map((i) => i.id)).toEqual(['a']);
+    expect(out.block).not.toBe('');
+  });
+});

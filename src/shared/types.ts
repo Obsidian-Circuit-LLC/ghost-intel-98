@@ -387,6 +387,11 @@ export interface AppSettings {
      *  background reindex so recall reflects the latest content without a manual rebuild.
      *  Local-only; no-op for non-Ollama providers. Default true. */
     autoReindex: boolean;
+    /** When true (and `useMemory` is on), the assistant also injects a self-updating, inspectable
+     *  long-term profile (durable facts + a rolling summary) learned from conversations, and
+     *  learns from each conversation after it settles. Local-only, encrypted at rest, fully
+     *  user-editable/erasable; no-op for non-Ollama providers. Default off. */
+    adaptiveMemory: boolean;
   };
   mail: {
     accounts: { id: string; label: string; imapHost: string; imapPort: number; smtpHost: string; smtpPort: number; user: string; secureRef: string | null }[];
@@ -612,7 +617,8 @@ export const defaultSettings: AppSettings = {
     ttsEngine: 'auto',
     piperVoice: null,
     useMemory: false,
-    autoReindex: true
+    autoReindex: true,
+    adaptiveMemory: false
   },
   mail: { accounts: [] },
   mailBackgroundCheck: false,
