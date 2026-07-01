@@ -28,6 +28,7 @@ import {
 import { useSearchlightStore } from '../store';
 import { useSettings } from '../../../state/store';
 import { sweepStream } from '../sweep-stream';
+import { resolveSweepSelection } from '../sweep-selection';
 import { useFavicons } from './useFavicons';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -111,11 +112,13 @@ export function SweepPanel(): JSX.Element {
   const setSelectedJobId = useSearchlightStore((s) => s.setSelectedJobId);
   const activeJobId = selectedJobId;
 
-  // Restore the last sweep into view when returning to the tab with no active selection.
+  // Restore the correct sweep into view: keep the current selection when it belongs to
+  // the active case, otherwise fall back to this case's most recent sweep (or null when it
+  // has none). This runs on tab remount AND on case switch — a stale cross-case pointer must
+  // not blank the panel. Only writes when the resolved value differs (no render loop).
   useEffect(() => {
-    if (selectedJobId) return;
-    const last = activeCase?.searches[activeCase.searches.length - 1];
-    if (last) setSelectedJobId(last.id);
+    const resolved = resolveSweepSelection(activeCase?.searches ?? [], selectedJobId);
+    if (resolved !== selectedJobId) setSelectedJobId(resolved);
   }, [selectedJobId, activeCase, setSelectedJobId]);
 
   const [catalog, setCatalog] = useState<SiteCatalogEntry[]>([]);
