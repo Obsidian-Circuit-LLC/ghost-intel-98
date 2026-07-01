@@ -239,14 +239,18 @@ async function resumeEnableIfNeeded(): Promise<void> {
 /** Best-effort adaptive-memory learning trigger, fired after a conversation settles and is saved
  *  (never in the chat response's own hot path — this runs off a separate, later IPC call). Gated
  *  on `useMemory && adaptiveMemory` and Ollama-only, mirroring the injection gate in `ai.ts`. A
- *  settings-read failure or a learning failure must never surface to the save caller. Conversation
- *  saves aren't case-linked in this store, so learning is scoped to `'global'` only. */
+ *  settings-read failure or a learning failure must never surface to the save caller. Scopes
+ *  learning to `['global', 'case:<caseId>']` when the conversation carries a `caseId` (the case
+ *  selected as context while it was chatted in), exactly mirroring `scopesFor()` in `ai.ts` — so a
+ *  case-scoped conversation's facts land in that case's scope, not `global`, and never bleed into
+ *  an unrelated case's recall. */
 async function triggerAdaptiveLearning(convo: AiConversation): Promise<void> {
   try {
     const s = await settingsStore.read();
     if (!s.ai.useMemory || !s.ai.adaptiveMemory || s.ai.provider !== 'ollama') return;
     const turns = convo.messages.map((m) => `${m.role}: ${m.content}`).join('\n');
-    await learnFromConversation(convo.id, turns, ['global']);
+    const scopes = ['global', ...(convo.caseId ? [`case:${convo.caseId}`] : [])];
+    await learnFromConversation(convo.id, turns, scopes);
   } catch { /* adaptive learning is best-effort */ }
 }
 

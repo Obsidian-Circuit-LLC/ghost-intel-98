@@ -145,6 +145,37 @@ describe('learnFromConversation', () => {
     await expect(learnFromConversation('convo-1', 'turns', ['global'])).resolves.toBeUndefined();
   });
 
+  it('does not re-decay an unreinforced item on repeated calls with no real time elapsed', async () => {
+    // Reproduces the compounding-decay bug: a multi-turn chat auto-saves (and so re-triggers
+    // learnFromConversation) many times per session, with the real clock barely moving. Decay
+    // must be anchored to real elapsed time since the last checkpoint, not re-applied on every
+    // call regardless of the clock.
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const fixedNow = 5 * DAY_MS; // item is "5 days stale" exactly once
+    const preExisting = [item({ id: 'a', confidence: 1.0, lastSeenAt: 0 })];
+    const store = createProfileStore(makeFakeStoreIO(preExisting));
+    // No candidate ever matches/reinforces this item.
+    const extractorClient: ExtractorClient = { complete: async () => '[]' };
+    __setProfileFacadeDepsForTest({
+      store,
+      extractorClient,
+      summarizerClient: noopSummarizer,
+      summaryIo: makeFakeSummaryIO(),
+      now: () => fixedNow, // same instant on every call — no real time passes between calls
+      newId: idFactory()
+    });
+
+    for (let i = 0; i < 10; i++) {
+      await learnFromConversation('convo-1', 'turns', ['global']);
+    }
+
+    const all = await store.all();
+    expect(all).toHaveLength(1); // still present — must NOT have decayed past the expiry floor
+    // decayPerDay defaults to 0.02: exactly one day's worth of decay (5 days * 0.02) should have
+    // been applied once, not once per call.
+    expect(all[0].confidence).toBeCloseTo(1.0 - 0.02 * 5, 5);
+  });
+
   it('rolls the scope summary forward via the summarizer client', async () => {
     const store = createProfileStore(makeFakeStoreIO());
     const summaryIo = makeFakeSummaryIO({ global: 'Prior summary.' });
