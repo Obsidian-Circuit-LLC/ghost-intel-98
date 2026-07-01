@@ -45,6 +45,7 @@ import { detectStream } from '../services/stream-detect';
 import * as walls from '../services/walls';
 import * as sounds from '../services/sounds';
 import * as ai from '../services/ai';
+import { liveReindex } from '../services/memory/live-reindex.singleton';
 import * as localAi from '../services/local-ai';
 import * as chat from '../services/chat';
 import * as piperTts from '../services/piper-tts';
@@ -473,7 +474,12 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.cases.create, (...args) => caseStore.create(args[0] as Parameters<typeof caseStore.create>[0]));
   safeHandle(channels.cases.read, (...args) => caseStore.read(ensureUuid(args[0], 'caseId')));
   safeHandle(channels.cases.rename, (...args) => caseStore.rename(ensureUuid(args[0], 'caseId'), args[1] as string));
-  safeHandle(channels.cases.update, (...args) => caseStore.update(ensureUuid(args[0], 'caseId'), args[1] as Parameters<typeof caseStore.update>[1]));
+  safeHandle(channels.cases.update, async (...args) => {
+    const caseId = ensureUuid(args[0], 'caseId');
+    const rec = await caseStore.update(caseId, args[1] as Parameters<typeof caseStore.update>[1]);
+    liveReindex.caseChanged(caseId); // fire-and-forget: never awaited in the response path
+    return rec;
+  });
   safeHandle(channels.cases.archive, (...args) => caseStore.archive(ensureUuid(args[0], 'caseId'), args[1] as boolean));
   safeHandle(channels.cases.delete, (...args) => caseStore.softDelete(ensureUuid(args[0], 'caseId')));
   safeHandle(channels.cases.addTimeline, (...args) => caseStore.addTimeline(ensureUuid(args[0], 'caseId'), ensureTimelineEvent(args[1])));
@@ -743,7 +749,12 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   // ---- notes ----
   safeHandle(channels.notes.list, (...args) => noteStore.list(ensureUuid(args[0], 'caseId')));
   safeHandle(channels.notes.read, (...args) => noteStore.read(ensureUuid(args[0], 'caseId'), ensureFileName(args[1], 'noteName')));
-  safeHandle(channels.notes.write, (...args) => noteStore.write(ensureUuid(args[0], 'caseId'), ensureFileName(args[1], 'noteName'), args[2] as string));
+  safeHandle(channels.notes.write, async (...args) => {
+    const caseId = ensureUuid(args[0], 'caseId');
+    const result = await noteStore.write(caseId, ensureFileName(args[1], 'noteName'), args[2] as string);
+    liveReindex.caseChanged(caseId); // fire-and-forget: never awaited in the response path
+    return result;
+  });
   safeHandle(channels.notes.delete, (...args) => noteStore.delete(ensureUuid(args[0], 'caseId'), ensureFileName(args[1], 'noteName')));
 
   // ---- reminders ----
@@ -877,7 +888,11 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   // ---- AI conversations (ChatGPT-style saved chats; encrypted at rest, zero egress) ----
   safeHandle(channels.aiConvos.list, () => aiConvos.list());
   safeHandle(channels.aiConvos.get, (...args) => aiConvos.get(ensureUuid(args[0], 'conversation id')));
-  safeHandle(channels.aiConvos.save, (...args) => aiConvos.save(ensureAiConversation(args[0])));
+  safeHandle(channels.aiConvos.save, async (...args) => {
+    const result = await aiConvos.save(ensureAiConversation(args[0]));
+    liveReindex.conversationsChanged(); // fire-and-forget: never awaited in the response path
+    return result;
+  });
   safeHandle(channels.aiConvos.delete, (...args) => aiConvos.remove(ensureUuid(args[0], 'conversation id')));
 
   // ---- briefcase (standalone notes not tied to a case; encrypted at rest, zero egress) ----

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createLiveReindexer, type LiveReindexDeps } from '../src/main/services/memory/live-reindex';
 
 // Fake timer/clock harness: deps.schedule/deps.cancel drive a manually-advanced queue so the
@@ -98,5 +98,78 @@ describe('createLiveReindexer (debounced)', () => {
     await r.flush();
     expect(reindexCase).not.toHaveBeenCalled();
     expect(reindexConversations).not.toHaveBeenCalled();
+  });
+});
+
+describe('live-reindex.singleton (gated wiring)', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    vi.doUnmock('../src/main/storage/json-fs');
+    vi.doUnmock('../src/main/services/memory/indexer');
+  });
+
+  it('reindexes the case when useMemory + autoReindex are both on', async () => {
+    const reindexCase = vi.fn(async () => undefined);
+    const reindexConversations = vi.fn(async () => undefined);
+    vi.doMock('../src/main/storage/json-fs', () => ({
+      settingsStore: { read: vi.fn(async () => ({ ai: { useMemory: true, autoReindex: true } })) }
+    }));
+    vi.doMock('../src/main/services/memory/indexer', () => ({ reindexCase, reindexConversations }));
+
+    const { liveReindex } = await import('../src/main/services/memory/live-reindex.singleton');
+    liveReindex.caseChanged('c1');
+    await liveReindex.flush();
+
+    expect(reindexCase).toHaveBeenCalledTimes(1);
+    expect(reindexCase).toHaveBeenCalledWith('c1');
+  });
+
+  it('is a no-op when useMemory is off', async () => {
+    const reindexCase = vi.fn(async () => undefined);
+    const reindexConversations = vi.fn(async () => undefined);
+    vi.doMock('../src/main/storage/json-fs', () => ({
+      settingsStore: { read: vi.fn(async () => ({ ai: { useMemory: false, autoReindex: true } })) }
+    }));
+    vi.doMock('../src/main/services/memory/indexer', () => ({ reindexCase, reindexConversations }));
+
+    const { liveReindex } = await import('../src/main/services/memory/live-reindex.singleton');
+    liveReindex.caseChanged('c1');
+    liveReindex.conversationsChanged();
+    await liveReindex.flush();
+
+    expect(reindexCase).not.toHaveBeenCalled();
+    expect(reindexConversations).not.toHaveBeenCalled();
+  });
+
+  it('is a no-op when autoReindex is off', async () => {
+    const reindexCase = vi.fn(async () => undefined);
+    const reindexConversations = vi.fn(async () => undefined);
+    vi.doMock('../src/main/storage/json-fs', () => ({
+      settingsStore: { read: vi.fn(async () => ({ ai: { useMemory: true, autoReindex: false } })) }
+    }));
+    vi.doMock('../src/main/services/memory/indexer', () => ({ reindexCase, reindexConversations }));
+
+    const { liveReindex } = await import('../src/main/services/memory/live-reindex.singleton');
+    liveReindex.conversationsChanged();
+    await liveReindex.flush();
+
+    expect(reindexConversations).not.toHaveBeenCalled();
+  });
+
+  it('a settingsStore.read() failure is swallowed (never rejects flush)', async () => {
+    const reindexCase = vi.fn(async () => undefined);
+    const reindexConversations = vi.fn(async () => undefined);
+    vi.doMock('../src/main/storage/json-fs', () => ({
+      settingsStore: { read: vi.fn(async () => { throw new Error('locked'); }) }
+    }));
+    vi.doMock('../src/main/services/memory/indexer', () => ({ reindexCase, reindexConversations }));
+
+    const { liveReindex } = await import('../src/main/services/memory/live-reindex.singleton');
+    liveReindex.caseChanged('c1');
+    await expect(liveReindex.flush()).resolves.toBeUndefined();
+    expect(reindexCase).not.toHaveBeenCalled();
   });
 });
