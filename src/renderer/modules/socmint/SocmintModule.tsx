@@ -63,6 +63,7 @@ import {
   type StartMonitorResult,
 } from './start-monitor-request';
 import { describeStartMonitorBlock } from './start-monitor-block';
+import { buildCaseOptions, type CaseOption } from './case-options';
 import './socmint.css';
 
 // ---------------------------------------------------------------------------
@@ -687,6 +688,18 @@ export function SocmintModule({ caseId: propCaseId }: { caseId?: string }): JSX.
     }
   }, [propCaseId]);
 
+  const [caseOptions, setCaseOptions] = useState<CaseOption[]>([]);
+  const [manualEntry, setManualEntry] = useState(false);
+
+  useEffect(() => {
+    if (propCaseId !== undefined) return; // launched from a case → no picker
+    let cancelled = false;
+    void window.api.cases.list()
+      .then((list) => { if (!cancelled) setCaseOptions(buildCaseOptions(list)); })
+      .catch((err) => console.warn('[SOCMINT] cases.list:', err));
+    return () => { cancelled = true; };
+  }, [propCaseId]);
+
   // Channels
   const [channels, setChannels] = useState<MonitoredChannel[]>([]);
   const [newChannelId, setNewChannelId] = useState('');
@@ -855,21 +868,40 @@ export function SocmintModule({ caseId: propCaseId }: { caseId?: string }): JSX.
         </div>
       )}
 
-      {/* Case ID selector — only shown when caseId is not passed as a prop. */}
+      {/* Case selector — dropdown of real cases (value = real CaseId, no phantom-case footgun).
+          Manual entry stays available for advanced/edge use. */}
       {propCaseId === undefined && (
         <div className="sm-case-bar">
-          <label htmlFor="sm-case-id" className="sm-label">Case ID</label>
-          <input
-            id="sm-case-id"
-            className="sm-input"
-            value={caseIdInput}
-            onChange={(e) => setCaseIdInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') handleApplyCaseId(); }}
-            placeholder="Enter case ID…"
-          />
-          <button className="sm-btn" onClick={handleApplyCaseId}>
-            Load
-          </button>
+          <label htmlFor="sm-case-pick" className="sm-label">Case</label>
+          {!manualEntry ? (
+            <>
+              <select
+                id="sm-case-pick"
+                className="sm-input"
+                value={caseId}
+                onChange={(e) => { setCaseId(e.target.value); setCaseIdInput(e.target.value); }}
+              >
+                <option value="">Select a case…</option>
+                {caseOptions.map((o) => (
+                  <option key={o.value} value={o.value}>{o.category} › {o.label}</option>
+                ))}
+              </select>
+              <button className="sm-btn" onClick={() => setManualEntry(true)}>Enter ID…</button>
+            </>
+          ) : (
+            <>
+              <input
+                id="sm-case-id"
+                className="sm-input"
+                value={caseIdInput}
+                onChange={(e) => setCaseIdInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleApplyCaseId(); }}
+                placeholder="Enter case ID…"
+              />
+              <button className="sm-btn" onClick={handleApplyCaseId}>Load</button>
+              <button className="sm-btn" onClick={() => setManualEntry(false)}>Pick from list</button>
+            </>
+          )}
         </div>
       )}
 
