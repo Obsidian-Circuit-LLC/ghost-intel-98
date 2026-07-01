@@ -62,6 +62,7 @@ import {
   describeMonitorResult,
   type StartMonitorResult,
 } from './start-monitor-request';
+import { describeStartMonitorBlock } from './start-monitor-block';
 import './socmint.css';
 
 // ---------------------------------------------------------------------------
@@ -352,6 +353,14 @@ function ChannelsPanel({
   const waJidInvalid = isWhatsApp && channelIdTrimmed.length > 0 &&
     !channelIdTrimmed.endsWith('@g.us');
   const canAdd = channelIdTrimmed.length > 0 && !waJidInvalid;
+  const blockReason = describeStartMonitorBlock({
+    networkEnabled,
+    caseId,
+    burnerId,
+    channelCount: channels.length,
+    hasPendingChannelInput: newChannelId.trim().length > 0,
+    isWhatsApp,
+  });
 
   return (
     <div className="sm-channels">
@@ -488,8 +497,8 @@ function ChannelsPanel({
             >
               {monitoring ? 'Starting…' : 'Start Monitor'}
             </button>
-            {!networkEnabled && (
-              <p className="sm-note">Network disabled — enable in Settings → SOCMINT.</p>
+            {blockReason !== '' && (
+              <p className="sm-monitor-hint" role="status">{blockReason}</p>
             )}
             {/* Surface the last attempt's failure (noChannels / disabled / error)
                 instead of swallowing it. XSS-safe: rendered as a text child. */}
