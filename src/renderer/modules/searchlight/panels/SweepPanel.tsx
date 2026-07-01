@@ -106,7 +106,17 @@ export function SweepPanel(): JSX.Element {
   const [directMode, setDirectMode] = useState(false); // default OFF = Tor
   const [torState, setTorState] = useState<'off' | 'connecting' | 'ready' | 'unknown'>('unknown');
   const [torErr, setTorErr] = useState<string | null>(null);
-  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const selectedJobId = useSearchlightStore((s) => s.selectedJobId);
+  const setSelectedJobId = useSearchlightStore((s) => s.setSelectedJobId);
+  const activeJobId = selectedJobId;
+
+  // Restore the last sweep into view when returning to the tab with no active selection.
+  useEffect(() => {
+    if (selectedJobId) return;
+    const last = activeCase?.searches[activeCase.searches.length - 1];
+    if (last) setSelectedJobId(last.id);
+  }, [selectedJobId, activeCase, setSelectedJobId]);
+
   const [catalog, setCatalog] = useState<SiteCatalogEntry[]>([]);
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [resultBucket, setResultBucket] = useState<FilterBucket>('all');
@@ -285,9 +295,9 @@ export function SweepPanel(): JSX.Element {
       useTor: !directMode,
     };
     store.addSearchJob(activeCaseId, job);
-    setActiveJobId(jobId);
+    setSelectedJobId(jobId);
     setResultBucket('all');
-  }, [username, activeCaseId, networkEnabled, activeJob, filteredCatalog, directMode, store]);
+  }, [username, activeCaseId, networkEnabled, activeJob, filteredCatalog, directMode, store, setSelectedJobId]);
 
   const handleCancel = useCallback(async () => {
     if (!activeJobId || !activeCaseId) return;
