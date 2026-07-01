@@ -243,6 +243,7 @@
   border-color: #7d5aad;
 }
 .sm-platform-active + .sm-platform-btn { border-left: none; }
+.sm-platform-xlaunch { margin-left: auto; font-style: italic; }
 
 /* ── WhatsApp deanon warning (§5.1) ─────────────────────────────────────── */
 .sm-wa-warning {

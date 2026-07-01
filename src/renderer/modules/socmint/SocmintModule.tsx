@@ -54,8 +54,9 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import type { HarvestedItem, MonitoredChannel, SocmintPlatform } from '@shared/socmint/types';
-import { useSettings } from '../../state/store';
+import { useSettings, useWindows } from '../../state/store';
 import { safeHref } from './safe-href';
+import { xLaunchSpec } from './x-launch-spec';
 import {
   buildStartMonitorRequest,
   canStartMonitor,
@@ -920,6 +921,13 @@ export function SocmintModule({ caseId: propCaseId }: { caseId?: string }): JSX.
           aria-pressed={platform === 'whatsapp'}
         >
           WhatsApp
+        </button>
+        <button
+          className="sm-platform-btn sm-platform-xlaunch"
+          onClick={() => useWindows.getState().open(xLaunchSpec(caseId))}
+          title="Opens the separate X / Twitter collector (clearnet — not routed through Tor)"
+        >
+          X / Twitter ↗
         </button>
       </div>
 
