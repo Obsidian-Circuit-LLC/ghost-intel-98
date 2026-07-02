@@ -490,6 +490,18 @@ export const channels = {
     collect: 'x:collect',
     listItems: 'x:listItems',
     rankItems: 'x:rankItems'
+  },
+  // GhostScrape — hidden-browser X timeline/profile scraper (clearnet quarantine module, GS-6).
+  // Reuses the SAME two-flag gate (x.networkEnabled && x.clearnetAcknowledged) and shared
+  // x.accounts.<id>.{auth_token,ct0} session cookies as the `x` namespace above — no new
+  // settings.ghostscrape namespace, no second cookie store.
+  ghostscrape: {
+    start: 'ghostscrape:start',
+    cancel: 'ghostscrape:cancel',
+    /** Main→renderer push: scroll/capture progress for a running job. */
+    onProgress: 'ghostscrape:onProgress',
+    /** Main→renderer push: a job finished (result) or failed (error). */
+    onDone: 'ghostscrape:onDone'
   }
 } as const;
 
@@ -531,6 +543,52 @@ export interface RecallHitShape {
  *  what memory contributed — `profileSummary` is the distilled prior-conversation prose folded into
  *  the injected profile block, `''` when none was injected. */
 export interface RecallPreview { rag: RecallHitShape[]; profile: MemoryItem[]; profileSummary: string }
+
+/**
+ * GhostScrape scrape shapes — mirror src/main/x/ghostscrape/types.ts (Task 1). Defined here
+ * (rather than imported from main) so preload/renderer stay self-contained in the shared
+ * package, matching the XCollectResultShape / MemoryItem mirror pattern above. GhostScrape
+ * reuses the SAME X clearnet quarantine as the `x` namespace — no new settings namespace.
+ */
+export type ScrapeType = 'all' | 'tweets' | 'retweets' | 'bio';
+
+export interface ScrapedTweet {
+  id: string;
+  text: string;
+  createdAt: string;
+  isRetweet: boolean;
+  likeCount: number;
+  retweetCount: number;
+  replyCount: number;
+  url: string;
+}
+
+export interface ScrapedProfile {
+  handle: string;
+  displayName: string;
+  bio: string;
+  followers: number;
+  following: number;
+  joined: string;
+}
+
+export interface GhostScrapeConfig {
+  accountId: string;
+  username: string;
+  type: ScrapeType;
+  sinceAfter?: string;
+  before?: string;
+  scrolls: number;
+  max: number;
+  delayMs: number;
+}
+
+export interface GhostScrapeResult {
+  profile?: ScrapedProfile;
+  tweets: ScrapedTweet[];
+  partial: boolean;
+  captured: number;
+}
 
 export interface AuthStatus { enabled: boolean; unlocked: boolean }
 
@@ -773,6 +831,14 @@ export interface ApiContracts {
   // X-platform items only (platform === 'x').
   [channels.x.listItems]: { args: [string]; returns: HarvestedItem[] };
   [channels.x.rankItems]: { args: [string, string]; returns: HarvestedItem[] };
+
+  // GhostScrape — reuses the X two-flag gate + shared session cookies (GS-6).
+  // Throws GhostScrapeGatedError when networkEnabled or clearnetAcknowledged is false
+  // (mirrors XCollectorGatedError above).
+  [channels.ghostscrape.start]: { args: [GhostScrapeConfig]; returns: { jobId: string } };
+  [channels.ghostscrape.cancel]: { args: [string]; returns: void };
+  [channels.ghostscrape.onProgress]: { args: [(p: { jobId: string; captured: number; scrollsDone: number }) => void]; returns: () => void };
+  [channels.ghostscrape.onDone]: { args: [(d: { jobId: string; result?: GhostScrapeResult; error?: string }) => void]; returns: () => void };
 }
 
 export const BGCONN_LOCK_EXEMPT_CHANNELS = ['bgconn:status', 'bgconn:stop'] as const;

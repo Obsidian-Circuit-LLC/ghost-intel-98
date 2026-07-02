@@ -1,0 +1,176 @@
+/* ── GhostScrape module ──────────────────────────────────────────────────── */
+.gs-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow-y: auto;
+  background: #0a0a14;
+  color: #d8d8e0;
+  font-family: inherit;
+}
+
+/* ── Honesty note — always visible, gate-independent ────────────────────── */
+.gs-honesty-note {
+  flex: 0 0 auto;
+  background: #10141c;
+  border-bottom: 1px solid #2a2f3c;
+  color: #a0aac0;
+  padding: 6px 12px;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+/* ── Clearnet gate notice ────────────────────────────────────────────────── */
+.gs-gate-notice {
+  flex: 0 0 auto;
+  background: #1a1000;
+  border-bottom: 2px solid #7d5a1a;
+  color: #e8d0a0;
+  padding: 6px 12px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.gs-gate-notice strong { color: #ffcc80; }
+
+.gs-section {
+  padding: 10px 12px;
+  border-bottom: 1px solid #1c2030;
+}
+.gs-section-title {
+  margin: 0 0 8px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #8890a8;
+}
+
+.gs-form-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.gs-form-row-tight .gs-input-narrow { width: 70px; }
+.gs-label {
+  min-width: 120px;
+  font-size: 12px;
+  color: #b0b6c8;
+}
+.gs-input {
+  flex: 1;
+  background: #14182400;
+  background-color: #14182a;
+  border: 1px solid #2a2f3c;
+  color: #e0e4f0;
+  padding: 4px 6px;
+  font-size: 12px;
+}
+.gs-note {
+  font-size: 11px;
+  color: #c8a860;
+}
+
+.gs-fieldset {
+  border: 1px solid #2a2f3c;
+  margin-bottom: 8px;
+  padding: 6px 8px;
+}
+.gs-fieldset legend {
+  font-size: 11px;
+  color: #8890a8;
+  padding: 0 4px;
+}
+.gs-radio-label {
+  display: block;
+  font-size: 12px;
+  padding: 2px 0;
+}
+
+.gs-actions {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0;
+}
+.gs-btn {
+  background: #1c2030;
+  border: 1px solid #343a4c;
+  color: #d8d8e0;
+  padding: 5px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.gs-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.gs-btn-primary {
+  background: #22304a;
+  border-color: #3a5a8a;
+  color: #cfe0ff;
+}
+
+.gs-progress {
+  font-size: 12px;
+  color: #a0c8ff;
+}
+
+.gs-error-banner {
+  background: #2a0808;
+  border: 2px solid #aa2020;
+  border-left: 6px solid #ee3030;
+  color: #f0b0b0;
+  padding: 8px 12px;
+  font-size: 12px;
+  margin-top: 6px;
+}
+.gs-error-banner strong { color: #ff8080; }
+
+.gs-partial-banner {
+  background: #2a2408;
+  border: 2px solid #aa8820;
+  border-left: 6px solid #eecc30;
+  color: #f0e0b0;
+  padding: 8px 12px;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+.gs-partial-banner strong { color: #ffdd80; }
+
+/* ── Export bar ───────────────────────────────────────────────────────────── */
+.gs-export-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.gs-export-label { font-size: 11px; color: #8890a8; }
+.gs-export-sep { width: 1px; height: 16px; background: #2a2f3c; margin: 0 4px; }
+
+/* ── Results ──────────────────────────────────────────────────────────────── */
+.gs-profile-card {
+  background: #12162200;
+  background-color: #12162200;
+  border: 1px solid #2a2f3c;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+.gs-profile-bio { margin: 4px 0; color: #b0b6c8; }
+.gs-profile-stats { font-size: 11px; color: #8890a8; }
+
+.gs-empty { font-size: 12px; color: #8890a8; }
+
+.gs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+.gs-table th, .gs-table td {
+  border: 1px solid #2a2f3c;
+  padding: 4px 6px;
+  text-align: left;
+  vertical-align: top;
+}
+.gs-th-sortable { cursor: pointer; user-select: none; color: #a0c8ff; }
+.gs-td-text { max-width: 420px; white-space: pre-wrap; word-break: break-word; }
+.gs-td-url { max-width: 220px; word-break: break-all; color: #7090c0; }
+
+.gs-captured-note { font-size: 11px; color: #8890a8; margin-top: 6px; }
