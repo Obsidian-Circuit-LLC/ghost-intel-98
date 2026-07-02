@@ -5,7 +5,7 @@
 
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import { channels } from '../shared/ipc-contracts';
-import type { LocalAiStatus, LocalAiProgress, MemoryStatus, MemoryProgress, MemoryItem, RecallPreview, GhostScrapeConfig, GhostScrapeResult } from '../shared/ipc-contracts';
+import type { LocalAiStatus, LocalAiProgress, MemoryStatus, MemoryProgress, MemoryItem, RecallPreview, GhostScrapeConfig, GhostScrapeResult, ScrapingCaseStoreId } from '../shared/ipc-contracts';
 
 const api = {
   cases: {
@@ -559,6 +559,17 @@ const api = {
       ipcRenderer.on(channels.ghostscrape.onDone, listener);
       return () => ipcRenderer.removeListener(channels.ghostscrape.onDone, listener);
     }
+  },
+  // Scraping cases (W4) — the isolated SOCMINT/X collection-run stores. Every call passes a
+  // `store: 'socmint' | 'x'` discriminator that main validates against an allowlist and routes
+  // to the matching namespace store. Distinct from window.api.cases (investigation cases).
+  scrapingCases: {
+    list: (store: ScrapingCaseStoreId) => ipcRenderer.invoke(channels.scrapingCases.list, store),
+    create: (store: ScrapingCaseStoreId, name: string) => ipcRenderer.invoke(channels.scrapingCases.create, store, name),
+    rename: (store: ScrapingCaseStoreId, id: string, name: string) => ipcRenderer.invoke(channels.scrapingCases.rename, store, id, name),
+    remove: (store: ScrapingCaseStoreId, id: string) => ipcRenderer.invoke(channels.scrapingCases.remove, store, id),
+    importToCase: (store: ScrapingCaseStoreId, scrapingCaseId: string, mainCaseId: string) =>
+      ipcRenderer.invoke(channels.scrapingCases.importToCase, store, scrapingCaseId, mainCaseId)
   }
 } as const;
 

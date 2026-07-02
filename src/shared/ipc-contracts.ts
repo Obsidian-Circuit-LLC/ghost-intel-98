@@ -23,6 +23,7 @@ import type {
   JournalEntrySummary,
   JournalEntryInput,
   MediaUrlResult,
+  ScrapingCase,
   SearchResult,
   Reminder,
   TaskItem,
@@ -502,8 +503,27 @@ export const channels = {
     onProgress: 'ghostscrape:onProgress',
     /** Main→renderer push: a job finished (result) or failed (error). */
     onDone: 'ghostscrape:onDone'
+  },
+  // Scraping cases — the isolated per-namespace case stores for SOCMINT + X collection runs
+  // (kept apart from the core investigation `cases` namespace). Every handler takes a
+  // `store: 'socmint' | 'x'` discriminator that main validates against an allowlist and routes
+  // to the matching namespace store; an unknown value throws (W4 Task 3).
+  scrapingCases: {
+    list: 'scrapingCases:list',
+    create: 'scrapingCases:create',
+    rename: 'scrapingCases:rename',
+    remove: 'scrapingCases:remove',
+    importToCase: 'scrapingCases:importToCase'
   }
 } as const;
+
+/** Renderer-facing scraping-case store discriminator. Validated main-side against the same
+ *  allowlist (see assertScrapingStore in src/main/scraping-cases/ipc.ts). Declared here so the
+ *  shared contract + preload stay self-contained without importing a main-process type. */
+export type ScrapingCaseStoreId = 'socmint' | 'x';
+
+/** Result of importing a scraping case's items into a main investigation case. */
+export interface ScrapingImportResult { imported: number }
 
 export interface MemoryStatus { model: string; cases: number; chunks: number }
 export interface MemoryProgress { done: number; total: number; label: string }
@@ -839,6 +859,13 @@ export interface ApiContracts {
   [channels.ghostscrape.cancel]: { args: [string]; returns: void };
   [channels.ghostscrape.onProgress]: { args: [(p: { jobId: string; captured: number; scrollsDone: number }) => void]; returns: () => void };
   [channels.ghostscrape.onDone]: { args: [(d: { jobId: string; result?: GhostScrapeResult; error?: string }) => void]; returns: () => void };
+
+  // Scraping cases (W4 Task 3) — `store` is validated main-side against ['socmint','x'].
+  [channels.scrapingCases.list]: { args: [ScrapingCaseStoreId]; returns: ScrapingCase[] };
+  [channels.scrapingCases.create]: { args: [ScrapingCaseStoreId, string]; returns: ScrapingCase };
+  [channels.scrapingCases.rename]: { args: [ScrapingCaseStoreId, string, string]; returns: ScrapingCase };
+  [channels.scrapingCases.remove]: { args: [ScrapingCaseStoreId, string]; returns: void };
+  [channels.scrapingCases.importToCase]: { args: [ScrapingCaseStoreId, string, string]; returns: ScrapingImportResult };
 }
 
 export const BGCONN_LOCK_EXEMPT_CHANNELS = ['bgconn:status', 'bgconn:stop'] as const;

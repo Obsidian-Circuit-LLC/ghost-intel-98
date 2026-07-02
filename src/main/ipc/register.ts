@@ -134,6 +134,8 @@ import {
   handleXCollect, handleXListItems, handleXRankItems,
 } from '../x/ipc';
 import { createGhostScrapeHandlers } from '../x/ghostscrape/ipc';
+import { createScrapingCasesHandlers } from '../scraping-cases/ipc';
+import { prodScrapingCaseStore } from '../storage/scraping-cases';
 
 const MAX_SAVE_ATTACHMENT_BYTES = 64 * 1024 * 1024; // 64 MB cap on base64 decoded payload
 const MAX_EXPORT_BYTES = 64 * 1024 * 1024;
@@ -513,6 +515,24 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.cases.deleteLink, (...args) => caseStore.deleteLink(ensureUuid(args[0], 'caseId'), args[1] as string));
   safeHandle(channels.cases.addReminder, (...args) => caseStore.addReminder(ensureUuid(args[0], 'caseId'), args[1] as Parameters<typeof caseStore.addReminder>[1]));
   safeHandle(channels.cases.deleteReminder, (...args) => caseStore.deleteReminder(ensureUuid(args[0], 'caseId'), args[1] as string));
+
+  // ---- scraping cases (W4) — isolated per-namespace SOCMINT/X collection-run stores, distinct
+  //      from the core investigation `cases` above. The `store` discriminator (args[0]) is
+  //      validated main-side against ['socmint','x'] inside every handler and routed to the
+  //      matching encrypt-at-rest namespace store. importToCase's body lands in a later W4 task;
+  //      T3 owns the namespace, the validated routing, and the preload surface only.
+  const scrapingCases = createScrapingCasesHandlers({
+    getStore: (ns) => prodScrapingCaseStore(ns),
+    importToCase: async () => {
+      // Placeholder until the W4 import-to-main-case task wires the real writer path.
+      throw new Error('scrapingCases.importToCase is not yet implemented');
+    }
+  });
+  safeHandle(channels.scrapingCases.list, (...args) => scrapingCases.list(args[0]));
+  safeHandle(channels.scrapingCases.create, (...args) => scrapingCases.create(args[0], args[1]));
+  safeHandle(channels.scrapingCases.rename, (...args) => scrapingCases.rename(args[0], args[1], args[2]));
+  safeHandle(channels.scrapingCases.remove, (...args) => scrapingCases.remove(args[0], args[1]));
+  safeHandle(channels.scrapingCases.importToCase, (...args) => scrapingCases.importToCase(args[0], args[1], args[2]));
 
   // ---- files ----
   safeHandle(channels.files.importDropped, async (...args) => {
