@@ -43,6 +43,12 @@ describe('OSINT Toolkit module registration', () => {
     expect(typeof m?.component).toBe('function');
   });
 
+  it('opens as a compact folder-sized window (matches the operator screenshot)', () => {
+    const m = getModule('osint-toolkit');
+    expect(m?.defaultWidth).toBe(360);
+    expect(m?.defaultHeight).toBe(470);
+  });
+
   it('groups the real registry with a Social Media group containing x, ghostscrape, socmint, and never lists itself', () => {
     const groups = buildOsintDirectory(listModules());
     const socialMedia = groups.find((g) => g.subcategory === 'Social Media');
