@@ -425,10 +425,19 @@ export interface AppSettings {
     newsStreams: { label: string; url: string; kind: 'hls' | 'youtube' }[];
     /** Index of the active stream in newsStreams. */
     newsStreamIndex: number;
-    /** When true, CCTV streams in EyeSpy are routed through the ga98cctv:// main-side Tor proxy.
-     *  A camera that cannot be reached over Tor will not load (no clearnet fallback).
-     *  Off by default — live video over Tor is slow. */
+    /** When true, CCTV *stream playback* in EyeSpy is routed through the ga98cctv:// main-side Tor
+     *  proxy. A camera that cannot be reached over Tor will not load (no clearnet fallback).
+     *  Off by default — live video over Tor is slow. Governs only the media stream, NOT the
+     *  separate host-resolution recon step (see cctvResolveHosts). */
     cctvOverTor: boolean;
+    /** When true, CCTV *host resolution* (the DoH + RDAP recon lookups that resolve a camera's
+     *  hostname/IP and registration — an act that reveals interest in that specific camera) is
+     *  performed strictly over Tor. This is a DISTINCT step from stream routing (cctvOverTor):
+     *  it runs for both stream-driven playback and the standalone Host Info lookup. When false,
+     *  host resolution is disabled entirely — it NEVER falls back to a clearnet lookup, since a
+     *  clearnet resolve would leak the operator's real IP to the camera's DNS/registry path.
+     *  On by default (resolution is cheap and Tor-safe, unlike live video). */
+    cctvResolveHosts: boolean;
   };
   markets: {
     /** Master opt-in egress gate for the Markets module. Off by default ⇒ no quote is fetched. */
@@ -631,7 +640,8 @@ export const defaultSettings: AppSettings = {
     basemap: 'street',
     newsStreams: [{ label: 'Bloomberg TV', url: 'https://www.bloomberg.com/media-manifest/streams/us.m3u8', kind: 'hls' }],
     newsStreamIndex: 0,
-    cctvOverTor: false
+    cctvOverTor: false,
+    cctvResolveHosts: true
   },
   markets: {
     networkEnabled: false,

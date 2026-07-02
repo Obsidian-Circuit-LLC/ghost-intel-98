@@ -61,6 +61,27 @@ describe('settings upgrade guard — a frozen pre-v3.23.0 settings.json heals th
   });
 });
 
+describe('settings upgrade guard — geoint.cctvResolveHosts (Tor-only host resolution toggle)', () => {
+  it('upgrades an old geoint block with no cctvResolveHosts to the default (true)', async () => {
+    // A settings.json persisted before cctvResolveHosts existed: geoint present, field absent.
+    writeOnDiskSettings({ geoint: { networkEnabled: true, cctvOverTor: true } });
+
+    const s = await settingsStore.read();
+
+    expect(s.geoint.cctvResolveHosts).toBe(true);          // healed to default
+    expect(s.geoint.cctvOverTor).toBe(true);               // pre-existing user value kept
+    expect(s.geoint.networkEnabled).toBe(true);            // pre-existing user value kept
+  });
+
+  it('preserves a stored cctvResolveHosts=false across the merge (not clobbered by the default)', async () => {
+    writeOnDiskSettings({ geoint: { cctvResolveHosts: false } });
+
+    const s = await settingsStore.read();
+
+    expect(s.geoint.cctvResolveHosts).toBe(false);         // user opt-out survives
+  });
+});
+
 describe('settings upgrade guard — completeness: every nested block survives a stale on-disk block', () => {
   it('keeps all default sub-fields for EVERY nested settings object (catches a future block left out of the merge)', async () => {
     // Synthesize the worst case for every nested block at once: present-but-empty, simulating

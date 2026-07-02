@@ -94,6 +94,7 @@ export function LiveNewsPanel(): JSX.Element {
         newsStreams: streams,
         newsStreamIndex: index,
         cctvOverTor: g?.cctvOverTor ?? false,
+        cctvResolveHosts: g?.cctvResolveHosts ?? true,
         ...p
       }
     });

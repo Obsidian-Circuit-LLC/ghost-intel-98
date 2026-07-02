@@ -101,6 +101,9 @@ function GeoIntModuleInner(): JSX.Element {
   const newsStreamIndex = g?.newsStreamIndex ?? 0;
   // CCTV-over-Tor setting (Task 6) — carried through patchGeo alongside other geoint fields.
   const cctvOverTor = g?.cctvOverTor ?? false;
+  // Tor-only host-resolution recon toggle — distinct from stream routing; default on. Carried
+  // through patchGeo so a geoint write here can't silently drop it.
+  const cctvResolveHosts = g?.cctvResolveHosts ?? true;
   // The map's active layer: street uses the user/default tiles; satellite uses the built-in Esri layer.
   const activeTileUrl = basemap === 'satellite' ? ESRI_SAT_URL : tileUrl;
   const activeTileAttribution = basemap === 'satellite' ? ESRI_SAT_ATTRIBUTION : tileAttribution;
@@ -465,7 +468,7 @@ function GeoIntModuleInner(): JSX.Element {
   // every write must carry all fields — this fills the unchanged ones from current state and
   // applies the delta, so adding basemap (or any future field) can't silently drop the others.
   function patchGeo(p: Partial<{ networkEnabled: boolean; tileServerUrl: string; tileAttribution: string; basemap: 'street' | 'satellite' }>): void {
-    void patch({ geoint: { networkEnabled: net, tileServerUrl: tileUrl, tileAttribution, basemap, newsStreams, newsStreamIndex, cctvOverTor, ...p } });
+    void patch({ geoint: { networkEnabled: net, tileServerUrl: tileUrl, tileAttribution, basemap, newsStreams, newsStreamIndex, cctvOverTor, cctvResolveHosts, ...p } });
   }
   function setNetwork(enabled: boolean): void {
     // Enabling with no tile server configured yet → drop in the default basemap so the map
@@ -1164,7 +1167,7 @@ export function GeoIntModule(): JSX.Element {
     //     (which only touches the cache) — and it would make the inner render re-throw immediately on
     //     remount. Overwriting with known-good defaults clears it. Network goes back to off (its
     //     default); one click re-enables it and the default tiles auto-populate.
-    try { await patch({ geoint: { networkEnabled: false, tileServerUrl: '', tileAttribution: '', basemap: 'street', newsStreams: [{ label: 'Bloomberg TV', url: 'https://www.bloomberg.com/media-manifest/streams/us.m3u8', kind: 'hls' }], newsStreamIndex: 0, cctvOverTor: false } }); }
+    try { await patch({ geoint: { networkEnabled: false, tileServerUrl: '', tileAttribution: '', basemap: 'street', newsStreams: [{ label: 'Bloomberg TV', url: 'https://www.bloomberg.com/media-manifest/streams/us.m3u8', kind: 'hls' }], newsStreamIndex: 0, cctvOverTor: false, cctvResolveHosts: true } }); }
     catch { /* best-effort */ }
     setResetKey((k) => k + 1); // remount Inner fresh against purged + reset state
   }, [patch]);
