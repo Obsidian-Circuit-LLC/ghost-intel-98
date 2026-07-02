@@ -131,6 +131,7 @@ import {
   handleXAddAccount, handleXRemoveAccount, handleXListAccounts, handleXHasAccount,
   handleXCollect, handleXListItems, handleXRankItems,
 } from '../x/ipc';
+import { createGhostScrapeHandlers } from '../x/ghostscrape/ipc';
 
 const MAX_SAVE_ATTACHMENT_BYTES = 64 * 1024 * 1024; // 64 MB cap on base64 decoded payload
 const MAX_EXPORT_BYTES = 64 * 1024 * 1024;
@@ -1754,6 +1755,18 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     handleXListItems(ensureUuid(a[0], 'caseId')));
   safeHandle(channels.x.rankItems, (...a) =>
     handleXRankItems(ensureUuid(a[0], 'caseId'), typeof a[1] === 'string' ? a[1] : ''));
+
+  // ---- GhostScrape (hidden-browser X scraper; reuses the SAME two-flag gate + shared X
+  // session cookies as the x namespace above — no new settings namespace, no second cookie
+  // store). start()/cancel() are the only two handlers; progress/done are pushed events. ----
+  const ghostScrapeHandlers = createGhostScrapeHandlers({
+    getSecret: (k) => secretStore.get(k),
+    networkEnabled: async () => (await settingsStore.read()).x.networkEnabled,
+    clearnetAcknowledged: async () => (await settingsStore.read()).x.clearnetAcknowledged,
+    getWindow,
+  });
+  safeHandle(channels.ghostscrape.start, (...a) => ghostScrapeHandlers.start(a[0]));
+  safeHandle(channels.ghostscrape.cancel, (...a) => ghostScrapeHandlers.cancel(a[0]));
 
   startMailPoller(getWindow);
 }

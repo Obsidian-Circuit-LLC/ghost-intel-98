@@ -1,0 +1,97 @@
+{
+  "data": {
+    "user": {
+      "result": {
+        "timeline_v2": {
+          "timeline": {
+            "instructions": [
+              {
+                "type": "TimelineAddEntries",
+                "entries": [
+                  {
+                    "entryId": "tweet-1001",
+                    "content": {
+                      "itemContent": {
+                        "tweet_results": {
+                          "result": {
+                            "rest_id": "1001",
+                            "legacy": {
+                              "full_text": "Hello world, this is tweet one.",
+                              "created_at": "Wed Jun 25 12:00:00 +0000 2026",
+                              "favorite_count": 5,
+                              "retweet_count": 1,
+                              "reply_count": 0
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "entryId": "tweet-1002",
+                    "content": {
+                      "itemContent": {
+                        "tweet_results": {
+                          "result": {
+                            "rest_id": "1002",
+                            "legacy": {
+                              "full_text": "RT @someone: Original retweeted content here.",
+                              "created_at": "Wed Jun 24 10:00:00 +0000 2026",
+                              "favorite_count": 0,
+                              "retweet_count": 0,
+                              "reply_count": 0,
+                              "retweeted_status_result": {
+                                "result": {
+                                  "legacy": {
+                                    "full_text": "Original retweeted content here.",
+                                    "created_at": "Wed Jun 23 08:00:00 +0000 2026"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "entryId": "tweet-1003",
+                    "content": {
+                      "itemContent": {
+                        "tweet_results": {
+                          "result": {
+                            "rest_id": "1003",
+                            "note_tweet": {
+                              "note_tweet_results": {
+                                "result": {
+                                  "text": "Extended   text   tweet  with  extra   whitespace."
+                                }
+                              }
+                            },
+                            "legacy": {
+                              "full_text": "(truncated placeholder)",
+                              "created_at": "Wed Jun 22 09:00:00 +0000 2026",
+                              "favorite_count": 2,
+                              "retweet_count": 0,
+                              "reply_count": 1
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "entryId": "cursor-bottom-0",
+                    "content": {
+                      "value": "cursor-token-abc"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}
