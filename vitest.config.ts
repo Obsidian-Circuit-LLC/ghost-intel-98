@@ -12,9 +12,12 @@ export default defineConfig({
       '@main': resolve(__dirname, 'src/main')
     }
   },
+  // Automatic JSX runtime so React component tests (*.test.tsx) don't need React in scope;
+  // has no effect on the JSX-free *.test.ts files.
+  esbuild: { jsx: 'automatic' },
   test: {
     environment: 'node',
-    include: ['test/**/*.test.ts'],
+    include: ['test/**/*.test.ts', 'test/**/*.test.tsx'],
     setupFiles: ['./test/setup-mlkem.ts'], // install the in-process ML-KEM-1024 provider for chat crypto
     globals: false
   }
