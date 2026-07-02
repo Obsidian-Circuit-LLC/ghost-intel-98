@@ -5,7 +5,8 @@
 
 import { useState } from 'react';
 import { useSettings, useWindows, type ModuleKey } from '../state/store';
-import { getModule } from '../state/registry';
+import { getModule, listModules } from '../state/registry';
+import { buildOsintDirectory } from '../modules/osint-toolkit/directory';
 import { glyphFor } from './Icon';
 import { playClick } from '../audio/synth';
 import { confirmDialog } from '../state/dialogs';
@@ -29,13 +30,20 @@ export function AccessMenu({ onClose }: AccessMenuProps): JSX.Element {
   const settings = useSettings((s) => s.settings);
   const open = useWindows((s) => s.open);
   const [gamesOpen, setGamesOpen] = useState(false);
+  const [osintOpen, setOsintOpen] = useState(false);
+  // OSINT modules live in the "OSINT Toolkit ▸" submenu (grouped by subcategory), not flat in the
+  // menu. Derived from the live registry at render time (like the flat-items filter below) so it
+  // reflects modules registered after this file was imported, and covers new OSINT modules for free.
+  const modules = listModules();
+  const osintGroups = buildOsintDirectory(modules);
+  const OSINT_TARGETS = new Set<string>(modules.filter((m) => m.category === 'osint').map((m) => m.key));
   let clockOn = false;
   try { clockOn = localStorage.getItem(CLOCK_ENABLED_KEY) === '1'; } catch { /* storage off */ }
 
   // Drop the footer 'Settings' launcher's duplicate, and any game shortcuts (games live in the Games
   // submenu now). Done at render time so existing installs are fixed too, not just fresh ones.
   const items = (settings?.shortcuts ?? []).filter(
-    (s) => !(s.kind === 'module' && (s.target === 'settings' || GAME_TARGETS.has(s.target)))
+    (s) => !(s.kind === 'module' && (s.target === 'settings' || GAME_TARGETS.has(s.target) || OSINT_TARGETS.has(s.target)))
   );
 
   function openModule(mod: ModuleKey, label: string): void {
@@ -120,17 +128,50 @@ export function AccessMenu({ onClose }: AccessMenuProps): JSX.Element {
           )}
         </div>
         <div className="ga98-access-separator" />
-        {/* Pinned OSINT Toolkit launcher — a single entry (not a submenu); the toolkit window
-            itself groups the OSINT modules by category. */}
-        <div
-          className="ga98-access-entry"
-          role="menuitem"
-          tabIndex={0}
-          onClick={() => openModule('osint-toolkit', 'OSINT Toolkit')}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') openModule('osint-toolkit', 'OSINT Toolkit'); }}
-        >
-          <span className="ga98-access-entry-glyph" aria-hidden="true">{glyphFor('osint-toolkit')}</span>
-          <span>OSINT Toolkit</span>
+        {/* OSINT Toolkit submenu — hover (or click) to fan out. ONE hop only: grouped subcategory
+            headings + one big clickable row per tool, each launching that module immediately (no
+            nested sub-submenu). Grouping/ordering is buildOsintDirectory's, shared with the toolkit
+            window. The flyout is a DOM descendant of this wrapper, so moving onto it does not fire
+            the wrapper's mouseleave (stays open). */}
+        <div style={{ position: 'relative' }} onMouseEnter={() => setOsintOpen(true)} onMouseLeave={() => setOsintOpen(false)}>
+          <div
+            className="ga98-access-entry"
+            role="menuitem"
+            tabIndex={0}
+            aria-haspopup="true"
+            aria-expanded={osintOpen}
+            onClick={() => setOsintOpen((o) => !o)}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowRight') setOsintOpen(true); }}
+          >
+            <span className="ga98-access-entry-glyph" aria-hidden="true">{glyphFor('osint-toolkit')}</span>
+            <span style={{ flex: 1 }}>OSINT Toolkit</span>
+            <span aria-hidden="true" style={{ opacity: 0.7 }}>▸</span>
+          </div>
+          {osintOpen && (
+            <div role="menu" style={{ position: 'absolute', left: '100%', top: 0, minWidth: 180, background: '#c0c0c0', border: '2px outset #f5f5f5', boxShadow: '2px 2px 5px rgba(0,0,0,0.4)', zIndex: 30, maxHeight: '70vh', overflowY: 'auto' }}>
+              {osintGroups.map((group) => (
+                <div key={group.subcategory}>
+                  <div className="ga98-access-osint-group" style={{ padding: '2px 8px', fontWeight: 'bold', opacity: 0.75, fontSize: '0.85em' }}>
+                    {group.subcategory}
+                  </div>
+                  {group.tools.map((tool) => (
+                    <div
+                      key={tool.key}
+                      className="ga98-access-entry"
+                      role="menuitem"
+                      tabIndex={0}
+                      data-osint-key={tool.key}
+                      onClick={() => openModule(tool.key as ModuleKey, tool.title)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') openModule(tool.key as ModuleKey, tool.title); }}
+                    >
+                      <span className="ga98-access-entry-glyph" aria-hidden="true">{tool.glyph}</span>
+                      <span>{tool.title}</span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
         <div className="ga98-access-separator" />
         <div
