@@ -241,5 +241,5 @@ export function registerBuiltins(): void {
   registerModule({ key: 'socmint', title: 'SOCMINT', glyph: '📡', component: SocmintAdapter, builtin: true, defaultWidth: 900, defaultHeight: 640, category: 'osint', subcategory: 'Social Media' });
   registerModule({ key: 'x', title: 'X / Twitter', glyph: '✖', component: XCollectorAdapter, builtin: true, defaultWidth: 900, defaultHeight: 640, category: 'osint', subcategory: 'Social Media' });
   registerModule({ key: 'ghostscrape', title: 'GhostScrape', glyph: '🐦', component: GhostScrapeAdapter, builtin: true, defaultWidth: 960, defaultHeight: 680, category: 'osint', subcategory: 'Social Media' });
-  registerModule({ key: 'osint-toolkit', title: 'OSINT Toolkit', glyph: '🧰', component: OSINTToolkitAdapter, builtin: true, defaultWidth: 760, defaultHeight: 560 });
+  registerModule({ key: 'osint-toolkit', title: 'OSINT Toolkit', glyph: '🧰', component: OSINTToolkitAdapter, builtin: true, defaultWidth: 360, defaultHeight: 470 });
 }
