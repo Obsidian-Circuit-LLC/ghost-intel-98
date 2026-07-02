@@ -9,7 +9,7 @@
  *      generic "Scrape failed" catch-all).
  *   2. capture DID attach + zero tweets -> empty-success (no error).
  *
- * It also exercises the capture.ts signal wiring (`attached` / `sawAnyResponse`) with a fake
+ * It also exercises the capture.ts signal wiring (`attached` / `sawMatchedResponse`) with a fake
  * webContents.debugger so the branch has a real source of truth, not a hand-set flag.
  */
 import { describe, it, expect } from 'vitest';
@@ -68,41 +68,58 @@ describe('capture signal wiring', () => {
     const cap = attachGraphqlCapture(wc, () => true);
     await flush();
     expect(cap.attached).toBe(false);
-    expect(cap.sawAnyResponse).toBe(false);
+    expect(cap.sawMatchedResponse).toBe(false);
     cap.detach();
   });
 
-  it('sets attached=true once Network.enable resolves and sawAnyResponse on first response', async () => {
+  it('sets attached=true once Network.enable resolves and sawMatchedResponse on a MATCHED response', async () => {
+    // The predicate matches only X GraphQL profile/timeline URLs — mirrors the real job wiring.
+    const isGraphql = (url: string): boolean =>
+      url.includes('/UserByScreenName') || url.includes('/UserTweets');
     const { wc, emit } = makeFakeWc({});
-    const cap = attachGraphqlCapture(wc, () => false);
+    const cap = attachGraphqlCapture(wc, isGraphql);
     await flush();
     expect(cap.attached).toBe(true);
-    expect(cap.sawAnyResponse).toBe(false);
-    emit('Network.responseReceived', { requestId: 'r1', response: { url: 'https://x.com/home' } });
-    expect(cap.sawAnyResponse).toBe(true);
+    expect(cap.sawMatchedResponse).toBe(false);
+
+    // A NON-matched response (the logged-out shell serves assets/other URLs, never GraphQL) must
+    // NOT flip the flag — this is the whole point of the fix: an expired session is not a success.
+    emit('Network.responseReceived', { requestId: 'a1', response: { url: 'https://x.com/home' } });
+    emit('Network.responseReceived', {
+      requestId: 'a2',
+      response: { url: 'https://abs.twimg.com/asset.js' },
+    });
+    expect(cap.sawMatchedResponse).toBe(false);
+
+    // A MATCHED GraphQL response (UserByScreenName always fires on a valid profile nav) flips it.
+    emit('Network.responseReceived', {
+      requestId: 'r1',
+      response: { url: 'https://x.com/i/api/graphql/abc/UserByScreenName?x=1' },
+    });
+    expect(cap.sawMatchedResponse).toBe(true);
     cap.detach();
   });
 });
 
 describe('isCaptureFailure — genuine-empty vs failed-capture', () => {
   it('flags a capture-attach failure (never attached, zero results, not cancelled)', () => {
-    expect(isCaptureFailure({ attached: false, sawAnyResponse: false }, false, false)).toBe(true);
+    expect(isCaptureFailure({ attached: false, sawMatchedResponse: false }, false, false)).toBe(true);
   });
 
   it('flags attached-but-silent (no response ever delivered, zero results)', () => {
-    expect(isCaptureFailure({ attached: true, sawAnyResponse: false }, false, false)).toBe(true);
+    expect(isCaptureFailure({ attached: true, sawMatchedResponse: false }, false, false)).toBe(true);
   });
 
   it('treats attached + saw responses + zero tweets as an EMPTY SUCCESS, not a failure', () => {
-    expect(isCaptureFailure({ attached: true, sawAnyResponse: true }, false, false)).toBe(false);
+    expect(isCaptureFailure({ attached: true, sawMatchedResponse: true }, false, false)).toBe(false);
   });
 
   it('never flags a failure when any result was captured', () => {
-    expect(isCaptureFailure({ attached: false, sawAnyResponse: false }, true, false)).toBe(false);
+    expect(isCaptureFailure({ attached: false, sawMatchedResponse: false }, true, false)).toBe(false);
   });
 
   it('never flags a failure on a cancelled (partial) job, even with zero results', () => {
-    expect(isCaptureFailure({ attached: false, sawAnyResponse: false }, false, true)).toBe(false);
+    expect(isCaptureFailure({ attached: false, sawMatchedResponse: false }, false, true)).toBe(false);
   });
 });
 

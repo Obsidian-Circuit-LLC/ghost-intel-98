@@ -31,11 +31,18 @@ export interface Capture {
    */
   readonly attached: boolean;
   /**
-   * True once at least one `Network.responseReceived` event was delivered over the session
-   * (any URL, matched or not). Distinguishes "session alive, timeline just empty" from
-   * "nothing ever loaded / the debugger delivered no traffic at all".
+   * True once at least one `Network.responseReceived` for a MATCHED GraphQL URL was delivered
+   * (i.e. a response the `match` predicate accepted — `UserByScreenName`/`UserTweets`/…), NOT on
+   * every response. This is the honest live-session signal: `UserByScreenName` always fires on a
+   * valid profile navigation, whereas an EXPIRED/invalid session is redirected to the logged-out
+   * login SPA shell, which serves assets but no GraphQL — so it produces no matched response.
+   * Keying on ANY response would misclassify that expired-session shell as a genuine-empty success.
+   *
+   * Residual limitation: a matched URL that returns a GraphQL *error* body (200/401) would still
+   * flip this flag. Accepted — this addresses the dominant expired-session case (no matched
+   * response at all), and the parse layer already tolerates error/empty bodies.
    */
-  readonly sawAnyResponse: boolean;
+  readonly sawMatchedResponse: boolean;
   detach(): void;
 }
 
@@ -55,7 +62,7 @@ export function attachGraphqlCapture(
   const raw: unknown[] = [];
   const pendingRequestIds = new Set<string>();
   let attached = false;
-  let sawAnyResponse = false;
+  let sawMatchedResponse = false;
 
   const onMessage = (
     _event: Electron.Event,
@@ -63,12 +70,14 @@ export function attachGraphqlCapture(
     params: unknown,
   ): void => {
     if (method === 'Network.responseReceived') {
-      // Any response at all (matched or not) proves the session is delivering traffic.
-      sawAnyResponse = true;
       const p = params as { requestId?: unknown; response?: { url?: unknown } };
       const requestId = typeof p.requestId === 'string' ? p.requestId : undefined;
       const url = typeof p.response?.url === 'string' ? p.response.url : undefined;
       if (requestId && url && match(url)) {
+        // Only a MATCHED GraphQL response proves a live session (see interface docstring). An
+        // expired session redirected to the logged-out shell serves assets but no GraphQL, so it
+        // never reaches here — which is exactly the failure we want isCaptureFailure to catch.
+        sawMatchedResponse = true;
         pendingRequestIds.add(requestId);
       }
       return;
@@ -123,8 +132,8 @@ export function attachGraphqlCapture(
     get attached(): boolean {
       return attached;
     },
-    get sawAnyResponse(): boolean {
-      return sawAnyResponse;
+    get sawMatchedResponse(): boolean {
+      return sawMatchedResponse;
     },
     detach(): void {
       wc.debugger.off('message', onMessage);

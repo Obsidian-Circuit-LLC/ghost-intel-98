@@ -61,7 +61,10 @@ export class GhostScrapeCaptureFailedError extends Error {
 /** Capture liveness signals read off a Capture (see capture.ts). */
 export interface CaptureSignals {
   attached: boolean;
-  sawAnyResponse: boolean;
+  /** True once a MATCHED GraphQL response landed (UserByScreenName/UserTweets/…) — the honest
+   *  live-session signal. An expired session lands on the logged-out shell, which serves assets
+   *  but no GraphQL, so this stays false and the job is correctly flagged a capture failure. */
+  sawMatchedResponse: boolean;
 }
 
 /**
@@ -71,8 +74,9 @@ export interface CaptureSignals {
  *
  * A cancelled (`partial`) job is never a failure — cancellation is a normal, reportable
  * outcome. Any captured result (`hadAnyResult`) proves the capture worked. Otherwise, if the
- * session never confirmed attach OR never delivered a single response, we never actually
- * observed the timeline: report it honestly rather than as a silent empty success.
+ * session never confirmed attach OR never delivered a single MATCHED GraphQL response, we never
+ * actually observed the timeline (an expired session yields the logged-out shell — assets, no
+ * GraphQL): report it honestly rather than as a silent empty success.
  */
 export function isCaptureFailure(
   signals: CaptureSignals,
@@ -81,7 +85,7 @@ export function isCaptureFailure(
 ): boolean {
   if (partial) return false;
   if (hadAnyResult) return false;
-  return !signals.attached || !signals.sawAnyResponse;
+  return !signals.attached || !signals.sawMatchedResponse;
 }
 
 /**

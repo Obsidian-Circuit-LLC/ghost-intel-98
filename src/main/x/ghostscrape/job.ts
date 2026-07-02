@@ -80,7 +80,8 @@ function delay(ms: number, signal: AbortSignal): Promise<void> {
  * immediately and the result is returned with `partial: true` rather than
  * throwing — cancellation is a normal, reportable outcome, not an error.
  *
- * The hidden window is ALWAYS destroyed (`finally`), even on error or cancel.
+ * The hidden window is ALWAYS disposed (`finally`) — destroyed AND its session
+ * storage cleared to purge the injected X cookies — even on error or cancel.
  */
 export async function runScrapeJob(
   jobId: string,
@@ -170,7 +171,7 @@ export async function runScrapeJob(
     // (capture attached, responses flowed, just zero matching tweets) falls through as success.
     const hadAnyResult = tweets.length > 0 || profile !== undefined;
     if (isCaptureFailure(
-      { attached: capture.attached, sawAnyResponse: capture.sawAnyResponse },
+      { attached: capture.attached, sawMatchedResponse: capture.sawMatchedResponse },
       hadAnyResult,
       partial,
     )) {
@@ -185,6 +186,6 @@ export async function runScrapeJob(
     };
   } finally {
     capture.detach();
-    win.destroy();
+    await win.dispose();
   }
 }

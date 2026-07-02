@@ -16,12 +16,22 @@
  * intrinsic egress as the X Intel collector. No Tor. No telemetry.
  *
  * The window runs on a UNIQUE, NON-persistent per-job session partition
- * (`ghostscrape-<jobId>` — no `persist:` prefix, so Electron keeps it purely
- * in-memory and GCs it when the job's window closes) rather than a shared
- * on-disk jar. This isolates every job's injected cookies into their own jar:
- * concurrent jobs can never race on, leak into, or read each other's
- * credentials (never the main window's session either). The partition's
- * permission handlers deny every request/check (mirrors the
+ * (`ghostscrape-<jobId>`): (a) UNIQUE, so no two jobs ever share a cookie jar —
+ * concurrent jobs can never race on, leak into, or read each other's injected
+ * credentials (nor the main window's session); and (b) NON-persistent — the
+ * absence of a `persist:` prefix means Electron never writes the jar to disk,
+ * so a job's X auth_token/ct0 never survive onto storage.
+ *
+ * Electron 33 has NO `Session.destroy()` and retains every `fromPartition`
+ * session for the app lifetime, so `win.destroy()` alone would leave the
+ * injected cookies resident in the in-memory session jar indefinitely. To close
+ * that, the job EXPLICITLY clears the session's storage on completion
+ * (`dispose()` → `ses.clearStorageData()`), so the injected credentials do not
+ * linger in process memory after the job ends. The empty Session object itself
+ * still lingers (an Electron limitation with no API to release it), but it holds
+ * no credentials once cleared.
+ *
+ * The partition's permission handlers deny every request/check (mirrors the
  * `persist:netexplorer` lockdown in src/main/index.ts), `sandbox`+
  * `contextIsolation` are on, `nodeIntegration` is off, and `webviewTag` is
  * disabled.
@@ -31,11 +41,14 @@ import { BrowserWindow, session } from 'electron';
 import type { XCookie } from './cookies';
 
 /**
- * Derive the per-job session-partition name. NON-persistent by construction —
- * the absence of a `persist:` prefix makes Electron treat it as an in-memory
- * partition that is discarded when its last window closes, so a job's cookie
- * jar never survives onto disk or into a sibling job. Pure + deterministic so
- * it can be unit-tested without Electron.
+ * Derive the per-job session-partition name. UNIQUE per jobId, so no two jobs
+ * share a cookie jar. NON-persistent by construction — the absence of a
+ * `persist:` prefix makes Electron treat it as an in-memory partition that is
+ * never written to disk, so a job's cookie jar never survives onto storage or
+ * into a sibling job. (Electron still retains the Session object itself for the
+ * app lifetime — see the module header — which is why the job clears the
+ * session's storage on dispose rather than relying on GC.) Pure + deterministic
+ * so it can be unit-tested without Electron.
  */
 export function partitionForJob(jobId: string): string {
   return `ghostscrape-${jobId}`;
@@ -46,7 +59,7 @@ export interface ScrapeWindow {
   scrollToBottom(): Promise<void>;
   clickLatest(): Promise<void>;
   readonly webContents: Electron.WebContents;
-  destroy(): void;
+  dispose(): Promise<void>;
 }
 
 /** Deny every permission request/check on the scrape partition — it should never
@@ -61,8 +74,10 @@ function lockDownGhostScrapeSession(ses: Electron.Session): void {
  * Opens the hidden scrape `BrowserWindow` on this job's UNIQUE, non-persistent
  * `ghostscrape-<jobId>` partition, injects the supplied X session cookies into
  * that job-private jar, and returns a thin navigation/scroll handle. The window
- * is never shown; when it closes the in-memory partition (and its cookies) is
- * discarded.
+ * is never shown. On `dispose()` the window is destroyed AND the session's
+ * storage is explicitly cleared, purging the injected cookies from the resident
+ * in-memory jar (Electron 33 keeps the Session alive for the app lifetime, so
+ * closing the window is not enough — see the module header).
  */
 export async function openScrapeWindow(jobId: string, cookies: XCookie[]): Promise<ScrapeWindow> {
   const ses = session.fromPartition(partitionForJob(jobId));
@@ -124,9 +139,17 @@ export async function openScrapeWindow(jobId: string, cookies: XCookie[]): Promi
         // Best-effort — never abort the job over the "Latest" tab not being found.
       }
     },
-    destroy(): void {
+    async dispose(): Promise<void> {
       if (!win.isDestroyed()) {
         win.destroy();
+      }
+      try {
+        // Electron 33 has no Session.destroy() and retains fromPartition sessions for the app
+        // lifetime, so win.destroy() alone leaves the injected X cookies resident in the in-memory
+        // jar. Explicitly purge them so credentials do not linger in process memory after the job.
+        await ses.clearStorageData();
+      } catch {
+        // Best-effort — a failed clear must never turn a completed/cancelled job into a throw.
       }
     },
   };
