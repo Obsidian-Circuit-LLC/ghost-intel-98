@@ -21,13 +21,14 @@ import type {
   JournalEntrySummary,
   JournalEntryInput,
   Reminder,
+  ScrapingCase,
   SearchResult,
   TaskItem,
   TimelineEvent,
   WebLink,
   Whiteboard
 } from '../shared/types';
-import type { EntityCreateInput, EntityLinkOpts, BioAddInput, AuthStatus, LocalAiStatus, LocalAiProgress, MemoryStatus, MemoryProgress, MemoryItem, RecallPreview, XCollectResultShape, LearningModelMeta, GhostScrapeConfig, GhostScrapeResult } from '../shared/ipc-contracts';
+import type { EntityCreateInput, EntityLinkOpts, BioAddInput, AuthStatus, LocalAiStatus, LocalAiProgress, MemoryStatus, MemoryProgress, MemoryItem, RecallPreview, XCollectResultShape, LearningModelMeta, GhostScrapeConfig, GhostScrapeResult, ScrapingCaseStoreId, ScrapingImportResult } from '../shared/ipc-contracts';
 import type {
   AiChatRequest,
   CameraStream,
@@ -643,6 +644,21 @@ export interface GhostApi {
     onProgress(cb: (p: { jobId: string; captured: number; scrollsDone: number }) => void): () => void;
     /** Returns an unsubscribe function. Exactly one of result/error is present per job. */
     onDone(cb: (d: { jobId: string; result?: GhostScrapeResult; error?: string }) => void): () => void;
+  };
+
+  /**
+   * Scraping cases (W4) — the isolated per-namespace SOCMINT/X collection-run stores, kept
+   * apart from `cases` (investigation cases). Every call passes a `store: 'socmint' | 'x'`
+   * discriminator validated main-side against an allowlist. `saveArtifact` writes a saved
+   * export (e.g. GhostScrape JSON) into the scraping case, encrypted at rest.
+   */
+  scrapingCases: {
+    list(store: ScrapingCaseStoreId): Promise<ScrapingCase[]>;
+    create(store: ScrapingCaseStoreId, name: string): Promise<ScrapingCase>;
+    rename(store: ScrapingCaseStoreId, id: string, name: string): Promise<ScrapingCase>;
+    remove(store: ScrapingCaseStoreId, id: string): Promise<void>;
+    importToCase(store: ScrapingCaseStoreId, scrapingCaseId: string, mainCaseId: string): Promise<ScrapingImportResult>;
+    saveArtifact(store: ScrapingCaseStoreId, scrapingCaseId: string, name: string, content: string): Promise<string>;
   };
 }
 

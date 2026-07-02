@@ -526,6 +526,12 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     importToCase: async () => {
       // Placeholder until the W4 import-to-main-case task wires the real writer path.
       throw new Error('scrapingCases.importToCase is not yet implemented');
+    },
+    // Encrypt-at-rest artifact writer (e.g. GhostScrape "save to case"). The handler has
+    // already validated ns/id/name; the writer only routes through secure-fs.
+    saveArtifact: async (ns, scrapingCaseId, name, content) => {
+      const { saveScrapingArtifact } = await import('../storage/scraping-cases');
+      return saveScrapingArtifact(ns, scrapingCaseId, name, content);
     }
   });
   safeHandle(channels.scrapingCases.list, (...args) => scrapingCases.list(args[0]));
@@ -533,6 +539,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.scrapingCases.rename, (...args) => scrapingCases.rename(args[0], args[1], args[2]));
   safeHandle(channels.scrapingCases.remove, (...args) => scrapingCases.remove(args[0], args[1]));
   safeHandle(channels.scrapingCases.importToCase, (...args) => scrapingCases.importToCase(args[0], args[1], args[2]));
+  safeHandle(channels.scrapingCases.saveArtifact, (...args) => scrapingCases.saveArtifact(args[0], args[1], args[2], args[3]));
 
   // ---- files ----
   safeHandle(channels.files.importDropped, async (...args) => {
@@ -1773,12 +1780,14 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
       networkEnabled: async () => (await settingsStore.read()).x.networkEnabled,
       clearnetAcknowledged: async () => (await settingsStore.read()).x.clearnetAcknowledged,
       async upsertItems(caseId, items) {
-        const { upsertItems } = await import('../socmint/store');
-        return upsertItems(caseId, items);
+        // X Intel persists into the x scraping store (scrapingCaseDir('x', id)) — separate
+        // from the socmint store and the main investigation cases (W4 Task 5).
+        const { upsertXItems } = await import('../socmint/store');
+        return upsertXItems(caseId, items);
       },
       async recordJob(caseId, job) {
-        const { recordJob } = await import('../socmint/store');
-        return recordJob(caseId, job);
+        const { recordXJob } = await import('../socmint/store');
+        return recordXJob(caseId, job);
       },
       getSecret: (k) => secretStore.get(k),
     }));

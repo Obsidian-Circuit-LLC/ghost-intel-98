@@ -20,7 +20,7 @@
 import type { ScrapingCaseNs } from '../storage/paths';
 import type { ScrapingCaseStore } from '../storage/scraping-cases';
 import type { ScrapingCase } from '@shared/types';
-import { ensureUuid } from '../security/validate';
+import { ensureUuid, ensureFileName } from '../security/validate';
 
 /** The only namespaces a scraping-case store may address. Renderer input is checked against this. */
 export const SCRAPING_CASE_STORES = ['socmint', 'x'] as const;
@@ -59,6 +59,9 @@ export interface ScrapingCasesIpcDeps {
   getStore(ns: ScrapingCaseNs): Promise<ScrapingCaseStore> | ScrapingCaseStore;
   /** Import a scraping case's items into a main investigation case (body lands in a later task). */
   importToCase(ns: ScrapingCaseNs, scrapingCaseId: string, mainCaseId: string): Promise<ScrapingImportResult>;
+  /** Write a saved artifact (e.g. a GhostScrape export) into a scraping case, encrypt-at-rest.
+   *  ns/id/name are already validated by the handler before this is called. Returns the filename. */
+  saveArtifact(ns: ScrapingCaseNs, scrapingCaseId: string, name: string, content: string): Promise<string>;
 }
 
 export interface ScrapingCasesHandlers {
@@ -67,6 +70,7 @@ export interface ScrapingCasesHandlers {
   rename(store: unknown, id: unknown, name: unknown): Promise<ScrapingCase>;
   remove(store: unknown, id: unknown): Promise<void>;
   importToCase(store: unknown, scrapingCaseId: unknown, mainCaseId: unknown): Promise<ScrapingImportResult>;
+  saveArtifact(store: unknown, scrapingCaseId: unknown, name: unknown, content: unknown): Promise<string>;
 }
 
 /** Build the five scrapingCases handlers over an injected store seam. Each validates the `store`
@@ -96,6 +100,15 @@ export function createScrapingCasesHandlers(deps: ScrapingCasesIpcDeps): Scrapin
         ensureUuid(scrapingCaseId, 'scrapingCaseId'),
         ensureUuid(mainCaseId, 'caseId'),
       );
+    },
+    async saveArtifact(store, scrapingCaseId, name, content) {
+      // Validate the store discriminator + id + filename BEFORE any path is built (the store
+      // selects a filesystem sub-tree, the id/name are path components — all hostile input).
+      const ns = assertScrapingStore(store);
+      const id = ensureUuid(scrapingCaseId, 'scrapingCaseId');
+      const safeName = ensureFileName(name, 'artifactName');
+      if (typeof content !== 'string') throw new Error('scrapingCases.saveArtifact content must be a string');
+      return deps.saveArtifact(ns, id, safeName, content);
     },
   };
 }

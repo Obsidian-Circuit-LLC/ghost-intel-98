@@ -569,7 +569,9 @@ const api = {
     rename: (store: ScrapingCaseStoreId, id: string, name: string) => ipcRenderer.invoke(channels.scrapingCases.rename, store, id, name),
     remove: (store: ScrapingCaseStoreId, id: string) => ipcRenderer.invoke(channels.scrapingCases.remove, store, id),
     importToCase: (store: ScrapingCaseStoreId, scrapingCaseId: string, mainCaseId: string) =>
-      ipcRenderer.invoke(channels.scrapingCases.importToCase, store, scrapingCaseId, mainCaseId)
+      ipcRenderer.invoke(channels.scrapingCases.importToCase, store, scrapingCaseId, mainCaseId),
+    saveArtifact: (store: ScrapingCaseStoreId, scrapingCaseId: string, name: string, content: string) =>
+      ipcRenderer.invoke(channels.scrapingCases.saveArtifact, store, scrapingCaseId, name, content)
   }
 } as const;
 

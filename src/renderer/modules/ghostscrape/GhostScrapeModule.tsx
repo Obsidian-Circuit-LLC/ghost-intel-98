@@ -165,15 +165,15 @@ function GhostScrapeExportBar({ result, username }: { result: GhostScrapeResult;
     }
   }
 
-  // Save-to-case: persisted via the existing per-case notes store (same
-  // secure-fs encryption-at-rest as case attachments) — GhostScrape's main
-  // code writes nothing to disk itself; this is a renderer-side call into an
-  // already-existing, already-encrypted case store.
+  // Save-to-case: persisted into the x scraping store (scrapingCaseArtifactFile('x', id, …),
+  // same secure-fs encryption-at-rest), NOT the main investigation case notes (W4 Task 5).
+  // GhostScrape's main code writes nothing to disk itself; this is a renderer-side call into
+  // the already-encrypted x scraping-case artifact store.
   async function saveToCase(): Promise<void> {
     if (!caseId) { toast.warn('Choose a case first.'); return; }
     setSaving(true);
     try {
-      await window.api.notes.write(caseId, `${baseName}.json`, toJson(result));
+      await window.api.scrapingCases.saveArtifact('x', caseId, `${baseName}.json`, toJson(result));
       toast.success('Saved to case.');
     } catch (err) {
       toast.error(`Save to case failed: ${(err as Error).message}`);

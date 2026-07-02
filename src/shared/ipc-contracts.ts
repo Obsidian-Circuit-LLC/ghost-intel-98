@@ -513,7 +513,8 @@ export const channels = {
     create: 'scrapingCases:create',
     rename: 'scrapingCases:rename',
     remove: 'scrapingCases:remove',
-    importToCase: 'scrapingCases:importToCase'
+    importToCase: 'scrapingCases:importToCase',
+    saveArtifact: 'scrapingCases:saveArtifact'
   }
 } as const;
 
@@ -866,6 +867,7 @@ export interface ApiContracts {
   [channels.scrapingCases.rename]: { args: [ScrapingCaseStoreId, string, string]; returns: ScrapingCase };
   [channels.scrapingCases.remove]: { args: [ScrapingCaseStoreId, string]; returns: void };
   [channels.scrapingCases.importToCase]: { args: [ScrapingCaseStoreId, string, string]; returns: ScrapingImportResult };
+  [channels.scrapingCases.saveArtifact]: { args: [ScrapingCaseStoreId, string, string, string]; returns: string };
 }
 
 export const BGCONN_LOCK_EXEMPT_CHANNELS = ['bgconn:status', 'bgconn:stop'] as const;

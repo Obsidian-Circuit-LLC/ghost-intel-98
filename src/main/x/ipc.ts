@@ -308,11 +308,13 @@ export async function handleXCollect(
 
 /**
  * List all X-platform harvested items for a case in stable (append) order.
- * Delegates to the shared SOCMINT store; filters by platform: 'x'.
+ * Reads the x scraping store (scrapingCaseDir('x', id)) — separate from the socmint
+ * store and from the main investigation cases (W4 Task 5). Filters by platform: 'x'
+ * as defence-in-depth (the x store only ever holds X items).
  */
 export async function handleXListItems(caseId: string): Promise<HarvestedItem[]> {
-  const { listItems } = await import('../socmint/store');
-  const all = await listItems(caseId);
+  const { listXItems } = await import('../socmint/store');
+  const all = await listXItems(caseId);
   return all.filter((item) => item.platform === 'x');
 }
 

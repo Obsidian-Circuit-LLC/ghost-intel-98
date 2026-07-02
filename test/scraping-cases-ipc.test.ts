@@ -41,11 +41,13 @@ function makeHarness() {
     x: makeMockStore('x'),
   };
   const importToCase = vi.fn(async () => ({ imported: 3 }));
+  const saveArtifact = vi.fn(async (_ns, _id, name: string) => name);
   const deps: ScrapingCasesIpcDeps = {
     getStore: (ns) => stores[ns],
     importToCase,
+    saveArtifact,
   };
-  return { stores, importToCase, handlers: createScrapingCasesHandlers(deps) };
+  return { stores, importToCase, saveArtifact, handlers: createScrapingCasesHandlers(deps) };
 }
 
 // The values a hostile renderer might send instead of a valid namespace.
@@ -58,7 +60,7 @@ describe('T3: channels.scrapingCases structure', () => {
   it('is a top-level channel group with exactly the expected keys', () => {
     expect((channels as Record<string, unknown>).scrapingCases).toBeTruthy();
     expect(Object.keys(channels.scrapingCases).sort()).toEqual(
-      ['create', 'importToCase', 'list', 'remove', 'rename'].sort(),
+      ['create', 'importToCase', 'list', 'remove', 'rename', 'saveArtifact'].sort(),
     );
   });
 
@@ -85,15 +87,16 @@ describe('T3: assertScrapingStore', () => {
 
 describe('T3: scrapingCases handlers reject an unknown store', () => {
   it('every handler rejects a bogus store before touching a store', async () => {
-    const { handlers, stores, importToCase } = makeHarness();
+    const { handlers, stores, importToCase, saveArtifact } = makeHarness();
     for (const v of BOGUS_STORES) {
       await expect(handlers.list(v)).rejects.toThrow();
       await expect(handlers.create(v, 'name')).rejects.toThrow();
       await expect(handlers.rename(v, VALID_ID, 'name')).rejects.toThrow();
       await expect(handlers.remove(v, VALID_ID)).rejects.toThrow();
       await expect(handlers.importToCase(v, VALID_ID, VALID_ID_2)).rejects.toThrow();
+      await expect(handlers.saveArtifact(v, VALID_ID, 'a.json', '{}')).rejects.toThrow();
     }
-    // No store method — and no import — was ever reached for a bad discriminator.
+    // No store method — and no import/artifact write — was ever reached for a bad discriminator.
     for (const ns of ['socmint', 'x'] as const) {
       expect(stores[ns].list).not.toHaveBeenCalled();
       expect(stores[ns].create).not.toHaveBeenCalled();
@@ -101,6 +104,7 @@ describe('T3: scrapingCases handlers reject an unknown store', () => {
       expect(stores[ns].remove).not.toHaveBeenCalled();
     }
     expect(importToCase).not.toHaveBeenCalled();
+    expect(saveArtifact).not.toHaveBeenCalled();
   });
 });
 

@@ -69,6 +69,17 @@ export function scrapingCaseFile(ns: ScrapingCaseNs, id: string): string {
   return join(scrapingCaseDir(ns, id), 'case.json');
 }
 
+/** Directory holding a scraping case's saved artifacts (e.g. a GhostScrape JSON export). */
+export function scrapingCaseArtifactsDir(ns: ScrapingCaseNs, id: string): string {
+  return join(scrapingCaseDir(ns, id), 'artifacts');
+}
+
+/** Path of one saved artifact inside a scraping case. `name` must already be a validated
+ *  filename (no separators/traversal — see ensureFileName at the IPC boundary). */
+export function scrapingCaseArtifactFile(ns: ScrapingCaseNs, id: string, name: string): string {
+  return join(scrapingCaseArtifactsDir(ns, id), name);
+}
+
 /** Backup of pre-v3.27.0 scraping-case originals, written before the reversible migration
  *  removes them from the main case. Kept for recovery. */
 export function scrapingBackupDir(): string {

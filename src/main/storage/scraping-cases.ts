@@ -167,3 +167,26 @@ export async function prodScrapingCaseStore(ns: ScrapingCaseNs): Promise<Scrapin
 export function __resetProdScrapingCaseStore(): void {
   _prod = {};
 }
+
+/**
+ * Write a saved artifact (e.g. a GhostScrape JSON export) into a scraping case's artifacts
+ * dir, encrypted at rest. The path is scrapingCaseArtifactFile(ns, id, name); `id` and `name`
+ * MUST already be validated (UUID + ensureFileName) by the IPC boundary before this is called
+ * — this writer performs no validation of its own. Returns the stored filename.
+ *
+ * Encrypt-at-rest: routed through secureWriteFile (never the plaintext json-fs bypass); the
+ * parent artifacts dir is created by secureWriteFile's recursive mkdir.
+ */
+export async function saveScrapingArtifact(
+  ns: ScrapingCaseNs,
+  id: string,
+  name: string,
+  content: string,
+): Promise<string> {
+  const [paths, { secureWriteFile }] = await Promise.all([
+    import('./paths'),
+    import('./secure-fs'),
+  ]);
+  await secureWriteFile(paths.scrapingCaseArtifactFile(ns, id, name), content);
+  return name;
+}
