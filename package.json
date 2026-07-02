@@ -188,6 +188,7 @@
       "artifactName": "GhostIntel98-Setup-${version}.${ext}"
     },
     "nsis": {
+      "include": "installer.nsh",
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
