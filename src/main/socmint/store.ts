@@ -6,9 +6,9 @@
  *   upsertItems / listItems / recordJob / listJobs — production-wired top-level exports
  *     (lazy-initialized; safe to import without electron being available at import time).
  *
- * Sidecars per case:
- *   <caseDir>/<caseId>/socmint-items.json
- *   <caseDir>/<caseId>/socmint-jobs.json
+ * Sidecars per case (production wiring resolves against the socmint scraping-case dir):
+ *   <scrapingCaseDir('socmint',caseId)>/socmint-items.json
+ *   <scrapingCaseDir('socmint',caseId)>/socmint-jobs.json
  *
  * Every read-modify-write is serialised with withLock(caseId) so concurrent IPC
  * calls cannot produce duplicate items or corrupt the file.
@@ -125,7 +125,7 @@ let _prod: ReturnType<typeof makeSocmintStore> | null = null;
 
 async function prod(): Promise<ReturnType<typeof makeSocmintStore>> {
   if (_prod) return _prod;
-  const [{ join }, { caseDir }, { secureReadFile, secureWriteFile }] = await Promise.all([
+  const [{ join }, { scrapingCaseDir }, { secureReadFile, secureWriteFile }] = await Promise.all([
     import('node:path'),
     import('../storage/paths'),
     import('../storage/secure-fs'),
@@ -133,8 +133,8 @@ async function prod(): Promise<ReturnType<typeof makeSocmintStore>> {
   _prod = makeSocmintStore({
     readFile: secureReadFile,
     writeFile: (p, d) => secureWriteFile(p, d),
-    itemsPath: (id) => join(caseDir(id), 'socmint-items.json'),
-    jobsPath:  (id) => join(caseDir(id), 'socmint-jobs.json'),
+    itemsPath: (id) => join(scrapingCaseDir('socmint', id), 'socmint-items.json'),
+    jobsPath:  (id) => join(scrapingCaseDir('socmint', id), 'socmint-jobs.json'),
   });
   return _prod;
 }
