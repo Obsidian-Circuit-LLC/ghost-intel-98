@@ -685,9 +685,10 @@ export function AiAssistantModule(): JSX.Element {
         {messages.map((m) => (
           <div
             key={m.id}
+            className="ga98-selectable"
             style={{ marginBottom: 12 }}
             onContextMenu={(e) => { e.preventDefault(); setMsgMenu({ x: e.clientX, y: e.clientY, content: m.content }); }}
-            title="Right-click to copy"
+            title="Drag to select text, or right-click to copy"
           >
             <div style={{ fontSize: 11, fontWeight: 'bold', color: m.role === 'user' ? '#000080' : '#400080' }}>
               {m.role === 'user' ? 'You' : 'Assistant'}{m.streaming ? ' · streaming…' : ''}
