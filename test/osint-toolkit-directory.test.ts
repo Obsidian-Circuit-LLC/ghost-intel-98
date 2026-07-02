@@ -46,6 +46,22 @@ describe('buildOsintDirectory', () => {
     expect(groups.map((g) => g.subcategory)).toEqual(['Social Media', 'Geospatial']);
   });
 
+  it('pins the FULL fixed priority order across all four tiers (fails if any middle pair is swapped)', () => {
+    const mods = [
+      mod({ key: 'net', title: 'Net', category: 'osint', subcategory: 'Network / Recon' }),
+      mod({ key: 'id', title: 'Id', category: 'osint', subcategory: 'Identity' }),
+      mod({ key: 'geo', title: 'Geo', category: 'osint', subcategory: 'Geospatial' }),
+      mod({ key: 'soc', title: 'Soc', category: 'osint', subcategory: 'Social Media' }),
+    ];
+    const groups = buildOsintDirectory(mods);
+    expect(groups.map((g) => g.subcategory)).toEqual([
+      'Social Media',
+      'Geospatial',
+      'Identity',
+      'Network / Recon',
+    ]);
+  });
+
   it('places unknown subcategories after the fixed priority ones, alphabetically, with Other last', () => {
     const mods = [
       mod({ key: 'zeta', title: 'Zeta', category: 'osint', subcategory: 'Zulu' }),
