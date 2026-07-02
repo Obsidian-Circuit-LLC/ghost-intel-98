@@ -96,6 +96,8 @@ import { makeBgConnSecrets, type SecretBackend } from '../bgconn/secrets';
 import { secretStore } from '../secrets/index';
 import { homedir } from 'node:os';
 import { hostInfoService } from '../services/hostinfo/index';
+import { resolveHostInfoGated } from '../services/hostinfo/gate';
+import { hostFromStreamUrl } from '../services/hostinfo/extract';
 import * as adsb from '../services/livefeeds/adsb';
 import * as ais from '../services/livefeeds/ais-stream';
 import * as slSiteDb from '../searchlight/site-db';
@@ -1435,10 +1437,19 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   });
 
   // ---- hostinfo (camera host resolution — Tor-only DNS/RDAP recon) ----
+  // Gated on settings.geoint.cctvResolveHosts: OFF ⇒ return a `resolve-disabled` result FAST
+  // without calling the resolver (no Tor lookup) and NEVER a clearnet fallback — a clearnet
+  // resolve would leak the operator's real IP. Governs both the stream-driven resolve and the
+  // standalone Host Info lookup (they share this one handler).
   safeHandle(channels.hostinfo.resolve, async (...args) => {
     const url = String(args[0] ?? '');
     const force = !!(args[1] as { force?: boolean } | undefined)?.force;
-    return hostInfoService.resolve(url, { force });
+    return resolveHostInfoGated({
+      resolveEnabled: async () => (await settingsStore.read()).geoint.cctvResolveHosts,
+      resolve: (u, o) => hostInfoService.resolve(u, o),
+      hostOf: (u) => hostFromStreamUrl(u)?.host ?? '',
+      now: () => new Date().toISOString()
+    }, url, { force });
   });
 
   // ---- livefeeds (ADS-B + AIS; egress gated by settings.geoint.networkEnabled) ----
