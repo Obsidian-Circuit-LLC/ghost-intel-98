@@ -31,6 +31,7 @@ import { registerBuiltins } from '../src/renderer/modules/register-builtins';
 import { getModule, listModules } from '../src/renderer/state/registry';
 import { buildOsintDirectory } from '../src/renderer/modules/osint-toolkit/directory';
 import { ModuleHost } from '../src/renderer/shell/ModuleHost';
+import { desktopShortcutDefaults } from '../src/renderer/shell/Desktop';
 import type { WindowSpec } from '../src/renderer/state/store';
 
 describe('OSINT Toolkit module registration', () => {
@@ -74,6 +75,17 @@ describe('OSINT Toolkit module registration', () => {
     ]) {
       expect(reachable.has(key), `OSINT tool "${key}" is not reachable via the toolkit`).toBe(true);
     }
+  });
+
+  it('no OSINT-tagged module (except the Toolkit launcher) appears as a desktop icon', () => {
+    // Derived from the registry, not a hardcoded name list, so a FUTURE OSINT tool wrongly added to
+    // the desktop is caught too. The single OSINT desktop entry point is the Toolkit launcher; every
+    // tagged tool is reached through it (the flyout / the Toolkit window).
+    const desktopKeys = new Set(desktopShortcutDefaults.map((s) => s.module));
+    for (const m of listModules().filter((mod) => mod.category === 'osint')) {
+      expect(desktopKeys.has(m.key), `OSINT tool "${m.key}" must not be a desktop icon — reach it via the Toolkit`).toBe(false);
+    }
+    expect(desktopKeys.has('osint-toolkit')).toBe(true); // the launcher stays
   });
 
   // Reachability is necessary but not sufficient: three of the tagged tools (Hosts, News, Camera)

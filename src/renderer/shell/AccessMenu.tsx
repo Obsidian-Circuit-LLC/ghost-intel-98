@@ -147,8 +147,13 @@ export function AccessMenu({ onClose }: AccessMenuProps): JSX.Element {
             <span style={{ flex: 1 }}>OSINT Toolkit</span>
             <span aria-hidden="true" style={{ opacity: 0.7 }}>▸</span>
           </div>
+          {/* Anchor the flyout to the BOTTOM of the parent row so it grows UPWARD: the Access menu
+              is bottom-anchored near the taskbar, and this flyout (4 headings + up to 10 tool rows)
+              is far taller than the Games one — opening downward from top:0 would run its lower
+              groups off the bottom of the screen and make them unclickable. maxHeight/overflow cap
+              the rare case it's taller than the space above. */}
           {osintOpen && (
-            <div role="menu" style={{ position: 'absolute', left: '100%', top: 0, minWidth: 180, background: '#c0c0c0', border: '2px outset #f5f5f5', boxShadow: '2px 2px 5px rgba(0,0,0,0.4)', zIndex: 30, maxHeight: '70vh', overflowY: 'auto' }}>
+            <div role="menu" style={{ position: 'absolute', left: '100%', bottom: 0, minWidth: 180, background: '#c0c0c0', border: '2px outset #f5f5f5', boxShadow: '2px 2px 5px rgba(0,0,0,0.4)', zIndex: 30, maxHeight: '70vh', overflowY: 'auto' }}>
               {osintGroups.map((group) => (
                 <div key={group.subcategory}>
                   <div className="ga98-access-osint-group" style={{ padding: '2px 8px', fontWeight: 'bold', opacity: 0.75, fontSize: '0.85em' }}>

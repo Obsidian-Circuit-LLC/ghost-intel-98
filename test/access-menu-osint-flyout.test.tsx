@@ -120,6 +120,18 @@ describe('Access menu — OSINT Toolkit flyout (T2)', () => {
     expect(rowKeys).toEqual(dir.flatMap((g) => g.tools.map((t) => t.key)));
   });
 
+  it('anchors the flyout to grow UPWARD (bottom-anchored) so its lower groups stay on-screen', () => {
+    render();
+    click(findByHaspopup('OSINT Toolkit'));
+    // The Access menu is bottom-anchored near the taskbar; this flyout is tall (headings + up to 10
+    // rows), so it must open upward (bottom:0), not downward from top:0 which would push its lower
+    // groups off the bottom of the screen and make them unclickable.
+    const panel = (container.querySelector('[data-osint-key]')?.closest('[role="menu"]')) as HTMLElement | null;
+    expect(panel).not.toBeNull();
+    expect(panel!.style.bottom).toBe('0px');
+    expect(panel!.style.top).not.toBe('0px');
+  });
+
   it('launches the module when a tool row is clicked', () => {
     render();
     click(findByHaspopup('OSINT Toolkit'));
