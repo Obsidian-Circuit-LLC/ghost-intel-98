@@ -164,3 +164,48 @@ describe('applyFilters', () => {
     expect(out1.map((t) => t.id)).toEqual(out2.map((t) => t.id));
   });
 });
+
+describe('parseTimeline — module entries + retweet detection', () => {
+  it('captures every tweet in a TimelineTimelineModule (conversation/self-thread) entry', () => {
+    const response = {
+      data: { user: { result: { timeline_v2: { timeline: { instructions: [
+        { entries: [
+          { entryId: 'profile-conversation-9000', content: {
+            entryType: 'TimelineTimelineModule',
+            items: [
+              { entryId: 'profile-conversation-9000-tweet-2001', item: { itemContent: { tweet_results: { result: {
+                rest_id: '2001', legacy: { full_text: 'Thread part one', created_at: 'Wed Jun 25 12:00:00 +0000 2026' } } } } } },
+              { entryId: 'profile-conversation-9000-tweet-2002', item: { itemContent: { tweet_results: { result: {
+                rest_id: '2002', legacy: { full_text: 'Thread part two', created_at: 'Wed Jun 25 12:01:00 +0000 2026' } } } } } },
+              // a non-tweet item (cursor/show-more) must be skipped, not counted
+              { entryId: 'profile-conversation-9000-cursor', item: { itemContent: { itemType: 'TimelineTimelineCursor' } } }
+            ]
+          } }
+        ] }
+      ] } } } } }
+    };
+    const tweets = parseTimeline([response]);
+    expect(tweets.map((t) => t.id).sort()).toEqual(['2001', '2002']);
+    expect(tweets.find((t) => t.id === '2001')?.text).toBe('Thread part one');
+  });
+
+  it('detects a retweet via retweeted_status_result even without an "RT @" prefix', () => {
+    const response = {
+      data: { user: { result: { timeline_v2: { timeline: { instructions: [
+        { entries: [
+          { entryId: 'tweet-3001', content: { itemContent: { tweet_results: { result: {
+            rest_id: '3001',
+            legacy: {
+              full_text: 'quoted body without the RT prefix',
+              created_at: 'Wed Jun 25 12:00:00 +0000 2026',
+              retweeted_status_result: { result: { legacy: { full_text: 'The original retweeted body' } } }
+            }
+          } } } } }
+        ] }
+      ] } } } } }
+    };
+    const [rt] = parseTimeline([response]);
+    expect(rt.isRetweet).toBe(true);
+    expect(rt.text).toBe('The original retweeted body');
+  });
+});

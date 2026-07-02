@@ -79,11 +79,11 @@ function extractInstructions(raw: unknown): unknown[] {
   return [];
 }
 
-function extractTweetFromEntry(entry: unknown): ScrapedTweet | null {
-  const entryId = str(get(entry, 'entryId'));
-  if (!entryId.startsWith('tweet-')) return null;
-
-  const tweetResult = get(entry, 'content', 'itemContent', 'tweet_results', 'result');
+/** Extract a tweet from an `itemContent` object — shared by single `tweet-*` entries and the
+ *  items[] of a `TimelineTimelineModule` (conversation / self-thread) entry. Returns null for
+ *  non-tweet item content (cursors, "show more" controls, promoted slots, etc.). */
+function tweetFromItemContent(itemContent: unknown): ScrapedTweet | null {
+  const tweetResult = get(itemContent, 'tweet_results', 'result');
   if (!isRecord(tweetResult)) return null;
 
   const id = str(tweetResult['rest_id']);
@@ -122,6 +122,34 @@ function extractTweetFromEntry(entry: unknown): ScrapedTweet | null {
 }
 
 /**
+ * Extract every tweet from one timeline entry. A `tweet-*` entry yields at most one tweet
+ * (`content.itemContent`). A `TimelineTimelineModule` entry (conversation / self-thread) carries
+ * MULTIPLE tweets under `content.items[].item.itemContent` — these were previously dropped, so
+ * threads and self-threads went uncaptured. Cursor and other non-tweet entries yield nothing.
+ */
+function extractTweetsFromEntry(entry: unknown): ScrapedTweet[] {
+  const entryId = str(get(entry, 'entryId'));
+  const content = get(entry, 'content');
+
+  if (entryId.startsWith('tweet-')) {
+    const t = tweetFromItemContent(get(content, 'itemContent'));
+    return t ? [t] : [];
+  }
+
+  const items = get(content, 'items');
+  if (Array.isArray(items)) {
+    const out: ScrapedTweet[] = [];
+    for (const it of items) {
+      const t = tweetFromItemContent(get(it, 'item', 'itemContent'));
+      if (t) out.push(t);
+    }
+    return out;
+  }
+
+  return [];
+}
+
+/**
  * Flattens `instructions → entries → tweet_results → legacy` across one or more
  * raw X GraphQL timeline responses into a flat tweet list. Tolerant of any
  * shape mismatch: never throws, degrades to `[]`.
@@ -136,8 +164,7 @@ export function parseTimeline(rawResponses: unknown[]): ScrapedTweet[] {
       const entries = get(instr, 'entries');
       if (!Array.isArray(entries)) continue;
       for (const entry of entries) {
-        const tweet = extractTweetFromEntry(entry);
-        if (tweet) tweets.push(tweet);
+        for (const tweet of extractTweetsFromEntry(entry)) tweets.push(tweet);
       }
     }
   }

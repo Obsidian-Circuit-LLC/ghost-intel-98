@@ -25,22 +25,11 @@ import type { BrowserWindow } from 'electron';
 import { channels } from '@shared/ipc-contracts';
 import type { GhostScrapeConfig, ScrapeType } from './types';
 import { runScrapeJob } from './job';
+import { GhostScrapeGatedError, safeJobErrorMessage } from './errors';
 
-/**
- * Thrown by start() when the shared X clearnet egress gate is closed. Mirrors
- * XCollectorGatedError (src/main/x/ipc.ts) — same two flags, same "throw, don't silently
- * skip" posture so the UI layer must handle it explicitly.
- */
-export class GhostScrapeGatedError extends Error {
-  constructor() {
-    super(
-      'GhostScrape is gated — both settings.x.networkEnabled and ' +
-      'settings.x.clearnetAcknowledged must be true. Acknowledge the clearnet ' +
-      'warning in Settings → X before enabling.',
-    );
-    this.name = 'GhostScrapeGatedError';
-  }
-}
+// GhostScrapeGatedError now lives in ./errors (co-located with the renderer-safe error mapper);
+// re-exported here for callers that import it from this module.
+export { GhostScrapeGatedError };
 
 /** Injectable deps for createGhostScrapeHandlers — no direct settingsStore/secretStore/
  *  BrowserWindow import here, only what register.ts wires in (mirrors XCollectHandlerDeps). */
@@ -148,7 +137,11 @@ export function createGhostScrapeHandlers(deps: GhostScrapeIpcDeps): {
       )
         .then((result) => sendDone(jobId, { result }))
         .catch((err: unknown) => {
-          sendDone(jobId, { error: err instanceof Error ? err.message : String(err) });
+          // Raw error stays in the main log ONLY (it may embed a filesystem path, an account id,
+          // or a credential token); the renderer gets a fixed, safe sentence — never err.message
+          // (OpSec posture: don't leak internals across the IPC boundary).
+          console.warn('[ghostscrape] job error:', err);
+          sendDone(jobId, { error: safeJobErrorMessage(err) });
         })
         .finally(() => {
           controllers.delete(jobId);
