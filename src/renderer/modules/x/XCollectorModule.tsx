@@ -610,6 +610,28 @@ export function XCollectorModule({ caseId: propCaseId }: { caseId?: string }): J
     }
   }, [loadCases]);
 
+  // Copy this scraping case's results into one of the main investigation cases. The scraping
+  // case is left intact (source only). Main cases live in a separate store (window.api.cases).
+  const handleImportCase = useCallback(async (id: string) => {
+    try {
+      const cases = await window.api.cases.list();
+      if (cases.length === 0) {
+        window.alert('No investigation cases yet. Create one first.');
+        return;
+      }
+      const menu = cases.map((c, i) => `${i + 1}. ${c.title}`).join('\n');
+      const pick = window.prompt(`Import into which case?\n\n${menu}\n\nEnter a number:`);
+      if (pick === null) return; // cancelled
+      const idx = Number.parseInt(pick.trim(), 10) - 1;
+      const target = cases[idx];
+      if (!target) return;
+      const res = await window.api.scrapingCases.importToCase('x', id, target.id);
+      window.alert(`Imported ${res.imported} item(s) into "${target.title}".`);
+    } catch (err) {
+      console.warn('[XCollector] scrapingCases.importToCase:', err);
+    }
+  }, []);
+
   // Collection state
   const [collecting, setCollecting] = useState(false);
   const [lastResult, setLastResult] = useState<XCollectResultShape | null>(null);
@@ -775,6 +797,13 @@ export function XCollectorModule({ caseId: propCaseId }: { caseId?: string }): J
                     <span className="xc-case-name">{o.label}</span>
                     <span className="xc-case-actions">
                       <button className="xc-btn" onClick={() => setCaseId(o.value)}>Open</button>
+                      <button
+                        className="xc-btn"
+                        title="Copy this case's results into an investigation case"
+                        onClick={() => void handleImportCase(o.value)}
+                      >
+                        Import to case…
+                      </button>
                       <button
                         className="xc-btn xc-btn-danger"
                         onClick={() => void handleDeleteCase(o.value)}

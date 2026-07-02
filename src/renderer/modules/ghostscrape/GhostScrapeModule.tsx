@@ -255,6 +255,28 @@ export function GhostScrapeModule(): JSX.Element {
     }
   }, [loadCases]);
 
+  // Copy this scraping case's results into one of the main investigation cases. The scraping
+  // case is left intact (source only). Main cases live in a separate store (window.api.cases).
+  const handleImportCase = useCallback(async (id: string) => {
+    try {
+      const cases = await window.api.cases.list();
+      if (cases.length === 0) {
+        window.alert('No investigation cases yet. Create one first.');
+        return;
+      }
+      const menu = cases.map((c, i) => `${i + 1}. ${c.title}`).join('\n');
+      const pick = window.prompt(`Import into which case?\n\n${menu}\n\nEnter a number:`);
+      if (pick === null) return; // cancelled
+      const idx = Number.parseInt(pick.trim(), 10) - 1;
+      const target = cases[idx];
+      if (!target) return;
+      const res = await window.api.scrapingCases.importToCase('x', id, target.id);
+      window.alert(`Imported ${res.imported} item(s) into "${target.title}".`);
+    } catch (err) {
+      console.warn('[GhostScrape] scrapingCases.importToCase:', err);
+    }
+  }, []);
+
   const [accounts, setAccounts] = useState<string[]>([]);
   const [accountId, setAccountId] = useState('');
   const [username, setUsername] = useState('');
@@ -394,6 +416,13 @@ export function GhostScrapeModule(): JSX.Element {
                   <span className="gs-case-name">{o.label}</span>
                   <span className="gs-case-actions">
                     <button className="gs-btn" onClick={() => setCaseId(o.value)}>Open</button>
+                    <button
+                      className="gs-btn"
+                      title="Copy this case's results into an investigation case"
+                      onClick={() => void handleImportCase(o.value)}
+                    >
+                      Import to case…
+                    </button>
                     <button
                       className="gs-btn gs-btn-danger"
                       onClick={() => void handleDeleteCase(o.value)}

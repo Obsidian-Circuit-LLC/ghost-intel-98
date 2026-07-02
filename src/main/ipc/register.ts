@@ -523,9 +523,12 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   //      T3 owns the namespace, the validated routing, and the preload surface only.
   const scrapingCases = createScrapingCasesHandlers({
     getStore: (ns) => prodScrapingCaseStore(ns),
-    importToCase: async () => {
-      // Placeholder until the W4 import-to-main-case task wires the real writer path.
-      throw new Error('scrapingCases.importToCase is not yet implemented');
+    // Copy a scraping case's items + artifacts INTO a main investigation case via the
+    // existing SOCMINT item writer (main caseDir) + note writer. The scraping case is a
+    // read-only source — left intact so a run can be imported into more than one case.
+    importToCase: async (ns, scrapingCaseId, mainCaseId) => {
+      const { prodImportScrapingCaseToMainCase } = await import('../scraping-cases/import-to-case');
+      return prodImportScrapingCaseToMainCase(ns, scrapingCaseId, mainCaseId);
     },
     // Encrypt-at-rest artifact writer (e.g. GhostScrape "save to case"). The handler has
     // already validated ns/id/name; the writer only routes through secure-fs.
