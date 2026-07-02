@@ -19,6 +19,11 @@ import { Component, type ReactNode } from 'react';
 interface Props {
   children: ReactNode;
   moduleKey: string;
+  /** When provided (by ModuleHost), the fallback offers a real "Close window" action that
+   *  tears down the host window. Without it, only "Retry" is shown. This is what makes the
+   *  Close affordance actually close a deterministically-crashing tool instead of merely
+   *  clearing the error and re-throwing on the next render. */
+  onClose?: () => void;
 }
 
 interface State {
@@ -57,7 +62,9 @@ export class ModuleErrorBoundary extends Component<Props, State> {
     );
   }
 
-  dismiss = (): void => {
+  // "Retry" — clear the error and re-attempt render. Recovers a transient failure; for a
+  // deterministic crash the child throws again and the panel returns (an honest retry).
+  retry = (): void => {
     this.setState({ hasError: false, message: '' });
   };
 
@@ -88,7 +95,8 @@ export class ModuleErrorBoundary extends Component<Props, State> {
             </code>
           )}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, marginTop: 12 }}>
-            <button onClick={this.dismiss}>Close</button>
+            <button onClick={this.retry}>Retry</button>
+            {this.props.onClose && <button onClick={this.props.onClose}>Close window</button>}
           </div>
         </div>
       </div>

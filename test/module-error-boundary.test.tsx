@@ -73,6 +73,22 @@ describe('ModuleErrorBoundary', () => {
     expect(container.textContent).not.toContain('This tool failed to load');
   });
 
+  it('invokes onClose when the fallback "Close window" button is clicked', () => {
+    const onClose = vi.fn();
+    act(() => {
+      root.render(
+        <ModuleErrorBoundary moduleKey="mod-a" onClose={onClose}>
+          <Boom />
+        </ModuleErrorBoundary>
+      );
+    });
+    // In the fallback, the real close action tears down the host window.
+    const closeBtn = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Close window');
+    expect(closeBtn, 'fallback did not offer a "Close window" button when onClose provided').toBeTruthy();
+    act(() => { closeBtn!.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it('resets its error state when moduleKey changes', () => {
     act(() => {
       root.render(

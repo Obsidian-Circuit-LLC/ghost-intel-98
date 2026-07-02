@@ -5,7 +5,7 @@
  */
 
 import { getModule } from '../state/registry';
-import type { WindowSpec } from '../state/store';
+import { useWindows, type WindowSpec } from '../state/store';
 import { ComingSoon } from '../modules/coming-soon/ComingSoon';
 import { ModuleErrorBoundary } from './ModuleErrorBoundary';
 
@@ -24,7 +24,7 @@ export function ModuleHost({ spec }: { spec: WindowSpec }): JSX.Element {
   if (!d) return <ComingSoon name={spec.module} detail="No module registered for this key." />;
   const C = d.component;
   return (
-    <ModuleErrorBoundary moduleKey={spec.module}>
+    <ModuleErrorBoundary moduleKey={spec.module} onClose={() => useWindows.getState().close(spec.id)}>
       <C spec={spec} />
     </ModuleErrorBoundary>
   );
