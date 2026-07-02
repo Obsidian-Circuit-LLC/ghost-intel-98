@@ -52,6 +52,29 @@ export function caseStreamsFile(caseId: string): string {
   return join(caseDir(caseId), 'streams.json');
 }
 
+/** Scraping-case namespaces. 'x' is the clearnet-quarantined X collector; 'socmint' is
+ *  every other (Tor-eligible) social collector. Which store a scraping case lands in is a
+ *  pure function of the case's namespace — never iteration order or a clock. */
+export type ScrapingCaseNs = 'socmint' | 'x';
+
+export function scrapingCasesRoot(): string {
+  return join(dataRoot(), 'scraping-cases');
+}
+
+export function scrapingCaseDir(ns: ScrapingCaseNs, id: string): string {
+  return join(scrapingCasesRoot(), ns, id);
+}
+
+export function scrapingCaseFile(ns: ScrapingCaseNs, id: string): string {
+  return join(scrapingCaseDir(ns, id), 'case.json');
+}
+
+/** Backup of pre-v3.27.0 scraping-case originals, written before the reversible migration
+ *  removes them from the main case. Kept for recovery. */
+export function scrapingBackupDir(): string {
+  return join(scrapingCasesRoot(), 'backup-pre-v3.27.0');
+}
+
 export function settingsFile(): string {
   return join(dataRoot(), 'settings.json');
 }

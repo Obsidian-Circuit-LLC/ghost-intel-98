@@ -27,6 +27,17 @@ export interface CaseSummary {
   category?: string;
 }
 
+/** A scraping case: a self-contained store for one social-collection run, kept apart from the
+ *  core investigation cases. Persisted under scrapingCaseFile(ns, id) via the encrypt-at-rest
+ *  IO layer. Namespace (socmint | x) is the path key, not a field on the record. */
+export interface ScrapingCase {
+  id: string;
+  name: string;
+  createdAt: number;
+  updatedAt: number;
+  note?: string;
+}
+
 export type ImageMime = 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif';
 export const IMAGE_MIMES: readonly ImageMime[] = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
