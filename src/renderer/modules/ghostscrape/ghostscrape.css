@@ -32,6 +32,62 @@
 }
 .gs-gate-notice strong { color: #ffcc80; }
 
+/* ── Layout: Cases sidebar + main content ────────────────────────────────── */
+.gs-layout {
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0;
+}
+.gs-main {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* ── Cases sidebar — GhostScrape's own scraping cases (namespace 'x') ─────── */
+.gs-cases-sidebar {
+  flex: 0 0 200px;
+  display: flex;
+  flex-direction: column;
+  background: #0d0a1e;
+  border-right: 1px solid #2a2040;
+  overflow-y: auto;
+}
+.gs-cases-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 6px 8px;
+  border-bottom: 1px solid #2a2040;
+}
+.gs-cases-title { font-size: 12px; font-weight: bold; opacity: 0.8; }
+.gs-cases-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.gs-case-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  border-bottom: 1px solid #1a1430;
+}
+.gs-case-item-active { background: #1a1236; }
+.gs-case-name {
+  font-size: 12px;
+  word-break: break-word;
+}
+.gs-case-actions {
+  display: flex;
+  gap: 4px;
+}
+.gs-btn-danger { background: #3a1a1a; color: #ffd0d0; }
+
 .gs-section {
   padding: 10px 12px;
   border-bottom: 1px solid #1c2030;
