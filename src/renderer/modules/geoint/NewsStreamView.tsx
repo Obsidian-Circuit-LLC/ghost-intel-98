@@ -23,6 +23,16 @@ export interface NewsStream {
   kind: NewsStreamKind;
 }
 
+/** Sensible fallback feed for surfaces that must render a viewer without a selected stream
+ *  (the standalone News tool launched from the OSINT Toolkit with no props). Same feed the
+ *  GeoINT settings seed newsStreams with, so the default is not a new source of egress — the
+ *  network gate in NewsStreamView still decides whether anything actually loads. */
+export const DEFAULT_NEWS_STREAM: NewsStream = {
+  label: 'Bloomberg TV',
+  url: 'https://www.bloomberg.com/media-manifest/streams/us.m3u8',
+  kind: 'hls'
+};
+
 export type NewsRenderMode = 'offline' | 'hls' | 'youtube' | 'bad-youtube-id';
 
 /** Pure render decision. Network OFF always yields 'offline' (no player, no iframe) regardless of
