@@ -178,13 +178,17 @@ describe('learnFromConversation', () => {
     expect(all[0].confidence).toBeCloseTo(1.0 - 0.02 * 5, 5);
   });
 
-  it('rolls the scope summary forward via the summarizer client', async () => {
+  it('replaces the scope summary with the summarizer full rewrite (no duplication of prior)', async () => {
     const store = createProfileStore(makeFakeStoreIO());
     const summaryIo = makeFakeSummaryIO({ global: 'Prior summary.' });
+    // The real summarizer is prompted with the prior summary + new turns and returns the COMPLETE
+    // rewritten summary — retention of prior context comes from the model's rewrite, which the
+    // facade stores verbatim (replace), never prior + rewrite (which would duplicate every turn).
+    const rewrite = 'Prior summary. Also uses a hardware wallet.';
     __setProfileFacadeDepsForTest({
       store,
       extractorClient: { complete: async () => '[]' },
-      summarizerClient: { complete: async () => 'New distilled fact.' },
+      summarizerClient: { complete: async () => rewrite },
       summaryIo,
       now: () => 1000,
       newId: idFactory()
@@ -193,8 +197,9 @@ describe('learnFromConversation', () => {
     await learnFromConversation('convo-1', 'turns', ['global']);
 
     const { summary } = await recallProfile('anything', ['global']);
-    expect(summary).toContain('Prior summary.');
-    expect(summary).toContain('New distilled fact.');
+    expect(summary).toBe(rewrite);
+    // 'Prior summary.' must appear exactly once — not duplicated by folding.
+    expect(summary.split('Prior summary.').length - 1).toBe(1);
   });
 });
 
@@ -277,5 +282,67 @@ describe('recallProfile', () => {
     const out = await recallProfile('anything', ['global']);
     expect(out.items.map((i) => i.id)).toEqual(['a']);
     expect(out.block).not.toBe('');
+  });
+});
+
+describe('learnFromConversation — summary replacement + concurrency', () => {
+  it('REPLACES the rolling summary with the model rewrite (never appends the prior summary)', async () => {
+    // summarizeTurns returns the COMPLETE updated summary; folding it onto the prior summary
+    // duplicated prior content every settled turn. The stored summary must be exactly the rewrite.
+    const summaryIo = makeFakeSummaryIO({ global: 'OLD-SUMMARY-CONTENT' });
+    __setProfileFacadeDepsForTest({
+      store: createProfileStore(makeFakeStoreIO()),
+      extractorClient: { complete: async () => '[]' },
+      summarizerClient: { complete: async () => 'NEW-COMPLETE-REWRITE' },
+      summaryIo,
+      now: () => 2000,
+      newId: idFactory()
+    });
+
+    await learnFromConversation('c1', 'user: hi\nassistant: hey', ['global']);
+
+    const summaries = await profileSummaries();
+    expect(summaries.global).toBe('NEW-COMPLETE-REWRITE');
+    expect(summaries.global).not.toContain('OLD-SUMMARY-CONTENT');
+  });
+
+  it('serialises concurrent learns — writes never overlap and neither update is lost', async () => {
+    const backing = createProfileStore(makeFakeStoreIO());
+    let inCritical = 0;
+    let maxConcurrent = 0;
+    const tick = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
+    // Instrumented store: widen the write window and record overlap. With the facade lock the
+    // critical section never overlaps (maxConcurrent === 1); without it both learns enter put()
+    // and it reaches 2 — and one update is lost.
+    const store = {
+      all: backing.all,
+      byScope: backing.byScope,
+      remove: backing.remove,
+      wipe: backing.wipe,
+      async put(items: MemoryItem[]) {
+        inCritical += 1;
+        maxConcurrent = Math.max(maxConcurrent, inCritical);
+        await tick();
+        await backing.put(items);
+        inCritical -= 1;
+      }
+    };
+    async function runLearn(convo: string, marker: string): Promise<void> {
+      __setProfileFacadeDepsForTest({
+        store,
+        extractorClient: { complete: async () => JSON.stringify([`fact ${marker}`]) },
+        summarizerClient: noopSummarizer,
+        summaryIo: makeFakeSummaryIO(),
+        now: () => 3000,
+        newId: idFactory(marker)
+      });
+      await learnFromConversation(convo, `turns ${marker}`, ['global']);
+    }
+
+    await Promise.all([runLearn('cA', 'A'), runLearn('cB', 'B')]);
+
+    expect(maxConcurrent).toBe(1); // serialised by withLock — writes never overlap
+    const texts = (await backing.all()).map((i) => i.text).sort();
+    expect(texts).toEqual(['fact A', 'fact B']); // both persisted; neither lost
   });
 });

@@ -16,22 +16,20 @@ export interface RollingSummary {
 const DEFAULT_MAX_CHARS = 1200;
 
 /**
- * Fold `addition` onto `prev`, capping the result at `maxChars`. When capping is required the
- * OLDEST content is dropped first (front of the string) so the newest material — the addition,
- * and whatever tail of `prev` still fits — is what survives. The cut point is snapped forward to
- * the next whitespace boundary so the result never starts mid-word.
+ * Cap a full rolling summary to `maxChars`. `summarizeTurns` returns the COMPLETE updated summary
+ * (the model is given the prior summary + new turns and asked to rewrite the whole thing), so the
+ * caller REPLACES the stored summary with this — it must never fold/append the model output onto
+ * the prior summary, or every settled turn would duplicate the prior content and the summary would
+ * grow without bound. When capping is required the OLDEST content is dropped first (front of the
+ * string); the cut point is snapped forward to the next whitespace boundary so the result never
+ * starts mid-word.
  */
-export function mergeSummary(
-  prev: string,
-  addition: string,
+export function capSummary(
+  text: string,
   now: number,
   maxChars: number = DEFAULT_MAX_CHARS
 ): RollingSummary {
-  const prevTrim = prev.trim();
-  const addTrim = addition.trim();
-  const merged = prevTrim && addTrim ? `${prevTrim} ${addTrim}` : prevTrim || addTrim;
-
-  return { scope: '', text: capToSafeBoundary(merged, maxChars), updatedAt: now };
+  return { scope: '', text: capToSafeBoundary(text.trim(), maxChars), updatedAt: now };
 }
 
 function capToSafeBoundary(text: string, maxChars: number): string {
