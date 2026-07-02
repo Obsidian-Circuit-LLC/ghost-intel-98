@@ -1,0 +1,101 @@
+/**
+ * Deterministic profile reconciliation: fold a batch of extractor/user candidates into the
+ * existing `MemoryItem` set (dedupe/reinforce), then age the whole set (decay/expire), then
+ * order the result stably. Pure — no clock, no RNG, no I/O; the caller injects `now` and
+ * `newId()` so this is fully unit-testable and reproducible. Pinned items are user-authoritative:
+ * exempt from decay/expiry and confidence is held at whatever the user set it to (never bumped by
+ * a matching candidate) — only `lastSeenAt`/provenance move.
+ */
+import { normalizeItemText, type MemoryItem } from './types';
+
+export interface ReconcileCandidate {
+  scope: string;
+  text: string;
+  provenance: string[];
+}
+
+export interface ReconcileParams {
+  existing: MemoryItem[];
+  candidates: ReconcileCandidate[];
+  now: number;
+  /** Confidence granted to a brand-new item / added on each reinforcement. Default 0.25. */
+  confidenceGain?: number;
+  /** Linear confidence decay applied per day since `lastSeenAt`, to non-pinned items. Default 0.02. */
+  decayPerDay?: number;
+  /** Non-pinned items with confidence below this after decay are dropped. Default 0.1. */
+  expireFloor?: number;
+  /** Injected id factory — determinism for new items. */
+  newId(): string;
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function matchKey(scope: string, normalized: string): string {
+  return `${scope}\0${normalized}`;
+}
+
+export function reconcile(p: ReconcileParams): MemoryItem[] {
+  const confidenceGain = p.confidenceGain ?? 0.25;
+  const decayPerDay = p.decayPerDay ?? 0.02;
+  const expireFloor = p.expireFloor ?? 0.1;
+
+  const byId = new Map<string, MemoryItem>();
+  const byKey = new Map<string, MemoryItem>();
+  for (const it of p.existing) {
+    byId.set(it.id, it);
+    byKey.set(matchKey(it.scope, it.normalized), it);
+  }
+
+  for (const candidate of p.candidates) {
+    const normalized = normalizeItemText(candidate.text);
+    const key = matchKey(candidate.scope, normalized);
+    const match = byKey.get(key);
+
+    if (match) {
+      const mergedProvenance = Array.from(new Set([...match.provenance, ...candidate.provenance]));
+      const updated: MemoryItem = {
+        ...match,
+        lastSeenAt: p.now,
+        provenance: mergedProvenance,
+        confidence: match.pinned ? match.confidence : Math.min(1, match.confidence + confidenceGain)
+      };
+      byId.set(updated.id, updated);
+      byKey.set(key, updated);
+    } else {
+      const created: MemoryItem = {
+        id: p.newId(),
+        scope: candidate.scope,
+        text: candidate.text,
+        normalized,
+        provenance: [...candidate.provenance],
+        confidence: confidenceGain,
+        createdAt: p.now,
+        lastSeenAt: p.now,
+        pinned: false,
+        source: 'extractor'
+      };
+      byId.set(created.id, created);
+      byKey.set(key, created);
+    }
+  }
+
+  const survivors: MemoryItem[] = [];
+  for (const it of byId.values()) {
+    if (it.pinned) {
+      survivors.push(it);
+      continue;
+    }
+    const daysSince = Math.max(0, (p.now - it.lastSeenAt) / DAY_MS);
+    const decayed = it.confidence - decayPerDay * daysSince;
+    if (decayed < expireFloor) continue;
+    survivors.push({ ...it, confidence: decayed });
+  }
+
+  survivors.sort((a, b) => {
+    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+    if (a.confidence !== b.confidence) return b.confidence - a.confidence;
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+  });
+
+  return survivors;
+}
