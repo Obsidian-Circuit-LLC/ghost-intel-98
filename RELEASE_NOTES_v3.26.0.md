@@ -13,7 +13,7 @@ Built subagent-driven, each feature on its own branch with a parallel adversaria
 
 ## Quality / QA
 
-- **2,409 automated tests** passing; TypeScript strict (`pnpm typecheck` clean); clean `pnpm build`.
+- **2,410 automated tests** passing; TypeScript strict (`pnpm typecheck` clean); clean `pnpm build`.
 - **Pre-ship reachability audit** (machine-verified): every module is registered and every OSINT tool is tagged and reachable via the toolkit — no hidden or unreachable features.
 - **Packaged-artifact integrity check**: all four features confirmed present in the shipped `app.asar` (nothing dropped from packaging).
 - **Runtime smoke** is a human pass this release — a per-tool checklist ships in `docs/guides/v3.26.0-windows-smoke-checklist.md`. (A fully-automated Windows-VM UI smoke is planned for the next cycle; the build VM had been torn down.)
