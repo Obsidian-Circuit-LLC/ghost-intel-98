@@ -82,6 +82,7 @@ import * as geoCaseEvents from '../geoint/case-events';
 import * as markets from '../markets/providers';
 import * as vault from '../services/vault';
 import { encryptAll, decryptAll } from '../storage/encryption-migrate';
+import { migrateScrapingDataIfNeeded } from '../storage/scraping-migration';
 import { buildSummaryHtml, renderCasePdf, type ReportImages } from '../services/export';
 import { timelineCsv, linksCsv, entitiesCsv, attachmentsCsv } from '../services/csv';
 import * as search from '../services/search';
@@ -239,6 +240,13 @@ async function resumeEnableIfNeeded(): Promise<void> {
     }
   } finally {
     vault.endMigration();
+  }
+  // The DEK is now loaded, so the one-time pre-v3.27.0 SOCMINT/X relocation (deferred at startup
+  // while the vault was locked) can read+re-encrypt. Marker-guarded, so it's a no-op once done.
+  try {
+    await migrateScrapingDataIfNeeded();
+  } catch (err) {
+    console.error('[scraping-migration] post-unlock pass failed; will retry next unlock', err);
   }
 }
 

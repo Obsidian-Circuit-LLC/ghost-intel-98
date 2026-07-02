@@ -15,6 +15,7 @@ import { appendFile, mkdir } from 'node:fs/promises';
 import { channels } from '@shared/ipc-contracts';
 import { ensureDataLayout } from './storage/paths';
 import { migrateUserDataIfNeeded } from './migrate-userdata';
+import { migrateScrapingDataIfNeeded } from './storage/scraping-migration';
 import { registerMediaProtocol } from './media/protocol';
 import { registerModelProtocol } from './voice/model-protocol';
 import { registerCctvProxy } from './geoint/cctv-proxy';
@@ -272,6 +273,16 @@ app.whenReady().then(async () => {
   await migrateUserDataIfNeeded();
   await ensureDataLayout();
   await vault.refreshEnabled(); // populate the lock-gate cache before any IPC can fire
+
+  // One-time relocation of pre-v3.27.0 SOCMINT/X data out of the main case dirs and into the
+  // scraping-case stores. Marker-guarded + idempotent, so it's a no-op after the first success.
+  // With login disabled this completes here; with an enabled-but-locked vault the secure-fs writes
+  // fail per-case (marker unwritten) and it retries after the first unlock (see resumeEnableIfNeeded).
+  try {
+    await migrateScrapingDataIfNeeded();
+  } catch (err) {
+    console.error('[scraping-migration] startup pass failed; will retry next launch', err);
+  }
 
   // Load plugins after the vault is refreshed so secure-fs reads work, and before
   // IPC is registered so plugin handlers are available when the renderer connects.
