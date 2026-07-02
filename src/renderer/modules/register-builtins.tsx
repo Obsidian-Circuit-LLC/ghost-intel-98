@@ -41,6 +41,7 @@ import { HelpModule } from './help/HelpModule';
 import { SearchlightModule } from './searchlight/SearchlightModule';
 import { SocmintModule } from './socmint/SocmintModule';
 import { XCollectorModule } from './x/XCollectorModule';
+import { GhostScrapeModule } from './ghostscrape/GhostScrapeModule';
 
 // ---------------------------------------------------------------------------
 // Adapter components — each has the uniform { spec: WindowSpec } signature and
@@ -190,6 +191,10 @@ function XCollectorAdapter({ spec }: { spec: WindowSpec }): JSX.Element {
   return <XCollectorModule caseId={spec.props?.['caseId'] as string | undefined} />;
 }
 
+function GhostScrapeAdapter({ spec: _spec }: { spec: WindowSpec }): JSX.Element {
+  return <GhostScrapeModule />;
+}
+
 // ---------------------------------------------------------------------------
 // Registration
 // Titles are VERBATIM from Desktop.tsx moduleTitles.
@@ -230,4 +235,5 @@ export function registerBuiltins(): void {
   registerModule({ key: 'searchlight', title: 'Searchlight', glyph: '🔎', component: SearchlightAdapter, builtin: true, defaultWidth: 1100, defaultHeight: 720 });
   registerModule({ key: 'socmint', title: 'SOCMINT', glyph: '📡', component: SocmintAdapter, builtin: true, defaultWidth: 900, defaultHeight: 640 });
   registerModule({ key: 'x', title: 'X / Twitter', glyph: '✖', component: XCollectorAdapter, builtin: true, defaultWidth: 900, defaultHeight: 640 });
+  registerModule({ key: 'ghostscrape', title: 'GhostScrape', glyph: '🐦', component: GhostScrapeAdapter, builtin: true, defaultWidth: 960, defaultHeight: 680 });
 }
