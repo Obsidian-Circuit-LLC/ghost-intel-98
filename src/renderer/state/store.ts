@@ -44,7 +44,8 @@ export type ModuleKey =
   | 'help'
   | 'searchlight'
   | 'socmint'
-  | 'x';
+  | 'x'
+  | 'ghostscrape';
 
 export interface WindowSpec {
   id: string;
