@@ -65,7 +65,11 @@ export async function save(input: AiConversationInput): Promise<AiConversation> 
       title: input.title,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
-      messages: input.messages
+      messages: input.messages,
+      // Whatever case (if any) is selected as context at save time, verbatim — never carried
+      // forward from a prior save, so clearing the case selector actually stops scoping this
+      // conversation's learned facts to that case.
+      caseId: input.caseId
     };
     const others = all.filter((c) => c.id !== input.id);
     // Newest first, capped — drops the oldest beyond MAX_CONVOS.

@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AiChatMessage, AiChatRequest, AiConversationSummary } from '@shared/post-mvp-types';
 import type { CaseSummary, CaseRecord } from '@shared/types';
+import type { MemoryItem, RecallPreview } from '@shared/ipc-contracts';
 import { useSettings } from '../../state/store';
 import { toast } from '../../state/toasts';
 import { confirmDialog } from '../../state/dialogs';
@@ -22,6 +23,7 @@ import { createVoskRecognizer } from '../../voice/recognizer';
 import { VoiceConversation, type VoiceMode, type VoiceState } from '../../voice/conversation';
 import { MarkdownView } from './MarkdownView';
 import { stripMarkdown } from './markdown';
+import { groupItemsByScope, formatRecallProvenance, labelForScope } from './memory-view';
 
 interface DisplayMessage extends AiChatMessage {
   id: string;
@@ -92,10 +94,14 @@ export function AiAssistantModule(): JSX.Element {
     const payload = {
       id: convoIdRef.current,
       title: titleRef.current || messages.find((m) => m.role === 'user')?.content.slice(0, 60) || 'Conversation',
-      messages: messages.map(({ role, content }) => ({ role, content }))
+      messages: messages.map(({ role, content }) => ({ role, content })),
+      // Same guard as the chat request's own `caseId` (only pass it once contextCase has actually
+      // loaded) so adaptive-memory learning scopes to the case this conversation was really
+      // chatted in, instead of always falling back to 'global'.
+      caseId: contextCase ? contextCaseId : undefined
     };
     void window.api.aiConvos.save(payload).then(() => { dirtyRef.current = false; refreshConvos(); }).catch(() => {});
-  }, [streaming, messages, refreshConvos]);
+  }, [streaming, messages, refreshConvos, contextCase, contextCaseId]);
 
   function newChat(): void {
     convoIdRef.current = null;
@@ -121,6 +127,69 @@ export function AiAssistantModule(): JSX.Element {
       if (convoIdRef.current === id) newChat();
       refreshConvos();
     } catch (err) { toast.error(`Delete failed: ${(err as Error).message}`); }
+  }
+
+  // --- Memory panel (transparency + governance, Task 10) ---
+  // "Recalled" = exactly what was injected for the last answer (RAG hits + adaptive-profile
+  // items), pushed by main as a `recall` field on the chat stream and republished by preload as
+  // a dedicated event. "Learned" = the durable, inspectable adaptive-memory profile — browsed,
+  // pinned, edited, and erased here so nothing the assistant learns is ever silent.
+  const [memoryPanelOpen, setMemoryPanelOpen] = useState(false);
+  const [lastRecall, setLastRecall] = useState<RecallPreview | null>(null);
+  const [profileItems, setProfileItems] = useState<MemoryItem[]>([]);
+  const [profileSummaries, setProfileSummaries] = useState<Record<string, string>>({});
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState('');
+
+  useEffect(() => window.api.memory.onRecall(setLastRecall), []);
+
+  const refreshProfile = useCallback(() => {
+    setProfileLoading(true);
+    // The rolling per-scope summary is durable, injected learned content too, so it must be
+    // browsable/erasable here alongside the discrete items — not left as a silent invisible profile.
+    void Promise.all([window.api.memory.profileList(), window.api.memory.profileSummaries()])
+      .then(([items, summaries]) => { setProfileItems(items); setProfileSummaries(summaries); })
+      .catch(() => {})
+      .finally(() => setProfileLoading(false));
+  }, []);
+  useEffect(() => { if (memoryPanelOpen) refreshProfile(); }, [memoryPanelOpen, refreshProfile]);
+
+  async function togglePin(item: MemoryItem): Promise<void> {
+    try {
+      await window.api.memory.profileUpsert({ id: item.id, scope: item.scope, text: item.text, pinned: !item.pinned });
+      refreshProfile();
+    } catch (err) { toast.error(`Couldn't update: ${(err as Error).message}`); }
+  }
+  function startEditItem(item: MemoryItem): void {
+    setEditingItemId(item.id);
+    setEditDraft(item.text);
+  }
+  async function saveEditItem(item: MemoryItem): Promise<void> {
+    const text = editDraft.trim();
+    if (!text) { toast.warn('Memory text cannot be empty.'); return; }
+    try {
+      await window.api.memory.profileUpsert({ id: item.id, scope: item.scope, text, pinned: item.pinned });
+      setEditingItemId(null);
+      refreshProfile();
+    } catch (err) { toast.error(`Save failed: ${(err as Error).message}`); }
+  }
+  async function deleteItem(id: string): Promise<void> {
+    const ok = await confirmDialog('Delete this learned item? This cannot be undone.', 'Delete memory item');
+    if (!ok) return;
+    try {
+      await window.api.memory.profileDelete([id]);
+      refreshProfile();
+    } catch (err) { toast.error(`Delete failed: ${(err as Error).message}`); }
+  }
+  async function wipeMemory(scope: string | undefined, label: string): Promise<void> {
+    const ok = await confirmDialog(`Erase ${label}? This cannot be undone.`, 'Wipe learned memory');
+    if (!ok) return;
+    try {
+      await window.api.memory.profileWipe(scope);
+      refreshProfile();
+      toast.success('Wiped.');
+    } catch (err) { toast.error(`Wipe failed: ${(err as Error).message}`); }
   }
 
   // Populate the offline voice list and keep it current. Chromium fills voices asynchronously and
@@ -237,7 +306,10 @@ export function AiAssistantModule(): JSX.Element {
     setStreaming(true);
     stoppedRef.current = false;
 
-    const req: AiChatRequest = { context, messages: history };
+    // Adaptive-memory scoping: only pass caseId when the user has actually selected a case whose
+    // context loaded successfully (contextCase), so a stale/failed contextCaseId never scopes
+    // learning/recall to a case whose data wasn't actually included in this message.
+    const req: AiChatRequest = { context, messages: history, caseId: contextCase ? contextCaseId : undefined };
 
     // Accumulate the full reply locally so we can speak it on `done` without reading
     // back through React state (avoids StrictMode double-speak + stale closures).
@@ -469,6 +541,18 @@ export function AiAssistantModule(): JSX.Element {
     }
   }
 
+  const recallLabels = lastRecall ? formatRecallProvenance(lastRecall.rag, lastRecall.profile, lastRecall.profileSummary) : [];
+  const profileGroups = groupItemsByScope(profileItems);
+  // Scopes that carry a non-empty rolling summary (may or may not also have discrete items).
+  const summaryScopes = Object.entries(profileSummaries)
+    .filter(([, text]) => text.trim())
+    .map(([scope, text]) => ({ scope, text }));
+  const hasLearned = profileItems.length > 0 || summaryScopes.length > 0;
+  const groupSummary = (scope: string): string => profileSummaries[scope]?.trim() ?? '';
+  // Scopes that have ONLY a summary (no discrete items) get their own group so they are still
+  // inspectable + erasable — otherwise a summary-only scope would be invisible in the browser.
+  const summaryOnlyScopes = summaryScopes.filter(({ scope }) => !profileGroups.some((g) => g.scope === scope));
+
   return (
     <div style={{ display: 'flex', height: '100%' }}>
       {/* Conversation memory sidebar (ChatGPT-style): new chat, the saved list, delete. */}
@@ -507,6 +591,13 @@ export function AiAssistantModule(): JSX.Element {
         <button onClick={() => quickPrompt('Draft a status report for this case suitable for an external stakeholder.')} disabled={!contextCase}>Draft report</button>
         <button onClick={() => quickPrompt('What questions should I be asking that I have not yet?')} disabled={!contextCase}>Open questions</button>
         <button onClick={() => void exportChat()} disabled={messages.length === 0} title="Save this conversation to a file">Export…</button>
+        <button
+          onClick={() => setMemoryPanelOpen((v) => !v)}
+          style={{ fontWeight: memoryPanelOpen ? 'bold' : 'normal' }}
+          title="See what the assistant recalled for the last answer, and browse/edit/erase everything it has learned"
+        >
+          🧠 Memory
+        </button>
         {(ttsSupported() || piperOk) && (
           <>
             <button
@@ -670,6 +761,102 @@ export function AiAssistantModule(): JSX.Element {
         </>
       )}
       </div>
+
+      {memoryPanelOpen && (
+        <div className="ga98-pane" style={{ width: 260, flex: '0 0 auto', display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
+          <div style={{ padding: '4px 6px', borderBottom: '1px solid #999', fontSize: 12, fontWeight: 'bold' }}>Memory</div>
+
+          <div style={{ padding: 6, borderBottom: '1px solid #ccc' }}>
+            <div style={{ fontSize: 11, fontWeight: 'bold', marginBottom: 4 }}>Recalled for the last answer</div>
+            {recallLabels.length === 0 ? (
+              <div style={{ fontSize: 11, color: '#666' }}>Nothing recalled yet.</div>
+            ) : (
+              <ul style={{ margin: 0, paddingLeft: 16, fontSize: 11 }}>
+                {recallLabels.map((label, i) => <li key={i}>{label}</li>)}
+              </ul>
+            )}
+          </div>
+
+          <div style={{ padding: 6, flex: 1, overflow: 'auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+              <span style={{ fontSize: 11, fontWeight: 'bold' }}>Learned{profileLoading ? '…' : ''}</span>
+              <span style={{ display: 'flex', gap: 4 }}>
+                <button style={{ fontSize: 10 }} onClick={refreshProfile} title="Refresh the learned list">↻</button>
+                <button
+                  style={{ fontSize: 10 }}
+                  onClick={() => void wipeMemory(undefined, 'everything the assistant has learned, across every case')}
+                  disabled={!hasLearned}
+                  title="Erase every learned item and rolling summary, in every scope"
+                >
+                  Wipe all
+                </button>
+              </span>
+            </div>
+            {!hasLearned && (
+              <div style={{ fontSize: 11, color: '#666' }}>
+                Nothing learned yet. Turn on &ldquo;adaptive memory&rdquo; in Settings to let the
+                assistant start building an inspectable long-term profile.
+              </div>
+            )}
+            {profileGroups.map((g) => (
+              <div key={g.scope} style={{ marginBottom: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: 11, fontWeight: 'bold', color: '#400080' }}>{g.label}</span>
+                  <button style={{ fontSize: 10 }} onClick={() => void wipeMemory(g.scope, `everything learned under "${g.label}"`)} title={`Erase everything learned under ${g.label}`}>
+                    Wipe
+                  </button>
+                </div>
+                {groupSummary(g.scope) && (
+                  <div style={{ fontSize: 11, fontStyle: 'italic', color: '#333', background: '#f4f0ff', border: '1px solid #ddd', padding: '3px 4px', margin: '2px 0', whiteSpace: 'pre-wrap' }} title="Rolling summary of prior conversations, injected into chats for this scope">
+                    Summary: {groupSummary(g.scope)}
+                  </div>
+                )}
+                <ul style={{ margin: '2px 0', paddingLeft: 0, listStyle: 'none' }}>
+                  {g.items.map((item) => (
+                    <li key={item.id} style={{ fontSize: 11, borderBottom: '1px solid #eee', padding: '3px 0' }}>
+                      {editingItemId === item.id ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                          <textarea className="ga98-text" rows={2} value={editDraft} onChange={(e) => setEditDraft(e.target.value)} />
+                          <div style={{ display: 'flex', gap: 4 }}>
+                            <button onClick={() => void saveEditItem(item)}>Save</button>
+                            <button onClick={() => setEditingItemId(null)}>Cancel</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div>{item.pinned ? '📌 ' : ''}{item.text}</div>
+                          <div style={{ display: 'flex', gap: 6, marginTop: 2, alignItems: 'center' }}>
+                            <button style={{ fontSize: 10 }} onClick={() => void togglePin(item)}>{item.pinned ? 'Unpin' : 'Pin'}</button>
+                            <button style={{ fontSize: 10 }} onClick={() => startEditItem(item)}>Edit</button>
+                            <button style={{ fontSize: 10 }} onClick={() => void deleteItem(item.id)}>Delete</button>
+                            <span style={{ opacity: 0.6 }}>conf {item.confidence.toFixed(2)}</span>
+                          </div>
+                        </>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+            {summaryOnlyScopes.map(({ scope, text }) => {
+              const label = labelForScope(scope);
+              return (
+                <div key={`summary:${scope}`} style={{ marginBottom: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: 11, fontWeight: 'bold', color: '#400080' }}>{label}</span>
+                    <button style={{ fontSize: 10 }} onClick={() => void wipeMemory(scope, `everything learned under "${label}"`)} title={`Erase everything learned under ${label}`}>
+                      Wipe
+                    </button>
+                  </div>
+                  <div style={{ fontSize: 11, fontStyle: 'italic', color: '#333', background: '#f4f0ff', border: '1px solid #ddd', padding: '3px 4px', margin: '2px 0', whiteSpace: 'pre-wrap' }} title="Rolling summary of prior conversations, injected into chats for this scope">
+                    Summary: {text}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -866,7 +866,7 @@ const CONVO_ROLES = new Set(['system', 'user', 'assistant']);
 /** Clamp/whitelist a renderer-supplied conversation before it is persisted: bounds the title,
  *  the message count, and per-message content length; the role must be a known enum value. */
 export function ensureAiConversation(raw: unknown): AiConversationInput {
-  const o = (raw ?? {}) as { id?: unknown; title?: unknown; messages?: unknown };
+  const o = (raw ?? {}) as { id?: unknown; title?: unknown; messages?: unknown; caseId?: unknown };
   // Must be a UUIDv4 (get/delete validate with ensureUuid) — mint one for anything else, so a
   // saved conversation can never carry an id that get/delete will later reject.
   const id = typeof o.id === 'string' && UUID_V4.test(o.id) ? o.id : randomUUID();
@@ -879,7 +879,11 @@ export function ensureAiConversation(raw: unknown): AiConversationInput {
     const content = typeof m.content === 'string' ? m.content.slice(0, MAX_CONVO_CONTENT) : '';
     messages.push({ role, content });
   }
-  return { id, title, messages };
+  // Same UUIDv4 shape as `id`/case ids everywhere else — anything else (missing, malformed,
+  // spoofed) is dropped rather than rejected, so adaptive-memory scoping degrades to 'global'
+  // instead of ever throwing on a save.
+  const caseId = typeof o.caseId === 'string' && UUID_V4.test(o.caseId) ? o.caseId : undefined;
+  return caseId ? { id, title, messages, caseId } : { id, title, messages };
 }
 
 /** Bound + sanitize the renderer-supplied markets settings block. settings.update otherwise trusts

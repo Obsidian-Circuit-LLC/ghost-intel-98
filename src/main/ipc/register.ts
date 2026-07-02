@@ -18,7 +18,7 @@ import { app, ipcMain, shell, dialog, BrowserWindow } from 'electron';
 import { writeFile, rename, lstat, rm, readFile, stat, realpath } from 'node:fs/promises';
 import { basename, dirname, join, sep } from 'node:path';
 import { channels, BGCONN_LOCK_EXEMPT_CHANNELS } from '@shared/ipc-contracts';
-import type { MailAccount, MailSendInput, SshHostProfile, AiChatRequest, MediaTrack } from '@shared/post-mvp-types';
+import type { MailAccount, MailSendInput, SshHostProfile, AiChatRequest, MediaTrack, AiConversation } from '@shared/post-mvp-types';
 import type { MediaUrlResult, CaseRecord } from '@shared/types';
 import { defaultSettings } from '@shared/types';
 import type { SearchlightCase } from '@shared/searchlight/types';
@@ -45,6 +45,9 @@ import { detectStream } from '../services/stream-detect';
 import * as walls from '../services/walls';
 import * as sounds from '../services/sounds';
 import * as ai from '../services/ai';
+import { liveReindex } from '../services/memory/live-reindex.singleton';
+import { learnFromConversation, profileList, profileSummaries, profileUpsert, profileDelete, profileWipe } from '../services/memory/profile';
+import type { MemoryItem } from '@shared/ipc-contracts';
 import * as localAi from '../services/local-ai';
 import * as chat from '../services/chat';
 import * as piperTts from '../services/piper-tts';
@@ -232,6 +235,24 @@ async function resumeEnableIfNeeded(): Promise<void> {
   } finally {
     vault.endMigration();
   }
+}
+
+/** Best-effort adaptive-memory learning trigger, fired after a conversation settles and is saved
+ *  (never in the chat response's own hot path — this runs off a separate, later IPC call). Gated
+ *  on `useMemory && adaptiveMemory` and Ollama-only, mirroring the injection gate in `ai.ts`. A
+ *  settings-read failure or a learning failure must never surface to the save caller. Scopes
+ *  learning to `['global', 'case:<caseId>']` when the conversation carries a `caseId` (the case
+ *  selected as context while it was chatted in), exactly mirroring `scopesFor()` in `ai.ts` — so a
+ *  case-scoped conversation's facts land in that case's scope, not `global`, and never bleed into
+ *  an unrelated case's recall. */
+async function triggerAdaptiveLearning(convo: AiConversation): Promise<void> {
+  try {
+    const s = await settingsStore.read();
+    if (!s.ai.useMemory || !s.ai.adaptiveMemory || s.ai.provider !== 'ollama') return;
+    const turns = convo.messages.map((m) => `${m.role}: ${m.content}`).join('\n');
+    const scopes = ['global', ...(convo.caseId ? [`case:${convo.caseId}`] : [])];
+    await learnFromConversation(convo.id, turns, scopes);
+  } catch { /* adaptive learning is best-effort */ }
 }
 
 // Photos embedded into a case report (summary HTML/PDF). Originals are decrypted here in main and
@@ -473,7 +494,12 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.cases.create, (...args) => caseStore.create(args[0] as Parameters<typeof caseStore.create>[0]));
   safeHandle(channels.cases.read, (...args) => caseStore.read(ensureUuid(args[0], 'caseId')));
   safeHandle(channels.cases.rename, (...args) => caseStore.rename(ensureUuid(args[0], 'caseId'), args[1] as string));
-  safeHandle(channels.cases.update, (...args) => caseStore.update(ensureUuid(args[0], 'caseId'), args[1] as Parameters<typeof caseStore.update>[1]));
+  safeHandle(channels.cases.update, async (...args) => {
+    const caseId = ensureUuid(args[0], 'caseId');
+    const rec = await caseStore.update(caseId, args[1] as Parameters<typeof caseStore.update>[1]);
+    liveReindex.caseChanged(caseId); // fire-and-forget: never awaited in the response path
+    return rec;
+  });
   safeHandle(channels.cases.archive, (...args) => caseStore.archive(ensureUuid(args[0], 'caseId'), args[1] as boolean));
   safeHandle(channels.cases.delete, (...args) => caseStore.softDelete(ensureUuid(args[0], 'caseId')));
   safeHandle(channels.cases.addTimeline, (...args) => caseStore.addTimeline(ensureUuid(args[0], 'caseId'), ensureTimelineEvent(args[1])));
@@ -486,9 +512,19 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.cases.deleteReminder, (...args) => caseStore.deleteReminder(ensureUuid(args[0], 'caseId'), args[1] as string));
 
   // ---- files ----
-  safeHandle(channels.files.importDropped, (...args) => fileStore.importDropped(ensureUuid(args[0], 'caseId'), args[1] as Parameters<typeof fileStore.importDropped>[1]));
+  safeHandle(channels.files.importDropped, async (...args) => {
+    const caseId = ensureUuid(args[0], 'caseId');
+    const result = await fileStore.importDropped(caseId, args[1] as Parameters<typeof fileStore.importDropped>[1]);
+    liveReindex.caseChanged(caseId); // new attachment text is part of reindexCase's source set
+    return result;
+  });
   safeHandle(channels.files.listAttachments, (...args) => fileStore.listAttachments(ensureUuid(args[0], 'caseId')));
-  safeHandle(channels.files.deleteAttachment, (...args) => fileStore.deleteAttachment(ensureUuid(args[0], 'caseId'), ensureFileName(args[1], 'fileName')));
+  safeHandle(channels.files.deleteAttachment, async (...args) => {
+    const caseId = ensureUuid(args[0], 'caseId');
+    const result = await fileStore.deleteAttachment(caseId, ensureFileName(args[1], 'fileName'));
+    liveReindex.caseChanged(caseId); // removed attachment text must drop out of the case's recall index
+    return result;
+  });
   safeHandle(channels.files.revealAttachment, (...args) => {
     const id = ensureUuid(args[0], 'caseId');
     const name = ensureFileName(args[1], 'fileName');
@@ -543,13 +579,52 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
 
   // ---- entities (cross-case registry) ----
   safeHandle(channels.entities.listAll, () => entities.listAll());
+  // A freshly created entity isn't linked to any case yet, so there is nothing for
+  // reindexCase to pick up until it's linked (entities.linkToCase, below, covers that).
   safeHandle(channels.entities.create, (...args) => entities.create(ensureEntityInput(args[0])));
-  safeHandle(channels.entities.update, (...args) => entities.update(ensureEntityId(args[0]), ensureEntityPatch(args[1])));
-  safeHandle(channels.entities.delete, (...args) => entities.remove(ensureEntityId(args[0])));
-  safeHandle(channels.entities.merge, (...args) => entities.merge(ensureEntityId(args[0]), ensureEntityId(args[1])));
-  safeHandle(channels.entities.linkToCase, (...args) => entities.linkToCase(ensureUuid(args[0], 'caseId'), ensureEntityId(args[1]), ensureLinkOpts(args[2])));
-  safeHandle(channels.entities.unlinkFromCase, (...args) => entities.unlinkFromCase(ensureUuid(args[0], 'caseId'), ensureEntityId(args[1])));
-  safeHandle(channels.entities.setRelationship, (...args) => entities.setRelationship(ensureUuid(args[0], 'caseId'), ensureEntityId(args[1]), ensureRelationship(args[2])));
+  safeHandle(channels.entities.update, async (...args) => {
+    const id = ensureEntityId(args[0]);
+    const rec = await entities.update(id, ensureEntityPatch(args[1]));
+    // The entity's value/notes/aliases feed every linked case's reindexCase source text.
+    for (const c of await entities.casesForEntity(id)) liveReindex.caseChanged(c.caseId);
+    return rec;
+  });
+  safeHandle(channels.entities.delete, async (...args) => {
+    const id = ensureEntityId(args[0]);
+    // Resolve affected cases BEFORE removing the registry record — dangling entity-links are
+    // tolerated (per entities.ts), so this is just reading the per-case link files.
+    const affected = await entities.casesForEntity(id);
+    await entities.remove(id);
+    for (const c of affected) liveReindex.caseChanged(c.caseId);
+  });
+  safeHandle(channels.entities.merge, async (...args) => {
+    const keepId = ensureEntityId(args[0]);
+    const mergeId = ensureEntityId(args[1]);
+    const affected = new Set<string>();
+    for (const c of await entities.casesForEntity(keepId)) affected.add(c.caseId);
+    for (const c of await entities.casesForEntity(mergeId)) affected.add(c.caseId);
+    const rec = await entities.merge(keepId, mergeId);
+    for (const caseId of affected) liveReindex.caseChanged(caseId);
+    return rec;
+  });
+  safeHandle(channels.entities.linkToCase, async (...args) => {
+    const caseId = ensureUuid(args[0], 'caseId');
+    const result = await entities.linkToCase(caseId, ensureEntityId(args[1]), ensureLinkOpts(args[2]));
+    liveReindex.caseChanged(caseId);
+    return result;
+  });
+  safeHandle(channels.entities.unlinkFromCase, async (...args) => {
+    const caseId = ensureUuid(args[0], 'caseId');
+    const result = await entities.unlinkFromCase(caseId, ensureEntityId(args[1]));
+    liveReindex.caseChanged(caseId);
+    return result;
+  });
+  safeHandle(channels.entities.setRelationship, async (...args) => {
+    const caseId = ensureUuid(args[0], 'caseId');
+    const result = await entities.setRelationship(caseId, ensureEntityId(args[1]), ensureRelationship(args[2]));
+    liveReindex.caseChanged(caseId);
+    return result;
+  });
   safeHandle(channels.entities.casesForEntity, (...args) => entities.casesForEntity(ensureEntityId(args[0])));
 
   // ---- bio images ----
@@ -743,7 +818,12 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   // ---- notes ----
   safeHandle(channels.notes.list, (...args) => noteStore.list(ensureUuid(args[0], 'caseId')));
   safeHandle(channels.notes.read, (...args) => noteStore.read(ensureUuid(args[0], 'caseId'), ensureFileName(args[1], 'noteName')));
-  safeHandle(channels.notes.write, (...args) => noteStore.write(ensureUuid(args[0], 'caseId'), ensureFileName(args[1], 'noteName'), args[2] as string));
+  safeHandle(channels.notes.write, async (...args) => {
+    const caseId = ensureUuid(args[0], 'caseId');
+    const result = await noteStore.write(caseId, ensureFileName(args[1], 'noteName'), args[2] as string);
+    liveReindex.caseChanged(caseId); // fire-and-forget: never awaited in the response path
+    return result;
+  });
   safeHandle(channels.notes.delete, (...args) => noteStore.delete(ensureUuid(args[0], 'caseId'), ensureFileName(args[1], 'noteName')));
 
   // ---- reminders ----
@@ -877,7 +957,12 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   // ---- AI conversations (ChatGPT-style saved chats; encrypted at rest, zero egress) ----
   safeHandle(channels.aiConvos.list, () => aiConvos.list());
   safeHandle(channels.aiConvos.get, (...args) => aiConvos.get(ensureUuid(args[0], 'conversation id')));
-  safeHandle(channels.aiConvos.save, (...args) => aiConvos.save(ensureAiConversation(args[0])));
+  safeHandle(channels.aiConvos.save, async (...args) => {
+    const result = await aiConvos.save(ensureAiConversation(args[0]));
+    liveReindex.conversationsChanged(); // fire-and-forget: never awaited in the response path
+    void triggerAdaptiveLearning(result); // fire-and-forget: never awaited in the response path
+    return result;
+  });
   safeHandle(channels.aiConvos.delete, (...args) => aiConvos.remove(ensureUuid(args[0], 'conversation id')));
 
   // ---- briefcase (standalone notes not tied to a case; encrypted at rest, zero egress) ----
@@ -1235,6 +1320,27 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     const win = getWindow();
     if (win) win.webContents.send(channels.memory.onProgress, p);
   }));
+
+  // ---- adaptive-memory profile governance (list/edit/pin/delete/wipe) ----
+  // Nothing here is best-effort: every learned item must stay inspectable/editable/erasable, so
+  // (unlike recallProfile/learnFromConversation) these delegate straight to the facade and let
+  // safeHandle's normal error path surface any failure to the renderer.
+  safeHandle(channels.memory.profileList, (...args) =>
+    profileList(typeof args[0] === 'string' ? args[0] : undefined));
+  safeHandle(channels.memory.profileSummaries, () => profileSummaries());
+  safeHandle(channels.memory.profileUpsert, (...args) => {
+    const raw = args[0] as Partial<MemoryItem> | undefined;
+    if (!raw || typeof raw.id !== 'string' || typeof raw.scope !== 'string' || typeof raw.text !== 'string' || typeof raw.pinned !== 'boolean') {
+      throw new Error('profileUpsert: expected { id, scope, text, pinned }');
+    }
+    return profileUpsert({ id: raw.id, scope: raw.scope, text: raw.text, pinned: raw.pinned });
+  });
+  safeHandle(channels.memory.profileDelete, (...args) => {
+    const ids = Array.isArray(args[0]) ? (args[0] as unknown[]).filter((x): x is string => typeof x === 'string') : [];
+    return profileDelete(ids);
+  });
+  safeHandle(channels.memory.profileWipe, (...args) =>
+    profileWipe(typeof args[0] === 'string' ? args[0] : undefined));
 
   // ---- plugins ----
   safeHandle(channels.plugins.listVerified, async () => getVerified());

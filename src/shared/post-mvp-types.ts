@@ -258,16 +258,24 @@ export interface AiChatRequest {
   /** Concatenated context to prepend (typically: selected case bundle). */
   context?: string;
   messages: AiChatMessage[];
+  /** The case (if any) the user has selected as context for this message — used to scope the
+   *  adaptive-memory profile (`case:<caseId>`) alongside the always-included `global` scope. */
+  caseId?: string;
 }
 
 /** A saved AI conversation (ChatGPT-style memory). Persisted under dataRoot, encrypted at rest
- *  when login is on. The renderer sends {id,title,messages}; the store stamps the timestamps. */
+ *  when login is on. The renderer sends {id,title,messages,caseId?}; the store stamps the
+ *  timestamps. `caseId` is the case (if any) that was selected as context while this conversation
+ *  was chatted in — the same id `AiChatRequest.caseId` carried — so post-hoc adaptive-memory
+ *  learning can scope what it learns to `case:<caseId>` instead of always falling back to
+ *  `global` (see `triggerAdaptiveLearning` in `ipc/register.ts`). */
 export interface AiConversation {
   id: string;
   title: string;
   createdAt: string;
   updatedAt: string;
   messages: AiChatMessage[];
+  caseId?: string;
 }
 
 /** Lightweight row for the conversation sidebar — full messages fetched on open. */
@@ -283,6 +291,7 @@ export interface AiConversationInput {
   id: string;
   title: string;
   messages: AiChatMessage[];
+  caseId?: string;
 }
 
 // ---------- Bookmarks dashboard (offline start.me-style board) ----------
