@@ -30,10 +30,13 @@ Var CleanPrevDataCheckbox
 ; cleanPrevDataPageShow Function below. This mirrors electron-builder's own multiUserUi.nsh
 ; pattern (PageEx/Page custom + a page callback Function).
 !macro customPageAfterChangeDir
-  Page custom cleanPrevDataPageShow
+  Page custom cleanPrevDataPageShow cleanPrevDataPageLeave
 !macroend
 
 Function cleanPrevDataPageShow
+  ; Reset the flag on every (re)show so a tick from an earlier visit can't linger across a
+  ; Back/Next round-trip and act on a freshly-rebuilt, visibly-UNCHECKED box (data-loss guard).
+  StrCpy $CleanPrevData 0
   nsDialogs::Create 1018
   Pop $0
   ${If} $0 == error
@@ -52,6 +55,14 @@ Function cleanPrevDataPageShow
 FunctionEnd
 
 Function onCleanPrevDataToggle
+  ${NSD_GetState} $CleanPrevDataCheckbox $CleanPrevData
+FunctionEnd
+
+; Authoritative sync: read the ACTUAL checkbox state when the user leaves the page (clicks Next),
+; so $CleanPrevData always reflects what is on screen — never a stale value from an earlier visit.
+; Without this, ticking the box then going Back and forward again would leave the flag set while
+; the rebuilt checkbox shows unchecked, and cleanup would run against the user's visible intent.
+Function cleanPrevDataPageLeave
   ${NSD_GetState} $CleanPrevDataCheckbox $CleanPrevData
 FunctionEnd
 
