@@ -406,6 +406,27 @@ function AiPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSettings>)
             {memBusy ? memProgress : memStatus ? `${memStatus.cases} case(s) · ${memStatus.chunks} chunk(s) indexed` : ''}
           </span>
         </div>
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
+          <input type="checkbox" checked={s.ai.autoReindex}
+            onChange={(e) => void patch({ ai: { ...s.ai, autoReindex: e.target.checked } })} />
+          Keep the memory index live (auto-reindex on save)
+        </label>
+        <p style={{ fontSize: 11, color: '#444', margin: '6px 0' }}>
+          When on, saving a note, case, or conversation quietly refreshes the local index in the
+          background (debounced) so recall reflects the latest content without a manual rebuild.
+          Still local, still offline.
+        </p>
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
+          <input type="checkbox" checked={s.ai.adaptiveMemory}
+            onChange={(e) => void patch({ ai: { ...s.ai, adaptiveMemory: e.target.checked } })} />
+          Let the assistant learn a long-term profile from conversations
+        </label>
+        <p style={{ fontSize: 11, color: '#444', margin: '6px 0' }}>
+          When on (and Ollama is the provider), the assistant distills durable facts and a rolling
+          summary from each conversation after it settles, and injects them into future replies.
+          Local only, encrypted at rest, off by default. Every learned item is visible, editable,
+          pinnable, and erasable in the assistant&rsquo;s Memory panel.
+        </p>
       </fieldset>
     </>
   );

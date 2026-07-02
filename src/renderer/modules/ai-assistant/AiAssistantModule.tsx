@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AiChatMessage, AiChatRequest, AiConversationSummary } from '@shared/post-mvp-types';
 import type { CaseSummary, CaseRecord } from '@shared/types';
+import type { MemoryItem, RecallPreview } from '@shared/ipc-contracts';
 import { useSettings } from '../../state/store';
 import { toast } from '../../state/toasts';
 import { confirmDialog } from '../../state/dialogs';
@@ -22,6 +23,7 @@ import { createVoskRecognizer } from '../../voice/recognizer';
 import { VoiceConversation, type VoiceMode, type VoiceState } from '../../voice/conversation';
 import { MarkdownView } from './MarkdownView';
 import { stripMarkdown } from './markdown';
+import { groupItemsByScope, formatRecallProvenance } from './memory-view';
 
 interface DisplayMessage extends AiChatMessage {
   id: string;
@@ -125,6 +127,66 @@ export function AiAssistantModule(): JSX.Element {
       if (convoIdRef.current === id) newChat();
       refreshConvos();
     } catch (err) { toast.error(`Delete failed: ${(err as Error).message}`); }
+  }
+
+  // --- Memory panel (transparency + governance, Task 10) ---
+  // "Recalled" = exactly what was injected for the last answer (RAG hits + adaptive-profile
+  // items), pushed by main as a `recall` field on the chat stream and republished by preload as
+  // a dedicated event. "Learned" = the durable, inspectable adaptive-memory profile — browsed,
+  // pinned, edited, and erased here so nothing the assistant learns is ever silent.
+  const [memoryPanelOpen, setMemoryPanelOpen] = useState(false);
+  const [lastRecall, setLastRecall] = useState<RecallPreview | null>(null);
+  const [profileItems, setProfileItems] = useState<MemoryItem[]>([]);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState('');
+
+  useEffect(() => window.api.memory.onRecall(setLastRecall), []);
+
+  const refreshProfile = useCallback(() => {
+    setProfileLoading(true);
+    void window.api.memory.profileList()
+      .then(setProfileItems)
+      .catch(() => {})
+      .finally(() => setProfileLoading(false));
+  }, []);
+  useEffect(() => { if (memoryPanelOpen) refreshProfile(); }, [memoryPanelOpen, refreshProfile]);
+
+  async function togglePin(item: MemoryItem): Promise<void> {
+    try {
+      await window.api.memory.profileUpsert({ id: item.id, scope: item.scope, text: item.text, pinned: !item.pinned });
+      refreshProfile();
+    } catch (err) { toast.error(`Couldn't update: ${(err as Error).message}`); }
+  }
+  function startEditItem(item: MemoryItem): void {
+    setEditingItemId(item.id);
+    setEditDraft(item.text);
+  }
+  async function saveEditItem(item: MemoryItem): Promise<void> {
+    const text = editDraft.trim();
+    if (!text) { toast.warn('Memory text cannot be empty.'); return; }
+    try {
+      await window.api.memory.profileUpsert({ id: item.id, scope: item.scope, text, pinned: item.pinned });
+      setEditingItemId(null);
+      refreshProfile();
+    } catch (err) { toast.error(`Save failed: ${(err as Error).message}`); }
+  }
+  async function deleteItem(id: string): Promise<void> {
+    const ok = await confirmDialog('Delete this learned item? This cannot be undone.', 'Delete memory item');
+    if (!ok) return;
+    try {
+      await window.api.memory.profileDelete([id]);
+      refreshProfile();
+    } catch (err) { toast.error(`Delete failed: ${(err as Error).message}`); }
+  }
+  async function wipeMemory(scope: string | undefined, label: string): Promise<void> {
+    const ok = await confirmDialog(`Erase ${label}? This cannot be undone.`, 'Wipe learned memory');
+    if (!ok) return;
+    try {
+      await window.api.memory.profileWipe(scope);
+      refreshProfile();
+      toast.success('Wiped.');
+    } catch (err) { toast.error(`Wipe failed: ${(err as Error).message}`); }
   }
 
   // Populate the offline voice list and keep it current. Chromium fills voices asynchronously and
@@ -476,6 +538,9 @@ export function AiAssistantModule(): JSX.Element {
     }
   }
 
+  const recallLabels = lastRecall ? formatRecallProvenance(lastRecall.rag, lastRecall.profile) : [];
+  const profileGroups = groupItemsByScope(profileItems);
+
   return (
     <div style={{ display: 'flex', height: '100%' }}>
       {/* Conversation memory sidebar (ChatGPT-style): new chat, the saved list, delete. */}
@@ -514,6 +579,13 @@ export function AiAssistantModule(): JSX.Element {
         <button onClick={() => quickPrompt('Draft a status report for this case suitable for an external stakeholder.')} disabled={!contextCase}>Draft report</button>
         <button onClick={() => quickPrompt('What questions should I be asking that I have not yet?')} disabled={!contextCase}>Open questions</button>
         <button onClick={() => void exportChat()} disabled={messages.length === 0} title="Save this conversation to a file">Export…</button>
+        <button
+          onClick={() => setMemoryPanelOpen((v) => !v)}
+          style={{ fontWeight: memoryPanelOpen ? 'bold' : 'normal' }}
+          title="See what the assistant recalled for the last answer, and browse/edit/erase everything it has learned"
+        >
+          🧠 Memory
+        </button>
         {(ttsSupported() || piperOk) && (
           <>
             <button
@@ -677,6 +749,81 @@ export function AiAssistantModule(): JSX.Element {
         </>
       )}
       </div>
+
+      {memoryPanelOpen && (
+        <div className="ga98-pane" style={{ width: 260, flex: '0 0 auto', display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
+          <div style={{ padding: '4px 6px', borderBottom: '1px solid #999', fontSize: 12, fontWeight: 'bold' }}>Memory</div>
+
+          <div style={{ padding: 6, borderBottom: '1px solid #ccc' }}>
+            <div style={{ fontSize: 11, fontWeight: 'bold', marginBottom: 4 }}>Recalled for the last answer</div>
+            {recallLabels.length === 0 ? (
+              <div style={{ fontSize: 11, color: '#666' }}>Nothing recalled yet.</div>
+            ) : (
+              <ul style={{ margin: 0, paddingLeft: 16, fontSize: 11 }}>
+                {recallLabels.map((label, i) => <li key={i}>{label}</li>)}
+              </ul>
+            )}
+          </div>
+
+          <div style={{ padding: 6, flex: 1, overflow: 'auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+              <span style={{ fontSize: 11, fontWeight: 'bold' }}>Learned{profileLoading ? '…' : ''}</span>
+              <span style={{ display: 'flex', gap: 4 }}>
+                <button style={{ fontSize: 10 }} onClick={refreshProfile} title="Refresh the learned list">↻</button>
+                <button
+                  style={{ fontSize: 10 }}
+                  onClick={() => void wipeMemory(undefined, 'everything the assistant has learned, across every case')}
+                  disabled={profileItems.length === 0}
+                  title="Erase every learned item, in every scope"
+                >
+                  Wipe all
+                </button>
+              </span>
+            </div>
+            {profileGroups.length === 0 && (
+              <div style={{ fontSize: 11, color: '#666' }}>
+                Nothing learned yet. Turn on &ldquo;adaptive memory&rdquo; in Settings to let the
+                assistant start building an inspectable long-term profile.
+              </div>
+            )}
+            {profileGroups.map((g) => (
+              <div key={g.scope} style={{ marginBottom: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: 11, fontWeight: 'bold', color: '#400080' }}>{g.label}</span>
+                  <button style={{ fontSize: 10 }} onClick={() => void wipeMemory(g.scope, `everything learned under "${g.label}"`)} title={`Erase everything learned under ${g.label}`}>
+                    Wipe
+                  </button>
+                </div>
+                <ul style={{ margin: '2px 0', paddingLeft: 0, listStyle: 'none' }}>
+                  {g.items.map((item) => (
+                    <li key={item.id} style={{ fontSize: 11, borderBottom: '1px solid #eee', padding: '3px 0' }}>
+                      {editingItemId === item.id ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                          <textarea className="ga98-text" rows={2} value={editDraft} onChange={(e) => setEditDraft(e.target.value)} />
+                          <div style={{ display: 'flex', gap: 4 }}>
+                            <button onClick={() => void saveEditItem(item)}>Save</button>
+                            <button onClick={() => setEditingItemId(null)}>Cancel</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div>{item.pinned ? '📌 ' : ''}{item.text}</div>
+                          <div style={{ display: 'flex', gap: 6, marginTop: 2, alignItems: 'center' }}>
+                            <button style={{ fontSize: 10 }} onClick={() => void togglePin(item)}>{item.pinned ? 'Unpin' : 'Pin'}</button>
+                            <button style={{ fontSize: 10 }} onClick={() => startEditItem(item)}>Edit</button>
+                            <button style={{ fontSize: 10 }} onClick={() => void deleteItem(item.id)}>Delete</button>
+                            <span style={{ opacity: 0.6 }}>conf {item.confidence.toFixed(2)}</span>
+                          </div>
+                        </>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
