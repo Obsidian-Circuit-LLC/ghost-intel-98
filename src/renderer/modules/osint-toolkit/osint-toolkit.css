@@ -1,0 +1,83 @@
+/* ── OSINT Toolkit — folder-style launcher ──────────────────────────────── */
+.ot-root {
+  height: 100%;
+  overflow-y: auto;
+  background: var(--ga98-grey, #c0c0c0);
+  padding: 10px;
+  box-sizing: border-box;
+}
+
+.ot-empty {
+  margin: 0;
+  padding: 12px 4px;
+  font-size: 12px;
+  color: #404040;
+}
+
+.ot-group {
+  margin-bottom: 14px;
+}
+.ot-group:last-child {
+  margin-bottom: 0;
+}
+
+.ot-group-heading {
+  font-size: 12px;
+  font-weight: bold;
+  color: #000080;
+  border-bottom: 1px solid var(--ga98-shadow-dark, #808080);
+  padding-bottom: 2px;
+  margin-bottom: 8px;
+}
+
+.ot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 96px);
+  gap: 6px;
+}
+
+.ot-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+  width: 96px;
+  height: 76px;
+  padding: 6px 2px;
+  background: var(--ga98-grey, #c0c0c0);
+  border-top: 1px solid var(--ga98-shadow-light, #ffffff);
+  border-left: 1px solid var(--ga98-shadow-light, #ffffff);
+  border-bottom: 1px solid var(--ga98-shadow-dark, #808080);
+  border-right: 1px solid var(--ga98-shadow-dark, #808080);
+  box-shadow: inset -1px -1px 0 var(--ga98-shadow-deep, #000000);
+  color: #000;
+  font-size: 11px;
+  text-align: center;
+  cursor: pointer;
+}
+
+.ot-tile:hover {
+  background: #d4d0c8;
+}
+
+.ot-tile:active {
+  border-top-color: var(--ga98-shadow-dark, #808080);
+  border-left-color: var(--ga98-shadow-dark, #808080);
+  border-bottom-color: var(--ga98-shadow-light, #ffffff);
+  border-right-color: var(--ga98-shadow-light, #ffffff);
+  box-shadow: inset 1px 1px 0 var(--ga98-shadow-deep, #000000);
+}
+
+.ot-tile-glyph {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.ot-tile-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
