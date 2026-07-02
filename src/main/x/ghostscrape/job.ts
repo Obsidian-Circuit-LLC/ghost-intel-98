@@ -33,18 +33,10 @@ import { attachGraphqlCapture } from './capture';
 import { isProfileGraphqlUrl, isTimelineGraphqlUrl } from './graphql-urls';
 import { applyFilters, parseProfile, parseTimeline } from './parse';
 import { shouldContinueScroll, type ScrollState } from './scroll-control';
+import { GhostScrapeNoCredsError } from './errors';
 
-/** Thrown when the account referenced by `cfg.accountId` has no usable X session
- * cookies (auth_token/ct0) in the injected secret store. */
-export class GhostScrapeNoCredsError extends Error {
-  constructor(accountId: string) {
-    super(
-      `GhostScrape: no X session cookies stored for account "${accountId}" ` +
-      '(x.accounts.<accountId>.{auth_token,ct0}). Add the account in X Intel first.',
-    );
-    this.name = 'GhostScrapeNoCredsError';
-  }
-}
+// GhostScrapeNoCredsError now lives in ./errors; re-exported for callers importing it from here.
+export { GhostScrapeNoCredsError };
 
 export interface JobDeps {
   getSecret(key: string): Promise<string | null>;
@@ -154,7 +146,13 @@ export async function runScrapeJob(
       if (signal.aborted) partial = true;
     }
 
-    const tweets = applyFilters(parseTimeline(capture.raw), cfg);
+    // Let any in-flight CDP response-body fetches (from the final navigation/scroll) land before
+    // we parse and tear the window down — otherwise the last batch can be dropped.
+    if (!signal.aborted) await delay(cfg.delayMs, signal);
+
+    // A 'bio'-only scrape returns the profile alone — tweets captured incidentally during the
+    // initial profile navigation are not what the user asked for.
+    const tweets = cfg.type === 'bio' ? [] : applyFilters(parseTimeline(capture.raw), cfg);
 
     let profile: ScrapedProfile | undefined;
     for (const raw of capture.raw) {

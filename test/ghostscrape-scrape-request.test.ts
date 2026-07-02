@@ -36,7 +36,9 @@ describe('buildScrapeRequest', () => {
       delayMs: -100
     });
     expect(cfg.scrolls).toBeGreaterThanOrEqual(1);
-    expect(cfg.delayMs).toBeGreaterThanOrEqual(1);
+    // delayMs has an anti-detection FLOOR of 250ms — a below-floor input clamps up to exactly 250,
+    // not merely to >=1 (a weakened floor must fail this).
+    expect(cfg.delayMs).toBe(250);
 
     const huge = buildScrapeRequest({ accountId: 'acct-1', username: 'u', type: 'all', scrolls: 1e9, delayMs: 1e9 });
     expect(huge.scrolls).toBeLessThan(1e9);

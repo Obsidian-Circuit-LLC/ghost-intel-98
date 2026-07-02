@@ -23,6 +23,7 @@ describe('buildXCookies', () => {
       domain: '.x.com',
       path: '/',
       secure: true,
+      httpOnly: true, // auth_token must be httpOnly — weakening this must fail the test
     });
 
     const ct0Cookie = cookies.find((c) => c.name === 'ct0');
@@ -34,6 +35,7 @@ describe('buildXCookies', () => {
       domain: '.x.com',
       path: '/',
       secure: true,
+      httpOnly: false, // ct0 is read by x.com's own JS to set the x-csrf-token header — not httpOnly
     });
   });
 
