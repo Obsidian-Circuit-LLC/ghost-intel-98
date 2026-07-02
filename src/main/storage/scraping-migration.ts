@@ -10,11 +10,15 @@
  *  - Marker-guarded + idempotent: once scrapingBackupDir()/../.migrated-v3.27.0 exists the whole
  *    migration is a no-op (`{ migrated: 0, skipped: true }`). Because processed cases have their
  *    legacy files removed, a crash before the marker is written re-runs safely (already-migrated
- *    cases have nothing left to scan; only the unfinished case is retried).
+ *    cases have nothing left to scan; only the unfinished case is retried) — and the retry RESUMES
+ *    rather than duplicates: the target scraping-case id is a PURE function of (ns, sourceCaseId)
+ *    (`newCaseId`), so a crash anywhere between the store write and the legacy `rm` re-uses the same
+ *    case dir on the next launch (overwrite), never minting a second copy under a fresh random id.
  *  - Deterministic: main cases are processed in sorted id order; which store an item lands in is a
  *    PURE function of the item (`platform === 'x'` → the x store, else the socmint store), never
- *    readdir order or a clock. The injected now()/uuid() are the only nondeterminism, supplied by
- *    the caller (real clock/uuid in prod; fixed counters in tests).
+ *    readdir order or a clock; the target case id is a pure function of (ns, sourceCaseId). The
+ *    injected now() is the only nondeterminism (createdAt/updatedAt), supplied by the caller (real
+ *    clock in prod; a fixed counter in tests).
  *  - Reversible: for each source case the split items are COPIED into the new store AND the raw
  *    original files are copied byte-for-byte into scrapingBackupDir()/<caseId>/ BEFORE they are
  *    removed from the main case dir. If either the store copy or the backup fails, the originals
@@ -70,8 +74,15 @@ export interface ScrapingMigrationDeps {
   paths: ScrapingMigrationPaths;
   /** Injected clock (createdAt/updatedAt on the new scraping cases). */
   now(): number;
-  /** Injected id source for new scraping cases. */
-  uuid(): string;
+  /**
+   * Id for the scraping case that a given (target store, source main case) migrates into. MUST be a
+   * PURE function of (ns, sourceCaseId): this is what makes a retried per-case migration idempotent.
+   * A crash between the store write and the legacy `rm` leaves the marker unwritten, so the next
+   * launch re-scans the still-present legacy files — and because this returns the SAME id, the retry
+   * overwrites the same case dir instead of minting a duplicate (a fresh random id would orphan the
+   * first attempt and double the harvested items across two scraping cases).
+   */
+  newCaseId(ns: ScrapingCaseNs, sourceCaseId: string): string;
 }
 
 function isEnoent(e: unknown): boolean {
@@ -165,10 +176,10 @@ export async function migrateScrapingData(
       // 1) COPY into the new store(s). Jobs carry no platform, so they belong with the socmint
       //    store (the default/"else" store); a jobs-only case still gets a socmint scraping case.
       if (socItems.length > 0 || jobs.length > 0) {
-        await writeScrapingCase(deps, 'socmint', deps.uuid(), name, socItems, jobs);
+        await writeScrapingCase(deps, 'socmint', deps.newCaseId('socmint', caseId), name, socItems, jobs);
       }
       if (xItems.length > 0) {
-        await writeScrapingCase(deps, 'x', deps.uuid(), name, xItems, []);
+        await writeScrapingCase(deps, 'x', deps.newCaseId('x', caseId), name, xItems, []);
       }
 
       // 2) BACK UP the raw originals BEFORE removing them (reversible). Byte-faithful copy keeps
@@ -205,7 +216,7 @@ export async function migrateScrapingData(
  * locked/enabled vault surfaces as a per-case failure (marker unwritten) so it retries post-unlock.
  */
 export async function migrateScrapingDataIfNeeded(): Promise<{ migrated: number; skipped: boolean }> {
-  const [{ join, basename }, nodeFs, paths, { secureReadFile, secureWriteFile }, { randomUUID }] =
+  const [{ join, basename }, nodeFs, paths, { secureReadFile, secureWriteFile }, { createHash }] =
     await Promise.all([
       import('node:path'),
       import('node:fs/promises'),
@@ -215,6 +226,15 @@ export async function migrateScrapingDataIfNeeded(): Promise<{ migrated: number;
     ]);
 
   const markerFile = (): string => join(paths.scrapingCasesRoot(), '.migrated-v3.27.0');
+
+  // Deterministic scraping-case id: a pure function of (ns, sourceCaseId) so a retried per-case
+  // migration re-uses the same case dir instead of orphaning the first attempt under a fresh random
+  // id. UUIDv8 shape (RFC 9562) derived from a domain-separated SHA-256 — stable across launches.
+  const newCaseId = (ns: ScrapingCaseNs, sourceCaseId: string): string => {
+    const h = createHash('sha256').update(`scraping-migration:v3.27.0:${ns}:${sourceCaseId}`).digest('hex');
+    const variant = ((parseInt(h[16], 16) & 0x3) | 0x8).toString(16);
+    return `${h.slice(0, 8)}-${h.slice(8, 12)}-8${h.slice(13, 16)}-${variant}${h.slice(17, 20)}-${h.slice(20, 32)}`;
+  };
 
   const fs: ScrapingMigrationFs = {
     readFile: secureReadFile,
@@ -255,6 +275,6 @@ export async function migrateScrapingDataIfNeeded(): Promise<{ migrated: number;
     fs,
     paths: migrationPaths,
     now: () => Date.now(),
-    uuid: () => randomUUID(),
+    newCaseId,
   });
 }

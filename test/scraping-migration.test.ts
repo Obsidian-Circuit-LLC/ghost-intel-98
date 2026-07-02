@@ -25,7 +25,6 @@ function enoent(): NodeJS.ErrnoException {
 
 function makeHarness(overrides: Partial<ScrapingMigrationDeps['fs']> = {}): Harness {
   const files = new Map<string, Buffer>();
-  let seq = 0;
   let clock = 1_000;
 
   const baseFs: ScrapingMigrationDeps['fs'] = {
@@ -76,7 +75,9 @@ function makeHarness(overrides: Partial<ScrapingMigrationDeps['fs']> = {}): Harn
       markerFile: () => `${SCRAPE}/.migrated-v3.27.0`,
     },
     now: () => clock++,
-    uuid: () => `id-${++seq}`,
+    // Deterministic, pure fn of (ns, sourceCaseId) — mirrors the prod contract that makes a retried
+    // per-case migration overwrite the same case dir instead of minting a duplicate.
+    newCaseId: (ns, sourceCaseId) => `mig-${ns}-${sourceCaseId}`,
   };
 
   return { deps, files };
@@ -113,21 +114,21 @@ describe('migrateScrapingData', () => {
     const res = await migrateScrapingData(deps);
     expect(res).toEqual({ migrated: 1, skipped: false });
 
-    // case-A: uuid id-1 (socmint, created first), id-2 (x).
-    const socItems = readJson(files, `${SCRAPE}/socmint/id-1/socmint-items.json`) as Array<{ id: string; platform: string }>;
+    // case-A: deterministic ids mig-socmint-case-A (socmint) and mig-x-case-A (x).
+    const socItems = readJson(files, `${SCRAPE}/socmint/mig-socmint-case-A/socmint-items.json`) as Array<{ id: string; platform: string }>;
     expect(socItems.map((i) => i.id)).toEqual(['a1', 'a3']); // telegram + whatsapp, order preserved
     expect(socItems.every((i) => i.platform !== 'x')).toBe(true);
 
-    const xItems = readJson(files, `${SCRAPE}/x/id-2/x-items.json`) as Array<{ id: string; platform: string }>;
+    const xItems = readJson(files, `${SCRAPE}/x/mig-x-case-A/x-items.json`) as Array<{ id: string; platform: string }>;
     expect(xItems.map((i) => i.id)).toEqual(['a2']);
     expect(xItems.every((i) => i.platform === 'x')).toBe(true);
 
     // Both scraping cases are named after the source main case record.
-    expect((readJson(files, `${SCRAPE}/socmint/id-1/case.json`) as { name: string }).name).toBe('Alpha Case');
-    expect((readJson(files, `${SCRAPE}/x/id-2/case.json`) as { name: string }).name).toBe('Alpha Case');
+    expect((readJson(files, `${SCRAPE}/socmint/mig-socmint-case-A/case.json`) as { name: string }).name).toBe('Alpha Case');
+    expect((readJson(files, `${SCRAPE}/x/mig-x-case-A/case.json`) as { name: string }).name).toBe('Alpha Case');
 
     // Jobs (no platform field) are preserved in the socmint store.
-    const jobs = readJson(files, `${SCRAPE}/socmint/id-1/socmint-jobs.json`) as Array<{ jobId: string }>;
+    const jobs = readJson(files, `${SCRAPE}/socmint/mig-socmint-case-A/socmint-jobs.json`) as Array<{ jobId: string }>;
     expect(jobs.map((j) => j.jobId)).toEqual(['j1']);
   });
 
@@ -164,6 +165,53 @@ describe('migrateScrapingData', () => {
     expect(files.has(`${SCRAPE}/.migrated-v3.27.0`)).toBe(false);
   });
 
+  it('retry after a mid-migration failure RESUMES (overwrites) instead of duplicating the case', async () => {
+    // Regression: a failure after the store write but before the legacy rm must not double the data
+    // on the next launch. Deterministic ids make the retry re-use the same case dir.
+    const { deps, files } = makeHarness();
+    seedCaseA(files); // mixed: socmint (a1/a3) + x (a2) + one job
+
+    // Run 1: backup fails → scraping cases are written, but originals stay and the marker is not
+    // stamped (mimics a crash/disk-full between the store write and the rm).
+    let failCopy = true;
+    const failingCopy = deps.fs.copyFile;
+    deps.fs.copyFile = async (src, dst) => {
+      if (failCopy) throw new Error('disk full');
+      return failingCopy(src, dst);
+    };
+    const first = await migrateScrapingData(deps);
+    expect(first).toEqual({ migrated: 0, skipped: false });
+    expect(files.has(`${SCRAPE}/.migrated-v3.27.0`)).toBe(false);
+    expect(files.has(`${CASES}/case-A/socmint-items.json`)).toBe(true); // originals intact
+
+    // Run 2: copy now succeeds → migration completes.
+    failCopy = false;
+    const second = await migrateScrapingData(deps);
+    expect(second).toEqual({ migrated: 1, skipped: false });
+
+    // Exactly ONE socmint case and ONE x case exist for case-A — no orphaned duplicate under a
+    // second id, and the items are not doubled.
+    const socDirs = new Set<string>();
+    const xDirs = new Set<string>();
+    for (const key of files.keys()) {
+      const soc = key.match(new RegExp(`^${SCRAPE}/socmint/([^/]+)/`));
+      if (soc) socDirs.add(soc[1]);
+      const x = key.match(new RegExp(`^${SCRAPE}/x/([^/]+)/`));
+      if (x) xDirs.add(x[1]);
+    }
+    expect([...socDirs]).toEqual(['mig-socmint-case-A']);
+    expect([...xDirs]).toEqual(['mig-x-case-A']);
+
+    const socItems = readJson(files, `${SCRAPE}/socmint/mig-socmint-case-A/socmint-items.json`) as Array<{ id: string }>;
+    expect(socItems.map((i) => i.id)).toEqual(['a1', 'a3']); // not ['a1','a3','a1','a3']
+    const xItems = readJson(files, `${SCRAPE}/x/mig-x-case-A/x-items.json`) as Array<{ id: string }>;
+    expect(xItems.map((i) => i.id)).toEqual(['a2']);
+
+    // Originals are removed on the successful run and the marker is now stamped.
+    expect(files.has(`${CASES}/case-A/socmint-items.json`)).toBe(false);
+    expect(files.has(`${SCRAPE}/.migrated-v3.27.0`)).toBe(true);
+  });
+
   it('is a no-op on the second run (marker guard)', async () => {
     const { deps, files } = makeHarness();
     seedCaseA(files);
@@ -191,8 +239,8 @@ describe('migrateScrapingData', () => {
 
     await migrateScrapingData(deps);
 
-    expect((readJson(files, `${SCRAPE}/x/id-1/case.json`) as { name: string }).name).toBe('case-C');
-    const xItems = readJson(files, `${SCRAPE}/x/id-1/x-items.json`) as Array<{ id: string }>;
+    expect((readJson(files, `${SCRAPE}/x/mig-x-case-C/case.json`) as { name: string }).name).toBe('case-C');
+    const xItems = readJson(files, `${SCRAPE}/x/mig-x-case-C/x-items.json`) as Array<{ id: string }>;
     expect(xItems.map((i) => i.id)).toEqual(['c1', 'c2']);
   });
 
