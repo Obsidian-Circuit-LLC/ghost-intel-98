@@ -1,0 +1,26 @@
+{
+  "data": {
+    "user": {
+      "result": {
+        "legacy": {
+          "screen_name": "someuser",
+          "name": "Some User",
+          "description": "Bio with a link https://t.co/abc123 in it.",
+          "entities": {
+            "description": {
+              "urls": [
+                {
+                  "url": "https://t.co/abc123",
+                  "expanded_url": "https://example.com/real-link"
+                }
+              ]
+            }
+          },
+          "followers_count": 1234,
+          "friends_count": 56,
+          "created_at": "Mon Jan 05 00:00:00 +0000 2015"
+        }
+      }
+    }
+  }
+}
