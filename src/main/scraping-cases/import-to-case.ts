@@ -4,7 +4,9 @@
  * A scraping case (namespace 'socmint' | 'x') is a self-contained collection-run store, kept
  * apart from the core investigation cases. This module copies a scraping case's harvested
  * items + saved artifacts INTO a target main case, reusing the EXISTING writers:
- *   - items  → the SOCMINT upsert-items writer bound to the main `caseDir` (dedup on item id);
+ *   - items  → the SOCMINT upsert-items writer bound to the SAME per-namespace items path the
+ *              main-case reader (window.api.{socmint,x}.listItems) consumes, keyed by the main
+ *              case id — scrapingCaseItemsFile(ns, mainCaseId), dedup on item id;
  *   - artifacts → the main case's note writer (one note per saved artifact).
  *
  * The scraping case is a SOURCE only. This import never mutates or removes it — the same run
@@ -25,7 +27,8 @@ import type { ScrapingImportResult } from './ipc';
 export interface ScrapingImporterDeps {
   /** List the scraping case's harvested items (source scraping store — read-only). */
   readItems(ns: ScrapingCaseNs, scrapingCaseId: string): Promise<HarvestedItem[]>;
-  /** Upsert items into the MAIN investigation case (existing SOCMINT writer, main caseDir). */
+  /** Upsert items into the MAIN case at the reader-aligned per-namespace items path
+   *  (existing SOCMINT writer bound to scrapingCaseItemsFile(ns, mainCaseId)). */
   upsertMainItems(mainCaseId: string, items: HarvestedItem[]): Promise<{ added: number; skipped: number }>;
   /** List the scraping case's saved artifacts (name + decrypted content). */
   readArtifacts(ns: ScrapingCaseNs, scrapingCaseId: string): Promise<Array<{ name: string; content: string }>>;
@@ -71,8 +74,7 @@ export async function prodImportScrapingCaseToMainCase(
   scrapingCaseId: string,
   mainCaseId: string,
 ): Promise<ScrapingImportResult> {
-  const [{ join }, { readdir }, paths, secureFs, socmintStore, jsonFs] = await Promise.all([
-    import('node:path'),
+  const [{ readdir }, paths, secureFs, socmintStore, jsonFs] = await Promise.all([
     import('node:fs/promises'),
     import('../storage/paths'),
     import('../storage/secure-fs'),
@@ -82,21 +84,26 @@ export async function prodImportScrapingCaseToMainCase(
 
   const { secureReadFile, secureReadText } = secureFs;
 
-  // Destination writer: the EXISTING SOCMINT item store, bound to the MAIN caseDir sidecar
-  // (the historical `<caseDir>/socmint-items.json` target, pre-migration).
+  // Destination writer: the SOCMINT item store bound to the SAME per-namespace items path the
+  // production reader consumes — scrapingCaseItemsFile(ns, mainCaseId), i.e. what
+  // window.api.{socmint,x}.listItems(mainCaseId) reads (socmint/store.ts prod listItems/listXItems).
+  // Writing here (not the orphaned caseDir sidecar, which no post-W4 reader opens) is what makes
+  // the imported items actually surface in the main case. Keyed by `ns` so an X import lands in
+  // the x store the X reader looks in, and a socmint import in the socmint store.
   const mainStore = socmintStore.makeSocmintStore({
     readFile: secureReadFile,
     writeFile: (p, d) => secureFs.secureWriteFile(p, d),
-    itemsPath: (id) => join(paths.caseDir(id), 'socmint-items.json'),
-    jobsPath: (id) => join(paths.caseDir(id), 'socmint-jobs.json'),
+    itemsPath: (id) => paths.scrapingCaseItemsFile(ns, id),
+    jobsPath: (id) => paths.scrapingCaseJobsFile(ns, id),
   });
 
-  // Source reader: the scraping-case item store for `ns` (`<ns>-items.json`).
+  // Source reader: the scraping-case item store for `ns` (`<ns>-items.json`) — same helper,
+  // keyed by the SOURCE scraping-case id.
   const srcStore = socmintStore.makeSocmintStore({
     readFile: secureReadFile,
     writeFile: (p, d) => secureFs.secureWriteFile(p, d),
-    itemsPath: (id) => join(paths.scrapingCaseDir(ns, id), `${ns}-items.json`),
-    jobsPath: (id) => join(paths.scrapingCaseDir(ns, id), `${ns}-jobs.json`),
+    itemsPath: (id) => paths.scrapingCaseItemsFile(ns, id),
+    jobsPath: (id) => paths.scrapingCaseJobsFile(ns, id),
   });
 
   const deps: ScrapingImporterDeps = {

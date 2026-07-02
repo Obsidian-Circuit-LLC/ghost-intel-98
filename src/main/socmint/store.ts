@@ -134,16 +134,15 @@ const _prod: Partial<Record<ScrapingCaseNs, ReturnType<typeof makeSocmintStore>>
 async function prod(ns: ScrapingCaseNs): Promise<ReturnType<typeof makeSocmintStore>> {
   const cached = _prod[ns];
   if (cached) return cached;
-  const [{ join }, { scrapingCaseDir }, { secureReadFile, secureWriteFile }] = await Promise.all([
-    import('node:path'),
+  const [{ scrapingCaseItemsFile, scrapingCaseJobsFile }, { secureReadFile, secureWriteFile }] = await Promise.all([
     import('../storage/paths'),
     import('../storage/secure-fs'),
   ]);
   const store = makeSocmintStore({
     readFile: secureReadFile,
     writeFile: (p, d) => secureWriteFile(p, d),
-    itemsPath: (id) => join(scrapingCaseDir(ns, id), `${ns}-items.json`),
-    jobsPath:  (id) => join(scrapingCaseDir(ns, id), `${ns}-jobs.json`),
+    itemsPath: (id) => scrapingCaseItemsFile(ns, id),
+    jobsPath:  (id) => scrapingCaseJobsFile(ns, id),
   });
   _prod[ns] = store;
   return store;
