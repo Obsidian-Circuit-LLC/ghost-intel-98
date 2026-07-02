@@ -27,7 +27,7 @@ import type {
   WebLink,
   Whiteboard
 } from '../shared/types';
-import type { EntityCreateInput, EntityLinkOpts, BioAddInput, AuthStatus, LocalAiStatus, LocalAiProgress, MemoryStatus, MemoryProgress, MemoryItem, RecallPreview, XCollectResultShape, LearningModelMeta } from '../shared/ipc-contracts';
+import type { EntityCreateInput, EntityLinkOpts, BioAddInput, AuthStatus, LocalAiStatus, LocalAiProgress, MemoryStatus, MemoryProgress, MemoryItem, RecallPreview, XCollectResultShape, LearningModelMeta, GhostScrapeConfig, GhostScrapeResult } from '../shared/ipc-contracts';
 import type {
   AiChatRequest,
   CameraStream,
@@ -627,6 +627,22 @@ export interface GhostApi {
     listItems(caseId: string): Promise<HarvestedItem[]>;
     /** Rank X-platform items for the given case by keyword relevance (loopback-only AI). */
     rankItems(caseId: string, keyword: string): Promise<HarvestedItem[]>;
+  };
+  /**
+   * GhostScrape — hidden-browser X timeline/profile scraper (clearnet quarantine module).
+   * Reuses the SAME two-flag gate (x.networkEnabled && x.clearnetAcknowledged) and shared
+   * x.accounts.<id>.{auth_token,ct0} session cookies as `x` above — no new settings
+   * namespace, no second cookie store. Account list comes from x.listAccounts(); save-to-case
+   * uses the existing files.* attachment API.
+   */
+  ghostscrape: {
+    /** Throws GhostScrapeGatedError when networkEnabled or clearnetAcknowledged is false. */
+    start(cfg: GhostScrapeConfig): Promise<{ jobId: string }>;
+    cancel(jobId: string): Promise<void>;
+    /** Returns an unsubscribe function, mirroring the onProgress pattern used elsewhere. */
+    onProgress(cb: (p: { jobId: string; captured: number; scrollsDone: number }) => void): () => void;
+    /** Returns an unsubscribe function. Exactly one of result/error is present per job. */
+    onDone(cb: (d: { jobId: string; result?: GhostScrapeResult; error?: string }) => void): () => void;
   };
 }
 

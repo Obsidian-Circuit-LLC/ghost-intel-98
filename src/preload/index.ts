@@ -5,7 +5,7 @@
 
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import { channels } from '../shared/ipc-contracts';
-import type { LocalAiStatus, LocalAiProgress, MemoryStatus, MemoryProgress, MemoryItem, RecallPreview } from '../shared/ipc-contracts';
+import type { LocalAiStatus, LocalAiProgress, MemoryStatus, MemoryProgress, MemoryItem, RecallPreview, GhostScrapeConfig, GhostScrapeResult } from '../shared/ipc-contracts';
 
 const api = {
   cases: {
@@ -539,6 +539,26 @@ const api = {
       ipcRenderer.invoke(channels.x.listItems, caseId),
     rankItems: (caseId: string, keyword: string) =>
       ipcRenderer.invoke(channels.x.rankItems, caseId, keyword)
+  },
+  // GhostScrape — hidden-browser X timeline/profile scraper (clearnet quarantine, GS-6).
+  // Reuses the SAME two-flag gate + shared x.accounts.<id> session cookies as the x
+  // namespace above — no new settings.ghostscrape namespace, no second cookie store.
+  // Account list uses window.api.x.listAccounts(); save-to-case uses window.api.files.*.
+  ghostscrape: {
+    start: (cfg: GhostScrapeConfig): Promise<{ jobId: string }> =>
+      ipcRenderer.invoke(channels.ghostscrape.start, cfg),
+    cancel: (jobId: string): Promise<void> =>
+      ipcRenderer.invoke(channels.ghostscrape.cancel, jobId),
+    onProgress: (cb: (p: { jobId: string; captured: number; scrollsDone: number }) => void): (() => void) => {
+      const listener = (_e: unknown, p: { jobId: string; captured: number; scrollsDone: number }): void => cb(p);
+      ipcRenderer.on(channels.ghostscrape.onProgress, listener);
+      return () => ipcRenderer.removeListener(channels.ghostscrape.onProgress, listener);
+    },
+    onDone: (cb: (d: { jobId: string; result?: GhostScrapeResult; error?: string }) => void): (() => void) => {
+      const listener = (_e: unknown, d: { jobId: string; result?: GhostScrapeResult; error?: string }): void => cb(d);
+      ipcRenderer.on(channels.ghostscrape.onDone, listener);
+      return () => ipcRenderer.removeListener(channels.ghostscrape.onDone, listener);
+    }
   }
 } as const;
 
