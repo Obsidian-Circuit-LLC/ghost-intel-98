@@ -16,7 +16,16 @@
 Var CleanPrevData
 Var CleanPrevDataCheckbox
 
+; customPageAfterChangeDir is expanded by electron-builder's assistedInstaller.nsh at
+; page-declaration scope (between the MUI_PAGE_* directives), so it may contain ONLY a
+; page directive — never raw instructions. The nsDialogs page body lives in the
+; cleanPrevDataPageShow Function below. This mirrors electron-builder's own multiUserUi.nsh
+; pattern (PageEx/Page custom + a page callback Function).
 !macro customPageAfterChangeDir
+  Page custom cleanPrevDataPageShow
+!macroend
+
+Function cleanPrevDataPageShow
   nsDialogs::Create 1018
   Pop $0
   ${If} $0 == error
@@ -32,7 +41,7 @@ Var CleanPrevDataCheckbox
   ${NSD_OnClick} $CleanPrevDataCheckbox onCleanPrevDataToggle
 
   nsDialogs::Show
-!macroend
+FunctionEnd
 
 Function onCleanPrevDataToggle
   ${NSD_GetState} $CleanPrevDataCheckbox $CleanPrevData
