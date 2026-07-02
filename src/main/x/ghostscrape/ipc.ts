@@ -128,6 +128,7 @@ export function createGhostScrapeHandlers(deps: GhostScrapeIpcDeps): {
       // Fire-and-forget: start() resolves with the jobId immediately; the job itself reports
       // via onProgress/onDone pushes so the renderer isn't left blocked on a long-running invoke.
       void runScrapeJob(
+        jobId,
         cfg,
         {
           getSecret: deps.getSecret,

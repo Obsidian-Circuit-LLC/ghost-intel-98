@@ -83,6 +83,7 @@ function delay(ms: number, signal: AbortSignal): Promise<void> {
  * The hidden window is ALWAYS destroyed (`finally`), even on error or cancel.
  */
 export async function runScrapeJob(
+  jobId: string,
   cfg: GhostScrapeConfig,
   deps: JobDeps,
   signal: AbortSignal,
@@ -97,7 +98,7 @@ export async function runScrapeJob(
   }
 
   const cookies = buildXCookies(authToken, ct0);
-  const win = await openScrapeWindow(cookies);
+  const win = await openScrapeWindow(jobId, cookies);
   const capture = attachGraphqlCapture(
     win.webContents,
     (url) => isTimelineGraphqlUrl(url) || isProfileGraphqlUrl(url),

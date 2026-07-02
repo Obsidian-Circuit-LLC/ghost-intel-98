@@ -17,8 +17,10 @@
  * Reuses the SAME shared X credential shape as X Intel
  * (`x.accounts.<accountId>.{auth_token,ct0}`, injected via register.ts) — no new
  * cookie store, no new settings namespace. Cookies built here are injected only
- * into the isolated `persist:ghostscrape` session partition (browser.ts, Task 4);
- * they are never logged and never sent to the renderer.
+ * into the job's own non-persistent `ghostscrape-<jobId>` session partition
+ * (browser.ts) — an in-memory jar discarded when the job window closes, so no
+ * job's credentials persist to disk or bleed into a sibling job; they are never
+ * logged and never sent to the renderer.
  */
 
 export interface XCookie {

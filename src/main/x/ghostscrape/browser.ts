@@ -15,18 +15,31 @@
  * HTTPS to x.com, using the operator's own session cookies and IP — the same
  * intrinsic egress as the X Intel collector. No Tor. No telemetry.
  *
- * The window runs on the isolated `persist:ghostscrape` session partition
- * (never the main window's session) so injected cookies never leak into, or
- * out of, any other part of the app; the partition's permission handlers deny
- * every request/check (mirrors the `persist:netexplorer` lockdown in
- * src/main/index.ts), `sandbox`+`contextIsolation` are on, `nodeIntegration`
- * is off, and `webviewTag` is disabled.
+ * The window runs on a UNIQUE, NON-persistent per-job session partition
+ * (`ghostscrape-<jobId>` — no `persist:` prefix, so Electron keeps it purely
+ * in-memory and GCs it when the job's window closes) rather than a shared
+ * on-disk jar. This isolates every job's injected cookies into their own jar:
+ * concurrent jobs can never race on, leak into, or read each other's
+ * credentials (never the main window's session either). The partition's
+ * permission handlers deny every request/check (mirrors the
+ * `persist:netexplorer` lockdown in src/main/index.ts), `sandbox`+
+ * `contextIsolation` are on, `nodeIntegration` is off, and `webviewTag` is
+ * disabled.
  */
 
 import { BrowserWindow, session } from 'electron';
 import type { XCookie } from './cookies';
 
-const GHOSTSCRAPE_PARTITION = 'persist:ghostscrape';
+/**
+ * Derive the per-job session-partition name. NON-persistent by construction —
+ * the absence of a `persist:` prefix makes Electron treat it as an in-memory
+ * partition that is discarded when its last window closes, so a job's cookie
+ * jar never survives onto disk or into a sibling job. Pure + deterministic so
+ * it can be unit-tested without Electron.
+ */
+export function partitionForJob(jobId: string): string {
+  return `ghostscrape-${jobId}`;
+}
 
 export interface ScrapeWindow {
   navigate(url: string): Promise<void>;
@@ -45,12 +58,14 @@ function lockDownGhostScrapeSession(ses: Electron.Session): void {
 }
 
 /**
- * Opens the hidden scrape `BrowserWindow` on the isolated `persist:ghostscrape`
- * partition, injects the supplied X session cookies into that partition, and
- * returns a thin navigation/scroll handle. The window is never shown.
+ * Opens the hidden scrape `BrowserWindow` on this job's UNIQUE, non-persistent
+ * `ghostscrape-<jobId>` partition, injects the supplied X session cookies into
+ * that job-private jar, and returns a thin navigation/scroll handle. The window
+ * is never shown; when it closes the in-memory partition (and its cookies) is
+ * discarded.
  */
-export async function openScrapeWindow(cookies: XCookie[]): Promise<ScrapeWindow> {
-  const ses = session.fromPartition(GHOSTSCRAPE_PARTITION);
+export async function openScrapeWindow(jobId: string, cookies: XCookie[]): Promise<ScrapeWindow> {
+  const ses = session.fromPartition(partitionForJob(jobId));
   lockDownGhostScrapeSession(ses);
 
   for (const cookie of cookies) {
