@@ -71,6 +71,7 @@ export interface SearchlightState {
   removeGraphNode(caseId: string, nodeId: string): void;
   addGraphEdge(caseId: string, edge: GraphEdge): void;
   removeGraphEdge(caseId: string, edgeId: string): void;
+  clearGraph(caseId: string): void;
 
   // Whiteboard (stubs — implemented in Task 11)
   addWhiteboardFile(caseId: string, file: WhiteboardFile): void;
@@ -294,11 +295,18 @@ export const useSearchlightStore = create<SearchlightState>((set, get) => ({
 
   addGraphEdge: (caseId, edge) => {
     set((s) => ({
-      cases: mutateCaseAndSave(s.cases, caseId, (c) => ({
-        ...c,
-        graphEdges: [...c.graphEdges, edge],
-        updatedAt: Date.now(),
-      })),
+      cases: mutateCaseAndSave(s.cases, caseId, (c) => {
+        // Defense in depth: refuse an edge whose source or target node isn't present. A stale
+        // endpoint (e.g. a node removed mid-connect, or a connect started before a graph wipe)
+        // would otherwise create a dangling edge that renders nowhere and corrupts the graph.
+        if (
+          !c.graphNodes.some((n) => n.id === edge.source) ||
+          !c.graphNodes.some((n) => n.id === edge.target)
+        ) {
+          return c;
+        }
+        return { ...c, graphEdges: [...c.graphEdges, edge], updatedAt: Date.now() };
+      }),
     }));
   },
 
@@ -307,6 +315,17 @@ export const useSearchlightStore = create<SearchlightState>((set, get) => ({
       cases: mutateCaseAndSave(s.cases, caseId, (c) => ({
         ...c,
         graphEdges: c.graphEdges.filter((e) => e.id !== edgeId),
+        updatedAt: Date.now(),
+      })),
+    }));
+  },
+
+  clearGraph: (caseId) => {
+    set((s) => ({
+      cases: mutateCaseAndSave(s.cases, caseId, (c) => ({
+        ...c,
+        graphNodes: [],
+        graphEdges: [],
         updatedAt: Date.now(),
       })),
     }));
