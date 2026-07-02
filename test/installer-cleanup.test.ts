@@ -113,6 +113,21 @@ describe('installer cleanup: installer.nsh macros', () => {
   });
 });
 
+describe('installer cleanup: uninstaller-pass guard', () => {
+  it('guards installer-only page code behind !ifndef BUILD_UNINSTALLER', () => {
+    // electron-builder compiles this file for the uninstaller too, where customPageAfterChangeDir
+    // is not inserted; the page functions must be guarded out there or they orphan and fail -WX.
+    expect(nsh).toMatch(/!ifndef\s+BUILD_UNINSTALLER/);
+    const start = nsh.indexOf('!ifndef BUILD_UNINSTALLER');
+    const end = nsh.indexOf('!endif', start);
+    expect(end).toBeGreaterThan(start);
+    const guarded = nsh.slice(start, end);
+    expect(guarded).toContain('Function cleanPrevDataPageShow');
+    expect(guarded).toContain('Function cleanPrevDataPageLeave');
+    expect(guarded).toContain('!macro customInstall');
+  });
+});
+
 describe('installer cleanup: makensis compile gate', () => {
   const makensisAvailable = hasMakensis();
 
@@ -120,18 +135,22 @@ describe('installer cleanup: makensis compile gate', () => {
   // through electron-builder's hook points — the static greps above cannot catch a
   // non-compilable page structure. On boxes without NSIS this is skipped; the structural
   // `Page custom` assertion in the block above still guards the requirement.
-  it.runIf(makensisAvailable)('installer.nsh compiles via the electron-builder hook points', () => {
+  it.runIf(makensisAvailable)('compiles clean (warnings=errors) in BOTH the installer AND uninstaller passes', () => {
     const dir = mkdtempSync(join(tmpdir(), 'nsh-compile-'));
-    // Faithfully reproduce electron-builder's REAL concatenation order: the custom include lands
-    // in the header BEFORE the installer template pulls in MUI2 (which is what provides
-    // LogicLib/nsDialogs). If installer.nsh's top-level Functions did not self-include those
-    // headers, this order would fail to compile — which is exactly the shipped-build break a
-    // MUI-first harness would mask. Then exercise both hook points at electron-builder's scopes.
-    const harness = [
-      `!include "${nshPath.replace(/\\/g, '\\\\')}"`,
+    const inc = nshPath.replace(/\\/g, '\\\\');
+    // electron-builder compiles the script TWICE and runs makensis with warnings-as-errors.
+    // Reproduce BOTH passes with -WX. The custom include lands in the header BEFORE MUI2 (real
+    // concatenation order). The UNINSTALLER pass (BUILD_UNINSTALLER defined) does NOT insert
+    // customPageAfterChangeDir — so installer.nsh MUST guard its page functions behind
+    // !ifndef BUILD_UNINSTALLER, or they orphan → NSIS warning 6010 → -WX failure (the exact
+    // break that shipped a non-building installer when only the installer pass was tested).
+
+    // 1) INSTALLER pass — custom page inserted at the hook, functions referenced.
+    const installer = [
+      `!include "${inc}"`,
       '!include "MUI2.nsh"',
-      'Name "nsh-compile-harness"',
-      `OutFile "${join(dir, 'harness.exe').replace(/\\/g, '\\\\')}"`,
+      'Name "h-inst"',
+      `OutFile "${join(dir, 'inst.exe').replace(/\\/g, '\\\\')}"`,
       '!insertmacro MUI_PAGE_DIRECTORY',
       '!insertmacro customPageAfterChangeDir',
       '!insertmacro MUI_PAGE_INSTFILES',
@@ -141,10 +160,26 @@ describe('installer cleanup: makensis compile gate', () => {
       'SectionEnd',
       ''
     ].join('\n');
-    const harnessPath = join(dir, 'harness.nsi');
-    writeFileSync(harnessPath, harness, 'utf8');
-    // Throws (failing the test) on non-zero makensis exit.
-    execFileSync('makensis', ['-V2', harnessPath], { stdio: 'pipe' });
+    const instPath = join(dir, 'inst.nsi');
+    writeFileSync(instPath, installer, 'utf8');
+    execFileSync('makensis', ['-WX', '-V2', instPath], { stdio: 'pipe' });
+
+    // 2) UNINSTALLER pass — BUILD_UNINSTALLER defined, customPageAfterChangeDir NOT inserted.
+    const uninstaller = [
+      '!define BUILD_UNINSTALLER',
+      `!include "${inc}"`,
+      '!include "MUI2.nsh"',
+      'Name "h-uninst"',
+      `OutFile "${join(dir, 'uninst.exe').replace(/\\/g, '\\\\')}"`,
+      '!insertmacro MUI_PAGE_INSTFILES',
+      '!insertmacro MUI_LANGUAGE "English"',
+      'Section "Install"',
+      'SectionEnd',
+      ''
+    ].join('\n');
+    const uninstPath = join(dir, 'uninst.nsi');
+    writeFileSync(uninstPath, uninstaller, 'utf8');
+    execFileSync('makensis', ['-WX', '-V2', uninstPath], { stdio: 'pipe' });
   });
 
   it.skipIf(makensisAvailable)('structural gate stands in when makensis is unavailable', () => {

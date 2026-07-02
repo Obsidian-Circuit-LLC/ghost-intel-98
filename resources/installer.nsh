@@ -21,6 +21,13 @@
 !include LogicLib.nsh
 !include nsDialogs.nsh
 
+; electron-builder compiles this file TWICE — once for the installer and once (with BUILD_UNINSTALLER
+; defined) for the uninstaller. The custom page + cleanup are installer-only; the uninstaller pass does
+; NOT insert customPageAfterChangeDir (assistedInstaller.nsh guards it behind !ifndef BUILD_UNINSTALLER),
+; so leaving these page Functions defined there orphans them → NSIS warning 6010 → (warnings are errors)
+; → the whole build fails. Guard everything installer-specific so the uninstaller pass sees none of it.
+!ifndef BUILD_UNINSTALLER
+
 Var CleanPrevData
 Var CleanPrevDataCheckbox
 
@@ -80,3 +87,5 @@ FunctionEnd
     ${EndIf}
   ${EndIf}
 !macroend
+
+!endif ; !BUILD_UNINSTALLER
