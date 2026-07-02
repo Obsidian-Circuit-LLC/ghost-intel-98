@@ -11,7 +11,7 @@ import { playClick } from '../audio/synth';
 
 // Left-column desktop icons (auto-flow grid). Shred is intentionally NOT here — it's pinned to
 // the bottom-right corner like the classic Windows Recycle Bin (cornerShortcuts below).
-const desktopShortcutDefaults: { module: ModuleKey; label: string }[] = [
+export const desktopShortcutDefaults: { module: ModuleKey; label: string }[] = [
   { module: 'cases', label: 'My Cases' },
   { module: 'notepad', label: 'Notepad 98' },
   { module: 'briefcase', label: 'Briefcase' },
@@ -19,8 +19,8 @@ const desktopShortcutDefaults: { module: ModuleKey; label: string }[] = [
   { module: 'calendar', label: 'Calendar' },
   { module: 'reminders', label: 'Reminders' },
   { module: 'chat', label: 'Chat (beta)' },
-  { module: 'searchlight', label: 'Searchlight' },
-  { module: 'socmint', label: 'SOCMINT' },
+  // Individual OSINT tools (Searchlight, SOCMINT, …) are reached through the OSINT Toolkit
+  // flyout/launcher, not as their own desktop icons — the Toolkit is the single OSINT entry point.
   { module: 'osint-toolkit', label: 'OSINT Toolkit' }
 ];
 
