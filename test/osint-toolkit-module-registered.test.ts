@@ -36,4 +36,20 @@ describe('OSINT Toolkit module registration', () => {
     const allKeys = groups.flatMap((g) => g.tools.map((t) => t.key));
     expect(allKeys).not.toContain('osint-toolkit');
   });
+
+  it('every expected OSINT tool is tagged and reachable via the toolkit (none hidden)', () => {
+    const reachable = new Set(
+      buildOsintDirectory(listModules()).flatMap((g) => g.tools.map((t) => t.key))
+    );
+    // The full OSINT surface the toolkit must expose — a tool that exists but is untagged would
+    // be unreachable from the launcher (the exact "hidden feature" class the pre-ship QA targets).
+    for (const key of [
+      'x', 'ghostscrape', 'socmint',        // Social Media
+      'geoint', 'eyespy', 'camera-view',    // Geospatial
+      'searchlight',                        // Identity
+      'host-info', 'net-explorer', 'news-view' // Network / Recon
+    ]) {
+      expect(reachable.has(key), `OSINT tool "${key}" is not reachable via the toolkit`).toBe(true);
+    }
+  });
 });
