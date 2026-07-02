@@ -35,13 +35,15 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`GhostIntel98-Setup-3.25.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
+> **Install:** download [`GhostIntel98-Setup-3.26.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
 
 > **📘 User guides** — plain-language, step-by-step (download or read in-browser):
 > - [**SOCMINT: X, Telegram & WhatsApp**](docs/guides/SOCMINT-Tutorial.pdf) — set up and run the social-media collectors, per platform, with the Tor / clearnet and opsec caveats. ([markdown](docs/guides/socmint-tutorial.md))
 > - [**How Searchlight Learns**](docs/guides/Searchlight-Learning-Guide.pdf) — how the username-sweep detector gets smarter from your own labels, and when to turn ML on. ([markdown](docs/guides/searchlight-learning.md))
 
 ## Status
+
+**v3.26.0** — **Four features: adaptive AI memory, GhostScrape (native X timeline scraper), an OSINT Toolkit launcher, and free text-selection in the AI assistant.** **(1) Adaptive Memory** — the assistant's local memory now goes **live** (auto-reindex on save, no more manual snapshot), learns a **local, encrypted, self-updating** profile, and adds a **Memory panel** to inspect / edit / pin / **erase** everything it has learned (including the rolling summary). Off by default; loopback-Ollama only; nothing learned is silent or un-erasable. **(2) GhostScrape** — a new module that scrapes an X user's timeline (tweets / retweets / bio, date-filtered) by driving a **hidden, cookie-authenticated Electron browser** and capturing X's GraphQL; it reuses your X Intel session + the same clearnet gate, stays inside the X clearnet quarantine (no Tor/Telegram link, no new egress), exports JSON/TXT/CSV, and saves to a case (adapted from ZenScraper by 0Day3xpl0it, MIT — reimplemented on native Electron primitives). **(3) OSINT Toolkit** — a folder-style launcher grouping the OSINT tools by category (Social Media / Geospatial / Identity / Network-Recon) into one discoverable home; desktop icon + Access-menu entry. **(4) AI assistant** — click-drag to highlight and copy any part of a message (the right-click Copy menu is unchanged). Built subagent-driven, each feature on its own branch with a parallel adversarial whole-branch review that caught and fixed a charter-level memory-privacy critical + correctness bugs before merge. Pre-ship **reachability audit** + **packaged-artifact integrity check** (all four confirmed present in the shipped `app.asar`); the runtime pass ships as a **[Windows smoke checklist](docs/guides/v3.26.0-windows-smoke-checklist.md)** for now (automated Windows-VM smoke is next cycle). **2,409 automated tests** green; typecheck + build clean. *Everything from v3.25.0 carries forward.*
 
 **v3.25.0** — **Searchlight sweeps survive tab switches; SOCMINT gets a case picker, a visible reason when it's blocked, and an X launcher.** Four casework-blocking papercuts from the field, fixed. **(1) Searchlight sweeps used to vanish** if you left the Sweep tab mid-run or to glance at the Graph — the panel unmounted, and with it the local pointer to which job was on screen, so you'd come back to "No sweep yet" even though the results were still sitting in the case. The selected job is now tracked in the store itself (survives unmount) and a mount-independent stream manager keeps writing results into it whether or not the panel is on screen, so a sweep keeps collecting while you're on another tab and is exactly where you left it when you come back. **(2) SOCMINT's Start Monitor** used to sit disabled with no on-screen explanation — the only "why" was a hover tooltip, which isn't a fix for a busy investigator. It now names the next concrete step in plain language (pick a case, add a channel, enter a burner) directly under the button. **(3) SOCMINT case selection** was a free-text Case ID field — easy to typo, easy to point at a case that doesn't exist. It's now a dropdown of your real, existing cases. **(4) An "X / Twitter ↗" launcher** inside SOCMINT opens the existing X collector window — X stays a quarantined clearnet trust domain in its own window (no embed, no link to the Tor/Telegram transports); SOCMINT itself doesn't gain any new egress. **2,249 automated tests** green; typecheck + build clean. *Everything from v3.24.2 carries forward.*
 
@@ -468,7 +470,7 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases) and run it.
 
-Direct link to the current release: [`GhostIntel98-Setup-3.25.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.25.0/GhostIntel98-Setup-3.25.0.exe)
+Direct link to the current release: [`GhostIntel98-Setup-3.26.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.26.0/GhostIntel98-Setup-3.26.0.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is **formally verified internally** — symbolic (ProVerif) +
 computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not**
 FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.6.8/GhostIntel98-Setup-3.6.8.exe).
@@ -476,7 +478,7 @@ FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Se
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\GhostIntel98-Setup-3.25.0.exe -Algorithm SHA256
+Get-FileHash .\GhostIntel98-Setup-3.26.0.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
