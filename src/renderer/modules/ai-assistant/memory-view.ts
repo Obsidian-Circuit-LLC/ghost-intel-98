@@ -15,7 +15,7 @@ const MEMORY_TEXT_MAX = 80;
 
 /** Human label for a scope: 'global'→'General', `case:${id}`→`Case ${id}`, `subject:${h}`→`@${h}`;
  *  anything else falls back to the raw scope string so new scope kinds never throw. */
-function labelForScope(scope: string): string {
+export function labelForScope(scope: string): string {
   if (scope === 'global') return 'General';
   if (scope.startsWith('case:')) return `Case ${scope.slice('case:'.length)}`;
   if (scope.startsWith('subject:')) return `@${scope.slice('subject:'.length)}`;
@@ -66,11 +66,14 @@ function truncateMemoryText(text: string, max: number = MEMORY_TEXT_MAX): string
 
 /**
  * Human-readable labels describing what was recalled for the last answer — one line per rag hit
- * ('Case "<title>" › <kind>:<ref>') followed by one line per profile item ('Memory: <truncated
- * text>'), in the order supplied. Returns `[]` when nothing was recalled.
+ * ('Case "<title>" › <kind>:<ref>'), then one line per profile item ('Memory: <truncated text>'),
+ * then a single trailing line for the injected rolling summary ('Summary: <truncated>') when one
+ * was folded into the profile block. Disclosing the summary here is what keeps the injected,
+ * durable prior-conversation prose from being silent. Returns `[]` when nothing was recalled.
  */
-export function formatRecallProvenance(rag: RecallHitShape[], profile: MemoryItem[]): string[] {
+export function formatRecallProvenance(rag: RecallHitShape[], profile: MemoryItem[], summary = ''): string[] {
   const ragLabels = rag.map((h) => `Case “${h.caseTitle}” › ${h.kind}:${h.ref}`);
   const profileLabels = profile.map((item) => `Memory: ${truncateMemoryText(item.text)}`);
-  return [...ragLabels, ...profileLabels];
+  const summaryLabel = summary.trim() ? [`Summary: ${truncateMemoryText(summary)}`] : [];
+  return [...ragLabels, ...profileLabels, ...summaryLabel];
 }

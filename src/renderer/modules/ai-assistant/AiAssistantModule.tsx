@@ -23,7 +23,7 @@ import { createVoskRecognizer } from '../../voice/recognizer';
 import { VoiceConversation, type VoiceMode, type VoiceState } from '../../voice/conversation';
 import { MarkdownView } from './MarkdownView';
 import { stripMarkdown } from './markdown';
-import { groupItemsByScope, formatRecallProvenance } from './memory-view';
+import { groupItemsByScope, formatRecallProvenance, labelForScope } from './memory-view';
 
 interface DisplayMessage extends AiChatMessage {
   id: string;
@@ -137,6 +137,7 @@ export function AiAssistantModule(): JSX.Element {
   const [memoryPanelOpen, setMemoryPanelOpen] = useState(false);
   const [lastRecall, setLastRecall] = useState<RecallPreview | null>(null);
   const [profileItems, setProfileItems] = useState<MemoryItem[]>([]);
+  const [profileSummaries, setProfileSummaries] = useState<Record<string, string>>({});
   const [profileLoading, setProfileLoading] = useState(false);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState('');
@@ -145,8 +146,10 @@ export function AiAssistantModule(): JSX.Element {
 
   const refreshProfile = useCallback(() => {
     setProfileLoading(true);
-    void window.api.memory.profileList()
-      .then(setProfileItems)
+    // The rolling per-scope summary is durable, injected learned content too, so it must be
+    // browsable/erasable here alongside the discrete items — not left as a silent invisible profile.
+    void Promise.all([window.api.memory.profileList(), window.api.memory.profileSummaries()])
+      .then(([items, summaries]) => { setProfileItems(items); setProfileSummaries(summaries); })
       .catch(() => {})
       .finally(() => setProfileLoading(false));
   }, []);
@@ -538,8 +541,17 @@ export function AiAssistantModule(): JSX.Element {
     }
   }
 
-  const recallLabels = lastRecall ? formatRecallProvenance(lastRecall.rag, lastRecall.profile) : [];
+  const recallLabels = lastRecall ? formatRecallProvenance(lastRecall.rag, lastRecall.profile, lastRecall.profileSummary) : [];
   const profileGroups = groupItemsByScope(profileItems);
+  // Scopes that carry a non-empty rolling summary (may or may not also have discrete items).
+  const summaryScopes = Object.entries(profileSummaries)
+    .filter(([, text]) => text.trim())
+    .map(([scope, text]) => ({ scope, text }));
+  const hasLearned = profileItems.length > 0 || summaryScopes.length > 0;
+  const groupSummary = (scope: string): string => profileSummaries[scope]?.trim() ?? '';
+  // Scopes that have ONLY a summary (no discrete items) get their own group so they are still
+  // inspectable + erasable — otherwise a summary-only scope would be invisible in the browser.
+  const summaryOnlyScopes = summaryScopes.filter(({ scope }) => !profileGroups.some((g) => g.scope === scope));
 
   return (
     <div style={{ display: 'flex', height: '100%' }}>
@@ -773,14 +785,14 @@ export function AiAssistantModule(): JSX.Element {
                 <button
                   style={{ fontSize: 10 }}
                   onClick={() => void wipeMemory(undefined, 'everything the assistant has learned, across every case')}
-                  disabled={profileItems.length === 0}
-                  title="Erase every learned item, in every scope"
+                  disabled={!hasLearned}
+                  title="Erase every learned item and rolling summary, in every scope"
                 >
                   Wipe all
                 </button>
               </span>
             </div>
-            {profileGroups.length === 0 && (
+            {!hasLearned && (
               <div style={{ fontSize: 11, color: '#666' }}>
                 Nothing learned yet. Turn on &ldquo;adaptive memory&rdquo; in Settings to let the
                 assistant start building an inspectable long-term profile.
@@ -794,6 +806,11 @@ export function AiAssistantModule(): JSX.Element {
                     Wipe
                   </button>
                 </div>
+                {groupSummary(g.scope) && (
+                  <div style={{ fontSize: 11, fontStyle: 'italic', color: '#333', background: '#f4f0ff', border: '1px solid #ddd', padding: '3px 4px', margin: '2px 0', whiteSpace: 'pre-wrap' }} title="Rolling summary of prior conversations, injected into chats for this scope">
+                    Summary: {groupSummary(g.scope)}
+                  </div>
+                )}
                 <ul style={{ margin: '2px 0', paddingLeft: 0, listStyle: 'none' }}>
                   {g.items.map((item) => (
                     <li key={item.id} style={{ fontSize: 11, borderBottom: '1px solid #eee', padding: '3px 0' }}>
@@ -821,6 +838,22 @@ export function AiAssistantModule(): JSX.Element {
                 </ul>
               </div>
             ))}
+            {summaryOnlyScopes.map(({ scope, text }) => {
+              const label = labelForScope(scope);
+              return (
+                <div key={`summary:${scope}`} style={{ marginBottom: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: 11, fontWeight: 'bold', color: '#400080' }}>{label}</span>
+                    <button style={{ fontSize: 10 }} onClick={() => void wipeMemory(scope, `everything learned under "${label}"`)} title={`Erase everything learned under ${label}`}>
+                      Wipe
+                    </button>
+                  </div>
+                  <div style={{ fontSize: 11, fontStyle: 'italic', color: '#333', background: '#f4f0ff', border: '1px solid #ddd', padding: '3px 4px', margin: '2px 0', whiteSpace: 'pre-wrap' }} title="Rolling summary of prior conversations, injected into chats for this scope">
+                    Summary: {text}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

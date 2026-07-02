@@ -8,6 +8,8 @@ vi.mock('electron', () => ({ app: { getPath: () => '/tmp/ga98-memory-profile-fac
 import {
   recallProfile,
   learnFromConversation,
+  profileSummaries,
+  profileWipe,
   __setProfileFacadeDepsForTest,
   __resetProfileFacadeForTest
 } from '../src/main/services/memory/profile/index';
@@ -193,6 +195,58 @@ describe('learnFromConversation', () => {
     const { summary } = await recallProfile('anything', ['global']);
     expect(summary).toContain('Prior summary.');
     expect(summary).toContain('New distilled fact.');
+  });
+});
+
+describe('summary governance (inspect + erase)', () => {
+  it('profileSummaries exposes the per-scope rolling summaries for inspection', async () => {
+    __setProfileFacadeDepsForTest({
+      store: createProfileStore(makeFakeStoreIO()),
+      summaryIo: makeFakeSummaryIO({ global: 'A general summary.', 'case:c1': 'A case summary.' }),
+      now: () => 1000,
+      newId: idFactory()
+    });
+
+    expect(await profileSummaries()).toEqual({ global: 'A general summary.', 'case:c1': 'A case summary.' });
+  });
+
+  it('profileSummaries returns {} when no summary file exists', async () => {
+    __setProfileFacadeDepsForTest({
+      store: createProfileStore(makeFakeStoreIO()),
+      summaryIo: makeFakeSummaryIO(),
+      now: () => 1000,
+      newId: idFactory()
+    });
+
+    expect(await profileSummaries()).toEqual({});
+  });
+
+  it('scoped profileWipe erases that scope summary AND its items but leaves other scopes intact', async () => {
+    const store = createProfileStore(makeFakeStoreIO([item({ id: 'a', scope: 'global' }), item({ id: 'b', scope: 'case:c1' })]));
+    const summaryIo = makeFakeSummaryIO({ global: 'General summary.', 'case:c1': 'Case summary.' });
+    __setProfileFacadeDepsForTest({ store, summaryIo, now: () => 1000, newId: idFactory() });
+
+    await profileWipe('case:c1');
+
+    expect(await profileSummaries()).toEqual({ global: 'General summary.' });
+    expect((await store.all()).map((i) => i.id)).toEqual(['a']);
+    // The surviving summary must still be injected on recall.
+    const { summary } = await recallProfile('anything', ['global']);
+    expect(summary).toContain('General summary.');
+  });
+
+  it('wipe-all (no scope) erases every summary as well as every item — nothing learned survives', async () => {
+    const store = createProfileStore(makeFakeStoreIO([item({ id: 'a', scope: 'global' })]));
+    const summaryIo = makeFakeSummaryIO({ global: 'General summary.', 'case:c1': 'Case summary.' });
+    __setProfileFacadeDepsForTest({ store, summaryIo, now: () => 1000, newId: idFactory() });
+
+    await profileWipe();
+
+    expect(await profileSummaries()).toEqual({});
+    expect(await store.all()).toEqual([]);
+    const { summary, block } = await recallProfile('anything', ['global', 'case:c1']);
+    expect(summary).toBe('');
+    expect(block).toBe('');
   });
 });
 

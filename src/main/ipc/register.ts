@@ -46,7 +46,7 @@ import * as walls from '../services/walls';
 import * as sounds from '../services/sounds';
 import * as ai from '../services/ai';
 import { liveReindex } from '../services/memory/live-reindex.singleton';
-import { learnFromConversation, profileList, profileUpsert, profileDelete, profileWipe } from '../services/memory/profile';
+import { learnFromConversation, profileList, profileSummaries, profileUpsert, profileDelete, profileWipe } from '../services/memory/profile';
 import type { MemoryItem } from '@shared/ipc-contracts';
 import * as localAi from '../services/local-ai';
 import * as chat from '../services/chat';
@@ -1327,6 +1327,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   // safeHandle's normal error path surface any failure to the renderer.
   safeHandle(channels.memory.profileList, (...args) =>
     profileList(typeof args[0] === 'string' ? args[0] : undefined));
+  safeHandle(channels.memory.profileSummaries, () => profileSummaries());
   safeHandle(channels.memory.profileUpsert, (...args) => {
     const raw = args[0] as Partial<MemoryItem> | undefined;
     if (!raw || typeof raw.id !== 'string' || typeof raw.scope !== 'string' || typeof raw.text !== 'string' || typeof raw.pinned !== 'boolean') {

@@ -401,6 +401,7 @@ const api = {
       return () => ipcRenderer.removeListener(channels.memory.onProgress, listener);
     },
     profileList: (scope?: string): Promise<MemoryItem[]> => ipcRenderer.invoke(channels.memory.profileList, scope),
+    profileSummaries: (): Promise<Record<string, string>> => ipcRenderer.invoke(channels.memory.profileSummaries),
     profileUpsert: (item: Pick<MemoryItem, 'id' | 'scope' | 'text' | 'pinned'>): Promise<MemoryItem[]> =>
       ipcRenderer.invoke(channels.memory.profileUpsert, item),
     profileDelete: (ids: string[]): Promise<void> => ipcRenderer.invoke(channels.memory.profileDelete, ids),
