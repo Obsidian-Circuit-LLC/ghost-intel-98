@@ -42,6 +42,53 @@ export class GhostScrapeNoCredsError extends Error {
 }
 
 /**
+ * Thrown when a job completes with nothing captured because the CDP capture never actually
+ * observed the timeline — the debugger never attached / `Network.enable` was rejected, or the
+ * session delivered no responses at all. This is DISTINCT from a genuinely empty timeline
+ * (capture attached, page loaded, the account simply has zero matching tweets), which is a
+ * normal empty-success and never throws. The raw message stays main-process-only (see below).
+ */
+export class GhostScrapeCaptureFailedError extends Error {
+  constructor() {
+    super(
+      'GhostScrape: CDP capture never attached or delivered no responses — the timeline was ' +
+      'never observed (the X session may be invalid, or the debugger failed to attach).',
+    );
+    this.name = 'GhostScrapeCaptureFailedError';
+  }
+}
+
+/** Capture liveness signals read off a Capture (see capture.ts). */
+export interface CaptureSignals {
+  attached: boolean;
+  /** True once a MATCHED GraphQL response landed (UserByScreenName/UserTweets/…) — the honest
+   *  live-session signal. An expired session lands on the logged-out shell, which serves assets
+   *  but no GraphQL, so this stays false and the job is correctly flagged a capture failure. */
+  sawMatchedResponse: boolean;
+}
+
+/**
+ * Decide whether a `captured:0` outcome is a genuinely empty timeline or a capture FAILURE
+ * that must be surfaced. Pure (no I/O) so the job completion branch is unit-testable without
+ * a live browser.
+ *
+ * A cancelled (`partial`) job is never a failure — cancellation is a normal, reportable
+ * outcome. Any captured result (`hadAnyResult`) proves the capture worked. Otherwise, if the
+ * session never confirmed attach OR never delivered a single MATCHED GraphQL response, we never
+ * actually observed the timeline (an expired session yields the logged-out shell — assets, no
+ * GraphQL): report it honestly rather than as a silent empty success.
+ */
+export function isCaptureFailure(
+  signals: CaptureSignals,
+  hadAnyResult: boolean,
+  partial: boolean,
+): boolean {
+  if (partial) return false;
+  if (hadAnyResult) return false;
+  return !signals.attached || !signals.sawMatchedResponse;
+}
+
+/**
  * Map any job error to a FIXED, safe, actionable sentence for the renderer. Never returns the
  * raw message — see the SECURITY note above. Unknown errors collapse to a generic sentence; the
  * caller logs the raw error to the main-process console for debugging.
@@ -52,6 +99,9 @@ export function safeJobErrorMessage(err: unknown): string {
   }
   if (err instanceof GhostScrapeNoCredsError) {
     return 'No stored X session for the selected account — add its cookies in X Intel first.';
+  }
+  if (err instanceof GhostScrapeCaptureFailedError) {
+    return "Couldn't capture the timeline — the X session may be invalid. Re-add its cookies in X Intel.";
   }
   return 'Scrape failed. Check the app log for details.';
 }

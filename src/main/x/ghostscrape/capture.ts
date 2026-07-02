@@ -23,6 +23,26 @@
 
 export interface Capture {
   readonly raw: unknown[];
+  /**
+   * True once the CDP debugger session is confirmed live — i.e. `Network.enable` resolved.
+   * When this stays false the debugger never attached (or the command was rejected), so no
+   * response could ever have been observed: a `captured:0` outcome is then a capture FAILURE,
+   * NOT a genuinely empty timeline. The job path branches on this to surface an honest error.
+   */
+  readonly attached: boolean;
+  /**
+   * True once at least one `Network.responseReceived` for a MATCHED GraphQL URL was delivered
+   * (i.e. a response the `match` predicate accepted — `UserByScreenName`/`UserTweets`/…), NOT on
+   * every response. This is the honest live-session signal: `UserByScreenName` always fires on a
+   * valid profile navigation, whereas an EXPIRED/invalid session is redirected to the logged-out
+   * login SPA shell, which serves assets but no GraphQL — so it produces no matched response.
+   * Keying on ANY response would misclassify that expired-session shell as a genuine-empty success.
+   *
+   * Residual limitation: a matched URL that returns a GraphQL *error* body (200/401) would still
+   * flip this flag. Accepted — this addresses the dominant expired-session case (no matched
+   * response at all), and the parse layer already tolerates error/empty bodies.
+   */
+  readonly sawMatchedResponse: boolean;
   detach(): void;
 }
 
@@ -41,6 +61,8 @@ export function attachGraphqlCapture(
 ): Capture {
   const raw: unknown[] = [];
   const pendingRequestIds = new Set<string>();
+  let attached = false;
+  let sawMatchedResponse = false;
 
   const onMessage = (
     _event: Electron.Event,
@@ -52,6 +74,10 @@ export function attachGraphqlCapture(
       const requestId = typeof p.requestId === 'string' ? p.requestId : undefined;
       const url = typeof p.response?.url === 'string' ? p.response.url : undefined;
       if (requestId && url && match(url)) {
+        // Only a MATCHED GraphQL response proves a live session (see interface docstring). An
+        // expired session redirected to the logged-out shell serves assets but no GraphQL, so it
+        // never reaches here — which is exactly the failure we want isCaptureFailure to catch.
+        sawMatchedResponse = true;
         pendingRequestIds.add(requestId);
       }
       return;
@@ -88,13 +114,27 @@ export function attachGraphqlCapture(
     // Already attached (e.g. devtools open) — attach() throws in that case;
     // proceed, the existing session still delivers 'message' events.
   }
-  void wc.debugger.sendCommand('Network.enable').catch(() => {
-    // Best-effort; if this fails no responses will match and raw stays empty
-    // (surfaced to the caller as zero captured items, not a thrown error).
-  });
+  void wc.debugger
+    .sendCommand('Network.enable')
+    .then(() => {
+      // Confirmed live: the session accepted a command and will now deliver events. This is
+      // the single source of truth for `attached` — attach() alone can throw on an already-
+      // attached session (devtools) yet still work, so we key off the command actually landing.
+      attached = true;
+    })
+    .catch(() => {
+      // Rejected — the debugger never attached / the command failed. `attached` stays false so
+      // the job path surfaces an HONEST capture failure instead of a silent empty result.
+    });
 
   return {
     raw,
+    get attached(): boolean {
+      return attached;
+    },
+    get sawMatchedResponse(): boolean {
+      return sawMatchedResponse;
+    },
     detach(): void {
       wc.debugger.off('message', onMessage);
       try {

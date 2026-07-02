@@ -33,7 +33,7 @@ import { attachGraphqlCapture } from './capture';
 import { isProfileGraphqlUrl, isTimelineGraphqlUrl } from './graphql-urls';
 import { applyFilters, parseProfile, parseTimeline } from './parse';
 import { shouldContinueScroll, type ScrollState } from './scroll-control';
-import { GhostScrapeNoCredsError } from './errors';
+import { GhostScrapeCaptureFailedError, GhostScrapeNoCredsError, isCaptureFailure } from './errors';
 
 // GhostScrapeNoCredsError now lives in ./errors; re-exported for callers importing it from here.
 export { GhostScrapeNoCredsError };
@@ -80,9 +80,11 @@ function delay(ms: number, signal: AbortSignal): Promise<void> {
  * immediately and the result is returned with `partial: true` rather than
  * throwing — cancellation is a normal, reportable outcome, not an error.
  *
- * The hidden window is ALWAYS destroyed (`finally`), even on error or cancel.
+ * The hidden window is ALWAYS disposed (`finally`) — destroyed AND its session
+ * storage cleared to purge the injected X cookies — even on error or cancel.
  */
 export async function runScrapeJob(
+  jobId: string,
   cfg: GhostScrapeConfig,
   deps: JobDeps,
   signal: AbortSignal,
@@ -97,7 +99,7 @@ export async function runScrapeJob(
   }
 
   const cookies = buildXCookies(authToken, ct0);
-  const win = await openScrapeWindow(cookies);
+  const win = await openScrapeWindow(jobId, cookies);
   const capture = attachGraphqlCapture(
     win.webContents,
     (url) => isTimelineGraphqlUrl(url) || isProfileGraphqlUrl(url),
@@ -163,6 +165,19 @@ export async function runScrapeJob(
       }
     }
 
+    // Honesty check: if we captured nothing AND the CDP session never confirmed attach / never
+    // delivered a single response, the timeline was never actually observed — surface a distinct
+    // capture failure instead of a silent successful empty result. A genuinely empty timeline
+    // (capture attached, responses flowed, just zero matching tweets) falls through as success.
+    const hadAnyResult = tweets.length > 0 || profile !== undefined;
+    if (isCaptureFailure(
+      { attached: capture.attached, sawMatchedResponse: capture.sawMatchedResponse },
+      hadAnyResult,
+      partial,
+    )) {
+      throw new GhostScrapeCaptureFailedError();
+    }
+
     return {
       ...(profile !== undefined && { profile }),
       tweets,
@@ -171,6 +186,6 @@ export async function runScrapeJob(
     };
   } finally {
     capture.detach();
-    win.destroy();
+    await win.dispose();
   }
 }
