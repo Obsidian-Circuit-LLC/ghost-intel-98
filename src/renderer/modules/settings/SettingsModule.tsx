@@ -697,8 +697,28 @@ function GeoINTPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSettin
             style={{ marginTop: 2 }}
           />
           <span>
-            Route CCTV streams through Tor (off by default). When on, a camera that can't be
-            reached over Tor will not load rather than expose your IP. Live video over Tor may be slow.
+            Route CCTV <strong>stream playback</strong> through Tor (off by default). Governs only
+            the live video stream — camera <em>host resolution</em> is a separate toggle below. When
+            on, a camera that can't be reached over Tor will not load rather than expose your IP.
+            Live video over Tor may be slow.
+          </span>
+        </label>
+      </div>
+      <div style={{ marginTop: 8 }}>
+        <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={s.geoint.cctvResolveHosts}
+            onChange={(e) => void patch({ geoint: { ...s.geoint, cctvResolveHosts: e.target.checked } })}
+            style={{ marginTop: 2 }}
+          />
+          <span>
+            Resolve camera hosts over Tor (on by default). A <strong>distinct, Tor-only recon
+            step</strong> — the DoH + RDAP lookups that resolve a camera's hostname/IP and
+            registration, which reveal your interest in that specific camera. This is independent of
+            the stream toggle above and applies to both stream-driven playback and the standalone
+            Host Info lookup. When off, host resolution is disabled entirely — it never falls back
+            to a clearnet lookup, which would leak your real IP.
           </span>
         </label>
       </div>
