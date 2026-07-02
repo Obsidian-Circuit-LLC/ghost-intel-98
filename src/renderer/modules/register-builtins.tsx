@@ -42,6 +42,7 @@ import { SearchlightModule } from './searchlight/SearchlightModule';
 import { SocmintModule } from './socmint/SocmintModule';
 import { XCollectorModule } from './x/XCollectorModule';
 import { GhostScrapeModule } from './ghostscrape/GhostScrapeModule';
+import { OSINTToolkitModule } from './osint-toolkit/OSINTToolkitModule';
 
 // ---------------------------------------------------------------------------
 // Adapter components — each has the uniform { spec: WindowSpec } signature and
@@ -195,6 +196,10 @@ function GhostScrapeAdapter({ spec: _spec }: { spec: WindowSpec }): JSX.Element 
   return <GhostScrapeModule />;
 }
 
+function OSINTToolkitAdapter({ spec: _spec }: { spec: WindowSpec }): JSX.Element {
+  return <OSINTToolkitModule />;
+}
+
 // ---------------------------------------------------------------------------
 // Registration
 // Titles are VERBATIM from Desktop.tsx moduleTitles.
@@ -209,16 +214,16 @@ export function registerBuiltins(): void {
   registerModule({ key: 'alarm',        title: 'Alarm',            glyph: '⏰', component: AlarmAdapter,        builtin: true });
   registerModule({ key: 'shred',        title: 'Shred',            glyph: '🗑', component: ShredAdapter,        builtin: true });
   registerModule({ key: 'settings',     title: 'Settings',         glyph: '⚙', component: SettingsAdapter,     builtin: true });
-  registerModule({ key: 'net-explorer', title: 'Net Explorer',     glyph: '🌐', component: NetExplorerAdapter,  builtin: true });
+  registerModule({ key: 'net-explorer', title: 'Net Explorer',     glyph: '🌐', component: NetExplorerAdapter,  builtin: true, category: 'osint', subcategory: 'Network / Recon' });
   registerModule({ key: 'mail',         title: 'Mail',             glyph: '✉', component: MailAdapter,         builtin: true });
   registerModule({ key: 'dialterm',     title: 'DialTerm',         glyph: '📞', component: DialTermAdapter,     builtin: true });
-  registerModule({ key: 'eyespy',       title: 'EyeSpy',           glyph: '📷', component: EyeSpyAdapter,       builtin: true });
+  registerModule({ key: 'eyespy',       title: 'EyeSpy',           glyph: '📷', component: EyeSpyAdapter,       builtin: true, category: 'osint', subcategory: 'Geospatial' });
   registerModule({ key: 'ai-assistant', title: 'AI Assistant',     glyph: '✨', component: AiAssistantAdapter,  builtin: true });
   registerModule({ key: 'doc-viewer',   title: 'Document Viewer',  glyph: '📄', component: DocViewerAdapter,    builtin: true });
   registerModule({ key: 'search',       title: 'Search',           glyph: '🔍', component: SearchAdapter,       builtin: true });
   registerModule({ key: 'whiteboard',   title: 'Whiteboard',       glyph: '🗺', component: WhiteboardAdapter,   builtin: true });
   registerModule({ key: 'media-player', title: 'Jukebox',          glyph: '🎵', component: MediaPlayerAdapter,  builtin: true, defaultWidth: 720, defaultHeight: 840 });
-  registerModule({ key: 'geoint',       title: 'GeoINT',           glyph: '🌍', component: GeoIntAdapter,       builtin: true });
+  registerModule({ key: 'geoint',       title: 'GeoINT',           glyph: '🌍', component: GeoIntAdapter,       builtin: true, category: 'osint', subcategory: 'Geospatial' });
   registerModule({ key: 'bookmarks',    title: 'Bookmarks',        glyph: '🔖', component: BookmarksAdapter,    builtin: true });
   registerModule({ key: 'markets',      title: 'Markets',          glyph: '📈', component: MarketsAdapter,      builtin: true });
   registerModule({ key: 'briefcase',    title: 'Briefcase',        glyph: '💼', component: BriefcaseAdapter,    builtin: true });
@@ -228,12 +233,13 @@ export function registerBuiltins(): void {
   registerModule({ key: 'chess',        title: 'Chess',            glyph: '♟', component: ChessAdapter,        builtin: true });
   registerModule({ key: 'pinball',      title: 'Ghost Space Ball',   glyph: '🕹', component: PinballAdapter,      builtin: true });
   registerModule({ key: 'chat',         title: 'Chat (beta)',      glyph: '💬', component: ChatAdapter,         builtin: true });
-  registerModule({ key: 'camera-view', title: 'Camera', glyph: '📹', component: CameraViewAdapter, builtin: true, defaultWidth: 480, defaultHeight: 360 });
-  registerModule({ key: 'host-info', title: 'Host Info', glyph: '🖥', component: HostInfoAdapter, builtin: true, defaultWidth: 460, defaultHeight: 360 });
-  registerModule({ key: 'news-view', title: 'News', glyph: '📺', component: NewsViewAdapter, builtin: true, defaultWidth: 640, defaultHeight: 480 });
+  registerModule({ key: 'camera-view', title: 'Camera', glyph: '📹', component: CameraViewAdapter, builtin: true, defaultWidth: 480, defaultHeight: 360, category: 'osint', subcategory: 'Geospatial' });
+  registerModule({ key: 'host-info', title: 'Host Info', glyph: '🖥', component: HostInfoAdapter, builtin: true, defaultWidth: 460, defaultHeight: 360, category: 'osint', subcategory: 'Network / Recon' });
+  registerModule({ key: 'news-view', title: 'News', glyph: '📺', component: NewsViewAdapter, builtin: true, defaultWidth: 640, defaultHeight: 480, category: 'osint', subcategory: 'Network / Recon' });
   registerModule({ key: 'help',         title: 'RTFM',             glyph: '?',  component: HelpAdapter,         builtin: true });
-  registerModule({ key: 'searchlight', title: 'Searchlight', glyph: '🔎', component: SearchlightAdapter, builtin: true, defaultWidth: 1100, defaultHeight: 720 });
-  registerModule({ key: 'socmint', title: 'SOCMINT', glyph: '📡', component: SocmintAdapter, builtin: true, defaultWidth: 900, defaultHeight: 640 });
-  registerModule({ key: 'x', title: 'X / Twitter', glyph: '✖', component: XCollectorAdapter, builtin: true, defaultWidth: 900, defaultHeight: 640 });
-  registerModule({ key: 'ghostscrape', title: 'GhostScrape', glyph: '🐦', component: GhostScrapeAdapter, builtin: true, defaultWidth: 960, defaultHeight: 680 });
+  registerModule({ key: 'searchlight', title: 'Searchlight', glyph: '🔎', component: SearchlightAdapter, builtin: true, defaultWidth: 1100, defaultHeight: 720, category: 'osint', subcategory: 'Identity' });
+  registerModule({ key: 'socmint', title: 'SOCMINT', glyph: '📡', component: SocmintAdapter, builtin: true, defaultWidth: 900, defaultHeight: 640, category: 'osint', subcategory: 'Social Media' });
+  registerModule({ key: 'x', title: 'X / Twitter', glyph: '✖', component: XCollectorAdapter, builtin: true, defaultWidth: 900, defaultHeight: 640, category: 'osint', subcategory: 'Social Media' });
+  registerModule({ key: 'ghostscrape', title: 'GhostScrape', glyph: '🐦', component: GhostScrapeAdapter, builtin: true, defaultWidth: 960, defaultHeight: 680, category: 'osint', subcategory: 'Social Media' });
+  registerModule({ key: 'osint-toolkit', title: 'OSINT Toolkit', glyph: '🧰', component: OSINTToolkitAdapter, builtin: true, defaultWidth: 760, defaultHeight: 560 });
 }
