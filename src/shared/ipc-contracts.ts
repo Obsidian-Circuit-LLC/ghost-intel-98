@@ -402,6 +402,7 @@ export const channels = {
     // recall provenance rides the existing `ai:onChatChunk` stream (see ai.ts's `recall` field
     // on the done event) and preload filters/republishes it as `window.api.memory.onRecall`.
     profileList: 'memory:profileList',
+    profileSummaries: 'memory:profileSummaries',
     profileUpsert: 'memory:profileUpsert',
     profileDelete: 'memory:profileDelete',
     profileWipe: 'memory:profileWipe'
@@ -526,8 +527,10 @@ export interface RecallHitShape {
 
 /** Recall-preview payload emitted per generation (see ai.ts's `recall` field on the done event of
  *  `ai:onChatChunk`) — what was actually recalled/injected (vector-RAG hits + adaptive-profile
- *  items) for that answer. Governance transparency: never silent about what memory contributed. */
-export interface RecallPreview { rag: RecallHitShape[]; profile: MemoryItem[] }
+ *  items + the rolling-summary prose) for that answer. Governance transparency: never silent about
+ *  what memory contributed — `profileSummary` is the distilled prior-conversation prose folded into
+ *  the injected profile block, `''` when none was injected. */
+export interface RecallPreview { rag: RecallHitShape[]; profile: MemoryItem[]; profileSummary: string }
 
 export interface AuthStatus { enabled: boolean; unlocked: boolean }
 
@@ -689,6 +692,7 @@ export interface ApiContracts {
   [channels.memory.status]: { args: []; returns: MemoryStatus };
   [channels.memory.onProgress]: { args: [(payload: MemoryProgress) => void]; returns: () => void };
   [channels.memory.profileList]: { args: [string | undefined]; returns: MemoryItem[] };
+  [channels.memory.profileSummaries]: { args: []; returns: Record<string, string> };
   [channels.memory.profileUpsert]: { args: [Pick<MemoryItem, 'id' | 'scope' | 'text' | 'pinned'>]; returns: MemoryItem[] };
   [channels.memory.profileDelete]: { args: [string[]]; returns: void };
   [channels.memory.profileWipe]: { args: [string | undefined]; returns: void };

@@ -72,6 +72,7 @@ export async function chat(streamId: string, req: AiChatRequest, getWindow: () =
     // was recalled/injected for this answer (transparency — never silent).
     let ragHits: RecallHit[] = [];
     let profileItems: MemoryItem[] = [];
+    let profileSummary = '';
     if (s.ai.useMemory && provider === 'ollama') {
       try {
         const lastUser = [...req.messages].reverse().find((m) => m.role === 'user');
@@ -88,6 +89,7 @@ export async function chat(streamId: string, req: AiChatRequest, getWindow: () =
             try {
               const profile = await recallProfile(lastUser.content, scopesFor(req));
               profileItems = profile.items;
+              profileSummary = profile.summary;
               if (profile.block) messages.push({ role: 'system', content: profile.block });
             } catch { /* adaptive profile is best-effort */ }
           }
@@ -110,7 +112,7 @@ export async function chat(streamId: string, req: AiChatRequest, getWindow: () =
     // Recall provenance goes out on the final event — guaranteed to fire exactly once per request
     // (unlike the first chunk, which never arrives for an empty/failed completion), so the
     // renderer's "recalled from…" transparency panel always gets told what was/wasn't used.
-    emit(getWindow, streamId, { done: true, recall: { rag: ragHits, profile: profileItems } });
+    emit(getWindow, streamId, { done: true, recall: { rag: ragHits, profile: profileItems, profileSummary } });
   } catch (err) {
     emit(getWindow, streamId, { error: (err as Error).message, done: true });
   } finally {
@@ -138,7 +140,7 @@ interface ChatChunkPayload {
   error?: string;
   /** Emitted on the final (`done`) event when adaptive memory (`useMemory`/`adaptiveMemory`) was
    *  active — exactly what was recalled/injected into this answer, for renderer-side transparency. */
-  recall?: { rag: RecallHit[]; profile: MemoryItem[] };
+  recall?: { rag: RecallHit[]; profile: MemoryItem[]; profileSummary: string };
 }
 
 function emit(getWindow: () => BrowserWindow | null, streamId: string, payload: ChatChunkPayload): void {

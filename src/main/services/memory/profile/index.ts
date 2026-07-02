@@ -226,6 +226,15 @@ export async function profileList(scope?: MemoryScope): Promise<MemoryItem[]> {
   return scope === undefined ? d.store.all() : d.store.byScope([scope]);
 }
 
+/** Read side of governance for the rolling per-scope summaries (scope → distilled prose). The
+ *  summary is durable, injected learned content (see `recallProfile`), so it must be inspectable
+ *  in the Memory panel — not just erasable — or it would be a silent, invisible profile. Returns
+ *  `{}` when no summary file exists yet. */
+export async function profileSummaries(): Promise<Record<string, string>> {
+  const d = getDeps();
+  return parseSummaries(await d.summaryIo.read());
+}
+
 /** User-authored edit/pin: always `source: 'user'`, always `confidence: 1` (user-authoritative,
  *  never subject to reconcile's extractor-confidence gain/decay), text is normalized the same
  *  way extractor candidates are so a user edit still dedupes/matches correctly. Existing
@@ -257,8 +266,22 @@ export async function profileDelete(ids: string[]): Promise<void> {
   await d.store.remove(ids);
 }
 
-/** Erase every item in `scope`, or the entire profile when `scope` is omitted. */
+/** Erase every item in `scope`, or the entire profile when `scope` is omitted — AND the matching
+ *  rolling summary. The summary is injected learned content (`recallProfile`), so leaving it on
+ *  disk after a wipe would silently outlive an explicit erase and keep being pushed into every
+ *  chat — a break of the "everything learned is erasable" invariant. Wipe-all drops the whole
+ *  summary file; a scoped wipe drops only that scope's key. */
 export async function profileWipe(scope?: MemoryScope): Promise<void> {
   const d = getDeps();
   await d.store.wipe(scope);
+  const summaries = parseSummaries(await d.summaryIo.read());
+  if (scope === undefined) {
+    if (Object.keys(summaries).length > 0) await d.summaryIo.write(JSON.stringify({}));
+    return;
+  }
+  if (scope in summaries) {
+    const rest = { ...summaries };
+    delete rest[scope];
+    await d.summaryIo.write(JSON.stringify(rest));
+  }
 }

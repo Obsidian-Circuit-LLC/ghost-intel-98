@@ -478,6 +478,9 @@ export interface GhostApi {
     onProgress(cb: (p: MemoryProgress) => void): () => void;
     /** List every learned item, or just those in `scope` when given. */
     profileList(scope?: string): Promise<MemoryItem[]>;
+    /** Read the durable per-scope rolling summaries (scope → distilled prose) so the injected
+     *  summary is inspectable and erasable, not a silent invisible profile. */
+    profileSummaries(): Promise<Record<string, string>>;
     /** User edit/pin (source:'user', confidence:1); returns the full post-upsert item set. */
     profileUpsert(item: Pick<MemoryItem, 'id' | 'scope' | 'text' | 'pinned'>): Promise<MemoryItem[]>;
     /** Erase specific learned items by id. */

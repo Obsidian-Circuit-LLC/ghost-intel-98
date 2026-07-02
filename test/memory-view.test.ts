@@ -116,4 +116,21 @@ describe('formatRecallProvenance', () => {
       'Memory: fact one'
     ]);
   });
+
+  it('discloses the injected rolling summary as a trailing Summary line', () => {
+    const out = formatRecallProvenance([], [item({ id: 'a', text: 'fact one' })], 'Distilled prior conversation.');
+    expect(out).toEqual(['Memory: fact one', 'Summary: Distilled prior conversation.']);
+  });
+
+  it('omits the Summary line when no summary was injected', () => {
+    expect(formatRecallProvenance([], [item({ id: 'a', text: 'fact one' })], '')).toEqual(['Memory: fact one']);
+    expect(formatRecallProvenance([], [], '   ')).toEqual([]);
+  });
+
+  it('truncates a long summary', () => {
+    const out = formatRecallProvenance([], [], 'y'.repeat(200));
+    expect(out).toHaveLength(1);
+    expect(out[0]!.startsWith('Summary: ')).toBe(true);
+    expect(out[0]!.endsWith('…')).toBe(true);
+  });
 });
