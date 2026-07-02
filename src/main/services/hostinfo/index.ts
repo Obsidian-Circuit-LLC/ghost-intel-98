@@ -1,9 +1,9 @@
 import { join } from 'node:path';
-import { ensurePluginTor, torFetch } from '../../plugins/tor-egress';
+import { ensurePluginTor, getPluginTor, torFetch } from '../../plugins/tor-egress';
 import { secureReadText, secureWriteFile } from '../../storage/secure-fs';
 import { dataRoot } from '../../storage/paths';
 import { hostFromStreamUrl } from './extract';
-import { resolveHost as resolveHostImpl } from './resolve';
+import { resolveHost as resolveHostImpl, TorNotReadyError } from './resolve';
 import { makeHostInfoStore } from './store';
 import type { HostInfo } from './types';
 
@@ -31,9 +31,19 @@ export function makeHostInfoService(deps: HostInfoServiceDeps) {
 }
 
 /** Tor JSON GET — the recon egress path. Throws on blocked / non-200 / parse failure so the resolver
- *  records a per-lookup error and continues. */
-async function torFetchJson(url: string): Promise<unknown> {
-  await ensurePluginTor();
+ *  records a per-lookup error and continues.
+ *
+ *  Bootstrap fast-fail: if the dedicated plugin-egress Tor isn't bootstrapped yet, awaiting
+ *  ensurePluginTor() would block this lookup on a Tor start that can take tens of seconds — the
+ *  standalone Host Info panel and the stream-driven resolve would both hang. Instead we kick the
+ *  start off in the BACKGROUND (fire-and-forget, so Tor warms for the next lookup) and immediately
+ *  throw TorNotReadyError; resolveHost catches it per-lookup and returns a partial with a
+ *  `tor-not-ready` marker. TOR-ONLY — there is no clearnet fallback (it would leak the real IP). */
+export async function torFetchJson(url: string): Promise<unknown> {
+  if (!getPluginTor()?.isBootstrapped()) {
+    void ensurePluginTor().catch(() => { /* warm best-effort; a later lookup retries */ });
+    throw new TorNotReadyError();
+  }
   const resp = await torFetch(url, { headers: { Accept: 'application/dns-json' } });
   if (resp.blocked || resp.status !== 200) throw new Error(`hostinfo lookup ${resp.status}${resp.blocked ? ' blocked' : ''}`);
   return JSON.parse(resp.body);
