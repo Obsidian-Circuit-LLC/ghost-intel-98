@@ -1,53 +1,40 @@
 import { describe, it, expect } from 'vitest';
-import { mergeSummary, summarizeTurns, type SummarizerClient } from '../src/main/services/memory/profile/summarizer';
+import { capSummary, summarizeTurns, type SummarizerClient } from '../src/main/services/memory/profile/summarizer';
 
-describe('mergeSummary', () => {
-  it('appends the addition to a prior summary', () => {
-    const out = mergeSummary('Prefers Tor-only egress.', 'Uses a hardware wallet.', 1000);
-    expect(out.text).toContain('Prefers Tor-only egress.');
-    expect(out.text).toContain('Uses a hardware wallet.');
+describe('capSummary', () => {
+  it('returns the trimmed full summary unchanged when within maxChars', () => {
+    const out = capSummary('  Prefers Tor-only egress. Uses a hardware wallet.  ', 1000);
+    expect(out.text).toBe('Prefers Tor-only egress. Uses a hardware wallet.');
     expect(out.updatedAt).toBe(1000);
   });
 
   it('never exceeds maxChars', () => {
-    const prev = 'a'.repeat(1000);
-    const addition = 'b'.repeat(1000);
-    const out = mergeSummary(prev, addition, 1, 1200);
+    const out = capSummary('a '.repeat(2000), 1, 1200);
     expect(out.text.length).toBeLessThanOrEqual(1200);
   });
 
   it('is deterministic: identical inputs produce identical output', () => {
-    const out1 = mergeSummary('Prefers Tor-only egress.', 'Uses a hardware wallet.', 42);
-    const out2 = mergeSummary('Prefers Tor-only egress.', 'Uses a hardware wallet.', 42);
+    const out1 = capSummary('Prefers Tor-only egress.', 42);
+    const out2 = capSummary('Prefers Tor-only egress.', 42);
     expect(out1).toEqual(out2);
   });
 
-  it('keeps the newest content when capping — the tail (addition) survives, not the head', () => {
-    const prev = 'x'.repeat(1190);
-    const addition = 'FRESH-AND-DISTINCTIVE-MARKER';
-    const out = mergeSummary(prev, addition, 1, 1200);
+  it('drops the OLDEST content when capping — the newest tail survives', () => {
+    const out = capSummary('x '.repeat(700) + 'FRESH-AND-DISTINCTIVE-MARKER', 1, 1200);
     expect(out.text).toContain('FRESH-AND-DISTINCTIVE-MARKER');
     expect(out.text.length).toBeLessThanOrEqual(1200);
   });
 
-  it('trims mid-sentence/mid-word safely: the capped text never starts with a dangling word fragment', () => {
-    const prev = 'word'.repeat(400); // no spaces at all near the cut boundary except our own
-    const addition = ' the rest of the newest sentence goes here and should be kept intact';
-    const out = mergeSummary(prev, addition, 1, 50);
-    // Should not start mid-token of the repeated "word" filler; either starts at a space-trimmed
-    // boundary or is entirely within the addition's own words.
-    expect(out.text.length).toBeLessThanOrEqual(50);
-    expect(out.text.startsWith('word')).toBe(false);
+  it('snaps the cut to a whitespace boundary — never starts mid-word (fails if snapping reverted)', () => {
+    // Raw slice at maxChars=18 of the 25-char string starts inside "bravo" ("ravo charlie delta");
+    // boundary-snapping must advance past that fragment to the next whole word "charlie".
+    const out = capSummary('alpha bravo charlie delta', 1, 18);
+    expect(out.text).toBe('charlie delta');
   });
 
-  it('handles an empty prior summary (first-ever addition)', () => {
-    const out = mergeSummary('', 'First fact learned.', 5);
-    expect(out.text).toBe('First fact learned.');
-  });
-
-  it('handles an empty addition (no-op merge keeps prior summary)', () => {
-    const out = mergeSummary('Existing summary.', '', 5);
-    expect(out.text).toBe('Existing summary.');
+  it('handles empty / whitespace-only text', () => {
+    expect(capSummary('', 5).text).toBe('');
+    expect(capSummary('   ', 5).text).toBe('');
   });
 });
 

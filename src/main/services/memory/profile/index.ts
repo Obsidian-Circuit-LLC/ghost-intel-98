@@ -23,9 +23,17 @@ import { LOCAL_AI_ENDPOINT, LOCAL_AI_MODEL } from '../../local-ai-paths';
 import { createProfileStore, type ProfileStore } from './profile-store';
 import { reconcile } from './reconcile';
 import { extractItems, type ExtractorClient } from './extractor';
-import { summarizeTurns, mergeSummary, type SummarizerClient } from './summarizer';
+import { summarizeTurns, capSummary, type SummarizerClient } from './summarizer';
 import { selectProfileItems, formatProfileBlock } from './profile-retriever';
 import { normalizeItemText, type MemoryItem, type MemoryScope } from './types';
+import { withLock } from '../../../util/mutex';
+
+// Every profile read-modify-write (learn + all governance writes) is serialised on this one key.
+// The store's put/remove/wipe and the summary file are each read-then-write and the facade chains
+// several of them, so without a lock two concurrent learns (one fires per settled turn, each behind
+// a slow Ollama call) — or a Memory-panel edit racing a learn — read the same base and the second
+// write clobbers the first, losing updates. The slow LLM calls stay OUTSIDE the lock.
+const PROFILE_LOCK = 'adaptive-memory-profile';
 
 // ---------- Real loopback-Ollama completion client (shared by extractor + summarizer) ----------
 
@@ -186,25 +194,34 @@ export async function learnFromConversation(convoId: string, turns: string, scop
     const provenance = [`conversation:${convoId}`];
     const now = d.now();
 
+    // LLM work (extraction + summarization) runs OUTSIDE the lock — it is slow (~30s Ollama) and
+    // best-effort, and must never block a governance action (e.g. Wipe) waiting on the same lock.
     const candidates = await extractItems(d.extractorClient, turns, scope, provenance);
+    const prevSummary = parseSummaries(await d.summaryIo.read())[scope] ?? '';
+    // summarizeTurns returns the COMPLETE updated summary — it is REPLACED (capped), never folded
+    // onto prevSummary (folding duplicated the prior content on every settled turn).
+    const nextSummary = await summarizeTurns(d.summarizerClient, prevSummary, turns);
 
-    const existing = await d.store.byScope(scopes);
-    const reconciled = reconcile({ existing, candidates, now, newId: d.newId });
-    // Checkpoint the decay: whatever confidence reconcile() just computed is now the baseline
-    // as of `now`, so the next call's `daysSince(lastSeenAt)` starts from zero real-time elapsed
-    // instead of re-decaying the same already-elapsed window.
-    const survivors = reconciled.map((it) => (it.lastSeenAt === now ? it : { ...it, lastSeenAt: now }));
+    // Only the fast store + summary read-modify-write is serialised, so concurrent learns and
+    // Memory-panel edits can't interleave and lose each other's writes.
+    await withLock(PROFILE_LOCK, async () => {
+      const existing = await d.store.byScope(scopes);
+      const reconciled = reconcile({ existing, candidates, now, newId: d.newId });
+      // Checkpoint the decay: whatever confidence reconcile() just computed is now the baseline
+      // as of `now`, so the next call's `daysSince(lastSeenAt)` starts from zero real-time elapsed
+      // instead of re-decaying the same already-elapsed window.
+      const survivors = reconciled.map((it) => (it.lastSeenAt === now ? it : { ...it, lastSeenAt: now }));
 
-    const keep = new Set(survivors.map((it) => it.id));
-    const expiredIds = existing.filter((it) => !keep.has(it.id)).map((it) => it.id);
-    if (expiredIds.length) await d.store.remove(expiredIds);
-    await d.store.put(survivors);
+      const keep = new Set(survivors.map((it) => it.id));
+      const expiredIds = existing.filter((it) => !keep.has(it.id)).map((it) => it.id);
+      if (expiredIds.length) await d.store.remove(expiredIds);
+      await d.store.put(survivors);
 
-    const summaries = parseSummaries(await d.summaryIo.read());
-    const prevSummary = summaries[scope] ?? '';
-    const addition = await summarizeTurns(d.summarizerClient, prevSummary, turns);
-    const merged = mergeSummary(prevSummary, addition, now);
-    await d.summaryIo.write(JSON.stringify({ ...summaries, [scope]: merged.text }));
+      // Re-read the summary map INSIDE the lock so a concurrent write to a DIFFERENT scope isn't
+      // clobbered; replace only this scope's summary with the freshly-distilled full rewrite.
+      const cur = parseSummaries(await d.summaryIo.read());
+      await d.summaryIo.write(JSON.stringify({ ...cur, [scope]: capSummary(nextSummary, now).text }));
+    });
   } catch {
     // best-effort: extraction/reconcile/store/summarization failures must never break the
     // caller's flow (the conversation-save path is not the response hot path, but this is still
@@ -243,27 +260,29 @@ export async function profileSummaries(): Promise<Record<string, string>> {
 export async function profileUpsert(item: Pick<MemoryItem, 'id' | 'scope' | 'text' | 'pinned'>): Promise<MemoryItem[]> {
   const d = getDeps();
   const now = d.now();
-  const prior = (await d.store.byScope([item.scope])).find((it) => it.id === item.id);
-  const upserted: MemoryItem = {
-    id: item.id,
-    scope: item.scope,
-    text: item.text,
-    normalized: normalizeItemText(item.text),
-    provenance: prior?.provenance ?? ['user'],
-    confidence: 1,
-    createdAt: prior?.createdAt ?? now,
-    lastSeenAt: now,
-    pinned: item.pinned,
-    source: 'user'
-  };
-  await d.store.put([upserted]);
-  return d.store.all();
+  return withLock(PROFILE_LOCK, async () => {
+    const prior = (await d.store.byScope([item.scope])).find((it) => it.id === item.id);
+    const upserted: MemoryItem = {
+      id: item.id,
+      scope: item.scope,
+      text: item.text,
+      normalized: normalizeItemText(item.text),
+      provenance: prior?.provenance ?? ['user'],
+      confidence: 1,
+      createdAt: prior?.createdAt ?? now,
+      lastSeenAt: now,
+      pinned: item.pinned,
+      source: 'user'
+    };
+    await d.store.put([upserted]);
+    return d.store.all();
+  });
 }
 
 /** Erase specific items by id — irreversible, per the "erasable" governance invariant. */
 export async function profileDelete(ids: string[]): Promise<void> {
   const d = getDeps();
-  await d.store.remove(ids);
+  await withLock(PROFILE_LOCK, () => d.store.remove(ids));
 }
 
 /** Erase every item in `scope`, or the entire profile when `scope` is omitted — AND the matching
@@ -273,15 +292,17 @@ export async function profileDelete(ids: string[]): Promise<void> {
  *  summary file; a scoped wipe drops only that scope's key. */
 export async function profileWipe(scope?: MemoryScope): Promise<void> {
   const d = getDeps();
-  await d.store.wipe(scope);
-  const summaries = parseSummaries(await d.summaryIo.read());
-  if (scope === undefined) {
-    if (Object.keys(summaries).length > 0) await d.summaryIo.write(JSON.stringify({}));
-    return;
-  }
-  if (scope in summaries) {
-    const rest = { ...summaries };
-    delete rest[scope];
-    await d.summaryIo.write(JSON.stringify(rest));
-  }
+  await withLock(PROFILE_LOCK, async () => {
+    await d.store.wipe(scope);
+    const summaries = parseSummaries(await d.summaryIo.read());
+    if (scope === undefined) {
+      if (Object.keys(summaries).length > 0) await d.summaryIo.write(JSON.stringify({}));
+      return;
+    }
+    if (scope in summaries) {
+      const rest = { ...summaries };
+      delete rest[scope];
+      await d.summaryIo.write(JSON.stringify(rest));
+    }
+  });
 }
