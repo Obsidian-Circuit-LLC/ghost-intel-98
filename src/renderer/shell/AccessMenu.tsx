@@ -120,6 +120,19 @@ export function AccessMenu({ onClose }: AccessMenuProps): JSX.Element {
           )}
         </div>
         <div className="ga98-access-separator" />
+        {/* Pinned OSINT Toolkit launcher — a single entry (not a submenu); the toolkit window
+            itself groups the OSINT modules by category. */}
+        <div
+          className="ga98-access-entry"
+          role="menuitem"
+          tabIndex={0}
+          onClick={() => openModule('osint-toolkit', 'OSINT Toolkit')}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') openModule('osint-toolkit', 'OSINT Toolkit'); }}
+        >
+          <span className="ga98-access-entry-glyph" aria-hidden="true">{glyphFor('osint-toolkit')}</span>
+          <span>OSINT Toolkit</span>
+        </div>
+        <div className="ga98-access-separator" />
         <div
           className="ga98-access-entry"
           role="menuitem"

@@ -42,6 +42,7 @@ import { SearchlightModule } from './searchlight/SearchlightModule';
 import { SocmintModule } from './socmint/SocmintModule';
 import { XCollectorModule } from './x/XCollectorModule';
 import { GhostScrapeModule } from './ghostscrape/GhostScrapeModule';
+import { OSINTToolkitModule } from './osint-toolkit/OSINTToolkitModule';
 
 // ---------------------------------------------------------------------------
 // Adapter components — each has the uniform { spec: WindowSpec } signature and
@@ -195,6 +196,10 @@ function GhostScrapeAdapter({ spec: _spec }: { spec: WindowSpec }): JSX.Element 
   return <GhostScrapeModule />;
 }
 
+function OSINTToolkitAdapter({ spec: _spec }: { spec: WindowSpec }): JSX.Element {
+  return <OSINTToolkitModule />;
+}
+
 // ---------------------------------------------------------------------------
 // Registration
 // Titles are VERBATIM from Desktop.tsx moduleTitles.
@@ -236,4 +241,5 @@ export function registerBuiltins(): void {
   registerModule({ key: 'socmint', title: 'SOCMINT', glyph: '📡', component: SocmintAdapter, builtin: true, defaultWidth: 900, defaultHeight: 640, category: 'osint', subcategory: 'Social Media' });
   registerModule({ key: 'x', title: 'X / Twitter', glyph: '✖', component: XCollectorAdapter, builtin: true, defaultWidth: 900, defaultHeight: 640, category: 'osint', subcategory: 'Social Media' });
   registerModule({ key: 'ghostscrape', title: 'GhostScrape', glyph: '🐦', component: GhostScrapeAdapter, builtin: true, defaultWidth: 960, defaultHeight: 680, category: 'osint', subcategory: 'Social Media' });
+  registerModule({ key: 'osint-toolkit', title: 'OSINT Toolkit', glyph: '🧰', component: OSINTToolkitAdapter, builtin: true, defaultWidth: 760, defaultHeight: 560 });
 }
