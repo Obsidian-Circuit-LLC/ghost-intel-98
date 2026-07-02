@@ -501,6 +501,29 @@ export const GraphView: React.FC = () => {
           </>
         )}
 
+        {/* Clear entire graph (this case only), confirm-gated + local-state reset */}
+        <button
+          className="sl-sweep-btn sl-sweep-btn-danger"
+          disabled={nodes.length === 0}
+          title="Clear the entire relationship graph for this case"
+          onClick={() => {
+            if (nodes.length === 0) return;
+            const ok = confirm(
+              `Clear the entire graph for "${activeCase.name}"? This removes all ` +
+                `${nodes.length} node(s) and ${edges.length} edge(s) and cannot be undone.`,
+            );
+            if (!ok) return;
+            store.clearGraph(activeCaseId);
+            // Reset LOCAL view state so no id survives referencing a deleted node.
+            setSelected(null);
+            setConnecting(null);
+            setEditingNote(null);
+            setShowAddMenu(false);
+          }}
+        >
+          🗑 CLEAR GRAPH
+        </button>
+
         <div style={{ flex: 1 }} />
 
         <span className="sl-graph-counts">
