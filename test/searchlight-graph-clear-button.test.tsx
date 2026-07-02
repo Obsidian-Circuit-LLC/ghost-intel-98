@@ -122,6 +122,40 @@ describe('GraphView — Clear Graph button', () => {
     expect(useSearchlightStore.getState().selectedJobId).toBe('job-keep');
   });
 
+  it('confirming closes the ADD ENTITY menu (showAddMenu reset)', () => {
+    mount(true);
+    const addBtn = buttons().find((b) => (b.textContent ?? '').includes('ADD ENTITY'));
+    act(() => { addBtn!.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+    // Menu open — independent of `selected`, so its disappearance isolates the showAddMenu reset.
+    expect(container.querySelector('.sl-graph-add-menu')).toBeTruthy();
+
+    vi.stubGlobal('confirm', vi.fn(() => true));
+    act(() => { clearBtn()!.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+
+    expect(clearGraph).toHaveBeenCalledWith('a');
+    expect(container.querySelector('.sl-graph-add-menu')).toBeNull();
+  });
+
+  it('confirming exits connect-mode so the next node click SELECTS (not connects)', () => {
+    mount(true);
+    selectFirstNode(); // selects node a-n1
+    // Enter connect mode via the CONNECT button in NODE PROPERTIES.
+    const connectBtn = buttons().find((b) => (b.textContent ?? '').includes('CONNECT'));
+    act(() => { connectBtn!.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+
+    vi.stubGlobal('confirm', vi.fn(() => true));
+    act(() => { clearBtn()!.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+
+    // clearGraph is spied (nodes remain), so node a-n2 is still clickable. If `connecting` were
+    // NOT reset, clicking it would create an edge (and not select); because it WAS reset, the
+    // click selects the node → NODE PROPERTIES reappears. This isolates the connecting reset.
+    const node2 = Array.from(container.querySelectorAll('g')).find(
+      (g) => g.getAttribute('transform') === 'translate(100,100)',
+    );
+    act(() => { node2!.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+    expect(container.textContent ?? '').toContain('NODE PROPERTIES');
+  });
+
   it('cancelling the confirm is a no-op (no clear, selection retained)', () => {
     mount(true);
     selectFirstNode();
