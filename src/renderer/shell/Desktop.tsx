@@ -20,7 +20,8 @@ const desktopShortcutDefaults: { module: ModuleKey; label: string }[] = [
   { module: 'reminders', label: 'Reminders' },
   { module: 'chat', label: 'Chat (beta)' },
   { module: 'searchlight', label: 'Searchlight' },
-  { module: 'socmint', label: 'SOCMINT' }
+  { module: 'socmint', label: 'SOCMINT' },
+  { module: 'osint-toolkit', label: 'OSINT Toolkit' }
 ];
 
 // Pinned to the bottom-right corner (Recycle Bin position).

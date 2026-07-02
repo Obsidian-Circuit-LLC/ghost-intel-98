@@ -45,7 +45,8 @@ export type ModuleKey =
   | 'searchlight'
   | 'socmint'
   | 'x'
-  | 'ghostscrape';
+  | 'ghostscrape'
+  | 'osint-toolkit';
 
 export interface WindowSpec {
   id: string;

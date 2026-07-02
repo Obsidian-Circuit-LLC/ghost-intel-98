@@ -12,6 +12,10 @@ export interface ModuleDescriptor {
    *  every launch site repeating it. Falls back to the global 760×520 if unset. */
   defaultWidth?: number;
   defaultHeight?: number;
+  /** OSINT Toolkit grouping (optional). A module with category:'osint' appears in the OSINT
+   *  Toolkit launcher under its subcategory. Non-OSINT modules omit both. */
+  category?: string;
+  subcategory?: string;
 }
 
 const registry = new Map<string, ModuleDescriptor>();
