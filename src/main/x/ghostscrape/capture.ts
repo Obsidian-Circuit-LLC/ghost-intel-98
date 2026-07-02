@@ -23,6 +23,19 @@
 
 export interface Capture {
   readonly raw: unknown[];
+  /**
+   * True once the CDP debugger session is confirmed live — i.e. `Network.enable` resolved.
+   * When this stays false the debugger never attached (or the command was rejected), so no
+   * response could ever have been observed: a `captured:0` outcome is then a capture FAILURE,
+   * NOT a genuinely empty timeline. The job path branches on this to surface an honest error.
+   */
+  readonly attached: boolean;
+  /**
+   * True once at least one `Network.responseReceived` event was delivered over the session
+   * (any URL, matched or not). Distinguishes "session alive, timeline just empty" from
+   * "nothing ever loaded / the debugger delivered no traffic at all".
+   */
+  readonly sawAnyResponse: boolean;
   detach(): void;
 }
 
@@ -41,6 +54,8 @@ export function attachGraphqlCapture(
 ): Capture {
   const raw: unknown[] = [];
   const pendingRequestIds = new Set<string>();
+  let attached = false;
+  let sawAnyResponse = false;
 
   const onMessage = (
     _event: Electron.Event,
@@ -48,6 +63,8 @@ export function attachGraphqlCapture(
     params: unknown,
   ): void => {
     if (method === 'Network.responseReceived') {
+      // Any response at all (matched or not) proves the session is delivering traffic.
+      sawAnyResponse = true;
       const p = params as { requestId?: unknown; response?: { url?: unknown } };
       const requestId = typeof p.requestId === 'string' ? p.requestId : undefined;
       const url = typeof p.response?.url === 'string' ? p.response.url : undefined;
@@ -88,13 +105,27 @@ export function attachGraphqlCapture(
     // Already attached (e.g. devtools open) — attach() throws in that case;
     // proceed, the existing session still delivers 'message' events.
   }
-  void wc.debugger.sendCommand('Network.enable').catch(() => {
-    // Best-effort; if this fails no responses will match and raw stays empty
-    // (surfaced to the caller as zero captured items, not a thrown error).
-  });
+  void wc.debugger
+    .sendCommand('Network.enable')
+    .then(() => {
+      // Confirmed live: the session accepted a command and will now deliver events. This is
+      // the single source of truth for `attached` — attach() alone can throw on an already-
+      // attached session (devtools) yet still work, so we key off the command actually landing.
+      attached = true;
+    })
+    .catch(() => {
+      // Rejected — the debugger never attached / the command failed. `attached` stays false so
+      // the job path surfaces an HONEST capture failure instead of a silent empty result.
+    });
 
   return {
     raw,
+    get attached(): boolean {
+      return attached;
+    },
+    get sawAnyResponse(): boolean {
+      return sawAnyResponse;
+    },
     detach(): void {
       wc.debugger.off('message', onMessage);
       try {

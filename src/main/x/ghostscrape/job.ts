@@ -33,7 +33,7 @@ import { attachGraphqlCapture } from './capture';
 import { isProfileGraphqlUrl, isTimelineGraphqlUrl } from './graphql-urls';
 import { applyFilters, parseProfile, parseTimeline } from './parse';
 import { shouldContinueScroll, type ScrollState } from './scroll-control';
-import { GhostScrapeNoCredsError } from './errors';
+import { GhostScrapeCaptureFailedError, GhostScrapeNoCredsError, isCaptureFailure } from './errors';
 
 // GhostScrapeNoCredsError now lives in ./errors; re-exported for callers importing it from here.
 export { GhostScrapeNoCredsError };
@@ -162,6 +162,19 @@ export async function runScrapeJob(
         profile = parsed;
         break;
       }
+    }
+
+    // Honesty check: if we captured nothing AND the CDP session never confirmed attach / never
+    // delivered a single response, the timeline was never actually observed — surface a distinct
+    // capture failure instead of a silent successful empty result. A genuinely empty timeline
+    // (capture attached, responses flowed, just zero matching tweets) falls through as success.
+    const hadAnyResult = tweets.length > 0 || profile !== undefined;
+    if (isCaptureFailure(
+      { attached: capture.attached, sawAnyResponse: capture.sawAnyResponse },
+      hadAnyResult,
+      partial,
+    )) {
+      throw new GhostScrapeCaptureFailedError();
     }
 
     return {
