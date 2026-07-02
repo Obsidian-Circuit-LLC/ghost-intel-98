@@ -52,6 +52,55 @@ export function caseStreamsFile(caseId: string): string {
   return join(caseDir(caseId), 'streams.json');
 }
 
+/** Scraping-case namespaces. 'x' is the clearnet-quarantined X collector; 'socmint' is
+ *  every other (Tor-eligible) social collector. Which store a scraping case lands in is a
+ *  pure function of the case's namespace — never iteration order or a clock. */
+export type ScrapingCaseNs = 'socmint' | 'x';
+
+export function scrapingCasesRoot(): string {
+  return join(dataRoot(), 'scraping-cases');
+}
+
+export function scrapingCaseDir(ns: ScrapingCaseNs, id: string): string {
+  return join(scrapingCasesRoot(), ns, id);
+}
+
+export function scrapingCaseFile(ns: ScrapingCaseNs, id: string): string {
+  return join(scrapingCaseDir(ns, id), 'case.json');
+}
+
+/** Items sidecar for a scraping case: `<scrapingCaseDir(ns,id)>/<ns>-items.json`.
+ *  This is the SINGLE source of truth for the per-namespace items path — both the store
+ *  reader (socmint/store.ts prod listItems/listXItems, reached via window.api.{socmint,x}.listItems)
+ *  and the import writer (scraping-cases/import-to-case.ts) derive from here so the
+ *  writer/reader seam cannot drift into a "written-but-never-read" mismatch. */
+export function scrapingCaseItemsFile(ns: ScrapingCaseNs, id: string): string {
+  return join(scrapingCaseDir(ns, id), `${ns}-items.json`);
+}
+
+/** Jobs sidecar for a scraping case: `<scrapingCaseDir(ns,id)>/<ns>-jobs.json`. Single source of
+ *  truth for the per-namespace jobs path (see scrapingCaseItemsFile for the seam rationale). */
+export function scrapingCaseJobsFile(ns: ScrapingCaseNs, id: string): string {
+  return join(scrapingCaseDir(ns, id), `${ns}-jobs.json`);
+}
+
+/** Directory holding a scraping case's saved artifacts (e.g. a GhostScrape JSON export). */
+export function scrapingCaseArtifactsDir(ns: ScrapingCaseNs, id: string): string {
+  return join(scrapingCaseDir(ns, id), 'artifacts');
+}
+
+/** Path of one saved artifact inside a scraping case. `name` must already be a validated
+ *  filename (no separators/traversal — see ensureFileName at the IPC boundary). */
+export function scrapingCaseArtifactFile(ns: ScrapingCaseNs, id: string, name: string): string {
+  return join(scrapingCaseArtifactsDir(ns, id), name);
+}
+
+/** Backup of pre-v3.27.0 scraping-case originals, written before the reversible migration
+ *  removes them from the main case. Kept for recovery. */
+export function scrapingBackupDir(): string {
+  return join(scrapingCasesRoot(), 'backup-pre-v3.27.0');
+}
+
 export function settingsFile(): string {
   return join(dataRoot(), 'settings.json');
 }

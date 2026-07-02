@@ -82,6 +82,7 @@ import * as geoCaseEvents from '../geoint/case-events';
 import * as markets from '../markets/providers';
 import * as vault from '../services/vault';
 import { encryptAll, decryptAll } from '../storage/encryption-migrate';
+import { migrateScrapingDataIfNeeded } from '../storage/scraping-migration';
 import { buildSummaryHtml, renderCasePdf, type ReportImages } from '../services/export';
 import { timelineCsv, linksCsv, entitiesCsv, attachmentsCsv } from '../services/csv';
 import * as search from '../services/search';
@@ -134,6 +135,8 @@ import {
   handleXCollect, handleXListItems, handleXRankItems,
 } from '../x/ipc';
 import { createGhostScrapeHandlers } from '../x/ghostscrape/ipc';
+import { createScrapingCasesHandlers } from '../scraping-cases/ipc';
+import { prodScrapingCaseStore } from '../storage/scraping-cases';
 
 const MAX_SAVE_ATTACHMENT_BYTES = 64 * 1024 * 1024; // 64 MB cap on base64 decoded payload
 const MAX_EXPORT_BYTES = 64 * 1024 * 1024;
@@ -237,6 +240,13 @@ async function resumeEnableIfNeeded(): Promise<void> {
     }
   } finally {
     vault.endMigration();
+  }
+  // The DEK is now loaded, so the one-time pre-v3.27.0 SOCMINT/X relocation (deferred at startup
+  // while the vault was locked) can read+re-encrypt. Marker-guarded, so it's a no-op once done.
+  try {
+    await migrateScrapingDataIfNeeded();
+  } catch (err) {
+    console.error('[scraping-migration] post-unlock pass failed; will retry next unlock', err);
   }
 }
 
@@ -513,6 +523,34 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.cases.deleteLink, (...args) => caseStore.deleteLink(ensureUuid(args[0], 'caseId'), args[1] as string));
   safeHandle(channels.cases.addReminder, (...args) => caseStore.addReminder(ensureUuid(args[0], 'caseId'), args[1] as Parameters<typeof caseStore.addReminder>[1]));
   safeHandle(channels.cases.deleteReminder, (...args) => caseStore.deleteReminder(ensureUuid(args[0], 'caseId'), args[1] as string));
+
+  // ---- scraping cases (W4) — isolated per-namespace SOCMINT/X collection-run stores, distinct
+  //      from the core investigation `cases` above. The `store` discriminator (args[0]) is
+  //      validated main-side against ['socmint','x'] inside every handler and routed to the
+  //      matching encrypt-at-rest namespace store. importToCase's body lands in a later W4 task;
+  //      T3 owns the namespace, the validated routing, and the preload surface only.
+  const scrapingCases = createScrapingCasesHandlers({
+    getStore: (ns) => prodScrapingCaseStore(ns),
+    // Copy a scraping case's items + artifacts INTO a main investigation case via the
+    // existing SOCMINT item writer (main caseDir) + note writer. The scraping case is a
+    // read-only source — left intact so a run can be imported into more than one case.
+    importToCase: async (ns, scrapingCaseId, mainCaseId) => {
+      const { prodImportScrapingCaseToMainCase } = await import('../scraping-cases/import-to-case');
+      return prodImportScrapingCaseToMainCase(ns, scrapingCaseId, mainCaseId);
+    },
+    // Encrypt-at-rest artifact writer (e.g. GhostScrape "save to case"). The handler has
+    // already validated ns/id/name; the writer only routes through secure-fs.
+    saveArtifact: async (ns, scrapingCaseId, name, content) => {
+      const { saveScrapingArtifact } = await import('../storage/scraping-cases');
+      return saveScrapingArtifact(ns, scrapingCaseId, name, content);
+    }
+  });
+  safeHandle(channels.scrapingCases.list, (...args) => scrapingCases.list(args[0]));
+  safeHandle(channels.scrapingCases.create, (...args) => scrapingCases.create(args[0], args[1]));
+  safeHandle(channels.scrapingCases.rename, (...args) => scrapingCases.rename(args[0], args[1], args[2]));
+  safeHandle(channels.scrapingCases.remove, (...args) => scrapingCases.remove(args[0], args[1]));
+  safeHandle(channels.scrapingCases.importToCase, (...args) => scrapingCases.importToCase(args[0], args[1], args[2]));
+  safeHandle(channels.scrapingCases.saveArtifact, (...args) => scrapingCases.saveArtifact(args[0], args[1], args[2], args[3]));
 
   // ---- files ----
   safeHandle(channels.files.importDropped, async (...args) => {
@@ -1753,12 +1791,14 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
       networkEnabled: async () => (await settingsStore.read()).x.networkEnabled,
       clearnetAcknowledged: async () => (await settingsStore.read()).x.clearnetAcknowledged,
       async upsertItems(caseId, items) {
-        const { upsertItems } = await import('../socmint/store');
-        return upsertItems(caseId, items);
+        // X Intel persists into the x scraping store (scrapingCaseDir('x', id)) — separate
+        // from the socmint store and the main investigation cases (W4 Task 5).
+        const { upsertXItems } = await import('../socmint/store');
+        return upsertXItems(caseId, items);
       },
       async recordJob(caseId, job) {
-        const { recordJob } = await import('../socmint/store');
-        return recordJob(caseId, job);
+        const { recordXJob } = await import('../socmint/store');
+        return recordXJob(caseId, job);
       },
       getSecret: (k) => secretStore.get(k),
     }));

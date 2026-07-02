@@ -6,15 +6,16 @@
  *   upsertItems / listItems / recordJob / listJobs — production-wired top-level exports
  *     (lazy-initialized; safe to import without electron being available at import time).
  *
- * Sidecars per case:
- *   <caseDir>/<caseId>/socmint-items.json
- *   <caseDir>/<caseId>/socmint-jobs.json
+ * Sidecars per case (production wiring resolves against the socmint scraping-case dir):
+ *   <scrapingCaseDir('socmint',caseId)>/socmint-items.json
+ *   <scrapingCaseDir('socmint',caseId)>/socmint-jobs.json
  *
  * Every read-modify-write is serialised with withLock(caseId) so concurrent IPC
  * calls cannot produce duplicate items or corrupt the file.
  */
 
 import type { HarvestedItem, SocmintJob } from '@shared/socmint/types';
+import type { ScrapingCaseNs } from '../storage/paths';
 import { withLock } from '../util/mutex';
 
 // ---- injectable fs interface (injection seam for tests) ----------------
@@ -120,40 +121,71 @@ export function makeSocmintStore(deps: SocmintStoreDeps) {
 // Lazy: deps are resolved only on first call so importing this module in tests
 // that do NOT mock electron is safe (electron/paths/secure-fs are never
 // evaluated at module-import time).  Tests should use makeSocmintStore(testDeps).
+//
+// The generic item/job store is instantiated PER scraping-case namespace: 'socmint'
+// (Telegram/WhatsApp) and 'x' (X Intel + GhostScrape share the x store — W4 Task 5).
+// Each namespace persists under scrapingCaseDir(ns, id) with `<ns>-items.json` /
+// `<ns>-jobs.json`, isolated from the other namespace and from the main investigation
+// cases. The x-namespace exports (upsertXItems/…) are imported by src/main/x/ipc.ts,
+// which is permitted to reach this module (see the X clearnet-quarantine allowlist).
 
-let _prod: ReturnType<typeof makeSocmintStore> | null = null;
+const _prod: Partial<Record<ScrapingCaseNs, ReturnType<typeof makeSocmintStore>>> = {};
 
-async function prod(): Promise<ReturnType<typeof makeSocmintStore>> {
-  if (_prod) return _prod;
-  const [{ join }, { caseDir }, { secureReadFile, secureWriteFile }] = await Promise.all([
-    import('node:path'),
+async function prod(ns: ScrapingCaseNs): Promise<ReturnType<typeof makeSocmintStore>> {
+  const cached = _prod[ns];
+  if (cached) return cached;
+  const [{ scrapingCaseItemsFile, scrapingCaseJobsFile }, { secureReadFile, secureWriteFile }] = await Promise.all([
     import('../storage/paths'),
     import('../storage/secure-fs'),
   ]);
-  _prod = makeSocmintStore({
+  const store = makeSocmintStore({
     readFile: secureReadFile,
     writeFile: (p, d) => secureWriteFile(p, d),
-    itemsPath: (id) => join(caseDir(id), 'socmint-items.json'),
-    jobsPath:  (id) => join(caseDir(id), 'socmint-jobs.json'),
+    itemsPath: (id) => scrapingCaseItemsFile(ns, id),
+    jobsPath:  (id) => scrapingCaseJobsFile(ns, id),
   });
-  return _prod;
+  _prod[ns] = store;
+  return store;
 }
+
+// ---- socmint-namespace prod exports (Telegram/WhatsApp) ----------------
 
 export async function upsertItems(
   caseId: string,
   items: HarvestedItem[],
 ): Promise<{ added: number; skipped: number }> {
-  return (await prod()).upsertItems(caseId, items);
+  return (await prod('socmint')).upsertItems(caseId, items);
 }
 
 export async function listItems(caseId: string): Promise<HarvestedItem[]> {
-  return (await prod()).listItems(caseId);
+  return (await prod('socmint')).listItems(caseId);
 }
 
 export async function recordJob(caseId: string, job: SocmintJob): Promise<void> {
-  return (await prod()).recordJob(caseId, job);
+  return (await prod('socmint')).recordJob(caseId, job);
 }
 
 export async function listJobs(caseId: string): Promise<SocmintJob[]> {
-  return (await prod()).listJobs(caseId);
+  return (await prod('socmint')).listJobs(caseId);
+}
+
+// ---- x-namespace prod exports (X Intel + GhostScrape share the x store) --
+
+export async function upsertXItems(
+  caseId: string,
+  items: HarvestedItem[],
+): Promise<{ added: number; skipped: number }> {
+  return (await prod('x')).upsertItems(caseId, items);
+}
+
+export async function listXItems(caseId: string): Promise<HarvestedItem[]> {
+  return (await prod('x')).listItems(caseId);
+}
+
+export async function recordXJob(caseId: string, job: SocmintJob): Promise<void> {
+  return (await prod('x')).recordJob(caseId, job);
+}
+
+export async function listXJobs(caseId: string): Promise<SocmintJob[]> {
+  return (await prod('x')).listJobs(caseId);
 }

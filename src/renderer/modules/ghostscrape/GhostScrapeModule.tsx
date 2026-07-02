@@ -35,10 +35,10 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { CaseSummary } from '@shared/types';
 import type { GhostScrapeConfig, GhostScrapeResult, ScrapeType } from '@shared/ipc-contracts';
 import { useSettings } from '../../state/store';
 import { toast } from '../../state/toasts';
+import { buildScrapingCaseOptions, type ScrapingCaseOption } from '../socmint/case-options';
 import { buildScrapeRequest, canScrape } from './scrape-request';
 import { toRows, sortRows, type SortDir, type SortKey } from './results-view';
 import { toJson, toTxt, toCsv } from './export';
@@ -146,12 +146,10 @@ function GhostScrapeResultsTable({ result }: { result: GhostScrapeResult }): JSX
 // Export + save-to-case bar
 // ---------------------------------------------------------------------------
 
-function GhostScrapeExportBar({ result, username }: { result: GhostScrapeResult; username: string }): JSX.Element {
-  const [cases, setCases] = useState<CaseSummary[]>([]);
-  const [caseId, setCaseId] = useState('');
+function GhostScrapeExportBar(
+  { result, username, caseId }: { result: GhostScrapeResult; username: string; caseId: string },
+): JSX.Element {
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => { void window.api.cases.list().then(setCases); }, []);
 
   const baseName = `ghostscrape-${username || 'export'}-${Date.now()}`;
 
@@ -165,15 +163,17 @@ function GhostScrapeExportBar({ result, username }: { result: GhostScrapeResult;
     }
   }
 
-  // Save-to-case: persisted via the existing per-case notes store (same
-  // secure-fs encryption-at-rest as case attachments) — GhostScrape's main
-  // code writes nothing to disk itself; this is a renderer-side call into an
-  // already-existing, already-encrypted case store.
+  // Save-to-case: persisted into the x scraping store (scrapingCaseArtifactFile('x', id, …),
+  // same secure-fs encryption-at-rest), NOT the main investigation case notes (W4 Task 5).
+  // The target case is the one selected in the Cases sidebar — GhostScrape's own scraping
+  // cases (namespace 'x'), NEVER the main investigation cases (window.api.cases.*).
+  // GhostScrape's main code writes nothing to disk itself; this is a renderer-side call into
+  // the already-encrypted x scraping-case artifact store.
   async function saveToCase(): Promise<void> {
-    if (!caseId) { toast.warn('Choose a case first.'); return; }
+    if (!caseId) { toast.warn('Select a case in the sidebar first.'); return; }
     setSaving(true);
     try {
-      await window.api.notes.write(caseId, `${baseName}.json`, toJson(result));
+      await window.api.scrapingCases.saveArtifact('x', caseId, `${baseName}.json`, toJson(result));
       toast.success('Saved to case.');
     } catch (err) {
       toast.error(`Save to case failed: ${(err as Error).message}`);
@@ -191,18 +191,12 @@ function GhostScrapeExportBar({ result, username }: { result: GhostScrapeResult;
 
       <span className="gs-export-sep" />
 
-      <select
-        className="gs-input"
-        value={caseId}
-        onChange={(e) => setCaseId(e.target.value)}
-        aria-label="Save to case"
+      <button
+        className="gs-btn gs-btn-primary"
+        onClick={() => void saveToCase()}
+        disabled={!caseId || saving}
+        title={!caseId ? 'Select a case in the sidebar first' : undefined}
       >
-        <option value="">(choose a case)</option>
-        {cases.map((c) => (
-          <option key={c.id} value={c.id}>{c.reference ? `${c.reference} — ` : ''}{c.title}</option>
-        ))}
-      </select>
-      <button className="gs-btn gs-btn-primary" onClick={() => void saveToCase()} disabled={!caseId || saving}>
         {saving ? 'Saving…' : 'Save to Case'}
       </button>
     </div>
@@ -218,6 +212,70 @@ export function GhostScrapeModule(): JSX.Element {
   const networkEnabled = settings?.x?.networkEnabled ?? false;
   const clearnetAcknowledged = settings?.x?.clearnetAcknowledged ?? false;
   const gateOpen = networkEnabled && clearnetAcknowledged;
+
+  // GhostScrape's OWN scraping cases (namespace 'x') — the SAME store X Collector drives,
+  // kept apart from the main investigation cases (window.api.cases.*). The sidebar
+  // reads/writes only this store; the selected case is where Save-to-Case artifacts land.
+  const [caseOptions, setCaseOptions] = useState<ScrapingCaseOption[]>([]);
+  const [caseId, setCaseId] = useState('');
+
+  const loadCases = useCallback(async () => {
+    try {
+      const list = await window.api.scrapingCases.list('x');
+      setCaseOptions(buildScrapingCaseOptions(list));
+    } catch (err) {
+      console.warn('[GhostScrape] scrapingCases.list:', err);
+    }
+  }, []);
+
+  useEffect(() => { void loadCases(); }, [loadCases]);
+
+  const handleAddCase = useCallback(async () => {
+    // window.prompt is the app's existing lightweight name-entry ceremony (no new modal).
+    const name = window.prompt('New X case name');
+    if (name === null) return; // cancelled
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    try {
+      const created = await window.api.scrapingCases.create('x', trimmed);
+      await loadCases();
+      setCaseId(created.id);
+    } catch (err) {
+      console.warn('[GhostScrape] scrapingCases.create:', err);
+    }
+  }, [loadCases]);
+
+  const handleDeleteCase = useCallback(async (id: string) => {
+    try {
+      await window.api.scrapingCases.remove('x', id);
+      await loadCases();
+      setCaseId((current) => (current === id ? '' : current));
+    } catch (err) {
+      console.warn('[GhostScrape] scrapingCases.remove:', err);
+    }
+  }, [loadCases]);
+
+  // Copy this scraping case's results into one of the main investigation cases. The scraping
+  // case is left intact (source only). Main cases live in a separate store (window.api.cases).
+  const handleImportCase = useCallback(async (id: string) => {
+    try {
+      const cases = await window.api.cases.list();
+      if (cases.length === 0) {
+        window.alert('No investigation cases yet. Create one first.');
+        return;
+      }
+      const menu = cases.map((c, i) => `${i + 1}. ${c.title}`).join('\n');
+      const pick = window.prompt(`Import into which case?\n\n${menu}\n\nEnter a number:`);
+      if (pick === null) return; // cancelled
+      const idx = Number.parseInt(pick.trim(), 10) - 1;
+      const target = cases[idx];
+      if (!target) return;
+      const res = await window.api.scrapingCases.importToCase('x', id, target.id);
+      window.alert(`Imported ${res.imported} item(s) into "${target.title}".`);
+    } catch (err) {
+      console.warn('[GhostScrape] scrapingCases.importToCase:', err);
+    }
+  }, []);
 
   const [accounts, setAccounts] = useState<string[]>([]);
   const [accountId, setAccountId] = useState('');
@@ -334,6 +392,51 @@ export function GhostScrapeModule(): JSX.Element {
         </div>
       )}
 
+      <div className="gs-layout">
+        {/* Cases sidebar — GhostScrape's own scraping cases (namespace 'x'), independent of
+            the main investigation cases. Selecting a case sets the Save-to-Case target. */}
+        <aside className="gs-cases-sidebar" aria-label="GhostScrape cases">
+          <div className="gs-cases-head">
+            <span className="gs-cases-title">Cases</span>
+            <button className="gs-btn gs-btn-primary" onClick={() => void handleAddCase()}>
+              Add Case
+            </button>
+          </div>
+          {caseOptions.length === 0 ? (
+            <p className="gs-empty">No cases yet. Add one to begin.</p>
+          ) : (
+            <ul className="gs-cases-list">
+              {caseOptions.map((o) => (
+                <li
+                  key={o.value}
+                  data-scraping-case-id={o.value}
+                  className={`gs-case-item${caseId === o.value ? ' gs-case-item-active' : ''}`}
+                >
+                  {/* label is an operator-supplied case name — rendered as a text child. */}
+                  <span className="gs-case-name">{o.label}</span>
+                  <span className="gs-case-actions">
+                    <button className="gs-btn" onClick={() => setCaseId(o.value)}>Open</button>
+                    <button
+                      className="gs-btn"
+                      title="Copy this case's results into an investigation case"
+                      onClick={() => void handleImportCase(o.value)}
+                    >
+                      Import to case…
+                    </button>
+                    <button
+                      className="gs-btn gs-btn-danger"
+                      onClick={() => void handleDeleteCase(o.value)}
+                    >
+                      Delete
+                    </button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </aside>
+
+        <div className="gs-main">
       <section className="gs-section">
         <h3 className="gs-section-title">Target</h3>
 
@@ -442,10 +545,12 @@ export function GhostScrapeModule(): JSX.Element {
       {result && (
         <section className="gs-section">
           <h3 className="gs-section-title">Results</h3>
-          <GhostScrapeExportBar result={result} username={username} />
+          <GhostScrapeExportBar result={result} username={username} caseId={caseId} />
           <GhostScrapeResultsTable result={result} />
         </section>
       )}
+        </div>
+      </div>
     </div>
   );
 }

@@ -46,6 +46,7 @@ import type { HarvestedItem } from '@shared/socmint/types';
 import type { XCollectResultShape, XCollectorStatus } from '@shared/ipc-contracts';
 import { useSettings } from '../../state/store';
 import { safeHref } from '../socmint/safe-href';
+import { buildScrapingCaseOptions, type ScrapingCaseOption } from '../socmint/case-options';
 import { xStatusDisplay } from './status-display';
 import { buildXCollectRequest, canCollect as canCollectFn } from './x-collect-request';
 import './x-collector.css';
@@ -554,17 +555,82 @@ export function XCollectorModule({ caseId: propCaseId }: { caseId?: string }): J
 
   const [tab, setTab] = useState<XTab>('collect');
 
-  // Case ID — use the prop when provided; otherwise let the user enter one.
+  // Case ID — use the prop when provided; otherwise the Cases sidebar drives it.
   const [caseId, setCaseId] = useState<string>(propCaseId ?? '');
-  const [caseIdInput, setCaseIdInput] = useState<string>(propCaseId ?? '');
 
   // Keep caseId in sync when propCaseId changes (e.g. opened from a Case window).
   useEffect(() => {
     if (propCaseId !== undefined) {
       setCaseId(propCaseId);
-      setCaseIdInput(propCaseId);
     }
   }, [propCaseId]);
+
+  // X's OWN scraping cases (namespace 'x') — kept apart from the main investigation
+  // cases (window.api.cases.*). The sidebar reads/writes only this store. Shared with
+  // GhostScrape, which drives the same 'x' scraping-case store.
+  const [caseOptions, setCaseOptions] = useState<ScrapingCaseOption[]>([]);
+
+  const loadCases = useCallback(async () => {
+    try {
+      const list = await window.api.scrapingCases.list('x');
+      setCaseOptions(buildScrapingCaseOptions(list));
+    } catch (err) {
+      console.warn('[XCollector] scrapingCases.list:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (propCaseId !== undefined) return; // launched from a case → no sidebar
+    void loadCases();
+  }, [propCaseId, loadCases]);
+
+  const handleAddCase = useCallback(async () => {
+    // window.prompt is the app's existing lightweight name-entry ceremony (no new modal).
+    const name = window.prompt('New X case name');
+    if (name === null) return; // cancelled
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    try {
+      const created = await window.api.scrapingCases.create('x', trimmed);
+      await loadCases();
+      setCaseId(created.id);
+    } catch (err) {
+      console.warn('[XCollector] scrapingCases.create:', err);
+    }
+  }, [loadCases]);
+
+  const handleDeleteCase = useCallback(async (id: string) => {
+    try {
+      await window.api.scrapingCases.remove('x', id);
+      await loadCases();
+      // If the open case was the one deleted, drop back to the empty state.
+      setCaseId((current) => (current === id ? '' : current));
+    } catch (err) {
+      console.warn('[XCollector] scrapingCases.remove:', err);
+    }
+  }, [loadCases]);
+
+  // Copy this scraping case's results into one of the main investigation cases. The scraping
+  // case is left intact (source only). Main cases live in a separate store (window.api.cases).
+  const handleImportCase = useCallback(async (id: string) => {
+    try {
+      const cases = await window.api.cases.list();
+      if (cases.length === 0) {
+        window.alert('No investigation cases yet. Create one first.');
+        return;
+      }
+      const menu = cases.map((c, i) => `${i + 1}. ${c.title}`).join('\n');
+      const pick = window.prompt(`Import into which case?\n\n${menu}\n\nEnter a number:`);
+      if (pick === null) return; // cancelled
+      const idx = Number.parseInt(pick.trim(), 10) - 1;
+      const target = cases[idx];
+      if (!target) return;
+      const res = await window.api.scrapingCases.importToCase('x', id, target.id);
+      window.alert(`Imported ${res.imported} item(s) into "${target.title}".`);
+    } catch (err) {
+      console.warn('[XCollector] scrapingCases.importToCase:', err);
+    }
+  }, []);
 
   // Collection state
   const [collecting, setCollecting] = useState(false);
@@ -614,10 +680,6 @@ export function XCollectorModule({ caseId: propCaseId }: { caseId?: string }): J
   // We track it here so it persists across collect calls.
   const showBreakageBanner =
     lastResult?.status === 'breakage-detected';
-
-  const handleApplyCaseId = useCallback(() => {
-    setCaseId(caseIdInput.trim());
-  }, [caseIdInput]);
 
   const loadItems = useCallback(async () => {
     if (!caseId) return;
@@ -710,75 +772,110 @@ export function XCollectorModule({ caseId: propCaseId }: { caseId?: string }): J
       {/* ── Persistent breakage banner (shown above tabs, spec §4.3) ──────── */}
       {showBreakageBanner && <XBreakageBanner />}
 
-      {/* ── Case ID selector (when not provided as a prop) ───────────────── */}
-      {propCaseId === undefined && (
-        <div className="xc-case-bar">
-          <label htmlFor="xc-case-id" className="xc-label">Case ID</label>
-          <input
-            id="xc-case-id"
-            className="xc-input"
-            value={caseIdInput}
-            onChange={(e) => setCaseIdInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') handleApplyCaseId(); }}
-            placeholder="Enter case ID…"
-          />
-          <button className="xc-btn" onClick={handleApplyCaseId}>
-            Load
-          </button>
+      <div className="xc-layout">
+        {/* Cases sidebar — X's OWN scraping cases (namespace 'x'), independent of the
+            main investigation cases. Hidden when launched from a Case window. */}
+        {propCaseId === undefined && (
+          <aside className="xc-cases-sidebar" aria-label="X cases">
+            <div className="xc-cases-head">
+              <span className="xc-cases-title">Cases</span>
+              <button className="xc-btn xc-btn-primary" onClick={() => void handleAddCase()}>
+                Add Case
+              </button>
+            </div>
+            {caseOptions.length === 0 ? (
+              <p className="xc-empty">No cases yet. Add one to begin.</p>
+            ) : (
+              <ul className="xc-cases-list">
+                {caseOptions.map((o) => (
+                  <li
+                    key={o.value}
+                    data-scraping-case-id={o.value}
+                    className={`xc-case-item${caseId === o.value ? ' xc-case-item-active' : ''}`}
+                  >
+                    {/* label is an operator-supplied case name — rendered as a text child. */}
+                    <span className="xc-case-name">{o.label}</span>
+                    <span className="xc-case-actions">
+                      <button className="xc-btn" onClick={() => setCaseId(o.value)}>Open</button>
+                      <button
+                        className="xc-btn"
+                        title="Copy this case's results into an investigation case"
+                        onClick={() => void handleImportCase(o.value)}
+                      >
+                        Import to case…
+                      </button>
+                      <button
+                        className="xc-btn xc-btn-danger"
+                        onClick={() => void handleDeleteCase(o.value)}
+                      >
+                        Delete
+                      </button>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </aside>
+        )}
+
+        <div className="xc-main">
+          {caseId ? (
+            <>
+              {/* ── Tab bar ──────────────────────────────────────────────── */}
+              <div className="xc-tabs" role="tablist">
+                <button
+                  role="tab"
+                  aria-selected={tab === 'collect'}
+                  className={`xc-tab${tab === 'collect' ? ' xc-tab-active' : ''}`}
+                  onClick={() => setTab('collect')}
+                >
+                  Collect
+                </button>
+                <button
+                  role="tab"
+                  aria-selected={tab === 'items'}
+                  className={`xc-tab${tab === 'items' ? ' xc-tab-active' : ''}`}
+                  onClick={() => { setTab('items'); void loadItems(); }}
+                >
+                  Harvested Items
+                </button>
+              </div>
+
+              <div className="xc-body">
+                {tab === 'collect' && (
+                  <XCollectPanel
+                    gateOpen={gateOpen}
+                    onCollect={handleCollect}
+                    lastResult={lastResult}
+                    collecting={collecting}
+                    caseId={caseId}
+                    accounts={accounts}
+                    selectedAccount={selectedAccount}
+                    onSelectAccount={setSelectedAccount}
+                  />
+                )}
+                {tab === 'items' && (
+                  <XItemsPanel
+                    items={items}
+                    rankKeyword={rankKeyword}
+                    ranking={ranking}
+                    onChangeRankKeyword={setRankKeyword}
+                    onRankItems={handleRankItems}
+                    onRefreshItems={loadItems}
+                    onLabel={handleLabel}
+                  />
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="xc-placeholder">
+              {propCaseId === undefined
+                ? 'Select a case from the sidebar (or add one) to load X Collector data.'
+                : 'Loading X Collector data…'}
+            </div>
+          )}
         </div>
-      )}
-
-      {caseId ? (
-        <>
-          {/* ── Tab bar ──────────────────────────────────────────────────── */}
-          <div className="xc-tabs" role="tablist">
-            <button
-              role="tab"
-              aria-selected={tab === 'collect'}
-              className={`xc-tab${tab === 'collect' ? ' xc-tab-active' : ''}`}
-              onClick={() => setTab('collect')}
-            >
-              Collect
-            </button>
-            <button
-              role="tab"
-              aria-selected={tab === 'items'}
-              className={`xc-tab${tab === 'items' ? ' xc-tab-active' : ''}`}
-              onClick={() => { setTab('items'); void loadItems(); }}
-            >
-              Harvested Items
-            </button>
-          </div>
-
-          <div className="xc-body">
-            {tab === 'collect' && (
-              <XCollectPanel
-                gateOpen={gateOpen}
-                onCollect={handleCollect}
-                lastResult={lastResult}
-                collecting={collecting}
-                caseId={caseId}
-                accounts={accounts}
-                selectedAccount={selectedAccount}
-                onSelectAccount={setSelectedAccount}
-              />
-            )}
-            {tab === 'items' && (
-              <XItemsPanel
-                items={items}
-                rankKeyword={rankKeyword}
-                ranking={ranking}
-                onChangeRankKeyword={setRankKeyword}
-                onRankItems={handleRankItems}
-                onRefreshItems={loadItems}
-                onLabel={handleLabel}
-              />
-            )}
-          </div>
-        </>
-      ) : (
-        <div className="xc-placeholder">Enter a case ID above to load X Collector data.</div>
-      )}
+      </div>
     </div>
   );
 }

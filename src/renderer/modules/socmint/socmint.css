@@ -20,18 +20,59 @@
 }
 .sm-gate-notice strong { color: #ff9090; }
 
-/* ── Case ID bar ─────────────────────────────────────────────────────────── */
-.sm-case-bar {
-  flex: 0 0 auto;
+/* ── Layout: Cases sidebar + main content ────────────────────────────────── */
+.sm-layout {
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0;
+}
+.sm-main {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* ── Cases sidebar — SOCMINT's own scraping cases ────────────────────────── */
+.sm-cases-sidebar {
+  flex: 0 0 200px;
+  display: flex;
+  flex-direction: column;
+  background: #0d0a1e;
+  border-right: 1px solid #2a2040;
+  overflow-y: auto;
+}
+.sm-cases-head {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 6px;
-  padding: 6px 10px;
-  background: #0d0a1e;
+  padding: 6px 8px;
   border-bottom: 1px solid #2a2040;
 }
-.sm-case-bar .sm-label { font-size: 12px; white-space: nowrap; opacity: 0.7; }
-.sm-case-bar .sm-input { flex: 1 1 auto; }
+.sm-cases-title { font-size: 12px; font-weight: bold; opacity: 0.8; }
+.sm-cases-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.sm-case-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  border-bottom: 1px solid #1a1430;
+}
+.sm-case-item-active { background: #1a1236; }
+.sm-case-name {
+  font-size: 12px;
+  word-break: break-word;
+}
+.sm-case-actions {
+  display: flex;
+  gap: 4px;
+}
 
 /* ── Tab bar ─────────────────────────────────────────────────────────────── */
 .sm-tabs {
