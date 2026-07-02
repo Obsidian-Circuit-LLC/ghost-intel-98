@@ -64,7 +64,7 @@ import {
   type StartMonitorResult,
 } from './start-monitor-request';
 import { describeStartMonitorBlock } from './start-monitor-block';
-import { buildCaseOptions, type CaseOption } from './case-options';
+import { buildScrapingCaseOptions, type ScrapingCaseOption } from './case-options';
 import './socmint.css';
 
 // ---------------------------------------------------------------------------
@@ -677,29 +677,59 @@ export function SocmintModule({ caseId: propCaseId }: { caseId?: string }): JSX.
     }
   }, [platform, tab]);
 
-  // Controlled case ID — use the prop if provided; otherwise let the user enter one.
+  // Controlled case ID — use the prop if provided; otherwise the Cases sidebar drives it.
   const [caseId, setCaseId] = useState<string>(propCaseId ?? '');
-  const [caseIdInput, setCaseIdInput] = useState<string>(propCaseId ?? '');
 
   // Keep caseId in sync when propCaseId changes (e.g. opened from a Case window).
   useEffect(() => {
     if (propCaseId !== undefined) {
       setCaseId(propCaseId);
-      setCaseIdInput(propCaseId);
     }
   }, [propCaseId]);
 
-  const [caseOptions, setCaseOptions] = useState<CaseOption[]>([]);
-  const [manualEntry, setManualEntry] = useState(false);
+  // SOCMINT's OWN scraping cases (namespace 'socmint') — kept apart from the main
+  // investigation cases (window.api.cases.*). The sidebar reads/writes only this store.
+  const [caseOptions, setCaseOptions] = useState<ScrapingCaseOption[]>([]);
+
+  const loadCases = useCallback(async () => {
+    try {
+      const list = await window.api.scrapingCases.list('socmint');
+      setCaseOptions(buildScrapingCaseOptions(list));
+    } catch (err) {
+      console.warn('[SOCMINT] scrapingCases.list:', err);
+    }
+  }, []);
 
   useEffect(() => {
-    if (propCaseId !== undefined) return; // launched from a case → no picker
-    let cancelled = false;
-    void window.api.cases.list()
-      .then((list) => { if (!cancelled) setCaseOptions(buildCaseOptions(list)); })
-      .catch((err) => console.warn('[SOCMINT] cases.list:', err));
-    return () => { cancelled = true; };
-  }, [propCaseId]);
+    if (propCaseId !== undefined) return; // launched from a case → no sidebar
+    void loadCases();
+  }, [propCaseId, loadCases]);
+
+  const handleAddCase = useCallback(async () => {
+    // window.prompt is the app's existing lightweight name-entry ceremony (no new modal).
+    const name = window.prompt('New SOCMINT case name');
+    if (name === null) return; // cancelled
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    try {
+      const created = await window.api.scrapingCases.create('socmint', trimmed);
+      await loadCases();
+      setCaseId(created.id);
+    } catch (err) {
+      console.warn('[SOCMINT] scrapingCases.create:', err);
+    }
+  }, [loadCases]);
+
+  const handleDeleteCase = useCallback(async (id: string) => {
+    try {
+      await window.api.scrapingCases.remove('socmint', id);
+      await loadCases();
+      // If the open case was the one deleted, drop back to the empty state.
+      setCaseId((current) => (current === id ? '' : current));
+    } catch (err) {
+      console.warn('[SOCMINT] scrapingCases.remove:', err);
+    }
+  }, [loadCases]);
 
   // Channels
   const [channels, setChannels] = useState<MonitoredChannel[]>([]);
@@ -748,10 +778,6 @@ export function SocmintModule({ caseId: propCaseId }: { caseId?: string }): JSX.
     void loadChannels();
     void loadItems();
   }, [loadChannels, loadItems]);
-
-  const handleApplyCaseId = useCallback(() => {
-    setCaseId(caseIdInput.trim());
-  }, [caseIdInput]);
 
   const handleAddChannel = useCallback(async () => {
     if (!caseId || !newChannelId.trim()) return;
@@ -869,43 +895,46 @@ export function SocmintModule({ caseId: propCaseId }: { caseId?: string }): JSX.
         </div>
       )}
 
-      {/* Case selector — dropdown of real cases (value = real CaseId, no phantom-case footgun).
-          Manual entry stays available for advanced/edge use. */}
-      {propCaseId === undefined && (
-        <div className="sm-case-bar">
-          <label htmlFor="sm-case-pick" className="sm-label">Case</label>
-          {!manualEntry ? (
-            <>
-              <select
-                id="sm-case-pick"
-                className="sm-input"
-                value={caseId}
-                onChange={(e) => { setCaseId(e.target.value); setCaseIdInput(e.target.value); }}
-              >
-                <option value="">Select a case…</option>
+      <div className="sm-layout">
+        {/* Cases sidebar — SOCMINT's OWN scraping cases (namespace 'socmint'), independent
+            of the main investigation cases. Hidden when launched from a Case window. */}
+        {propCaseId === undefined && (
+          <aside className="sm-cases-sidebar" aria-label="SOCMINT cases">
+            <div className="sm-cases-head">
+              <span className="sm-cases-title">Cases</span>
+              <button className="sm-btn sm-btn-primary" onClick={() => void handleAddCase()}>
+                Add Case
+              </button>
+            </div>
+            {caseOptions.length === 0 ? (
+              <p className="sm-empty">No cases yet. Add one to begin.</p>
+            ) : (
+              <ul className="sm-cases-list">
                 {caseOptions.map((o) => (
-                  <option key={o.value} value={o.value}>{o.category} › {o.label}</option>
+                  <li
+                    key={o.value}
+                    data-scraping-case-id={o.value}
+                    className={`sm-case-item${caseId === o.value ? ' sm-case-item-active' : ''}`}
+                  >
+                    {/* label is an operator-supplied case name — rendered as a text child. */}
+                    <span className="sm-case-name">{o.label}</span>
+                    <span className="sm-case-actions">
+                      <button className="sm-btn" onClick={() => setCaseId(o.value)}>Open</button>
+                      <button
+                        className="sm-btn sm-btn-danger"
+                        onClick={() => void handleDeleteCase(o.value)}
+                      >
+                        Delete
+                      </button>
+                    </span>
+                  </li>
                 ))}
-              </select>
-              <button className="sm-btn" onClick={() => setManualEntry(true)}>Enter ID…</button>
-            </>
-          ) : (
-            <>
-              <input
-                id="sm-case-id"
-                className="sm-input"
-                value={caseIdInput}
-                onChange={(e) => setCaseIdInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleApplyCaseId(); }}
-                placeholder="Enter case ID…"
-              />
-              <button className="sm-btn" onClick={handleApplyCaseId}>Load</button>
-              <button className="sm-btn" onClick={() => setManualEntry(false)}>Pick from list</button>
-            </>
-          )}
-        </div>
-      )}
+              </ul>
+            )}
+          </aside>
+        )}
 
+        <div className="sm-main">
       {/* Platform selector — above the case body, always visible once a case is loaded. */}
       <div className="sm-platform-bar" role="group" aria-label="Platform">
         <button
@@ -1008,8 +1037,14 @@ export function SocmintModule({ caseId: propCaseId }: { caseId?: string }): JSX.
           </div>
         </>
       ) : (
-        <div className="sm-placeholder">Enter a case ID above to load SOCMINT data.</div>
+        <div className="sm-placeholder">
+          {propCaseId === undefined
+            ? 'Select a case from the sidebar (or add one) to load SOCMINT data.'
+            : 'Loading SOCMINT data…'}
+        </div>
       )}
+        </div>
+      </div>
     </div>
   );
 }
