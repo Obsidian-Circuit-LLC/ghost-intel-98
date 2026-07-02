@@ -13,6 +13,14 @@
 ; Per-user install (perMachine:false) ⇒ no elevation; %APPDATA% resolves to the current user's
 ; roaming profile. oneClick:false ⇒ customPageAfterChangeDir fires.
 
+; electron-builder concatenates this custom include into the installer script BEFORE
+; installer.nsi pulls in MUI2/LogicLib/nsDialogs, so the ${If}/${NSD_*} macros used by the
+; top-level Functions below are otherwise undefined at parse time and makensis aborts.
+; Pull them in here explicitly; both headers carry internal !ifndef guards, so the later
+; re-inclusion by electron-builder (and by the test harness) is a no-op.
+!include LogicLib.nsh
+!include nsDialogs.nsh
+
 Var CleanPrevData
 Var CleanPrevDataCheckbox
 
