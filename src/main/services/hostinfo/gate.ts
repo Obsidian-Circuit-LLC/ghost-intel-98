@@ -19,6 +19,14 @@ export interface HostInfoGateDeps {
   now(): string;
 }
 
+/** Reads the host-resolution toggle from settings. Extracted so the IPC wiring's FIELD CHOICE is
+ *  unit-testable: `geoint.cctvResolveHosts` (resolution) and `geoint.cctvOverTor` (the stream proxy)
+ *  are both booleans in the same settings block, so a wrong-field regression would be type-safe and
+ *  otherwise pass every test. register.ts wires `resolveEnabled` through this helper. */
+export function hostResolveEnabledFrom(settings: { geoint: { cctvResolveHosts: boolean } }): boolean {
+  return settings.geoint.cctvResolveHosts;
+}
+
 export async function resolveHostInfoGated(
   deps: HostInfoGateDeps,
   url: string,

@@ -96,7 +96,7 @@ import { makeBgConnSecrets, type SecretBackend } from '../bgconn/secrets';
 import { secretStore } from '../secrets/index';
 import { homedir } from 'node:os';
 import { hostInfoService } from '../services/hostinfo/index';
-import { resolveHostInfoGated } from '../services/hostinfo/gate';
+import { resolveHostInfoGated, hostResolveEnabledFrom } from '../services/hostinfo/gate';
 import { hostFromStreamUrl } from '../services/hostinfo/extract';
 import * as adsb from '../services/livefeeds/adsb';
 import * as ais from '../services/livefeeds/ais-stream';
@@ -1445,7 +1445,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     const url = String(args[0] ?? '');
     const force = !!(args[1] as { force?: boolean } | undefined)?.force;
     return resolveHostInfoGated({
-      resolveEnabled: async () => (await settingsStore.read()).geoint.cctvResolveHosts,
+      resolveEnabled: async () => hostResolveEnabledFrom(await settingsStore.read()),
       resolve: (u, o) => hostInfoService.resolve(u, o),
       hostOf: (u) => hostFromStreamUrl(u)?.host ?? '',
       now: () => new Date().toISOString()

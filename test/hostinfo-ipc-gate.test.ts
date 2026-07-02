@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { resolveHostInfoGated } from '../src/main/services/hostinfo/gate';
+import { resolveHostInfoGated, hostResolveEnabledFrom } from '../src/main/services/hostinfo/gate';
 import { resolveHost } from '../src/main/services/hostinfo/resolve';
 import type { HostInfo } from '../src/main/services/hostinfo/types';
 
@@ -42,39 +42,48 @@ describe('hostinfo IPC resolve gate (settings.geoint.cctvResolveHosts)', () => {
   });
 });
 
-describe('hostinfo resolution invariant — Tor-only, no clearnet fetch ever', () => {
-  it('a full resolution routes EVERY lookup through the injected Tor fetch; the clearnet path is never called', async () => {
-    // Two distinct injected fetchers. resolveHost is wired ONLY to the Tor one; the clearnet spy
-    // stands in for any direct/https egress that would leak the operator's real IP. If resolution
-    // ever fell back to clearnet this spy would fire.
-    const clearnetFetch = vi.fn(async () => { throw new Error('clearnet must never be used for host resolution'); });
-    const torFetch = vi.fn(async (url: string) => {
+describe('hostinfo resolution invariant — Tor-only egress', () => {
+  it('routes EVERY recon lookup (DoH A / PTR / RDAP) through the single injected fetcher — the sole egress', async () => {
+    // resolveHost's ResolveDeps exposes ONLY `fetchJson` (wired to torFetchJson in production, see
+    // index.ts) — there is no other fetch route in the module, so this is the real Tor-only guarantee:
+    // every recon request goes through the one injected fetcher and nowhere else. We assert all three
+    // stages hit it, with the expected DoH/RDAP URLs.
+    const fetchJson = vi.fn(async (url: string) => {
       if (url.includes('type=A')) return { Answer: [{ type: 1, data: '5.6.7.8' }] };
       if (url.includes('type=PTR')) return { Answer: [{ type: 12, data: 'cam.example.' }] };
-      return {}; // rdap: empty object → no rdap block, still exercises the Tor fetch
+      return {}; // rdap: empty object → no rdap block, still exercises the fetcher
     });
 
-    const out = await resolveHost('http://cam.example/stream', { fetchJson: torFetch, now: () => '2026-02-02T00:00:00Z' });
+    const out = await resolveHost('http://cam.example/stream', { fetchJson, now: () => '2026-02-02T00:00:00Z' });
 
-    expect(torFetch).toHaveBeenCalled();
-    expect(clearnetFetch).not.toHaveBeenCalled();
-    // Every URL handed to a fetcher went to the Tor fetcher — the https DoH / RDAP recon URLs.
-    for (const call of torFetch.mock.calls) expect(String(call[0])).toMatch(/^https:\/\//);
+    // Three stages, each through the injected fetcher: DNS A, reverse PTR, RDAP.
+    expect(fetchJson).toHaveBeenCalledTimes(3);
+    const urls = fetchJson.mock.calls.map((c) => String(c[0]));
+    expect(urls.some((u) => u.includes('cloudflare-dns.com') && u.includes('type=A'))).toBe(true);
+    expect(urls.some((u) => u.includes('type=PTR'))).toBe(true);
+    expect(urls.some((u) => u.includes('rdap.org/ip/'))).toBe(true);
     expect(out.ips).toContain('5.6.7.8');
   });
 
-  it('gate OFF: neither the Tor fetch nor the clearnet fetch runs — resolution is disabled entirely', async () => {
-    const clearnetFetch = vi.fn();
-    const torFetch = vi.fn();
+  it('gate OFF: the resolver (and therefore the fetcher) is never invoked — resolution disabled entirely', async () => {
+    const fetchJson = vi.fn();
     const d = {
       resolveEnabled: async () => false,
-      // If the gate ever let this through, resolveHost would invoke torFetch — it must not.
-      resolve: (url: string) => resolveHost(url, { fetchJson: torFetch, now: () => 'x' }),
+      // If the gate ever let this through, resolveHost would invoke fetchJson — it must not.
+      resolve: (url: string) => resolveHost(url, { fetchJson, now: () => 'x' }),
       hostOf: (u: string) => { try { return new URL(u).hostname; } catch { return ''; } },
       now: () => 'x'
     };
     await resolveHostInfoGated(d, 'http://cam.example/stream');
-    expect(torFetch).not.toHaveBeenCalled();
-    expect(clearnetFetch).not.toHaveBeenCalled();
+    expect(fetchJson).not.toHaveBeenCalled();
+  });
+});
+
+describe('host-resolution setting field wiring (hostResolveEnabledFrom)', () => {
+  it('reads geoint.cctvResolveHosts, NOT the stream toggle geoint.cctvOverTor', () => {
+    // Settings where the two toggles DISAGREE — proves the resolve gate reads the resolution field,
+    // not the stream field. register.ts wires resolveEnabled through this helper.
+    expect(hostResolveEnabledFrom({ geoint: { cctvResolveHosts: true, cctvOverTor: false } } as never)).toBe(true);
+    expect(hostResolveEnabledFrom({ geoint: { cctvResolveHosts: false, cctvOverTor: true } } as never)).toBe(false);
   });
 });

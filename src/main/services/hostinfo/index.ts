@@ -24,7 +24,10 @@ export function makeHostInfoService(deps: HostInfoServiceDeps) {
         if (cached) return cached;
       }
       const info = await deps.resolveHost(streamUrl);
-      if (info.host) await deps.store.save(info);
+      // Never persist a transient tor-not-ready partial: it would poison the 30-day cache so every
+      // later non-force lookup keeps returning "Tor not ready" even after Tor bootstraps. Cache only
+      // a result that actually ran against Tor (the background ensurePluginTor() warms it meanwhile).
+      if (info.host && !info.errors.includes('tor-not-ready')) await deps.store.save(info);
       return info;
     }
   };
