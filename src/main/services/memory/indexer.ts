@@ -57,6 +57,9 @@ async function reindexShard(path: string, caseId: string, title: string, sources
     embedded += 1;
   }
   if (newTexts.length) {
+    // If embed() throws, we return/rethrow BEFORE saveShard below — the prior shard on disk
+    // (from the last successful reindex) is left untouched rather than overwritten with a
+    // partial/empty one. Keep saveShard strictly after this call.
     const vecs = await embed(newTexts);
     newChunks.forEach((c, i) => next.chunks.push({ ...c, vector: vecs[i] }));
   }
@@ -81,17 +84,24 @@ export async function reindexConversations(): Promise<ReindexResult> {
   return reindexShard(conversationShardPath(), '__conversations__', 'Conversations', sources);
 }
 
-/** Reindex everything: every case + the conversation log. Reports coarse progress. */
-export async function reindexAll(onProgress?: (p: ReindexProgress) => void): Promise<{ cases: number; chunks: number }> {
+export interface ReindexFailure { label: string; error: string }
+
+/** Reindex everything: every case + the conversation log. Reports coarse progress and failures. */
+export async function reindexAll(
+  onProgress?: (p: ReindexProgress) => void
+): Promise<{ cases: number; chunks: number; failures: ReindexFailure[] }> {
   let ids: string[] = [];
   try { ids = await readdir(casesDir()); } catch { ids = []; }
   const total = ids.length + 1;
   let done = 0, cases = 0, chunks = 0;
+  const failures: ReindexFailure[] = [];
   for (const id of ids) {
-    try { const r = await reindexCase(id); chunks += r.chunks; cases += 1; } catch { /* not a case dir / unreadable */ }
+    try { const r = await reindexCase(id); chunks += r.chunks; cases += 1; }
+    catch (e) { failures.push({ label: id, error: (e as Error).message }); }
     onProgress?.({ done: (done += 1), total, label: id });
   }
-  try { const r = await reindexConversations(); chunks += r.chunks; } catch { /* no conversations */ }
+  try { const r = await reindexConversations(); chunks += r.chunks; }
+  catch (e) { failures.push({ label: 'conversations', error: (e as Error).message }); }
   onProgress?.({ done: (done += 1), total, label: 'conversations' });
-  return { cases, chunks };
+  return { cases, chunks, failures };
 }
