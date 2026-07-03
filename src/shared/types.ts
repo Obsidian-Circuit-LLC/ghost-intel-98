@@ -636,7 +636,7 @@ export const defaultSettings: AppSettings = {
     ttsRate: 1,
     ttsEngine: 'auto',
     piperVoice: null,
-    useMemory: false,
+    useMemory: true,
     autoReindex: true,
     adaptiveMemory: false
   },

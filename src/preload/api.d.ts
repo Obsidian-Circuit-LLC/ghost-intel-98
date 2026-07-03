@@ -475,8 +475,10 @@ export interface GhostApi {
   };
   memory: {
     status(): Promise<MemoryStatus>;
-    reindexAll(): Promise<{ cases: number; chunks: number }>;
+    reindexAll(): Promise<{ cases: number; chunks: number; failures: { label: string; error: string }[] }>;
     onProgress(cb: (p: MemoryProgress) => void): () => void;
+    /** Health of the dedicated bundled embedding runtime (loopback-only, own port). */
+    embedHealth(): Promise<'ready' | 'starting' | 'unavailable'>;
     /** List every learned item, or just those in `scope` when given. */
     profileList(scope?: string): Promise<MemoryItem[]>;
     /** Read the durable per-scope rolling summaries (scope → distilled prose) so the injected

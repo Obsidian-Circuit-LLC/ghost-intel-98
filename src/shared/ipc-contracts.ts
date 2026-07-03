@@ -398,6 +398,7 @@ export const channels = {
     reindexAll: 'memory:reindexAll',
     status: 'memory:status',
     onProgress: 'memory:onProgress',
+    embedHealth: 'memory:embedHealth',
     // Adaptive-memory profile governance (Task 8) — list/edit/pin/delete/wipe the durable,
     // inspectable `MemoryItem` profile. `memory:onRecall` is deliberately NOT a channel here:
     // recall provenance rides the existing `ai:onChatChunk` stream (see ai.ts's `recall` field
@@ -767,9 +768,10 @@ export interface ApiContracts {
   [channels.localAi.stop]: { args: []; returns: void };
   [channels.localAi.onProgress]: { args: [(payload: LocalAiProgress) => void]; returns: () => void };
 
-  [channels.memory.reindexAll]: { args: []; returns: { cases: number; chunks: number } };
+  [channels.memory.reindexAll]: { args: []; returns: { cases: number; chunks: number; failures: { label: string; error: string }[] } };
   [channels.memory.status]: { args: []; returns: MemoryStatus };
   [channels.memory.onProgress]: { args: [(payload: MemoryProgress) => void]; returns: () => void };
+  [channels.memory.embedHealth]: { args: []; returns: 'ready' | 'starting' | 'unavailable' };
   [channels.memory.profileList]: { args: [string | undefined]; returns: MemoryItem[] };
   [channels.memory.profileSummaries]: { args: []; returns: Record<string, string> };
   [channels.memory.profileUpsert]: { args: [Pick<MemoryItem, 'id' | 'scope' | 'text' | 'pinned'>]; returns: MemoryItem[] };

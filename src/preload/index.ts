@@ -394,12 +394,14 @@ const api = {
   },
   memory: {
     status: (): Promise<MemoryStatus> => ipcRenderer.invoke(channels.memory.status),
-    reindexAll: (): Promise<{ cases: number; chunks: number }> => ipcRenderer.invoke(channels.memory.reindexAll),
+    reindexAll: (): Promise<{ cases: number; chunks: number; failures: { label: string; error: string }[] }> =>
+      ipcRenderer.invoke(channels.memory.reindexAll),
     onProgress: (cb: (p: MemoryProgress) => void): (() => void) => {
       const listener = (_e: unknown, payload: MemoryProgress): void => cb(payload);
       ipcRenderer.on(channels.memory.onProgress, listener);
       return () => ipcRenderer.removeListener(channels.memory.onProgress, listener);
     },
+    embedHealth: (): Promise<'ready' | 'starting' | 'unavailable'> => ipcRenderer.invoke(channels.memory.embedHealth),
     profileList: (scope?: string): Promise<MemoryItem[]> => ipcRenderer.invoke(channels.memory.profileList, scope),
     profileSummaries: (): Promise<Record<string, string>> => ipcRenderer.invoke(channels.memory.profileSummaries),
     profileUpsert: (item: Pick<MemoryItem, 'id' | 'scope' | 'text' | 'pinned'>): Promise<MemoryItem[]> =>

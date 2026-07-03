@@ -10,6 +10,7 @@ import { EMBED_MODEL } from './embeddings';
 
 export { reindexAll, reindexCase, reindexConversations, type ReindexProgress } from './indexer';
 export { recall, formatRecall, type RecallHit } from './retriever';
+export { embedHealth } from './embed-runtime';
 
 export interface MemoryStatus { model: string; cases: number; chunks: number }
 

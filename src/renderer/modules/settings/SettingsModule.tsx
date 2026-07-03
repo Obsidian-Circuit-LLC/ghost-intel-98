@@ -327,9 +327,11 @@ function AiPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSettings>)
   const [memStatus, setMemStatus] = useState<{ model: string; cases: number; chunks: number } | null>(null);
   const [memBusy, setMemBusy] = useState(false);
   const [memProgress, setMemProgress] = useState<string>('');
+  const [embedHealth, setEmbedHealth] = useState<'ready' | 'starting' | 'unavailable' | null>(null);
 
   useEffect(() => { void window.api.memory.status().then(setMemStatus).catch(() => undefined); }, []);
   useEffect(() => window.api.memory.onProgress((p) => setMemProgress(`${p.done}/${p.total} · ${p.label}`)), []);
+  useEffect(() => { void window.api.memory.embedHealth().then(setEmbedHealth).catch(() => undefined); }, []);
 
   async function rebuildIndex(): Promise<void> {
     setMemBusy(true); setMemProgress('starting…');
@@ -337,6 +339,9 @@ function AiPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSettings>)
       const r = await window.api.memory.reindexAll();
       setMemStatus(await window.api.memory.status());
       toast.success(`Memory index rebuilt: ${r.cases} case(s), ${r.chunks} chunk(s).`);
+      if (r.failures.length) {
+        toast.error(`${r.failures.length} item(s) failed to index — ${r.failures[0].error}`);
+      }
     } catch (err) {
       toast.error(`Reindex failed: ${(err as Error).message}`);
     } finally { setMemBusy(false); setMemProgress(''); }
@@ -389,16 +394,20 @@ function AiPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSettings>)
       </p>
       </fieldset>
       <fieldset>
-        <legend>Case Memory (local, offline)</legend>
+        <legend>Memory (local, offline)</legend>
         <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <input type="checkbox" checked={s.ai.useMemory}
             onChange={(e) => void patch({ ai: { ...s.ai, useMemory: e.target.checked } })} />
-          Let the assistant recall relevant notes, files, entities &amp; past conversations
+          Memory (recall across all conversations, cases &amp; documents)
         </label>
         <p style={{ fontSize: 11, color: '#444', margin: '6px 0' }}>
-          Builds a local vector index of your cases and conversations using the bundled embedding
-          model ({memStatus?.model ?? 'nomic-embed-text'}). Everything stays on this machine
-          (loopback only) and is encrypted at rest with your vault. Retrieval is deterministic.
+          Builds a local vector index of your cases, conversations, and documents using the bundled
+          embedding model ({memStatus?.model ?? 'nomic-embed-text'}). Everything stays on this
+          machine (loopback only) and is encrypted at rest with your vault. Retrieval is
+          deterministic.
+        </p>
+        <p style={{ fontSize: 11, color: '#444', margin: '6px 0' }}>
+          Embedding engine: {embedHealth ?? '…'}
         </p>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           <button onClick={() => void rebuildIndex()} disabled={memBusy}>{memBusy ? 'Rebuilding…' : 'Rebuild memory index'}</button>
