@@ -80,6 +80,9 @@ async function spawnOnPort(port: number): Promise<boolean> {
 }
 
 export async function ensureEmbedRuntime(): Promise<void> {
+  // Idempotent short-circuit, mirroring local-ai.ts's ensureRuntime(): if we already resolved
+  // an endpoint and it's still answering, reuse it instead of re-entering the spawn/port-step loop.
+  if (resolvedEndpoint && (await probeFn(resolvedEndpoint))) return;
   if (await resolveBundled()) {
     for (let step = 0; step < EMBED_PORT_MAX_STEPS; step++) {
       const port = EMBED_PORT_BASE + step;
