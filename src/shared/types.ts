@@ -204,11 +204,13 @@ export interface ExtractedAttachmentMeta {
 
 export type EntityType =
   | 'person' | 'alias' | 'email' | 'phone' | 'domain' | 'ip'
-  | 'organisation' | 'social-profile' | 'vehicle' | 'location' | 'crypto-wallet' | 'other';
+  | 'organisation' | 'social-profile' | 'vehicle' | 'location' | 'crypto-wallet' | 'other'
+  | 'url' | 'hostname' | 'asn' | 'certificate' | 'username' | 'file-hash';
 
 export const ENTITY_TYPES: readonly EntityType[] = [
   'person', 'alias', 'email', 'phone', 'domain', 'ip',
-  'organisation', 'social-profile', 'vehicle', 'location', 'crypto-wallet', 'other'
+  'organisation', 'social-profile', 'vehicle', 'location', 'crypto-wallet', 'other',
+  'url', 'hostname', 'asn', 'certificate', 'username', 'file-hash'
 ];
 
 export type EntityRelationship = 'family' | 'associate' | 'other';
