@@ -8,7 +8,7 @@
  */
 import { useEffect, useState } from 'react';
 import type { GraphNodeShape, MemoryGraphShape } from '@shared/ipc-contracts';
-import { toSvgScene } from './svg-graph';
+import { toSvgScene, type RenderGraph } from '../../components/graph-canvas/svg-scene';
 
 const VIEW = { w: 720, h: 500 };
 
@@ -167,7 +167,14 @@ export function MindsEyeModule(): JSX.Element {
     );
   }
 
-  const scene = toSvgScene(graph, VIEW);
+  const render: RenderGraph = {
+    nodes: graph.nodes.map((n) => ({
+      id: n.id, x: n.x, y: n.y, strength: n.strength, label: n.label,
+      cls: ['node-' + n.kind, n.pinned ? 'pinned' : '', n.conflict ? 'conflict' : ''].filter(Boolean).join(' '),
+    })),
+    edges: graph.edges.map((e) => ({ source: e.source, target: e.target, cls: 'edge-' + e.kind })),
+  };
+  const scene = toSvgScene(render, VIEW);
   const byId = new Map(graph.nodes.map((n) => [n.id, n]));
 
   // "One thing to fix" tray: surface a single detected conflict pair at a time (never the whole
