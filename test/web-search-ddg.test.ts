@@ -79,6 +79,30 @@ describe('searchWeb (injected deps)', () => {
   });
 });
 
+describe('searchWeb onReason (diagnosability — why zero results)', () => {
+  const ensure = async () => {};
+  const capture = async (opts: Parameters<typeof searchWeb>[1]): Promise<string> => {
+    let reason = 'unset';
+    await searchWeb('acme', { ...opts, onReason: (r) => { reason = r; } });
+    return reason;
+  };
+  it("reports 'ok' when results parse", async () => {
+    expect(await capture({ ensure, endpoint: 'https://ddg.onion', fetch: (async () => ({ status: 200, body: FIXTURE, finalUrl: 'x' })) as never })).toBe('ok');
+  });
+  it("reports 'no-results' on a 200 that parses to nothing", async () => {
+    expect(await capture({ ensure, endpoint: 'https://ddg.onion', fetch: (async () => ({ status: 200, body: '<html>none</html>', finalUrl: 'x' })) as never })).toBe('no-results');
+  });
+  it("reports 'tor-unavailable' when ensure() throws", async () => {
+    expect(await capture({ ensure: async () => { throw new Error('down'); }, fetch: (async () => ({ status: 200, body: FIXTURE, finalUrl: 'x' })) as never })).toBe('tor-unavailable');
+  });
+  it("reports 'blocked' on a blocked/non-200 fetch", async () => {
+    expect(await capture({ ensure, endpoint: 'https://ddg.onion', fetch: (async () => ({ status: 0, body: '', finalUrl: 'x', blocked: true })) as never })).toBe('blocked');
+  });
+  it("reports 'bad-endpoint' for a non-onion endpoint", async () => {
+    expect(await capture({ ensure, endpoint: 'https://evil.example', fetch: (async () => ({ status: 200, body: FIXTURE, finalUrl: 'x' })) as never })).toBe('bad-endpoint');
+  });
+});
+
 describe('searchWebClearnet (opt-in, non-Tor, injected fetch)', () => {
   const okFetch = async () => ({ ok: true, status: 200, text: async () => FIXTURE });
 

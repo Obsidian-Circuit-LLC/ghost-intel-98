@@ -5,7 +5,20 @@
  * Tor-routed DDG search, feeds the results back as an untrusted-DATA turn, and lets the model continue.
  * Bounded by MAX_WEB_SEARCHES so it can never loop indefinitely.
  */
-import type { WebResult } from './ddg';
+import type { WebResult, SearchReason } from './ddg';
+
+/** Human-readable explanation of why a Tor web search returned nothing — shown in the chat so a
+ *  failed search is diagnosable (Tor didn't start vs onion unreachable vs genuinely-empty) rather
+ *  than a silent "(0 results)". Pure/testable. */
+export function torFailureMessage(reason: SearchReason): string {
+  switch (reason) {
+    case 'tor-unavailable': return "Tor isn't available — the bundled Tor connection couldn't start. Web search needs Tor.";
+    case 'blocked': return 'could not reach DuckDuckGo over Tor — the onion was unreachable or the request was blocked/timed out.';
+    case 'no-results': return 'Tor reached DuckDuckGo but there were no results for this query.';
+    case 'bad-endpoint': return 'the web-search endpoint is misconfigured (not an onion).';
+    default: return 'the Tor web search returned nothing.';
+  }
+}
 
 export const MAX_WEB_SEARCHES = 3;
 

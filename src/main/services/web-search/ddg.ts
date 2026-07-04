@@ -64,30 +64,45 @@ export function parseDdgResults(html: string): WebResult[] {
 
 export interface SearchDeps { fetch: typeof torFetch; ensure: typeof ensurePluginTor; endpoint: string }
 
+/** Why a Tor search produced the result it did — so the UI can tell a Tor-down from an unreachable
+ *  onion from a genuinely-empty query, instead of collapsing every zero into the same "(0 results)".
+ *  Diagnosability for GhostExodus's "can't search anything over Tor" (which works from our test box,
+ *  so his zero is environmental — this makes WHICH environmental cause visible in one screenshot). */
+export type SearchReason = 'ok' | 'no-results' | 'tor-unavailable' | 'blocked' | 'bad-endpoint' | 'empty-query';
+
 /**
  * Run a Tor-routed DDG search. Fail-closed: any blocked/non-200 fetch (Tor down, onion unreachable,
- * refusal) returns [] — never a clearnet fallback. `deps` is injectable for tests.
+ * refusal) returns [] — never a clearnet fallback. `deps` is injectable for tests. `onReason` (when
+ * supplied) is called exactly once with the outcome reason before returning — the results array is
+ * unchanged, so existing callers/tests are unaffected.
  */
-export async function searchWeb(query: string, opts: { caseId?: string } & Partial<SearchDeps> = {}): Promise<WebResult[]> {
+export async function searchWeb(
+  query: string,
+  opts: { caseId?: string; onReason?: (r: SearchReason) => void } & Partial<SearchDeps> = {}
+): Promise<WebResult[]> {
+  const report = (r: SearchReason): void => opts.onReason?.(r);
   const q = query.trim();
-  if (!q) return [];
+  if (!q) { report('empty-query'); return []; }
   const ensure = opts.ensure ?? ensurePluginTor;
   const doFetch = opts.fetch ?? torFetch;
   const endpoint = opts.endpoint ?? DDG_ONION;
   // Charter: onion-to-onion ONLY. Enforce it here (not by convention) so no override — present or
   // future — can ever route a clearnet host through a Tor exit node. Fail-closed on a bad/non-onion URL.
   let host: string;
-  try { host = new URL(endpoint).hostname; } catch { return []; }
-  if (!host.endsWith('.onion')) return [];
+  try { host = new URL(endpoint).hostname; } catch { report('bad-endpoint'); return []; }
+  if (!host.endsWith('.onion')) { report('bad-endpoint'); return []; }
   try {
     await ensure();
   } catch {
-    return []; // Tor unavailable → no results, no fallback
+    report('tor-unavailable'); // Tor couldn't start/bootstrap → no results, no fallback
+    return [];
   }
   const url = `${endpoint.replace(/\/$/, '')}/html/?q=${encodeURIComponent(q)}`;
   const res = await doFetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, caseId: opts.caseId });
-  if (res.blocked || res.status !== 200 || !res.body) return [];
-  return parseDdgResults(res.body);
+  if (res.blocked || res.status !== 200 || !res.body) { report('blocked'); return []; }
+  const results = parseDdgResults(res.body);
+  report(results.length ? 'ok' : 'no-results');
+  return results;
 }
 
 export const DDG_CLEARNET = 'https://html.duckduckgo.com';

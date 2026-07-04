@@ -21,8 +21,8 @@ import { recall, formatRecall, type RecallHit } from './memory/retriever';
 import { recallProfile } from './memory/profile';
 import type { MemoryItem } from './memory/profile/types';
 import { randomBytes } from 'node:crypto';
-import { searchWeb, searchWebClearnet } from './web-search/ddg';
-import { extractSearchDirective, formatWebResults, planWebSearch, decideSearchAction, WEB_SEARCH_SYSTEM, MAX_WEB_SEARCHES } from './web-search/directive';
+import { searchWeb, searchWebClearnet, type SearchReason } from './web-search/ddg';
+import { extractSearchDirective, formatWebResults, planWebSearch, decideSearchAction, torFailureMessage, WEB_SEARCH_SYSTEM, MAX_WEB_SEARCHES } from './web-search/directive';
 
 /** `'global'` always included; `case:<caseId>` appended when the request carries a selected case
  *  — the same scoping convention the adaptive-memory profile store/reconcile/retriever use. */
@@ -144,7 +144,8 @@ export async function chat(streamId: string, req: AiChatRequest, getWindow: () =
       seen.push(decision.key);
       searches += 1;
       emit(getWindow, streamId, { chunk: `\n\n🔍 searching the web over Tor for “${q}”…\n\n` });
-      const results = await searchWeb(q, { caseId: req.caseId });
+      let searchReason: SearchReason = 'ok';
+      const results = await searchWeb(q, { caseId: req.caseId, onReason: (r) => { searchReason = r; } });
       const fence = randomBytes(8).toString('hex');
       messages.push({ role: 'assistant', content: full });
 
@@ -153,14 +154,16 @@ export async function chat(streamId: string, req: AiChatRequest, getWindow: () =
         emit(getWindow, streamId, { chunk: `\n(${results.length} result(s) over Tor)\n` });
         messages.push({ role: 'user', content: formatWebResults(q, results, fence) });
       } else if (plan.mode === 'clearnet') {
+        // Surface WHY Tor produced nothing before exposing the IP over clearnet.
         emit(getWindow, streamId, {
-          chunk: `\n\n⚠ Tor search returned nothing — falling back to CLEARNET for “${q}”. Your real IP is exposed to these results and their hosts.\n\n`
+          chunk: `\n\n⚠ ${torFailureMessage(searchReason)} Falling back to CLEARNET for “${q}” — your real IP is exposed to these results and their hosts.\n\n`
         });
         const cn = await searchWebClearnet(q);
         emit(getWindow, streamId, { chunk: `\n(${cn.length} result(s) over CLEARNET)\n` });
         messages.push({ role: 'user', content: formatWebResults(q, cn, fence) });
       } else {
-        emit(getWindow, streamId, { chunk: `\n⚠ no web results (Tor search returned nothing).\n` });
+        // Diagnosable failure: Tor-not-started vs onion-unreachable vs genuinely-empty are now distinct.
+        emit(getWindow, streamId, { chunk: `\n⚠ ${torFailureMessage(searchReason)}\n` });
         messages.push({ role: 'user', content: formatWebResults(q, [], fence) });
       }
     }

@@ -80,6 +80,33 @@ function clamp01(n: number): number {
   return Math.max(0, Math.min(1, n));
 }
 
+// Estimated per-glyph width + line height for label collision boxes (Win98 ~11px sans text).
+const CHAR_W = 5.5;
+const LINE_H = 12;
+
+/**
+ * Drop labels that would overlap an already-placed one, keeping larger (more important) nodes'
+ * labels first. Deterministic: priority is node radius desc, tie-broken by text then x. Fixes the
+ * Mind's Eye "text glitch overlaying" — a dense node cluster stacked every node's label on top of
+ * the others into an unreadable blob. Shared by every graph on the canvas (Mind's Eye + the SP-4
+ * investigation graph). Exported for unit testing.
+ */
+export function declutterLabels(items: { x: number; y: number; text: string; r: number }[]): SvgSceneLabel[] {
+  const boxes: { x: number; y: number; w: number; h: number }[] = [];
+  const out: SvgSceneLabel[] = [];
+  const ordered = [...items].sort((a, b) => (b.r - a.r) || a.text.localeCompare(b.text) || a.x - b.x);
+  for (const it of ordered) {
+    if (!it.text) continue;
+    const w = it.text.length * CHAR_W;
+    const box = { x: it.x - w / 2, y: it.y - LINE_H, w, h: LINE_H };
+    const overlaps = boxes.some((b) => box.x < b.x + b.w && box.x + box.w > b.x && box.y < b.y + b.h && box.y + box.h > b.y);
+    if (overlaps) continue;
+    boxes.push(box);
+    out.push({ x: it.x, y: it.y, text: it.text });
+  }
+  return out;
+}
+
 export function toSvgScene(graph: RenderGraph, view: { w: number; h: number }): SvgScene {
   const sx = scaleAxis(graph.nodes.map((n) => n.x), view.w);
   const sy = scaleAxis(graph.nodes.map((n) => n.y), view.h);
@@ -101,11 +128,12 @@ export function toSvgScene(graph: RenderGraph, view: { w: number; h: number }): 
     edges.push({ x1: s.cx, y1: s.cy, x2: t.cx, y2: t.cy, cls: e.cls, source: e.source, target: e.target });
   }
 
-  const labels: SvgSceneLabel[] = nodes.map((n, i) => ({
+  const labels = declutterLabels(nodes.map((n, i) => ({
     x: n.cx,
     y: n.cy - n.r - 4,
-    text: graph.nodes[i].label
-  }));
+    text: graph.nodes[i].label,
+    r: n.r
+  })));
 
   return { nodes, edges, labels };
 }
