@@ -562,7 +562,7 @@ export const defaultShortcuts: AccessShortcut[] = [
   { id: 'calendar', label: 'Calendar', kind: 'module', target: 'calendar', icon: 'calendar' },
   { id: 'reminders', label: 'Reminders', kind: 'module', target: 'reminders', icon: 'bell' },
   { id: 'alarm', label: 'Alarm', kind: 'module', target: 'alarm', icon: 'alarm' },
-  { id: 'ai', label: 'AI Assistant', kind: 'module', target: 'ai-assistant', icon: 'sparkle' },
+  { id: 'ai', label: 'Q', kind: 'module', target: 'ai-assistant', icon: 'sparkle' },
   { id: 'search', label: 'Search', kind: 'module', target: 'search', icon: 'search' },
   { id: 'help', label: 'RTFM', kind: 'module', target: 'help', icon: 'help' }
   // Games (Solitaire/Minesweeper/Chess/Pinball) are surfaced via the Access "Games ▸" submenu, not
@@ -603,6 +603,7 @@ export function reconcileShortcuts(
     // user's custom rename is preserved. Same pattern as the Help → RTFM rename.
     if (s.kind === 'module' && s.target === 'help' && s.label === 'Help') return { ...s, label: 'RTFM' };
     if (s.kind === 'module' && s.target === 'cases' && s.label === 'Case Files') return { ...s, label: 'My Cases' };
+    if (s.kind === 'module' && s.target === 'ai-assistant' && s.label === 'AI Assistant') return { ...s, label: 'Q' };
     return s;
   });
   const seen = new Set(seeded);

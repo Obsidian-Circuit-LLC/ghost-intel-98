@@ -78,6 +78,28 @@ describe('reconcileShortcuts', () => {
   });
 });
 
+describe('reconcileShortcuts — "Q" rename (Access menu)', () => {
+  it('renames the persisted default "AI Assistant" label to "Q"', () => {
+    const legacy: AccessShortcut[] = [
+      { id: 'ai', label: 'AI Assistant', kind: 'module', target: 'ai-assistant' }
+    ];
+    const { shortcuts } = reconcileShortcuts(legacy, []);
+    expect(shortcuts.find((s) => s.target === 'ai-assistant')?.label).toBe('Q');
+  });
+
+  it('does NOT rename a user-customised AI shortcut label', () => {
+    const custom: AccessShortcut[] = [
+      { id: 'ai', label: 'My AI', kind: 'module', target: 'ai-assistant' }
+    ];
+    const { shortcuts } = reconcileShortcuts(custom, []);
+    expect(shortcuts.find((s) => s.target === 'ai-assistant')?.label).toBe('My AI');
+  });
+
+  it('fresh defaultShortcuts already label the ai-assistant target "Q"', () => {
+    expect(defaultShortcuts.find((s) => s.target === 'ai-assistant')?.label).toBe('Q');
+  });
+});
+
 describe('reconcileShortcuts — journal + markets seeding (beta.10)', () => {
   it('seeds journal and markets into an install that lacks them', () => {
     const existing = defaultShortcuts.filter((s) => s.target !== 'journal' && s.target !== 'markets');
