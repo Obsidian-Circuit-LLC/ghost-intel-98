@@ -327,7 +327,7 @@ function AiPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSettings>)
   const [memStatus, setMemStatus] = useState<{ model: string; cases: number; chunks: number } | null>(null);
   const [memBusy, setMemBusy] = useState(false);
   const [memProgress, setMemProgress] = useState<string>('');
-  const [embedHealth, setEmbedHealth] = useState<'ready' | 'starting' | 'unavailable' | null>(null);
+  const [embedHealth, setEmbedHealth] = useState<'ready' | 'starting' | 'unavailable' | 'model-missing' | null>(null);
 
   useEffect(() => { void window.api.memory.status().then(setMemStatus).catch(() => undefined); }, []);
   useEffect(() => window.api.memory.onProgress((p) => setMemProgress(`${p.done}/${p.total} · ${p.label}`)), []);
@@ -412,7 +412,11 @@ function AiPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSettings>)
           deterministic.
         </p>
         <p style={{ fontSize: 11, color: '#444', margin: '6px 0' }}>
-          Embedding engine: {embedHealth ?? '…'}
+          Embedding engine: {embedHealth === 'model-missing'
+            ? 'model not loaded — click "Rebuild memory index" below'
+            : embedHealth === 'unavailable'
+            ? 'engine offline'
+            : embedHealth ?? '…'}
         </p>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           <button onClick={() => void rebuildIndex()} disabled={memBusy}>{memBusy ? 'Rebuilding…' : 'Rebuild memory index'}</button>

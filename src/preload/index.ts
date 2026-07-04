@@ -401,7 +401,7 @@ const api = {
       ipcRenderer.on(channels.memory.onProgress, listener);
       return () => ipcRenderer.removeListener(channels.memory.onProgress, listener);
     },
-    embedHealth: (): Promise<'ready' | 'starting' | 'unavailable'> => ipcRenderer.invoke(channels.memory.embedHealth),
+    embedHealth: (): Promise<'ready' | 'starting' | 'unavailable' | 'model-missing'> => ipcRenderer.invoke(channels.memory.embedHealth),
     profileList: (scope?: string): Promise<MemoryItem[]> => ipcRenderer.invoke(channels.memory.profileList, scope),
     profileSummaries: (): Promise<Record<string, string>> => ipcRenderer.invoke(channels.memory.profileSummaries),
     profileUpsert: (item: Pick<MemoryItem, 'id' | 'scope' | 'text' | 'pinned'>): Promise<MemoryItem[]> =>

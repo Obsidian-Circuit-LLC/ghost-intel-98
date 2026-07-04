@@ -3,8 +3,9 @@ import { access } from 'node:fs/promises';
 import { join } from 'node:path';
 import { bundledRoot, LOCAL_AI_ENDPOINT } from '../local-ai-paths';
 import { ensureRuntime } from '../local-ai';
+import { EMBED_MODEL } from './embeddings';
 
-export type EmbedHealth = 'ready' | 'starting' | 'unavailable';
+export type EmbedHealth = 'ready' | 'starting' | 'unavailable' | 'model-missing';
 
 export const EMBED_HOST = '127.0.0.1';
 export const EMBED_PORT_BASE = 11435;
@@ -14,6 +15,7 @@ type SpawnLike = (cmd: string, args: string[], opts: { env: NodeJS.ProcessEnv; s
 
 let spawnFn: SpawnLike = nodeSpawn as unknown as SpawnLike;
 let probeFn: (url: string) => Promise<boolean> = defaultProbe;
+let tagsFn: (url: string) => Promise<string[] | null> = defaultTags;
 let bundledOverride: boolean | null = null;
 let bundledRootOverride: string | null = null;
 
@@ -22,11 +24,13 @@ let starting = false;
 
 export function __setSpawnForTest(fn: SpawnLike | null): void { spawnFn = fn ?? (nodeSpawn as unknown as SpawnLike); }
 export function __setProbeForTest(fn: ((url: string) => Promise<boolean>) | null): void { probeFn = fn ?? defaultProbe; }
+export function __setTagsForTest(fn: ((url: string) => Promise<string[] | null>) | null): void { tagsFn = fn ?? defaultTags; }
 export function __setBundledForTest(v: boolean | null): void { bundledOverride = v; }
 export function __setBundledRootForTest(dir: string | null): void { bundledRootOverride = dir; }
 export function __resetEmbedRuntimeForTest(): void {
   spawnFn = nodeSpawn as unknown as SpawnLike;
   probeFn = defaultProbe;
+  tagsFn = defaultTags;
   bundledOverride = null;
   bundledRootOverride = null;
   resolvedEndpoint = null;
@@ -38,6 +42,18 @@ async function defaultProbe(url: string): Promise<boolean> {
     const res = await fetch(`${url}/api/tags`, { signal: AbortSignal.timeout(1500) });
     return res.ok;
   } catch { return false; }
+}
+
+/** Fetches the loaded-model tag list from `<url>/api/tags`, or `null` if the server is unreachable
+ * / responded with an error — mirrors chat's `probeTags()` in `local-ai.ts` so `embedHealth()` can
+ * tell "server up but model not loaded" apart from "server down". */
+async function defaultTags(url: string): Promise<string[] | null> {
+  try {
+    const res = await fetch(`${url}/api/tags`, { signal: AbortSignal.timeout(1500) });
+    if (!res.ok) return null;
+    const body = (await res.json()) as { models?: { name?: string }[] };
+    return Array.isArray(body.models) ? body.models.map((m) => m.name ?? '') : null;
+  } catch { return null; }
 }
 
 async function exists(p: string): Promise<boolean> { try { await access(p); return true; } catch { return false; } }
@@ -122,5 +138,8 @@ export async function ensureEmbedRuntime(): Promise<void> {
 export async function embedHealth(): Promise<EmbedHealth> {
   if (starting) return 'starting';
   const endpoint = embedEndpoint();
-  return (await probeFn(endpoint)) ? 'ready' : 'unavailable';
+  const tags = await tagsFn(endpoint);
+  if (tags === null) return 'unavailable';
+  const modelPresent = tags.some((n) => n.startsWith(EMBED_MODEL));
+  return modelPresent ? 'ready' : 'model-missing';
 }

@@ -6,7 +6,7 @@ vi.mock('electron', () => ({ app: { getPath: () => join(tmpdir(), 'dcs98-embedrt
 
 import {
   ensureEmbedRuntime, embedEndpoint, embedHealth, embedBundled,
-  __setSpawnForTest, __setProbeForTest, __setBundledForTest, __setBundledRootForTest, __resetEmbedRuntimeForTest
+  __setSpawnForTest, __setProbeForTest, __setBundledForTest, __setBundledRootForTest, __setTagsForTest, __resetEmbedRuntimeForTest
 } from '../src/main/services/memory/embed-runtime';
 
 function fakeChild() {
@@ -22,6 +22,7 @@ describe('dedicated embedding runtime', () => {
     let spawnedEnv: NodeJS.ProcessEnv | undefined;
     __setSpawnForTest((_bin, _args, opts) => { spawnedEnv = opts.env; return fakeChild(); });
     __setProbeForTest(async () => true); // runtime answers immediately
+    __setTagsForTest(async () => ['nomic-embed-text:latest']); // model loaded
     await ensureEmbedRuntime();
     expect(spawnedEnv?.OLLAMA_HOST).toContain('11435');
     expect(spawnedEnv?.OLLAMA_MODELS).toContain('models');
@@ -57,5 +58,25 @@ describe('embedBundled() — gates on the EMBED bundle marker, not the chat MODE
     await writeFile(join(dir, process.platform === 'win32' ? 'ollama.exe' : 'ollama'), '');
     __setBundledRootForTest(dir);
     expect(await embedBundled()).toBe(false);
+  });
+});
+
+describe('embedHealth() — verifies nomic-embed-text is actually loaded, not just that the server is up', () => {
+  it('returns "model-missing" when the server is up but nomic-embed-text is not in the tag list', async () => {
+    __setProbeForTest(async () => true);
+    __setTagsForTest(async () => ['llama3.1:latest']);
+    expect(await embedHealth()).toBe('model-missing');
+  });
+
+  it('returns "ready" when nomic-embed-text is present in the tag list', async () => {
+    __setProbeForTest(async () => true);
+    __setTagsForTest(async () => ['llama3.1:latest', 'nomic-embed-text:latest']);
+    expect(await embedHealth()).toBe('ready');
+  });
+
+  it('returns "unavailable" when the server cannot be reached (tags fetch fails)', async () => {
+    __setProbeForTest(async () => false);
+    __setTagsForTest(async () => null);
+    expect(await embedHealth()).toBe('unavailable');
   });
 });
