@@ -66,7 +66,7 @@ import * as aiConvos from '../storage/ai-conversations';
 import * as briefcase from '../storage/briefcase';
 import * as journal from '../storage/journal';
 import * as voiceModel from '../voice/model-protocol';
-import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureShellProgram, ensureWhiteboard, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon, ensureSaveToCaseOpts, ensureGeoItem, ensureThreatLayerId, ensureKeyedLayerId, ensureLayerKey, isKeyedLayerId, ensureBookmarkBoard, ensureMarketsSettings, ensureStickyNotes, ensureAiConversation, ensureBriefcaseNote, ensureJournalEntry, ensurePin, ensureUid, ensureMailFlag, stripProtectedSettings, ensureBounds } from '../security/validate';
+import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityType, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureShellProgram, ensureWhiteboard, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon, ensureSaveToCaseOpts, ensureGeoItem, ensureThreatLayerId, ensureKeyedLayerId, ensureLayerKey, isKeyedLayerId, ensureBookmarkBoard, ensureMarketsSettings, ensureStickyNotes, ensureAiConversation, ensureBriefcaseNote, ensureJournalEntry, ensurePin, ensureUid, ensureMailFlag, stripProtectedSettings, ensureBounds } from '../security/validate';
 import * as entities from '../storage/entities';
 import * as bioStore from '../storage/bio-images';
 import * as ftp from '../services/ftp';
@@ -143,6 +143,7 @@ import { createGhostScrapeHandlers } from '../x/ghostscrape/ipc';
 import { createScrapingCasesHandlers } from '../scraping-cases/ipc';
 import { prodScrapingCaseStore } from '../storage/scraping-cases';
 import { registerInvestigationGraphIpc } from '../investigation/ipc';
+import { addManualNode, addManualEdge } from '../investigation/graph';
 
 const MAX_SAVE_ATTACHMENT_BYTES = 64 * 1024 * 1024; // 64 MB cap on base64 decoded payload
 const MAX_EXPORT_BYTES = 64 * 1024 * 1024;
@@ -1398,6 +1399,22 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
       if (win) win.webContents.send(channels.investigation.onGraphDelta, payload);
     }
   });
+
+  // ---- SP-4 investigation graph: manual add-node / draw-edge write path (Task 7). `now` is
+  // supplied here — the ONE place a real timestamp enters this feature — keeping the pure
+  // scene/emitter modules clock-free per the plan's determinism constraint. ----
+  const ensureManualValue = (v: unknown): string => {
+    if (typeof v !== 'string' || v.trim().length === 0 || v.length > 2000) throw new Error('Invalid entity value');
+    return v.trim();
+  };
+  const ensureManualRelation = (v: unknown): string => {
+    if (typeof v !== 'string' || v.trim().length === 0 || v.length > 200) throw new Error('Invalid relation');
+    return v.trim();
+  };
+  safeHandle(channels.investigation.addNode, (...args) =>
+    addManualNode(args[0] as string, ensureEntityType(args[1]), ensureManualValue(args[2]), new Date().toISOString()));
+  safeHandle(channels.investigation.addEdge, (...args) =>
+    addManualEdge(args[0] as string, ensureEntityId(args[1]), ensureEntityId(args[2]), ensureManualRelation(args[3]), new Date().toISOString()));
 
   // ---- adaptive-memory profile governance (list/edit/pin/delete/wipe) ----
   // Nothing here is best-effort: every learned item must stay inspectable/editable/erasable, so

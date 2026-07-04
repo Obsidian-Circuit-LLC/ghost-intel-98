@@ -4,12 +4,13 @@
  * current `InvestigationScene` (Task 5 IPC) and subscribes to the live delta stream (Task 4/5),
  * folding each `SceneDelta` into local state via `applyDelta`. Client-side `GraphFilters` narrow
  * what's drawn without touching the underlying scene (`applyFilters`, pure). The manual
- * add-node/draw-edge write path (`window.api.investigation.addNode`/`addEdge`) lands in Task 7 —
- * `onDrawEdge` here is a local no-op until that IPC exists.
+ * add-node/draw-edge write path (Task 7) calls `window.api.investigation.addNode`/`addEdge`,
+ * which append a `manual` evidence record main-side and stream back through the same delta
+ * channel — this component never mutates local scene state directly from a write.
  */
 import { useEffect, useState } from 'react';
 import type { InvestigationScene, GraphFilters } from '@shared/investigation-graph';
-import type { EntityType } from '@shared/types';
+import { ENTITY_TYPES, type EntityType } from '@shared/types';
 import { GraphCanvas } from '../../components/graph-canvas/GraphCanvas';
 import type { RenderGraph } from '../../components/graph-canvas/svg-scene';
 import { applyFilters, applyDelta } from './filters';
@@ -33,6 +34,10 @@ export function InvestigationGraphModule({ caseId }: InvestigationGraphModulePro
   const [scene, setScene] = useState<InvestigationScene>(EMPTY_SCENE);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<GraphFilters>(DEFAULT_FILTERS);
+  const [addType, setAddType] = useState<EntityType>(ENTITY_TYPES[0]);
+  const [addValue, setAddValue] = useState('');
+  const [addBusy, setAddBusy] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,9 +77,23 @@ export function InvestigationGraphModule({ caseId }: InvestigationGraphModulePro
   const types = [...new Set(scene.nodes.map((n) => n.type))].sort();
   const clusters = [...new Set(scene.nodes.map((n) => n.cluster))].sort((a, b) => a - b);
 
-  // Task 7 wires this to `window.api.investigation.addEdge` once that write path exists.
-  function manualEdge(_from: string, _to: string): void {
-    /* no-op until Task 7 */
+  function manualEdge(from: string, to: string): void {
+    // The delta this produces streams back through onGraphDelta above — no local state write here.
+    void window.api.investigation.addEdge(caseId, from, to, 'related').catch((e: unknown) => {
+      setAddError(e instanceof Error ? e.message : String(e));
+    });
+  }
+
+  function handleAddNode(): void {
+    const value = addValue.trim();
+    if (!value || addBusy) return;
+    setAddBusy(true);
+    setAddError(null);
+    window.api.investigation
+      .addNode(caseId, addType, value)
+      .then(() => setAddValue(''))
+      .catch((e: unknown) => setAddError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setAddBusy(false));
   }
 
   return (
@@ -138,6 +157,24 @@ export function InvestigationGraphModule({ caseId }: InvestigationGraphModulePro
           />{' '}
           Show co-occurrence
         </label>
+        <span style={{ borderLeft: '1px solid #333', paddingLeft: 8, display: 'flex', gap: 6, alignItems: 'center' }}>
+          <select value={addType} onChange={(e) => setAddType(e.target.value as EntityType)} aria-label="New entity type">
+            {ENTITY_TYPES.map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+          <input
+            placeholder="value…"
+            aria-label="New entity value"
+            value={addValue}
+            onChange={(e) => setAddValue(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleAddNode(); }}
+          />
+          <button type="button" onClick={handleAddNode} disabled={addBusy || addValue.trim().length === 0}>
+            Add node
+          </button>
+          {addError && <span style={{ color: '#e06060' }}>{addError}</span>}
+        </span>
       </div>
       <div style={{ flex: 1, minHeight: 0 }}>
         <GraphCanvas

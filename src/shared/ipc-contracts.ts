@@ -545,10 +545,14 @@ export const channels = {
   },
   // SP-4 investigation graph: the per-case scene fetch (nodes/edges assembled from the SP-2
   // entity store + provenance ledger) + a main→renderer push of live diffs as evidence is
-  // appended. Read-only from the renderer's perspective — Task 7 adds the manual write path.
+  // appended. `addNode`/`addEdge` (Task 7) are the manual write path — a `manual` evidence
+  // record referencing/relating existing or newly-created entities, streamed like any other
+  // ledger append.
   investigation: {
     graph: 'investigation:graph',
-    onGraphDelta: 'investigation:onGraphDelta'
+    onGraphDelta: 'investigation:onGraphDelta',
+    addNode: 'investigation:addNode',
+    addEdge: 'investigation:addEdge'
   }
 } as const;
 
@@ -970,6 +974,8 @@ export interface ApiContracts {
 
   [channels.investigation.graph]: { args: [string]; returns: InvestigationScene };
   [channels.investigation.onGraphDelta]: { args: [(payload: { caseId: string; delta: SceneDelta }) => void]; returns: () => void };
+  [channels.investigation.addNode]: { args: [string, EntityType, string]; returns: void };
+  [channels.investigation.addEdge]: { args: [string, string, string, string]; returns: void };
 }
 
 export const BGCONN_LOCK_EXEMPT_CHANNELS = ['bgconn:status', 'bgconn:stop'] as const;

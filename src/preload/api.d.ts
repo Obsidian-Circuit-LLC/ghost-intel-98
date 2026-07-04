@@ -16,6 +16,7 @@ import type {
   EmlPreview,
   EntityRecord,
   EntityRelationship,
+  EntityType,
   ExtractedAttachmentMeta,
   JournalEntry,
   JournalEntrySummary,
@@ -519,10 +520,13 @@ export interface GhostApi {
     };
   };
   /** SP-4 investigation graph: per-case scene fetch + live delta push as evidence is appended
-   *  to the SP-2 provenance ledger. Read-only — Task 7 adds the manual add-node/edge write path. */
+   *  to the SP-2 provenance ledger, plus the manual add-node/draw-edge write path (Task 7) — both
+   *  append a `manual` evidence record and stream through the same delta channel. */
   investigation: {
     graph(caseId: string): Promise<InvestigationScene>;
     onGraphDelta(caseId: string, cb: (delta: SceneDelta) => void): () => void;
+    addNode(caseId: string, type: EntityType, value: string): Promise<void>;
+    addEdge(caseId: string, fromId: string, toId: string, relation: string): Promise<void>;
   };
   plugins: {
     listVerified(): Promise<VerifiedPluginInfo[]>;

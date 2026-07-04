@@ -1,8 +1,9 @@
-import { onLedgerAppend, listEvidence } from './ledger';
+import { onLedgerAppend, listEvidence, appendEvidence } from './ledger';
 import { buildInvestigationScene } from './scene';
 import { diffScenes } from './scene-diff';
 import * as entities from '../storage/entities';
 import type { InvestigationScene, SceneDelta } from '@shared/investigation-graph';
+import type { EntityType } from '@shared/types';
 
 const EMPTY: InvestigationScene = { nodes: [], edges: [] };
 type TimerId = ReturnType<typeof setTimeout>;
@@ -47,4 +48,44 @@ export function startGraphEmitter(deps?: { setTimeoutFn?: typeof setTimeoutFn; c
 export function onSceneDelta(caseId: string, cb: (d: SceneDelta) => void): () => void {
   const set = subs.get(caseId) ?? new Set(); set.add(cb); subs.set(caseId, set);
   return () => set.delete(cb);
+}
+
+/** Manual add-node: reuses an existing entity of the same type+value if one exists (no
+ *  duplicates), else creates it, then appends a `manual` evidence record referencing it so the
+ *  ledger notifier streams the change like any transform-produced entity. `now` is supplied by
+ *  the caller (the IPC boundary) — this stays clock-free. */
+export async function addManualNode(caseId: string, type: EntityType, value: string, now: string): Promise<void> {
+  const all = await entities.listAll();
+  const existing = all.find((e) => e.type === type && e.value === value);
+  const rec = existing ?? (await entities.create({ type, value }));
+  await appendEvidence(
+    caseId,
+    { runId: 'manual', transformId: 'manual', transformVersion: '1', inputEntityId: rec.id, producedEntityIds: [rec.id], producedEdges: [], signals: [] },
+    '',
+    now
+  );
+}
+
+/** Manual draw-edge: both entities must already exist (referenced by id, as `GraphCanvas`'s
+ *  draw-bond gesture connects two already-rendered nodes). Appends a `manual` evidence record
+ *  whose `producedEdges` carries the resolved {value,type} pair `buildInvestigationScene` expects. */
+export async function addManualEdge(caseId: string, fromId: string, toId: string, relation: string, now: string): Promise<void> {
+  const all = await entities.listAll();
+  const a = all.find((e) => e.id === fromId);
+  const b = all.find((e) => e.id === toId);
+  if (!a || !b) throw new Error('Both entities must exist to add an edge');
+  await appendEvidence(
+    caseId,
+    {
+      runId: 'manual',
+      transformId: 'manual',
+      transformVersion: '1',
+      inputEntityId: fromId,
+      producedEntityIds: [fromId, toId],
+      producedEdges: [{ fromValue: a.value, fromType: a.type, toValue: b.value, toType: b.type, relation }],
+      signals: []
+    },
+    '',
+    now
+  );
 }
