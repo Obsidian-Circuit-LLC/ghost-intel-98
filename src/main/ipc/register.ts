@@ -51,6 +51,7 @@ import { learnFromConversation, profileList, profileSummaries, profileUpsert, pr
 import { createProfileStore } from '../services/memory/profile/profile-store';
 import { mergeItems as mergeProfileItems } from '../services/memory/graph/merge';
 import { createLibrary } from '../services/memory/library/store';
+import { createBonds } from '../services/memory/bonds';
 import { withLock } from '../util/mutex';
 import type { MemoryItem } from '@shared/ipc-contracts';
 import * as localAi from '../services/local-ai';
@@ -1368,6 +1369,15 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   }));
   safeHandle(channels.memory.embedHealth, () => memory.embedHealth());
   safeHandle(channels.memory.graph, () => memory.buildGraph());
+
+  // ---- Mind's Eye: user-drawn retrieval bonds (undirected, one-hop, boost co-recall) ----
+  const ensureNodeId = (v: unknown): string => {
+    if (typeof v !== 'string' || v.length === 0 || v.length > 512) throw new Error('Invalid node id');
+    return v;
+  };
+  safeHandle(channels.memory.bondList, () => createBonds().list());
+  safeHandle(channels.memory.bondAdd, (...args) => createBonds().add(ensureNodeId(args[0]), ensureNodeId(args[1])));
+  safeHandle(channels.memory.bondRemove, (...args) => createBonds().remove(ensureNodeId(args[0]), ensureNodeId(args[1])));
 
   // ---- adaptive-memory profile governance (list/edit/pin/delete/wipe) ----
   // Nothing here is best-effort: every learned item must stay inspectable/editable/erasable, so

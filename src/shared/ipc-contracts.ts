@@ -425,7 +425,14 @@ export const channels = {
     // Mind's Eye: the assembled node/edge graph (shards + profile → nodes → auto-edges →
     // deterministic layout). Read-only — curation writes go through the profile/library/bond
     // channels above and this is simply re-fetched afterward.
-    graph: 'memory:graph'
+    graph: 'memory:graph',
+    // Mind's Eye: user-drawn retrieval bonds (undirected, one-hop, boost co-recall — see
+    // `bonds.ts`/`retriever.ts`'s `applyBondBoost`). Drawn by dragging node-to-node in the graph;
+    // cut by clicking the bond edge. `bondAdd`/`bondRemove` take the two node ids as separate args
+    // (order-independent — `createBonds` normalizes/dedupes internally).
+    bondList: 'memory:bondList',
+    bondAdd: 'memory:bondAdd',
+    bondRemove: 'memory:bondRemove'
   },
   plugins: {
     listVerified: 'plugins:listVerified',
@@ -587,6 +594,16 @@ export interface RecallHitShape {
   text: string;
   snippet: string;
   score: number;
+  /** True when this hit's score was boosted by a user-drawn bond (see `retriever.ts`'s
+   *  `applyBondBoost`) — lets the renderer's provenance display say "recalled via your link". */
+  viaBond?: boolean;
+}
+
+/** Mirrors Bond in src/main/services/memory/bonds.ts — an undirected retrieval bond between two
+ *  Mind's Eye graph node ids, always stored with `a < b`. */
+export interface BondShape {
+  a: string;
+  b: string;
 }
 
 /** Recall-preview payload emitted per generation (see ai.ts's `recall` field on the done event of
@@ -846,6 +863,9 @@ export interface ApiContracts {
   [channels.memory.forgetDoc]: { args: [string]; returns: void };
   [channels.memory.mergeItems]: { args: [{ keepId: string; dropId: string }]; returns: MemoryItem[] };
   [channels.memory.graph]: { args: []; returns: MemoryGraphShape };
+  [channels.memory.bondList]: { args: []; returns: BondShape[] };
+  [channels.memory.bondAdd]: { args: [string, string]; returns: void };
+  [channels.memory.bondRemove]: { args: [string, string]; returns: void };
 
   [channels.plugins.listVerified]: { args: []; returns: import('./plugin-types').VerifiedPluginInfo[] };
   [channels.plugins.invoke]: { args: [string, string, unknown[]]; returns: unknown };

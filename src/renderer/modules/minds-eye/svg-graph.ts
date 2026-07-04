@@ -21,6 +21,10 @@ export interface SvgSceneEdge {
   x2: number;
   y2: number;
   cls: string;
+  /** Endpoint node ids — carried through so the renderer can cut a bond edge (`kind:'bond'`) by
+   *  its actual node ids without needing to re-derive them from on-screen geometry. */
+  source: string;
+  target: string;
 }
 
 export interface SvgSceneLabel {
@@ -82,7 +86,7 @@ export function toSvgScene(graph: MemoryGraphShape, view: { w: number; h: number
     const s = byId.get(e.source);
     const t = byId.get(e.target);
     if (!s || !t) continue;
-    edges.push({ x1: s.cx, y1: s.cy, x2: t.cx, y2: t.cy, cls: `edge-${e.kind}` });
+    edges.push({ x1: s.cx, y1: s.cy, x2: t.cx, y2: t.cy, cls: `edge-${e.kind}`, source: e.source, target: e.target });
   }
 
   const labels: SvgSceneLabel[] = nodes.map((n, i) => ({

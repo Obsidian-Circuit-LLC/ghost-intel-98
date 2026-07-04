@@ -5,7 +5,7 @@
 
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import { channels } from '../shared/ipc-contracts';
-import type { LocalAiStatus, LocalAiProgress, MemoryStatus, MemoryProgress, MemoryItem, RecallPreview, LibraryDoc, MemoryGraphShape, GhostScrapeConfig, GhostScrapeResult, ScrapingCaseStoreId } from '../shared/ipc-contracts';
+import type { LocalAiStatus, LocalAiProgress, MemoryStatus, MemoryProgress, MemoryItem, RecallPreview, LibraryDoc, MemoryGraphShape, BondShape, GhostScrapeConfig, GhostScrapeResult, ScrapingCaseStoreId } from '../shared/ipc-contracts';
 
 const api = {
   cases: {
@@ -433,7 +433,14 @@ const api = {
     mergeItems: (keepId: string, dropId: string): Promise<MemoryItem[]> =>
       ipcRenderer.invoke(channels.memory.mergeItems, { keepId, dropId }),
     /** The assembled Mind's Eye graph (nodes + auto-edges, deterministically laid out). */
-    graph: (): Promise<MemoryGraphShape> => ipcRenderer.invoke(channels.memory.graph)
+    graph: (): Promise<MemoryGraphShape> => ipcRenderer.invoke(channels.memory.graph),
+    /** Mind's Eye: user-drawn retrieval bonds — drag node-to-node to draw, click a bond edge to
+     *  cut. Undirected; `add`/`remove` take the two node ids in either order. */
+    bonds: {
+      list: (): Promise<BondShape[]> => ipcRenderer.invoke(channels.memory.bondList),
+      add: (a: string, b: string): Promise<void> => ipcRenderer.invoke(channels.memory.bondAdd, a, b),
+      remove: (a: string, b: string): Promise<void> => ipcRenderer.invoke(channels.memory.bondRemove, a, b)
+    }
   },
   plugins: {
     listVerified: () => ipcRenderer.invoke(channels.plugins.listVerified),

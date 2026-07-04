@@ -69,10 +69,12 @@ function truncateMemoryText(text: string, max: number = MEMORY_TEXT_MAX): string
  * ('Case "<title>" › <kind>:<ref>'), then one line per profile item ('Memory: <truncated text>'),
  * then a single trailing line for the injected rolling summary ('Summary: <truncated>') when one
  * was folded into the profile block. Disclosing the summary here is what keeps the injected,
- * durable prior-conversation prose from being silent. Returns `[]` when nothing was recalled.
+ * durable prior-conversation prose from being silent. A hit whose score was boosted by a
+ * user-drawn Mind's Eye bond (`viaBond`) is suffixed "(recalled via your link)" so that provenance
+ * is never silent either. Returns `[]` when nothing was recalled.
  */
 export function formatRecallProvenance(rag: RecallHitShape[], profile: MemoryItem[], summary = ''): string[] {
-  const ragLabels = rag.map((h) => `Case “${h.caseTitle}” › ${h.kind}:${h.ref}`);
+  const ragLabels = rag.map((h) => `Case “${h.caseTitle}” › ${h.kind}:${h.ref}${h.viaBond ? ' (recalled via your link)' : ''}`);
   const profileLabels = profile.map((item) => `Memory: ${truncateMemoryText(item.text)}`);
   const summaryLabel = summary.trim() ? [`Summary: ${truncateMemoryText(summary)}`] : [];
   return [...ragLabels, ...profileLabels, ...summaryLabel];

@@ -40,6 +40,10 @@ export function MindsEyeModule(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<GraphNodeShape | null>(null);
   const [busy, setBusy] = useState(false);
+  // Draw-a-bond gesture: mousedown on a node starts the drag; mouseup on a DIFFERENT node draws
+  // the bond; mouseup on the SAME node (or no drag at all) is a plain click that opens the
+  // inspector; mouseup on empty canvas cancels the drag.
+  const [dragFrom, setDragFrom] = useState<string | null>(null);
 
   const load = (): void => {
     window.api.memory
@@ -117,6 +121,30 @@ export function MindsEyeModule(): JSX.Element {
     window.dispatchEvent(new CustomEvent('dcs98:minds-eye-recall', { detail: { text: node.label } }));
   }
 
+  /** Draw a bond between two nodes (dragged node-to-node). Self-bonds are a no-op (ignored by
+   *  `createBonds().add` too, but skipping here avoids an unnecessary round-trip + reload). */
+  async function addBond(a: string, b: string): Promise<void> {
+    if (a === b) return;
+    setBusy(true);
+    try {
+      await window.api.memory.bonds.add(a, b);
+      load();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Cut a bond (click its edge). */
+  async function cutBond(a: string, b: string): Promise<void> {
+    setBusy(true);
+    try {
+      await window.api.memory.bonds.remove(a, b);
+      load();
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (error) {
     return (
       <div style={{ padding: 16, fontSize: 12 }}>
@@ -175,6 +203,7 @@ export function MindsEyeModule(): JSX.Element {
         style={{ flex: 1, minHeight: 0, width: '100%', background: '#111820' }}
         role="img"
         aria-label="Mind's Eye memory graph"
+        onMouseUp={() => setDragFrom(null)}
       >
         {scene.edges.map((e, i) => (
           <line
@@ -185,7 +214,11 @@ export function MindsEyeModule(): JSX.Element {
             y2={e.y2}
             stroke={e.cls === 'edge-bond' ? '#e0a030' : '#3a4a5a'}
             strokeWidth={e.cls === 'edge-bond' ? 2 : 1}
-          />
+            style={e.cls === 'edge-bond' ? { cursor: 'pointer' } : undefined}
+            onClick={e.cls === 'edge-bond' ? () => cutBond(e.source, e.target) : undefined}
+          >
+            {e.cls === 'edge-bond' && <title>Click to cut this link</title>}
+          </line>
         ))}
         {scene.nodes.map((n) => {
           const node = byId.get(n.id);
@@ -201,9 +234,18 @@ export function MindsEyeModule(): JSX.Element {
               stroke={conflict ? '#ff5050' : pinned ? '#ffd700' : 'none'}
               strokeWidth={conflict || pinned ? 2 : 0}
               style={{ cursor: 'pointer' }}
-              onClick={() => node && setSelected(node)}
+              onMouseDown={() => setDragFrom(n.id)}
+              onMouseUp={(ev) => {
+                ev.stopPropagation();
+                if (dragFrom && dragFrom !== n.id) {
+                  addBond(dragFrom, n.id);
+                } else if (node) {
+                  setSelected(node);
+                }
+                setDragFrom(null);
+              }}
             >
-              <title>{node?.label ?? n.id}</title>
+              <title>{node?.label ?? n.id} — drag to another node to link them</title>
             </circle>
           );
         })}

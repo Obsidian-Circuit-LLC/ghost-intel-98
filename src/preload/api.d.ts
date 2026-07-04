@@ -28,7 +28,7 @@ import type {
   WebLink,
   Whiteboard
 } from '../shared/types';
-import type { EntityCreateInput, EntityLinkOpts, BioAddInput, AuthStatus, LocalAiStatus, LocalAiProgress, MemoryStatus, MemoryProgress, MemoryItem, RecallPreview, LibraryDoc, MemoryGraphShape, XCollectResultShape, LearningModelMeta, GhostScrapeConfig, GhostScrapeResult, ScrapingCaseStoreId, ScrapingImportResult } from '../shared/ipc-contracts';
+import type { EntityCreateInput, EntityLinkOpts, BioAddInput, AuthStatus, LocalAiStatus, LocalAiProgress, MemoryStatus, MemoryProgress, MemoryItem, RecallPreview, LibraryDoc, MemoryGraphShape, BondShape, XCollectResultShape, LearningModelMeta, GhostScrapeConfig, GhostScrapeResult, ScrapingCaseStoreId, ScrapingImportResult } from '../shared/ipc-contracts';
 import type {
   AiChatRequest,
   CameraStream,
@@ -509,6 +509,13 @@ export interface GhostApi {
     /** The assembled Mind's Eye graph: shards + adaptive-memory profile → nodes → similarity
      *  auto-edges → deterministic clustered layout. */
     graph(): Promise<MemoryGraphShape>;
+    /** Mind's Eye: user-drawn retrieval bonds — drag node-to-node to draw, click a bond edge to
+     *  cut. Undirected; `add`/`remove` take the two node ids in either order. */
+    bonds: {
+      list(): Promise<BondShape[]>;
+      add(a: string, b: string): Promise<void>;
+      remove(a: string, b: string): Promise<void>;
+    };
   };
   plugins: {
     listVerified(): Promise<VerifiedPluginInfo[]>;
