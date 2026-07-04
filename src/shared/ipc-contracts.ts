@@ -418,6 +418,10 @@ export const channels = {
     // above, which only fires a debounced live-reindex — forgetDoc reindexes synchronously so the
     // "forgotten" node/evidence is gone from the graph and recall on the very next call).
     forgetDoc: 'memory:forgetDoc',
+    // Mind's Eye curation: merge a duplicate fact (`dropId`) into another (`keepId`) — unions
+    // provenance, keeps the higher confidence, drops the other. Also how the "one thing to fix"
+    // tray resolves a detected conflict pair (see graph/merge.ts's detectConflicts/mergeItems).
+    mergeItems: 'memory:mergeItems',
     // Mind's Eye: the assembled node/edge graph (shards + profile → nodes → auto-edges →
     // deterministic layout). Read-only — curation writes go through the profile/library/bond
     // channels above and this is simply re-fetched afterward.
@@ -833,6 +837,7 @@ export interface ApiContracts {
   [channels.memory.libraryAdd]: { args: [{ title: string; mime: string; text: string }]; returns: LibraryDoc };
   [channels.memory.libraryRemove]: { args: [string]; returns: void };
   [channels.memory.forgetDoc]: { args: [string]; returns: void };
+  [channels.memory.mergeItems]: { args: [{ keepId: string; dropId: string }]; returns: MemoryItem[] };
   [channels.memory.graph]: { args: []; returns: MemoryGraphShape };
 
   [channels.plugins.listVerified]: { args: []; returns: import('./plugin-types').VerifiedPluginInfo[] };

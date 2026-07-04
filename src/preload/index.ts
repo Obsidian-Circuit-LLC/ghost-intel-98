@@ -428,6 +428,10 @@ const api = {
     /** Mind's Eye curation: forget a `doc`-kind node — removes it from the library AND reindexes
      *  synchronously so the node/evidence is gone from the graph and recall right away. */
     forgetDoc: (docId: string): Promise<void> => ipcRenderer.invoke(channels.memory.forgetDoc, docId),
+    /** Merge a duplicate fact (`dropId`) into another (`keepId`) — unions provenance, keeps the
+     *  higher confidence, drops the other. Returns the full post-merge item set. */
+    mergeItems: (keepId: string, dropId: string): Promise<MemoryItem[]> =>
+      ipcRenderer.invoke(channels.memory.mergeItems, { keepId, dropId }),
     /** The assembled Mind's Eye graph (nodes + auto-edges, deterministically laid out). */
     graph: (): Promise<MemoryGraphShape> => ipcRenderer.invoke(channels.memory.graph)
   },

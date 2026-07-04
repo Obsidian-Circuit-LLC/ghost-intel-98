@@ -15,6 +15,7 @@
 import type { MemoryShard, StoredChunk } from '../store';
 import type { MemoryItem } from '../profile/types';
 import type { GraphNode, NodeKind } from './model';
+import { detectConflicts } from './merge';
 
 export interface BuildInputs {
   shards: MemoryShard[];
@@ -68,6 +69,15 @@ export function buildNodes(input: BuildInputs): GraphNode[] {
     }
   }
 
+  // A fact is flagged `conflict: true` when it's one half of an obvious contradiction (see
+  // detectConflicts's v1 heuristic) — the Mind's Eye "one thing to fix" tray surfaces these one
+  // pair at a time and offers Resolve (merge.ts's `mergeItems`) to collapse the pair.
+  const conflictIds = new Set<string>();
+  for (const [a, b] of detectConflicts(input.profile)) {
+    conflictIds.add(a);
+    conflictIds.add(b);
+  }
+
   for (const item of input.profile) {
     nodes.push({
       id: item.id,
@@ -75,7 +85,7 @@ export function buildNodes(input: BuildInputs): GraphNode[] {
       label: item.text,
       strength: item.confidence,
       pinned: item.pinned,
-      conflict: false,
+      conflict: conflictIds.has(item.id),
       vector: [],
       x: 0,
       y: 0,

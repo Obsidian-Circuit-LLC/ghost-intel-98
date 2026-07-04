@@ -48,7 +48,10 @@ import * as sounds from '../services/sounds';
 import * as ai from '../services/ai';
 import { liveReindex } from '../services/memory/live-reindex.singleton';
 import { learnFromConversation, profileList, profileSummaries, profileUpsert, profileDelete, profileWipe } from '../services/memory/profile';
+import { createProfileStore } from '../services/memory/profile/profile-store';
+import { mergeItems as mergeProfileItems } from '../services/memory/graph/merge';
 import { createLibrary } from '../services/memory/library/store';
+import { withLock } from '../util/mutex';
 import type { MemoryItem } from '@shared/ipc-contracts';
 import * as localAi from '../services/local-ai';
 import * as chat from '../services/chat';
@@ -1386,6 +1389,28 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   });
   safeHandle(channels.memory.profileWipe, (...args) =>
     profileWipe(typeof args[0] === 'string' ? args[0] : undefined));
+
+  // ---- Mind's Eye curation: merge a duplicate fact into another / resolve a conflict pair ----
+  // A profile read-modify-write like upsert/delete/wipe above, so it's serialised on the SAME
+  // lock key as the adaptive-memory profile facade's PROFILE_LOCK (profile/index.ts) — merge must
+  // not race a concurrent learn or a Memory-panel edit.
+  safeHandle(channels.memory.mergeItems, (...args) => {
+    const raw = args[0] as { keepId?: unknown; dropId?: unknown } | undefined;
+    if (!raw || typeof raw.keepId !== 'string' || typeof raw.dropId !== 'string') {
+      throw new Error('mergeItems: expected { keepId, dropId }');
+    }
+    const keepId = raw.keepId;
+    const dropId = raw.dropId;
+    const store = createProfileStore();
+    return withLock('adaptive-memory-profile', async () => {
+      const all = await store.all();
+      const merged = mergeProfileItems(all, keepId, dropId, Date.now());
+      const keptItem = merged.find((it) => it.id === keepId);
+      if (keptItem) await store.put([keptItem]);
+      await store.remove([dropId]);
+      return merged;
+    });
+  });
 
   // ---- global document library (uploads + briefcase + journal) ----
   // Extraction (pdf/txt/md/docx → text) happens renderer-side; the handler only persists

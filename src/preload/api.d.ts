@@ -503,6 +503,9 @@ export interface GhostApi {
     /** Mind's Eye curation: forget a `doc`-kind node — removes it from the library AND reindexes
      *  the library shard synchronously so recall stops surfacing it right away. */
     forgetDoc(docId: string): Promise<void>;
+    /** Merge a duplicate fact (`dropId`) into another (`keepId`) — unions provenance, keeps the
+     *  higher confidence, drops the other. Returns the full post-merge item set. */
+    mergeItems(keepId: string, dropId: string): Promise<MemoryItem[]>;
     /** The assembled Mind's Eye graph: shards + adaptive-memory profile → nodes → similarity
      *  auto-edges → deterministic clustered layout. */
     graph(): Promise<MemoryGraphShape>;

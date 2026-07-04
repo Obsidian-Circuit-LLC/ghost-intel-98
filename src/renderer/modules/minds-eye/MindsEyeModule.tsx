@@ -97,6 +97,19 @@ export function MindsEyeModule(): JSX.Element {
     }
   }
 
+  /** Resolve one detected conflict pair (the "one thing to fix" tray below) by merging the
+   *  other fact into the kept one — unions provenance, keeps the higher confidence. */
+  async function resolveConflict(keepId: string, dropId: string): Promise<void> {
+    setBusy(true);
+    try {
+      await window.api.memory.mergeItems(keepId, dropId);
+      load();
+      setSelected(null);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   /** Recall-into-chat is renderer-only per the curation spec: no new IPC, just post the node's
    *  label into the active AI Assistant composer via a window message that AiAssistantModule (or
    *  any listener) can pick up. */
@@ -127,8 +140,29 @@ export function MindsEyeModule(): JSX.Element {
   const scene = toSvgScene(graph, VIEW);
   const byId = new Map(graph.nodes.map((n) => [n.id, n]));
 
+  // "One thing to fix" tray: surface a single detected conflict pair at a time (never the whole
+  // list) — the first two conflict-flagged fact nodes found in the graph. Resolving merges the
+  // second into the first via mergeItems; the tray then re-derives from the freshly-loaded graph.
+  const conflictPair = graph.nodes.filter((n) => n.kind === 'fact' && n.conflict).slice(0, 2);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#111820' }}>
+      {conflictPair.length === 2 && (
+        <div style={{ padding: 8, fontSize: 12, background: '#3a2a1a', color: '#f0d8b0', borderBottom: '1px solid #5a4020' }}>
+          <div style={{ fontWeight: 'bold', marginBottom: 4 }}>One thing to fix: conflicting facts</div>
+          <div style={{ marginBottom: 6 }}>
+            &ldquo;{conflictPair[0].label}&rdquo; vs &ldquo;{conflictPair[1].label}&rdquo;
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button disabled={busy} onClick={() => resolveConflict(conflictPair[0].id, conflictPair[1].id)}>
+              Keep &ldquo;{conflictPair[0].label}&rdquo;
+            </button>
+            <button disabled={busy} onClick={() => resolveConflict(conflictPair[1].id, conflictPair[0].id)}>
+              Keep &ldquo;{conflictPair[1].label}&rdquo;
+            </button>
+          </div>
+        </div>
+      )}
       <svg
         viewBox={`0 0 ${VIEW.w} ${VIEW.h}`}
         style={{ flex: 1, minHeight: 0, width: '100%', background: '#111820' }}
