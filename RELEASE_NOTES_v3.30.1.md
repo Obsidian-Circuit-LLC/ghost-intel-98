@@ -1,6 +1,6 @@
 # Ghost Intel 98 — v3.30.1
 
-**The offline memory fix that v3.28.0 and v3.30.0 were reaching for — now actually complete.** Memory genuinely works offline this time, because the missing piece is finally in the box.
+**The offline memory fix that v3.28.0 and v3.30.0 were reaching for — now actually complete — plus a web-search loop fix.** Memory genuinely works offline this time, because the missing piece is finally in the box; and Q no longer wastes searches re-running the same query.
 
 ## The bug, and why it took three tries
 
@@ -14,6 +14,10 @@ Every prior fix passed its tests because the tests **mocked the runtime** — no
 - **CPU-only, so the size hit is small.** Ollama's Windows package is ~2 GB, almost all of it GPU runners (CUDA/Vulkan) that embeddings never use. We bundle only the CPU runner set — **~43 MB**, not gigabytes.
 - **A build-time guard (`afterPack`) now fails the build** if the embedding runtime, a CPU runner, or the model blobs aren't in the packaged app — so "shipped without the engine" can never happen quietly again.
 
+## Web search — no more spinning on the same query
+
+Web search was already returning results (the "(N result(s) over Tor)" line is real), but the local model would sometimes **re-run the exact same query several times instead of answering**. Q now **detects a repeated query and won't re-search it** — it's told to answer from the results it already has. Fewer wasted Tor round-trips, and it stops looping.
+
 ## Verified
 
 - The bundled model blobs were confirmed to load and return a real 768-dim embedding via the exact `OLLAMA_MODELS` + `/api/embeddings` path the app uses.
@@ -23,7 +27,7 @@ Every prior fix passed its tests because the tests **mocked the runtime** — no
 
 Windows NSIS installer — `GhostIntel98-Setup-3.30.1.exe` (per-user, no admin; unsigned → **More info → Run anyway**):
 
-- **SHA-256:** `44466a1455e9a9a5fd538cf0976c70bc23dbfda99f2c01d819912dae9e061584`
-- **Size:** 917,677,176 bytes (~918 MB; +~12 MB over v3.30.0 for the CPU-only Ollama runtime).
+- **SHA-256:** `1918e1191feb4ccd04f00fb164197f565ddf277b4dd3afa545a288c430d74a6f`
+- **Size:** 917,677,032 bytes (~918 MB; +~12 MB over v3.30.0 for the CPU-only Ollama runtime).
 
 *Everything from v3.30.0 carries forward. If memory still shows 0 chunks right after updating, hit Settings → Q (AI Assistant) → Rebuild memory index once — the engine status there now reports honestly whether the model is loaded.*
