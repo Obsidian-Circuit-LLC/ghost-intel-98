@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractSearchDirective, formatWebResults } from '../src/main/services/web-search/directive';
+import { extractSearchDirective, formatWebResults, decideSearchAction } from '../src/main/services/web-search/directive';
 
 describe('extractSearchDirective', () => {
   it('extracts the query from a [SEARCH: ...] line', () => {
@@ -39,5 +39,29 @@ describe('formatWebResults', () => {
     const out = formatWebResults('acme', [], FENCE);
     expect(out.toLowerCase()).toContain('no results');
     expect(out).toContain(`<<<UNTRUSTED-WEB-RESULTS ${FENCE}>>>`);
+  });
+});
+
+describe('decideSearchAction (same-query loop guard)', () => {
+  it('a fresh query → search, with the normalized key', () => {
+    expect(decideSearchAction({ query: 'Michael Laster', seen: [], searches: 0, max: 3 }))
+      .toEqual({ action: 'search', key: 'michael laster' });
+  });
+  it('a query already seen (case/space-insensitive) → repeat, not re-run', () => {
+    expect(decideSearchAction({ query: '  MICHAEL laster ', seen: ['michael laster'], searches: 1, max: 3 }))
+      .toEqual({ action: 'repeat', key: 'michael laster' });
+  });
+  it('at the search budget → limit, regardless of the query', () => {
+    expect(decideSearchAction({ query: 'anything', seen: [], searches: 3, max: 3 }))
+      .toEqual({ action: 'limit' });
+  });
+  it('the exact GhostExodus loop (same query 3×) only ever triggers ONE real search', () => {
+    const seen: string[] = [];
+    let realSearches = 0;
+    for (let i = 0; i < 3; i++) {
+      const d = decideSearchAction({ query: 'Michael Laster OSINT profile', seen, searches: i, max: 3 });
+      if (d.action === 'search') { realSearches += 1; seen.push(d.key); }
+    }
+    expect(realSearches).toBe(1); // was 3 wasted Tor searches before the guard
   });
 });
