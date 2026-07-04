@@ -95,6 +95,7 @@
   "build": {
     "appId": "com.ghostintel.ghostintel98",
     "productName": "Ghost Intel 98",
+    "afterPack": "scripts/afterpack-verify.cjs",
     "directories": {
       "output": "release/${version}",
       "buildResources": "resources"
