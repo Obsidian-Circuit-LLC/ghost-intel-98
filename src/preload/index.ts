@@ -425,6 +425,9 @@ const api = {
         ipcRenderer.invoke(channels.memory.libraryAdd, input),
       remove: (docId: string): Promise<void> => ipcRenderer.invoke(channels.memory.libraryRemove, docId)
     },
+    /** Mind's Eye curation: forget a `doc`-kind node — removes it from the library AND reindexes
+     *  synchronously so the node/evidence is gone from the graph and recall right away. */
+    forgetDoc: (docId: string): Promise<void> => ipcRenderer.invoke(channels.memory.forgetDoc, docId),
     /** The assembled Mind's Eye graph (nodes + auto-edges, deterministically laid out). */
     graph: (): Promise<MemoryGraphShape> => ipcRenderer.invoke(channels.memory.graph)
   },

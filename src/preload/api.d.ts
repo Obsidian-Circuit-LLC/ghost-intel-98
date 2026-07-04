@@ -500,6 +500,9 @@ export interface GhostApi {
       add(input: { title: string; mime: string; text: string }): Promise<LibraryDoc>;
       remove(docId: string): Promise<void>;
     };
+    /** Mind's Eye curation: forget a `doc`-kind node — removes it from the library AND reindexes
+     *  the library shard synchronously so recall stops surfacing it right away. */
+    forgetDoc(docId: string): Promise<void>;
     /** The assembled Mind's Eye graph: shards + adaptive-memory profile → nodes → similarity
      *  auto-edges → deterministic clustered layout. */
     graph(): Promise<MemoryGraphShape>;

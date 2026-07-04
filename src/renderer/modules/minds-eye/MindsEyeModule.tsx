@@ -24,10 +24,29 @@ function fillForCls(cls: string): string {
   return KIND_FILL[kind] ?? '#9aa5b1';
 }
 
+/** Uploaded-library `doc` nodes carry `doc:<docId>` as a segment of their node id (see
+ *  `library/sources.ts`'s `doc:${docId}` sourceKey → `build.ts`'s `${caseId}:${sourceKey}` node
+ *  id); briefcase/journal-sourced `doc` nodes don't have a real library docId, so extraction
+ *  falls back to the full node id (a harmless no-op forgetDoc — nothing in the library manifest
+ *  matches, so nothing is removed). */
+function docIdFromNodeId(id: string): string {
+  const parts = id.split(':');
+  const i = parts.indexOf('doc');
+  return i >= 0 && i < parts.length - 1 ? parts.slice(i + 1).join(':') : id;
+}
+
 export function MindsEyeModule(): JSX.Element {
   const [graph, setGraph] = useState<MemoryGraphShape | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<GraphNodeShape | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = (): void => {
+    window.api.memory
+      .graph()
+      .then((g) => setGraph(g))
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -37,6 +56,53 @@ export function MindsEyeModule(): JSX.Element {
       .catch((e: unknown) => { if (!cancelled) setError(e instanceof Error ? e.message : String(e)); });
     return () => { cancelled = true; };
   }, []);
+
+  /** Pin/forget a `fact` reuses the existing adaptive-memory profile governance IPC (no new
+   *  channel); `profileUpsert` needs the item's `scope`/`text`, which aren't on the graph node
+   *  shape, so pin looks the item up via `profileList` first. */
+  async function togglePinFact(node: GraphNodeShape): Promise<void> {
+    setBusy(true);
+    try {
+      const items = await window.api.memory.profileList();
+      const item = items.find((it) => it.id === node.id);
+      if (item) {
+        await window.api.memory.profileUpsert({ id: item.id, scope: item.scope, text: item.text, pinned: !item.pinned });
+      }
+      load();
+      setSelected(null);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function forgetFact(node: GraphNodeShape): Promise<void> {
+    setBusy(true);
+    try {
+      await window.api.memory.profileDelete([node.id]);
+      load();
+      setSelected(null);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function forgetDoc(node: GraphNodeShape): Promise<void> {
+    setBusy(true);
+    try {
+      await window.api.memory.forgetDoc(docIdFromNodeId(node.id));
+      load();
+      setSelected(null);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Recall-into-chat is renderer-only per the curation spec: no new IPC, just post the node's
+   *  label into the active AI Assistant composer via a window message that AiAssistantModule (or
+   *  any listener) can pick up. */
+  function recallIntoChat(node: GraphNodeShape): void {
+    window.dispatchEvent(new CustomEvent('dcs98:minds-eye-recall', { detail: { text: node.label } }));
+  }
 
   if (error) {
     return (
@@ -113,6 +179,23 @@ export function MindsEyeModule(): JSX.Element {
           <div>Strength: {selected.strength.toFixed(2)}</div>
           <div>Pinned: {selected.pinned ? 'yes' : 'no'}{selected.conflict ? ' · Conflict' : ''}</div>
           <div style={{ opacity: 0.7, wordBreak: 'break-all' }}>Provenance: {selected.id}</div>
+          <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+            {selected.kind === 'fact' && (
+              <>
+                <button disabled={busy} onClick={() => togglePinFact(selected)}>
+                  {selected.pinned ? 'Unpin' : 'Pin'}
+                </button>
+                <button disabled={busy} onClick={() => forgetFact(selected)}>Forget</button>
+              </>
+            )}
+            {selected.kind === 'doc' && (
+              <button disabled={busy} onClick={() => forgetDoc(selected)}>Forget</button>
+            )}
+            {(selected.kind === 'conversation' || selected.kind === 'entity') && (
+              <button disabled title="Forgetting conversations/entities isn't supported yet">Forget</button>
+            )}
+            <button disabled={busy} onClick={() => recallIntoChat(selected)}>Recall into chat</button>
+          </div>
           <button onClick={() => setSelected(null)} style={{ marginTop: 4 }}>Close</button>
         </div>
       )}

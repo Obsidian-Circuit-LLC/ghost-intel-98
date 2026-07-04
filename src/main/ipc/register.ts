@@ -1413,6 +1413,17 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     liveReindex.libraryChanged();
   });
 
+  // ---- Mind's Eye curation: forget a `doc`-kind node ----
+  // Unlike libraryRemove above (debounced live-reindex, for the Library management UI), forgetDoc
+  // reindexes the library shard synchronously so the node disappears from the graph and recall
+  // stops surfacing it immediately after this call resolves — see the channel doc comment.
+  safeHandle(channels.memory.forgetDoc, async (...args) => {
+    const docId = args[0];
+    if (typeof docId !== 'string') throw new Error('forgetDoc: expected a docId string');
+    await createLibrary().remove(docId);
+    await memory.reindexLibrary();
+  });
+
   // ---- plugins ----
   safeHandle(channels.plugins.listVerified, async () => getVerified());
   safeHandle(channels.plugins.status, async () => getStatus());

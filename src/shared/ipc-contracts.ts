@@ -413,6 +413,11 @@ export const channels = {
     libraryList: 'memory:libraryList',
     libraryAdd: 'memory:libraryAdd',
     libraryRemove: 'memory:libraryRemove',
+    // Mind's Eye curation: forgetting a `doc`-kind node removes it from the global library AND
+    // reindexes the library shard so recall stops surfacing it immediately (unlike libraryRemove
+    // above, which only fires a debounced live-reindex — forgetDoc reindexes synchronously so the
+    // "forgotten" node/evidence is gone from the graph and recall on the very next call).
+    forgetDoc: 'memory:forgetDoc',
     // Mind's Eye: the assembled node/edge graph (shards + profile → nodes → auto-edges →
     // deterministic layout). Read-only — curation writes go through the profile/library/bond
     // channels above and this is simply re-fetched afterward.
@@ -827,6 +832,7 @@ export interface ApiContracts {
   [channels.memory.libraryList]: { args: []; returns: LibraryDoc[] };
   [channels.memory.libraryAdd]: { args: [{ title: string; mime: string; text: string }]; returns: LibraryDoc };
   [channels.memory.libraryRemove]: { args: [string]; returns: void };
+  [channels.memory.forgetDoc]: { args: [string]; returns: void };
   [channels.memory.graph]: { args: []; returns: MemoryGraphShape };
 
   [channels.plugins.listVerified]: { args: []; returns: import('./plugin-types').VerifiedPluginInfo[] };
