@@ -3,12 +3,22 @@
  * real indexer + real clock/timer, gated on `settings.ai.useMemory && settings.ai.autoReindex`.
  * Settings are re-read on every notification (so a toggle flip takes effect immediately without
  * restarting the app). Fire-and-forget: callers (save handlers) never await these calls.
+ *
+ * Reindex failures are best-effort (never break the caller's save), but per the ADHD-UI
+ * constraint they must not be entirely silent either — `setErrorNotifier` lets the IPC wiring
+ * layer (which owns the renderer window) plug in a rate-limited toast; live-reindex.ts already
+ * throttles calls into it so a stuck failure doesn't spam a toast per keystroke-triggered save.
  */
 import { settingsStore } from '../../storage/json-fs';
 import { reindexCase as realReindexCase, reindexConversations as realReindexConversations, reindexLibrary as realReindexLibrary } from './indexer';
-import { createLiveReindexer, type LiveReindexer } from './live-reindex';
+import { createLiveReindexer, type LiveReindexer, type LiveReindexScope } from './live-reindex';
 
 let reindexer: LiveReindexer | null = null;
+
+export type ReindexErrorNotifier = (scope: LiveReindexScope, err: unknown) => void;
+// Mutable indirection so wiring can be set at IPC-registration time regardless of whether the
+// reindexer singleton has already been constructed (getReindexer() memoizes deps once).
+let errorNotifier: ReindexErrorNotifier | null = null;
 
 function getReindexer(): LiveReindexer {
   if (!reindexer) {
@@ -18,7 +28,8 @@ function getReindexer(): LiveReindexer {
       reindexLibrary: () => realReindexLibrary(),
       now: () => Date.now(),
       schedule: (fn, ms) => setTimeout(fn, ms),
-      cancel: (handle) => clearTimeout(handle as NodeJS.Timeout)
+      cancel: (handle) => clearTimeout(handle as NodeJS.Timeout),
+      onError: (scope, err) => errorNotifier?.(scope, err)
     });
   }
   return reindexer;
@@ -65,5 +76,10 @@ export const liveReindex = {
       await Promise.all([...pendingGateChecks]);
     }
     if (reindexer) await reindexer.flush();
+  },
+
+  /** Wire (or clear, with null) a rate-limited notifier for debounced reindex failures. */
+  setErrorNotifier(fn: ReindexErrorNotifier | null): void {
+    errorNotifier = fn;
   }
 };

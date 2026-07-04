@@ -323,6 +323,17 @@ async function gatherReportImages(caseId: string, rec: CaseRecord): Promise<Repo
 }
 
 export function registerIpc(getWindow: () => BrowserWindow | null): void {
+  // Debounced auto-index (case/conversation/library autosave) is best-effort by design — a
+  // failing embed must never break the save path — but per the ADHD-UI constraint it must not be
+  // entirely silent. live-reindex.ts already rate-limits calls into this notifier, so a stuck
+  // failure surfaces at most one toast per interval, not one per keystroke-triggered autosave.
+  liveReindex.setErrorNotifier((scope, err) => {
+    const win = getWindow();
+    if (!win || win.isDestroyed()) return;
+    const message = (err as Error)?.message ?? String(err);
+    win.webContents.send(channels.system.onDiagnostic, { kind: 'reindex-failed', scope, message });
+  });
+
   // ---- system ----
   safeHandle(channels.system.appInfo, () => ({
     version: app.getVersion(),

@@ -3,7 +3,16 @@
  * single reindex call so a burst of saves (e.g. autosave-on-keystroke) doesn't hammer the
  * embedder. Best-effort: a failing reindex is swallowed (never breaks the caller's save path).
  * Clock + timer are injected for determinism (no Date.now/setTimeout in this module directly).
+ *
+ * A reindex failure is never re-thrown (the caller's save path must stay silent-safe), but it is
+ * NOT silently dropped either: `deps.onError` (optional) is invoked so the wiring layer can
+ * surface a user-facing signal. Because a stuck failure would otherwise refire on every
+ * debounced retry (e.g. every keystroke-triggered autosave), `onError` calls themselves are
+ * rate-limited via the injected clock so the user gets at most one notification per
+ * `ERROR_NOTIFY_MIN_INTERVAL_MS`, not a toast per keystroke.
  */
+
+export type LiveReindexScope = 'case' | 'conversations' | 'library';
 
 export interface LiveReindexDeps {
   reindexCase(caseId: string): Promise<unknown>;
@@ -14,7 +23,13 @@ export interface LiveReindexDeps {
   now(): number;                 // injected clock (determinism)
   schedule(fn: () => void, ms: number): unknown; // injected timer
   cancel(handle: unknown): void;
+  // Optional: called (rate-limited, see ERROR_NOTIFY_MIN_INTERVAL_MS) when a debounced reindex
+  // rejects. The reindex itself is still swallowed either way — this is purely a notification hook.
+  onError?(scope: LiveReindexScope, err: unknown): void;
 }
+
+/** Minimum spacing between onError notifications, so a stuck failure doesn't spam a toast per keystroke. */
+export const ERROR_NOTIFY_MIN_INTERVAL_MS = 30_000;
 
 export interface LiveReindexer {
   caseChanged(caseId: string): void;   // debounced → reindexCase
@@ -31,11 +46,24 @@ export function createLiveReindexer(deps: LiveReindexDeps, debounceMs: number = 
   let pendingLibrary: unknown | null = null;       // timer handle or null
   const inFlight: Promise<unknown>[] = [];
 
+  // Rate-limits deps.onError so a persistently-failing reindex (e.g. the embed engine down)
+  // notifies at most once per ERROR_NOTIFY_MIN_INTERVAL_MS instead of once per debounce cycle.
+  let lastErrorNotifyAt = -Infinity;
+  const notifyError = (scope: LiveReindexScope, err: unknown): void => {
+    if (!deps.onError) return;
+    const t = deps.now();
+    if (t - lastErrorNotifyAt < ERROR_NOTIFY_MIN_INTERVAL_MS) return;
+    lastErrorNotifyAt = t;
+    try {
+      deps.onError(scope, err);
+    } catch { /* the notifier itself must never break the best-effort reindex path */ }
+  };
+
   const runCase = (caseId: string): void => {
     pendingCases.delete(caseId);
     const p = Promise.resolve()
       .then(() => deps.reindexCase(caseId))
-      .catch(() => { /* best-effort: swallow reindex errors */ });
+      .catch((err) => { notifyError('case', err); /* best-effort: swallow reindex errors */ });
     inFlight.push(p);
   };
 
@@ -43,7 +71,7 @@ export function createLiveReindexer(deps: LiveReindexDeps, debounceMs: number = 
     pendingConversations = null;
     const p = Promise.resolve()
       .then(() => deps.reindexConversations())
-      .catch(() => { /* best-effort: swallow reindex errors */ });
+      .catch((err) => { notifyError('conversations', err); /* best-effort: swallow reindex errors */ });
     inFlight.push(p);
   };
 
@@ -51,7 +79,7 @@ export function createLiveReindexer(deps: LiveReindexDeps, debounceMs: number = 
     pendingLibrary = null;
     const p = Promise.resolve()
       .then(() => (deps.reindexLibrary ? deps.reindexLibrary() : undefined))
-      .catch(() => { /* best-effort: swallow reindex errors */ });
+      .catch((err) => { notifyError('library', err); /* best-effort: swallow reindex errors */ });
     inFlight.push(p);
   };
 

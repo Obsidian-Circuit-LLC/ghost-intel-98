@@ -81,8 +81,8 @@ const api = {
       ipcRenderer.on(channels.system.onReminderFired, listener);
       return () => ipcRenderer.removeListener(channels.system.onReminderFired, listener);
     },
-    onDiagnostic: (cb: (payload: { kind: string; message?: string; cases?: { caseId: string; reason: string }[] }) => void) => {
-      const listener = (_e: unknown, payload: { kind: string; message?: string; cases?: { caseId: string; reason: string }[] }) => cb(payload);
+    onDiagnostic: (cb: (payload: { kind: string; message?: string; cases?: { caseId: string; reason: string }[]; scope?: string }) => void) => {
+      const listener = (_e: unknown, payload: { kind: string; message?: string; cases?: { caseId: string; reason: string }[]; scope?: string }) => cb(payload);
       ipcRenderer.on(channels.system.onDiagnostic, listener);
       return () => ipcRenderer.removeListener(channels.system.onDiagnostic, listener);
     }

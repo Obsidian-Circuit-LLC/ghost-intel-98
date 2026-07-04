@@ -193,7 +193,7 @@ export interface GhostApi {
     openExternal(url: string): Promise<void>;
     quit(): Promise<void>;
     onReminderFired(cb: (payload: { reminder: Reminder }) => void): () => void;
-    onDiagnostic(cb: (payload: { kind: string; message?: string; cases?: { caseId: string; reason: string }[] }) => void): () => void;
+    onDiagnostic(cb: (payload: { kind: string; message?: string; cases?: { caseId: string; reason: string }[]; scope?: string }) => void): () => void;
   };
   chat: {
     status(): Promise<{ enabled: boolean; onion: string | null }>;
