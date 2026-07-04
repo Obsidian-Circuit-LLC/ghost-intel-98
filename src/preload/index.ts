@@ -6,6 +6,7 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import { channels } from '../shared/ipc-contracts';
 import type { LocalAiStatus, LocalAiProgress, MemoryStatus, MemoryProgress, MemoryItem, RecallPreview, LibraryDoc, MemoryGraphShape, BondShape, GhostScrapeConfig, GhostScrapeResult, ScrapingCaseStoreId } from '../shared/ipc-contracts';
+import type { InvestigationScene, SceneDelta } from '../shared/investigation-graph';
 
 const api = {
   cases: {
@@ -440,6 +441,18 @@ const api = {
       list: (): Promise<BondShape[]> => ipcRenderer.invoke(channels.memory.bondList),
       add: (a: string, b: string): Promise<void> => ipcRenderer.invoke(channels.memory.bondAdd, a, b),
       remove: (a: string, b: string): Promise<void> => ipcRenderer.invoke(channels.memory.bondRemove, a, b)
+    }
+  },
+  /** SP-4 investigation graph: per-case scene fetch + live delta push as evidence is appended
+   *  to the SP-2 provenance ledger. Read-only — Task 7 adds the manual add-node/edge write path. */
+  investigation: {
+    graph: (caseId: string): Promise<InvestigationScene> => ipcRenderer.invoke(channels.investigation.graph, caseId),
+    onGraphDelta: (caseId: string, cb: (delta: SceneDelta) => void): (() => void) => {
+      const listener = (_e: unknown, payload: { caseId: string; delta: SceneDelta }): void => {
+        if (payload.caseId === caseId) cb(payload.delta);
+      };
+      ipcRenderer.on(channels.investigation.onGraphDelta, listener);
+      return () => ipcRenderer.removeListener(channels.investigation.onGraphDelta, listener);
     }
   },
   plugins: {

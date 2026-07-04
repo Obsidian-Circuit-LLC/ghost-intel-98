@@ -142,6 +142,7 @@ import {
 import { createGhostScrapeHandlers } from '../x/ghostscrape/ipc';
 import { createScrapingCasesHandlers } from '../scraping-cases/ipc';
 import { prodScrapingCaseStore } from '../storage/scraping-cases';
+import { registerInvestigationGraphIpc } from '../investigation/ipc';
 
 const MAX_SAVE_ATTACHMENT_BYTES = 64 * 1024 * 1024; // 64 MB cap on base64 decoded payload
 const MAX_EXPORT_BYTES = 64 * 1024 * 1024;
@@ -1388,6 +1389,15 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.memory.bondList, () => createBonds().list());
   safeHandle(channels.memory.bondAdd, (...args) => createBonds().add(ensureNodeId(args[0]), ensureNodeId(args[1])));
   safeHandle(channels.memory.bondRemove, (...args) => createBonds().remove(ensureNodeId(args[0]), ensureNodeId(args[1])));
+
+  // ---- SP-4 investigation graph: per-case scene fetch + live delta push (Task 5) ----
+  registerInvestigationGraphIpc({
+    handle: safeHandle,
+    sendToWatchers: (payload) => {
+      const win = getWindow();
+      if (win) win.webContents.send(channels.investigation.onGraphDelta, payload);
+    }
+  });
 
   // ---- adaptive-memory profile governance (list/edit/pin/delete/wipe) ----
   // Nothing here is best-effort: every learned item must stay inspectable/editable/erasable, so
