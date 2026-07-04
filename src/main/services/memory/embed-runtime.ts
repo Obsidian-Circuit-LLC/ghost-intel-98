@@ -1,7 +1,8 @@
 import { spawn as nodeSpawn } from 'node:child_process';
+import { access } from 'node:fs/promises';
 import { join } from 'node:path';
 import { bundledRoot, LOCAL_AI_ENDPOINT } from '../local-ai-paths';
-import { isBundled, ensureRuntime } from '../local-ai';
+import { ensureRuntime } from '../local-ai';
 
 export type EmbedHealth = 'ready' | 'starting' | 'unavailable';
 
@@ -14,6 +15,7 @@ type SpawnLike = (cmd: string, args: string[], opts: { env: NodeJS.ProcessEnv; s
 let spawnFn: SpawnLike = nodeSpawn as unknown as SpawnLike;
 let probeFn: (url: string) => Promise<boolean> = defaultProbe;
 let bundledOverride: boolean | null = null;
+let bundledRootOverride: string | null = null;
 
 let resolvedEndpoint: string | null = null;
 let starting = false;
@@ -21,10 +23,12 @@ let starting = false;
 export function __setSpawnForTest(fn: SpawnLike | null): void { spawnFn = fn ?? (nodeSpawn as unknown as SpawnLike); }
 export function __setProbeForTest(fn: ((url: string) => Promise<boolean>) | null): void { probeFn = fn ?? defaultProbe; }
 export function __setBundledForTest(v: boolean | null): void { bundledOverride = v; }
+export function __setBundledRootForTest(dir: string | null): void { bundledRootOverride = dir; }
 export function __resetEmbedRuntimeForTest(): void {
   spawnFn = nodeSpawn as unknown as SpawnLike;
   probeFn = defaultProbe;
   bundledOverride = null;
+  bundledRootOverride = null;
   resolvedEndpoint = null;
   starting = false;
 }
@@ -36,9 +40,28 @@ async function defaultProbe(url: string): Promise<boolean> {
   } catch { return false; }
 }
 
+async function exists(p: string): Promise<boolean> { try { await access(p); return true; } catch { return false; } }
+
+/**
+ * Whether the dedicated embedding bundle (ollama binary + `EMBED_MODEL_PRESENT`) shipped with
+ * this install — independent of the chat model's `MODEL_PRESENT` marker. The installer ships
+ * only `EMBED_MODEL_PRESENT` (the chat model is the user's own Ollama), so gating on the chat
+ * marker (as `resolveBundled()` used to, via `isBundled()`) is always false in production and the
+ * 11435 embed runtime never starts.
+ */
+export async function embedBundled(root?: string): Promise<boolean> {
+  try {
+    const r = root ?? bundledRootOverride ?? safeBundledRoot();
+    if (!r) return false;
+    const bin = (await exists(join(r, 'ollama'))) || (await exists(join(r, 'ollama.exe')));
+    const model = await exists(join(r, 'EMBED_MODEL_PRESENT'));
+    return bin && model;
+  } catch { return false; }
+}
+
 async function resolveBundled(): Promise<boolean> {
   if (bundledOverride !== null) return bundledOverride;
-  return isBundled();
+  return embedBundled();
 }
 
 export function embedEndpoint(): string {
