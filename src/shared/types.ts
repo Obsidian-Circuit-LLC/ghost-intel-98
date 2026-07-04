@@ -628,7 +628,7 @@ export const defaultSettings: AppSettings = {
     provider: 'none',
     endpoint: 'http://localhost:11434',
     model: 'qwen3-abliterated:4b',
-    defaultSystemPrompt: 'You are an investigative case-management assistant. Use only the case data the user has explicitly shared. Be concise.',
+    defaultSystemPrompt: 'You are Q, an investigative case-management assistant. Use only the case data the user has explicitly shared. Be concise.',
     formattedOutput: true,
     apiKeyRef: null,
     ttsEnabled: false,

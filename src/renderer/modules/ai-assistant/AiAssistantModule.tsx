@@ -492,22 +492,6 @@ export function AiAssistantModule(): JSX.Element {
     void convoRef.current?.stop();
   }, []);
 
-  // Push-to-talk press/release via pointer events with a document-level pointerup, so dragging
-  // the cursor off the button doesn't truncate the utterance (mouseLeave would).
-  const pttHoldingRef = useRef(false);
-  const pttDown = useCallback((e: React.PointerEvent) => {
-    e.preventDefault();
-    pttHoldingRef.current = true;
-    convoRef.current?.pttDown();
-    const up = (): void => {
-      if (!pttHoldingRef.current) return;
-      pttHoldingRef.current = false;
-      convoRef.current?.pttUp();
-      window.removeEventListener('pointerup', up);
-    };
-    window.addEventListener('pointerup', up);
-  }, []);
-
   function quickPrompt(text: string): void {
     setInput(text);
   }
@@ -767,24 +751,16 @@ export function AiAssistantModule(): JSX.Element {
               🎙 Voice input needs a Vosk model in <code>resources/vosk/</code> — speak-aloud (TTS) still works.
             </span>
           ) : voiceMode === 'off' ? (
-            <>
-              <span>Voice conversation:</span>
-              <button onClick={() => void startVoice('continuous')} disabled={modelInstalled === null} title="Hands-free: mic stays open; the AI listens, answers, and speaks while you read">🎙 Hands-free</button>
-              <button onClick={() => void startVoice('ptt')} disabled={modelInstalled === null} title="Push-to-talk: hold a button to speak">🎤 Push-to-talk</button>
-            </>
+            <button
+              onClick={() => void startVoice('continuous')}
+              disabled={modelInstalled === null}
+              title="Tap to talk to Q hands-free — the mic stays open; Q listens, answers, and speaks while you read. Tap again to stop."
+            >🎤 Talk to Q</button>
           ) : (
             <>
-              <button onClick={stopVoice} style={{ fontWeight: 'bold' }}>■ Stop voice</button>
-              {voiceMode === 'ptt' && (
-                <button
-                  onPointerDown={pttDown}
-                  disabled={voiceState === 'thinking' || voiceState === 'speaking'}
-                  title="Hold while speaking"
-                >🎤 Hold to talk</button>
-              )}
+              <button onClick={stopVoice} style={{ fontWeight: 'bold' }} title="Stop the voice conversation">🔴 Listening — tap to stop</button>
               <span style={{ opacity: 0.85 }}>
-                {voiceMode === 'continuous' ? 'hands-free' : 'push-to-talk'} · <b>{voiceState}</b>
-                {voicePartial ? ` — “${voicePartial}”` : ''}
+                <b>{voiceState}</b>{voicePartial ? ` — “${voicePartial}”` : ''}
               </span>
             </>
           )}

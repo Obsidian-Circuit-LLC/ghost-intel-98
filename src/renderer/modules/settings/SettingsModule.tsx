@@ -29,7 +29,7 @@ const SECTIONS: Section[] = [
   { key: 'theme',     label: 'Theme',       glyph: '🎨' },
   { key: 'cases',     label: 'Case folder', glyph: '📁' },
   { key: 'shortcuts', label: 'Shortcuts',   glyph: '⚡' },
-  { key: 'ai',        label: 'AI Assistant',glyph: '✨' },
+  { key: 'ai',        label: 'Q (AI Assistant)',glyph: '✨' },
   { key: 'browser',   label: 'Browser',     glyph: '🌐' },
   { key: 'terminal',  label: 'Terminal',    glyph: '💻' },
   { key: 'mail',      label: 'Mail',        glyph: '✉' },
@@ -351,7 +351,7 @@ function AiPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSettings>)
     <>
       <LocalAiPane />
       <fieldset>
-      <legend>AI Assistant</legend>
+      <legend>Q (AI Assistant)</legend>
       <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 6, alignItems: 'center' }}>
         <label>Provider:</label>
         <select className="ga98-text" value={s.ai.provider} onChange={(e) => void patch({ ai: { ...s.ai, provider: e.target.value as AppSettings['ai']['provider'] } })}>

@@ -223,7 +223,7 @@ export function registerBuiltins(): void {
   registerModule({ key: 'mail',         title: 'Mail',             glyph: '✉', component: MailAdapter,         builtin: true });
   registerModule({ key: 'dialterm',     title: 'DialTerm',         glyph: '📞', component: DialTermAdapter,     builtin: true });
   registerModule({ key: 'eyespy',       title: 'EyeSpy',           glyph: '📷', component: EyeSpyAdapter,       builtin: true, category: 'osint', subcategory: 'Geospatial' });
-  registerModule({ key: 'ai-assistant', title: 'AI Assistant',     glyph: '✨', component: AiAssistantAdapter,  builtin: true });
+  registerModule({ key: 'ai-assistant', title: 'Q',                 glyph: '✨', component: AiAssistantAdapter,  builtin: true });
   registerModule({ key: 'doc-viewer',   title: 'Document Viewer',  glyph: '📄', component: DocViewerAdapter,    builtin: true });
   registerModule({ key: 'search',       title: 'Search',           glyph: '🔍', component: SearchAdapter,       builtin: true });
   registerModule({ key: 'whiteboard',   title: 'Whiteboard',       glyph: '🗺', component: WhiteboardAdapter,   builtin: true });
