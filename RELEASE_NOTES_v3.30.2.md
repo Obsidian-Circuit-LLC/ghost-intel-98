@@ -17,7 +17,7 @@
 
 Windows NSIS installer — `GhostIntel98-Setup-3.30.2.exe` (per-user, no admin; unsigned → **More info → Run anyway**):
 
-- **SHA-256:** `PENDING_BUILD`
-- **Size:** `PENDING_BUILD`
+- **SHA-256:** `58120522a0c03b7092eccb38b9c4f7624eaeab2af85f795f1594260682b68abe`
+- **Size:** 917,681,157 bytes (~918 MB).
 
 *Everything from v3.30.1 (the offline-memory runtime fix + web-search same-query guard) carries forward.*
