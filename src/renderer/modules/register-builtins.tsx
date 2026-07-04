@@ -43,6 +43,7 @@ import { SocmintModule } from './socmint/SocmintModule';
 import { XCollectorModule } from './x/XCollectorModule';
 import { GhostScrapeModule } from './ghostscrape/GhostScrapeModule';
 import { OSINTToolkitModule } from './osint-toolkit/OSINTToolkitModule';
+import { MindsEyeModule } from './minds-eye/MindsEyeModule';
 
 // ---------------------------------------------------------------------------
 // Adapter components — each has the uniform { spec: WindowSpec } signature and
@@ -200,6 +201,10 @@ function OSINTToolkitAdapter({ spec: _spec }: { spec: WindowSpec }): JSX.Element
   return <OSINTToolkitModule />;
 }
 
+function MindsEyeAdapter({ spec: _spec }: { spec: WindowSpec }): JSX.Element {
+  return <MindsEyeModule />;
+}
+
 // ---------------------------------------------------------------------------
 // Registration
 // Titles are VERBATIM from Desktop.tsx moduleTitles.
@@ -242,4 +247,5 @@ export function registerBuiltins(): void {
   registerModule({ key: 'x', title: 'X / Twitter', glyph: '✖', component: XCollectorAdapter, builtin: true, defaultWidth: 900, defaultHeight: 640, category: 'osint', subcategory: 'Social Media' });
   registerModule({ key: 'ghostscrape', title: 'GhostScrape', glyph: '🐦', component: GhostScrapeAdapter, builtin: true, defaultWidth: 960, defaultHeight: 680, category: 'osint', subcategory: 'Social Media' });
   registerModule({ key: 'osint-toolkit', title: 'OSINT Toolkit', glyph: '🧰', component: OSINTToolkitAdapter, builtin: true, defaultWidth: 360, defaultHeight: 470 });
+  registerModule({ key: 'minds-eye', title: "Mind's Eye", glyph: '👁', component: MindsEyeAdapter, builtin: true, defaultWidth: 760, defaultHeight: 560 });
 }

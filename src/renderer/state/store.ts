@@ -46,7 +46,8 @@ export type ModuleKey =
   | 'socmint'
   | 'x'
   | 'ghostscrape'
-  | 'osint-toolkit';
+  | 'osint-toolkit'
+  | 'minds-eye';
 
 export interface WindowSpec {
   id: string;

@@ -92,11 +92,33 @@ export function SearchlightGlyph(): JSX.Element {
   );
 }
 
+/**
+ * Hand-drawn "Mind's Eye" glyph for the memory graph module — a stylised open eye (lids + iris)
+ * over a faint node/edge motif, so it reads as "the mind, visualized" rather than a literal eye.
+ */
+export function MindsEyeGlyph(): JSX.Element {
+  return (
+    <svg width="28" height="28" viewBox="0 0 16 16" shapeRendering="crispEdges" aria-hidden="true">
+      {/* faint graph nodes behind the lids, evoking the memory graph */}
+      <circle cx="2.5" cy="3" r="0.8" fill="#8aa0a8" opacity="0.6" />
+      <circle cx="13.5" cy="12.5" r="0.8" fill="#8aa0a8" opacity="0.6" />
+      <line x1="2.5" y1="3" x2="6" y2="6" stroke="#8aa0a8" strokeWidth="0.6" opacity="0.6" />
+      {/* eye outline (almond lids) */}
+      <path d="M1 8 Q8 2 15 8 Q8 14 1 8 Z" fill="none" stroke="#d8d1ba" strokeWidth="1.3" />
+      {/* iris + pupil */}
+      <circle cx="8" cy="8" r="3" fill="#0f7f96" opacity="0.85" />
+      <circle cx="8" cy="8" r="1.4" fill="#000" />
+      <circle cx="7.2" cy="7.1" r="0.6" fill="#bdeef9" opacity="0.9" />
+    </svg>
+  );
+}
+
 /** Custom hand-drawn SVG glyph for modules that have one (falls through to the emoji otherwise). */
 export function glyphNodeFor(m: string): ReactNode | undefined {
   if (m === 'cases') return <MyComputerGlyph />;
   if (m === 'notepad') return <NotepadGlyph />;
   if (m === 'searchlight') return <SearchlightGlyph />;
+  if (m === 'minds-eye') return <MindsEyeGlyph />;
   return undefined;
 }
 

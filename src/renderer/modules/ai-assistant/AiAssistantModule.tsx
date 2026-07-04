@@ -12,7 +12,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AiChatMessage, AiChatRequest, AiConversationSummary } from '@shared/post-mvp-types';
 import type { CaseSummary, CaseRecord } from '@shared/types';
 import type { MemoryItem, RecallPreview } from '@shared/ipc-contracts';
-import { useSettings } from '../../state/store';
+import { useSettings, useWindows } from '../../state/store';
 import { toast } from '../../state/toasts';
 import { confirmDialog } from '../../state/dialogs';
 import { ttsSupported, listVoices, onVoicesChanged, speakAuto, cancelSpeechAll, setTtsEnginePref, type TtsVoice } from '../../audio/tts';
@@ -638,6 +638,12 @@ export function AiAssistantModule(): JSX.Element {
           title="See what the assistant recalled for the last answer, and browse/edit/erase everything it has learned"
         >
           🧠 Memory
+        </button>
+        <button
+          onClick={() => useWindows.getState().open({ module: 'minds-eye', title: "Mind's Eye" })}
+          title="See the whole memory graph — facts, documents, conversations, entities — as a visual map"
+        >
+          👁 Mind&rsquo;s Eye
         </button>
         {(ttsSupported() || piperOk) && (
           <>
