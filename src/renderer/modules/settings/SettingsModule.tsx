@@ -390,6 +390,11 @@ function AiPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSettings>)
             onChange={(e) => void patch({ ai: { ...s.ai, webSearch: e.target.checked } })} />
           Let Q search the web over Tor (DuckDuckGo onion; results are untrusted; Ollama only)
         </label>
+        <label style={{ alignSelf: 'flex-start', display: 'flex', gap: 6, alignItems: 'center' }}>
+          <input type="checkbox" checked={s.ai.webSearchClearnet}
+            onChange={(e) => void patch({ ai: { ...s.ai, webSearchClearnet: e.target.checked } })} />
+          Allow CLEARNET fallback when Tor search fails (⚠ exposes your real IP to results — off by default)
+        </label>
       </div>
       <p style={{ fontSize: 11, color: '#444', marginTop: 8 }}>
         The API key is sent to the configured endpoint only when you send an AI message.

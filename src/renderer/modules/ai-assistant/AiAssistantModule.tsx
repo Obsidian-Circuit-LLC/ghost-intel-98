@@ -615,6 +615,14 @@ export function AiAssistantModule(): JSX.Element {
           <input type="checkbox" checked={includeFiles} disabled={!contextCase} onChange={(e) => setIncludeFiles(e.target.checked)} />
           &nbsp;Include file contents
         </label>
+        <label style={{ fontSize: 11 }} title="Let Q search the web over Tor (DuckDuckGo onion) mid-conversation">
+          <input
+            type="checkbox"
+            checked={settings?.ai.webSearch ?? false}
+            onChange={(e) => { if (settings) void patchSettings({ ai: { ...settings.ai, webSearch: e.target.checked } }); }}
+          />
+          &nbsp;Web (Tor)
+        </label>
         <button onClick={() => quickPrompt('Summarise this case in 3-5 bullet points.')} disabled={!contextCase}>Summarise</button>
         <button onClick={() => quickPrompt('Draft a status report for this case suitable for an external stakeholder.')} disabled={!contextCase}>Draft report</button>
         <button onClick={() => quickPrompt('What questions should I be asking that I have not yet?')} disabled={!contextCase}>Open questions</button>
