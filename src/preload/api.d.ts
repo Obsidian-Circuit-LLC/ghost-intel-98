@@ -16,6 +16,7 @@ import type {
   EmlPreview,
   EntityRecord,
   EntityRelationship,
+  EntityType,
   ExtractedAttachmentMeta,
   JournalEntry,
   JournalEntrySummary,
@@ -29,6 +30,7 @@ import type {
   Whiteboard
 } from '../shared/types';
 import type { EntityCreateInput, EntityLinkOpts, BioAddInput, AuthStatus, LocalAiStatus, LocalAiProgress, MemoryStatus, MemoryProgress, MemoryItem, RecallPreview, LibraryDoc, MemoryGraphShape, BondShape, XCollectResultShape, LearningModelMeta, GhostScrapeConfig, GhostScrapeResult, ScrapingCaseStoreId, ScrapingImportResult } from '../shared/ipc-contracts';
+import type { InvestigationScene, SceneDelta } from '../shared/investigation-graph';
 import type {
   AiChatRequest,
   CameraStream,
@@ -516,6 +518,15 @@ export interface GhostApi {
       add(a: string, b: string): Promise<void>;
       remove(a: string, b: string): Promise<void>;
     };
+  };
+  /** SP-4 investigation graph: per-case scene fetch + live delta push as evidence is appended
+   *  to the SP-2 provenance ledger, plus the manual add-node/draw-edge write path (Task 7) — both
+   *  append a `manual` evidence record and stream through the same delta channel. */
+  investigation: {
+    graph(caseId: string): Promise<InvestigationScene>;
+    onGraphDelta(caseId: string, cb: (delta: SceneDelta) => void): () => void;
+    addNode(caseId: string, type: EntityType, value: string): Promise<void>;
+    addEdge(caseId: string, fromId: string, toId: string, relation: string): Promise<void>;
   };
   plugins: {
     listVerified(): Promise<VerifiedPluginInfo[]>;

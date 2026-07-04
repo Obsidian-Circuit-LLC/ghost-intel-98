@@ -6,6 +6,8 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import { channels } from '../shared/ipc-contracts';
 import type { LocalAiStatus, LocalAiProgress, MemoryStatus, MemoryProgress, MemoryItem, RecallPreview, LibraryDoc, MemoryGraphShape, BondShape, GhostScrapeConfig, GhostScrapeResult, ScrapingCaseStoreId } from '../shared/ipc-contracts';
+import type { InvestigationScene, SceneDelta } from '../shared/investigation-graph';
+import type { EntityType } from '../shared/types';
 
 const api = {
   cases: {
@@ -441,6 +443,23 @@ const api = {
       add: (a: string, b: string): Promise<void> => ipcRenderer.invoke(channels.memory.bondAdd, a, b),
       remove: (a: string, b: string): Promise<void> => ipcRenderer.invoke(channels.memory.bondRemove, a, b)
     }
+  },
+  /** SP-4 investigation graph: per-case scene fetch + live delta push as evidence is appended
+   *  to the SP-2 provenance ledger, plus the manual add-node/draw-edge write path (Task 7) — both
+   *  append a `manual` evidence record and stream through the same delta channel. */
+  investigation: {
+    graph: (caseId: string): Promise<InvestigationScene> => ipcRenderer.invoke(channels.investigation.graph, caseId),
+    onGraphDelta: (caseId: string, cb: (delta: SceneDelta) => void): (() => void) => {
+      const listener = (_e: unknown, payload: { caseId: string; delta: SceneDelta }): void => {
+        if (payload.caseId === caseId) cb(payload.delta);
+      };
+      ipcRenderer.on(channels.investigation.onGraphDelta, listener);
+      return () => ipcRenderer.removeListener(channels.investigation.onGraphDelta, listener);
+    },
+    addNode: (caseId: string, type: EntityType, value: string): Promise<void> =>
+      ipcRenderer.invoke(channels.investigation.addNode, caseId, type, value),
+    addEdge: (caseId: string, fromId: string, toId: string, relation: string): Promise<void> =>
+      ipcRenderer.invoke(channels.investigation.addEdge, caseId, fromId, toId, relation)
   },
   plugins: {
     listVerified: () => ipcRenderer.invoke(channels.plugins.listVerified),

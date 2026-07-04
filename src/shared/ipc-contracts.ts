@@ -32,6 +32,7 @@ import type {
 } from './types';
 import type { MediaLibrarySnapshot, MediaStation, MediaTrack, GeoSnapshot, GeoSource, GeoItem, SavedGeoEvent, MarketSnapshot } from './post-mvp-types';
 import type { SiteCatalogEntry, SweepResult, SearchlightCase, SearchlightCaseSummary } from './searchlight/types';
+import type { InvestigationScene, SceneDelta } from './investigation-graph';
 
 /**
  * Metadata written after each retrain cycle.
@@ -541,6 +542,17 @@ export const channels = {
     remove: 'scrapingCases:remove',
     importToCase: 'scrapingCases:importToCase',
     saveArtifact: 'scrapingCases:saveArtifact'
+  },
+  // SP-4 investigation graph: the per-case scene fetch (nodes/edges assembled from the SP-2
+  // entity store + provenance ledger) + a main→renderer push of live diffs as evidence is
+  // appended. `addNode`/`addEdge` (Task 7) are the manual write path — a `manual` evidence
+  // record referencing/relating existing or newly-created entities, streamed like any other
+  // ledger append.
+  investigation: {
+    graph: 'investigation:graph',
+    onGraphDelta: 'investigation:onGraphDelta',
+    addNode: 'investigation:addNode',
+    addEdge: 'investigation:addEdge'
   }
 } as const;
 
@@ -959,6 +971,11 @@ export interface ApiContracts {
   [channels.scrapingCases.remove]: { args: [ScrapingCaseStoreId, string]; returns: void };
   [channels.scrapingCases.importToCase]: { args: [ScrapingCaseStoreId, string, string]; returns: ScrapingImportResult };
   [channels.scrapingCases.saveArtifact]: { args: [ScrapingCaseStoreId, string, string, string]; returns: string };
+
+  [channels.investigation.graph]: { args: [string]; returns: InvestigationScene };
+  [channels.investigation.onGraphDelta]: { args: [(payload: { caseId: string; delta: SceneDelta }) => void]; returns: () => void };
+  [channels.investigation.addNode]: { args: [string, EntityType, string]; returns: void };
+  [channels.investigation.addEdge]: { args: [string, string, string, string]; returns: void };
 }
 
 export const BGCONN_LOCK_EXEMPT_CHANNELS = ['bgconn:status', 'bgconn:stop'] as const;

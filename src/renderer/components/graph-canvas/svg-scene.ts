@@ -1,11 +1,30 @@
 /**
- * Pure geometry mapper for the Mind's Eye — turns a `MemoryGraphShape` (arbitrary-range x/y from
- * the deterministic layout pass) into a renderable SVG scene: circles for nodes, lines for edges,
- * text labels, normalized into a fixed viewBox. No I/O, no randomness, no DOM: same graph + view
- * in ⇒ same scene out, and every coordinate is finite (never NaN/Infinity) even for a single node
- * or an empty graph.
+ * Pure geometry mapper for the shared graph canvas — turns a domain-neutral `RenderGraph`
+ * (arbitrary-range x/y from a deterministic layout pass, with precomputed `cls` per node/edge)
+ * into a renderable SVG scene: circles for nodes, lines for edges, text labels, normalized into a
+ * fixed viewBox. No I/O, no randomness, no DOM: same graph + view in ⇒ same scene out, and every
+ * coordinate is finite (never NaN/Infinity) even for a single node or an empty graph.
  */
-import type { GraphNodeShape, MemoryGraphShape } from '@shared/ipc-contracts';
+
+export interface RenderGraphNode {
+  id: string;
+  x: number;
+  y: number;
+  strength: number;
+  cls: string;
+  label: string;
+}
+
+export interface RenderGraphEdge {
+  source: string;
+  target: string;
+  cls: string;
+}
+
+export interface RenderGraph {
+  nodes: RenderGraphNode[];
+  edges: RenderGraphEdge[];
+}
 
 export interface SvgSceneNode {
   id: string;
@@ -61,14 +80,7 @@ function clamp01(n: number): number {
   return Math.max(0, Math.min(1, n));
 }
 
-function nodeClass(n: GraphNodeShape): string {
-  const parts = [`node-${n.kind}`];
-  if (n.pinned) parts.push('pinned');
-  if (n.conflict) parts.push('conflict');
-  return parts.join(' ');
-}
-
-export function toSvgScene(graph: MemoryGraphShape, view: { w: number; h: number }): SvgScene {
+export function toSvgScene(graph: RenderGraph, view: { w: number; h: number }): SvgScene {
   const sx = scaleAxis(graph.nodes.map((n) => n.x), view.w);
   const sy = scaleAxis(graph.nodes.map((n) => n.y), view.h);
 
@@ -77,7 +89,7 @@ export function toSvgScene(graph: MemoryGraphShape, view: { w: number; h: number
     cx: sx(n.x),
     cy: sy(n.y),
     r: MIN_R + clamp01(n.strength) * (MAX_R - MIN_R),
-    cls: nodeClass(n)
+    cls: n.cls
   }));
 
   const byId = new Map(nodes.map((n) => [n.id, n]));
@@ -86,7 +98,7 @@ export function toSvgScene(graph: MemoryGraphShape, view: { w: number; h: number
     const s = byId.get(e.source);
     const t = byId.get(e.target);
     if (!s || !t) continue;
-    edges.push({ x1: s.cx, y1: s.cy, x2: t.cx, y2: t.cy, cls: `edge-${e.kind}`, source: e.source, target: e.target });
+    edges.push({ x1: s.cx, y1: s.cy, x2: t.cx, y2: t.cy, cls: e.cls, source: e.source, target: e.target });
   }
 
   const labels: SvgSceneLabel[] = nodes.map((n, i) => ({

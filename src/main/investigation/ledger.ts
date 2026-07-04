@@ -7,6 +7,9 @@ import type { EvidenceRecord, Finding, InvestigationRun } from '@shared/investig
 
 interface LedgerShape { evidence: EvidenceRecord[]; findings: Finding[]; runs: InvestigationRun[] }
 
+const appendListeners = new Set<(caseId: string) => void>();
+export function onLedgerAppend(cb: (caseId: string) => void): () => void { appendListeners.add(cb); return () => appendListeners.delete(cb); }
+
 function ledgerFile(caseId: string): string { return join(caseDir(caseId), 'investigation', 'ledger.json'); }
 function rawFile(caseId: string, evidenceId: string): string { return join(caseDir(caseId), 'investigation', 'raw', `${evidenceId}.txt`); }
 
@@ -32,6 +35,7 @@ export async function appendEvidence(
     const full: EvidenceRecord = { ...rec, id, rawRef, createdAt: now };
     l.evidence.push(full);
     await write(caseId, l);
+    for (const cb of appendListeners) cb(caseId);
     return full;
   });
 }
@@ -64,4 +68,8 @@ export async function listEvidence(caseId: string, runId?: string): Promise<Evid
     const all = (await read(caseId)).evidence;
     return runId ? all.filter((e) => e.runId === runId) : all;
   });
+}
+
+export async function listFindings(caseId: string): Promise<Finding[]> {
+  return withLock(`inv:${caseId}`, async () => (await read(caseId)).findings);
 }

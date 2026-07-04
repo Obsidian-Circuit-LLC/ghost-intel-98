@@ -1,28 +1,17 @@
 /**
  * Mind's Eye — the SVG memory graph surface. Fetches the assembled `MemoryGraph` over IPC and
- * renders it as plain SVG (circles/lines/text) — no `<canvas>`, ever (canvas rendered solid black
- * on mobile in the v1 prototype; see test/minds-eye-render.pw.test.ts for the regression guard).
- * Empty graph ⇒ an inviting message, never a blank/black rect. Clicking a node opens a small
- * inspector panel (kind, label, strength, provenance). No animation is used, so there is nothing
- * for `prefers-reduced-motion` to need to disable.
+ * renders it via the shared `GraphCanvas` core (plain SVG — no `<canvas>`, ever; canvas rendered
+ * solid black on mobile in the v1 prototype; see test/minds-eye-render.pw.test.ts for the
+ * regression guard). Empty graph ⇒ an inviting message, never a blank/black rect. Clicking a node
+ * opens a small inspector panel (kind, label, strength, provenance). No animation is used, so
+ * there is nothing for `prefers-reduced-motion` to need to disable.
  */
 import { useEffect, useState } from 'react';
 import type { GraphNodeShape, MemoryGraphShape } from '@shared/ipc-contracts';
-import { toSvgScene } from './svg-graph';
+import { GraphCanvas } from '../../components/graph-canvas/GraphCanvas';
+import type { RenderGraph } from '../../components/graph-canvas/svg-scene';
 
 const VIEW = { w: 720, h: 500 };
-
-const KIND_FILL: Record<string, string> = {
-  fact: '#4aa3ff',
-  doc: '#3fbf7f',
-  conversation: '#e0a030',
-  entity: '#b07cf0'
-};
-
-function fillForCls(cls: string): string {
-  const kind = cls.split(' ')[0]?.replace('node-', '') ?? '';
-  return KIND_FILL[kind] ?? '#9aa5b1';
-}
 
 /** Uploaded-library `doc` nodes carry `doc:<docId>` as a segment of their node id (see
  *  `library/sources.ts`'s `doc:${docId}` sourceKey → `build.ts`'s `${caseId}:${sourceKey}` node
@@ -38,12 +27,7 @@ export function docIdFromNodeId(id: string): string | null {
 export function MindsEyeModule(): JSX.Element {
   const [graph, setGraph] = useState<MemoryGraphShape | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [selected, setSelected] = useState<GraphNodeShape | null>(null);
   const [busy, setBusy] = useState(false);
-  // Draw-a-bond gesture: mousedown on a node starts the drag; mouseup on a DIFFERENT node draws
-  // the bond; mouseup on the SAME node (or no drag at all) is a plain click that opens the
-  // inspector; mouseup on empty canvas cancels the drag.
-  const [dragFrom, setDragFrom] = useState<string | null>(null);
 
   const load = (): void => {
     window.api.memory
@@ -73,7 +57,6 @@ export function MindsEyeModule(): JSX.Element {
         await window.api.memory.profileUpsert({ id: item.id, scope: item.scope, text: item.text, pinned: !item.pinned });
       }
       load();
-      setSelected(null);
     } finally {
       setBusy(false);
     }
@@ -84,7 +67,6 @@ export function MindsEyeModule(): JSX.Element {
     try {
       await window.api.memory.profileDelete([node.id]);
       load();
-      setSelected(null);
     } finally {
       setBusy(false);
     }
@@ -97,7 +79,6 @@ export function MindsEyeModule(): JSX.Element {
     try {
       await window.api.memory.forgetDoc(docId);
       load();
-      setSelected(null);
     } finally {
       setBusy(false);
     }
@@ -110,7 +91,6 @@ export function MindsEyeModule(): JSX.Element {
     try {
       await window.api.memory.mergeItems(keepId, dropId);
       load();
-      setSelected(null);
     } finally {
       setBusy(false);
     }
@@ -167,7 +147,13 @@ export function MindsEyeModule(): JSX.Element {
     );
   }
 
-  const scene = toSvgScene(graph, VIEW);
+  const render: RenderGraph = {
+    nodes: graph.nodes.map((n) => ({
+      id: n.id, x: n.x, y: n.y, strength: n.strength, label: n.label,
+      cls: ['node-' + n.kind, n.pinned ? 'pinned' : '', n.conflict ? 'conflict' : ''].filter(Boolean).join(' '),
+    })),
+    edges: graph.edges.map((e) => ({ source: e.source, target: e.target, cls: 'edge-' + e.kind })),
+  };
   const byId = new Map(graph.nodes.map((n) => [n.id, n]));
 
   // "One thing to fix" tray: surface a single detected conflict pair at a time (never the whole
@@ -200,98 +186,53 @@ export function MindsEyeModule(): JSX.Element {
           </div>
         </div>
       )}
-      <svg
-        viewBox={`0 0 ${VIEW.w} ${VIEW.h}`}
-        style={{ flex: 1, minHeight: 0, width: '100%', background: '#111820' }}
-        role="img"
-        aria-label="Mind's Eye memory graph"
-        onMouseUp={() => setDragFrom(null)}
-      >
-        {scene.edges.map((e, i) => (
-          <line
-            key={`e${i}`}
-            x1={e.x1}
-            y1={e.y1}
-            x2={e.x2}
-            y2={e.y2}
-            stroke={e.cls === 'edge-bond' ? '#e0a030' : '#3a4a5a'}
-            strokeWidth={e.cls === 'edge-bond' ? 2 : 1}
-            style={e.cls === 'edge-bond' ? { cursor: 'pointer' } : undefined}
-            onClick={e.cls === 'edge-bond' ? () => cutBond(e.source, e.target) : undefined}
-          >
-            {e.cls === 'edge-bond' && <title>Click to cut this link</title>}
-          </line>
-        ))}
-        {scene.nodes.map((n) => {
-          const node = byId.get(n.id);
-          const pinned = n.cls.includes('pinned');
-          const conflict = n.cls.includes('conflict');
+      <GraphCanvas
+        graph={render}
+        view={VIEW}
+        ariaLabel="Mind's Eye memory graph"
+        onNodeClick={() => {}}
+        onDrawEdge={addBond}
+        onEdgeClick={(source, target, cls) => { if (cls === 'edge-bond') cutBond(source, target); }}
+        emptyMessage="Nothing remembered yet — start chatting or ➕ add a document."
+        renderInspector={(id) => {
+          const selected = byId.get(id);
+          if (!selected) return null;
           return (
-            <circle
-              key={n.id}
-              cx={n.cx}
-              cy={n.cy}
-              r={n.r}
-              fill={fillForCls(n.cls)}
-              stroke={conflict ? '#ff5050' : pinned ? '#ffd700' : 'none'}
-              strokeWidth={conflict || pinned ? 2 : 0}
-              style={{ cursor: 'pointer' }}
-              onMouseDown={() => setDragFrom(n.id)}
-              onMouseUp={(ev) => {
-                ev.stopPropagation();
-                if (dragFrom && dragFrom !== n.id) {
-                  addBond(dragFrom, n.id);
-                } else if (node) {
-                  setSelected(node);
-                }
-                setDragFrom(null);
-              }}
-            >
-              <title>{node?.label ?? n.id} — drag to another node to link them</title>
-            </circle>
+            <>
+              <div style={{ fontWeight: 'bold', marginBottom: 2 }}>{selected.label}</div>
+              <div>Kind: {selected.kind}</div>
+              <div>Strength: {selected.strength.toFixed(2)}</div>
+              <div>Pinned: {selected.pinned ? 'yes' : 'no'}{selected.conflict ? ' · Conflict' : ''}</div>
+              <div style={{ opacity: 0.7, wordBreak: 'break-all' }}>Provenance: {selected.id}</div>
+              <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+                {selected.kind === 'fact' && (
+                  <>
+                    <button disabled={busy} onClick={() => togglePinFact(selected)}>
+                      {selected.pinned ? 'Unpin' : 'Pin'}
+                    </button>
+                    <button disabled={busy} onClick={() => forgetFact(selected)}>Forget</button>
+                  </>
+                )}
+                {selected.kind === 'doc' && (
+                  <button
+                    disabled={busy || docIdFromNodeId(selected.id) === null}
+                    title={docIdFromNodeId(selected.id) === null
+                      ? 'Briefcase/journal/conversation/entity memories are managed in their own tools'
+                      : undefined}
+                    onClick={() => forgetDoc(selected)}
+                  >
+                    Forget
+                  </button>
+                )}
+                {(selected.kind === 'conversation' || selected.kind === 'entity') && (
+                  <button disabled title="Forgetting conversations/entities isn't supported yet">Forget</button>
+                )}
+                <button disabled={busy} onClick={() => recallIntoChat(selected)}>Recall into chat</button>
+              </div>
+            </>
           );
-        })}
-        {scene.labels.map((l, i) => (
-          <text key={`l${i}`} x={l.x} y={l.y} fontSize={9} fill="#cfd8e0" textAnchor="middle">
-            {l.text.length > 24 ? `${l.text.slice(0, 24)}…` : l.text}
-          </text>
-        ))}
-      </svg>
-      {selected && (
-        <div style={{ borderTop: '1px solid #444', padding: 8, fontSize: 12, background: '#1a232c', color: '#dfe6ec' }}>
-          <div style={{ fontWeight: 'bold', marginBottom: 2 }}>{selected.label}</div>
-          <div>Kind: {selected.kind}</div>
-          <div>Strength: {selected.strength.toFixed(2)}</div>
-          <div>Pinned: {selected.pinned ? 'yes' : 'no'}{selected.conflict ? ' · Conflict' : ''}</div>
-          <div style={{ opacity: 0.7, wordBreak: 'break-all' }}>Provenance: {selected.id}</div>
-          <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
-            {selected.kind === 'fact' && (
-              <>
-                <button disabled={busy} onClick={() => togglePinFact(selected)}>
-                  {selected.pinned ? 'Unpin' : 'Pin'}
-                </button>
-                <button disabled={busy} onClick={() => forgetFact(selected)}>Forget</button>
-              </>
-            )}
-            {selected.kind === 'doc' && (
-              <button
-                disabled={busy || docIdFromNodeId(selected.id) === null}
-                title={docIdFromNodeId(selected.id) === null
-                  ? 'Briefcase/journal/conversation/entity memories are managed in their own tools'
-                  : undefined}
-                onClick={() => forgetDoc(selected)}
-              >
-                Forget
-              </button>
-            )}
-            {(selected.kind === 'conversation' || selected.kind === 'entity') && (
-              <button disabled title="Forgetting conversations/entities isn't supported yet">Forget</button>
-            )}
-            <button disabled={busy} onClick={() => recallIntoChat(selected)}>Recall into chat</button>
-          </div>
-          <button onClick={() => setSelected(null)} style={{ marginTop: 4 }}>Close</button>
-        </div>
-      )}
+        }}
+      />
     </div>
   );
 }

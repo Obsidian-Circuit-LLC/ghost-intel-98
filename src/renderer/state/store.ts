@@ -47,7 +47,8 @@ export type ModuleKey =
   | 'x'
   | 'ghostscrape'
   | 'osint-toolkit'
-  | 'minds-eye';
+  | 'minds-eye'
+  | 'investigation-graph';
 
 export interface WindowSpec {
   id: string;
