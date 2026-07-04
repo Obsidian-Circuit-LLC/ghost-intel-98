@@ -1397,7 +1397,8 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     sendToWatchers: (payload) => {
       const win = getWindow();
       if (win) win.webContents.send(channels.investigation.onGraphDelta, payload);
-    }
+    },
+    validateCaseId: (id) => ensureUuid(id, 'caseId')
   });
 
   // ---- SP-4 investigation graph: manual add-node / draw-edge write path (Task 7). `now` is

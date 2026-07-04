@@ -69,3 +69,7 @@ export async function listEvidence(caseId: string, runId?: string): Promise<Evid
     return runId ? all.filter((e) => e.runId === runId) : all;
   });
 }
+
+export async function listFindings(caseId: string): Promise<Finding[]> {
+  return withLock(`inv:${caseId}`, async () => (await read(caseId)).findings);
+}

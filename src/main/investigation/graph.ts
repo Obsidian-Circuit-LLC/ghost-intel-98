@@ -1,4 +1,4 @@
-import { onLedgerAppend, listEvidence, appendEvidence } from './ledger';
+import { onLedgerAppend, listEvidence, listFindings, appendEvidence } from './ledger';
 import { buildInvestigationScene } from './scene';
 import { diffScenes } from './scene-diff';
 import * as entities from '../storage/entities';
@@ -22,8 +22,8 @@ export function __resetGraphForTest(): void {
 }
 
 export async function sceneForCase(caseId: string): Promise<InvestigationScene> {
-  const [all, evidence] = await Promise.all([entities.listAll(), listEvidence(caseId)]);
-  return buildInvestigationScene({ entities: all, evidence, findings: [] });
+  const [all, evidence, findings] = await Promise.all([entities.listAll(), listEvidence(caseId), listFindings(caseId)]);
+  return buildInvestigationScene({ entities: all, evidence, findings });
 }
 
 async function flush(caseId: string): Promise<void> {

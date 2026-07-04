@@ -16,11 +16,14 @@ import type { InvestigationScene, SceneDelta } from '@shared/investigation-graph
 type HandleFn = (channel: string, fn: (...args: unknown[]) => unknown) => void;
 type SendToWatchers = (payload: { caseId: string; delta: SceneDelta }) => void;
 
-export function registerInvestigationGraphIpc(deps: { handle: HandleFn; sendToWatchers: SendToWatchers }): void {
+export function registerInvestigationGraphIpc(deps: { handle: HandleFn; sendToWatchers: SendToWatchers; validateCaseId: (id: unknown) => string }): void {
   startGraphEmitter();
   const watched = new Set<string>();
   deps.handle(channels.investigation.graph, (...args: unknown[]): Promise<InvestigationScene> => {
-    const caseId = args[0] as string;
+    // Validate BEFORE the id reaches sceneForCase → listEvidence → ledgerFile → caseDir(join): a raw
+    // caseId like '../../..' would otherwise escape casesDir() on the read side (node:path.join does
+    // not strip traversal). register.ts injects ensureUuid; every sibling caseId channel already does.
+    const caseId = deps.validateCaseId(args[0]);
     if (!watched.has(caseId)) {
       watched.add(caseId);
       onSceneDelta(caseId, (delta) => deps.sendToWatchers({ caseId, delta }));
