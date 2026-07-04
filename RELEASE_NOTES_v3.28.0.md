@@ -14,7 +14,7 @@ The AI assistant's local memory graduates from an opt-in per-conversation featur
 
 ## Quality / QA
 
-- **2,568 automated tests** passing (1 skipped); TypeScript strict (`pnpm typecheck` clean) across both the node and web project configs.
+- **2,582 automated tests** passing (1 skipped); TypeScript strict (`pnpm typecheck` clean) across both the node and web project configs.
 - **Determinism preserved in every new critical path**: graph layout, similarity edges, and bond-boosted recall all take `now`/ids/rng via injected params — no `Math.random`, no bare `Date.now()` in scoring or layout logic.
 - **No new network egress.** The dedicated embedding runtime is the bundled, loopback-only Ollama on its own port (distinct from the chat port); no clearnet, no telemetry.
 - **Encrypted at rest.** Library manifest, per-document text, and bonds all persist through the existing `secure-fs` (`secureWriteFile`/`secureReadText`) path, exactly like existing memory shards.
@@ -22,6 +22,9 @@ The AI assistant's local memory graduates from an opt-in per-conversation featur
 
 ## Install
 
-Windows NSIS installer: pending build (this is a docs/version-bump release; the installer artifact is produced and SHA-256-pinned in a separate, operator-gated build step).
+Windows NSIS installer — `GhostIntel98-Setup-3.28.0.exe` (per-user, no admin; unsigned → **More info → Run anyway**):
+
+- **SHA-256:** `67e857d146c4f9321cb6a85beb8d788c273e0e43f6b61cec2eafa4f88b9c844c`
+- **Size:** 906,357,144 bytes (~906 MB; bundles the offline embedding model + Ollama runtime, Tor, Piper voices, ML-KEM libs).
 
 *Everything from v3.27.0 carries forward.*
