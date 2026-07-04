@@ -17,6 +17,18 @@ export const WEB_SEARCH_SYSTEM =
   'URLs you used. Only search when it genuinely helps — do not search for things you already know, ' +
   'and never emit more than one [SEARCH: …] line at a time.';
 
+/**
+ * Pure decision helper for the Tor→clearnet fallback (Task 7). Kept side-effect-free and separate
+ * from the loop so the branch logic — clearnet fires ONLY on an empty Tor result AND explicit
+ * opt-in — is independently testable without mocking fetch/emit/settings.
+ */
+export interface WebSearchPlan { mode: 'tor' | 'clearnet' | 'empty' }
+export function planWebSearch(opts: { torResults: number; clearnetOn: boolean }): WebSearchPlan {
+  if (opts.torResults > 0) return { mode: 'tor' };
+  if (opts.clearnetOn) return { mode: 'clearnet' };
+  return { mode: 'empty' };
+}
+
 /** Extract the query from the first `[SEARCH: …]` directive in the model output, else null. */
 export function extractSearchDirective(text: string): string | null {
   const m = text.match(/\[SEARCH:\s*([^\]]+)\]/i);
