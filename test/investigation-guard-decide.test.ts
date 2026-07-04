@@ -31,6 +31,13 @@ describe('checkAction (composed rails, priority order)', () => {
     const g = createGuard(budget, 0); recordAction(g, act(), 0); recordAction(g, act({ entityId: 'e2' }), 0);
     expect(checkAction(g, act({ entityId: 'e3', transformActive: true }), 0)).toEqual({ allow: false, reason: 'budget-pivots' });
   });
+  it('budget outranks dedup: an over-budget duplicate denies for budget, not duplicate', () => {
+    const g = createGuard(budget, 0);
+    recordAction(g, act(), 0);                    // pivots=1, e1 now seen
+    recordAction(g, act({ entityId: 'e2' }), 0);  // pivots=2 === maxPivots
+    // act() (entityId e1) is BOTH a duplicate AND over budget → checkAction must return the budget reason
+    expect(checkAction(g, act(), 0)).toEqual({ allow: false, reason: 'budget-pivots' });
+  });
 });
 
 describe('shouldStop', () => {

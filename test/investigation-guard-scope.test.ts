@@ -24,4 +24,11 @@ describe('guard authorized-target scope', () => {
     removeFromScope(g, 'evil.tld');
     expect(isAuthorized(g.scope, 'evil.tld')).toBe(false);
   });
+  it('a bare-suffix lookalike is NOT authorized — the leading-dot boundary matters', () => {
+    // Guards against `endsWith('.'+s)` regressing to `endsWith(s)`: 'notevil.tld' shares the suffix
+    // 'evil.tld' but is a different domain and must never be authorized by scope 'evil.tld'.
+    const s = new Set(['evil.tld']);
+    expect(isAuthorized(s, 'notevil.tld')).toBe(false);
+    expect(isAuthorized(s, 'xevil.tld')).toBe(false);
+  });
 });

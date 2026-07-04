@@ -40,4 +40,12 @@ describe('guard budget rail', () => {
     resume(g); expect(g.paused).toBe(false);
     stop(g, 'user'); expect(g.stopped).toBe(true); expect(g.stopReason).toBe('user');
   });
+  it('the depth/token ceilings are inclusive at the boundary (pins > vs >=)', () => {
+    const g = createGuard(budget, 0);
+    expect(checkBudget(g, act({ depth: 2 }), 0)).toBeNull();          // depth === maxDepth is allowed
+    expect(checkBudget(g, act({ depth: 3 }), 0)).toBe('budget-depth'); // one past is denied
+    recordAction(g, act(), 900);
+    expect(checkBudget(g, act({ estTokens: 100 }), 0)).toBeNull();    // spent+est === maxTokens is allowed
+    expect(checkBudget(g, act({ estTokens: 101 }), 0)).toBe('budget-tokens'); // one over is denied
+  });
 });
