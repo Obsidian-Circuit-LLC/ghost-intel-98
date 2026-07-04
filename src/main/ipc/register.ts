@@ -1412,9 +1412,9 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     return v.trim();
   };
   safeHandle(channels.investigation.addNode, (...args) =>
-    addManualNode(args[0] as string, ensureEntityType(args[1]), ensureManualValue(args[2]), new Date().toISOString()));
+    addManualNode(ensureUuid(args[0], 'caseId'), ensureEntityType(args[1]), ensureManualValue(args[2]), new Date().toISOString()));
   safeHandle(channels.investigation.addEdge, (...args) =>
-    addManualEdge(args[0] as string, ensureEntityId(args[1]), ensureEntityId(args[2]), ensureManualRelation(args[3]), new Date().toISOString()));
+    addManualEdge(ensureUuid(args[0], 'caseId'), ensureEntityId(args[1]), ensureEntityId(args[2]), ensureManualRelation(args[3]), new Date().toISOString()));
 
   // ---- adaptive-memory profile governance (list/edit/pin/delete/wipe) ----
   // Nothing here is best-effort: every learned item must stay inspectable/editable/erasable, so
