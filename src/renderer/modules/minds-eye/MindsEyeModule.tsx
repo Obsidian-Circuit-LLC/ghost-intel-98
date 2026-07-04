@@ -141,9 +141,16 @@ export function MindsEyeModule(): JSX.Element {
   const byId = new Map(graph.nodes.map((n) => [n.id, n]));
 
   // "One thing to fix" tray: surface a single detected conflict pair at a time (never the whole
-  // list) — the first two conflict-flagged fact nodes found in the graph. Resolving merges the
-  // second into the first via mergeItems; the tray then re-derives from the freshly-loaded graph.
-  const conflictPair = graph.nodes.filter((n) => n.kind === 'fact' && n.conflict).slice(0, 2);
+  // list) — the FIRST ACTUAL pair from `graph.conflictPairs` (as returned by `detectConflicts`),
+  // resolved to nodes via `byId`. Deliberately NOT `graph.nodes.filter(conflict).slice(0,2)`:
+  // with >=2 independent conflicting pairs interleaved in storage order (e.g. [a,c,b,d] where the
+  // real conflicts are (a,b) and (c,d)), all four nodes carry `conflict:true` and slicing the
+  // first two would pair up unrelated facts. Resolving merges the second into the first via
+  // mergeItems; the tray then re-derives from the freshly-loaded graph.
+  const firstPair = graph.conflictPairs[0];
+  const conflictPair = firstPair
+    ? ([byId.get(firstPair[0]), byId.get(firstPair[1])].filter((n): n is GraphNodeShape => n != null))
+    : [];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#111820' }}>

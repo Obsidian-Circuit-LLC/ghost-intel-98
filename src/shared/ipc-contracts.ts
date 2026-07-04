@@ -620,7 +620,14 @@ export type GraphEdgeKind = 'auto' | 'bond';
 
 export interface GraphEdgeShape { source: string; target: string; kind: GraphEdgeKind; weight: number }
 
-export interface MemoryGraphShape { nodes: GraphNodeShape[]; edges: GraphEdgeShape[] }
+export interface MemoryGraphShape {
+  nodes: GraphNodeShape[];
+  edges: GraphEdgeShape[];
+  /** Actual conflicting-fact-id pairs (mirrors `MemoryGraph.conflictPairs`) — the "one thing to
+   *  fix" tray uses this to show a real detected pair instead of guessing from `conflict`-flagged
+   *  node iteration order. */
+  conflictPairs: [string, string][];
+}
 
 /**
  * GhostScrape scrape shapes — mirror src/main/x/ghostscrape/types.ts (Task 1). Defined here

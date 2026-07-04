@@ -31,4 +31,8 @@ export interface GraphEdge {
 export interface MemoryGraph {
   nodes: GraphNode[];
   edges: GraphEdge[];
+  /** Actual conflicting-fact-id pairs from `merge.ts`'s `detectConflicts` (not just the
+   *  per-node `conflict` boolean) — lets the "one thing to fix" tray surface a real pair
+   *  instead of guessing from `conflict`-flagged node iteration order. */
+  conflictPairs: [string, string][];
 }

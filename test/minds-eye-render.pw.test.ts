@@ -44,10 +44,28 @@ const populatedGraph: MemoryGraphShape = {
       cluster: 0
     }
   ],
-  edges: []
+  edges: [],
+  conflictPairs: []
 };
 
-const emptyGraph: MemoryGraphShape = { nodes: [], edges: [] };
+const emptyGraph: MemoryGraphShape = { nodes: [], edges: [], conflictPairs: [] };
+
+/** T17 regression fixture: TWO independent conflicting pairs — real conflicts are (a,b) and
+ *  (c,d) — whose fact nodes are interleaved in storage order as [a, c, b, d]. All four carry
+ *  `conflict: true` (as `build.ts` sets on every node in either pair), so a tray that picked
+ *  "the first two conflict-flagged nodes in graph order" would wrongly show a vs c. */
+function factNode(id: string, label: string): MemoryGraphShape['nodes'][number] {
+  return { id, kind: 'fact', label, strength: 0.5, pinned: false, conflict: true, vector: [], x: 0, y: 0, cluster: 0 };
+}
+
+const interleavedConflictGraph: MemoryGraphShape = {
+  nodes: [factNode('a', 'colour is blue'), factNode('c', 'food is pizza'), factNode('b', 'colour is red'), factNode('d', 'food is sushi')],
+  edges: [],
+  conflictPairs: [
+    ['a', 'b'],
+    ['c', 'd']
+  ]
+};
 
 const BLACK = new Set(['rgb(0, 0, 0)', '#000', '#000000', 'black', '']);
 
@@ -119,5 +137,25 @@ describe("Mind's Eye — renders non-black at a mobile viewport (390x844)", () =
     expect(container.querySelector('svg')).toBeNull();
     expect(container.querySelector('circle')).toBeNull();
     expect(container.textContent ?? '').toMatch(/nothing remembered yet/i);
+  });
+
+  it('"one thing to fix" tray shows an actual conflicting pair, not two unrelated interleaved facts', async () => {
+    stubGraph(interleavedConflictGraph);
+    await act(async () => {
+      root.render(createElement(MindsEyeModule));
+    });
+    await flush();
+
+    // Scope to the tray itself (the SVG separately renders every node's label, including the
+    // unrelated pair, so asserting against the whole container would be a false negative there).
+    const heading = Array.from(container.querySelectorAll('div')).find((d) => d.textContent === 'One thing to fix: conflicting facts');
+    const tray = heading?.parentElement ?? null;
+    expect(tray).not.toBeNull();
+    const trayText = tray?.textContent ?? '';
+    expect(trayText).toMatch(/colour is blue/);
+    expect(trayText).toMatch(/colour is red/);
+    // The unrelated interleaved pair (a,c) must NOT be presented as the contradiction.
+    expect(trayText).not.toMatch(/food is pizza/);
+    expect(trayText).not.toMatch(/food is sushi/);
   });
 });

@@ -20,6 +20,10 @@ import { detectConflicts } from './merge';
 export interface BuildInputs {
   shards: MemoryShard[];
   profile: MemoryItem[];
+  /** Precomputed `detectConflicts(profile)` result — pass it in when the caller (graph/index.ts)
+   *  also needs the raw pairs for `MemoryGraph.conflictPairs`, so it isn't computed twice.
+   *  Recomputed from `profile` when omitted (e.g. in tests that only care about node shape). */
+  conflictPairs?: [string, string][];
 }
 
 function meanVector(vectors: number[][]): number[] {
@@ -73,7 +77,7 @@ export function buildNodes(input: BuildInputs): GraphNode[] {
   // detectConflicts's v1 heuristic) — the Mind's Eye "one thing to fix" tray surfaces these one
   // pair at a time and offers Resolve (merge.ts's `mergeItems`) to collapse the pair.
   const conflictIds = new Set<string>();
-  for (const [a, b] of detectConflicts(input.profile)) {
+  for (const [a, b] of input.conflictPairs ?? detectConflicts(input.profile)) {
     conflictIds.add(a);
     conflictIds.add(b);
   }

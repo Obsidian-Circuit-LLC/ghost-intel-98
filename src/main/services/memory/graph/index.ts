@@ -6,13 +6,17 @@
 import { loadAllShards } from '../store';
 import { profileList } from '../profile';
 import { buildNodes } from './build';
+import { detectConflicts } from './merge';
 import { autoEdges } from './edges';
 import { layout } from './layout';
 import type { MemoryGraph } from './model';
 
 export async function buildGraph(): Promise<MemoryGraph> {
   const [shards, profile] = await Promise.all([loadAllShards(), profileList()]);
-  const nodes = layout(buildNodes({ shards, profile }));
+  // Computed once here (not re-derived from `conflict`-flagged nodes) so the "one thing to fix"
+  // tray gets an actual conflicting pair rather than guessing from node iteration order.
+  const conflictPairs = detectConflicts(profile);
+  const nodes = layout(buildNodes({ shards, profile, conflictPairs }));
   const edges = autoEdges(nodes);
-  return { nodes, edges };
+  return { nodes, edges, conflictPairs };
 }
