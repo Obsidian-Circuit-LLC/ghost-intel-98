@@ -89,3 +89,30 @@ export async function searchWeb(query: string, opts: { caseId?: string } & Parti
   if (res.blocked || res.status !== 200 || !res.body) return [];
   return parseDdgResults(res.body);
 }
+
+export const DDG_CLEARNET = 'https://html.duckduckgo.com';
+
+/**
+ * Opt-in, non-Tor, plain-https DDG search. This is the ONLY new clearnet egress in this change and
+ * is deliberately a separate function from `searchWeb` so the Tor onion path above stays untouched
+ * and `.onion`-enforced. Policy (whether this may run at all) is decided by the caller (ai.ts) — this
+ * function does not check any setting. Fail-closed: a non-200 response or a throwing fetch yields [],
+ * never an exception. Results are still untrusted downstream (fenced by the caller like Tor results).
+ */
+export async function searchWebClearnet(
+  query: string,
+  opts: { fetchImpl?: typeof fetch } = {}
+): Promise<WebResult[]> {
+  const q = query.trim();
+  if (!q) return [];
+  const doFetch = opts.fetchImpl ?? fetch;
+  const url = `${DDG_CLEARNET}/html/?q=${encodeURIComponent(q)}`;
+  try {
+    const res = await doFetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } } as never);
+    if (!res || res.status !== 200) return [];
+    const body = await res.text();
+    return parseDdgResults(body);
+  } catch {
+    return [];
+  }
+}
