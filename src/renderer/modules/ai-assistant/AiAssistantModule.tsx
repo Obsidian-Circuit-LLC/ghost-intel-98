@@ -25,6 +25,7 @@ import { VoiceConversation, type VoiceMode, type VoiceState } from '../../voice/
 import { MarkdownView } from './MarkdownView';
 import { stripMarkdown } from './markdown';
 import { groupItemsByScope, formatRecallProvenance, labelForScope } from './memory-view';
+import { appendRecalled } from './recall-inject';
 
 interface DisplayMessage extends AiChatMessage {
   id: string;
@@ -144,6 +145,14 @@ export function AiAssistantModule(): JSX.Element {
   const [editDraft, setEditDraft] = useState('');
 
   useEffect(() => window.api.memory.onRecall(setLastRecall), []);
+
+  // "Recall into chat" from Mind's Eye: append the recalled node label to the composer draft.
+  useEffect(() => {
+    const h = (e: Event): void =>
+      setInput((cur) => appendRecalled(cur, (e as CustomEvent).detail?.text ?? ''));
+    window.addEventListener('dcs98:minds-eye-recall', h as EventListener);
+    return () => window.removeEventListener('dcs98:minds-eye-recall', h as EventListener);
+  }, []);
 
   const refreshProfile = useCallback(() => {
     setProfileLoading(true);

@@ -26,13 +26,13 @@ function fillForCls(cls: string): string {
 
 /** Uploaded-library `doc` nodes carry `doc:<docId>` as a segment of their node id (see
  *  `library/sources.ts`'s `doc:${docId}` sourceKey → `build.ts`'s `${caseId}:${sourceKey}` node
- *  id); briefcase/journal-sourced `doc` nodes don't have a real library docId, so extraction
- *  falls back to the full node id (a harmless no-op forgetDoc — nothing in the library manifest
- *  matches, so nothing is removed). */
-function docIdFromNodeId(id: string): string {
+ *  id). Briefcase/journal/conversation/entity-sourced `doc` nodes don't have a real library
+ *  docId, so their sourceKey does not start with `doc:` and there is nothing forgetDoc can remove
+ *  — return `null` so the caller can disable Forget rather than fire a silent no-op. */
+export function docIdFromNodeId(id: string): string | null {
   const parts = id.split(':');
   const i = parts.indexOf('doc');
-  return i >= 0 && i < parts.length - 1 ? parts.slice(i + 1).join(':') : id;
+  return i >= 0 && i < parts.length - 1 ? parts.slice(i + 1).join(':') : null;
 }
 
 export function MindsEyeModule(): JSX.Element {
@@ -91,9 +91,11 @@ export function MindsEyeModule(): JSX.Element {
   }
 
   async function forgetDoc(node: GraphNodeShape): Promise<void> {
+    const docId = docIdFromNodeId(node.id);
+    if (docId === null) return; // briefcase/journal/conversation/entity doc nodes aren't library-backed
     setBusy(true);
     try {
-      await window.api.memory.forgetDoc(docIdFromNodeId(node.id));
+      await window.api.memory.forgetDoc(docId);
       load();
       setSelected(null);
     } finally {
@@ -272,7 +274,15 @@ export function MindsEyeModule(): JSX.Element {
               </>
             )}
             {selected.kind === 'doc' && (
-              <button disabled={busy} onClick={() => forgetDoc(selected)}>Forget</button>
+              <button
+                disabled={busy || docIdFromNodeId(selected.id) === null}
+                title={docIdFromNodeId(selected.id) === null
+                  ? 'Briefcase/journal/conversation/entity memories are managed in their own tools'
+                  : undefined}
+                onClick={() => forgetDoc(selected)}
+              >
+                Forget
+              </button>
             )}
             {(selected.kind === 'conversation' || selected.kind === 'entity') && (
               <button disabled title="Forgetting conversations/entities isn't supported yet">Forget</button>
