@@ -18,6 +18,7 @@ import { confirmDialog } from '../../state/dialogs';
 import { ttsSupported, listVoices, onVoicesChanged, speakAuto, cancelSpeechAll, setTtsEnginePref, type TtsVoice } from '../../audio/tts';
 import { piperAvailable } from '../../audio/piper';
 import { extractPdfText } from '../../lib/pdfExtract';
+import { extractForLibrary } from '../../lib/libraryExtract';
 import { loadAttachmentBytes } from '../../lib/attachmentBytes';
 import { createVoskRecognizer } from '../../voice/recognizer';
 import { VoiceConversation, type VoiceMode, type VoiceState } from '../../voice/conversation';
@@ -541,6 +542,32 @@ export function AiAssistantModule(): JSX.Element {
     }
   }
 
+  // "Add to memory": extract text renderer-side (pdf/txt/md/docx) and persist it into the
+  // global document library, so it's recalled by the RAG retriever regardless of case/conversation.
+  const memoryFileInputRef = useRef<HTMLInputElement>(null);
+  async function addFilesToMemory(files: FileList | File[]): Promise<void> {
+    for (const file of Array.from(files)) {
+      try {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        const { title, mime, text } = await extractForLibrary(file.name, bytes);
+        await window.api.memory.library.add({ title, mime, text });
+        toast.success(`Indexed '${title}'`);
+      } catch (err) {
+        toast.error(`Couldn't index '${file.name}': ${(err as Error).message}`);
+      }
+    }
+  }
+  function handleMemoryFileInput(e: React.ChangeEvent<HTMLInputElement>): void {
+    const files = e.target.files;
+    if (files && files.length > 0) void addFilesToMemory(files);
+    e.target.value = '';
+  }
+  function handleChatDrop(e: React.DragEvent<HTMLDivElement>): void {
+    if (!e.dataTransfer.files || e.dataTransfer.files.length === 0) return;
+    e.preventDefault();
+    void addFilesToMemory(e.dataTransfer.files);
+  }
+
   const recallLabels = lastRecall ? formatRecallProvenance(lastRecall.rag, lastRecall.profile, lastRecall.profileSummary) : [];
   const profileGroups = groupItemsByScope(profileItems);
   // Scopes that carry a non-empty rolling summary (may or may not also have discrete items).
@@ -591,6 +618,20 @@ export function AiAssistantModule(): JSX.Element {
         <button onClick={() => quickPrompt('Draft a status report for this case suitable for an external stakeholder.')} disabled={!contextCase}>Draft report</button>
         <button onClick={() => quickPrompt('What questions should I be asking that I have not yet?')} disabled={!contextCase}>Open questions</button>
         <button onClick={() => void exportChat()} disabled={messages.length === 0} title="Save this conversation to a file">Export…</button>
+        <input
+          ref={memoryFileInputRef}
+          type="file"
+          accept=".pdf,.txt,.md,.docx"
+          multiple
+          style={{ display: 'none' }}
+          onChange={handleMemoryFileInput}
+        />
+        <button
+          onClick={() => memoryFileInputRef.current?.click()}
+          title="Upload PDF/TXT/MD/DOCX documents into the global memory library (also recalled from other cases)"
+        >
+          ➕ Add to memory
+        </button>
         <button
           onClick={() => setMemoryPanelOpen((v) => !v)}
           style={{ fontWeight: memoryPanelOpen ? 'bold' : 'normal' }}
@@ -673,7 +714,12 @@ export function AiAssistantModule(): JSX.Element {
           Context unavailable: {contextError} — clear the dropdown or retry before sending.
         </div>
       )}
-      <div ref={scrollRef} style={{ flex: 1, overflow: 'auto', padding: 8, background: '#fff' }}>
+      <div
+        ref={scrollRef}
+        style={{ flex: 1, overflow: 'auto', padding: 8, background: '#fff' }}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={handleChatDrop}
+      >
         {messages.length === 0 && (
           <div style={{ color: '#666', padding: 16 }}>
             Set a provider in Settings, optionally pick a case for context, and type below.
