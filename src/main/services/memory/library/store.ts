@@ -7,11 +7,12 @@
  * logic is unit-testable without touching real secure-fs or the filesystem — see
  * test/memory-library-store.test.ts (mirrors profile-store.ts's pattern).
  */
-import { join } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 import { rm } from 'node:fs/promises';
 import { dataRoot } from '../../../storage/paths';
 import { secureReadText, secureWriteFile } from '../../../storage/secure-fs';
 import { contentHash } from '../chunker';
+import { withLock } from '../../../util/mutex';
 
 export interface LibraryDoc {
   docId: string;
@@ -31,7 +32,17 @@ export function libraryManifestPath(): string {
 }
 
 export function libraryDocTextPath(docId: string): string {
-  return join(libraryDir(), 'docs', `${docId}.txt`);
+  // Path confinement: a docId that arrives across IPC could contain traversal segments
+  // (`../../../home/user/notes`) that escape `<libraryDir>/docs` and let remove()/readText()
+  // touch an arbitrary `.txt` on disk. Resolve the candidate path and require it to sit
+  // strictly under the docs directory, or refuse it outright.
+  const docsDir = join(libraryDir(), 'docs');
+  const p = join(docsDir, `${docId}.txt`);
+  const resolved = resolve(p);
+  if (!resolved.startsWith(resolve(docsDir) + sep)) {
+    throw new Error('libraryDocTextPath: docId escapes the library directory');
+  }
+  return p;
 }
 
 /** Minimal read/write seam the store needs — real impl reads/writes encrypted files via
@@ -106,26 +117,32 @@ export function createLibrary(io: LibraryIO = defaultIO()): {
     },
 
     async add(input) {
-      const doc: LibraryDoc = {
-        docId: input.docId,
-        title: input.title,
-        mime: input.mime,
-        addedAt: input.now,
-        charCount: input.text.length,
-        bytesHash: contentHash(input.text)
-      };
-      const existing = await readAll();
-      const byId = new Map(existing.map((d) => [d.docId, d]));
-      byId.set(doc.docId, doc);
-      await writeAll([...byId.values()]);
-      await io.writeDocText(input.docId, input.text);
-      return doc;
+      // Serialize the manifest read-modify-write: the upload UI can fire several adds in
+      // parallel, and an unsynchronized RMW loses all but the last writer's entry.
+      return withLock('memory-library', async () => {
+        const doc: LibraryDoc = {
+          docId: input.docId,
+          title: input.title,
+          mime: input.mime,
+          addedAt: input.now,
+          charCount: input.text.length,
+          bytesHash: contentHash(input.text)
+        };
+        const existing = await readAll();
+        const byId = new Map(existing.map((d) => [d.docId, d]));
+        byId.set(doc.docId, doc);
+        await writeAll([...byId.values()]);
+        await io.writeDocText(input.docId, input.text);
+        return doc;
+      });
     },
 
     async remove(docId: string) {
-      const existing = await readAll();
-      await writeAll(existing.filter((d) => d.docId !== docId));
-      await io.removeDocText(docId);
+      await withLock('memory-library', async () => {
+        const existing = await readAll();
+        await writeAll(existing.filter((d) => d.docId !== docId));
+        await io.removeDocText(docId);
+      });
     },
 
     async readText(docId: string) {

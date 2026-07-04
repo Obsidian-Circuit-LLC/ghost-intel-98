@@ -1444,6 +1444,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.memory.libraryRemove, async (...args) => {
     const docId = args[0];
     if (typeof docId !== 'string') throw new Error('libraryRemove: expected a docId string');
+    if (!/^[A-Za-z0-9_-]+$/.test(docId)) throw new Error('libraryRemove: invalid docId');
     await createLibrary().remove(docId);
     liveReindex.libraryChanged();
   });
@@ -1455,6 +1456,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.memory.forgetDoc, async (...args) => {
     const docId = args[0];
     if (typeof docId !== 'string') throw new Error('forgetDoc: expected a docId string');
+    if (!/^[A-Za-z0-9_-]+$/.test(docId)) throw new Error('forgetDoc: invalid docId');
     await createLibrary().remove(docId);
     await memory.reindexLibrary();
   });
