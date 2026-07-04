@@ -5,7 +5,7 @@
 
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import { channels } from '../shared/ipc-contracts';
-import type { LocalAiStatus, LocalAiProgress, MemoryStatus, MemoryProgress, MemoryItem, RecallPreview, GhostScrapeConfig, GhostScrapeResult, ScrapingCaseStoreId } from '../shared/ipc-contracts';
+import type { LocalAiStatus, LocalAiProgress, MemoryStatus, MemoryProgress, MemoryItem, RecallPreview, LibraryDoc, GhostScrapeConfig, GhostScrapeResult, ScrapingCaseStoreId } from '../shared/ipc-contracts';
 
 const api = {
   cases: {
@@ -418,6 +418,12 @@ const api = {
       };
       ipcRenderer.on(channels.ai.onChatChunk, listener);
       return () => ipcRenderer.removeListener(channels.ai.onChatChunk, listener);
+    },
+    library: {
+      list: (): Promise<LibraryDoc[]> => ipcRenderer.invoke(channels.memory.libraryList),
+      add: (input: { title: string; mime: string; text: string }): Promise<LibraryDoc> =>
+        ipcRenderer.invoke(channels.memory.libraryAdd, input),
+      remove: (docId: string): Promise<void> => ipcRenderer.invoke(channels.memory.libraryRemove, docId)
     }
   },
   plugins: {

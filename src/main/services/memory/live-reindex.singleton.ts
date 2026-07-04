@@ -5,7 +5,7 @@
  * restarting the app). Fire-and-forget: callers (save handlers) never await these calls.
  */
 import { settingsStore } from '../../storage/json-fs';
-import { reindexCase as realReindexCase, reindexConversations as realReindexConversations } from './indexer';
+import { reindexCase as realReindexCase, reindexConversations as realReindexConversations, reindexLibrary as realReindexLibrary } from './indexer';
 import { createLiveReindexer, type LiveReindexer } from './live-reindex';
 
 let reindexer: LiveReindexer | null = null;
@@ -15,6 +15,7 @@ function getReindexer(): LiveReindexer {
     reindexer = createLiveReindexer({
       reindexCase: (caseId) => realReindexCase(caseId),
       reindexConversations: () => realReindexConversations(),
+      reindexLibrary: () => realReindexLibrary(),
       now: () => Date.now(),
       schedule: (fn, ms) => setTimeout(fn, ms),
       cancel: (handle) => clearTimeout(handle as NodeJS.Timeout)
@@ -51,6 +52,11 @@ export const liveReindex = {
   /** Notify that the conversation log changed. Best-effort, debounced. */
   conversationsChanged(): void {
     track(gateOpen().then((open) => { if (open) getReindexer().conversationsChanged(); }));
+  },
+
+  /** Notify that the global document library changed (doc added/removed). Best-effort, debounced. */
+  libraryChanged(): void {
+    track(gateOpen().then((open) => { if (open) getReindexer().libraryChanged(); }));
   },
 
   /** Run any pending gate-checked + debounced reindexes now (tests + shutdown). */

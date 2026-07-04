@@ -28,7 +28,7 @@ import type {
   WebLink,
   Whiteboard
 } from '../shared/types';
-import type { EntityCreateInput, EntityLinkOpts, BioAddInput, AuthStatus, LocalAiStatus, LocalAiProgress, MemoryStatus, MemoryProgress, MemoryItem, RecallPreview, XCollectResultShape, LearningModelMeta, GhostScrapeConfig, GhostScrapeResult, ScrapingCaseStoreId, ScrapingImportResult } from '../shared/ipc-contracts';
+import type { EntityCreateInput, EntityLinkOpts, BioAddInput, AuthStatus, LocalAiStatus, LocalAiProgress, MemoryStatus, MemoryProgress, MemoryItem, RecallPreview, LibraryDoc, XCollectResultShape, LearningModelMeta, GhostScrapeConfig, GhostScrapeResult, ScrapingCaseStoreId, ScrapingImportResult } from '../shared/ipc-contracts';
 import type {
   AiChatRequest,
   CameraStream,
@@ -492,6 +492,14 @@ export interface GhostApi {
     profileWipe(scope?: string): Promise<void>;
     /** Fired once per chat generation with exactly what was recalled/injected (RAG + profile). */
     onRecall(cb: (r: RecallPreview) => void): () => void;
+    /** Global document library (uploads + briefcase + journal) — case-independent corpus that
+     *  the memory retriever recalls from regardless of which case/conversation is active. */
+    library: {
+      list(): Promise<LibraryDoc[]>;
+      /** Extraction (pdf/txt/md/docx → text) happens renderer-side; this persists the result. */
+      add(input: { title: string; mime: string; text: string }): Promise<LibraryDoc>;
+      remove(docId: string): Promise<void>;
+    };
   };
   plugins: {
     listVerified(): Promise<VerifiedPluginInfo[]>;

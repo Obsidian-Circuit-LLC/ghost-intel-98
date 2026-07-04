@@ -16,6 +16,7 @@
 
 import { app, ipcMain, shell, dialog, BrowserWindow } from 'electron';
 import { writeFile, rename, lstat, rm, readFile, stat, realpath } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import { basename, dirname, join, sep } from 'node:path';
 import { channels, BGCONN_LOCK_EXEMPT_CHANNELS } from '@shared/ipc-contracts';
 import type { MailAccount, MailSendInput, SshHostProfile, AiChatRequest, MediaTrack, AiConversation } from '@shared/post-mvp-types';
@@ -47,6 +48,7 @@ import * as sounds from '../services/sounds';
 import * as ai from '../services/ai';
 import { liveReindex } from '../services/memory/live-reindex.singleton';
 import { learnFromConversation, profileList, profileSummaries, profileUpsert, profileDelete, profileWipe } from '../services/memory/profile';
+import { createLibrary } from '../services/memory/library/store';
 import type { MemoryItem } from '@shared/ipc-contracts';
 import * as localAi from '../services/local-ai';
 import * as chat from '../services/chat';
@@ -1383,6 +1385,32 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   });
   safeHandle(channels.memory.profileWipe, (...args) =>
     profileWipe(typeof args[0] === 'string' ? args[0] : undefined));
+
+  // ---- global document library (uploads + briefcase + journal) ----
+  // Extraction (pdf/txt/md/docx → text) happens renderer-side; the handler only persists
+  // already-extracted text and fires a debounced library reindex.
+  safeHandle(channels.memory.libraryList, () => createLibrary().list());
+  safeHandle(channels.memory.libraryAdd, async (...args) => {
+    const raw = args[0] as { title?: unknown; mime?: unknown; text?: unknown } | undefined;
+    if (!raw || typeof raw.title !== 'string' || typeof raw.mime !== 'string' || typeof raw.text !== 'string') {
+      throw new Error('libraryAdd: expected { title, mime, text }');
+    }
+    const doc = await createLibrary().add({
+      docId: randomUUID(),
+      title: raw.title,
+      mime: raw.mime,
+      text: raw.text,
+      now: Date.now()
+    });
+    liveReindex.libraryChanged();
+    return doc;
+  });
+  safeHandle(channels.memory.libraryRemove, async (...args) => {
+    const docId = args[0];
+    if (typeof docId !== 'string') throw new Error('libraryRemove: expected a docId string');
+    await createLibrary().remove(docId);
+    liveReindex.libraryChanged();
+  });
 
   // ---- plugins ----
   safeHandle(channels.plugins.listVerified, async () => getVerified());

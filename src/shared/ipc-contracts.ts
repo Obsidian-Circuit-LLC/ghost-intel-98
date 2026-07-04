@@ -407,7 +407,12 @@ export const channels = {
     profileSummaries: 'memory:profileSummaries',
     profileUpsert: 'memory:profileUpsert',
     profileDelete: 'memory:profileDelete',
-    profileWipe: 'memory:profileWipe'
+    profileWipe: 'memory:profileWipe',
+    // Global document library (uploads + briefcase + journal) CRUD — extraction happens
+    // renderer-side; the handler only stores already-extracted text and reindexes the library.
+    libraryList: 'memory:libraryList',
+    libraryAdd: 'memory:libraryAdd',
+    libraryRemove: 'memory:libraryRemove'
   },
   plugins: {
     listVerified: 'plugins:listVerified',
@@ -529,6 +534,18 @@ export interface ScrapingImportResult { imported: number }
 
 export interface MemoryStatus { model: string; cases: number; chunks: number }
 export interface MemoryProgress { done: number; total: number; label: string }
+
+/** Mirrors LibraryDoc in src/main/services/memory/library/store.ts — one entry in the global
+ *  document library manifest. Defined here so preload/renderer stay self-contained, matching
+ *  the existing MemoryStatus/MemoryItem mirror pattern. */
+export interface LibraryDoc {
+  docId: string;
+  title: string;
+  mime: string;
+  addedAt: number;
+  charCount: number;
+  bytesHash: string;
+}
 
 /**
  * Mirrors MemoryItem in src/main/services/memory/profile/types.ts — the adaptive-memory profile
@@ -777,6 +794,9 @@ export interface ApiContracts {
   [channels.memory.profileUpsert]: { args: [Pick<MemoryItem, 'id' | 'scope' | 'text' | 'pinned'>]; returns: MemoryItem[] };
   [channels.memory.profileDelete]: { args: [string[]]; returns: void };
   [channels.memory.profileWipe]: { args: [string | undefined]; returns: void };
+  [channels.memory.libraryList]: { args: []; returns: LibraryDoc[] };
+  [channels.memory.libraryAdd]: { args: [{ title: string; mime: string; text: string }]; returns: LibraryDoc };
+  [channels.memory.libraryRemove]: { args: [string]; returns: void };
 
   [channels.plugins.listVerified]: { args: []; returns: import('./plugin-types').VerifiedPluginInfo[] };
   [channels.plugins.invoke]: { args: [string, string, unknown[]]; returns: unknown };
