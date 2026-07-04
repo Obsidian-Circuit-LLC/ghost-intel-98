@@ -20,6 +20,9 @@ import { validateAiEndpoint } from '../security/validate';
 import { recall, formatRecall, type RecallHit } from './memory/retriever';
 import { recallProfile } from './memory/profile';
 import type { MemoryItem } from './memory/profile/types';
+import { randomBytes } from 'node:crypto';
+import { searchWeb } from './web-search/ddg';
+import { extractSearchDirective, formatWebResults, WEB_SEARCH_SYSTEM, MAX_WEB_SEARCHES } from './web-search/directive';
 
 /** `'global'` always included; `case:<caseId>` appended when the request carries a selected case
  *  — the same scoping convention the adaptive-memory profile store/reconcile/retriever use. */
@@ -99,15 +102,39 @@ export async function chat(streamId: string, req: AiChatRequest, getWindow: () =
 
     messages.push(...req.messages);
 
-    if (provider === 'ollama') {
-      await streamOllama(endpoint, s.ai.model || 'qwen3-abliterated:4b', messages, controller.signal, (chunk) =>
-        emit(getWindow, streamId, { chunk })
-      );
-    } else {
-      const apiKey = await secretStore.get('ai.apiKey');
-      await streamOpenAi(endpoint, s.ai.model || 'gpt-4o-mini', messages, apiKey ?? '', controller.signal, (chunk) =>
-        emit(getWindow, streamId, { chunk })
-      );
+    const webOn = s.ai.webSearch && provider === 'ollama';
+    if (webOn) messages.push({ role: 'system', content: WEB_SEARCH_SYSTEM });
+
+    const apiKey = provider === 'ollama' ? '' : (await secretStore.get('ai.apiKey')) ?? '';
+    const runOnce = async (): Promise<string> => {
+      let acc = '';
+      const onChunk = (chunk: string): void => { acc += chunk; emit(getWindow, streamId, { chunk }); };
+      if (provider === 'ollama') {
+        await streamOllama(endpoint, s.ai.model || 'qwen3-abliterated:4b', messages, controller.signal, onChunk);
+      } else {
+        await streamOpenAi(endpoint, s.ai.model || 'gpt-4o-mini', messages, apiKey, controller.signal, onChunk);
+      }
+      return acc;
+    };
+
+    // Bounded hybrid web-search loop: the model may emit `[SEARCH: query]`; we run a Tor-routed DDG
+    // search and feed the results back as an untrusted-DATA turn, then let it continue. Capped by
+    // MAX_WEB_SEARCHES so it can never loop indefinitely; only active when web search is on (ollama).
+    let searches = 0;
+    for (;;) {
+      const full = await runOnce();
+      const q = webOn ? extractSearchDirective(full) : null;
+      if (!q) break;
+      if (searches >= MAX_WEB_SEARCHES) {
+        emit(getWindow, streamId, { chunk: `\n\n(reached the web-search limit of ${MAX_WEB_SEARCHES}.)\n` });
+        break;
+      }
+      searches += 1;
+      emit(getWindow, streamId, { chunk: `\n\n🔍 searching the web over Tor for “${q}”…\n\n` });
+      const results = await searchWeb(q, { caseId: req.caseId });
+      const fence = randomBytes(8).toString('hex');
+      messages.push({ role: 'assistant', content: full });
+      messages.push({ role: 'user', content: formatWebResults(q, results, fence) });
     }
     // Recall provenance goes out on the final event — guaranteed to fire exactly once per request
     // (unlike the first chunk, which never arrives for an empty/failed completion), so the

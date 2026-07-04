@@ -403,6 +403,10 @@ export interface AppSettings {
      *  learns from each conversation after it settles. Local-only, encrypted at rest, fully
      *  user-editable/erasable; no-op for non-Ollama providers. Default off. */
     adaptiveMemory: boolean;
+    /** When true (Ollama only), the assistant may emit a `[SEARCH: query]` directive that triggers a
+     *  Tor-routed DuckDuckGo-onion web search; results are fed back as untrusted data, then it answers.
+     *  Onion-to-onion (no exit node, no clearnet). Default off. */
+    webSearch: boolean;
   };
   mail: {
     accounts: { id: string; label: string; imapHost: string; imapPort: number; smtpHost: string; smtpPort: number; user: string; secureRef: string | null }[];
@@ -638,7 +642,8 @@ export const defaultSettings: AppSettings = {
     piperVoice: null,
     useMemory: true,
     autoReindex: true,
-    adaptiveMemory: false
+    adaptiveMemory: false,
+    webSearch: false
   },
   mail: { accounts: [] },
   mailBackgroundCheck: false,
