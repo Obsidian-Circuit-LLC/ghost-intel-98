@@ -83,3 +83,27 @@ export function isAuthorized(scope: Set<string>, value: string): boolean {
 /** Human-set only: the orchestrator wires these to a human-gated control, never the agent path. */
 export function addToScope(g: GuardState, target: string): void { g.scope.add(target); }
 export function removeFromScope(g: GuardState, target: string): void { g.scope.delete(target); }
+
+/** The orchestrator calls this before every proposed action. Rails in priority order: an explicit
+ *  stop/pause first, then the hard budget, then dedup, then the authorized-target gate for active
+ *  transforms. Deterministic (only time source is `now`). */
+export function checkAction(g: GuardState, a: ProposedAction, now: number): GuardDecision {
+  if (g.stopped) return { allow: false, reason: 'stopped' };
+  if (g.paused) return { allow: false, reason: 'paused' };
+  const b = checkBudget(g, a, now);
+  if (b) return { allow: false, reason: b };
+  if (isDuplicate(g, a)) return { allow: false, reason: 'duplicate' };
+  if (a.transformActive && !isAuthorized(g.scope, a.entityValue)) return { allow: false, reason: 'not-authorized-target' };
+  return { allow: true };
+}
+
+/** The orchestrator calls this each turn to decide whether the run must end: explicit stop, then a
+ *  hard-budget exhaustion (pivots/wall-clock/tokens), then a `window`-turn no-progress stall. */
+export function shouldStop(g: GuardState, now: number, window: number): { stop: boolean; reason: string | null } {
+  if (g.stopped) return { stop: true, reason: g.stopReason };
+  if (now - g.startedAt >= g.budget.maxWallClockMs) return { stop: true, reason: 'budget-wallclock' };
+  if (g.spentPivots >= g.budget.maxPivots) return { stop: true, reason: 'budget-pivots' };
+  if (g.spentTokens >= g.budget.maxTokens) return { stop: true, reason: 'budget-tokens' };
+  if (noProgress(g, window)) return { stop: true, reason: 'no-progress' };
+  return { stop: false, reason: null };
+}
