@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractSearchDirective, formatWebResults, decideSearchAction } from '../src/main/services/web-search/directive';
+import { extractSearchDirective, formatWebResults, decideSearchAction, torFailureMessage } from '../src/main/services/web-search/directive';
 
 describe('extractSearchDirective', () => {
   it('extracts the query from a [SEARCH: ...] line', () => {
@@ -63,5 +63,20 @@ describe('decideSearchAction (same-query loop guard)', () => {
       if (d.action === 'search') { realSearches += 1; seen.push(d.key); }
     }
     expect(realSearches).toBe(1); // was 3 wasted Tor searches before the guard
+  });
+});
+
+describe('torFailureMessage (why a Tor search returned nothing)', () => {
+  it('distinguishes Tor-down from unreachable from genuinely-empty', () => {
+    expect(torFailureMessage('tor-unavailable')).toMatch(/tor/i);
+    expect(torFailureMessage('tor-unavailable')).not.toBe(torFailureMessage('blocked'));
+    expect(torFailureMessage('blocked')).toMatch(/unreachable|blocked/i);
+    expect(torFailureMessage('no-results')).toMatch(/no results/i);
+    expect(torFailureMessage('bad-endpoint')).toMatch(/onion|misconfigured/i);
+  });
+  it('every reason yields a non-empty, distinct-enough message', () => {
+    for (const r of ['tor-unavailable', 'blocked', 'no-results', 'bad-endpoint', 'ok'] as const) {
+      expect(torFailureMessage(r).length).toBeGreaterThan(5);
+    }
   });
 });
