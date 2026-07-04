@@ -51,3 +51,22 @@ export function recordAction(g: GuardState, a: ProposedAction, actualTokens: num
   g.spentTokens += actualTokens;
   g.seen.add(`${a.transformId}:${a.entityId}`);
 }
+
+/** True if this transform+entity pair has already been run — the dedup rail (the model must not
+ *  re-pivot the same way). */
+export function isDuplicate(g: GuardState, a: ProposedAction): boolean {
+  return g.seen.has(`${a.transformId}:${a.entityId}`);
+}
+
+/** Record the total entity count observed at the end of a turn (for no-progress detection). */
+export function recordProgress(g: GuardState, entityCount: number): void {
+  g.progress.push(entityCount);
+}
+
+/** True when the last `window` recorded turns produced no new entities (all equal) — the stall
+ *  signal for a free-form run. Needs at least `window` turns of history first. */
+export function noProgress(g: GuardState, window: number): boolean {
+  if (window <= 0 || g.progress.length < window) return false;
+  const tail = g.progress.slice(-window);
+  return tail.every((c) => c === tail[0]);
+}
