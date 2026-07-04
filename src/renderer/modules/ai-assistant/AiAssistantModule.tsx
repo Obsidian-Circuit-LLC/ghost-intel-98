@@ -26,6 +26,7 @@ import { MarkdownView } from './MarkdownView';
 import { stripMarkdown } from './markdown';
 import { groupItemsByScope, formatRecallProvenance, labelForScope } from './memory-view';
 import { appendRecalled } from './recall-inject';
+import { describeSkippedFiles } from './file-notice';
 
 interface DisplayMessage extends AiChatMessage {
   id: string;
@@ -299,6 +300,10 @@ export function AiAssistantModule(): JSX.Element {
           remoteEgressConfirmedRef.current = true;
         }
         context = composeContext(contextCase, gathered);
+        // Surface files Q won't see (binary/Office, scanned PDF, read error) instead of dropping
+        // them into a context line the model may not relay — the "it breaks when I reference a file" fix.
+        const skipMsg = describeSkippedFiles(gathered.skipped);
+        if (skipMsg) toast.warn(skipMsg);
       } else {
         context = buildContextMeta(contextCase);
       }
