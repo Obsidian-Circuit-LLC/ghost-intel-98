@@ -3,10 +3,8 @@
  * conversation shard, with provenance. Deterministic ordering (score desc, id asc). Used by the AI
  * assistant to ground answers in the user's own corpus, and exposed for a semantic search blend.
  */
-import { readdir } from 'node:fs/promises';
-import { casesDir } from '../../storage/paths';
 import { embed } from './embeddings';
-import { caseShardPath, conversationShardPath, libraryShardPath, cosine, loadShard, type MemoryShard } from './store';
+import { caseShardPath, cosine, loadAllShards, loadShard, type MemoryShard } from './store';
 import { snippetOf, type ChunkKind } from './chunker';
 
 export interface RecallHit {
@@ -23,15 +21,7 @@ export interface RecallOptions { k?: number; caseId?: string; minScore?: number 
 
 async function shardsFor(caseId?: string): Promise<MemoryShard[]> {
   if (caseId) { const s = await loadShard(caseShardPath(caseId)); return s ? [s] : []; }
-  const shards: MemoryShard[] = [];
-  let ids: string[] = [];
-  try { ids = await readdir(casesDir()); } catch { ids = []; }
-  for (const id of ids) { const s = await loadShard(caseShardPath(id)); if (s) shards.push(s); }
-  const cs = await loadShard(conversationShardPath());
-  if (cs) shards.push(cs);
-  const lib = await loadShard(libraryShardPath());
-  if (lib) shards.push(lib);
-  return shards;
+  return loadAllShards();
 }
 
 export async function recall(query: string, opts: RecallOptions = {}): Promise<RecallHit[]> {

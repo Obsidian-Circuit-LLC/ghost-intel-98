@@ -412,7 +412,11 @@ export const channels = {
     // renderer-side; the handler only stores already-extracted text and reindexes the library.
     libraryList: 'memory:libraryList',
     libraryAdd: 'memory:libraryAdd',
-    libraryRemove: 'memory:libraryRemove'
+    libraryRemove: 'memory:libraryRemove',
+    // Mind's Eye: the assembled node/edge graph (shards + profile → nodes → auto-edges →
+    // deterministic layout). Read-only — curation writes go through the profile/library/bond
+    // channels above and this is simply re-fetched afterward.
+    graph: 'memory:graph'
   },
   plugins: {
     listVerified: 'plugins:listVerified',
@@ -582,6 +586,32 @@ export interface RecallHitShape {
  *  what memory contributed — `profileSummary` is the distilled prior-conversation prose folded into
  *  the injected profile block, `''` when none was injected. */
 export interface RecallPreview { rag: RecallHitShape[]; profile: MemoryItem[]; profileSummary: string }
+
+/**
+ * Mirrors src/main/services/memory/graph/model.ts — the Mind's Eye graph shape. Defined here
+ * (rather than imported from main) so preload/renderer stay self-contained in the shared package,
+ * matching the LibraryDoc / MemoryItem mirror pattern above.
+ */
+export type GraphNodeKind = 'fact' | 'doc' | 'conversation' | 'entity';
+
+export interface GraphNodeShape {
+  id: string;
+  kind: GraphNodeKind;
+  label: string;
+  strength: number;
+  pinned: boolean;
+  conflict: boolean;
+  vector: number[];
+  x: number;
+  y: number;
+  cluster: number;
+}
+
+export type GraphEdgeKind = 'auto' | 'bond';
+
+export interface GraphEdgeShape { source: string; target: string; kind: GraphEdgeKind; weight: number }
+
+export interface MemoryGraphShape { nodes: GraphNodeShape[]; edges: GraphEdgeShape[] }
 
 /**
  * GhostScrape scrape shapes — mirror src/main/x/ghostscrape/types.ts (Task 1). Defined here
@@ -797,6 +827,7 @@ export interface ApiContracts {
   [channels.memory.libraryList]: { args: []; returns: LibraryDoc[] };
   [channels.memory.libraryAdd]: { args: [{ title: string; mime: string; text: string }]; returns: LibraryDoc };
   [channels.memory.libraryRemove]: { args: [string]; returns: void };
+  [channels.memory.graph]: { args: []; returns: MemoryGraphShape };
 
   [channels.plugins.listVerified]: { args: []; returns: import('./plugin-types').VerifiedPluginInfo[] };
   [channels.plugins.invoke]: { args: [string, string, unknown[]]; returns: unknown };

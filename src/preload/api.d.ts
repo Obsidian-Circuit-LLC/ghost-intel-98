@@ -28,7 +28,7 @@ import type {
   WebLink,
   Whiteboard
 } from '../shared/types';
-import type { EntityCreateInput, EntityLinkOpts, BioAddInput, AuthStatus, LocalAiStatus, LocalAiProgress, MemoryStatus, MemoryProgress, MemoryItem, RecallPreview, LibraryDoc, XCollectResultShape, LearningModelMeta, GhostScrapeConfig, GhostScrapeResult, ScrapingCaseStoreId, ScrapingImportResult } from '../shared/ipc-contracts';
+import type { EntityCreateInput, EntityLinkOpts, BioAddInput, AuthStatus, LocalAiStatus, LocalAiProgress, MemoryStatus, MemoryProgress, MemoryItem, RecallPreview, LibraryDoc, MemoryGraphShape, XCollectResultShape, LearningModelMeta, GhostScrapeConfig, GhostScrapeResult, ScrapingCaseStoreId, ScrapingImportResult } from '../shared/ipc-contracts';
 import type {
   AiChatRequest,
   CameraStream,
@@ -500,6 +500,9 @@ export interface GhostApi {
       add(input: { title: string; mime: string; text: string }): Promise<LibraryDoc>;
       remove(docId: string): Promise<void>;
     };
+    /** The assembled Mind's Eye graph: shards + adaptive-memory profile → nodes → similarity
+     *  auto-edges → deterministic clustered layout. */
+    graph(): Promise<MemoryGraphShape>;
   };
   plugins: {
     listVerified(): Promise<VerifiedPluginInfo[]>;

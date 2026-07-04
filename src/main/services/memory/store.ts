@@ -4,8 +4,9 @@
  * the embedded chunks for one source set (a case, or the conversation log). Brute-force cosine over a
  * single user's corpus is plenty fast; no native dependency, no SQLite.
  */
+import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { caseDir, dataRoot } from '../../storage/paths';
+import { caseDir, casesDir, dataRoot } from '../../storage/paths';
 import { secureReadText, secureWriteFile } from '../../storage/secure-fs';
 import type { ChunkKind } from './chunker';
 
@@ -55,6 +56,23 @@ export async function loadShard(path: string): Promise<MemoryShard | null> {
 
 export async function saveShard(path: string, shard: MemoryShard): Promise<void> {
   await secureWriteFile(path, JSON.stringify(shard));
+}
+
+/**
+ * Load every shard on disk: one per case, plus the conversation shard, plus the global library
+ * shard. Single enumeration shared by `retriever.shardsFor` (no-caseId branch), `index.status`,
+ * and `graph.buildGraph` so the "which shards exist" logic never diverges between them.
+ */
+export async function loadAllShards(): Promise<MemoryShard[]> {
+  const shards: MemoryShard[] = [];
+  let ids: string[] = [];
+  try { ids = await readdir(casesDir()); } catch { ids = []; }
+  for (const id of ids) { const s = await loadShard(caseShardPath(id)); if (s) shards.push(s); }
+  const cs = await loadShard(conversationShardPath());
+  if (cs) shards.push(cs);
+  const lib = await loadShard(libraryShardPath());
+  if (lib) shards.push(lib);
+  return shards;
 }
 
 /** Cosine similarity of two equal-length vectors. Returns 0 for a zero vector (avoids NaN). */

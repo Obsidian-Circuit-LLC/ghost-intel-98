@@ -1364,6 +1364,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     if (win) win.webContents.send(channels.memory.onProgress, p);
   }));
   safeHandle(channels.memory.embedHealth, () => memory.embedHealth());
+  safeHandle(channels.memory.graph, () => memory.buildGraph());
 
   // ---- adaptive-memory profile governance (list/edit/pin/delete/wipe) ----
   // Nothing here is best-effort: every learned item must stay inspectable/editable/erasable, so

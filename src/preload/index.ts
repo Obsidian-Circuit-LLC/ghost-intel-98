@@ -5,7 +5,7 @@
 
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import { channels } from '../shared/ipc-contracts';
-import type { LocalAiStatus, LocalAiProgress, MemoryStatus, MemoryProgress, MemoryItem, RecallPreview, LibraryDoc, GhostScrapeConfig, GhostScrapeResult, ScrapingCaseStoreId } from '../shared/ipc-contracts';
+import type { LocalAiStatus, LocalAiProgress, MemoryStatus, MemoryProgress, MemoryItem, RecallPreview, LibraryDoc, MemoryGraphShape, GhostScrapeConfig, GhostScrapeResult, ScrapingCaseStoreId } from '../shared/ipc-contracts';
 
 const api = {
   cases: {
@@ -424,7 +424,9 @@ const api = {
       add: (input: { title: string; mime: string; text: string }): Promise<LibraryDoc> =>
         ipcRenderer.invoke(channels.memory.libraryAdd, input),
       remove: (docId: string): Promise<void> => ipcRenderer.invoke(channels.memory.libraryRemove, docId)
-    }
+    },
+    /** The assembled Mind's Eye graph (nodes + auto-edges, deterministically laid out). */
+    graph: (): Promise<MemoryGraphShape> => ipcRenderer.invoke(channels.memory.graph)
   },
   plugins: {
     listVerified: () => ipcRenderer.invoke(channels.plugins.listVerified),
