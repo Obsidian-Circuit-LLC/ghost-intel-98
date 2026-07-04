@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { createLiveReindexer, type LiveReindexDeps } from '../src/main/services/memory/live-reindex';
+import { createLiveReindexer, ERROR_NOTIFY_MIN_INTERVAL_MS, type LiveReindexDeps } from '../src/main/services/memory/live-reindex';
 
 // Fake timer/clock harness: deps.schedule/deps.cancel drive a manually-advanced queue so the
 // debounce logic is exercised deterministically without real wall-clock time.
@@ -99,6 +99,58 @@ describe('createLiveReindexer (debounced)', () => {
     expect(reindexCase).not.toHaveBeenCalled();
     expect(reindexConversations).not.toHaveBeenCalled();
   });
+
+  it('calls onError once when a debounced reindexCase rejects (still best-effort, still swallowed)', async () => {
+    const onError = vi.fn();
+    const { deps, advance } = makeFakeDeps({
+      reindexCase: vi.fn(async () => { throw new Error('embed 404'); }),
+      onError
+    });
+    const r = createLiveReindexer(deps, 1500);
+    r.caseChanged('c1');
+    advance(2000);
+    await expect(r.flush()).resolves.toBeUndefined();
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError).toHaveBeenCalledWith('case', expect.any(Error));
+  });
+
+  it('rate-limits onError so a persistently-failing reindex does not spam a toast per debounce cycle', async () => {
+    const onError = vi.fn();
+    const { deps, advance } = makeFakeDeps({
+      reindexCase: vi.fn(async () => { throw new Error('embed 404'); }),
+      onError
+    });
+    const r = createLiveReindexer(deps, 1500);
+
+    r.caseChanged('c1');
+    advance(2000);
+    await r.flush();
+    expect(onError).toHaveBeenCalledTimes(1);
+
+    // A second failure shortly after (well within the rate-limit window) must not notify again.
+    r.caseChanged('c1');
+    advance(2000);
+    await r.flush();
+    expect(onError).toHaveBeenCalledTimes(1);
+
+    // Once the rate-limit window elapses, the next failure notifies again.
+    advance(ERROR_NOTIFY_MIN_INTERVAL_MS);
+    r.caseChanged('c1');
+    advance(2000);
+    await r.flush();
+    expect(onError).toHaveBeenCalledTimes(2);
+  });
+
+  it('an onError notifier that itself throws does not reject flush() (best-effort)', async () => {
+    const { deps, advance } = makeFakeDeps({
+      reindexCase: vi.fn(async () => { throw new Error('embed 404'); }),
+      onError: vi.fn(() => { throw new Error('notifier exploded'); })
+    });
+    const r = createLiveReindexer(deps, 1500);
+    r.caseChanged('c1');
+    advance(2000);
+    await expect(r.flush()).resolves.toBeUndefined();
+  });
 });
 
 describe('live-reindex.singleton (gated wiring)', () => {
@@ -171,5 +223,23 @@ describe('live-reindex.singleton (gated wiring)', () => {
     liveReindex.caseChanged('c1');
     await expect(liveReindex.flush()).resolves.toBeUndefined();
     expect(reindexCase).not.toHaveBeenCalled();
+  });
+
+  it('setErrorNotifier receives a debounced reindex failure (never breaks the caller)', async () => {
+    const reindexCase = vi.fn(async () => { throw new Error('embed 404'); });
+    const reindexConversations = vi.fn(async () => undefined);
+    vi.doMock('../src/main/storage/json-fs', () => ({
+      settingsStore: { read: vi.fn(async () => ({ ai: { useMemory: true, autoReindex: true } })) }
+    }));
+    vi.doMock('../src/main/services/memory/indexer', () => ({ reindexCase, reindexConversations }));
+
+    const { liveReindex } = await import('../src/main/services/memory/live-reindex.singleton');
+    const onError = vi.fn();
+    liveReindex.setErrorNotifier(onError);
+    liveReindex.caseChanged('c1');
+    await expect(liveReindex.flush()).resolves.toBeUndefined();
+
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError).toHaveBeenCalledWith('case', expect.any(Error));
   });
 });

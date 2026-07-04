@@ -851,7 +851,7 @@ export interface ApiContracts {
   [channels.memory.reindexAll]: { args: []; returns: { cases: number; chunks: number; failures: { label: string; error: string }[] } };
   [channels.memory.status]: { args: []; returns: MemoryStatus };
   [channels.memory.onProgress]: { args: [(payload: MemoryProgress) => void]; returns: () => void };
-  [channels.memory.embedHealth]: { args: []; returns: 'ready' | 'starting' | 'unavailable' };
+  [channels.memory.embedHealth]: { args: []; returns: 'ready' | 'starting' | 'unavailable' | 'model-missing' };
   [channels.memory.profileList]: { args: [string | undefined]; returns: MemoryItem[] };
   [channels.memory.profileSummaries]: { args: []; returns: Record<string, string> };
   [channels.memory.profileUpsert]: { args: [Pick<MemoryItem, 'id' | 'scope' | 'text' | 'pinned'>]; returns: MemoryItem[] };

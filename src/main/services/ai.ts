@@ -21,8 +21,8 @@ import { recall, formatRecall, type RecallHit } from './memory/retriever';
 import { recallProfile } from './memory/profile';
 import type { MemoryItem } from './memory/profile/types';
 import { randomBytes } from 'node:crypto';
-import { searchWeb } from './web-search/ddg';
-import { extractSearchDirective, formatWebResults, WEB_SEARCH_SYSTEM, MAX_WEB_SEARCHES } from './web-search/directive';
+import { searchWeb, searchWebClearnet } from './web-search/ddg';
+import { extractSearchDirective, formatWebResults, planWebSearch, WEB_SEARCH_SYSTEM, MAX_WEB_SEARCHES } from './web-search/directive';
 
 /** `'global'` always included; `case:<caseId>` appended when the request carries a selected case
  *  — the same scoping convention the adaptive-memory profile store/reconcile/retriever use. */
@@ -134,7 +134,22 @@ export async function chat(streamId: string, req: AiChatRequest, getWindow: () =
       const results = await searchWeb(q, { caseId: req.caseId });
       const fence = randomBytes(8).toString('hex');
       messages.push({ role: 'assistant', content: full });
-      messages.push({ role: 'user', content: formatWebResults(q, results, fence) });
+
+      const plan = planWebSearch({ torResults: results.length, clearnetOn: s.ai.webSearchClearnet });
+      if (plan.mode === 'tor') {
+        emit(getWindow, streamId, { chunk: `\n(${results.length} result(s) over Tor)\n` });
+        messages.push({ role: 'user', content: formatWebResults(q, results, fence) });
+      } else if (plan.mode === 'clearnet') {
+        emit(getWindow, streamId, {
+          chunk: `\n\n⚠ Tor search returned nothing — falling back to CLEARNET for “${q}”. Your real IP is exposed to these results and their hosts.\n\n`
+        });
+        const cn = await searchWebClearnet(q);
+        emit(getWindow, streamId, { chunk: `\n(${cn.length} result(s) over CLEARNET)\n` });
+        messages.push({ role: 'user', content: formatWebResults(q, cn, fence) });
+      } else {
+        emit(getWindow, streamId, { chunk: `\n⚠ no web results (Tor search returned nothing).\n` });
+        messages.push({ role: 'user', content: formatWebResults(q, [], fence) });
+      }
     }
     // Recall provenance goes out on the final event — guaranteed to fire exactly once per request
     // (unlike the first chunk, which never arrives for an empty/failed completion), so the

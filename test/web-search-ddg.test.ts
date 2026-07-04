@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseDdgResults, searchWeb } from '../src/main/services/web-search/ddg';
+import { parseDdgResults, searchWeb, searchWebClearnet } from '../src/main/services/web-search/ddg';
 
 const FIXTURE = `
 <div class="result results_links web-result">
@@ -76,5 +76,52 @@ describe('searchWeb (injected deps)', () => {
     });
     expect(r).toEqual([]);
     expect(fetched).toBe(false);
+  });
+});
+
+describe('searchWebClearnet (opt-in, non-Tor, injected fetch)', () => {
+  const okFetch = async () => ({ ok: true, status: 200, text: async () => FIXTURE });
+
+  it('targets html.duckduckgo.com over plain https and parses results', async () => {
+    let calledUrl = '';
+    const r = await searchWebClearnet('acme corp', {
+      fetchImpl: (async (url: string) => { calledUrl = url; return okFetch() as never; }) as never
+    });
+    expect(calledUrl).toBe('https://html.duckduckgo.com/html/?q=acme%20corp');
+    expect(r).toHaveLength(2);
+  });
+
+  it('non-200 response → []', async () => {
+    const r = await searchWebClearnet('x', {
+      fetchImpl: (async () => ({ ok: false, status: 503, text: async () => '' })) as never
+    });
+    expect(r).toEqual([]);
+  });
+
+  it('a throwing fetch → [] (fail-closed, not an exception)', async () => {
+    const r = await searchWebClearnet('x', {
+      fetchImpl: (async () => { throw new Error('network down'); }) as never
+    });
+    expect(r).toEqual([]);
+  });
+
+  it('empty query → [] without fetching', async () => {
+    let fetched = false;
+    const r = await searchWebClearnet('   ', {
+      fetchImpl: (async () => { fetched = true; return okFetch() as never; }) as never
+    });
+    expect(r).toEqual([]);
+    expect(fetched).toBe(false);
+  });
+
+  it('never imports/uses torFetch — source has no torFetch reference for this function\'s call path', async () => {
+    // Structural guard: read the module source and ensure searchWebClearnet's implementation
+    // does not reference torFetch. (torFetch is imported for searchWeb; clearnet must not use it.)
+    const fs = await import('node:fs');
+    const src = fs.readFileSync(new URL('../src/main/services/web-search/ddg.ts', import.meta.url), 'utf8');
+    const fnStart = src.indexOf('export async function searchWebClearnet');
+    expect(fnStart).toBeGreaterThan(-1);
+    const fnBody = src.slice(fnStart, src.indexOf('\n}', fnStart));
+    expect(fnBody).not.toMatch(/torFetch/);
   });
 });

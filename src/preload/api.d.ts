@@ -193,7 +193,7 @@ export interface GhostApi {
     openExternal(url: string): Promise<void>;
     quit(): Promise<void>;
     onReminderFired(cb: (payload: { reminder: Reminder }) => void): () => void;
-    onDiagnostic(cb: (payload: { kind: string; message?: string; cases?: { caseId: string; reason: string }[] }) => void): () => void;
+    onDiagnostic(cb: (payload: { kind: string; message?: string; cases?: { caseId: string; reason: string }[]; scope?: string }) => void): () => void;
   };
   chat: {
     status(): Promise<{ enabled: boolean; onion: string | null }>;
@@ -478,7 +478,7 @@ export interface GhostApi {
     reindexAll(): Promise<{ cases: number; chunks: number; failures: { label: string; error: string }[] }>;
     onProgress(cb: (p: MemoryProgress) => void): () => void;
     /** Health of the dedicated bundled embedding runtime (loopback-only, own port). */
-    embedHealth(): Promise<'ready' | 'starting' | 'unavailable'>;
+    embedHealth(): Promise<'ready' | 'starting' | 'unavailable' | 'model-missing'>;
     /** List every learned item, or just those in `scope` when given. */
     profileList(scope?: string): Promise<MemoryItem[]>;
     /** Read the durable per-scope rolling summaries (scope → distilled prose) so the injected

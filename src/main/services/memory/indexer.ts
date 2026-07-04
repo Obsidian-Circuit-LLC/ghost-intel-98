@@ -3,6 +3,7 @@
  * Incremental: each source carries a contentHash, so unchanged notes/files/entities are NOT
  * re-embedded on a reindex (cheap to run on app start / after a save). Deterministic chunking.
  */
+import { randomUUID } from 'node:crypto';
 import { readdir } from 'node:fs/promises';
 import { casesDir } from '../../storage/paths';
 import { caseStore, noteStore, fileStore } from '../../storage/json-fs';
@@ -13,6 +14,7 @@ import {
   caseShardPath, conversationShardPath, libraryShardPath, emptyShard, loadShard, saveShard, type StoredChunk
 } from './store';
 import { librarySources } from './library/sources';
+import { createLibrary, type LibraryDoc } from './library/store';
 
 interface Source { key: string; kind: ChunkKind; ref: string; text: string }
 export interface ReindexResult { embedded: number; skipped: number; chunks: number }
@@ -87,6 +89,29 @@ export async function reindexConversations(): Promise<ReindexResult> {
 
 export async function reindexLibrary(): Promise<ReindexResult> {
   return reindexShard(libraryShardPath(), '__library__', 'Library', await librarySources());
+}
+
+export interface AddLibraryDocResult { ok: boolean; doc: LibraryDoc; error?: string }
+
+/** "+Add to memory" — persist a document AND attempt to index it right away, so an embed
+ *  failure (bundled embedding runtime not up, model missing → HTTP 404) is visible to the
+ *  caller immediately instead of being swallowed by the debounced auto-reindex path (see
+ *  live-reindex.ts, which deliberately eats reindex errors for the autosave case). The doc's
+ *  text is always persisted — `doc` is always returned — even when indexing fails, so the
+ *  upload itself isn't lost; only the "already recallable" guarantee waits on a later
+ *  successful reindex (e.g. after the operator fixes the embedding engine and rebuilds). */
+export async function addLibraryDocIndexed(
+  input: { title: string; mime: string; text: string },
+  deps: { library?: ReturnType<typeof createLibrary> } = {}
+): Promise<AddLibraryDocResult> {
+  const lib = deps.library ?? createLibrary();
+  const doc = await lib.add({ docId: randomUUID(), title: input.title, mime: input.mime, text: input.text, now: Date.now() });
+  try {
+    await reindexLibrary();
+    return { ok: true, doc };
+  } catch (err) {
+    return { ok: false, doc, error: (err as Error).message };
+  }
 }
 
 export interface ReindexFailure { label: string; error: string }

@@ -81,8 +81,8 @@ const api = {
       ipcRenderer.on(channels.system.onReminderFired, listener);
       return () => ipcRenderer.removeListener(channels.system.onReminderFired, listener);
     },
-    onDiagnostic: (cb: (payload: { kind: string; message?: string; cases?: { caseId: string; reason: string }[] }) => void) => {
-      const listener = (_e: unknown, payload: { kind: string; message?: string; cases?: { caseId: string; reason: string }[] }) => cb(payload);
+    onDiagnostic: (cb: (payload: { kind: string; message?: string; cases?: { caseId: string; reason: string }[]; scope?: string }) => void) => {
+      const listener = (_e: unknown, payload: { kind: string; message?: string; cases?: { caseId: string; reason: string }[]; scope?: string }) => cb(payload);
       ipcRenderer.on(channels.system.onDiagnostic, listener);
       return () => ipcRenderer.removeListener(channels.system.onDiagnostic, listener);
     }
@@ -401,7 +401,7 @@ const api = {
       ipcRenderer.on(channels.memory.onProgress, listener);
       return () => ipcRenderer.removeListener(channels.memory.onProgress, listener);
     },
-    embedHealth: (): Promise<'ready' | 'starting' | 'unavailable'> => ipcRenderer.invoke(channels.memory.embedHealth),
+    embedHealth: (): Promise<'ready' | 'starting' | 'unavailable' | 'model-missing'> => ipcRenderer.invoke(channels.memory.embedHealth),
     profileList: (scope?: string): Promise<MemoryItem[]> => ipcRenderer.invoke(channels.memory.profileList, scope),
     profileSummaries: (): Promise<Record<string, string>> => ipcRenderer.invoke(channels.memory.profileSummaries),
     profileUpsert: (item: Pick<MemoryItem, 'id' | 'scope' | 'text' | 'pinned'>): Promise<MemoryItem[]> =>

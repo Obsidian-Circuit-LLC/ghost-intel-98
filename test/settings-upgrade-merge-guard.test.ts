@@ -82,6 +82,26 @@ describe('settings upgrade guard — geoint.cctvResolveHosts (Tor-only host reso
   });
 });
 
+describe('settings upgrade guard — ai.webSearchClearnet (opt-in clearnet fallback)', () => {
+  it('upgrades an old ai block with no webSearchClearnet to the default (false)', async () => {
+    // A settings.json persisted before webSearchClearnet existed: ai present, field absent.
+    writeOnDiskSettings({ ai: { webSearch: true } });
+
+    const s = await settingsStore.read();
+
+    expect(s.ai.webSearchClearnet).toBe(false);   // healed to default (off)
+    expect(s.ai.webSearch).toBe(true);            // pre-existing user value kept
+  });
+
+  it('preserves a stored webSearchClearnet=true across the merge (not clobbered by the default)', async () => {
+    writeOnDiskSettings({ ai: { webSearchClearnet: true } });
+
+    const s = await settingsStore.read();
+
+    expect(s.ai.webSearchClearnet).toBe(true);    // user opt-in survives
+  });
+});
+
 describe('settings upgrade guard — completeness: every nested block survives a stale on-disk block', () => {
   it('keeps all default sub-fields for EVERY nested settings object (catches a future block left out of the merge)', async () => {
     // Synthesize the worst case for every nested block at once: present-but-empty, simulating

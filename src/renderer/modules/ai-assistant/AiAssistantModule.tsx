@@ -546,7 +546,15 @@ export function AiAssistantModule(): JSX.Element {
         await window.api.memory.library.add({ title, mime, text });
         toast.success(`Indexed '${title}'`);
       } catch (err) {
-        toast.error(`Couldn't index '${file.name}': ${(err as Error).message}`);
+        const message = (err as Error).message;
+        // The main process throws this exact phrase when the doc was saved but the offline
+        // embedding engine failed to index it (see register.ts libraryAdd) — surface the
+        // plain-language fix instead of the raw/wrapped IPC error text.
+        if (message.includes("embedding engine isn't loaded")) {
+          toast.error("Couldn't add to memory — the offline embedding engine isn't loaded. Open Settings → Rebuild memory index.");
+        } else {
+          toast.error(`Couldn't index '${file.name}': ${message}`);
+        }
       }
     }
   }
@@ -606,6 +614,14 @@ export function AiAssistantModule(): JSX.Element {
         >
           <input type="checkbox" checked={includeFiles} disabled={!contextCase} onChange={(e) => setIncludeFiles(e.target.checked)} />
           &nbsp;Include file contents
+        </label>
+        <label style={{ fontSize: 11 }} title="Let Q search the web over Tor (DuckDuckGo onion) mid-conversation">
+          <input
+            type="checkbox"
+            checked={settings?.ai.webSearch ?? false}
+            onChange={(e) => { if (settings) void patchSettings({ ai: { ...settings.ai, webSearch: e.target.checked } }); }}
+          />
+          &nbsp;Web (Tor)
         </label>
         <button onClick={() => quickPrompt('Summarise this case in 3-5 bullet points.')} disabled={!contextCase}>Summarise</button>
         <button onClick={() => quickPrompt('Draft a status report for this case suitable for an external stakeholder.')} disabled={!contextCase}>Draft report</button>

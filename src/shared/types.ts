@@ -407,6 +407,11 @@ export interface AppSettings {
      *  Tor-routed DuckDuckGo-onion web search; results are fed back as untrusted data, then it answers.
      *  Onion-to-onion (no exit node, no clearnet). Default off. */
     webSearch: boolean;
+    /** Operator-authorized, hard-gated fallback: when true AND a Tor web search (webSearch) returns
+     *  zero results, the assistant may fall back to a plain clearnet DuckDuckGo query. This exposes
+     *  the real IP to the query and result hosts — a deanonymization warning is always shown in the
+     *  chat stream when it fires. Off by default; the Tor-only path is never weakened by this flag. */
+    webSearchClearnet: boolean;
   };
   mail: {
     accounts: { id: string; label: string; imapHost: string; imapPort: number; smtpHost: string; smtpPort: number; user: string; secureRef: string | null }[];
@@ -557,7 +562,7 @@ export const defaultShortcuts: AccessShortcut[] = [
   { id: 'calendar', label: 'Calendar', kind: 'module', target: 'calendar', icon: 'calendar' },
   { id: 'reminders', label: 'Reminders', kind: 'module', target: 'reminders', icon: 'bell' },
   { id: 'alarm', label: 'Alarm', kind: 'module', target: 'alarm', icon: 'alarm' },
-  { id: 'ai', label: 'AI Assistant', kind: 'module', target: 'ai-assistant', icon: 'sparkle' },
+  { id: 'ai', label: 'Q', kind: 'module', target: 'ai-assistant', icon: 'sparkle' },
   { id: 'search', label: 'Search', kind: 'module', target: 'search', icon: 'search' },
   { id: 'help', label: 'RTFM', kind: 'module', target: 'help', icon: 'help' }
   // Games (Solitaire/Minesweeper/Chess/Pinball) are surfaced via the Access "Games ▸" submenu, not
@@ -598,6 +603,7 @@ export function reconcileShortcuts(
     // user's custom rename is preserved. Same pattern as the Help → RTFM rename.
     if (s.kind === 'module' && s.target === 'help' && s.label === 'Help') return { ...s, label: 'RTFM' };
     if (s.kind === 'module' && s.target === 'cases' && s.label === 'Case Files') return { ...s, label: 'My Cases' };
+    if (s.kind === 'module' && s.target === 'ai-assistant' && s.label === 'AI Assistant') return { ...s, label: 'Q' };
     return s;
   });
   const seen = new Set(seeded);
@@ -643,7 +649,8 @@ export const defaultSettings: AppSettings = {
     useMemory: true,
     autoReindex: true,
     adaptiveMemory: false,
-    webSearch: false
+    webSearch: false,
+    webSearchClearnet: false
   },
   mail: { accounts: [] },
   mailBackgroundCheck: false,

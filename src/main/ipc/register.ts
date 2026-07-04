@@ -16,7 +16,6 @@
 
 import { app, ipcMain, shell, dialog, BrowserWindow } from 'electron';
 import { writeFile, rename, lstat, rm, readFile, stat, realpath } from 'node:fs/promises';
-import { randomUUID } from 'node:crypto';
 import { basename, dirname, join, sep } from 'node:path';
 import { channels, BGCONN_LOCK_EXEMPT_CHANNELS } from '@shared/ipc-contracts';
 import type { MailAccount, MailSendInput, SshHostProfile, AiChatRequest, MediaTrack, AiConversation } from '@shared/post-mvp-types';
@@ -324,6 +323,17 @@ async function gatherReportImages(caseId: string, rec: CaseRecord): Promise<Repo
 }
 
 export function registerIpc(getWindow: () => BrowserWindow | null): void {
+  // Debounced auto-index (case/conversation/library autosave) is best-effort by design — a
+  // failing embed must never break the save path — but per the ADHD-UI constraint it must not be
+  // entirely silent. live-reindex.ts already rate-limits calls into this notifier, so a stuck
+  // failure surfaces at most one toast per interval, not one per keystroke-triggered autosave.
+  liveReindex.setErrorNotifier((scope, err) => {
+    const win = getWindow();
+    if (!win || win.isDestroyed()) return;
+    const message = (err as Error)?.message ?? String(err);
+    win.webContents.send(channels.system.onDiagnostic, { kind: 'reindex-failed', scope, message });
+  });
+
   // ---- system ----
   safeHandle(channels.system.appInfo, () => ({
     version: app.getVersion(),
@@ -1423,23 +1433,24 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   });
 
   // ---- global document library (uploads + briefcase + journal) ----
-  // Extraction (pdf/txt/md/docx → text) happens renderer-side; the handler only persists
-  // already-extracted text and fires a debounced library reindex.
+  // Extraction (pdf/txt/md/docx → text) happens renderer-side; the handler persists the
+  // already-extracted text AND attempts to index it right away (memory.addLibraryDocIndexed),
+  // so an embed failure (bundled embedding runtime not up / model missing → HTTP 404) rejects
+  // this call and is visible to the renderer instead of being silently eaten by the debounced
+  // auto-reindex path — see the memory-embed-fix plan, Task 4.
   safeHandle(channels.memory.libraryList, () => createLibrary().list());
   safeHandle(channels.memory.libraryAdd, async (...args) => {
     const raw = args[0] as { title?: unknown; mime?: unknown; text?: unknown } | undefined;
     if (!raw || typeof raw.title !== 'string' || typeof raw.mime !== 'string' || typeof raw.text !== 'string') {
       throw new Error('libraryAdd: expected { title, mime, text }');
     }
-    const doc = await createLibrary().add({
-      docId: randomUUID(),
-      title: raw.title,
-      mime: raw.mime,
-      text: raw.text,
-      now: Date.now()
-    });
-    liveReindex.libraryChanged();
-    return doc;
+    const result = await memory.addLibraryDocIndexed({ title: raw.title, mime: raw.mime, text: raw.text });
+    if (!result.ok) {
+      const err = new Error("Couldn't add to memory — the offline embedding engine isn't loaded. Open Settings → Rebuild memory index.");
+      (err as Error & { cause?: unknown }).cause = result.error;
+      throw err;
+    }
+    return result.doc;
   });
   safeHandle(channels.memory.libraryRemove, async (...args) => {
     const docId = args[0];
