@@ -10,8 +10,9 @@ import * as conversations from '../../storage/ai-conversations';
 import { chunkText, contentHash, type ChunkKind } from './chunker';
 import { embed, EMBED_MODEL } from './embeddings';
 import {
-  caseShardPath, conversationShardPath, emptyShard, loadShard, saveShard, type StoredChunk
+  caseShardPath, conversationShardPath, libraryShardPath, emptyShard, loadShard, saveShard, type StoredChunk
 } from './store';
+import { librarySources } from './library/sources';
 
 interface Source { key: string; kind: ChunkKind; ref: string; text: string }
 export interface ReindexResult { embedded: number; skipped: number; chunks: number }
@@ -84,15 +85,20 @@ export async function reindexConversations(): Promise<ReindexResult> {
   return reindexShard(conversationShardPath(), '__conversations__', 'Conversations', sources);
 }
 
+export async function reindexLibrary(): Promise<ReindexResult> {
+  return reindexShard(libraryShardPath(), '__library__', 'Library', await librarySources());
+}
+
 export interface ReindexFailure { label: string; error: string }
 
-/** Reindex everything: every case + the conversation log. Reports coarse progress and failures. */
+/** Reindex everything: every case + the conversation log + the global library. Reports coarse
+ *  progress and failures. */
 export async function reindexAll(
   onProgress?: (p: ReindexProgress) => void
 ): Promise<{ cases: number; chunks: number; failures: ReindexFailure[] }> {
   let ids: string[] = [];
   try { ids = await readdir(casesDir()); } catch { ids = []; }
-  const total = ids.length + 1;
+  const total = ids.length + 2;
   let done = 0, cases = 0, chunks = 0;
   const failures: ReindexFailure[] = [];
   for (const id of ids) {
@@ -103,5 +109,8 @@ export async function reindexAll(
   try { const r = await reindexConversations(); chunks += r.chunks; }
   catch (e) { failures.push({ label: 'conversations', error: (e as Error).message }); }
   onProgress?.({ done: (done += 1), total, label: 'conversations' });
+  try { const r = await reindexLibrary(); chunks += r.chunks; }
+  catch (e) { failures.push({ label: 'library', error: (e as Error).message }); }
+  onProgress?.({ done: (done += 1), total, label: 'library' });
   return { cases, chunks, failures };
 }

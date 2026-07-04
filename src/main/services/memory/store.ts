@@ -35,6 +35,9 @@ export function caseShardPath(caseId: string): string {
 export function conversationShardPath(): string {
   return join(dataRoot(), 'memory', 'conversations.json');
 }
+export function libraryShardPath(): string {
+  return join(dataRoot(), 'memory', 'library.json');
+}
 
 export function emptyShard(caseId: string, title: string, model: string): MemoryShard {
   return { version: SHARD_VERSION, model, caseId, title, sources: {}, chunks: [] };

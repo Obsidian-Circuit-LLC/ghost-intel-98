@@ -5,10 +5,10 @@
  */
 import { readdir } from 'node:fs/promises';
 import { casesDir } from '../../storage/paths';
-import { caseShardPath, conversationShardPath, loadShard } from './store';
+import { caseShardPath, conversationShardPath, libraryShardPath, loadShard } from './store';
 import { EMBED_MODEL } from './embeddings';
 
-export { reindexAll, reindexCase, reindexConversations, type ReindexProgress } from './indexer';
+export { reindexAll, reindexCase, reindexConversations, reindexLibrary, type ReindexProgress } from './indexer';
 export { recall, formatRecall, type RecallHit } from './retriever';
 export { embedHealth } from './embed-runtime';
 
@@ -25,5 +25,7 @@ export async function status(): Promise<MemoryStatus> {
   }
   const cs = await loadShard(conversationShardPath());
   if (cs) chunks += cs.chunks.length;
+  const lib = await loadShard(libraryShardPath());
+  if (lib) chunks += lib.chunks.length;
   return { model: EMBED_MODEL, cases, chunks };
 }
