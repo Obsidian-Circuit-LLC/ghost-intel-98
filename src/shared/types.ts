@@ -407,6 +407,11 @@ export interface AppSettings {
      *  Tor-routed DuckDuckGo-onion web search; results are fed back as untrusted data, then it answers.
      *  Onion-to-onion (no exit node, no clearnet). Default off. */
     webSearch: boolean;
+    /** Operator-authorized, hard-gated fallback: when true AND a Tor web search (webSearch) returns
+     *  zero results, the assistant may fall back to a plain clearnet DuckDuckGo query. This exposes
+     *  the real IP to the query and result hosts — a deanonymization warning is always shown in the
+     *  chat stream when it fires. Off by default; the Tor-only path is never weakened by this flag. */
+    webSearchClearnet: boolean;
   };
   mail: {
     accounts: { id: string; label: string; imapHost: string; imapPort: number; smtpHost: string; smtpPort: number; user: string; secureRef: string | null }[];
@@ -643,7 +648,8 @@ export const defaultSettings: AppSettings = {
     useMemory: true,
     autoReindex: true,
     adaptiveMemory: false,
-    webSearch: false
+    webSearch: false,
+    webSearchClearnet: false
   },
   mail: { accounts: [] },
   mailBackgroundCheck: false,
