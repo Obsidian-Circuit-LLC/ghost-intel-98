@@ -44,6 +44,21 @@ describe('runTransform (contract end-to-end, stub transform)', () => {
     expect(res.confidence.band).toBe('high');
     expect(res.confidence.attribution).toBe('attributed');
   });
+  it('reuses an existing entity id (dedup by type+value) instead of creating a duplicate', async () => {
+    created.push({ type: 'email', value: 'reg@evil.tld' }); // pre-existing entity → id ent-0
+    const stub: TransformDescriptor = {
+      id: 'whois', version: '1', title: 'WHOIS', inputTypes: ['domain'], capabilities: [], active: false,
+      run: async () => ({
+        entities: [{ type: 'email', value: 'reg@evil.tld' }], // same type+value as the existing entity
+        edges: [], signals: [{ kind: 'authoritative-source', weight: 2 }], raw: 'x',
+      }),
+    };
+    registerTransform(stub);
+    const res = await runTransform('caseD', 'run1', 'whois',
+      { entityId: 'ent-seed', entityType: 'domain', value: 'evil.tld' }, NOW);
+    expect(res.producedEntityIds).toEqual(['ent-0']); // reused the existing id
+    expect(created).toHaveLength(1); // did NOT create a duplicate
+  });
   it('throws on an unknown transform id', async () => {
     await expect(runTransform('caseA', 'run1', 'nope',
       { entityId: 'e', entityType: 'domain', value: 'x' }, NOW)).rejects.toThrow(/unknown transform/i);

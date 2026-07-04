@@ -20,6 +20,10 @@ describe('scoreConfidence (deterministic)', () => {
     expect(r.band).toBe('low');
     expect(r.attribution).toBe('unattributed');
   });
+  it('score exactly 3 is the high threshold; 2 is still medium (boundary)', () => {
+    expect(scoreConfidence([sig('authoritative-source', 2), sig('corroborating-source', 1)]).band).toBe('high'); // score 3
+    expect(scoreConfidence([sig('authoritative-source', 2)]).band).toBe('medium'); // score 2
+  });
   it('is deterministic: identical input → identical output', () => {
     const s = [sig('authoritative-source', 2), sig('corroborating-source', 1)];
     expect(scoreConfidence(s)).toEqual(scoreConfidence(s));
