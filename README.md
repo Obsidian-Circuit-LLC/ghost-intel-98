@@ -35,13 +35,15 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`GhostIntel98-Setup-3.27.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
+> **Install:** download [`GhostIntel98-Setup-3.28.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
 
 > **📘 User guides** — plain-language, step-by-step (download or read in-browser):
 > - [**SOCMINT: X, Telegram & WhatsApp**](docs/guides/SOCMINT-Tutorial.pdf) — set up and run the social-media collectors, per platform, with the Tor / clearnet and opsec caveats. ([markdown](docs/guides/socmint-tutorial.md))
 > - [**How Searchlight Learns**](docs/guides/Searchlight-Learning-Guide.pdf) — how the username-sweep detector gets smarter from your own labels, and when to turn ML on. ([markdown](docs/guides/searchlight-learning.md))
 
 ## Status
+
+**v3.28.0** — **Global scalable memory, on by default, plus Mind's Eye — a visual map of what the assistant remembers.** The assistant's local memory graduates from an opt-in per-conversation feature to a **global, always-on-by-default** system, backed by a **dedicated embedding runtime** (its own bundled, loopback-only Ollama instance, separate from chat) so an embedding failure is now a **loud, actionable error** instead of a silently empty index — the indexer refuses to overwrite a good shard with an empty one. Memory now spans a **global document library**: upload PDF/TXT/MD/DOCX straight into memory via "➕ Add to memory", and the indexer pulls in your **briefcase** and **journal** entries alongside chat, all as first-class memory sources. A new **Mind's Eye** module renders the whole memory pool as an interactive SVG graph — nodes for chat/profile/library/briefcase/journal, similarity auto-edges, a deterministic clustered layout — with curation built into the graph itself: **pin**, **forget**, **merge duplicates**, **resolve a flagged conflict**, and **recall a node straight into chat**. You can also draw (and cut) your own **retrieval bonds** between two items directly in the graph, teaching recall that they belong together even when they aren't lexically similar; every recall hit that used a bond carries that provenance back with it. `useMemory` now defaults to **on** for new installs (existing installs are not force-flipped — the settings merge is additive only); no new network egress, encrypted at rest throughout. **2,568 automated tests** green (1 skipped); typecheck clean. *Everything from v3.27.0 carries forward.*
 
 **v3.27.0** — **Seven items from GhostExodus's field feedback: crash-safety, a Tor-hang fix, a scraper-credential-race fix, per-tool scraping cases with migration, OSINT consolidation, an installer cleanup opt-in, and a Searchlight graph reset.** **(1) Crash-safety** — a module error boundary means no single tool can white-screen the whole app again, and Hosts / News / Camera now open standalone instead of crashing when launched from the Toolkit. **(2) CCTV host-resolution** no longer hangs on Tor bootstrap (fast-fail → a clear "Tor not ready" state) and gains an explicit "resolve camera hosts over Tor" toggle — resolution stays **Tor-only**, never clearnet, so a lookup can't leak your IP. **(3) GhostScrape** runs each scrape job in its **own ephemeral session partition**, so two concurrent jobs can no longer clobber each other's X credentials. **(4) Independent scraping cases** — SOCMINT and X/GhostScrape now have their **own encrypted case stores** with a left-hand Cases sidebar, fully separate from your investigation cases; existing harvested data is relocated by a **one-time, backed-up, idempotent migration**, and an **"Import into a main case"** action pulls results across when you want. **(5) OSINT consolidation** — the OSINT tools move off the desktop into the Toolkit and a **one-hop Access-menu flyout**; the Toolkit window is compact. **(6) Installer** — an **opt-in, default-off** checkbox to remove a previous installation's data. **(7) Searchlight** — reset the entire relationship graph and re-import. Built subagent-driven, each workstream on its own branch with a **parallel adversarial whole-branch review** that caught and fixed real bugs before merge — a cache-poisoning regression, resident X credentials, an off-screen flyout, an installer data-loss on Back/Next, and a migration duplication-on-crash critical. Pre-ship **reachability audit** + **packaged-artifact integrity check**; the runtime pass ships as a **[Windows smoke checklist](docs/guides/v3.27.0-windows-smoke-checklist.md)** (automated Windows-VM smoke still pending an ISO on the build host). **2,535 automated tests** green; typecheck + build clean. *Everything from v3.26.0 carries forward.*
 
@@ -472,7 +474,7 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases) and run it.
 
-Direct link to the current release: [`GhostIntel98-Setup-3.27.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.27.0/GhostIntel98-Setup-3.27.0.exe)
+Direct link to the current release: [`GhostIntel98-Setup-3.28.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.28.0/GhostIntel98-Setup-3.28.0.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is **formally verified internally** — symbolic (ProVerif) +
 computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not**
 FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.6.8/GhostIntel98-Setup-3.6.8.exe).
@@ -480,7 +482,7 @@ FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Se
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\GhostIntel98-Setup-3.27.0.exe -Algorithm SHA256
+Get-FileHash .\GhostIntel98-Setup-3.28.0.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
