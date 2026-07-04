@@ -72,6 +72,16 @@ describe('indexer + retriever (end-to-end with conversation store)', () => {
     expect(hits[0].ref).toBe('Alpha chat'); // the alpha conversation ranks first
   });
 
+  it('charter: determinism — recall() twice on the same pool gives identical ordering', async () => {
+    await conversations.save({ id: 'c1', title: 'Alpha chat', messages: [{ role: 'user', content: 'tell me about alpha alpha alpha' }] });
+    await conversations.save({ id: 'c2', title: 'Beta chat', messages: [{ role: 'user', content: 'all about beta beta' }] });
+    await reindexConversations();
+
+    const a = await recall('alpha');
+    const b = await recall('alpha');
+    expect(a.map((h) => [h.kind, h.ref, h.text])).toEqual(b.map((h) => [h.kind, h.ref, h.text]));
+  });
+
   it('skips re-embedding unchanged sources on a second reindex', async () => {
     await conversations.save({ id: 'c1', title: 'Alpha chat', messages: [{ role: 'user', content: 'alpha content' }] });
     await reindexConversations();

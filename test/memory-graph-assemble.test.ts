@@ -29,4 +29,17 @@ describe('assemble MemoryGraph', () => {
     const docEdge = graph.edges.find((e) => e.kind === 'auto');
     expect(docEdge).toBeTruthy();
   });
+
+  it('charter: determinism — buildGraph() twice on the same pool gives identical positions and edges', async () => {
+    setEmbedderForTest(async (texts) => texts.map((t) => [t.includes('zebra') ? 1 : 0, t.includes('giraffe') ? 1 : 0]));
+    const lib = createLibrary();
+    await lib.add({ docId: 'doc-z1', title: 'z1.txt', mime: 'text/plain', text: 'the zebra crossing report', now: 1 });
+    await lib.add({ docId: 'doc-z2', title: 'z2.txt', mime: 'text/plain', text: 'another zebra sighting', now: 2 });
+    await reindexLibrary();
+
+    const a = await buildGraph();
+    const b = await buildGraph();
+    expect(a.nodes).toEqual(b.nodes);
+    expect(a.edges).toEqual(b.edges);
+  });
 });
