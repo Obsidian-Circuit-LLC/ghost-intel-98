@@ -29,6 +29,24 @@ export function planWebSearch(opts: { torResults: number; clearnetOn: boolean })
   return { mode: 'empty' };
 }
 
+export type SearchAction =
+  | { action: 'limit' }
+  | { action: 'repeat'; key: string }
+  | { action: 'search'; key: string };
+
+/**
+ * Decide what to do with a non-empty `[SEARCH: query]` the model emitted. Pure/testable.
+ * A small local model sometimes loops on the SAME query instead of answering (GhostExodus saw one
+ * query fire 3× with no answer). A repeated query (case-insensitive) is NOT re-run — the caller
+ * tells the model to answer from the results it already has. `limit` bounds total iterations.
+ */
+export function decideSearchAction(opts: { query: string; seen: string[]; searches: number; max: number }): SearchAction {
+  if (opts.searches >= opts.max) return { action: 'limit' };
+  const key = opts.query.trim().toLowerCase();
+  if (opts.seen.includes(key)) return { action: 'repeat', key };
+  return { action: 'search', key };
+}
+
 /** Extract the query from the first `[SEARCH: …]` directive in the model output, else null. */
 export function extractSearchDirective(text: string): string | null {
   const m = text.match(/\[SEARCH:\s*([^\]]+)\]/i);

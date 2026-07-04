@@ -22,7 +22,7 @@ import { recallProfile } from './memory/profile';
 import type { MemoryItem } from './memory/profile/types';
 import { randomBytes } from 'node:crypto';
 import { searchWeb, searchWebClearnet } from './web-search/ddg';
-import { extractSearchDirective, formatWebResults, planWebSearch, WEB_SEARCH_SYSTEM, MAX_WEB_SEARCHES } from './web-search/directive';
+import { extractSearchDirective, formatWebResults, planWebSearch, decideSearchAction, WEB_SEARCH_SYSTEM, MAX_WEB_SEARCHES } from './web-search/directive';
 
 /** `'global'` always included; `case:<caseId>` appended when the request carries a selected case
  *  — the same scoping convention the adaptive-memory profile store/reconcile/retriever use. */
@@ -121,14 +121,27 @@ export async function chat(streamId: string, req: AiChatRequest, getWindow: () =
     // search and feed the results back as an untrusted-DATA turn, then let it continue. Capped by
     // MAX_WEB_SEARCHES so it can never loop indefinitely; only active when web search is on (ollama).
     let searches = 0;
+    const seen: string[] = [];
     for (;;) {
       const full = await runOnce();
       const q = webOn ? extractSearchDirective(full) : null;
       if (!q) break;
-      if (searches >= MAX_WEB_SEARCHES) {
+      const decision = decideSearchAction({ query: q, seen, searches, max: MAX_WEB_SEARCHES });
+      if (decision.action === 'limit') {
         emit(getWindow, streamId, { chunk: `\n\n(reached the web-search limit of ${MAX_WEB_SEARCHES}.)\n` });
         break;
       }
+      if (decision.action === 'repeat') {
+        // The local model re-emitted a query it already ran — don't waste a Tor search on it; nudge
+        // it to answer from the results already in the conversation. Counts toward the bound so a
+        // persistent repeat can't loop forever.
+        searches += 1;
+        emit(getWindow, streamId, { chunk: `\n(already searched “${q}” — answering from those results)\n` });
+        messages.push({ role: 'assistant', content: full });
+        messages.push({ role: 'user', content: `You already ran the search "${q}" and its results are in the conversation above. Do NOT emit another [SEARCH: …] for the same query — answer the user now using those results.` });
+        continue;
+      }
+      seen.push(decision.key);
       searches += 1;
       emit(getWindow, streamId, { chunk: `\n\n🔍 searching the web over Tor for “${q}”…\n\n` });
       const results = await searchWeb(q, { caseId: req.caseId });

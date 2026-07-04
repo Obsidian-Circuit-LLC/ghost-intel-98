@@ -4,11 +4,14 @@
  *
  * Runs on the BUILD host (which must have `ollama` on PATH). Starts a throwaway Ollama server
  * pointed at resources/local-ai/models, pulls the pinned embedding model into that models dir, and
- * drops an EMBED_MODEL_PRESENT marker. electron-builder then ships resources/local-ai/models so the
- * app's bundled Ollama can serve /api/embeddings fully offline.
+ * drops an EMBED_MODEL_PRESENT marker. electron-builder then ships resources/local-ai/models, and
+ * `fetch-ollama.mjs` bundles the CPU-only ollama.exe that actually serves /api/embeddings from those
+ * blobs — so the dedicated embed runtime (embed-runtime.ts, port 11435) works fully offline without
+ * the user's own Ollama. (Before fetch-ollama existed, the model blobs shipped but no runtime did,
+ * so `embedBundled()` was always false → 404 / 0 chunks. That gap is now closed.)
  *
  * Idempotent: if the marker exists it does nothing. This populates ONLY the embedding model; the
- * chat-model + Ollama-runtime bundling is the separate local-AI mega-installer task.
+ * chat model remains BYO (the user's own Ollama).
  *
  * NOTE: the model blob (~274 MB) is git-ignored like the other bundled binaries — CI/build-host
  * supplied, never committed.
