@@ -4,11 +4,11 @@
  * plugin-egress Tor (`torFetch`). Results are parsed from DDG's no-JS `/html/` endpoint and are treated
  * as UNTRUSTED downstream (neutralized before they reach the model — see ai.ts).
  *
- * NOTE: DDG_ONION MUST be verified against DuckDuckGo's official published v3 onion before release
- * (it cannot be verified from the build box). `searchWeb` enforces `.onion` on the endpoint host, so
- * any endpoint (default or override) that is not an onion fails closed to [] — a clearnet host can
- * never route through a Tor exit node. The search is fail-closed throughout: a blocked/non-200 fetch
- * yields no results, never a clearnet fallback.
+ * NOTE: DDG_ONION is DuckDuckGo's v3 onion (live since Jul 2021), VERIFIED 2026-07-04 as an exact
+ * byte-for-byte match against Wikipedia's DuckDuckGo article and independent Tor link directories.
+ * `searchWeb` enforces `.onion` on the endpoint host, so any endpoint (default or override) that is
+ * not an onion fails closed to [] — a clearnet host can never route through a Tor exit node. The
+ * search is fail-closed throughout: a blocked/non-200 fetch yields no results, never a clearnet fallback.
  */
 import { torFetch, ensurePluginTor } from '../../plugins/tor-egress';
 
