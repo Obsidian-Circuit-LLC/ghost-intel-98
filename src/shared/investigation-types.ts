@@ -1,5 +1,6 @@
 // Shared contract for the Autonomous OSINT Investigator (SP-2). Core + the OSINT plugin agree on these.
 import type { EntityType } from './types';
+export type { EntityType };
 
 export type ConfidenceBand = 'high' | 'medium' | 'low';
 export type AttributionStatus = 'attributed' | 'unattributed' | 'unconfirmed';
@@ -58,4 +59,25 @@ export interface InvestigationRun {
   actionLog: RunAction[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface TransformInput { entityId: string; entityType: EntityType; value: string }
+export interface TransformEntityOut { type: EntityType; value: string; role?: string }
+
+export interface TransformOutput {
+  entities: TransformEntityOut[];
+  edges: TransformEdgeOut[];
+  signals: EvidenceSignal[];
+  raw: string; // the raw tool output (stored encrypted at rest by the ledger)
+}
+
+/** A registered transform. `run` is supplied by the OSINT plugin; core holds the descriptor and invokes it. */
+export interface TransformDescriptor {
+  id: string;
+  version: string;
+  title: string;
+  inputTypes: EntityType[];
+  capabilities: string[]; // required capabilities, e.g. ['egress'] or ['authorized-target-egress']
+  active: boolean;        // active (touches target) vs passive
+  run: (input: TransformInput) => Promise<TransformOutput>;
 }
