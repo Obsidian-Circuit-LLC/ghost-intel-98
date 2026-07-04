@@ -44,6 +44,7 @@ import { XCollectorModule } from './x/XCollectorModule';
 import { GhostScrapeModule } from './ghostscrape/GhostScrapeModule';
 import { OSINTToolkitModule } from './osint-toolkit/OSINTToolkitModule';
 import { MindsEyeModule } from './minds-eye/MindsEyeModule';
+import { InvestigationGraphModule } from './investigation-graph/InvestigationGraphModule';
 
 // ---------------------------------------------------------------------------
 // Adapter components — each has the uniform { spec: WindowSpec } signature and
@@ -205,6 +206,10 @@ function MindsEyeAdapter({ spec: _spec }: { spec: WindowSpec }): JSX.Element {
   return <MindsEyeModule />;
 }
 
+function InvestigationGraphAdapter({ spec }: { spec: WindowSpec }): JSX.Element {
+  return <InvestigationGraphModule caseId={spec.props?.['caseId'] as string} />;
+}
+
 // ---------------------------------------------------------------------------
 // Registration
 // Titles are VERBATIM from Desktop.tsx moduleTitles.
@@ -248,4 +253,5 @@ export function registerBuiltins(): void {
   registerModule({ key: 'ghostscrape', title: 'GhostScrape', glyph: '🐦', component: GhostScrapeAdapter, builtin: true, defaultWidth: 960, defaultHeight: 680, category: 'osint', subcategory: 'Social Media' });
   registerModule({ key: 'osint-toolkit', title: 'OSINT Toolkit', glyph: '🧰', component: OSINTToolkitAdapter, builtin: true, defaultWidth: 360, defaultHeight: 470 });
   registerModule({ key: 'minds-eye', title: "Mind's Eye", glyph: '👁', component: MindsEyeAdapter, builtin: true, defaultWidth: 760, defaultHeight: 560 });
+  registerModule({ key: 'investigation-graph', title: 'Investigation Graph', glyph: '🕸', component: InvestigationGraphAdapter, builtin: true, defaultWidth: 900, defaultHeight: 640, category: 'osint', subcategory: 'Identity' });
 }
