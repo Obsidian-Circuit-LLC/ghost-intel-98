@@ -25,7 +25,7 @@ The DuckDuckGo onion address is pinned as a constant and must be verified agains
 
 Windows NSIS installer — `GhostIntel98-Setup-3.29.0.exe` (per-user, no admin; unsigned → **More info → Run anyway**):
 
-- **SHA-256:** `PENDING_BUILD`
-- **Size:** PENDING_BUILD
+- **SHA-256:** `d45962e42d945c974b72688240837fa7d251ec44ca98b5dd4fa6d9387e08648a`
+- **Size:** 906,358,036 bytes (~906 MB; bundles the offline embedding model + Ollama runtime, Tor, Piper voices, ML-KEM libs).
 
 *Everything from v3.28.0 (global scalable memory + Mind's Eye) carries forward.*
