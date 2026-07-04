@@ -70,3 +70,16 @@ export function noProgress(g: GuardState, window: number): boolean {
   const tail = g.progress.slice(-window);
   return tail.every((c) => c === tail[0]);
 }
+
+/** Authorized if the value equals an in-scope entry or is a subdomain of one (`x.evil.tld` for
+ *  `evil.tld`). Never a lookalike (`evil.tld.attacker.com`). */
+export function isAuthorized(scope: Set<string>, value: string): boolean {
+  for (const s of scope) {
+    if (value === s || value.endsWith(`.${s}`)) return true;
+  }
+  return false;
+}
+
+/** Human-set only: the orchestrator wires these to a human-gated control, never the agent path. */
+export function addToScope(g: GuardState, target: string): void { g.scope.add(target); }
+export function removeFromScope(g: GuardState, target: string): void { g.scope.delete(target); }
