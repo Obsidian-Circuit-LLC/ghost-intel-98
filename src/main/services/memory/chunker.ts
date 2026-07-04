@@ -5,7 +5,7 @@
  */
 import { createHash } from 'node:crypto';
 
-export type ChunkKind = 'desc' | 'note' | 'file' | 'entity' | 'chat';
+export type ChunkKind = 'desc' | 'note' | 'file' | 'entity' | 'chat' | 'doc';
 
 export interface SourceChunk {
   kind: ChunkKind;
