@@ -546,7 +546,15 @@ export function AiAssistantModule(): JSX.Element {
         await window.api.memory.library.add({ title, mime, text });
         toast.success(`Indexed '${title}'`);
       } catch (err) {
-        toast.error(`Couldn't index '${file.name}': ${(err as Error).message}`);
+        const message = (err as Error).message;
+        // The main process throws this exact phrase when the doc was saved but the offline
+        // embedding engine failed to index it (see register.ts libraryAdd) — surface the
+        // plain-language fix instead of the raw/wrapped IPC error text.
+        if (message.includes("embedding engine isn't loaded")) {
+          toast.error("Couldn't add to memory — the offline embedding engine isn't loaded. Open Settings → Rebuild memory index.");
+        } else {
+          toast.error(`Couldn't index '${file.name}': ${message}`);
+        }
       }
     }
   }

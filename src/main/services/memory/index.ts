@@ -6,7 +6,10 @@
 import { loadAllShards } from './store';
 import { EMBED_MODEL } from './embeddings';
 
-export { reindexAll, reindexCase, reindexConversations, reindexLibrary, type ReindexProgress } from './indexer';
+export {
+  reindexAll, reindexCase, reindexConversations, reindexLibrary, addLibraryDocIndexed,
+  type ReindexProgress, type AddLibraryDocResult
+} from './indexer';
 export { recall, formatRecall, type RecallHit } from './retriever';
 export { embedHealth } from './embed-runtime';
 export { buildGraph } from './graph';
