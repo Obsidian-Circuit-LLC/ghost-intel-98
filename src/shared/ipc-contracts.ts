@@ -33,6 +33,8 @@ import type {
 import type { MediaLibrarySnapshot, MediaStation, MediaTrack, GeoSnapshot, GeoSource, GeoItem, SavedGeoEvent, MarketSnapshot } from './post-mvp-types';
 import type { SiteCatalogEntry, SweepResult, SearchlightCase, SearchlightCaseSummary } from './searchlight/types';
 import type { InvestigationScene, SceneDelta } from './investigation-graph';
+import type { RunEvent } from './investigation-agent';
+import type { RunBudget } from './investigation-types';
 
 /**
  * Metadata written after each retrain cycle.
@@ -552,7 +554,23 @@ export const channels = {
     graph: 'investigation:graph',
     onGraphDelta: 'investigation:onGraphDelta',
     addNode: 'investigation:addNode',
-    addEdge: 'investigation:addEdge'
+    addEdge: 'investigation:addEdge',
+    // SP-6 free-form orchestrator: the run harness's start/control surface + its event stream.
+    // `start` returns the new runId; every other control channel is fire-and-forget (`void`) and
+    // a silent no-op if the run has already finished — see run-controller's `rsOf`.
+    run: {
+      start: 'investigation:run:start',
+      pause: 'investigation:run:pause',
+      resume: 'investigation:run:resume',
+      stop: 'investigation:run:stop',
+      addScope: 'investigation:run:addScope',
+      removeScope: 'investigation:run:removeScope',
+      focus: 'investigation:run:focus',
+      ignore: 'investigation:run:ignore',
+      answer: 'investigation:run:answer',
+      /** Main→renderer push: every `RunEvent` emitted by any live run, tagged with its runId. */
+      onEvent: 'investigation:run:onEvent'
+    }
   }
 } as const;
 
@@ -976,6 +994,18 @@ export interface ApiContracts {
   [channels.investigation.onGraphDelta]: { args: [(payload: { caseId: string; delta: SceneDelta }) => void]; returns: () => void };
   [channels.investigation.addNode]: { args: [string, EntityType, string]; returns: void };
   [channels.investigation.addEdge]: { args: [string, string, string, string]; returns: void };
+
+  // SP-6 run harness IPC — see channels.investigation.run above.
+  [channels.investigation.run.start]: { args: [string, string[], string, RunBudget]; returns: string };
+  [channels.investigation.run.pause]: { args: [string]; returns: void };
+  [channels.investigation.run.resume]: { args: [string]; returns: void };
+  [channels.investigation.run.stop]: { args: [string, string]; returns: void };
+  [channels.investigation.run.addScope]: { args: [string, string]; returns: void };
+  [channels.investigation.run.removeScope]: { args: [string, string]; returns: void };
+  [channels.investigation.run.focus]: { args: [string, string]; returns: void };
+  [channels.investigation.run.ignore]: { args: [string, string]; returns: void };
+  [channels.investigation.run.answer]: { args: [string, string]; returns: void };
+  [channels.investigation.run.onEvent]: { args: [(payload: { runId: string; event: RunEvent }) => void]; returns: () => void };
 }
 
 export const BGCONN_LOCK_EXEMPT_CHANNELS = ['bgconn:status', 'bgconn:stop'] as const;

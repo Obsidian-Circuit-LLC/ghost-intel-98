@@ -8,6 +8,8 @@ import { channels } from '../shared/ipc-contracts';
 import type { LocalAiStatus, LocalAiProgress, MemoryStatus, MemoryProgress, MemoryItem, RecallPreview, LibraryDoc, MemoryGraphShape, BondShape, GhostScrapeConfig, GhostScrapeResult, ScrapingCaseStoreId } from '../shared/ipc-contracts';
 import type { InvestigationScene, SceneDelta } from '../shared/investigation-graph';
 import type { EntityType } from '../shared/types';
+import type { RunEvent } from '../shared/investigation-agent';
+import type { RunBudget } from '../shared/investigation-types';
 
 const api = {
   cases: {
@@ -459,7 +461,27 @@ const api = {
     addNode: (caseId: string, type: EntityType, value: string): Promise<void> =>
       ipcRenderer.invoke(channels.investigation.addNode, caseId, type, value),
     addEdge: (caseId: string, fromId: string, toId: string, relation: string): Promise<void> =>
-      ipcRenderer.invoke(channels.investigation.addEdge, caseId, fromId, toId, relation)
+      ipcRenderer.invoke(channels.investigation.addEdge, caseId, fromId, toId, relation),
+    /** SP-6 free-form orchestrator: the run harness's start/control surface + its event stream.
+     *  `onEvent` fans every live run's events through one channel — filter by `runId` if you only
+     *  care about a single run (mirrors `onGraphDelta`'s per-caseId filtering above). */
+    run: {
+      start: (caseId: string, seedIds: string[], objective: string, budget: RunBudget): Promise<string> =>
+        ipcRenderer.invoke(channels.investigation.run.start, caseId, seedIds, objective, budget),
+      pause: (runId: string): Promise<void> => ipcRenderer.invoke(channels.investigation.run.pause, runId),
+      resume: (runId: string): Promise<void> => ipcRenderer.invoke(channels.investigation.run.resume, runId),
+      stop: (runId: string, reason: string): Promise<void> => ipcRenderer.invoke(channels.investigation.run.stop, runId, reason),
+      addScope: (runId: string, target: string): Promise<void> => ipcRenderer.invoke(channels.investigation.run.addScope, runId, target),
+      removeScope: (runId: string, target: string): Promise<void> => ipcRenderer.invoke(channels.investigation.run.removeScope, runId, target),
+      focus: (runId: string, entityId: string): Promise<void> => ipcRenderer.invoke(channels.investigation.run.focus, runId, entityId),
+      ignore: (runId: string, entityId: string): Promise<void> => ipcRenderer.invoke(channels.investigation.run.ignore, runId, entityId),
+      answer: (runId: string, text: string): Promise<void> => ipcRenderer.invoke(channels.investigation.run.answer, runId, text),
+      onEvent: (cb: (p: { runId: string; event: RunEvent }) => void): (() => void) => {
+        const listener = (_e: unknown, payload: { runId: string; event: RunEvent }): void => cb(payload);
+        ipcRenderer.on(channels.investigation.run.onEvent, listener);
+        return () => ipcRenderer.removeListener(channels.investigation.run.onEvent, listener);
+      }
+    }
   },
   plugins: {
     listVerified: () => ipcRenderer.invoke(channels.plugins.listVerified),

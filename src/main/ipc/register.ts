@@ -142,8 +142,9 @@ import {
 import { createGhostScrapeHandlers } from '../x/ghostscrape/ipc';
 import { createScrapingCasesHandlers } from '../scraping-cases/ipc';
 import { prodScrapingCaseStore } from '../storage/scraping-cases';
-import { registerInvestigationGraphIpc } from '../investigation/ipc';
+import { registerInvestigationGraphIpc, registerInvestigationRunIpc } from '../investigation/ipc';
 import { addManualNode, addManualEdge } from '../investigation/graph';
+import type { Brain } from '@shared/investigation-agent';
 
 const MAX_SAVE_ATTACHMENT_BYTES = 64 * 1024 * 1024; // 64 MB cap on base64 decoded payload
 const MAX_EXPORT_BYTES = 64 * 1024 * 1024;
@@ -1399,6 +1400,23 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
       if (win) win.webContents.send(channels.investigation.onGraphDelta, payload);
     },
     validateCaseId: (id) => ensureUuid(id, 'caseId')
+  });
+
+  // ---- SP-6 free-form orchestrator: run harness start/control + event stream ----
+  // No reasoning-model brain ships in core yet — subsystem-2 (the OSINT investigator plugin)
+  // supplies one when installed. `getBrain` is the single seam that will wire it in; until then
+  // `run:start` refuses with a guarded error rather than running an autonomous investigation
+  // headless. `deps.now = Date.now` is the ONE production wall-clock entry point — everything past
+  // this line (the run loop, the guard) is deterministic on the injected ms value.
+  registerInvestigationRunIpc({
+    handle: safeHandle,
+    sendEvent: (payload) => {
+      const win = getWindow();
+      if (win) win.webContents.send(channels.investigation.run.onEvent, payload);
+    },
+    validateCaseId: (id) => ensureUuid(id, 'caseId'),
+    now: () => Date.now(),
+    getBrain: (): Brain | null => null
   });
 
   // ---- SP-4 investigation graph: manual add-node / draw-edge write path (Task 7). `now` is

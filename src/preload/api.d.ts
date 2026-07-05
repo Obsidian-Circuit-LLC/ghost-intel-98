@@ -31,6 +31,8 @@ import type {
 } from '../shared/types';
 import type { EntityCreateInput, EntityLinkOpts, BioAddInput, AuthStatus, LocalAiStatus, LocalAiProgress, MemoryStatus, MemoryProgress, MemoryItem, RecallPreview, LibraryDoc, MemoryGraphShape, BondShape, XCollectResultShape, LearningModelMeta, GhostScrapeConfig, GhostScrapeResult, ScrapingCaseStoreId, ScrapingImportResult } from '../shared/ipc-contracts';
 import type { InvestigationScene, SceneDelta } from '../shared/investigation-graph';
+import type { RunEvent } from '../shared/investigation-agent';
+import type { RunBudget } from '../shared/investigation-types';
 import type {
   AiChatRequest,
   CameraStream,
@@ -527,6 +529,19 @@ export interface GhostApi {
     onGraphDelta(caseId: string, cb: (delta: SceneDelta) => void): () => void;
     addNode(caseId: string, type: EntityType, value: string): Promise<void>;
     addEdge(caseId: string, fromId: string, toId: string, relation: string): Promise<void>;
+    /** SP-6 free-form orchestrator: run harness start/control + event stream. */
+    run: {
+      start(caseId: string, seedIds: string[], objective: string, budget: RunBudget): Promise<string>;
+      pause(runId: string): Promise<void>;
+      resume(runId: string): Promise<void>;
+      stop(runId: string, reason: string): Promise<void>;
+      addScope(runId: string, target: string): Promise<void>;
+      removeScope(runId: string, target: string): Promise<void>;
+      focus(runId: string, entityId: string): Promise<void>;
+      ignore(runId: string, entityId: string): Promise<void>;
+      answer(runId: string, text: string): Promise<void>;
+      onEvent(cb: (p: { runId: string; event: RunEvent }) => void): () => void;
+    };
   };
   plugins: {
     listVerified(): Promise<VerifiedPluginInfo[]>;
