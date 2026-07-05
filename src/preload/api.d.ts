@@ -33,6 +33,7 @@ import type { EntityCreateInput, EntityLinkOpts, BioAddInput, AuthStatus, LocalA
 import type { InvestigationScene, SceneDelta } from '../shared/investigation-graph';
 import type { RunEvent } from '../shared/investigation-agent';
 import type { RunBudget } from '../shared/investigation-types';
+import type { IntelReport } from '../shared/investigation-report';
 import type {
   AiChatRequest,
   CameraStream,
@@ -541,6 +542,10 @@ export interface GhostApi {
       ignore(runId: string, entityId: string): Promise<void>;
       answer(runId: string, text: string): Promise<void>;
       onEvent(cb: (p: { runId: string; event: RunEvent }) => void): () => void;
+    };
+    /** SP-7 INTELREPORT: assemble the deterministic report model for on-screen preview. */
+    report: {
+      generate(caseId: string, opts?: { runId?: string }): Promise<IntelReport>;
     };
   };
   plugins: {

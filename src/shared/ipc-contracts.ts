@@ -35,6 +35,7 @@ import type { SiteCatalogEntry, SweepResult, SearchlightCase, SearchlightCaseSum
 import type { InvestigationScene, SceneDelta } from './investigation-graph';
 import type { RunEvent } from './investigation-agent';
 import type { RunBudget } from './investigation-types';
+import type { IntelReport } from './investigation-report';
 
 /**
  * Metadata written after each retrain cycle.
@@ -570,6 +571,13 @@ export const channels = {
       answer: 'investigation:run:answer',
       /** Main→renderer push: every `RunEvent` emitted by any live run, tagged with its runId. */
       onEvent: 'investigation:run:onEvent'
+    },
+    // SP-7 INTELREPORT: assemble a deterministic, ledger-sourced report (key-actors table +
+    // findings + methodology appendix) with an optional boxed narrator, for on-screen preview.
+    // `caseId` is UUID-gated at the boundary; the optional `runId` narrows every ledger read to a
+    // single run (scope → 'run'). Facts are machine-derived; only the narrative prose is model-authored.
+    report: {
+      generate: 'investigation:report:generate'
     }
   }
 } as const;
@@ -1006,6 +1014,10 @@ export interface ApiContracts {
   [channels.investigation.run.ignore]: { args: [string, string]; returns: void };
   [channels.investigation.run.answer]: { args: [string, string]; returns: void };
   [channels.investigation.run.onEvent]: { args: [(payload: { runId: string; event: RunEvent }) => void]; returns: () => void };
+
+  // SP-7 INTELREPORT — generate the report model for on-screen preview. Optional `runId` narrows to
+  // a single run (scope → 'run'); omit for the case aggregate.
+  [channels.investigation.report.generate]: { args: [string, { runId?: string }?]; returns: IntelReport };
 }
 
 export const BGCONN_LOCK_EXEMPT_CHANNELS = ['bgconn:status', 'bgconn:stop'] as const;
