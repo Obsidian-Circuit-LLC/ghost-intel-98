@@ -2,36 +2,59 @@
  * Renders the assistant-pane markdown AST as React elements. No dangerouslySetInnerHTML — all text
  * is rendered as React children, so any literal HTML in model output is escaped (no XSS).
  */
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { parseMarkdown, type Inline } from './markdown';
+import { safeHref } from '../../util/safe-href';
 
-function renderInline(nodes: Inline[]): ReactNode[] {
+const LINK_STYLE: CSSProperties = { color: '#0000cc', textDecoration: 'underline' };
+
+/** Callback invoked when a link is clicked. The URL passed has already been through safeHref. */
+type OnLinkClick = (safeUrl: string) => void;
+
+function renderInline(nodes: Inline[], onLinkClick?: OnLinkClick): ReactNode[] {
   return nodes.map((n, i) => {
     switch (n.t) {
       case 'text': return <span key={i}>{n.v}</span>;
-      case 'bold': return <strong key={i}>{renderInline(n.children)}</strong>;
-      case 'italic': return <em key={i}>{renderInline(n.children)}</em>;
+      case 'bold': return <strong key={i}>{renderInline(n.children, onLinkClick)}</strong>;
+      case 'italic': return <em key={i}>{renderInline(n.children, onLinkClick)}</em>;
       case 'code': return <code key={i} style={{ fontFamily: 'monospace', background: '#eee', padding: '0 2px' }}>{n.v}</code>;
-      // Inert stub — Task 5 replaces this with a safeHref-guarded external-open anchor. Rendering the
-      // label as plain text keeps hostile schemes non-navigable (the safe default) until then.
-      case 'link': return <span key={i}>{renderInline(n.children)}</span>;
+      case 'link': {
+        // safeHref is the SINGLE render-time choke-point: a non-http/https or userinfo-bearing
+        // href renders as INERT TEXT (no anchor), so a hostile [x](javascript:…) is never navigable.
+        const safe = safeHref(n.href);
+        if (safe === null) return <span key={i}>{renderInline(n.children, onLinkClick)}</span>;
+        // Real href gives hover-preview + right-click Copy-Link; preventDefault stops in-app
+        // renderer navigation, and the click is routed to onLinkClick (the clearnet-ack open policy).
+        return (
+          <a
+            key={i}
+            href={safe}
+            title={`${safe} — opens in your clearnet browser`}
+            onClick={(e) => { e.preventDefault(); onLinkClick?.(safe); }}
+            style={LINK_STYLE}
+          >
+            {renderInline(n.children, onLinkClick)}
+            <span aria-hidden>↗</span>
+          </a>
+        );
+      }
       default: { const _exhaustive: never = n; return _exhaustive; }
     }
   });
 }
 
-export function MarkdownView({ text }: { text: string }): JSX.Element {
+export function MarkdownView({ text, onLinkClick }: { text: string; onLinkClick?: OnLinkClick }): JSX.Element {
   const blocks = parseMarkdown(text);
   return (
     <div style={{ fontSize: 13 }}>
       {blocks.map((b, i) => {
         switch (b.t) {
           case 'p':
-            return <div key={i} style={{ whiteSpace: 'pre-wrap', margin: '0 0 6px' }}>{renderInline(b.children)}</div>;
+            return <div key={i} style={{ whiteSpace: 'pre-wrap', margin: '0 0 6px' }}>{renderInline(b.children, onLinkClick)}</div>;
           case 'h':
-            return <div key={i} style={{ fontWeight: 'bold', fontSize: b.level <= 2 ? 15 : 14, margin: '4px 0 2px' }}>{renderInline(b.children)}</div>;
+            return <div key={i} style={{ fontWeight: 'bold', fontSize: b.level <= 2 ? 15 : 14, margin: '4px 0 2px' }}>{renderInline(b.children, onLinkClick)}</div>;
           case 'ul':
-            return <ul key={i} style={{ margin: '0 0 6px', paddingLeft: 20 }}>{b.items.map((it, j) => <li key={j}>{renderInline(it)}</li>)}</ul>;
+            return <ul key={i} style={{ margin: '0 0 6px', paddingLeft: 20 }}>{b.items.map((it, j) => <li key={j}>{renderInline(it, onLinkClick)}</li>)}</ul>;
           default: { const _exhaustive: never = b; return _exhaustive; }
         }
       })}
