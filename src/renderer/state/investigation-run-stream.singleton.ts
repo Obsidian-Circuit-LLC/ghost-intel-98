@@ -13,15 +13,19 @@ import { useInvestigationRunStore } from './investigation-run-store';
 
 let off: (() => void) | null = null;
 
-/** Subscribe once to the run event stream. Safe to call on every shell mount. */
+/** Subscribe once to the run event stream. Safe to call on every shell mount — self-guarding via an
+ *  optional call, so a surface that hasn't bound the run channel (e.g. a graph-only test) no-ops
+ *  instead of throwing, and without a bare-function truthiness test (which the always-defined api
+ *  type would flag). */
 export function startRunStream(): void {
   if (off) return; // already subscribed — idempotent
-  off = window.api.investigation.run.onEvent(({ runId, event }) => {
+  const onEvent = window.api?.investigation?.run?.onEvent;
+  off = onEvent?.(({ runId, event }) => {
     const { cases, applyEvent } = useInvestigationRunStore.getState();
     const caseId = Object.keys(cases).find((cid) => cases[cid].runId === runId);
     if (caseId) applyEvent(caseId, event);
     // Unknown runId (no case owns it) → drop; never throw.
-  });
+  }) ?? null;
 }
 
 /** Test-only: tear down the subscription so a fresh `startRunStream` re-subscribes. */

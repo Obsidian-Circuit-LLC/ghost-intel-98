@@ -28,7 +28,7 @@ export function InvestigationGraphModule({ caseId }: InvestigationGraphModulePro
   // state until the reasoning pack lands. Both are optional-chained so a graph-only surface
   // (no run channel bound) degrades quietly instead of throwing.
   useEffect(() => {
-    if (window.api?.investigation?.run?.onEvent) startRunStream();
+    startRunStream(); // self-guarding + idempotent
     let cancelled = false;
     window.api?.investigation?.run
       ?.available?.()
