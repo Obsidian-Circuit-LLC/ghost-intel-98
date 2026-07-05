@@ -66,6 +66,20 @@ function buttonByText(scope: HTMLElement, re: RegExp): HTMLButtonElement {
   return btn as HTMLButtonElement;
 }
 
+/** The in-app name dialog that replaced window.prompt (rendered at the module root). */
+function dialog(): HTMLElement {
+  const el = container.querySelector('[role="dialog"]');
+  if (!el) throw new Error('no [role="dialog"] rendered');
+  return el as HTMLElement;
+}
+
+/** Set a React-controlled input's value the way a real keystroke would (native setter + input event). */
+function typeInto(input: HTMLInputElement, value: string): void {
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
+  setter.call(input, value);
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
 beforeEach(() => {
   installApi();
   container = document.createElement('div');
@@ -96,8 +110,7 @@ describe('SOCMINT Cases sidebar (T6)', () => {
     expect(text).toContain('Bravo Ring');
   });
 
-  it('Add Case prompts for a name and calls scrapingCases.create("socmint", name)', async () => {
-    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('Charlie Node');
+  it('Add Case opens the in-app dialog; Create calls scrapingCases.create("socmint", name)', async () => {
     await act(async () => { root.render(<SocmintModule />); });
     await flush();
 
@@ -106,21 +119,30 @@ describe('SOCMINT Cases sidebar (T6)', () => {
     });
     await flush();
 
-    expect(promptSpy).toHaveBeenCalled();
+    typeInto(dialog().querySelector('#case-dialog-input') as HTMLInputElement, 'Charlie Node');
+    await act(async () => {
+      buttonByText(dialog(), /create/i).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flush();
+
     expect(scrapingCreate).toHaveBeenCalledWith('socmint', 'Charlie Node');
   });
 
-  it('does not create a case when the name prompt is cancelled', async () => {
-    vi.spyOn(window, 'prompt').mockReturnValue(null);
+  it('does not create a case when the dialog is cancelled', async () => {
     await act(async () => { root.render(<SocmintModule />); });
     await flush();
 
     await act(async () => {
       buttonByText(sidebar(), /add case/i).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flush();
+    await act(async () => {
+      buttonByText(dialog(), /cancel/i).dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     await flush();
 
     expect(scrapingCreate).not.toHaveBeenCalled();
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
   });
 
   it('Delete calls scrapingCases.remove("socmint", id) for that case', async () => {

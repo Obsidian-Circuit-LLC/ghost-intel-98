@@ -65,6 +65,7 @@ import {
 } from './start-monitor-request';
 import { describeStartMonitorBlock } from './start-monitor-block';
 import { buildScrapingCaseOptions, type ScrapingCaseOption } from './case-options';
+import { PromptDialog, ChoiceDialog } from '../../components/CaseDialogs';
 import './socmint.css';
 
 // ---------------------------------------------------------------------------
@@ -705,14 +706,15 @@ export function SocmintModule({ caseId: propCaseId }: { caseId?: string }): JSX.
     void loadCases();
   }, [propCaseId, loadCases]);
 
-  const handleAddCase = useCallback(async () => {
-    // window.prompt is the app's existing lightweight name-entry ceremony (no new modal).
-    const name = window.prompt('New SOCMINT case name');
-    if (name === null) return; // cancelled
-    const trimmed = name.trim();
-    if (!trimmed) return;
+  // window.prompt is a no-op in Electron's renderer (returns null) — use in-app dialogs instead.
+  const [showAddCase, setShowAddCase] = useState(false);
+  const [importPick, setImportPick] = useState<{ scrapingId: string; cases: { id: string; title: string }[] } | null>(null);
+
+  const handleAddCase = useCallback(() => setShowAddCase(true), []);
+  const submitAddCase = useCallback(async (name: string) => {
+    setShowAddCase(false);
     try {
-      const created = await window.api.scrapingCases.create('socmint', trimmed);
+      const created = await window.api.scrapingCases.create('socmint', name);
       await loadCases();
       setCaseId(created.id);
     } catch (err) {
@@ -740,18 +742,23 @@ export function SocmintModule({ caseId: propCaseId }: { caseId?: string }): JSX.
         window.alert('No investigation cases yet. Create one first.');
         return;
       }
-      const menu = cases.map((c, i) => `${i + 1}. ${c.title}`).join('\n');
-      const pick = window.prompt(`Import into which case?\n\n${menu}\n\nEnter a number:`);
-      if (pick === null) return; // cancelled
-      const idx = Number.parseInt(pick.trim(), 10) - 1;
-      const target = cases[idx];
-      if (!target) return;
-      const res = await window.api.scrapingCases.importToCase('socmint', id, target.id);
-      window.alert(`Imported ${res.imported} item(s) into "${target.title}".`);
+      setImportPick({ scrapingId: id, cases: cases.map((c) => ({ id: c.id, title: c.title })) });
     } catch (err) {
       console.warn('[SOCMINT] scrapingCases.importToCase:', err);
     }
   }, []);
+  const submitImport = useCallback(async (targetCaseId: string) => {
+    const pick = importPick;
+    setImportPick(null);
+    const target = pick?.cases.find((c) => c.id === targetCaseId);
+    if (!pick || !target) return;
+    try {
+      const res = await window.api.scrapingCases.importToCase('socmint', pick.scrapingId, target.id);
+      window.alert(`Imported ${res.imported} item(s) into "${target.title}".`);
+    } catch (err) {
+      console.warn('[SOCMINT] scrapingCases.importToCase:', err);
+    }
+  }, [importPick]);
 
   // Channels
   const [channels, setChannels] = useState<MonitoredChannel[]>([]);
@@ -908,6 +915,19 @@ export function SocmintModule({ caseId: propCaseId }: { caseId?: string }): JSX.
 
   return (
     <div className="sm-root">
+      {showAddCase && (
+        <PromptDialog
+          title="New SOCMINT case" label="Case name" placeholder="e.g. Operation Nightfall"
+          onSubmit={(n) => void submitAddCase(n)} onClose={() => setShowAddCase(false)}
+        />
+      )}
+      {importPick && (
+        <ChoiceDialog
+          title="Import into investigation case" label="Case"
+          options={importPick.cases.map((c) => ({ id: c.id, label: c.title }))}
+          onSubmit={(id) => void submitImport(id)} onClose={() => setImportPick(null)}
+        />
+      )}
       {/* Network-gate notice: always visible when egress is disabled. */}
       {!networkEnabled && (
         <div className="sm-gate-notice" role="alert">

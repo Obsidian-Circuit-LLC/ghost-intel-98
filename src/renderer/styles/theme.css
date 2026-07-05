@@ -362,6 +362,11 @@ input, textarea, [contenteditable="true"], .ga98-selectable {
 
 .ga98-toolbar {
   display: flex;
+  /* wrap so a width-starved row (e.g. when the AI Memory sidebar mounts and steals ~260px) drops
+     buttons to a second line instead of shrinking them below their label width — 98.css buttons
+     have min-width:75px and overflow:visible, so an un-wrapped row paints labels over the Voice
+     controls in the upper-right. Wrapping is a no-op when the row already fits. */
+  flex-wrap: wrap;
   gap: 4px;
   padding: 4px 6px;
   border-bottom: 1px solid var(--ga98-shadow-dark);

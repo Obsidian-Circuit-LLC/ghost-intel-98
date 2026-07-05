@@ -17,6 +17,7 @@ import { channels } from '@shared/ipc-contracts';
 import { secretStore } from '../secrets';
 import { settingsStore } from '../storage/json-fs';
 import { validateAiEndpoint } from '../security/validate';
+import { readWithIdleTimeout } from './ai-stream-util';
 import { recall, formatRecall, type RecallHit } from './memory/retriever';
 import { recallProfile } from './memory/profile';
 import type { MemoryItem } from './memory/profile/types';
@@ -227,7 +228,8 @@ async function streamOllama(endpoint: URL, model: string, messages: AiChatMessag
   let buf = '';
   let parseFailures = 0;
   while (true) {
-    const { value, done } = await reader.read();
+    // Idle watchdog: a silently-stalled generation rejects here instead of hanging forever.
+    const { value, done } = await readWithIdleTimeout(reader);
     if (done) break;
     buf += decoder.decode(value, { stream: true });
     const lines = buf.split('\n');
@@ -272,7 +274,8 @@ async function streamOpenAi(endpoint: URL, model: string, messages: AiChatMessag
   let buf = '';
   let parseFailures = 0;
   while (true) {
-    const { value, done } = await reader.read();
+    // Idle watchdog: a silently-stalled generation rejects here instead of hanging forever.
+    const { value, done } = await readWithIdleTimeout(reader);
     if (done) break;
     buf += decoder.decode(value, { stream: true });
     const lines = buf.split('\n');
