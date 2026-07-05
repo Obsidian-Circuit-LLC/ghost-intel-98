@@ -560,6 +560,10 @@ export const channels = {
     // `start` returns the new runId; every other control channel is fire-and-forget (`void`) and
     // a silent no-op if the run has already finished — see run-controller's `rsOf`.
     run: {
+      /** Capability probe: resolves `getBrain() != null` — true once the subsystem-2 reasoning
+       *  pack is installed. The Run panel probes this on mount to show a calm "needs the reasoning
+       *  pack" card instead of a dead Start button. */
+      available: 'investigation:run:available',
       start: 'investigation:run:start',
       pause: 'investigation:run:pause',
       resume: 'investigation:run:resume',
@@ -1004,6 +1008,7 @@ export interface ApiContracts {
   [channels.investigation.addEdge]: { args: [string, string, string, string]; returns: void };
 
   // SP-6 run harness IPC — see channels.investigation.run above.
+  [channels.investigation.run.available]: { args: []; returns: boolean };
   [channels.investigation.run.start]: { args: [string, string[], string, RunBudget]; returns: string };
   [channels.investigation.run.pause]: { args: [string]; returns: void };
   [channels.investigation.run.resume]: { args: [string]; returns: void };
