@@ -64,6 +64,13 @@ const ALLOWED_CROSS_DIR: string[] = [
   resolve(SRC_MAIN, 'socmint', 'rank'),
   resolve(SRC_MAIN, 'socmint', 'utils'),
   resolve(SRC_MAIN, 'security', 'validate'),
+  // sessions-store (non-secret X session metadata) uses the shared mutex + the encrypt-at-rest
+  // storage layer, exactly as the sibling scraping-cases store does. None of these transitively
+  // reach a Tor/transport module: mutex has no imports; paths imports only electron/node; secure-fs
+  // imports node + services/vault, and vault imports only storage/paths.
+  resolve(SRC_MAIN, 'util', 'mutex'),
+  resolve(SRC_MAIN, 'storage', 'paths'),
+  resolve(SRC_MAIN, 'storage', 'secure-fs'),
 ];
 
 // ---------------------------------------------------------------------------
