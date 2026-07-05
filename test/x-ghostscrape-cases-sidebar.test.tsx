@@ -68,6 +68,20 @@ function buttonByText(scope: HTMLElement, re: RegExp): HTMLButtonElement {
   return btn as HTMLButtonElement;
 }
 
+/** The in-app name dialog that replaced window.prompt (rendered at the module root, not the sidebar). */
+function dialog(): HTMLElement {
+  const el = container.querySelector('[role="dialog"]');
+  if (!el) throw new Error('no [role="dialog"] rendered');
+  return el as HTMLElement;
+}
+
+/** Set a React-controlled input's value the way a real keystroke would (native setter + input event). */
+function typeInto(input: HTMLInputElement, value: string): void {
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
+  setter.call(input, value);
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
 beforeEach(() => {
   installApi();
   container = document.createElement('div');
@@ -108,8 +122,26 @@ describe('X Collector Cases sidebar (T7)', () => {
     expect(text).toContain('Bravo Ring');
   });
 
-  it('Add Case prompts for a name and calls scrapingCases.create("x", name)', async () => {
-    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('Charlie Node');
+  it('Add Case opens the in-app dialog; Create calls scrapingCases.create("x", name)', async () => {
+    await act(async () => { root.render(<XCollectorModule />); });
+    await flush();
+
+    // window.prompt is a no-op in Electron — the button must open an in-app dialog, not prompt().
+    await act(async () => {
+      buttonByText(sidebar(), /add case/i).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flush();
+
+    typeInto(dialog().querySelector('#case-dialog-input') as HTMLInputElement, 'Charlie Node');
+    await act(async () => {
+      buttonByText(dialog(), /create/i).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flush();
+
+    expect(scrapingCreate).toHaveBeenCalledWith('x', 'Charlie Node');
+  });
+
+  it('does not create a case when the dialog is cancelled', async () => {
     await act(async () => { root.render(<XCollectorModule />); });
     await flush();
 
@@ -117,22 +149,13 @@ describe('X Collector Cases sidebar (T7)', () => {
       buttonByText(sidebar(), /add case/i).dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     await flush();
-
-    expect(promptSpy).toHaveBeenCalled();
-    expect(scrapingCreate).toHaveBeenCalledWith('x', 'Charlie Node');
-  });
-
-  it('does not create a case when the name prompt is cancelled', async () => {
-    vi.spyOn(window, 'prompt').mockReturnValue(null);
-    await act(async () => { root.render(<XCollectorModule />); });
-    await flush();
-
     await act(async () => {
-      buttonByText(sidebar(), /add case/i).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      buttonByText(dialog(), /cancel/i).dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     await flush();
 
     expect(scrapingCreate).not.toHaveBeenCalled();
+    expect(container.querySelector('[role="dialog"]')).toBeNull(); // dialog closed
   });
 
   it('Delete calls scrapingCases.remove("x", id) for that case', async () => {
@@ -173,8 +196,7 @@ describe('GhostScrape Cases sidebar (T7)', () => {
     expect(text).toContain('Bravo Ring');
   });
 
-  it('Add Case prompts for a name and calls scrapingCases.create("x", name)', async () => {
-    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('Charlie Node');
+  it('Add Case opens the in-app dialog; Create calls scrapingCases.create("x", name)', async () => {
     await act(async () => { root.render(<GhostScrapeModule />); });
     await flush();
 
@@ -183,7 +205,12 @@ describe('GhostScrape Cases sidebar (T7)', () => {
     });
     await flush();
 
-    expect(promptSpy).toHaveBeenCalled();
+    typeInto(dialog().querySelector('#case-dialog-input') as HTMLInputElement, 'Charlie Node');
+    await act(async () => {
+      buttonByText(dialog(), /create/i).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flush();
+
     expect(scrapingCreate).toHaveBeenCalledWith('x', 'Charlie Node');
   });
 

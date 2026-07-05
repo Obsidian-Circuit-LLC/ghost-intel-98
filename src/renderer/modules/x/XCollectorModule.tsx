@@ -47,6 +47,7 @@ import type { XCollectResultShape, XCollectorStatus } from '@shared/ipc-contract
 import { useSettings } from '../../state/store';
 import { safeHref } from '../socmint/safe-href';
 import { buildScrapingCaseOptions, type ScrapingCaseOption } from '../socmint/case-options';
+import { PromptDialog, ChoiceDialog } from '../../components/CaseDialogs';
 import { xStatusDisplay } from './status-display';
 import { buildXCollectRequest, canCollect as canCollectFn } from './x-collect-request';
 import './x-collector.css';
@@ -584,14 +585,15 @@ export function XCollectorModule({ caseId: propCaseId }: { caseId?: string }): J
     void loadCases();
   }, [propCaseId, loadCases]);
 
-  const handleAddCase = useCallback(async () => {
-    // window.prompt is the app's existing lightweight name-entry ceremony (no new modal).
-    const name = window.prompt('New X case name');
-    if (name === null) return; // cancelled
-    const trimmed = name.trim();
-    if (!trimmed) return;
+  // window.prompt is a no-op in Electron's renderer (returns null) — use in-app dialogs instead.
+  const [showAddCase, setShowAddCase] = useState(false);
+  const [importPick, setImportPick] = useState<{ scrapingId: string; cases: { id: string; title: string }[] } | null>(null);
+
+  const handleAddCase = useCallback(() => setShowAddCase(true), []);
+  const submitAddCase = useCallback(async (name: string) => {
+    setShowAddCase(false);
     try {
-      const created = await window.api.scrapingCases.create('x', trimmed);
+      const created = await window.api.scrapingCases.create('x', name);
       await loadCases();
       setCaseId(created.id);
     } catch (err) {
@@ -619,18 +621,23 @@ export function XCollectorModule({ caseId: propCaseId }: { caseId?: string }): J
         window.alert('No investigation cases yet. Create one first.');
         return;
       }
-      const menu = cases.map((c, i) => `${i + 1}. ${c.title}`).join('\n');
-      const pick = window.prompt(`Import into which case?\n\n${menu}\n\nEnter a number:`);
-      if (pick === null) return; // cancelled
-      const idx = Number.parseInt(pick.trim(), 10) - 1;
-      const target = cases[idx];
-      if (!target) return;
-      const res = await window.api.scrapingCases.importToCase('x', id, target.id);
-      window.alert(`Imported ${res.imported} item(s) into "${target.title}".`);
+      setImportPick({ scrapingId: id, cases: cases.map((c) => ({ id: c.id, title: c.title })) });
     } catch (err) {
       console.warn('[XCollector] scrapingCases.importToCase:', err);
     }
   }, []);
+  const submitImport = useCallback(async (targetCaseId: string) => {
+    const pick = importPick;
+    setImportPick(null);
+    const target = pick?.cases.find((c) => c.id === targetCaseId);
+    if (!pick || !target) return;
+    try {
+      const res = await window.api.scrapingCases.importToCase('x', pick.scrapingId, target.id);
+      window.alert(`Imported ${res.imported} item(s) into "${target.title}".`);
+    } catch (err) {
+      console.warn('[XCollector] scrapingCases.importToCase:', err);
+    }
+  }, [importPick]);
 
   // Collection state
   const [collecting, setCollecting] = useState(false);
@@ -757,6 +764,19 @@ export function XCollectorModule({ caseId: propCaseId }: { caseId?: string }): J
 
   return (
     <div className="xc-root">
+      {showAddCase && (
+        <PromptDialog
+          title="New X case" label="Case name" placeholder="e.g. Operation Nightfall"
+          onSubmit={(n) => void submitAddCase(n)} onClose={() => setShowAddCase(false)}
+        />
+      )}
+      {importPick && (
+        <ChoiceDialog
+          title="Import into investigation case" label="Case"
+          options={importPick.cases.map((c) => ({ id: c.id, label: c.title }))}
+          onSubmit={(id) => void submitImport(id)} onClose={() => setImportPick(null)}
+        />
+      )}
       {/* ── Clearnet gate notice — always visible when either flag is off ── */}
       {!gateOpen && (
         <div className="xc-gate-notice" role="alert">
