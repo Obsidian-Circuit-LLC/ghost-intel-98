@@ -1,7 +1,8 @@
 /**
  * Scheme-guard: returns a safe href for http/https URLs, null for everything else
- * (javascript:, data:, file:, vbscript:, malformed). The sole XSS choke-point for
- * URL rendering in the SOCMINT module — callers render null as plain text, no anchor.
+ * (javascript:, data:, file:, vbscript:, malformed). The sole render-time XSS
+ * choke-point for URL rendering across the renderer (SOCMINT, X, and Q's
+ * AI-assistant replies) — callers render null as plain text, never an anchor.
  */
 export function safeHref(url: string): string | null {
   try {
