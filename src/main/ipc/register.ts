@@ -143,8 +143,10 @@ import { createGhostScrapeHandlers } from '../x/ghostscrape/ipc';
 import { createScrapingCasesHandlers } from '../scraping-cases/ipc';
 import { prodScrapingCaseStore } from '../storage/scraping-cases';
 import { registerInvestigationGraphIpc, registerInvestigationRunIpc } from '../investigation/ipc';
+import { registerInvestigationReportIpc } from '../investigation/report-ipc';
 import { addManualNode, addManualEdge } from '../investigation/graph';
 import type { Brain } from '@shared/investigation-agent';
+import type { Narrator } from '@shared/investigation-report';
 
 const MAX_SAVE_ATTACHMENT_BYTES = 64 * 1024 * 1024; // 64 MB cap on base64 decoded payload
 const MAX_EXPORT_BYTES = 64 * 1024 * 1024;
@@ -1417,6 +1419,19 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     validateCaseId: (id) => ensureUuid(id, 'caseId'),
     now: () => Date.now(),
     getBrain: (): Brain | null => null
+  });
+
+  // ---- SP-7 INTELREPORT: assemble the deterministic report model for on-screen preview ----
+  // The report core (assembler + template narrator) ships in core; the optional model narrator
+  // rides subsystem-2 (the OSINT investigator plugin). `getNarrator` is the single seam that will
+  // wire it in — until then it returns `null` and `applyNarrative` falls back to the deterministic
+  // `TemplateNarrator`, so the report always renders offline with zero dependencies. `now = Date.now`
+  // is the ONE wall-clock entry point; the assembler stays clock-free on the injected ms value.
+  registerInvestigationReportIpc({
+    handle: safeHandle,
+    validateCaseId: (id) => ensureUuid(id, 'caseId'),
+    now: () => Date.now(),
+    getNarrator: (): Narrator | null => null
   });
 
   // ---- SP-4 investigation graph: manual add-node / draw-edge write path (Task 7). `now` is

@@ -10,6 +10,7 @@ import type { InvestigationScene, SceneDelta } from '../shared/investigation-gra
 import type { EntityType } from '../shared/types';
 import type { RunEvent } from '../shared/investigation-agent';
 import type { RunBudget } from '../shared/investigation-types';
+import type { IntelReport } from '../shared/investigation-report';
 
 const api = {
   cases: {
@@ -481,6 +482,13 @@ const api = {
         ipcRenderer.on(channels.investigation.run.onEvent, listener);
         return () => ipcRenderer.removeListener(channels.investigation.run.onEvent, listener);
       }
+    },
+    /** SP-7 INTELREPORT: assemble the deterministic report model (key actors + findings +
+     *  methodology + boxed narrative) for on-screen preview. Omit `runId` for the case aggregate;
+     *  pass it to narrow to a single run. */
+    report: {
+      generate: (caseId: string, opts?: { runId?: string }): Promise<IntelReport> =>
+        ipcRenderer.invoke(channels.investigation.report.generate, caseId, opts)
     }
   },
   plugins: {

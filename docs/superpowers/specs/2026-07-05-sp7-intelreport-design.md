@@ -219,7 +219,12 @@ shared helper extracted from `export.ts`: OS-temp file (**not** the vault — a 
   **and the model narrative prose especially** (a compromised model narrator could emit markup).
   (Ref: renderer-XSS memory — a green task review is not XSS clearance; escape at the trust boundary.)
 - `rawRef` renders as opaque text, never a clickable `file://` link (traversal/deanon).
-- `caseId`/`runId` pass `ensureUuid` at the IPC boundary (mirrors SP-4/SP-6 handlers).
+- `caseId` passes `ensureUuid` at the IPC boundary (mirrors SP-4/SP-6 handlers) — it is a path
+  segment on the ledger read side (`caseDir(join(...))`), so it is traversal-critical. `runId` is
+  **not** a UUID (SP-6 mints `run-<n>` / `manual` ids) and never becomes a path segment — it is only
+  a ledger filter value (`evidence.runId === runId`, `run.id === runId`); it is validated as a
+  bounded (1..128), control-char-stripped string, matching the SP-6 run-control channels. UUID-gating
+  `runId` would reject every real runId and break run-scoped reports (§2/§5).
 - No external resources in the HTML → CSP-safe, fully offline. No network egress: local reads →
   offline render. Consistent with the no-egress charter invariant.
 - v1 does **not** persist the report — generate on demand; the exported PDF (user-chosen path) is the

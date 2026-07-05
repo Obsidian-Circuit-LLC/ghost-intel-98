@@ -24,7 +24,12 @@ export interface ReportImages {
   omittedNote?: string;
 }
 
-function esc(s: unknown): string {
+/**
+ * HTML-escape any untrusted value for safe interpolation into element text or a double-quoted
+ * attribute. Shared with the INTELREPORT builder (`investigation/report-html.ts`) so both report
+ * paths escape identically at the trust boundary — do not hand-roll a second escaper.
+ */
+export function esc(s: unknown): string {
   return String(s ?? '').replace(/[&<>"]/g, (c) => (({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] ?? c));
 }
 
