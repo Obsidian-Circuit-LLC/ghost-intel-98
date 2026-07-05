@@ -141,7 +141,12 @@ describe('buildIntelReportHtml — truncation', () => {
 
   it('renders no truncation footer when all actors are shown', () => {
     const html = buildIntelReportHtml(report({ actorTail: { shown: 2, total: 2 } }));
-    expect(html.toLowerCase()).not.toMatch(/truncat/);
+    // Key off the real footer copy — the footer never contains the token "truncat", so asserting
+    // its absence proves nothing (tautology). The rendered footer reads
+    // "Showing X of Y actors, ranked by salience — Z lower-salience actors not shown."
+    const lower = html.toLowerCase();
+    expect(lower).not.toContain('not shown');
+    expect(lower).not.toMatch(/showing \d+ of \d+ actors/);
   });
 });
 

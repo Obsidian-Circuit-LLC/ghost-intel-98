@@ -130,6 +130,20 @@ describe('applyNarrative', () => {
     expect(out.narrative?.summary).toBeDefined();
   });
 
+  it('falls back to TemplateNarrator when the model narrator never settles (times out)', async () => {
+    // A stalled local-model/Ollama inference: narrate() returns a promise that never resolves.
+    const stalled: Narrator = {
+      narrate(): Promise<NarrativeSections> {
+        return new Promise<NarrativeSections>(() => {
+          /* never settles */
+        });
+      }
+    };
+    const out = await applyNarrative(report(), stalled, { timeoutMs: 10 });
+    expect(out.narrative?.source).toBe('template');
+    expect(out.narrative?.summary).toContain('case-abc');
+  });
+
   it('uses the injected narrator when it succeeds', async () => {
     const model: Narrator = {
       async narrate(): Promise<NarrativeSections> {
