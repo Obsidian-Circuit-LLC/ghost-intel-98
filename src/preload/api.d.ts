@@ -532,6 +532,8 @@ export interface GhostApi {
     addEdge(caseId: string, fromId: string, toId: string, relation: string): Promise<void>;
     /** SP-6 free-form orchestrator: run harness start/control + event stream. */
     run: {
+      /** Capability probe: `getBrain() != null` — true once the reasoning pack is installed. */
+      available(): Promise<boolean>;
       start(caseId: string, seedIds: string[], objective: string, budget: RunBudget): Promise<string>;
       pause(runId: string): Promise<void>;
       resume(runId: string): Promise<void>;
@@ -546,6 +548,8 @@ export interface GhostApi {
     /** SP-7 INTELREPORT: assemble the deterministic report model for on-screen preview. */
     report: {
       generate(caseId: string, opts?: { runId?: string }): Promise<IntelReport>;
+      /** Render the report as a PDF and save via the OS dialog; resolves the path or null on cancel. */
+      save(caseId: string, opts?: { runId?: string }): Promise<string | null>;
     };
   };
   plugins: {

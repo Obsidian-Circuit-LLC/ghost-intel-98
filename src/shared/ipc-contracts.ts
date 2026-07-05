@@ -560,6 +560,10 @@ export const channels = {
     // `start` returns the new runId; every other control channel is fire-and-forget (`void`) and
     // a silent no-op if the run has already finished — see run-controller's `rsOf`.
     run: {
+      /** Capability probe: resolves `getBrain() != null` — true once the subsystem-2 reasoning
+       *  pack is installed. The Run panel probes this on mount to show a calm "needs the reasoning
+       *  pack" card instead of a dead Start button. */
+      available: 'investigation:run:available',
       start: 'investigation:run:start',
       pause: 'investigation:run:pause',
       resume: 'investigation:run:resume',
@@ -577,7 +581,10 @@ export const channels = {
     // `caseId` is UUID-gated at the boundary; the optional `runId` narrows every ledger read to a
     // single run (scope → 'run'). Facts are machine-derived; only the narrative prose is model-authored.
     report: {
-      generate: 'investigation:report:generate'
+      generate: 'investigation:report:generate',
+      // Export the assembled report as a PDF via the shared offscreen render + OS save dialog.
+      // Same UUID gate / bounded-runId filter as `generate`; no LLM, no egress.
+      save: 'investigation:report:save'
     }
   }
 } as const;
@@ -1004,6 +1011,7 @@ export interface ApiContracts {
   [channels.investigation.addEdge]: { args: [string, string, string, string]; returns: void };
 
   // SP-6 run harness IPC — see channels.investigation.run above.
+  [channels.investigation.run.available]: { args: []; returns: boolean };
   [channels.investigation.run.start]: { args: [string, string[], string, RunBudget]; returns: string };
   [channels.investigation.run.pause]: { args: [string]; returns: void };
   [channels.investigation.run.resume]: { args: [string]; returns: void };
@@ -1018,6 +1026,9 @@ export interface ApiContracts {
   // SP-7 INTELREPORT — generate the report model for on-screen preview. Optional `runId` narrows to
   // a single run (scope → 'run'); omit for the case aggregate.
   [channels.investigation.report.generate]: { args: [string, { runId?: string }?]; returns: IntelReport };
+  // SP-7 INTELREPORT — render the report as a PDF and save it via the OS dialog; returns the saved
+  // path, or null if the user cancels. Same caseId/runId gating as `generate`.
+  [channels.investigation.report.save]: { args: [string, { runId?: string }?]; returns: string | null };
 }
 
 export const BGCONN_LOCK_EXEMPT_CHANNELS = ['bgconn:status', 'bgconn:stop'] as const;

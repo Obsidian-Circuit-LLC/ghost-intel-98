@@ -41,6 +41,12 @@ export interface RegisterReportIpcDeps {
   /** Returns the subsystem-2 model narrator when the OSINT investigator plugin is installed, else
    *  `null` — `applyNarrative` then falls back to the deterministic `TemplateNarrator`. */
   getNarrator: () => Narrator | null;
+  /** Renders the fully-narrated report to a PDF buffer (the shared offscreen `renderIntelReportPdf`;
+   *  no LLM, no egress). Injected so the seam is unit-testable without Electron's print stack. */
+  renderPdf: (report: IntelReport) => Promise<Buffer>;
+  /** Persists the PDF via the OS save dialog, returning the chosen path or `null` on cancel
+   *  (`saveBufferWithDialog` in `register.ts`). Injected to keep the handler dialog-free under test. */
+  saveBuffer: (name: string, buf: Buffer) => Promise<string | null>;
 }
 
 /** Wires `investigation:report:generate`. Mirrors `registerInvestigationRunIpc`: dependency-light
@@ -52,5 +58,17 @@ export function registerInvestigationReportIpc(deps: RegisterReportIpcDeps): voi
     const runId = opts.runId === undefined || opts.runId === null ? undefined : ensureRunId(opts.runId);
     const report = await assembleReport(caseId, { runId, now: deps.now });
     return applyNarrative(report, deps.getNarrator());
+  });
+
+  deps.handle(channels.investigation.report.save, async (...args: unknown[]): Promise<string | null> => {
+    const caseId = deps.validateCaseId(args[0]);
+    const opts = (args[1] ?? {}) as { runId?: unknown };
+    const runId = opts.runId === undefined || opts.runId === null ? undefined : ensureRunId(opts.runId);
+    const facts = await assembleReport(caseId, { runId, now: deps.now });
+    const report = await applyNarrative(facts, deps.getNarrator());
+    const buf = await deps.renderPdf(report);
+    // caseId is a UUID (validated above); its first block is a stable, path-safe short id for the file
+    // name — no user input reaches the name, so no further escaping is needed.
+    return deps.saveBuffer(`INTELREPORT-${caseId.slice(0, 8)}.pdf`, buf);
   });
 }

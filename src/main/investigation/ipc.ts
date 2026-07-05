@@ -76,6 +76,9 @@ export interface RegisterRunIpcDeps {
  *  control channel besides `start` is a silent no-op for an unknown/already-finished run — see
  *  run-controller's `rsOf`. */
 export function registerInvestigationRunIpc(deps: RegisterRunIpcDeps): void {
+  // Capability probe: true once the reasoning pack is installed (getBrain() != null). No args, no
+  // side effects — the Run panel probes this on mount to render its calm unavailable state.
+  deps.handle(channels.investigation.run.available, (): boolean => deps.getBrain() != null);
   deps.handle(channels.investigation.run.start, (...args: unknown[]): string => {
     const caseId = deps.validateCaseId(args[0]);
     const seedIds = ensureStringArray(args[1], 200, 'seedId');

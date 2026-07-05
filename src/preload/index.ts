@@ -467,6 +467,8 @@ const api = {
      *  `onEvent` fans every live run's events through one channel — filter by `runId` if you only
      *  care about a single run (mirrors `onGraphDelta`'s per-caseId filtering above). */
     run: {
+      /** Capability probe: `getBrain() != null` — true once the reasoning pack is installed. */
+      available: (): Promise<boolean> => ipcRenderer.invoke(channels.investigation.run.available),
       start: (caseId: string, seedIds: string[], objective: string, budget: RunBudget): Promise<string> =>
         ipcRenderer.invoke(channels.investigation.run.start, caseId, seedIds, objective, budget),
       pause: (runId: string): Promise<void> => ipcRenderer.invoke(channels.investigation.run.pause, runId),
@@ -488,7 +490,11 @@ const api = {
      *  pass it to narrow to a single run. */
     report: {
       generate: (caseId: string, opts?: { runId?: string }): Promise<IntelReport> =>
-        ipcRenderer.invoke(channels.investigation.report.generate, caseId, opts)
+        ipcRenderer.invoke(channels.investigation.report.generate, caseId, opts),
+      /** Render the report as a PDF and save it via the OS dialog; resolves the saved path, or
+       *  `null` if the user cancels. Same `runId` scoping as `generate`. */
+      save: (caseId: string, opts?: { runId?: string }): Promise<string | null> =>
+        ipcRenderer.invoke(channels.investigation.report.save, caseId, opts)
     }
   },
   plugins: {
