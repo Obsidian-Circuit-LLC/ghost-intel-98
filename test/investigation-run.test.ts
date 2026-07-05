@@ -33,7 +33,8 @@ describe('startRun', () => {
     registerTransform(whois);
     const { events, d } = deps();
     const brain = new ScriptedBrain([{ kind: 'run-transform', transformId: 'whois', entityId: 'e1' }, { kind: 'done', reason: 'finished' }]);
-    const runId = await startRun({ caseId: 'cR', seedIds: ['e1'], objective: 'find all', budget, brain, deps: d });
+    const { runId, completed } = startRun({ caseId: 'cR', seedIds: ['e1'], objective: 'find all', budget, brain, deps: d });
+    await completed;
     expect(events.some((x) => x.e.kind === 'observed')).toBe(true);
     expect(events.some((x) => x.e.kind === 'done' && (x.e as { reason: string }).reason === 'finished')).toBe(true);
     expect(getRunState(runId)).toBeUndefined(); // unregistered after finish
@@ -51,14 +52,26 @@ describe('startRun', () => {
       { kind: 'run-transform', transformId: 'whois', entityId: 'e5' },
       { kind: 'run-transform', transformId: 'whois', entityId: 'e6' },
     ]);
-    await startRun({ caseId: 'cB', seedIds: ['e1'], objective: 'x', budget, brain, deps: d });
+    await startRun({ caseId: 'cB', seedIds: ['e1'], objective: 'x', budget, brain, deps: d }).completed;
     expect(events.some((x) => x.e.kind === 'stopped' && (x.e as { reason: string }).reason.startsWith('budget'))).toBe(true);
   });
   it('no-progress stop: a brain proposing only duplicates stalls out', async () => {
     registerTransform(whois);
     const { events, d } = deps();
     const brain = new ScriptedBrain(Array.from({ length: 10 }, () => ({ kind: 'run-transform', transformId: 'whois', entityId: 'e1' })) as never);
-    await startRun({ caseId: 'cN', seedIds: ['e1'], objective: 'x', budget: { ...budget, maxPivots: 99 }, brain, deps: d });
+    await startRun({ caseId: 'cN', seedIds: ['e1'], objective: 'x', budget: { ...budget, maxPivots: 99 }, brain, deps: d }).completed;
     expect(events.some((x) => x.e.kind === 'stopped' && (x.e as { reason: string }).reason === 'no-progress')).toBe(true);
+  });
+
+  it('a perceive/storage error finalizes the run as stopped (no leak, status not stuck at running)', async () => {
+    // A brain whose decide throws simulates the loop hitting an error path; the loop must finalize +
+    // unregister rather than leaving the run stuck 'running' and leaking the registry entry.
+    const { events, d } = deps();
+    const brain = { async decide() { throw new Error('boom'); } };
+    const { runId, completed } = startRun({ caseId: 'cE', seedIds: ['e1'], objective: 'x', budget: { ...budget, maxPivots: 99 }, brain: brain as never, deps: d });
+    await completed;
+    // brain error → caught, lastError set, no progress → the run terminates (no-progress) and unregisters.
+    expect(getRunState(runId)).toBeUndefined();
+    expect(events.some((x) => x.e.kind === 'stopped')).toBe(true);
   });
 });

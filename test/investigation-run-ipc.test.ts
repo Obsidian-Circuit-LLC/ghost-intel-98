@@ -67,12 +67,12 @@ describe('registerInvestigationRunIpc', () => {
       now: () => 0,
       getBrain: () => new ScriptedBrain([{ kind: 'run-transform', transformId: 'whois', entityId: 'e1' }, { kind: 'done', reason: 'finished' }])
     });
-    const runId = (await handle(channels.investigation.run.start, CASE_UUID, ['e1'], 'find all', budget)) as string;
-    expect(typeof runId).toBe('string');
-    expect(sent.length).toBeGreaterThan(0);
+    const runId = handle(channels.investigation.run.start, CASE_UUID, ['e1'], 'find all', budget) as string;
+    expect(typeof runId).toBe('string'); // returned IMMEDIATELY (the run loop is detached, not awaited)
+    // the run streams events as it progresses — wait for its terminal 'done'
+    await vi.waitFor(() => { if (!sent.some((s) => s.event.kind === 'done')) throw new Error('run not finished'); });
     expect(sent.every((s) => s.runId === runId)).toBe(true);
     expect(sent.some((s) => s.event.kind === 'observed')).toBe(true);
-    expect(sent.some((s) => s.event.kind === 'done')).toBe(true);
   });
 
   it('run:start throws a guarded error when no brain is available (plugin not installed)', () => {

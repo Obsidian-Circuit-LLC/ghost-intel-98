@@ -76,17 +76,20 @@ export interface RegisterRunIpcDeps {
  *  control channel besides `start` is a silent no-op for an unknown/already-finished run — see
  *  run-controller's `rsOf`. */
 export function registerInvestigationRunIpc(deps: RegisterRunIpcDeps): void {
-  deps.handle(channels.investigation.run.start, (...args: unknown[]): Promise<string> => {
+  deps.handle(channels.investigation.run.start, (...args: unknown[]): string => {
     const caseId = deps.validateCaseId(args[0]);
     const seedIds = ensureStringArray(args[1], 200, 'seedId');
     const objective = ensureNonEmptyString(args[2], 2000, 'objective');
     const budget = ensureRunBudget(args[3]);
     const brain = deps.getBrain();
     if (!brain) throw new Error('OSINT investigator plugin not installed — free-form runs require the reasoning-model plugin.');
-    return startRun({
+    // Return the runId immediately; the loop runs detached (events stream via sendEvent). Blocking
+    // here would deadlock the ask/answer flow — the renderer needs the runId to send answers.
+    const { runId } = startRun({
       caseId, seedIds, objective, budget, brain,
-      deps: { emit: (runId, event) => deps.sendEvent({ runId, event }), now: deps.now }
+      deps: { emit: (rid, event) => deps.sendEvent({ runId: rid, event }), now: deps.now }
     });
+    return runId;
   });
   deps.handle(channels.investigation.run.pause, (...args: unknown[]): void => {
     pauseRun(ensureNonEmptyString(args[0], 128, 'runId'));

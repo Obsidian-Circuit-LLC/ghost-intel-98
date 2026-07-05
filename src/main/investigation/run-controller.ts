@@ -11,14 +11,15 @@ import type { RunBudget, InvestigationRun } from '@shared/investigation-types';
 export interface RunState {
   runId: string; caseId: string; objective: string; seedIds: string[]; guard: GuardState;
   depth: Map<string, number>; expanded: Set<string>; focus: Set<string>; ignore: Set<string>;
-  pendingAsk: ((a: string) => void) | null; lastError: string | null; humanInput: string | null;
+  pendingAsk: ((a: string) => void) | null; resumeSignal: (() => void) | null;
+  lastError: string | null; humanInput: string | null;
   status: 'running' | 'stopped' | 'done'; stopReason: string | null;
 }
 
 export function newRunState(runId: string, caseId: string, objective: string, seedIds: string[], guard: GuardState): RunState {
   const depth = new Map<string, number>(); for (const id of seedIds) depth.set(id, 0);
   return { runId, caseId, objective, seedIds, guard, depth, expanded: new Set(), focus: new Set(), ignore: new Set(),
-    pendingAsk: null, lastError: null, humanInput: null, status: 'running', stopReason: null };
+    pendingAsk: null, resumeSignal: null, lastError: null, humanInput: null, status: 'running', stopReason: null };
 }
 
 /** One turn's dispatch of a brain action. Returns 'done' to end the run, else 'continue'. `ask` is
@@ -74,54 +75,95 @@ function runRecord(rs: RunState, now: number): InvestigationRun {
     actionLog: [], createdAt: iso, updatedAt: iso };
 }
 
-/** Runs a full turn loop until the run ends (done, stopped, or budget/no-progress exhaustion).
- *  Deterministic: the ONLY time source is `deps.now()`. Awaits the whole loop so tests can assert
- *  on the finished state; production callers may fire-and-forget. */
-export async function startRun(input: StartRunInput): Promise<string> {
+export interface StartRunHandle { runId: string; completed: Promise<void> }
+
+function emitFor(runId: string, e: RunEvent): void { runs.get(runId)?.deps.emit(runId, e); }
+
+/** Park until answered or stopped (a brain `ask`). Resolves immediately if the run is no longer
+ *  running, so a stop-during-in-flight-decide can never arm a never-resolved wait. */
+function awaitAnswer(rs: RunState): Promise<void> {
+  if (rs.status !== 'running') return Promise.resolve();
+  return new Promise<void>((resolve) => { rs.pendingAsk = (a: string) => { rs.humanInput = a; rs.pendingAsk = null; resolve(); }; });
+}
+
+/** Park until resumed or stopped (a `pauseRun`). */
+function awaitResume(rs: RunState): Promise<void> {
+  if (rs.status !== 'running') return Promise.resolve();
+  return new Promise<void>((resolve) => { rs.resumeSignal = () => { rs.resumeSignal = null; resolve(); }; });
+}
+
+/**
+ * Start a run. Returns the `runId` IMMEDIATELY (registered synchronously) plus a `completed` promise
+ * that resolves when the loop ends. The loop runs DETACHED so an IPC caller isn't blocked and the
+ * ask/answer + pause control flow works. A storage/perceive error finalizes the run as `stopped`
+ * (never leaks the registry entry), and a paused run truly parks (no busy-spin into no-progress).
+ * Deterministic: the ONLY time source is `deps.now()`.
+ */
+export function startRun(input: StartRunInput): StartRunHandle {
   const runId = `run-${++seq}`;
   const window = input.deps.noProgressWindow ?? 4;
   const rs = newRunState(runId, input.caseId, input.objective, input.seedIds, createGuard(input.budget, input.deps.now()));
   runs.set(runId, { rs, deps: input.deps });
-  await upsertRun(input.caseId, runRecord(rs, input.deps.now()));
   const emit = (e: RunEvent): void => input.deps.emit(runId, e);
 
-  while (rs.status === 'running') {
-    const now = input.deps.now();
-    const ctx = await assembleContext({ caseId: rs.caseId, objective: rs.objective, guard: rs.guard, now,
-      seedIds: rs.seedIds, depth: rs.depth, expanded: rs.expanded, focus: rs.focus, ignore: rs.ignore,
-      humanInput: rs.humanInput, lastError: rs.lastError });
-    rs.humanInput = null;
-    let action;
-    try { action = await input.brain.decide(ctx); }
-    catch (e) { rs.lastError = `brain error: ${(e as Error).message}`; emit({ kind: 'blocked', reason: rs.lastError }); action = null; }
-    if (action) {
-      const outcome = await runOneTurn(rs, action, emit, now);
-      if (outcome === 'done') break;
-      if (action.kind === 'ask') { await awaitAnswer(rs); continue; } // Task 5
+  const completed = (async () => {
+    await upsertRun(input.caseId, runRecord(rs, input.deps.now()));
+    try {
+      while (rs.status === 'running') {
+        if (rs.guard.paused) { await awaitResume(rs); continue; } // truly park, don't busy-spin
+        const now = input.deps.now();
+        const ctx = await assembleContext({ caseId: rs.caseId, objective: rs.objective, guard: rs.guard, now,
+          seedIds: rs.seedIds, depth: rs.depth, expanded: rs.expanded, focus: rs.focus, ignore: rs.ignore,
+          humanInput: rs.humanInput, lastError: rs.lastError });
+        rs.humanInput = null;
+        let action: AgentAction | null;
+        try { action = await input.brain.decide(ctx); }
+        catch (e) { rs.lastError = `brain error: ${(e as Error).message}`; emit({ kind: 'blocked', reason: rs.lastError }); action = null; }
+        if (action) {
+          const outcome = await runOneTurn(rs, action, emit, now);
+          if (outcome === 'done') break;
+          if (action.kind === 'ask') {
+            if (rs.status !== 'running') break;    // stopped during the in-flight decide → do NOT park
+            await awaitAnswer(rs);
+            if (rs.status !== 'running') break;    // stopped while parked on the ask
+            continue;
+          }
+        }
+        recordProgress(rs.guard, (await sceneForCase(rs.caseId)).nodes.length);
+        const s = shouldStop(rs.guard, input.deps.now(), window);
+        if (s.stop) {
+          if (!rs.guard.stopped) guardStop(rs.guard, s.reason ?? 'stopped');
+          rs.status = 'stopped'; rs.stopReason = s.reason;
+          emit({ kind: 'stopped', reason: s.reason ?? 'stopped' });
+          break;
+        }
+      }
+    } catch (e) {
+      // A perceive/storage error must never leak the run — finalize it as stopped.
+      if (rs.status === 'running') {
+        rs.status = 'stopped'; rs.stopReason = `error: ${(e as Error).message}`;
+        if (!rs.guard.stopped) guardStop(rs.guard, rs.stopReason);
+        emit({ kind: 'stopped', reason: rs.stopReason });
+      }
+    } finally {
+      await upsertRun(rs.caseId, runRecord(rs, input.deps.now())).catch(() => {});
+      runs.delete(runId);
     }
-    recordProgress(rs.guard, (await sceneForCase(rs.caseId)).nodes.length);
-    const s = shouldStop(rs.guard, input.deps.now(), window);
-    if (s.stop) {
-      if (!rs.guard.stopped) guardStop(rs.guard, s.reason ?? 'stopped');
-      rs.status = 'stopped'; rs.stopReason = s.reason;
-      emit({ kind: 'stopped', reason: s.reason ?? 'stopped' });
-      break;
-    }
-  }
-  await upsertRun(rs.caseId, runRecord(rs, input.deps.now()));
-  runs.delete(runId);
-  return runId;
-}
+  })();
 
-// Wired by the loop above when a brain action is `ask`: resolved by `answerRun` or `stopRun`.
-async function awaitAnswer(rs: RunState): Promise<void> {
-  await new Promise<void>((resolve) => { rs.pendingAsk = (a: string) => { rs.humanInput = a; rs.pendingAsk = null; resolve(); }; });
+  return { runId, completed };
 }
 
 function rsOf(runId: string): RunState | undefined { return runs.get(runId)?.rs; }
 
-export function pauseRun(runId: string): void { const rs = rsOf(runId); if (rs) pause(rs.guard); }
-export function resumeRun(runId: string): void { const rs = rsOf(runId); if (rs) resume(rs.guard); }
+export function pauseRun(runId: string): void {
+  const rs = rsOf(runId); if (!rs || rs.status !== 'running' || rs.guard.paused) return;
+  pause(rs.guard); emitFor(runId, { kind: 'paused' }); // the loop parks at its next top-of-iteration check
+}
+export function resumeRun(runId: string): void {
+  const rs = rsOf(runId); if (!rs || !rs.guard.paused) return;
+  resume(rs.guard); emitFor(runId, { kind: 'resumed' }); rs.resumeSignal?.(); // unpark the loop
+}
 export function addScope(runId: string, target: string): void { const rs = rsOf(runId); if (rs) addToScope(rs.guard, target); }
 export function removeScope(runId: string, target: string): void { const rs = rsOf(runId); if (rs) removeFromScope(rs.guard, target); }
 export function focusEntity(runId: string, entityId: string): void { const rs = rsOf(runId); if (rs) { rs.focus.add(entityId); rs.ignore.delete(entityId); } }
@@ -130,5 +172,6 @@ export function answerRun(runId: string, text: string): void { const rs = rsOf(r
 export function stopRun(runId: string, reason: string): void {
   const rs = rsOf(runId); if (!rs) return;
   guardStop(rs.guard, reason); rs.status = 'stopped'; rs.stopReason = reason;
-  rs.pendingAsk?.(''); // unblock a run parked on `ask` so the loop can finish
+  rs.pendingAsk?.('');    // unblock a run parked on `ask`
+  rs.resumeSignal?.();    // unblock a run parked on `pause`
 }

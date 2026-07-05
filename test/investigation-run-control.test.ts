@@ -12,7 +12,7 @@ vi.mock('../src/main/storage/entities', () => ({
 }));
 
 import { registerTransform, __clearRegistryForTest } from '../src/main/investigation/registry';
-import { startRun, getRunState, __resetRunsForTest, answerRun, stopRun, addScope } from '../src/main/investigation/run-controller';
+import { startRun, getRunState, __resetRunsForTest, answerRun, stopRun, addScope, pauseRun, resumeRun } from '../src/main/investigation/run-controller';
 import { ScriptedBrain } from '../src/main/investigation/scripted-brain';
 import { isAuthorized } from '../src/main/investigation/guard';
 import { getRun } from '../src/main/investigation/ledger';
@@ -36,12 +36,11 @@ describe('run control', () => {
     registerTransform(whois);
     const { events, d } = deps();
     const brain = new ScriptedBrain([{ kind: 'ask', question: 'which target?' }, { kind: 'done', reason: 'finished' }] as never);
-    const p = startRun({ caseId: 'cA', seedIds: ['e1'], objective: 'x', budget, brain, deps: d });
+    const { runId, completed } = startRun({ caseId: 'cA', seedIds: ['e1'], objective: 'x', budget, brain, deps: d });
     await new Promise((r) => setImmediate(r));                // let the loop reach the ask + block
     expect(events.some((x) => x.e.kind === 'ask')).toBe(true);
-    const runId = events.find((x) => x.e.kind === 'ask')!.id; // find the live run
-    answerRun(runId, 'the domain');
-    await p;                                                  // run finishes after the answer
+    answerRun(runId, 'the domain');                          // runId is returned immediately now
+    await completed;
     expect(events.some((x) => x.e.kind === 'done')).toBe(true);
   });
 
@@ -49,36 +48,52 @@ describe('run control', () => {
     registerTransform(whois);
     const { events, d } = deps();
     const brain = new ScriptedBrain([{ kind: 'ask', question: 'which target?' }, { kind: 'done', reason: 'finished' }] as never);
-    const p = startRun({ caseId: 'cS', seedIds: ['e1'], objective: 'x', budget, brain, deps: d });
-    await new Promise((r) => setImmediate(r));                // let the loop reach the ask + block
-    const runId = events.find((x) => x.e.kind === 'ask')!.id; // find the live run
-    const before = getRunState(runId);
-    expect(before).toBeDefined();
-    expect(isAuthorized(before!.guard.scope, 'evil.tld')).toBe(false);
+    const { runId, completed } = startRun({ caseId: 'cS', seedIds: ['e1'], objective: 'x', budget, brain, deps: d });
+    await new Promise((r) => setImmediate(r));
+    expect(isAuthorized(getRunState(runId)!.guard.scope, 'evil.tld')).toBe(false);
     addScope(runId, 'evil.tld');
-    const after = getRunState(runId);
-    expect(after).toBeDefined();
-    expect(isAuthorized(after!.guard.scope, 'evil.tld')).toBe(true);
+    expect(isAuthorized(getRunState(runId)!.guard.scope, 'evil.tld')).toBe(true);
     answerRun(runId, 'the domain');
-    await p;                                                  // run finishes after the answer
+    await completed;
     expect(events.some((x) => x.e.kind === 'done')).toBe(true);
   });
 
   it('stopRun ends a run blocked on ask', async () => {
     registerTransform(whois);
     const { events, d } = deps();
-    // brain asks and never gets a scripted answer; stopRun unblocks + finishes as stopped
     const brain = new ScriptedBrain([{ kind: 'ask', question: 'which target?' }, { kind: 'done', reason: 'finished' }] as never);
-    const p = startRun({ caseId: 'cT', seedIds: ['e1'], objective: 'x', budget, brain, deps: d });
-    await new Promise((r) => setImmediate(r));                // let the loop reach the ask + block
-    const runId = events.find((x) => x.e.kind === 'ask')!.id; // find the live run
+    const { runId, completed } = startRun({ caseId: 'cT', seedIds: ['e1'], objective: 'x', budget, brain, deps: d });
+    await new Promise((r) => setImmediate(r));
     stopRun(runId, 'operator halt');
-    await p;                                                  // stopRun unblocks the pending ask
-    // cut short before the scripted `done` — the persisted run reflects the forced stop, not 'finished'
+    await completed;                                          // stopRun unblocks the pending ask
     expect(events.some((x) => x.e.kind === 'done' && (x.e as { reason: string }).reason === 'finished')).toBe(false);
     const rec = await getRun('cT', runId);
     expect(rec?.status).toBe('stopped');
     expect(rec?.stopReason).toBe('operator halt');
-    expect(getRunState(runId)).toBeUndefined();               // unregistered after finish
+    expect(getRunState(runId)).toBeUndefined();
+  });
+
+  it('pauseRun truly parks the loop (no new decide, no no-progress auto-stop); resumeRun un-parks — with events', async () => {
+    registerTransform(whois);
+    const { events, d } = deps();
+    // Gated brain: each decide() blocks until the test releases it, so turn boundaries are deterministic.
+    let release: (() => void) | null = null;
+    let decides = 0;
+    const brain = { async decide() { decides++; await new Promise<void>((r) => { release = r; }); return { kind: 'run-transform' as const, transformId: 'whois', entityId: 'e1' }; } };
+    const { runId, completed } = startRun({ caseId: 'cP', seedIds: ['e1'], objective: 'x', budget: { ...budget, maxPivots: 99 }, brain: brain as never, deps: d });
+    await new Promise((r) => setImmediate(r));               // loop reaches decide #1, blocks on the gate
+    expect(decides).toBe(1);
+    pauseRun(runId);
+    expect(events.some((x) => x.e.kind === 'paused')).toBe(true);
+    release!();                                              // finish turn 1 → loop should PARK (paused), not decide again
+    await new Promise((r) => setImmediate(r));
+    await new Promise((r) => setImmediate(r));
+    expect(decides).toBe(1);                                 // parked: no new decide while paused
+    expect(getRunState(runId)!.status).toBe('running');      // still live, NOT no-progress-stopped
+    resumeRun(runId);
+    expect(events.some((x) => x.e.kind === 'resumed')).toBe(true);
+    await new Promise((r) => setImmediate(r));
+    expect(decides).toBe(2);                                 // resumed: decide called again
+    stopRun(runId, 'done'); release?.(); await completed;    // clean up
   });
 });
