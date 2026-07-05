@@ -1,6 +1,6 @@
 # Multi-engine web-search picker for Q — design
 
-**Status:** design (brainstorm complete, awaiting plan)
+**Status:** design complete; **BLOCKED on real-network fixtures** (operator's call: capture fixtures first, then full ultracode). This sandbox cannot verify the new engines — public SearXNG instances 403/429/bot-challenge scraping from datacenter IPs (checked 2026-07-05: searx.be 403, priv.au/search.rhscz.eu 429, baresearch.org bot-challenge), and there is no Tor here to reach onion instances or capture faithful Google/Bing/Yandex/Yahoo raw HTML. The charter forbids building parsers against guessed formats. **Next step:** GhostExodus/operator runs `capture-search-fixtures.sh` on a Tor-connected box and returns real fixtures per engine; the full engine set is then ultracoded against verified data (unverifiable engines dropped). The framework (registry + DDG extraction + picker + settings + gating) is independently buildable but we're doing the whole feature in one pass once fixtures land.
 **Date:** 2026-07-05
 **Origin:** GhostExodus field request — a Firefox-style search-engine picker ("sometimes Google hasn't indexed what Yahoo has"). Today Q's web search is DuckDuckGo-only.
 **Boundary:** CORE (`/dcs98`). Extends the existing `web-search` service + the `[SEARCH:]` directive loop + a chat-toolbar picker. No architecture-level new egress posture (reuses the app's existing Tor-onion and opt-in-clearnet tiers).
