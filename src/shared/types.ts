@@ -418,6 +418,14 @@ export interface AppSettings {
      *  over the clearnet, exposing the real IP (not Tor). False until the user confirms the first
      *  clearnet-link warning; once true, subsequent link clicks open directly. Default false. */
     linkClearnetAcknowledged: boolean;
+    /** Selected web-search engine id for Q's `[SEARCH:]` directive — resolved through the
+     *  `SEARCH_ENGINES` registry (`web-search/registry.ts`). Ships `'ddg'` (DuckDuckGo onion) and
+     *  `'searxng'` (SearXNG onion metasearch); an unknown id falls back to DDG. Default `'ddg'`. */
+    searchEngine: string;
+    /** SearXNG onion instance URL used when `searchEngine === 'searxng'`. Default is the operator's
+     *  verified pinned instance (`DEFAULT_SEARXNG_ONION`); operator-editable, `.onion`-enforced
+     *  fail-closed (a non-onion endpoint returns `[]` and never fetches). */
+    searxngOnion: string;
   };
   mail: {
     accounts: { id: string; label: string; imapHost: string; imapPort: number; smtpHost: string; smtpPort: number; user: string; secureRef: string | null }[];
@@ -657,7 +665,11 @@ export const defaultSettings: AppSettings = {
     adaptiveMemory: false,
     webSearch: false,
     webSearchClearnet: false,
-    linkClearnetAcknowledged: false
+    linkClearnetAcknowledged: false,
+    searchEngine: 'ddg',
+    // Mirrors DEFAULT_SEARXNG_ONION in src/main/services/web-search/searxng.ts (shared/ must not
+    // import from main/); the settings-merge test asserts the two stay in sync.
+    searxngOnion: 'http://searxokthnxmo7ndis35jpts2tawcwvbovuy47qtavwo7oq4jgcm5gqd.onion'
   },
   mail: { accounts: [] },
   mailBackgroundCheck: false,
