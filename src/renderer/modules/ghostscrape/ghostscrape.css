@@ -121,6 +121,17 @@
   padding: 4px 6px;
   font-size: 12px;
 }
+/* A wide (flex:1) native <select> with a dark custom background renders a glitched, tiled run of
+   dropdown chevrons on Chromium/Windows when opened. Strip the native indicator and draw a single
+   arrow so the Account picker renders cleanly. */
+select.gs-input {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M0 0l5 6 5-6z' fill='%23e0e4f0'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding-right: 22px;
+}
 .gs-note {
   font-size: 11px;
   color: #c8a860;
