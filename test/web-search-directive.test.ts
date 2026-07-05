@@ -92,4 +92,22 @@ describe('torFailureMessage (why a Tor search returned nothing)', () => {
       expect(torFailureMessage(r).length).toBeGreaterThan(5);
     }
   });
+  it('defaults to DuckDuckGo for the engine-named reasons (backward-compatible one-arg call)', () => {
+    expect(torFailureMessage('blocked')).toContain('DuckDuckGo');
+    expect(torFailureMessage('no-results')).toContain('DuckDuckGo');
+  });
+  it('names the operator-selected engine in the engine-aware reasons (SearXNG must not say DuckDuckGo)', () => {
+    // The reproduction: operator selected SearXNG; a failed/empty SearXNG search deterministically
+    // lands on 'blocked'/'no-results'. The diagnostic must name SearXNG, never DuckDuckGo.
+    expect(torFailureMessage('blocked', 'SearXNG')).toContain('SearXNG');
+    expect(torFailureMessage('blocked', 'SearXNG')).not.toContain('DuckDuckGo');
+    expect(torFailureMessage('no-results', 'SearXNG')).toContain('SearXNG');
+    expect(torFailureMessage('no-results', 'SearXNG')).not.toContain('DuckDuckGo');
+  });
+  it('the engine-agnostic reasons ignore the engine name (no spurious engine mention)', () => {
+    // tor-unavailable / bad-endpoint are about Tor/the endpoint, not the engine — passing an engine
+    // name must not inject it, so these stay accurate regardless of selection.
+    expect(torFailureMessage('tor-unavailable', 'SearXNG')).not.toContain('SearXNG');
+    expect(torFailureMessage('bad-endpoint', 'SearXNG')).not.toContain('SearXNG');
+  });
 });

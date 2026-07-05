@@ -170,14 +170,14 @@ export async function chat(streamId: string, req: AiChatRequest, getWindow: () =
       } else if (plan.mode === 'clearnet') {
         // Surface WHY Tor produced nothing before exposing the IP over clearnet.
         emit(getWindow, streamId, {
-          chunk: `\n\n⚠ ${torFailureMessage(searchReason)} Falling back to CLEARNET for “${q}” — your real IP is exposed to these results and their hosts.\n\n`
+          chunk: `\n\n⚠ ${torFailureMessage(searchReason, engineDisplayName(engine))} Falling back to CLEARNET for “${q}” — your real IP is exposed to these results and their hosts.\n\n`
         });
         const cn = await searchWebClearnet(q);
         emit(getWindow, streamId, { chunk: `\n(${cn.length} result(s) over CLEARNET)\n` });
         messages.push({ role: 'user', content: formatWebResults(q, cn, fence) });
       } else {
         // Diagnosable failure: Tor-not-started vs onion-unreachable vs genuinely-empty are now distinct.
-        emit(getWindow, streamId, { chunk: `\n⚠ ${torFailureMessage(searchReason)}\n` });
+        emit(getWindow, streamId, { chunk: `\n⚠ ${torFailureMessage(searchReason, engineDisplayName(engine))}\n` });
         messages.push({ role: 'user', content: formatWebResults(q, [], fence) });
       }
     }

@@ -9,12 +9,15 @@ import type { WebResult, SearchReason } from './ddg';
 
 /** Human-readable explanation of why a Tor web search returned nothing — shown in the chat so a
  *  failed search is diagnosable (Tor didn't start vs onion unreachable vs genuinely-empty) rather
- *  than a silent "(0 results)". Pure/testable. */
-export function torFailureMessage(reason: SearchReason): string {
+ *  than a silent "(0 results)". Engine-aware: the reasons that name the queried engine take the
+ *  operator-selected engine's display name so a failed/empty SearXNG search never mislabels itself as
+ *  DuckDuckGo (spec §6 — the transparency line becomes engine-aware). `engineName` defaults to the
+ *  historical DuckDuckGo string so the caller can omit it for the DDG-only path. Pure/testable. */
+export function torFailureMessage(reason: SearchReason, engineName = 'DuckDuckGo'): string {
   switch (reason) {
     case 'tor-unavailable': return "Tor isn't available — the bundled Tor connection couldn't start. Web search needs Tor.";
-    case 'blocked': return 'could not reach DuckDuckGo over Tor — the onion was unreachable or the request was blocked/timed out.';
-    case 'no-results': return 'Tor reached DuckDuckGo but there were no results for this query.';
+    case 'blocked': return `could not reach ${engineName} over Tor — the onion was unreachable or the request was blocked/timed out.`;
+    case 'no-results': return `Tor reached ${engineName} but there were no results for this query.`;
     case 'bad-endpoint': return 'the web-search endpoint is misconfigured (not an onion).';
     default: return 'the Tor web search returned nothing.';
   }
