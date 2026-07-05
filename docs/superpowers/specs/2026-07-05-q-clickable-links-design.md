@@ -64,7 +64,7 @@ Falls out of the existing structure for free:
 
 `AiAssistantModule` calls the hook and passes `openLink` as `MarkdownView`'s `onLinkClick`.
 
-**Defense in depth (5 layers):** (1) render-time `safeHref` → inert text for non-http/https; (2) `preventDefault` → no in-app nav; (3) main-side `validateExternalUrl` allowlist re-checks the URL; (4) `will-navigate`/`window.open` interception as a JS-failure backstop; (5) the one-time clearnet ack for OpSec consent.
+**Defense in depth (4 real layers):** (1) render-time `safeHref` → inert text for non-http/https; (2) `preventDefault` on **both `onClick` AND `onAuxClick`** → no in-app renderer navigation AND no middle-click new-window request; (3) the click routes to `onLinkClick` → the one-time clearnet-ack open policy → `window.api.system.openExternal`; (4) main-side `validateExternalUrl` allowlist re-checks the URL. **NB (adversarial finding):** the main `setWindowOpenHandler`/`will-navigate` path is NOT a clean backstop — an anchor with a real `href` middle-clicked issues a *new-window* request that `setWindowOpenHandler` sends straight to `shell.openExternal`, bypassing the ack. That vector is why `onAuxClick` must `preventDefault` (it cancels the new-window request before it is issued); left-click alone is insufficient.
 
 **Streaming:** a partial `[label](` or half-typed URL renders as literal text mid-stream (existing robust-to-partial behavior) and resolves to a link once the full token arrives — the final render is always correct, no special handling. `mailto:` and other schemes stay inert text by design (not broadening `safeHref`).
 
