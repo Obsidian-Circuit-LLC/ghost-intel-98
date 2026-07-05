@@ -71,6 +71,13 @@ const ALLOWED_CROSS_DIR: string[] = [
   resolve(SRC_MAIN, 'util', 'mutex'),
   resolve(SRC_MAIN, 'storage', 'paths'),
   resolve(SRC_MAIN, 'storage', 'secure-fs'),
+  // session-test (main-side cookie validation) makes ONE authenticated clearnet GET through the
+  // shared egress-gated safeFetch — the deliberate clearnet path (X has no Tor route; the request
+  // is gated behind x.networkEnabled at the IPC layer). Neither module reaches a Tor/transport
+  // module: net/limits imports nothing in-tree; net/safe-fetch imports only security/validate
+  // (already allowlisted above) + net/limits and uses the global fetch.
+  resolve(SRC_MAIN, 'net', 'safe-fetch'),
+  resolve(SRC_MAIN, 'net', 'limits'),
 ];
 
 // ---------------------------------------------------------------------------
