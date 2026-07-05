@@ -548,6 +548,8 @@ export interface GhostApi {
     /** SP-7 INTELREPORT: assemble the deterministic report model for on-screen preview. */
     report: {
       generate(caseId: string, opts?: { runId?: string }): Promise<IntelReport>;
+      /** Render the report as a PDF and save via the OS dialog; resolves the path or null on cancel. */
+      save(caseId: string, opts?: { runId?: string }): Promise<string | null>;
     };
   };
   plugins: {

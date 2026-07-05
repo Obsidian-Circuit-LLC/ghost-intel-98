@@ -490,7 +490,11 @@ const api = {
      *  pass it to narrow to a single run. */
     report: {
       generate: (caseId: string, opts?: { runId?: string }): Promise<IntelReport> =>
-        ipcRenderer.invoke(channels.investigation.report.generate, caseId, opts)
+        ipcRenderer.invoke(channels.investigation.report.generate, caseId, opts),
+      /** Render the report as a PDF and save it via the OS dialog; resolves the saved path, or
+       *  `null` if the user cancels. Same `runId` scoping as `generate`. */
+      save: (caseId: string, opts?: { runId?: string }): Promise<string | null> =>
+        ipcRenderer.invoke(channels.investigation.report.save, caseId, opts)
     }
   },
   plugins: {

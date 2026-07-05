@@ -144,6 +144,7 @@ import { createScrapingCasesHandlers } from '../scraping-cases/ipc';
 import { prodScrapingCaseStore } from '../storage/scraping-cases';
 import { registerInvestigationGraphIpc, registerInvestigationRunIpc } from '../investigation/ipc';
 import { registerInvestigationReportIpc } from '../investigation/report-ipc';
+import { renderIntelReportPdf } from '../investigation/report-pdf';
 import { addManualNode, addManualEdge } from '../investigation/graph';
 import type { Brain } from '@shared/investigation-agent';
 import type { Narrator } from '@shared/investigation-report';
@@ -1433,7 +1434,11 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     handle: safeHandle,
     validateCaseId: (id) => ensureUuid(id, 'caseId'),
     now: () => Date.now(),
-    getNarrator: (): Narrator | null => null
+    getNarrator: (): Narrator | null => null,
+    // PDF export rides the same fully-offline offscreen render used for case exports; the OS save
+    // dialog mirrors the case-export path (`saveBufferWithDialog`, register.ts:156). No LLM, no egress.
+    renderPdf: (report) => renderIntelReportPdf(report),
+    saveBuffer: (name, buf) => saveBufferWithDialog(getWindow(), name, buf)
   });
 
   // ---- SP-4 investigation graph: manual add-node / draw-edge write path (Task 7). `now` is
