@@ -1,0 +1,591 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<!--[if IE 6]><html class="ie6" xmlns="http://www.w3.org/1999/xhtml"><![endif]-->
+<!--[if IE 7]><html class="lt-ie8 lt-ie9" xmlns="http://www.w3.org/1999/xhtml"><![endif]-->
+<!--[if IE 8]><html class="lt-ie9" xmlns="http://www.w3.org/1999/xhtml"><![endif]-->
+<!--[if gt IE 8]><!--><html xmlns="http://www.w3.org/1999/xhtml"><!--<![endif]-->
+<head>
+  <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=3.0, user-scalable=1" />
+  <meta name="referrer" content="origin" />
+  <meta name="HandheldFriendly" content="true" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>openbsd pf firewall at DuckDuckGo</title>
+  <link title="DuckDuckGo (HTML)" type="application/opensearchdescription+xml" rel="search" href="/opensearch_html_v2.xml" />
+  <link href="/favicon.ico" rel="shortcut icon" />
+  <link rel="icon" href="/favicon.ico" type="image/x-icon" />
+  <link id="icon60" rel="apple-touch-icon" href="/assets/icons/meta/DDG-iOS-icon_60x60.png?v=2"/>
+  <link id="icon76" rel="apple-touch-icon" sizes="76x76" href="/assets/icons/meta/DDG-iOS-icon_76x76.png?v=2"/>
+  <link id="icon120" rel="apple-touch-icon" sizes="120x120" href="/assets/icons/meta/DDG-iOS-icon_120x120.png?v=2"/>
+  <link id="icon152" rel="apple-touch-icon" sizes="152x152" href="/assets/icons/meta/DDG-iOS-icon_152x152.png?v=2"/>
+  <link rel="image_src" href="/assets/icons/meta/DDG-icon_256x256.png">
+  <link rel="stylesheet" media="handheld, all" href="/dist/h.238c80a7d9b754cfcdd5.css" type="text/css"/>
+</head>
+
+<body class="body--html">
+  <a name="top" id="top"></a>
+
+  <form action="/html/" method="post">
+    <input type="text" name="state_hidden" id="state_hidden" />
+  </form>
+
+  <div>
+    <div class="site-wrapper-border"></div>
+
+    <div id="header" class="header cw header--html">
+      <a title="DuckDuckGo" href="/html/" class="header__logo-wrap"></a>
+
+      <form name="x" class="header__form" action="/html/" method="post">
+        <div class="search search--header">
+          <input name="q" autocomplete="off" class="search__input" id="search_form_input_homepage" type="text" value="openbsd pf firewall" />
+          <input name="b" id="search_button_homepage" class="search__button search__button--html" value="" title="Search" alt="Search" type="submit" />
+        </div>
+
+        
+        
+        
+        
+
+        <div class="frm__select">
+          <select name="kl">
+            
+              <option value="" >All Regions</option>
+            
+              <option value="ar-es" >Argentina</option>
+            
+              <option value="au-en" >Australia</option>
+            
+              <option value="at-de" >Austria</option>
+            
+              <option value="be-fr" >Belgium (fr)</option>
+            
+              <option value="be-nl" >Belgium (nl)</option>
+            
+              <option value="br-pt" >Brazil</option>
+            
+              <option value="bg-bg" >Bulgaria</option>
+            
+              <option value="ca-en" >Canada (en)</option>
+            
+              <option value="ca-fr" >Canada (fr)</option>
+            
+              <option value="ct-ca" >Catalonia</option>
+            
+              <option value="cl-es" >Chile</option>
+            
+              <option value="cn-zh" >China</option>
+            
+              <option value="co-es" >Colombia</option>
+            
+              <option value="hr-hr" >Croatia</option>
+            
+              <option value="cz-cs" >Czech Republic</option>
+            
+              <option value="dk-da" >Denmark</option>
+            
+              <option value="ee-et" >Estonia</option>
+            
+              <option value="fi-fi" >Finland</option>
+            
+              <option value="fr-fr" >France</option>
+            
+              <option value="de-de" >Germany</option>
+            
+              <option value="gr-el" >Greece</option>
+            
+              <option value="hk-tzh" >Hong Kong</option>
+            
+              <option value="hu-hu" >Hungary</option>
+            
+              <option value="is-is" >Iceland</option>
+            
+              <option value="in-en" >India (en)</option>
+            
+              <option value="id-en" >Indonesia (en)</option>
+            
+              <option value="ie-en" >Ireland</option>
+            
+              <option value="il-en" >Israel (en)</option>
+            
+              <option value="it-it" >Italy</option>
+            
+              <option value="jp-jp" >Japan</option>
+            
+              <option value="kr-kr" >Korea</option>
+            
+              <option value="lv-lv" >Latvia</option>
+            
+              <option value="lt-lt" >Lithuania</option>
+            
+              <option value="my-en" >Malaysia (en)</option>
+            
+              <option value="mx-es" >Mexico</option>
+            
+              <option value="nl-nl" >Netherlands</option>
+            
+              <option value="nz-en" >New Zealand</option>
+            
+              <option value="no-no" >Norway</option>
+            
+              <option value="pk-en" >Pakistan (en)</option>
+            
+              <option value="pe-es" >Peru</option>
+            
+              <option value="ph-en" >Philippines (en)</option>
+            
+              <option value="pl-pl" >Poland</option>
+            
+              <option value="pt-pt" >Portugal</option>
+            
+              <option value="ro-ro" >Romania</option>
+            
+              <option value="ru-ru" >Russia</option>
+            
+              <option value="xa-ar" >Saudi Arabia</option>
+            
+              <option value="sg-en" >Singapore</option>
+            
+              <option value="sk-sk" >Slovakia</option>
+            
+              <option value="sl-sl" >Slovenia</option>
+            
+              <option value="za-en" >South Africa</option>
+            
+              <option value="es-ca" >Spain (ca)</option>
+            
+              <option value="es-es" >Spain (es)</option>
+            
+              <option value="se-sv" >Sweden</option>
+            
+              <option value="ch-de" >Switzerland (de)</option>
+            
+              <option value="ch-fr" >Switzerland (fr)</option>
+            
+              <option value="tw-tzh" >Taiwan</option>
+            
+              <option value="th-en" >Thailand (en)</option>
+            
+              <option value="tr-tr" >Turkey</option>
+            
+              <option value="us-en" >US (English)</option>
+            
+              <option value="us-es" >US (Spanish)</option>
+            
+              <option value="ua-uk" >Ukraine</option>
+            
+              <option value="uk-en" >United Kingdom</option>
+            
+              <option value="vn-en" >Vietnam (en)</option>
+            
+          </select>
+        </div>
+
+        <div class="frm__select frm__select--last">
+          <select class="" name="df">
+            
+              <option value="" selected>Any Time</option>
+            
+              <option value="d" >Past Day</option>
+            
+              <option value="w" >Past Week</option>
+            
+              <option value="m" >Past Month</option>
+            
+              <option value="y" >Past Year</option>
+            
+          </select>
+        </div>
+      </form>
+    </div>
+
+    
+
+    
+      <!-- Web results are present -->
+      <div>
+        <div class="serp__results">
+          <div id="links" class="results">
+            
+
+            
+              
+                <div class="result results_links results_links_deep web-result ">
+                  <div class="links_main links_deep result__body"> <!-- This is the visible part -->
+                    
+                      <h2 class="result__title">
+                        <a rel="nofollow" class="result__a" href="/l/?uddg=https%3A%2F%2Fwww.openbsd.org%2Ffaq%2Fpf%2F&amp;rut=59c79231b75720db6fe1119e94663a8ab764517ed898500787d84009ff35a200">OpenBSD PF: User&#x27;s Guide</a>
+                      </h2>
+
+                    
+
+                    
+                      <div class="result__extras">
+                        <div class="result__extras__url">
+                          <span class="result__icon">
+                            <a rel="nofollow" href="/l/?uddg=https%3A%2F%2Fwww.openbsd.org%2Ffaq%2Fpf%2F&amp;rut=59c79231b75720db6fe1119e94663a8ab764517ed898500787d84009ff35a200">
+                              <img class="result__icon__img" width="16" height="16" alt="" src="//external-content.duckduckgo.com/ip3/www.openbsd.org.ico" name="i15" />
+                            </a>
+                          </span>
+                          <a class="result__url" href="/l/?uddg=https%3A%2F%2Fwww.openbsd.org%2Ffaq%2Fpf%2F&amp;rut=59c79231b75720db6fe1119e94663a8ab764517ed898500787d84009ff35a200">
+                            www.openbsd.org/faq/pf/
+                          </a>
+                          
+                        </div>
+                      </div>
+                    
+
+                    
+                      
+                        <a class="result__snippet" href="/l/?uddg=https%3A%2F%2Fwww.openbsd.org%2Ffaq%2Fpf%2F&amp;rut=59c79231b75720db6fe1119e94663a8ab764517ed898500787d84009ff35a200">Packet Filter (from here on referred to as <b>PF</b>) is <b>OpenBSD&#x27;s</b> system for filtering TCP/IP traffic and doing Network Address Translation. <b>PF</b> is also capable of normalizing and conditioning TCP/IP traffic, as well as providing bandwidth control and packet prioritization. <b>PF</b> has been a part of the GENERIC kernel since <b>OpenBSD</b> 3.0. <b>PF</b> was originally developed by Daniel Hartmeier and is now ...</a>
+                      
+                    
+
+                    <div class="clear"></div>
+                  </div>
+                </div>
+              
+            
+              
+                <div class="result results_links results_links_deep web-result ">
+                  <div class="links_main links_deep result__body"> <!-- This is the visible part -->
+                    
+                      <h2 class="result__title">
+                        <a rel="nofollow" class="result__a" href="/l/?uddg=https%3A%2F%2Fwww.openbsdhandbook.com%2Fpf%2F&amp;rut=05f4ccd93d256ffc0ad358333854297b19be07e356a9547f389d44d118050dc4">PF - OpenBSD Handbook</a>
+                      </h2>
+
+                    
+
+                    
+                      <div class="result__extras">
+                        <div class="result__extras__url">
+                          <span class="result__icon">
+                            <a rel="nofollow" href="/l/?uddg=https%3A%2F%2Fwww.openbsdhandbook.com%2Fpf%2F&amp;rut=05f4ccd93d256ffc0ad358333854297b19be07e356a9547f389d44d118050dc4">
+                              <img class="result__icon__img" width="16" height="16" alt="" src="//external-content.duckduckgo.com/ip3/www.openbsdhandbook.com.ico" name="i15" />
+                            </a>
+                          </span>
+                          <a class="result__url" href="/l/?uddg=https%3A%2F%2Fwww.openbsdhandbook.com%2Fpf%2F&amp;rut=05f4ccd93d256ffc0ad358333854297b19be07e356a9547f389d44d118050dc4">
+                            www.openbsdhandbook.com/pf/
+                          </a>
+                          
+                        </div>
+                      </div>
+                    
+
+                    
+                      
+                        <a class="result__snippet" href="/l/?uddg=https%3A%2F%2Fwww.openbsdhandbook.com%2Fpf%2F&amp;rut=05f4ccd93d256ffc0ad358333854297b19be07e356a9547f389d44d118050dc4"><b>PF</b> The <b>PF</b> section of the <b>OpenBSD</b> Handbook provides detailed guidance on configuring and managing the Packet Filter <b>firewall</b>. <b>PF</b> controls network traffic through filtering rules, NAT, redirection, and various advanced features. This section includes: PFCTL Cheat Sheet A quick reference for common pfctl commands and options. Anchors Using anchors to modularize <b>PF</b> rule sets and load rules ...</a>
+                      
+                    
+
+                    <div class="clear"></div>
+                  </div>
+                </div>
+              
+            
+              
+                <div class="result results_links results_links_deep web-result ">
+                  <div class="links_main links_deep result__body"> <!-- This is the visible part -->
+                    
+                      <h2 class="result__title">
+                        <a rel="nofollow" class="result__a" href="/l/?uddg=https%3A%2F%2Fen.wikipedia.org%2Fwiki%2FPF_%2528firewall%2529&amp;rut=897800e7f5fd8460c3207e974101dea7eaa2f9f7e1993e35771839f0aa4070fe">PF (firewall) - Wikipedia</a>
+                      </h2>
+
+                    
+
+                    
+                      <div class="result__extras">
+                        <div class="result__extras__url">
+                          <span class="result__icon">
+                            <a rel="nofollow" href="/l/?uddg=https%3A%2F%2Fen.wikipedia.org%2Fwiki%2FPF_%2528firewall%2529&amp;rut=897800e7f5fd8460c3207e974101dea7eaa2f9f7e1993e35771839f0aa4070fe">
+                              <img class="result__icon__img" width="16" height="16" alt="" src="//external-content.duckduckgo.com/ip3/en.wikipedia.org.ico" name="i15" />
+                            </a>
+                          </span>
+                          <a class="result__url" href="/l/?uddg=https%3A%2F%2Fen.wikipedia.org%2Fwiki%2FPF_%2528firewall%2529&amp;rut=897800e7f5fd8460c3207e974101dea7eaa2f9f7e1993e35771839f0aa4070fe">
+                            en.wikipedia.org/wiki/PF_(firewall)
+                          </a>
+                          
+                        </div>
+                      </div>
+                    
+
+                    
+                      
+                        <a class="result__snippet" href="/l/?uddg=https%3A%2F%2Fen.wikipedia.org%2Fwiki%2FPF_%2528firewall%2529&amp;rut=897800e7f5fd8460c3207e974101dea7eaa2f9f7e1993e35771839f0aa4070fe"><b>PF</b> (<b>firewall</b>) ... <b>PF</b> (Packet Filter, also written <b>pf</b>) is a BSD licensed stateful packet filter, a central piece of software for firewalling. It is comparable to netfilter (iptables), ipfw, and ipfilter. <b>PF</b> was developed for <b>OpenBSD</b>, but has been ported to many other operating systems.</a>
+                      
+                    
+
+                    <div class="clear"></div>
+                  </div>
+                </div>
+              
+            
+              
+                <div class="result results_links results_links_deep web-result ">
+                  <div class="links_main links_deep result__body"> <!-- This is the visible part -->
+                    
+                      <h2 class="result__title">
+                        <a rel="nofollow" class="result__a" href="/l/?uddg=https%3A%2F%2Fwww.openbsd.org%2Ffaq%2Fpf%2Ffilter.html&amp;rut=2db5c742f9a5ac86a4671f648748562578e59ae5b004b4a5e8845608ff324410">OpenBSD PF: Packet Filtering</a>
+                      </h2>
+
+                    
+
+                    
+                      <div class="result__extras">
+                        <div class="result__extras__url">
+                          <span class="result__icon">
+                            <a rel="nofollow" href="/l/?uddg=https%3A%2F%2Fwww.openbsd.org%2Ffaq%2Fpf%2Ffilter.html&amp;rut=2db5c742f9a5ac86a4671f648748562578e59ae5b004b4a5e8845608ff324410">
+                              <img class="result__icon__img" width="16" height="16" alt="" src="//external-content.duckduckgo.com/ip3/www.openbsd.org.ico" name="i15" />
+                            </a>
+                          </span>
+                          <a class="result__url" href="/l/?uddg=https%3A%2F%2Fwww.openbsd.org%2Ffaq%2Fpf%2Ffilter.html&amp;rut=2db5c742f9a5ac86a4671f648748562578e59ae5b004b4a5e8845608ff324410">
+                            www.openbsd.org/faq/pf/filter.html
+                          </a>
+                          
+                        </div>
+                      </div>
+                    
+
+                    
+                      
+                        <a class="result__snippet" href="/l/?uddg=https%3A%2F%2Fwww.openbsd.org%2Ffaq%2Fpf%2Ffilter.html&amp;rut=2db5c742f9a5ac86a4671f648748562578e59ae5b004b4a5e8845608ff324410">By storing information about each connection in a state table, <b>PF</b> is able to quickly determine if a packet passing through the <b>firewall</b> belongs to an already-established connection. If it does, it is passed through the <b>firewall</b> without going through ruleset evaluation.</a>
+                      
+                    
+
+                    <div class="clear"></div>
+                  </div>
+                </div>
+              
+            
+              
+                <div class="result results_links results_links_deep web-result ">
+                  <div class="links_main links_deep result__body"> <!-- This is the visible part -->
+                    
+                      <h2 class="result__title">
+                        <a rel="nofollow" class="result__a" href="/l/?uddg=https%3A%2F%2Fsrobb.net%2Fpf.html&amp;rut=77b13f92e04b4c66be9c1747dd6ce1f5a949e21791175e8606b78be31c6edac3">A Beginner&#x27;s Guide To Firewalling with pf - srobb.net</a>
+                      </h2>
+
+                    
+
+                    
+                      <div class="result__extras">
+                        <div class="result__extras__url">
+                          <span class="result__icon">
+                            <a rel="nofollow" href="/l/?uddg=https%3A%2F%2Fsrobb.net%2Fpf.html&amp;rut=77b13f92e04b4c66be9c1747dd6ce1f5a949e21791175e8606b78be31c6edac3">
+                              <img class="result__icon__img" width="16" height="16" alt="" src="//external-content.duckduckgo.com/ip3/srobb.net.ico" name="i15" />
+                            </a>
+                          </span>
+                          <a class="result__url" href="/l/?uddg=https%3A%2F%2Fsrobb.net%2Fpf.html&amp;rut=77b13f92e04b4c66be9c1747dd6ce1f5a949e21791175e8606b78be31c6edac3">
+                            srobb.net/pf.html
+                          </a>
+                          
+                        </div>
+                      </div>
+                    
+
+                    
+                      
+                        <a class="result__snippet" href="/l/?uddg=https%3A%2F%2Fsrobb.net%2Fpf.html&amp;rut=77b13f92e04b4c66be9c1747dd6ce1f5a949e21791175e8606b78be31c6edac3">A Beginner&#x27;s Guide To Firewalling with <b>pf</b> This guide is written for the person very new to firewalling. Please realize that the sample <b>firewall</b> we build should not be considered appropriate for actual use. I just try to cover a few basics, that took me awhile to grasp from the better known (and more detailed) documentation referenced below</a>
+                      
+                    
+
+                    <div class="clear"></div>
+                  </div>
+                </div>
+              
+            
+              
+                <div class="result results_links results_links_deep web-result ">
+                  <div class="links_main links_deep result__body"> <!-- This is the visible part -->
+                    
+                      <h2 class="result__title">
+                        <a rel="nofollow" class="result__a" href="/l/?uddg=https%3A%2F%2Fwww.openbsdhandbook.com%2Frouter%2Dfirewall%2F&amp;rut=f8d54f587ee0438c8003ee2351fe6afb030600452eca895ff5880fb4534bf0ce">Build a Simple Router and Firewall - OpenBSD Handbook</a>
+                      </h2>
+
+                    
+
+                    
+                      <div class="result__extras">
+                        <div class="result__extras__url">
+                          <span class="result__icon">
+                            <a rel="nofollow" href="/l/?uddg=https%3A%2F%2Fwww.openbsdhandbook.com%2Frouter%2Dfirewall%2F&amp;rut=f8d54f587ee0438c8003ee2351fe6afb030600452eca895ff5880fb4534bf0ce">
+                              <img class="result__icon__img" width="16" height="16" alt="" src="//external-content.duckduckgo.com/ip3/www.openbsdhandbook.com.ico" name="i15" />
+                            </a>
+                          </span>
+                          <a class="result__url" href="/l/?uddg=https%3A%2F%2Fwww.openbsdhandbook.com%2Frouter%2Dfirewall%2F&amp;rut=f8d54f587ee0438c8003ee2351fe6afb030600452eca895ff5880fb4534bf0ce">
+                            www.openbsdhandbook.com/router-firewall/
+                          </a>
+                          
+                        </div>
+                      </div>
+                    
+
+                    
+                      
+                        <a class="result__snippet" href="/l/?uddg=https%3A%2F%2Fwww.openbsdhandbook.com%2Frouter%2Dfirewall%2F&amp;rut=f8d54f587ee0438c8003ee2351fe6afb030600452eca895ff5880fb4534bf0ce">Configure <b>OpenBSD</b> as a two-interface router and <b>firewall</b> with NAT, DHCP, and local DNS caching using <b>pf</b>, dhcpd, and unbound.</a>
+                      
+                    
+
+                    <div class="clear"></div>
+                  </div>
+                </div>
+              
+            
+              
+                <div class="result results_links results_links_deep web-result ">
+                  <div class="links_main links_deep result__body"> <!-- This is the visible part -->
+                    
+                      <h2 class="result__title">
+                        <a rel="nofollow" class="result__a" href="/l/?uddg=https%3A%2F%2Fwww.dragonflybsd.org%2F~sephe%2Fpf%2Dfaq.pdf&amp;rut=5450577bc774e43f7b559ac26615ff4f3a8ba6d1989255a0ff8b92e41cc968db"><span class="result__type">PDF</span> PF: The OpenBSD Packet Filter - DragonFly BSD</a>
+                      </h2>
+
+                    
+
+                    
+                      <div class="result__extras">
+                        <div class="result__extras__url">
+                          <span class="result__icon">
+                            <a rel="nofollow" href="/l/?uddg=https%3A%2F%2Fwww.dragonflybsd.org%2F~sephe%2Fpf%2Dfaq.pdf&amp;rut=5450577bc774e43f7b559ac26615ff4f3a8ba6d1989255a0ff8b92e41cc968db">
+                              <img class="result__icon__img" width="16" height="16" alt="" src="//external-content.duckduckgo.com/ip3/www.dragonflybsd.org.ico" name="i15" />
+                            </a>
+                          </span>
+                          <a class="result__url" href="/l/?uddg=https%3A%2F%2Fwww.dragonflybsd.org%2F~sephe%2Fpf%2Dfaq.pdf&amp;rut=5450577bc774e43f7b559ac26615ff4f3a8ba6d1989255a0ff8b92e41cc968db">
+                            www.dragonflybsd.org/~sephe/pf-faq.pdf
+                          </a>
+                          
+                        </div>
+                      </div>
+                    
+
+                    
+                      
+                        <a class="result__snippet" href="/l/?uddg=https%3A%2F%2Fwww.dragonflybsd.org%2F~sephe%2Fpf%2Dfaq.pdf&amp;rut=5450577bc774e43f7b559ac26615ff4f3a8ba6d1989255a0ff8b92e41cc968db">Previous <b>OpenBSD</b> releases used a different <b>firewall</b>/NAT package which is no longer supported. <b>PF</b> was originally developed by Daniel Hartmeier and is now maintained and developed by Daniel and the rest of the <b>OpenBSD</b> team. This set of documents, also available in PDF format, is intended as a general introduction to the <b>PF</b> system as run on <b>OpenBSD</b>.</a>
+                      
+                    
+
+                    <div class="clear"></div>
+                  </div>
+                </div>
+              
+            
+              
+                <div class="result results_links results_links_deep web-result ">
+                  <div class="links_main links_deep result__body"> <!-- This is the visible part -->
+                    
+                      <h2 class="result__title">
+                        <a rel="nofollow" class="result__a" href="/l/?uddg=https%3A%2F%2Fwww.protectstar.com%2Fen%2Fblog%2Fopenbsd%2D77%2Das%2Da%2Drobust%2Dfirewall%2Dfoundation%2Da%2Dpfconf%2Dand%2Dsysctlconf%2Dthat%2Dhave%2Dyour%2Dback&amp;rut=cd94572497ca3883fbc7ba2b11c8b21bdc800021d45df749669eed2f05710baf">OpenBSD 7.7 (7.8) as a Robust Firewall Foundation: a pf.conf and sysctl ...</a>
+                      </h2>
+
+                    
+
+                    
+                      <div class="result__extras">
+                        <div class="result__extras__url">
+                          <span class="result__icon">
+                            <a rel="nofollow" href="/l/?uddg=https%3A%2F%2Fwww.protectstar.com%2Fen%2Fblog%2Fopenbsd%2D77%2Das%2Da%2Drobust%2Dfirewall%2Dfoundation%2Da%2Dpfconf%2Dand%2Dsysctlconf%2Dthat%2Dhave%2Dyour%2Dback&amp;rut=cd94572497ca3883fbc7ba2b11c8b21bdc800021d45df749669eed2f05710baf">
+                              <img class="result__icon__img" width="16" height="16" alt="" src="//external-content.duckduckgo.com/ip3/www.protectstar.com.ico" name="i15" />
+                            </a>
+                          </span>
+                          <a class="result__url" href="/l/?uddg=https%3A%2F%2Fwww.protectstar.com%2Fen%2Fblog%2Fopenbsd%2D77%2Das%2Da%2Drobust%2Dfirewall%2Dfoundation%2Da%2Dpfconf%2Dand%2Dsysctlconf%2Dthat%2Dhave%2Dyour%2Dback&amp;rut=cd94572497ca3883fbc7ba2b11c8b21bdc800021d45df749669eed2f05710baf">
+                            www.protectstar.com/en/blog/openbsd-77-as-a-robust-firewall-foundation-a-pfconf-and-sysctlconf-that-have-your-back
+                          </a>
+                          
+                            <span>&nbsp; &nbsp; 2025-10-08T00:00:00.0000000</span>
+                          
+                        </div>
+                      </div>
+                    
+
+                    
+                      
+                        <a class="result__snippet" href="/l/?uddg=https%3A%2F%2Fwww.protectstar.com%2Fen%2Fblog%2Fopenbsd%2D77%2Das%2Da%2Drobust%2Dfirewall%2Dfoundation%2Da%2Dpfconf%2Dand%2Dsysctlconf%2Dthat%2Dhave%2Dyour%2Dback&amp;rut=cd94572497ca3883fbc7ba2b11c8b21bdc800021d45df749669eed2f05710baf"><b>OpenBSD</b> 7.7 (and 7.8) as a Robust <b>Firewall</b> Foundation: a <b>pf</b>.conf and sysctl.conf That Have Your Back With this article, we want to provide a practical baseline that secures small networks, home labs, and many SMB environments with confidence—while remaining readable and maintainable.</a>
+                      
+                    
+
+                    <div class="clear"></div>
+                  </div>
+                </div>
+              
+            
+              
+                <div class="result results_links results_links_deep web-result ">
+                  <div class="links_main links_deep result__body"> <!-- This is the visible part -->
+                    
+                      <h2 class="result__title">
+                        <a rel="nofollow" class="result__a" href="/l/?uddg=https%3A%2F%2Fdl.rubens.cloud%2Fbooks%2Fbookofpf_ano%2Dnonsenseguidetotheopenbsdfirewall.pdf&amp;rut=b0a2d4e13a445fad4c6c691e62a5e4b38e087618df0efd16295bd67d9070c0fc"><span class="result__type">PDF</span> A No-nonsense Guide to The Openbsd Fire Wall</a>
+                      </h2>
+
+                    
+
+                    
+                      <div class="result__extras">
+                        <div class="result__extras__url">
+                          <span class="result__icon">
+                            <a rel="nofollow" href="/l/?uddg=https%3A%2F%2Fdl.rubens.cloud%2Fbooks%2Fbookofpf_ano%2Dnonsenseguidetotheopenbsdfirewall.pdf&amp;rut=b0a2d4e13a445fad4c6c691e62a5e4b38e087618df0efd16295bd67d9070c0fc">
+                              <img class="result__icon__img" width="16" height="16" alt="" src="//external-content.duckduckgo.com/ip3/dl.rubens.cloud.ico" name="i15" />
+                            </a>
+                          </span>
+                          <a class="result__url" href="/l/?uddg=https%3A%2F%2Fdl.rubens.cloud%2Fbooks%2Fbookofpf_ano%2Dnonsenseguidetotheopenbsdfirewall.pdf&amp;rut=b0a2d4e13a445fad4c6c691e62a5e4b38e087618df0efd16295bd67d9070c0fc">
+                            dl.rubens.cloud/books/bookofpf_ano-nonsenseguidetotheopenbsdfirewall.pdf
+                          </a>
+                          
+                        </div>
+                      </div>
+                    
+
+                    
+                      
+                        <a class="result__snippet" href="/l/?uddg=https%3A%2F%2Fdl.rubens.cloud%2Fbooks%2Fbookofpf_ano%2Dnonsenseguidetotheopenbsdfirewall.pdf&amp;rut=b0a2d4e13a445fad4c6c691e62a5e4b38e087618df0efd16295bd67d9070c0fc">the <b>OpenBSD</b> project&#x27;s <b>PF</b> (Packet Filter). <b>PF</b> offers firewalling, NAT, traffic control, and bandwidth management in a si gle, flexible, and sysadmin-friendly system. Peter hopes that the lecture will give you some ideas about how to control your network traffic the way you want—keeping some things outside your network, directing traffic to ...</a>
+                      
+                    
+
+                    <div class="clear"></div>
+                  </div>
+                </div>
+              
+            
+
+            
+              
+              
+                <div class="nav-link">
+                  <form action="/html/" method="post">
+                    <input type="submit" class='btn btn--alt' value="Next" />
+                    <input type="hidden" name="q" value="openbsd pf firewall" />
+                    <input type="hidden" name="s" value="10" />
+                    <input type="hidden" name="nextParams" value="" />
+                    <input type="hidden" name="v" value="l" />
+                    <input type="hidden" name="o" value="json" />
+                    <input type="hidden" name="dc" value="10" />
+                    <input type="hidden" name="api" value="d.js" />
+                    <input type="hidden" name="vqd" value="4-104848113359852037286415652180167088721" />
+
+                    
+                    
+                    
+                      <input name="kl" value="wt-wt" type="hidden" />
+                    
+                    
+                    
+                    
+                  </form>
+                </div>
+              
+            
+
+            <div class="feedback-btn">
+              <a rel="nofollow" href="/feedback.html" target="_new">Feedback</a>
+            </div>
+            <div class="clear"></div>
+          </div>
+        </div>
+      </div> <!-- links wrapper //-->
+    
+  </div>
+
+  <div id="bottom_spacing2"></div>
+
+  
+    <img src="/t/sl_h"/>
+  
+</body>
+</html>
