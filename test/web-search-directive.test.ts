@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractSearchDirective, formatWebResults, decideSearchAction, torFailureMessage } from '../src/main/services/web-search/directive';
+import { extractSearchDirective, formatWebResults, decideSearchAction, torFailureMessage, formatSearchAnnounce } from '../src/main/services/web-search/directive';
 
 describe('extractSearchDirective', () => {
   it('extracts the query from a [SEARCH: ...] line', () => {
@@ -39,6 +39,19 @@ describe('formatWebResults', () => {
     const out = formatWebResults('acme', [], FENCE);
     expect(out.toLowerCase()).toContain('no results');
     expect(out).toContain(`<<<UNTRUSTED-WEB-RESULTS ${FENCE}>>>`);
+  });
+});
+
+describe('formatSearchAnnounce (engine-aware transparency line)', () => {
+  it('names the selected engine and echoes the query, over Tor', () => {
+    const line = formatSearchAnnounce('SearXNG', 'openbsd pf firewall');
+    expect(line).toContain('SearXNG');
+    expect(line).toContain('over Tor');
+    expect(line).toContain('openbsd pf firewall');
+    expect(line).toContain('🔍');
+  });
+  it('a different engine name is reflected verbatim', () => {
+    expect(formatSearchAnnounce('DuckDuckGo', 'acme')).toContain('DuckDuckGo');
   });
 });
 

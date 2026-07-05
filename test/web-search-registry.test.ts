@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { getEngine, SEARCH_ENGINES, ddgEngine } from '../src/main/services/web-search/registry';
+import { getEngine, SEARCH_ENGINES, ddgEngine, endpointForEngine, engineDisplayName } from '../src/main/services/web-search/registry';
+import { searxngEngine, DEFAULT_SEARXNG_ONION } from '../src/main/services/web-search/searxng';
 
 const FIXTURE = `
 <div class="result results_links web-result">
@@ -27,6 +28,31 @@ describe('SearchEngine registry', () => {
   it('SEARCH_ENGINES is keyed by id and contains ddg', () => {
     expect(SEARCH_ENGINES.ddg).toBe(ddgEngine);
     expect(SEARCH_ENGINES.ddg.id).toBe('ddg');
+  });
+
+  it('SearXNG is registered so getEngine("searxng") resolves the SearXNG engine (not the DDG fallback)', () => {
+    expect(SEARCH_ENGINES.searxng).toBe(searxngEngine);
+    const e = getEngine('searxng');
+    expect(e).toBe(searxngEngine);
+    expect(e.id).toBe('searxng');
+    expect(e.egress).toBe('tor');
+  });
+});
+
+describe('endpointForEngine (loop endpoint selection)', () => {
+  it('feeds the operator SearXNG onion ONLY to the searxng engine', () => {
+    expect(endpointForEngine(searxngEngine, DEFAULT_SEARXNG_ONION)).toBe(DEFAULT_SEARXNG_ONION);
+    expect(endpointForEngine(searxngEngine, 'http://custom.onion')).toBe('http://custom.onion');
+  });
+  it('passes no endpoint for DDG, so DDG uses its own pinned onion default', () => {
+    expect(endpointForEngine(ddgEngine, DEFAULT_SEARXNG_ONION)).toBeUndefined();
+  });
+});
+
+describe('engineDisplayName (transparency line naming)', () => {
+  it('strips the egress badge suffix for the human-facing search line', () => {
+    expect(engineDisplayName(ddgEngine)).toBe('DuckDuckGo');
+    expect(engineDisplayName(searxngEngine)).toBe('SearXNG');
   });
 });
 

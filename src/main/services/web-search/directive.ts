@@ -36,10 +36,21 @@ export const WEB_SEARCH_SYSTEM =
  * opt-in — is independently testable without mocking fetch/emit/settings.
  */
 export interface WebSearchPlan { mode: 'tor' | 'clearnet' | 'empty' }
-export function planWebSearch(opts: { torResults: number; clearnetOn: boolean }): WebSearchPlan {
+/** `clearnetEligible` (default true, preserving the original DDG behavior) gates the clearnet fallback
+ *  on the SELECTED engine: only DDG has a clearnet fallback (`searchWebClearnet`). An onion metasearch
+ *  like SearXNG must never fall back to a clearnet scrape on a zero result — passing `false` keeps a
+ *  zero Tor result `empty` even when the operator opted into clearnet. */
+export function planWebSearch(opts: { torResults: number; clearnetOn: boolean; clearnetEligible?: boolean }): WebSearchPlan {
   if (opts.torResults > 0) return { mode: 'tor' };
-  if (opts.clearnetOn) return { mode: 'clearnet' };
+  if (opts.clearnetOn && opts.clearnetEligible !== false) return { mode: 'clearnet' };
   return { mode: 'empty' };
+}
+
+/** The engine-aware "searching…" transparency chunk streamed before a Tor search runs. Names the
+ *  selected engine (from `engineDisplayName`) so the user sees WHICH engine Q queried, not a generic
+ *  "the web". Pure/testable — the caller (ai.ts) emits the returned chunk. */
+export function formatSearchAnnounce(engineName: string, query: string): string {
+  return `\n\n🔍 searching ${engineName} over Tor for “${query}”…\n\n`;
 }
 
 export type SearchAction =
