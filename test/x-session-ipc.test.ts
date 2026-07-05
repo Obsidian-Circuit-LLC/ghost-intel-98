@@ -20,6 +20,7 @@ import { channels } from '../src/shared/ipc-contracts';
 import {
   XSessionGatedError,
   handleXAddSession,
+  handleXAddSessionTested,
   handleXRemoveSession,
   handleXListSessions,
   handleXTestSession,
@@ -164,10 +165,69 @@ describe('Task 3: handleXAddSession', () => {
 });
 
 // ---------------------------------------------------------------------------
+// addSessionTested (combined test + save-on-valid, single clearnet request)
+// ---------------------------------------------------------------------------
+
+describe('handleXAddSessionTested', () => {
+  const base = (over: Partial<{ networkEnabled: boolean; result: SessionTestResult }> = {}) => {
+    const secrets = makeSecretStore();
+    const meta = makeMetaStore();
+    const testSession = vi.fn(async () => over.result ?? ({ valid: true, handle: 'ghostexodus' } as SessionTestResult));
+    return {
+      secrets, meta, testSession,
+      deps: {
+        getSecret: secrets.getSecret, setSecret: secrets.setSecret, putSessionMeta: meta.putSessionMeta,
+        genId: () => 'uuid-new', now: () => '2026-07-05T00:00:00.000Z',
+        networkEnabled: vi.fn(async () => over.networkEnabled ?? true), testSession,
+      },
+    };
+  };
+  const input = { label: 'Burner', authToken: AUTH, ct0: CT0 };
+
+  it('valid → saves with status:valid + handle in ONE testSession call; returns {accountId,result}, no secret leak', async () => {
+    const { secrets, meta, testSession, deps } = base({ result: { valid: true, handle: 'ghostexodus' } });
+    const res = await handleXAddSessionTested(input, deps);
+    expect(testSession).toHaveBeenCalledTimes(1);
+    expect(secrets.store['x.accounts.uuid-new.auth_token']).toBe(AUTH);
+    expect(meta.map.get('uuid-new')).toMatchObject({ status: 'valid', handle: 'ghostexodus', lastTestedAt: '2026-07-05T00:00:00.000Z' });
+    expect(res).toEqual({ accountId: 'uuid-new', result: { valid: true, handle: 'ghostexodus' } });
+    assertNoSecret(res);
+  });
+
+  it('expired → does NOT save (no secret write, no metadata) and returns {result}', async () => {
+    const { secrets, meta, deps } = base({ result: { valid: false, reason: 'expired' } });
+    const res = await handleXAddSessionTested(input, deps);
+    expect(secrets.setSecret).not.toHaveBeenCalled();
+    expect(meta.putSessionMeta).not.toHaveBeenCalled();
+    expect(res).toEqual({ result: { valid: false, reason: 'expired' } });
+  });
+
+  it('throws XSessionGatedError when networkEnabled is false, without testing', async () => {
+    const { testSession, deps } = base({ networkEnabled: false });
+    await expect(handleXAddSessionTested(input, deps)).rejects.toBeInstanceOf(XSessionGatedError);
+    expect(testSession).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // removeSession
 // ---------------------------------------------------------------------------
 
 describe('Task 3: handleXRemoveSession', () => {
+  it('un-lists (metadata) BEFORE deleting secrets — never a listed session with missing cookies', async () => {
+    const secrets = makeSecretStore();
+    const meta = makeMetaStore();
+    const order: string[] = [];
+    meta.removeSessionMeta.mockImplementation(async (id: string) => { order.push('meta'); meta.map.delete(id); });
+    secrets.deleteSecret.mockImplementation(async (k: string) => { order.push('secret'); delete secrets.store[k]; });
+    secrets.store['x.accounts.abc.auth_token'] = AUTH;
+    meta.map.set('abc', { accountId: 'abc', label: 'L', status: 'valid' });
+    await handleXRemoveSession('abc', { getSecret: secrets.getSecret, setSecret: secrets.setSecret, deleteSecret: secrets.deleteSecret, removeSessionMeta: meta.removeSessionMeta });
+    expect(order[0]).toBe('meta'); // metadata cleared first (mirror of addSession's secrets-then-metadata)
+    expect(order).toContain('secret');
+    expect(order.indexOf('meta')).toBeLessThan(order.indexOf('secret'));
+  });
+
   it('deletes the secret keys AND the metadata', async () => {
     const secrets = makeSecretStore();
     const meta = makeMetaStore();

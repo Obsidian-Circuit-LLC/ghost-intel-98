@@ -622,6 +622,8 @@ const api = {
     // return an accountId, session metadata, or a test result — never a cookie value.
     addSession: (input: { label: string; username?: string; authToken: string; ct0: string }) =>
       ipcRenderer.invoke(channels.x.addSession, input),
+    addSessionTested: (input: { label: string; username?: string; authToken: string; ct0: string }) =>
+      ipcRenderer.invoke(channels.x.addSessionTested, input),
     removeSession: (accountId: string) =>
       ipcRenderer.invoke(channels.x.removeSession, accountId),
     listSessions: () =>

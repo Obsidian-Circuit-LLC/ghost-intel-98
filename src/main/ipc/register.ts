@@ -139,7 +139,7 @@ import { makeWhatsAppCollector } from '../socmint/whatsapp-collector';
 import {
   handleXAddAccount, handleXRemoveAccount, handleXListAccounts, handleXHasAccount,
   handleXCollect, handleXListItems, handleXRankItems,
-  handleXAddSession, handleXRemoveSession, handleXListSessions,
+  handleXAddSession, handleXAddSessionTested, handleXRemoveSession, handleXListSessions,
   handleXTestSession, handleXTestStoredSession,
 } from '../x/ipc';
 import { listSessions as listXSessions, putSessionMeta as putXSessionMeta, removeSessionMeta as removeXSessionMeta } from '../x/sessions-store';
@@ -1985,6 +1985,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     now: () => new Date().toISOString(),
   };
   safeHandle(channels.x.addSession, (...a) => handleXAddSession(a[0] as Parameters<typeof handleXAddSession>[0], xSessionStoreDeps));
+  safeHandle(channels.x.addSessionTested, (...a) => handleXAddSessionTested(a[0] as Parameters<typeof handleXAddSessionTested>[0], xSessionStoreDeps));
   safeHandle(channels.x.removeSession, (...a) => handleXRemoveSession(typeof a[0] === 'string' ? a[0] : '', xSessionStoreDeps));
   safeHandle(channels.x.listSessions, () => handleXListSessions(xSessionStoreDeps));
   safeHandle(channels.x.testSession, (...a) => handleXTestSession(a[0], xSessionStoreDeps));

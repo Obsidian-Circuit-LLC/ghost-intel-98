@@ -236,10 +236,10 @@ export interface XSessionDeps {
  * opaque accountId, then record untested metadata. Both cookies are required together, so a caller
  * always pastes a matched pair from one browser session. Returns the accountId only — never a cookie.
  */
-export async function handleXAddSession(
-  input: { label?: unknown; username?: unknown; authToken?: unknown; ct0?: unknown },
-  deps: Pick<XSessionDeps, 'getSecret' | 'setSecret' | 'putSessionMeta' | 'genId'>,
-): Promise<{ accountId: string }> {
+interface ParsedSession { label: string; username?: string; authToken: string; ct0: string }
+
+/** Validate + normalise an Add-session input (shared by addSession + addSessionTested). */
+function parseSessionInput(input: { label?: unknown; username?: unknown; authToken?: unknown; ct0?: unknown }): ParsedSession {
   const label = typeof input?.label === 'string' ? input.label.trim().slice(0, 128) : '';
   if (!label) throw new Error('x:addSession requires a label');
   const authToken = typeof input?.authToken === 'string' ? input.authToken : '';
@@ -247,26 +247,68 @@ export async function handleXAddSession(
   if (!authToken || !ct0) throw new Error('x:addSession requires both auth_token and ct0 (a matched pair)');
   const username =
     typeof input?.username === 'string' && input.username.trim() ? input.username.trim().slice(0, 64) : undefined;
+  return { label, username, authToken, ct0 };
+}
 
-  const accountId = deps.genId();
+/**
+ * Write a session's cookie material + keep the legacy x.accounts.index in sync. Secrets are
+ * persisted before the caller records metadata, so a crash between the two never leaves a listed
+ * session whose secrets are missing. The index is GhostScrape's only discovery path
+ * (x.listAccounts → readAccountIndex), so a session added via the refined UI is selectable there too.
+ */
+async function persistSessionSecrets(
+  accountId: string,
+  s: ParsedSession,
+  deps: Pick<XSessionDeps, 'getSecret' | 'setSecret'>,
+): Promise<void> {
   const prefix = `${ACCOUNT_KEY_PREFIX}${accountId}`;
-  // Secrets first, then metadata: the cookie material is persisted before the session is listable,
-  // so a crash between the two never leaves a listed session whose secrets are missing.
-  await deps.setSecret(`${prefix}.auth_token`, authToken);
-  await deps.setSecret(`${prefix}.ct0`, ct0);
-  if (username) await deps.setSecret(`${prefix}.username`, username);
-
-  // Keep the legacy x.accounts.index in sync: it is the ONLY discovery path GhostScrape has
-  // (x.listAccounts → readAccountIndex). A session added via the refined UI must be selectable in
-  // GhostScrape too, since both share the same cookie store keyed by accountId. Mirrors
-  // handleXAddAccount's index append.
+  await deps.setSecret(`${prefix}.auth_token`, s.authToken);
+  await deps.setSecret(`${prefix}.ct0`, s.ct0);
+  if (s.username) await deps.setSecret(`${prefix}.username`, s.username);
   const index = await readAccountIndex(deps);
   if (!index.includes(accountId)) {
     await deps.setSecret(ACCOUNT_INDEX_KEY, JSON.stringify([...index, accountId]));
   }
+}
 
-  await deps.putSessionMeta({ accountId, label, status: 'untested', ...(username !== undefined && { username }) });
+export async function handleXAddSession(
+  input: { label?: unknown; username?: unknown; authToken?: unknown; ct0?: unknown },
+  deps: Pick<XSessionDeps, 'getSecret' | 'setSecret' | 'putSessionMeta' | 'genId'>,
+): Promise<{ accountId: string }> {
+  const s = parseSessionInput(input);
+  const accountId = deps.genId();
+  await persistSessionSecrets(accountId, s, deps);
+  await deps.putSessionMeta({ accountId, label: s.label, status: 'untested', ...(s.username !== undefined && { username: s.username }) });
   return { accountId };
+}
+
+/**
+ * Test-and-save in ONE main-side operation: validate the cookie pair, and ONLY on success persist
+ * the session with status/handle stamped from that same single test. This replaces the renderer's
+ * old two-step (testSession → addSession → testStoredSession) dance, which fired TWO IP-exposing
+ * clearnet GETs per save and could show "✓ valid" while the stored row stamped "untested" if the
+ * second request throttled. One request, no divergence, and the status is derived main-side (the
+ * renderer never asserts validity).
+ *
+ * EGRESS GATE: throws XSessionGatedError when networkEnabled is false — no ungated clearnet request.
+ * Returns `{ result }` (NOT saved) on any non-valid result; the renderer decides whether to offer
+ * "Save without testing" (→ x:addSession, untested) for the inconclusive rate-limited/network cases.
+ */
+export async function handleXAddSessionTested(
+  input: { label?: unknown; username?: unknown; authToken?: unknown; ct0?: unknown },
+  deps: Pick<XSessionDeps, 'getSecret' | 'setSecret' | 'putSessionMeta' | 'genId' | 'now' | 'networkEnabled' | 'testSession'>,
+): Promise<{ accountId?: string; result: SessionTestResult }> {
+  if (!(await deps.networkEnabled())) throw new XSessionGatedError();
+  const s = parseSessionInput(input);
+  const result = await deps.testSession({ authToken: s.authToken, ct0: s.ct0 });
+  if (!result.valid) return { result }; // not saved — renderer handles expired vs inconclusive
+  const accountId = deps.genId();
+  await persistSessionSecrets(accountId, s, deps);
+  await deps.putSessionMeta({
+    accountId, label: s.label, status: 'valid', handle: result.handle, lastTestedAt: deps.now(),
+    ...(s.username !== undefined && { username: s.username }),
+  });
+  return { accountId, result };
 }
 
 /**
@@ -280,19 +322,21 @@ export async function handleXRemoveSession(
   if (!rawAccountId) return;
   const accountId = safeAccountId(rawAccountId);
   const prefix = `${ACCOUNT_KEY_PREFIX}${accountId}`;
-  await deps.deleteSecret(`${prefix}.auth_token`);
-  await deps.deleteSecret(`${prefix}.ct0`);
-  await deps.deleteSecret(`${prefix}.username`);
 
-  // Drop the id from the legacy x.accounts.index too, so GhostScrape never lists a dead account
-  // whose secrets are gone, and so the startup legacy migration can't resurrect a removed session
-  // by re-synthesizing metadata from a stale index entry. Mirrors handleXRemoveAccount.
+  // UN-LIST FIRST (metadata + legacy index), THEN delete secrets — the mirror of addSession's
+  // secrets-then-metadata order. A mid-way failure then leaves an UNLISTED session with orphan
+  // secrets (invisible, and a re-add mints a fresh uuid so nothing collides) rather than a
+  // still-listed session whose cookies are already gone. Dropping the index entry also stops the
+  // startup legacy migration resurrecting a removed session from a stale index. Mirrors handleXRemoveAccount.
+  await deps.removeSessionMeta(accountId);
   const index = await readAccountIndex(deps);
   if (index.includes(accountId)) {
     await deps.setSecret(ACCOUNT_INDEX_KEY, JSON.stringify(index.filter((id) => id !== accountId)));
   }
 
-  await deps.removeSessionMeta(accountId);
+  await deps.deleteSecret(`${prefix}.auth_token`);
+  await deps.deleteSecret(`${prefix}.ct0`);
+  await deps.deleteSecret(`${prefix}.username`);
 }
 
 /** List the non-secret session metadata for the Stored Sessions UI. Never carries a secret. */

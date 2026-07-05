@@ -41,6 +41,7 @@ let root: Root;
 let xApi: {
   listSessions: ReturnType<typeof vi.fn>;
   addSession: ReturnType<typeof vi.fn>;
+  addSessionTested: ReturnType<typeof vi.fn>;
   removeSession: ReturnType<typeof vi.fn>;
   testSession: ReturnType<typeof vi.fn>;
   testStoredSession: ReturnType<typeof vi.fn>;
@@ -50,6 +51,7 @@ function installApi(sessions: XSessionMeta[] = []): void {
   xApi = {
     listSessions: vi.fn().mockResolvedValue(sessions),
     addSession: vi.fn().mockResolvedValue({ accountId: 'uuid-new' }),
+    addSessionTested: vi.fn(),
     removeSession: vi.fn().mockResolvedValue(undefined),
     testSession: vi.fn(),
     testStoredSession: vi.fn().mockResolvedValue({ valid: true, handle: 'ghostexodus' }),
@@ -179,23 +181,25 @@ describe('X settings Add session', () => {
     await flush();
   }
 
-  it('Test & Save with a valid result calls addSession and shows the @handle', async () => {
-    xApi.testSession.mockResolvedValue({ valid: true, handle: 'ghostexodus' });
+  it('Test & Save with a valid result calls addSessionTested (one op) and shows the @handle', async () => {
+    xApi.addSessionTested.mockResolvedValue({ accountId: 'uuid-new', result: { valid: true, handle: 'ghostexodus' } });
     await renderPane(enabled());
     await fillForm();
 
     await act(async () => { buttonByText(container, /test & save/i).click(); });
     await flush();
 
-    expect(xApi.testSession).toHaveBeenCalledWith({ authToken: 'AUTHTOKENVALUE', ct0: 'CT0VALUE' });
-    expect(xApi.addSession).toHaveBeenCalledWith({
+    // Single combined main-side op — no separate testSession/testStoredSession round-trips.
+    expect(xApi.addSessionTested).toHaveBeenCalledWith({
       label: 'Burner One', username: undefined, authToken: 'AUTHTOKENVALUE', ct0: 'CT0VALUE',
     });
+    expect(xApi.testSession).not.toHaveBeenCalled();
+    expect(xApi.testStoredSession).not.toHaveBeenCalled();
     expect(container.textContent).toContain('@ghostexodus');
   });
 
-  it('a definitive expired result does NOT call addSession and shows the error', async () => {
-    xApi.testSession.mockResolvedValue({ valid: false, reason: 'expired' });
+  it('a definitive expired result does NOT save and shows the error', async () => {
+    xApi.addSessionTested.mockResolvedValue({ result: { valid: false, reason: 'expired' } });
     await renderPane(enabled());
     await fillForm();
 
@@ -207,7 +211,7 @@ describe('X settings Add session', () => {
   });
 
   it('an inconclusive result (rate-limited) offers Save without testing → addSession untested', async () => {
-    xApi.testSession.mockResolvedValue({ valid: false, reason: 'rate-limited' });
+    xApi.addSessionTested.mockResolvedValue({ result: { valid: false, reason: 'rate-limited' } });
     await renderPane(enabled());
     await fillForm();
 

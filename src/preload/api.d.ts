@@ -695,6 +695,8 @@ export interface GhostApi {
      * cookies are never echoed back.
      */
     addSession(input: { label: string; username?: string; authToken: string; ct0: string }): Promise<{ accountId: string }>;
+    /** Test + save in one gated main-side op; saves only on a valid result (status/handle stamped from that test). */
+    addSessionTested(input: { label: string; username?: string; authToken: string; ct0: string }): Promise<{ accountId?: string; result: XSessionTestResult }>;
     /** Remove a session: deletes its secrets and its metadata. */
     removeSession(accountId: string): Promise<void>;
     /** List non-secret session metadata for the Stored Sessions UI (no cookie values). */

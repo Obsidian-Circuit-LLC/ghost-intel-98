@@ -543,6 +543,7 @@ export const channels = {
     // These SUPERSEDE the account channels for the Settings UI; addAccount/listAccounts stay
     // for GhostScrape back-compat. NO secret ever appears in a session channel's return.
     addSession: 'x:addSession',
+    addSessionTested: 'x:addSessionTested',
     removeSession: 'x:removeSession',
     listSessions: 'x:listSessions',
     testSession: 'x:testSession',
@@ -1017,6 +1018,8 @@ export interface ApiContracts {
   // Session model — atomic auth_token+ct0 sessions. Returns carry NO secret value.
   // addSession returns the opaque accountId only; secrets are written to secretStore main-side.
   [channels.x.addSession]: { args: [{ label: string; username?: string; authToken: string; ct0: string }]; returns: { accountId: string } };
+  // Test + save in one gated main-side op; saves only on a valid result (status/handle stamped from that test).
+  [channels.x.addSessionTested]: { args: [{ label: string; username?: string; authToken: string; ct0: string }]; returns: { accountId?: string; result: XSessionTestResult } };
   [channels.x.removeSession]: { args: [string]; returns: void };
   [channels.x.listSessions]: { args: []; returns: XSessionMeta[] };
   // Egress-gated (networkEnabled): validates a cookie pair; returns handle or a reason code.

@@ -1006,18 +1006,22 @@ export function XPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSett
     }
     setBusy(true);
     try {
-      const res = await window.api.x.testSession({ authToken: authToken.trim(), ct0: ct0.trim() });
-      if (res.valid) {
-        const id = await addSession();
-        // Stamp status/handle/lastTestedAt on the freshly-saved session (best-effort).
-        try { await window.api.x.testStoredSession(id); } catch { /* metadata stamp only */ }
-        setStatus({ kind: 'ok', msg: `✓ Session valid — authenticated as @${res.handle}` });
+      // One gated main-side op: test + save-on-valid, status/handle stamped from that single test
+      // (no second clearnet request, no message-vs-stored-status divergence).
+      const { result } = await window.api.x.addSessionTested({
+        label: label.trim(),
+        username: username.trim() || undefined,
+        authToken: authToken.trim(),
+        ct0: ct0.trim(),
+      });
+      if (result.valid) {
+        setStatus({ kind: 'ok', msg: `✓ Session valid — authenticated as @${result.handle}` });
         resetForm();
         await loadSessions();
-      } else if (res.reason === 'expired') {
+      } else if (result.reason === 'expired') {
         setStatus({ kind: 'error', msg: '✗ Session invalid or expired — paste a fresh auth_token + ct0' });
       } else {
-        setStatus({ kind: 'inconclusive', msg: `Couldn't verify (${res.reason}) — you can Save without testing.` });
+        setStatus({ kind: 'inconclusive', msg: `Couldn't verify (${result.reason}) — you can Save without testing.` });
       }
     } catch (err) {
       setStatus({ kind: 'inconclusive', msg: `Couldn't verify (${(err as Error).message}) — you can Save without testing.` });
