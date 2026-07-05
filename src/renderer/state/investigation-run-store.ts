@@ -81,25 +81,33 @@ export const useInvestigationRunStore = create<InvestigationRunState>((set) => (
           pendingAsk = event.question;
           status = 'running';
           break;
-        case 'action':
-          // The agent is acting again — any parked question is resolved.
-          pendingAsk = null;
-          break;
         case 'paused':
+          // A control event, not an answer — a run parked on an ask stays parked.
           status = 'paused';
           break;
         case 'resumed':
+          // Symmetric to `paused`: resuming does not answer a pending ask.
           status = 'running';
           break;
         case 'stopped':
           status = 'stopped';
+          pendingAsk = null;
           break;
         case 'done':
           status = 'done';
+          pendingAsk = null;
           break;
+        case 'action':
         case 'observed':
         case 'thinking':
         case 'blocked':
+          // The brain took its next turn — the parked question is resolved.
+          // The real run-controller emits NO event on answer (answerRun only
+          // unparks the loop); the next event is whatever the next turn
+          // produces (thinking/blocked/action/observed) or a terminal
+          // stopped/done. Clearing here (and on terminal) keeps pendingAsk
+          // from stranding a finished/advanced run on an already-answered ask.
+          pendingAsk = null;
           break;
       }
       return { cases: { ...s.cases, [caseId]: { ...prev, feed, status, pendingAsk } } };

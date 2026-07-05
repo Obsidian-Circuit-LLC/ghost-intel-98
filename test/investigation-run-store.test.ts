@@ -61,6 +61,30 @@ describe('investigationRunStore — per-case reducers', () => {
     expect(store().cases['caseA'].pendingAsk).toBeNull();
   });
 
+  it('a non-action event after an answered ask clears pendingAsk (real SP-6 flow)', () => {
+    // The run-controller emits NO event on answer; the next event is whatever the
+    // next turn produces — often thinking/blocked, then a terminal done/stopped.
+    store().beginRun('caseA', 'run-1');
+    store().applyEvent('caseA', { kind: 'ask', question: 'which target?' });
+    expect(store().cases['caseA'].pendingAsk).toBe('which target?');
+    store().applyEvent('caseA', { kind: 'thinking', text: 'analyst says a.tld' });
+    expect(store().cases['caseA'].pendingAsk).toBeNull();
+    store().applyEvent('caseA', { kind: 'blocked', reason: 'unknown transform' });
+    store().applyEvent('caseA', { kind: 'done', reason: 'finished' });
+    const e = store().cases['caseA'];
+    expect(e.status).toBe('done');
+    expect(e.pendingAsk).toBeNull(); // never strands on an already-answered ask
+  });
+
+  it('a terminal stopped after an ask clears pendingAsk', () => {
+    store().beginRun('caseA', 'run-1');
+    store().applyEvent('caseA', { kind: 'ask', question: 'proceed?' });
+    store().applyEvent('caseA', { kind: 'stopped', reason: 'analyst stopped the run' });
+    const e = store().cases['caseA'];
+    expect(e.status).toBe('stopped');
+    expect(e.pendingAsk).toBeNull();
+  });
+
   it('paused → paused; resumed → running (clears nothing else)', () => {
     store().beginRun('caseA', 'run-1');
     store().applyEvent('caseA', { kind: 'ask', question: 'q?' });
