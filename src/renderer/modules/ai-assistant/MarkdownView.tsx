@@ -25,12 +25,21 @@ function renderInline(nodes: Inline[], onLinkClick?: OnLinkClick): ReactNode[] {
         if (safe === null) return <span key={i}>{renderInline(n.children, onLinkClick)}</span>;
         // Real href gives hover-preview + right-click Copy-Link; preventDefault stops in-app
         // renderer navigation, and the click is routed to onLinkClick (the clearnet-ack open policy).
+        //
+        // onAuxClick guards the MIDDLE-CLICK (mouse-wheel) vector: a middle click fires `auxclick`,
+        // NOT `click`, so onClick never runs. Left unguarded, Chromium issues a new-window request
+        // for the real href, which Electron routes to the main window's setWindowOpenHandler — that
+        // handler calls shell.openExternal directly, opening the URL over the CLEARNET with the
+        // operator's real IP and NO clearnet-ack consent, silently skipping the entire OpSec gate.
+        // preventDefault cancels that new-window request; the middle button (1) then routes through
+        // the same clearnet-ack open policy as a left click so behaviour is consistent and gated.
         return (
           <a
             key={i}
             href={safe}
             title={`${safe} — opens in your clearnet browser`}
             onClick={(e) => { e.preventDefault(); onLinkClick?.(safe); }}
+            onAuxClick={(e) => { e.preventDefault(); if (e.button === 1) onLinkClick?.(safe); }}
             style={LINK_STYLE}
           >
             {renderInline(n.children, onLinkClick)}

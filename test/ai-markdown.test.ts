@@ -73,9 +73,36 @@ describe('parseInline links', () => {
     expect(parseInline('`https://x/a`')).toEqual([{ t: 'code', v: 'https://x/a' }]);
   });
   it('stays scheme-agnostic: hostile [x](javascript:...) keeps the raw href', () => {
+    // Balanced-paren matching keeps the whole raw href (still scheme-agnostic — safeHref rejects it).
     expect(parseInline('[x](javascript:alert(1))')).toEqual([
-      { t: 'link', href: 'javascript:alert(1', children: [{ t: 'text', v: 'x' }] },
-      { t: 'text', v: ')' }
+      { t: 'link', href: 'javascript:alert(1)', children: [{ t: 'text', v: 'x' }] }
+    ]);
+  });
+  // Regression (finding 3): a markdown-link href containing a literal ')' must NOT be truncated at
+  // the first inner paren — balance-match the closing paren like the bare-URL path does.
+  it('keeps balanced parens in a [label](url) href: Wikipedia disambiguation', () => {
+    expect(parseInline('[Foo](https://en.wikipedia.org/wiki/Foo_(bar))')).toEqual([
+      { t: 'link', href: 'https://en.wikipedia.org/wiki/Foo_(bar)', children: [{ t: 'text', v: 'Foo' }] }
+    ]);
+  });
+  // Regression (findings 2 & 4): a URL inside a link LABEL must NOT nest a second link node —
+  // nested <a> double-fires the clearnet-open policy on one click.
+  it('does NOT nest a link when the label is itself a URL: [url](url)', () => {
+    expect(parseInline('[https://example.com/foo](https://example.com/foo)')).toEqual([
+      { t: 'link', href: 'https://example.com/foo', children: [{ t: 'text', v: 'https://example.com/foo' }] }
+    ]);
+  });
+  it('does NOT autolink a foreign URL inside a link label (adversarial)', () => {
+    expect(parseInline('[click https://evil.com here](https://good.com)')).toEqual([
+      { t: 'link', href: 'https://good.com', children: [{ t: 'text', v: 'click https://evil.com here' }] }
+    ]);
+  });
+  it('still parses emphasis inside a link label (bold not suppressed)', () => {
+    expect(parseInline('[**b** https://x](https://good.com)')).toEqual([
+      { t: 'link', href: 'https://good.com', children: [
+        { t: 'bold', children: [{ t: 'text', v: 'b' }] },
+        { t: 'text', v: ' https://x' }
+      ] }
     ]);
   });
   it('unclosed [label]( stays literal text (no throw)', () => {

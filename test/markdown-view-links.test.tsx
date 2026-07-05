@@ -62,6 +62,28 @@ describe('MarkdownView link rendering (Task 5)', () => {
     expect(evt.defaultPrevented).toBe(true);
   });
 
+  // Regression (finding 1): a MIDDLE-CLICK fires `auxclick`, not `click`, so onClick never runs.
+  // Unguarded, Chromium issues a new-window request for the real href, which the main window's
+  // setWindowOpenHandler opens over the clearnet with NO clearnet-ack consent — silently skipping
+  // the OpSec gate. onAuxClick must preventDefault (cancel the new-window request) AND route the
+  // middle button through onLinkClick so opening stays gated by the clearnet acknowledgment.
+  it('middle-click (auxclick) prevents default and routes through onLinkClick (gated)', async () => {
+    const onLinkClick = vi.fn();
+    await act(async () => {
+      root.render(<MarkdownView text="[go](http://example.com/deanon)" onLinkClick={onLinkClick} />);
+    });
+
+    const a = anchors()[0];
+    const evt = new MouseEvent('auxclick', { bubbles: true, cancelable: true, button: 1 });
+    await act(async () => { a.dispatchEvent(evt); });
+
+    // new-window request cancelled — it never reaches the ungated main-side handler...
+    expect(evt.defaultPrevented).toBe(true);
+    // ...and opening still routes through the clearnet-ack open policy.
+    expect(onLinkClick).toHaveBeenCalledTimes(1);
+    expect(onLinkClick).toHaveBeenCalledWith('http://example.com/deanon');
+  });
+
   it('renders a javascript: link as inert text, never an <a>', async () => {
     const onLinkClick = vi.fn();
     await act(async () => {
