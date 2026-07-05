@@ -9,7 +9,8 @@ export type Inline =
   | { t: 'text'; v: string }
   | { t: 'bold'; children: Inline[] }
   | { t: 'italic'; children: Inline[] }
-  | { t: 'code'; v: string };
+  | { t: 'code'; v: string }
+  | { t: 'link'; href: string; children: Inline[] };
 
 export type Block =
   | { t: 'p'; children: Inline[] }
@@ -18,6 +19,31 @@ export type Block =
 
 const HEADING = /^(#{1,6})\s+(.*)$/;
 const BULLET = /^\s*[*\-+]\s+(.*)$/;
+
+const TRAILING_PUNCT = '.,;:!?\'"';
+
+/**
+ * Trim trailing punctuation off a bare-URL autolink token so `see https://x/a.` drops the period:
+ * strip trailing `.,;:!?'"`, and a trailing `)`/`]` only when the URL has no matching opener
+ * (so Wikipedia-style `..._(bar)` parens survive but a wrapping `(url)` paren does not). Pure.
+ */
+function trimAutolinkTail(url: string): string {
+  let end = url.length;
+  while (end > 0) {
+    const ch = url[end - 1];
+    if (TRAILING_PUNCT.includes(ch)) { end--; continue; }
+    if (ch === ')' || ch === ']') {
+      const open = ch === ')' ? '(' : '[';
+      const slice = url.slice(0, end);
+      let opens = 0;
+      let closes = 0;
+      for (const s of slice) { if (s === open) opens++; else if (s === ch) closes++; }
+      if (opens < closes) { end--; continue; }
+    }
+    break;
+  }
+  return url.slice(0, end);
+}
 
 export function parseInline(text: string): Inline[] {
   const out: Inline[] = [];
@@ -41,6 +67,31 @@ export function parseInline(text: string): Inline[] {
     if ((c === '*' || c === '_') && text[i + 1] !== c) {
       const end = text.indexOf(c, i + 1);
       if (end > i + 1) { pushText(); out.push({ t: 'italic', children: parseInline(text.slice(i + 1, end)) }); i = end + 1; continue; }
+    }
+    // markdown link: [label](url) — label parsed recursively; scheme-agnostic (raw href kept)
+    if (c === '[') {
+      const close = text.indexOf(']', i + 1);
+      if (close > i && text[close + 1] === '(') {
+        const rparen = text.indexOf(')', close + 2);
+        if (rparen > close + 1) {
+          pushText();
+          out.push({ t: 'link', href: text.slice(close + 2, rparen), children: parseInline(text.slice(i + 1, close)) });
+          i = rparen + 1;
+          continue;
+        }
+      }
+    }
+    // bare-URL autolink: http(s)://… up to whitespace/`<`, trailing punctuation trimmed
+    if (c === 'h' && (text.startsWith('http://', i) || text.startsWith('https://', i))) {
+      let j = i;
+      while (j < text.length && !/\s/.test(text[j]) && text[j] !== '<') j++;
+      const url = trimAutolinkTail(text.slice(i, j));
+      if (url.length > 0) {
+        pushText();
+        out.push({ t: 'link', href: url, children: [{ t: 'text', v: url }] });
+        i += url.length;
+        continue;
+      }
     }
     buf += c;
     i++;
@@ -78,6 +129,7 @@ function inlineToText(nodes: Inline[]): string {
           return n.v;
         case 'bold':
         case 'italic':
+        case 'link':
           return inlineToText(n.children);
       }
     })

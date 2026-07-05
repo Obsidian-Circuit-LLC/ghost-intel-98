@@ -12,6 +12,9 @@ function renderInline(nodes: Inline[]): ReactNode[] {
       case 'bold': return <strong key={i}>{renderInline(n.children)}</strong>;
       case 'italic': return <em key={i}>{renderInline(n.children)}</em>;
       case 'code': return <code key={i} style={{ fontFamily: 'monospace', background: '#eee', padding: '0 2px' }}>{n.v}</code>;
+      // Inert stub — Task 5 replaces this with a safeHref-guarded external-open anchor. Rendering the
+      // label as plain text keeps hostile schemes non-navigable (the safe default) until then.
+      case 'link': return <span key={i}>{renderInline(n.children)}</span>;
       default: { const _exhaustive: never = n; return _exhaustive; }
     }
   });
