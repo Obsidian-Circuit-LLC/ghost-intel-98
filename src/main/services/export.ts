@@ -18,8 +18,13 @@ import { buildSummaryHtml, type ReportImages } from './report-html';
 export { buildSummaryHtml };
 export type { ReportImage, ReportImages } from './report-html';
 
-export async function renderCasePdf(c: CaseRecord, images?: ReportImages): Promise<Buffer> {
-  const html = buildSummaryHtml(c, images);
+/**
+ * Render arbitrary self-contained HTML to a PDF Buffer, fully offline: write it to a short-lived
+ * OS-temp file and printToPDF() it in a locked-down offscreen window (sandbox, no JS, no node), on
+ * a 30s watchdog, always removing the temp file. Shared by renderCasePdf and the SP-7 INTELREPORT
+ * renderer so the security-critical render path exists once.
+ */
+export async function htmlToPdf(html: string): Promise<Buffer> {
   // The offscreen window must loadFile() PLAINTEXT html (it can't decrypt), so this temp can't
   // be encrypted. Therefore it must NOT live in dataRoot — a crash before the finally-rm would
   // strand a full plaintext case inside the encrypted vault. Put it in the OS temp dir, off the
@@ -40,4 +45,8 @@ export async function renderCasePdf(c: CaseRecord, images?: ReportImages): Promi
     try { if (!win.isDestroyed()) win.destroy(); } catch { /* gone */ }
     await rm(tmp, { force: true });
   }
+}
+
+export async function renderCasePdf(c: CaseRecord, images?: ReportImages): Promise<Buffer> {
+  return htmlToPdf(buildSummaryHtml(c, images));
 }
