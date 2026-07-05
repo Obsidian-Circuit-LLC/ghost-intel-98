@@ -24,6 +24,7 @@ import {
   handleXListSessions,
   handleXTestSession,
   handleXTestStoredSession,
+  handleXMigrateLegacySessions,
 } from '../src/main/x/ipc';
 import type { SessionMeta } from '../src/main/x/sessions-store';
 import type { SessionTestResult } from '../src/main/x/session-test';
@@ -87,14 +88,39 @@ describe('Task 3: channels.x session channels', () => {
 // addSession
 // ---------------------------------------------------------------------------
 
+const ACCOUNT_INDEX_KEY = 'x.accounts.index';
+
 describe('Task 3: handleXAddSession', () => {
+  it('appends the new accountId to the legacy x.accounts.index (GhostScrape discovery path)', async () => {
+    const secrets = makeSecretStore();
+    const meta = makeMetaStore();
+    await handleXAddSession(
+      { label: 'Alpha', authToken: AUTH, ct0: CT0 },
+      { getSecret: secrets.getSecret, setSecret: secrets.setSecret, putSessionMeta: meta.putSessionMeta, genId: () => 'uuid-new' },
+    );
+    // GhostScrape reads x.listAccounts → readAccountIndex(x.accounts.index); the refined session
+    // MUST be discoverable there, else GhostScrape can't authenticate with it.
+    expect(JSON.parse(secrets.store[ACCOUNT_INDEX_KEY])).toContain('uuid-new');
+  });
+
+  it('preserves pre-existing index entries when appending (does not clobber legacy accounts)', async () => {
+    const secrets = makeSecretStore();
+    const meta = makeMetaStore();
+    secrets.store[ACCOUNT_INDEX_KEY] = JSON.stringify(['burner1']);
+    await handleXAddSession(
+      { label: 'Alpha', authToken: AUTH, ct0: CT0 },
+      { getSecret: secrets.getSecret, setSecret: secrets.setSecret, putSessionMeta: meta.putSessionMeta, genId: () => 'uuid-new' },
+    );
+    expect(JSON.parse(secrets.store[ACCOUNT_INDEX_KEY])).toEqual(['burner1', 'uuid-new']);
+  });
+
   it('writes auth_token + ct0 + username secrets and untested metadata, returns a uuid accountId', async () => {
     const secrets = makeSecretStore();
     const meta = makeMetaStore();
     const genId = vi.fn(() => 'uuid-123');
     const res = await handleXAddSession(
       { label: 'Burner A', username: 'ghostexodus', authToken: AUTH, ct0: CT0 },
-      { setSecret: secrets.setSecret, putSessionMeta: meta.putSessionMeta, genId },
+      { getSecret: secrets.getSecret, setSecret: secrets.setSecret, putSessionMeta: meta.putSessionMeta, genId },
     );
     expect(res).toEqual({ accountId: 'uuid-123' });
     expect(secrets.store['x.accounts.uuid-123.auth_token']).toBe(AUTH);
@@ -111,7 +137,7 @@ describe('Task 3: handleXAddSession', () => {
     const meta = makeMetaStore();
     await handleXAddSession(
       { label: 'No handle', authToken: AUTH, ct0: CT0 },
-      { setSecret: secrets.setSecret, putSessionMeta: meta.putSessionMeta, genId: () => 'u2' },
+      { getSecret: secrets.getSecret, setSecret: secrets.setSecret, putSessionMeta: meta.putSessionMeta, genId: () => 'u2' },
     );
     expect(secrets.store['x.accounts.u2.username']).toBeUndefined();
     expect(meta.map.get('u2')?.username).toBeUndefined();
@@ -122,7 +148,7 @@ describe('Task 3: handleXAddSession', () => {
     const meta = makeMetaStore();
     await expect(handleXAddSession(
       { label: '  ', authToken: AUTH, ct0: CT0 },
-      { setSecret: secrets.setSecret, putSessionMeta: meta.putSessionMeta, genId: () => 'u3' },
+      { getSecret: secrets.getSecret, setSecret: secrets.setSecret, putSessionMeta: meta.putSessionMeta, genId: () => 'u3' },
     )).rejects.toThrow(/label/i);
     expect(secrets.setSecret).not.toHaveBeenCalled();
   });
@@ -130,7 +156,7 @@ describe('Task 3: handleXAddSession', () => {
   it('requires BOTH auth_token and ct0 (atomic pair)', async () => {
     const secrets = makeSecretStore();
     const meta = makeMetaStore();
-    const deps = { setSecret: secrets.setSecret, putSessionMeta: meta.putSessionMeta, genId: () => 'u4' };
+    const deps = { getSecret: secrets.getSecret, setSecret: secrets.setSecret, putSessionMeta: meta.putSessionMeta, genId: () => 'u4' };
     await expect(handleXAddSession({ label: 'L', authToken: AUTH }, deps)).rejects.toThrow(/ct0|auth_token/i);
     await expect(handleXAddSession({ label: 'L', ct0: CT0 }, deps)).rejects.toThrow(/ct0|auth_token/i);
     expect(secrets.setSecret).not.toHaveBeenCalled();
@@ -148,7 +174,7 @@ describe('Task 3: handleXRemoveSession', () => {
     secrets.store['x.accounts.abc.auth_token'] = AUTH;
     secrets.store['x.accounts.abc.ct0'] = CT0;
     meta.map.set('abc', { accountId: 'abc', label: 'L', status: 'valid' });
-    await handleXRemoveSession('abc', { deleteSecret: secrets.deleteSecret, removeSessionMeta: meta.removeSessionMeta });
+    await handleXRemoveSession('abc', { getSecret: secrets.getSecret, setSecret: secrets.setSecret, deleteSecret: secrets.deleteSecret, removeSessionMeta: meta.removeSessionMeta });
     expect(secrets.deleteSecret).toHaveBeenCalledWith('x.accounts.abc.auth_token');
     expect(secrets.deleteSecret).toHaveBeenCalledWith('x.accounts.abc.ct0');
     expect(secrets.deleteSecret).toHaveBeenCalledWith('x.accounts.abc.username');
@@ -159,15 +185,34 @@ describe('Task 3: handleXRemoveSession', () => {
   it('is a no-op for an empty accountId', async () => {
     const secrets = makeSecretStore();
     const meta = makeMetaStore();
-    await handleXRemoveSession('', { deleteSecret: secrets.deleteSecret, removeSessionMeta: meta.removeSessionMeta });
+    await handleXRemoveSession('', { getSecret: secrets.getSecret, setSecret: secrets.setSecret, deleteSecret: secrets.deleteSecret, removeSessionMeta: meta.removeSessionMeta });
     expect(secrets.deleteSecret).not.toHaveBeenCalled();
     expect(meta.removeSessionMeta).not.toHaveBeenCalled();
+  });
+
+  it('filters the removed id out of the legacy x.accounts.index (no dead GhostScrape entry / no migration resurrection)', async () => {
+    const secrets = makeSecretStore();
+    const meta = makeMetaStore();
+    secrets.store[ACCOUNT_INDEX_KEY] = JSON.stringify(['keep', 'abc']);
+    secrets.store['x.accounts.abc.auth_token'] = AUTH;
+    await handleXRemoveSession('abc', { getSecret: secrets.getSecret, setSecret: secrets.setSecret, deleteSecret: secrets.deleteSecret, removeSessionMeta: meta.removeSessionMeta });
+    expect(JSON.parse(secrets.store[ACCOUNT_INDEX_KEY])).toEqual(['keep']);
+  });
+
+  it('leaves the index untouched when the removed id was not present', async () => {
+    const secrets = makeSecretStore();
+    const meta = makeMetaStore();
+    secrets.store[ACCOUNT_INDEX_KEY] = JSON.stringify(['keep']);
+    await handleXRemoveSession('abc', { getSecret: secrets.getSecret, setSecret: secrets.setSecret, deleteSecret: secrets.deleteSecret, removeSessionMeta: meta.removeSessionMeta });
+    // setSecret must not have rewritten the index (only the 3 secret deletes ran).
+    expect(secrets.setSecret).not.toHaveBeenCalledWith(ACCOUNT_INDEX_KEY, expect.anything());
+    expect(JSON.parse(secrets.store[ACCOUNT_INDEX_KEY])).toEqual(['keep']);
   });
 
   it('sanitises path separators in the accountId before building secret keys', async () => {
     const secrets = makeSecretStore();
     const meta = makeMetaStore();
-    await handleXRemoveSession('a/b\\c', { deleteSecret: secrets.deleteSecret, removeSessionMeta: meta.removeSessionMeta });
+    await handleXRemoveSession('a/b\\c', { getSecret: secrets.getSecret, setSecret: secrets.setSecret, deleteSecret: secrets.deleteSecret, removeSessionMeta: meta.removeSessionMeta });
     expect(secrets.deleteSecret).toHaveBeenCalledWith('x.accounts.a_b_c.auth_token');
   });
 });
@@ -183,6 +228,47 @@ describe('Task 3: handleXListSessions', () => {
     const out = await handleXListSessions({ listSessions: meta.listSessions });
     expect(out).toEqual([{ accountId: 's1', label: 'One', status: 'valid', handle: 'ghostexodus' }]);
     assertNoSecret(out);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// migrateLegacySessions (non-destructive startup migration, spec §5)
+// ---------------------------------------------------------------------------
+
+describe('handleXMigrateLegacySessions', () => {
+  it('passes the legacy x.accounts.index ids to migrateSessions so upgraded accounts stay visible', async () => {
+    const secrets = makeSecretStore();
+    secrets.store[ACCOUNT_INDEX_KEY] = JSON.stringify(['burner1', 'burner2']);
+    const migrateSessions = vi.fn(async () => {});
+    await handleXMigrateLegacySessions({ getSecret: secrets.getSecret, migrateSessions });
+    expect(migrateSessions).toHaveBeenCalledWith(['burner1', 'burner2']);
+  });
+
+  it('does not call migrateSessions when the legacy index is empty/absent', async () => {
+    const secrets = makeSecretStore();
+    const migrateSessions = vi.fn(async () => {});
+    await handleXMigrateLegacySessions({ getSecret: secrets.getSecret, migrateSessions });
+    expect(migrateSessions).not.toHaveBeenCalled();
+  });
+
+  it('end-to-end: a legacy account synthesizes untested metadata that then lists', async () => {
+    // Legacy account "burner1" exists in the index + secretStore, but nothing is in the metadata
+    // store yet (the pre-refinement state on upgrade). Migration must make it listable.
+    const secrets = makeSecretStore();
+    secrets.store[ACCOUNT_INDEX_KEY] = JSON.stringify(['burner1']);
+    secrets.store['x.accounts.burner1.auth_token'] = AUTH;
+    secrets.store['x.accounts.burner1.ct0'] = CT0;
+    const meta = makeMetaStore();
+    // migrateSessions mirrors the sessions-store's non-destructive semantics.
+    const migrateSessions = vi.fn(async (ids: string[]) => {
+      for (const id of ids) {
+        if (![...meta.map.keys()].includes(id)) meta.map.set(id, { accountId: id, label: id, status: 'untested' });
+      }
+    });
+    await handleXMigrateLegacySessions({ getSecret: secrets.getSecret, migrateSessions });
+    const listed = await handleXListSessions({ listSessions: meta.listSessions });
+    expect(listed).toEqual([{ accountId: 'burner1', label: 'burner1', status: 'untested' }]);
+    assertNoSecret(listed);
   });
 });
 

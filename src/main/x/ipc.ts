@@ -238,7 +238,7 @@ export interface XSessionDeps {
  */
 export async function handleXAddSession(
   input: { label?: unknown; username?: unknown; authToken?: unknown; ct0?: unknown },
-  deps: Pick<XSessionDeps, 'setSecret' | 'putSessionMeta' | 'genId'>,
+  deps: Pick<XSessionDeps, 'getSecret' | 'setSecret' | 'putSessionMeta' | 'genId'>,
 ): Promise<{ accountId: string }> {
   const label = typeof input?.label === 'string' ? input.label.trim().slice(0, 128) : '';
   if (!label) throw new Error('x:addSession requires a label');
@@ -256,6 +256,15 @@ export async function handleXAddSession(
   await deps.setSecret(`${prefix}.ct0`, ct0);
   if (username) await deps.setSecret(`${prefix}.username`, username);
 
+  // Keep the legacy x.accounts.index in sync: it is the ONLY discovery path GhostScrape has
+  // (x.listAccounts → readAccountIndex). A session added via the refined UI must be selectable in
+  // GhostScrape too, since both share the same cookie store keyed by accountId. Mirrors
+  // handleXAddAccount's index append.
+  const index = await readAccountIndex(deps);
+  if (!index.includes(accountId)) {
+    await deps.setSecret(ACCOUNT_INDEX_KEY, JSON.stringify([...index, accountId]));
+  }
+
   await deps.putSessionMeta({ accountId, label, status: 'untested', ...(username !== undefined && { username }) });
   return { accountId };
 }
@@ -266,7 +275,7 @@ export async function handleXAddSession(
  */
 export async function handleXRemoveSession(
   rawAccountId: string,
-  deps: Pick<XSessionDeps, 'deleteSecret' | 'removeSessionMeta'>,
+  deps: Pick<XSessionDeps, 'getSecret' | 'setSecret' | 'deleteSecret' | 'removeSessionMeta'>,
 ): Promise<void> {
   if (!rawAccountId) return;
   const accountId = safeAccountId(rawAccountId);
@@ -274,6 +283,15 @@ export async function handleXRemoveSession(
   await deps.deleteSecret(`${prefix}.auth_token`);
   await deps.deleteSecret(`${prefix}.ct0`);
   await deps.deleteSecret(`${prefix}.username`);
+
+  // Drop the id from the legacy x.accounts.index too, so GhostScrape never lists a dead account
+  // whose secrets are gone, and so the startup legacy migration can't resurrect a removed session
+  // by re-synthesizing metadata from a stale index entry. Mirrors handleXRemoveAccount.
+  const index = await readAccountIndex(deps);
+  if (index.includes(accountId)) {
+    await deps.setSecret(ACCOUNT_INDEX_KEY, JSON.stringify(index.filter((id) => id !== accountId)));
+  }
+
   await deps.removeSessionMeta(accountId);
 }
 
@@ -282,6 +300,24 @@ export async function handleXListSessions(
   deps: Pick<XSessionDeps, 'listSessions'>,
 ): Promise<SessionMeta[]> {
   return deps.listSessions();
+}
+
+/**
+ * Non-destructive legacy-account migration (spec §5). Reads the legacy x.accounts.index (the only
+ * place a pre-refinement x:addAccount stored its account IDs) and synthesizes untested metadata —
+ * `{ label:<old id>, status:'untested' }` — for any id not already in the sessions store.
+ *
+ * Without this, a user who upgraded with an X account added the old way would find the refined
+ * Stored-Sessions list AND the collector picker empty (both read x.listSessions, which reads only
+ * the new metadata store) while their valid cookies still sit unreachable in secretStore. Run once
+ * at startup; idempotent — `migrateSessions` never overwrites existing metadata, so re-running only
+ * fills gaps, and (paired with handleXRemoveSession's index sync) it never resurrects a removed one.
+ */
+export async function handleXMigrateLegacySessions(
+  deps: Pick<XReadDeps, 'getSecret'> & { migrateSessions: (existingAccountIds: string[]) => Promise<void> },
+): Promise<void> {
+  const ids = await readAccountIndex(deps);
+  if (ids.length > 0) await deps.migrateSessions(ids);
 }
 
 /**
