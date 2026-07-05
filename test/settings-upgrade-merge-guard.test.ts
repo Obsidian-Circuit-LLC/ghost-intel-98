@@ -102,6 +102,26 @@ describe('settings upgrade guard — ai.webSearchClearnet (opt-in clearnet fallb
   });
 });
 
+describe('settings upgrade guard — ai.linkClearnetAcknowledged (one-time clearnet link ack)', () => {
+  it('upgrades an old ai block with no linkClearnetAcknowledged to the default (false)', async () => {
+    // A settings.json persisted before linkClearnetAcknowledged existed: ai present, field absent.
+    writeOnDiskSettings({ ai: { webSearch: true } });
+
+    const s = await settingsStore.read();
+
+    expect(s.ai.linkClearnetAcknowledged).toBe(false);   // healed to default (not yet acknowledged)
+    expect(s.ai.webSearch).toBe(true);                   // pre-existing user value kept
+  });
+
+  it('preserves a stored linkClearnetAcknowledged=true across the merge (not clobbered by the default)', async () => {
+    writeOnDiskSettings({ ai: { linkClearnetAcknowledged: true } });
+
+    const s = await settingsStore.read();
+
+    expect(s.ai.linkClearnetAcknowledged).toBe(true);    // user's one-time ack survives
+  });
+});
+
 describe('settings upgrade guard — completeness: every nested block survives a stale on-disk block', () => {
   it('keeps all default sub-fields for EVERY nested settings object (catches a future block left out of the merge)', async () => {
     // Synthesize the worst case for every nested block at once: present-but-empty, simulating

@@ -414,6 +414,10 @@ export interface AppSettings {
      *  the real IP to the query and result hosts — a deanonymization warning is always shown in the
      *  chat stream when it fires. Off by default; the Tor-only path is never weakened by this flag. */
     webSearchClearnet: boolean;
+    /** One-time acknowledgment that opening a link from Q's replies launches the default browser
+     *  over the clearnet, exposing the real IP (not Tor). False until the user confirms the first
+     *  clearnet-link warning; once true, subsequent link clicks open directly. Default false. */
+    linkClearnetAcknowledged: boolean;
   };
   mail: {
     accounts: { id: string; label: string; imapHost: string; imapPort: number; smtpHost: string; smtpPort: number; user: string; secureRef: string | null }[];
@@ -652,7 +656,8 @@ export const defaultSettings: AppSettings = {
     autoReindex: true,
     adaptiveMemory: false,
     webSearch: false,
-    webSearchClearnet: false
+    webSearchClearnet: false,
+    linkClearnetAcknowledged: false
   },
   mail: { accounts: [] },
   mailBackgroundCheck: false,
