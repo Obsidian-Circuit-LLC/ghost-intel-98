@@ -274,7 +274,9 @@ async function triggerAdaptiveLearning(convo: AiConversation): Promise<void> {
     if (!s.ai.useMemory || !s.ai.adaptiveMemory || s.ai.provider !== 'ollama') return;
     const turns = convo.messages.map((m) => `${m.role}: ${m.content}`).join('\n');
     const scopes = ['global', ...(convo.caseId ? [`case:${convo.caseId}`] : [])];
-    await learnFromConversation(convo.id, turns, scopes);
+    // Distill via the SAME endpoint+model the chat uses (the conversation already went there) — the
+    // old hardcoded llama3.1 on the bundled runtime 404'd, leaving the Learned panel empty.
+    await learnFromConversation(convo.id, turns, scopes, { model: s.ai.model || 'qwen3-abliterated:4b', endpoint: s.ai.endpoint });
   } catch { /* adaptive learning is best-effort */ }
 }
 

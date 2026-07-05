@@ -9,16 +9,17 @@
  * break a chat or a conversation save, so both `recallProfile` and `learnFromConversation` swallow
  * and degrade gracefully rather than reject.
  *
- * Zero egress beyond loopback: like `../embeddings.ts`, this ALWAYS talks to the bundled runtime's
- * fixed loopback address (`LOCAL_AI_ENDPOINT`), never the user's own-configured (possibly LAN)
- * chat endpoint — extraction/summarization must not depend on what endpoint the user picked for
- * chat, and must never reach further than 127.0.0.1.
+ * Egress: distillation mirrors the CHAT endpoint + model the caller passes (`s.ai.endpoint` /
+ * `s.ai.model`). This adds no new egress surface — the conversation being distilled has already
+ * traversed that exact endpoint during the chat, so it stays in the same trust domain the user
+ * chose (and for the common local-Ollama setup that is still 127.0.0.1). The earlier design pinned
+ * a hardcoded model on the bundled runtime, but the bundled runtime ships only the embed model —
+ * no chat model — so every distill call 404'd and nothing was ever learned.
  */
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { dataRoot } from '../../../storage/paths';
 import { secureReadText, secureWriteFile } from '../../../storage/secure-fs';
-import { ensureRuntime } from '../../local-ai';
 import { LOCAL_AI_ENDPOINT, LOCAL_AI_MODEL } from '../../local-ai-paths';
 import { createProfileStore, type ProfileStore } from './profile-store';
 import { reconcile } from './reconcile';
@@ -35,22 +36,35 @@ import { withLock } from '../../../util/mutex';
 // write clobbers the first, losing updates. The slow LLM calls stay OUTSIDE the lock.
 const PROFILE_LOCK = 'adaptive-memory-profile';
 
-// ---------- Real loopback-Ollama completion client (shared by extractor + summarizer) ----------
+// ---------- Ollama completion client (shared by extractor + summarizer) ----------
+//
+// Distillation mirrors the CHAT endpoint + model (`learnFromConversation` is handed `s.ai.endpoint`
+// / `s.ai.model` by its caller). This adds NO egress surface: the conversation being distilled has
+// ALREADY traversed that exact endpoint during the chat, so it stays inside the same trust domain
+// the user chose (and for the common local-Ollama setup that is still 127.0.0.1). The previous
+// hardcoded `llama3.1` on the bundled runtime 404'd forever — the bundled runtime ships only the
+// embed model, no chat model — which is why the Learned panel stayed empty.
 
-async function ollamaComplete(prompt: string): Promise<string> {
-  await ensureRuntime();
-  const res = await fetch(`${LOCAL_AI_ENDPOINT}/api/generate`, {
+async function ollamaComplete(prompt: string, model: string, endpoint: string): Promise<string> {
+  const res = await fetch(new URL('/api/generate', endpoint).toString(), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ model: LOCAL_AI_MODEL, prompt, stream: false }),
+    body: JSON.stringify({ model, prompt, stream: false }),
     signal: AbortSignal.timeout(30_000)
   });
-  if (!res.ok) throw new Error(`Local AI: HTTP ${res.status} ${res.statusText}`);
+  if (!res.ok) throw new Error(`Adaptive-memory distiller: HTTP ${res.status} ${res.statusText}`);
   const body = (await res.json()) as { response?: string };
   return typeof body.response === 'string' ? body.response : '';
 }
 
-const realClient: ExtractorClient & SummarizerClient = { complete: ollamaComplete };
+/** Build an extractor/summarizer client bound to a specific chat endpoint + model. */
+export function makeProfileClient(model: string, endpoint: string): ExtractorClient & SummarizerClient {
+  return { complete: (prompt) => ollamaComplete(prompt, model, endpoint) };
+}
+
+// Fallback default (bundled loopback) — only used if a caller omits the endpoint/model; the real
+// learn path always passes the user's configured pair.
+const realClient: ExtractorClient & SummarizerClient = makeProfileClient(LOCAL_AI_MODEL, LOCAL_AI_ENDPOINT);
 
 // ---------- Per-scope rolling-summary persistence (tiny sibling file to profile.json) ----------
 
@@ -187,20 +201,30 @@ export async function recallProfile(
  * to `now` here: the next call (however soon after, in real time) then decays only for whatever
  * real time actually elapsed since this checkpoint, not for the same window twice.
  */
-export async function learnFromConversation(convoId: string, turns: string, scopes: string[]): Promise<void> {
+export async function learnFromConversation(
+  convoId: string,
+  turns: string,
+  scopes: string[],
+  opts?: { model?: string; endpoint?: string }
+): Promise<void> {
   try {
     const d = getDeps();
+    // Distill via the user's configured chat endpoint+model when the caller supplies them (prod);
+    // fall back to the injected deps clients otherwise (tests inject their own).
+    const configured = opts?.model && opts?.endpoint ? makeProfileClient(opts.model, opts.endpoint) : null;
+    const extractorClient = configured ?? d.extractorClient;
+    const summarizerClient = configured ?? d.summarizerClient;
     const scope = targetScopeOf(scopes);
     const provenance = [`conversation:${convoId}`];
     const now = d.now();
 
     // LLM work (extraction + summarization) runs OUTSIDE the lock — it is slow (~30s Ollama) and
     // best-effort, and must never block a governance action (e.g. Wipe) waiting on the same lock.
-    const candidates = await extractItems(d.extractorClient, turns, scope, provenance);
+    const candidates = await extractItems(extractorClient, turns, scope, provenance);
     const prevSummary = parseSummaries(await d.summaryIo.read())[scope] ?? '';
     // summarizeTurns returns the COMPLETE updated summary — it is REPLACED (capped), never folded
     // onto prevSummary (folding duplicated the prior content on every settled turn).
-    const nextSummary = await summarizeTurns(d.summarizerClient, prevSummary, turns);
+    const nextSummary = await summarizeTurns(summarizerClient, prevSummary, turns);
 
     // Only the fast store + summary read-modify-write is serialised, so concurrent learns and
     // Memory-panel edits can't interleave and lose each other's writes.
@@ -222,10 +246,13 @@ export async function learnFromConversation(convoId: string, turns: string, scop
       const cur = parseSummaries(await d.summaryIo.read());
       await d.summaryIo.write(JSON.stringify({ ...cur, [scope]: capSummary(nextSummary, now).text }));
     });
-  } catch {
+  } catch (err) {
     // best-effort: extraction/reconcile/store/summarization failures must never break the
-    // caller's flow (the conversation-save path is not the response hot path, but this is still
-    // never allowed to surface — see the memory charter).
+    // caller's flow (the conversation-save path is not the response hot path). We DO log a warning
+    // (previously fully swallowed) so a persistently-failing distiller — e.g. the chat model
+    // unreachable — is diagnosable in the console instead of silently leaving the Learned panel
+    // empty forever.
+    console.warn('[adaptive-memory] learn failed (best-effort, profile not updated):', err);
   }
 }
 
