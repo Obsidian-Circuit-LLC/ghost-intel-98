@@ -13,7 +13,7 @@
 - **Commit identity:** author/committer `onna-bugeisha-dev-team <dev@onna-bugeisha.org>`. NEVER emit `Co-Authored-By`, `Signed-off-by`, `Claude-Session`, or any AI-identity trailer in author, committer, or message body.
 - **Never stage pre-existing dirty files:** `pnpm-lock.yaml`, `resources/satellites/active-snapshot.tle`, `native/dcs98-confine/Cargo.lock`, anything under `docs/superpowers/ideation/`, anything under `resources/local-ai/`. Stage only the files your task creates/modifies.
 - **Determinism (critical path):** no `Date.now()`/`Math.random()`/argless `new Date()` in `report.ts` or `report-html.ts`. Time enters via an injected `now: () => number`; `new Date(now()).toISOString()` is the only allowed conversion (storage boundary). Stable sorts everywhere with explicit tie-breaks.
-- **Security:** HTML-escape every untrusted value in `report-html.ts` (entity values, finding claims, objectives, roles, **and model-narrative prose**). `rawRef` renders as text, never a link. `caseId`/`runId` pass `ensureUuid` at the IPC boundary.
+- **Security:** HTML-escape every untrusted value in `report-html.ts` (entity values, finding claims, objectives, roles, **and model-narrative prose**). `rawRef` renders as text, never a link. `caseId` passes `ensureUuid` at the IPC boundary (it is a traversal-critical path segment); `runId` is a ledger filter value only (real runIds are `run-<n>` / `manual`, not UUIDs) so it is validated as a bounded, control-char-stripped string, not UUID-gated.
 - **No egress, no telemetry.** Local reads → offline render only.
 - Branch `feat/sp7-intelreport`. TDD: failing test → run (fails) → minimal impl → run (passes) → commit. Run the suite (`pnpm test`) before each task's final commit.
 
@@ -69,7 +69,7 @@ Implement spec §5 exactly: salience `2·bestFindingScore + degree + threatWeigh
 
 **Files:** Modify `src/shared/ipc-contracts.ts` (add `investigation.report.generate: 'investigation:report:generate'`). Create `src/main/investigation/report-ipc.ts` (`registerInvestigationReportIpc({ handle, validateCaseId, now, getNarrator })`). Modify `src/main/ipc/register.ts` (wire it, mirroring `registerInvestigationRunIpc`). Modify `src/preload/api.d.ts` + the preload bridge if run IPC has a preload entry (grep for `investigation.run` in preload). Test: `test/investigation-report-ipc.test.ts` (reuse the `makeHandle` double from `test/investigation-run-ipc.test.ts`).
 
-**Produces:** a `generate(caseId, opts?)` handler that `ensureUuid`s `caseId` (+ `runId` when present), calls `assembleReport` then `applyNarrative(report, getNarrator())`, and returns the `IntelReport`. `getNarrator` injected (returns subsystem-2 narrator if installed, else `TemplateNarrator`).
+**Produces:** a `generate(caseId, opts?)` handler that `ensureUuid`s `caseId` and validates any `runId` as a bounded, control-char-stripped string (not UUID-gated — real runIds are `run-<n>` / `manual`), calls `assembleReport` then `applyNarrative(report, getNarrator())`, and returns the `IntelReport`. `getNarrator` injected (returns subsystem-2 narrator if installed, else `TemplateNarrator`).
 
 - [ ] Tests: non-UUID `caseId` throws `/UUID/i`; returns a model with `narrative` set; `getNarrator` returning null → template fallback; a throwing narrator → still returns a report (template). TDD, run suite, commit.
 
