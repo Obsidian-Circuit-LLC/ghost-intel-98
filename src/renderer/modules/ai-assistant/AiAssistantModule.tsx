@@ -23,6 +23,7 @@ import { loadAttachmentBytes } from '../../lib/attachmentBytes';
 import { createVoskRecognizer } from '../../voice/recognizer';
 import { VoiceConversation, type VoiceMode, type VoiceState } from '../../voice/conversation';
 import { MarkdownView } from './MarkdownView';
+import { useClearnetLinkOpener } from './useClearnetLinkOpener';
 import { stripMarkdown } from './markdown';
 import { groupItemsByScope, formatRecallProvenance, labelForScope } from './memory-view';
 import { appendRecalled } from './recall-inject';
@@ -64,6 +65,9 @@ export function AiAssistantModule(): JSX.Element {
   const settings = useSettings((s) => s.settings);
   const patchSettings = useSettings((s) => s.patch);
   const formatted = useSettings((s) => s.settings?.ai?.formattedOutput ?? true);
+  // Open policy for links clicked in Q's replies: one-time clearnet-IP acknowledgment then
+  // system.openExternal. Keeps MarkdownView a pure renderer.
+  const openLink = useClearnetLinkOpener();
   const [voices, setVoices] = useState<TtsVoice[]>([]);
   const [voicesLoaded, setVoicesLoaded] = useState(false);
   const [piperOk, setPiperOk] = useState(false);
@@ -760,7 +764,7 @@ export function AiAssistantModule(): JSX.Element {
               {m.role === 'user' ? 'You' : 'Assistant'}{m.streaming ? ' · streaming…' : ''}
             </div>
             {formatted && m.role === 'assistant'
-              ? <MarkdownView text={m.content} />
+              ? <MarkdownView text={m.content} onLinkClick={openLink} />
               : <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontFamily: 'inherit', fontSize: 13 }}>{m.content}</pre>}
           </div>
         ))}

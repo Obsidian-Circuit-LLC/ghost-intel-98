@@ -55,7 +55,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { HarvestedItem, MonitoredChannel, SocmintPlatform } from '@shared/socmint/types';
 import { useSettings, useWindows } from '../../state/store';
-import { safeHref } from './safe-href';
+import { safeHref } from '../../util/safe-href';
 import { xLaunchSpec } from './x-launch-spec';
 import {
   buildStartMonitorRequest,

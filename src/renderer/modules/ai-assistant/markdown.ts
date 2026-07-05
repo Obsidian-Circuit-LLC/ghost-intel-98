@@ -9,7 +9,8 @@ export type Inline =
   | { t: 'text'; v: string }
   | { t: 'bold'; children: Inline[] }
   | { t: 'italic'; children: Inline[] }
-  | { t: 'code'; v: string };
+  | { t: 'code'; v: string }
+  | { t: 'link'; href: string; children: Inline[] };
 
 export type Block =
   | { t: 'p'; children: Inline[] }
@@ -19,7 +20,58 @@ export type Block =
 const HEADING = /^(#{1,6})\s+(.*)$/;
 const BULLET = /^\s*[*\-+]\s+(.*)$/;
 
-export function parseInline(text: string): Inline[] {
+const TRAILING_PUNCT = '.,;:!?\'"';
+
+/**
+ * Trim trailing punctuation off a bare-URL autolink token so `see https://x/a.` drops the period:
+ * strip trailing `.,;:!?'"`, and a trailing `)`/`]` only when the URL has no matching opener
+ * (so Wikipedia-style `..._(bar)` parens survive but a wrapping `(url)` paren does not). Pure.
+ */
+function trimAutolinkTail(url: string): string {
+  let end = url.length;
+  while (end > 0) {
+    const ch = url[end - 1];
+    if (TRAILING_PUNCT.includes(ch)) { end--; continue; }
+    if (ch === ')' || ch === ']') {
+      const open = ch === ')' ? '(' : '[';
+      const slice = url.slice(0, end);
+      let opens = 0;
+      let closes = 0;
+      for (const s of slice) { if (s === open) opens++; else if (s === ch) closes++; }
+      if (opens < closes) { end--; continue; }
+    }
+    break;
+  }
+  return url.slice(0, end);
+}
+
+/**
+ * Find the index of the `)` that closes a markdown link's `(url)`, given the index just past the
+ * opening `(`. Tracks nesting so a URL that itself contains balanced parens (Wikipedia
+ * disambiguation `..._(bar)`, many tracking URLs) is captured whole instead of being truncated at
+ * the first inner `)`. Returns -1 if the parens never balance (unclosed — caller falls through to
+ * literal text). Pure.
+ */
+function matchLinkClose(text: string, start: number): number {
+  let depth = 1;
+  for (let k = start; k < text.length; k++) {
+    const ch = text[k];
+    if (ch === '(') depth++;
+    else if (ch === ')') { depth--; if (depth === 0) return k; }
+  }
+  return -1;
+}
+
+/**
+ * @param inLink when true we are parsing a markdown link's LABEL — link/autolink recognition is
+ *   suppressed so a label containing a URL (the very common `[url](url)` form models emit, or an
+ *   adversarial `[click https://evil.com here](https://good.com)`) does NOT produce a link nested
+ *   inside a link. Nested `<a>` is invalid DOM and, worse, a single click would bubble through both
+ *   anchors' onClick handlers, firing the clearnet-open policy twice / opening a second host the
+ *   analyst never chose. Emphasis (bold/italic/code) still parses inside a label; the flag threads
+ *   through those recursive calls so no link is ever recognized at any depth within a label.
+ */
+export function parseInline(text: string, inLink = false): Inline[] {
   const out: Inline[] = [];
   let buf = '';
   let i = 0;
@@ -35,12 +87,41 @@ export function parseInline(text: string): Inline[] {
     if ((c === '*' || c === '_') && text[i + 1] === c) {
       const marker = c + c;
       const end = text.indexOf(marker, i + 2);
-      if (end > i + 1) { pushText(); out.push({ t: 'bold', children: parseInline(text.slice(i + 2, end)) }); i = end + 2; continue; }
+      if (end > i + 1) { pushText(); out.push({ t: 'bold', children: parseInline(text.slice(i + 2, end), inLink) }); i = end + 2; continue; }
     }
     // italic: *...* or _..._  (skip when it's a double marker — that was an unclosed bold)
     if ((c === '*' || c === '_') && text[i + 1] !== c) {
       const end = text.indexOf(c, i + 1);
-      if (end > i + 1) { pushText(); out.push({ t: 'italic', children: parseInline(text.slice(i + 1, end)) }); i = end + 1; continue; }
+      if (end > i + 1) { pushText(); out.push({ t: 'italic', children: parseInline(text.slice(i + 1, end), inLink) }); i = end + 1; continue; }
+    }
+    // markdown link: [label](url) — label parsed recursively; scheme-agnostic (raw href kept).
+    // Suppressed inside a link label so links never nest.
+    if (!inLink && c === '[') {
+      const close = text.indexOf(']', i + 1);
+      if (close > i && text[close + 1] === '(') {
+        // Balance-match the closing paren (not the first `)`), so a URL containing parens is not
+        // truncated — mirrors trimAutolinkTail's paren balancing for the bare-URL path.
+        const rparen = matchLinkClose(text, close + 2);
+        if (rparen >= close + 2) {
+          pushText();
+          out.push({ t: 'link', href: text.slice(close + 2, rparen), children: parseInline(text.slice(i + 1, close), true) });
+          i = rparen + 1;
+          continue;
+        }
+      }
+    }
+    // bare-URL autolink: http(s)://… up to whitespace/`<`, trailing punctuation trimmed.
+    // Suppressed inside a link label so a URL in the label does not nest a second link.
+    if (!inLink && c === 'h' && (text.startsWith('http://', i) || text.startsWith('https://', i))) {
+      let j = i;
+      while (j < text.length && !/\s/.test(text[j]) && text[j] !== '<') j++;
+      const url = trimAutolinkTail(text.slice(i, j));
+      if (url.length > 0) {
+        pushText();
+        out.push({ t: 'link', href: url, children: [{ t: 'text', v: url }] });
+        i += url.length;
+        continue;
+      }
     }
     buf += c;
     i++;
@@ -78,6 +159,7 @@ function inlineToText(nodes: Inline[]): string {
           return n.v;
         case 'bold':
         case 'italic':
+        case 'link':
           return inlineToText(n.children);
       }
     })

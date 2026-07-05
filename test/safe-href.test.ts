@@ -2,11 +2,13 @@
  * safeHref — XSS choke-point unit tests.
  *
  * Verifies that the scheme-guard allows only http/https and blocks all other
- * schemes or malformed inputs (javascript:, data:, file:, vbscript:, empty, unparseable).
+ * schemes or malformed inputs (javascript:, data:, mailto:, file:, vbscript:,
+ * empty, unparseable, userinfo-bearing). Shared renderer util — the single
+ * render-time URL choke-point for SOCMINT, X and Q's AI-assistant replies.
  */
 
 import { describe, it, expect } from 'vitest';
-import { safeHref } from '../src/renderer/modules/socmint/safe-href';
+import { safeHref } from '../src/renderer/util/safe-href';
 
 describe('safeHref — allowed schemes', () => {
   it('returns the href for an http URL', () => {
@@ -33,6 +35,10 @@ describe('safeHref — blocked schemes and malformed inputs', () => {
 
   it('returns null for data: URL', () => {
     expect(safeHref('data:text/html,x')).toBeNull();
+  });
+
+  it('returns null for mailto: URL', () => {
+    expect(safeHref('mailto:someone@example.com')).toBeNull();
   });
 
   it('returns null for vbscript: URL', () => {

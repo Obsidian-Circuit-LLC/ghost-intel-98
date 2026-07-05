@@ -45,7 +45,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { HarvestedItem } from '@shared/socmint/types';
 import type { XCollectResultShape, XCollectorStatus, XSessionMeta } from '@shared/ipc-contracts';
 import { useSettings } from '../../state/store';
-import { safeHref } from '../socmint/safe-href';
+import { safeHref } from '../../util/safe-href';
 import { buildScrapingCaseOptions, type ScrapingCaseOption } from '../socmint/case-options';
 import { PromptDialog, ChoiceDialog } from '../../components/CaseDialogs';
 import { xStatusDisplay } from './status-display';
