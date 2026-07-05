@@ -617,7 +617,21 @@ const api = {
     listItems: (caseId: string) =>
       ipcRenderer.invoke(channels.x.listItems, caseId),
     rankItems: (caseId: string, keyword: string) =>
-      ipcRenderer.invoke(channels.x.rankItems, caseId, keyword)
+      ipcRenderer.invoke(channels.x.rankItems, caseId, keyword),
+    // Session model — atomic auth_token+ct0 sessions. Secrets go main-side only; these calls
+    // return an accountId, session metadata, or a test result — never a cookie value.
+    addSession: (input: { label: string; username?: string; authToken: string; ct0: string }) =>
+      ipcRenderer.invoke(channels.x.addSession, input),
+    addSessionTested: (input: { label: string; username?: string; authToken: string; ct0: string }) =>
+      ipcRenderer.invoke(channels.x.addSessionTested, input),
+    removeSession: (accountId: string) =>
+      ipcRenderer.invoke(channels.x.removeSession, accountId),
+    listSessions: () =>
+      ipcRenderer.invoke(channels.x.listSessions),
+    testSession: (creds: { authToken: string; ct0: string }) =>
+      ipcRenderer.invoke(channels.x.testSession, creds),
+    testStoredSession: (accountId: string) =>
+      ipcRenderer.invoke(channels.x.testStoredSession, accountId)
   },
   // GhostScrape — hidden-browser X timeline/profile scraper (clearnet quarantine, GS-6).
   // Reuses the SAME two-flag gate + shared x.accounts.<id> session cookies as the x

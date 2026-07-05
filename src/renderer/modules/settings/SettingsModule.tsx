@@ -13,7 +13,8 @@ import { useAuth, useSettings } from '../../state/store';
 import { LocalAiPane } from './LocalAiPane';
 import { playMailNotify, clearMailChimeCache } from '../../audio/synth';
 import logoUrl from '../../assets/logo.png';
-import { CLEARNET_DIALOG_TEXT, xNetworkToggleEnabled } from '../x/x-settings-logic';
+import { CLEARNET_DIALOG_TEXT, xGateEffective, xGateToggleAction } from '../x/x-settings-logic';
+import type { XSessionMeta } from '@shared/ipc-contracts';
 
 type SectionKey = 'about' | 'sound' | 'theme' | 'cases' | 'shortcuts' | 'ai' | 'browser' | 'terminal' | 'mail' | 'backup' | 'security' | 'searchlight' | 'geoint' | 'socmint' | 'x';
 
@@ -906,255 +907,337 @@ function SocmintPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSetti
 // X / Twitter collector settings pane (X-7)
 // ---------------------------------------------------------------------------
 
-/**
- * XPane — gated toggle + clearnet-acknowledgement dialog + account management.
- *
- * Gating (spec §3.1):
- *   - The network-enabled toggle is DISABLED until clearnetAcknowledged=true.
- *   - clearnetAcknowledged is set only via the explicit confirmation dialog
- *     (not by the toggle alone). The dialog text is from CLEARNET_DIALOG_TEXT.
- *
- * Credentials (spec §5.2):
- *   - auth_token / ct0 are written to secretStore via x.addAccount().
- *   - Credential input fields are type="password" and are cleared after save.
- *   - x.listAccounts() returns IDs only; x.hasAccount() returns boolean only.
- *   - No credential values are ever displayed or stored in component state after save.
- */
-function XPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSettings>) => Promise<void> }): JSX.Element {
-  const [newAccountId, setNewAccountId] = useState('');
-  const [newAuthToken, setNewAuthToken] = useState('');
-  const [newCt0, setNewCt0] = useState('');
-  const [newUsername, setNewUsername] = useState('');
-  const [accountList, setAccountList] = useState<string[]>([]);
-  const [credStatus, setCredStatus] = useState<Record<string, boolean>>({});
-  const [saving, setSaving] = useState(false);
+/** Relative-time label for the Stored-sessions "last tested" column. Display-only
+ *  (not a correctness path); `now` is injected so the formatting itself is pure. */
+function fmtRelative(iso: string | undefined, now: number): string {
+  if (!iso) return 'never tested';
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return 'unknown';
+  const secs = Math.max(0, Math.round((now - t) / 1000));
+  if (secs < 60) return 'just now';
+  const mins = Math.round(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.round(hrs / 24);
+  return `${days}d ago`;
+}
 
-  const loadAccounts = useCallback(async (): Promise<void> => {
+const STATUS_BADGE: Record<XSessionMeta['status'], { text: string; color: string }> = {
+  valid: { text: 'Valid ✓', color: '#008000' },
+  expired: { text: 'Expired ✗', color: '#a00000' },
+  untested: { text: 'Untested •', color: '#888' },
+};
+
+/**
+ * XPane — one-control clearnet gate + atomic session management (spec §4–§6).
+ *
+ * Gate (spec §4): ONE "Enable authenticated X collection" checkbox whose checked
+ * state is the *effective* gate (networkEnabled && clearnetAcknowledged). Any
+ * legacy inconsistent state renders OFF; checking it (when not yet acknowledged)
+ * opens the CLEARNET_DIALOG_TEXT modal and only patches BOTH flags on confirm.
+ *
+ * Sessions (spec §5/§6): a session is an atomic auth_token+ct0 pair. Add session
+ * → Test & Save validates the pair against X main-side then writes it; the row's
+ * @handle is authoritative (from the last Test), not a self-reported hint. The
+ * renderer NEVER reads a secret back — only XSessionMeta and a handle cross the
+ * seam. Test/Save actions are egress-gated behind the enable flag.
+ */
+export function XPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSettings>) => Promise<void> }): JSX.Element {
+  const [sessions, setSessions] = useState<XSessionMeta[]>([]);
+  const [label, setLabel] = useState('');
+  const [username, setUsername] = useState('');
+  const [authToken, setAuthToken] = useState('');
+  const [ct0, setCt0] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [rowBusy, setRowBusy] = useState<string | null>(null);
+  // `canSaveUntested` becomes true only after an INCONCLUSIVE test (rate-limited /
+  // network) so a transient failure with good cookies isn't a dead end.
+  const [status, setStatus] = useState<{ kind: 'idle' | 'ok' | 'error' | 'inconclusive'; msg: string }>({ kind: 'idle', msg: '' });
+
+  const loadSessions = useCallback(async (): Promise<void> => {
     try {
-      const ids = (await window.api.x.listAccounts()) as string[];
-      setAccountList(ids);
-      const pairs = await Promise.all(
-        ids.map(async (id) => {
-          const has = (await window.api.x.hasAccount(id)) as boolean;
-          return [id, has] as const;
-        }),
-      );
-      setCredStatus(Object.fromEntries(pairs));
+      setSessions(await window.api.x.listSessions());
     } catch {
-      setAccountList([]);
-      setCredStatus({});
+      setSessions([]);
     }
   }, []);
 
-  useEffect(() => { void loadAccounts(); }, [loadAccounts]);
+  useEffect(() => { void loadSessions(); }, [loadSessions]);
 
   const x = s.x;
+  const gateOn = xGateEffective(x);
 
-  const handleAcknowledge = async (): Promise<void> => {
-    const ok = await confirmDialog(CLEARNET_DIALOG_TEXT, 'X/Twitter Collector — Clearnet Acknowledgement');
-    if (!ok) return;
-    await patch({ x: { ...x, clearnetAcknowledged: true } });
-    toast.info('Clearnet acknowledged. You may now enable the X collector.');
-  };
-
-  const handleNetworkToggle = async (checked: boolean): Promise<void> => {
-    if (checked && !xNetworkToggleEnabled(x.clearnetAcknowledged)) {
-      toast.error('Acknowledge the clearnet warning first (see below).');
+  const handleToggle = async (nextChecked: boolean): Promise<void> => {
+    const action = xGateToggleAction(x, nextChecked);
+    if (action.kind === 'disable') {
+      await patch({ x: { ...x, networkEnabled: false } });
       return;
     }
-    await patch({ x: { ...x, networkEnabled: checked } });
-  };
-
-  const handleAddAccount = async (): Promise<void> => {
-    const id = newAccountId.trim();
-    if (!id) { toast.error('Enter an account ID.'); return; }
-    if (!newAuthToken.trim() && !newCt0.trim()) {
-      toast.error('Enter at least auth_token or ct0.');
+    if (action.kind === 'enable-direct') {
+      await patch({ x: { ...x, networkEnabled: true } });
       return;
     }
-    setSaving(true);
+    // needs-ack-modal — first-time enable: show the durable clearnet disclosure.
+    const ok = await confirmDialog(CLEARNET_DIALOG_TEXT, 'Enable authenticated X collection');
+    if (!ok) return; // cancel → no change
+    await patch({ x: { ...x, clearnetAcknowledged: true, networkEnabled: true } });
+  };
+
+  const resetForm = (): void => { setLabel(''); setUsername(''); setAuthToken(''); setCt0(''); };
+
+  const missingFields = !label.trim() || !authToken.trim() || !ct0.trim();
+
+  /** Write secrets + metadata. Returns the new opaque accountId (never a secret). */
+  const addSession = async (): Promise<string> => {
+    const { accountId } = await window.api.x.addSession({
+      label: label.trim(),
+      username: username.trim() || undefined,
+      authToken: authToken.trim(),
+      ct0: ct0.trim(),
+    });
+    return accountId;
+  };
+
+  const handleTestAndSave = async (): Promise<void> => {
+    if (missingFields) {
+      setStatus({ kind: 'error', msg: 'Local label, auth_token and ct0 are all required.' });
+      return;
+    }
+    setBusy(true);
     try {
-      const creds: Record<string, string> = {};
-      if (newAuthToken.trim()) creds.auth_token = newAuthToken.trim();
-      if (newCt0.trim()) creds.ct0 = newCt0.trim();
-      if (newUsername.trim()) creds.username = newUsername.trim();
-      await window.api.x.addAccount(id, creds);
-      // Clear credential fields immediately after save — they must not remain in state.
-      setNewAccountId(''); setNewAuthToken(''); setNewCt0(''); setNewUsername('');
-      toast.success('X account credentials saved (encrypted).');
-      await loadAccounts();
+      // One gated main-side op: test + save-on-valid, status/handle stamped from that single test
+      // (no second clearnet request, no message-vs-stored-status divergence).
+      const { result } = await window.api.x.addSessionTested({
+        label: label.trim(),
+        username: username.trim() || undefined,
+        authToken: authToken.trim(),
+        ct0: ct0.trim(),
+      });
+      if (result.valid) {
+        setStatus({ kind: 'ok', msg: `✓ Session valid — authenticated as @${result.handle}` });
+        resetForm();
+        await loadSessions();
+      } else if (result.reason === 'expired') {
+        setStatus({ kind: 'error', msg: '✗ Session invalid or expired — paste a fresh auth_token + ct0' });
+      } else {
+        setStatus({ kind: 'inconclusive', msg: `Couldn't verify (${result.reason}) — you can Save without testing.` });
+      }
     } catch (err) {
-      toast.error(`Save failed: ${(err as Error).message}`);
+      setStatus({ kind: 'inconclusive', msg: `Couldn't verify (${(err as Error).message}) — you can Save without testing.` });
     } finally {
-      setSaving(false);
+      setBusy(false);
     }
   };
 
-  const handleRemoveAccount = async (id: string): Promise<void> => {
+  const handleSaveWithoutTesting = async (): Promise<void> => {
+    if (missingFields) {
+      setStatus({ kind: 'error', msg: 'Local label, auth_token and ct0 are all required.' });
+      return;
+    }
+    setBusy(true);
+    try {
+      await addSession();
+      setStatus({ kind: 'ok', msg: 'Session saved (untested).' });
+      resetForm();
+      await loadSessions();
+    } catch (err) {
+      setStatus({ kind: 'error', msg: `Save failed: ${(err as Error).message}` });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleTestStored = async (id: string): Promise<void> => {
+    setRowBusy(id);
+    try {
+      await window.api.x.testStoredSession(id);
+      await loadSessions();
+    } catch (err) {
+      toast.error(`Test failed: ${(err as Error).message}`);
+    } finally {
+      setRowBusy(null);
+    }
+  };
+
+  const handleRemove = async (id: string, rowLabel: string): Promise<void> => {
     const ok = await confirmDialog(
-      `Remove X account "${id}" and delete all stored credentials?`,
-      'Remove X account',
+      `Remove session "${rowLabel}" and delete its stored cookies?`,
+      'Remove session',
     );
     if (!ok) return;
     try {
-      await window.api.x.removeAccount(id);
-      toast.success('Account removed.');
-      await loadAccounts();
+      await window.api.x.removeSession(id);
+      await loadSessions();
     } catch (err) {
       toast.error(`Remove failed: ${(err as Error).message}`);
     }
   };
+
+  const now = Date.now();
 
   return (
     <>
       <fieldset>
         <legend>X / Twitter Collector</legend>
 
-        {/* Clearnet acknowledgement gate */}
-        {!x.clearnetAcknowledged ? (
-          <div style={{ border: '1px solid #c0a000', background: '#fffae0', padding: 10, marginBottom: 12 }}>
-            <p style={{ margin: '0 0 6px 0', fontWeight: 'bold', color: '#7a4d00' }}>
-              Clearnet acknowledgement required
-            </p>
-            <p style={{ margin: '0 0 8px 0', fontSize: 12, color: '#444' }}>
-              The X/Twitter collector makes requests to x.com over your regular internet
-              connection. Unlike SOCMINT (Telegram) it cannot be routed through Tor.
-              You must read and confirm the clearnet disclosure before the network
-              toggle can be enabled.
-            </p>
-            <button onClick={() => void handleAcknowledge()}>
-              View clearnet disclosure and acknowledge…
-            </button>
-          </div>
-        ) : (
-          <p style={{ fontSize: 11, color: '#008000', marginBottom: 8 }}>
-            ✓ Clearnet exposure acknowledged.
-          </p>
-        )}
-
-        {/* Network enable toggle — disabled until clearnetAcknowledged */}
-        <div style={{ marginBottom: 10 }}>
-          <label
-            style={{
-              display: 'flex', gap: 8, alignItems: 'flex-start',
-              cursor: xNetworkToggleEnabled(x.clearnetAcknowledged) ? 'pointer' : 'not-allowed',
-              opacity: xNetworkToggleEnabled(x.clearnetAcknowledged) ? 1 : 0.45,
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={x.networkEnabled}
-              disabled={!xNetworkToggleEnabled(x.clearnetAcknowledged)}
-              onChange={(e) => void handleNetworkToggle(e.target.checked)}
-              style={{ marginTop: 2 }}
-            />
-            <span>
-              Enable X/Twitter network egress (off by default). When off, the sidecar
-              is never spawned and no egress is initiated for X collection.
+        {/* One-control gate — checked = effective gate (both flags). */}
+        <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            aria-label="Enable authenticated X collection"
+            checked={gateOn}
+            onChange={(e) => void handleToggle(e.target.checked)}
+            style={{ marginTop: 2 }}
+          />
+          <span>
+            <strong>Enable authenticated X collection</strong>
+            <span style={{ display: 'block', fontSize: 11, color: '#900' }}>
+              Uses your real clearnet IP — X has no Tor path.
             </span>
-          </label>
-          {!xNetworkToggleEnabled(x.clearnetAcknowledged) && (
-            <p style={{ fontSize: 11, color: '#900', margin: '3px 0 0 24px' }}>
-              Requires clearnet acknowledgement above.
-            </p>
-          )}
-        </div>
+          </span>
+        </label>
 
-        <p style={{ fontSize: 11, color: '#444', margin: '0 0 0 0' }}>
-          The X collector uses a Python sidecar (twscrape) that connects to x.com. Both
-          settings.x.networkEnabled and settings.x.clearnetAcknowledged must be true at
-          the IPC gate before any sidecar path is entered (spec §3.1). The sidecar binary
-          is built, SHA-256-pinned, and bundled in the Windows and Linux installers
-          (macOS is not yet built); on a platform with no bundled sidecar, collection
-          reports &ldquo;sidecar not installed&rdquo;.
+        <p style={{ fontSize: 11, color: '#444', margin: '10px 0 0 0' }}>
+          Both <code>settings.x.networkEnabled</code> and <code>settings.x.clearnetAcknowledged</code>{' '}
+          must be true before any X egress path is entered. Enabling here confirms the
+          clearnet disclosure once; disabling leaves the acknowledgement in place so
+          re-enabling is a single click. The twscrape sidecar is built, SHA-256-pinned,
+          and bundled (Windows/Linux); with none bundled, collection reports
+          &ldquo;sidecar not installed&rdquo;.
         </p>
       </fieldset>
 
-      {/* Account credentials */}
+      {/* Stored sessions */}
       <fieldset>
-        <legend>X Account Credentials</legend>
+        <legend>Stored sessions</legend>
         <p style={{ fontSize: 11, color: '#444', margin: '0 0 8px 0' }}>
-          Credentials (auth_token + ct0) are stored encrypted via the OS keyring under
-          {' '}<code>x.accounts.&lt;id&gt;.*</code>. Only a boolean{' '}
-          <strong>has credential</strong> status is shown here — the secret values
-          are never echoed to the UI (spec §5.2). Provision burner accounts externally
-          on an unlinked device/network before adding them here.
+          A session is a matched <code>auth_token</code> + <code>ct0</code> pair, stored
+          encrypted in the OS keyring; only non-secret metadata (label, last-tested handle,
+          status) is shown here — the cookies are never echoed back to the UI. The @handle
+          is authoritative, resolved from X during the last Test.
         </p>
 
-        {/* Existing accounts */}
-        {accountList.length > 0 && (
-          <div style={{ marginBottom: 12 }}>
-            <p style={{ fontSize: 12, fontWeight: 'bold', margin: '0 0 6px 0' }}>Stored accounts</p>
-            <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
-              {accountList.map((id) => (
-                <li key={id} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
-                  <code style={{ flex: 1, fontSize: 12 }}>{id}</code>
-                  {credStatus[id]
-                    ? <span style={{ fontSize: 11, color: '#008000' }}>✓ auth_token stored</span>
-                    : <span style={{ fontSize: 11, color: '#888' }}>no auth_token</span>
-                  }
-                  <button onClick={() => void handleRemoveAccount(id)}>Remove</button>
+        {sessions.length === 0 ? (
+          <p style={{ fontSize: 11, color: '#888', margin: 0 }}>No sessions stored yet.</p>
+        ) : (
+          <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+            {sessions.map((m) => {
+              const badge = STATUS_BADGE[m.status];
+              const handle = m.handle ?? m.username;
+              return (
+                <li
+                  key={m.accountId}
+                  data-x-session-id={m.accountId}
+                  style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}
+                >
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <strong style={{ fontSize: 12 }}>{m.label}</strong>
+                    {handle && <span style={{ fontSize: 11, color: '#444' }}> · @{handle}</span>}
+                    <span style={{ display: 'block', fontSize: 10, color: '#888' }}>
+                      Last tested: {fmtRelative(m.lastTestedAt, now)}
+                    </span>
+                  </span>
+                  <span style={{ fontSize: 11, color: badge.color, whiteSpace: 'nowrap' }}>{badge.text}</span>
+                  <button
+                    onClick={() => void handleTestStored(m.accountId)}
+                    disabled={!gateOn || rowBusy === m.accountId}
+                    title={gateOn ? undefined : 'Enable authenticated X collection first'}
+                  >
+                    {rowBusy === m.accountId ? 'Testing…' : 'Test'}
+                  </button>
+                  <button onClick={() => void handleRemove(m.accountId, m.label)}>Remove</button>
                 </li>
-              ))}
-            </ul>
-          </div>
+              );
+            })}
+          </ul>
         )}
+      </fieldset>
 
-        {/* Add new account */}
-        <div>
-          <p style={{ fontSize: 12, fontWeight: 'bold', margin: '0 0 6px 0' }}>Add account</p>
-          <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', gap: 6, alignItems: 'center' }}>
-            <label>Account ID:</label>
-            <input
-              className="ga98-text"
-              value={newAccountId}
-              onChange={(e) => setNewAccountId(e.target.value)}
-              placeholder="e.g. burner-x-1"
-              disabled={saving}
-            />
-            <label>auth_token:</label>
-            <input
-              className="ga98-text"
-              type="password"
-              value={newAuthToken}
-              onChange={(e) => setNewAuthToken(e.target.value)}
-              placeholder="(cookie — write-only, not echoed)"
-              disabled={saving}
-              autoComplete="off"
-            />
-            <label>ct0:</label>
-            <input
-              className="ga98-text"
-              type="password"
-              value={newCt0}
-              onChange={(e) => setNewCt0(e.target.value)}
-              placeholder="(CSRF token — write-only, not echoed)"
-              disabled={saving}
-              autoComplete="off"
-            />
-            <label>Username (opt.):</label>
-            <input
-              className="ga98-text"
-              value={newUsername}
-              onChange={(e) => setNewUsername(e.target.value)}
-              placeholder="@handle (optional)"
-              disabled={saving}
-            />
-          </div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
-            <button
-              onClick={() => void handleAddAccount()}
-              disabled={saving || !newAccountId.trim() || (!newAuthToken.trim() && !newCt0.trim())}
-            >
-              {saving ? 'Saving…' : 'Save credentials'}
-            </button>
-          </div>
-          <p style={{ fontSize: 11, color: '#444', marginTop: 8 }}>
-            Extract auth_token and ct0 from your browser's cookie jar after logging in to
-            x.com on the burner account. Credentials are stored encrypted; once saved,
-            they are never shown again (boolean status only).
-          </p>
+      {/* Add session — atomic auth_token+ct0 pairing */}
+      <fieldset>
+        <legend>Add session</legend>
+        <p style={{ fontSize: 11, color: '#444', margin: '0 0 8px 0' }}>
+          Paste a matched <code>auth_token</code> + <code>ct0</code> from ONE logged-in
+          x.com browser session on your burner account. Both cookies are required together
+          so a mismatched pair can't be stored. Test &amp; Save validates them against X
+          before saving.
+        </p>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', gap: 6, alignItems: 'center' }}>
+          <label>Local label:</label>
+          <input
+            className="ga98-text"
+            aria-label="Local label"
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            placeholder="e.g. burner-x-1"
+            disabled={busy}
+          />
+          <label>X username (opt.):</label>
+          <input
+            className="ga98-text"
+            aria-label="X username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="@handle (optional hint)"
+            disabled={busy}
+          />
+          <label>auth_token:</label>
+          <input
+            className="ga98-text"
+            aria-label="auth_token"
+            type="password"
+            value={authToken}
+            onChange={(e) => setAuthToken(e.target.value)}
+            placeholder="(cookie — write-only, not echoed)"
+            disabled={busy}
+            autoComplete="off"
+          />
+          <label>ct0:</label>
+          <input
+            className="ga98-text"
+            aria-label="ct0"
+            type="password"
+            value={ct0}
+            onChange={(e) => setCt0(e.target.value)}
+            placeholder="(CSRF token — write-only, not echoed)"
+            disabled={busy}
+            autoComplete="off"
+          />
         </div>
+
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
+          <button
+            onClick={() => void handleTestAndSave()}
+            disabled={busy || !gateOn || missingFields}
+            title={gateOn ? undefined : 'Enable authenticated X collection first'}
+          >
+            {busy ? 'Testing…' : 'Test & Save'}
+          </button>
+          {status.kind === 'inconclusive' && (
+            <button onClick={() => void handleSaveWithoutTesting()} disabled={busy || missingFields}>
+              Save without testing
+            </button>
+          )}
+        </div>
+
+        {!gateOn && (
+          <p style={{ fontSize: 11, color: '#900', margin: '6px 0 0 0' }}>
+            Enable authenticated X collection first to test a session.
+          </p>
+        )}
+        {status.kind !== 'idle' && (
+          <p
+            style={{
+              fontSize: 11,
+              margin: '6px 0 0 0',
+              color: status.kind === 'ok' ? '#008000' : status.kind === 'error' ? '#a00000' : '#a06000',
+            }}
+          >
+            {status.msg}
+          </p>
+        )}
       </fieldset>
     </>
   );

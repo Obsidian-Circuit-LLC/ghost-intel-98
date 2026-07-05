@@ -17,6 +17,7 @@
 import { app, ipcMain, shell, dialog, BrowserWindow } from 'electron';
 import { writeFile, rename, lstat, rm, readFile, stat, realpath } from 'node:fs/promises';
 import { basename, dirname, join, sep } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { channels, BGCONN_LOCK_EXEMPT_CHANNELS } from '@shared/ipc-contracts';
 import type { MailAccount, MailSendInput, SshHostProfile, AiChatRequest, MediaTrack, AiConversation } from '@shared/post-mvp-types';
 import type { MediaUrlResult, CaseRecord } from '@shared/types';
@@ -138,7 +139,11 @@ import { makeWhatsAppCollector } from '../socmint/whatsapp-collector';
 import {
   handleXAddAccount, handleXRemoveAccount, handleXListAccounts, handleXHasAccount,
   handleXCollect, handleXListItems, handleXRankItems,
+  handleXAddSession, handleXAddSessionTested, handleXRemoveSession, handleXListSessions,
+  handleXTestSession, handleXTestStoredSession,
 } from '../x/ipc';
+import { listSessions as listXSessions, putSessionMeta as putXSessionMeta, removeSessionMeta as removeXSessionMeta } from '../x/sessions-store';
+import { testSession as testXSession } from '../x/session-test';
 import { createGhostScrapeHandlers } from '../x/ghostscrape/ipc';
 import { createScrapingCasesHandlers } from '../scraping-cases/ipc';
 import { prodScrapingCaseStore } from '../storage/scraping-cases';
@@ -1963,6 +1968,28 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     handleXListItems(ensureUuid(a[0], 'caseId')));
   safeHandle(channels.x.rankItems, (...a) =>
     handleXRankItems(ensureUuid(a[0], 'caseId'), typeof a[1] === 'string' ? a[1] : ''));
+
+  // Session model — atomic auth_token+ct0 sessions with non-secret metadata (refinement).
+  // Secrets stay in secretStore (write-only from the renderer); the metadata store holds none.
+  // Test/testStored are egress-gated behind x.networkEnabled (a real clearnet request).
+  const xSessionStoreDeps = {
+    getSecret: (k: string) => secretStore.get(k),
+    setSecret: (k: string, v: string) => secretStore.set(k, v),
+    deleteSecret: (k: string) => secretStore.delete(k),
+    listSessions: () => listXSessions(),
+    putSessionMeta: (m: Parameters<typeof putXSessionMeta>[0]) => putXSessionMeta(m),
+    removeSessionMeta: (id: string) => removeXSessionMeta(id),
+    testSession: testXSession,
+    networkEnabled: async () => (await settingsStore.read()).x.networkEnabled,
+    genId: () => randomUUID(),
+    now: () => new Date().toISOString(),
+  };
+  safeHandle(channels.x.addSession, (...a) => handleXAddSession(a[0] as Parameters<typeof handleXAddSession>[0], xSessionStoreDeps));
+  safeHandle(channels.x.addSessionTested, (...a) => handleXAddSessionTested(a[0] as Parameters<typeof handleXAddSessionTested>[0], xSessionStoreDeps));
+  safeHandle(channels.x.removeSession, (...a) => handleXRemoveSession(typeof a[0] === 'string' ? a[0] : '', xSessionStoreDeps));
+  safeHandle(channels.x.listSessions, () => handleXListSessions(xSessionStoreDeps));
+  safeHandle(channels.x.testSession, (...a) => handleXTestSession(a[0], xSessionStoreDeps));
+  safeHandle(channels.x.testStoredSession, (...a) => handleXTestStoredSession(typeof a[0] === 'string' ? a[0] : '', xSessionStoreDeps));
 
   // ---- GhostScrape (hidden-browser X scraper; reuses the SAME two-flag gate + shared X
   // session cookies as the x namespace above — no new settings namespace, no second cookie

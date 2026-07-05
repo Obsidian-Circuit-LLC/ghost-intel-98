@@ -64,6 +64,20 @@ const ALLOWED_CROSS_DIR: string[] = [
   resolve(SRC_MAIN, 'socmint', 'rank'),
   resolve(SRC_MAIN, 'socmint', 'utils'),
   resolve(SRC_MAIN, 'security', 'validate'),
+  // sessions-store (non-secret X session metadata) uses the shared mutex + the encrypt-at-rest
+  // storage layer, exactly as the sibling scraping-cases store does. None of these transitively
+  // reach a Tor/transport module: mutex has no imports; paths imports only electron/node; secure-fs
+  // imports node + services/vault, and vault imports only storage/paths.
+  resolve(SRC_MAIN, 'util', 'mutex'),
+  resolve(SRC_MAIN, 'storage', 'paths'),
+  resolve(SRC_MAIN, 'storage', 'secure-fs'),
+  // session-test (main-side cookie validation) makes ONE authenticated clearnet GET through the
+  // shared egress-gated safeFetch — the deliberate clearnet path (X has no Tor route; the request
+  // is gated behind x.networkEnabled at the IPC layer). Neither module reaches a Tor/transport
+  // module: net/limits imports nothing in-tree; net/safe-fetch imports only security/validate
+  // (already allowlisted above) + net/limits and uses the global fetch.
+  resolve(SRC_MAIN, 'net', 'safe-fetch'),
+  resolve(SRC_MAIN, 'net', 'limits'),
 ];
 
 // ---------------------------------------------------------------------------

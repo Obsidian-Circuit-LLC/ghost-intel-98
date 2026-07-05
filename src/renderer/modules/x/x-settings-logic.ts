@@ -44,6 +44,48 @@ export function xNetworkToggleEnabled(clearnetAcknowledged: boolean): boolean {
 }
 
 /**
+ * The two settings flags that together gate authenticated X collection.
+ */
+export interface XGateFlags {
+  networkEnabled: boolean;
+  clearnetAcknowledged: boolean;
+}
+
+/**
+ * The *effective* gate state shown by the single "Enable authenticated X
+ * collection" checkbox — true only when BOTH flags are set (spec §4).
+ *
+ * Any legacy inconsistent state (e.g. networkEnabled:true, acknowledged:false
+ * from the old two-control UI) therefore renders OFF, and checking the box
+ * repairs it. GhostScrape's independent gate (which also requires both flags)
+ * is unaffected — this is a display/decision helper only.
+ */
+export function xGateEffective(x: XGateFlags): boolean {
+  return x.networkEnabled && x.clearnetAcknowledged;
+}
+
+/**
+ * The action the one-control gate checkbox should take, given the current
+ * flags and the checkbox's next checked value (spec §4):
+ *
+ *   - unchecked            → 'disable'         (patch networkEnabled:false;
+ *                                               clearnetAcknowledged stays true)
+ *   - checked + acked      → 'enable-direct'   (patch networkEnabled:true; no modal)
+ *   - checked + not acked  → 'needs-ack-modal' (open CLEARNET_DIALOG_TEXT modal;
+ *                                               on confirm patch BOTH flags true)
+ *
+ * Only "off" and "on (both flags true)" are reachable through this control; the
+ * confusing middle state is unrepresentable. Pure — no Date.now/Math.random.
+ */
+export function xGateToggleAction(
+  x: XGateFlags,
+  nextChecked: boolean,
+): { kind: 'enable-direct' } | { kind: 'needs-ack-modal' } | { kind: 'disable' } {
+  if (!nextChecked) return { kind: 'disable' };
+  return x.clearnetAcknowledged ? { kind: 'enable-direct' } : { kind: 'needs-ack-modal' };
+}
+
+/**
  * The shape of an X account as presented in the Settings UI.
  *
  * INVARIANT (spec §5.2): no credential values (auth_token, ct0, username)

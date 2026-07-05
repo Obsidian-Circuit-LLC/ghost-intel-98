@@ -79,6 +79,24 @@ export interface XCollectResultShape {
   jobId: string;
 }
 
+/**
+ * Renderer-facing X session metadata (mirrors SessionMeta in src/main/x/sessions-store.ts).
+ * Holds NO secret — the auth_token/ct0 live write-only in secretStore and never cross this seam.
+ */
+export interface XSessionMeta {
+  accountId: string;
+  label: string;
+  username?: string;
+  status: 'valid' | 'expired' | 'untested';
+  lastTestedAt?: string;
+  handle?: string;
+}
+
+/** Result of validating a cookie pair against X (mirrors SessionTestResult in session-test.ts). */
+export type XSessionTestResult =
+  | { valid: true; handle: string }
+  | { valid: false; reason: 'expired' | 'rate-limited' | 'network' };
+
 export interface EntityCreateInput { type: EntityType; value: string; notes?: string; aliases?: string[] }
 export interface EntityLinkOpts { relationship?: EntityRelationship; linkIds?: string[]; attachmentFileNames?: string[] }
 export interface BioAddInput { originalName: string; mime: ImageMime; width: number; height: number; originalBase64: string; thumbBase64: string }
@@ -520,7 +538,16 @@ export const channels = {
     hasAccount: 'x:hasAccount',
     collect: 'x:collect',
     listItems: 'x:listItems',
-    rankItems: 'x:rankItems'
+    rankItems: 'x:rankItems',
+    // Session model (refinement) — atomic auth_token+ct0 sessions with non-secret metadata.
+    // These SUPERSEDE the account channels for the Settings UI; addAccount/listAccounts stay
+    // for GhostScrape back-compat. NO secret ever appears in a session channel's return.
+    addSession: 'x:addSession',
+    addSessionTested: 'x:addSessionTested',
+    removeSession: 'x:removeSession',
+    listSessions: 'x:listSessions',
+    testSession: 'x:testSession',
+    testStoredSession: 'x:testStoredSession'
   },
   // GhostScrape — hidden-browser X timeline/profile scraper (clearnet quarantine module, GS-6).
   // Reuses the SAME two-flag gate (x.networkEnabled && x.clearnetAcknowledged) and shared
@@ -988,6 +1015,17 @@ export interface ApiContracts {
   // X-platform items only (platform === 'x').
   [channels.x.listItems]: { args: [string]; returns: HarvestedItem[] };
   [channels.x.rankItems]: { args: [string, string]; returns: HarvestedItem[] };
+  // Session model — atomic auth_token+ct0 sessions. Returns carry NO secret value.
+  // addSession returns the opaque accountId only; secrets are written to secretStore main-side.
+  [channels.x.addSession]: { args: [{ label: string; username?: string; authToken: string; ct0: string }]; returns: { accountId: string } };
+  // Test + save in one gated main-side op; saves only on a valid result (status/handle stamped from that test).
+  [channels.x.addSessionTested]: { args: [{ label: string; username?: string; authToken: string; ct0: string }]; returns: { accountId?: string; result: XSessionTestResult } };
+  [channels.x.removeSession]: { args: [string]; returns: void };
+  [channels.x.listSessions]: { args: []; returns: XSessionMeta[] };
+  // Egress-gated (networkEnabled): validates a cookie pair; returns handle or a reason code.
+  [channels.x.testSession]: { args: [{ authToken: string; ct0: string }]; returns: XSessionTestResult };
+  // Egress-gated: reads the stored secrets main-side, tests, stamps metadata. Returns no secret.
+  [channels.x.testStoredSession]: { args: [string]; returns: XSessionTestResult };
 
   // GhostScrape — reuses the X two-flag gate + shared session cookies (GS-6).
   // Throws GhostScrapeGatedError when networkEnabled or clearnetAcknowledged is false

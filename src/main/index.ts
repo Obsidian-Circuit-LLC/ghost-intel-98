@@ -16,6 +16,9 @@ import { channels } from '@shared/ipc-contracts';
 import { ensureDataLayout } from './storage/paths';
 import { migrateUserDataIfNeeded } from './migrate-userdata';
 import { migrateScrapingDataIfNeeded } from './storage/scraping-migration';
+import { handleXMigrateLegacySessions } from './x/ipc';
+import { migrateLegacyAccounts as migrateLegacyXAccounts } from './x/sessions-store';
+import { secretStore } from './secrets/index';
 import { registerMediaProtocol } from './media/protocol';
 import { registerModelProtocol } from './voice/model-protocol';
 import { registerCctvProxy } from './geoint/cctv-proxy';
@@ -282,6 +285,18 @@ app.whenReady().then(async () => {
     await migrateScrapingDataIfNeeded();
   } catch (err) {
     console.error('[scraping-migration] startup pass failed; will retry next launch', err);
+  }
+
+  // Non-destructive X-session migration (spec §5): synthesize untested metadata for any X account
+  // added the pre-refinement way (x.accounts.index) so it stays visible/usable in the refined
+  // Stored-Sessions list and the collector picker. Idempotent — only fills gaps, never overwrites.
+  try {
+    await handleXMigrateLegacySessions({
+      getSecret: (k) => secretStore.get(k),
+      migrateSessions: (ids) => migrateLegacyXAccounts(ids),
+    });
+  } catch (err) {
+    console.error('[x-session-migration] startup pass failed; will retry next launch', err);
   }
 
   // Load plugins after the vault is refreshed so secure-fs reads work, and before

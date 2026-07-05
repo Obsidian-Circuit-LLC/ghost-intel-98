@@ -30,6 +30,8 @@ import { randomUUID } from 'node:crypto';
 import type { HarvestedItem, SocmintJob } from '@shared/socmint/types';
 import type { XCollectRequest, XCollectResult, XCollectDeps } from './collector';
 import type { XSidecarRequest } from './sidecar-client';
+import type { SessionMeta } from './sessions-store';
+import type { SessionTestResult } from './session-test';
 
 // ---------------------------------------------------------------------------
 // Egress gate error
@@ -184,6 +186,237 @@ export async function handleXHasAccount(
     // the real error will surface when collect actually tries to read creds.
     return false;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Session model — atomic auth_token+ct0 sessions with non-secret metadata
+// ---------------------------------------------------------------------------
+//
+// A "session" splits its data across two stores that this seam keeps apart:
+//   - SECRETS (auth_token/ct0/username) → secretStore under x.accounts.<accountId>.* (write-only
+//     from the renderer's perspective; the renderer never reads a cookie back).
+//   - NON-SECRET metadata (label/status/handle/lastTestedAt) → the sessions metadata store.
+// Every handler below returns ONLY non-secret material — an opaque accountId, a SessionMeta list,
+// or a SessionTestResult (handle or reason code). No cookie value ever crosses back to the
+// renderer, and none is placed in a thrown error.
+
+/**
+ * Thrown by the Test-session handlers when the egress gate is closed. A session test is a real
+ * clearnet request (same IP exposure as a collect), so it is gated behind settings.x.networkEnabled
+ * — the same enable flag the Settings gate control drives. (The clearnet acknowledgment is already
+ * a precondition of networkEnabled ever being true via that control.)
+ */
+export class XSessionGatedError extends Error {
+  constructor() {
+    super('Enable authenticated X collection first');
+    this.name = 'XSessionGatedError';
+  }
+}
+
+/** All injected I/O the session handlers can draw on. Each handler takes only the subset it needs. */
+export interface XSessionDeps {
+  getSecret: (key: string) => Promise<string | null>;
+  setSecret: (key: string, value: string) => Promise<void>;
+  deleteSecret: (key: string) => Promise<void>;
+  listSessions: () => Promise<SessionMeta[]>;
+  putSessionMeta: (meta: SessionMeta) => Promise<void>;
+  removeSessionMeta: (accountId: string) => Promise<void>;
+  /** The Task 2 core cookie-pair validator. */
+  testSession: (creds: { authToken: string; ct0: string }) => Promise<SessionTestResult>;
+  /** Egress gate — the Test handlers refuse to fire when this is false. */
+  networkEnabled: () => Promise<boolean>;
+  /** UUID generator for a new session's opaque accountId. */
+  genId: () => string;
+  /** ISO timestamp source for lastTestedAt (injected — no Date.now in the pure path). */
+  now: () => string;
+}
+
+/**
+ * Create a new session: write the auth_token + ct0 (+ optional username) secrets under a fresh
+ * opaque accountId, then record untested metadata. Both cookies are required together, so a caller
+ * always pastes a matched pair from one browser session. Returns the accountId only — never a cookie.
+ */
+interface ParsedSession { label: string; username?: string; authToken: string; ct0: string }
+
+/** Validate + normalise an Add-session input (shared by addSession + addSessionTested). */
+function parseSessionInput(input: { label?: unknown; username?: unknown; authToken?: unknown; ct0?: unknown }): ParsedSession {
+  const label = typeof input?.label === 'string' ? input.label.trim().slice(0, 128) : '';
+  if (!label) throw new Error('x:addSession requires a label');
+  const authToken = typeof input?.authToken === 'string' ? input.authToken : '';
+  const ct0 = typeof input?.ct0 === 'string' ? input.ct0 : '';
+  if (!authToken || !ct0) throw new Error('x:addSession requires both auth_token and ct0 (a matched pair)');
+  const username =
+    typeof input?.username === 'string' && input.username.trim() ? input.username.trim().slice(0, 64) : undefined;
+  return { label, username, authToken, ct0 };
+}
+
+/**
+ * Write a session's cookie material + keep the legacy x.accounts.index in sync. Secrets are
+ * persisted before the caller records metadata, so a crash between the two never leaves a listed
+ * session whose secrets are missing. The index is GhostScrape's only discovery path
+ * (x.listAccounts → readAccountIndex), so a session added via the refined UI is selectable there too.
+ */
+async function persistSessionSecrets(
+  accountId: string,
+  s: ParsedSession,
+  deps: Pick<XSessionDeps, 'getSecret' | 'setSecret'>,
+): Promise<void> {
+  const prefix = `${ACCOUNT_KEY_PREFIX}${accountId}`;
+  await deps.setSecret(`${prefix}.auth_token`, s.authToken);
+  await deps.setSecret(`${prefix}.ct0`, s.ct0);
+  if (s.username) await deps.setSecret(`${prefix}.username`, s.username);
+  const index = await readAccountIndex(deps);
+  if (!index.includes(accountId)) {
+    await deps.setSecret(ACCOUNT_INDEX_KEY, JSON.stringify([...index, accountId]));
+  }
+}
+
+export async function handleXAddSession(
+  input: { label?: unknown; username?: unknown; authToken?: unknown; ct0?: unknown },
+  deps: Pick<XSessionDeps, 'getSecret' | 'setSecret' | 'putSessionMeta' | 'genId'>,
+): Promise<{ accountId: string }> {
+  const s = parseSessionInput(input);
+  const accountId = deps.genId();
+  await persistSessionSecrets(accountId, s, deps);
+  await deps.putSessionMeta({ accountId, label: s.label, status: 'untested', ...(s.username !== undefined && { username: s.username }) });
+  return { accountId };
+}
+
+/**
+ * Test-and-save in ONE main-side operation: validate the cookie pair, and ONLY on success persist
+ * the session with status/handle stamped from that same single test. This replaces the renderer's
+ * old two-step (testSession → addSession → testStoredSession) dance, which fired TWO IP-exposing
+ * clearnet GETs per save and could show "✓ valid" while the stored row stamped "untested" if the
+ * second request throttled. One request, no divergence, and the status is derived main-side (the
+ * renderer never asserts validity).
+ *
+ * EGRESS GATE: throws XSessionGatedError when networkEnabled is false — no ungated clearnet request.
+ * Returns `{ result }` (NOT saved) on any non-valid result; the renderer decides whether to offer
+ * "Save without testing" (→ x:addSession, untested) for the inconclusive rate-limited/network cases.
+ */
+export async function handleXAddSessionTested(
+  input: { label?: unknown; username?: unknown; authToken?: unknown; ct0?: unknown },
+  deps: Pick<XSessionDeps, 'getSecret' | 'setSecret' | 'putSessionMeta' | 'genId' | 'now' | 'networkEnabled' | 'testSession'>,
+): Promise<{ accountId?: string; result: SessionTestResult }> {
+  if (!(await deps.networkEnabled())) throw new XSessionGatedError();
+  const s = parseSessionInput(input);
+  const result = await deps.testSession({ authToken: s.authToken, ct0: s.ct0 });
+  if (!result.valid) return { result }; // not saved — renderer handles expired vs inconclusive
+  const accountId = deps.genId();
+  await persistSessionSecrets(accountId, s, deps);
+  await deps.putSessionMeta({
+    accountId, label: s.label, status: 'valid', handle: result.handle, lastTestedAt: deps.now(),
+    ...(s.username !== undefined && { username: s.username }),
+  });
+  return { accountId, result };
+}
+
+/**
+ * Remove a session: delete its three secret keys and its metadata. No-op on an empty id.
+ * The accountId is path-sanitised before it is used to build secret keys.
+ */
+export async function handleXRemoveSession(
+  rawAccountId: string,
+  deps: Pick<XSessionDeps, 'getSecret' | 'setSecret' | 'deleteSecret' | 'removeSessionMeta'>,
+): Promise<void> {
+  if (!rawAccountId) return;
+  const accountId = safeAccountId(rawAccountId);
+  const prefix = `${ACCOUNT_KEY_PREFIX}${accountId}`;
+
+  // UN-LIST FIRST (metadata + legacy index), THEN delete secrets — the mirror of addSession's
+  // secrets-then-metadata order. A mid-way failure then leaves an UNLISTED session with orphan
+  // secrets (invisible, and a re-add mints a fresh uuid so nothing collides) rather than a
+  // still-listed session whose cookies are already gone. Dropping the index entry also stops the
+  // startup legacy migration resurrecting a removed session from a stale index. Mirrors handleXRemoveAccount.
+  await deps.removeSessionMeta(accountId);
+  const index = await readAccountIndex(deps);
+  if (index.includes(accountId)) {
+    await deps.setSecret(ACCOUNT_INDEX_KEY, JSON.stringify(index.filter((id) => id !== accountId)));
+  }
+
+  await deps.deleteSecret(`${prefix}.auth_token`);
+  await deps.deleteSecret(`${prefix}.ct0`);
+  await deps.deleteSecret(`${prefix}.username`);
+}
+
+/** List the non-secret session metadata for the Stored Sessions UI. Never carries a secret. */
+export async function handleXListSessions(
+  deps: Pick<XSessionDeps, 'listSessions'>,
+): Promise<SessionMeta[]> {
+  return deps.listSessions();
+}
+
+/**
+ * Non-destructive legacy-account migration (spec §5). Reads the legacy x.accounts.index (the only
+ * place a pre-refinement x:addAccount stored its account IDs) and synthesizes untested metadata —
+ * `{ label:<old id>, status:'untested' }` — for any id not already in the sessions store.
+ *
+ * Without this, a user who upgraded with an X account added the old way would find the refined
+ * Stored-Sessions list AND the collector picker empty (both read x.listSessions, which reads only
+ * the new metadata store) while their valid cookies still sit unreachable in secretStore. Run once
+ * at startup; idempotent — `migrateSessions` never overwrites existing metadata, so re-running only
+ * fills gaps, and (paired with handleXRemoveSession's index sync) it never resurrects a removed one.
+ */
+export async function handleXMigrateLegacySessions(
+  deps: Pick<XReadDeps, 'getSecret'> & { migrateSessions: (existingAccountIds: string[]) => Promise<void> },
+): Promise<void> {
+  const ids = await readAccountIndex(deps);
+  if (ids.length > 0) await deps.migrateSessions(ids);
+}
+
+/**
+ * Test a cookie pair the renderer just typed (pre-save, from the Add-session form).
+ * EGRESS GATE: throws XSessionGatedError when networkEnabled is false — no ungated clearnet request.
+ * Returns the handle (valid) or a reason code (invalid) — never echoes the cookies.
+ */
+export async function handleXTestSession(
+  rawCreds: unknown,
+  deps: Pick<XSessionDeps, 'networkEnabled' | 'testSession'>,
+): Promise<SessionTestResult> {
+  if (!(await deps.networkEnabled())) throw new XSessionGatedError();
+  const creds = (rawCreds ?? {}) as Record<string, unknown>;
+  const authToken = typeof creds.authToken === 'string' ? creds.authToken : '';
+  const ct0 = typeof creds.ct0 === 'string' ? creds.ct0 : '';
+  return deps.testSession({ authToken, ct0 });
+}
+
+/**
+ * Re-test a stored session: read its secrets MAIN-SIDE (the renderer never re-reads a secret),
+ * validate, then stamp status/handle/lastTestedAt into the metadata store. Returns the result only.
+ *
+ * EGRESS GATE: throws XSessionGatedError when networkEnabled is false.
+ *
+ * Status mapping (status is advisory — it reflects the last test):
+ *   - valid                    → status:'valid'  + handle
+ *   - expired                  → status:'expired'
+ *   - rate-limited / network   → INCONCLUSIVE: keep the prior status, only stamp lastTestedAt,
+ *                                so a transient failure never flips a good session to "expired".
+ */
+export async function handleXTestStoredSession(
+  rawAccountId: string,
+  deps: Pick<XSessionDeps, 'networkEnabled' | 'getSecret' | 'testSession' | 'listSessions' | 'putSessionMeta' | 'now'>,
+): Promise<SessionTestResult> {
+  if (!(await deps.networkEnabled())) throw new XSessionGatedError();
+  const accountId = safeAccountId(rawAccountId);
+  const prefix = `${ACCOUNT_KEY_PREFIX}${accountId}`;
+  const authToken = (await deps.getSecret(`${prefix}.auth_token`)) ?? '';
+  const ct0 = (await deps.getSecret(`${prefix}.ct0`)) ?? '';
+  const result = await deps.testSession({ authToken, ct0 });
+
+  // Preserve the existing label/username; synthesize a minimal record if none exists yet.
+  const existing = (await deps.listSessions()).find((s) => s.accountId === accountId);
+  const next: SessionMeta = {
+    ...(existing ?? { accountId, label: accountId, status: 'untested' as const }),
+    lastTestedAt: deps.now(),
+  };
+  if (result.valid) {
+    next.status = 'valid';
+    next.handle = result.handle;
+  } else if (result.reason === 'expired') {
+    next.status = 'expired';
+  }
+  await deps.putSessionMeta(next);
+  return result;
 }
 
 // ---------------------------------------------------------------------------

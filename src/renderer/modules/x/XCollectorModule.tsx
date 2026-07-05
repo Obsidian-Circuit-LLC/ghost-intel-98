@@ -43,7 +43,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import type { HarvestedItem } from '@shared/socmint/types';
-import type { XCollectResultShape, XCollectorStatus } from '@shared/ipc-contracts';
+import type { XCollectResultShape, XCollectorStatus, XSessionMeta } from '@shared/ipc-contracts';
 import { useSettings } from '../../state/store';
 import { safeHref } from '../socmint/safe-href';
 import { buildScrapingCaseOptions, type ScrapingCaseOption } from '../socmint/case-options';
@@ -332,11 +332,21 @@ interface XCollectPanelProps {
   lastResult: XCollectResultShape | null;
   collecting: boolean;
   caseId: string;
-  /** Stored X account IDs (from x.listAccounts) — never carries credentials. */
-  accounts: string[];
+  /** Stored X session metadata (from x.listSessions) — labels + status, never credentials. */
+  sessions: XSessionMeta[];
   /** The account ID whose stored cookie this harvest will authenticate with. */
   selectedAccount: string;
   onSelectAccount(id: string): void;
+}
+
+/**
+ * Human-facing option label for a stored session: the operator's label plus a
+ * status hint (e.g. "Alpha burner · expired"). Never the opaque accountId — that
+ * stays as the <option> value, sent to collect. Label/username/handle are
+ * operator/attacker-supplied and rendered as text children (no innerHTML).
+ */
+function sessionOptionLabel(s: XSessionMeta): string {
+  return `${s.label} · ${s.status}`;
 }
 
 function XCollectPanel({
@@ -345,7 +355,7 @@ function XCollectPanel({
   lastResult,
   collecting,
   caseId,
-  accounts,
+  sessions,
   selectedAccount,
   onSelectAccount,
 }: XCollectPanelProps): JSX.Element {
@@ -354,7 +364,7 @@ function XCollectPanel({
   const [username, setUsername] = useState('');
   const [limit, setLimit] = useState('500');
 
-  const noAccounts = accounts.length === 0;
+  const noAccounts = sessions.length === 0;
   const canCollect = canCollectFn({
     gateOpen, collecting, caseId, mode, query, username, accountId: selectedAccount,
   });
@@ -413,8 +423,8 @@ function XCollectPanel({
               value={selectedAccount}
               onChange={(e) => onSelectAccount(e.target.value)}
             >
-              {accounts.map((id) => (
-                <option key={id} value={id}>{id}</option>
+              {sessions.map((s) => (
+                <option key={s.accountId} value={s.accountId}>{sessionOptionLabel(s)}</option>
               ))}
             </select>
           )}
@@ -648,21 +658,23 @@ export function XCollectorModule({ caseId: propCaseId }: { caseId?: string }): J
   const [rankKeyword, setRankKeyword] = useState('');
   const [ranking, setRanking] = useState(false);
 
-  // Stored X accounts — IDs only (x.listAccounts never returns credentials).
-  // The selected account's cookie is what authenticates a harvest; without one,
-  // twscrape collects nothing, so the Collect button is gated on a selection.
-  const [accounts, setAccounts] = useState<string[]>([]);
+  // Stored X sessions — non-secret metadata only (x.listSessions never returns
+  // credentials). The picker shows each session's label + status; the selected
+  // account's cookie is what authenticates a harvest, so the Collect button is
+  // gated on a selection (twscrape collects nothing anonymously).
+  const [sessions, setSessions] = useState<XSessionMeta[]>([]);
   const [selectedAccount, setSelectedAccount] = useState<string>('');
 
   const loadAccounts = useCallback(async () => {
     try {
-      const ids = (await window.api.x.listAccounts()) as string[];
-      setAccounts(ids);
-      // Auto-select when exactly one account exists; otherwise keep any still-valid
-      // selection and fall back to the first when the prior pick was removed.
+      const list = await window.api.x.listSessions();
+      setSessions(list);
+      const ids = list.map((s) => s.accountId);
+      // Keep any still-valid selection; otherwise fall back to the first session
+      // (drops to '' when the list is empty → canCollect blocks).
       setSelectedAccount((prev) => (prev && ids.includes(prev) ? prev : (ids[0] ?? '')));
     } catch (err) {
-      console.warn('[XCollector] listAccounts:', err);
+      console.warn('[XCollector] listSessions:', err);
     }
   }, []);
 
@@ -869,7 +881,7 @@ export function XCollectorModule({ caseId: propCaseId }: { caseId?: string }): J
                     lastResult={lastResult}
                     collecting={collecting}
                     caseId={caseId}
-                    accounts={accounts}
+                    sessions={sessions}
                     selectedAccount={selectedAccount}
                     onSelectAccount={setSelectedAccount}
                   />
