@@ -29,7 +29,7 @@ import type {
   WebLink,
   Whiteboard
 } from '../shared/types';
-import type { EntityCreateInput, EntityLinkOpts, BioAddInput, AuthStatus, LocalAiStatus, LocalAiProgress, MemoryStatus, MemoryProgress, MemoryItem, RecallPreview, LibraryDoc, MemoryGraphShape, BondShape, XCollectResultShape, LearningModelMeta, GhostScrapeConfig, GhostScrapeResult, ScrapingCaseStoreId, ScrapingImportResult } from '../shared/ipc-contracts';
+import type { EntityCreateInput, EntityLinkOpts, BioAddInput, AuthStatus, LocalAiStatus, LocalAiProgress, MemoryStatus, MemoryProgress, MemoryItem, RecallPreview, LibraryDoc, MemoryGraphShape, BondShape, XCollectResultShape, XSessionMeta, XSessionTestResult, LearningModelMeta, GhostScrapeConfig, GhostScrapeResult, ScrapingCaseStoreId, ScrapingImportResult } from '../shared/ipc-contracts';
 import type { InvestigationScene, SceneDelta } from '../shared/investigation-graph';
 import type { RunEvent } from '../shared/investigation-agent';
 import type { RunBudget } from '../shared/investigation-types';
@@ -689,6 +689,26 @@ export interface GhostApi {
     listItems(caseId: string): Promise<HarvestedItem[]>;
     /** Rank X-platform items for the given case by keyword relevance (loopback-only AI). */
     rankItems(caseId: string, keyword: string): Promise<HarvestedItem[]>;
+    /**
+     * Create a session: writes the auth_token + ct0 (+ optional username) to secretStore
+     * main-side and records untested metadata. Returns the opaque accountId only — the
+     * cookies are never echoed back.
+     */
+    addSession(input: { label: string; username?: string; authToken: string; ct0: string }): Promise<{ accountId: string }>;
+    /** Remove a session: deletes its secrets and its metadata. */
+    removeSession(accountId: string): Promise<void>;
+    /** List non-secret session metadata for the Stored Sessions UI (no cookie values). */
+    listSessions(): Promise<XSessionMeta[]>;
+    /**
+     * Validate a just-typed cookie pair against X. Egress-gated (networkEnabled) — throws when
+     * authenticated X collection is disabled. Returns the handle or a reason code, never a cookie.
+     */
+    testSession(creds: { authToken: string; ct0: string }): Promise<XSessionTestResult>;
+    /**
+     * Re-validate a stored session: reads its secrets main-side, tests, and stamps
+     * status/handle/lastTestedAt. Egress-gated. Returns the result only (no secrets).
+     */
+    testStoredSession(accountId: string): Promise<XSessionTestResult>;
   };
   /**
    * GhostScrape — hidden-browser X timeline/profile scraper (clearnet quarantine module).

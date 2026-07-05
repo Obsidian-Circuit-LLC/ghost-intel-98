@@ -64,6 +64,7 @@ describe('X-5: channels.x structure', () => {
     const expected = [
       'addAccount', 'removeAccount', 'listAccounts', 'hasAccount',
       'collect', 'listItems', 'rankItems',
+      'addSession', 'removeSession', 'listSessions', 'testSession', 'testStoredSession',
     ];
     expect(Object.keys(channels.x).sort()).toEqual([...expected].sort());
   });
