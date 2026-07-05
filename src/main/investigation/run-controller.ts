@@ -1,7 +1,7 @@
 import * as entities from '../storage/entities';
 import { getTransform } from './registry';
 import { runTransform } from './runner';
-import { checkAction, recordAction, createGuard, recordProgress, shouldStop, stop as guardStop, type GuardState, type ProposedAction } from './guard';
+import { checkAction, recordAction, createGuard, recordProgress, shouldStop, stop as guardStop, pause, resume, addToScope, removeFromScope, type GuardState, type ProposedAction } from './guard';
 import { assembleContext } from './perceive';
 import { sceneForCase } from './graph';
 import { upsertRun } from './ledger';
@@ -113,7 +113,22 @@ export async function startRun(input: StartRunInput): Promise<string> {
   return runId;
 }
 
-// Placeholder wired in Task 5; for Task 4 no run scripts an `ask`.
+// Wired by the loop above when a brain action is `ask`: resolved by `answerRun` or `stopRun`.
 async function awaitAnswer(rs: RunState): Promise<void> {
   await new Promise<void>((resolve) => { rs.pendingAsk = (a: string) => { rs.humanInput = a; rs.pendingAsk = null; resolve(); }; });
+}
+
+function rsOf(runId: string): RunState | undefined { return runs.get(runId)?.rs; }
+
+export function pauseRun(runId: string): void { const rs = rsOf(runId); if (rs) pause(rs.guard); }
+export function resumeRun(runId: string): void { const rs = rsOf(runId); if (rs) resume(rs.guard); }
+export function addScope(runId: string, target: string): void { const rs = rsOf(runId); if (rs) addToScope(rs.guard, target); }
+export function removeScope(runId: string, target: string): void { const rs = rsOf(runId); if (rs) removeFromScope(rs.guard, target); }
+export function focusEntity(runId: string, entityId: string): void { const rs = rsOf(runId); if (rs) { rs.focus.add(entityId); rs.ignore.delete(entityId); } }
+export function ignoreEntity(runId: string, entityId: string): void { const rs = rsOf(runId); if (rs) { rs.ignore.add(entityId); rs.focus.delete(entityId); } }
+export function answerRun(runId: string, text: string): void { const rs = rsOf(runId); if (rs) rs.pendingAsk?.(text); }
+export function stopRun(runId: string, reason: string): void {
+  const rs = rsOf(runId); if (!rs) return;
+  guardStop(rs.guard, reason); rs.status = 'stopped'; rs.stopReason = reason;
+  rs.pendingAsk?.(''); // unblock a run parked on `ask` so the loop can finish
 }
