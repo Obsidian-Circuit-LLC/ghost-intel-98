@@ -21,6 +21,7 @@ import { GraphCanvas } from '../../components/graph-canvas/GraphCanvas';
 import type { RenderGraph } from '../../components/graph-canvas/svg-scene';
 import { applyFilters, applyDelta } from './filters';
 import type { SeedNode } from './RunPanel';
+import { useInvestigationRunStore } from '../../state/investigation-run-store';
 
 export interface GraphPaneProps {
   caseId: string;
@@ -47,6 +48,13 @@ export function GraphPane({ caseId, onNodesChange }: GraphPaneProps): JSX.Elemen
   const [addValue, setAddValue] = useState('');
   const [addBusy, setAddBusy] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
+
+  // The active run (if any) for this case — enables in-inspector Focus/Ignore steering (spec §4).
+  const runEntry = useInvestigationRunStore((s) => s.cases[caseId]);
+  const activeRunId =
+    runEntry && (runEntry.status === 'running' || runEntry.status === 'paused')
+      ? runEntry.runId
+      : null;
 
   useEffect(() => {
     let cancelled = false;
@@ -207,6 +215,26 @@ export function GraphPane({ caseId, onNodesChange }: GraphPaneProps): JSX.Elemen
                 <div>Cluster: {node.cluster}</div>
                 <div>Score: {node.score.toFixed(2)}</div>
                 <div style={{ opacity: 0.7, wordBreak: 'break-all' }}>Entity id: {node.id}</div>
+                {activeRunId && (
+                  <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void window.api.investigation.run.focus(activeRunId, node.id);
+                      }}
+                    >
+                      Focus
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void window.api.investigation.run.ignore(activeRunId, node.id);
+                      }}
+                    >
+                      Ignore
+                    </button>
+                  </div>
+                )}
               </>
             );
           }}
