@@ -11,6 +11,7 @@
  * search is fail-closed throughout: a blocked/non-200 fetch yields no results, never a clearnet fallback.
  */
 import { torFetch, ensurePluginTor } from '../../plugins/tor-egress';
+import type { SearchEngine, EngineRunDeps } from './registry';
 
 export const DDG_ONION = 'https://duckduckgogg42xjoc72x3sjasowoarfbgcmvfimaftt6twagswzczad.onion';
 export const MAX_RESULTS = 6;
@@ -104,6 +105,29 @@ export async function searchWeb(
   report(results.length ? 'ok' : 'no-results');
   return results;
 }
+
+/**
+ * DuckDuckGo onion engine descriptor for the search registry. This is a thin wrapping of the existing
+ * `searchWeb` (onion enforcement, parsing, and fail-closed posture UNCHANGED) that adapts its
+ * `onReason` callback into the registry's `{ results, reason }` return shape. `egress:'tor'` — the loop
+ * runs it under the Tor gate; the endpoint stays `.onion`-enforced inside `searchWeb`.
+ */
+export const ddgEngine: SearchEngine = {
+  id: 'ddg',
+  label: 'DuckDuckGo · Tor',
+  egress: 'tor',
+  async run(query: string, deps: EngineRunDeps = {}): Promise<{ results: WebResult[]; reason: SearchReason }> {
+    let reason: SearchReason = 'no-results';
+    const results = await searchWeb(query, {
+      caseId: deps.caseId,
+      endpoint: deps.endpoint,
+      fetch: deps.fetch,
+      ensure: deps.ensure,
+      onReason: (r) => { reason = r; },
+    });
+    return { results, reason };
+  },
+};
 
 export const DDG_CLEARNET = 'https://html.duckduckgo.com';
 

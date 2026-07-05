@@ -34,6 +34,18 @@ interface DisplayMessage extends AiChatMessage {
   streaming?: boolean;
 }
 
+/**
+ * Engine picker options — ids mirror the main-process registry (`SEARCH_ENGINES` in
+ * web-search/registry.ts) so main and renderer agree; labels carry the ` · Tor` egress badge
+ * matching each engine descriptor's `label`. Both shipped engines are onion (`egress:'tor'`); the
+ * clearnet tier ships empty. The picker only writes `ai.searchEngine` — the `.onion` enforcement +
+ * untrusted-data fence stay in main.
+ */
+const SEARCH_ENGINE_OPTIONS: ReadonlyArray<{ id: string; label: string }> = [
+  { id: 'ddg', label: 'DuckDuckGo · Tor' },
+  { id: 'searxng', label: 'SearXNG · Tor' },
+];
+
 function newId(): string {
   return crypto.randomUUID();
 }
@@ -632,6 +644,17 @@ export function AiAssistantModule(): JSX.Element {
           />
           &nbsp;Web (Tor)
         </label>
+        <select
+          className="ga98-text"
+          style={{ maxWidth: 150, fontSize: 11 }}
+          value={settings?.ai.searchEngine ?? 'ddg'}
+          onChange={(e) => { if (settings) void patchSettings({ ai: { ...settings.ai, searchEngine: e.target.value } }); }}
+          title="Which search engine Q uses for [SEARCH:]. Both ship onion-to-onion over Tor (IP hidden); SearXNG is a metasearch aggregating Google/Bing/etc. server-side."
+        >
+          {SEARCH_ENGINE_OPTIONS.map((eng) => (
+            <option key={eng.id} value={eng.id}>{eng.label}</option>
+          ))}
+        </select>
         <button onClick={() => quickPrompt('Summarise this case in 3-5 bullet points.')} disabled={!contextCase}>Summarise</button>
         <button onClick={() => quickPrompt('Draft a status report for this case suitable for an external stakeholder.')} disabled={!contextCase}>Draft report</button>
         <button onClick={() => quickPrompt('What questions should I be asking that I have not yet?')} disabled={!contextCase}>Open questions</button>

@@ -22,8 +22,9 @@ import { recall, formatRecall, type RecallHit } from './memory/retriever';
 import { recallProfile } from './memory/profile';
 import type { MemoryItem } from './memory/profile/types';
 import { randomBytes } from 'node:crypto';
-import { searchWeb, searchWebClearnet, type SearchReason } from './web-search/ddg';
-import { extractSearchDirective, formatWebResults, planWebSearch, decideSearchAction, torFailureMessage, WEB_SEARCH_SYSTEM, MAX_WEB_SEARCHES } from './web-search/directive';
+import { searchWebClearnet } from './web-search/ddg';
+import { getEngine, endpointForEngine, engineDisplayName } from './web-search/registry';
+import { extractSearchDirective, formatWebResults, planWebSearch, decideSearchAction, torFailureMessage, formatSearchAnnounce, WEB_SEARCH_SYSTEM, MAX_WEB_SEARCHES } from './web-search/directive';
 
 /** `'global'` always included; `case:<caseId>` appended when the request carries a selected case
  *  — the same scoping convention the adaptive-memory profile store/reconcile/retriever use. */
@@ -144,27 +145,39 @@ export async function chat(streamId: string, req: AiChatRequest, getWindow: () =
       }
       seen.push(decision.key);
       searches += 1;
-      emit(getWindow, streamId, { chunk: `\n\n🔍 searching the web over Tor for “${q}”…\n\n` });
-      let searchReason: SearchReason = 'ok';
-      const results = await searchWeb(q, { caseId: req.caseId, onReason: (r) => { searchReason = r; } });
+      // Run the operator-selected engine (registry). Only SearXNG takes the configurable onion; DDG
+      // keeps its own pinned onion default (endpointForEngine). The result stays UNTRUSTED and is
+      // fenced identically for every engine (formatWebResults) below.
+      const engine = getEngine(s.ai.searchEngine);
+      emit(getWindow, streamId, { chunk: formatSearchAnnounce(engineDisplayName(engine), q) });
+      const { results, reason: searchReason } = await engine.run(q, {
+        caseId: req.caseId,
+        endpoint: endpointForEngine(engine, s.ai.searxngOnion),
+      });
       const fence = randomBytes(8).toString('hex');
       messages.push({ role: 'assistant', content: full });
 
-      const plan = planWebSearch({ torResults: results.length, clearnetOn: s.ai.webSearchClearnet });
+      // Clearnet fallback is DDG-only (searchWebClearnet). An onion metasearch (SearXNG) never falls
+      // back to a clearnet scrape — clearnetEligible gates it on the selected engine.
+      const plan = planWebSearch({
+        torResults: results.length,
+        clearnetOn: s.ai.webSearchClearnet,
+        clearnetEligible: engine.id === 'ddg',
+      });
       if (plan.mode === 'tor') {
         emit(getWindow, streamId, { chunk: `\n(${results.length} result(s) over Tor)\n` });
         messages.push({ role: 'user', content: formatWebResults(q, results, fence) });
       } else if (plan.mode === 'clearnet') {
         // Surface WHY Tor produced nothing before exposing the IP over clearnet.
         emit(getWindow, streamId, {
-          chunk: `\n\n⚠ ${torFailureMessage(searchReason)} Falling back to CLEARNET for “${q}” — your real IP is exposed to these results and their hosts.\n\n`
+          chunk: `\n\n⚠ ${torFailureMessage(searchReason, engineDisplayName(engine))} Falling back to CLEARNET for “${q}” — your real IP is exposed to these results and their hosts.\n\n`
         });
         const cn = await searchWebClearnet(q);
         emit(getWindow, streamId, { chunk: `\n(${cn.length} result(s) over CLEARNET)\n` });
         messages.push({ role: 'user', content: formatWebResults(q, cn, fence) });
       } else {
         // Diagnosable failure: Tor-not-started vs onion-unreachable vs genuinely-empty are now distinct.
-        emit(getWindow, streamId, { chunk: `\n⚠ ${torFailureMessage(searchReason)}\n` });
+        emit(getWindow, streamId, { chunk: `\n⚠ ${torFailureMessage(searchReason, engineDisplayName(engine))}\n` });
         messages.push({ role: 'user', content: formatWebResults(q, [], fence) });
       }
     }
