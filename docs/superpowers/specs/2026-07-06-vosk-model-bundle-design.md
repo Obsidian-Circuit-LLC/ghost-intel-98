@@ -99,10 +99,8 @@ artifact. The Vosk model gets the same guard so it can never silently ship absen
 
 - **Rewrite `resources/vosk/README-VOSK.txt`** from "operator-supplied" to "bundled at build time,"
   recording provenance: model name, source URL, pinned SHA-256, Apache-2.0, and the fetch-script
-  reference. **Correct the archive-structure guidance** to match the empirically verified structure
-  (the current text's "files at the archive root" instruction conflicts with upstream and is
-  resolved by the verification below — the README must state whichever structure the load test
-  proves correct, not a guess).
+  reference. **Correct the archive-structure guidance**: replace the current (wrong) "files at the
+  archive root" instruction with the documented `model/`-rooted structure the re-pack now produces.
 - **Add the upstream Apache-2.0 `LICENSE`** text alongside the README (`resources/vosk/LICENSE-VOSK`
   or equivalent), included verbatim from the model distribution — accurate attribution, not a
   paraphrase.
@@ -115,42 +113,63 @@ fails and voice input is dead — a failure mock-based tests cannot see.
 Two candidate structures, and the two docs disagree:
 
 - **Upstream `vosk-browser` README ("Model format")**: the tar is "a gzipped tar archive of a model
-  folder," listing paths as `model/am/final.mdl`, `model/conf/model.conf`, `model/graph/HCLG.fst`,
-  etc. — i.e. a single top-level `model/` directory.
+  folder," listing paths as `model/am/final.mdl`, `model/conf/model.conf`, `model/graph/…`, etc. —
+  i.e. a single top-level directory named literally `model/`. The `createModel('model.tar.gz')`
+  example reinforces this convention.
 - **Our internal `README-VOSK.txt`** (pre-existing, unverified): instructs flattening "such that the
   model files are at the archive root, not nested under the folder name." **This contradicts
-  upstream and is suspected wrong.**
+  upstream and is wrong — it must be corrected.**
 
-**Resolution — verify empirically against the real artifact, trust neither doc.** `vosk-browser`'s
-`createModel(url)` resolves its promise only when the model loads with the correct internal
-structure, and a `KaldiRecognizer` fed a canned PCM/WAV buffer emits a transcript — **none of this
-requires a microphone.** A headless-Chromium (Playwright) test loads the *actually produced*
-`model.tar.gz` over a local URL, awaits `createModel`, feeds a short bundled speech sample, and
-asserts a non-empty result. The implementer determines the correct structure by making this test
-pass (default to the upstream `model/`-prefixed layout; if `createModel` rejects, try root), then
-pins that structure in `fetch-vosk.mjs` and documents it in the README. This converts the scariest
-risk from "hope it works on GhostExodus's box" into a CI-verifiable fact.
+**Resolution — follow vosk-browser's documented contract; verify the artifact against it
+structurally.** The originally-specified headless-Chromium load-test is **not achievable in this
+project**: Playwright is not a dependency, and the repo's "headless" tests run on jsdom, which cannot
+execute vosk-browser's WASM Web Worker. Rather than bolt a ~150 MB Chromium dev-dependency onto the
+repo for a single test, the structure is fixed to vosk-browser's **documented** format — a top-level
+directory named literally **`model/`** — and the re-pack renames the upstream
+`vosk-model-small-en-us-0.15/` root to `model/`, producing entries `model/am/final.mdl`,
+`model/conf/mfcc.conf`, `model/conf/model.conf`, `model/graph/HCLr.fst`, `model/graph/Gr.fst`,
+`model/graph/phones/word_boundary.int`, `model/ivector/final.dubm`, … A **structural-parity test**
+(pure, CI-runnable, no browser) lists the produced `model.tar.gz` and asserts the documented model
+files are present under the `model/` prefix. This matches the library's published contract exactly
+and proves the produced artifact conforms to it.
+
+**Verified model contents (real, inspected 2026-07-06).** The upstream zip's top-level directory is
+`vosk-model-small-en-us-0.15/`, containing `am/final.mdl`, `conf/{mfcc,model}.conf`,
+`graph/{HCLr,Gr}.fst` + `graph/disambig_tid.int` + `graph/phones/word_boundary.int`, and
+`ivector/{final.dubm,final.ie,final.mat,global_cmvn.stats,online_cmvn.conf,splice.conf}`, plus a
+`README`. **Note:** this small model ships the lookahead graph split (`HCLr.fst` + `Gr.fst`), **not** a
+single `HCLG.fst` — the parity test must assert the files that actually exist, never `HCLG.fst`.
+**Pinned SHA-256** of `vosk-model-small-en-us-0.15.zip`:
+`30f26242c4eb449f948e42cb302dd7a686cb29a3423a8367f99ff41780942498` (41,205,931 bytes).
 
 ## Testing
 
-- **Re-pack helper (unit, node):** given a synthetic extracted directory, the produced tar's entries
-  match the verified structure (correct prefix, model files present, deterministic byte output on
-  repeated runs).
+- **Re-pack helper (unit, node):** given a synthetic extracted directory (whose top folder is named
+  like the upstream `vosk-model-small-en-us-0.15/`), the produced tar's entries are re-rooted under
+  `model/` — asserting `model/am/final.mdl` etc. are present and that **no** entry retains the
+  original `vosk-model-small-en-us-0.15/` prefix. Also asserts deterministic byte output on repeated
+  runs (identical input → identical tar bytes).
+- **Structural-parity against the documented contract (unit, node, gated):** list the *produced*
+  `resources/vosk/model.tar.gz` and assert every documented, actually-present model file exists under
+  the `model/` prefix (`model/am/final.mdl`, `model/conf/mfcc.conf`, `model/conf/model.conf`,
+  `model/graph/HCLr.fst`, `model/graph/Gr.fst`, `model/graph/phones/word_boundary.int`,
+  `model/ivector/final.dubm`). This is the authoritative structure check. It requires the built
+  artifact, so it is skipped with a clear message when `model.tar.gz` is absent (mirroring how other
+  artifact-dependent tests degrade).
 - **afterPack size-floor (unit, node):** the predicate rejects a missing file and an under-floor
   file, accepts an over-floor file.
-- **Headless model-load (Playwright, gated):** the produced `model.tar.gz` loads in real Chromium
-  via `createModel`, and a canned audio sample yields a non-empty transcript. This is the
-  authoritative archive-structure verification. It requires the built artifact present, so it is
-  skipped (with a clear message) when `resources/vosk/model.tar.gz` is absent, mirroring how other
-  artifact-dependent tests degrade.
 
 ### Honest verification limits
 
-Headless CI proves the model **loads and transcribes canned audio** — i.e. the archive structure and
-the WASM path are correct. It does **not** exercise a live microphone or the `getUserMedia` →
-`AudioContext` → `ScriptProcessor` capture graph; that path remains verifiable only in a real browser
-with a mic on the operator's / GhostExodus's Windows box, exactly as `recognizer.ts` already
-documents for itself. The spec does not claim otherwise.
+CI proves the produced artifact **conforms to vosk-browser's documented model format** (correct
+`model/`-rooted structure, all required files present, deterministic bytes). It does **not** execute
+the model in vosk-browser's WASM runtime — Playwright is not available and jsdom cannot run the WASM
+Web Worker, and adding a Chromium harness for one test is out of scope (YAGNI). The final runtime
+links — `createModel` actually loading this tar, and the live `getUserMedia` → `AudioContext` →
+`ScriptProcessor` mic-capture graph — are confirmed only in the shipped Electron app on the
+operator's / GhostExodus's Windows box, exactly as `recognizer.ts` already documents for itself. The
+spec does not claim headless CI covers the runtime load; it claims (and proves) documented-contract
+conformance.
 
 ## Charter compliance
 
