@@ -8,6 +8,7 @@ vi.mock('electron', () => ({ app: { getPath: () => DATA }, shell: { showItemInFo
 
 import * as store from '../src/main/documents/store';
 import { documentsRoot } from '../src/main/documents/paths';
+import { shell } from 'electron';
 
 afterEach(async () => { await rm(DATA, { recursive: true, force: true }); });
 
@@ -49,6 +50,27 @@ describe('documents store — core', () => {
     await expect(store.rename('', 'pwned')).rejects.toThrow(/documents root/i);
     // The root and its contents are untouched.
     expect((await store.list('')).some((e) => e.name === 'Secret')).toBe(true);
+  });
+
+  it('refuses to remove the documents root', async () => {
+    await store.mkdir('', 'Keep');
+    await expect(store.remove('')).rejects.toThrow(/documents root/i);
+    expect((await store.list('')).some((e) => e.name === 'Keep')).toBe(true);
+  });
+
+  it('mkdir fails (does not silently no-op) when the folder already exists', async () => {
+    await store.mkdir('', 'Dup');
+    await expect(store.mkdir('', 'Dup')).rejects.toThrow(); // EEXIST — non-recursive fsMkdir
+  });
+
+  it('reveal shows the resolved path in the OS file manager', async () => {
+    (shell.showItemInFolder as ReturnType<typeof vi.fn>).mockClear();
+    await store.mkdir('', 'Shown');
+    store.reveal('Shown');
+    expect(shell.showItemInFolder).toHaveBeenCalledWith(join(documentsRoot(), 'Shown'));
+    // Root reveal resolves to the documents root itself.
+    store.reveal('');
+    expect(shell.showItemInFolder).toHaveBeenCalledWith(documentsRoot());
   });
 
   it('confines: an existing symlink escaping the root is refused', async () => {
