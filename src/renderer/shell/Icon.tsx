@@ -113,12 +113,36 @@ export function MindsEyeGlyph(): JSX.Element {
   );
 }
 
+/**
+ * Windows-98 "My Documents" icon — an open manila folder with a white ruled document sheet
+ * standing up out of it, hand-drawn as crisp-edged pixels to match the other period glyphs.
+ */
+export function MyDocumentsGlyph(): JSX.Element {
+  return (
+    <svg width="28" height="28" viewBox="0 0 32 32" shapeRendering="crispEdges" aria-hidden="true">
+      {/* white document sheet rising out of the folder */}
+      <rect x="11" y="4" width="13" height="15" fill="#fdfdfd" stroke="#000" />
+      <rect x="13" y="7" width="9" height="1" fill="#2b6cb0" />
+      <rect x="13" y="10" width="9" height="1" fill="#8aa0a8" />
+      <rect x="13" y="13" width="9" height="1" fill="#8aa0a8" />
+      <rect x="13" y="16" width="6" height="1" fill="#8aa0a8" />
+      {/* folder back */}
+      <rect x="4" y="12" width="24" height="15" fill="#e8c766" stroke="#000" />
+      {/* folder tab */}
+      <rect x="4" y="9" width="9" height="4" fill="#e8c766" stroke="#000" />
+      {/* folder front flap (lighter, overlapping the sheet's base) */}
+      <rect x="4" y="17" width="24" height="10" fill="#f2d98a" stroke="#000" />
+    </svg>
+  );
+}
+
 /** Custom hand-drawn SVG glyph for modules that have one (falls through to the emoji otherwise). */
 export function glyphNodeFor(m: string): ReactNode | undefined {
   if (m === 'cases') return <MyComputerGlyph />;
   if (m === 'notepad') return <NotepadGlyph />;
   if (m === 'searchlight') return <SearchlightGlyph />;
   if (m === 'minds-eye') return <MindsEyeGlyph />;
+  if (m === 'my-documents') return <MyDocumentsGlyph />;
   return undefined;
 }
 

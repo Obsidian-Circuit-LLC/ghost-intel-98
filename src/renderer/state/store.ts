@@ -13,6 +13,7 @@ import { getModule } from './registry';
 
 export type ModuleKey =
   | 'cases'
+  | 'my-documents'
   | 'notepad'
   | 'calendar'
   | 'reminders'
