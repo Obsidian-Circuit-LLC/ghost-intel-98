@@ -49,6 +49,13 @@ export function planWebSearch(opts: { torResults: number; clearnetOn: boolean; c
   return { mode: 'empty' };
 }
 
+/** Pre-Tor decision: should this search SKIP Tor and go straight to clearnet? True only when clearnet
+ *  is enabled, the selected engine has a clearnet path (DDG), AND the user chose 'first' mode. In every
+ *  other case the Tor path runs first and `planWebSearch` governs the post-Tor fallback. Pure/testable. */
+export function clearnetFirst(opts: { clearnetOn: boolean; clearnetEligible?: boolean; mode: 'fallback' | 'first' }): boolean {
+  return opts.clearnetOn && opts.clearnetEligible !== false && opts.mode === 'first';
+}
+
 /** The engine-aware "searching…" transparency chunk streamed before a Tor search runs. Names the
  *  selected engine (from `engineDisplayName`) so the user sees WHICH engine Q queried, not a generic
  *  "the web". Pure/testable — the caller (ai.ts) emits the returned chunk. */

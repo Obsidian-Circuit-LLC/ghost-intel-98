@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractSearchDirective, formatWebResults, decideSearchAction, torFailureMessage, formatSearchAnnounce } from '../src/main/services/web-search/directive';
+import { extractSearchDirective, formatWebResults, decideSearchAction, torFailureMessage, formatSearchAnnounce, clearnetFirst } from '../src/main/services/web-search/directive';
 
 describe('extractSearchDirective', () => {
   it('extracts the query from a [SEARCH: ...] line', () => {
@@ -87,6 +87,21 @@ describe('decideSearchAction (same-query loop guard)', () => {
       if (d.action === 'search') { realSearches += 1; seen.push(d.key); }
     }
     expect(realSearches).toBe(1); // was 3 wasted Tor searches before the guard
+  });
+});
+
+describe('clearnetFirst', () => {
+  it('is true only when clearnet on, engine eligible, and mode "first"', () => {
+    expect(clearnetFirst({ clearnetOn: true, clearnetEligible: true, mode: 'first' })).toBe(true);
+  });
+  it('is false in fallback mode', () => {
+    expect(clearnetFirst({ clearnetOn: true, clearnetEligible: true, mode: 'fallback' })).toBe(false);
+  });
+  it('is false for an ineligible engine even in "first" (SearXNG has no clearnet path)', () => {
+    expect(clearnetFirst({ clearnetOn: true, clearnetEligible: false, mode: 'first' })).toBe(false);
+  });
+  it('is false when clearnet is disabled', () => {
+    expect(clearnetFirst({ clearnetOn: false, clearnetEligible: true, mode: 'first' })).toBe(false);
   });
 });
 

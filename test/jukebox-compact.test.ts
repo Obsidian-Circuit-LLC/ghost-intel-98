@@ -13,4 +13,10 @@ describe('jukeboxExpanded setting', () => {
     expect(merged.media.jukeboxExpanded).toBe(false);      // default filled in
     expect(merged.media.streamingEnabled).toBe(true);      // legacy value preserved
   });
+  it('ai.webSearchClearnetMode defaults to "fallback" and survives merge', () => {
+    expect(defaultSettings.ai.webSearchClearnetMode).toBe('fallback');
+    const legacy = { ...defaultSettings, ai: { ...defaultSettings.ai } } as any;
+    delete legacy.ai.webSearchClearnetMode;
+    expect(mergeSettings(defaultSettings, legacy).ai.webSearchClearnetMode).toBe('fallback');
+  });
 });

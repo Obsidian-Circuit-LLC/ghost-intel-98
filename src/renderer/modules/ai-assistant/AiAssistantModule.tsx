@@ -655,6 +655,28 @@ export function AiAssistantModule(): JSX.Element {
             <option key={eng.id} value={eng.id}>{eng.label}</option>
           ))}
         </select>
+        <label style={{ fontSize: 11 }} title="Allow Q to use clearnet DuckDuckGo. Off = Tor-only (IP hidden).">
+          <input
+            type="checkbox"
+            checked={settings?.ai.webSearchClearnet ?? false}
+            onChange={(e) => { if (settings) void patchSettings({ ai: { ...settings.ai, webSearchClearnet: e.target.checked } }); }}
+          />
+          &nbsp;Clearnet
+        </label>
+        {settings?.ai.webSearchClearnet && (
+          <select
+            className="ga98-text"
+            style={{ maxWidth: 120, fontSize: 11 }}
+            value={settings?.ai.webSearchClearnetMode ?? 'fallback'}
+            onChange={(e) => { if (settings) void patchSettings({ ai: { ...settings.ai, webSearchClearnetMode: e.target.value as 'fallback' | 'first' } }); }}
+            title={(settings?.ai.webSearchClearnetMode ?? 'fallback') === 'first'
+              ? 'Clearnet-first: skips Tor and queries DuckDuckGo directly — exposes your real IP on every search.'
+              : 'Fallback: Tor first; clearnet only if Tor returns nothing.'}
+          >
+            <option value="fallback">Fallback</option>
+            <option value="first">First (no Tor)</option>
+          </select>
+        )}
         <button onClick={() => quickPrompt('Summarise this case in 3-5 bullet points.')} disabled={!contextCase}>Summarise</button>
         <button onClick={() => quickPrompt('Draft a status report for this case suitable for an external stakeholder.')} disabled={!contextCase}>Draft report</button>
         <button onClick={() => quickPrompt('What questions should I be asking that I have not yet?')} disabled={!contextCase}>Open questions</button>
