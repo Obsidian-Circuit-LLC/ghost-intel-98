@@ -30,7 +30,7 @@
 
 Windows NSIS installer — `GhostIntel98-Setup-3.31.0.exe` (per-user, no admin; unsigned → **More info → Run anyway**):
 
-- **SHA-256:** `<filled after build>`
-- **Size:** `<filled after build>`
+- **SHA-256:** `552bd5aaf0785e7b51247102a23ea75f01fc32ab0b4cc6508f45256df55fde3c`
+- **Size:** 958,364,056 bytes (~958 MB).
 
 *Everything from v3.30.3 (the GhostExodus field-fix batch) carries forward.*
