@@ -36,7 +36,10 @@ export function assertSha(got, want, label = 'artifact') {
  * Re-pack an extracted Vosk model directory into a deterministic, model/-rooted gzipped tar.
  * vosk-browser expects a single top-level `model/` folder; the upstream zip nests under
  * MODEL_ZIP_TOPDIR, so we rename that folder to `model` then tar it. Determinism: --sort=name,
- * zeroed mtime/owner, gzip -n (no gz timestamp). GNU tar required (the build box ships GNU tar 1.35).
+ * zeroed mtime/owner, gzip -n (no gz timestamp), and --mode='go+u,go-w' to normalize group/other
+ * permission bits (which vary by extracting host's unzip version/umask) so identical input bytes
+ * always produce an identical tar regardless of which box ran the extraction. GNU tar required
+ * (the build box ships GNU tar 1.35).
  */
 export function repackModelTar({ extractedDir, outFile }) {
   const parent = dirname(extractedDir);
@@ -48,11 +51,29 @@ export function repackModelTar({ extractedDir, outFile }) {
     '--sort=name',
     '--mtime=@0',
     '--owner=0', '--group=0', '--numeric-owner',
+    '--mode=go+u,go-w',
     '--use-compress-program=gzip -n',
     '-C', parent,
     '-cf', outFile,
     'model'
   ], { stdio: 'pipe' });
+}
+
+/**
+ * True if `file` is a well-formed gzipped tar containing the model/ layout (cheap structural
+ * check, not a full content hash). Used to decide whether an existing OUT_FILE is trustworthy
+ * enough to skip re-fetching, or is a corrupt/truncated leftover (e.g. from an interrupted prior
+ * run) that must be discarded and re-fetched. Fail-closed: any error (unreadable, not a tar,
+ * missing the expected root) is treated as invalid.
+ */
+export function isValidModelArchive(file) {
+  try {
+    const listing = execFileSync('tar', ['-tzf', file], { stdio: ['ignore', 'pipe', 'ignore'] }).toString();
+    const entries = listing.split('\n').filter(Boolean);
+    return entries.includes('model/conf/model.conf');
+  } catch {
+    return false;
+  }
 }
 
 function download(url, dest) {
@@ -79,10 +100,21 @@ function sha256(file) {
 }
 
 async function main() {
-  if (existsSync(OUT_FILE)) { console.log(`[fetch-vosk] present: ${OUT_FILE} (skipping)`); return; }
+  if (existsSync(OUT_FILE)) {
+    if (isValidModelArchive(OUT_FILE)) {
+      console.log(`[fetch-vosk] present: ${OUT_FILE} (skipping)`);
+      return;
+    }
+    console.warn(`[fetch-vosk] existing ${OUT_FILE} failed integrity check — discarding and re-fetching`);
+    rmSync(OUT_FILE, { force: true });
+  }
   mkdirSync(dirname(OUT_FILE), { recursive: true });
   const work = join(root, `.vosk-dl-${process.pid}`);
   const zip = `${work}.zip`;
+  // `finally` must run BEFORE the process exits so the temp zip + work dir are always cleaned up,
+  // even on failure — process.exit() inside a catch block would skip a pending finally, so the
+  // exit is deferred to after the try/catch/finally completes.
+  let failed = null;
   try {
     mkdirSync(work, { recursive: true });
     console.log(`[fetch-vosk] downloading ${MODEL_URL}`);
@@ -96,11 +128,12 @@ async function main() {
   } catch (e) {
     rmSync(OUT_FILE, { force: true });
     console.error(`[fetch-vosk] failed: ${e.message}`);
-    process.exit(1);
+    failed = e;
   } finally {
     rmSync(zip, { force: true });
     rmSync(work, { recursive: true, force: true });
   }
+  if (failed) process.exit(1);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
