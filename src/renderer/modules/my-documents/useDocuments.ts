@@ -83,6 +83,14 @@ export function useDocuments() {
     } catch (e) { setError((e as Error).message); }
   }, [dir, refresh]);
   const reveal = useCallback((rel = dir) => { void window.api.documents.reveal(rel); }, [dir]);
+  const open = useCallback(async (rel: string) => {
+    try { await window.api.documents.open(rel); }
+    catch (e) { setError((e as Error).message); }
+  }, []);
+  const exportFile = useCallback(async (rel: string) => {
+    try { await window.api.documents.export(rel); }
+    catch (e) { setError((e as Error).message); }
+  }, []);
 
-  return { dir, entries, error, clipboard, enter, up, goRoot, refresh, newFolder, rename, remove, paste, importFiles, reveal };
+  return { dir, entries, error, clipboard, enter, up, goRoot, refresh, newFolder, rename, remove, paste, importFiles, reveal, open, exportFile };
 }

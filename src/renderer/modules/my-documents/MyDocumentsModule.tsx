@@ -73,17 +73,21 @@ export function MyDocumentsModule(): JSX.Element {
         onDrop={onDrop}
       >
         {doc.entries.length === 0 && <div style={{ opacity: 0.6 }}>This folder is empty.</div>}
-        {doc.entries.map((e) => (
-          <div
-            key={e.name}
-            className="ga98-mydocs-entry"
-            style={{ padding: '2px 4px', cursor: 'pointer', userSelect: 'none' }}
-            onDoubleClick={() => (e.kind === 'folder' ? doc.enter(e.name) : doc.reveal(joinRel(doc.dir, e.name)))}
-            onContextMenu={(ev) => openMenu(ev, e)}
-          >
-            {e.kind === 'folder' ? '📁' : '📄'} {e.name}
-          </div>
-        ))}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignContent: 'flex-start' }}>
+          {doc.entries.map((e) => (
+            <div
+              key={e.name}
+              className="ga98-mydocs-tile"
+              style={{ width: 88, textAlign: 'center', cursor: 'pointer', userSelect: 'none', padding: 4 }}
+              title={e.name}
+              onDoubleClick={() => (e.kind === 'folder' ? doc.enter(e.name) : void doc.open(joinRel(doc.dir, e.name)))}
+              onContextMenu={(ev) => openMenu(ev, e)}
+            >
+              <div style={{ fontSize: 40, lineHeight: 1 }}>{e.kind === 'folder' ? '📁' : '📄'}</div>
+              <div style={{ fontSize: 11, wordBreak: 'break-word' }}>{e.name}</div>
+            </div>
+          ))}
+        </div>
       </div>
       {menu && (
         <DocumentsContextMenu
@@ -95,6 +99,8 @@ export function MyDocumentsModule(): JSX.Element {
           onCopy={(e) => { doc.clipboard.current = { op: 'copy', relPath: joinRel(doc.dir, e.name) }; }}
           onCut={(e) => { doc.clipboard.current = { op: 'cut', relPath: joinRel(doc.dir, e.name) }; }}
           onPaste={() => void doc.paste()}
+          onOpen={(e) => void doc.open(joinRel(doc.dir, e.name))}
+          onExport={(e) => void doc.exportFile(joinRel(doc.dir, e.name))}
           onClose={() => setMenu(null)}
         />
       )}

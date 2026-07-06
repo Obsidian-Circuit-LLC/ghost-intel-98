@@ -20,7 +20,9 @@ const api = {
   copy: vi.fn().mockResolvedValue('X/a.txt'),
   move: vi.fn().mockResolvedValue('X/a.txt'),
   importDropped: vi.fn().mockResolvedValue({ imported: [], failures: [] }),
-  reveal: vi.fn().mockResolvedValue(undefined)
+  reveal: vi.fn().mockResolvedValue(undefined),
+  open: vi.fn().mockResolvedValue(undefined),
+  export: vi.fn().mockResolvedValue(undefined)
 };
 
 let container: HTMLDivElement;
@@ -84,7 +86,7 @@ describe('MyDocumentsModule', () => {
     await act(async () => { root.render(<MyDocumentsModule />); });
     await flush();
     // Descend into a subfolder so dir !== ''.
-    const folder = [...container.querySelectorAll('.ga98-mydocs-entry')]
+    const folder = [...container.querySelectorAll('.ga98-mydocs-tile')]
       .find((el) => /Folder A/.test(el.textContent ?? ''))!;
     await act(async () => { folder.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); });
     await flush();
@@ -109,5 +111,25 @@ describe('MyDocumentsModule', () => {
     await act(async () => { root.render(<MyDocumentsModule />); });
     await flush();
     expect(container.textContent).not.toMatch(/encrypted at rest/i);
+  });
+
+  it('double-clicking a file calls documents.open', async () => {
+    api.list.mockResolvedValue([{ name: 'a.pdf', kind: 'file', size: 3, modifiedAt: 'x' }]);
+    await act(async () => { root.render(<MyDocumentsModule />); });
+    await flush();
+    const tile = container.querySelector('.ga98-mydocs-tile') as HTMLElement;
+    await act(async () => { tile.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); });
+    expect(api.open).toHaveBeenCalledWith('a.pdf');
+  });
+
+  it('context menu lists New Folder first, Paste under Cut, Open/Export files-only', async () => {
+    api.list.mockResolvedValue([{ name: 'a.pdf', kind: 'file', size: 3, modifiedAt: 'x' }]);
+    await act(async () => { root.render(<MyDocumentsModule />); });
+    await flush();
+    const tile = container.querySelector('.ga98-mydocs-tile') as HTMLElement;
+    await act(async () => { tile.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 5, clientY: 5 })); });
+    const labels = [...document.querySelectorAll('[role="menuitem"]')].map((n) => n.textContent);
+    expect(labels[0]).toBe('New Folder');
+    expect(labels).toEqual(['New Folder', 'Open', 'Rename', 'Delete', 'Copy', 'Cut', 'Paste', 'Export…']);
   });
 });
