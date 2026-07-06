@@ -15,10 +15,32 @@ import { useInvestigationRunStore } from '../../state/investigation-run-store';
 import { startRunStream } from '../../state/investigation-run-stream.singleton';
 
 export interface InvestigationGraphModuleProps {
-  caseId: string;
+  /** Optional at the type level because the module can be opened from the global OSINT AccessMenu,
+   *  which supplies no props. A missing caseId renders the no-case hint (never the graph). */
+  caseId?: string;
 }
 
+/** The investigation cockpit is per-case. Opened without a caseId (e.g. from the global OSINT menu)
+ *  it must not touch the graph IPC — it points the operator at the case-scoped entry point instead
+ *  of rendering a raw "Invalid caseId" error. Guard-only wrapper: no hooks here, so the early return
+ *  is clean; all state/effects live in <InvestigationCockpit> which only ever sees a real caseId. */
 export function InvestigationGraphModule({ caseId }: InvestigationGraphModuleProps): JSX.Element {
+  if (!caseId) return <InvestigationNoCaseHint />;
+  return <InvestigationCockpit caseId={caseId} />;
+}
+
+/** Calm, actionable empty state shown when the cockpit is opened without a case. */
+export function InvestigationNoCaseHint(): JSX.Element {
+  return (
+    <div style={{ height: '100%', background: '#111820', color: '#cfe4ef', padding: 20, fontSize: 13, lineHeight: 1.6 }}>
+      <p style={{ fontWeight: 'bold', marginBottom: 8 }}>Open an investigation from a case</p>
+      <p>The investigation cockpit works on one case at a time.</p>
+      <p style={{ marginTop: 8 }}>Open <b>Cases</b>, open a case, then click <b>“Open investigation…”</b>.</p>
+    </div>
+  );
+}
+
+function InvestigationCockpit({ caseId }: { caseId: string }): JSX.Element {
   const [nodes, setNodes] = useState<SeedNode[]>([]);
   const setAvailable = useInvestigationRunStore((s) => s.setAvailable);
 

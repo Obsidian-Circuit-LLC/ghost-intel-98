@@ -112,6 +112,10 @@ export function CaseDetail({ record, onChange, onArchive, onRefresh, onUpdateFie
           <button onClick={() => open({ module: 'whiteboard', title: `Whiteboard — ${record.title}`, props: { caseId: record.id }, width: 960, height: 680 })}>
             Open whiteboard…
           </button>
+          <button title="Open the investigation cockpit (graph + run/report) scoped to this case"
+            onClick={() => open({ module: 'investigation-graph', title: `Investigation — ${record.title}`, props: { caseId: record.id }, width: 900, height: 640 })}>
+            Open investigation…
+          </button>
         </div>
         <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
           <button title="Copy evidence files from your computer into this case folder" onClick={async () => {
