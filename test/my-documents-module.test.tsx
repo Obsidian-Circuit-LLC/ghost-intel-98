@@ -80,6 +80,23 @@ describe('MyDocumentsModule', () => {
     expect(api.reveal).toHaveBeenCalledWith('');
   });
 
+  it('root breadcrumb returns to the top folder without freezing', async () => {
+    await act(async () => { root.render(<MyDocumentsModule />); });
+    await flush();
+    // Descend into a subfolder so dir !== ''.
+    const folder = [...container.querySelectorAll('.ga98-mydocs-entry')]
+      .find((el) => /Folder A/.test(el.textContent ?? ''))!;
+    await act(async () => { folder.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); });
+    await flush();
+    expect(api.list).toHaveBeenLastCalledWith('Folder A');
+    // Click the "My Documents" root breadcrumb — must synchronously return, not spin.
+    const crumb = [...container.querySelectorAll('a')]
+      .find((a) => /my documents/i.test(a.textContent ?? ''))!;
+    await act(async () => { crumb.click(); });
+    await flush();
+    expect(api.list).toHaveBeenLastCalledWith('');
+  });
+
   it('shows the encryption banner only when the vault is enabled', async () => {
     (window.api.auth.status as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ enabled: true, unlocked: true });
     await act(async () => { root.render(<MyDocumentsModule />); });

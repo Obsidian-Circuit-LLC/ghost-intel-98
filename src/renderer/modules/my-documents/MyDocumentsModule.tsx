@@ -54,7 +54,7 @@ export function MyDocumentsModule(): JSX.Element {
         <button onClick={() => doc.reveal()}>Reveal in Explorer</button>
       </div>
       <div className="ga98-breadcrumb" style={{ padding: '2px 6px' }}>
-        <a onClick={() => { while (doc.dir !== '') doc.up(); }} style={{ cursor: 'pointer' }}>My Documents</a>
+        <a onClick={doc.goRoot} style={{ cursor: 'pointer' }}>My Documents</a>
         {crumbs.map((c, i) => <span key={i}> › {c}</span>)}
       </div>
       {vaultOn && (

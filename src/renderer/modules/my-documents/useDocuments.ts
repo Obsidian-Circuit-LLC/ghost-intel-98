@@ -33,6 +33,7 @@ export function useDocuments() {
 
   const enter = useCallback((folder: string) => setDir((d) => joinRel(d, folder)), []);
   const up = useCallback(() => setDir((d) => parentRel(d)), []);
+  const goRoot = useCallback(() => setDir(''), []);
 
   const newFolder = useCallback(async (name: string) => {
     await window.api.documents.mkdir(dir, name);
@@ -59,5 +60,5 @@ export function useDocuments() {
   }, [dir, refresh]);
   const reveal = useCallback((rel = dir) => { void window.api.documents.reveal(rel); }, [dir]);
 
-  return { dir, entries, error, clipboard, enter, up, refresh, newFolder, rename, remove, paste, importFiles, reveal };
+  return { dir, entries, error, clipboard, enter, up, goRoot, refresh, newFolder, rename, remove, paste, importFiles, reveal };
 }
