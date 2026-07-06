@@ -76,7 +76,7 @@ All operations are confinement-checked (see §Security) and route file content t
 | `mkdir` | `(relDir: string, name: string) => Promise<void>` | Create `relDir/name`. Fails if it exists. |
 | `rename` | `(relPath: string, newName: string) => Promise<void>` | Rename the leaf of `relPath` to `newName` in the same parent. Rejects if target exists. |
 | `remove` | `(relPath: string) => Promise<void>` | Delete file, or folder recursively (`rm(..., { recursive: true })`). |
-| `copy` | `(srcRel: string, destDir: string) => Promise<string>` | Copy file or folder (recursive) into `destDir`; on name collision append ` (n)` before the extension until unique. Returns the final relative path. Content re-encrypts under the current DEK (read-decrypt then write-encrypt), so copies are valid ciphertext, not double-encrypted blobs. |
+| `copy` | `(srcRel: string, destDir: string) => Promise<string>` | Copy file or folder (recursive) into `destDir`; on name collision append ` (n)` before the extension until unique. Returns the final relative path. **Raw byte-copy** (`fs.cp`) — the on-disk bytes are already in correct at-rest form under the current vault DEK, so duplicating them preserves a valid file whether the vault is on or off, needs no decrypt (works while locked-capable), and keeps plaintext out of memory. `importDropped` is the only path that writes *through* `secure-fs`, because its source is an external plaintext file that must be encrypted on the way in. |
 | `move` | `(srcRel: string, destDir: string) => Promise<string>` | Move into `destDir` (rename within `documentsRoot`); collision-uniqued like `copy`. Returns final relative path. Reject moving a folder into its own descendant. |
 | `importDropped` | `(destDir: string, files: {sourcePath: string; originalName: string}[]) => Promise<ImportResult>` | For each dropped host file: read source (plaintext, outside dataRoot), `secureWriteFile` into `destDir` under a collision-uniqued real name. Returns `{ imported: DocEntry[]; failures: {originalName, error}[] }`. Mirrors `fileStore.importDropped`. |
 | `reveal` | `(relPath: string) => void` | `shell.showItemInFolder(resolved)`. `relPath === ''` reveals `documentsRoot` itself. |
@@ -140,16 +140,19 @@ UI behaviour:
   documents file is deliberately out of scope for this pass; note it as a possible follow-up.)
 - **Context menu:** on an item (Rename / Delete / Copy / Cut) and on empty space (New Folder /
   Paste). Cut/Copy set a module-level clipboard `{ op: 'copy'|'cut', relPath }`; Paste calls
-  `copy`/`move` into the current dir, then refreshes.
-- **Inline rename:** the selected item's label becomes a text field; Enter commits via `rename`,
-  Escape cancels.
-- **Drag-drop import:** an `onDrop` over the folder view reads `e.dataTransfer.files[i].path`
-  (Electron exposes the absolute host path) and calls `importDropped(currentDir, files)`. A drag
-  overlay indicates the drop target. Failures surface in a small toast/list.
-- **Internal drag:** dragging an entry onto a folder in the same view calls `move`.
+  `copy`/`move` into the current dir, then refreshes. Cut+Paste is how "move a file from one folder
+  to another" is achieved (no internal entry-drag affordance in this pass — a possible follow-up).
+- **Rename:** via `promptDialog` (the project's async dialog — `window.prompt()` is a no-op in
+  Electron's renderer, see memory `electron-window-prompt-noop`), prefilled with the current name.
+- **New Folder:** via `promptDialog` for the name.
+- **Drag-drop import (from the host PC):** an `onDrop` over the folder view resolves each dropped
+  file's absolute path via `window.api.files.getPathForFile(file)` (the existing helper) and calls
+  `importDropped(currentDir, files)`. A drag overlay indicates the drop target. Failures surface in
+  the returned `failures[]`.
 - **Delete confirm:** `confirmDialog` before `remove` (recursive for folders).
-- **Encryption banner:** when login/vault is enabled, a persistent one-line note: *"Files are
-  encrypted at rest — open them here, not in Explorer."* Hidden when the vault is off.
+- **Encryption banner:** when the vault is enabled (`window.api.auth.status().enabled === true`), a
+  persistent one-line note: *"Files are encrypted at rest — open them here, not in Explorer."*
+  Hidden when the vault is off.
 
 GhostExodus has ADHD (standing UI constraint): one-click actions, immediate feedback after every
 mutation (list refreshes, brief confirmation), plain language, one clear next action, visible
@@ -186,8 +189,10 @@ progress on multi-file imports.
 - Nested folders: create `a/b/c`, list each level.
 - `copy` / `move` collision → ` (n)` uniquing; returned relative path is correct.
 - `move` a folder into its own descendant → rejected.
-- **Encrypted round-trip:** with the vault mock reporting unlocked+enabled, a written file's on-disk
-  bytes are ciphertext (magic-prefixed) while `secureReadFile` returns the original plaintext.
+- **Encrypted round-trip (import path):** with the vault mock reporting unlocked+enabled, a file
+  brought in via `importDropped` has on-disk bytes that are ciphertext (magic-prefixed) while an
+  in-app read (`secureReadFile`) returns the original plaintext; a subsequent `copy` of that file
+  duplicates the ciphertext byte-for-byte (still decryptable), proving copy does not double-encrypt.
 - **Path-traversal rejection on every op:** `../`, absolute paths, embedded separators in a name,
   and a reserved Win32 name are all rejected and touch nothing outside `documentsRoot`.
 
