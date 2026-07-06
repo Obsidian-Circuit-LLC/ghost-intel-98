@@ -83,6 +83,7 @@ export function MediaPlayerModule(): JSX.Element {
   const patch = useSettings((s) => s.patch);
   const streamingEnabled = settings?.media.streamingEnabled ?? false;
   const visualizer = settings?.media.visualizer ?? true;
+  const jukeboxExpanded = settings?.media.jukeboxExpanded ?? false;
 
   const [snap, setSnap] = useState<MediaLibrarySnapshot | null>(null);
   const [queue, setQueue] = useState<QueueItem[]>([]);
@@ -94,7 +95,11 @@ export function MediaPlayerModule(): JSX.Element {
   // Collapsed = the compact "just the deck" view: hide the file toolbar + Library/Stations
   // panes, leaving the LCD/transport/fields/visualizer/seek. Lets the Jukebox shrink to a
   // WinAmp-shade-style strip without losing playback control.
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(!jukeboxExpanded);
+  const hydratedRef = useRef(false);
+  useEffect(() => {
+    if (!hydratedRef.current && settings) { hydratedRef.current = true; setCollapsed(!settings.media.jukeboxExpanded); }
+  }, [settings]);
   const [repeat, setRepeat] = useState<RepeatMode>('off');
   const [shuffle, setShuffle] = useState(false);
   // next()/prev()/onEnded read the *latest* repeat+shuffle without re-binding their
@@ -279,8 +284,8 @@ export function MediaPlayerModule(): JSX.Element {
     catch (err) { toast.error((err as Error).message); }
   }
   function playStation(s: MediaStation): void { playItem({ title: s.label, url: s.url }, -1); }
-  function enableStreaming(): void { void patch({ media: { streamingEnabled: true, visualizer } }); }
-  function toggleVisualizer(): void { void patch({ media: { streamingEnabled, visualizer: !visualizer } }); }
+  function enableStreaming(): void { void patch({ media: { streamingEnabled: true, visualizer, jukeboxExpanded } }); }
+  function toggleVisualizer(): void { void patch({ media: { streamingEnabled, visualizer: !visualizer, jukeboxExpanded } }); }
 
   const currentItem = current >= 0 ? queue[current] : null;
   const titleText = currentItem ? (currentItem.name ?? currentItem.title) : '';
@@ -359,7 +364,8 @@ export function MediaPlayerModule(): JSX.Element {
         <label style={{ fontSize: 11, marginLeft: 8 }}>
           <input type="checkbox" checked={visualizer} onChange={toggleVisualizer} /> Viz
         </label>
-        <button onClick={() => setCollapsed((c) => !c)} style={{ marginLeft: 8, minWidth: 0, padding: '0 6px' }}
+        <button onClick={() => setCollapsed((c) => { const next = !c; void patch({ media: { streamingEnabled, visualizer, jukeboxExpanded: !next } }); return next; })}
+          style={{ marginLeft: 8, minWidth: 0, padding: '0 6px' }}
           title={collapsed ? 'Expand library & stations' : 'Collapse to the compact player'}
           aria-pressed={collapsed} aria-label={collapsed ? 'Expand' : 'Collapse'}>{collapsed ? '▼' : '▲'}</button>
       </div>

@@ -442,6 +442,9 @@ export interface AppSettings {
     streamingEnabled: boolean;
     /** Show the spectrum visualizer in the Jukebox. */
     visualizer: boolean;
+    /** Jukebox opens in the compact (deck-only) view by default; the caret expands it to the file
+     *  toolbar + Library/Stations. Persists the user's last choice. Default false = compact. */
+    jukeboxExpanded: boolean;
   };
   geoint: {
     /** Master opt-in egress gate for GeoINT. When false (default) no feed is fetched
@@ -676,7 +679,7 @@ export const defaultSettings: AppSettings = {
   mail: { accounts: [] },
   mailBackgroundCheck: false,
   browser: { homepage: 'about:blank' },
-  media: { streamingEnabled: false, visualizer: true },
+  media: { streamingEnabled: false, visualizer: true, jukeboxExpanded: false },
   geoint: {
     networkEnabled: false,
     tileServerUrl: '',
