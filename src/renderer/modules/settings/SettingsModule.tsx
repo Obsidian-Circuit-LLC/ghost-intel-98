@@ -7,6 +7,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AccessShortcut, AppSettings } from '@shared/types';
+import { defaultSettings } from '@shared/types';
+import { isOnionUrl } from '@shared/onion';
 import { toast } from '../../state/toasts';
 import { confirmDialog } from '../../state/dialogs';
 import { useAuth, useSettings } from '../../state/store';
@@ -323,7 +325,7 @@ function ShortcutsPane({ s, setS, latest, patch }: {
   );
 }
 
-function AiPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSettings>) => Promise<void> }): JSX.Element {
+export function AiPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSettings>) => Promise<void> }): JSX.Element {
   const [apiKeyDraft, setApiKeyDraft] = useState('');
   const [memStatus, setMemStatus] = useState<{ model: string; cases: number; chunks: number } | null>(null);
   const [memBusy, setMemBusy] = useState(false);
@@ -395,6 +397,23 @@ function AiPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSettings>)
           <input type="checkbox" checked={s.ai.webSearchClearnet}
             onChange={(e) => void patch({ ai: { ...s.ai, webSearchClearnet: e.target.checked } })} />
           Allow CLEARNET fallback when Tor search fails (⚠ exposes your real IP to results — off by default)
+        </label>
+        <label style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: 3, width: '100%' }}>
+          <span>SearXNG instance (used when Q's toolbar engine is set to SearXNG):</span>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', width: '100%' }}>
+            <input className="ga98-text" style={{ flex: 1, minWidth: 0 }} value={s.ai.searxngOnion}
+              placeholder="http://…onion"
+              onChange={(e) => void patch({ ai: { ...s.ai, searxngOnion: e.target.value } })} />
+            <button type="button" title="Restore the bundled default SearXNG onion"
+              onClick={() => void patch({ ai: { ...s.ai, searxngOnion: defaultSettings.ai.searxngOnion } })}>
+              Reset
+            </button>
+          </div>
+          {!isOnionUrl(s.ai.searxngOnion) && (
+            <span style={{ fontSize: 11, color: '#900' }}>
+              ⚠ Must be a .onion URL (include http://). SearXNG search fails closed for a non-onion — it is never routed over clearnet.
+            </span>
+          )}
         </label>
       </div>
       <p style={{ fontSize: 11, color: '#444', marginTop: 8 }}>
