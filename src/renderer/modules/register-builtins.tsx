@@ -207,7 +207,7 @@ function MindsEyeAdapter({ spec: _spec }: { spec: WindowSpec }): JSX.Element {
 }
 
 function InvestigationGraphAdapter({ spec }: { spec: WindowSpec }): JSX.Element {
-  return <InvestigationGraphModule caseId={spec.props?.['caseId'] as string} />;
+  return <InvestigationGraphModule caseId={spec.props?.['caseId'] as string | undefined} />;
 }
 
 // ---------------------------------------------------------------------------
