@@ -11,7 +11,8 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import Hls from 'hls.js';
 import type { MediaLibrarySnapshot, MediaStation } from '@shared/post-mvp-types';
-import { useSettings } from '../../state/store';
+import { useSettings, useWindows, type WindowSpec } from '../../state/store';
+import { jukeboxWindowHeight } from './jukebox-window';
 import { toast } from '../../state/toasts';
 import { resolveSource, isHlsUrl } from './resolveSource';
 import { Visualizer } from './Visualizer';
@@ -78,7 +79,7 @@ function transportToggleStyle(active: boolean): CSSProperties {
   return active ? { borderStyle: 'inset', background: '#bfe0bf', color: '#003300' } : {};
 }
 
-export function MediaPlayerModule(): JSX.Element {
+export function MediaPlayerModule({ spec }: { spec: WindowSpec }): JSX.Element {
   const settings = useSettings((s) => s.settings);
   const patch = useSettings((s) => s.patch);
   const streamingEnabled = settings?.media.streamingEnabled ?? false;
@@ -100,6 +101,12 @@ export function MediaPlayerModule(): JSX.Element {
   useEffect(() => {
     if (!hydratedRef.current && settings) { hydratedRef.current = true; setCollapsed(!settings.media.jukeboxExpanded); }
   }, [settings]);
+  // Fit the WINDOW to the mode. Collapsing only hides the toolbar/panes; without shrinking the frame a
+  // tall empty slab is left below the deck (the v3.33.0 bug). Compact/expanded heights live in
+  // jukebox-window.ts; the caret and the persisted default both flow through `collapsed`.
+  useEffect(() => {
+    useWindows.getState().update(spec.id, { height: jukeboxWindowHeight(collapsed) });
+  }, [collapsed, spec.id]);
   const [repeat, setRepeat] = useState<RepeatMode>('off');
   const [shuffle, setShuffle] = useState(false);
   // next()/prev()/onEnded read the *latest* repeat+shuffle without re-binding their

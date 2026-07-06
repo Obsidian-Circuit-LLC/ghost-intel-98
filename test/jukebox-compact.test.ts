@@ -2,6 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import { defaultSettings } from '../src/shared/types';
 import { mergeSettings } from '../src/main/storage/json-fs';
+import { jukeboxWindowHeight, JUKEBOX_COMPACT_H, JUKEBOX_EXPANDED_H } from '../src/renderer/modules/media/jukebox-window';
 
 describe('jukeboxExpanded setting', () => {
   it('defaults to false (compact)', () => {
@@ -18,5 +19,16 @@ describe('jukeboxExpanded setting', () => {
     const legacy = { ...defaultSettings, ai: { ...defaultSettings.ai } } as any;
     delete legacy.ai.webSearchClearnetMode;
     expect(mergeSettings(defaultSettings, legacy).ai.webSearchClearnetMode).toBe('fallback');
+  });
+});
+
+describe('jukebox window height (fits the frame to the mode)', () => {
+  it('compact is shorter than expanded so no empty slab is left below the deck', () => {
+    expect(jukeboxWindowHeight(true)).toBe(JUKEBOX_COMPACT_H);
+    expect(jukeboxWindowHeight(false)).toBe(JUKEBOX_EXPANDED_H);
+    expect(JUKEBOX_COMPACT_H).toBeLessThan(JUKEBOX_EXPANDED_H);
+  });
+  it('registration default height matches the compact height (fresh window opens deck-sized)', () => {
+    expect(JUKEBOX_COMPACT_H).toBe(270);
   });
 });

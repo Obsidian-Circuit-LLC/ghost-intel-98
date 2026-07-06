@@ -117,8 +117,8 @@ function WhiteboardAdapter({ spec }: { spec: WindowSpec }): JSX.Element {
   return <WhiteboardModule caseId={spec.props?.['caseId'] as string} />;
 }
 
-function MediaPlayerAdapter({ spec: _spec }: { spec: WindowSpec }): JSX.Element {
-  return <MediaPlayerModule />;
+function MediaPlayerAdapter({ spec }: { spec: WindowSpec }): JSX.Element {
+  return <MediaPlayerModule spec={spec} />;
 }
 
 function GeoIntAdapter({ spec: _spec }: { spec: WindowSpec }): JSX.Element {
@@ -238,7 +238,9 @@ export function registerBuiltins(): void {
   registerModule({ key: 'doc-viewer',   title: 'Document Viewer',  glyph: '📄', component: DocViewerAdapter,    builtin: true });
   registerModule({ key: 'search',       title: 'Search',           glyph: '🔍', component: SearchAdapter,       builtin: true });
   registerModule({ key: 'whiteboard',   title: 'Whiteboard',       glyph: '🗺', component: WhiteboardAdapter,   builtin: true });
-  registerModule({ key: 'media-player', title: 'Jukebox',          glyph: '🎵', component: MediaPlayerAdapter,  builtin: true, defaultWidth: 720, defaultHeight: 840 });
+  // defaultHeight = the compact (collapsed) height so a fresh window opens deck-sized; the module grows
+  // it to the expanded height (jukebox-window.ts) when un-collapsed. Keep in sync with JUKEBOX_COMPACT_H.
+  registerModule({ key: 'media-player', title: 'Jukebox',          glyph: '🎵', component: MediaPlayerAdapter,  builtin: true, defaultWidth: 720, defaultHeight: 270 });
   registerModule({ key: 'geoint',       title: 'GeoINT',           glyph: '🌍', component: GeoIntAdapter,       builtin: true, category: 'osint', subcategory: 'Geospatial' });
   registerModule({ key: 'bookmarks',    title: 'Bookmarks',        glyph: '🔖', component: BookmarksAdapter,    builtin: true });
   registerModule({ key: 'markets',      title: 'Markets',          glyph: '📈', component: MarketsAdapter,      builtin: true });
