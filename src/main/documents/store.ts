@@ -5,11 +5,12 @@
  * File content routes through secure-fs (encrypted at rest iff login is on). Copy/move (Task 3)
  * use raw fs ops because at-rest bytes are already valid under the current vault DEK.
  */
-import { readdir, stat, rename as fsRename, rm, realpath, mkdir as fsMkdir } from 'node:fs/promises';
-import { join, dirname, sep, extname, basename } from 'node:path';
+import { readdir, stat, rename as fsRename, rm, realpath, mkdir as fsMkdir, cp, readFile } from 'node:fs/promises';
+import { join, dirname, sep, extname, basename, relative } from 'node:path';
 import { shell } from 'electron';
-import type { DocEntry } from '../../shared/documents-types';
+import type { DocEntry, DocImportResult } from '../../shared/documents-types';
 import { documentsRoot, resolveWithin, ensureDocumentsRoot } from './paths';
+import { secureWriteFile } from '../storage/secure-fs';
 
 /** Realpath of the root, computed after ensuring it exists. Throws if root is missing. */
 async function rootReal(): Promise<string> {
@@ -111,4 +112,56 @@ export async function remove(relPath: string): Promise<void> {
 export function reveal(relPath: string): void {
   // No realpath (target may be the root); resolveWithin is safe because relPath is validated.
   shell.showItemInFolder(resolveWithin(relPath));
+}
+
+/** The relative path (from documentsRoot) of a real absolute path already known to be inside it. */
+async function relOf(realAbs: string): Promise<string> {
+  const root = await rootReal();
+  return relative(root, realAbs).split(sep).join('/');
+}
+
+export async function copy(srcRel: string, destDir: string): Promise<string> {
+  const realSrc = await confineExisting(srcRel);
+  const realDstDir = await confineExisting(destDir);
+  const leaf = await uniqueLeaf(realDstDir, basename(realSrc));
+  const dest = join(realDstDir, leaf);
+  // Raw byte copy: at-rest bytes are already valid under the current vault DEK.
+  await cp(realSrc, dest, { recursive: true });
+  return relOf(dest);
+}
+
+export async function move(srcRel: string, destDir: string): Promise<string> {
+  const realSrc = await confineExisting(srcRel);
+  const realDstDir = await confineExisting(destDir);
+  // Refuse moving a directory into itself or a descendant (would orphan/loop).
+  const srcPrefix = realSrc.endsWith(sep) ? realSrc : realSrc + sep;
+  if (realDstDir === realSrc || realDstDir.startsWith(srcPrefix)) {
+    throw new Error('Cannot move a folder into itself or a descendant.');
+  }
+  const leaf = await uniqueLeaf(realDstDir, basename(realSrc));
+  const dest = join(realDstDir, leaf);
+  await fsRename(realSrc, dest);
+  return relOf(dest);
+}
+
+export async function importDropped(
+  destDir: string,
+  files: { sourcePath: string; originalName: string }[]
+): Promise<DocImportResult> {
+  const realDstDir = await confineExisting(destDir); // dest folder must exist + be inside root
+  const imported: DocEntry[] = [];
+  const failures: { originalName: string; error: string }[] = [];
+  for (const f of files) {
+    try {
+      const leaf = await uniqueLeaf(realDstDir, f.originalName);
+      const dest = join(realDstDir, leaf);
+      const bytes = await readFile(f.sourcePath); // plaintext host file, outside dataRoot
+      await secureWriteFile(dest, bytes); // encrypts iff the vault is unlocked
+      const s = await stat(dest);
+      imported.push({ name: leaf, kind: 'file', size: bytes.length, modifiedAt: s.mtime.toISOString() });
+    } catch (err) {
+      failures.push({ originalName: f.originalName, error: (err as Error).message });
+    }
+  }
+  return { imported, failures };
 }
