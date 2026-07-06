@@ -44,6 +44,13 @@ describe('documents store — core', () => {
     await expect(store.rename('One', 'Two')).rejects.toThrow();
   });
 
+  it('refuses to rename the documents root (empty relPath would move the whole tree out)', async () => {
+    await store.mkdir('', 'Secret');
+    await expect(store.rename('', 'pwned')).rejects.toThrow(/documents root/i);
+    // The root and its contents are untouched.
+    expect((await store.list('')).some((e) => e.name === 'Secret')).toBe(true);
+  });
+
   it('confines: an existing symlink escaping the root is refused', async () => {
     const { symlink } = await import('node:fs/promises');
     await fsMkdir(join(tmpdir(), 'dcs98-outside'), { recursive: true });

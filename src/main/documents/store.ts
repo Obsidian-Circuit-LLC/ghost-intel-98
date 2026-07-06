@@ -95,7 +95,11 @@ export async function mkdir(relDir: string, name: string): Promise<void> {
 }
 
 export async function rename(relPath: string, newName: string): Promise<void> {
+  // Mirror remove()'s root guard: an empty relPath resolves to documentsRoot itself, whose parent
+  // is OUTSIDE the confinement root — renaming it would move the entire tree out and wipe the store.
+  if (relPath === '') throw new Error('Refusing to rename the documents root.');
   const realSrc = await confineExisting(relPath);
+  if (realSrc === (await rootReal())) throw new Error('Refusing to rename the documents root.');
   const dest = join(dirname(realSrc), newName);
   // Refuse to clobber an existing entry.
   const clash = await stat(dest).then(() => true, () => false);

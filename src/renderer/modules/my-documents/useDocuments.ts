@@ -36,27 +36,41 @@ export function useDocuments() {
   const goRoot = useCallback(() => setDir(''), []);
 
   const newFolder = useCallback(async (name: string) => {
-    await window.api.documents.mkdir(dir, name);
-    await refresh();
+    try {
+      await window.api.documents.mkdir(dir, name);
+      await refresh();
+    } catch (e) { setError((e as Error).message); }
   }, [dir, refresh]);
   const rename = useCallback(async (rel: string, newName: string) => {
-    await window.api.documents.rename(rel, newName);
-    await refresh();
+    try {
+      await window.api.documents.rename(rel, newName);
+      await refresh();
+    } catch (e) { setError((e as Error).message); }
   }, [refresh]);
   const remove = useCallback(async (rel: string) => {
-    await window.api.documents.remove(rel);
-    await refresh();
+    try {
+      await window.api.documents.remove(rel);
+      await refresh();
+    } catch (e) { setError((e as Error).message); }
   }, [refresh]);
   const paste = useCallback(async () => {
     const c = clipboard.current;
     if (!c) return;
-    if (c.op === 'copy') await window.api.documents.copy(c.relPath, dir);
-    else { await window.api.documents.move(c.relPath, dir); clipboard.current = null; }
-    await refresh();
+    try {
+      if (c.op === 'copy') await window.api.documents.copy(c.relPath, dir);
+      else { await window.api.documents.move(c.relPath, dir); clipboard.current = null; }
+      await refresh();
+    } catch (e) { setError((e as Error).message); }
   }, [dir, refresh]);
   const importFiles = useCallback(async (files: { sourcePath: string; originalName: string }[]) => {
-    await window.api.documents.importDropped(dir, files);
-    await refresh();
+    try {
+      const res = await window.api.documents.importDropped(dir, files);
+      await refresh(); // clears error on a clean list; the failure notice below re-sets it if needed
+      if (res.failures.length > 0) {
+        const names = res.failures.map((f) => f.originalName).join(', ');
+        setError(`Failed to import ${res.failures.length} file(s): ${names}`);
+      }
+    } catch (e) { setError((e as Error).message); }
   }, [dir, refresh]);
   const reveal = useCallback((rel = dir) => { void window.api.documents.reveal(rel); }, [dir]);
 

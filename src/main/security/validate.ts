@@ -1106,6 +1106,23 @@ export function ensureDocName(value: unknown, context = 'name'): string {
   return value;
 }
 
+/** Validate the HOST source path of a dropped-file import. Unlike a documents rel-path this may
+ *  legitimately point outside the documents root (it is the drag source), so it cannot be confined
+ *  to the root — but it must still be a structurally valid absolute, NUL-free string rather than an
+ *  arbitrary renderer-supplied value handed straight to fs.readFile. */
+export function ensureImportSourcePath(value: unknown, context = 'sourcePath'): string {
+  if (typeof value !== 'string' || value.length === 0 || value.length > 4096) {
+    throw new ValidationError(`Invalid ${context}: empty or too long`);
+  }
+  if (value.includes('\0')) {
+    throw new ValidationError(`Invalid ${context}: NUL byte`);
+  }
+  if (!isAbsolute(value)) {
+    throw new ValidationError(`Invalid ${context}: must be an absolute path`);
+  }
+  return value;
+}
+
 /** Validate a My Documents relative path (`/`-joined segments; `''` = root). Returns the
  *  normalized POSIX relative path. Every segment must pass ensureDocName. */
 export function ensureDocRelPath(value: unknown, context = 'path'): string {
