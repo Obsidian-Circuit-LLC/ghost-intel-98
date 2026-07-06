@@ -7,9 +7,29 @@
  * present in the packed app, so a missing runtime can never silently ship again.
  */
 const { join } = require('node:path');
-const { existsSync, readdirSync } = require('node:fs');
+const { existsSync, readdirSync, statSync } = require('node:fs');
+
+// The Vosk speech model is bundled on EVERY platform (OS-independent data unpacked by vosk-browser
+// WASM), so it is guarded before the win32-only embedding-stack checks. 10 MB floor catches an
+// empty/truncated artifact (the real model is ~35-40 MB).
+const VOSK_MODEL_MIN_BYTES = 10 * 1024 * 1024;
+function sufficientVoskModel(bytes) { return bytes >= VOSK_MODEL_MIN_BYTES; }
+
+function assertVoskModel(appOutDir) {
+  const f = join(appOutDir, 'resources', 'vosk', 'model.tar.gz');
+  if (!existsSync(f)) {
+    throw new Error(`[afterpack-verify] Vosk model MISSING in the package: ${f}\n  Voice input would be dead. Did 'pnpm fetch:vosk' run before packaging?`);
+  }
+  const size = statSync(f).size;
+  if (!sufficientVoskModel(size)) {
+    throw new Error(`[afterpack-verify] Vosk model too small (${size} bytes < ${VOSK_MODEL_MIN_BYTES} floor) — truncated/empty artifact would ship a dead voice feature.`);
+  }
+  console.log(`[afterpack-verify] Vosk speech model present (${size} bytes) ✓`);
+}
 
 module.exports = async function afterPack(context) {
+  assertVoskModel(context.appOutDir); // all platforms — the Vosk model is OS-independent
+
   // Only the Windows build bundles the CPU Ollama runtime + embed model today.
   if (context.electronPlatformName !== 'win32') return;
 
@@ -38,3 +58,6 @@ module.exports = async function afterPack(context) {
   }
   console.log('[afterpack-verify] offline embedding stack present (ollama.exe + CPU runner + embed model) ✓');
 };
+
+module.exports.sufficientVoskModel = sufficientVoskModel;
+module.exports.VOSK_MODEL_MIN_BYTES = VOSK_MODEL_MIN_BYTES;
