@@ -13,12 +13,11 @@ import { playClick } from '../audio/synth';
 // the bottom-right corner like the classic Windows Recycle Bin (cornerShortcuts below).
 export const desktopShortcutDefaults: { module: ModuleKey; label: string }[] = [
   { module: 'cases', label: 'My Cases' },
+  { module: 'my-documents', label: 'My Documents' },
   { module: 'notepad', label: 'Notepad 98' },
   { module: 'briefcase', label: 'Briefcase' },
   { module: 'bookmarks', label: 'Bookmarks' },
-  { module: 'calendar', label: 'Calendar' },
-  { module: 'reminders', label: 'Reminders' },
-  { module: 'chat', label: 'Chat (beta)' },
+  // Calendar, Reminders, and Chat live in the Access menu now (not the desktop).
   // Individual OSINT tools (Searchlight, SOCMINT, …) are reached through the OSINT Toolkit
   // flyout/launcher, not as their own desktop icons — the Toolkit is the single OSINT entry point.
   { module: 'osint-toolkit', label: 'OSINT Toolkit' }

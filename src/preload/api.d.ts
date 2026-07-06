@@ -73,6 +73,7 @@ import type {
   SearchlightCaseSummary,
 } from '../shared/searchlight/types';
 import type { HarvestedItem, MonitoredChannel } from '../shared/socmint/types';
+import type { DocEntry, DocImportResult } from '../shared/documents-types';
 
 export interface MailDraft {
   id: string;
@@ -170,6 +171,16 @@ export interface GhostApi {
     renameAttachment(id: string, name: string, newName: string): Promise<string>;
     pickOpen(opts?: { multi?: boolean; filters?: { name: string; extensions: string[] }[] }): Promise<string[]>;
     pickSave(opts?: { defaultName?: string; filters?: { name: string; extensions: string[] }[] }): Promise<string | null>;
+  };
+  documents: {
+    list(relDir: string): Promise<DocEntry[]>;
+    mkdir(relDir: string, name: string): Promise<void>;
+    rename(relPath: string, newName: string): Promise<void>;
+    remove(relPath: string): Promise<void>;
+    copy(srcRel: string, destDir: string): Promise<string>;
+    move(srcRel: string, destDir: string): Promise<string>;
+    importDropped(destDir: string, list: { sourcePath: string; originalName: string }[]): Promise<DocImportResult>;
+    reveal(relPath: string): Promise<void>;
   };
   notes: {
     list(id: string): Promise<{ name: string; updatedAt: string }[]>;

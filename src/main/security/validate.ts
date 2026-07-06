@@ -1073,3 +1073,71 @@ export async function validateSshKeyPath(path: string): Promise<string> {
 
 // Reference isIPv6 to satisfy "no unused import" — keeps the import alongside isIP for callers extending this module
 export const _ipv6Sentinel: typeof isIPv6 = isIPv6;
+
+// ---------- My Documents (path-segment / relative-path validators) ----------
+
+/** Windows reserved device basenames — illegal as a file/folder name even with an extension. */
+const RESERVED_WIN32_NAMES = new Set<string>([
+  'CON', 'PRN', 'AUX', 'NUL',
+  'COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9',
+  'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9'
+]);
+
+// Control chars (0x00-0x1f, 0x7f) plus the Windows-illegal path characters. Space and dot are
+// intentionally NOT rejected here (dot/space names are legal; '.'/'..' are caught explicitly below).
+// eslint-disable-next-line no-control-regex
+const ILLEGAL_SEGMENT_CHARS = /[\x00-\x1f\x7f/\\:*?"<>|]/;
+
+/** Validate a SINGLE My Documents path segment (a file or folder leaf name). Returns it unchanged. */
+export function ensureDocName(value: unknown, context = 'name'): string {
+  if (typeof value !== 'string' || value.length === 0 || value.length > 255) {
+    throw new ValidationError(`Invalid ${context}: empty or too long`);
+  }
+  if (value === '.' || value === '..') {
+    throw new ValidationError(`Invalid ${context}: traversal not allowed`);
+  }
+  if (ILLEGAL_SEGMENT_CHARS.test(value)) {
+    throw new ValidationError(`Invalid ${context}: illegal character`);
+  }
+  const base = value.split('.')[0]!.toUpperCase();
+  if (RESERVED_WIN32_NAMES.has(base)) {
+    throw new ValidationError(`Invalid ${context}: reserved device name`);
+  }
+  return value;
+}
+
+/** Validate the HOST source path of a dropped-file import. Unlike a documents rel-path this may
+ *  legitimately point outside the documents root (it is the drag source), so it cannot be confined
+ *  to the root — but it must still be a structurally valid absolute, NUL-free string rather than an
+ *  arbitrary renderer-supplied value handed straight to fs.readFile. */
+export function ensureImportSourcePath(value: unknown, context = 'sourcePath'): string {
+  if (typeof value !== 'string' || value.length === 0 || value.length > 4096) {
+    throw new ValidationError(`Invalid ${context}: empty or too long`);
+  }
+  if (value.includes('\0')) {
+    throw new ValidationError(`Invalid ${context}: NUL byte`);
+  }
+  if (!isAbsolute(value)) {
+    throw new ValidationError(`Invalid ${context}: must be an absolute path`);
+  }
+  return value;
+}
+
+/** Validate a My Documents relative path (`/`-joined segments; `''` = root). Returns the
+ *  normalized POSIX relative path. Every segment must pass ensureDocName. */
+export function ensureDocRelPath(value: unknown, context = 'path'): string {
+  if (typeof value !== 'string') {
+    throw new ValidationError(`Invalid ${context}: not a string`);
+  }
+  if (value.length > 4096 || value.includes('\\')) {
+    throw new ValidationError(`Invalid ${context}: too long or backslash`);
+  }
+  // Reject absolute paths outright — a leading '/' would otherwise be silently stripped by the
+  // segment filter below and pass as a relative path (the plan's own test requires a throw here).
+  if (value.startsWith('/')) {
+    throw new ValidationError(`Invalid ${context}: absolute path not allowed`);
+  }
+  const segments = value.split('/').filter((s) => s.length > 0);
+  for (const seg of segments) ensureDocName(seg, `${context} segment`);
+  return segments.join('/');
+}

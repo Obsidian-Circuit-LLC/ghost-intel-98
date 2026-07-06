@@ -9,6 +9,7 @@
 import { registerModule } from '../state/registry';
 import type { WindowSpec } from '../state/store';
 import { CasesModule } from './cases/CasesModule';
+import { MyDocumentsModule } from './my-documents/MyDocumentsModule';
 import { NotepadModule } from './notepad/NotepadModule';
 import { CalendarModule } from './calendar/CalendarModule';
 import { RemindersModule } from './reminders/RemindersModule';
@@ -53,6 +54,10 @@ import { InvestigationGraphModule } from './investigation-graph/InvestigationGra
 
 function CasesAdapter({ spec }: { spec: WindowSpec }): JSX.Element {
   return <CasesModule initialCaseId={spec.props?.['caseId'] as string | undefined} />;
+}
+
+function MyDocumentsAdapter({ spec: _spec }: { spec: WindowSpec }): JSX.Element {
+  return <MyDocumentsModule />;
 }
 
 function NotepadAdapter({ spec }: { spec: WindowSpec }): JSX.Element {
@@ -218,6 +223,7 @@ function InvestigationGraphAdapter({ spec }: { spec: WindowSpec }): JSX.Element 
 
 export function registerBuiltins(): void {
   registerModule({ key: 'cases',        title: 'My Cases',         glyph: '📁', component: CasesAdapter,        builtin: true });
+  registerModule({ key: 'my-documents', title: 'My Documents',     glyph: '📂', component: MyDocumentsAdapter, builtin: true, defaultWidth: 720, defaultHeight: 520 });
   registerModule({ key: 'notepad',      title: 'Notepad 98',       glyph: '🗒', component: NotepadAdapter,      builtin: true });
   registerModule({ key: 'calendar',     title: 'Calendar',         glyph: '📅', component: CalendarAdapter,     builtin: true });
   registerModule({ key: 'reminders',    title: 'Reminders',        glyph: '🔔', component: RemindersAdapter,    builtin: true });

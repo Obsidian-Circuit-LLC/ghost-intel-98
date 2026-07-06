@@ -577,6 +577,7 @@ export const defaultShortcuts: AccessShortcut[] = [
   { id: 'reminders', label: 'Reminders', kind: 'module', target: 'reminders', icon: 'bell' },
   { id: 'alarm', label: 'Alarm', kind: 'module', target: 'alarm', icon: 'alarm' },
   { id: 'ai', label: 'Q', kind: 'module', target: 'ai-assistant', icon: 'sparkle' },
+  { id: 'chat', label: 'Chat (beta)', kind: 'module', target: 'chat', icon: 'chat' },
   { id: 'search', label: 'Search', kind: 'module', target: 'search', icon: 'search' },
   { id: 'help', label: 'RTFM', kind: 'module', target: 'help', icon: 'help' }
   // Games (Solitaire/Minesweeper/Chess/Pinball) are surfaced via the Access "Games ▸" submenu, not
@@ -598,7 +599,8 @@ export const REQUIRED_MODULE_SHORTCUTS: readonly AccessShortcut[] = [
   { id: 'briefcase', label: 'Briefcase', kind: 'module', target: 'briefcase', icon: 'briefcase' },
   { id: 'journal', label: 'Journal Jots', kind: 'module', target: 'journal', icon: 'note' },
   { id: 'markets', label: 'Markets', kind: 'module', target: 'markets', icon: 'chart' },
-  { id: 'socmint', label: 'SOCMINT', kind: 'module', target: 'socmint', icon: 'search' }
+  { id: 'socmint', label: 'SOCMINT', kind: 'module', target: 'socmint', icon: 'search' },
+  { id: 'chat', label: 'Chat (beta)', kind: 'module', target: 'chat', icon: 'chat' }
   // Games are in the Access "Games ▸" submenu (AccessMenu.tsx), not seeded as shortcuts.
 ];
 
