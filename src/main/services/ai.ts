@@ -24,7 +24,7 @@ import type { MemoryItem } from './memory/profile/types';
 import { randomBytes } from 'node:crypto';
 import { searchWebClearnet } from './web-search/ddg';
 import { getEngine, endpointForEngine, engineDisplayName } from './web-search/registry';
-import { extractSearchDirective, formatWebResults, planWebSearch, clearnetFirst, decideSearchAction, torFailureMessage, formatSearchAnnounce, WEB_SEARCH_SYSTEM, MAX_WEB_SEARCHES } from './web-search/directive';
+import { extractSearchDirective, formatWebResults, planWebSearch, decideWebSearchRoute, decideSearchAction, torFailureMessage, formatSearchAnnounce, WEB_SEARCH_SYSTEM, MAX_WEB_SEARCHES } from './web-search/directive';
 
 /** `'global'` always included; `case:<caseId>` appended when the request carries a selected case
  *  — the same scoping convention the adaptive-memory profile store/reconcile/retriever use. */
@@ -150,9 +150,17 @@ export async function chat(streamId: string, req: AiChatRequest, getWindow: () =
       // fenced identically for every engine (formatWebResults) below.
       const engine = getEngine(s.ai.searchEngine);
       const fence = randomBytes(8).toString('hex');
+      // Resolve the full clearnet routing (pre-Tor skip + post-Tor fallback eligibility) from settings
+      // ONCE, so `clearnetEligible` can't drift between the two decisions and the IP-egress wiring is a
+      // single tested seam (decideWebSearchRoute) rather than two open `engine.id === 'ddg'` literals.
+      const route = decideWebSearchRoute({
+        engineId: engine.id,
+        clearnetOn: s.ai.webSearchClearnet,
+        mode: s.ai.webSearchClearnetMode,
+      });
       // Clearnet-FIRST: user opted to skip Tor for DDG. Announce the IP exposure, query clearnet,
       // and continue — the normal Tor path below is not run for this iteration.
-      if (clearnetFirst({ clearnetOn: s.ai.webSearchClearnet, clearnetEligible: engine.id === 'ddg', mode: s.ai.webSearchClearnetMode })) {
+      if (route.clearnetFirst) {
         messages.push({ role: 'assistant', content: full });
         emit(getWindow, streamId, { chunk: `\n\n⚠ Clearnet-first is ON — querying DuckDuckGo over CLEARNET for “${q}” (skipping Tor); your real IP is exposed to these results and their hosts.\n\n` });
         const cn = await searchWebClearnet(q);
@@ -172,7 +180,7 @@ export async function chat(streamId: string, req: AiChatRequest, getWindow: () =
       const plan = planWebSearch({
         torResults: results.length,
         clearnetOn: s.ai.webSearchClearnet,
-        clearnetEligible: engine.id === 'ddg',
+        clearnetEligible: route.clearnetEligible,
       });
       if (plan.mode === 'tor') {
         emit(getWindow, streamId, { chunk: `\n(${results.length} result(s) over Tor)\n` });
