@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, chmodSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
@@ -13,7 +13,11 @@ const MODEL_FILES = [
 ];
 
 const dirs: string[] = [];
-function synthModel(): { extractedDir: string; root: string } {
+// `modes` lets callers give each synthesized tree DIFFERENT (but internally consistent) permission
+// bits — real-world nondeterminism comes from unzip/host umask producing different mode bits on
+// each extraction, NOT from anything content-related. A determinism test that builds both trees
+// identically (same modes) can never exercise repackModelTar's mode-normalization step.
+function synthModel(opts: { fileMode?: number; dirMode?: number } = {}): { extractedDir: string; root: string } {
   const root = mkdtempSync(join(tmpdir(), 'vosk-synth-'));
   dirs.push(root);
   const top = join(root, 'vosk-model-small-en-us-0.15');
@@ -21,6 +25,16 @@ function synthModel(): { extractedDir: string; root: string } {
     const f = join(top, rel);
     mkdirSync(dirname(f), { recursive: true });
     writeFileSync(f, `stub:${rel}`);
+    if (opts.fileMode !== undefined) chmodSync(f, opts.fileMode);
+  }
+  if (opts.dirMode !== undefined) {
+    // chmod every directory under top, deepest-first, so parent chmods don't get overwritten.
+    const dirsUnderTop = new Set<string>();
+    for (const rel of MODEL_FILES) {
+      let d = dirname(join(top, rel));
+      while (d.startsWith(top)) { dirsUnderTop.add(d); d = dirname(d); }
+    }
+    for (const d of [...dirsUnderTop].sort((a, b) => b.length - a.length)) chmodSync(d, opts.dirMode);
   }
   return { extractedDir: top, root };
 }
@@ -44,6 +58,21 @@ describe('repackModelTar → model/-rooted deterministic tar', () => {
     repackModelTar({ extractedDir: a.extractedDir, outFile: outA });
     const b = synthModel(); const outB = join(b.root, 'b.tar.gz');
     repackModelTar({ extractedDir: b.extractedDir, outFile: outB });
+    expect(sha(outA)).toBe(sha(outB));
+  });
+
+  it('is byte-reproducible even when the two extractions have DIFFERENT permission bits', () => {
+    // Simulates two build hosts whose unzip/umask left different (but internally consistent)
+    // mode bits on the extracted tree — the real-world nondeterminism source this repo hit
+    // (one file group-writable, the rest not). repackModelTar must normalize this away.
+    const a = synthModel({ fileMode: 0o644, dirMode: 0o755 });
+    const outA = join(a.root, 'a.tar.gz');
+    repackModelTar({ extractedDir: a.extractedDir, outFile: outA });
+
+    const b = synthModel({ fileMode: 0o664, dirMode: 0o750 });
+    const outB = join(b.root, 'b.tar.gz');
+    repackModelTar({ extractedDir: b.extractedDir, outFile: outB });
+
     expect(sha(outA)).toBe(sha(outB));
   });
 });
