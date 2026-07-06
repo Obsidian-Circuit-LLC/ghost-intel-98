@@ -84,6 +84,9 @@ resources/twscrape-runner/vendor/
 resources/twscrape-runner/.build-work/
 resources/twscrape-runner/twscrape-runner.spec
 
+# Bundled Vosk speech model (build-fetched + verified; see scripts/fetch-vosk.mjs)
+resources/vosk/model.tar.gz
+
 # python bytecode from confinement gate scripts
 scripts/gates/__pycache__/
 __pycache__/
