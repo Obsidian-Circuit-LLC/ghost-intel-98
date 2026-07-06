@@ -49,6 +49,12 @@ describe('documents store — transfer', () => {
     await expect(store.move('Parent', 'Parent/Child')).rejects.toThrow(/descendant|into itself/i);
   });
 
+  it('refuses to copy a folder into its own descendant (guards against fs.cp recursion)', async () => {
+    await store.mkdir('', 'Root');
+    await store.mkdir('Root', 'Leaf');
+    await expect(store.copy('Root', 'Root/Leaf')).rejects.toThrow(/descendant|into itself/i);
+  });
+
   it('imports dropped host files under their real names, uniquing collisions', async () => {
     const src1 = join(DATA, 'drop1.bin');
     const src2 = join(DATA, 'drop2.bin');

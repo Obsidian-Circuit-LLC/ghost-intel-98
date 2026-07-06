@@ -18,16 +18,26 @@ export function useDocuments() {
   const [entries, setEntries] = useState<DocEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const clipboard = useRef<ClipboardRef | null>(null);
+  // Request-sequencing: a slow list() for a folder the user has since left must NOT overwrite the
+  // current folder's contents. `dirRef` always holds the live dir; `reqSeq` orders concurrent
+  // refreshes so only the latest-issued result for the still-current dir is applied.
+  const dirRef = useRef(dir);
+  const reqSeq = useRef(0);
+  useEffect(() => { dirRef.current = dir; }, [dir]);
 
-  const refresh = useCallback(async (target = dir) => {
+  const refresh = useCallback(async (target = dirRef.current) => {
+    const seq = ++reqSeq.current;
     try {
-      setEntries(await window.api.documents.list(target));
+      const list = await window.api.documents.list(target);
+      if (seq !== reqSeq.current || target !== dirRef.current) return; // superseded / user navigated away
+      setEntries(list);
       setError(null);
     } catch (e) {
+      if (seq !== reqSeq.current || target !== dirRef.current) return;
       setError((e as Error).message);
       setEntries([]);
     }
-  }, [dir]);
+  }, []);
 
   useEffect(() => { void refresh(dir); }, [dir, refresh]);
 

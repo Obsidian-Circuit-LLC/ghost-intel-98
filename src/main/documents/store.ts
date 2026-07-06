@@ -124,9 +124,19 @@ async function relOf(realAbs: string): Promise<string> {
   return relative(root, realAbs).split(sep).join('/');
 }
 
+/** Refuse a transfer of a directory into itself or one of its own descendants — that would
+ *  orphan the tree (move) or recurse infinitely (copy). `verb` shapes the error message. */
+function refuseIntoDescendant(realSrc: string, realDstDir: string, verb: string): void {
+  const srcPrefix = realSrc.endsWith(sep) ? realSrc : realSrc + sep;
+  if (realDstDir === realSrc || realDstDir.startsWith(srcPrefix)) {
+    throw new Error(`Cannot ${verb} a folder into itself or a descendant.`);
+  }
+}
+
 export async function copy(srcRel: string, destDir: string): Promise<string> {
   const realSrc = await confineExisting(srcRel);
   const realDstDir = await confineExisting(destDir);
+  refuseIntoDescendant(realSrc, realDstDir, 'copy');
   const leaf = await uniqueLeaf(realDstDir, basename(realSrc));
   const dest = join(realDstDir, leaf);
   // Raw byte copy: at-rest bytes are already valid under the current vault DEK.
@@ -137,11 +147,7 @@ export async function copy(srcRel: string, destDir: string): Promise<string> {
 export async function move(srcRel: string, destDir: string): Promise<string> {
   const realSrc = await confineExisting(srcRel);
   const realDstDir = await confineExisting(destDir);
-  // Refuse moving a directory into itself or a descendant (would orphan/loop).
-  const srcPrefix = realSrc.endsWith(sep) ? realSrc : realSrc + sep;
-  if (realDstDir === realSrc || realDstDir.startsWith(srcPrefix)) {
-    throw new Error('Cannot move a folder into itself or a descendant.');
-  }
+  refuseIntoDescendant(realSrc, realDstDir, 'move');
   const leaf = await uniqueLeaf(realDstDir, basename(realSrc));
   const dest = join(realDstDir, leaf);
   await fsRename(realSrc, dest);

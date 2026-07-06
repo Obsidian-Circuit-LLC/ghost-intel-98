@@ -97,10 +97,17 @@ describe('MyDocumentsModule', () => {
     expect(api.list).toHaveBeenLastCalledWith('');
   });
 
-  it('shows the encryption banner only when the vault is enabled', async () => {
+  it('shows the encryption banner when the vault is enabled', async () => {
     (window.api.auth.status as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ enabled: true, unlocked: true });
     await act(async () => { root.render(<MyDocumentsModule />); });
     await flush();
     expect(container.textContent).toMatch(/encrypted at rest/i);
+  });
+
+  it('hides the encryption banner when the vault is disabled', async () => {
+    // beforeEach stubs auth.status → { enabled: false } (vault off); the banner must be absent.
+    await act(async () => { root.render(<MyDocumentsModule />); });
+    await flush();
+    expect(container.textContent).not.toMatch(/encrypted at rest/i);
   });
 });
