@@ -38,13 +38,15 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`GhostIntel98-Setup-3.32.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
+> **Install:** download [`GhostIntel98-Setup-3.33.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
 
 > **📘 User guides** — plain-language, step-by-step (download or read in-browser):
 > - [**SOCMINT: X, Telegram & WhatsApp**](docs/guides/SOCMINT-Tutorial.pdf) — set up and run the social-media collectors, per platform, with the Tor / clearnet and opsec caveats. ([markdown](docs/guides/socmint-tutorial.md))
 > - [**How Searchlight Learns**](docs/guides/Searchlight-Learning-Guide.pdf) — how the username-sweep detector gets smarter from your own labels, and when to turn ML on. ([markdown](docs/guides/searchlight-learning.md))
 
 ## Status
+
+**v3.33.0** — **My Documents can now open and export your files, a proper large-icons folder view, a compact Jukebox, and a clearnet toggle in Q — all from GhostExodus's field feedback.** **(1) Open & Export in My Documents** — v3.32.0 stored everything encrypted-at-rest but gave you no way to read it back (opening the on-disk file in Word/Acrobat showed ciphertext — "unreadable content"). Now **Open** decrypts a file into a session-scoped temp and launches it in your default app, and **Export…** writes one decrypted copy to a location you choose. The vault store stays ciphertext throughout: the Open temp is written **owner-only**, **shredded on quit**, and **overwrite-swept on next launch**, and **Export refuses a destination inside the encrypted store** so a plaintext copy can never land back in the vault. **(2) A large-icons folder view** — My Documents now shows folders and files as a Win98 **large-icons grid**; double-click a file to Open it. The right-click menu is reordered (**New Folder** at the top, **Paste** under Cut) and gains **Open** / **Export…** on files. **(3) Jukebox opens compact** — the player opens as the compact deck by default with a caret to expand the library/stations, and **remembers your choice**. **(4) Clearnet toggle in Q** — a **Clearnet** checkbox in Q's chat toolbar (**off by default**) with a **Fallback / First** mode: *Fallback* keeps today's Tor-first behavior (clearnet only if Tor returns nothing), *First* skips Tor and queries DuckDuckGo directly — each carrying the unmistakable **real-IP-exposure warning**. Clearnet stays **DuckDuckGo-only** and can never route the SearXNG onion. Built subagent-driven with a **parallel adversarial whole-branch review** whose verified findings were folded in before ship — export-into-vault refusal, owner-only + overwrite-swept Open temps, and a jukebox-persist race. **3,093 automated tests** green (1 skipped); typecheck clean; **no new egress** beyond the existing opt-in clearnet path. *Everything from v3.32.0 carries forward.*
 
 **v3.32.0** — **A "My Documents" file manager on the desktop, and a cleaner desktop.** **(1) My Documents** — a new global file manager, a peer of My Cases and reached from its own desktop icon: create **nested folders**, right-click for **New Folder / Rename / Delete / Copy / Cut / Paste**, **drag files in from your PC**, and **Reveal in Explorer** to see where they live on disk. It's a single personal store, independent of any case, and it obeys the same **encrypt-at-rest** rule as everything else — files are encrypted on disk exactly when app login is on (with an in-app note that, while encrypted, they open here rather than in Explorer). Every path the file manager touches is fenced twice against traversal (segment validation at the process boundary **and** a realpath-confinement check in the store), so nothing can escape the documents folder. **(2) A tidier desktop** — **Calendar**, **Reminders**, and **Chat** move off the desktop into the **Access menu** (existing installs keep them: Chat is seeded into the menu on update, so it never disappears). **(3)** The **SearXNG instance** used by Q's web search is now editable in **Settings → Q** (with the same fail-closed `.onion` validation the engine enforces). Built subagent-driven with a **parallel adversarial whole-branch review** that caught a **critical the plan itself contained** — a `rename('')` that would have relocated the entire documents root *out* of its confinement (data-loss + escape) — plus an unvalidated import path and two error-swallowing UI bugs, all fixed before merge; a **pre-ship reachability audit** confirmed My Documents opens with no case selected and all three moved tools stay reachable. **3,067 automated tests** green (1 skipped); typecheck clean; **no new egress**. *Everything from v3.31.0 carries forward.*
 
@@ -491,7 +493,7 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases) and run it.
 
-Direct link to the current release: [`GhostIntel98-Setup-3.28.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.28.0/GhostIntel98-Setup-3.28.0.exe)
+Direct link to the current release: [`GhostIntel98-Setup-3.33.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.33.0/GhostIntel98-Setup-3.33.0.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is **formally verified internally** — symbolic (ProVerif) +
 computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not**
 FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.6.8/GhostIntel98-Setup-3.6.8.exe).
@@ -499,7 +501,7 @@ FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Se
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\GhostIntel98-Setup-3.28.0.exe -Algorithm SHA256
+Get-FileHash .\GhostIntel98-Setup-3.33.0.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
