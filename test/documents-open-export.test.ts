@@ -77,6 +77,11 @@ describe('exportEntry', () => {
     const link = join(OSTMP, 'link'); await symlink(victim, link);
     await expect(store.exportEntry('a.docx', link)).rejects.toThrow(/symlink/i);
   });
+  it('refuses a destination inside the encrypted documents store (no plaintext-at-rest in the vault)', async () => {
+    const store = await import('../src/main/documents/store');
+    await writeFile(join(ROOT, 'documents', 'a.docx'), Buffer.from([0x01, 0x41]));
+    await expect(store.exportEntry('a.docx', join(ROOT, 'documents', 'leak.docx'))).rejects.toThrow(/outside My Documents/i);
+  });
 });
 
 describe('temp lifecycle', () => {
@@ -87,6 +92,15 @@ describe('temp lifecycle', () => {
     await t.shredDocOpenTemps();
     expect(await readFile(p).catch(() => 'GONE')).toBe('GONE');
     await t.sweepDocOpenTemp();
+    expect(await readdir(t.docOpenTempDir())).toEqual([]);
+  });
+  it('sweep removes an untracked straggler (post-crash: tracked set is empty on restart)', async () => {
+    const t = await import('../src/main/documents/open-temp');
+    await mkdir(t.docOpenTempDir(), { recursive: true });
+    const straggler = join(t.docOpenTempDir(), 'orphan.pdf');
+    await writeFile(straggler, 'leftover plaintext');
+    await t.sweepDocOpenTemp(); // enumerates + shreds even though nothing is in the in-memory tracked set
+    expect(await readFile(straggler).catch(() => 'GONE')).toBe('GONE');
     expect(await readdir(t.docOpenTempDir())).toEqual([]);
   });
 });

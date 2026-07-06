@@ -197,5 +197,14 @@ export async function exportEntry(relPath: string, destPath: string): Promise<vo
   if ((await stat(real)).isDirectory()) throw new Error('Refusing to export a folder.');
   const existing = await lstat(destPath).catch(() => null);
   if (existing?.isSymbolicLink()) throw new Error('Refusing to export onto a symlink.');
+  // Export writes PLAINTEXT — refuse a destination inside the encrypted documents store, or the copy
+  // would sit as cleartext among the ciphertext corpus (weakening encrypt-at-rest and breaking the
+  // magic-byte assumption). realpath the parent (destPath itself may not exist yet — it's a save target).
+  const root = await realpath(documentsRoot());
+  const destParent = await realpath(dirname(destPath));
+  const prefix = root.endsWith(sep) ? root : root + sep;
+  if (destParent === root || destParent.startsWith(prefix)) {
+    throw new Error('Choose a destination outside My Documents — exporting into the encrypted store would leave a plaintext copy.');
+  }
   await writeFile(destPath, await secureReadFile(real));
 }

@@ -132,4 +132,16 @@ describe('MyDocumentsModule', () => {
     expect(labels[0]).toBe('New Folder');
     expect(labels).toEqual(['New Folder', 'Open', 'Rename', 'Delete', 'Copy', 'Cut', 'Paste', 'Export…']);
   });
+
+  it('omits Open and Export for a folder (files-only)', async () => {
+    api.list.mockResolvedValue([{ name: 'sub', kind: 'folder', size: 0, modifiedAt: 'x' }]);
+    await act(async () => { root.render(<MyDocumentsModule />); });
+    await flush();
+    const tile = container.querySelector('.ga98-mydocs-tile') as HTMLElement;
+    await act(async () => { tile.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 5, clientY: 5 })); });
+    const labels = [...document.querySelectorAll('[role="menuitem"]')].map((n) => n.textContent);
+    expect(labels).toEqual(['New Folder', 'Rename', 'Delete', 'Copy', 'Cut', 'Paste']);
+    expect(labels).not.toContain('Open');
+    expect(labels).not.toContain('Export…');
+  });
 });

@@ -284,8 +284,11 @@ export function MediaPlayerModule(): JSX.Element {
     catch (err) { toast.error((err as Error).message); }
   }
   function playStation(s: MediaStation): void { playItem({ title: s.label, url: s.url }, -1); }
-  function enableStreaming(): void { void patch({ media: { streamingEnabled: true, visualizer, jukeboxExpanded } }); }
-  function toggleVisualizer(): void { void patch({ media: { streamingEnabled, visualizer: !visualizer, jukeboxExpanded } }); }
+  // Persist jukeboxExpanded from the LIVE `collapsed` state (!collapsed), never the settings-derived
+  // `jukeboxExpanded` const — the latter lags a just-fired caret toggle by a store round-trip, so
+  // writing it here could revert the user's expand choice. `collapsed` is always current.
+  function enableStreaming(): void { void patch({ media: { streamingEnabled: true, visualizer, jukeboxExpanded: !collapsed } }); }
+  function toggleVisualizer(): void { void patch({ media: { streamingEnabled, visualizer: !visualizer, jukeboxExpanded: !collapsed } }); }
 
   const currentItem = current >= 0 ? queue[current] : null;
   const titleText = currentItem ? (currentItem.name ?? currentItem.title) : '';

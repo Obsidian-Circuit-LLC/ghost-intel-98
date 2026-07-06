@@ -7,7 +7,7 @@
  */
 import { app } from 'electron';
 import { join, extname } from 'node:path';
-import { writeFile, rm, mkdir, stat, open as fsOpen } from 'node:fs/promises';
+import { writeFile, rm, mkdir, stat, readdir, open as fsOpen } from 'node:fs/promises';
 import { randomBytes, randomUUID } from 'node:crypto';
 
 const tracked = new Set<string>();
@@ -16,18 +16,25 @@ export function docOpenTempDir(): string {
   return join(app.getPath('temp'), 'ga98-docopen');
 }
 
-/** Startup: wipe any stragglers a prior crash left, then recreate an empty dir. */
+/** Startup: OVERWRITE-then-remove any stragglers a prior crash left (the tracked set is in-memory and
+ *  empty after a restart, so a bare unlink would leave the previous session's decrypted plaintext
+ *  undelete-recoverable). Then recreate an owner-only dir. This is what makes the sweep a real shred. */
 export async function sweepDocOpenTemp(): Promise<void> {
+  try {
+    for (const name of await readdir(docOpenTempDir())) await shredOne(join(docOpenTempDir(), name));
+  } catch { /* dir absent — nothing to shred */ }
   await rm(docOpenTempDir(), { recursive: true, force: true });
-  await mkdir(docOpenTempDir(), { recursive: true });
+  await mkdir(docOpenTempDir(), { recursive: true, mode: 0o700 });
   tracked.clear();
 }
 
-/** Write decrypted bytes to a random-named temp preserving origName's extension; track for shred. */
+/** Write decrypted bytes to a random-named temp preserving origName's extension; track for shred.
+ *  Owner-only perms (0o600 file / 0o700 dir) so the plaintext isn't world-readable on a shared /tmp
+ *  (the roadmapped Linux target; on Windows per-user %TEMP% the mode is a harmless no-op). */
 export async function stageDecryptedTemp(bytes: Buffer, origName: string): Promise<string> {
-  await mkdir(docOpenTempDir(), { recursive: true });
+  await mkdir(docOpenTempDir(), { recursive: true, mode: 0o700 });
   const temp = join(docOpenTempDir(), `${randomUUID()}${extname(origName)}`);
-  await writeFile(temp, bytes);
+  await writeFile(temp, bytes, { mode: 0o600 });
   tracked.add(temp);
   return temp;
 }
