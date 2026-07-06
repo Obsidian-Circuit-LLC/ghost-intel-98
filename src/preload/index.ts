@@ -55,6 +55,17 @@ const api = {
     pickSave: (opts?: { defaultName?: string; filters?: { name: string; extensions: string[] }[] }) =>
       ipcRenderer.invoke(channels.files.pickSave, opts)
   },
+  documents: {
+    list: (relDir: string) => ipcRenderer.invoke(channels.documents.list, relDir),
+    mkdir: (relDir: string, name: string) => ipcRenderer.invoke(channels.documents.mkdir, relDir, name),
+    rename: (relPath: string, newName: string) => ipcRenderer.invoke(channels.documents.rename, relPath, newName),
+    remove: (relPath: string) => ipcRenderer.invoke(channels.documents.remove, relPath),
+    copy: (srcRel: string, destDir: string) => ipcRenderer.invoke(channels.documents.copy, srcRel, destDir),
+    move: (srcRel: string, destDir: string) => ipcRenderer.invoke(channels.documents.move, srcRel, destDir),
+    importDropped: (destDir: string, list: { sourcePath: string; originalName: string }[]) =>
+      ipcRenderer.invoke(channels.documents.importDropped, destDir, list),
+    reveal: (relPath: string) => ipcRenderer.invoke(channels.documents.reveal, relPath)
+  },
   notes: {
     list: (id: string) => ipcRenderer.invoke(channels.notes.list, id),
     read: (id: string, name: string) => ipcRenderer.invoke(channels.notes.read, id, name),

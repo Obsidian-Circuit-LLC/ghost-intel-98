@@ -41,6 +41,7 @@ import * as ssh from '../services/ssh';
 import * as shellSvc from '../services/shell';
 import * as streams from '../services/streams';
 import * as satellites from '../services/satellites';
+import * as documentsStore from '../documents/store';
 import { streamsToMasterTree } from '../services/cctv-export';
 import { detectStream } from '../services/stream-detect';
 import * as walls from '../services/walls';
@@ -67,7 +68,7 @@ import * as aiConvos from '../storage/ai-conversations';
 import * as briefcase from '../storage/briefcase';
 import * as journal from '../storage/journal';
 import * as voiceModel from '../voice/model-protocol';
-import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityType, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureShellProgram, ensureWhiteboard, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon, ensureSaveToCaseOpts, ensureGeoItem, ensureThreatLayerId, ensureKeyedLayerId, ensureLayerKey, isKeyedLayerId, ensureBookmarkBoard, ensureMarketsSettings, ensureStickyNotes, ensureAiConversation, ensureBriefcaseNote, ensureJournalEntry, ensurePin, ensureUid, ensureMailFlag, stripProtectedSettings, ensureBounds } from '../security/validate';
+import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityType, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureShellProgram, ensureWhiteboard, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon, ensureSaveToCaseOpts, ensureGeoItem, ensureThreatLayerId, ensureKeyedLayerId, ensureLayerKey, isKeyedLayerId, ensureBookmarkBoard, ensureMarketsSettings, ensureStickyNotes, ensureAiConversation, ensureBriefcaseNote, ensureJournalEntry, ensurePin, ensureUid, ensureMailFlag, stripProtectedSettings, ensureBounds, ensureDocRelPath, ensureDocName } from '../security/validate';
 import * as entities from '../storage/entities';
 import * as bioStore from '../storage/bio-images';
 import * as ftp from '../services/ftp';
@@ -646,6 +647,35 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     exiftool.readExif(ensureUuid(args[0], 'caseId'), ensureFileName(args[1], 'fileName')));
   safeHandle(channels.files.renameAttachment, (...args) =>
     fileStore.renameAttachment(ensureUuid(args[0], 'caseId'), ensureFileName(args[1], 'fileName'), ensureFileName(args[2], 'newName')));
+
+  // ---- documents (global My Documents file manager) ----
+  safeHandle(channels.documents.list, (...args) =>
+    documentsStore.list(ensureDocRelPath(args[0], 'relDir')));
+  safeHandle(channels.documents.mkdir, (...args) =>
+    documentsStore.mkdir(ensureDocRelPath(args[0], 'relDir'), ensureDocName(args[1], 'name')));
+  safeHandle(channels.documents.rename, (...args) =>
+    documentsStore.rename(ensureDocRelPath(args[0], 'relPath'), ensureDocName(args[1], 'newName')));
+  safeHandle(channels.documents.remove, (...args) =>
+    documentsStore.remove(ensureDocRelPath(args[0], 'relPath')));
+  safeHandle(channels.documents.copy, (...args) =>
+    documentsStore.copy(ensureDocRelPath(args[0], 'srcRel'), ensureDocRelPath(args[1], 'destDir')));
+  safeHandle(channels.documents.move, (...args) =>
+    documentsStore.move(ensureDocRelPath(args[0], 'srcRel'), ensureDocRelPath(args[1], 'destDir')));
+  safeHandle(channels.documents.importDropped, (...args) => {
+    const destDir = ensureDocRelPath(args[0], 'destDir');
+    const raw = Array.isArray(args[1]) ? (args[1] as unknown[]) : [];
+    const files = raw.map((x) => {
+      const o = (x ?? {}) as Record<string, unknown>;
+      if (typeof o['sourcePath'] !== 'string' || typeof o['originalName'] !== 'string') {
+        throw new Error('Invalid dropped-file payload');
+      }
+      // originalName becomes an on-disk leaf → validate it like any other name.
+      return { sourcePath: o['sourcePath'], originalName: ensureDocName(o['originalName'], 'originalName') };
+    });
+    return documentsStore.importDropped(destDir, files);
+  });
+  safeHandle(channels.documents.reveal, (...args) =>
+    documentsStore.reveal(ensureDocRelPath(args[0], 'relPath')));
 
   // ---- entities (cross-case registry) ----
   safeHandle(channels.entities.listAll, () => entities.listAll());

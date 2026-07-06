@@ -263,6 +263,16 @@ export const channels = {
     pickOpen: 'files:pickOpen',
     pickSave: 'files:pickSave'
   },
+  documents: {
+    list: 'documents:list',
+    mkdir: 'documents:mkdir',
+    rename: 'documents:rename',
+    remove: 'documents:remove',
+    copy: 'documents:copy',
+    move: 'documents:move',
+    importDropped: 'documents:importDropped',
+    reveal: 'documents:reveal'
+  },
   ssh: {
     listHosts: 'ssh:listHosts',
     upsertHost: 'ssh:upsertHost',
