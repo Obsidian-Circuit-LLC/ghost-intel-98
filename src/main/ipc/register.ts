@@ -677,6 +677,15 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   });
   safeHandle(channels.documents.reveal, (...args) =>
     documentsStore.reveal(ensureDocRelPath(args[0], 'relPath')));
+  safeHandle(channels.documents.open, (...args) =>
+    documentsStore.openEntry(ensureDocRelPath(args[0], 'relPath')));
+  safeHandle(channels.documents.export, async (...args) => {
+    const rel = ensureDocRelPath(args[0], 'relPath');
+    const name = rel.split('/').pop() || 'file'; // rel uses '/'; avoid platform basename ambiguity
+    const res = await dialog.showSaveDialog({ defaultPath: name });
+    if (res.canceled || !res.filePath) return;
+    await documentsStore.exportEntry(rel, res.filePath);
+  });
 
   // ---- entities (cross-case registry) ----
   safeHandle(channels.entities.listAll, () => entities.listAll());

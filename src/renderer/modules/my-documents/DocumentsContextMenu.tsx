@@ -11,6 +11,8 @@ interface Props {
   onCopy(e: DocEntry): void;
   onCut(e: DocEntry): void;
   onPaste(): void;
+  onOpen(e: DocEntry): void;
+  onExport(e: DocEntry): void;
   onClose(): void;
 }
 
@@ -33,13 +35,15 @@ export function DocumentsContextMenu(p: Props): JSX.Element {
       style={{ position: 'fixed', left: p.target.x, top: p.target.y, minWidth: 150, background: '#c0c0c0', border: '2px outset #f5f5f5', boxShadow: '2px 2px 5px rgba(0,0,0,0.4)', zIndex: 40 }}
       onMouseDown={(ev) => ev.stopPropagation()}
     >
+      {item('New Folder', p.onNewFolder)}
+      <div className="ga98-access-separator" />
+      {e && e.kind === 'file' && item('Open', () => p.onOpen(e))}
       {e && item('Rename', () => p.onRename(e))}
       {e && item('Delete', () => p.onDelete(e))}
       {e && item('Copy', () => p.onCopy(e))}
       {e && item('Cut', () => p.onCut(e))}
-      {e && <div className="ga98-access-separator" />}
-      {item('New Folder', p.onNewFolder)}
       {item('Paste', p.onPaste, !p.canPaste)}
+      {e && e.kind === 'file' && item('Export…', () => p.onExport(e))}
     </div>
   );
 }

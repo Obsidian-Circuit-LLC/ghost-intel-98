@@ -414,6 +414,11 @@ export interface AppSettings {
      *  the real IP to the query and result hosts — a deanonymization warning is always shown in the
      *  chat stream when it fires. Off by default; the Tor-only path is never weakened by this flag. */
     webSearchClearnet: boolean;
+    /** When clearnet is enabled, whether it runs as a FALLBACK (Tor first; clearnet only on an empty
+     *  Tor result — the default, safer) or FIRST (skip Tor; query clearnet DDG directly — faster but
+     *  exposes the real IP on every search). Meaningful only when webSearchClearnet is true and the
+     *  selected engine has a clearnet path (DDG). Default 'fallback'. */
+    webSearchClearnetMode: 'fallback' | 'first';
     /** One-time acknowledgment that opening a link from Q's replies launches the default browser
      *  over the clearnet, exposing the real IP (not Tor). False until the user confirms the first
      *  clearnet-link warning; once true, subsequent link clicks open directly. Default false. */
@@ -442,6 +447,9 @@ export interface AppSettings {
     streamingEnabled: boolean;
     /** Show the spectrum visualizer in the Jukebox. */
     visualizer: boolean;
+    /** Jukebox opens in the compact (deck-only) view by default; the caret expands it to the file
+     *  toolbar + Library/Stations. Persists the user's last choice. Default false = compact. */
+    jukeboxExpanded: boolean;
   };
   geoint: {
     /** Master opt-in egress gate for GeoINT. When false (default) no feed is fetched
@@ -667,6 +675,7 @@ export const defaultSettings: AppSettings = {
     adaptiveMemory: false,
     webSearch: false,
     webSearchClearnet: false,
+    webSearchClearnetMode: 'fallback',
     linkClearnetAcknowledged: false,
     searchEngine: 'ddg',
     // Mirrors DEFAULT_SEARXNG_ONION in src/main/services/web-search/searxng.ts (shared/ must not
@@ -676,7 +685,7 @@ export const defaultSettings: AppSettings = {
   mail: { accounts: [] },
   mailBackgroundCheck: false,
   browser: { homepage: 'about:blank' },
-  media: { streamingEnabled: false, visualizer: true },
+  media: { streamingEnabled: false, visualizer: true, jukeboxExpanded: false },
   geoint: {
     networkEnabled: false,
     tileServerUrl: '',

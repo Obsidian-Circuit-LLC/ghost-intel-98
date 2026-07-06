@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractSearchDirective, formatWebResults, decideSearchAction, torFailureMessage, formatSearchAnnounce } from '../src/main/services/web-search/directive';
+import { extractSearchDirective, formatWebResults, decideSearchAction, torFailureMessage, formatSearchAnnounce, clearnetFirst, decideWebSearchRoute, planWebSearch } from '../src/main/services/web-search/directive';
 
 describe('extractSearchDirective', () => {
   it('extracts the query from a [SEARCH: ...] line', () => {
@@ -87,6 +87,60 @@ describe('decideSearchAction (same-query loop guard)', () => {
       if (d.action === 'search') { realSearches += 1; seen.push(d.key); }
     }
     expect(realSearches).toBe(1); // was 3 wasted Tor searches before the guard
+  });
+});
+
+describe('clearnetFirst', () => {
+  it('is true only when clearnet on, engine eligible, and mode "first"', () => {
+    expect(clearnetFirst({ clearnetOn: true, clearnetEligible: true, mode: 'first' })).toBe(true);
+  });
+  it('is false in fallback mode', () => {
+    expect(clearnetFirst({ clearnetOn: true, clearnetEligible: true, mode: 'fallback' })).toBe(false);
+  });
+  it('is false for an ineligible engine even in "first" (SearXNG has no clearnet path)', () => {
+    expect(clearnetFirst({ clearnetOn: true, clearnetEligible: false, mode: 'first' })).toBe(false);
+  });
+  it('is false when clearnet is disabled', () => {
+    expect(clearnetFirst({ clearnetOn: false, clearnetEligible: true, mode: 'first' })).toBe(false);
+  });
+});
+
+describe('decideWebSearchRoute (the clearnet-first IP-egress seam ai.ts actually calls)', () => {
+  // This is the function chat() invokes to resolve BOTH the pre-Tor clearnet-first skip AND the
+  // post-Tor fallback eligibility from the raw settings fields. Testing it (not a reproduced copy of
+  // the wiring) is what closes the seam: a mis-passed mode, a wrong engine-eligibility rule, or the two
+  // clearnetEligible computations drifting would now fail here instead of shipping green.
+  it('DDG + clearnet on + mode "first" → skip Tor (clearnetFirst true), IP exposed pre-Tor', () => {
+    expect(decideWebSearchRoute({ engineId: 'ddg', clearnetOn: true, mode: 'first' }))
+      .toEqual({ clearnetFirst: true, clearnetEligible: true });
+  });
+  it('DDG + clearnet on + mode "fallback" → Tor runs first (clearnetFirst false), still fallback-eligible', () => {
+    // The exact regression the finding names: a Tor-first "fallback" user must NOT be flipped to
+    // clearnet-first. clearnetFirst=false proves Tor is attempted before any IP exposure.
+    expect(decideWebSearchRoute({ engineId: 'ddg', clearnetOn: true, mode: 'fallback' }))
+      .toEqual({ clearnetFirst: false, clearnetEligible: true });
+  });
+  it('clearnet OFF → never skips Tor and never falls back, regardless of mode', () => {
+    expect(decideWebSearchRoute({ engineId: 'ddg', clearnetOn: false, mode: 'first' }))
+      .toEqual({ clearnetFirst: false, clearnetEligible: true });
+  });
+  it('SearXNG is never clearnet-eligible → no pre-Tor skip AND no post-Tor clearnet fallback even in "first"', () => {
+    const r = decideWebSearchRoute({ engineId: 'searxng', clearnetOn: true, mode: 'first' });
+    expect(r).toEqual({ clearnetFirst: false, clearnetEligible: false });
+    // the same clearnetEligible feeds planWebSearch — an onion metasearch never leaks to a clearnet scrape
+    expect(planWebSearch({ torResults: 0, clearnetOn: true, clearnetEligible: r.clearnetEligible }))
+      .toEqual({ mode: 'empty' });
+  });
+  it('an unknown/stale engine id is not clearnet-eligible (only "ddg" is), so it can never leak the IP', () => {
+    expect(decideWebSearchRoute({ engineId: 'bing-was-removed', clearnetOn: true, mode: 'first' }))
+      .toEqual({ clearnetFirst: false, clearnetEligible: false });
+  });
+  it('the resolved clearnetEligible is consistent across the pre-Tor and post-Tor decisions (no drift)', () => {
+    // Regression guard for the DRY consolidation: whatever eligibility gates the pre-Tor skip must be
+    // the SAME value handed to planWebSearch. For DDG that means clearnet is reachable on both paths.
+    const r = decideWebSearchRoute({ engineId: 'ddg', clearnetOn: true, mode: 'fallback' });
+    expect(planWebSearch({ torResults: 0, clearnetOn: true, clearnetEligible: r.clearnetEligible }))
+      .toEqual({ mode: 'clearnet' });
   });
 });
 

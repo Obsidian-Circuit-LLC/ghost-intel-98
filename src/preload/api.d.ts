@@ -181,6 +181,8 @@ export interface GhostApi {
     move(srcRel: string, destDir: string): Promise<string>;
     importDropped(destDir: string, list: { sourcePath: string; originalName: string }[]): Promise<DocImportResult>;
     reveal(relPath: string): Promise<void>;
+    open(relPath: string): Promise<void>;
+    export(relPath: string): Promise<void>;
   };
   notes: {
     list(id: string): Promise<{ name: string; updatedAt: string }[]>;

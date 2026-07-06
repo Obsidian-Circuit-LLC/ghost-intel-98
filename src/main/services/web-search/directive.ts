@@ -49,6 +49,39 @@ export function planWebSearch(opts: { torResults: number; clearnetOn: boolean; c
   return { mode: 'empty' };
 }
 
+/** Pre-Tor decision: should this search SKIP Tor and go straight to clearnet? True only when clearnet
+ *  is enabled, the selected engine has a clearnet path (DDG), AND the user chose 'first' mode. In every
+ *  other case the Tor path runs first and `planWebSearch` governs the post-Tor fallback. Pure/testable. */
+export function clearnetFirst(opts: { clearnetOn: boolean; clearnetEligible?: boolean; mode: 'fallback' | 'first' }): boolean {
+  return opts.clearnetOn && opts.clearnetEligible !== false && opts.mode === 'first';
+}
+
+/**
+ * Full per-iteration clearnet routing for the loop, resolved from the raw settings fields + the
+ * selected engine id in ONE place so the caller (ai.ts) can't mis-wire the seam. This closes the
+ * IP-egress wiring gap: `clearnetEligible` (does the engine even have a clearnet path — DDG only) is
+ * computed once and reused for BOTH the pre-Tor `clearnetFirst` decision AND the post-Tor
+ * `planWebSearch` fallback, so the two can never drift, and the mode/engine plumbing is exercised by
+ * an executable test rather than only reproduced in a fixture. ai.ts feeds `s.ai.searchEngine`'s
+ * resolved engine id, `s.ai.webSearchClearnet`, and `s.ai.webSearchClearnetMode` straight in.
+ *
+ * `clearnetFirst === true`  → skip Tor, query clearnet immediately (real IP exposed pre-Tor).
+ * `clearnetEligible`        → pass to `planWebSearch` as the post-Tor fallback gate.
+ */
+export interface WebSearchRoute {
+  /** Skip Tor entirely and go straight to the clearnet DDG scrape this iteration. */
+  clearnetFirst: boolean;
+  /** Whether the selected engine has any clearnet path (DDG only); gates the post-Tor fallback too. */
+  clearnetEligible: boolean;
+}
+export function decideWebSearchRoute(opts: { engineId: string; clearnetOn: boolean; mode: 'fallback' | 'first' }): WebSearchRoute {
+  const clearnetEligible = opts.engineId === 'ddg';
+  return {
+    clearnetEligible,
+    clearnetFirst: clearnetFirst({ clearnetOn: opts.clearnetOn, clearnetEligible, mode: opts.mode }),
+  };
+}
+
 /** The engine-aware "searching…" transparency chunk streamed before a Tor search runs. Names the
  *  selected engine (from `engineDisplayName`) so the user sees WHICH engine Q queried, not a generic
  *  "the web". Pure/testable — the caller (ai.ts) emits the returned chunk. */

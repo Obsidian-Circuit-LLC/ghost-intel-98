@@ -5,12 +5,13 @@
  * File content routes through secure-fs (encrypted at rest iff login is on). Copy/move (Task 3)
  * use raw fs ops because at-rest bytes are already valid under the current vault DEK.
  */
-import { readdir, stat, rename as fsRename, rm, realpath, mkdir as fsMkdir, cp, readFile } from 'node:fs/promises';
+import { readdir, stat, lstat, rename as fsRename, rm, realpath, mkdir as fsMkdir, cp, readFile, writeFile } from 'node:fs/promises';
 import { join, dirname, sep, extname, basename, relative } from 'node:path';
 import { shell } from 'electron';
 import type { DocEntry, DocImportResult } from '../../shared/documents-types';
 import { documentsRoot, resolveWithin, ensureDocumentsRoot } from './paths';
-import { secureWriteFile } from '../storage/secure-fs';
+import { secureWriteFile, isEncryptedFile, secureReadFile } from '../storage/secure-fs';
+import { stageDecryptedTemp } from './open-temp';
 
 /** Realpath of the root, computed after ensuring it exists. Throws if root is missing. */
 async function rootReal(): Promise<string> {
@@ -174,4 +175,36 @@ export async function importDropped(
     }
   }
   return { imported, failures };
+}
+
+/** Open a FILE in the OS default app. Encrypted-at-rest files are decrypted into a session-scoped
+ *  temp (shredded on quit); plaintext files (vault off) are opened in place. Folders are refused. */
+export async function openEntry(relPath: string): Promise<void> {
+  const real = await confineExisting(relPath);
+  if ((await stat(real)).isDirectory()) throw new Error('Refusing to open a folder.');
+  let target = real;
+  if (await isEncryptedFile(real)) {
+    target = await stageDecryptedTemp(await secureReadFile(real), basename(real));
+  }
+  const err = await shell.openPath(target);
+  if (err) throw new Error(err);
+}
+
+/** Export one decrypted copy of a FILE to a user-chosen destination (outside the confinement root,
+ *  by design). Refuses a folder and a symlink destination (can't be redirected to clobber a file). */
+export async function exportEntry(relPath: string, destPath: string): Promise<void> {
+  const real = await confineExisting(relPath);
+  if ((await stat(real)).isDirectory()) throw new Error('Refusing to export a folder.');
+  const existing = await lstat(destPath).catch(() => null);
+  if (existing?.isSymbolicLink()) throw new Error('Refusing to export onto a symlink.');
+  // Export writes PLAINTEXT — refuse a destination inside the encrypted documents store, or the copy
+  // would sit as cleartext among the ciphertext corpus (weakening encrypt-at-rest and breaking the
+  // magic-byte assumption). realpath the parent (destPath itself may not exist yet — it's a save target).
+  const root = await realpath(documentsRoot());
+  const destParent = await realpath(dirname(destPath));
+  const prefix = root.endsWith(sep) ? root : root + sep;
+  if (destParent === root || destParent.startsWith(prefix)) {
+    throw new Error('Choose a destination outside My Documents — exporting into the encrypted store would leave a plaintext copy.');
+  }
+  await writeFile(destPath, await secureReadFile(real));
 }

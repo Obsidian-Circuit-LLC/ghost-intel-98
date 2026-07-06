@@ -64,7 +64,9 @@ const api = {
     move: (srcRel: string, destDir: string) => ipcRenderer.invoke(channels.documents.move, srcRel, destDir),
     importDropped: (destDir: string, list: { sourcePath: string; originalName: string }[]) =>
       ipcRenderer.invoke(channels.documents.importDropped, destDir, list),
-    reveal: (relPath: string) => ipcRenderer.invoke(channels.documents.reveal, relPath)
+    reveal: (relPath: string) => ipcRenderer.invoke(channels.documents.reveal, relPath),
+    open: (relPath: string) => ipcRenderer.invoke(channels.documents.open, relPath),
+    export: (relPath: string) => ipcRenderer.invoke(channels.documents.export, relPath)
   },
   notes: {
     list: (id: string) => ipcRenderer.invoke(channels.notes.list, id),

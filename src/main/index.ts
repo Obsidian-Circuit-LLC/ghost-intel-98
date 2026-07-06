@@ -22,6 +22,7 @@ import { secretStore } from './secrets/index';
 import { registerMediaProtocol } from './media/protocol';
 import { registerModelProtocol } from './voice/model-protocol';
 import { registerCctvProxy } from './geoint/cctv-proxy';
+import { sweepDocOpenTemp, shredDocOpenTemps } from './documents/open-temp';
 
 // Custom schemes. Must be declared before app is ready.
 //  - ga98media: local audio/video streaming
@@ -381,6 +382,7 @@ app.whenReady().then(async () => {
   registerMediaProtocol(); // ga98media:// for local audio playback
   registerModelProtocol(); // ga98model:// serves the bundled Vosk model (offline STT)
   registerCctvProxy();     // ga98cctv:// routes CCTV stream bytes through Tor (main-side egress)
+  try { await sweepDocOpenTemp(); } catch { /* non-fatal — Open re-creates the dir on demand */ }
   registerIpc(() => mainWindow);
   createWindow();
   lockDownPartitionSessions();
@@ -422,6 +424,7 @@ app.on('before-quit', (event) => {
     await getBgConnManager()?.stopAll('quit').catch(() => { /* */ });   // stops workers (awaited)
     await getBgTor()?.stop().catch(() => { /* */ });                     // kills the bgconn tor.exe → frees the lock
     await disableAllPlugins().catch(() => { /* */ });                    // tears down plugin-registered workers
+    await shredDocOpenTemps(); // shred decrypted Open temps before the process exits
     localAi.stop();
   })();
   // Never let teardown wedge the quit: whichever resolves first, we then quit for real.
