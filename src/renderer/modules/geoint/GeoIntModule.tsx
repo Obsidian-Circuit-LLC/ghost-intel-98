@@ -7,6 +7,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { GeoSnapshot, GeoSourceType, GeoXmlMap, GeoItem, KevEntry, CameraStream } from '@shared/post-mvp-types';
+import type { AppSettings } from '@shared/types';
 import { useSettings, useWindows } from '../../state/store';
 import { toast } from '../../state/toasts';
 import { confirmDialog, alertDialog } from '../../state/dialogs';
@@ -95,15 +96,6 @@ function GeoIntModuleInner(): JSX.Element {
   const tileUrl = g?.tileServerUrl ?? '';
   const tileAttribution = g?.tileAttribution ?? '';
   const basemap = g?.basemap ?? 'street';
-  // News playlist (R12) — carried through patchGeo so a tile/basemap write never drops it (the
-  // renderer store shallow-replaces the whole geoint block; every write must carry all fields).
-  const newsStreams = g?.newsStreams ?? [];
-  const newsStreamIndex = g?.newsStreamIndex ?? 0;
-  // CCTV-over-Tor setting (Task 6) — carried through patchGeo alongside other geoint fields.
-  const cctvOverTor = g?.cctvOverTor ?? false;
-  // Tor-only host-resolution recon toggle — distinct from stream routing; default on. Carried
-  // through patchGeo so a geoint write here can't silently drop it.
-  const cctvResolveHosts = g?.cctvResolveHosts ?? true;
   // The map's active layer: street uses the user/default tiles; satellite uses the built-in Esri layer.
   const activeTileUrl = basemap === 'satellite' ? ESRI_SAT_URL : tileUrl;
   const activeTileAttribution = basemap === 'satellite' ? ESRI_SAT_ATTRIBUTION : tileAttribution;
@@ -464,11 +456,17 @@ function GeoIntModuleInner(): JSX.Element {
     try { const n = await window.api.geoint.importOpml(); if (n > 0) toast.success(`Imported ${n} source${n === 1 ? '' : 's'}.`); else toast.warn('No sources found.'); await load(); }
     catch (err) { toast.error((err as Error).message); }
   }
-  // Merge-write the geoint settings block. `patch` shallow-replaces the whole geoint object, so
-  // every write must carry all fields — this fills the unchanged ones from current state and
-  // applies the delta, so adding basemap (or any future field) can't silently drop the others.
+  // Merge-write the geoint settings block. `settingsStore.update` deep-merges the `geoint`
+  // sub-object main-side (json-fs.ts `mergeSettings`: `{ ...base.geoint, ...patch.geoint }`), so
+  // sending ONLY the changed field(s) is safe and cannot drop siblings — whereas re-sending the
+  // whole block reconstructed from this (possibly stale) renderer cache could clobber a sibling
+  // field a different window had just changed. Never spread the cached `g` block here.
   function patchGeo(p: Partial<{ networkEnabled: boolean; tileServerUrl: string; tileAttribution: string; basemap: 'street' | 'satellite' }>): void {
-    void patch({ geoint: { networkEnabled: net, tileServerUrl: tileUrl, tileAttribution, basemap, newsStreams, newsStreamIndex, cctvOverTor, cctvResolveHosts, ...p } });
+    // `patch`'s Partial<AppSettings> is a SHALLOW partial — it doesn't make AppSettings['geoint']'s
+    // own fields optional — but main's mergeSettings deep-merges geoint regardless of what TS
+    // thinks the shape is, so a genuinely-partial geoint payload is cast past that shallow check
+    // rather than fabricating the other fields just to satisfy the type.
+    void patch({ geoint: p } as Partial<AppSettings>);
   }
   function setNetwork(enabled: boolean): void {
     // Enabling with no tile server configured yet → drop in the default basemap so the map

@@ -8,9 +8,10 @@
  * surface is immediately selectable on the other — one settings-backed list.
  *
  * Two properties matter here:
- *  - addStream/removeStream must re-send the FULL geoint block on every patch() call (the renderer
- *    store shallow-replaces the whole `geoint` object on write, so a partial write would silently
- *    drop the other geoint fields — tileServerUrl/basemap/etc).
+ *  - addStream/removeStream must patch ONLY newsStreams/newsStreamIndex (main deep-merges the
+ *    geoint sub-object — json-fs.ts mergeSettings — so a partial write is safe and cannot drop
+ *    sibling fields; re-sending the whole reconstructed block from this renderer's own cache could
+ *    instead clobber a sibling a different window had just changed — Task 3, v3.35.0).
  *  - NewsViewModule must reflect the store's active stream (not a hardcoded Bloomberg default),
  *    falling back to DEFAULT_NEWS_STREAM only when the store has no streams at all.
  *
@@ -70,7 +71,7 @@ afterEach(() => {
 });
 
 describe('NewsFeedControls — shared add-feed form', () => {
-  it('adding a stream patches the full geoint block, not just newsStreams', async () => {
+  it('adding a stream patches ONLY newsStreams/newsStreamIndex', async () => {
     useSettings.setState({
       settings: {
         ...defaultSettings,
@@ -99,9 +100,9 @@ describe('NewsFeedControls — shared add-feed form', () => {
     expect(payload.geoint.newsStreams).toEqual(
       expect.arrayContaining([expect.objectContaining({ label: 'Al Jazeera English', kind: 'hls' })])
     );
-    // AND the rest of the geoint block was re-sent (not dropped by a partial write).
-    expect(payload.geoint).toHaveProperty('networkEnabled');
-    expect(payload.geoint).toHaveProperty('basemap', defaultSettings.geoint.basemap);
+    // AND the rest of the geoint block was NOT re-sent (a partial write can't clobber siblings).
+    expect(payload.geoint).not.toHaveProperty('networkEnabled');
+    expect(payload.geoint).not.toHaveProperty('basemap');
   });
 
   it('removeStream clamps newsStreamIndex to a valid range after removing the active (last) stream', async () => {

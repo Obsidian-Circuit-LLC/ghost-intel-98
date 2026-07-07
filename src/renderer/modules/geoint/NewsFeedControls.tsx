@@ -4,9 +4,11 @@
  * standalone/pop-out News module (NewsViewModule) manage the SAME settings.geoint.newsStreams list
  * with identical behavior — a feed added on either surface is immediately selectable on the other.
  *
- * Reads/writes settings.geoint directly via useSettings(). Carries the FULL geoint block on every
- * write (patchNews) — the renderer store shallow-replaces the whole geoint object, so a partial
- * write would silently drop the other geoint fields (tileServerUrl/basemap/cctv settings/etc).
+ * Reads/writes settings.geoint directly via useSettings(). patchNews sends ONLY the changed
+ * field(s) (newsStreams/newsStreamIndex) — main deep-merges the geoint sub-object (json-fs.ts
+ * mergeSettings), so a partial write here cannot drop the other geoint fields (tileServerUrl/
+ * basemap/cctv settings/etc); re-sending the whole block from this cache could instead clobber
+ * a sibling a different window had just changed.
  *
  * validateStreamUrl/isPublicHost live here (addStream needs them); LiveNewsPanel re-exports
  * validateStreamUrl so existing importers/tests keep resolving it from there.
@@ -16,6 +18,7 @@ import { useState } from 'react';
 import { useSettings, useWindows } from '../../state/store';
 import { toast } from '../../state/toasts';
 import { parseYouTubeId } from '@shared/youtube';
+import type { AppSettings } from '@shared/types';
 import type { NewsStream, NewsStreamKind } from './NewsStreamView';
 import { newsWindowSpec } from './newsWindow';
 
@@ -66,7 +69,6 @@ export function NewsFeedControls(): JSX.Element {
 
   // Defensive read (mirrors GeoIntModuleInner): a partial/legacy settings object must not crash.
   const g = settings?.geoint;
-  const net = g?.networkEnabled ?? false;
   const streams: NewsStream[] = g?.newsStreams ?? [];
   const rawIndex = g?.newsStreamIndex ?? 0;
   const index = streams.length === 0 ? 0 : Math.min(Math.max(rawIndex, 0), streams.length - 1);
@@ -74,23 +76,16 @@ export function NewsFeedControls(): JSX.Element {
 
   const [form, setForm] = useState<{ label: string; url: string; kind: NewsStreamKind }>({ label: '', url: '', kind: 'hls' });
 
-  // Carry the full geoint block on every write (the renderer store shallow-replaces the whole
-  // geoint object, so a news write must re-send the unchanged tile/basemap fields or they'd drop).
-  // We default each field defensively in case a partial/legacy settings object slipped through.
+  // `settingsStore.update` deep-merges the `geoint` sub-object main-side (json-fs.ts
+  // `mergeSettings`), so sending ONLY the changed field(s) is safe and cannot drop siblings —
+  // whereas re-sending the whole block reconstructed from this (possibly stale) renderer cache
+  // could clobber a sibling field a different window had just changed. Never spread `g` here.
   function patchNews(p: Partial<{ newsStreams: NewsStream[]; newsStreamIndex: number }>): void {
-    void patch({
-      geoint: {
-        networkEnabled: net,
-        tileServerUrl: g?.tileServerUrl ?? '',
-        tileAttribution: g?.tileAttribution ?? '',
-        basemap: g?.basemap ?? 'street',
-        newsStreams: streams,
-        newsStreamIndex: index,
-        cctvOverTor: g?.cctvOverTor ?? false,
-        cctvResolveHosts: g?.cctvResolveHosts ?? true,
-        ...p
-      }
-    });
+    // `patch`'s Partial<AppSettings> is a SHALLOW partial — it doesn't make AppSettings['geoint']'s
+    // own fields optional — but main's mergeSettings deep-merges geoint regardless of what TS
+    // thinks the shape is, so a genuinely-partial geoint payload is cast past that shallow check
+    // rather than fabricating the other fields just to satisfy the type.
+    void patch({ geoint: p } as Partial<AppSettings>);
   }
 
   function selectStream(i: number): void {
