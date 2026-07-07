@@ -1699,9 +1699,10 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.hostinfo.resolve, async (...args) => {
     const url = String(args[0] ?? '');
     const force = !!(args[1] as { force?: boolean } | undefined)?.force;
+    const settings = await settingsStore.read();
     return resolveHostInfoGated({
-      resolveEnabled: async () => hostResolveEnabledFrom(await settingsStore.read()),
-      resolve: (u, o) => hostInfoService.resolve(u, o),
+      resolveEnabled: async () => hostResolveEnabledFrom(settings),
+      resolve: (u, o) => hostInfoService.resolve(u, { ...o, via: settings.geoint.cctvResolveClearnet ? 'clearnet' : 'tor' }),
       hostOf: (u) => hostFromStreamUrl(u)?.host ?? '',
       now: () => new Date().toISOString()
     }, url, { force });

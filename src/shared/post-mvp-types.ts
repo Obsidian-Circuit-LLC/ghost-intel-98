@@ -411,4 +411,7 @@ export interface HostInfo {
   rdap?: RdapInfo;
   resolvedAt: string;
   errors: string[];
+  /** Which egress path this result was resolved over — absent on cached/pre-existing/disabled
+   *  results (only stamped on a freshly-resolved lookup; see hostinfo/index.ts). */
+  via?: 'tor' | 'clearnet';
 }

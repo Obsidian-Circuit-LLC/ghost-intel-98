@@ -8,7 +8,7 @@ import { makeHostInfoStore } from './store';
 import type { HostInfo } from './types';
 
 export interface HostInfoServiceDeps {
-  resolveHost(streamUrl: string): Promise<HostInfo>;
+  resolveHost(streamUrl: string, via: 'tor' | 'clearnet'): Promise<HostInfo>;
   store: { load(host: string): Promise<HostInfo | null>; save(info: HostInfo): Promise<void> };
   hostOf(streamUrl: string): string;
 }
@@ -17,13 +17,17 @@ export interface HostInfoServiceDeps {
  *  wires the Tor fetch + vault store below. */
 export function makeHostInfoService(deps: HostInfoServiceDeps) {
   return {
-    async resolve(streamUrl: string, opts: { force?: boolean } = {}): Promise<HostInfo> {
+    async resolve(streamUrl: string, opts: { force?: boolean; via?: 'tor' | 'clearnet' } = {}): Promise<HostInfo> {
       const host = deps.hostOf(streamUrl);
       if (!opts.force && host) {
         const cached = await deps.store.load(host);
         if (cached) return cached;
       }
-      const info = await deps.resolveHost(streamUrl);
+      const via = opts.via ?? 'tor';
+      // via is stamped HERE, on a freshly-resolved result only — a cache hit above returns the
+      // ALREADY-stamped cached info as-is, and the resolve-disabled path never reaches this service
+      // at all (the gate short-circuits before calling resolve()).
+      const info: HostInfo = { ...(await deps.resolveHost(streamUrl, via)), via };
       // Never persist a transient tor-not-ready partial: it would poison the 30-day cache so every
       // later non-force lookup keeps returning "Tor not ready" even after Tor bootstraps. Cache only
       // a result that actually ran against Tor (the background ensurePluginTor() warms it meanwhile).
@@ -52,10 +56,18 @@ export async function torFetchJson(url: string): Promise<unknown> {
   return JSON.parse(resp.body);
 }
 
+/** Clearnet JSON GET — the OPT-IN recon egress (settings.geoint.cctvResolveClearnet). Leaks the
+ *  real IP by design; only selected when the user enabled + acknowledged clearnet resolution. */
+export async function clearnetFetchJson(url: string): Promise<unknown> {
+  const resp = await fetch(url, { headers: { Accept: 'application/dns-json' } });
+  if (!resp.ok) throw new Error(`hostinfo clearnet lookup ${resp.status}`);
+  return resp.json();
+}
+
 const store = makeHostInfoStore({ indexPath: () => join(dataRoot(), 'hostinfo', 'index.json'), readText: secureReadText, writeFile: (p, d) => secureWriteFile(p, d), now: () => Date.now() });
 
 export const hostInfoService = makeHostInfoService({
-  resolveHost: (streamUrl) => resolveHostImpl(streamUrl, { fetchJson: torFetchJson, now: () => new Date().toISOString() }),
+  resolveHost: (streamUrl, via) => resolveHostImpl(streamUrl, { fetchJson: via === 'clearnet' ? clearnetFetchJson : torFetchJson, now: () => new Date().toISOString() }),
   store,
   hostOf: (streamUrl) => hostFromStreamUrl(streamUrl)?.host ?? ''
 });
