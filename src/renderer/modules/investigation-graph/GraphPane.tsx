@@ -120,7 +120,7 @@ export function GraphPane({ caseId, onNodesChange }: GraphPaneProps): JSX.Elemen
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#111820' }}>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: 8, fontSize: 12, color: '#dfe6ec', borderBottom: '1px solid #333' }}>
+      <div className="graph-pane-toolbar" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: 8, fontSize: 12 }}>
         <label>
           Search{' '}
           <input
