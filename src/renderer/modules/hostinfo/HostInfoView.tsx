@@ -50,6 +50,7 @@ export function HostInfoView({ stream, defaultOpen = false }: { stream: CameraSt
           {info.rdap && <div><b>rdap:</b> {[info.rdap.org, info.rdap.asn, info.rdap.country, info.rdap.range].filter(Boolean).join(' · ')}</div>}
           {info.errors.filter((e) => e !== 'resolve-disabled').length > 0 &&
             <div style={{ color: '#a33' }}>Couldn't fully resolve via Tor ({info.errors.filter((e) => e !== 'resolve-disabled').join(', ')}).</div>}
+          {info.via === 'clearnet' && <div style={{ color: '#a33' }}>Resolved over CLEARNET — real IP exposed.</div>}
           <button style={{ marginTop: 4 }} onClick={() => run(true)}>Refresh</button>
           <span style={{ opacity: 0.6, marginLeft: 6 }}>{info.resolvedAt}</span>
         </div>
