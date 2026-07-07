@@ -27,6 +27,16 @@ export function hostResolveEnabledFrom(settings: { geoint: { cctvResolveHosts: b
   return settings.geoint.cctvResolveHosts;
 }
 
+/** Selects the recon egress route from settings — CHARTER decision point ("clearnet-off = no
+ *  clearnet fetch"). Tor UNLESS the operator explicitly opted into (and acknowledged) clearnet
+ *  resolution via geoint.cctvResolveClearnet. Extracted for the same reason as hostResolveEnabledFrom:
+ *  the choice is a boolean over the geoint block, so an inverted/wrong-field regression would be
+ *  type-safe and silently leak the real IP by default. register.ts wires resolve()'s `via` through
+ *  this helper. Default (false) ⇒ 'tor' ⇒ no clearnet socket. */
+export function hostResolveViaFrom(settings: { geoint: { cctvResolveClearnet: boolean } }): 'tor' | 'clearnet' {
+  return settings.geoint.cctvResolveClearnet ? 'clearnet' : 'tor';
+}
+
 export async function resolveHostInfoGated(
   deps: HostInfoGateDeps,
   url: string,

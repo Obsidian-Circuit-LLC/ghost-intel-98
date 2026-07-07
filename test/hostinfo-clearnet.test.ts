@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { makeHostInfoService, clearnetFetchJson } from '../src/main/services/hostinfo/index';
+import { makeHostInfoService, clearnetFetchJson, torFetchJson, fetchJsonForVia } from '../src/main/services/hostinfo/index';
 import { resolveHost } from '../src/main/services/hostinfo/resolve';
 import type { HostInfo } from '../src/main/services/hostinfo/types';
 
@@ -34,6 +34,19 @@ describe('hostinfo service via marker (opt-in clearnet resolve)', () => {
     const svc = makeHostInfoService(d as never);
     const r = await svc.resolve('http://1.2.3.4/v', { via: 'tor' });
     expect(r.via).toBe('tor');
+  });
+});
+
+describe('fetchJsonForVia — the real egress-route binding (index.ts singleton wiring)', () => {
+  // The second charter decision point ("clearnet-off = no clearnet fetch"). The production singleton
+  // wires resolveHostImpl's `fetchJson` through this map. Inverting `via === "clearnet" ? clearnet :
+  // tor` would send the default Tor-mode lookup out over a real clearnet fetch(), leaking the real
+  // IP. Asserting the exact function bound to each via is what kills that mutation.
+  it('binds via="tor" to torFetchJson — the Tor-only path, NEVER a clearnet socket', () => {
+    expect(fetchJsonForVia('tor')).toBe(torFetchJson);
+  });
+  it('binds via="clearnet" to clearnetFetchJson (only the opt-in path fetches clearnet)', () => {
+    expect(fetchJsonForVia('clearnet')).toBe(clearnetFetchJson);
   });
 });
 

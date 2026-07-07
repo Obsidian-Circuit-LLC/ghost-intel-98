@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { resolveHostInfoGated, hostResolveEnabledFrom } from '../src/main/services/hostinfo/gate';
+import { resolveHostInfoGated, hostResolveEnabledFrom, hostResolveViaFrom } from '../src/main/services/hostinfo/gate';
 import { resolveHost } from '../src/main/services/hostinfo/resolve';
 import type { HostInfo } from '../src/main/services/hostinfo/types';
 
@@ -85,5 +85,19 @@ describe('host-resolution setting field wiring (hostResolveEnabledFrom)', () => 
     // not the stream field. register.ts wires resolveEnabled through this helper.
     expect(hostResolveEnabledFrom({ geoint: { cctvResolveHosts: true, cctvOverTor: false } } as never)).toBe(true);
     expect(hostResolveEnabledFrom({ geoint: { cctvResolveHosts: false, cctvOverTor: true } } as never)).toBe(false);
+  });
+});
+
+describe('host-resolution egress-route wiring (hostResolveViaFrom) — CHARTER: clearnet-off = Tor-only', () => {
+  // This is one of the two real charter decision points ("clearnet-off = no clearnet fetch").
+  // register.ts wires the resolve()'s `via` through this helper; inverting the field/ternary here
+  // would leak the operator's real IP to Cloudflare/rdap.org by default. Both toggles are booleans
+  // in the same geoint block, so a wrong-field/inverted regression would be type-safe and otherwise
+  // pass every test — these assertions are what catch the mutation.
+  it('defaults to tor when cctvResolveClearnet is OFF (the shipped default — NO clearnet socket)', () => {
+    expect(hostResolveViaFrom({ geoint: { cctvResolveClearnet: false } } as never)).toBe('tor');
+  });
+  it('selects clearnet ONLY when cctvResolveClearnet is explicitly ON (opt-in, acknowledged)', () => {
+    expect(hostResolveViaFrom({ geoint: { cctvResolveClearnet: true } } as never)).toBe('clearnet');
   });
 });

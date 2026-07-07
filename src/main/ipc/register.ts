@@ -105,7 +105,7 @@ import { makeBgConnSecrets, type SecretBackend } from '../bgconn/secrets';
 import { secretStore } from '../secrets/index';
 import { homedir } from 'node:os';
 import { hostInfoService } from '../services/hostinfo/index';
-import { resolveHostInfoGated, hostResolveEnabledFrom } from '../services/hostinfo/gate';
+import { resolveHostInfoGated, hostResolveEnabledFrom, hostResolveViaFrom } from '../services/hostinfo/gate';
 import { hostFromStreamUrl } from '../services/hostinfo/extract';
 import * as adsb from '../services/livefeeds/adsb';
 import * as ais from '../services/livefeeds/ais-stream';
@@ -1704,7 +1704,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     const settings = await settingsStore.read();
     return resolveHostInfoGated({
       resolveEnabled: async () => hostResolveEnabledFrom(settings),
-      resolve: (u, o) => hostInfoService.resolve(u, { ...o, via: settings.geoint.cctvResolveClearnet ? 'clearnet' : 'tor' }),
+      resolve: (u, o) => hostInfoService.resolve(u, { ...o, via: hostResolveViaFrom(settings) }),
       hostOf: (u) => hostFromStreamUrl(u)?.host ?? '',
       now: () => new Date().toISOString()
     }, url, { force });

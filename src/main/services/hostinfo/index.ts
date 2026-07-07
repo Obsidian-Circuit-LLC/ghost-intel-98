@@ -81,8 +81,17 @@ export async function clearnetFetchJson(url: string): Promise<unknown> {
 
 const store = makeHostInfoStore({ indexPath: () => join(dataRoot(), 'hostinfo', 'index.json'), readText: secureReadText, writeFile: (p, d) => secureWriteFile(p, d), now: () => Date.now() });
 
+/** CHARTER decision point ("clearnet-off = no clearnet fetch"): maps the resolved egress route to
+ *  its fetcher. Only via='clearnet' (the opt-in, acknowledged path) binds the real-IP-leaking
+ *  clearnetFetchJson; every other value stays Tor-only. Extracted so this binding is unit-testable —
+ *  an inverted ternary here would send default Tor-mode lookups out over clearnet and pass every
+ *  behavioural test otherwise. */
+export function fetchJsonForVia(via: 'tor' | 'clearnet'): (url: string) => Promise<unknown> {
+  return via === 'clearnet' ? clearnetFetchJson : torFetchJson;
+}
+
 export const hostInfoService = makeHostInfoService({
-  resolveHost: (streamUrl, via) => resolveHostImpl(streamUrl, { fetchJson: via === 'clearnet' ? clearnetFetchJson : torFetchJson, now: () => new Date().toISOString() }),
+  resolveHost: (streamUrl, via) => resolveHostImpl(streamUrl, { fetchJson: fetchJsonForVia(via), now: () => new Date().toISOString() }),
   store,
   hostOf: (streamUrl) => hostFromStreamUrl(streamUrl)?.host ?? ''
 });
