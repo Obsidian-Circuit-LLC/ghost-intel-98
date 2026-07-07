@@ -9,6 +9,11 @@ vi.mock('../src/renderer/state/dialogs', () => ({
   confirmDialog: vi.fn().mockResolvedValue(true)
 }));
 
+const { toastWarn } = vi.hoisted(() => ({ toastWarn: vi.fn() }));
+vi.mock('../src/renderer/state/toasts', () => ({
+  toast: { info: vi.fn(), success: vi.fn(), warn: toastWarn, error: vi.fn() }
+}));
+
 import { MyDocumentsModule } from '../src/renderer/modules/my-documents/MyDocumentsModule';
 
 const GA98_ITEM = 'application/x-ga98-item';
@@ -61,6 +66,7 @@ beforeEach(() => {
     { name: 'note.txt', kind: 'file', size: 12, modifiedAt: '2026-07-06T00:00:00Z' }
   ]);
   briefcaseApi.read.mockReset();
+  toastWarn.mockClear();
   (globalThis as unknown as { window: { api: unknown } }).window.api = {
     documents: api,
     briefcase: briefcaseApi,
@@ -126,5 +132,31 @@ describe('MyDocumentsModule drag-and-drop (cross-module, Briefcase → My Docume
     await act(async () => { view.dispatchEvent(dragEvent('drop', dt)); });
     expect(briefcaseApi.read).toHaveBeenCalledWith('b1');
     expect(api.writeText).toHaveBeenCalledWith('', 'todo.txt', 'buy milk');
+  });
+
+  it('a stale/deleted briefcase note (read resolves null) surfaces a warn toast and does not write', async () => {
+    briefcaseApi.read.mockResolvedValue(null);
+    await act(async () => { root.render(<MyDocumentsModule />); });
+    await flush();
+    const view = container.querySelector('.ga98-mydocs-view') as HTMLElement;
+    const dt = new FakeDataTransfer();
+    dt.setData(GA98_ITEM, JSON.stringify({ src: 'briefcase', id: 'gone', name: 'todo' }));
+    await act(async () => { view.dispatchEvent(dragEvent('drop', dt)); });
+    expect(briefcaseApi.read).toHaveBeenCalledWith('gone');
+    expect(api.writeText).not.toHaveBeenCalled();
+    expect(toastWarn).toHaveBeenCalledTimes(1);
+  });
+
+  it('a briefcase read that rejects surfaces a warn toast and does not write', async () => {
+    briefcaseApi.read.mockRejectedValue(new Error('Briefcase note unavailable.'));
+    await act(async () => { root.render(<MyDocumentsModule />); });
+    await flush();
+    const view = container.querySelector('.ga98-mydocs-view') as HTMLElement;
+    const dt = new FakeDataTransfer();
+    dt.setData(GA98_ITEM, JSON.stringify({ src: 'briefcase', id: 'b1', name: 'todo' }));
+    await act(async () => { view.dispatchEvent(dragEvent('drop', dt)); });
+    expect(briefcaseApi.read).toHaveBeenCalledWith('b1');
+    expect(api.writeText).not.toHaveBeenCalled();
+    expect(toastWarn).toHaveBeenCalledWith('Briefcase note unavailable.');
   });
 });

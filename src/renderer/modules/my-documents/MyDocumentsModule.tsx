@@ -1,5 +1,6 @@
 import { useEffect, useState, type DragEvent, type MouseEvent } from 'react';
 import { confirmDialog, promptDialog } from '../../state/dialogs';
+import { toast } from '../../state/toasts';
 import type { DocEntry } from '../../../shared/documents-types';
 import { useDocuments, joinRel } from './useDocuments';
 import { DocumentsContextMenu, type ContextTarget } from './DocumentsContextMenu';
@@ -53,11 +54,15 @@ export function MyDocumentsModule(): JSX.Element {
       // A cross-module Briefcase note dropped on the folder view (not on a specific folder tile):
       // pull its body and land it as a .txt note in the current folder. A `docs` payload here means
       // the user missed a folder tile — nothing to do (in-folder moves are handled by the tile's own onDrop).
+      // Note: writeTextNote surfaces its own write/refresh failures via doc.error, but the read below
+      // is not covered by that — a rejected or stale/deleted (null) read is surfaced here as a warn
+      // toast, mirroring BriefcaseModule.onListDrop's handling of the reverse direction.
       if (payload.src === 'briefcase' && payload.id) {
         try {
           const note = await window.api.briefcase.read(payload.id);
-          if (note) await doc.writeTextNote(doc.dir, `${payload.name}.txt`, note.body);
-        } catch { /* writeTextNote already surfaces write/refresh failures via doc.error */ }
+          if (!note) { toast.warn('That Briefcase note no longer exists.'); return; }
+          await doc.writeTextNote(doc.dir, `${payload.name}.txt`, note.body);
+        } catch (err) { toast.warn((err as Error).message); }
       }
       return;
     }
