@@ -1141,3 +1141,14 @@ export function ensureDocRelPath(value: unknown, context = 'path'): string {
   for (const seg of segments) ensureDocName(seg, `${context} segment`);
   return segments.join('/');
 }
+
+const MAX_NOTE_BODY = 1024 * 1024; // 1 MiB chars — mirrors the documents store's MAX_TEXT_BYTES cap
+
+/** Validate a plain-text note body crossing the IPC boundary for documents:writeText. Rejects
+ *  non-string input; clamps length so an oversize body can't be forced through the write path. */
+export function ensureNoteBody(value: unknown, context = 'body'): string {
+  if (typeof value !== 'string') {
+    throw new ValidationError(`Invalid ${context}: not a string`);
+  }
+  return value.slice(0, MAX_NOTE_BODY);
+}

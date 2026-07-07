@@ -208,3 +208,35 @@ export async function exportEntry(relPath: string, destPath: string): Promise<vo
   }
   await writeFile(destPath, await secureReadFile(real));
 }
+
+// ---- text note movement (Notepad <-> My Documents, My Documents <-> Briefcase) ----
+
+// The main process can't import the renderer's file-icons module, so this is a minimal
+// allowlist of the extensions considered "text" there ('text' | 'data' | 'code' kinds).
+const TEXT_EXTS = new Set([
+  'txt', 'md', 'log', 'rtf', 'json', 'xml', 'yaml', 'yml', 'toml',
+  'js', 'ts', 'tsx', 'py', 'html', 'css', 'sh', 'rs', 'c', 'cpp', 'csv',
+]);
+const MAX_TEXT_BYTES = 1024 * 1024; // 1 MiB
+
+/** Write a UTF-8 note into My Documents (encrypted at rest iff the vault is unlocked). */
+export async function writeText(relDir: string, name: string, body: string): Promise<DocEntry> {
+  const realDir = await confineExisting(relDir);
+  const leaf = await uniqueLeaf(realDir, name);
+  const dest = join(realDir, leaf);
+  const bytes = Buffer.from(body, 'utf8');
+  await secureWriteFile(dest, bytes);
+  const s = await stat(dest);
+  return { name: leaf, kind: 'file', size: bytes.length, modifiedAt: s.mtime.toISOString() };
+}
+
+/** Read a TEXT file's decrypted content. Rejects non-text extensions and oversize files. */
+export async function readText(relPath: string): Promise<string> {
+  const real = await confineExisting(relPath);
+  if ((await stat(real)).isDirectory()) throw new Error('Refusing to read a folder as text.');
+  const ext = extname(real).slice(1).toLowerCase();
+  if (!TEXT_EXTS.has(ext)) throw new Error('Only text notes can be moved this way.');
+  const bytes = await ((await isEncryptedFile(real)) ? secureReadFile(real) : readFile(real));
+  if (bytes.length > MAX_TEXT_BYTES) throw new Error('File is too large to read as text.');
+  return bytes.toString('utf8');
+}

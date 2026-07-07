@@ -68,7 +68,7 @@ import * as aiConvos from '../storage/ai-conversations';
 import * as briefcase from '../storage/briefcase';
 import * as journal from '../storage/journal';
 import * as voiceModel from '../voice/model-protocol';
-import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityType, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureShellProgram, ensureWhiteboard, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon, ensureSaveToCaseOpts, ensureGeoItem, ensureThreatLayerId, ensureKeyedLayerId, ensureLayerKey, isKeyedLayerId, ensureBookmarkBoard, ensureMarketsSettings, ensureStickyNotes, ensureAiConversation, ensureBriefcaseNote, ensureJournalEntry, ensurePin, ensureUid, ensureMailFlag, stripProtectedSettings, ensureBounds, ensureDocRelPath, ensureDocName, ensureImportSourcePath } from '../security/validate';
+import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityType, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureShellProgram, ensureWhiteboard, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon, ensureSaveToCaseOpts, ensureGeoItem, ensureThreatLayerId, ensureKeyedLayerId, ensureLayerKey, isKeyedLayerId, ensureBookmarkBoard, ensureMarketsSettings, ensureStickyNotes, ensureAiConversation, ensureBriefcaseNote, ensureJournalEntry, ensurePin, ensureUid, ensureMailFlag, stripProtectedSettings, ensureBounds, ensureDocRelPath, ensureDocName, ensureImportSourcePath, ensureNoteBody } from '../security/validate';
 import * as entities from '../storage/entities';
 import * as bioStore from '../storage/bio-images';
 import * as ftp from '../services/ftp';
@@ -686,6 +686,10 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     if (res.canceled || !res.filePath) return;
     await documentsStore.exportEntry(rel, res.filePath);
   });
+  safeHandle(channels.documents.writeText, (...args) =>
+    documentsStore.writeText(ensureDocRelPath(args[0], 'relDir'), ensureDocName(args[1], 'name'), ensureNoteBody(args[2], 'body')));
+  safeHandle(channels.documents.readText, (...args) =>
+    documentsStore.readText(ensureDocRelPath(args[0], 'relPath')));
 
   // ---- entities (cross-case registry) ----
   safeHandle(channels.entities.listAll, () => entities.listAll());

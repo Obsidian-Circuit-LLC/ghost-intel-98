@@ -183,6 +183,8 @@ export interface GhostApi {
     reveal(relPath: string): Promise<void>;
     open(relPath: string): Promise<void>;
     export(relPath: string): Promise<void>;
+    writeText(relDir: string, name: string, body: string): Promise<DocEntry>;
+    readText(relPath: string): Promise<string>;
   };
   notes: {
     list(id: string): Promise<{ name: string; updatedAt: string }[]>;
