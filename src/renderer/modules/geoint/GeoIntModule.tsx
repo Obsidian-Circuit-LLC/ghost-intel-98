@@ -1165,7 +1165,7 @@ export function GeoIntModule(): JSX.Element {
     //     (which only touches the cache) — and it would make the inner render re-throw immediately on
     //     remount. Overwriting with known-good defaults clears it. Network goes back to off (its
     //     default); one click re-enables it and the default tiles auto-populate.
-    try { await patch({ geoint: { networkEnabled: false, tileServerUrl: '', tileAttribution: '', basemap: 'street', newsStreams: [{ label: 'Bloomberg TV', url: 'https://www.bloomberg.com/media-manifest/streams/us.m3u8', kind: 'hls' }], newsStreamIndex: 0, cctvOverTor: false, cctvResolveHosts: true } }); }
+    try { await patch({ geoint: { networkEnabled: false, tileServerUrl: '', tileAttribution: '', basemap: 'street', newsStreams: [{ label: 'Bloomberg TV', url: 'https://www.bloomberg.com/media-manifest/streams/us.m3u8', kind: 'hls' }], newsStreamIndex: 0, cctvOverTor: false, cctvResolveHosts: true, cctvResolveClearnet: false, cctvResolveClearnetAck: false } }); }
     catch { /* best-effort */ }
     setResetKey((k) => k + 1); // remount Inner fresh against purged + reset state
   }, [patch]);

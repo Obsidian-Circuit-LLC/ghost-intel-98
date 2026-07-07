@@ -480,6 +480,15 @@ export interface AppSettings {
      *  clearnet resolve would leak the operator's real IP to the camera's DNS/registry path.
      *  On by default (resolution is cheap and Tor-safe, unlike live video). */
     cctvResolveHosts: boolean;
+    /** When true, CCTV *host resolution* is performed over CLEARNET instead of Tor — opt-in, off by
+     *  default. Only consulted when cctvResolveHosts is on. A clearnet DoH/RDAP lookup exposes the
+     *  operator's real IP to Cloudflare/rdap.org and reveals which cameras are being investigated;
+     *  the UI requires an explicit acknowledgement (cctvResolveClearnetAck) before first enabling it
+     *  and shows a persistent warning whenever a lookup used clearnet. */
+    cctvResolveClearnet: boolean;
+    /** One-time acknowledgement that clearnet resolution exposes the real IP (mirrors the link/web-search
+     *  clearnet consent). Set true when the user confirms the warning; gates re-prompting. */
+    cctvResolveClearnetAck: boolean;
   };
   markets: {
     /** Master opt-in egress gate for the Markets module. Off by default ⇒ no quote is fetched. */
@@ -694,7 +703,9 @@ export const defaultSettings: AppSettings = {
     newsStreams: [{ label: 'Bloomberg TV', url: 'https://www.bloomberg.com/media-manifest/streams/us.m3u8', kind: 'hls' }],
     newsStreamIndex: 0,
     cctvOverTor: false,
-    cctvResolveHosts: true
+    cctvResolveHosts: true,
+    cctvResolveClearnet: false,
+    cctvResolveClearnetAck: false
   },
   markets: {
     networkEnabled: false,
