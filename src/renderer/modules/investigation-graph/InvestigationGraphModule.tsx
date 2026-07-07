@@ -13,6 +13,7 @@ import { InvestigationSidePanel } from './InvestigationSidePanel';
 import type { SeedNode } from './RunPanel';
 import { useInvestigationRunStore } from '../../state/investigation-run-store';
 import { startRunStream } from '../../state/investigation-run-stream.singleton';
+import './investigation.css';
 
 export interface InvestigationGraphModuleProps {
   /** Optional at the type level because the module can be opened from the global OSINT AccessMenu,
@@ -60,11 +61,26 @@ function InvestigationCockpit({ caseId }: { caseId: string }): JSX.Element {
   }, [caseId, setAvailable]);
 
   return (
-    <div style={{ display: 'flex', height: '100%', minHeight: 0, background: '#111820' }}>
-      <div style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
-        <GraphPane caseId={caseId} onNodesChange={setNodes} />
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+      <div
+        style={{
+          background: 'var(--ga98-grey)',
+          color: '#000',
+          padding: '4px 10px',
+          fontSize: 12,
+          borderBottom: '1px solid var(--ga98-shadow-dark)',
+          boxShadow: 'inset 0 -1px 0 var(--ga98-shadow-light)',
+        }}
+      >
+        An entity graph you grow with transforms — seed a node, pivot outward; autonomous fan-out
+        needs the reasoning pack.
       </div>
-      <InvestigationSidePanel caseId={caseId} nodes={nodes} />
+      <div style={{ display: 'flex', flex: 1, minHeight: 0, background: '#111820' }}>
+        <div style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
+          <GraphPane caseId={caseId} onNodesChange={setNodes} />
+        </div>
+        <InvestigationSidePanel caseId={caseId} nodes={nodes} />
+      </div>
     </div>
   );
 }

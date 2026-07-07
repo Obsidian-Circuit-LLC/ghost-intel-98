@@ -72,6 +72,14 @@ export function useDocuments() {
       await refresh();
     } catch (e) { setError((e as Error).message); }
   }, [dir, refresh]);
+  const move = useCallback(async (rel: string, destDir: string) => {
+    try { await window.api.documents.move(rel, destDir); await refresh(); }
+    catch (e) { setError((e as Error).message); }
+  }, [refresh]);
+  const writeTextNote = useCallback(async (relDir: string, name: string, body: string) => {
+    try { await window.api.documents.writeText(relDir, name, body); await refresh(); }
+    catch (e) { setError((e as Error).message); }
+  }, [refresh]);
   const importFiles = useCallback(async (files: { sourcePath: string; originalName: string }[]) => {
     try {
       const res = await window.api.documents.importDropped(dir, files);
@@ -92,5 +100,5 @@ export function useDocuments() {
     catch (e) { setError((e as Error).message); }
   }, []);
 
-  return { dir, entries, error, clipboard, enter, up, goRoot, refresh, newFolder, rename, remove, paste, importFiles, reveal, open, exportFile };
+  return { dir, entries, error, clipboard, enter, up, goRoot, refresh, newFolder, rename, remove, paste, move, writeTextNote, importFiles, reveal, open, exportFile };
 }

@@ -711,42 +711,30 @@ input.ga98-text, select.ga98-text {
   gap: 6px;
   box-sizing: border-box;
 }
-.ga98-jukebox-lcd {
+/* WMP-style re-skin (Jukebox restyle, v3.34.0). A bordered "screen" holds the visualizer as the
+   art area with the GI98 logo pinned bottom-right, above the classic five-button WMP transport
+   row (rewind/play/pause/stop/fast-forward). Artist/Title/Track fields + the status strip below
+   are unchanged from the CD-Player restyle. */
+.ga98-wmp-screen {
+  position: relative;
   background: #000;
-  color: #00ff66;
-  font-family: 'Courier New', monospace;
-  font-size: 13px;
-  padding: 4px 8px;
   border: 2px inset #404040;
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
+  min-height: 44px;
   overflow: hidden;
-  white-space: nowrap;
 }
-.ga98-jukebox-title { overflow: hidden; text-overflow: ellipsis; }
-.ga98-jukebox-time { flex-shrink: 0; }
-.ga98-jukebox-transport { display: flex; align-items: center; gap: 4px; }
-.ga98-jukebox-transport button { min-width: 0; padding: 2px 10px; color: #000; }
-/* Icons paint with fill/stroke=currentColor — pin the color so they never inherit the
-   button-face grey and vanish (the "buttons are gone, hover works" v3.4.1 regression). */
-.ga98-jukebox-transport button svg { vertical-align: middle; }
-
-/* CD-Player-style console (Jukebox restyle). Green LCD beside a beveled two-row deck, with
-   Artist/Title/Track fields and a status strip — modeled on the Win98 CD Player. */
-.ga98-cdp { display: flex; gap: 8px; align-items: stretch; }
-.ga98-cdp-lcd {
-  flex: 1; background: #001a00; color: #00ff66; border: 2px inset #404040;
-  font-family: 'Courier New', monospace; display: flex; align-items: center;
-  justify-content: space-between; padding: 4px 10px; min-height: 44px; overflow: hidden;
+.ga98-wmp-logo {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 22px;
+  height: 22px;
+  opacity: .9;
 }
-.ga98-cdp-tracknum { font-size: 18px; font-weight: bold; }
-.ga98-cdp-clock { font-size: 22px; font-weight: bold; letter-spacing: 1px; }
-.ga98-cdp-deck { display: flex; flex-direction: column; gap: 3px; }
-.ga98-cdp-row { display: flex; gap: 3px; }
-/* Pin icon color (currentColor) so the SVG glyphs never inherit the button-face grey. */
-.ga98-cdp-deck button { min-width: 0; padding: 2px 10px; color: #000; }
-.ga98-cdp-deck button svg { vertical-align: middle; }
+.ga98-wmp-transport { display: flex; align-items: center; justify-content: center; gap: 4px; margin-top: 4px; }
+/* Pin icon color (currentColor) so the SVG glyphs never inherit the button-face grey and vanish
+   (the "buttons are gone, hover works" v3.4.1 regression). */
+.ga98-wmp-transport button { min-width: 0; padding: 2px 10px; color: #000; }
+.ga98-wmp-transport button svg { vertical-align: middle; }
 .ga98-cdp-fields {
   display: grid; grid-template-columns: 52px 1fr; gap: 2px 6px; align-items: center;
   margin-top: 4px; font-size: 11px;

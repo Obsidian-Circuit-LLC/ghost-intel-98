@@ -4,13 +4,27 @@
  * "Briefcase". Persisted via the briefcase store (encrypted at rest when login is on); zero egress.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type DragEvent } from 'react';
 import type { BriefcaseNoteSummary } from '@shared/post-mvp-types';
 import { toast } from '../../state/toasts';
 import { confirmDialog } from '../../state/dialogs';
 
 function uid(): string { return crypto.randomUUID(); }
 function fmtBytes(n: number): string { return n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} KB`; }
+
+/** Shared drag payload MIME for in-app item drags (My Documents ↔ Briefcase, and in-folder). */
+const GA98_ITEM = 'application/x-ga98-item';
+
+interface Ga98ItemPayload { src: string; relPath?: string; name: string; kind?: string; id?: string; }
+
+/** Parses the `GA98_ITEM` payload off a drop's DataTransfer, or null if absent/malformed. */
+function readItemPayload(dt: DataTransfer): Ga98ItemPayload | null {
+  if (!dt.types.includes(GA98_ITEM)) return null;
+  const raw = dt.getData(GA98_ITEM);
+  if (!raw) return null;
+  try { return JSON.parse(raw) as Ga98ItemPayload; }
+  catch { return null; }
+}
 
 export function BriefcaseModule({ initialNoteId }: { initialNoteId?: string } = {}): JSX.Element {
   const [notes, setNotes] = useState<BriefcaseNoteSummary[]>([]);
@@ -55,16 +69,47 @@ export function BriefcaseModule({ initialNoteId }: { initialNoteId?: string } = 
     } catch (err) { toast.error(`Delete failed: ${(err as Error).message}`); }
   }
 
+  function onNoteDragStart(ev: DragEvent<HTMLLIElement>, n: BriefcaseNoteSummary): void {
+    const payload: Ga98ItemPayload = { src: 'briefcase', id: n.id, name: n.name };
+    ev.dataTransfer.setData(GA98_ITEM, JSON.stringify(payload));
+  }
+
+  // Cross-module drop target: a My Documents text-file tile dragged onto the note list is read
+  // (decrypted) via `documents.readText` and saved as a new Briefcase note. Binary files are
+  // rejected by `readText` itself — surface that as a warn toast rather than a silent no-op.
+  async function onListDrop(ev: DragEvent<HTMLUListElement>): Promise<void> {
+    ev.preventDefault();
+    const payload = readItemPayload(ev.dataTransfer);
+    if (!payload || payload.src !== 'docs' || !payload.relPath) return;
+    try {
+      const body = await window.api.documents.readText(payload.relPath);
+      await window.api.briefcase.save({ id: uid(), name: payload.name, body });
+      await refresh();
+      toast.success('Saved to Briefcase.');
+    } catch (err) { toast.warn((err as Error).message); }
+  }
+
   return (
     <div className="ga98-split" style={{ height: '100%' }}>
       <div className="ga98-pane" style={{ width: 200, flex: '0 0 auto', display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', gap: 4, padding: 4 }}>
           <button onClick={newNote} title="Start a new note">New</button>
         </div>
-        <ul className="ga98-list" style={{ flex: 1, overflow: 'auto', margin: 0 }}>
+        <ul
+          className="ga98-list"
+          style={{ flex: 1, overflow: 'auto', margin: 0 }}
+          onDragOver={(ev) => ev.preventDefault()}
+          onDrop={(ev) => void onListDrop(ev)}
+        >
           {notes.length === 0 && <li style={{ color: '#666', fontSize: 11 }}>Empty. Click New, type, then Save.</li>}
           {notes.map((n) => (
-            <li key={n.id} data-selected={n.id === id} title={`${fmtBytes(n.bytes)} · ${new Date(n.updatedAt).toLocaleString()}`}>
+            <li
+              key={n.id}
+              data-selected={n.id === id}
+              title={`${fmtBytes(n.bytes)} · ${new Date(n.updatedAt).toLocaleString()}`}
+              draggable
+              onDragStart={(ev) => onNoteDragStart(ev, n)}
+            >
               <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }} onClick={() => void openNote(n.id)}>{n.name}</span>
               <button onClick={() => void del(n.id)} style={{ minWidth: 0, padding: '0 5px' }} title="Delete">×</button>
             </li>

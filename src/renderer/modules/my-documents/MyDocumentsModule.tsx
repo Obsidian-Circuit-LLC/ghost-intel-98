@@ -1,14 +1,31 @@
 import { useEffect, useState, type DragEvent, type MouseEvent } from 'react';
 import { confirmDialog, promptDialog } from '../../state/dialogs';
+import { toast } from '../../state/toasts';
 import type { DocEntry } from '../../../shared/documents-types';
 import { useDocuments, joinRel } from './useDocuments';
 import { DocumentsContextMenu, type ContextTarget } from './DocumentsContextMenu';
+import { fileGlyphNode } from './file-icons';
+
+/** Shared drag payload MIME for in-app item drags (My Documents ↔ folders, and cross-module). */
+const GA98_ITEM = 'application/x-ga98-item';
+
+interface Ga98ItemPayload { src: string; relPath?: string; name: string; kind?: string; id?: string; }
+
+/** Parses the `GA98_ITEM` payload off a drop's DataTransfer, or null if absent/malformed. */
+function readItemPayload(dt: DataTransfer): Ga98ItemPayload | null {
+  if (!dt.types.includes(GA98_ITEM)) return null;
+  const raw = dt.getData(GA98_ITEM);
+  if (!raw) return null;
+  try { return JSON.parse(raw) as Ga98ItemPayload; }
+  catch { return null; }
+}
 
 export function MyDocumentsModule(): JSX.Element {
   const doc = useDocuments();
   const [vaultOn, setVaultOn] = useState(false);
   const [menu, setMenu] = useState<ContextTarget | null>(null);
   const [dropHot, setDropHot] = useState(false);
+  const [hoverFolder, setHoverFolder] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -29,13 +46,52 @@ export function MyDocumentsModule(): JSX.Element {
     if (ok) await doc.remove(joinRel(doc.dir, e.name));
   }
 
-  function onDrop(ev: DragEvent<HTMLDivElement>): void {
+  async function onDrop(ev: DragEvent<HTMLDivElement>): Promise<void> {
     ev.preventDefault();
     setDropHot(false);
+    const payload = readItemPayload(ev.dataTransfer);
+    if (payload) {
+      // A cross-module Briefcase note dropped on the folder view (not on a specific folder tile):
+      // pull its body and land it as a .txt note in the current folder. A `docs` payload here means
+      // the user missed a folder tile — nothing to do (in-folder moves are handled by the tile's own onDrop).
+      // Note: writeTextNote surfaces its own write/refresh failures via doc.error, but the read below
+      // is not covered by that — a rejected or stale/deleted (null) read is surfaced here as a warn
+      // toast, mirroring BriefcaseModule.onListDrop's handling of the reverse direction.
+      if (payload.src === 'briefcase' && payload.id) {
+        try {
+          const note = await window.api.briefcase.read(payload.id);
+          if (!note) { toast.warn('That Briefcase note no longer exists.'); return; }
+          await doc.writeTextNote(doc.dir, `${payload.name}.txt`, note.body);
+        } catch (err) { toast.warn((err as Error).message); }
+      }
+      return;
+    }
     const files = Array.from(ev.dataTransfer.files)
       .map((f) => ({ sourcePath: window.api.files.getPathForFile(f), originalName: f.name }))
       .filter((p) => p.sourcePath);
     if (files.length) void doc.importFiles(files);
+  }
+
+  function onTileDragStart(ev: DragEvent<HTMLDivElement>, e: DocEntry): void {
+    const payload: Ga98ItemPayload = { src: 'docs', relPath: joinRel(doc.dir, e.name), name: e.name, kind: e.kind };
+    ev.dataTransfer.setData(GA98_ITEM, JSON.stringify(payload));
+  }
+
+  function onFolderDragOver(ev: DragEvent<HTMLDivElement>, e: DocEntry): void {
+    ev.preventDefault();
+    ev.stopPropagation();
+    setHoverFolder(e.name);
+  }
+
+  function onFolderDrop(ev: DragEvent<HTMLDivElement>, e: DocEntry): void {
+    ev.preventDefault();
+    ev.stopPropagation();
+    setHoverFolder(null);
+    const payload = readItemPayload(ev.dataTransfer);
+    if (!payload || payload.src !== 'docs' || !payload.relPath) return;
+    const destDir = joinRel(doc.dir, e.name);
+    if (payload.relPath === destDir) return; // dropped onto itself
+    void doc.move(payload.relPath, destDir);
   }
 
   function openMenu(ev: MouseEvent, entry: DocEntry | null): void {
@@ -78,12 +134,20 @@ export function MyDocumentsModule(): JSX.Element {
             <div
               key={e.name}
               className="ga98-mydocs-tile"
-              style={{ width: 88, textAlign: 'center', cursor: 'pointer', userSelect: 'none', padding: 4 }}
+              style={{
+                width: 88, textAlign: 'center', cursor: 'pointer', userSelect: 'none', padding: 4,
+                background: hoverFolder === e.name ? '#e8f0ff' : undefined
+              }}
               title={e.name}
+              draggable
+              onDragStart={(ev) => onTileDragStart(ev, e)}
+              onDragOver={e.kind === 'folder' ? (ev) => onFolderDragOver(ev, e) : undefined}
+              onDragLeave={e.kind === 'folder' ? () => setHoverFolder(null) : undefined}
+              onDrop={e.kind === 'folder' ? (ev) => onFolderDrop(ev, e) : undefined}
               onDoubleClick={() => (e.kind === 'folder' ? doc.enter(e.name) : void doc.open(joinRel(doc.dir, e.name)))}
               onContextMenu={(ev) => openMenu(ev, e)}
             >
-              <div style={{ fontSize: 40, lineHeight: 1 }}>{e.kind === 'folder' ? '📁' : '📄'}</div>
+              <div style={{ width: 40, height: 40, margin: '0 auto', lineHeight: 0 }}>{fileGlyphNode(e)}</div>
               <div style={{ fontSize: 11, wordBreak: 'break-word' }}>{e.name}</div>
             </div>
           ))}

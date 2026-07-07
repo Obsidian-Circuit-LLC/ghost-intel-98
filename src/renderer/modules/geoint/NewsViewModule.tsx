@@ -1,19 +1,39 @@
 /**
- * Live News pop-out window — plays one news feed in its own draggable Win98 window, opened from the
- * GeoINT LiveNewsPanel pop-out (⧉) button. Mirrors CameraViewModule's chrome; the player is the
- * shared NewsStreamView (which enforces the GeoINT network gate).
+ * Live News module — mirrors the GeoINT LiveNewsPanel: the SAME shared Stream dropdown + add-feed
+ * form (NewsFeedControls) plus the shared player (NewsStreamView), all backed by the one
+ * settings.geoint.newsStreams list. A feed added or selected here is immediately reflected in the
+ * GeoINT panel and vice-versa.
  *
- * Also reachable as a standalone OSINT tool launched from the Toolkit with no props, where there is
- * no selected stream. Launched that way it must NOT crash dereferencing an absent stream — it falls
- * back to DEFAULT_NEWS_STREAM and renders the same shared viewer. No new egress: NewsStreamView's
- * network gate still decides whether the feed loads at all.
+ * Reachable two ways:
+ *  - popped out from the GeoINT LiveNewsPanel's pop-out (⧉) button, which hands it the stream that
+ *    was active at the moment of popping. That `stream` prop is ONLY a fallback for when the store
+ *    has no active entry to show (e.g. a stale/legacy settings object) — once the store has a live
+ *    selection, this module always renders THAT, so the pop-out's own Stream dropdown (rendered via
+ *    the shared NewsFeedControls) actually changes what plays in that same window;
+ *  - launched standalone as an OSINT tool from the Toolkit with no props, where there is no
+ *    snapshot stream — it reads the store's active stream (streams[newsStreamIndex]) instead.
+ *
+ * Either way it must NOT crash dereferencing an absent stream: with no snapshot prop and an empty
+ * store it falls back to DEFAULT_NEWS_STREAM. No new egress: NewsStreamView's network gate still
+ * decides whether the feed loads at all.
  */
+import { useSettings } from '../../state/store';
+import { NewsFeedControls } from './NewsFeedControls';
 import { NewsStreamView, DEFAULT_NEWS_STREAM, type NewsStream } from './NewsStreamView';
 
-export function NewsViewModule({ stream }: { stream?: NewsStream }): JSX.Element {
-  const active = stream ?? DEFAULT_NEWS_STREAM;
+export function NewsViewModule({ stream }: { stream?: NewsStream } = {}): JSX.Element {
+  const settings = useSettings((s) => s.settings);
+  const g = settings?.geoint;
+  const streams: NewsStream[] = g?.newsStreams ?? [];
+  const rawIndex = g?.newsStreamIndex ?? 0;
+  const index = streams.length === 0 ? 0 : Math.min(Math.max(rawIndex, 0), streams.length - 1);
+  // The store's live selection wins whenever it has one — that's what lets the pop-out's own
+  // Stream dropdown (NewsFeedControls, rendered below) actually change what this window shows.
+  // The `stream` snapshot prop is only a fallback for a store with no active entry to offer.
+  const active: NewsStream = streams[index] ?? stream ?? DEFAULT_NEWS_STREAM;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <NewsFeedControls />
       <div className="ga98-panel" style={{ padding: '2px 6px', fontSize: 11, borderBottom: '1px solid #808080' }}>
         {active.label} <span style={{ opacity: 0.6 }}>({active.kind})</span>
       </div>

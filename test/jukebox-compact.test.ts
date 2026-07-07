@@ -29,6 +29,6 @@ describe('jukebox window height (fits the frame to the mode)', () => {
     expect(JUKEBOX_COMPACT_H).toBeLessThan(JUKEBOX_EXPANDED_H);
   });
   it('registration default height matches the compact height (fresh window opens deck-sized)', () => {
-    expect(JUKEBOX_COMPACT_H).toBe(270);
+    expect(JUKEBOX_COMPACT_H).toBe(210);
   });
 });

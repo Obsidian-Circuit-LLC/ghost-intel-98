@@ -1,0 +1,177 @@
+/*
+ * Investigation cockpit — Win98-grey controls (GhostExodus readability fix).
+ *
+ * The side panel (Run/Report switch) and the run-panel state views (`RunPanel.tsx`) had no
+ * stylesheet at all, so every `.investigation-side-panel*` / `.run-panel*` class rendered with
+ * whatever default/inherited color sat behind the dark cockpit — the "Autonomous runs need the
+ * reasoning pack" card in particular was unreadable. Every selector here is scoped under
+ * `.investigation-side-panel`, `.run-panel`, or `.graph-pane-toolbar` (no bare element
+ * selectors) so this sheet can never bleed into unrelated cascade — the graph-canvas/node area
+ * stays dark and is untouched by this file.
+ */
+
+.investigation-side-panel {
+  display: flex;
+  flex-direction: column;
+  width: 320px;
+  min-width: 320px;
+  height: 100%;
+  background: var(--ga98-grey);
+  color: #000;
+  border-left: 1px solid var(--ga98-shadow-dark);
+  box-shadow: inset 1px 0 0 var(--ga98-shadow-light);
+  font-size: 12px;
+}
+
+.investigation-side-panel--collapsed {
+  width: auto;
+  min-width: 0;
+  align-items: flex-start;
+  padding: 4px;
+}
+
+.investigation-side-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  background: var(--ga98-grey);
+  color: #000;
+  border-bottom: 1px solid var(--ga98-shadow-dark);
+  box-shadow: inset 0 -1px 0 var(--ga98-shadow-light);
+}
+
+.investigation-side-panel__switch {
+  display: flex;
+  gap: 4px;
+}
+
+.investigation-side-panel__tab {
+  background: var(--ga98-grey);
+  color: #000;
+  border-top: 1px solid var(--ga98-shadow-light);
+  border-left: 1px solid var(--ga98-shadow-light);
+  border-bottom: 1px solid var(--ga98-shadow-dark);
+  border-right: 1px solid var(--ga98-shadow-dark);
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.investigation-side-panel__tab--on {
+  border-top: 1px solid var(--ga98-shadow-dark);
+  border-left: 1px solid var(--ga98-shadow-dark);
+  border-bottom: 1px solid var(--ga98-shadow-light);
+  border-right: 1px solid var(--ga98-shadow-light);
+  box-shadow: inset 1px 1px 0 var(--ga98-shadow-deep);
+  font-weight: bold;
+}
+
+.investigation-side-panel__expand,
+.investigation-side-panel__collapse {
+  background: var(--ga98-grey);
+  color: #000;
+  border-top: 1px solid var(--ga98-shadow-light);
+  border-left: 1px solid var(--ga98-shadow-light);
+  border-bottom: 1px solid var(--ga98-shadow-dark);
+  border-right: 1px solid var(--ga98-shadow-dark);
+  padding: 2px 6px;
+  cursor: pointer;
+}
+
+.investigation-side-panel__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--ga98-grey);
+  color: #000;
+}
+
+.run-panel {
+  background: var(--ga98-grey);
+  color: #000;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.run-panel__title {
+  margin: 0 0 6px 0;
+  font-size: 13px;
+  color: #000;
+}
+
+.run-panel__muted {
+  color: #404040;
+}
+
+.run-panel__card {
+  background: var(--ga98-grey);
+  color: #000;
+  border-top: 1px solid var(--ga98-shadow-dark);
+  border-left: 1px solid var(--ga98-shadow-dark);
+  border-bottom: 1px solid var(--ga98-shadow-light);
+  border-right: 1px solid var(--ga98-shadow-light);
+  padding: 10px;
+}
+
+.run-panel__status {
+  font-weight: bold;
+}
+
+.run-panel__status--terminal {
+  color: #000;
+}
+
+.run-panel__hint {
+  font-weight: normal;
+  color: #404040;
+}
+
+.run-panel__feed {
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  background: #fff;
+  color: #000;
+  border-top: 1px solid var(--ga98-shadow-dark);
+  border-left: 1px solid var(--ga98-shadow-dark);
+  border-bottom: 1px solid var(--ga98-shadow-light);
+  border-right: 1px solid var(--ga98-shadow-light);
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.run-panel__feed-line {
+  padding: 2px 0;
+}
+
+.run-panel__controls,
+.run-panel__scope {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.run-panel__primary {
+  font-weight: bold;
+}
+
+.run-panel__seed-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.run-panel__seed-type {
+  color: #404040;
+}
+
+.graph-pane-toolbar {
+  background: var(--ga98-grey);
+  color: #000;
+  border-bottom: 1px solid var(--ga98-shadow-dark);
+  box-shadow: inset 0 -1px 0 var(--ga98-shadow-light);
+}

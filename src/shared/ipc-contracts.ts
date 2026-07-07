@@ -273,7 +273,9 @@ export const channels = {
     importDropped: 'documents:importDropped',
     reveal: 'documents:reveal',
     open: 'documents:open',
-    export: 'documents:export'
+    export: 'documents:export',
+    writeText: 'documents:writeText',
+    readText: 'documents:readText'
   },
   ssh: {
     listHosts: 'ssh:listHosts',
