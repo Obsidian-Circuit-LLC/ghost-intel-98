@@ -38,13 +38,15 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`GhostIntel98-Setup-3.33.1.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
+> **Install:** download [`GhostIntel98-Setup-3.34.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
 
 > **📘 User guides** — plain-language, step-by-step (download or read in-browser):
 > - [**SOCMINT: X, Telegram & WhatsApp**](docs/guides/SOCMINT-Tutorial.pdf) — set up and run the social-media collectors, per platform, with the Tor / clearnet and opsec caveats. ([markdown](docs/guides/socmint-tutorial.md))
 > - [**How Searchlight Learns**](docs/guides/Searchlight-Learning-Guide.pdf) — how the username-sweep detector gets smarter from your own labels, and when to turn ML on. ([markdown](docs/guides/searchlight-learning.md))
 
 ## Status
+
+**v3.34.0** — **Field-feedback batch: file-type icons, drag-and-drop, notes into My Documents, a readable Investigation panel, a mirrored News feed, and a Windows Media Player–style Jukebox.** Six items from GhostExodus's live casework. **(1) Per-file-type icons** — My Documents files no longer share one generic glyph; text/document/spreadsheet/data/image/audio/video/archive/code each get a hand-drawn Win98 icon (neutral fallback for the rest). **(2) Drag-and-drop** — drag a file onto a folder tile to move it, and drag text notes **between My Documents and the Briefcase** both ways (a Briefcase note → an encrypted `.txt`; a text file → a note; binaries declined, not mangled). **(3) Save a note into My Documents** — Notepad's save-target dropdown now lists **📂 My Documents** beside the Briefcase and your cases; re-saving updates in place, encrypted at rest. **(4) The Investigation window is readable** — the autonomous-investigation cockpit's side panel was black-on-near-black (a missing stylesheet); it now has a proper Win98-grey control panel while the graph canvas stays dark (it *is* a Maltego-style tool — seed an entity, pivot across transforms; autonomous fan-out needs the reasoning pack). **(5) News mirrors GeoINT Live News** — the standalone News window shares GeoINT's saved live-news feeds: pick any from the dropdown or add one, and adds in either place appear in both (one list, no duplicate store). **(6) Jukebox WMP re-skin** — the compact deck is restyled as a classic media player (bordered visualizer screen, rewind/play/pause/stop/fast-forward, GI98 logo bottom-right), opening smaller by default with the caret still expanding the track info + library. Two new encrypt-at-rest channels carry note content through secure-fs with path-confinement (oversize bodies rejected, not truncated). Built subagent-driven over 9 TDD tasks with a **parallel adversarial whole-branch review** whose verified findings were folded in before ship. **3,165 automated tests** green (1 skipped); typecheck clean; **no new egress**; encrypt-at-rest unchanged. *Everything from v3.33.1 carries forward.*
 
 **v3.33.1** — **Hotfix: the Jukebox window fits the compact deck.** v3.33.0 made the Jukebox *content* default to compact, but the window frame stayed at its full expanded height — the deck sat atop a tall empty gray panel. The window now resizes to match the mode (a short deck-sized frame when compact, full height when expanded via the caret, back down when collapsed), and a fresh Jukebox opens deck-sized. The media module drives its own frame height through the window store (compact 270px / expanded 840px). **3,095 tests** green; typecheck clean; no new egress, no behavior change beyond window sizing. *Everything from v3.33.0 carries forward.*
 
@@ -495,7 +497,7 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases) and run it.
 
-Direct link to the current release: [`GhostIntel98-Setup-3.33.1.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.33.1/GhostIntel98-Setup-3.33.1.exe)
+Direct link to the current release: [`GhostIntel98-Setup-3.34.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.34.0/GhostIntel98-Setup-3.34.0.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is **formally verified internally** — symbolic (ProVerif) +
 computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not**
 FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.6.8/GhostIntel98-Setup-3.6.8.exe).
@@ -503,7 +505,7 @@ FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Se
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\GhostIntel98-Setup-3.33.1.exe -Algorithm SHA256
+Get-FileHash .\GhostIntel98-Setup-3.34.0.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
