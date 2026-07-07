@@ -1691,10 +1691,12 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     await bgSecrets.clear(pluginId, connId, BGCONN_SECRET_FIELDS);
   });
 
-  // ---- hostinfo (camera host resolution — Tor-only DNS/RDAP recon) ----
+  // ---- hostinfo (camera host resolution — Tor-by-default DNS/RDAP recon) ----
   // Gated on settings.geoint.cctvResolveHosts: OFF ⇒ return a `resolve-disabled` result FAST
-  // without calling the resolver (no Tor lookup) and NEVER a clearnet fallback — a clearnet
-  // resolve would leak the operator's real IP. Governs both the stream-driven resolve and the
+  // without calling the resolver (no Tor lookup, no clearnet socket) at all. When resolution is
+  // enabled, the via is Tor UNLESS settings.geoint.cctvResolveClearnet is also on (opt-in,
+  // one-time-acknowledged clearnet fallback that leaks the operator's real IP by design — see
+  // hostinfo/index.ts clearnetFetchJson). Governs both the stream-driven resolve and the
   // standalone Host Info lookup (they share this one handler).
   safeHandle(channels.hostinfo.resolve, async (...args) => {
     const url = String(args[0] ?? '');

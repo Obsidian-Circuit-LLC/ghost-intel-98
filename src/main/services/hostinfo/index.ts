@@ -56,12 +56,27 @@ export async function torFetchJson(url: string): Promise<unknown> {
   return JSON.parse(resp.body);
 }
 
+/** Fail-fast bound matching torFetchJson's Tor-path TIMEOUT_MS (tor-egress.ts) — a stalled
+ *  clearnet socket must not hang the resolve promise (and the Host Info UI) any longer than the
+ *  Tor path would. */
+const CLEARNET_TIMEOUT_MS = 30_000;
+
 /** Clearnet JSON GET — the OPT-IN recon egress (settings.geoint.cctvResolveClearnet). Leaks the
- *  real IP by design; only selected when the user enabled + acknowledged clearnet resolution. */
+ *  real IP by design; only selected when the user enabled + acknowledged clearnet resolution.
+ *  Aborts at CLEARNET_TIMEOUT_MS for fail-fast parity with the Tor path. */
 export async function clearnetFetchJson(url: string): Promise<unknown> {
-  const resp = await fetch(url, { headers: { Accept: 'application/dns-json' } });
-  if (!resp.ok) throw new Error(`hostinfo clearnet lookup ${resp.status}`);
-  return resp.json();
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), CLEARNET_TIMEOUT_MS);
+  try {
+    const resp = await fetch(url, { headers: { Accept: 'application/dns-json' }, signal: ctrl.signal });
+    if (!resp.ok) throw new Error(`hostinfo clearnet lookup ${resp.status}`);
+    return await resp.json();
+  } catch (e) {
+    if (e instanceof Error && e.name === 'AbortError') throw new Error('hostinfo clearnet lookup timed out');
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 const store = makeHostInfoStore({ indexPath: () => join(dataRoot(), 'hostinfo', 'index.json'), readText: secureReadText, writeFile: (p, d) => secureWriteFile(p, d), now: () => Date.now() });

@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
-import { makeHostInfoService } from '../src/main/services/hostinfo/index';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { makeHostInfoService, clearnetFetchJson } from '../src/main/services/hostinfo/index';
 import { resolveHost } from '../src/main/services/hostinfo/resolve';
 import type { HostInfo } from '../src/main/services/hostinfo/types';
 
@@ -34,6 +34,44 @@ describe('hostinfo service via marker (opt-in clearnet resolve)', () => {
     const svc = makeHostInfoService(d as never);
     const r = await svc.resolve('http://1.2.3.4/v', { via: 'tor' });
     expect(r.via).toBe('tor');
+  });
+});
+
+describe('clearnetFetchJson — fail-fast timeout parity with torFetchJson (30s)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  it('aborts a hung request at 30s instead of hanging the resolve promise forever', async () => {
+    vi.useFakeTimers();
+    const fetchSpy = vi.fn((_url: string, init?: { signal?: AbortSignal }) => new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+    }));
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const p = clearnetFetchJson('http://cam.example/dns-query?type=A');
+    const assertion = expect(p).rejects.toThrow();
+    await vi.advanceTimersByTimeAsync(30_000);
+    await assertion;
+
+    // The signal handed to fetch must be the one that aborted (fetch was given a real AbortSignal).
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const init = fetchSpy.mock.calls[0][1] as { signal?: AbortSignal };
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+    expect(init.signal?.aborted).toBe(true);
+  });
+
+  it('does not abort (and resolves normally) for a request that completes well under 30s', async () => {
+    vi.useFakeTimers();
+    const fetchSpy = vi.fn(async (_url: string, _init?: { signal?: AbortSignal }) => ({
+      ok: true,
+      json: async () => ({ Answer: [] })
+    }));
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const out = await clearnetFetchJson('http://cam.example/dns-query?type=A');
+    expect(out).toEqual({ Answer: [] });
   });
 });
 
