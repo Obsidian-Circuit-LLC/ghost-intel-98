@@ -3,6 +3,7 @@ import { confirmDialog, promptDialog } from '../../state/dialogs';
 import type { DocEntry } from '../../../shared/documents-types';
 import { useDocuments, joinRel } from './useDocuments';
 import { DocumentsContextMenu, type ContextTarget } from './DocumentsContextMenu';
+import { fileGlyphNode } from './file-icons';
 
 export function MyDocumentsModule(): JSX.Element {
   const doc = useDocuments();
@@ -83,7 +84,7 @@ export function MyDocumentsModule(): JSX.Element {
               onDoubleClick={() => (e.kind === 'folder' ? doc.enter(e.name) : void doc.open(joinRel(doc.dir, e.name)))}
               onContextMenu={(ev) => openMenu(ev, e)}
             >
-              <div style={{ fontSize: 40, lineHeight: 1 }}>{e.kind === 'folder' ? '📁' : '📄'}</div>
+              <div style={{ width: 40, height: 40, margin: '0 auto', lineHeight: 0 }}>{fileGlyphNode(e)}</div>
               <div style={{ fontSize: 11, wordBreak: 'break-word' }}>{e.name}</div>
             </div>
           ))}
