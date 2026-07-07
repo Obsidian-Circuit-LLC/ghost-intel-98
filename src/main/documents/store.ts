@@ -219,10 +219,15 @@ const TEXT_EXTS = new Set([
 ]);
 const MAX_TEXT_BYTES = 1024 * 1024; // 1 MiB
 
-/** Write a UTF-8 note into My Documents (encrypted at rest iff the vault is unlocked). */
-export async function writeText(relDir: string, name: string, body: string): Promise<DocEntry> {
+/** Write a UTF-8 note into My Documents (encrypted at rest iff the vault is unlocked).
+ *  By default a colliding name is de-duped (" (1)", " (2)", ...) so an unrelated existing file is
+ *  never silently clobbered. Pass `overwrite: true` to write to the exact requested name instead —
+ *  used by Notepad's Save so re-saving the same open note updates it in place rather than minting
+ *  a new file on every save. `name` is validated at the IPC boundary (ensureDocName), so it is
+ *  always a single safe path segment here — never a traversal. */
+export async function writeText(relDir: string, name: string, body: string, overwrite = false): Promise<DocEntry> {
   const realDir = await confineExisting(relDir);
-  const leaf = await uniqueLeaf(realDir, name);
+  const leaf = overwrite ? name : await uniqueLeaf(realDir, name);
   const dest = join(realDir, leaf);
   const bytes = Buffer.from(body, 'utf8');
   await secureWriteFile(dest, bytes);

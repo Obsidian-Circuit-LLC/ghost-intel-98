@@ -91,16 +91,20 @@ function typeInto(el: HTMLTextAreaElement, value: string): void {
   el.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
+function selectMyDocs(container: HTMLDivElement): void {
+  const select = container.querySelector('select.ga98-text') as HTMLSelectElement;
+  act(() => {
+    select.value = '__mydocs__';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+}
+
 describe('NotepadModule — Save to My Documents target', () => {
-  it('saves the body to My Documents when the My Documents target is selected', async () => {
+  it('saves the body to My Documents when the My Documents target is selected (first save: no overwrite)', async () => {
     render();
     await flush();
 
-    const select = container.querySelector('select.ga98-text') as HTMLSelectElement;
-    act(() => {
-      select.value = '__mydocs__';
-      select.dispatchEvent(new Event('change', { bubbles: true }));
-    });
+    selectMyDocs(container);
     await flush();
 
     const textarea = container.querySelector('textarea') as HTMLTextAreaElement;
@@ -111,7 +115,34 @@ describe('NotepadModule — Save to My Documents target', () => {
     act(() => { saveBtn.click(); });
     await flush();
 
-    expect(documentsApi.writeText).toHaveBeenCalledWith('', 'untitled.txt', 'field notes');
+    expect(documentsApi.writeText).toHaveBeenCalledWith('', 'untitled.txt', 'field notes', false);
+  });
+
+  it('overwrites the same file on a repeat Save instead of minting "untitled (1).txt"', async () => {
+    render();
+    await flush();
+
+    selectMyDocs(container);
+    await flush();
+
+    const textarea = container.querySelector('textarea') as HTMLTextAreaElement;
+    const saveBtn = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Save')!;
+
+    act(() => { typeInto(textarea, 'first draft'); });
+    await flush();
+    act(() => { saveBtn.click(); });
+    await flush();
+
+    act(() => { typeInto(textarea, 'second draft'); });
+    await flush();
+    act(() => { saveBtn.click(); });
+    await flush();
+
+    expect(documentsApi.writeText).toHaveBeenCalledTimes(2);
+    // First save: don't clobber an unrelated pre-existing "untitled.txt".
+    expect(documentsApi.writeText).toHaveBeenNthCalledWith(1, '', 'untitled.txt', 'first draft', false);
+    // Second save of the SAME open note: overwrite in place, not "untitled (1).txt".
+    expect(documentsApi.writeText).toHaveBeenNthCalledWith(2, '', 'untitled.txt', 'second draft', true);
   });
 
   it('warns and does not call writeText when (no case) is selected', async () => {
@@ -124,5 +155,36 @@ describe('NotepadModule — Save to My Documents target', () => {
 
     expect(documentsApi.writeText).not.toHaveBeenCalled();
     expect(toastWarn).toHaveBeenCalled();
+  });
+
+  it('does not call notes.list (and does not reject) when My Documents is selected', async () => {
+    render();
+    await flush();
+
+    selectMyDocs(container);
+    await flush();
+
+    expect(notesApi.list).not.toHaveBeenCalled();
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
+  it('"Open existing…" shows no case notes and canDelete stays false while My Documents is active', async () => {
+    // Start on a real case with notes so caseNotes gets populated stale data...
+    notesApi.list.mockResolvedValue([{ name: 'stale-note', updatedAt: '2026-01-01T00:00:00Z' }]);
+    act(() => {
+      root.render(<NotepadModule initialCaseId="11111111-1111-4111-8111-111111111111" />);
+    });
+    await flush();
+
+    // ...then switch to My Documents: the stale case-notes list must be cleared.
+    selectMyDocs(container);
+    await flush();
+
+    const openExistingSelect = [...container.querySelectorAll('select.ga98-text')][1] as HTMLSelectElement;
+    const optionValues = [...openExistingSelect.options].map((o) => o.value);
+    expect(optionValues).toEqual(['']); // only the placeholder "Open existing…" option
+
+    const deleteBtn = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Delete')!;
+    expect(deleteBtn.hasAttribute('disabled')).toBe(true);
   });
 });

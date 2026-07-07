@@ -67,7 +67,8 @@ const api = {
     reveal: (relPath: string) => ipcRenderer.invoke(channels.documents.reveal, relPath),
     open: (relPath: string) => ipcRenderer.invoke(channels.documents.open, relPath),
     export: (relPath: string) => ipcRenderer.invoke(channels.documents.export, relPath),
-    writeText: (relDir: string, name: string, body: string) => ipcRenderer.invoke(channels.documents.writeText, relDir, name, body),
+    writeText: (relDir: string, name: string, body: string, overwrite?: boolean) =>
+      ipcRenderer.invoke(channels.documents.writeText, relDir, name, body, overwrite),
     readText: (relPath: string) => ipcRenderer.invoke(channels.documents.readText, relPath)
   },
   notes: {

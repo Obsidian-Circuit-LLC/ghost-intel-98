@@ -687,7 +687,11 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     await documentsStore.exportEntry(rel, res.filePath);
   });
   safeHandle(channels.documents.writeText, (...args) =>
-    documentsStore.writeText(ensureDocRelPath(args[0], 'relDir'), ensureDocName(args[1], 'name'), ensureNoteBody(args[2], 'body')));
+    documentsStore.writeText(
+      ensureDocRelPath(args[0], 'relDir'),
+      ensureDocName(args[1], 'name'),
+      ensureNoteBody(args[2], 'body'),
+      args[3] === true));
   safeHandle(channels.documents.readText, (...args) =>
     documentsStore.readText(ensureDocRelPath(args[0], 'relPath')));
 

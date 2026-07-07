@@ -33,6 +33,10 @@ export function NotepadModule({ initialCaseId, initialNoteName }: Props): JSX.El
   const [body, setBody] = useState('');
   const [dirty, setDirty] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  // Exact on-disk filename (with extension) of the currently-open My Documents note, once saved —
+  // lets a repeat Save overwrite that same file instead of minting "name (1).txt", "name (2).txt", ...
+  // Cleared whenever the open note no longer matches (renamed, New, or target switched away).
+  const myDocsSavedNameRef = useRef<string | null>(null);
 
   const isBriefcase = target === BRIEFCASE;
   const isMyDocs = target === MYDOCS;
@@ -43,26 +47,31 @@ export function NotepadModule({ initialCaseId, initialNoteName }: Props): JSX.El
 
   const refreshNotes = useCallback(async () => {
     if (isBriefcase) { setBriefNotes(await window.api.briefcase.list()); setCaseNotes([]); return; }
-    if (!target) { setCaseNotes([]); setBriefNotes([]); return; }
+    // My Documents is save-only (not a real case id) — window.api.notes.list would fail main's
+    // ensureUuid validation and reject. Nothing to list; leave both note lists empty.
+    if (isMyDocs || !target) { setCaseNotes([]); setBriefNotes([]); return; }
     setCaseNotes(await window.api.notes.list(target)); setBriefNotes([]);
-  }, [target, isBriefcase]);
+  }, [target, isBriefcase, isMyDocs]);
 
   useEffect(() => {
-    void refreshNotes();
+    refreshNotes().catch((err: Error) => toast.error(`Could not list notes: ${err.message}`));
   }, [refreshNotes]);
 
   // Deep-link: auto-open the requested note once, after the case target is set.
   const openedInitialNote = useRef(false);
   useEffect(() => {
     if (openedInitialNote.current) return;
-    if (!initialNoteName || isBriefcase || !target) return;
+    if (!initialNoteName || isBriefcase || isMyDocs || !target) return;
     openedInitialNote.current = true;
     void openExisting(initialNoteName);
     // openExisting reads the note directly by name; no list dependency needed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialNoteName, target, isBriefcase]);
+  }, [initialNoteName, target, isBriefcase, isMyDocs]);
 
   async function openExisting(value: string): Promise<void> {
+    // My Documents is save-only (not listed in "Open existing…"); target isn't a case id, so
+    // window.api.notes.read(target, ...) would fail main's ensureUuid validation and reject.
+    if (isMyDocs) return;
     if (dirty) {
       const ok = await confirmDialog('Discard unsaved changes?', 'Open note');
       if (!ok) return;
@@ -94,8 +103,15 @@ export function NotepadModule({ initialCaseId, initialNoteName }: Props): JSX.El
     }
     try {
       if (isMyDocs) {
-        await window.api.documents.writeText('', `${noteName.trim()}.txt`, body);
-        toast.info('Saved to My Documents.');
+        const requestedName = `${noteName.trim()}.txt`;
+        // Overwrite in place only when this Save is re-saving the exact file we saved last —
+        // otherwise dedupe (uniqueLeaf) so an unrelated existing file is never silently clobbered.
+        const overwrite = myDocsSavedNameRef.current === requestedName;
+        const saved = await window.api.documents.writeText('', requestedName, body, overwrite);
+        myDocsSavedNameRef.current = saved.name;
+        const savedStem = saved.name.replace(/\.txt$/, '');
+        if (savedStem !== noteName.trim()) setNoteName(savedStem);
+        toast.info(`Saved to My Documents as "${saved.name}".`);
         setSavedAt(new Date().toLocaleTimeString());
         setDirty(false);
         return;
@@ -124,15 +140,18 @@ export function NotepadModule({ initialCaseId, initialNoteName }: Props): JSX.El
     setNoteName('untitled');
     setBody('');
     setBriefId(null);
+    myDocsSavedNameRef.current = null;
     setDirty(false);
     setSavedAt(null);
   }, [dirty]);
 
   // A saved note is open: briefcase → we hold its id; case → its name is in the list.
-  const canDelete = isBriefcase ? briefId !== null : !!target && caseNotes.some((n) => n.name === noteName.trim());
+  // My Documents is save-only — there's no case-notes list to check membership against, and it's
+  // never a real case id, so it can never be "deletable" via the case-notes path.
+  const canDelete = isBriefcase ? briefId !== null : !isMyDocs && !!target && caseNotes.some((n) => n.name === noteName.trim());
 
   const deleteNote = useCallback(async (): Promise<void> => {
-    if (!target) return;
+    if (!target || isMyDocs) return;
     const label = noteName.trim() || '(untitled)';
     const ok = await confirmDialog(`Delete "${label}"? This cannot be undone.`, 'Delete note');
     if (!ok) return;
@@ -150,7 +169,7 @@ export function NotepadModule({ initialCaseId, initialNoteName }: Props): JSX.El
     } catch (err) {
       toast.error(`Delete failed: ${(err as Error).message}`);
     }
-  }, [target, isBriefcase, briefId, noteName, refreshNotes]);
+  }, [target, isBriefcase, isMyDocs, briefId, noteName, refreshNotes]);
 
   // Listen for global Ctrl-S / Ctrl-N when this module is focused.
   useEffect(() => {
@@ -173,7 +192,7 @@ export function NotepadModule({ initialCaseId, initialNoteName }: Props): JSX.El
         <select
           className="ga98-text"
           value={target ?? ''}
-          onChange={(e) => { setTarget(e.target.value || null); setBriefId(null); }}
+          onChange={(e) => { setTarget(e.target.value || null); setBriefId(null); myDocsSavedNameRef.current = null; }}
         >
           <option value="">(no case)</option>
           <option value={BRIEFCASE}>💼 Briefcase</option>
