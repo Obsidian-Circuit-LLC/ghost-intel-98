@@ -48,6 +48,7 @@ import * as walls from '../services/walls';
 import * as sounds from '../services/sounds';
 import * as ai from '../services/ai';
 import { liveReindex } from '../services/memory/live-reindex.singleton';
+import { initSettingsNotify, notifySettingsChanged } from '../services/settings-notify';
 import { learnFromConversation, profileList, profileSummaries, profileUpsert, profileDelete, profileWipe } from '../services/memory/profile';
 import { createProfileStore } from '../services/memory/profile/profile-store';
 import { mergeItems as mergeProfileItems } from '../services/memory/graph/merge';
@@ -337,6 +338,10 @@ async function gatherReportImages(caseId: string, rec: CaseRecord): Promise<Repo
 }
 
 export function registerIpc(getWindow: () => BrowserWindow | null): void {
+  // Every main-side settingsStore.update() call site notifies the renderer so its cache
+  // can't lag disk (see settings-notify.ts) — wire the shared accessor once, up front.
+  initSettingsNotify(getWindow);
+
   // Debounced auto-index (case/conversation/library autosave) is best-effort by design — a
   // failing embed must never break the save path — but per the ADHD-UI constraint it must not be
   // entirely silent. live-reindex.ts already rate-limits calls into this notifier, so a stuck
@@ -504,7 +509,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
 
   // ---- settings ----
   safeHandle(channels.settings.read, () => settingsStore.read());
-  safeHandle(channels.settings.update, (...args) => {
+  safeHandle(channels.settings.update, async (...args) => {
     // Strip the shell-enable keys: enabling the DialTerm local shell grants local code execution,
     // so it must go through the dedicated, native-dialog-confirmed shell:requestEnable path. A
     // bulk patch (renderer/plugin/XSS) must never be able to set localShellEnabled/localShellProgram.
@@ -514,7 +519,9 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     if (patch && typeof patch === 'object' && (patch as { markets?: unknown }).markets) {
       (patch as { markets: unknown }).markets = ensureMarketsSettings((patch as { markets: unknown }).markets);
     }
-    return settingsStore.update(patch);
+    const next = await settingsStore.update(patch);
+    notifySettingsChanged(next);
+    return next;
   });
   safeHandle(channels.settings.pickWallpaper, async () => {
     const win = getWindow();
@@ -1163,12 +1170,12 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     if (response !== 1) return false; // anything but the explicit 'Enable' button → no-op
     // Persist main-side (settings.update can't reach these keys). Validate the optional program.
     const program = ensureShellProgram(args[0] ?? (await settingsStore.read()).localShellProgram);
-    await settingsStore.update({ localShellEnabled: true, localShellProgram: program });
+    notifySettingsChanged(await settingsStore.update({ localShellEnabled: true, localShellProgram: program }));
     return true;
   });
   // Disabling is safe — no confirmation needed.
   safeHandle(channels.shell.disable, async () => {
-    await settingsStore.update({ localShellEnabled: false });
+    notifySettingsChanged(await settingsStore.update({ localShellEnabled: false }));
     return false;
   });
   safeHandle(channels.shell.connect, async (...args) => {
@@ -1671,12 +1678,12 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     if (!inRange(cfg?.maxSessionAgeMinutes, 1, 10_080)) throw new Error('bgconn: maxSessionAgeMinutes must be an integer 1..10080');
     // NOTE: a live manager captured its policy at construction; bgconn policy changes apply on next
     // app start (same snapshot semantics as the plugin-net snapshot). Emergency-stop is the live control.
-    settingsStore.update({ bgconn: {
+    notifySettingsChanged(await settingsStore.update({ bgconn: {
       idleTeardownAfterMinutes: cfg.idleTeardownAfterMinutes as number | null,
       defaultRouting: cfg.defaultRouting,
       maxReconnects: cfg.maxReconnects as number,
       maxSessionAgeMinutes: cfg.maxSessionAgeMinutes as number
-    } });
+    } }));
   });
   safeHandle(channels.bgconn.clearCredentials, async (...a) => {
     const pluginId = String(a[0]);
@@ -1912,7 +1919,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   // Enable or disable the ML scorer (writes through the normal settings path).
   safeHandle(channels.searchlight.setMlEnabled, async (...a) => {
     const enabled = a[0] === true;
-    await settingsStore.update({ searchlight: { scorer: { useMl: enabled } } } as Parameters<typeof settingsStore.update>[0]);
+    notifySettingsChanged(await settingsStore.update({ searchlight: { scorer: { useMl: enabled } } } as Parameters<typeof settingsStore.update>[0]));
     return { ok: true };
   });
 

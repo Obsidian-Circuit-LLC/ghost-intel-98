@@ -4,6 +4,7 @@ import { spawn as nodeSpawn } from 'node:child_process';
 import { LOCAL_AI_ENDPOINT, LOCAL_AI_MODEL, bundledRoot as defaultBundledRoot, fetchedRoot, fetchedModelsDir } from './local-ai-paths';
 import type { LocalAiStatus } from '@shared/ipc-contracts';
 import { settingsStore } from '../storage/json-fs';
+import { notifySettingsChanged } from './settings-notify';
 
 let bundledRootFn = defaultBundledRoot;
 export function __setBundledRootForTest(p: string): void { bundledRootFn = () => p; }
@@ -122,5 +123,5 @@ export async function ensureModel(onProgress?: (p: ModelProgress) => void): Prom
 export async function autoConfigure(): Promise<void> {
   const s = await settingsStore.read();
   if (s.ai.provider !== 'none') return; // user already chose a provider — never clobber it
-  await settingsStore.update({ ai: { ...s.ai, provider: 'ollama', endpoint: LOCAL_AI_ENDPOINT, model: LOCAL_AI_MODEL } });
+  notifySettingsChanged(await settingsStore.update({ ai: { ...s.ai, provider: 'ollama', endpoint: LOCAL_AI_ENDPOINT, model: LOCAL_AI_MODEL } }));
 }

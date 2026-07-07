@@ -158,6 +158,14 @@ export const useSettings = create<SettingsState>((set) => ({
   }
 }));
 
+/** Subscribes to the main->renderer `settings:changed` push (settings-notify.ts) so the
+ *  cache can't lag disk when another handler (shell enable, bgconn config, searchlight ML
+ *  toggle, local-ai autoConfigure, or a future window) writes settings.json without going
+ *  through THIS window's load()/patch(). Call once (App.tsx); returns the preload disposer. */
+export function wireSettingsChanged(): () => void {
+  return window.api.settings.onChanged((s) => { useSettings.setState({ settings: s }); });
+}
+
 export interface AuthStatusState { enabled: boolean; unlocked: boolean }
 
 interface AuthState {
