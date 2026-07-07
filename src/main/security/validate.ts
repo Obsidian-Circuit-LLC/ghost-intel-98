@@ -1145,10 +1145,14 @@ export function ensureDocRelPath(value: unknown, context = 'path'): string {
 const MAX_NOTE_BODY = 1024 * 1024; // 1 MiB chars — mirrors the documents store's MAX_TEXT_BYTES cap
 
 /** Validate a plain-text note body crossing the IPC boundary for documents:writeText. Rejects
- *  non-string input; clamps length so an oversize body can't be forced through the write path. */
+ *  non-string input and REJECTS (never silently truncates) an oversize body — truncating here would
+ *  persist only the first megabyte while Notepad/DnD report a successful save, i.e. silent data loss. */
 export function ensureNoteBody(value: unknown, context = 'body'): string {
   if (typeof value !== 'string') {
     throw new ValidationError(`Invalid ${context}: not a string`);
   }
-  return value.slice(0, MAX_NOTE_BODY);
+  if (value.length > MAX_NOTE_BODY) {
+    throw new ValidationError(`Invalid ${context}: too large (max 1 MiB)`);
+  }
+  return value;
 }

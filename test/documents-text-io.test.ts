@@ -46,6 +46,19 @@ describe('writeText', () => {
     expect(entry.name).toBe('note (1).txt');
     expect((await readFile(join(ROOT, 'documents', 'note (1).txt'))).toString('utf8')).toBe('new body');
   });
+
+  it('overwrite=true writes to the EXACT name in place (no dedupe) when the leaf already exists', async () => {
+    const store = await import('../src/main/documents/store');
+    await writeFile(join(ROOT, 'documents', 'untitled.txt'), 'first draft');
+    const entry = await store.writeText('', 'untitled.txt', 'second draft', true);
+    // Must reuse the exact name, not mint 'untitled (1).txt' — the Notepad re-save-in-place contract.
+    expect(entry.name).toBe('untitled.txt');
+    expect((await readFile(join(ROOT, 'documents', 'untitled.txt'))).toString('utf8')).toBe('second draft');
+    // And no dedupe sibling was created.
+    const { readdir } = await import('node:fs/promises');
+    const names = await readdir(join(ROOT, 'documents'));
+    expect(names).toEqual(['untitled.txt']);
+  });
 });
 
 describe('readText', () => {

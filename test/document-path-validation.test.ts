@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ensureDocName, ensureDocRelPath } from '../src/main/security/validate';
+import { ensureDocName, ensureDocRelPath, ensureNoteBody } from '../src/main/security/validate';
 
 describe('ensureDocName', () => {
   it('accepts a normal file/folder name', () => {
@@ -33,5 +33,28 @@ describe('ensureDocRelPath', () => {
       expect(() => ensureDocRelPath(bad)).toThrow();
     }
     expect(() => ensureDocRelPath(5 as unknown)).toThrow();
+  });
+});
+
+describe('ensureNoteBody', () => {
+  const MAX = 1024 * 1024; // 1 MiB chars
+  it('accepts an ordinary body unchanged', () => {
+    expect(ensureNoteBody('hello world')).toBe('hello world');
+    expect(ensureNoteBody('')).toBe('');
+  });
+  it('accepts a body exactly at the 1 MiB cap unchanged', () => {
+    const atCap = 'a'.repeat(MAX);
+    expect(ensureNoteBody(atCap)).toBe(atCap);
+    expect(ensureNoteBody(atCap).length).toBe(MAX);
+  });
+  it('rejects (does NOT silently truncate) an oversize body', () => {
+    const tooBig = 'a'.repeat(MAX + 1);
+    // Must throw, not return a truncated string — silent truncation would be data loss
+    // reported to the user as a successful save.
+    expect(() => ensureNoteBody(tooBig)).toThrow(/too large|1 MiB/i);
+  });
+  it('rejects a non-string', () => {
+    expect(() => ensureNoteBody(123 as unknown)).toThrow();
+    expect(() => ensureNoteBody(null)).toThrow();
   });
 });
