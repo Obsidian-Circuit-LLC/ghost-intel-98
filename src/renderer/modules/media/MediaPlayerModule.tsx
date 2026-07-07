@@ -17,6 +17,7 @@ import { toast } from '../../state/toasts';
 import { resolveSource, isHlsUrl } from './resolveSource';
 import { Visualizer } from './Visualizer';
 import { nextIndex, prevIndex, endedIndex, cycleRepeat, type RepeatMode } from './playlist-nav';
+import { clampSeek, SEEK_STEP } from './seek';
 
 interface QueueItem { title: string; name?: string; artist?: string; path?: string; url?: string }
 
@@ -50,6 +51,12 @@ function IcoPause(): JSX.Element {
 }
 function IcoStop(): JSX.Element {
   return <svg {...SVG}><rect x="3" y="3" width="10" height="10" fill="currentColor" /></svg>;
+}
+function IcoRewind(): JSX.Element {
+  return <svg {...SVG}><path d="M8 3 L8 13 L1 8 Z" fill="currentColor" /><path d="M15 3 L15 13 L8 8 Z" fill="currentColor" /></svg>;
+}
+function IcoFForward(): JSX.Element {
+  return <svg {...SVG}><path d="M1 3 L1 13 L8 8 Z" fill="currentColor" /><path d="M8 3 L8 13 L15 8 Z" fill="currentColor" /></svg>;
 }
 function IcoShuffle(): JSX.Element {
   return (
@@ -216,6 +223,13 @@ export function MediaPlayerModule({ spec }: { spec: WindowSpec }): JSX.Element {
     if (p !== null) playItem(queue[p], p);
   }, [current, queue, playItem]);
 
+  // Rewind/fast-forward: nudge the <audio> element's currentTime by SEEK_STEP, clamped to
+  // [0, duration]. clampSeek is a pure helper so the boundary math is unit-tested in isolation.
+  const seek = (delta: number): void => {
+    const a = audioRef.current;
+    if (a) a.currentTime = clampSeek(a.currentTime, delta, a.duration);
+  };
+
   // Track ended naturally: repeat-one replays, otherwise advance like Next (respecting shuffle/repeat-all).
   const handleEnded = useCallback(() => {
     rememberCurrent();
@@ -333,6 +347,8 @@ export function MediaPlayerModule({ spec }: { spec: WindowSpec }): JSX.Element {
           </div>
           <div className="ga98-cdp-row">
             <button onClick={prev} title="Previous track" aria-label="Previous track"><IcoPrev /></button>
+            <button onClick={() => seek(-SEEK_STEP)} title="Rewind 10s" aria-label="Rewind 10s"><IcoRewind /></button>
+            <button onClick={() => seek(SEEK_STEP)} title="Fast-forward 10s" aria-label="Fast-forward 10s"><IcoFForward /></button>
             <button onClick={next} title="Next track" aria-label="Next track"><IcoNext /></button>
             <button onClick={() => setShuffle((s) => !s)} title={`Shuffle: ${shuffle ? 'on' : 'off'}`} aria-label="Shuffle"
               aria-pressed={shuffle} style={transportToggleStyle(shuffle)}><IcoShuffle /></button>
