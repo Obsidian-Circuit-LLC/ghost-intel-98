@@ -5,11 +5,26 @@ import { useDocuments, joinRel } from './useDocuments';
 import { DocumentsContextMenu, type ContextTarget } from './DocumentsContextMenu';
 import { fileGlyphNode } from './file-icons';
 
+/** Shared drag payload MIME for in-app item drags (My Documents ↔ folders, and cross-module). */
+const GA98_ITEM = 'application/x-ga98-item';
+
+interface Ga98ItemPayload { src: string; relPath?: string; name: string; kind?: string; id?: string; }
+
+/** Parses the `GA98_ITEM` payload off a drop's DataTransfer, or null if absent/malformed. */
+function readItemPayload(dt: DataTransfer): Ga98ItemPayload | null {
+  if (!dt.types.includes(GA98_ITEM)) return null;
+  const raw = dt.getData(GA98_ITEM);
+  if (!raw) return null;
+  try { return JSON.parse(raw) as Ga98ItemPayload; }
+  catch { return null; }
+}
+
 export function MyDocumentsModule(): JSX.Element {
   const doc = useDocuments();
   const [vaultOn, setVaultOn] = useState(false);
   const [menu, setMenu] = useState<ContextTarget | null>(null);
   const [dropHot, setDropHot] = useState(false);
+  const [hoverFolder, setHoverFolder] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -33,10 +48,33 @@ export function MyDocumentsModule(): JSX.Element {
   function onDrop(ev: DragEvent<HTMLDivElement>): void {
     ev.preventDefault();
     setDropHot(false);
+    if (ev.dataTransfer.types.includes(GA98_ITEM)) return; // in-app item drag, handled by a tile's own onDrop
     const files = Array.from(ev.dataTransfer.files)
       .map((f) => ({ sourcePath: window.api.files.getPathForFile(f), originalName: f.name }))
       .filter((p) => p.sourcePath);
     if (files.length) void doc.importFiles(files);
+  }
+
+  function onTileDragStart(ev: DragEvent<HTMLDivElement>, e: DocEntry): void {
+    const payload: Ga98ItemPayload = { src: 'docs', relPath: joinRel(doc.dir, e.name), name: e.name, kind: e.kind };
+    ev.dataTransfer.setData(GA98_ITEM, JSON.stringify(payload));
+  }
+
+  function onFolderDragOver(ev: DragEvent<HTMLDivElement>, e: DocEntry): void {
+    ev.preventDefault();
+    ev.stopPropagation();
+    setHoverFolder(e.name);
+  }
+
+  function onFolderDrop(ev: DragEvent<HTMLDivElement>, e: DocEntry): void {
+    ev.preventDefault();
+    ev.stopPropagation();
+    setHoverFolder(null);
+    const payload = readItemPayload(ev.dataTransfer);
+    if (!payload || payload.src !== 'docs' || !payload.relPath) return;
+    const destDir = joinRel(doc.dir, e.name);
+    if (payload.relPath === destDir) return; // dropped onto itself
+    void doc.move(payload.relPath, destDir);
   }
 
   function openMenu(ev: MouseEvent, entry: DocEntry | null): void {
@@ -79,8 +117,16 @@ export function MyDocumentsModule(): JSX.Element {
             <div
               key={e.name}
               className="ga98-mydocs-tile"
-              style={{ width: 88, textAlign: 'center', cursor: 'pointer', userSelect: 'none', padding: 4 }}
+              style={{
+                width: 88, textAlign: 'center', cursor: 'pointer', userSelect: 'none', padding: 4,
+                background: hoverFolder === e.name ? '#e8f0ff' : undefined
+              }}
               title={e.name}
+              draggable
+              onDragStart={(ev) => onTileDragStart(ev, e)}
+              onDragOver={e.kind === 'folder' ? (ev) => onFolderDragOver(ev, e) : undefined}
+              onDragLeave={e.kind === 'folder' ? () => setHoverFolder(null) : undefined}
+              onDrop={e.kind === 'folder' ? (ev) => onFolderDrop(ev, e) : undefined}
               onDoubleClick={() => (e.kind === 'folder' ? doc.enter(e.name) : void doc.open(joinRel(doc.dir, e.name)))}
               onContextMenu={(ev) => openMenu(ev, e)}
             >
