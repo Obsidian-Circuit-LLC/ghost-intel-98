@@ -7,7 +7,7 @@ import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import { channels } from '../shared/ipc-contracts';
 import type { LocalAiStatus, LocalAiProgress, MemoryStatus, MemoryProgress, MemoryItem, RecallPreview, LibraryDoc, MemoryGraphShape, BondShape, GhostScrapeConfig, GhostScrapeResult, ScrapingCaseStoreId } from '../shared/ipc-contracts';
 import type { InvestigationScene, SceneDelta } from '../shared/investigation-graph';
-import type { EntityType } from '../shared/types';
+import type { EntityType, AppSettings } from '../shared/types';
 import type { RunEvent } from '../shared/investigation-agent';
 import type { RunBudget } from '../shared/investigation-types';
 import type { IntelReport } from '../shared/investigation-report';
@@ -80,7 +80,12 @@ const api = {
   settings: {
     read: () => ipcRenderer.invoke(channels.settings.read),
     update: (patch: unknown) => ipcRenderer.invoke(channels.settings.update, patch),
-    pickWallpaper: () => ipcRenderer.invoke(channels.settings.pickWallpaper)
+    pickWallpaper: () => ipcRenderer.invoke(channels.settings.pickWallpaper),
+    onChanged: (cb: (s: AppSettings) => void) => {
+      const listener = (_e: unknown, s: AppSettings) => cb(s);
+      ipcRenderer.on(channels.settings.changed, listener);
+      return () => ipcRenderer.removeListener(channels.settings.changed, listener);
+    }
   },
   reminders: {
     listGlobal: () => ipcRenderer.invoke(channels.reminders.listGlobal),

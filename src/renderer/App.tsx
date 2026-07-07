@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { useAuth, useSettings, useWindows } from './state/store';
+import { useAuth, useSettings, useWindows, wireSettingsChanged } from './state/store';
 import { Desktop } from './shell/Desktop';
 import { Taskbar } from './shell/Taskbar';
 import { Window } from './shell/Window';
@@ -44,6 +44,10 @@ export function App(): JSX.Element {
     installPluginBridge();
     void window.api.plugins.listVerified().then((list) => importPluginChunks(list)).catch(() => {});
   }, [loadSettings, refreshAuth]);
+
+  // settings:changed main->renderer push (settings-notify.ts): keeps the settings cache from
+  // lagging disk when a handler OTHER than this window's load()/patch() writes settings.json.
+  useEffect(() => wireSettingsChanged(), []);
 
   // Global retro mouse-click on every <button>. Delegated at the document so it covers
   // buttons in any module/dialog without per-component wiring. Read soundEnabled live

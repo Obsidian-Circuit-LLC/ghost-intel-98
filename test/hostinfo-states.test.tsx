@@ -6,9 +6,11 @@
  * drill-down and the standalone OSINT Host Info entry (W1). It must respect the Tor-only
  * host-resolution setting (settings.geoint.cctvResolveHosts):
  *
- *   - OFF: render a "turned off in Settings → GeoINT" notice and NEVER fire a lookup. Host
- *     resolution is Tor-only recon (DoH + RDAP); with it disabled there must be no egress at
- *     all — and never a clearnet fallback, which would leak the operator's real IP.
+ *   - OFF: render a "turned off in Settings → GeoINT" notice. The renderer's cached setting is
+ *     only a pre-run hint — main is authoritative (see hostinfo-view.test.tsx Task 1): the IPC
+ *     call may still fire, but the gate (hostinfo-ipc-gate.test.ts) answers with a fast,
+ *     no-network `resolve-disabled` result and never touches the resolver/Tor — that is where
+ *     the real "no egress" guarantee lives, not in whether the renderer's mock got called.
  *   - ON but Tor not ready: the main-side resolve fast-fails and returns a partial HostInfo whose
  *     errors carry the `tor-not-ready` marker (see hostinfo-tor-fastfail). The view must surface a
  *     "needs Tor (bootstrapping / unavailable)" message rather than sit on an indefinite spinner.
@@ -61,13 +63,10 @@ afterEach(() => {
 });
 
 describe('HostInfoView — Tor-only host-resolution setting gating', () => {
-  it('setting OFF: shows the off notice and NEVER fires a resolve lookup (auto-run gated)', () => {
+  it('setting OFF: shows the off notice, driven by the gate\'s authoritative resolve-disabled result', async () => {
     setResolveHosts(false);
-    act(() => root.render(<HostInfoView stream={stream} defaultOpen />));
-    // Expanding the panel must not kick off a lookup when resolution is disabled.
-    const details = container.querySelector('details') as HTMLDetailsElement;
-    act(() => { details.dispatchEvent(new Event('toggle', { bubbles: true })); });
-    expect(resolve).not.toHaveBeenCalled();
+    resolve.mockResolvedValue({ host: 'cam.example.com', isIpLiteral: false, ips: [], errors: ['resolve-disabled'], resolvedAt: 't' });
+    await act(async () => { root.render(<HostInfoView stream={stream} defaultOpen />); });
     expect(container.textContent ?? '').toMatch(/turned off in Settings/i);
   });
 
