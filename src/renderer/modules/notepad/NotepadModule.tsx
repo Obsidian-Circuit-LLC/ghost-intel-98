@@ -19,6 +19,8 @@ interface Props {
 
 /** Sentinel target for the Briefcase (vs a real case id or '' for no destination). */
 const BRIEFCASE = '__briefcase__';
+/** Sentinel target for saving straight into My Documents (save-only; not listed in "Open existing"). */
+const MYDOCS = '__mydocs__';
 
 export function NotepadModule({ initialCaseId, initialNoteName }: Props): JSX.Element {
   const [cases, setCases] = useState<CaseSummary[]>([]);
@@ -33,6 +35,7 @@ export function NotepadModule({ initialCaseId, initialNoteName }: Props): JSX.El
   const [savedAt, setSavedAt] = useState<string | null>(null);
 
   const isBriefcase = target === BRIEFCASE;
+  const isMyDocs = target === MYDOCS;
 
   useEffect(() => {
     void window.api.cases.list().then(setCases);
@@ -90,6 +93,13 @@ export function NotepadModule({ initialCaseId, initialNoteName }: Props): JSX.El
       return;
     }
     try {
+      if (isMyDocs) {
+        await window.api.documents.writeText('', `${noteName.trim()}.txt`, body);
+        toast.info('Saved to My Documents.');
+        setSavedAt(new Date().toLocaleTimeString());
+        setDirty(false);
+        return;
+      }
       if (isBriefcase) {
         const nid = briefId ?? crypto.randomUUID();
         const saved = await window.api.briefcase.save({ id: nid, name: noteName.trim(), body });
@@ -167,6 +177,7 @@ export function NotepadModule({ initialCaseId, initialNoteName }: Props): JSX.El
         >
           <option value="">(no case)</option>
           <option value={BRIEFCASE}>💼 Briefcase</option>
+          <option value={MYDOCS}>📂 My Documents</option>
           {cases.map((c) => (
             <option key={c.id} value={c.id}>{c.title}{c.reference ? ` [${c.reference}]` : ''}</option>
           ))}
