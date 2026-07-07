@@ -18,6 +18,7 @@ import { resolveSource, isHlsUrl } from './resolveSource';
 import { Visualizer } from './Visualizer';
 import { nextIndex, prevIndex, endedIndex, cycleRepeat, type RepeatMode } from './playlist-nav';
 import { clampSeek, SEEK_STEP } from './seek';
+import logoUrl from '../../assets/logo.png';
 
 interface QueueItem { title: string; name?: string; artist?: string; path?: string; url?: string }
 
@@ -325,41 +326,14 @@ export function MediaPlayerModule({ spec }: { spec: WindowSpec }): JSX.Element {
         style={{ display: 'none' }}
       />
 
-      {/* CD-Player-style console: a green LCD (track # + elapsed) beside a beveled two-row
-          transport deck. Same handlers as before — only the chrome changed. */}
-      <div className="ga98-cdp">
-        <div className="ga98-cdp-lcd">
-          <span className="ga98-cdp-tracknum">{current >= 0 ? `[${String(current + 1).padStart(2, '0')}]` : '[--]'}</span>
-          <span className="ga98-cdp-clock">{fmtTime(now)}</span>
-        </div>
-        <div className="ga98-cdp-deck">
-          <div className="ga98-cdp-row">
-            {/* Distinct Play / Pause / Stop buttons like a real CD-player deck. Play resumes or
-                starts the first track; Pause only pauses. (Previously button 1 was a
-                Play/Pause toggle AND there was a separate Pause button — two pause icons while
-                playing.) The currently-active state is shown by highlighting, not by morphing. */}
-            <button onClick={togglePlay} title="Play" aria-label="Play"
-              aria-pressed={playing} style={transportToggleStyle(playing)}><IcoPlay /></button>
-            <button onClick={() => { const a = audioRef.current; if (a && !a.paused) { a.pause(); setPlaying(false); } }}
-              title="Pause" aria-label="Pause" aria-pressed={!playing && !!currentItem}
-              style={transportToggleStyle(!playing && !!currentItem)}><IcoPause /></button>
-            <button onClick={stop} title="Stop" aria-label="Stop"><IcoStop /></button>
-          </div>
-          <div className="ga98-cdp-row">
-            <button onClick={prev} title="Previous track" aria-label="Previous track"><IcoPrev /></button>
-            <button onClick={() => seek(-SEEK_STEP)} title="Rewind 10s" aria-label="Rewind 10s"><IcoRewind /></button>
-            <button onClick={() => seek(SEEK_STEP)} title="Fast-forward 10s" aria-label="Fast-forward 10s"><IcoFForward /></button>
-            <button onClick={next} title="Next track" aria-label="Next track"><IcoNext /></button>
-            <button onClick={() => setShuffle((s) => !s)} title={`Shuffle: ${shuffle ? 'on' : 'off'}`} aria-label="Shuffle"
-              aria-pressed={shuffle} style={transportToggleStyle(shuffle)}><IcoShuffle /></button>
-            <button onClick={() => setRepeat((r) => cycleRepeat(r))} title={`Repeat: ${repeat}`} aria-label={`Repeat: ${repeat}`}
-              aria-pressed={repeat !== 'off'} style={transportToggleStyle(repeat !== 'off')}><IcoRepeat one={repeat === 'one'} /></button>
-          </div>
-        </div>
+      {/* WMP-style "screen": the visualizer as the art area, GI98 logo pinned bottom-right —
+          the classic Windows Media Player look, not the CD-Player console it replaced. */}
+      <div className="ga98-wmp-screen">
+        <Visualizer analyser={analyser} enabled={visualizer} />
+        <img src={logoUrl} className="ga98-wmp-logo" alt="" style={{ imageRendering: 'pixelated' }} />
       </div>
 
-      {/* Artist / Title / Track readout — the CD Player's labeled fields. Track is a live
-          dropdown of the queue; picking one plays it. */}
+      {/* Artist / Title / Track readout. Track is a live dropdown of the queue; picking one plays it. */}
       <div className="ga98-cdp-fields">
         <label>Artist:</label>
         <div className="ga98-cdp-field">{artistText || (currentItem ? '' : 'No track loaded')}</div>
@@ -373,7 +347,18 @@ export function MediaPlayerModule({ spec }: { spec: WindowSpec }): JSX.Element {
         </select>
       </div>
 
-      <Visualizer analyser={analyser} enabled={visualizer} />
+      {/* The classic five WMP transport buttons — rewind / play / pause / stop / fast-forward.
+          Prev/Next/Shuffle/Repeat move to the secondary strip below so this row stays the five. */}
+      <div className="ga98-wmp-transport">
+        <button onClick={() => seek(-SEEK_STEP)} title="Rewind 10s" aria-label="Rewind 10s"><IcoRewind /></button>
+        <button onClick={togglePlay} title="Play" aria-label="Play"
+          aria-pressed={playing} style={transportToggleStyle(playing)}><IcoPlay /></button>
+        <button onClick={() => { const a = audioRef.current; if (a && !a.paused) { a.pause(); setPlaying(false); } }}
+          title="Pause" aria-label="Pause" aria-pressed={!playing && !!currentItem}
+          style={transportToggleStyle(!playing && !!currentItem)}><IcoPause /></button>
+        <button onClick={stop} title="Stop" aria-label="Stop"><IcoStop /></button>
+        <button onClick={() => seek(SEEK_STEP)} title="Fast-forward 10s" aria-label="Fast-forward 10s"><IcoFForward /></button>
+      </div>
 
       <input
         type="range" min={0} max={dur || 0} step={0.1} value={now} disabled={!currentItem || !!currentItem.url}
@@ -381,8 +366,16 @@ export function MediaPlayerModule({ spec }: { spec: WindowSpec }): JSX.Element {
         style={{ width: '100%' }}
       />
 
+      {/* Slim status strip: elapsed/length, Prev/Next/Shuffle/Repeat (moved off the main transport
+          row), volume, viz toggle, and the caret — verbatim, still driving the collapse/resize. */}
       <div className="ga98-cdp-status">
-        <span>Track Length: {currentItem?.url ? '∞' : fmtTime(dur)} m:s</span>
+        <span>{fmtTime(now)} / {currentItem?.url ? '∞' : fmtTime(dur)}</span>
+        <button onClick={prev} title="Previous track" aria-label="Previous track" style={{ marginLeft: 6, minWidth: 0, padding: '0 6px' }}><IcoPrev /></button>
+        <button onClick={next} title="Next track" aria-label="Next track" style={{ minWidth: 0, padding: '0 6px' }}><IcoNext /></button>
+        <button onClick={() => setShuffle((s) => !s)} title={`Shuffle: ${shuffle ? 'on' : 'off'}`} aria-label="Shuffle"
+          aria-pressed={shuffle} style={{ ...transportToggleStyle(shuffle), minWidth: 0, padding: '0 6px' }}><IcoShuffle /></button>
+        <button onClick={() => setRepeat((r) => cycleRepeat(r))} title={`Repeat: ${repeat}`} aria-label={`Repeat: ${repeat}`}
+          aria-pressed={repeat !== 'off'} style={{ ...transportToggleStyle(repeat !== 'off'), minWidth: 0, padding: '0 6px' }}><IcoRepeat one={repeat === 'one'} /></button>
         <span style={{ flex: 1 }} />
         <label style={{ fontSize: 11 }}>Vol</label>
         <input type="range" min={0} max={1} step={0.01} defaultValue={1}
