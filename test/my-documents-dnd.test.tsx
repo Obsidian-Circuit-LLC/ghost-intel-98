@@ -44,7 +44,12 @@ const api = {
   importDropped: vi.fn().mockResolvedValue({ imported: [], failures: [] }),
   reveal: vi.fn().mockResolvedValue(undefined),
   open: vi.fn().mockResolvedValue(undefined),
-  export: vi.fn().mockResolvedValue(undefined)
+  export: vi.fn().mockResolvedValue(undefined),
+  writeText: vi.fn().mockResolvedValue({ name: 'todo.txt', kind: 'file', size: 9, modifiedAt: '2026-07-06T00:00:00Z' })
+};
+
+const briefcaseApi = {
+  read: vi.fn()
 };
 
 let container: HTMLDivElement;
@@ -55,8 +60,10 @@ beforeEach(() => {
     { name: 'Folder A', kind: 'folder', size: 0, modifiedAt: '2026-07-06T00:00:00Z' },
     { name: 'note.txt', kind: 'file', size: 12, modifiedAt: '2026-07-06T00:00:00Z' }
   ]);
+  briefcaseApi.read.mockReset();
   (globalThis as unknown as { window: { api: unknown } }).window.api = {
     documents: api,
+    briefcase: briefcaseApi,
     files: { getPathForFile: vi.fn() },
     auth: { status: vi.fn().mockResolvedValue({ enabled: false, unlocked: true }) }
   };
@@ -105,5 +112,19 @@ describe('MyDocumentsModule drag-and-drop (in-folder move)', () => {
     dt.setData(GA98_ITEM, JSON.stringify({ src: 'docs', relPath: 'note.txt', name: 'note.txt', kind: 'file' }));
     await act(async () => { folderTile.dispatchEvent(dragEvent('drop', dt)); });
     expect(api.move).toHaveBeenCalledWith('note.txt', 'Folder A');
+  });
+});
+
+describe('MyDocumentsModule drag-and-drop (cross-module, Briefcase → My Documents)', () => {
+  it('dropping a briefcase payload writes a text note into the current folder', async () => {
+    briefcaseApi.read.mockResolvedValue({ id: 'b1', name: 'todo', body: 'buy milk', updatedAt: '2026-07-06T00:00:00Z' });
+    await act(async () => { root.render(<MyDocumentsModule />); });
+    await flush();
+    const view = container.querySelector('.ga98-mydocs-view') as HTMLElement;
+    const dt = new FakeDataTransfer();
+    dt.setData(GA98_ITEM, JSON.stringify({ src: 'briefcase', id: 'b1', name: 'todo' }));
+    await act(async () => { view.dispatchEvent(dragEvent('drop', dt)); });
+    expect(briefcaseApi.read).toHaveBeenCalledWith('b1');
+    expect(api.writeText).toHaveBeenCalledWith('', 'todo.txt', 'buy milk');
   });
 });

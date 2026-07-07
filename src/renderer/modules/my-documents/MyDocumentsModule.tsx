@@ -45,10 +45,22 @@ export function MyDocumentsModule(): JSX.Element {
     if (ok) await doc.remove(joinRel(doc.dir, e.name));
   }
 
-  function onDrop(ev: DragEvent<HTMLDivElement>): void {
+  async function onDrop(ev: DragEvent<HTMLDivElement>): Promise<void> {
     ev.preventDefault();
     setDropHot(false);
-    if (ev.dataTransfer.types.includes(GA98_ITEM)) return; // in-app item drag, handled by a tile's own onDrop
+    const payload = readItemPayload(ev.dataTransfer);
+    if (payload) {
+      // A cross-module Briefcase note dropped on the folder view (not on a specific folder tile):
+      // pull its body and land it as a .txt note in the current folder. A `docs` payload here means
+      // the user missed a folder tile — nothing to do (in-folder moves are handled by the tile's own onDrop).
+      if (payload.src === 'briefcase' && payload.id) {
+        try {
+          const note = await window.api.briefcase.read(payload.id);
+          if (note) await doc.writeTextNote(doc.dir, `${payload.name}.txt`, note.body);
+        } catch { /* writeTextNote already surfaces write/refresh failures via doc.error */ }
+      }
+      return;
+    }
     const files = Array.from(ev.dataTransfer.files)
       .map((f) => ({ sourcePath: window.api.files.getPathForFile(f), originalName: f.name }))
       .filter((p) => p.sourcePath);
