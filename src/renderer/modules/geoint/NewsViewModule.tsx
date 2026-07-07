@@ -6,8 +6,10 @@
  *
  * Reachable two ways:
  *  - popped out from the GeoINT LiveNewsPanel's pop-out (⧉) button, which hands it the stream that
- *    was active at the moment of popping (a snapshot — the pop-out still renders the shared
- *    controls, so the operator can keep switching feeds from inside the pop-out too);
+ *    was active at the moment of popping. That `stream` prop is ONLY a fallback for when the store
+ *    has no active entry to show (e.g. a stale/legacy settings object) — once the store has a live
+ *    selection, this module always renders THAT, so the pop-out's own Stream dropdown (rendered via
+ *    the shared NewsFeedControls) actually changes what plays in that same window;
  *  - launched standalone as an OSINT tool from the Toolkit with no props, where there is no
  *    snapshot stream — it reads the store's active stream (streams[newsStreamIndex]) instead.
  *
@@ -25,7 +27,10 @@ export function NewsViewModule({ stream }: { stream?: NewsStream } = {}): JSX.El
   const streams: NewsStream[] = g?.newsStreams ?? [];
   const rawIndex = g?.newsStreamIndex ?? 0;
   const index = streams.length === 0 ? 0 : Math.min(Math.max(rawIndex, 0), streams.length - 1);
-  const active: NewsStream = stream ?? streams[index] ?? DEFAULT_NEWS_STREAM;
+  // The store's live selection wins whenever it has one — that's what lets the pop-out's own
+  // Stream dropdown (NewsFeedControls, rendered below) actually change what this window shows.
+  // The `stream` snapshot prop is only a fallback for a store with no active entry to offer.
+  const active: NewsStream = streams[index] ?? stream ?? DEFAULT_NEWS_STREAM;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <NewsFeedControls />

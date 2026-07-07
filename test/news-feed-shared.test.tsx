@@ -162,4 +162,40 @@ describe('NewsViewModule — mirrors the store-selected active stream', () => {
 
     expect(container.textContent ?? '').toContain(DEFAULT_NEWS_STREAM.label);
   });
+
+  it('a pop-out window (mounted with a fixed snapshot `stream` prop) still follows the store when the operator picks a different feed from its OWN dropdown', async () => {
+    const bloomberg = { label: 'Bloomberg TV', url: 'https://www.bloomberg.com/media-manifest/streams/us.m3u8', kind: 'hls' as const };
+    const skyNews = { label: 'Sky News', url: 'https://b.example.com/b.m3u8', kind: 'hls' as const };
+    useSettings.setState({
+      settings: {
+        ...defaultSettings,
+        geoint: { ...defaultSettings.geoint, newsStreams: [bloomberg, skyNews], newsStreamIndex: 0 }
+      }
+    });
+    // Mirrors the real pop-out: NewsViewAdapter hands NewsViewModule the stream that was active
+    // at the moment of popping (a fixed snapshot prop) — here, Bloomberg (index 0).
+    await act(async () => { root.render(<NewsViewModule stream={bloomberg} />); });
+    await flush();
+
+    // The header (`.ga98-panel`) is the module's OWN label, distinct from the dropdown's <option>
+    // text (which always lists every feed regardless of selection) — assert on it specifically.
+    const header = () => container.querySelector('.ga98-panel')?.textContent ?? '';
+    expect(header()).toContain('Bloomberg TV');
+
+    // Now pick a different entry from the pop-out's OWN Stream dropdown (NewsFeedControls is
+    // rendered inside NewsViewModule) — this writes newsStreamIndex: 1 to the shared store.
+    const select = container.querySelector('select.ga98-select') as HTMLSelectElement;
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value')!.set!;
+      setter.call(select, '1');
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await flush();
+
+    // The store now reflects the new selection...
+    expect(useSettings.getState().settings?.geoint.newsStreamIndex).toBe(1);
+    // ...and the SAME window's header must follow it, not stay pinned to the snapshot.
+    expect(header()).toContain('Sky News');
+    expect(header()).not.toContain('Bloomberg TV');
+  });
 });
