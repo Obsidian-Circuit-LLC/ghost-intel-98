@@ -28,6 +28,7 @@ export interface ContextDeps {
     noteReconnect(connId: string): void;
   };
   vectorRecall?: { recallAcrossCases(query: string, opts: { k: number; minScore: number }): Promise<RecallHit[]> };
+  schedule?: (pluginId: string, intervalMs: number, fn: () => void) => { dispose(): void };
 }
 
 export interface PluginContext {
@@ -48,6 +49,7 @@ export interface PluginContext {
     noteReconnect(connId: string): void;
   };
   vectors?: VectorRecall;
+  schedule?: (intervalMs: number, fn: () => void) => { dispose(): void };
 }
 
 export function createPluginContext(
@@ -112,6 +114,9 @@ export function createPluginContext(
     ctx.vectors = {
       recallAcrossCases: (query, opts) => deps.vectorRecall!.recallAcrossCases(query, opts)
     };
+  }
+  if (has('background-tasks') && deps.schedule) {
+    ctx.schedule = (intervalMs, fn) => deps.schedule!(id, intervalMs, fn);
   }
   return ctx;
 }

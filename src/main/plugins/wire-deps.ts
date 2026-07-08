@@ -26,6 +26,7 @@
 import { app } from 'electron';
 import { join } from 'node:path';
 import type { ContextDeps, PluginFetchInit, PluginFetchResponse } from './context';
+import { schedulePluginTask } from './schedule';
 import { resolveInside } from './paths';
 import { isPublicHttpUrl, assertResolvedPublic } from '../security/validate';
 import { secretStore } from '../secrets/index';
@@ -324,6 +325,10 @@ export function buildContextDeps(): ContextDeps {
 
     // Cross-case vector recall: plugins with the 'vector-recall' cap can query recalled material
     // across all cases. Falsy caseId ⇒ recall() scans every shard. Loopback embeddings; no egress.
-    vectorRecall: { recallAcrossCases: (query, opts) => recall(query, { k: opts.k, minScore: opts.minScore }) }
+    vectorRecall: { recallAcrossCases: (query, opts) => recall(query, { k: opts.k, minScore: opts.minScore }) },
+
+    // Host-owned background timer: plugins with the 'background-tasks' cap can schedule bounded
+    // self-directed work. schedule.ts owns the registry (min-interval clamp, per-plugin dispose).
+    schedule: (pluginId, intervalMs, fn) => schedulePluginTask(pluginId, intervalMs, fn)
   };
 }

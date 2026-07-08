@@ -7,6 +7,7 @@ import { canonicalPluginHash, verifyPluginSignature, type PluginAsset } from './
 import { getPinnedKeysets, isApiCompatible, type TrustKeyset } from './trust';
 import { createPluginContext, type ContextDeps } from './context';
 import { resolveInside } from './paths';
+import { disposePluginSchedules } from './schedule';
 import type { VerifiedPluginInfo, PluginStatus } from '../../shared/plugin-types';
 
 const MAX_SIG_BYTES = 8192; // ML-DSA-65 sig ~3309 + Ed25519 64; generous cap, bound before verify
@@ -117,6 +118,7 @@ export function registerTeardown(pluginId: string, fn: () => Promise<void> | voi
   teardowns.set(pluginId, list);
 }
 export async function disablePlugin(pluginId: string): Promise<void> {
+  disposePluginSchedules(pluginId);
   const list = teardowns.get(pluginId) ?? [];
   teardowns.delete(pluginId);
   for (const fn of list) { try { await fn(); } catch (e) { console.error(`[plugin:${pluginId}] teardown`, e); } }
