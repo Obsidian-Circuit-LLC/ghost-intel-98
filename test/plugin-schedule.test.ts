@@ -4,7 +4,8 @@ import {
   disposePluginSchedules,
   disposeAllSchedules,
   _resetSchedulesForTest,
-  MIN_SCHEDULE_MS
+  MIN_SCHEDULE_MS,
+  MAX_SCHEDULE_MS
 } from '../src/main/plugins/schedule';
 
 /**
@@ -46,6 +47,26 @@ describe('plugin schedule registry', () => {
     vi.advanceTimersByTime(1000);
     expect(fn).not.toHaveBeenCalled();
     vi.advanceTimersByTime(MIN_SCHEDULE_MS - 1000);
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it('clamps an interval above MAX_SCHEDULE_MS down to MAX_SCHEDULE_MS (no Node TIMEOUT_MAX 1ms busy-spin)', () => {
+    // A monthly forager cadence (~30 days) exceeds Node/Electron's TIMEOUT_MAX (2^31-1 ms).
+    // Without a high-end clamp, setInterval coerces the delay to 1ms and busy-spins the host loop.
+    const fn = vi.fn();
+    schedulePluginTask('p', 2_592_000_000, fn);
+    // Just before the clamped boundary: must not have fired yet.
+    vi.advanceTimersByTime(MAX_SCHEDULE_MS - 1);
+    expect(fn).not.toHaveBeenCalled();
+    // At the clamped boundary: fires exactly once (buggy code would still be waiting on 2_592_000_000).
+    vi.advanceTimersByTime(1);
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it('clamps a non-finite interval (Infinity) down to MAX_SCHEDULE_MS instead of a 1ms coercion', () => {
+    const fn = vi.fn();
+    schedulePluginTask('p', Infinity, fn);
+    vi.advanceTimersByTime(MAX_SCHEDULE_MS);
     expect(fn).toHaveBeenCalledTimes(1);
   });
 
