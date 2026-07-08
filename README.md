@@ -38,13 +38,15 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`GhostIntel98-Setup-3.37.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
+> **Install:** download [`GhostIntel98-Setup-3.37.1.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
 
 > **📘 User guides** — plain-language, step-by-step (download or read in-browser):
 > - [**SOCMINT: X, Telegram & WhatsApp**](docs/guides/SOCMINT-Tutorial.pdf) — set up and run the social-media collectors, per platform, with the Tor / clearnet and opsec caveats. ([markdown](docs/guides/socmint-tutorial.md))
 > - [**How Searchlight Learns**](docs/guides/Searchlight-Learning-Guide.pdf) — how the username-sweep detector gets smarter from your own labels, and when to turn ML on. ([markdown](docs/guides/searchlight-learning.md))
 
 ## Status
+
+**v3.37.1** — **Jukebox dimensional fixes** (GhostExodus field feedback on the v3.36.0 rebuild). The **Prev / Next / Shuffle / Repeat** buttons now show their icons instead of rendering blank (their glyph colour wasn't pinned, so they inherited the button-face grey and vanished); the **Playlist** button no longer bleeds its label (the crowded control row wraps instead of shrinking the text buttons below their width); and the **fully-expanded** view no longer spills off the bottom of the app — the equalizer is a little shorter, the expanded height comes down from 780→640px, and the frame clips so the playlist scrolls internally rather than the deck overflowing. Purely dimensional — no behaviour change. **3,271 automated tests** green (1 skipped); typecheck clean. *Everything from v3.37.0 carries forward.*
 
 **v3.37.0** — **An offline invoice generator.** From GhostExodus ("investigators may find this useful to calculate their invoice stuff and export it"). A new free **Invoices** module: build a month of work as **line items** (date + start/end time → hours are derived, e.g. 12:00–15:30 = 3.5 h), apply a **flat hourly rate** with an optional **tax/VAT %** and a currency, and watch the totals foot live. Add your **and the client's** name, company, and **logo**, an optional **signature** (draw on a pad or upload an image), then **export to PDF** — the on-screen preview *is* the exported document. It **remembers your details**: reusable sender/client profiles, a list of past invoices you can reopen or duplicate, and an auto-incrementing invoice number, all **encrypted at rest** through the vault. Fully offline — no network, no new dependency. Built subagent-driven over **9 TDD tasks** with a **parallel adversarial whole-branch review** that caught and fixed a **critical** before ship (a renderer-supplied asset ref reached the filesystem unvalidated — a vault-exfiltration path — now gated by `ensureFileName` with defense-in-depth and a traversal-rejection test), plus verified minors folded in (money now rounds to cents and line amounts foot to the subtotal; no unrounded `0.3333…` hours; signature mime tracks the file). Every user-supplied string is HTML-escaped in the printable invoice (XSS fence). **3,271 automated tests** green (1 skipped); typecheck clean; **no new egress**; encrypt-at-rest unchanged. *Everything from v3.36.0 carries forward.*
 
@@ -503,7 +505,7 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases) and run it.
 
-Direct link to the current release: [`GhostIntel98-Setup-3.37.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.37.0/GhostIntel98-Setup-3.37.0.exe)
+Direct link to the current release: [`GhostIntel98-Setup-3.37.1.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.37.1/GhostIntel98-Setup-3.37.1.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is **formally verified internally** — symbolic (ProVerif) +
 computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not**
 FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.6.8/GhostIntel98-Setup-3.6.8.exe).
@@ -511,7 +513,7 @@ FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Se
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\GhostIntel98-Setup-3.37.0.exe -Algorithm SHA256
+Get-FileHash .\GhostIntel98-Setup-3.37.1.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
