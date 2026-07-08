@@ -38,13 +38,15 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`GhostIntel98-Setup-3.35.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
+> **Install:** download [`GhostIntel98-Setup-3.36.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
 
 > **📘 User guides** — plain-language, step-by-step (download or read in-browser):
 > - [**SOCMINT: X, Telegram & WhatsApp**](docs/guides/SOCMINT-Tutorial.pdf) — set up and run the social-media collectors, per platform, with the Tor / clearnet and opsec caveats. ([markdown](docs/guides/socmint-tutorial.md))
 > - [**How Searchlight Learns**](docs/guides/Searchlight-Learning-Guide.pdf) — how the username-sweep detector gets smarter from your own labels, and when to turn ML on. ([markdown](docs/guides/searchlight-learning.md))
 
 ## Status
+
+**v3.36.0** — **A rounded Windows-Media-Player Jukebox and a cleaner News add-stream flow.** Two items from GhostExodus's field feedback. **(1) The Jukebox is rebuilt** into the rounded chrome shell from his mockup: a **3-state shade** (slim strip → deck-with-playlist → full-with-drawer), a **real 10-band graphic equalizer** (Web-Audio peaking bands, presets, the analyser tapping *after* the EQ so the visualizer shows what you hear), a fold-out **stream-station manager** (add/edit/remove, up/down reorder, Save List, and a Test button that probes reachability through the *same* opt-in egress gate as playback — off means it never touches the network), and an **honest format readout** (codec · bitrate · channels · sample-rate from the file's real tags; bit-depth shown **only** when the container actually declares it, so MP3s don't get a fabricated "16-bit"). Same functions as before, restyled and extended; the current docked width is preserved. **(2) News custom streams** are now added through an **Add-stream modal** (Label · kind · URL · OK/Cancel) instead of an always-visible inline form, and the redundant per-row pop-out button is gone — less in the visual path, and an invalid entry keeps the dialog open with your text intact. Built subagent-driven over **11 TDD tasks** with a **parallel adversarial whole-branch review**: two confirmed findings auto-fixed before ship (a stale-settings write race and a vacuous IPC test), four verified minors folded in (modal input retention, a timed-out Test probe that now tears down, and two coverage gaps). **3,240 automated tests** green (1 skipped); typecheck clean; **no new egress** (streaming stays opt-in); no new dependency; encrypt-at-rest unchanged. *Everything from v3.35.0 carries forward.*
 
 **v3.35.0** — **GeoINT field fixes: the Host Info panel tells the truth, settings stay in sync, and host resolution gains an opt-in clearnet mode.** From GhostExodus's casework on Tor-blocked cameras. **(1)** The Host Info panel no longer claims "Host resolution is turned off" right after resolving a host — the message is now driven by what the lookup **actually did** (a stale settings copy could contradict the real result), and the standalone panel resolves as soon as it opens. **(2)** Settings changes now **sync across the app without a restart** — the main process pushes a `settings:changed` event to the UI, and per-panel writes (GeoINT tiles, the news feed list) send only the field they changed instead of re-sending a whole block that could clobber a sibling from a stale copy. **(3)** Host resolution (the DoH/PTR/RDAP recon) gains an **opt-in CLEARNET mode** in Settings → GeoINT — **off by default**, gated behind a one-time real-IP-exposure acknowledgement, and visibly marked ("Resolved over CLEARNET — real IP exposed") whenever a lookup used it; with the toggle off, a mutation-tested guard proves no code path reaches a clearnet socket (Tor-only stays the default). Also clarifies the two GeoINT Tor labels so camera **streams** vs camera **hosts** stop getting confused — and a reminder: to watch a Tor-blocked camera's **video**, that's the separate "Route CCTV over Tor" toggle (turn it off → clearnet stream). Built subagent-driven over 6 TDD tasks with a **charter-focused adversarial whole-branch review** whose confirmed finding (the clearnet-off guard was untested) was fixed with a mutation-survival test before ship. **3,191 automated tests** green (1 skipped); typecheck clean; **no new egress with the clearnet toggle off**; encrypt-at-rest unchanged. *Everything from v3.34.0 carries forward.*
 
@@ -499,7 +501,7 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases) and run it.
 
-Direct link to the current release: [`GhostIntel98-Setup-3.35.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.35.0/GhostIntel98-Setup-3.35.0.exe)
+Direct link to the current release: [`GhostIntel98-Setup-3.36.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.36.0/GhostIntel98-Setup-3.36.0.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is **formally verified internally** — symbolic (ProVerif) +
 computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not**
 FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.6.8/GhostIntel98-Setup-3.6.8.exe).
@@ -507,7 +509,7 @@ FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Se
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\GhostIntel98-Setup-3.35.0.exe -Algorithm SHA256
+Get-FileHash .\GhostIntel98-Setup-3.36.0.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
