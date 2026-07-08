@@ -38,13 +38,15 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`GhostIntel98-Setup-3.36.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
+> **Install:** download [`GhostIntel98-Setup-3.37.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
 
 > **📘 User guides** — plain-language, step-by-step (download or read in-browser):
 > - [**SOCMINT: X, Telegram & WhatsApp**](docs/guides/SOCMINT-Tutorial.pdf) — set up and run the social-media collectors, per platform, with the Tor / clearnet and opsec caveats. ([markdown](docs/guides/socmint-tutorial.md))
 > - [**How Searchlight Learns**](docs/guides/Searchlight-Learning-Guide.pdf) — how the username-sweep detector gets smarter from your own labels, and when to turn ML on. ([markdown](docs/guides/searchlight-learning.md))
 
 ## Status
+
+**v3.37.0** — **An offline invoice generator.** From GhostExodus ("investigators may find this useful to calculate their invoice stuff and export it"). A new free **Invoices** module: build a month of work as **line items** (date + start/end time → hours are derived, e.g. 12:00–15:30 = 3.5 h), apply a **flat hourly rate** with an optional **tax/VAT %** and a currency, and watch the totals foot live. Add your **and the client's** name, company, and **logo**, an optional **signature** (draw on a pad or upload an image), then **export to PDF** — the on-screen preview *is* the exported document. It **remembers your details**: reusable sender/client profiles, a list of past invoices you can reopen or duplicate, and an auto-incrementing invoice number, all **encrypted at rest** through the vault. Fully offline — no network, no new dependency. Built subagent-driven over **9 TDD tasks** with a **parallel adversarial whole-branch review** that caught and fixed a **critical** before ship (a renderer-supplied asset ref reached the filesystem unvalidated — a vault-exfiltration path — now gated by `ensureFileName` with defense-in-depth and a traversal-rejection test), plus verified minors folded in (money now rounds to cents and line amounts foot to the subtotal; no unrounded `0.3333…` hours; signature mime tracks the file). Every user-supplied string is HTML-escaped in the printable invoice (XSS fence). **3,271 automated tests** green (1 skipped); typecheck clean; **no new egress**; encrypt-at-rest unchanged. *Everything from v3.36.0 carries forward.*
 
 **v3.36.0** — **A rounded Windows-Media-Player Jukebox and a cleaner News add-stream flow.** Two items from GhostExodus's field feedback. **(1) The Jukebox is rebuilt** into the rounded chrome shell from his mockup: a **3-state shade** (slim strip → deck-with-playlist → full-with-drawer), a **real 10-band graphic equalizer** (Web-Audio peaking bands, presets, the analyser tapping *after* the EQ so the visualizer shows what you hear), a fold-out **stream-station manager** (add/edit/remove, up/down reorder, Save List, and a Test button that probes reachability through the *same* opt-in egress gate as playback — off means it never touches the network), and an **honest format readout** (codec · bitrate · channels · sample-rate from the file's real tags; bit-depth shown **only** when the container actually declares it, so MP3s don't get a fabricated "16-bit"). Same functions as before, restyled and extended; the current docked width is preserved. **(2) News custom streams** are now added through an **Add-stream modal** (Label · kind · URL · OK/Cancel) instead of an always-visible inline form, and the redundant per-row pop-out button is gone — less in the visual path, and an invalid entry keeps the dialog open with your text intact. Built subagent-driven over **11 TDD tasks** with a **parallel adversarial whole-branch review**: two confirmed findings auto-fixed before ship (a stale-settings write race and a vacuous IPC test), four verified minors folded in (modal input retention, a timed-out Test probe that now tears down, and two coverage gaps). **3,240 automated tests** green (1 skipped); typecheck clean; **no new egress** (streaming stays opt-in); no new dependency; encrypt-at-rest unchanged. *Everything from v3.35.0 carries forward.*
 
@@ -501,7 +503,7 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases) and run it.
 
-Direct link to the current release: [`GhostIntel98-Setup-3.36.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.36.0/GhostIntel98-Setup-3.36.0.exe)
+Direct link to the current release: [`GhostIntel98-Setup-3.37.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.37.0/GhostIntel98-Setup-3.37.0.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is **formally verified internally** — symbolic (ProVerif) +
 computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not**
 FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.6.8/GhostIntel98-Setup-3.6.8.exe).
@@ -509,7 +511,7 @@ FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Se
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\GhostIntel98-Setup-3.36.0.exe -Algorithm SHA256
+Get-FileHash .\GhostIntel98-Setup-3.37.0.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
