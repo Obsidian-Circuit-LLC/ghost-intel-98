@@ -6,6 +6,7 @@ import { mkdir } from 'node:fs/promises';
 import type { Invoice, Profile, InvoiceStoreData, InvoiceAsset } from '@shared/invoice-types';
 import { secureReadText, secureReadFile, secureWriteFile } from '../storage/secure-fs';
 import { dataRoot } from '../storage/paths';
+import { ensureFileName } from '../security/validate';
 
 const EMPTY: InvoiceStoreData = { invoices: [], profiles: [], seq: 0 };
 const file = (): string => join(dataRoot(), 'invoices.json');
@@ -72,6 +73,11 @@ export async function putAsset(bytes: Buffer, mime: string): Promise<string> {
   return ref;
 }
 export async function getAsset(ref: string): Promise<InvoiceAsset | null> {
+  // Defense-in-depth: the IPC boundary already gates `ref` with ensureFileName, but this is a
+  // renderer-reachable read primitive — re-validate here so a traversal ref ('../invoices.json',
+  // '../../../../etc/passwd', NUL) can never reach secureReadFile and exfiltrate a decrypted vault
+  // file or any host file the main process can read. Rejects rather than silently reading.
+  ensureFileName(ref, 'assetRef');
   try {
     const buf = await secureReadFile(join(assetsDir(), ref));
     const mime = mimeFor(ref);

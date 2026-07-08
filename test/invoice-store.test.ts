@@ -41,4 +41,14 @@ describe('invoice store', () => {
     expect(a?.mime).toBe('image/png');
     expect(a?.dataUrl.startsWith('data:image/png;base64,')).toBe(true);
   });
+  it('getAsset rejects a path-traversal / non-filename ref (no arbitrary-file read)', async () => {
+    // A hostile renderer must not be able to escape invoice-assets/ and read the vault or host
+    // files. ensureFileName rejects separators, traversal, and NUL before any secureReadFile.
+    for (const ref of ['../invoices.json', '../../../../etc/passwd', 'sub/dir.png', '..', '.', 'a\0b.png', '']) {
+      await expect(store.getAsset(ref)).rejects.toThrow();
+    }
+    // A legitimate `<uuid>.<ext>` ref still resolves normally.
+    const ok = await store.putAsset(Buffer.from([9]), 'image/png');
+    expect((await store.getAsset(ok))?.mime).toBe('image/png');
+  });
 });

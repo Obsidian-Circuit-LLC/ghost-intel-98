@@ -1341,7 +1341,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.invoices.saveProfile, (...a) => invoiceStore.saveProfile(ensureProfile(a[0])));
   safeHandle(channels.invoices.removeProfile, (...a) => invoiceStore.removeProfile(a[0] as string));
   safeHandle(channels.invoices.putAsset, (...a) => { const { bytes, mime } = ensureAssetInput(a[0]); return invoiceStore.putAsset(bytes, mime); });
-  safeHandle(channels.invoices.getAsset, (...a) => invoiceStore.getAsset(a[0] as string));
+  safeHandle(channels.invoices.getAsset, (...a) => invoiceStore.getAsset(ensureFileName(a[0], 'assetRef')));
   safeHandle(channels.invoices.exportPdf, async (...a) => {
     const { html } = a[0] as { html: string };
     const pdf = await renderInvoicePdf(html);
