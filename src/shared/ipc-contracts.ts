@@ -36,6 +36,7 @@ import type { InvestigationScene, SceneDelta } from './investigation-graph';
 import type { RunEvent } from './investigation-agent';
 import type { RunBudget } from './investigation-types';
 import type { IntelReport } from './investigation-report';
+import type { Invoice, Profile, InvoiceAsset } from './invoice-types';
 
 /**
  * Metadata written after each retrain cycle.
@@ -630,6 +631,12 @@ export const channels = {
       // Same UUID gate / bounded-runId filter as `generate`; no LLM, no egress.
       save: 'investigation:report:save'
     }
+  },
+  invoices: {
+    list: 'invoices:list', save: 'invoices:save', remove: 'invoices:remove', duplicate: 'invoices:duplicate',
+    nextNumber: 'invoices:nextNumber',
+    listProfiles: 'invoices:listProfiles', saveProfile: 'invoices:saveProfile', removeProfile: 'invoices:removeProfile',
+    putAsset: 'invoices:putAsset', getAsset: 'invoices:getAsset', exportPdf: 'invoices:exportPdf'
   }
 } as const;
 
@@ -1086,6 +1093,21 @@ export interface ApiContracts {
   // SP-7 INTELREPORT — render the report as a PDF and save it via the OS dialog; returns the saved
   // path, or null if the user cancels. Same caseId/runId gating as `generate`.
   [channels.investigation.report.save]: { args: [string, { runId?: string }?]; returns: string | null };
+
+  // Invoice generator (core module) — see src/shared/invoice-types.ts.
+  [channels.invoices.list]: { args: []; returns: Invoice[] };
+  [channels.invoices.save]: { args: [Invoice]; returns: Invoice };
+  [channels.invoices.remove]: { args: [string]; returns: void };
+  [channels.invoices.duplicate]: { args: [string]; returns: Invoice };
+  [channels.invoices.nextNumber]: { args: []; returns: string };
+  [channels.invoices.listProfiles]: { args: []; returns: Profile[] };
+  [channels.invoices.saveProfile]: { args: [Profile]; returns: Profile };
+  [channels.invoices.removeProfile]: { args: [string]; returns: void };
+  [channels.invoices.putAsset]: { args: [{ bytes: number[]; mime: string }]; returns: string };
+  [channels.invoices.getAsset]: { args: [string]; returns: InvoiceAsset | null };
+  [channels.invoices.exportPdf]: { args: [{ html: string }]; returns: string | null };
+  // ^ takes prebuilt HTML (the renderer already has renderInvoiceHtml for the preview) so main never
+  //   imports a renderer module. The renderer resolves asset refs → data URLs before building the HTML.
 }
 
 export const BGCONN_LOCK_EXEMPT_CHANNELS = ['bgconn:status', 'bgconn:stop'] as const;

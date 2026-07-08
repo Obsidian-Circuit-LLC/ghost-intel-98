@@ -1195,3 +1195,44 @@ input.ga98-text, select.ga98-text {
 .ga98-sol-canvas { position: absolute; inset: 0; z-index: 24000; pointer-events: none; width: 100%; height: 100%; }
 .ga98-sol-win { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 24500; pointer-events: none; }
 .ga98-sol-win .window { pointer-events: auto; }
+
+/* ---------------------------------------------------------------------------
+ * Invoices module — two-pane host (saved list + editor/preview). Tables restate
+ * their own background on a CLASS selector so the bundled 98.css element rule
+ * (`table{background:white}`) can't override the Win98 grey chrome (see the
+ * "98.css table white cascade" note). The preview pane is a deliberate white
+ * "paper" surface — it hosts the exact printable HTML (preview == PDF output).
+ * ------------------------------------------------------------------------- */
+.ga98-invoices { display: flex; height: 100%; overflow: hidden; }
+.ga98-invoices-list {
+  width: 220px; flex: 0 0 220px; display: flex; flex-direction: column;
+  border-right: 1px solid var(--ga98-shadow-dark); background: var(--ga98-grey); overflow-y: auto;
+}
+.ga98-invoices-toolbar { padding: 6px; border-bottom: 1px solid var(--ga98-shadow-dark); }
+.ga98-invoices-list ul { list-style: none; margin: 0; padding: 0; }
+.ga98-invoices-list li { display: flex; align-items: center; gap: 2px; padding: 2px 4px; }
+.ga98-invoices-list li.selected { background: var(--ga98-blue); color: #fff; }
+.ga98-invoices-open { flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ga98-invoices-empty { color: var(--ga98-shadow-dark); padding: 8px; font-style: italic; }
+.ga98-invoices-editor { flex: 1; display: flex; flex-direction: column; overflow-y: auto; padding: 8px; }
+.ga98-invoices-actions { display: flex; gap: 6px; margin-bottom: 8px; }
+.ga98-invoices-placeholder { margin: auto; color: var(--ga98-shadow-dark); }
+
+.ga98-invoice-form { display: flex; flex-direction: column; gap: 10px; }
+.ga98-invoice-parties { display: flex; gap: 10px; flex-wrap: wrap; }
+.ga98-invoice-party { flex: 1; min-width: 220px; }
+.ga98-invoice-meta { flex-wrap: wrap; gap: 8px; }
+.ga98-invoice-lines { width: 100%; border-collapse: collapse; background: var(--ga98-grey); }
+.ga98-invoice-lines th, .ga98-invoice-lines td { border: 1px solid var(--ga98-shadow-dark); padding: 3px 5px; }
+.ga98-invoice-lines .num { text-align: right; }
+.ga98-invoice-totals { align-self: flex-end; text-align: right; min-width: 220px; }
+.ga98-invoice-signature { display: flex; flex-direction: column; gap: 6px; }
+.ga98-signature-pad { display: inline-flex; flex-direction: column; gap: 4px; }
+.ga98-sig-canvas {
+  border: 1px solid var(--ga98-shadow-dark); background: #fff; box-shadow: inset 1px 1px 0 var(--ga98-shadow-dark);
+  touch-action: none; cursor: crosshair;
+}
+.ga98-invoice-preview {
+  border: 1px solid var(--ga98-shadow-dark); background: #fff; color: #111; padding: 8px; margin-top: 8px;
+  max-height: 360px; overflow: auto;
+}

@@ -317,6 +317,19 @@ const api = {
     reorderStations: (ids: string[]) => ipcRenderer.invoke(channels.media.reorderStations, ids),
     exportStations: () => ipcRenderer.invoke(channels.media.exportStations)
   },
+  invoices: {
+    list: () => ipcRenderer.invoke(channels.invoices.list),
+    save: (invoice: unknown) => ipcRenderer.invoke(channels.invoices.save, invoice),
+    remove: (id: string) => ipcRenderer.invoke(channels.invoices.remove, id),
+    duplicate: (id: string) => ipcRenderer.invoke(channels.invoices.duplicate, id),
+    nextNumber: () => ipcRenderer.invoke(channels.invoices.nextNumber),
+    listProfiles: () => ipcRenderer.invoke(channels.invoices.listProfiles),
+    saveProfile: (profile: unknown) => ipcRenderer.invoke(channels.invoices.saveProfile, profile),
+    removeProfile: (id: string) => ipcRenderer.invoke(channels.invoices.removeProfile, id),
+    putAsset: (bytes: number[], mime: string) => ipcRenderer.invoke(channels.invoices.putAsset, { bytes, mime }),
+    getAsset: (ref: string) => ipcRenderer.invoke(channels.invoices.getAsset, ref),
+    exportPdf: (html: string) => ipcRenderer.invoke(channels.invoices.exportPdf, { html })
+  },
   geoint: {
     snapshot: () => ipcRenderer.invoke(channels.geoint.snapshot),
     addSource: (s: unknown) => ipcRenderer.invoke(channels.geoint.addSource, s),

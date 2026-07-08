@@ -1164,3 +1164,32 @@ export function ensureIdArray(v: unknown): string[] {
   if (!Array.isArray(v)) throw new ValidationError('expected an array of station ids');
   return v.map((x) => { if (typeof x !== 'string' || x.length > 128) throw new ValidationError('id must be a short string'); return x; });
 }
+
+// ---------- invoices ----------
+
+/** Renderer-supplied logo/signature upload: image mime + a byte-array cap (2 MiB) — a hostile
+ *  renderer must not be able to smuggle an arbitrary mime or an unbounded blob into the vault. */
+export function ensureAssetInput(v: unknown): { bytes: Buffer; mime: string } {
+  if (!v || typeof v !== 'object') throw new ValidationError('asset must be an object');
+  const o = v as { bytes?: unknown; mime?: unknown };
+  if (o.mime !== 'image/png' && o.mime !== 'image/jpeg') throw new ValidationError('asset.mime must be image/png or image/jpeg');
+  if (!Array.isArray(o.bytes)) throw new ValidationError('asset.bytes must be a byte array');
+  if (o.bytes.length > 2_000_000) throw new ValidationError('asset too large (max 2MB)');
+  return { bytes: Buffer.from(o.bytes as number[]), mime: o.mime };
+}
+
+/** Minimal shape guard for a persisted invoice — the store is the source of truth for the rest. */
+export function ensureInvoice(v: unknown): import('@shared/invoice-types').Invoice {
+  if (!v || typeof v !== 'object') throw new ValidationError('invoice must be an object');
+  const o = v as { id?: unknown; number?: unknown };
+  if (typeof o.id !== 'string' || typeof o.number !== 'string') throw new ValidationError('invoice.id/number must be strings');
+  return v as import('@shared/invoice-types').Invoice;
+}
+
+/** Minimal shape guard for a persisted sender/client profile. */
+export function ensureProfile(v: unknown): import('@shared/invoice-types').Profile {
+  if (!v || typeof v !== 'object') throw new ValidationError('profile must be an object');
+  const o = v as { id?: unknown; kind?: unknown };
+  if (typeof o.id !== 'string' || (o.kind !== 'sender' && o.kind !== 'client')) throw new ValidationError('bad profile');
+  return v as import('@shared/invoice-types').Profile;
+}

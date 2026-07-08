@@ -74,6 +74,7 @@ import type {
 } from '../shared/searchlight/types';
 import type { HarvestedItem, MonitoredChannel } from '../shared/socmint/types';
 import type { DocEntry, DocImportResult } from '../shared/documents-types';
+import type { Invoice, Profile, InvoiceAsset } from '../shared/invoice-types';
 
 export interface MailDraft {
   id: string;
@@ -382,6 +383,19 @@ export interface GhostApi {
     deleteStation(id: string): Promise<void>;
     reorderStations(ids: string[]): Promise<MediaLibrarySnapshot>;
     exportStations(): Promise<string | null>;
+  };
+  invoices: {
+    list(): Promise<Invoice[]>;
+    save(invoice: Invoice): Promise<Invoice>;
+    remove(id: string): Promise<void>;
+    duplicate(id: string): Promise<Invoice>;
+    nextNumber(): Promise<string>;
+    listProfiles(): Promise<Profile[]>;
+    saveProfile(profile: Profile): Promise<Profile>;
+    removeProfile(id: string): Promise<void>;
+    putAsset(bytes: number[], mime: string): Promise<string>;
+    getAsset(ref: string): Promise<InvoiceAsset | null>;
+    exportPdf(html: string): Promise<string | null>;
   };
   geoint: {
     snapshot(): Promise<GeoSnapshot>;
