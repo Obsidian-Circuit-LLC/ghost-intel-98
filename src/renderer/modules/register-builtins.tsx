@@ -46,6 +46,7 @@ import { GhostScrapeModule } from './ghostscrape/GhostScrapeModule';
 import { OSINTToolkitModule } from './osint-toolkit/OSINTToolkitModule';
 import { MindsEyeModule } from './minds-eye/MindsEyeModule';
 import { InvestigationGraphModule } from './investigation-graph/InvestigationGraphModule';
+import { InvoicesModule } from './invoices/InvoicesModule';
 
 // ---------------------------------------------------------------------------
 // Adapter components — each has the uniform { spec: WindowSpec } signature and
@@ -215,6 +216,10 @@ function InvestigationGraphAdapter({ spec }: { spec: WindowSpec }): JSX.Element 
   return <InvestigationGraphModule caseId={spec.props?.['caseId'] as string | undefined} />;
 }
 
+function InvoicesAdapter({ spec: _spec }: { spec: WindowSpec }): JSX.Element {
+  return <InvoicesModule />;
+}
+
 // ---------------------------------------------------------------------------
 // Registration
 // Titles are VERBATIM from Desktop.tsx moduleTitles.
@@ -262,4 +267,5 @@ export function registerBuiltins(): void {
   registerModule({ key: 'osint-toolkit', title: 'OSINT Toolkit', glyph: '🧰', component: OSINTToolkitAdapter, builtin: true, defaultWidth: 360, defaultHeight: 470 });
   registerModule({ key: 'minds-eye', title: "Mind's Eye", glyph: '👁', component: MindsEyeAdapter, builtin: true, defaultWidth: 760, defaultHeight: 560 });
   registerModule({ key: 'investigation-graph', title: 'Investigation Graph', glyph: '🕸', component: InvestigationGraphAdapter, builtin: true, defaultWidth: 900, defaultHeight: 640, category: 'osint', subcategory: 'Identity' });
+  registerModule({ key: 'invoices', title: 'Invoices', glyph: '🧾', component: InvoicesAdapter, builtin: true, defaultWidth: 900, defaultHeight: 640 });
 }
