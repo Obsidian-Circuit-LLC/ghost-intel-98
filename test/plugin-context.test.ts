@@ -60,6 +60,19 @@ describe('PluginContext capability scoping', () => {
     expect(bare.vectors).toBeUndefined();
   });
 
+  it('background-tasks capability gates ctx.schedule', () => {
+    const scheduleSpy = vi.fn(() => ({ dispose: vi.fn() }));
+    const d: ContextDeps = { ...deps(true), schedule: scheduleSpy };
+    const ctx = createPluginContext('osint', ['background-tasks'], d);
+    expect(ctx.schedule).toBeDefined();
+    const fn = () => {};
+    ctx.schedule!(120_000, fn);
+    expect(scheduleSpy).toHaveBeenCalledWith('osint', 120_000, fn);
+
+    const bare = createPluginContext('osint', [], deps(true));
+    expect(bare.schedule).toBeUndefined();
+  });
+
   it('bgconn + egress: egress.fetch still rejects loopback/socks via the SSRF gate', async () => {
     const ssrf = (u: string): string => {
       // Mirror the real wire-deps validator: reject non-public/non-http(s) targets.
