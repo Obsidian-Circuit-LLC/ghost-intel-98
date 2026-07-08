@@ -54,6 +54,7 @@ import * as chat from './services/chat';
 import { stopAis } from './services/livefeeds/ais-stream';
 import { cancelAllSweeps } from './searchlight/sweep';
 import { killSidecar as killXSidecar } from './x/sidecar-client';
+import { disposeAllSchedules } from './plugins/schedule';
 
 const isDev = !!process.env['ELECTRON_RENDERER_URL'];
 
@@ -435,7 +436,7 @@ app.on('before-quit', (event) => {
   });
 });
 
-app.on('will-quit', () => { localAi.stop(); getBgTor()?.killNow(); getPluginTor()?.killNow(); killXSidecar(); }); // sync backstops (idempotent)
+app.on('will-quit', () => { localAi.stop(); getBgTor()?.killNow(); getPluginTor()?.killNow(); killXSidecar(); disposeAllSchedules(); }); // sync backstops (idempotent)
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
