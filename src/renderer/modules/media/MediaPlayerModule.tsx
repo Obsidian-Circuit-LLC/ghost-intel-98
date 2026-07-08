@@ -93,6 +93,8 @@ export function MediaPlayerModule({ spec }: { spec: WindowSpec }): JSX.Element {
   const streamingEnabled = settings?.media.streamingEnabled ?? false;
   const visualizer = settings?.media.visualizer ?? true;
   const jukeboxExpanded = settings?.media.jukeboxExpanded ?? false;
+  const jukeboxMode = settings?.media.jukeboxMode ?? 'strip';
+  const eq = settings?.media.eq ?? { enabled: false, gains: [0,0,0,0,0,0,0,0,0,0], preset: 'Flat' };
 
   const [snap, setSnap] = useState<MediaLibrarySnapshot | null>(null);
   const [queue, setQueue] = useState<QueueItem[]>([]);
@@ -309,8 +311,8 @@ export function MediaPlayerModule({ spec }: { spec: WindowSpec }): JSX.Element {
   // Persist jukeboxExpanded from the LIVE `collapsed` state (!collapsed), never the settings-derived
   // `jukeboxExpanded` const — the latter lags a just-fired caret toggle by a store round-trip, so
   // writing it here could revert the user's expand choice. `collapsed` is always current.
-  function enableStreaming(): void { void patch({ media: { streamingEnabled: true, visualizer, jukeboxExpanded: !collapsed } }); }
-  function toggleVisualizer(): void { void patch({ media: { streamingEnabled, visualizer: !visualizer, jukeboxExpanded: !collapsed } }); }
+  function enableStreaming(): void { void patch({ media: { streamingEnabled: true, visualizer, jukeboxExpanded: !collapsed, jukeboxMode, eq } }); }
+  function toggleVisualizer(): void { void patch({ media: { streamingEnabled, visualizer: !visualizer, jukeboxExpanded: !collapsed, jukeboxMode, eq } }); }
 
   const currentItem = current >= 0 ? queue[current] : null;
   const titleText = currentItem ? (currentItem.name ?? currentItem.title) : '';
@@ -383,7 +385,7 @@ export function MediaPlayerModule({ spec }: { spec: WindowSpec }): JSX.Element {
         <label style={{ fontSize: 11, marginLeft: 8 }}>
           <input type="checkbox" checked={visualizer} onChange={toggleVisualizer} /> Viz
         </label>
-        <button onClick={() => setCollapsed((c) => { const next = !c; void patch({ media: { streamingEnabled, visualizer, jukeboxExpanded: !next } }); return next; })}
+        <button onClick={() => setCollapsed((c) => { const next = !c; void patch({ media: { streamingEnabled, visualizer, jukeboxExpanded: !next, jukeboxMode, eq } }); return next; })}
           style={{ marginLeft: 8, minWidth: 0, padding: '0 6px' }}
           title={collapsed ? 'Expand library & stations' : 'Collapse to the compact player'}
           aria-pressed={collapsed} aria-label={collapsed ? 'Expand' : 'Collapse'}>{collapsed ? '▼' : '▲'}</button>

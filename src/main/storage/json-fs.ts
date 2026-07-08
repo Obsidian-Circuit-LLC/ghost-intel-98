@@ -931,7 +931,11 @@ export function mergeSettings(base: AppSettings, patch: Partial<AppSettings>): A
     mail: { ...base.mail, ...(patch.mail ?? {}) },
     browser: { ...base.browser, ...(patch.browser ?? {}) },
     bgconn: { ...base.bgconn, ...(patch.bgconn ?? {}) },
-    media: { ...base.media, ...(patch.media ?? {}) },
+    media: {
+      ...base.media,
+      ...(patch.media ?? {}),
+      eq: { ...base.media.eq, ...(patch.media?.eq ?? {}) },
+    },
     geoint: { ...base.geoint, ...(patch.geoint ?? {}) },
     markets: {
       ...base.markets,

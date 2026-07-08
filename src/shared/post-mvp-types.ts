@@ -159,6 +159,12 @@ export interface MediaTrack {
   durationMs?: number;
   /** Filename of cached cover art under media-art/, if the file had embedded art. */
   artRef?: string;
+  /** Container/codec + stream format, read from music-metadata at index time (best-effort). */
+  bitrate?: number;       // bits/sec
+  sampleRate?: number;    // Hz
+  channels?: number;      // 1 = mono, 2 = stereo
+  bitsPerSample?: number; // present only for lossless containers (WAV/FLAC/AIFF); absent for MP3
+  codec?: string;         // e.g. 'MPEG 1 Layer 3', 'FLAC'
 }
 
 export interface MediaStation {
