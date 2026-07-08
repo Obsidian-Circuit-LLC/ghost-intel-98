@@ -4,7 +4,7 @@ import { CAPABILITIES, type Capability, type PluginManifest } from '../src/share
 describe('plugin-types', () => {
   it('exposes the closed capability set', () => {
     expect([...CAPABILITIES].sort()).toEqual(
-      ['authorized-target-egress', 'case-storage', 'egress', 'entity-registry', 'investigation', 'persistent-background-connection', 'plugin-storage', 'reasoning-runtime', 'secrets', 'timeline', 'vector-recall']
+      ['authorized-target-egress', 'background-tasks', 'case-storage', 'egress', 'entity-registry', 'investigation', 'persistent-background-connection', 'plugin-storage', 'reasoning-runtime', 'secrets', 'timeline', 'vector-recall']
     );
   });
 
