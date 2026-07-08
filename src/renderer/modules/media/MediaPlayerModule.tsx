@@ -16,7 +16,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import Hls from 'hls.js';
 import type { MediaLibrarySnapshot, MediaStation, MediaTrack } from '@shared/post-mvp-types';
-import type { JukeboxMode } from '@shared/types';
+import type { AppSettings, JukeboxMode } from '@shared/types';
 import { useSettings, useWindows, type WindowSpec } from '../../state/store';
 import { toast } from '../../state/toasts';
 import { resolveSource, isHlsUrl } from './resolveSource';
@@ -122,7 +122,6 @@ export function MediaPlayerModule({ spec }: { spec: WindowSpec }): JSX.Element {
   const patch = useSettings((s) => s.patch);
   const streamingEnabled = settings?.media.streamingEnabled ?? false;
   const visualizer = settings?.media.visualizer ?? true;
-  const jukeboxExpanded = settings?.media.jukeboxExpanded ?? false;
   const eq: EqState = settings?.media.eq ?? { enabled: false, gains: EQ_FLAT_GAINS, preset: 'Flat' };
 
   const [snap, setSnap] = useState<MediaLibrarySnapshot | null>(null);
@@ -167,10 +166,17 @@ export function MediaPlayerModule({ spec }: { spec: WindowSpec }): JSX.Element {
   const hlsRef = useRef<Hls | null>(null);
   const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
 
-  // Re-send the FULL media block on every settings write: the base `media` spread in mergeSettings
-  // is shallow, so a partial write would drop the sibling fields. jukeboxMode/eq are overridden by
-  // the individual writers below.
-  const mediaBlock = { streamingEnabled, visualizer, jukeboxExpanded, jukeboxMode: mode, eq };
+  // Send ONLY the changed media field(s) on every settings write. mergeSettings deep-merges the
+  // `media` sub-object main-side (json-fs.ts — and it deep-merges media.eq too), so a partial write
+  // preserves the siblings from base.media and cannot drop them. Re-sending the whole block rebuilt
+  // from this (async-lagging) renderer cache is both unnecessary and racy: a second write fired
+  // before the first patch's IPC round-trip resolves would carry the stale sibling and clobber the
+  // field the first write just changed (mirrors NewsFeedControls.patchNews for geoint).
+  // `patch`'s Partial<AppSettings> is a SHALLOW partial, so a genuinely-partial media payload is
+  // cast past that check rather than fabricating the untouched fields just to satisfy the type.
+  function patchMedia(p: Partial<AppSettings['media']>): void {
+    void patch({ media: p } as Partial<AppSettings>);
+  }
 
   const loadSnapshot = useCallback(async () => {
     const s = await window.api.media.getSnapshot();
@@ -292,10 +298,10 @@ export function MediaPlayerModule({ spec }: { spec: WindowSpec }): JSX.Element {
   // ---- shade / EQ persistence ----
   function setModePersist(nextMode: JukeboxMode): void {
     setMode(nextMode);
-    void patch({ media: { ...mediaBlock, jukeboxMode: nextMode } });
+    patchMedia({ jukeboxMode: nextMode });
   }
   function onEqChange(nextEq: EqState): void {
-    void patch({ media: { ...mediaBlock, eq: nextEq } });
+    patchMedia({ eq: nextEq });
     graphRef.current?.applyGains(nextEq.enabled ? nextEq.gains : EQ_FLAT_GAINS);
   }
 
@@ -337,8 +343,8 @@ export function MediaPlayerModule({ spec }: { spec: WindowSpec }): JSX.Element {
 
   // ---- stations ----
   function playStation(s: MediaStation): void { playItem({ title: s.label, url: s.url }, -1); }
-  function enableStreaming(): void { void patch({ media: { ...mediaBlock, streamingEnabled: true } }); }
-  function toggleVisualizer(): void { void patch({ media: { ...mediaBlock, visualizer: !visualizer } }); }
+  function enableStreaming(): void { patchMedia({ streamingEnabled: true }); }
+  function toggleVisualizer(): void { patchMedia({ visualizer: !visualizer }); }
 
   const currentItem = current >= 0 ? queue[current] : null;
   const titleText = currentItem ? (currentItem.name ?? currentItem.title) : '';
