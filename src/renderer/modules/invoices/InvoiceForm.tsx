@@ -12,8 +12,8 @@ import { renderInvoiceHtml } from './invoice-html';
 const CURRENCIES = ['USD', 'GBP', 'EUR', 'CAD', 'AUD', 'JPY'];
 
 export function InvoiceForm(
-  { invoice, assets, onChange, onUploadLogo }:
-  { invoice: Invoice; assets: Record<string, string>; onChange: (inv: Invoice) => void; onUploadLogo: (which: 'sender' | 'client', file: File) => void }
+  { invoice, assets, onChange, onUploadLogo, onCaptureSignature }:
+  { invoice: Invoice; assets: Record<string, string>; onChange: (inv: Invoice) => void; onUploadLogo: (which: 'sender' | 'client', file: File) => void; onCaptureSignature: (dataUrl: string, mime: 'image/png' | 'image/jpeg') => void }
 ): JSX.Element {
   const t = computeTotals(invoice.lines, invoice.rate, invoice.taxPct);
   const setParty = (which: 'sender' | 'client', patch: Partial<Party>): void =>
@@ -92,10 +92,10 @@ export function InvoiceForm(
           <input className="ga98-text" aria-label="Signer name" value={invoice.signature?.signerName ?? ''}
             onChange={(e) => onChange({ ...invoice, signature: { ...invoice.signature, signerName: e.target.value } })} />
         </div>
-        <SignaturePad onCapture={(_dataUrl, _mime) => {
-          // Draw/upload capture is persisted by the parent host (putAsset → signatureRef); the form only
-          // carries the captured date here — the host wires the encrypted-asset ref on save.
-          onChange({ ...invoice, signature: { ...invoice.signature, signedDate: invoice.issueDate } });
+        <SignaturePad onCapture={(dataUrl, mime) => {
+          // Hand the captured image up to the host, which encrypts it via putAsset, caches the data URL,
+          // and stamps signature.signatureRef + signedDate so it flows into the preview and the PDF.
+          onCaptureSignature(dataUrl, mime);
         }} />
       </div>
 

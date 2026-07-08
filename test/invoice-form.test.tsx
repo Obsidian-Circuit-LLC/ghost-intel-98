@@ -45,7 +45,7 @@ afterEach(() => {
 describe('InvoiceForm', () => {
   it('renders the live grand total (3.5h*20=70 +10% = 77)', async () => {
     await act(async () => {
-      root.render(<InvoiceForm invoice={inv} assets={{}} onChange={() => {}} onUploadLogo={() => {}} />);
+      root.render(<InvoiceForm invoice={inv} assets={{}} onChange={() => {}} onUploadLogo={() => {}} onCaptureSignature={() => {}} />);
     });
     expect(container.textContent).toMatch(/77/);
   });
@@ -53,7 +53,7 @@ describe('InvoiceForm', () => {
   it('editing the rate emits an updated invoice', async () => {
     const onChange = vi.fn();
     await act(async () => {
-      root.render(<InvoiceForm invoice={inv} assets={{}} onChange={onChange} onUploadLogo={() => {}} />);
+      root.render(<InvoiceForm invoice={inv} assets={{}} onChange={onChange} onUploadLogo={() => {}} onCaptureSignature={() => {}} />);
     });
     const rate = container.querySelector('input[aria-label="Rate"]') as HTMLInputElement;
     await act(async () => { typeInto(rate, '40'); });

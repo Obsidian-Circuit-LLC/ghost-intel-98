@@ -109,6 +109,22 @@ export function InvoicesModule(): JSX.Element {
     setInvoice((prev) => (prev ? { ...prev, [which]: { ...prev[which], logoRef: ref } } : prev));
   }
 
+  // Signature capture (draw or upload) arrives as a data URL. Mirror the logo path: decode to bytes,
+  // persist as an encrypted asset via putAsset, cache the resolved data URL, and stamp
+  // signature.signatureRef + signedDate so the captured image flows into the preview and the PDF.
+  async function captureSignature(dataUrl: string): Promise<void> {
+    if (!invoice) return;
+    const m = /^data:([^;,]+)[^,]*?(;base64)?,([\s\S]*)$/.exec(dataUrl);
+    if (!m) return;
+    const mime = m[1] === 'image/jpeg' ? 'image/jpeg' : 'image/png';
+    const bin = m[2] ? atob(m[3]) : decodeURIComponent(m[3]);
+    const bytes = Array.from(bin, (ch) => ch.charCodeAt(0));
+    const ref = await window.api.invoices.putAsset(bytes, mime);
+    const a = await window.api.invoices.getAsset(ref);
+    if (a) setAssets((prev) => ({ ...prev, [ref]: a.dataUrl }));
+    setInvoice((prev) => (prev ? { ...prev, signature: { ...prev.signature, signatureRef: ref, signedDate: prev.issueDate } } : prev));
+  }
+
   return (
     <div className="ga98-invoices">
       <div className="ga98-invoices-list">
@@ -141,6 +157,7 @@ export function InvoicesModule(): JSX.Element {
               assets={assets}
               onChange={setInvoice}
               onUploadLogo={(which, file) => { void uploadLogo(which, file); }}
+              onCaptureSignature={(dataUrl) => { void captureSignature(dataUrl); }}
             />
           </>
         ) : (
