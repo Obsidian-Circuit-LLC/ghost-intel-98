@@ -7,7 +7,7 @@ import { canonicalPluginHash, verifyPluginSignature, type PluginAsset } from './
 import { getPinnedKeysets, isApiCompatible, type TrustKeyset } from './trust';
 import { createPluginContext, type ContextDeps } from './context';
 import { resolveInside } from './paths';
-import { disposePluginSchedules } from './schedule';
+import { disposePluginSchedules, scheduledPluginIds } from './schedule';
 import type { VerifiedPluginInfo, PluginStatus } from '../../shared/plugin-types';
 
 const MAX_SIG_BYTES = 8192; // ML-DSA-65 sig ~3309 + Ed25519 64; generous cap, bound before verify
@@ -124,6 +124,11 @@ export async function disablePlugin(pluginId: string): Promise<void> {
   for (const fn of list) { try { await fn(); } catch (e) { console.error(`[plugin:${pluginId}] teardown`, e); } }
 }
 export async function disableAllPlugins(): Promise<void> {
-  for (const id of [...teardowns.keys()]) await disablePlugin(id);
+  // Union teardown-registered plugins with schedule-only plugins: a background-tasks plugin that
+  // called ctx.schedule() but never registerTeardown() has no key in `teardowns`, so enumerating
+  // teardowns alone would leave its interval orphaned (violating the no-orphans invariant) whenever
+  // this aggregate is used for a non-quit teardown (hot-reload, disable-all toggle, plugin-set swap).
+  const ids = new Set<string>([...teardowns.keys(), ...scheduledPluginIds()]);
+  for (const id of ids) await disablePlugin(id);
 }
 export function _resetTeardownsForTest(): void { teardowns.clear(); }

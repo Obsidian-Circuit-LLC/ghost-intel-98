@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { registerTeardown, disablePlugin, _resetTeardownsForTest } from '../src/main/plugins/loader';
+import { registerTeardown, disablePlugin, disableAllPlugins, _resetTeardownsForTest } from '../src/main/plugins/loader';
 import { schedulePluginTask, _resetSchedulesForTest } from '../src/main/plugins/schedule';
 
 describe('plugin teardown', () => {
@@ -31,6 +31,17 @@ describe('plugin teardown clears scheduled timers', () => {
     const fn = vi.fn();
     schedulePluginTask('p', 60_000, fn);
     await disablePlugin('p');
+    vi.advanceTimersByTime(180_000);
+    expect(fn).not.toHaveBeenCalled();
+  });
+
+  it('disableAllPlugins() disposes a schedule-only plugin that registered no teardown (no orphan)', async () => {
+    // A background-tasks plugin that called ctx.schedule() but never registerTeardown() has no key
+    // in the teardowns map. If disableAllPlugins() enumerates only teardowns.keys(), its interval
+    // orphans past the aggregate teardown and keeps firing against torn-down state.
+    const fn = vi.fn();
+    schedulePluginTask('sched-only', 60_000, fn); // NOTE: no registerTeardown()
+    await disableAllPlugins();
     vi.advanceTimersByTime(180_000);
     expect(fn).not.toHaveBeenCalled();
   });

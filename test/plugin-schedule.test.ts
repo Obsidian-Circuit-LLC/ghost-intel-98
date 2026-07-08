@@ -79,6 +79,22 @@ describe('plugin schedule registry', () => {
     expect(fn).toHaveBeenCalledTimes(3);
   });
 
+  it('isolates a REJECTING async task — the rejection is caught (not left unhandled), interval keeps firing', async () => {
+    // An `async () => {...}` callback is assignable to `fn: () => void` (Promise<void>). When its
+    // awaited work rejects (e.g. Tor down), fn() returns a rejected promise; a bare sync try/catch
+    // never sees it and the rejection surfaces as an unhandledRejection on the main loop — which
+    // Electron's Node runtime terminates the process on. The wrapper must catch it and log-and-continue.
+    const err = new Error('async boom');
+    const fn = vi.fn(async () => { throw err; });
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    schedulePluginTask('p', 60_000, fn);
+    // advanceTimersByTimeAsync flushes the microtask queue so the .catch handler runs.
+    await vi.advanceTimersByTimeAsync(180_000);
+    expect(fn).toHaveBeenCalledTimes(3);          // interval survives each rejection
+    expect(spy).toHaveBeenCalled();               // rejection was caught+logged, not left unhandled
+    spy.mockRestore();
+  });
+
   it('disposePluginSchedules(id) clears all of that plugin\'s timers, leaving another plugin unaffected', () => {
     const fnP1 = vi.fn();
     const fnP2 = vi.fn();
