@@ -8,13 +8,16 @@ import { secureReadText, secureReadFile, secureWriteFile } from '../storage/secu
 import { dataRoot } from '../storage/paths';
 import { ensureFileName } from '../security/validate';
 
-const EMPTY: InvoiceStoreData = { invoices: [], profiles: [], seq: 0 };
 const file = (): string => join(dataRoot(), 'invoices.json');
 const assetsDir = (): string => join(dataRoot(), 'invoice-assets');
 
 async function read(): Promise<InvoiceStoreData> {
-  try { return { ...EMPTY, ...(JSON.parse(await secureReadText(file())) as Partial<InvoiceStoreData>) }; }
-  catch { return { ...EMPTY, invoices: [], profiles: [] }; }
+  // Build a fresh object with fresh arrays — never spread the shared EMPTY const, or a JSON blob that
+  // lacks `invoices`/`profiles` would alias EMPTY's arrays and later writes would mutate the module const.
+  try {
+    const p = JSON.parse(await secureReadText(file())) as Partial<InvoiceStoreData>;
+    return { invoices: p.invoices ?? [], profiles: p.profiles ?? [], seq: p.seq ?? 0 };
+  } catch { return { invoices: [], profiles: [], seq: 0 }; }
 }
 async function write(d: InvoiceStoreData): Promise<void> { await secureWriteFile(file(), JSON.stringify(d, null, 2)); }
 

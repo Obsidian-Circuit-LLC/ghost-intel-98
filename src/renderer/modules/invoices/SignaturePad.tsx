@@ -2,7 +2,7 @@
  *  parent persists it as an encrypted asset via putAsset. */
 import { useRef, useState } from 'react';
 
-export function SignaturePad({ onCapture }: { onCapture: (dataUrl: string, mime: 'image/png') => void }): JSX.Element {
+export function SignaturePad({ onCapture }: { onCapture: (dataUrl: string, mime: 'image/png' | 'image/jpeg') => void }): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawing = useRef(false);
   const [dirty, setDirty] = useState(false);
@@ -25,8 +25,10 @@ export function SignaturePad({ onCapture }: { onCapture: (dataUrl: string, mime:
   }
   function upload(e: React.ChangeEvent<HTMLInputElement>): void {
     const f = e.target.files?.[0]; if (!f) return;
+    if (f.type !== 'image/png' && f.type !== 'image/jpeg') return; // accept only the two image kinds
+    const mime = f.type; // emit the real mime, not a hardcoded png
     const rd = new FileReader();
-    rd.onload = () => onCapture(String(rd.result), 'image/png');
+    rd.onload = () => onCapture(String(rd.result), mime);
     rd.readAsDataURL(f);
   }
   return (

@@ -50,6 +50,19 @@ describe('SignaturePad', () => {
     expect(onCapture.mock.calls[0][1]).toBe('image/png');
   });
 
+  it('uploading a jpeg emits image/jpeg (mime tracks the file, not a hardcoded png)', async () => {
+    const onCapture = vi.fn();
+    await act(async () => { root.render(<SignaturePad onCapture={onCapture} />); });
+    const file = new File([new Uint8Array([1, 2, 3])], 'sig.jpg', { type: 'image/jpeg' });
+    const input = container.querySelector('input[aria-label="Upload signature"]') as HTMLInputElement;
+    Object.defineProperty(input, 'files', { value: [file] });
+    await act(async () => {
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      await vi.waitFor(() => expect(onCapture).toHaveBeenCalled());
+    });
+    expect(onCapture.mock.calls[0][1]).toBe('image/jpeg');
+  });
+
   it('Clear resets without emitting', async () => {
     const onCapture = vi.fn();
     await act(async () => {

@@ -2,7 +2,7 @@
  *  export (preview == output). Pure + deterministic. Every user string is HTML-escaped (untrusted →
  *  HTML fence). Images are embedded as data URLs resolved from `assets` by ref. */
 import type { Invoice } from '@shared/invoice-types';
-import { hoursBetween, computeTotals, formatMoney } from './calc';
+import { lineHours, round2, computeTotals, formatMoney } from './calc';
 
 function esc(s: string | undefined): string {
   return (s ?? '').replace(/[&<>"']/g, (c) => (
@@ -18,9 +18,9 @@ export function renderInvoiceHtml(invoice: Invoice, assets: Record<string, strin
   const { currency, rate, taxPct } = invoice;
   const t = computeTotals(invoice.lines, rate, taxPct);
   const rows = invoice.lines.map((l) => {
-    const h = hoursBetween(l.start, l.end);
+    const h = lineHours(l);
     return `<tr><td>${esc(l.date)}</td><td>${esc(l.start)}–${esc(l.end)}</td><td>${esc(l.description)}</td>`
-      + `<td class="num">${h}</td><td class="num">${esc(formatMoney(h * rate, currency))}</td></tr>`;
+      + `<td class="num">${h}</td><td class="num">${esc(formatMoney(round2(h * rate), currency))}</td></tr>`;
   }).join('');
   const sig = invoice.signature;
   return [

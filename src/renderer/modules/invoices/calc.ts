@@ -17,11 +17,24 @@ export function hoursBetween(start: string, end: string): number {
   return diff > 0 ? diff / 60 : 0;
 }
 
+/** Round to 2 decimals (cents / hundredths of an hour). +EPSILON avoids 1.005 → 1.00 float wobble. */
+export const round2 = (n: number): number => Math.round((n + Number.EPSILON) * 100) / 100;
+
+/** Canonical hours for a line — rounded to 2dp so what's shown, the per-line amount, and the subtotal
+ *  all derive from ONE value (they foot; no unrounded 0.3333333333 leaks into the invoice). */
+export const lineHours = (line: { start: string; end: string }): number => round2(hoursBetween(line.start, line.end));
+
 export function computeTotals(lines: InvoiceLine[], rate: number, taxPct?: number): { totalHours: number; subtotal: number; tax: number; total: number } {
-  const totalHours = lines.reduce((s, l) => s + hoursBetween(l.start, l.end), 0);
-  const subtotal = totalHours * (Number.isFinite(rate) ? rate : 0);
-  const tax = taxPct ? subtotal * (taxPct / 100) : 0;
-  return { totalHours, subtotal, tax, total: subtotal + tax };
+  const r = Number.isFinite(rate) ? rate : 0;
+  let totalHours = 0;
+  let subtotal = 0;
+  for (const l of lines) {
+    const h = lineHours(l);
+    totalHours = round2(totalHours + h);
+    subtotal = round2(subtotal + round2(h * r)); // sum of rounded line amounts → foots to displayed lines
+  }
+  const tax = taxPct ? round2(subtotal * (taxPct / 100)) : 0;
+  return { totalHours, subtotal, tax, total: round2(subtotal + tax) };
 }
 
 // Node/V8's Intl.NumberFormat does NOT throw for a well-formed-but-unrecognized 3-letter currency
