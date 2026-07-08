@@ -69,7 +69,7 @@ import * as aiConvos from '../storage/ai-conversations';
 import * as briefcase from '../storage/briefcase';
 import * as journal from '../storage/journal';
 import * as voiceModel from '../voice/model-protocol';
-import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityType, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureShellProgram, ensureWhiteboard, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon, ensureSaveToCaseOpts, ensureGeoItem, ensureThreatLayerId, ensureKeyedLayerId, ensureLayerKey, isKeyedLayerId, ensureBookmarkBoard, ensureMarketsSettings, ensureStickyNotes, ensureAiConversation, ensureBriefcaseNote, ensureJournalEntry, ensurePin, ensureUid, ensureMailFlag, stripProtectedSettings, ensureBounds, ensureDocRelPath, ensureDocName, ensureImportSourcePath, ensureNoteBody, ensureIdArray } from '../security/validate';
+import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityType, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureShellProgram, ensureWhiteboard, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon, ensureSaveToCaseOpts, ensureGeoItem, ensureThreatLayerId, ensureKeyedLayerId, ensureLayerKey, isKeyedLayerId, ensureBookmarkBoard, ensureMarketsSettings, ensureStickyNotes, ensureAiConversation, ensureBriefcaseNote, ensureJournalEntry, ensurePin, ensureUid, ensureMailFlag, stripProtectedSettings, ensureBounds, ensureDocRelPath, ensureDocName, ensureImportSourcePath, ensureNoteBody, ensureIdArray, ensureInvoice, ensureProfile, ensureAssetInput } from '../security/validate';
 import * as entities from '../storage/entities';
 import * as bioStore from '../storage/bio-images';
 import * as ftp from '../services/ftp';
@@ -77,6 +77,8 @@ import * as backup from '../services/backup';
 import * as exiftool from '../services/exiftool';
 import * as whiteboard from '../storage/whiteboard';
 import * as mediaLib from '../media/library';
+import * as invoiceStore from '../invoices/store';
+import { renderInvoicePdf } from '../invoices/export';
 import { adHocAllowlist } from '../media/protocol';
 import { parseM3u, toM3u } from '../media/m3u';
 import { parseFeedList, feedToUpsert } from '../services/feed-import';
@@ -1325,6 +1327,30 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     try { const st = await lstat(r.filePath); if (st.isSymbolicLink()) throw new Error('Refusing to write to a symbolic link.'); }
     catch (err) { if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err; }
     await writeFile(r.filePath, JSON.stringify(stations, null, 2), 'utf8');
+    return basename(r.filePath);
+  });
+
+  // ---- Invoices (encrypted CRUD + assets + PDF export; PDF export takes prebuilt HTML from the
+  // renderer — main never imports a renderer module) ----
+  safeHandle(channels.invoices.list, () => invoiceStore.listInvoices());
+  safeHandle(channels.invoices.save, (...a) => invoiceStore.saveInvoice(ensureInvoice(a[0])));
+  safeHandle(channels.invoices.remove, (...a) => invoiceStore.removeInvoice(a[0] as string));
+  safeHandle(channels.invoices.duplicate, (...a) => invoiceStore.duplicateInvoice(a[0] as string));
+  safeHandle(channels.invoices.nextNumber, () => invoiceStore.nextInvoiceNumber());
+  safeHandle(channels.invoices.listProfiles, () => invoiceStore.listProfiles());
+  safeHandle(channels.invoices.saveProfile, (...a) => invoiceStore.saveProfile(ensureProfile(a[0])));
+  safeHandle(channels.invoices.removeProfile, (...a) => invoiceStore.removeProfile(a[0] as string));
+  safeHandle(channels.invoices.putAsset, (...a) => { const { bytes, mime } = ensureAssetInput(a[0]); return invoiceStore.putAsset(bytes, mime); });
+  safeHandle(channels.invoices.getAsset, (...a) => invoiceStore.getAsset(a[0] as string));
+  safeHandle(channels.invoices.exportPdf, async (...a) => {
+    const { html } = a[0] as { html: string };
+    const pdf = await renderInvoicePdf(html);
+    const win = getWindow();
+    const r = win ? await dialog.showSaveDialog(win, { defaultPath: 'invoice.pdf' }) : await dialog.showSaveDialog({ defaultPath: 'invoice.pdf' });
+    if (r.canceled || !r.filePath) return null;
+    try { const st = await lstat(r.filePath); if (st.isSymbolicLink()) throw new Error('Refusing to write to a symbolic link.'); }
+    catch (err) { if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err; }
+    await writeFile(r.filePath, pdf);
     return basename(r.filePath);
   });
 
