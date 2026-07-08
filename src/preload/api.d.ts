@@ -380,6 +380,8 @@ export interface GhostApi {
     savePlaylist(queue: { title: string; path?: string; url?: string }[]): Promise<string | null>;
     upsertStation(input: { id?: string; label: string; url: string }): Promise<MediaStation>;
     deleteStation(id: string): Promise<void>;
+    reorderStations(ids: string[]): Promise<MediaLibrarySnapshot>;
+    exportStations(): Promise<string | null>;
   };
   geoint: {
     snapshot(): Promise<GeoSnapshot>;

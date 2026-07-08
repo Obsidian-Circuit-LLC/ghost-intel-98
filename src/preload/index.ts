@@ -313,7 +313,9 @@ const api = {
     loadPlaylist: () => ipcRenderer.invoke(channels.media.loadPlaylist),
     savePlaylist: (queue: unknown) => ipcRenderer.invoke(channels.media.savePlaylist, queue),
     upsertStation: (input: unknown) => ipcRenderer.invoke(channels.media.upsertStation, input),
-    deleteStation: (id: string) => ipcRenderer.invoke(channels.media.deleteStation, id)
+    deleteStation: (id: string) => ipcRenderer.invoke(channels.media.deleteStation, id),
+    reorderStations: (ids: string[]) => ipcRenderer.invoke(channels.media.reorderStations, ids),
+    exportStations: () => ipcRenderer.invoke(channels.media.exportStations)
   },
   geoint: {
     snapshot: () => ipcRenderer.invoke(channels.geoint.snapshot),
