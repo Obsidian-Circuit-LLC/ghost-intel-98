@@ -710,6 +710,9 @@ input.ga98-text, select.ga98-text {
   padding: 6px;
   gap: 6px;
   box-sizing: border-box;
+  /* Clip to the frame: bounded flex children (the playlist/stations panes) scroll internally instead
+     of the whole deck spilling past the window's bottom edge (the v3.37.0 full-expand overflow). */
+  overflow: hidden;
 }
 /* WMP-style re-skin (Jukebox restyle, v3.34.0). A bordered "screen" holds the visualizer as the
    art area with the GI98 logo pinned bottom-right, above the classic five-button WMP transport
@@ -748,7 +751,15 @@ input.ga98-text, select.ga98-text {
 .ga98-cdp-status {
   display: flex; align-items: center; gap: 6px; margin-top: 4px;
   border-top: 1px solid var(--ga98-shadow-dark); padding-top: 4px; font-size: 11px;
+  /* The row's content (~497px) exceeds the 380px default width, so it wraps to a second line rather
+     than shrinking the text buttons below their labels (the "Playlist" text bleeding off its button). */
+  flex-wrap: wrap; row-gap: 3px;
 }
+/* Pin the icon color like the transport row (theme.css: .ga98-wmp-transport button) — without it the
+   Prev/Next/Shuffle/Repeat SVG glyphs inherit the button-face grey and render blank. flex-shrink:0 +
+   nowrap keep every labelled button at its content width so no text is clipped. */
+.ga98-cdp-status button { color: #000; white-space: nowrap; flex-shrink: 0; }
+.ga98-cdp-status button svg { vertical-align: middle; }
 .ga98-jukebox-panes { display: flex; gap: 6px; flex: 1; min-height: 0; }
 .ga98-jukebox-pane { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 .ga98-jukebox-list { flex: 1; overflow: auto; margin: 0; }
@@ -799,14 +810,14 @@ input.ga98-text, select.ga98-text {
   display: flex; flex-direction: column; gap: 4px; flex: 1; min-height: 0;
 }
 .ga98-eq-head { display: flex; align-items: center; gap: 8px; color: #cfe3ff; font-size: 11px; }
-.ga98-eq-bands { display: flex; justify-content: space-between; gap: 2px; flex: 1; min-height: 120px; }
+.ga98-eq-bands { display: flex; justify-content: space-between; gap: 2px; flex: 1; min-height: 84px; }
 .ga98-eq-band { display: flex; flex-direction: column; align-items: center; gap: 2px; flex: 1; }
 .ga98-eq-band input[type='range'] {
   /* Orient the range vertically. writing-mode is the standards path; appearance is the WebKit
      fallback — Electron's Chromium supports the slider-vertical appearance today. */
   writing-mode: vertical-lr; direction: rtl;
   -webkit-appearance: slider-vertical; appearance: slider-vertical;
-  width: 14px; flex: 1; min-height: 90px;
+  width: 14px; flex: 1; min-height: 60px;
 }
 .ga98-eq-label { font-size: 9px; color: #9db8d8; }
 

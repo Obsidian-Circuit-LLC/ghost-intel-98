@@ -4,7 +4,10 @@
  *  logical px (DPI-independent) and tunable; the module fits the WINDOW to shadeHeight(mode). */
 import type { JukeboxMode } from '../../../shared/types';
 
-export const SHADE_HEIGHTS: Record<JukeboxMode, number> = { strip: 150, deck: 470, full: 780 };
+// Heights tuned from GhostExodus's field feedback (v3.37.1): `full` was 780 and spilled past the app's
+// bottom edge; it comes down to 640 (paired with a shorter EQ) so the fully-expanded jukebox fits on
+// screen. `strip` rises to 180 to hold the control row once it wraps at the 380px default width.
+export const SHADE_HEIGHTS: Record<JukeboxMode, number> = { strip: 180, deck: 470, full: 640 };
 
 export function shadeHeight(m: JukeboxMode): number { return SHADE_HEIGHTS[m]; }
 
