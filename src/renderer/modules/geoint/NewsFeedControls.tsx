@@ -1,8 +1,8 @@
 /**
- * GeoINT — shared Live News feed controls: the Stream dropdown (+ pop-out/remove buttons) and the
- * Label/kind/m3u8 add-form. Extracted out of LiveNewsPanel so BOTH the inline GeoINT panel and the
- * standalone/pop-out News module (NewsViewModule) manage the SAME settings.geoint.newsStreams list
- * with identical behavior — a feed added on either surface is immediately selectable on the other.
+ * GeoINT — shared Live News feed controls: the Stream dropdown (+ remove button) and the
+ * Add-stream modal (AddStreamDialog). Extracted out of LiveNewsPanel so BOTH the inline GeoINT panel
+ * and the standalone/pop-out News module (NewsViewModule) manage the SAME settings.geoint.newsStreams
+ * list with identical behavior — a feed added on either surface is immediately selectable on the other.
  *
  * Reads/writes settings.geoint directly via useSettings(). patchNews sends ONLY the changed
  * field(s) (newsStreams/newsStreamIndex) — main deep-merges the geoint sub-object (json-fs.ts
@@ -15,12 +15,12 @@
  */
 
 import { useState } from 'react';
-import { useSettings, useWindows } from '../../state/store';
+import { useSettings } from '../../state/store';
 import { toast } from '../../state/toasts';
 import { parseYouTubeId } from '@shared/youtube';
 import type { AppSettings } from '@shared/types';
 import type { NewsStream, NewsStreamKind } from './NewsStreamView';
-import { newsWindowSpec } from './newsWindow';
+import { AddStreamDialog } from './AddStreamDialog';
 
 /**
  * Validate a user-supplied stream URL for the given kind.
@@ -75,6 +75,7 @@ export function NewsFeedControls(): JSX.Element {
   const active: NewsStream | undefined = streams[index];
 
   const [form, setForm] = useState<{ label: string; url: string; kind: NewsStreamKind }>({ label: '', url: '', kind: 'hls' });
+  const [adding, setAdding] = useState(false);
 
   // `settingsStore.update` deep-merges the `geoint` sub-object main-side (json-fs.ts
   // `mergeSettings`), so sending ONLY the changed field(s) is safe and cannot drop siblings —
@@ -92,26 +93,30 @@ export function NewsFeedControls(): JSX.Element {
     patchNews({ newsStreamIndex: i });
   }
 
-  function addStream(): void {
-    const label = form.label.trim();
-    const url = form.url.trim();
+  // Accepts an explicit draft (from AddStreamDialog's onSubmit) so the validated write path
+  // doesn't depend on a stale `form` closure across the async state update that opening/closing
+  // the modal triggers; falls back to the `form` state for any other caller.
+  function addStream(draft?: { label: string; url: string; kind: NewsStreamKind }): void {
+    const source = draft ?? form;
+    const label = source.label.trim();
+    const url = source.url.trim();
     if (!label) {
       toast.error('Give the stream a label.');
       return;
     }
-    if (!validateStreamUrl(url, form.kind)) {
+    if (!validateStreamUrl(url, source.kind)) {
       toast.error(
-        form.kind === 'youtube'
+        source.kind === 'youtube'
           ? 'Not a parseable YouTube URL (watch?v=, youtu.be/, or /live/).'
           : 'HLS needs a public http(s) URL (an .m3u8 manifest).'
       );
       return;
     }
-    if (form.kind === 'hls' && !/\.m3u8(\?|#|$)/i.test(url)) {
+    if (source.kind === 'hls' && !/\.m3u8(\?|#|$)/i.test(url)) {
       // Soft warning only — some live manifests omit the extension; we already enforced public http(s).
       toast.warn('That HLS URL does not end in .m3u8 — it may not play.');
     }
-    const next = [...streams, { label, url, kind: form.kind }];
+    const next = [...streams, { label, url, kind: source.kind }];
     patchNews({ newsStreams: next, newsStreamIndex: next.length - 1 });
     setForm({ label: '', url: '', kind: 'hls' });
     toast.success(`Added “${label}”.`);
@@ -144,44 +149,21 @@ export function NewsFeedControls(): JSX.Element {
             </option>
           ))}
         </select>
-        {active && (
-          <>
-            <button title="Pop out to its own window" onClick={() => useWindows.getState().open(newsWindowSpec(active))}>⧉</button>
-            <button title="Remove this stream" onClick={() => removeStream(index)}>✕</button>
-          </>
-        )}
+        {active && <button title="Remove this stream" onClick={() => removeStream(index)}>✕</button>}
       </div>
 
-      <div className="ga98-livenews-add" style={{ borderTop: '1px solid #888', paddingTop: 6 }}>
-        <div className="field-row" style={{ gap: 6, marginBottom: 4 }}>
-          <input
-            className="ga98-text"
-            placeholder="Label"
-            value={form.label}
-            onChange={(e) => setForm((f) => ({ ...f, label: e.target.value }))}
-            style={{ flex: 1 }}
-          />
-          <select
-            className="ga98-select"
-            value={form.kind}
-            onChange={(e) => setForm((f) => ({ ...f, kind: e.target.value as NewsStreamKind }))}
-          >
-            <option value="hls">HLS</option>
-            <option value="youtube">YouTube</option>
-          </select>
-        </div>
-        <div className="field-row" style={{ gap: 6 }}>
-          <input
-            className="ga98-text"
-            placeholder={form.kind === 'youtube' ? 'https://www.youtube.com/watch?v=…' : 'https://…/stream.m3u8'}
-            value={form.url}
-            onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
-            onKeyDown={(e) => { if (e.key === 'Enter') addStream(); }}
-            style={{ flex: 1 }}
-          />
-          <button onClick={addStream}>Add stream</button>
-        </div>
+      <div className="field-row" style={{ marginTop: 6 }}>
+        <button onClick={() => setAdding(true)}>Add stream</button>
       </div>
+      {adding && (
+        <AddStreamDialog
+          onCancel={() => setAdding(false)}
+          onSubmit={(v) => {
+            addStream(v);
+            setAdding(false);
+          }}
+        />
+      )}
     </>
   );
 }
