@@ -96,13 +96,15 @@ export function NewsFeedControls(): JSX.Element {
   // Accepts an explicit draft (from AddStreamDialog's onSubmit) so the validated write path
   // doesn't depend on a stale `form` closure across the async state update that opening/closing
   // the modal triggers; falls back to the `form` state for any other caller.
-  function addStream(draft?: { label: string; url: string; kind: NewsStreamKind }): void {
+  // Returns true only on a successful add, so the caller (the modal) keeps the dialog open — with the
+  // user's typed label/URL intact — when validation fails, instead of discarding the input.
+  function addStream(draft?: { label: string; url: string; kind: NewsStreamKind }): boolean {
     const source = draft ?? form;
     const label = source.label.trim();
     const url = source.url.trim();
     if (!label) {
       toast.error('Give the stream a label.');
-      return;
+      return false;
     }
     if (!validateStreamUrl(url, source.kind)) {
       toast.error(
@@ -110,7 +112,7 @@ export function NewsFeedControls(): JSX.Element {
           ? 'Not a parseable YouTube URL (watch?v=, youtu.be/, or /live/).'
           : 'HLS needs a public http(s) URL (an .m3u8 manifest).'
       );
-      return;
+      return false;
     }
     if (source.kind === 'hls' && !/\.m3u8(\?|#|$)/i.test(url)) {
       // Soft warning only — some live manifests omit the extension; we already enforced public http(s).
@@ -120,6 +122,7 @@ export function NewsFeedControls(): JSX.Element {
     patchNews({ newsStreams: next, newsStreamIndex: next.length - 1 });
     setForm({ label: '', url: '', kind: 'hls' });
     toast.success(`Added “${label}”.`);
+    return true;
   }
 
   function removeStream(i: number): void {
@@ -159,8 +162,7 @@ export function NewsFeedControls(): JSX.Element {
         <AddStreamDialog
           onCancel={() => setAdding(false)}
           onSubmit={(v) => {
-            addStream(v);
-            setAdding(false);
+            if (addStream(v)) setAdding(false);
           }}
         />
       )}

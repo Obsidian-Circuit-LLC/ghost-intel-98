@@ -29,4 +29,12 @@ describe('JukeboxGraph', () => {
     g.applyGains(new Array(EQ_BANDS.length).fill(99));
     for (const f of (g as any).bands as any[]) expect(f.gain.value).toBe(12);
   });
+  it('chains band[i] -> band[i+1] and the last band -> analyser (analyser taps AFTER the EQ)', () => {
+    const g = new JukeboxGraph({} as HTMLAudioElement);
+    const bands = (g as any).bands as any[];
+    for (let i = 0; i < bands.length - 1; i++) {
+      expect(bands[i].connect).toHaveBeenCalledWith(bands[i + 1]);
+    }
+    expect(bands[bands.length - 1].connect).toHaveBeenCalledWith(g.analyser);
+  });
 });
