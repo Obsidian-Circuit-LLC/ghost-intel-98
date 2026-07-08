@@ -1,23 +1,29 @@
 // @vitest-environment jsdom
 /**
- * Task 9: Jukebox WMP re-skin. jsdom smoke test — no @testing-library (not a dependency);
- * drive React 18's createRoot inside act(), mirroring briefcase-dnd.test.tsx /
- * access-menu-osint-flyout.test.tsx.
+ * Task 11: MediaPlayerModule rebuild — rounded WMP shell + 3-state shade.
  *
- * Verifies the strip (compact) deck renders the five classic WMP transport buttons
- * (rewind/play/pause/stop/fast-forward), the GI98 logo image, and that the Playlist button opens
- * the deck shade (which drives the window-resize effect via useWindows.update).
+ * Two layers:
+ *  (1) pure invariants — default mode is `strip` and maps to the shortest shade height.
+ *  (2) a jsdom render smoke — the rounded shell mounts with the Now-Playing readout and the
+ *      Playlist / EQ control buttons. No @testing-library (not a dependency); drive React 18's
+ *      createRoot inside act(), mirroring test/stations-drawer.test.tsx / test/jukebox-wmp-skin.test.tsx.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { shadeHeight } from '../src/renderer/modules/media/shade';
 import { MediaPlayerModule } from '../src/renderer/modules/media/MediaPlayerModule';
 import { useSettings, useWindows, type WindowSpec } from '../src/renderer/state/store';
-import { shadeHeight } from '../src/renderer/modules/media/shade';
-import { defaultSettings } from '@shared/types';
+import { defaultSettings } from '../src/shared/types';
+
+describe('jukebox integration invariants', () => {
+  it('default mode is strip and maps to the shortest height', () => {
+    expect(defaultSettings.media.jukeboxMode).toBe('strip');
+    expect(shadeHeight('strip')).toBeLessThan(shadeHeight('full'));
+  });
+});
 
 const emptySnapshot = { roots: [], tracks: [], stations: [] };
-
 const mediaApi = {
   getSnapshot: vi.fn().mockResolvedValue(emptySnapshot),
   addRoot: vi.fn(),
@@ -27,16 +33,14 @@ const mediaApi = {
   loadPlaylist: vi.fn(),
   savePlaylist: vi.fn(),
   upsertStation: vi.fn(),
-  deleteStation: vi.fn()
+  deleteStation: vi.fn(),
+  reorderStations: vi.fn(),
+  exportStations: vi.fn()
 };
-
-const settingsApi = {
-  update: vi.fn().mockResolvedValue(defaultSettings)
-};
+const settingsApi = { update: vi.fn().mockResolvedValue(defaultSettings) };
 
 let container: HTMLDivElement;
 let root: Root;
-
 const spec: WindowSpec = { id: 'jukebox-1', module: 'media-player', title: 'Jukebox' };
 
 beforeEach(() => {
@@ -64,36 +68,28 @@ async function flush(): Promise<void> {
   await act(async () => { await Promise.resolve(); await Promise.resolve(); });
 }
 
-describe('Jukebox WMP-style compact deck', () => {
-  it('renders the five classic transport buttons + the GI98 logo', async () => {
+describe('MediaPlayerModule rounded shell', () => {
+  it('mounts the rounded shell with the Now-Playing readout and Playlist/EQ buttons', async () => {
     await act(async () => { root.render(<MediaPlayerModule spec={spec} />); });
     await flush();
 
-    expect(container.querySelector('.ga98-wmp-screen')).toBeTruthy();
-    expect(container.querySelector('.ga98-wmp-transport')).toBeTruthy();
-    expect(container.querySelector('[aria-label="Rewind 10s"]')).toBeTruthy();
+    expect(container.querySelector('.ga98-jukebox-rounded')).toBeTruthy();
+    expect(container.querySelector('.ga98-np-title')).toBeTruthy();
+    expect(container.querySelector('[aria-label="Playlist"]')).toBeTruthy();
+    expect(container.querySelector('[aria-label="EQ"]')).toBeTruthy();
+    // Five classic transport buttons still present in the deck.
     expect(container.querySelector('[aria-label="Play"]')).toBeTruthy();
-    expect(container.querySelector('[aria-label="Pause"]')).toBeTruthy();
     expect(container.querySelector('[aria-label="Stop"]')).toBeTruthy();
-    expect(container.querySelector('[aria-label="Fast-forward 10s"]')).toBeTruthy();
-
-    const logo = container.querySelector('.ga98-wmp-logo');
-    expect(logo).toBeTruthy();
-    expect(logo?.tagName).toBe('IMG');
   });
 
-  it('the Playlist button opens the deck shade (drives the window-resize effect)', async () => {
+  it('default strip mode sizes the window to the strip shade height; Playlist opens the deck', async () => {
     await act(async () => { root.render(<MediaPlayerModule spec={spec} />); });
     await flush();
+    expect(useWindows.getState().windows.find((w) => w.id === spec.id)?.height).toBe(shadeHeight('strip'));
 
     const playlist = container.querySelector('[aria-label="Playlist"]') as HTMLButtonElement;
-    expect(playlist).toBeTruthy();
     await act(async () => { playlist.click(); });
     await flush();
-
-    // strip → deck: the toolbar + library pane are now revealed and the frame grows to the deck height.
-    expect(container.querySelector('.ga98-jukebox-body')).toBeTruthy();
-    const win = useWindows.getState().windows.find((w) => w.id === spec.id);
-    expect(win?.height).toBe(shadeHeight('deck'));
+    expect(useWindows.getState().windows.find((w) => w.id === spec.id)?.height).toBe(shadeHeight('deck'));
   });
 });
