@@ -755,6 +755,84 @@ input.ga98-text, select.ga98-text {
 .ga98-jukebox-list li { cursor: pointer; padding: 1px 4px; display: flex; align-items: center; }
 .ga98-jukebox-list li[data-active='true'] { background: navy; color: #fff; }
 
+/* ── Rounded WMP shell (Jukebox rebuild, v3.35.0) ──────────────────────────────
+   The rounded chrome frame from GhostExodus's mockup: a blue/chrome gradient body with
+   inset LCD panels for the Now-Playing readout + spectrum, a 10-band EQ, and a fold-out
+   stations drawer. The 3-state shade (strip/deck/full) drives the frame height in JS. */
+.ga98-jukebox-rounded {
+  border-radius: 10px;
+  background: linear-gradient(180deg, #dfe7f2 0%, #b9c6dc 42%, #8fa0bd 100%);
+  border: 1px solid #6f7f9c;
+  box-shadow: inset 0 1px 0 #ffffffcc, inset 0 -1px 0 #00000030;
+}
+.ga98-wmp-deck { display: flex; flex-direction: column; gap: 4px; }
+/* Now-Playing readout: inset LCD panel — big title, artist, format/kbps badges + the spectrum. */
+.ga98-np {
+  display: flex; gap: 6px; align-items: stretch;
+  background: #0b1a2b; color: #cfe3ff; border: 2px inset #2a4664; border-radius: 6px;
+  padding: 6px 8px; min-height: 46px;
+}
+.ga98-np-info { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+.ga98-np-title {
+  font-weight: bold; font-size: 13px; color: #eaf4ff;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ga98-np-artist {
+  font-size: 11px; color: #9db8d8;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ga98-np-badges { display: flex; gap: 4px; margin-top: 2px; }
+.ga98-np-badge {
+  font-size: 10px; background: #17324f; color: #8fd0ff; border: 1px solid #2f5578;
+  border-radius: 3px; padding: 0 4px;
+}
+.ga98-np-screen { width: 88px; min-height: 0; border-radius: 4px; align-self: stretch; }
+.ga98-np-track { width: 100%; }
+.ga98-jukebox-body { display: flex; flex-direction: column; gap: 4px; flex: 1; min-height: 0; }
+.ga98-jukebox-body .ga98-jukebox-pane { flex: 1; min-height: 0; }
+.ga98-stations-toggle { display: flex; justify-content: center; }
+.ga98-stations-toggle button { min-width: 0; padding: 1px 10px; font-size: 11px; }
+
+/* 10-band graphic equalizer — vertical band sliders, presets, on/off. */
+.ga98-eq-panel {
+  background: #10233a; border: 2px inset #2a4664; border-radius: 6px; padding: 6px;
+  display: flex; flex-direction: column; gap: 4px; flex: 1; min-height: 0;
+}
+.ga98-eq-head { display: flex; align-items: center; gap: 8px; color: #cfe3ff; font-size: 11px; }
+.ga98-eq-bands { display: flex; justify-content: space-between; gap: 2px; flex: 1; min-height: 120px; }
+.ga98-eq-band { display: flex; flex-direction: column; align-items: center; gap: 2px; flex: 1; }
+.ga98-eq-band input[type='range'] {
+  /* Orient the range vertically. writing-mode is the standards path; appearance is the WebKit
+     fallback — Electron's Chromium supports the slider-vertical appearance today. */
+  writing-mode: vertical-lr; direction: rtl;
+  -webkit-appearance: slider-vertical; appearance: slider-vertical;
+  width: 14px; flex: 1; min-height: 90px;
+}
+.ga98-eq-label { font-size: 9px; color: #9db8d8; }
+
+/* Fold-out stations drawer — 2 columns: the list + the Now-Playing-Station panel. */
+.ga98-stations-drawer {
+  display: grid; grid-template-columns: 1fr 140px; gap: 6px;
+  background: #dfe7f2; border: 2px inset #8fa0bd; border-radius: 6px; padding: 6px;
+  flex: 1; min-height: 0;
+}
+.ga98-stations-list { display: flex; flex-direction: column; min-height: 0; }
+.ga98-stations-list .ga98-list { flex: 1; overflow: auto; margin: 0; }
+.ga98-stations-list li { cursor: pointer; padding: 1px 4px; display: flex; align-items: center; gap: 2px; }
+.ga98-stations-list li[data-active='true'] { background: navy; color: #fff; }
+.ga98-stations-list li button { min-width: 0; padding: 0 4px; }
+.ga98-now-station {
+  border: 1px inset #808080; background: #0b1a2b; color: #cfe3ff; border-radius: 4px;
+  padding: 6px; display: flex; flex-direction: column; gap: 4px;
+}
+.ga98-now-station-title { font-size: 10px; color: #9db8d8; }
+.ga98-now-station-body { font-size: 12px; font-weight: bold; flex: 1; }
+/* Stream Test status dot — testing (amber) / ok (green) / fail (red). */
+.ga98-test-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 1px solid #0006; }
+.ga98-test-ok { background: #3c3; }
+.ga98-test-fail { background: #c33; }
+.ga98-test-testing { background: #cc3; }
+
 /* ── GeoINT dashboard ─────────────────────────────────────────────────────── */
 /* GeoINT needs a wider left column than the generic .ga98-split 220px track — its controls
    are ~320px, so the pane overflowed a too-narrow grid cell and clipped the labels ("text on

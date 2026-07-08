@@ -1156,3 +1156,11 @@ export function ensureNoteBody(value: unknown, context = 'body'): string {
   }
   return value;
 }
+
+// ---------- media (jukebox) ----------
+
+/** Renderer-supplied station-id ordering for reorderStations: a bounded array of short strings. */
+export function ensureIdArray(v: unknown): string[] {
+  if (!Array.isArray(v)) throw new ValidationError('expected an array of station ids');
+  return v.map((x) => { if (typeof x !== 'string' || x.length > 128) throw new ValidationError('id must be a short string'); return x; });
+}

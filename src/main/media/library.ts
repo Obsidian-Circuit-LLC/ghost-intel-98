@@ -66,6 +66,23 @@ export async function deleteStation(id: string): Promise<void> {
   await write(s);
 }
 
+export async function reorderStations(orderedIds: string[]): Promise<MediaLibrarySnapshot> {
+  const s = await read();
+  const byId = new Map(s.stations.map((x) => [x.id, x]));
+  const seen = new Set<string>();
+  const next: MediaStation[] = [];
+  for (const id of orderedIds) { const st = byId.get(id); if (st && !seen.has(id)) { next.push(st); seen.add(id); } }
+  for (const st of s.stations) if (!seen.has(st.id)) next.push(st); // append any not listed
+  s.stations = next;
+  await write(s);
+  return s;
+}
+
+export async function exportStations(): Promise<{ label: string; url: string }[]> {
+  const s = await read();
+  return s.stations.map((x) => ({ label: x.label, url: x.url }));
+}
+
 export async function setTracks(tracks: MediaTrack[]): Promise<void> {
   const s = await read();
   s.tracks = tracks;
@@ -87,11 +104,24 @@ async function* walk(dir: string): AsyncGenerator<string> {
 // music-metadata is ESM-only; cache the dynamically-imported parser.
 let parseFileFn: ((p: string, opts?: { duration?: boolean }) => Promise<{
   common: { title?: string; artist?: string; album?: string; picture?: { data: Uint8Array }[] };
-  format: { duration?: number };
+  format: { duration?: number; bitrate?: number; sampleRate?: number; numberOfChannels?: number; bitsPerSample?: number; codec?: string };
 }>) | null = null;
 async function getParseFile(): Promise<NonNullable<typeof parseFileFn>> {
   if (!parseFileFn) { const mm = await import('music-metadata'); parseFileFn = mm.parseFile as NonNullable<typeof parseFileFn>; }
   return parseFileFn;
+}
+
+/** Best-effort format fields from a music-metadata `format` object. Omits any field the parser
+ *  didn't provide — in particular bitsPerSample is absent for MP3, so we never invent a bit-depth. */
+export function pickFormat(f: { bitrate?: number; sampleRate?: number; numberOfChannels?: number; bitsPerSample?: number; codec?: string }):
+  Pick<MediaTrack, 'bitrate' | 'sampleRate' | 'channels' | 'bitsPerSample' | 'codec'> {
+  const out: Pick<MediaTrack, 'bitrate' | 'sampleRate' | 'channels' | 'bitsPerSample' | 'codec'> = {};
+  if (f.bitrate != null) out.bitrate = Math.round(f.bitrate);
+  if (f.sampleRate != null) out.sampleRate = f.sampleRate;
+  if (f.numberOfChannels != null) out.channels = f.numberOfChannels;
+  if (f.bitsPerSample != null) out.bitsPerSample = f.bitsPerSample;
+  if (f.codec) out.codec = f.codec;
+  return out;
 }
 
 /** Re-walk every root, parsing new or changed files (by mtime+size). Unchanged
@@ -113,6 +143,7 @@ export async function refresh(): Promise<MediaLibrarySnapshot> {
         track.artist = meta.common.artist;
         track.album = meta.common.album;
         track.durationMs = meta.format.duration ? Math.round(meta.format.duration * 1000) : undefined;
+        Object.assign(track, pickFormat(meta.format));
         // Embedded cover art is intentionally NOT extracted/written: it has no read path yet,
         // and writing it via plain fs would bypass the at-rest vault (red-team M3). Add it back
         // through secure-fs only when a viewer exists.

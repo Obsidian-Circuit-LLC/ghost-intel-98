@@ -81,16 +81,21 @@ describe('NewsFeedControls — shared add-feed form', () => {
     await act(async () => { root.render(<NewsFeedControls />); });
     await flush();
 
+    // Add stream now opens the AddStreamDialog modal rather than exposing an inline form.
+    const openAddButton = Array.from(container.querySelectorAll('button')).find((b) => /Add stream/i.test(b.textContent ?? '')) as HTMLButtonElement;
+    await act(async () => { openAddButton.click(); });
+    await flush();
+
     const labelInput = container.querySelector('input.ga98-text[placeholder="Label"]') as HTMLInputElement;
-    const urlInput = container.querySelector('input.ga98-text:not([placeholder="Label"])') as HTMLInputElement;
-    const addButton = Array.from(container.querySelectorAll('button')).find((b) => /Add stream/i.test(b.textContent ?? '')) as HTMLButtonElement;
+    const urlInput = container.querySelector('input.ga98-text[aria-label="Stream URL"]') as HTMLInputElement;
+    const okButton = Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'OK') as HTMLButtonElement;
 
     await act(async () => {
       typeInto(labelInput, 'Al Jazeera English');
       typeInto(urlInput, 'https://example.com/live/aje.m3u8');
     });
     await flush();
-    await act(async () => { addButton.click(); });
+    await act(async () => { okButton.click(); });
     await flush();
 
     expect(settingsUpdate).toHaveBeenCalledTimes(1);

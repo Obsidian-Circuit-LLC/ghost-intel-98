@@ -334,7 +334,9 @@ export const channels = {
     loadPlaylist: 'media:loadPlaylist',
     savePlaylist: 'media:savePlaylist',
     upsertStation: 'media:upsertStation',
-    deleteStation: 'media:deleteStation'
+    deleteStation: 'media:deleteStation',
+    reorderStations: 'media:reorderStations',
+    exportStations: 'media:exportStations'
   },
   geoint: {
     snapshot: 'geoint:snapshot',
@@ -875,6 +877,8 @@ export interface ApiContracts {
   [channels.media.savePlaylist]: { args: [{ title: string; path?: string; url?: string }[]]; returns: string | null };
   [channels.media.upsertStation]: { args: [{ id?: string; label: string; url: string }]; returns: MediaStation };
   [channels.media.deleteStation]: { args: [string]; returns: void };
+  [channels.media.reorderStations]: { args: [string[]]; returns: MediaLibrarySnapshot };
+  [channels.media.exportStations]: { args: []; returns: string | null };
 
   [channels.geoint.snapshot]: { args: []; returns: GeoSnapshot };
   [channels.geoint.addSource]: { args: [{ label: string; url: string; type: 'rss' | 'atom' | 'geojson' }]; returns: GeoSource };

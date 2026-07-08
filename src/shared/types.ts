@@ -340,6 +340,9 @@ export interface JournalEntrySummary { id: string; title: string; updatedAt: ISO
 /** What the renderer sends to persist a journal entry (id minted + timestamps managed by the store). */
 export interface JournalEntryInput { id: string; title: string; body: string }
 
+/** Jukebox shade state: strip (deck only) → deck (+playlist) → full (+stations drawer). */
+export type JukeboxMode = 'strip' | 'deck' | 'full';
+
 export interface AppSettings {
   soundEnabled: boolean;
   themeIntensity: 'lite' | 'classic' | 'maximum';
@@ -450,6 +453,10 @@ export interface AppSettings {
     /** Jukebox opens in the compact (deck-only) view by default; the caret expands it to the file
      *  toolbar + Library/Stations. Persists the user's last choice. Default false = compact. */
     jukeboxExpanded: boolean;
+    /** Jukebox shade state: strip (deck only) → deck (+playlist) → full (+stations drawer). */
+    jukeboxMode: JukeboxMode;
+    /** 10-band graphic EQ. enabled=false ⇒ flat/transparent. gains are dB per EQ_BANDS index. */
+    eq: { enabled: boolean; gains: number[]; preset: string };
   };
   geoint: {
     /** Master opt-in egress gate for GeoINT. When false (default) no feed is fetched
@@ -694,7 +701,8 @@ export const defaultSettings: AppSettings = {
   mail: { accounts: [] },
   mailBackgroundCheck: false,
   browser: { homepage: 'about:blank' },
-  media: { streamingEnabled: false, visualizer: true, jukeboxExpanded: false },
+  media: { streamingEnabled: false, visualizer: true, jukeboxExpanded: false,
+           jukeboxMode: 'strip', eq: { enabled: false, gains: [0,0,0,0,0,0,0,0,0,0], preset: 'Flat' } },
   geoint: {
     networkEnabled: false,
     tileServerUrl: '',
