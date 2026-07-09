@@ -140,4 +140,10 @@ describe('AccessMenu categories', () => {
     expect(openSpy).toHaveBeenCalledWith(expect.objectContaining({ module: 'help', title: 'RTFM' }));
     expect(onClose).toHaveBeenCalled();
   });
+
+  it('OSINT Toolkit is listed above Games', () => {
+    render();
+    const order = labels();
+    expect(order.findIndex((l) => /OSINT Toolkit/.test(l))).toBeLessThan(order.findIndex((l) => /Games/.test(l)));
+  });
 });

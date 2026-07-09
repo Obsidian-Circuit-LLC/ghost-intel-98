@@ -117,8 +117,6 @@ export function AccessMenu({ onClose }: AccessMenuProps): JSX.Element {
           <CategoryFlyout key={c.label} label={c.label} glyph={c.glyph} items={c.items} onOpen={openModule} />
         ))}
         <div className="ga98-access-separator" />
-        <CategoryFlyout label="Games" glyph="🎮" items={GAMES} onOpen={openModule} />
-        <div className="ga98-access-separator" />
         {/* OSINT Toolkit submenu — hover (or click) to fan out. ONE hop only: grouped subcategory
             headings + one big clickable row per tool, each launching that module immediately (no
             nested sub-submenu). Grouping/ordering is buildOsintDirectory's, shared with the toolkit
@@ -169,6 +167,8 @@ export function AccessMenu({ onClose }: AccessMenuProps): JSX.Element {
             </div>
           )}
         </div>
+        <div className="ga98-access-separator" />
+        <CategoryFlyout label="Games" glyph="🎮" items={GAMES} onOpen={openModule} />
         <div className="ga98-access-separator" />
         <div
           className="ga98-access-entry"
