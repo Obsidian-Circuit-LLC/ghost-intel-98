@@ -32,4 +32,16 @@ describe('LedgerFill', () => {
     await act(async () => { root.render(<LedgerFill />); });
     expect(raf).toHaveBeenCalled();
   });
+  it('under reduced-motion, a resize redraws (does not permanently blank the canvas)', async () => {
+    (globalThis as any).matchMedia = vi.fn(() => ({ matches: true }));
+    let roCb: (() => void) | null = null;
+    (globalThis as any).ResizeObserver = class { constructor(cb: () => void) { roCb = cb; } observe() {} disconnect() {} };
+    const ctx = fakeCtx();
+    (HTMLCanvasElement.prototype as any).getContext = vi.fn(() => ctx);
+    await act(async () => { root.render(<LedgerFill />); });
+    const drewOnMount = ctx.fillRect.mock.calls.length;
+    expect(drewOnMount).toBeGreaterThan(0);
+    await act(async () => { roCb?.(); }); // simulate a resize (which clears the bitmap)
+    expect(ctx.fillRect.mock.calls.length).toBeGreaterThan(drewOnMount); // redrew, not left blank
+  });
 });

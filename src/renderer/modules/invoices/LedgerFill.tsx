@@ -17,7 +17,9 @@ export function LedgerFill(): JSX.Element {
 
     const size = (): void => { const r = canvas.getBoundingClientRect(); canvas.width = Math.max(1, Math.floor(r.width)); canvas.height = Math.max(1, Math.floor(r.height)); };
     size();
-    const ro = new ResizeObserver(size); ro.observe(canvas);
+    // Resizing the canvas resets its bitmap (blank). The RAF loop repaints next frame, but under
+    // reduced-motion there is no loop — so redraw the single static frame right after a resize.
+    const ro = new ResizeObserver(() => { size(); if (reduce) draw(); }); ro.observe(canvas);
     const io = new IntersectionObserver((e) => { onScreen = e[0].isIntersecting; if (onScreen && !reduce && !raf) raf = requestAnimationFrame(loop); }); io.observe(canvas);
 
     function draw(): void {
