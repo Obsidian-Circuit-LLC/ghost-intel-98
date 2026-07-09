@@ -43,7 +43,7 @@ Operator decisions (2026-07-09): name = **Ghost Ledger 98**, applied **everywher
 ## Feature 3 — Rename to Ghost Ledger 98 (everywhere) + branded header
 
 - **Everywhere (display label):** `register-builtins.tsx` `registerModule({ key: 'invoices', title: 'Ghost Ledger 98', glyph: '📒', … })` (the **key stays `invoices`** — stable id for persistence/shortcuts/tests; only the display title + glyph change). Update the `Desktop.tsx` title and the `types.ts` shortcut label to "Ghost Ledger 98". The `register-builtins` enumeration test asserts the *key* set (unchanged), so it stays green.
-- **In-app header:** a branded header strip at the top of `InvoicesModule` — "Ghost Ledger 98" wordmark + a small Win98-style emblem (a hand-drawn pixel ledger/ghost glyph, inline SVG like the transport icons — no external asset) — filling the empty header space GhostExodus flagged.
+- **In-app header — banner image (operator-supplied):** a branded header strip at the top of `InvoicesModule` renders a **bundled banner image** the operator provides (generating it separately), imported like the existing `logo.png` (`import bannerUrl from '../../assets/ghost-ledger-banner.png'`) and rendered responsively — `.ga98-ledger-banner { display:block; max-height: 56px; max-width: 100%; }` — so it adapts to whatever aspect ratio the banner has, centered, filling the empty header space GhostExodus flagged. Build the header mechanism; the banner PNG is an operator-delivered asset (dropped into `src/renderer/assets/ghost-ledger-banner.png`), mirroring how bundled voice/model assets are supplied. A styled "Ghost Ledger 98" text wordmark is the fallback until the image is in place (so the batch isn't blocked on the asset).
 
 ## Data model
 
@@ -69,4 +69,4 @@ No schema change. `Invoice`/`Party`/`Signature` unchanged (`logoRef?`/`signature
 - Pixel-perfect PDF↔DOCX visual parity.
 - Orphaned-asset garbage collection (refs may be shared via duplicate; needs refcounting — separate concern).
 - Additional export formats (CSV/XLSX) — not requested.
-- A configurable/custom emblem upload for the header (one bundled emblem).
+- A configurable/custom-banner upload UI (one operator-bundled banner asset; text-wordmark fallback until it lands).
