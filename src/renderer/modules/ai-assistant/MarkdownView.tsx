@@ -87,6 +87,20 @@ export function MarkdownView({ text, onLinkClick }: { text: string; onLinkClick?
                 </table>
               </div>
             );
+          case 'quote':
+            return (
+              <div key={i} style={{ borderLeft: '3px solid #808080', background: '#f0f0f0', padding: '4px 8px', margin: '0 0 6px', whiteSpace: 'pre-wrap' }}>
+                {renderInline(b.children, onLinkClick)}
+              </div>
+            );
+          case 'codeblock':
+            return (
+              <pre key={i} style={{ background: '#eee', border: '1px solid #c0c0c0', padding: '6px 8px', margin: '0 0 6px', overflowX: 'auto', fontFamily: 'monospace', fontSize: 12, whiteSpace: 'pre' }}>
+                <code>{b.v}</code>
+              </pre>
+            );
+          case 'hr':
+            return <hr key={i} style={{ border: 0, borderTop: '1px solid #808080', margin: '8px 0' }} />;
           default: { const _exhaustive: never = b; return _exhaustive; }
         }
       })}

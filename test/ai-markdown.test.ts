@@ -169,10 +169,10 @@ describe('parseMarkdown tables (GFM)', () => {
     // No block anywhere is a paragraph whose text is the raw `|---|` separator.
     expect(JSON.stringify(blocks)).not.toContain('|---|');
   });
-  it('a lone --- section rule is NOT a table (needs a pipe-bearing header + delimiter)', () => {
+  it('a lone --- section rule is a horizontal rule, NOT a table (needs a pipe-bearing header + delimiter)', () => {
     expect(parseMarkdown('some text\n\n---\n\nmore')).toEqual([
       { t: 'p', children: [{ t: 'text', v: 'some text' }] },
-      { t: 'p', children: [{ t: 'text', v: '---' }] },
+      { t: 'hr' },
       { t: 'p', children: [{ t: 'text', v: 'more' }] }
     ]);
   });
