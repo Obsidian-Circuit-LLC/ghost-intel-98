@@ -144,6 +144,51 @@ describe('parseMarkdown', () => {
   });
 });
 
+describe('parseMarkdown tables (GFM)', () => {
+  it('parses a header + delimiter + rows into a table block (cells parsed inline)', () => {
+    const md = '| A | B |\n|---|---|\n| **x** | y |\n| p | q |';
+    expect(parseMarkdown(md)).toEqual([{
+      t: 'table',
+      header: [[{ t: 'text', v: 'A' }], [{ t: 'text', v: 'B' }]],
+      rows: [
+        [[{ t: 'bold', children: [{ t: 'text', v: 'x' }] }], [{ t: 'text', v: 'y' }]],
+        [[{ t: 'text', v: 'p' }], [{ t: 'text', v: 'q' }]]
+      ]
+    }]);
+  });
+  it('the Searchlight §5 reference table is a table block, not a literal-pipe paragraph', () => {
+    // Regression: MarkdownView used to emit the whole table as one pre-wrap `p` full of `|` pipes.
+    const md = '| What the button says | What it means | What to do |\n|---|---|---|\n'
+      + '| **Train now** | You hit 80+. | Press it. |\n| **Retrain** | ML is on. | Optional. |';
+    const blocks = parseMarkdown(md);
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].t).toBe('table');
+    const tbl = blocks[0] as Extract<ReturnType<typeof parseMarkdown>[number], { t: 'table' }>;
+    expect(tbl.header).toHaveLength(3);
+    expect(tbl.rows).toHaveLength(2);
+    // No block anywhere is a paragraph whose text is the raw `|---|` separator.
+    expect(JSON.stringify(blocks)).not.toContain('|---|');
+  });
+  it('a lone --- section rule is NOT a table (needs a pipe-bearing header + delimiter)', () => {
+    expect(parseMarkdown('some text\n\n---\n\nmore')).toEqual([
+      { t: 'p', children: [{ t: 'text', v: 'some text' }] },
+      { t: 'p', children: [{ t: 'text', v: '---' }] },
+      { t: 'p', children: [{ t: 'text', v: 'more' }] }
+    ]);
+  });
+  it('a pipe row without a matching delimiter stays a paragraph', () => {
+    expect(parseMarkdown('a | b | c')).toEqual([{ t: 'p', children: [{ t: 'text', v: 'a | b | c' }] }]);
+  });
+  it('a table with no body rows still parses (header only)', () => {
+    expect(parseMarkdown('| A | B |\n| --- | --- |')).toEqual([{
+      t: 'table', header: [[{ t: 'text', v: 'A' }], [{ t: 'text', v: 'B' }]], rows: []
+    }]);
+  });
+  it('stripMarkdown flattens a table row-by-row for TTS (no pipes spoken)', () => {
+    expect(stripMarkdown('| A | B |\n|---|---|\n| x | y |')).toBe('A B\nx y');
+  });
+});
+
 describe('stripMarkdown', () => {
   it('drops inline markers, keeping the spoken text (matches MarkdownView)', () => {
     expect(stripMarkdown('**bold** and *italic* and `code`')).toBe('bold and italic and code');

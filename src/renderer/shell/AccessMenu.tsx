@@ -1,6 +1,9 @@
 /**
- * The "Access" menu (renamed Start). Reads its entries from settings.shortcuts
- * so the user can add/edit/remove from Settings.
+ * The "Access" menu (renamed Start). Renders five fixed category flyouts (Programs / Creativity /
+ * Music / Network / Organization) plus the Games and OSINT Toolkit flyouts. `settings.shortcuts`
+ * no longer drives any rendering here — the field stays in the schema (Settings still reads/writes
+ * it) purely so existing installs / the settings migration path don't break; this menu just no
+ * longer consumes it.
  */
 
 import { useState } from 'react';
@@ -24,44 +27,82 @@ const GAMES: { module: ModuleKey; label: string }[] = [
   { module: 'chess', label: 'Chess' },
   { module: 'pinball', label: 'Ghost Space Ball' }
 ];
-const GAME_TARGETS = new Set<string>(GAMES.map((g) => g.module));
+/** The five fixed category flyouts. Verified against the `ModuleKey` union in `state/store.ts`. */
+const CATEGORIES: { label: string; glyph: string; items: { module: ModuleKey; label: string }[] }[] = [
+  { label: 'Programs', glyph: '📁', items: [
+    { module: 'cases', label: 'My Cases' }, { module: 'notepad', label: 'Notepad 98' },
+    { module: 'briefcase', label: 'Briefcase' }, { module: 'markets', label: 'Markets' },
+    { module: 'search', label: 'Search' }, { module: 'ai-assistant', label: 'Q' } ] },
+  { label: 'Creativity', glyph: '🎨', items: [
+    { module: 'notepad', label: 'Notepad 98' }, { module: 'journal', label: 'Journal Jots' } ] },
+  { label: 'Music', glyph: '🎵', items: [ { module: 'media-player', label: 'Jukebox' } ] },
+  { label: 'Network', glyph: '🖧', items: [
+    { module: 'dialterm', label: 'DialTerm' }, { module: 'mail', label: 'Mail' },
+    { module: 'chat', label: 'Chat (beta)' }, { module: 'bookmarks', label: 'Bookmarks' } ] },
+  { label: 'Organization', glyph: '📅', items: [
+    { module: 'invoices', label: 'Invoices' }, { module: 'calendar', label: 'Calendar' },
+    { module: 'reminders', label: 'Reminders' }, { module: 'alarm', label: 'Alarm' } ] }
+];
+
+/** Shared flyout shell for a category — extracted from the original Games submenu markup so
+ *  Games/OSINT/the five fixed categories all render identically. The flyout panel is a DOM
+ *  descendant of the trigger wrapper, so moving onto it does not fire the wrapper's mouseleave
+ *  (stays open). */
+function CategoryFlyout({ label, glyph, items, onOpen }: {
+  label: string; glyph: string; items: { module: ModuleKey; label: string }[]; onOpen: (m: ModuleKey, l: string) => void;
+}): JSX.Element {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ position: 'relative' }} onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+      <div
+        className="ga98-access-entry"
+        role="menuitem"
+        tabIndex={0}
+        aria-haspopup="true"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowRight') setOpen(true); }}
+      >
+        <span className="ga98-access-entry-glyph" aria-hidden="true">{glyph}</span>
+        <span style={{ flex: 1 }}>{label}</span>
+        <span aria-hidden="true" style={{ opacity: 0.7 }}>▸</span>
+      </div>
+      {open && (
+        <div role="menu" style={{ position: 'absolute', left: '100%', top: 0, minWidth: 160, background: '#c0c0c0', border: '2px outset #f5f5f5', boxShadow: '2px 2px 5px rgba(0,0,0,0.4)', zIndex: 30 }}>
+          {items.map((it) => (
+            <div
+              key={`${it.module}:${it.label}`}
+              className="ga98-access-entry"
+              role="menuitem"
+              tabIndex={0}
+              onClick={() => onOpen(it.module, it.label)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onOpen(it.module, it.label); }}
+            >
+              <span className="ga98-access-entry-glyph" aria-hidden="true">{glyphFor(it.module)}</span>
+              <span>{it.label}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function AccessMenu({ onClose }: AccessMenuProps): JSX.Element {
   const settings = useSettings((s) => s.settings);
   const open = useWindows((s) => s.open);
-  const [gamesOpen, setGamesOpen] = useState(false);
   const [osintOpen, setOsintOpen] = useState(false);
   // OSINT modules live in the "OSINT Toolkit ▸" submenu (grouped by subcategory), not flat in the
-  // menu. Derived from the live registry at render time (like the flat-items filter below) so it
-  // reflects modules registered after this file was imported, and covers new OSINT modules for free.
+  // menu. Derived from the live registry at render time so it reflects modules registered after
+  // this file was imported, and covers new OSINT modules for free.
   const modules = listModules();
   const osintGroups = buildOsintDirectory(modules);
-  const OSINT_TARGETS = new Set<string>(modules.filter((m) => m.category === 'osint').map((m) => m.key));
   let clockOn = false;
   try { clockOn = localStorage.getItem(CLOCK_ENABLED_KEY) === '1'; } catch { /* storage off */ }
-
-  // Drop the footer 'Settings' launcher's duplicate, and any game shortcuts (games live in the Games
-  // submenu now). Done at render time so existing installs are fixed too, not just fresh ones.
-  const items = (settings?.shortcuts ?? []).filter(
-    (s) => !(s.kind === 'module' && (s.target === 'settings' || GAME_TARGETS.has(s.target) || OSINT_TARGETS.has(s.target)))
-  );
 
   function openModule(mod: ModuleKey, label: string): void {
     if (settings?.soundEnabled) playClick();
     open({ module: mod, title: getModule(mod)?.title ?? label });
-    onClose();
-  }
-
-  function activate(id: string): void {
-    const s = items.find((x) => x.id === id);
-    if (!s) return;
-    if (settings?.soundEnabled) playClick();
-    if (s.kind === 'module') {
-      const mod = s.target as ModuleKey;
-      open({ module: mod, title: getModule(mod)?.title ?? s.label });
-    } else {
-      void window.api.system.openExternal(s.target);
-    }
     onClose();
   }
 
@@ -72,61 +113,11 @@ export function AccessMenu({ onClose }: AccessMenuProps): JSX.Element {
         <span>Ghost Intel 98</span>
       </div>
       <div className="ga98-access-list">
-        {items.length === 0 && <div className="ga98-access-entry">(no shortcuts — open Settings)</div>}
-        {items.map((s, i) => (
-          <div key={s.id}>
-            {i > 0 && s.kind === 'url' && items[i - 1]?.kind === 'module' && <div className="ga98-access-separator" />}
-            <div
-              className="ga98-access-entry"
-              role="menuitem"
-              tabIndex={0}
-              onClick={() => activate(s.id)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') activate(s.id);
-              }}
-            >
-              <span className="ga98-access-entry-glyph" aria-hidden="true">
-                {s.kind === 'module' ? glyphFor(s.target as ModuleKey) : '🔗'}
-              </span>
-              <span>{s.label}</span>
-            </div>
-          </div>
+        {CATEGORIES.map((c) => (
+          <CategoryFlyout key={c.label} label={c.label} glyph={c.glyph} items={c.items} onOpen={openModule} />
         ))}
         <div className="ga98-access-separator" />
-        {/* Games submenu — hover (or click) to fan out. The flyout is a DOM descendant of this
-            wrapper, so moving onto it does not fire the wrapper's mouseleave (stays open). */}
-        <div style={{ position: 'relative' }} onMouseEnter={() => setGamesOpen(true)} onMouseLeave={() => setGamesOpen(false)}>
-          <div
-            className="ga98-access-entry"
-            role="menuitem"
-            tabIndex={0}
-            aria-haspopup="true"
-            aria-expanded={gamesOpen}
-            onClick={() => setGamesOpen((o) => !o)}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowRight') setGamesOpen(true); }}
-          >
-            <span className="ga98-access-entry-glyph" aria-hidden="true">🎮</span>
-            <span style={{ flex: 1 }}>Games</span>
-            <span aria-hidden="true" style={{ opacity: 0.7 }}>▸</span>
-          </div>
-          {gamesOpen && (
-            <div role="menu" style={{ position: 'absolute', left: '100%', top: 0, minWidth: 160, background: '#c0c0c0', border: '2px outset #f5f5f5', boxShadow: '2px 2px 5px rgba(0,0,0,0.4)', zIndex: 30 }}>
-              {GAMES.map((g) => (
-                <div
-                  key={g.module}
-                  className="ga98-access-entry"
-                  role="menuitem"
-                  tabIndex={0}
-                  onClick={() => openModule(g.module, g.label)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') openModule(g.module, g.label); }}
-                >
-                  <span className="ga98-access-entry-glyph" aria-hidden="true">{glyphFor(g.module)}</span>
-                  <span>{g.label}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        <CategoryFlyout label="Games" glyph="🎮" items={GAMES} onOpen={openModule} />
         <div className="ga98-access-separator" />
         {/* OSINT Toolkit submenu — hover (or click) to fan out. ONE hop only: grouped subcategory
             headings + one big clickable row per tool, each launching that module immediately (no
@@ -207,6 +198,26 @@ export function AccessMenu({ onClose }: AccessMenuProps): JSX.Element {
         >
           <span className="ga98-access-entry-glyph" aria-hidden="true">⚙</span>
           <span>Settings…</span>
+        </div>
+        <div
+          className="ga98-access-entry"
+          role="menuitem"
+          tabIndex={0}
+          onClick={() => {
+            if (settings?.soundEnabled) playClick();
+            open({ module: 'help', title: 'RTFM' });
+            onClose();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              if (settings?.soundEnabled) playClick();
+              open({ module: 'help', title: 'RTFM' });
+              onClose();
+            }
+          }}
+        >
+          <span className="ga98-access-entry-glyph" aria-hidden="true">❔</span>
+          <span>RTFM</span>
         </div>
         <div className="ga98-access-separator" />
         <div

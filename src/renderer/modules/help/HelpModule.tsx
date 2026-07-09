@@ -8,6 +8,11 @@
 
 import { useState } from 'react';
 import logoUrl from '../../assets/logo.png';
+import { MarkdownView } from '../ai-assistant/MarkdownView';
+// Bundled copies of docs/guides/*.md (Vite ?raw import needs the file inside the renderer tree).
+// docs/guides/*.md stays the canonical source — re-sync these copies whenever those are edited.
+import SEARCHLIGHT_GUIDE from './guides/searchlight-learning.md?raw';
+import SOCMINT_GUIDE from './guides/socmint-tutorial.md?raw';
 
 const MODULE_DOCS: { name: string; desc: string }[] = [
   { name: 'My Cases', desc: 'Create cases, attach files (drag-drop), keep notes, tasks, links, reminders, and a per-case timeline. Sort by updated/created/priority/status/title; filter by tag.' },
@@ -111,13 +116,15 @@ function ExtLink({ href }: { href: string }): JSX.Element {
   );
 }
 
-type SectionKey = 'manual' | 'opcs' | 'hacktivist' | 'osint';
+type SectionKey = 'manual' | 'opcs' | 'hacktivist' | 'osint' | 'searchlight' | 'socmint';
 
 const SECTIONS: { key: SectionKey; label: string; glyph: string }[] = [
-  { key: 'manual',     label: 'Manual',          glyph: '📖' },
-  { key: 'opcs',       label: 'OpChildSafety',   glyph: '🛡' },
-  { key: 'hacktivist', label: 'Hacktivist Ethos', glyph: '✊' },
-  { key: 'osint',      label: 'OSINT',           glyph: '🔎' }
+  { key: 'manual',      label: 'Manual',           glyph: '📖' },
+  { key: 'opcs',        label: 'OpChildSafety',    glyph: '🛡' },
+  { key: 'hacktivist',  label: 'Hacktivist Ethos', glyph: '✊' },
+  { key: 'osint',       label: 'OSINT',            glyph: '🔎' },
+  { key: 'searchlight', label: 'Searchlight',      glyph: '📡' },
+  { key: 'socmint',     label: 'SOCMINT',          glyph: '💬' }
 ];
 
 export function HelpModule(): JSX.Element {
@@ -142,6 +149,8 @@ export function HelpModule(): JSX.Element {
         {section === 'opcs' && <OpChildSafetyPane />}
         {section === 'hacktivist' && <HacktivistEthosPane />}
         {section === 'osint' && <OsintPane />}
+        {section === 'searchlight' && <div className="ga98-stack"><MarkdownView text={SEARCHLIGHT_GUIDE} /></div>}
+        {section === 'socmint' && <div className="ga98-stack"><MarkdownView text={SOCMINT_GUIDE} /></div>}
       </div>
     </div>
   );

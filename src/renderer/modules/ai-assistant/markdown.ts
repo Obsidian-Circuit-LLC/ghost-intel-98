@@ -15,10 +15,40 @@ export type Inline =
 export type Block =
   | { t: 'p'; children: Inline[] }
   | { t: 'h'; level: number; children: Inline[] }
-  | { t: 'ul'; items: Inline[][] };
+  | { t: 'ul'; items: Inline[][] }
+  // GFM pipe table. `header` is one row of cells; `rows` are the body rows. Each cell is parsed
+  // inline (so bold/code/links inside a cell still work) — the renderer maps this to a native
+  // <table>. Detected only when a pipe row is immediately followed by a matching `|---|---|`
+  // delimiter row, so stray `|` in prose and lone `---` section rules never trigger it.
+  | { t: 'table'; header: Inline[][]; rows: Inline[][][] };
 
 const HEADING = /^(#{1,6})\s+(.*)$/;
 const BULLET = /^\s*[*\-+]\s+(.*)$/;
+const DELIM_CELL = /^:?-+:?$/;
+
+/**
+ * Split a GFM table row into trimmed cell strings, dropping the optional leading/trailing pipe.
+ * `| a | b |` → ['a','b']. Escaped pipes are not handled (guide/AI content has none); a `\|` would
+ * split — acceptable for this limited subset. Pure.
+ */
+function splitTableRow(line: string): string[] {
+  let s = line.trim();
+  if (s.startsWith('|')) s = s.slice(1);
+  if (s.endsWith('|')) s = s.slice(0, -1);
+  return s.split('|').map((c) => c.trim());
+}
+
+/**
+ * Return the cell count if `line` is a valid GFM delimiter row (every cell like `---`, `:--`,
+ * `--:`, `:-:`), else -1. A delimiter MUST contain a pipe, so a bare `---` horizontal-rule /
+ * section separator is never mistaken for a one-column delimiter. Pure.
+ */
+function delimiterCellCount(line: string): number {
+  if (!line.includes('|') || !line.includes('-')) return -1;
+  const cells = splitTableRow(line);
+  if (cells.length === 0 || !cells.every((c) => DELIM_CELL.test(c))) return -1;
+  return cells.length;
+}
 
 const TRAILING_PUNCT = '.,;:!?\'"';
 
@@ -147,6 +177,8 @@ function blockToText(b: Block): string {
       return inlineToText(b.children);
     case 'ul':
       return b.items.map(inlineToText).join('\n');
+    case 'table':
+      return [b.header, ...b.rows].map((row) => row.map(inlineToText).join(' ')).join('\n');
   }
 }
 
@@ -180,9 +212,29 @@ export function parseMarkdown(text: string): Block[] {
     bullets = null;
   };
 
-  for (const line of lines) {
+  for (let idx = 0; idx < lines.length; idx++) {
+    const line = lines[idx];
     const h = HEADING.exec(line);
     const b = BULLET.exec(line);
+    // GFM table: a pipe-bearing header row whose NEXT line is a delimiter row with the same cell
+    // count. Body rows continue while they contain a pipe and aren't blank.
+    if (!h && !b && line.includes('|') && idx + 1 < lines.length) {
+      const headerCells = splitTableRow(line);
+      const delimCount = delimiterCellCount(lines[idx + 1]);
+      if (delimCount > 0 && delimCount === headerCells.length) {
+        flushPara(); flushBullets();
+        const header = headerCells.map((c) => parseInline(c));
+        const rows: Inline[][][] = [];
+        let j = idx + 2;
+        while (j < lines.length && lines[j].trim() !== '' && lines[j].includes('|')) {
+          rows.push(splitTableRow(lines[j]).map((c) => parseInline(c)));
+          j++;
+        }
+        blocks.push({ t: 'table', header, rows });
+        idx = j - 1;
+        continue;
+      }
+    }
     if (h) {
       flushPara(); flushBullets();
       blocks.push({ t: 'h', level: h[1].length, children: parseInline(h[2]) });
