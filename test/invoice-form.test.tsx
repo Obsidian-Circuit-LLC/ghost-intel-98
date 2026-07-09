@@ -59,4 +59,52 @@ describe('InvoiceForm', () => {
     await act(async () => { typeInto(rate, '40'); });
     expect(onChange.mock.calls[0][0].rate).toBe(40);
   });
+
+  it('shows a logo preview + Remove that clears the ref', async () => {
+    const onChange = vi.fn();
+    const withLogo = { ...inv, sender: { ...inv.sender, logoRef: 'a.png' } };
+    await act(async () => {
+      root.render(<InvoiceForm invoice={withLogo} assets={{ 'a.png': 'data:image/png;base64,AAA' }}
+        onChange={onChange} onUploadLogo={() => {}} onCaptureSignature={() => {}} />);
+    });
+    const img = container.querySelector('img[alt="From logo"]') as HTMLImageElement;
+    expect(img).toBeTruthy();
+    expect(img.src).toBe('data:image/png;base64,AAA');
+    const removeBtn = container.querySelector('[aria-label="Remove From logo"]') as HTMLButtonElement;
+    expect(removeBtn).toBeTruthy();
+    await act(async () => { removeBtn.click(); });
+    expect(onChange.mock.calls[0][0].sender.logoRef).toBeUndefined();
+  });
+
+  it('shows "No logo" when there is no logoRef', async () => {
+    await act(async () => {
+      root.render(<InvoiceForm invoice={inv} assets={{}} onChange={() => {}} onUploadLogo={() => {}} onCaptureSignature={() => {}} />);
+    });
+    expect(container.querySelector('img[alt="From logo"]')).toBeNull();
+    expect(container.textContent).toMatch(/No logo/);
+  });
+
+  it('shows a signature preview + Remove that clears the ref', async () => {
+    const onChange = vi.fn();
+    const withSig = { ...inv, signature: { signerName: 'Me', signatureRef: 's.png' } };
+    await act(async () => {
+      root.render(<InvoiceForm invoice={withSig} assets={{ 's.png': 'data:image/png;base64,BBB' }}
+        onChange={onChange} onUploadLogo={() => {}} onCaptureSignature={() => {}} />);
+    });
+    const img = container.querySelector('img[alt="Signature"]') as HTMLImageElement;
+    expect(img).toBeTruthy();
+    expect(img.src).toBe('data:image/png;base64,BBB');
+    const removeBtn = container.querySelector('[aria-label="Remove signature"]') as HTMLButtonElement;
+    expect(removeBtn).toBeTruthy();
+    await act(async () => { removeBtn.click(); });
+    expect(onChange.mock.calls[0][0].signature.signatureRef).toBeUndefined();
+  });
+
+  it('shows "No signature" when there is no signatureRef', async () => {
+    await act(async () => {
+      root.render(<InvoiceForm invoice={inv} assets={{}} onChange={() => {}} onUploadLogo={() => {}} onCaptureSignature={() => {}} />);
+    });
+    expect(container.querySelector('img[alt="Signature"]')).toBeNull();
+    expect(container.textContent).toMatch(/No signature/);
+  });
 });

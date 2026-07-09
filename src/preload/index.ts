@@ -328,7 +328,8 @@ const api = {
     removeProfile: (id: string) => ipcRenderer.invoke(channels.invoices.removeProfile, id),
     putAsset: (bytes: number[], mime: string) => ipcRenderer.invoke(channels.invoices.putAsset, { bytes, mime }),
     getAsset: (ref: string) => ipcRenderer.invoke(channels.invoices.getAsset, ref),
-    exportPdf: (html: string) => ipcRenderer.invoke(channels.invoices.exportPdf, { html })
+    exportPdf: (html: string) => ipcRenderer.invoke(channels.invoices.exportPdf, { html }),
+    exportDocx: (args: { invoice: unknown; assets: Record<string, string> }) => ipcRenderer.invoke(channels.invoices.exportDocx, args)
   },
   geoint: {
     snapshot: () => ipcRenderer.invoke(channels.geoint.snapshot),

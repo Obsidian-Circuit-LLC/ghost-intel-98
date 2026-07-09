@@ -71,4 +71,14 @@ describe('SignaturePad', () => {
     await act(async () => { findByText('button', 'Clear').click(); });
     expect(onCapture).not.toHaveBeenCalled();
   });
+
+  it('the upload control is a button-styled control, not bare text', async () => {
+    const onCapture = vi.fn();
+    await act(async () => {
+      root.render(<SignaturePad onCapture={onCapture} />);
+    });
+    const up = container.querySelector('.ga98-file-button');
+    expect(up).toBeTruthy();
+    expect(up!.textContent).toMatch(/upload signature/i);
+  });
 });

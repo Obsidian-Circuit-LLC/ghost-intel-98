@@ -16,6 +16,7 @@ describe('invoices IPC channels', () => {
     expect(channels.invoices.getAsset).toBe('invoices:getAsset');
     expect(channels.invoices.exportPdf).toBe('invoices:exportPdf');
   });
+  it('exposes exportDocx', () => { expect(channels.invoices.exportDocx).toBe('invoices:exportDocx'); });
 });
 
 describe('ensureAssetInput', () => {

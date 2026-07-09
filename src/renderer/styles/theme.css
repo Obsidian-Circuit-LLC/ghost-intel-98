@@ -1214,7 +1214,9 @@ input.ga98-text, select.ga98-text {
  * "98.css table white cascade" note). The preview pane is a deliberate white
  * "paper" surface — it hosts the exact printable HTML (preview == PDF output).
  * ------------------------------------------------------------------------- */
-.ga98-invoices { display: flex; height: 100%; overflow: hidden; }
+.ga98-invoices { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+.ga98-ledger-banner { display: block; margin: 0 auto 6px; height: auto; width: auto; max-height: 180px; max-width: 100%; flex: 0 0 auto; }
+.ga98-invoices-body { display: flex; flex: 1; overflow: hidden; min-height: 0; }
 .ga98-invoices-list {
   width: 220px; flex: 0 0 220px; display: flex; flex-direction: column;
   border-right: 1px solid var(--ga98-shadow-dark); background: var(--ga98-grey); overflow-y: auto;
@@ -1238,6 +1240,21 @@ input.ga98-text, select.ga98-text {
 .ga98-invoice-lines .num { text-align: right; }
 .ga98-invoice-totals { align-self: flex-end; text-align: right; min-width: 220px; }
 .ga98-invoice-signature { display: flex; flex-direction: column; gap: 6px; }
+.ga98-invoice-logo-box, .ga98-invoice-sig-box {
+  position: relative; min-height: 48px; border: 1px solid var(--ga98-shadow-dark);
+  box-shadow: inset 1px 1px 0 var(--ga98-shadow-dark); background: #fff;
+  display: flex; align-items: center; justify-content: center; padding: 4px; margin-top: 4px;
+}
+.ga98-invoice-logo-img, .ga98-invoice-sig-img { max-height: 44px; max-width: 100%; }
+.ga98-invoice-img-remove {
+  position: absolute; top: 2px; right: 2px; font-size: 10px; line-height: 1; padding: 1px 4px; cursor: pointer;
+}
+.ga98-invoice-logo-empty { color: var(--ga98-shadow-dark); font-style: italic; text-align: center; }
+.ga98-file-button {
+  display: inline-block; border: 1px outset #c0c0c0; background: #c0c0c0; color: #000;
+  padding: 2px 10px; cursor: pointer; font-size: 11px; font-family: inherit; text-align: center;
+}
+.ga98-file-button:active { border-style: inset; }
 .ga98-signature-pad { display: inline-flex; flex-direction: column; gap: 4px; }
 .ga98-sig-canvas {
   border: 1px solid var(--ga98-shadow-dark); background: #fff; box-shadow: inset 1px 1px 0 var(--ga98-shadow-dark);

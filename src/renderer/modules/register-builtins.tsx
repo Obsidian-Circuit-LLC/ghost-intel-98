@@ -267,5 +267,5 @@ export function registerBuiltins(): void {
   registerModule({ key: 'osint-toolkit', title: 'OSINT Toolkit', glyph: '🧰', component: OSINTToolkitAdapter, builtin: true, defaultWidth: 360, defaultHeight: 470 });
   registerModule({ key: 'minds-eye', title: "Mind's Eye", glyph: '👁', component: MindsEyeAdapter, builtin: true, defaultWidth: 760, defaultHeight: 560 });
   registerModule({ key: 'investigation-graph', title: 'Investigation Graph', glyph: '🕸', component: InvestigationGraphAdapter, builtin: true, defaultWidth: 900, defaultHeight: 640, category: 'osint', subcategory: 'Identity' });
-  registerModule({ key: 'invoices', title: 'Invoices', glyph: '🧾', component: InvoicesAdapter, builtin: true, defaultWidth: 900, defaultHeight: 640 });
+  registerModule({ key: 'invoices', title: 'Ghost Ledger 98', glyph: '📒', component: InvoicesAdapter, builtin: true, defaultWidth: 900, defaultHeight: 640 });
 }

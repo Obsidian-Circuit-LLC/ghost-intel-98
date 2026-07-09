@@ -79,6 +79,7 @@ import * as whiteboard from '../storage/whiteboard';
 import * as mediaLib from '../media/library';
 import * as invoiceStore from '../invoices/store';
 import { renderInvoicePdf } from '../invoices/export';
+import { renderInvoiceDocx } from '../invoices/docx';
 import { adHocAllowlist } from '../media/protocol';
 import { parseM3u, toM3u } from '../media/m3u';
 import { parseFeedList, feedToUpsert } from '../services/feed-import';
@@ -1351,6 +1352,17 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     try { const st = await lstat(r.filePath); if (st.isSymbolicLink()) throw new Error('Refusing to write to a symbolic link.'); }
     catch (err) { if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err; }
     await writeFile(r.filePath, pdf);
+    return basename(r.filePath);
+  });
+  safeHandle(channels.invoices.exportDocx, async (...a) => {
+    const { invoice, assets } = a[0] as { invoice: unknown; assets: Record<string, string> };
+    const buf = renderInvoiceDocx(ensureInvoice(invoice), assets ?? {});
+    const win = getWindow();
+    const r = win ? await dialog.showSaveDialog(win, { defaultPath: 'invoice.docx' }) : await dialog.showSaveDialog({ defaultPath: 'invoice.docx' });
+    if (r.canceled || !r.filePath) return null;
+    try { const st = await lstat(r.filePath); if (st.isSymbolicLink()) throw new Error('Refusing to write to a symbolic link.'); }
+    catch (err) { if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err; }
+    await writeFile(r.filePath, buf);
     return basename(r.filePath);
   });
 
