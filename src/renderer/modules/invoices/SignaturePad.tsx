@@ -37,7 +37,7 @@ export function SignaturePad({ onCapture }: { onCapture: (dataUrl: string, mime:
         onPointerDown={start} onPointerMove={move} onPointerUp={end} onPointerLeave={end} />
       <div className="field-row" style={{ gap: 6 }}>
         <button onClick={clear}>Clear</button>
-        <label>Upload signature<input type="file" accept="image/png,image/jpeg" aria-label="Upload signature" onChange={upload} style={{ display: 'none' }} /></label>
+        <label className="ga98-file-button">Upload signature<input type="file" accept="image/png,image/jpeg" aria-label="Upload signature" onChange={upload} style={{ display: 'none' }} /></label>
       </div>
     </div>
   );
