@@ -36,6 +36,15 @@ export function InvoiceForm(
           <input type="file" accept="image/png,image/jpeg" aria-label={`Upload ${label} logo`}
             onChange={(e) => { const f = e.target.files?.[0]; if (f) onUploadLogo(which, f); }} />
         </label>
+        <div className="ga98-invoice-logo-box">
+          {p.logoRef && assets[p.logoRef]
+            ? <>
+                <img src={assets[p.logoRef]} alt={`${label} logo`} className="ga98-invoice-logo-img" />
+                <button type="button" aria-label={`Remove ${label} logo`} className="ga98-invoice-img-remove"
+                  onClick={() => setParty(which, { logoRef: undefined })}>✕</button>
+              </>
+            : <span className="ga98-invoice-logo-empty">No logo</span>}
+        </div>
       </fieldset>
     );
   };
@@ -91,6 +100,15 @@ export function InvoiceForm(
         <div>Signer name
           <input className="ga98-text" aria-label="Signer name" value={invoice.signature?.signerName ?? ''}
             onChange={(e) => onChange({ ...invoice, signature: { ...invoice.signature, signerName: e.target.value } })} />
+        </div>
+        <div className="ga98-invoice-sig-box">
+          {invoice.signature?.signatureRef && assets[invoice.signature.signatureRef]
+            ? <>
+                <img src={assets[invoice.signature.signatureRef]} alt="Signature" className="ga98-invoice-sig-img" />
+                <button type="button" aria-label="Remove signature" className="ga98-invoice-img-remove"
+                  onClick={() => onChange({ ...invoice, signature: { ...invoice.signature, signatureRef: undefined } })}>✕ Remove signature</button>
+              </>
+            : <span className="ga98-invoice-logo-empty">No signature</span>}
         </div>
         <SignaturePad onCapture={(dataUrl, mime) => {
           // Hand the captured image up to the host, which encrypts it via putAsset, caches the data URL,

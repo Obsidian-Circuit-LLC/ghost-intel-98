@@ -1238,6 +1238,16 @@ input.ga98-text, select.ga98-text {
 .ga98-invoice-lines .num { text-align: right; }
 .ga98-invoice-totals { align-self: flex-end; text-align: right; min-width: 220px; }
 .ga98-invoice-signature { display: flex; flex-direction: column; gap: 6px; }
+.ga98-invoice-logo-box, .ga98-invoice-sig-box {
+  position: relative; min-height: 48px; border: 1px solid var(--ga98-shadow-dark);
+  box-shadow: inset 1px 1px 0 var(--ga98-shadow-dark); background: #fff;
+  display: flex; align-items: center; justify-content: center; padding: 4px; margin-top: 4px;
+}
+.ga98-invoice-logo-img, .ga98-invoice-sig-img { max-height: 44px; max-width: 100%; }
+.ga98-invoice-img-remove {
+  position: absolute; top: 2px; right: 2px; font-size: 10px; line-height: 1; padding: 1px 4px; cursor: pointer;
+}
+.ga98-invoice-logo-empty { color: var(--ga98-shadow-dark); font-style: italic; text-align: center; }
 .ga98-signature-pad { display: inline-flex; flex-direction: column; gap: 4px; }
 .ga98-sig-canvas {
   border: 1px solid var(--ga98-shadow-dark); background: #fff; box-shadow: inset 1px 1px 0 var(--ga98-shadow-dark);
