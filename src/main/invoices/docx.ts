@@ -8,7 +8,13 @@ import { lineHours, round2, computeTotals, formatMoney } from '../../renderer/mo
 const EMU_PER_PX = 9525; // 1px @96dpi = 9525 EMU
 
 function esc(s: string | undefined): string {
-  return (s ?? '').replace(/[&<>"']/g, (c) => (c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : c === '"' ? '&quot;' : '&apos;'));
+  // Strip codepoints that are not representable in XML 1.0 (C0 controls other than
+  // tab/LF/CR, unpaired surrogates, U+FFFE/U+FFFF). These cannot be emitted even as
+  // numeric entities, so leaving them in yields a non-well-formed document.xml and Word
+  // shows the repair/corrupt-file prompt. The `u` flag keeps valid surrogate pairs intact.
+  return (s ?? '')
+    .replace(/[^\x09\x0A\x0D\x20-퟿-�\u{10000}-\u{10FFFF}]/gu, '')
+    .replace(/[&<>"']/g, (c) => (c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : c === '"' ? '&quot;' : '&apos;'));
 }
 /** Read intrinsic pixel size from PNG (IHDR) or JPEG (SOF); fall back to 120x60 if unparseable. */
 function imageSize(bytes: Buffer, mime: string): { w: number; h: number } {

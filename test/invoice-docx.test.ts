@@ -31,6 +31,26 @@ describe('renderInvoiceDocx', () => {
     expect(xml).toContain('$77.00');                     // 3.5h*20=70 +10% tax
     expect(xml).toContain('&lt;b&gt;C&lt;/b&gt;');       // client name escaped
   });
+  it('strips XML-1.0-illegal control chars from free-text so document.xml stays well-formed', () => {
+    // C0 controls other than tab/LF/CR (e.g. form-feed U+000C, vertical-tab U+000B,
+    // unit-separator U+001F, NUL) cannot be represented in XML 1.0 even as numeric
+    // entities; if they reach <w:t> Word rejects the part and shows the repair prompt.
+    const dirty: Invoice = {
+      ...inv,
+      client: { name: 'Acme\x0cInc\x00', company: 'Co\x1f' },
+      sender: { name: 'M\x0be', company: 'GI', logoRef: 'a.png' },
+      notes: 'note\x1eok café 🚀',
+      lines: [{ id: 'l1', date: '2026-07-01', start: '12:00', end: '15:30', description: 'Recon\x0cREPORT\x1fx & <ops>' }],
+    };
+    const xml = docXml(renderInvoiceDocx(dirty, {}));
+    // No codepoint outside the XML 1.0 Char production may survive.
+    const illegal = /[^\x09\x0A\x0D\x20-퟿-�\u{10000}-\u{10FFFF}]/u;
+    expect(illegal.test(xml)).toBe(false);
+    // Legible text around the stripped controls survives, metachars still escaped, astral kept.
+    expect(xml).toContain('ReconREPORTx &amp; &lt;ops&gt;');
+    expect(xml).toContain('AcmeInc');
+    expect(xml).toContain('noteok café 🚀');
+  });
   it('an image-bearing invoice writes a word/media part + a relationship', () => {
     const buf = renderInvoiceDocx(inv, { 'a.png': PNG });
     const zip = new AdmZip(buf);
