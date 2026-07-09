@@ -396,6 +396,7 @@ export interface GhostApi {
     putAsset(bytes: number[], mime: string): Promise<string>;
     getAsset(ref: string): Promise<InvoiceAsset | null>;
     exportPdf(html: string): Promise<string | null>;
+    exportDocx(args: { invoice: Invoice; assets: Record<string, string> }): Promise<string | null>;
   };
   geoint: {
     snapshot(): Promise<GeoSnapshot>;

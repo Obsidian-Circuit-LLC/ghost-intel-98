@@ -99,6 +99,16 @@ export function InvoicesModule(): JSX.Element {
     } finally { setBusy(false); }
   }
 
+  async function exportDocx(): Promise<void> {
+    if (!invoice) return;
+    setBusy(true);
+    try {
+      const resolved = await loadAssetsFor(invoice);
+      const filename = await window.api.invoices.exportDocx({ invoice, assets: resolved });
+      if (filename) toast.success(`Exported ${filename}`);
+    } finally { setBusy(false); }
+  }
+
   async function uploadLogo(which: 'sender' | 'client', file: File): Promise<void> {
     if (!invoice) return;
     const bytes = Array.from(new Uint8Array(await file.arrayBuffer()));
@@ -151,6 +161,7 @@ export function InvoicesModule(): JSX.Element {
             <div className="ga98-invoices-actions">
               <button disabled={busy} onClick={() => { void save(); }}>Save</button>
               <button disabled={busy} onClick={() => { void exportPdf(); }}>Export PDF</button>
+              <button disabled={busy} onClick={() => { void exportDocx(); }}>Export DOCX</button>
             </div>
             <InvoiceForm
               invoice={invoice}

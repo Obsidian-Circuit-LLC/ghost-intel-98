@@ -636,7 +636,8 @@ export const channels = {
     list: 'invoices:list', save: 'invoices:save', remove: 'invoices:remove', duplicate: 'invoices:duplicate',
     nextNumber: 'invoices:nextNumber',
     listProfiles: 'invoices:listProfiles', saveProfile: 'invoices:saveProfile', removeProfile: 'invoices:removeProfile',
-    putAsset: 'invoices:putAsset', getAsset: 'invoices:getAsset', exportPdf: 'invoices:exportPdf'
+    putAsset: 'invoices:putAsset', getAsset: 'invoices:getAsset', exportPdf: 'invoices:exportPdf',
+    exportDocx: 'invoices:exportDocx'
   }
 } as const;
 
@@ -1108,6 +1109,9 @@ export interface ApiContracts {
   [channels.invoices.exportPdf]: { args: [{ html: string }]; returns: string | null };
   // ^ takes prebuilt HTML (the renderer already has renderInvoiceHtml for the preview) so main never
   //   imports a renderer module. The renderer resolves asset refs → data URLs before building the HTML.
+  [channels.invoices.exportDocx]: { args: [{ invoice: Invoice; assets: Record<string, string> }]; returns: string | null };
+  // ^ builds an editable OOXML .docx via renderInvoiceDocx (adm-zip) — numbers foot with the PDF
+  //   via calc.ts; the renderer resolves asset refs → data URLs (same map exportPdf uses).
 }
 
 export const BGCONN_LOCK_EXEMPT_CHANNELS = ['bgconn:status', 'bgconn:stop'] as const;
