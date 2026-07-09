@@ -51,6 +51,13 @@ describe('InvoicesModule', () => {
     await vi.waitFor(() => expect((window as any).api.invoices.nextNumber).toHaveBeenCalled());
   });
 
+  it('renders the Ghost Ledger 98 banner at the top of the module', async () => {
+    await act(async () => { root.render(<InvoicesModule />); });
+    const banner = container.querySelector('img.ga98-ledger-banner') as HTMLImageElement | null;
+    expect(banner).toBeTruthy();
+    expect(banner!.alt).toBe('Ghost Ledger 98');
+  });
+
   it('capturing a signature persists it via putAsset and embeds it in the preview', async () => {
     const api = (window as any).api.invoices;
     api.putAsset = vi.fn(async () => 'sig-ref-1');

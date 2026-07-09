@@ -9,6 +9,7 @@ import type { Invoice } from '@shared/invoice-types';
 import { InvoiceForm } from './InvoiceForm';
 import { renderInvoiceHtml } from './invoice-html';
 import { toast } from '../../state/toasts';
+import bannerUrl from '../../assets/ghost-ledger-banner.png';
 
 function today(): string { return new Date().toISOString().slice(0, 10); }
 function nowIso(): string { return new Date().toISOString(); }
@@ -137,43 +138,46 @@ export function InvoicesModule(): JSX.Element {
 
   return (
     <div className="ga98-invoices">
-      <div className="ga98-invoices-list">
-        <div className="ga98-invoices-toolbar">
-          <button onClick={() => { void newInvoice(); }}>New invoice</button>
+      <img src={bannerUrl} alt="Ghost Ledger 98" className="ga98-ledger-banner" />
+      <div className="ga98-invoices-body">
+        <div className="ga98-invoices-list">
+          <div className="ga98-invoices-toolbar">
+            <button onClick={() => { void newInvoice(); }}>New invoice</button>
+          </div>
+          <ul>
+            {list.map((inv) => (
+              <li key={inv.id} className={invoice?.id === inv.id ? 'selected' : undefined}>
+                <button className="ga98-invoices-open" onClick={() => { void openInvoice(inv); }}>
+                  #{inv.number} — {inv.client.name || inv.client.company || 'Untitled'}
+                </button>
+                <button aria-label="Duplicate invoice" onClick={() => { void duplicate(inv.id); }}>⧉</button>
+                <button aria-label="Delete invoice" onClick={() => { void remove(inv.id); }}>✕</button>
+              </li>
+            ))}
+            {list.length === 0 ? <li className="ga98-invoices-empty">No invoices yet.</li> : null}
+          </ul>
         </div>
-        <ul>
-          {list.map((inv) => (
-            <li key={inv.id} className={invoice?.id === inv.id ? 'selected' : undefined}>
-              <button className="ga98-invoices-open" onClick={() => { void openInvoice(inv); }}>
-                #{inv.number} — {inv.client.name || inv.client.company || 'Untitled'}
-              </button>
-              <button aria-label="Duplicate invoice" onClick={() => { void duplicate(inv.id); }}>⧉</button>
-              <button aria-label="Delete invoice" onClick={() => { void remove(inv.id); }}>✕</button>
-            </li>
-          ))}
-          {list.length === 0 ? <li className="ga98-invoices-empty">No invoices yet.</li> : null}
-        </ul>
-      </div>
 
-      <div className="ga98-invoices-editor">
-        {invoice ? (
-          <>
-            <div className="ga98-invoices-actions">
-              <button disabled={busy} onClick={() => { void save(); }}>Save</button>
-              <button disabled={busy} onClick={() => { void exportPdf(); }}>Export PDF</button>
-              <button disabled={busy} onClick={() => { void exportDocx(); }}>Export DOCX</button>
-            </div>
-            <InvoiceForm
-              invoice={invoice}
-              assets={assets}
-              onChange={setInvoice}
-              onUploadLogo={(which, file) => { void uploadLogo(which, file); }}
-              onCaptureSignature={(dataUrl) => { void captureSignature(dataUrl); }}
-            />
-          </>
-        ) : (
-          <div className="ga98-invoices-placeholder">Select an invoice or create a new one.</div>
-        )}
+        <div className="ga98-invoices-editor">
+          {invoice ? (
+            <>
+              <div className="ga98-invoices-actions">
+                <button disabled={busy} onClick={() => { void save(); }}>Save</button>
+                <button disabled={busy} onClick={() => { void exportPdf(); }}>Export PDF</button>
+                <button disabled={busy} onClick={() => { void exportDocx(); }}>Export DOCX</button>
+              </div>
+              <InvoiceForm
+                invoice={invoice}
+                assets={assets}
+                onChange={setInvoice}
+                onUploadLogo={(which, file) => { void uploadLogo(which, file); }}
+                onCaptureSignature={(dataUrl) => { void captureSignature(dataUrl); }}
+              />
+            </>
+          ) : (
+            <div className="ga98-invoices-placeholder">Select an invoice or create a new one.</div>
+          )}
+        </div>
       </div>
     </div>
   );

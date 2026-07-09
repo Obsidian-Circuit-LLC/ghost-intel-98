@@ -36,4 +36,10 @@ describe('registerBuiltins', () => {
     registerBuiltins();
     expect(() => registerBuiltins()).toThrow();
   });
+
+  it('the invoices module is titled Ghost Ledger 98', () => {
+    registerBuiltins();
+    const m = listModules().find((x) => x.key === 'invoices');
+    expect(m?.title).toBe('Ghost Ledger 98');
+  });
 });

@@ -1214,7 +1214,9 @@ input.ga98-text, select.ga98-text {
  * "98.css table white cascade" note). The preview pane is a deliberate white
  * "paper" surface — it hosts the exact printable HTML (preview == PDF output).
  * ------------------------------------------------------------------------- */
-.ga98-invoices { display: flex; height: 100%; overflow: hidden; }
+.ga98-invoices { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+.ga98-ledger-banner { display: block; margin: 0 auto 6px; height: auto; width: auto; max-height: 180px; max-width: 100%; flex: 0 0 auto; }
+.ga98-invoices-body { display: flex; flex: 1; overflow: hidden; min-height: 0; }
 .ga98-invoices-list {
   width: 220px; flex: 0 0 220px; display: flex; flex-direction: column;
   border-right: 1px solid var(--ga98-shadow-dark); background: var(--ga98-grey); overflow-y: auto;
