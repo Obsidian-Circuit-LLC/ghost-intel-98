@@ -64,6 +64,29 @@ export function MarkdownView({ text, onLinkClick }: { text: string; onLinkClick?
             return <div key={i} style={{ fontWeight: 'bold', fontSize: b.level <= 2 ? 15 : 14, margin: '4px 0 2px' }}>{renderInline(b.children, onLinkClick)}</div>;
           case 'ul':
             return <ul key={i} style={{ margin: '0 0 6px', paddingLeft: 20 }}>{b.items.map((it, j) => <li key={j}>{renderInline(it, onLinkClick)}</li>)}</ul>;
+          case 'table':
+            // Native table. Cell border/background are INLINE (specificity beats the bundled
+            // 98.css `table{background:#fff}` element rule — see the "98.css table white cascade"
+            // note) so the header stays Win98 grey regardless of cascade. overflow-x wrapper keeps
+            // a wide table from bleeding out of the pane.
+            return (
+              <div key={i} style={{ overflowX: 'auto', margin: '0 0 6px' }}>
+                <table style={{ borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead>
+                    <tr>{b.header.map((cell, h) => (
+                      <th key={h} style={{ border: '1px solid #808080', padding: '2px 6px', textAlign: 'left', background: '#c0c0c0', verticalAlign: 'top' }}>{renderInline(cell, onLinkClick)}</th>
+                    ))}</tr>
+                  </thead>
+                  <tbody>
+                    {b.rows.map((row, r) => (
+                      <tr key={r}>{row.map((cell, c) => (
+                        <td key={c} style={{ border: '1px solid #808080', padding: '2px 6px', background: '#fff', verticalAlign: 'top' }}>{renderInline(cell, onLinkClick)}</td>
+                      ))}</tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
           default: { const _exhaustive: never = b; return _exhaustive; }
         }
       })}

@@ -44,6 +44,19 @@ describe('RTFM sections', () => {
     expect(container.textContent).toMatch(/Searchlight/i); // a heading from the guide
   });
 
+  it('renders the Searchlight §5 reference as a real <table>, not raw pipe text', async () => {
+    await act(async () => { root.render(<HelpModule />); });
+    const btn = Array.from(container.querySelectorAll('.ga98-settings-rail-item')).find((b) => /Searchlight/.test(b.textContent || ''));
+    await act(async () => { (btn as HTMLElement).click(); });
+    // The §5 "button by button" table must render as a DOM table with a header row + body rows...
+    const table = container.querySelector('table');
+    expect(table).not.toBeNull();
+    expect(table!.querySelectorAll('th').length).toBe(3); // What the button says | What it means | What to do
+    expect(table!.querySelectorAll('tbody tr').length).toBeGreaterThanOrEqual(5);
+    // ...and the raw `|---|` delimiter must NOT leak into the visible text.
+    expect(container.textContent).not.toContain('|---|');
+  });
+
   it('selecting SOCMINT renders its guide markdown', async () => {
     await act(async () => { root.render(<HelpModule />); });
     const btn = Array.from(container.querySelectorAll('.ga98-settings-rail-item')).find((b) => /SOCMINT/.test(b.textContent || ''));
