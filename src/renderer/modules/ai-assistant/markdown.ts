@@ -20,11 +20,19 @@ export type Block =
   // inline (so bold/code/links inside a cell still work) — the renderer maps this to a native
   // <table>. Detected only when a pipe row is immediately followed by a matching `|---|---|`
   // delimiter row, so stray `|` in prose and lone `---` section rules never trigger it.
-  | { t: 'table'; header: Inline[][]; rows: Inline[][][] };
+  | { t: 'table'; header: Inline[][]; rows: Inline[][][] }
+  // Blockquote callout (`> …`, one or more consecutive lines, the `> ` stripped), fenced code block
+  // (``` … ```, raw text, never inline-parsed), and a horizontal rule (a bare `---`/`***`/`___` line).
+  // Added so the RTFM guides + Q output render these instead of showing literal markdown syntax.
+  | { t: 'quote'; children: Inline[] }
+  | { t: 'codeblock'; v: string }
+  | { t: 'hr' };
 
 const HEADING = /^(#{1,6})\s+(.*)$/;
 const BULLET = /^\s*[*\-+]\s+(.*)$/;
 const DELIM_CELL = /^:?-+:?$/;
+const BLOCKQUOTE = /^>\s?/;
+const HR = /^(-{3,}|\*{3,}|_{3,})$/; // a bare rule line; a GFM `|---|` delimiter has pipes, so it never matches
 
 /**
  * Split a GFM table row into trimmed cell strings, dropping the optional leading/trailing pipe.
@@ -179,6 +187,12 @@ function blockToText(b: Block): string {
       return b.items.map(inlineToText).join('\n');
     case 'table':
       return [b.header, ...b.rows].map((row) => row.map(inlineToText).join(' ')).join('\n');
+    case 'quote':
+      return inlineToText(b.children);
+    case 'codeblock':
+      return b.v;
+    case 'hr':
+      return '';
   }
 }
 
@@ -214,8 +228,29 @@ export function parseMarkdown(text: string): Block[] {
 
   for (let idx = 0; idx < lines.length; idx++) {
     const line = lines[idx];
+    // fenced code block: ``` … ``` — raw text, never inline-parsed (a language after ``` is ignored).
+    // Runs to the closing fence or to EOF (unterminated fences don't throw).
+    if (line.trim().startsWith('```')) {
+      flushPara(); flushBullets();
+      const code: string[] = [];
+      let j = idx + 1;
+      while (j < lines.length && !lines[j].trim().startsWith('```')) { code.push(lines[j]); j++; }
+      blocks.push({ t: 'codeblock', v: code.join('\n') });
+      idx = j; // consume the closing fence line (or land on EOF)
+      continue;
+    }
     const h = HEADING.exec(line);
     const b = BULLET.exec(line);
+    // blockquote: one or more consecutive `> …` lines, the leading `> ` stripped, content parsed inline.
+    if (!h && !b && BLOCKQUOTE.test(line)) {
+      flushPara(); flushBullets();
+      const qlines: string[] = [line.replace(BLOCKQUOTE, '')];
+      let j = idx + 1;
+      while (j < lines.length && BLOCKQUOTE.test(lines[j])) { qlines.push(lines[j].replace(BLOCKQUOTE, '')); j++; }
+      blocks.push({ t: 'quote', children: parseInline(qlines.join('\n')) });
+      idx = j - 1;
+      continue;
+    }
     // GFM table: a pipe-bearing header row whose NEXT line is a delimiter row with the same cell
     // count. Body rows continue while they contain a pipe and aren't blank.
     if (!h && !b && line.includes('|') && idx + 1 < lines.length) {
@@ -241,6 +276,9 @@ export function parseMarkdown(text: string): Block[] {
     } else if (b) {
       flushPara();
       (bullets ??= []).push(b[1]);
+    } else if (HR.test(line.trim())) {
+      flushPara(); flushBullets();
+      blocks.push({ t: 'hr' });
     } else if (line.trim() === '') {
       flushPara(); flushBullets();
     } else {
