@@ -98,8 +98,9 @@ describe('Access menu — OSINT Toolkit flyout (T2)', () => {
   it('drops the OSINT modules from the flat shortcut list', () => {
     render();
     const text = container.textContent ?? '';
-    // Non-OSINT shortcut still there.
-    expect(text).toContain('My Cases');
+    // T1 (access-menu-rtfm) replaced the settings.shortcuts-driven flat list entirely with fixed
+    // category flyouts — "My Cases" now lives inside the closed Programs flyout, not as a flat row.
+    expect(text).not.toContain('My Cases');
     // OSINT modules gone from the flat list (flyout is closed, so they must not appear at all yet).
     expect(text).not.toContain('Searchlight');
     expect(text).not.toContain('GeoINT');
