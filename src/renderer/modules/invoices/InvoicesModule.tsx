@@ -9,6 +9,7 @@ import type { Invoice } from '@shared/invoice-types';
 import { InvoiceForm } from './InvoiceForm';
 import { renderInvoiceHtml } from './invoice-html';
 import { toast } from '../../state/toasts';
+import { LedgerFill } from './LedgerFill';
 import bannerUrl from '../../assets/ghost-ledger-banner.png';
 
 function today(): string { return new Date().toISOString().slice(0, 10); }
@@ -138,7 +139,10 @@ export function InvoicesModule(): JSX.Element {
 
   return (
     <div className="ga98-invoices">
-      <img src={bannerUrl} alt="Ghost Ledger 98" className="ga98-ledger-banner" />
+      <div className="ga98-ledger-header">
+        <img src={bannerUrl} alt="Ghost Ledger 98" className="ga98-ledger-banner" />
+        <LedgerFill />
+      </div>
       <div className="ga98-invoices-body">
         <div className="ga98-invoices-list">
           <div className="ga98-invoices-toolbar">

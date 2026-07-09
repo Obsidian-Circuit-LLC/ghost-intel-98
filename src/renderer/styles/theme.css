@@ -1215,7 +1215,9 @@ input.ga98-text, select.ga98-text {
  * "paper" surface — it hosts the exact printable HTML (preview == PDF output).
  * ------------------------------------------------------------------------- */
 .ga98-invoices { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
-.ga98-ledger-banner { display: block; margin: 0 auto 6px; height: auto; width: auto; max-height: 180px; max-width: 100%; flex: 0 0 auto; }
+.ga98-invoices .ga98-ledger-header { display: flex; align-items: stretch; gap: 0; height: 150px; margin-bottom: 6px; overflow: hidden; background: #0d0518; }
+.ga98-invoices .ga98-ledger-banner { display: block; height: 150px; width: auto; max-width: 60%; margin: 0; flex: 0 0 auto; }
+.ga98-invoices .ga98-ledger-fill { flex: 1 1 auto; height: 150px; display: block; }
 .ga98-invoices-body { display: flex; flex: 1; overflow: hidden; min-height: 0; }
 .ga98-invoices-list {
   width: 220px; flex: 0 0 220px; display: flex; flex-direction: column;
