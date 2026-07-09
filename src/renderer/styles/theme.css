@@ -1264,3 +1264,22 @@ input.ga98-text, select.ga98-text {
   border: 1px solid var(--ga98-shadow-dark); background: #fff; color: #111; padding: 8px; margin-top: 8px;
   max-height: 360px; overflow: auto;
 }
+
+/* Ghost Ledger 98 midnight-purple theme — scoped to the module root so nothing else changes.
+   Title bar / window frame stay standard Win98 grey (shell chrome). Text meets WCAG AA. */
+.ga98-invoices { background: #1a0f2e; color: #ece6f7; }
+.ga98-invoices .ga98-invoice-party,
+.ga98-invoices fieldset,
+.ga98-invoices .ga98-invoice-totals { background: #241539; color: #ece6f7; border-color: #5a3aa8; }
+.ga98-invoices legend { color: #ece6f7; }
+/* Inputs: dark inset fill + light text + violet focus (restate on the element so 98.css white is beaten). */
+.ga98-invoices input, .ga98-invoices select, .ga98-invoices textarea {
+  background: #12081f; color: #ece6f7; border: 1px solid #5a3aa8;
+}
+.ga98-invoices input:focus, .ga98-invoices select:focus, .ga98-invoices textarea:focus { outline: 2px solid #7c4dff; }
+/* Table: restate bg on the class selector to beat bundled 98.css `table{background:#fff}` (cascade note). */
+.ga98-invoices .ga98-invoice-lines { background: #1a0f2e; color: #ece6f7; }
+.ga98-invoices .ga98-invoice-lines th { background: #241539; color: #ece6f7; border-color: #5a3aa8; }
+.ga98-invoices .ga98-invoice-lines td { background: #12081f; color: #ece6f7; border-color: #5a3aa8; }
+.ga98-invoices button { background: #241539; color: #ece6f7; border-color: #7c4dff; }
+.ga98-invoices .ga98-invoice-logo-box, .ga98-invoices .ga98-invoice-sig-box { background: #12081f; border-color: #5a3aa8; }
