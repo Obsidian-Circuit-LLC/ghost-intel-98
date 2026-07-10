@@ -47,6 +47,7 @@ import { OSINTToolkitModule } from './osint-toolkit/OSINTToolkitModule';
 import { MindsEyeModule } from './minds-eye/MindsEyeModule';
 import { InvestigationGraphModule } from './investigation-graph/InvestigationGraphModule';
 import { InvoicesModule } from './invoices/InvoicesModule';
+import { NumberMuncherModule } from './number-muncher/NumberMuncherModule';
 
 // ---------------------------------------------------------------------------
 // Adapter components — each has the uniform { spec: WindowSpec } signature and
@@ -229,6 +230,10 @@ function InvoicesAdapter({ spec: _spec }: { spec: WindowSpec }): JSX.Element {
   return <InvoicesModule />;
 }
 
+function NumberMuncherAdapter({ spec: _spec }: { spec: WindowSpec }): JSX.Element {
+  return <NumberMuncherModule />;
+}
+
 // ---------------------------------------------------------------------------
 // Registration
 // Titles are VERBATIM from Desktop.tsx moduleTitles.
@@ -277,4 +282,5 @@ export function registerBuiltins(): void {
   registerModule({ key: 'minds-eye', title: "Mind's Eye", glyph: '👁', component: MindsEyeAdapter, builtin: true, defaultWidth: 760, defaultHeight: 560 });
   registerModule({ key: 'investigation-graph', title: 'Investigation Graph', glyph: '🕸', component: InvestigationGraphAdapter, builtin: true, defaultWidth: 900, defaultHeight: 640, category: 'osint', subcategory: 'Identity' });
   registerModule({ key: 'invoices', title: 'Ghost Ledger 98', glyph: '📒', component: InvoicesAdapter, builtin: true, defaultWidth: 900, defaultHeight: 640 });
+  registerModule({ key: 'number-muncher', title: 'Number Muncher', glyph: '🧮', component: NumberMuncherAdapter, builtin: true, defaultWidth: 760, defaultHeight: 620 });
 }

@@ -25,7 +25,7 @@ describe('registerBuiltins', () => {
     const EXPECTED = [
       'ai-assistant', 'alarm', 'bookmarks', 'briefcase', 'calendar', 'camera-view', 'cases', 'chat', 'chess',
       'dialterm', 'doc-viewer', 'eyespy', 'geoint', 'ghostscrape', 'help', 'host-info', 'investigation-graph', 'invoices', 'journal', 'mail', 'markets', 'media-player',
-      'minds-eye', 'minesweeper', 'my-documents', 'net-explorer', 'news-view', 'notepad', 'osint-toolkit', 'pinball', 'reminders', 'search', 'searchlight', 'settings',
+      'minds-eye', 'minesweeper', 'my-documents', 'net-explorer', 'news-view', 'notepad', 'number-muncher', 'osint-toolkit', 'pinball', 'reminders', 'search', 'searchlight', 'settings',
       'shred', 'socmint', 'solitaire', 'whiteboard', 'x'
     ].sort();
     expect(keys).toEqual(EXPECTED);
