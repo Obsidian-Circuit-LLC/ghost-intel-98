@@ -38,13 +38,15 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`GhostIntel98-Setup-3.38.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
+> **Install:** download [`GhostIntel98-Setup-3.39.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
 
 > **📘 User guides** — plain-language, step-by-step (download or read in-browser):
 > - [**SOCMINT: X, Telegram & WhatsApp**](docs/guides/SOCMINT-Tutorial.pdf) — set up and run the social-media collectors, per platform, with the Tor / clearnet and opsec caveats. ([markdown](docs/guides/socmint-tutorial.md))
 > - [**How Searchlight Learns**](docs/guides/Searchlight-Learning-Guide.pdf) — how the username-sweep detector gets smarter from your own labels, and when to turn ML on. ([markdown](docs/guides/searchlight-learning.md))
 
 ## Status
+
+**v3.39.0** — **Ghost Ledger 98 goes midnight purple.** A visual pass on the invoice module from GhostExodus. The module is re-themed **midnight purple** (module-scoped — every other tool stays Win98 grey; text meets WCAG-AA contrast, verified by a test), the recolored banner is **left-pinned** with the empty header space now filled by an **animated canvas** — purple pixel-cubes dissolving out of the banner edge with a subtle matrix code-rain behind them and a low-key "NO CHEATING!" watermark (throttled, pauses off-screen, static under reduced-motion). In the Access menu, **OSINT Toolkit moves above Games**. The **exports are deliberately untouched** — the PDF and `.docx` stay clean black-and-white professional invoices, and a test asserts no theme colour can leak into them. Built subagent-driven with a parallel adversarial whole-branch review (a reduced-motion resize blank was caught + fixed). **3,311 automated tests** green (1 skipped); typecheck clean; no new egress; no new dependency; encrypt-at-rest unchanged. *Everything from v3.38.0 carries forward.*
 
 **v3.38.0** — **Ghost Ledger 98, a categorized Access menu, and RTFM field guides.** A batch of GhostExodus field feedback. **(1) The invoice module becomes "Ghost Ledger 98"** — a branded banner header, a new **`.docx` export** beside the PDF (a real editable OOXML Word document, footed identically to the PDF, built with the bundled `adm-zip` — no new dependency), **uploaded logos and the signature now show in preview boxes with a Remove control**, and the "Upload signature" control is a proper button with a preview. **(2) The Access (start) menu is reorganized into categorized flyouts** — Programs · Creativity · Music · Network · Organization (each with an icon), plus the existing Games and OSINT Toolkit submenus, with **RTFM moved directly below Settings**. **(3) RTFM gains two field guides** — **Searchlight** and **SOCMINT** step-by-step tutorials, rendered from the in-repo guide markdown; the built-in markdown renderer now handles tables, blockquote callouts, fenced code, and rules, so the guides (and the AI assistant's replies) read cleanly. Built subagent-driven across several TDD passes with parallel adversarial whole-branch reviews that caught and fixed real defects before ship — a `.docx` that emitted XML-1.0-illegal control characters (an unopenable file) and guide tables that rendered as raw pipe text. **3,303 automated tests** green (1 skipped); typecheck clean; **no new egress**; no new dependency; encrypt-at-rest unchanged. *Everything from v3.37.1 carries forward.*
 
@@ -507,7 +509,7 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases) and run it.
 
-Direct link to the current release: [`GhostIntel98-Setup-3.38.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.38.0/GhostIntel98-Setup-3.38.0.exe)
+Direct link to the current release: [`GhostIntel98-Setup-3.39.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.39.0/GhostIntel98-Setup-3.39.0.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is **formally verified internally** — symbolic (ProVerif) +
 computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not**
 FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.6.8/GhostIntel98-Setup-3.6.8.exe).
@@ -515,7 +517,7 @@ FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Se
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\GhostIntel98-Setup-3.38.0.exe -Algorithm SHA256
+Get-FileHash .\GhostIntel98-Setup-3.39.0.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
