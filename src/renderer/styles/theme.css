@@ -1345,3 +1345,10 @@ input.ga98-text, select.ga98-text {
 .ga98-calc-angle-toggle { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
 .ga98-calc-angle { font-size: 11px; min-height: 22px; }
 .ga98-calc-angle[data-active='true'] { background: var(--ga98-blue); color: #fff; }
+.ga98-calc-keypad-programmer { grid-template-rows: auto auto auto repeat(4, 1fr) auto; }
+.ga98-calc-base-toggle { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.ga98-calc-base { font-size: 11px; min-height: 22px; }
+.ga98-calc-base[data-active='true'] { background: var(--ga98-blue); color: #fff; }
+.ga98-calc-bitops { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.ga98-calc-digit-grid { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.ga98-calc-keypad-programmer > .ga98-calc-equals { grid-column: 1 / -1; }

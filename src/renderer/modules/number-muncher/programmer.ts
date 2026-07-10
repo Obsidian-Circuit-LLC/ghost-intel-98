@@ -51,8 +51,12 @@ export function bitOp(op: BitOpKind, a: bigint, b: bigint): bigint {
     case 'OR': return clamp64(x | y);
     case 'XOR': return clamp64(x ^ y);
     case 'NOT': return clamp64(~x);
-    case 'SHL': return clamp64(x << y);
-    case 'SHR': return clamp64(x >> y);
+    // x is already clamped to 64 bits, so a shift of 64 or more always
+    // vacates every bit — short-circuit rather than let BigInt materialise
+    // an intermediate with `y` (attacker/user-reachable up to 2^64-1) bits,
+    // which throws "Maximum BigInt size exceeded" (RangeError).
+    case 'SHL': return y >= 64n ? 0n : clamp64(x << y);
+    case 'SHR': return y >= 64n ? 0n : clamp64(x >> y);
     case 'MOD': return y === 0n ? 0n : clamp64(x % y);
     default: return 0n;
   }
