@@ -687,8 +687,6 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   });
   safeHandle(channels.documents.reveal, (...args) =>
     documentsStore.reveal(ensureDocRelPath(args[0], 'relPath')));
-  safeHandle(channels.documents.open, (...args) =>
-    documentsStore.openEntry(ensureDocRelPath(args[0], 'relPath')));
   safeHandle(channels.documents.export, async (...args) => {
     const rel = ensureDocRelPath(args[0], 'relPath');
     const name = rel.split('/').pop() || 'file'; // rel uses '/'; avoid platform basename ambiguity
@@ -704,6 +702,11 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
       args[3] === true));
   safeHandle(channels.documents.readText, (...args) =>
     documentsStore.readText(ensureDocRelPath(args[0], 'relPath')));
+  // Internal viewer: decrypted bytes read in-process (never OS handoff). Returned as a Uint8Array —
+  // structured-cloned natively over IPC (Array.from would inflate every byte into a number[] element,
+  // ballooning memory + transfer for large files). The store caps the size before reading.
+  safeHandle(channels.documents.readBytes, (...args) =>
+    documentsStore.readBytes(ensureDocRelPath(args[0], 'relPath')));
 
   // ---- entities (cross-case registry) ----
   safeHandle(channels.entities.listAll, () => entities.listAll());

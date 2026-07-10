@@ -1,6 +1,6 @@
 /**
  * The "Access" menu (renamed Start). Renders five fixed category flyouts (Programs / Creativity /
- * Music / Network / Organization) plus the Games and OSINT Toolkit flyouts. `settings.shortcuts`
+ * Music / Network / Organizer) plus the Games and OSINT Toolkit flyouts. `settings.shortcuts`
  * no longer drives any rendering here — the field stays in the schema (Settings still reads/writes
  * it) purely so existing installs / the settings migration path don't break; this menu just no
  * longer consumes it.
@@ -39,9 +39,10 @@ const CATEGORIES: { label: string; glyph: string; items: { module: ModuleKey; la
   { label: 'Network', glyph: '🖧', items: [
     { module: 'dialterm', label: 'DialTerm' }, { module: 'mail', label: 'Mail' },
     { module: 'chat', label: 'Chat (beta)' }, { module: 'bookmarks', label: 'Bookmarks' } ] },
-  { label: 'Organization', glyph: '📅', items: [
+  { label: 'Organizer', glyph: '📅', items: [
     { module: 'invoices', label: 'Invoices' }, { module: 'calendar', label: 'Calendar' },
-    { module: 'reminders', label: 'Reminders' }, { module: 'alarm', label: 'Alarm' } ] }
+    { module: 'reminders', label: 'Reminders' }, { module: 'alarm', label: 'Alarm' },
+    { module: 'number-muncher', label: 'Number Muncher' } ] }
 ];
 
 /** Shared flyout shell for a category — extracted from the original Games submenu markup so

@@ -182,10 +182,10 @@ export interface GhostApi {
     move(srcRel: string, destDir: string): Promise<string>;
     importDropped(destDir: string, list: { sourcePath: string; originalName: string }[]): Promise<DocImportResult>;
     reveal(relPath: string): Promise<void>;
-    open(relPath: string): Promise<void>;
     export(relPath: string): Promise<void>;
     writeText(relDir: string, name: string, body: string, overwrite?: boolean): Promise<DocEntry>;
     readText(relPath: string): Promise<string>;
+    readBytes(relPath: string): Promise<Uint8Array>;
   };
   notes: {
     list(id: string): Promise<{ name: string; updatedAt: string }[]>;
