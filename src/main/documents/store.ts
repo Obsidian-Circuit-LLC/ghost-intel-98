@@ -195,10 +195,12 @@ export async function exportEntry(relPath: string, destPath: string): Promise<vo
   await writeFile(destPath, await secureReadFile(real));
 }
 
-/** Ceiling for an in-app preview read. Mirrors the case viewer's cap (attachmentBytes.ts,
- *  MAX_TOTAL_BYTES) so a huge My-Documents file can't OOM/freeze the app; the viewer surfaces the
- *  thrown message and the user Exports it instead. */
-const MAX_VIEW_BYTES = 64 * 1024 * 1024;
+/** Ceiling for an in-app preview read. My-Documents files are encrypted whole-file at rest, so a
+ *  viewed file must be decrypted into memory (no range-streaming into GCM); the number[] inflation
+ *  is gone (readBytes returns a Uint8Array), so memory is ~linear in file size. 512 MB comfortably
+ *  covers real documents (a 108 MB hearing bundle opens with ~5× headroom) while still refusing a
+ *  pathological multi-GB file — the viewer surfaces the thrown message and the user Exports it. */
+const MAX_VIEW_BYTES = 512 * 1024 * 1024;
 
 /** Read a FILE's DECRYPTED bytes in-process, for Ghost Intel 98's internal viewer. Encrypted-at-rest
  *  files are decrypted through secure-fs in renderer/main memory only — no temp file, no OS handoff.

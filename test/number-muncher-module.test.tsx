@@ -71,4 +71,24 @@ describe('NumberMuncherModule', () => {
     await act(async () => { modeByLabel('Programmer').click(); });
     expect(memButtons().every((b) => b.disabled)).toBe(true);  // Programmer: disabled
   });
+
+  it('is compact: no side column, memory is a row, info is a status footer', async () => {
+    await act(async () => { root.render(<NumberMuncherModule />); });
+    expect(container.querySelector('.ga98-calc-side')).toBeNull();      // the 200px column is gone
+    expect(container.querySelector('.ga98-calc-mem-row')).not.toBeNull();
+    const status = container.querySelector('.ga98-calc-statusbar');
+    expect(status).not.toBeNull();
+    expect(status?.textContent).toContain('Standard');                 // active mode in the footer
+  });
+
+  it('hides History behind a toggle drawer (off by default)', async () => {
+    await act(async () => { root.render(<NumberMuncherModule />); });
+    const toggle = container.querySelector('.ga98-calc-hist-toggle') as HTMLButtonElement;
+    expect(toggle).not.toBeNull();
+    expect(container.querySelector('.ga98-calc-history-drawer')).toBeNull(); // closed initially
+    await act(async () => { toggle.click(); });
+    expect(container.querySelector('.ga98-calc-history-drawer')).not.toBeNull(); // opens
+    await act(async () => { toggle.click(); });
+    expect(container.querySelector('.ga98-calc-history-drawer')).toBeNull(); // closes again
+  });
 });

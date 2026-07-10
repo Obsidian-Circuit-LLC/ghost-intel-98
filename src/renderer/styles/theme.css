@@ -1291,7 +1291,7 @@ input.ga98-text, select.ga98-text {
 .ga98-invoices .ga98-invoice-logo-box, .ga98-invoices .ga98-invoice-sig-box { background: #12081f; border-color: #5a3aa8; }
 
 /* ── Number Muncher calculator ─────────────────────────────────────────────── */
-.ga98-calc { display: grid; grid-template-columns: auto 1fr 200px; gap: 6px; height: 100%; padding: 6px; box-sizing: border-box; overflow: hidden; }
+.ga98-calc { display: grid; grid-template-columns: auto 1fr; gap: 6px; height: 100%; padding: 6px; box-sizing: border-box; overflow: hidden; }
 .ga98-calc-rail { display: flex; flex-direction: column; gap: 3px; }
 .ga98-calc-mode {
   font-size: 11px; padding: 6px 8px; text-align: left; white-space: nowrap; cursor: pointer;
@@ -1300,7 +1300,7 @@ input.ga98-text, select.ga98-text {
   border-bottom: 1px solid var(--ga98-shadow-dark); border-right: 1px solid var(--ga98-shadow-dark);
 }
 .ga98-calc-mode[data-active='true'] { background: var(--ga98-blue); color: #fff; }
-.ga98-calc-main { display: flex; flex-direction: column; gap: 6px; min-width: 0; overflow: hidden; }
+.ga98-calc-main { display: flex; flex-direction: column; gap: 6px; min-width: 0; overflow: hidden; position: relative; }
 .ga98-calc-display {
   font-family: 'Courier New', monospace; font-size: 26px; text-align: right; padding: 8px 10px;
   background: #0b1a0b; color: #7dff7d; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -1323,21 +1323,37 @@ input.ga98-text, select.ga98-text {
 .ga98-calc-equals { background: #000080; color: #fff; }
 .ga98-calc-fn { color: #000080; }
 .ga98-calc-placeholder { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--ga98-shadow-dark); font-style: italic; }
-.ga98-calc-side { display: flex; flex-direction: column; gap: 6px; overflow: hidden; }
-.ga98-calc-panel {
-  background: var(--ga98-grey); padding: 4px;
-  border-top: 1px solid var(--ga98-shadow-light); border-left: 1px solid var(--ga98-shadow-light);
-  border-bottom: 1px solid var(--ga98-shadow-dark); border-right: 1px solid var(--ga98-shadow-dark);
+/* Compact shell (v3.41.0): no side column — Memory is a row, History a toggled drawer, Info a footer. */
+.ga98-calc-topbar { display: flex; gap: 4px; align-items: stretch; }
+.ga98-calc-topbar .ga98-calc-display { flex: 1; min-width: 0; }
+.ga98-calc-hist-toggle {
+  flex: 0 0 auto; width: 30px; font-size: 14px; cursor: pointer;
+  background: var(--ga98-grey); color: #000;
+  border-top: 2px solid var(--ga98-shadow-light); border-left: 2px solid var(--ga98-shadow-light);
+  border-bottom: 2px solid var(--ga98-shadow-dark); border-right: 2px solid var(--ga98-shadow-dark);
 }
+.ga98-calc-hist-toggle[aria-pressed='true'] { background: var(--ga98-blue); color: #fff; }
+.ga98-calc-mem-row { display: flex; gap: 2px; align-items: center; }
+.ga98-calc-mem-row .ga98-calc-mem { flex: 1; }
 .ga98-calc-panel-title { font-weight: bold; font-size: 11px; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; }
-.ga98-calc-mem-buttons { display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px; }
 .ga98-calc-mem { min-height: 24px; font-size: 11px; }
-.ga98-calc-mem-reg { font-family: 'Courier New', monospace; font-size: 11px; margin-top: 4px; }
-.ga98-calc-history { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.ga98-calc-mem-reg { font-family: 'Courier New', monospace; font-size: 11px; flex: 0 0 auto; padding-left: 4px; white-space: nowrap; }
+.ga98-calc-statusbar {
+  display: flex; justify-content: space-between; gap: 8px; font-size: 11px; min-width: 0;
+  color: var(--ga98-shadow-dark); padding: 2px 2px 0; border-top: 1px solid var(--ga98-shadow-dark);
+}
+.ga98-calc-status-result { font-family: 'Courier New', monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ga98-calc-history-drawer {
+  position: absolute; inset: 0; z-index: 5;
+  display: flex; flex-direction: column; padding: 6px; background: var(--ga98-grey);
+  border: 2px solid var(--ga98-shadow-dark);
+}
+.ga98-calc-hist-actions { display: flex; gap: 4px; }
 .ga98-calc-hist-clear { font-size: 10px; padding: 1px 6px; cursor: pointer; }
 .ga98-calc-hist-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; background: #fff; border: 1px solid var(--ga98-shadow-dark); }
 .ga98-calc-hist-item, .ga98-calc-hist-empty { font-family: 'Courier New', monospace; font-size: 11px; padding: 2px 4px; border-bottom: 1px solid #eee; }
 .ga98-calc-hist-empty { color: var(--ga98-shadow-dark); font-family: inherit; font-style: italic; }
+/* Two-column key/value grid — reused by the Statistics keypad's results readout. */
 .ga98-calc-info-grid { display: grid; grid-template-columns: auto 1fr; gap: 2px 6px; margin: 0; font-size: 11px; }
 .ga98-calc-info-grid dt { color: var(--ga98-shadow-dark); }
 .ga98-calc-info-grid dd { margin: 0; text-align: right; font-family: 'Courier New', monospace; }
