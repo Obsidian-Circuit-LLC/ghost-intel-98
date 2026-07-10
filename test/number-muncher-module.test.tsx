@@ -33,6 +33,15 @@ function keyByText(text: string): HTMLButtonElement {
   return btn as HTMLButtonElement;
 }
 
+function modeByLabel(label: string): HTMLButtonElement {
+  const btn = Array.from(container.querySelectorAll('button.ga98-calc-mode')).find((b) => b.textContent === label);
+  if (!btn) throw new Error(`mode "${label}" not found`);
+  return btn as HTMLButtonElement;
+}
+
+const memButtons = (): HTMLButtonElement[] =>
+  Array.from(container.querySelectorAll('button.ga98-calc-mem')) as HTMLButtonElement[];
+
 describe('NumberMuncherModule', () => {
   it('renders the 7 mode-rail labels', async () => {
     await act(async () => { root.render(<NumberMuncherModule />); });
@@ -48,5 +57,18 @@ describe('NumberMuncherModule', () => {
     await act(async () => { keyByText('=').click(); });
     const display = container.querySelector('.ga98-calc-display');
     expect(display?.textContent).toBe('5');
+  });
+
+  it('scopes the memory register to Standard/Scientific and disables it in the other modes', async () => {
+    // Memory (MC/MR/MS/M+/M-) is a single decimal scalar; Programmer/Converter/Statistics/Date/Unit
+    // have no unambiguous scalar, so their memory buttons are disabled rather than capturing the stale
+    // standard display.
+    await act(async () => { root.render(<NumberMuncherModule />); });
+    expect(memButtons()).toHaveLength(5);
+    expect(memButtons().every((b) => !b.disabled)).toBe(true); // Standard: enabled
+    await act(async () => { modeByLabel('Scientific').click(); });
+    expect(memButtons().every((b) => !b.disabled)).toBe(true); // Scientific: enabled
+    await act(async () => { modeByLabel('Programmer').click(); });
+    expect(memButtons().every((b) => b.disabled)).toBe(true);  // Programmer: disabled
   });
 });

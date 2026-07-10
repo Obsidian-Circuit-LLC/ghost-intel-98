@@ -72,9 +72,9 @@ function useBytes(caseId: string, fileName: string): BytesProps {
   return { bytes, error };
 }
 
-/** Documents source: decrypted bytes read in-process via documents:readBytes (marshalled as
- *  number[] over IPC; re-wrapped in a Uint8Array here — the plaintext lives only in renderer
- *  memory, never a temp file). */
+/** Documents source: decrypted bytes read in-process via documents:readBytes (a Uint8Array
+ *  structured-cloned over IPC; copied into a fresh Uint8Array here — the plaintext lives only in
+ *  renderer memory, never a temp file). The main store caps the size before reading. */
 function useDocBytes(relPath: string): BytesProps {
   const [bytes, setBytes] = useState<Uint8Array<ArrayBuffer> | null>(null);
   const [error, setError] = useState<string | null>(null);

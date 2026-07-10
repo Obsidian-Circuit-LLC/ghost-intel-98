@@ -22,6 +22,7 @@ import {
   clearAll as stdClearAll,
   clearEntry as stdClearEntry,
   backspace as stdBackspace,
+  fmt,
 } from './standard';
 import { memoryOp, pushHistory, type MemOp } from './calc-shell';
 import { StandardKeypad } from './StandardKeypad';
@@ -51,13 +52,6 @@ const MODES: { key: CalcMode; label: string }[] = [
 ];
 
 const OP_GLYPH: Record<Op, string> = { '+': '+', '-': '-', '*': '×', '/': '÷' };
-
-/** Format a scientific result the same way standard.ts's internal `fmt` does. */
-const fmtSci = (n: number): string => {
-  if (!Number.isFinite(n)) return 'Error';
-  const r = Math.round(n * 1e12) / 1e12;
-  return String(r);
-};
 
 export function NumberMuncherModule(): JSX.Element {
   const [mode, setMode] = useState<CalcMode>('standard');
@@ -98,8 +92,16 @@ export function NumberMuncherModule(): JSX.Element {
     });
   }, []);
 
+  // The memory register (MC/MR/MS/M+/M-) is a single decimal scalar backed by the standard/
+  // scientific display. The other five modes have no unambiguous scalar to store or recall —
+  // Programmer is base-native, Converter/Unit show a compound `in = out`, Statistics/Date operate
+  // on a set — so memory is scoped to the arithmetic modes rather than silently capturing the
+  // stale standard display. Buttons are disabled outside those modes.
+  const memActive = mode === 'standard' || mode === 'scientific';
+
   const onMemory = useCallback(
     (op: MemOp) => {
+      if (!memActive) return;
       if (op === 'MR') {
         setStd((prev) => ({ ...prev, display: String(memory), fresh: true }));
         return;
@@ -107,7 +109,7 @@ export function NumberMuncherModule(): JSX.Element {
       const current = Number(std.display) || 0;
       setMemory((reg) => memoryOp(reg, op, current));
     },
-    [memory, std.display],
+    [memActive, memory, std.display],
   );
 
   // Scientific mode reuses standard.ts's CalcState for display/entry/basic
@@ -125,7 +127,7 @@ export function NumberMuncherModule(): JSX.Element {
       setStd((prev) => {
         const x = Number(prev.display);
         const r = sci(fn, x, angle);
-        const display = fmtSci(r);
+        const display = fmt(r);
         setHistory((h) => pushHistory(h, `${fn}(${prev.display}) = ${display}`));
         setLastResult(display);
         return { ...prev, display, fresh: true, error: !Number.isFinite(r) };
@@ -139,7 +141,7 @@ export function NumberMuncherModule(): JSX.Element {
       setStd((prev) => {
         const y = Number(prev.display);
         const r = sci('pow', sciAcc, angle, y);
-        const display = fmtSci(r);
+        const display = fmt(r);
         setHistory((h) => pushHistory(h, `${sciAcc} ^ ${y} = ${display}`));
         setLastResult(display);
         return { ...prev, display, fresh: true, error: !Number.isFinite(r), acc: null, op: null };
@@ -268,7 +270,7 @@ export function NumberMuncherModule(): JSX.Element {
   }, [convFresh]);
 
   const convResult = convert(Number(convInput) || 0, convFrom, convTo, convCategory);
-  const convDisplay = Number.isFinite(convResult) ? String(Math.round(convResult * 1e12) / 1e12) : 'Error';
+  const convDisplay = fmt(convResult);
 
   // Statistics mode accumulates a dataset (array of committed numbers) plus
   // an in-progress entry string; `stats()` (pure, statistics.ts) is derived
@@ -428,7 +430,7 @@ export function NumberMuncherModule(): JSX.Element {
   }, [unitFresh]);
 
   const unitResultRaw = unitConvert(Number(unitInput) || 0, unitFrom, unitTo, unitCategory);
-  const unitDisplay = Number.isFinite(unitResultRaw) ? String(Math.round(unitResultRaw * 1e12) / 1e12) : 'Error';
+  const unitDisplay = fmt(unitResultRaw);
 
   return (
     <div className="ga98-calc">
@@ -575,7 +577,14 @@ export function NumberMuncherModule(): JSX.Element {
           <div className="ga98-calc-panel-title">Memory</div>
           <div className="ga98-calc-mem-buttons">
             {(['MC', 'MR', 'MS', 'M+', 'M-'] as MemOp[]).map((op) => (
-              <button key={op} type="button" className="ga98-calc-key ga98-calc-mem" onClick={() => onMemory(op)}>
+              <button
+                key={op}
+                type="button"
+                className="ga98-calc-key ga98-calc-mem"
+                disabled={!memActive}
+                title={memActive ? undefined : 'Memory is available in Standard and Scientific modes'}
+                onClick={() => onMemory(op)}
+              >
                 {op}
               </button>
             ))}

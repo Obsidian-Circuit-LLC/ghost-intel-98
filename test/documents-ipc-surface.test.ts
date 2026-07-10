@@ -28,7 +28,7 @@ vi.mock('../src/main/security/validate', async (importOriginal) => {
 // so invoking the handlers records calls instead of touching the filesystem/decrypt path.
 vi.mock('../src/main/documents/store', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/main/documents/store')>();
-  return { ...actual, openEntry: vi.fn(async () => {}), exportEntry: vi.fn(async () => {}) };
+  return { ...actual, exportEntry: vi.fn(async () => {}) };
 });
 
 import { channels } from '../src/shared/ipc-contracts';
@@ -60,7 +60,6 @@ describe('documents IPC surface', () => {
       move: 'documents:move',
       importDropped: 'documents:importDropped',
       reveal: 'documents:reveal',
-      open: 'documents:open',
       export: 'documents:export',
       writeText: 'documents:writeText',
       readText: 'documents:readText',
@@ -72,20 +71,14 @@ describe('documents IPC surface', () => {
     expect(channels.documents.readBytes).toBe('documents:readBytes');
   });
 
-  it('documents.readBytes validates relPath and returns a number[]', async () => {
+  it('documents.readBytes validates relPath and returns the bytes as a Uint8Array (no number[] inflation)', async () => {
     const spy = vi
       .spyOn(store, 'readBytes')
       .mockResolvedValueOnce(new Uint8Array([104, 105]));
     const out = await invoke('documents:readBytes', 'a.txt');
     expect(ensureDocRelPath).toHaveBeenCalledWith('a.txt', 'relPath');
     expect(spy).toHaveBeenCalledWith('a.txt');
-    expect(out).toEqual([104, 105]);
-  });
-
-  it('documents.open validates relPath and calls openEntry', async () => {
-    await invoke('documents:open', '../escape');
-    expect(ensureDocRelPath).toHaveBeenCalledWith('../escape', 'relPath');
-    expect(store.openEntry).toHaveBeenCalled();
+    expect(out).toEqual(new Uint8Array([104, 105]));
   });
 
   it('documents.export opens a save dialog and no-ops on cancel', async () => {

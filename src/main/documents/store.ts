@@ -11,7 +11,6 @@ import { shell } from 'electron';
 import type { DocEntry, DocImportResult } from '../../shared/documents-types';
 import { documentsRoot, resolveWithin, ensureDocumentsRoot } from './paths';
 import { secureWriteFile, isEncryptedFile, secureReadFile } from '../storage/secure-fs';
-import { stageDecryptedTemp } from './open-temp';
 
 /** Realpath of the root, computed after ensuring it exists. Throws if root is missing. */
 async function rootReal(): Promise<string> {
@@ -177,19 +176,6 @@ export async function importDropped(
   return { imported, failures };
 }
 
-/** Open a FILE in the OS default app. Encrypted-at-rest files are decrypted into a session-scoped
- *  temp (shredded on quit); plaintext files (vault off) are opened in place. Folders are refused. */
-export async function openEntry(relPath: string): Promise<void> {
-  const real = await confineExisting(relPath);
-  if ((await stat(real)).isDirectory()) throw new Error('Refusing to open a folder.');
-  let target = real;
-  if (await isEncryptedFile(real)) {
-    target = await stageDecryptedTemp(await secureReadFile(real), basename(real));
-  }
-  const err = await shell.openPath(target);
-  if (err) throw new Error(err);
-}
-
 /** Export one decrypted copy of a FILE to a user-chosen destination (outside the confinement root,
  *  by design). Refuses a folder and a symlink destination (can't be redirected to clobber a file). */
 export async function exportEntry(relPath: string, destPath: string): Promise<void> {
@@ -209,12 +195,22 @@ export async function exportEntry(relPath: string, destPath: string): Promise<vo
   await writeFile(destPath, await secureReadFile(real));
 }
 
+/** Ceiling for an in-app preview read. Mirrors the case viewer's cap (attachmentBytes.ts,
+ *  MAX_TOTAL_BYTES) so a huge My-Documents file can't OOM/freeze the app; the viewer surfaces the
+ *  thrown message and the user Exports it instead. */
+const MAX_VIEW_BYTES = 64 * 1024 * 1024;
+
 /** Read a FILE's DECRYPTED bytes in-process, for Ghost Intel 98's internal viewer. Encrypted-at-rest
- *  files are decrypted through secure-fs in renderer/main memory only — no temp file, no OS handoff
- *  (unlike openEntry, which stages a decrypted temp for the OS default app). Refuses a folder. */
+ *  files are decrypted through secure-fs in renderer/main memory only — no temp file, no OS handoff.
+ *  Refuses a folder, and refuses a file over the preview cap BEFORE reading/decrypting it (bounds
+ *  memory + IPC transfer). This replaced the old decrypt-to-temp + shell.openPath "Open" path. */
 export async function readBytes(relPath: string): Promise<Uint8Array> {
   const real = await confineExisting(relPath);
-  if ((await stat(real)).isDirectory()) throw new Error('Refusing to read a folder as bytes.');
+  const s = await stat(real);
+  if (s.isDirectory()) throw new Error('Refusing to read a folder as bytes.');
+  if (s.size > MAX_VIEW_BYTES) {
+    throw new Error(`File is too large to preview in-app (over ${Math.round(MAX_VIEW_BYTES / 1024 / 1024)} MB). Use Export to open it externally.`);
+  }
   return (await isEncryptedFile(real)) ? secureReadFile(real) : readFile(real);
 }
 

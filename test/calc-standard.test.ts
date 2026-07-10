@@ -1,5 +1,20 @@
 import { describe, it, expect } from 'vitest';
-import { INIT, inputDigit, inputDot, setOp, equals, unary, clearAll, clearEntry, backspace } from '../src/renderer/modules/number-muncher/standard';
+import { INIT, inputDigit, inputDot, setOp, equals, unary, clearAll, clearEntry, backspace, fmt } from '../src/renderer/modules/number-muncher/standard';
+
+describe('fmt (shared result formatter)', () => {
+  it('snaps IEEE-754 float dust on human-scale magnitudes', () => {
+    expect(fmt(0.1 + 0.2)).toBe('0.3');
+  });
+  it('reports non-finite values as the Error string', () => {
+    expect(fmt(Infinity)).toBe('Error');
+    expect(fmt(NaN)).toBe('Error');
+  });
+  it('does NOT overflow a large finite result to "Infinity" (the 1e12 dust-snap is skipped for |n| ≥ 1e15)', () => {
+    // Regression: Math.round(1e300 * 1e12) === Infinity, so the old fmt printed a finite 1e300 as "Infinity".
+    expect(fmt(1e300)).toBe('1e+300');
+    expect(fmt(1e300)).not.toBe('Infinity');
+  });
+});
 
 const seq = (...fns: ((s: any) => any)[]) => fns.reduce((s, f) => f(s), INIT);
 describe('standard calculator', () => {

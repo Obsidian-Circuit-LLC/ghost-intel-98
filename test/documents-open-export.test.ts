@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mkdtemp, writeFile, readFile, mkdir, symlink, readdir, rm } from 'node:fs/promises';
+import { mkdtemp, writeFile, readFile, mkdir, symlink, readdir, rm, truncate } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -35,30 +35,29 @@ beforeEach(async () => {
 });
 afterEach(async () => { await rm(ROOT, { recursive: true, force: true }); await rm(OSTMP, { recursive: true, force: true }); });
 
-describe('openEntry', () => {
-  it('decrypts an encrypted file into a temp with the real extension and opens the temp', async () => {
+describe('readBytes (internal viewer, in-process — no OS handoff / temp)', () => {
+  it('returns the decrypted bytes of an encrypted file', async () => {
     const store = await import('../src/main/documents/store');
-    const { docOpenTempDir } = await import('../src/main/documents/open-temp');
-    await writeFile(join(ROOT, 'documents', 'report.pdf'), Buffer.from([0x01, 0x50, 0x44, 0x46])); // "encrypted" %PDF
-    await store.openEntry('report.pdf');
-    const opened = openPath.mock.calls[0][0] as string;
-    expect(opened.startsWith(docOpenTempDir())).toBe(true);
-    expect(opened.endsWith('.pdf')).toBe(true);
-    expect([...(await readFile(opened))]).toEqual([0x50, 0x44, 0x46]); // decrypted bytes
+    await writeFile(join(ROOT, 'documents', 'a.txt'), Buffer.from([0x01, 0x68, 0x69])); // "encrypted" hi
+    expect([...(await store.readBytes('a.txt'))]).toEqual([0x68, 0x69]);
+    expect(openPath).not.toHaveBeenCalled(); // in-process: never hands the file to the OS
   });
-  it('opens a plaintext file directly, without a temp', async () => {
+  it('reads a plaintext file in place', async () => {
     const store = await import('../src/main/documents/store');
-    const { docOpenTempDir } = await import('../src/main/documents/open-temp');
-    const real = join(ROOT, 'documents', 'notes.txt');
-    await writeFile(real, Buffer.from('hi'));
-    await store.openEntry('notes.txt');
-    expect(openPath).toHaveBeenCalledWith(real);
-    expect(await readdir(docOpenTempDir()).catch(() => [])).toEqual([]);
+    await writeFile(join(ROOT, 'documents', 'p.txt'), Buffer.from('yo'));
+    expect([...(await store.readBytes('p.txt'))]).toEqual([0x79, 0x6f]);
   });
-  it('refuses to open a folder', async () => {
+  it('refuses a file over the 64 MB preview cap (before reading it — no OOM)', async () => {
+    const store = await import('../src/main/documents/store');
+    const p = join(ROOT, 'documents', 'big.bin');
+    await writeFile(p, Buffer.from([0x00]));
+    await truncate(p, 64 * 1024 * 1024 + 1); // sparse: logical size just over the cap
+    await expect(store.readBytes('big.bin')).rejects.toThrow(/too large/i);
+  });
+  it('refuses to read a folder as bytes', async () => {
     const store = await import('../src/main/documents/store');
     await mkdir(join(ROOT, 'documents', 'sub'));
-    await expect(store.openEntry('sub')).rejects.toThrow(/folder/i);
+    await expect(store.readBytes('sub')).rejects.toThrow(/folder/i);
   });
 });
 

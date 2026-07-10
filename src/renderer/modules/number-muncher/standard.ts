@@ -19,10 +19,13 @@ export interface CalcState {
 
 export const INIT: CalcState = { display: '0', acc: null, op: null, fresh: true, error: false };
 
-/** Format a result, snapping tiny float dust away and reporting non-finite as an error string. */
-const fmt = (n: number): string => {
+/** Format a result, snapping tiny float dust away and reporting non-finite as an error string.
+ *  The 1e12 dust-snap only applies to human-scale magnitudes: for |n| ≥ 1e15 the value carries no
+ *  sub-integer dust worth snapping, and `n * 1e12` would overflow a finite result to Infinity
+ *  (printing e.g. 1e300 as "Infinity"), so pass those through unrounded. Shared by every mode. */
+export const fmt = (n: number): string => {
   if (!Number.isFinite(n)) return 'Error';
-  const r = Math.round(n * 1e12) / 1e12;
+  const r = Math.abs(n) < 1e15 ? Math.round(n * 1e12) / 1e12 : n;
   return String(r);
 };
 
