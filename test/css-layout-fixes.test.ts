@@ -47,3 +47,16 @@ describe('Bug D — GhostScrape Account select strips the glitched native contro
     expect(cs.appearance === 'none' || cs.webkitAppearance === 'none').toBe(true);
   });
 });
+
+describe('Number Muncher — the calc info-grid is shared, not Info-panel-only', () => {
+  // v3.41.0 dropped Number Muncher's Info side panel, but StatisticsKeypad reuses .ga98-calc-info-grid
+  // for its results readout. This locks the rule so deleting the (now defunct) Info panel again can't
+  // silently strip the Statistics grid layout.
+  it('.ga98-calc-info-grid computes display: grid', () => {
+    inject('src/renderer/styles/theme.css');
+    const el = document.createElement('dl');
+    el.className = 'ga98-calc-info-grid';
+    document.body.appendChild(el);
+    expect(getComputedStyle(el).display).toBe('grid');
+  });
+});
