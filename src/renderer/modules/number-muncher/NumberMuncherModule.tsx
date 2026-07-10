@@ -31,6 +31,8 @@ import { toBase, fromBase, bitOp, type Base, type BitOpKind } from './programmer
 import { ProgrammerKeypad } from './ProgrammerKeypad';
 import { convert, CATEGORIES, type Category } from './converter';
 import { ConverterKeypad } from './ConverterKeypad';
+import { stats } from './statistics';
+import { StatisticsKeypad } from './StatisticsKeypad';
 
 export type CalcMode = 'standard' | 'scientific' | 'programmer' | 'converter' | 'statistics' | 'date' | 'unit';
 
@@ -264,6 +266,59 @@ export function NumberMuncherModule(): JSX.Element {
   const convResult = convert(Number(convInput) || 0, convFrom, convTo, convCategory);
   const convDisplay = Number.isFinite(convResult) ? String(Math.round(convResult * 1e12) / 1e12) : 'Error';
 
+  // Statistics mode accumulates a dataset (array of committed numbers) plus
+  // an in-progress entry string; `stats()` (pure, statistics.ts) is derived
+  // fresh from the dataset on every render, same pattern as convResult above.
+  const [statsDataset, setStatsDataset] = useState<number[]>([]);
+  const [statsEntry, setStatsEntry] = useState<string>('0');
+  const [statsFresh, setStatsFresh] = useState<boolean>(true);
+
+  const onStatsDigit = useCallback((d: string) => {
+    setStatsEntry((prev) => (statsFresh || prev === '0' ? d : prev + d));
+    setStatsFresh(false);
+  }, [statsFresh]);
+
+  const onStatsDot = useCallback(() => {
+    setStatsEntry((prev) => {
+      if (statsFresh) return '0.';
+      return prev.includes('.') ? prev : prev + '.';
+    });
+    setStatsFresh(false);
+  }, [statsFresh]);
+
+  const onStatsBackspace = useCallback(() => {
+    setStatsEntry((prev) => {
+      if (statsFresh) return prev;
+      const d = prev.length > 1 ? prev.slice(0, -1) : '0';
+      return d === '' ? '0' : d;
+    });
+  }, [statsFresh]);
+
+  const onStatsClearEntry = useCallback(() => {
+    setStatsEntry('0');
+    setStatsFresh(true);
+  }, []);
+
+  const onStatsClearDataset = useCallback(() => {
+    setStatsDataset([]);
+    setStatsEntry('0');
+    setStatsFresh(true);
+  }, []);
+
+  const onStatsAddValue = useCallback(() => {
+    const v = Number(statsEntry);
+    if (!Number.isFinite(v)) return;
+    setStatsDataset((ds) => {
+      const next = [...ds, v];
+      setHistory((h) => pushHistory(h, `+ ${v} (n=${next.length})`));
+      return next;
+    });
+    setStatsEntry('0');
+    setStatsFresh(true);
+  }, [statsEntry]);
+
+  const statsResult = stats(statsDataset);
+
   return (
     <div className="ga98-calc">
       <div className="ga98-calc-rail" role="tablist" aria-label="Calculator modes">
@@ -290,7 +345,9 @@ export function NumberMuncherModule(): JSX.Element {
               ? progDisplay
               : mode === 'converter'
                 ? `${convInput} ${convFrom} = ${convDisplay} ${convTo}`
-                : '0'}
+                : mode === 'statistics'
+                  ? statsEntry
+                  : '0'}
         </div>
 
         {mode === 'standard' ? (
@@ -346,6 +403,18 @@ export function NumberMuncherModule(): JSX.Element {
             onClear={onConvClear}
             onClearEntry={onConvClear}
             onBackspace={onConvBackspace}
+          />
+        ) : mode === 'statistics' ? (
+          <StatisticsKeypad
+            entry={statsEntry}
+            dataset={statsDataset}
+            result={statsResult}
+            onDigit={onStatsDigit}
+            onDot={onStatsDot}
+            onBackspace={onStatsBackspace}
+            onAddValue={onStatsAddValue}
+            onClearEntry={onStatsClearEntry}
+            onClearDataset={onStatsClearDataset}
           />
         ) : (
           <div className="ga98-calc-placeholder">
