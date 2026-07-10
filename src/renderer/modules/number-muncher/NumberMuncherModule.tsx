@@ -33,6 +33,8 @@ import { convert, CATEGORIES, type Category } from './converter';
 import { ConverterKeypad } from './ConverterKeypad';
 import { stats } from './statistics';
 import { StatisticsKeypad } from './StatisticsKeypad';
+import { daysBetween, addDays } from './date-calc';
+import { DateCalcKeypad } from './DateCalcKeypad';
 
 export type CalcMode = 'standard' | 'scientific' | 'programmer' | 'converter' | 'statistics' | 'date' | 'unit';
 
@@ -319,6 +321,53 @@ export function NumberMuncherModule(): JSX.Element {
 
   const statsResult = stats(statsDataset);
 
+  // Date Calc mode holds two date-picker strings for daysBetween() plus a
+  // base date + in-progress day-count entry for addDays()/subtractDays();
+  // both results are derived fresh from current inputs on every render, same
+  // pattern as convResult/statsResult above — no Date.now() anywhere here.
+  const [dateStart, setDateStart] = useState<string>('2026-01-01');
+  const [dateEnd, setDateEnd] = useState<string>('2026-01-01');
+  const [dateBase, setDateBase] = useState<string>('2026-01-01');
+  const [dateDaysEntry, setDateDaysEntry] = useState<string>('0');
+  const [dateFresh, setDateFresh] = useState<boolean>(true);
+  const [dateAddResult, setDateAddResult] = useState<string>('—');
+
+  const onDateDigit = useCallback((d: string) => {
+    setDateDaysEntry((prev) => (dateFresh || prev === '0' ? d : prev + d));
+    setDateFresh(false);
+  }, [dateFresh]);
+
+  const onDateBackspace = useCallback(() => {
+    setDateDaysEntry((prev) => {
+      if (dateFresh) return prev;
+      const d = prev.length > 1 ? prev.slice(0, -1) : '0';
+      return d === '' ? '0' : d;
+    });
+  }, [dateFresh]);
+
+  const onDateClearEntry = useCallback(() => {
+    setDateDaysEntry('0');
+    setDateFresh(true);
+  }, []);
+
+  const onDateAddDays = useCallback(() => {
+    const n = Number(dateDaysEntry) || 0;
+    const result = addDays(dateBase, n);
+    setDateAddResult(result);
+    setHistory((h) => pushHistory(h, `${dateBase} + ${n} day(s) = ${result}`));
+    setLastResult(result);
+  }, [dateBase, dateDaysEntry]);
+
+  const onDateSubtractDays = useCallback(() => {
+    const n = Number(dateDaysEntry) || 0;
+    const result = addDays(dateBase, -n);
+    setDateAddResult(result);
+    setHistory((h) => pushHistory(h, `${dateBase} - ${n} day(s) = ${result}`));
+    setLastResult(result);
+  }, [dateBase, dateDaysEntry]);
+
+  const dateBetweenResult = daysBetween(dateStart, dateEnd);
+
   return (
     <div className="ga98-calc">
       <div className="ga98-calc-rail" role="tablist" aria-label="Calculator modes">
@@ -347,7 +396,9 @@ export function NumberMuncherModule(): JSX.Element {
                 ? `${convInput} ${convFrom} = ${convDisplay} ${convTo}`
                 : mode === 'statistics'
                   ? statsEntry
-                  : '0'}
+                  : mode === 'date'
+                    ? `${dateBetweenResult} day(s)`
+                    : '0'}
         </div>
 
         {mode === 'standard' ? (
@@ -415,6 +466,23 @@ export function NumberMuncherModule(): JSX.Element {
             onAddValue={onStatsAddValue}
             onClearEntry={onStatsClearEntry}
             onClearDataset={onStatsClearDataset}
+          />
+        ) : mode === 'date' ? (
+          <DateCalcKeypad
+            startDate={dateStart}
+            endDate={dateEnd}
+            onStartDateChange={setDateStart}
+            onEndDateChange={setDateEnd}
+            daysBetweenResult={dateBetweenResult}
+            baseDate={dateBase}
+            onBaseDateChange={setDateBase}
+            daysEntry={dateDaysEntry}
+            onDigit={onDateDigit}
+            onBackspace={onDateBackspace}
+            onClearEntry={onDateClearEntry}
+            onAddDays={onDateAddDays}
+            onSubtractDays={onDateSubtractDays}
+            addResult={dateAddResult}
           />
         ) : (
           <div className="ga98-calc-placeholder">
