@@ -19,9 +19,24 @@ import { sanitizeHtml, wireExternalLinks } from '../../lib/sanitizeHtml';
 // takes a live Worker instance; pdf.js drives all getDocument() calls through it.
 pdfjsLib.GlobalWorkerOptions.workerPort = new PdfWorker();
 
-interface Props { caseId: string; fileName: string; originalName: string }
+/**
+ * The viewer serves two byte sources:
+ *  - `case`: a case attachment (path-confined files.* IPC + files.mediaUrl streaming).
+ *  - `documents`: a My-Documents file, decrypted in-process via documents:readBytes (never an
+ *    OS handoff). Types the byte pipeline can't render (eml/video/audio/unknown) show an
+ *    "Export…" fallback rather than a broken preview.
+ */
+type Props =
+  | { source: 'case'; caseId: string; fileName: string; originalName?: string }
+  | { source: 'documents'; relPath: string; name: string };
 
 type Kind = 'pdf' | 'image' | 'csv' | 'json' | 'html' | 'docx' | 'eml' | 'video' | 'audio' | 'text';
+
+/** The kinds whose bodies render from raw decrypted bytes (source-agnostic). eml/video/audio use
+ *  case-only streaming IPC, so they are NOT byte kinds and are unsupported on the documents path. */
+type ByteKind = 'pdf' | 'image' | 'csv' | 'json' | 'html' | 'docx' | 'text';
+
+interface BytesProps { bytes: Uint8Array<ArrayBuffer> | null; error: string | null }
 
 const IMAGE_EXT = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'tif', 'tiff'];
 // Container types Chromium can play. These stream via ga98media:// (range requests) rather
@@ -43,7 +58,7 @@ function kindFor(name: string): Kind {
   return 'text';
 }
 
-function useBytes(caseId: string, fileName: string): { bytes: Uint8Array<ArrayBuffer> | null; error: string | null } {
+function useBytes(caseId: string, fileName: string): BytesProps {
   const [bytes, setBytes] = useState<Uint8Array<ArrayBuffer> | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -57,11 +72,37 @@ function useBytes(caseId: string, fileName: string): { bytes: Uint8Array<ArrayBu
   return { bytes, error };
 }
 
+/** Documents source: decrypted bytes read in-process via documents:readBytes (marshalled as
+ *  number[] over IPC; re-wrapped in a Uint8Array here — the plaintext lives only in renderer
+ *  memory, never a temp file). */
+function useDocBytes(relPath: string): BytesProps {
+  const [bytes, setBytes] = useState<Uint8Array<ArrayBuffer> | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    setBytes(null); setError(null);
+    window.api.documents.readBytes(relPath)
+      .then((arr) => { if (live) setBytes(new Uint8Array(arr) as Uint8Array<ArrayBuffer>); })
+      .catch((e) => { if (live) setError((e as Error).message); });
+    return () => { live = false; };
+  }, [relPath]);
+  return { bytes, error };
+}
+
 function Centered({ children }: { children: React.ReactNode }): JSX.Element {
   return <div style={{ padding: 16, color: '#666' }}>{children}</div>;
 }
 
-export function DocViewerModule({ caseId, fileName, originalName }: Props): JSX.Element {
+export function DocViewerModule(props: Props): JSX.Element {
+  if (props.source === 'documents') {
+    return <DocumentsViewer relPath={props.relPath} name={props.name} />;
+  }
+  return <CaseViewer caseId={props.caseId} fileName={props.fileName} originalName={props.originalName ?? props.fileName} />;
+}
+
+// ---- case source (unchanged behavior) ----
+
+function CaseViewer({ caseId, fileName, originalName }: { caseId: string; fileName: string; originalName: string }): JSX.Element {
   const kind = kindFor(originalName || fileName);
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#fff' }}>
@@ -72,24 +113,104 @@ export function DocViewerModule({ caseId, fileName, originalName }: Props): JSX.
         <span style={{ fontSize: 11, opacity: 0.7, marginLeft: 8 }}>{kind.toUpperCase()}</span>
       </div>
       <div style={{ flex: 1, overflow: 'auto', position: 'relative' }}>
-        <Body kind={kind} caseId={caseId} fileName={fileName} />
+        <CaseBody kind={kind} caseId={caseId} fileName={fileName} />
       </div>
     </div>
   );
 }
 
-function Body({ kind, caseId, fileName }: { kind: Kind; caseId: string; fileName: string }): JSX.Element {
+function CaseBody({ kind, caseId, fileName }: { kind: Kind; caseId: string; fileName: string }): JSX.Element {
   switch (kind) {
-    case 'pdf': return <PdfBody caseId={caseId} fileName={fileName} />;
-    case 'image': return <ImageBody caseId={caseId} fileName={fileName} />;
-    case 'csv': return <CsvBody caseId={caseId} fileName={fileName} />;
-    case 'json': return <JsonBody caseId={caseId} fileName={fileName} />;
-    case 'html': return <HtmlBody caseId={caseId} fileName={fileName} />;
-    case 'docx': return <DocxBody caseId={caseId} fileName={fileName} />;
     case 'eml': return <EmlBody caseId={caseId} fileName={fileName} />;
     case 'video': return <MediaBody kind="video" caseId={caseId} fileName={fileName} />;
     case 'audio': return <MediaBody kind="audio" caseId={caseId} fileName={fileName} />;
-    default: return <TextBody caseId={caseId} fileName={fileName} />;
+    default: return <CaseByteBody kind={kind} caseId={caseId} fileName={fileName} />;
+  }
+}
+
+/** Loads case-attachment bytes and hands them to the source-agnostic byte body. */
+function CaseByteBody({ kind, caseId, fileName }: { kind: ByteKind; caseId: string; fileName: string }): JSX.Element {
+  const { bytes, error } = useBytes(caseId, fileName);
+  return <ByteBody kind={kind} bytes={bytes} error={error} />;
+}
+
+// ---- documents source (My Documents internal viewer) ----
+
+// Extensions the byte pipeline previews as text/code. Anything else that resolves to the `text`
+// catch-all (archives, binaries, …) is treated as unsupported → Export fallback.
+const DOC_TEXT_EXT = [
+  'txt', 'text', 'md', 'markdown', 'log', 'rtf', 'xml', 'yaml', 'yml', 'toml', 'ini', 'cfg', 'conf',
+  'js', 'mjs', 'cjs', 'ts', 'tsx', 'jsx', 'py', 'css', 'scss', 'less', 'sh', 'bash', 'rs', 'c', 'h',
+  'cpp', 'hpp', 'cc', 'java', 'go', 'rb', 'php', 'sql', 'csv', 'tsv'
+];
+
+/** True iff the documents byte pipeline can render this file. eml/video/audio need case-only
+ *  streaming IPC; an unknown extension (falls into the `text` catch-all) is unsupported. */
+function docSupported(name: string): boolean {
+  const kind = kindFor(name);
+  if (kind === 'eml' || kind === 'video' || kind === 'audio') return false;
+  if (kind === 'text') return DOC_TEXT_EXT.includes(name.toLowerCase().split('.').pop() ?? '');
+  return true;
+}
+
+function DocumentsViewer({ relPath, name }: { relPath: string; name: string }): JSX.Element {
+  const kind = kindFor(name);
+  const supported = docSupported(name);
+  return (
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#fff' }}>
+      <div className="ga98-toolbar">
+        <b style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</b>
+        <span style={{ flex: 1 }} />
+        <span style={{ fontSize: 11, opacity: 0.7, marginLeft: 8 }}>{kind.toUpperCase()}</span>
+      </div>
+      <div style={{ flex: 1, overflow: 'auto', position: 'relative' }}>
+        {supported
+          ? <DocByteBody kind={kind as ByteKind} relPath={relPath} />
+          : <UnsupportedPanel relPath={relPath} name={name} />}
+      </div>
+    </div>
+  );
+}
+
+/** Loads decrypted My-Documents bytes and hands them to the source-agnostic byte body. */
+function DocByteBody({ kind, relPath }: { kind: ByteKind; relPath: string }): JSX.Element {
+  const { bytes, error } = useDocBytes(relPath);
+  return <ByteBody kind={kind} bytes={bytes} error={error} />;
+}
+
+/** Fallback for a type the in-app pipeline can't render: offer a decrypt-to-disk Export instead of
+ *  a broken preview. Export goes through the existing documents:export (OS save dialog, confined). */
+function UnsupportedPanel({ relPath, name }: { relPath: string; name: string }): JSX.Element {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  return (
+    <div style={{ padding: 24, color: '#555' }}>
+      <p style={{ marginTop: 0 }}>Can&apos;t preview this file type in-app.</p>
+      <p style={{ fontSize: 12, opacity: 0.8, wordBreak: 'break-word' }}>{name}</p>
+      <button
+        disabled={busy}
+        onClick={() => {
+          setBusy(true); setErr(null);
+          void window.api.documents.export(relPath)
+            .catch((e) => setErr((e as Error).message))
+            .finally(() => setBusy(false));
+        }}
+      >Export…</button>
+      {err && <div style={{ color: '#a00', marginTop: 8, fontSize: 12 }}>{err}</div>}
+    </div>
+  );
+}
+
+/** Source-agnostic renderer: dispatches to the byte-driven leaf for a resolved {bytes,error}. */
+function ByteBody({ kind, bytes, error }: BytesProps & { kind: ByteKind }): JSX.Element {
+  switch (kind) {
+    case 'pdf': return <PdfBody bytes={bytes} error={error} />;
+    case 'image': return <ImageBody bytes={bytes} error={error} />;
+    case 'csv': return <CsvBody bytes={bytes} error={error} />;
+    case 'json': return <JsonBody bytes={bytes} error={error} />;
+    case 'html': return <HtmlBody bytes={bytes} error={error} />;
+    case 'docx': return <DocxBody bytes={bytes} error={error} />;
+    default: return <TextBody bytes={bytes} error={error} />;
   }
 }
 
@@ -148,8 +269,7 @@ function MediaBody({ kind, caseId, fileName }: { kind: 'video' | 'audio'; caseId
   );
 }
 
-function PdfBody({ caseId, fileName }: { caseId: string; fileName: string }): JSX.Element {
-  const { bytes, error } = useBytes(caseId, fileName);
+function PdfBody({ bytes, error }: BytesProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1.2);
   const [renderError, setRenderError] = useState<string | null>(null);
@@ -204,8 +324,7 @@ function PdfBody({ caseId, fileName }: { caseId: string; fileName: string }): JS
   );
 }
 
-function ImageBody({ caseId, fileName }: { caseId: string; fileName: string }): JSX.Element {
-  const { bytes, error } = useBytes(caseId, fileName);
+function ImageBody({ bytes, error }: BytesProps): JSX.Element {
   const [scale, setScale] = useState(1);
   const url = useMemo(() => (bytes ? URL.createObjectURL(new Blob([bytes])) : null), [bytes]);
   useEffect(() => () => { if (url) URL.revokeObjectURL(url); }, [url]);
@@ -227,8 +346,7 @@ function ImageBody({ caseId, fileName }: { caseId: string; fileName: string }): 
   );
 }
 
-function CsvBody({ caseId, fileName }: { caseId: string; fileName: string }): JSX.Element {
-  const { bytes, error } = useBytes(caseId, fileName);
+function CsvBody({ bytes, error }: BytesProps): JSX.Element {
   const [filter, setFilter] = useState('');
   const rows = useMemo<string[][]>(() => {
     if (!bytes) return [];
@@ -265,8 +383,7 @@ function CsvBody({ caseId, fileName }: { caseId: string; fileName: string }): JS
   );
 }
 
-function JsonBody({ caseId, fileName }: { caseId: string; fileName: string }): JSX.Element {
-  const { bytes, error } = useBytes(caseId, fileName);
+function JsonBody({ bytes, error }: BytesProps): JSX.Element {
   const pretty = useMemo(() => {
     if (!bytes) return '';
     const text = bytesToText(bytes);
@@ -289,15 +406,13 @@ function SanitizedHtml({ html }: { html: string }): JSX.Element {
   return <div ref={ref} style={{ padding: 12, fontSize: 13, lineHeight: 1.5 }} dangerouslySetInnerHTML={{ __html: safe }} />;
 }
 
-function HtmlBody({ caseId, fileName }: { caseId: string; fileName: string }): JSX.Element {
-  const { bytes, error } = useBytes(caseId, fileName);
+function HtmlBody({ bytes, error }: BytesProps): JSX.Element {
   if (error) return <Centered>Could not load: {error}</Centered>;
   if (!bytes) return <Centered>Loading…</Centered>;
   return <SanitizedHtml html={bytesToText(bytes)} />;
 }
 
-function DocxBody({ caseId, fileName }: { caseId: string; fileName: string }): JSX.Element {
-  const { bytes, error } = useBytes(caseId, fileName);
+function DocxBody({ bytes, error }: BytesProps): JSX.Element {
   const [html, setHtml] = useState<string | null>(null);
   const [convErr, setConvErr] = useState<string | null>(null);
   useEffect(() => {
@@ -315,8 +430,7 @@ function DocxBody({ caseId, fileName }: { caseId: string; fileName: string }): J
   return <SanitizedHtml html={html} />;
 }
 
-function TextBody({ caseId, fileName }: { caseId: string; fileName: string }): JSX.Element {
-  const { bytes, error } = useBytes(caseId, fileName);
+function TextBody({ bytes, error }: BytesProps): JSX.Element {
   if (error) return <Centered>Could not load: {error}</Centered>;
   if (!bytes) return <Centered>Loading…</Centered>;
   if (looksBinary(bytes)) return <Centered>This file is not a previewable text/document type. Use Reveal to open it externally.</Centered>;

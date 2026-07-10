@@ -209,6 +209,15 @@ export async function exportEntry(relPath: string, destPath: string): Promise<vo
   await writeFile(destPath, await secureReadFile(real));
 }
 
+/** Read a FILE's DECRYPTED bytes in-process, for Ghost Intel 98's internal viewer. Encrypted-at-rest
+ *  files are decrypted through secure-fs in renderer/main memory only — no temp file, no OS handoff
+ *  (unlike openEntry, which stages a decrypted temp for the OS default app). Refuses a folder. */
+export async function readBytes(relPath: string): Promise<Uint8Array> {
+  const real = await confineExisting(relPath);
+  if ((await stat(real)).isDirectory()) throw new Error('Refusing to read a folder as bytes.');
+  return (await isEncryptedFile(real)) ? secureReadFile(real) : readFile(real);
+}
+
 // ---- text note movement (Notepad <-> My Documents, My Documents <-> Briefcase) ----
 
 // The main process can't import the renderer's file-icons module, so this is a minimal

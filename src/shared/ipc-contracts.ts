@@ -277,7 +277,10 @@ export const channels = {
     open: 'documents:open',
     export: 'documents:export',
     writeText: 'documents:writeText',
-    readText: 'documents:readText'
+    readText: 'documents:readText',
+    // Decrypted bytes of a My-Documents file, read in-process for the internal viewer
+    // (never an OS handoff / shell.openPath). Returns a number[] over the IPC wire.
+    readBytes: 'documents:readBytes'
   },
   ssh: {
     listHosts: 'ssh:listHosts',
@@ -840,6 +843,9 @@ export interface ApiContracts {
   [channels.files.mediaUrl]: { args: [CaseId, string]; returns: MediaUrlResult };
   [channels.files.extractAttachmentMeta]: { args: [CaseId, string]; returns: ExtractedAttachmentMeta };
   [channels.files.renameAttachment]: { args: [CaseId, string, string]; returns: string };
+
+  // Decrypted bytes of a My-Documents file for the internal viewer (marshalled as number[]).
+  [channels.documents.readBytes]: { args: [string]; returns: number[] };
 
   [channels.entities.listAll]: { args: []; returns: EntityRecord[] };
   [channels.entities.create]: { args: [EntityCreateInput]; returns: EntityRecord };

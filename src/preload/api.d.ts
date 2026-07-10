@@ -186,6 +186,7 @@ export interface GhostApi {
     export(relPath: string): Promise<void>;
     writeText(relDir: string, name: string, body: string, overwrite?: boolean): Promise<DocEntry>;
     readText(relPath: string): Promise<string>;
+    readBytes(relPath: string): Promise<number[]>;
   };
   notes: {
     list(id: string): Promise<{ name: string; updatedAt: string }[]>;

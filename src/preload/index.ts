@@ -69,7 +69,8 @@ const api = {
     export: (relPath: string) => ipcRenderer.invoke(channels.documents.export, relPath),
     writeText: (relDir: string, name: string, body: string, overwrite?: boolean) =>
       ipcRenderer.invoke(channels.documents.writeText, relDir, name, body, overwrite),
-    readText: (relPath: string) => ipcRenderer.invoke(channels.documents.readText, relPath)
+    readText: (relPath: string) => ipcRenderer.invoke(channels.documents.readText, relPath),
+    readBytes: (relPath: string) => ipcRenderer.invoke(channels.documents.readBytes, relPath)
   },
   notes: {
     list: (id: string) => ipcRenderer.invoke(channels.notes.list, id),

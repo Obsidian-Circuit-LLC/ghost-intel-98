@@ -1,4 +1,5 @@
 import { useEffect, useState, type DragEvent, type MouseEvent } from 'react';
+import { useWindows } from '../../state/store';
 import { confirmDialog, promptDialog } from '../../state/dialogs';
 import { toast } from '../../state/toasts';
 import type { DocEntry } from '../../../shared/documents-types';
@@ -100,6 +101,17 @@ export function MyDocumentsModule(): JSX.Element {
     setMenu({ x: ev.clientX, y: ev.clientY, entry });
   }
 
+  // Open a FILE in Ghost Intel 98's internal viewer (decrypted-in-process via documents:readBytes),
+  // NOT the OS default app — encrypted-at-rest files must never be handed off to a shell open.
+  function openInViewer(relPath: string, name: string): void {
+    useWindows.getState().open({
+      module: 'doc-viewer',
+      title: name,
+      id: `docview:${relPath}`,
+      props: { source: 'documents', relPath, name }
+    });
+  }
+
   const crumbs = doc.dir === '' ? [] : doc.dir.split('/');
 
   return (
@@ -144,7 +156,7 @@ export function MyDocumentsModule(): JSX.Element {
               onDragOver={e.kind === 'folder' ? (ev) => onFolderDragOver(ev, e) : undefined}
               onDragLeave={e.kind === 'folder' ? () => setHoverFolder(null) : undefined}
               onDrop={e.kind === 'folder' ? (ev) => onFolderDrop(ev, e) : undefined}
-              onDoubleClick={() => (e.kind === 'folder' ? doc.enter(e.name) : void doc.open(joinRel(doc.dir, e.name)))}
+              onDoubleClick={() => (e.kind === 'folder' ? doc.enter(e.name) : openInViewer(joinRel(doc.dir, e.name), e.name))}
               onContextMenu={(ev) => openMenu(ev, e)}
             >
               <div style={{ width: 40, height: 40, margin: '0 auto', lineHeight: 0 }}>{fileGlyphNode(e)}</div>
@@ -163,7 +175,7 @@ export function MyDocumentsModule(): JSX.Element {
           onCopy={(e) => { doc.clipboard.current = { op: 'copy', relPath: joinRel(doc.dir, e.name) }; }}
           onCut={(e) => { doc.clipboard.current = { op: 'cut', relPath: joinRel(doc.dir, e.name) }; }}
           onPaste={() => void doc.paste()}
-          onOpen={(e) => void doc.open(joinRel(doc.dir, e.name))}
+          onOpen={(e) => openInViewer(joinRel(doc.dir, e.name), e.name)}
           onExport={(e) => void doc.exportFile(joinRel(doc.dir, e.name))}
           onClose={() => setMenu(null)}
         />

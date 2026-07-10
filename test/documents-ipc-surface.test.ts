@@ -63,8 +63,23 @@ describe('documents IPC surface', () => {
       open: 'documents:open',
       export: 'documents:export',
       writeText: 'documents:writeText',
-      readText: 'documents:readText'
+      readText: 'documents:readText',
+      readBytes: 'documents:readBytes'
     });
+  });
+
+  it('exposes the readBytes channel for the internal viewer', () => {
+    expect(channels.documents.readBytes).toBe('documents:readBytes');
+  });
+
+  it('documents.readBytes validates relPath and returns a number[]', async () => {
+    const spy = vi
+      .spyOn(store, 'readBytes')
+      .mockResolvedValueOnce(new Uint8Array([104, 105]));
+    const out = await invoke('documents:readBytes', 'a.txt');
+    expect(ensureDocRelPath).toHaveBeenCalledWith('a.txt', 'relPath');
+    expect(spy).toHaveBeenCalledWith('a.txt');
+    expect(out).toEqual([104, 105]);
   });
 
   it('documents.open validates relPath and calls openEntry', async () => {

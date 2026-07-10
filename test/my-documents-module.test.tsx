@@ -11,6 +11,7 @@ vi.mock('../src/renderer/state/dialogs', () => ({
 
 import { MyDocumentsModule } from '../src/renderer/modules/my-documents/MyDocumentsModule';
 import { promptDialog } from '../src/renderer/state/dialogs';
+import { useWindows } from '../src/renderer/state/store';
 
 const api = {
   list: vi.fn(),
@@ -113,13 +114,20 @@ describe('MyDocumentsModule', () => {
     expect(container.textContent).not.toMatch(/encrypted at rest/i);
   });
 
-  it('double-clicking a file calls documents.open', async () => {
+  it('double-clicking a file opens it in the internal viewer (not an OS handoff)', async () => {
+    const openSpy = vi.spyOn(useWindows.getState(), 'open').mockReturnValue('win-1');
     api.list.mockResolvedValue([{ name: 'a.pdf', kind: 'file', size: 3, modifiedAt: 'x' }]);
     await act(async () => { root.render(<MyDocumentsModule />); });
     await flush();
     const tile = container.querySelector('.ga98-mydocs-tile') as HTMLElement;
     await act(async () => { tile.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); });
-    expect(api.open).toHaveBeenCalledWith('a.pdf');
+    // Never OS-launched — encrypted-at-rest files stay in-process.
+    expect(api.open).not.toHaveBeenCalled();
+    expect(openSpy).toHaveBeenCalledWith(expect.objectContaining({
+      module: 'doc-viewer',
+      props: { source: 'documents', relPath: 'a.pdf', name: 'a.pdf' }
+    }));
+    openSpy.mockRestore();
   });
 
   it('context menu lists New Folder first, Paste under Cut, Open/Export files-only', async () => {

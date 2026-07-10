@@ -704,6 +704,9 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
       args[3] === true));
   safeHandle(channels.documents.readText, (...args) =>
     documentsStore.readText(ensureDocRelPath(args[0], 'relPath')));
+  // Internal viewer: decrypted bytes read in-process (never OS handoff). Marshalled as number[].
+  safeHandle(channels.documents.readBytes, async (...args) =>
+    Array.from(await documentsStore.readBytes(ensureDocRelPath(args[0], 'relPath'))));
 
   // ---- entities (cross-case registry) ----
   safeHandle(channels.entities.listAll, () => entities.listAll());

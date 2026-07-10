@@ -160,11 +160,20 @@ function PinballAdapter({ spec: _spec }: { spec: WindowSpec }): JSX.Element {
 
 function DocViewerAdapter({ spec }: { spec: WindowSpec }): JSX.Element {
   return (
-    <DocViewerModule
-      caseId={spec.props?.['caseId'] as string}
-      fileName={spec.props?.['fileName'] as string}
-      originalName={(spec.props?.['originalName'] as string) ?? (spec.props?.['fileName'] as string)}
-    />
+    spec.props?.['source'] === 'documents' ? (
+      <DocViewerModule
+        source="documents"
+        relPath={spec.props?.['relPath'] as string}
+        name={spec.props?.['name'] as string}
+      />
+    ) : (
+      <DocViewerModule
+        source="case"
+        caseId={spec.props?.['caseId'] as string}
+        fileName={spec.props?.['fileName'] as string}
+        originalName={(spec.props?.['originalName'] as string) ?? (spec.props?.['fileName'] as string)}
+      />
+    )
   );
 }
 
