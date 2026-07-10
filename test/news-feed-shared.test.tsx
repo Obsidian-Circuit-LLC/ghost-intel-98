@@ -25,7 +25,8 @@ import { createRoot, type Root } from 'react-dom/client';
 import { NewsFeedControls } from '../src/renderer/modules/geoint/NewsFeedControls';
 import { NewsViewModule } from '../src/renderer/modules/geoint/NewsViewModule';
 import { DEFAULT_NEWS_STREAM } from '../src/renderer/modules/geoint/NewsStreamView';
-import { useSettings } from '../src/renderer/state/store';
+import { newsWindowSpec } from '../src/renderer/modules/geoint/newsWindow';
+import { useSettings, useWindows } from '../src/renderer/state/store';
 import { defaultSettings } from '@shared/types';
 
 let container: HTMLDivElement;
@@ -108,6 +109,25 @@ describe('NewsFeedControls — shared add-feed form', () => {
     // AND the rest of the geoint block was NOT re-sent (a partial write can't clobber siblings).
     expect(payload.geoint).not.toHaveProperty('networkEnabled');
     expect(payload.geoint).not.toHaveProperty('basemap');
+  });
+
+  it('renders the pop-out (⧉) button that opens the active feed in its own window', async () => {
+    // Regression (v3.42.0): eefc518 (the v3.38.0 Add-stream-modal batch) removed the feed-level
+    // pop-out button along with the intended per-row pop-out. Because NewsFeedControls is shared by
+    // both the GeoINT LiveNewsPanel and the standalone OSINT News module (NewsViewModule), restoring
+    // it here brings it back on BOTH surfaces at once.
+    const bloomberg = { label: 'Bloomberg TV', url: 'https://a.example.com/a.m3u8', kind: 'hls' as const };
+    useSettings.setState({
+      settings: { ...defaultSettings, geoint: { ...defaultSettings.geoint, newsStreams: [bloomberg], newsStreamIndex: 0 } }
+    });
+    const openSpy = vi.spyOn(useWindows.getState(), 'open').mockImplementation(() => {});
+    await act(async () => { root.render(<NewsFeedControls />); });
+    await flush();
+
+    const popBtn = Array.from(container.querySelectorAll('button')).find((b) => b.title === 'Pop out to its own window') as HTMLButtonElement;
+    expect(popBtn).toBeTruthy();
+    await act(async () => { popBtn.click(); });
+    expect(openSpy).toHaveBeenCalledWith(newsWindowSpec(bloomberg));
   });
 
   it('removeStream clamps newsStreamIndex to a valid range after removing the active (last) stream', async () => {

@@ -1,6 +1,6 @@
 /**
- * GeoINT — shared Live News feed controls: the Stream dropdown (+ remove button) and the
- * Add-stream modal (AddStreamDialog). Extracted out of LiveNewsPanel so BOTH the inline GeoINT panel
+ * GeoINT — shared Live News feed controls: the Stream dropdown (+ pop-out ⧉ / remove ✕ buttons) and
+ * the Add-stream modal (AddStreamDialog). Extracted out of LiveNewsPanel so BOTH the inline GeoINT panel
  * and the standalone/pop-out News module (NewsViewModule) manage the SAME settings.geoint.newsStreams
  * list with identical behavior — a feed added on either surface is immediately selectable on the other.
  *
@@ -15,12 +15,13 @@
  */
 
 import { useState } from 'react';
-import { useSettings } from '../../state/store';
+import { useSettings, useWindows } from '../../state/store';
 import { toast } from '../../state/toasts';
 import { parseYouTubeId } from '@shared/youtube';
 import type { AppSettings } from '@shared/types';
 import type { NewsStream, NewsStreamKind } from './NewsStreamView';
 import { AddStreamDialog } from './AddStreamDialog';
+import { newsWindowSpec } from './newsWindow';
 
 /**
  * Validate a user-supplied stream URL for the given kind.
@@ -152,6 +153,7 @@ export function NewsFeedControls(): JSX.Element {
             </option>
           ))}
         </select>
+        {active && <button title="Pop out to its own window" onClick={() => useWindows.getState().open(newsWindowSpec(active))}>⧉</button>}
         {active && <button title="Remove this stream" onClick={() => removeStream(index)}>✕</button>}
       </div>
 

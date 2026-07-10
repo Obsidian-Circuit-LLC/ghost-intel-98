@@ -1323,6 +1323,12 @@ input.ga98-text, select.ga98-text {
 .ga98-calc-equals { background: #000080; color: #fff; }
 .ga98-calc-fn { color: #000080; }
 .ga98-calc-placeholder { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--ga98-shadow-dark); font-style: italic; }
+/* GeoINT Live News fieldset: span the full rail-panel width so the near-transparent border wraps the
+ * content on the right. Without this the <fieldset> falls back to the UA default min-inline-size:
+ * min-content and shrinks once the wide inline add-form is gone (it now lives in a modal), leaving the
+ * right border short of the panel edge. box-sizing keeps the border inside the 100% width. */
+.ga98-livenews { box-sizing: border-box; width: 100%; margin: 0; min-inline-size: 0; padding: 6px 8px; }
+
 /* Compact shell (v3.41.0): no side column — Memory is a row, History a toggled drawer, Info a footer. */
 .ga98-calc-topbar { display: flex; gap: 4px; align-items: stretch; }
 .ga98-calc-topbar .ga98-calc-display { flex: 1; min-width: 0; }
