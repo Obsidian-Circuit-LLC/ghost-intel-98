@@ -1261,6 +1261,10 @@ input.ga98-text, select.ga98-text {
 .ga98-sig-canvas {
   border: 1px solid var(--ga98-shadow-dark); background: #fff; box-shadow: inset 1px 1px 0 var(--ga98-shadow-dark);
   touch-action: none; cursor: crosshair;
+  /* Pin the DISPLAY size to the drawing bitmap (280x80) so the flex `align-items:stretch` chain can't
+     stretch the canvas wider than its bitmap — otherwise pointer coords map off-bitmap and strokes
+     vanish. flex:0 0 auto keeps the parent from overriding it. */
+  width: 280px; height: 80px; flex: 0 0 auto; align-self: flex-start;
 }
 .ga98-invoice-preview {
   border: 1px solid var(--ga98-shadow-dark); background: #fff; color: #111; padding: 8px; margin-top: 8px;
