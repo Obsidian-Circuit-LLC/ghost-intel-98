@@ -50,7 +50,8 @@ export type ModuleKey =
   | 'osint-toolkit'
   | 'minds-eye'
   | 'investigation-graph'
-  | 'invoices';
+  | 'invoices'
+  | 'number-muncher';
 
 export interface WindowSpec {
   id: string;

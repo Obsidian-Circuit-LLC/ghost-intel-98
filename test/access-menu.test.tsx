@@ -107,7 +107,7 @@ describe('AccessMenu categories', () => {
   it('renders the five category flyouts + Games + OSINT Toolkit and the footer, RTFM below Settings', () => {
     render();
     const text = labels().join('|');
-    for (const cat of ['Programs', 'Creativity', 'Music', 'Network', 'Organization', 'Games', 'OSINT Toolkit', 'Settings', 'RTFM', 'Shut Down']) {
+    for (const cat of ['Programs', 'Creativity', 'Music', 'Network', 'Organizer', 'Games', 'OSINT Toolkit', 'Settings', 'RTFM', 'Shut Down']) {
       expect(text).toContain(cat);
     }
     const order = labels();
@@ -145,5 +145,12 @@ describe('AccessMenu categories', () => {
     render();
     const order = labels();
     expect(order.findIndex((l) => /OSINT Toolkit/.test(l))).toBeLessThan(order.findIndex((l) => /Games/.test(l)));
+  });
+
+  it('has an Organizer category containing Number Muncher', () => {
+    render();
+    const t = Array.from(container.querySelectorAll('.ga98-access-entry')).map((e) => e.textContent || '').join('|');
+    expect(t).toContain('Organizer');
+    expect(t).not.toMatch(/\bOrganization\b/);
   });
 });
