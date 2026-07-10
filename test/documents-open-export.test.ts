@@ -47,12 +47,20 @@ describe('readBytes (internal viewer, in-process — no OS handoff / temp)', () 
     await writeFile(join(ROOT, 'documents', 'p.txt'), Buffer.from('yo'));
     expect([...(await store.readBytes('p.txt'))]).toEqual([0x79, 0x6f]);
   });
-  it('refuses a file over the 64 MB preview cap (before reading it — no OOM)', async () => {
+  it('reads a large file under the 512 MB cap (a 108 MB-class doc opens fine)', async () => {
     const store = await import('../src/main/documents/store');
-    const p = join(ROOT, 'documents', 'big.bin');
+    const p = join(ROOT, 'documents', 'hearing-bundle.pdf');
+    await writeFile(p, Buffer.from([0x25, 0x50, 0x44, 0x46])); // "%PDF" (plaintext: vault off in this test)
+    await truncate(p, 108 * 1024 * 1024); // sparse: 108 MB logical, well under the raised cap
+    const bytes = await store.readBytes('hearing-bundle.pdf');
+    expect(bytes.length).toBe(108 * 1024 * 1024);
+  });
+  it('refuses a file over the 512 MB preview cap (before reading it — no OOM)', async () => {
+    const store = await import('../src/main/documents/store');
+    const p = join(ROOT, 'documents', 'huge.bin');
     await writeFile(p, Buffer.from([0x00]));
-    await truncate(p, 64 * 1024 * 1024 + 1); // sparse: logical size just over the cap
-    await expect(store.readBytes('big.bin')).rejects.toThrow(/too large/i);
+    await truncate(p, 512 * 1024 * 1024 + 1); // sparse: logical size just over the cap
+    await expect(store.readBytes('huge.bin')).rejects.toThrow(/too large/i);
   });
   it('refuses to read a folder as bytes', async () => {
     const store = await import('../src/main/documents/store');
