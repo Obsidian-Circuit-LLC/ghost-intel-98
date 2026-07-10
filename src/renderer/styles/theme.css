@@ -1352,3 +1352,7 @@ input.ga98-text, select.ga98-text {
 .ga98-calc-bitops { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
 .ga98-calc-digit-grid { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
 .ga98-calc-keypad-programmer > .ga98-calc-equals { grid-column: 1 / -1; }
+.ga98-calc-keypad-converter { grid-template-rows: auto auto repeat(4, 1fr); }
+.ga98-calc-conv-row { grid-column: 1 / -1; display: flex; align-items: flex-end; gap: 6px; }
+.ga98-calc-conv-label { display: flex; flex-direction: column; gap: 2px; font-size: 11px; flex: 1; }
+.ga98-calc-conv-swap { flex: 0 0 auto; align-self: center; min-height: 22px; }

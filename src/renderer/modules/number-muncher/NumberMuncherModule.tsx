@@ -29,6 +29,8 @@ import { sci, type Angle, type SciFn } from './scientific';
 import { ScientificKeypad } from './ScientificKeypad';
 import { toBase, fromBase, bitOp, type Base, type BitOpKind } from './programmer';
 import { ProgrammerKeypad } from './ProgrammerKeypad';
+import { convert, CATEGORIES, type Category } from './converter';
+import { ConverterKeypad } from './ConverterKeypad';
 
 export type CalcMode = 'standard' | 'scientific' | 'programmer' | 'converter' | 'statistics' | 'date' | 'unit';
 
@@ -65,6 +67,16 @@ export function NumberMuncherModule(): JSX.Element {
   const [progAcc, setProgAcc] = useState<bigint | null>(null);
   const [progOp, setProgOp] = useState<BitOpKind | null>(null);
   const [progFresh, setProgFresh] = useState<boolean>(true);
+
+  // Converter mode holds its own numeric-entry string (convInput) plus the
+  // active category/unit pair; the converted value is derived on every
+  // render via the pure `convert()` engine rather than staged like an
+  // accumulator, since there is no chained operator to resolve.
+  const [convCategory, setConvCategory] = useState<Category>('length');
+  const [convFrom, setConvFrom] = useState<string>('km');
+  const [convTo, setConvTo] = useState<string>('m');
+  const [convInput, setConvInput] = useState<string>('0');
+  const [convFresh, setConvFresh] = useState<boolean>(true);
 
   const onEquals = useCallback(() => {
     setStd((prev) => {
@@ -209,6 +221,49 @@ export function NumberMuncherModule(): JSX.Element {
     });
   }, [progFresh]);
 
+  const onConvCategoryChange = useCallback((cat: Category) => {
+    setConvCategory(cat);
+    const units = Object.keys(CATEGORIES[cat]);
+    setConvFrom(units[0]);
+    setConvTo(units[1] ?? units[0]);
+    setConvInput('0');
+    setConvFresh(true);
+  }, []);
+
+  const onConvSwap = useCallback(() => {
+    setConvFrom(convTo);
+    setConvTo(convFrom);
+  }, [convFrom, convTo]);
+
+  const onConvDigit = useCallback((d: string) => {
+    setConvInput((prev) => (convFresh || prev === '0' ? d : prev + d));
+    setConvFresh(false);
+  }, [convFresh]);
+
+  const onConvDot = useCallback(() => {
+    setConvInput((prev) => {
+      if (convFresh) return '0.';
+      return prev.includes('.') ? prev : prev + '.';
+    });
+    setConvFresh(false);
+  }, [convFresh]);
+
+  const onConvClear = useCallback(() => {
+    setConvInput('0');
+    setConvFresh(true);
+  }, []);
+
+  const onConvBackspace = useCallback(() => {
+    setConvInput((prev) => {
+      if (convFresh) return prev;
+      const d = prev.length > 1 ? prev.slice(0, -1) : '0';
+      return d === '' ? '0' : d;
+    });
+  }, [convFresh]);
+
+  const convResult = convert(Number(convInput) || 0, convFrom, convTo, convCategory);
+  const convDisplay = Number.isFinite(convResult) ? String(Math.round(convResult * 1e12) / 1e12) : 'Error';
+
   return (
     <div className="ga98-calc">
       <div className="ga98-calc-rail" role="tablist" aria-label="Calculator modes">
@@ -229,7 +284,13 @@ export function NumberMuncherModule(): JSX.Element {
 
       <div className="ga98-calc-main">
         <div className="ga98-calc-display" data-error={std.error}>
-          {mode === 'standard' || mode === 'scientific' ? std.display : mode === 'programmer' ? progDisplay : '0'}
+          {mode === 'standard' || mode === 'scientific'
+            ? std.display
+            : mode === 'programmer'
+              ? progDisplay
+              : mode === 'converter'
+                ? `${convInput} ${convFrom} = ${convDisplay} ${convTo}`
+                : '0'}
         </div>
 
         {mode === 'standard' ? (
@@ -270,6 +331,21 @@ export function NumberMuncherModule(): JSX.Element {
             onClear={onProgClear}
             onClearEntry={onProgClearEntry}
             onBackspace={onProgBackspace}
+          />
+        ) : mode === 'converter' ? (
+          <ConverterKeypad
+            category={convCategory}
+            onCategoryChange={onConvCategoryChange}
+            fromUnit={convFrom}
+            toUnit={convTo}
+            onFromChange={setConvFrom}
+            onToChange={setConvTo}
+            onSwap={onConvSwap}
+            onDigit={onConvDigit}
+            onDot={onConvDot}
+            onClear={onConvClear}
+            onClearEntry={onConvClear}
+            onBackspace={onConvBackspace}
           />
         ) : (
           <div className="ga98-calc-placeholder">
