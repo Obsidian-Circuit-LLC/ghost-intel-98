@@ -48,6 +48,22 @@ describe('Bug D — GhostScrape Account select strips the glitched native contro
   });
 });
 
+describe('GeoINT Live News — the fieldset border spans the rail panel', () => {
+  // Regression (v3.42.0): .ga98-livenews had NO rule, so the <fieldset> used the UA default
+  // min-inline-size: min-content and shrank once eefc518 removed the wide inline add-form that used
+  // to force its width — the near-transparent border no longer reached the panel's right edge. A
+  // full-width, border-box rule makes it span the rail regardless of inner content width.
+  it('.ga98-livenews computes box-sizing: border-box and zero left margin', () => {
+    inject('src/renderer/styles/theme.css');
+    const fs = document.createElement('fieldset');
+    fs.className = 'ga98-livenews';
+    document.body.appendChild(fs);
+    const cs = getComputedStyle(fs);
+    expect(cs.boxSizing).toBe('border-box');
+    expect(cs.marginLeft).toBe('0px');
+  });
+});
+
 describe('Number Muncher — the calc info-grid is shared, not Info-panel-only', () => {
   // v3.41.0 dropped Number Muncher's Info side panel, but StatisticsKeypad reuses .ga98-calc-info-grid
   // for its results readout. This locks the rule so deleting the (now defunct) Info panel again can't
