@@ -35,6 +35,8 @@ import { stats } from './statistics';
 import { StatisticsKeypad } from './StatisticsKeypad';
 import { daysBetween, addDays } from './date-calc';
 import { DateCalcKeypad } from './DateCalcKeypad';
+import { unitConvert, UNIT_CATEGORIES, type UnitCategory } from './unit-calc';
+import { UnitCalcKeypad } from './UnitCalcKeypad';
 
 export type CalcMode = 'standard' | 'scientific' | 'programmer' | 'converter' | 'statistics' | 'date' | 'unit';
 
@@ -368,6 +370,66 @@ export function NumberMuncherModule(): JSX.Element {
 
   const dateBetweenResult = daysBetween(dateStart, dateEnd);
 
+  // Unit Calc mode mirrors Converter mode's derive-on-render pattern:
+  // unitConvert() (pure, unit-calc.ts) is called fresh with the current
+  // category/units/value on every render — area/volume use factor tables,
+  // temperature uses the affine C/F/K formulas internally.
+  const [unitCategory, setUnitCategory] = useState<UnitCategory>('area');
+  const [unitFrom, setUnitFrom] = useState<string>('m2');
+  const [unitTo, setUnitTo] = useState<string>('ft2');
+  const [unitInput, setUnitInput] = useState<string>('0');
+  const [unitFresh, setUnitFresh] = useState<boolean>(true);
+
+  const unitsFor = useCallback((cat: UnitCategory): string[] => {
+    return cat === 'temperature' ? [...UNIT_CATEGORIES.temperature] : Object.keys(UNIT_CATEGORIES[cat]);
+  }, []);
+
+  const onUnitCategoryChange = useCallback(
+    (cat: UnitCategory) => {
+      setUnitCategory(cat);
+      const units = unitsFor(cat);
+      setUnitFrom(units[0]);
+      setUnitTo(units[1] ?? units[0]);
+      setUnitInput('0');
+      setUnitFresh(true);
+    },
+    [unitsFor],
+  );
+
+  const onUnitSwap = useCallback(() => {
+    setUnitFrom(unitTo);
+    setUnitTo(unitFrom);
+  }, [unitFrom, unitTo]);
+
+  const onUnitDigit = useCallback((d: string) => {
+    setUnitInput((prev) => (unitFresh || prev === '0' ? d : prev + d));
+    setUnitFresh(false);
+  }, [unitFresh]);
+
+  const onUnitDot = useCallback(() => {
+    setUnitInput((prev) => {
+      if (unitFresh) return '0.';
+      return prev.includes('.') ? prev : prev + '.';
+    });
+    setUnitFresh(false);
+  }, [unitFresh]);
+
+  const onUnitClear = useCallback(() => {
+    setUnitInput('0');
+    setUnitFresh(true);
+  }, []);
+
+  const onUnitBackspace = useCallback(() => {
+    setUnitInput((prev) => {
+      if (unitFresh) return prev;
+      const d = prev.length > 1 ? prev.slice(0, -1) : '0';
+      return d === '' ? '0' : d;
+    });
+  }, [unitFresh]);
+
+  const unitResultRaw = unitConvert(Number(unitInput) || 0, unitFrom, unitTo, unitCategory);
+  const unitDisplay = Number.isFinite(unitResultRaw) ? String(Math.round(unitResultRaw * 1e12) / 1e12) : 'Error';
+
   return (
     <div className="ga98-calc">
       <div className="ga98-calc-rail" role="tablist" aria-label="Calculator modes">
@@ -398,7 +460,9 @@ export function NumberMuncherModule(): JSX.Element {
                   ? statsEntry
                   : mode === 'date'
                     ? `${dateBetweenResult} day(s)`
-                    : '0'}
+                    : mode === 'unit'
+                      ? `${unitInput} ${unitFrom} = ${unitDisplay} ${unitTo}`
+                      : '0'}
         </div>
 
         {mode === 'standard' ? (
@@ -483,6 +547,21 @@ export function NumberMuncherModule(): JSX.Element {
             onAddDays={onDateAddDays}
             onSubtractDays={onDateSubtractDays}
             addResult={dateAddResult}
+          />
+        ) : mode === 'unit' ? (
+          <UnitCalcKeypad
+            category={unitCategory}
+            onCategoryChange={onUnitCategoryChange}
+            fromUnit={unitFrom}
+            toUnit={unitTo}
+            onFromChange={setUnitFrom}
+            onToChange={setUnitTo}
+            onSwap={onUnitSwap}
+            onDigit={onUnitDigit}
+            onDot={onUnitDot}
+            onClear={onUnitClear}
+            onClearEntry={onUnitClear}
+            onBackspace={onUnitBackspace}
           />
         ) : (
           <div className="ga98-calc-placeholder">
