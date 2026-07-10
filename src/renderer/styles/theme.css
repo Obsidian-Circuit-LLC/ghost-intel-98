@@ -1341,3 +1341,7 @@ input.ga98-text, select.ga98-text {
 .ga98-calc-info-grid { display: grid; grid-template-columns: auto 1fr; gap: 2px 6px; margin: 0; font-size: 11px; }
 .ga98-calc-info-grid dt { color: var(--ga98-shadow-dark); }
 .ga98-calc-info-grid dd { margin: 0; text-align: right; font-family: 'Courier New', monospace; }
+.ga98-calc-keypad-scientific { grid-template-rows: auto repeat(7, 1fr); }
+.ga98-calc-angle-toggle { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.ga98-calc-angle { font-size: 11px; min-height: 22px; }
+.ga98-calc-angle[data-active='true'] { background: var(--ga98-blue); color: #fff; }

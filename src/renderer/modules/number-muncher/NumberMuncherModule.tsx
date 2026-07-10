@@ -25,6 +25,8 @@ import {
 } from './standard';
 import { memoryOp, pushHistory, type MemOp } from './calc-shell';
 import { StandardKeypad } from './StandardKeypad';
+import { sci, type Angle, type SciFn } from './scientific';
+import { ScientificKeypad } from './ScientificKeypad';
 
 export type CalcMode = 'standard' | 'scientific' | 'programmer' | 'converter' | 'statistics' | 'date' | 'unit';
 
@@ -40,12 +42,22 @@ const MODES: { key: CalcMode; label: string }[] = [
 
 const OP_GLYPH: Record<Op, string> = { '+': '+', '-': '-', '*': '×', '/': '÷' };
 
+/** Format a scientific result the same way standard.ts's internal `fmt` does. */
+const fmtSci = (n: number): string => {
+  if (!Number.isFinite(n)) return 'Error';
+  const r = Math.round(n * 1e12) / 1e12;
+  return String(r);
+};
+
 export function NumberMuncherModule(): JSX.Element {
   const [mode, setMode] = useState<CalcMode>('standard');
   const [std, setStd] = useState<CalcState>(INIT);
   const [memory, setMemory] = useState<number>(0);
   const [history, setHistory] = useState<string[]>([]);
   const [lastResult, setLastResult] = useState<string>('—');
+  const [angle, setAngle] = useState<Angle>('deg');
+  const [sciAcc, setSciAcc] = useState<number | null>(null);
+  const [sciFn, setSciFn] = useState<SciFn | null>(null);
 
   const onEquals = useCallback(() => {
     setStd((prev) => {
@@ -73,6 +85,47 @@ export function NumberMuncherModule(): JSX.Element {
     [memory, std.display],
   );
 
+  // Scientific mode reuses standard.ts's CalcState for display/entry/basic
+  // +-*/ chaining; `sci()` (pure, scientific.ts) supplies trig/log/pow/
+  // factorial. `pow` is binary, so it stages an accumulator (sciAcc) the same
+  // way setOp stages `std.acc`, and is resolved on the next `=` (onSciEquals).
+  const onSci = useCallback(
+    (fn: SciFn) => {
+      if (fn === 'pow') {
+        setSciAcc(Number(std.display));
+        setSciFn('pow');
+        setStd((s) => ({ ...s, fresh: true }));
+        return;
+      }
+      setStd((prev) => {
+        const x = Number(prev.display);
+        const r = sci(fn, x, angle);
+        const display = fmtSci(r);
+        setHistory((h) => pushHistory(h, `${fn}(${prev.display}) = ${display}`));
+        setLastResult(display);
+        return { ...prev, display, fresh: true, error: !Number.isFinite(r) };
+      });
+    },
+    [angle, std.display],
+  );
+
+  const onSciEquals = useCallback(() => {
+    if (sciFn === 'pow' && sciAcc !== null) {
+      setStd((prev) => {
+        const y = Number(prev.display);
+        const r = sci('pow', sciAcc, angle, y);
+        const display = fmtSci(r);
+        setHistory((h) => pushHistory(h, `${sciAcc} ^ ${y} = ${display}`));
+        setLastResult(display);
+        return { ...prev, display, fresh: true, error: !Number.isFinite(r), acc: null, op: null };
+      });
+      setSciAcc(null);
+      setSciFn(null);
+      return;
+    }
+    onEquals();
+  }, [sciFn, sciAcc, angle, onEquals]);
+
   return (
     <div className="ga98-calc">
       <div className="ga98-calc-rail" role="tablist" aria-label="Calculator modes">
@@ -93,7 +146,7 @@ export function NumberMuncherModule(): JSX.Element {
 
       <div className="ga98-calc-main">
         <div className="ga98-calc-display" data-error={std.error}>
-          {mode === 'standard' ? std.display : '0'}
+          {mode === 'standard' || mode === 'scientific' ? std.display : '0'}
         </div>
 
         {mode === 'standard' ? (
@@ -104,6 +157,23 @@ export function NumberMuncherModule(): JSX.Element {
             onEquals={onEquals}
             onUnary={(k) => setStd((s) => stdUnary(s, k))}
             onClear={() => setStd((s) => stdClearAll(s))}
+            onClearEntry={() => setStd((s) => stdClearEntry(s))}
+            onBackspace={() => setStd((s) => stdBackspace(s))}
+          />
+        ) : mode === 'scientific' ? (
+          <ScientificKeypad
+            angle={angle}
+            onAngleChange={setAngle}
+            onDigit={(d) => setStd((s) => inputDigit(s, d))}
+            onDot={() => setStd((s) => inputDot(s))}
+            onOp={(op) => setStd((s) => setOp(s, op))}
+            onEquals={onSciEquals}
+            onSci={onSci}
+            onClear={() => {
+              setSciAcc(null);
+              setSciFn(null);
+              setStd((s) => stdClearAll(s));
+            }}
             onClearEntry={() => setStd((s) => stdClearEntry(s))}
             onBackspace={() => setStd((s) => stdBackspace(s))}
           />
