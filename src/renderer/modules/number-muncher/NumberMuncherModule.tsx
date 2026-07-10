@@ -27,6 +27,8 @@ import { memoryOp, pushHistory, type MemOp } from './calc-shell';
 import { StandardKeypad } from './StandardKeypad';
 import { sci, type Angle, type SciFn } from './scientific';
 import { ScientificKeypad } from './ScientificKeypad';
+import { toBase, fromBase, bitOp, type Base, type BitOpKind } from './programmer';
+import { ProgrammerKeypad } from './ProgrammerKeypad';
 
 export type CalcMode = 'standard' | 'scientific' | 'programmer' | 'converter' | 'statistics' | 'date' | 'unit';
 
@@ -58,6 +60,11 @@ export function NumberMuncherModule(): JSX.Element {
   const [angle, setAngle] = useState<Angle>('deg');
   const [sciAcc, setSciAcc] = useState<number | null>(null);
   const [sciFn, setSciFn] = useState<SciFn | null>(null);
+  const [progBase, setProgBase] = useState<Base>('DEC');
+  const [progDisplay, setProgDisplay] = useState<string>('0');
+  const [progAcc, setProgAcc] = useState<bigint | null>(null);
+  const [progOp, setProgOp] = useState<BitOpKind | null>(null);
+  const [progFresh, setProgFresh] = useState<boolean>(true);
 
   const onEquals = useCallback(() => {
     setStd((prev) => {
@@ -126,6 +133,82 @@ export function NumberMuncherModule(): JSX.Element {
     onEquals();
   }, [sciFn, sciAcc, angle, onEquals]);
 
+  // Programmer mode operates on BigInt values rendered in the active base
+  // (HEX/DEC/OCT/BIN) via the pure `toBase`/`fromBase`/`bitOp` engine. Digit
+  // entry accumulates a base-native string (progDisplay); a binary op (AND/
+  // OR/XOR/SHL/SHR/MOD) stages an accumulator the same way setOp stages
+  // std.acc, resolved on `=`; NOT applies immediately (unary).
+  const onProgDigit = useCallback(
+    (d: string) => {
+      setProgDisplay((prev) => (progFresh || prev === '0' ? d : prev + d));
+      setProgFresh(false);
+    },
+    [progFresh],
+  );
+
+  const onProgBaseChange = useCallback(
+    (newBase: Base) => {
+      const val = fromBase(progDisplay, progBase);
+      setProgBase(newBase);
+      setProgDisplay(toBase(val, newBase));
+      setProgFresh(true);
+    },
+    [progBase, progDisplay],
+  );
+
+  const onProgBitOp = useCallback(
+    (op: BitOpKind) => {
+      if (op === 'NOT') {
+        const val = fromBase(progDisplay, progBase);
+        const r = bitOp('NOT', val, 0n);
+        const display = toBase(r, progBase);
+        setHistory((h) => pushHistory(h, `NOT ${progDisplay} = ${display}`));
+        setLastResult(display);
+        setProgDisplay(display);
+        setProgFresh(true);
+        return;
+      }
+      const cur = fromBase(progDisplay, progBase);
+      setProgAcc(cur);
+      setProgOp(op);
+      setProgFresh(true);
+    },
+    [progDisplay, progBase],
+  );
+
+  const onProgEquals = useCallback(() => {
+    if (progAcc === null || progOp === null) return;
+    const cur = fromBase(progDisplay, progBase);
+    const r = bitOp(progOp, progAcc, cur);
+    const display = toBase(r, progBase);
+    setHistory((h) => pushHistory(h, `${toBase(progAcc, progBase)} ${progOp} ${progDisplay} = ${display}`));
+    setLastResult(display);
+    setProgDisplay(display);
+    setProgAcc(null);
+    setProgOp(null);
+    setProgFresh(true);
+  }, [progAcc, progOp, progDisplay, progBase]);
+
+  const onProgClear = useCallback(() => {
+    setProgDisplay('0');
+    setProgAcc(null);
+    setProgOp(null);
+    setProgFresh(true);
+  }, []);
+
+  const onProgClearEntry = useCallback(() => {
+    setProgDisplay('0');
+    setProgFresh(true);
+  }, []);
+
+  const onProgBackspace = useCallback(() => {
+    setProgDisplay((prev) => {
+      if (progFresh) return prev;
+      const d = prev.length > 1 ? prev.slice(0, -1) : '0';
+      return d === '' ? '0' : d;
+    });
+  }, [progFresh]);
+
   return (
     <div className="ga98-calc">
       <div className="ga98-calc-rail" role="tablist" aria-label="Calculator modes">
@@ -146,7 +229,7 @@ export function NumberMuncherModule(): JSX.Element {
 
       <div className="ga98-calc-main">
         <div className="ga98-calc-display" data-error={std.error}>
-          {mode === 'standard' || mode === 'scientific' ? std.display : '0'}
+          {mode === 'standard' || mode === 'scientific' ? std.display : mode === 'programmer' ? progDisplay : '0'}
         </div>
 
         {mode === 'standard' ? (
@@ -176,6 +259,17 @@ export function NumberMuncherModule(): JSX.Element {
             }}
             onClearEntry={() => setStd((s) => stdClearEntry(s))}
             onBackspace={() => setStd((s) => stdBackspace(s))}
+          />
+        ) : mode === 'programmer' ? (
+          <ProgrammerKeypad
+            base={progBase}
+            onBaseChange={onProgBaseChange}
+            onDigit={onProgDigit}
+            onBitOp={onProgBitOp}
+            onEquals={onProgEquals}
+            onClear={onProgClear}
+            onClearEntry={onProgClearEntry}
+            onBackspace={onProgBackspace}
           />
         ) : (
           <div className="ga98-calc-placeholder">
