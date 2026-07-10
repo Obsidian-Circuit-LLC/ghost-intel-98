@@ -38,13 +38,15 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`GhostIntel98-Setup-3.41.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
+> **Install:** download [`GhostIntel98-Setup-3.42.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
 
 > **📘 User guides** — plain-language, step-by-step (download or read in-browser):
 > - [**SOCMINT: X, Telegram & WhatsApp**](docs/guides/SOCMINT-Tutorial.pdf) — set up and run the social-media collectors, per platform, with the Tor / clearnet and opsec caveats. ([markdown](docs/guides/socmint-tutorial.md))
 > - [**How Searchlight Learns**](docs/guides/Searchlight-Learning-Guide.pdf) — how the username-sweep detector gets smarter from your own labels, and when to turn ML on. ([markdown](docs/guides/searchlight-learning.md))
 
 ## Status
+
+**v3.42.0** — **Two Live News regressions fixed.** Both reported by GhostExodus and both traced (via `git -S` bisection, not guesswork) to the same v3.38.0 commit that introduced the Add-stream modal. **(1) The News feed's pop-out (⧉) button is back** — it had been deleted as collateral when that commit dropped the older per-row pop-out; the pop-out window itself was never removed, only the button that opens it. It's restored in the *shared* feed control, so it returns on **both** the GeoINT Live News panel and the standalone OSINT Toolkit News window at once. **(2) The GeoINT Live News border spans the panel again** — the `<fieldset>` had no width rule and was falling back to the browser default (`min-content`), so it shrank once the wide inline add-form moved into a modal; a full-width, border-box rule makes the near-transparent border reach the panel's right edge regardless of content. Regression tests added for both. **3,354 automated tests** green (1 skipped); typecheck clean; no new egress; no new dependency; encrypt-at-rest unchanged. *Everything from v3.41.0 carries forward.*
 
 **v3.41.0** — **A compact Number Muncher and bigger documents.** Two quick GhostExodus follow-ups from field-testing v3.40.0. **(1) Number Muncher shrinks** to roughly the Windows 11 Calculator footprint (default 380×580, down from 760×620) — the fixed side column is gone: the Memory keys become a slim row above the keypad, History hides behind a 🕘 toggle that overlays a drawer, and the Info panel folds into a one-line status footer (`Mode · 64-bit · Ready`). All seven modes and the memory-scope rule are unchanged. **(2) The in-app document viewer's size cap goes from 64 MB to 512 MB** — a 108 MB PDF that was being rejected now opens (the per-byte `number[]` marshalling was already removed in v3.40.0, so memory cost is linear; encrypted files still decrypt in-process with no OS handoff, and anything over the cap still offers **Export**). A self-review during the change caught a shared CSS class the Statistics results readout reused, before ship. **3,352 automated tests** green (1 skipped); typecheck clean; no new egress; no new dependency; encrypt-at-rest unchanged. *Everything from v3.40.0 carries forward.*
 
@@ -513,7 +515,7 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases) and run it.
 
-Direct link to the current release: [`GhostIntel98-Setup-3.41.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.41.0/GhostIntel98-Setup-3.41.0.exe)
+Direct link to the current release: [`GhostIntel98-Setup-3.42.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.42.0/GhostIntel98-Setup-3.42.0.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is **formally verified internally** — symbolic (ProVerif) +
 computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not**
 FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.6.8/GhostIntel98-Setup-3.6.8.exe).
@@ -521,7 +523,7 @@ FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Se
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\GhostIntel98-Setup-3.41.0.exe -Algorithm SHA256
+Get-FileHash .\GhostIntel98-Setup-3.42.0.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
