@@ -59,6 +59,7 @@ export function NumberMuncherModule(): JSX.Element {
   const [memory, setMemory] = useState<number>(0);
   const [history, setHistory] = useState<string[]>([]);
   const [lastResult, setLastResult] = useState<string>('—');
+  const [showHistory, setShowHistory] = useState<boolean>(false); // History hides behind a toggle (compact shell)
   const [angle, setAngle] = useState<Angle>('deg');
   const [sciAcc, setSciAcc] = useState<number | null>(null);
   const [sciFn, setSciFn] = useState<SciFn | null>(null);
@@ -98,6 +99,7 @@ export function NumberMuncherModule(): JSX.Element {
   // on a set — so memory is scoped to the arithmetic modes rather than silently capturing the
   // stale standard display. Buttons are disabled outside those modes.
   const memActive = mode === 'standard' || mode === 'scientific';
+  const modeLabel = MODES.find((m) => m.key === mode)?.label;
 
   const onMemory = useCallback(
     (op: MemOp) => {
@@ -451,20 +453,48 @@ export function NumberMuncherModule(): JSX.Element {
       </div>
 
       <div className="ga98-calc-main">
-        <div className="ga98-calc-display" data-error={std.error}>
-          {mode === 'standard' || mode === 'scientific'
-            ? std.display
-            : mode === 'programmer'
-              ? progDisplay
-              : mode === 'converter'
-                ? `${convInput} ${convFrom} = ${convDisplay} ${convTo}`
-                : mode === 'statistics'
-                  ? statsEntry
-                  : mode === 'date'
-                    ? `${dateBetweenResult} day(s)`
-                    : mode === 'unit'
-                      ? `${unitInput} ${unitFrom} = ${unitDisplay} ${unitTo}`
-                      : '0'}
+        <div className="ga98-calc-topbar">
+          <div className="ga98-calc-display" data-error={std.error}>
+            {mode === 'standard' || mode === 'scientific'
+              ? std.display
+              : mode === 'programmer'
+                ? progDisplay
+                : mode === 'converter'
+                  ? `${convInput} ${convFrom} = ${convDisplay} ${convTo}`
+                  : mode === 'statistics'
+                    ? statsEntry
+                    : mode === 'date'
+                      ? `${dateBetweenResult} day(s)`
+                      : mode === 'unit'
+                        ? `${unitInput} ${unitFrom} = ${unitDisplay} ${unitTo}`
+                        : '0'}
+          </div>
+          <button
+            type="button"
+            className="ga98-calc-hist-toggle"
+            aria-pressed={showHistory}
+            aria-label="Toggle history"
+            title="History"
+            onClick={() => setShowHistory((v) => !v)}
+          >
+            🕘
+          </button>
+        </div>
+
+        <div className="ga98-calc-mem-row">
+          {(['MC', 'MR', 'MS', 'M+', 'M-'] as MemOp[]).map((op) => (
+            <button
+              key={op}
+              type="button"
+              className="ga98-calc-key ga98-calc-mem"
+              disabled={!memActive}
+              title={memActive ? undefined : 'Memory is available in Standard and Scientific modes'}
+              onClick={() => onMemory(op)}
+            >
+              {op}
+            </button>
+          ))}
+          <span className="ga98-calc-mem-reg">M = {memory}</span>
         </div>
 
         {mode === 'standard' ? (
@@ -570,61 +600,41 @@ export function NumberMuncherModule(): JSX.Element {
             {MODES.find((m) => m.key === mode)?.label} mode — coming soon.
           </div>
         )}
-      </div>
 
-      <div className="ga98-calc-side">
-        <div className="ga98-calc-panel ga98-calc-memory">
-          <div className="ga98-calc-panel-title">Memory</div>
-          <div className="ga98-calc-mem-buttons">
-            {(['MC', 'MR', 'MS', 'M+', 'M-'] as MemOp[]).map((op) => (
-              <button
-                key={op}
-                type="button"
-                className="ga98-calc-key ga98-calc-mem"
-                disabled={!memActive}
-                title={memActive ? undefined : 'Memory is available in Standard and Scientific modes'}
-                onClick={() => onMemory(op)}
-              >
-                {op}
-              </button>
-            ))}
+        <div className="ga98-calc-statusbar">
+          <span className="ga98-calc-status-mode">{modeLabel}</span>
+          <span>64-bit</span>
+          <span className="ga98-calc-status-result">
+            {std.error ? 'Error' : lastResult !== '—' ? `Last: ${lastResult}` : 'Ready'}
+          </span>
+        </div>
+
+        {showHistory && (
+          <div className="ga98-calc-history-drawer">
+            <div className="ga98-calc-panel-title">
+              History
+              <span className="ga98-calc-hist-actions">
+                <button type="button" className="ga98-calc-hist-clear" onClick={() => setHistory([])}>
+                  Clear
+                </button>
+                <button type="button" className="ga98-calc-hist-clear" onClick={() => setShowHistory(false)}>
+                  Close
+                </button>
+              </span>
+            </div>
+            <ul className="ga98-calc-hist-list">
+              {history.length === 0 ? (
+                <li className="ga98-calc-hist-empty">No calculations yet.</li>
+              ) : (
+                history.map((h, i) => (
+                  <li key={history.length - i} className="ga98-calc-hist-item">
+                    {h}
+                  </li>
+                ))
+              )}
+            </ul>
           </div>
-          <div className="ga98-calc-mem-reg">M = {memory}</div>
-        </div>
-
-        <div className="ga98-calc-panel ga98-calc-history">
-          <div className="ga98-calc-panel-title">
-            History
-            <button type="button" className="ga98-calc-hist-clear" onClick={() => setHistory([])}>
-              Clear
-            </button>
-          </div>
-          <ul className="ga98-calc-hist-list">
-            {history.length === 0 ? (
-              <li className="ga98-calc-hist-empty">No calculations yet.</li>
-            ) : (
-              history.map((h, i) => (
-                <li key={history.length - i} className="ga98-calc-hist-item">
-                  {h}
-                </li>
-              ))
-            )}
-          </ul>
-        </div>
-
-        <div className="ga98-calc-panel ga98-calc-info">
-          <div className="ga98-calc-panel-title">Info</div>
-          <dl className="ga98-calc-info-grid">
-            <dt>Mode</dt>
-            <dd>{MODES.find((m) => m.key === mode)?.label}</dd>
-            <dt>Precision</dt>
-            <dd>64-bit</dd>
-            <dt>Last Result</dt>
-            <dd>{lastResult}</dd>
-            <dt>Status</dt>
-            <dd>{std.error ? 'Error' : 'Ready'}</dd>
-          </dl>
-        </div>
+        )}
       </div>
     </div>
   );
