@@ -38,13 +38,15 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`GhostIntel98-Setup-3.40.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
+> **Install:** download [`GhostIntel98-Setup-3.41.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
 
 > **📘 User guides** — plain-language, step-by-step (download or read in-browser):
 > - [**SOCMINT: X, Telegram & WhatsApp**](docs/guides/SOCMINT-Tutorial.pdf) — set up and run the social-media collectors, per platform, with the Tor / clearnet and opsec caveats. ([markdown](docs/guides/socmint-tutorial.md))
 > - [**How Searchlight Learns**](docs/guides/Searchlight-Learning-Guide.pdf) — how the username-sweep detector gets smarter from your own labels, and when to turn ML on. ([markdown](docs/guides/searchlight-learning.md))
 
 ## Status
+
+**v3.41.0** — **A compact Number Muncher and bigger documents.** Two quick GhostExodus follow-ups from field-testing v3.40.0. **(1) Number Muncher shrinks** to roughly the Windows 11 Calculator footprint (default 380×580, down from 760×620) — the fixed side column is gone: the Memory keys become a slim row above the keypad, History hides behind a 🕘 toggle that overlays a drawer, and the Info panel folds into a one-line status footer (`Mode · 64-bit · Ready`). All seven modes and the memory-scope rule are unchanged. **(2) The in-app document viewer's size cap goes from 64 MB to 512 MB** — a 108 MB PDF that was being rejected now opens (the per-byte `number[]` marshalling was already removed in v3.40.0, so memory cost is linear; encrypted files still decrypt in-process with no OS handoff, and anything over the cap still offers **Export**). A self-review during the change caught a shared CSS class the Statistics results readout reused, before ship. **3,352 automated tests** green (1 skipped); typecheck clean; no new egress; no new dependency; encrypt-at-rest unchanged. *Everything from v3.40.0 carries forward.*
 
 **v3.40.0** — **Number Muncher, an in-app document viewer, and a fixed signature pad.** A batch of GhostExodus field feedback. **(1) Number Muncher** — a new **7-mode calculator** (Standard · Scientific · Programmer · Converter · Statistics · Date Calc · Unit Calc) with a memory register and calculation history, tucked into the Access menu's **Organizer** category (renamed from "Organization"). Each mode is a pure, exhaustively unit-tested engine — 64-bit BigInt base conversion and bitwise ops, affine °C/°F/K temperature, population-vs-sample statistics, UTC-pure date math. **(2) My Documents now opens files in Ghost Intel 98's own document viewer** — PDF, images, CSV, JSON, HTML, `.docx`, and text render **in-app, fully offline**, decrypted in-process with no handoff to Windows or any external app; a size cap keeps a huge file from freezing the viewer, and an unsupported type offers an **Export** rather than a broken preview. The old decrypt-to-temp OS-handoff "Open" path is removed. **(3) The signature pad is fixed** — drawing a signature by hand now works (the canvas was CSS-stretched wider than its drawing bitmap, so strokes landed off-canvas and vanished; uploading an image always worked). Built subagent-driven across nine TDD tasks with a parallel adversarial whole-branch review that caught and fixed real defects before ship — the viewer's missing size cap, a memory register that read the wrong value outside the arithmetic modes, and a formatter that printed very large finite results as "Infinity". **3,348 automated tests** green (1 skipped); typecheck clean; no new egress; no new dependency; encrypt-at-rest unchanged. *Everything from v3.39.0 carries forward.*
 
@@ -511,7 +513,7 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases) and run it.
 
-Direct link to the current release: [`GhostIntel98-Setup-3.40.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.40.0/GhostIntel98-Setup-3.40.0.exe)
+Direct link to the current release: [`GhostIntel98-Setup-3.41.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.41.0/GhostIntel98-Setup-3.41.0.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is **formally verified internally** — symbolic (ProVerif) +
 computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not**
 FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.6.8/GhostIntel98-Setup-3.6.8.exe).
@@ -519,7 +521,7 @@ FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Se
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\GhostIntel98-Setup-3.40.0.exe -Algorithm SHA256
+Get-FileHash .\GhostIntel98-Setup-3.41.0.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
