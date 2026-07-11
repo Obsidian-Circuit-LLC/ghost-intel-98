@@ -179,6 +179,19 @@ describe('NewsViewModule — mirrors the store-selected active stream', () => {
     expect(container.textContent ?? '').not.toContain(DEFAULT_NEWS_STREAM.label);
   });
 
+  it('clips its own overflow so the shared window-body overflow:auto cannot show a right scrollbar', async () => {
+    // Regression (v3.43.0): the News window showed a right scrollbar because the module content
+    // slightly overflowed the shared .window-body (overflow:auto, global). The module root now clips
+    // its own overflow — the video fills flex:1, so nothing here legitimately scrolls.
+    useSettings.setState({
+      settings: { ...defaultSettings, geoint: { ...defaultSettings.geoint, newsStreams: [{ label: 'Bloomberg TV', url: 'https://a.example.com/a.m3u8', kind: 'hls' }], newsStreamIndex: 0 } }
+    });
+    await act(async () => { root.render(<NewsViewModule />); });
+    await flush();
+    const rootDiv = container.firstElementChild as HTMLElement;
+    expect(rootDiv.style.overflow).toBe('hidden');
+  });
+
   it('falls back to the Bloomberg default when the store has no streams', async () => {
     useSettings.setState({
       settings: { ...defaultSettings, geoint: { ...defaultSettings.geoint, newsStreams: [], newsStreamIndex: 0 } }

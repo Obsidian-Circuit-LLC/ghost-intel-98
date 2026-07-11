@@ -436,7 +436,7 @@ export function NumberMuncherModule(): JSX.Element {
 
   return (
     <div className="ga98-calc">
-      <div className="ga98-calc-rail" role="tablist" aria-label="Calculator modes">
+      <div className="ga98-calc-tabs" role="tablist" aria-label="Calculator modes">
         {MODES.map((m) => (
           <button
             key={m.key}

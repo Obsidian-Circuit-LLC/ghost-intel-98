@@ -137,7 +137,7 @@ export function NewsFeedControls(): JSX.Element {
 
   return (
     <>
-      <div className="field-row" style={{ gap: 6, alignItems: 'center', marginBottom: 6 }}>
+      <div className="field-row" style={{ gap: 6, alignItems: 'center', marginBottom: 4 }}>
         <label style={{ minWidth: 50 }}>Stream:</label>
         <select
           className="ga98-select"
@@ -157,7 +157,7 @@ export function NewsFeedControls(): JSX.Element {
         {active && <button title="Remove this stream" onClick={() => removeStream(index)}>✕</button>}
       </div>
 
-      <div className="field-row" style={{ marginTop: 6 }}>
+      <div className="field-row" style={{ marginTop: 4 }}>
         <button onClick={() => setAdding(true)}>Add stream</button>
       </div>
       {adding && (

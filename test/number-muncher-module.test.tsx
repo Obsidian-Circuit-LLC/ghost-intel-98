@@ -72,9 +72,12 @@ describe('NumberMuncherModule', () => {
     expect(memButtons().every((b) => b.disabled)).toBe(true);  // Programmer: disabled
   });
 
-  it('is compact: no side column, memory is a row, info is a status footer', async () => {
+  it('is compact: modes are a top tab strip (no left rail), memory is a row, info is a status footer', async () => {
     await act(async () => { root.render(<NumberMuncherModule />); });
     expect(container.querySelector('.ga98-calc-side')).toBeNull();      // the 200px column is gone
+    expect(container.querySelector('.ga98-calc-rail')).toBeNull();      // v3.43.0: left rail replaced by...
+    expect(container.querySelector('.ga98-calc-tabs')).not.toBeNull();  // ...a top tab strip
+    expect(container.querySelectorAll('.ga98-calc-tabs .ga98-calc-mode')).toHaveLength(7); // all 7 modes present
     expect(container.querySelector('.ga98-calc-mem-row')).not.toBeNull();
     const status = container.querySelector('.ga98-calc-statusbar');
     expect(status).not.toBeNull();
