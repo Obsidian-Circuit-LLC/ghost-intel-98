@@ -32,7 +32,10 @@ export function NewsViewModule({ stream }: { stream?: NewsStream } = {}): JSX.El
   // The `stream` snapshot prop is only a fallback for a store with no active entry to offer.
   const active: NewsStream = streams[index] ?? stream ?? DEFAULT_NEWS_STREAM;
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    // overflow: hidden so the module clips its own sub-pixel overflow and never trips the shared
+    // window-body's overflow:auto into a right scrollbar — the video already fills flex:1 (nothing
+    // here legitimately scrolls). See docs/superpowers/specs/2026-07-11-v3.43.0-...
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       <NewsFeedControls />
       <div className="ga98-panel" style={{ padding: '2px 6px', fontSize: 11, borderBottom: '1px solid #808080' }}>
         {active.label} <span style={{ opacity: 0.6 }}>({active.kind})</span>

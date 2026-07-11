@@ -1291,16 +1291,19 @@ input.ga98-text, select.ga98-text {
 .ga98-invoices .ga98-invoice-logo-box, .ga98-invoices .ga98-invoice-sig-box { background: #12081f; border-color: #5a3aa8; }
 
 /* ── Number Muncher calculator ─────────────────────────────────────────────── */
-.ga98-calc { display: grid; grid-template-columns: auto 1fr; gap: 6px; height: 100%; padding: 6px; box-sizing: border-box; overflow: hidden; }
-.ga98-calc-rail { display: flex; flex-direction: column; gap: 3px; }
+.ga98-calc { display: flex; flex-direction: column; gap: 6px; height: 100%; padding: 6px; box-sizing: border-box; overflow: hidden; }
+/* Modes are a top tab strip (v3.43.0) — a wrapping row, not a left rail, so there is no empty
+ * side column and the window shrinks to fit. */
+.ga98-calc-tabs { display: flex; flex-wrap: wrap; gap: 3px; }
 .ga98-calc-mode {
-  font-size: 11px; padding: 6px 8px; text-align: left; white-space: nowrap; cursor: pointer;
+  font-size: 11px; padding: 4px 8px; text-align: center; white-space: nowrap; cursor: pointer;
+  flex: 1 0 auto;
   background: var(--ga98-grey); color: #000;
   border-top: 1px solid var(--ga98-shadow-light); border-left: 1px solid var(--ga98-shadow-light);
   border-bottom: 1px solid var(--ga98-shadow-dark); border-right: 1px solid var(--ga98-shadow-dark);
 }
 .ga98-calc-mode[data-active='true'] { background: var(--ga98-blue); color: #fff; }
-.ga98-calc-main { display: flex; flex-direction: column; gap: 6px; min-width: 0; overflow: hidden; position: relative; }
+.ga98-calc-main { display: flex; flex-direction: column; gap: 6px; min-width: 0; overflow: hidden; position: relative; flex: 1; }
 .ga98-calc-display {
   font-family: 'Courier New', monospace; font-size: 26px; text-align: right; padding: 8px 10px;
   background: #0b1a0b; color: #7dff7d; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
