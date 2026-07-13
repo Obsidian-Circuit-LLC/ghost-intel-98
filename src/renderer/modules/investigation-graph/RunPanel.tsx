@@ -81,11 +81,11 @@ function UnavailableCard(): JSX.Element {
   return (
     <div className="run-panel run-panel--unavailable">
       <div className="run-panel__card">
-        <h4 className="run-panel__title">Autonomous runs need the reasoning pack</h4>
+        <h4 className="run-panel__title">Autonomous runs need the OSINT investigator plugin</h4>
         <p>
-          Once installed, Ghost Intel 98 investigates a seed on its own — fanning out across
-          transforms and growing the graph live. For now you can explore the graph and open the
-          report.
+          Install the OSINT investigator plugin to fan out across transforms and grow the graph
+          on its own. <strong>AI reasoning is an upgrade</strong> — without it, runs use a fast
+          built-in heuristic.
         </p>
       </div>
     </div>

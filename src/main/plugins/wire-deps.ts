@@ -25,6 +25,7 @@
 
 import { app } from 'electron';
 import { join } from 'node:path';
+import { copyFile, mkdir } from 'node:fs/promises';
 import type { ContextDeps, PluginFetchInit, PluginFetchResponse } from './context';
 import { schedulePluginTask } from './schedule';
 import { resolveInside } from './paths';
@@ -39,6 +40,10 @@ import { getBgConnManager } from '../bgconn/singleton';
 import { makeBgConnSecrets } from '../bgconn/secrets';
 import { ensurePluginTor, torFetch } from './tor-egress';
 import { recall } from '../services/memory';
+import { setRegisteredBrain } from '../investigation/brain-registry';
+import { reasoningGenerate, configureReasoningRuntime, ensureReasoningRuntime } from '../services/reasoning/reasoning-runtime';
+import { verifyPluginSignature } from './verify';
+import { getPinnedKeysets } from './trust';
 
 /**
  * Strip credential-bearing headers from a header map. Used when a plugin egress redirect
@@ -329,6 +334,32 @@ export function buildContextDeps(): ContextDeps {
 
     // Host-owned background timer: plugins with the 'background-tasks' cap can schedule bounded
     // self-directed work. schedule.ts owns the registry (min-interval clamp, per-plugin dispose).
-    schedule: (pluginId, intervalMs, fn) => schedulePluginTask(pluginId, intervalMs, fn)
+    schedule: (pluginId, intervalMs, fn) => schedulePluginTask(pluginId, intervalMs, fn),
+
+    // Autonomous-run Brain seam: a 'reasoning-runtime' plugin registers its brain here; core's
+    // getBrain() returns it (last-registered wins). Keyed by plugin id so teardown clears it.
+    registerBrain: (pluginId, b) => setRegisteredBrain(pluginId, b),
+
+    // Reasoning surface (gated by 'reasoning-runtime'): loopback-only one-shot generation on the
+    // bundled runtime, model provisioning inside userData, and entitlement verification against
+    // core's single pinned trust root (the plugin never bundles crypto/keys).
+    reasoning: {
+      generate: (prompt, opts) => reasoningGenerate(prompt, opts),
+      async ensureModel(blobPath, name) {
+        // Copy the plugin-delivered GGUF into the reasoning models dir (inside userData only),
+        // then configure + start the runtime.
+        const modelsDir = join(app.getPath('userData'), 'local-ai', 'reasoning-models');
+        await mkdir(modelsDir, { recursive: true });
+        // `name` is untrusted plugin input. Confine the destination inside modelsDir
+        // (which is inside userData) via resolveInside — a '..'-laden or separator-bearing
+        // name that would escape throws "path escape" instead of writing outside the sandbox.
+        // This preserves the ensureModel invariant: writes ONLY inside app.getPath('userData').
+        const dest = resolveInside(modelsDir, `${name}.gguf`);
+        await copyFile(blobPath, dest);
+        configureReasoningRuntime({ modelsDir, model: name });
+        await ensureReasoningRuntime();
+      },
+      verify: (payload, signature) => verifyPluginSignature(payload, signature, getPinnedKeysets())
+    }
   };
 }

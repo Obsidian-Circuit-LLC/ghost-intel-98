@@ -8,6 +8,7 @@ import { getPinnedKeysets, isApiCompatible, type TrustKeyset } from './trust';
 import { createPluginContext, type ContextDeps } from './context';
 import { resolveInside } from './paths';
 import { disposePluginSchedules, scheduledPluginIds } from './schedule';
+import { clearRegisteredBrain, brainRegisteredPluginIds } from '../investigation/brain-registry';
 import type { VerifiedPluginInfo, PluginStatus } from '../../shared/plugin-types';
 
 const MAX_SIG_BYTES = 8192; // ML-DSA-65 sig ~3309 + Ed25519 64; generous cap, bound before verify
@@ -119,16 +120,18 @@ export function registerTeardown(pluginId: string, fn: () => Promise<void> | voi
 }
 export async function disablePlugin(pluginId: string): Promise<void> {
   disposePluginSchedules(pluginId);
+  clearRegisteredBrain(pluginId);
   const list = teardowns.get(pluginId) ?? [];
   teardowns.delete(pluginId);
   for (const fn of list) { try { await fn(); } catch (e) { console.error(`[plugin:${pluginId}] teardown`, e); } }
 }
 export async function disableAllPlugins(): Promise<void> {
-  // Union teardown-registered plugins with schedule-only plugins: a background-tasks plugin that
-  // called ctx.schedule() but never registerTeardown() has no key in `teardowns`, so enumerating
-  // teardowns alone would leave its interval orphaned (violating the no-orphans invariant) whenever
-  // this aggregate is used for a non-quit teardown (hot-reload, disable-all toggle, plugin-set swap).
-  const ids = new Set<string>([...teardowns.keys(), ...scheduledPluginIds()]);
+  // Union teardown-registered plugins with schedule-only AND brain-only plugins: a background-tasks
+  // plugin that called ctx.schedule(), or a reasoning-runtime plugin that called ctx.registerBrain(),
+  // but never registerTeardown() has no key in `teardowns`, so enumerating teardowns alone would leave
+  // its interval orphaned / its brain live (violating the no-orphans / no-stale-brain invariants)
+  // whenever this aggregate is used for a non-quit teardown (hot-reload, disable-all toggle, set swap).
+  const ids = new Set<string>([...teardowns.keys(), ...scheduledPluginIds(), ...brainRegisteredPluginIds()]);
   for (const id of ids) await disablePlugin(id);
 }
 export function _resetTeardownsForTest(): void { teardowns.clear(); }

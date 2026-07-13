@@ -21,6 +21,15 @@ const DATA = mkdtempSync(join(tmpdir(), 'dcs98-wiredeps-'));
 import { vi } from 'vitest';
 vi.mock('electron', () => ({ app: { getPath: () => DATA } }));
 
+// Stub the reasoning runtime so ensureModel's configure/start calls are inert no-ops
+// (the path-escape guard we exercise runs BEFORE these are reached; the positive-path
+// test must not spawn a real runtime). generate/verify are left as no-op stubs too.
+vi.mock('../src/main/services/reasoning/reasoning-runtime', () => ({
+  reasoningGenerate: vi.fn(),
+  configureReasoningRuntime: vi.fn(),
+  ensureReasoningRuntime: vi.fn().mockResolvedValue(undefined)
+}));
+
 import { buildContextDeps, refreshPluginNetSnapshot } from '../src/main/plugins/wire-deps';
 
 beforeEach(() => {
@@ -110,6 +119,62 @@ describe('buildContextDeps()', () => {
     const deps = buildContextDeps();
     expect(() => deps.validateUrl('ftp://example.com/file')).toThrow(/SSRF validator/);
     expect(() => deps.validateUrl('file:///etc/passwd')).toThrow(/SSRF validator/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ctx.reasoning.ensureModel path-confinement invariant
+//
+// ensureModel copies a plugin-delivered blob into userData/local-ai/reasoning-models.
+// `name` is UNTRUSTED plugin input; a '..'-laden or separator-bearing name must NOT
+// let the write escape userData. resolveInside enforces this — an escaping name throws
+// "path escape" before copyFile runs, so no attacker-controlled bytes land outside the
+// sandbox. A benign name writes exactly one .gguf inside the models dir.
+// ---------------------------------------------------------------------------
+describe('reasoning.ensureModel path confinement', () => {
+  const MODELS_DIR = join(DATA, 'local-ai', 'reasoning-models');
+
+  function writeBlob(): string {
+    const { mkdtempSync: mkd, writeFileSync } = require('node:fs') as typeof import('node:fs');
+    const dir = mkd(join(tmpdir(), 'dcs98-blob-'));
+    const p = join(dir, 'src.gguf');
+    writeFileSync(p, 'GGUF-BYTES');
+    return p;
+  }
+
+  it('rejects a traversal name and writes nothing outside userData', async () => {
+    const { existsSync, readdirSync } = require('node:fs') as typeof import('node:fs');
+    const deps = buildContextDeps();
+    const blob = writeBlob();
+
+    // A traversal name that would land the copy in DATA/.. (outside userData).
+    await expect(
+      deps.reasoning.ensureModel(blob, '../../../../evil-autostart')
+    ).rejects.toThrow(/path escape/);
+
+    // Nothing was written at the escape target.
+    expect(existsSync(join(DATA, '..', '..', '..', '..', 'evil-autostart.gguf'))).toBe(false);
+    // And no stray file made it into the models dir either.
+    if (existsSync(MODELS_DIR)) {
+      expect(readdirSync(MODELS_DIR).some((f) => f.includes('evil'))).toBe(false);
+    }
+  });
+
+  it('rejects an absolute-escaping name', async () => {
+    const deps = buildContextDeps();
+    const blob = writeBlob();
+    await expect(
+      deps.reasoning.ensureModel(blob, '../outside')
+    ).rejects.toThrow(/path escape/);
+  });
+
+  it('writes a benign model name inside the reasoning-models dir', async () => {
+    const { existsSync } = require('node:fs') as typeof import('node:fs');
+    const deps = buildContextDeps();
+    const blob = writeBlob();
+
+    await deps.reasoning.ensureModel(blob, 'good-model');
+    expect(existsSync(join(MODELS_DIR, 'good-model.gguf'))).toBe(true);
   });
 });
 
