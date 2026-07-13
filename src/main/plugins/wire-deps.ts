@@ -350,7 +350,12 @@ export function buildContextDeps(): ContextDeps {
         // then configure + start the runtime.
         const modelsDir = join(app.getPath('userData'), 'local-ai', 'reasoning-models');
         await mkdir(modelsDir, { recursive: true });
-        await copyFile(blobPath, join(modelsDir, `${name}.gguf`));
+        // `name` is untrusted plugin input. Confine the destination inside modelsDir
+        // (which is inside userData) via resolveInside — a '..'-laden or separator-bearing
+        // name that would escape throws "path escape" instead of writing outside the sandbox.
+        // This preserves the ensureModel invariant: writes ONLY inside app.getPath('userData').
+        const dest = resolveInside(modelsDir, `${name}.gguf`);
+        await copyFile(blobPath, dest);
         configureReasoningRuntime({ modelsDir, model: name });
         await ensureReasoningRuntime();
       },
