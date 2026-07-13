@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { registerTeardown, disablePlugin, disableAllPlugins, _resetTeardownsForTest } from '../src/main/plugins/loader';
 import { schedulePluginTask, _resetSchedulesForTest } from '../src/main/plugins/schedule';
+import { setRegisteredBrain, getRegisteredBrain, _resetBrainsForTest } from '../src/main/investigation/brain-registry';
+import type { Brain } from '../src/shared/investigation-agent';
 
 describe('plugin teardown', () => {
   it('registers + invokes teardowns for a plugin, once', async () => {
@@ -44,5 +46,21 @@ describe('plugin teardown clears scheduled timers', () => {
     await disableAllPlugins();
     vi.advanceTimersByTime(180_000);
     expect(fn).not.toHaveBeenCalled();
+  });
+});
+
+describe('plugin teardown clears a registered brain', () => {
+  beforeEach(() => { _resetTeardownsForTest(); _resetBrainsForTest(); });
+  afterEach(() => { _resetBrainsForTest(); });
+  const brain: Brain = { decide: async () => ({ kind: 'done', reason: 'x' }) };
+
+  it('disableAllPlugins() clears a brain-only plugin that registered no teardown/schedule (no stale brain)', async () => {
+    // A reasoning-runtime plugin that called ctx.registerBrain() but never registerTeardown()/schedule()
+    // has no key in teardowns/schedules. If disableAllPlugins() unioned only those, its brain would
+    // survive the aggregate teardown and keep run.available() true against a disabled plugin.
+    setRegisteredBrain('brain-only', brain); // NOTE: no registerTeardown(), no schedule
+    expect(getRegisteredBrain()).toBe(brain);
+    await disableAllPlugins();
+    expect(getRegisteredBrain()).toBeNull();
   });
 });
