@@ -11,6 +11,12 @@ export interface VectorRecall {
 
 export interface PluginFetchResponse { status: number; body: string; finalUrl: string; blocked?: boolean; }
 
+export interface ReasoningApi {
+  generate(prompt: string, opts?: { maxTokens?: number; stop?: string[] }): Promise<string>;
+  ensureModel(blobPath: string, name: string): Promise<void>;
+  verify(payload: Uint8Array, signature: Uint8Array): boolean;
+}
+
 export interface ContextDeps {
   isNetworkEnabled(id: string): boolean;
   rawFetch(url: string, init: PluginFetchInit): Promise<PluginFetchResponse>;
@@ -30,6 +36,7 @@ export interface ContextDeps {
   vectorRecall?: { recallAcrossCases(query: string, opts: { k: number; minScore: number }): Promise<RecallHit[]> };
   schedule?: (pluginId: string, intervalMs: number, fn: () => void) => { dispose(): void };
   registerBrain?: (pluginId: string, b: import('../../shared/investigation-agent').Brain) => void;
+  reasoning?: ReasoningApi;
 }
 
 export interface PluginContext {
@@ -52,6 +59,7 @@ export interface PluginContext {
   vectors?: VectorRecall;
   schedule?: (intervalMs: number, fn: () => void) => { dispose(): void };
   registerBrain?: (b: import('../../shared/investigation-agent').Brain) => void;
+  reasoning?: ReasoningApi;
 }
 
 export function createPluginContext(
@@ -122,6 +130,9 @@ export function createPluginContext(
   }
   if (has('reasoning-runtime') && deps.registerBrain) {
     ctx.registerBrain = (b) => deps.registerBrain!(id, b);
+  }
+  if (has('reasoning-runtime') && deps.reasoning) {
+    ctx.reasoning = deps.reasoning;
   }
   return ctx;
 }

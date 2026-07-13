@@ -25,6 +25,7 @@
 
 import { app } from 'electron';
 import { join } from 'node:path';
+import { copyFile, mkdir } from 'node:fs/promises';
 import type { ContextDeps, PluginFetchInit, PluginFetchResponse } from './context';
 import { schedulePluginTask } from './schedule';
 import { resolveInside } from './paths';
@@ -40,6 +41,9 @@ import { makeBgConnSecrets } from '../bgconn/secrets';
 import { ensurePluginTor, torFetch } from './tor-egress';
 import { recall } from '../services/memory';
 import { setRegisteredBrain } from '../investigation/brain-registry';
+import { reasoningGenerate, configureReasoningRuntime, ensureReasoningRuntime } from '../services/reasoning/reasoning-runtime';
+import { verifyPluginSignature } from './verify';
+import { getPinnedKeysets } from './trust';
 
 /**
  * Strip credential-bearing headers from a header map. Used when a plugin egress redirect
@@ -334,6 +338,23 @@ export function buildContextDeps(): ContextDeps {
 
     // Autonomous-run Brain seam: a 'reasoning-runtime' plugin registers its brain here; core's
     // getBrain() returns it (last-registered wins). Keyed by plugin id so teardown clears it.
-    registerBrain: (pluginId, b) => setRegisteredBrain(pluginId, b)
+    registerBrain: (pluginId, b) => setRegisteredBrain(pluginId, b),
+
+    // Reasoning surface (gated by 'reasoning-runtime'): loopback-only one-shot generation on the
+    // bundled runtime, model provisioning inside userData, and entitlement verification against
+    // core's single pinned trust root (the plugin never bundles crypto/keys).
+    reasoning: {
+      generate: (prompt, opts) => reasoningGenerate(prompt, opts),
+      async ensureModel(blobPath, name) {
+        // Copy the plugin-delivered GGUF into the reasoning models dir (inside userData only),
+        // then configure + start the runtime.
+        const modelsDir = join(app.getPath('userData'), 'local-ai', 'reasoning-models');
+        await mkdir(modelsDir, { recursive: true });
+        await copyFile(blobPath, join(modelsDir, `${name}.gguf`));
+        configureReasoningRuntime({ modelsDir, model: name });
+        await ensureReasoningRuntime();
+      },
+      verify: (payload, signature) => verifyPluginSignature(payload, signature, getPinnedKeysets())
+    }
   };
 }
