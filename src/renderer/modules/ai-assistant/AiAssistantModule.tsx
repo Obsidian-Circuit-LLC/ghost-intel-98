@@ -23,6 +23,7 @@ import { loadAttachmentBytes } from '../../lib/attachmentBytes';
 import { createVoskRecognizer } from '../../voice/recognizer';
 import { VoiceConversation, type VoiceMode, type VoiceState } from '../../voice/conversation';
 import { MarkdownView } from './MarkdownView';
+import { buildCopyMenu } from './copy-menu';
 import { useClearnetLinkOpener } from './useClearnetLinkOpener';
 import { stripMarkdown } from './markdown';
 import { groupItemsByScope, formatRecallProvenance, labelForScope } from './memory-view';
@@ -520,7 +521,7 @@ export function AiAssistantModule(): JSX.Element {
   // Right-click → copy. navigator.clipboard first; fall back to a hidden textarea +
   // execCommand so copy works even if Electron doesn't treat the app origin as "secure"
   // or the window isn't focused. Stays fully offline either way.
-  const [msgMenu, setMsgMenu] = useState<{ x: number; y: number; content: string } | null>(null);
+  const [msgMenu, setMsgMenu] = useState<{ x: number; y: number; content: string; selection: string } | null>(null);
   async function copyText(text: string): Promise<void> {
     setMsgMenu(null);
     try {
@@ -802,7 +803,13 @@ export function AiAssistantModule(): JSX.Element {
             key={m.id}
             className="ga98-selectable"
             style={{ marginBottom: 12 }}
-            onContextMenu={(e) => { e.preventDefault(); setMsgMenu({ x: e.clientX, y: e.clientY, content: m.content }); }}
+            onContextMenu={(e) => {
+              // Capture the live highlight BEFORE the menu opens — preventDefault() suppresses the
+              // native "Copy" (which would copy the selection), so we offer "Copy selection" ourselves.
+              const selection = window.getSelection()?.toString() ?? '';
+              e.preventDefault();
+              setMsgMenu({ x: e.clientX, y: e.clientY, content: m.content, selection });
+            }}
             title="Drag to select text, or right-click to copy"
           >
             <div style={{ fontSize: 11, fontWeight: 'bold', color: m.role === 'user' ? '#000080' : '#400080' }}>
@@ -863,8 +870,9 @@ export function AiAssistantModule(): JSX.Element {
         <>
           <div style={{ position: 'fixed', inset: 0, zIndex: 29999 }} onMouseDown={() => setMsgMenu(null)} />
           <div className="ga98-context-menu" style={{ left: msgMenu.x, top: msgMenu.y }}>
-            <button className="ga98-context-menu-item" onClick={() => void copyText(msgMenu.content)}>Copy message</button>
-            <button className="ga98-context-menu-item" onClick={() => void copyText(copyAll())}>Copy whole conversation</button>
+            {buildCopyMenu(msgMenu.selection, msgMenu.content, copyAll()).map((item) => (
+              <button key={item.label} className="ga98-context-menu-item" onClick={() => void copyText(item.text)}>{item.label}</button>
+            ))}
           </div>
         </>
       )}
