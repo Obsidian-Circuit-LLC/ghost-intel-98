@@ -93,3 +93,6 @@ __pycache__/
 
 # Rust build artifacts (confinement native binary; never commit the target/ dir)
 native/dcs98-confine/target/
+
+# DEV entitlement signing key (operator replaces with production; never commit secrets)
+scripts/.entitlement-dev-key.json

@@ -379,3 +379,28 @@ describe('rawFetch SSRF hardening', () => {
     spy307.mockRestore();
   });
 });
+
+// ctx.reasoning.verify uses the SEPARATE entitlement trust root (getEntitlementKeysets), not the
+// plugin-package keys — a regression here (revert to getPinnedKeysets) breaks entitlement verify.
+// This test uses the REAL trust module (only electron + reasoning-runtime are mocked above), so a
+// signature made with the DEV entitlement key must verify through buildContextDeps().reasoning.verify.
+describe('reasoning.verify → entitlement trust root', () => {
+  it('accepts an entitlement-key-signed payload end-to-end (skipped in CI if the dev key file is absent)', async () => {
+    const { existsSync, readFileSync } = await import('node:fs');
+    const keyPath = join(process.cwd(), 'scripts', '.entitlement-dev-key.json');
+    if (!existsSync(keyPath)) return; // dev-only file
+    const { ed25519 } = await import('@noble/curves/ed25519.js');
+    const { ml_dsa65 } = await import('@noble/post-quantum/ml-dsa.js');
+    const k = JSON.parse(readFileSync(keyPath, 'utf8')) as { ED_SEC: string; PQ_SEC: string };
+    const token = { subject: 's', tier: 'tester', issuedAt: '2026-07-13T00:00:00Z', features: ['llm'] };
+    const ordered: Record<string, unknown> = {};
+    for (const key of Object.keys(token).sort()) ordered[key] = (token as Record<string, unknown>)[key];
+    const msg = new TextEncoder().encode(JSON.stringify(ordered));
+    const edSec = Uint8Array.from(Buffer.from(k.ED_SEC, 'hex'));
+    const pqSec = Uint8Array.from(Buffer.from(k.PQ_SEC, 'hex'));
+    const sig = new Uint8Array([...ed25519.sign(msg, edSec), ...ml_dsa65.sign(msg, pqSec)]);
+    expect(buildContextDeps().reasoning.verify(msg, sig)).toBe(true);
+    // A tampered payload must NOT verify.
+    expect(buildContextDeps().reasoning.verify(new TextEncoder().encode('{}'), sig)).toBe(false);
+  });
+});
