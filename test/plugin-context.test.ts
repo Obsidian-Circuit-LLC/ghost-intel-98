@@ -73,6 +73,19 @@ describe('PluginContext capability scoping', () => {
     expect(bare.schedule).toBeUndefined();
   });
 
+  it('reasoning-runtime capability gates ctx.registerBrain and binds the plugin id', () => {
+    const registerBrainSpy = vi.fn();
+    const d: ContextDeps = { ...deps(true), registerBrain: registerBrainSpy };
+    const ctx = createPluginContext('osint', ['reasoning-runtime'], d);
+    expect(ctx.registerBrain).toBeDefined();
+    const brain = { decide: async () => ({ kind: 'done' as const, reason: 'x' }) };
+    ctx.registerBrain!(brain);
+    expect(registerBrainSpy).toHaveBeenCalledWith('osint', brain);
+
+    const bare = createPluginContext('osint', [], d);
+    expect(bare.registerBrain).toBeUndefined();
+  });
+
   it('bgconn + egress: egress.fetch still rejects loopback/socks via the SSRF gate', async () => {
     const ssrf = (u: string): string => {
       // Mirror the real wire-deps validator: reject non-public/non-http(s) targets.

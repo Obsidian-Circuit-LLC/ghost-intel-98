@@ -39,6 +39,7 @@ import { getBgConnManager } from '../bgconn/singleton';
 import { makeBgConnSecrets } from '../bgconn/secrets';
 import { ensurePluginTor, torFetch } from './tor-egress';
 import { recall } from '../services/memory';
+import { setRegisteredBrain } from '../investigation/brain-registry';
 
 /**
  * Strip credential-bearing headers from a header map. Used when a plugin egress redirect
@@ -329,6 +330,10 @@ export function buildContextDeps(): ContextDeps {
 
     // Host-owned background timer: plugins with the 'background-tasks' cap can schedule bounded
     // self-directed work. schedule.ts owns the registry (min-interval clamp, per-plugin dispose).
-    schedule: (pluginId, intervalMs, fn) => schedulePluginTask(pluginId, intervalMs, fn)
+    schedule: (pluginId, intervalMs, fn) => schedulePluginTask(pluginId, intervalMs, fn),
+
+    // Autonomous-run Brain seam: a 'reasoning-runtime' plugin registers its brain here; core's
+    // getBrain() returns it (last-registered wins). Keyed by plugin id so teardown clears it.
+    registerBrain: (pluginId, b) => setRegisteredBrain(pluginId, b)
   };
 }

@@ -8,6 +8,7 @@ import { getPinnedKeysets, isApiCompatible, type TrustKeyset } from './trust';
 import { createPluginContext, type ContextDeps } from './context';
 import { resolveInside } from './paths';
 import { disposePluginSchedules, scheduledPluginIds } from './schedule';
+import { clearRegisteredBrain } from '../investigation/brain-registry';
 import type { VerifiedPluginInfo, PluginStatus } from '../../shared/plugin-types';
 
 const MAX_SIG_BYTES = 8192; // ML-DSA-65 sig ~3309 + Ed25519 64; generous cap, bound before verify
@@ -119,6 +120,7 @@ export function registerTeardown(pluginId: string, fn: () => Promise<void> | voi
 }
 export async function disablePlugin(pluginId: string): Promise<void> {
   disposePluginSchedules(pluginId);
+  clearRegisteredBrain(pluginId);
   const list = teardowns.get(pluginId) ?? [];
   teardowns.delete(pluginId);
   for (const fn of list) { try { await fn(); } catch (e) { console.error(`[plugin:${pluginId}] teardown`, e); } }

@@ -29,6 +29,7 @@ export interface ContextDeps {
   };
   vectorRecall?: { recallAcrossCases(query: string, opts: { k: number; minScore: number }): Promise<RecallHit[]> };
   schedule?: (pluginId: string, intervalMs: number, fn: () => void) => { dispose(): void };
+  registerBrain?: (pluginId: string, b: import('../../shared/investigation-agent').Brain) => void;
 }
 
 export interface PluginContext {
@@ -50,6 +51,7 @@ export interface PluginContext {
   };
   vectors?: VectorRecall;
   schedule?: (intervalMs: number, fn: () => void) => { dispose(): void };
+  registerBrain?: (b: import('../../shared/investigation-agent').Brain) => void;
 }
 
 export function createPluginContext(
@@ -117,6 +119,9 @@ export function createPluginContext(
   }
   if (has('background-tasks') && deps.schedule) {
     ctx.schedule = (intervalMs, fn) => deps.schedule!(id, intervalMs, fn);
+  }
+  if (has('reasoning-runtime') && deps.registerBrain) {
+    ctx.registerBrain = (b) => deps.registerBrain!(id, b);
   }
   return ctx;
 }

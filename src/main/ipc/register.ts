@@ -157,6 +157,7 @@ import { registerInvestigationReportIpc } from '../investigation/report-ipc';
 import { renderIntelReportPdf } from '../investigation/report-pdf';
 import { addManualNode, addManualEdge } from '../investigation/graph';
 import type { Brain } from '@shared/investigation-agent';
+import { getRegisteredBrain } from '../investigation/brain-registry';
 import type { Narrator } from '@shared/investigation-report';
 
 const MAX_SAVE_ATTACHMENT_BYTES = 64 * 1024 * 1024; // 64 MB cap on base64 decoded payload
@@ -1522,8 +1523,9 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
 
   // ---- SP-6 free-form orchestrator: run harness start/control + event stream ----
   // No reasoning-model brain ships in core yet — subsystem-2 (the OSINT investigator plugin)
-  // supplies one when installed. `getBrain` is the single seam that will wire it in; until then
-  // `run:start` refuses with a guarded error rather than running an autonomous investigation
+  // supplies one when installed. `getBrain` is the single seam that wires it in (the brain registry);
+  // with no such plugin it returns null, so `run:start` refuses with a guarded error rather than
+  // running an autonomous investigation
   // headless. `deps.now = Date.now` is the ONE production wall-clock entry point — everything past
   // this line (the run loop, the guard) is deterministic on the injected ms value.
   registerInvestigationRunIpc({
@@ -1534,7 +1536,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     },
     validateCaseId: (id) => ensureUuid(id, 'caseId'),
     now: () => Date.now(),
-    getBrain: (): Brain | null => null
+    getBrain: (): Brain | null => getRegisteredBrain()
   });
 
   // ---- SP-7 INTELREPORT: assemble the deterministic report model for on-screen preview ----
