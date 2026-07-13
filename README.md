@@ -38,13 +38,15 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`GhostIntel98-Setup-3.43.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
+> **Install:** download [`GhostIntel98-Setup-3.44.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
 
 > **📘 User guides** — plain-language, step-by-step (download or read in-browser):
 > - [**SOCMINT: X, Telegram & WhatsApp**](docs/guides/SOCMINT-Tutorial.pdf) — set up and run the social-media collectors, per platform, with the Tor / clearnet and opsec caveats. ([markdown](docs/guides/socmint-tutorial.md))
 > - [**How Searchlight Learns**](docs/guides/Searchlight-Learning-Guide.pdf) — how the username-sweep detector gets smarter from your own labels, and when to turn ML on. ([markdown](docs/guides/searchlight-learning.md))
 
 ## Status
+
+**v3.44.0** — **Q: right-click copy now respects your selection.** A GhostExodus field fix. Highlighting a section of a Q message and using right-click **Copy** was grabbing the whole conversation (Ctrl+C worked fine). Q's messages use a custom right-click menu that suppresses the browser's native "Copy", and that menu only offered *Copy message* / *Copy whole conversation* — never the selection. Now the menu reads your live highlight and offers **Copy selection** first when text is selected, copying exactly what you highlighted. **3,378 automated tests** green (1 skipped); typecheck clean; no new egress; no new dependency; encrypt-at-rest unchanged. *Everything from v3.43.0 carries forward.*
 
 **v3.43.0** — **A tighter News window and a top-tab Number Muncher.** Two layout follow-ups from GhostExodus. **(1) The News window loses its right scrollbar and tightens up.** The scrollbar came from the module content slightly overflowing the *shared* window body (`overflow: auto`, used by every window) — so instead of touching that global rule, the News module now clips its own overflow (the video fills the space; nothing there legitimately scrolls), and the Stream / Add-stream control spacing is tightened to match the clean pop-out mockup. **(2) Number Muncher's modes move to a top tab strip.** The seven modes were a left rail that left a large empty grey column; they're now a wrapping row of tabs across the top, the empty column is gone, and the window shrinks from 380×580 to 320×450. All seven keypads and the memory-scope rule are unchanged. **3,355 automated tests** green (1 skipped); typecheck clean; no new egress; no new dependency; encrypt-at-rest unchanged. *Everything from v3.42.0 carries forward.*
 
@@ -517,7 +519,7 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases) and run it.
 
-Direct link to the current release: [`GhostIntel98-Setup-3.43.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.43.0/GhostIntel98-Setup-3.43.0.exe)
+Direct link to the current release: [`GhostIntel98-Setup-3.44.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.44.0/GhostIntel98-Setup-3.44.0.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is **formally verified internally** — symbolic (ProVerif) +
 computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not**
 FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.6.8/GhostIntel98-Setup-3.6.8.exe).
@@ -525,7 +527,7 @@ FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Se
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\GhostIntel98-Setup-3.43.0.exe -Algorithm SHA256
+Get-FileHash .\GhostIntel98-Setup-3.44.0.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
