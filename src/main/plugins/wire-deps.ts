@@ -43,7 +43,7 @@ import { recall } from '../services/memory';
 import { setRegisteredBrain } from '../investigation/brain-registry';
 import { reasoningGenerate, configureReasoningRuntime, ensureReasoningRuntime } from '../services/reasoning/reasoning-runtime';
 import { verifyPluginSignature } from './verify';
-import { getPinnedKeysets } from './trust';
+import { getEntitlementKeysets } from './trust';
 
 /**
  * Strip credential-bearing headers from a header map. Used when a plugin egress redirect
@@ -359,7 +359,9 @@ export function buildContextDeps(): ContextDeps {
         configureReasoningRuntime({ modelsDir, model: name });
         await ensureReasoningRuntime();
       },
-      verify: (payload, signature) => verifyPluginSignature(payload, signature, getPinnedKeysets())
+      // Entitlement signatures verify against the SEPARATE entitlement trust root (getEntitlementKeysets),
+      // NOT the plugin-package keys — the entitlement key is a distinct offline key (blast-radius isolation).
+      verify: (payload, signature) => verifyPluginSignature(payload, signature, getEntitlementKeysets())
     }
   };
 }
