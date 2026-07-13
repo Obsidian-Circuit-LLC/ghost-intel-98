@@ -13,6 +13,8 @@ let spawnFn: SpawnLike = nodeSpawn as unknown as SpawnLike;
 let probeFn: (url: string) => Promise<boolean> = defaultProbe;
 let tagsFn: (url: string) => Promise<string[] | null> = defaultTags;
 let existsFn: (p: string) => Promise<boolean> = defaultExists;
+let genFetchFn: (url: string, init: unknown) => Promise<{ ok: boolean; json(): Promise<unknown> }> =
+  (url, init) => fetch(url, init as RequestInit) as unknown as Promise<{ ok: boolean; json(): Promise<unknown> }>;
 
 let config: { modelsDir: string; model: string } | null = null;
 let resolvedEndpoint: string | null = null;
@@ -23,8 +25,12 @@ export function __setSpawnForTest(fn: SpawnLike | null): void { spawnFn = fn ?? 
 export function __setProbeForTest(fn: ((u: string) => Promise<boolean>) | null): void { probeFn = fn ?? defaultProbe; }
 export function __setTagsForTest(fn: ((u: string) => Promise<string[] | null>) | null): void { tagsFn = fn ?? defaultTags; }
 export function __setExistsForTest(fn: ((p: string) => Promise<boolean>) | null): void { existsFn = fn ?? defaultExists; }
+export function __setGenerateFetchForTest(fn: ((url: string, init: unknown) => Promise<{ ok: boolean; json(): Promise<unknown> }>) | null): void {
+  genFetchFn = fn ?? ((url, init) => fetch(url, init as RequestInit) as unknown as Promise<{ ok: boolean; json(): Promise<unknown> }>);
+}
 export function __resetReasoningRuntimeForTest(): void {
   spawnFn = nodeSpawn as unknown as SpawnLike; probeFn = defaultProbe; tagsFn = defaultTags; existsFn = defaultExists;
+  genFetchFn = (url, init) => fetch(url, init as RequestInit) as unknown as Promise<{ ok: boolean; json(): Promise<unknown> }>;
   config = null; resolvedEndpoint = null; starting = false;
 }
 
@@ -81,6 +87,21 @@ export async function ensureReasoningRuntime(): Promise<void> {
     if (await spawnOnPort(REASONING_PORT_BASE + step)) return;
   }
   throw new Error('Reasoning runtime could not start (is a port in 11440–11444 free?).');
+}
+
+/** One-shot local generation on the bundled reasoning runtime (loopback only). Requires the runtime
+ *  to be resolved (ensureReasoningRuntime succeeded); throws otherwise so callers fall back cleanly. */
+export async function reasoningGenerate(prompt: string, opts?: { maxTokens?: number; stop?: string[] }): Promise<string> {
+  const endpoint = reasoningEndpoint();
+  if (!endpoint || !config) throw new Error('reasoning runtime not available');
+  const body = JSON.stringify({
+    model: config.model, prompt, stream: false,
+    options: { num_predict: opts?.maxTokens ?? 256, ...(opts?.stop ? { stop: opts.stop } : {}) },
+  });
+  const r = await genFetchFn(`${endpoint}/api/generate`, { method: 'POST', headers: { 'content-type': 'application/json' }, body });
+  if (!r.ok) throw new Error('reasoning generate failed');
+  const j = (await r.json()) as { response?: string };
+  return j.response ?? '';
 }
 
 export async function reasoningHealth(): Promise<ReasoningHealth> {
