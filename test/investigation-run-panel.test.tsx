@@ -120,11 +120,13 @@ afterEach(() => {
 });
 
 describe('RunPanel — unavailable', () => {
-  it('renders the calm reasoning-pack copy and NO Start button', async () => {
+  it('names the OSINT investigator plugin + AI upgrade, and has NO Start button', async () => {
     seed({ available: false });
     await mount();
 
-    expect((container.textContent ?? '').toLowerCase()).toContain('reasoning pack');
+    const text = container.textContent ?? '';
+    expect(text).toMatch(/OSINT investigator plugin/i);
+    expect(text).toMatch(/AI reasoning is an upgrade/i);
     const start = Array.from(container.querySelectorAll('button')).find((b) =>
       /start investigation/i.test(b.textContent ?? ''),
     );
