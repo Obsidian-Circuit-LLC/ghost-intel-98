@@ -10,6 +10,7 @@ import { useWindows } from '../../state/store';
 import { promptDialog } from '../../state/dialogs';
 import { toast } from '../../state/toasts';
 import { loadAttachmentBytes } from '../../lib/attachmentBytes';
+import { NODE_COLORS, resolveNodeColor, clampNodeSize, headerLabel } from './node-visual';
 
 interface Props { caseId: string }
 
@@ -18,23 +19,6 @@ function id(): string { return crypto.randomUUID(); }
 function isImage(name: string): boolean { return IMAGE_EXT.includes((name.split('.').pop() ?? '').toLowerCase()); }
 function center(n: WhiteboardNode): { x: number; y: number } { return { x: n.x + n.w / 2, y: n.y + n.h / 2 }; }
 
-/** Tile colour palette (node.color stores the key; ≤16 chars per the validator). Clicking a node's
- *  swatch cycles through these. 'default' is the original grey/white. */
-const NODE_COLORS: { key: string; body: string; head: string }[] = [
-  { key: 'default', body: '#ffffff', head: '#607d8b' },
-  { key: 'yellow', body: '#fff9c4', head: '#f9a825' },
-  { key: 'green', body: '#e8f5e9', head: '#43a047' },
-  { key: 'blue', body: '#e3f2fd', head: '#1e88e5' },
-  { key: 'pink', body: '#fce4ec', head: '#d81b60' },
-  { key: 'orange', body: '#ffe0b2', head: '#fb8c00' },
-  { key: 'grey', body: '#cfd8dc', head: '#455a64' }
-];
-function nodeColor(key?: string): { body: string; head: string } { return NODE_COLORS.find((c) => c.key === key) ?? NODE_COLORS[0]; }
-function nextColorKey(key?: string): string {
-  const i = NODE_COLORS.findIndex((c) => c.key === (key ?? 'default'));
-  return NODE_COLORS[(i + 1) % NODE_COLORS.length].key;
-}
-
 export function WhiteboardModule({ caseId }: Props): JSX.Element {
   const [nodes, setNodes] = useState<WhiteboardNode[]>([]);
   const [edges, setEdges] = useState<WhiteboardEdge[]>([]);
@@ -42,8 +26,9 @@ export function WhiteboardModule({ caseId }: Props): JSX.Element {
   const [connectFrom, setConnectFrom] = useState<string | null>(null);
   const [connectMode, setConnectMode] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [colorMenu, setColorMenu] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const drag = useRef<{ kind: 'pan' | 'node'; id?: string; startX: number; startY: number; orig: { x: number; y: number } } | null>(null);
+  const drag = useRef<{ kind: 'pan' | 'node' | 'resize'; id?: string; startX: number; startY: number; orig: { x: number; y: number }; origSize?: { w: number; h: number } } | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -89,6 +74,15 @@ export function WhiteboardModule({ caseId }: Props): JSX.Element {
     if (connectMode) return;
     drag.current = { kind: 'node', id: n.id, startX: e.clientX, startY: e.clientY, orig: { x: n.x, y: n.y } };
   }
+  function onResizeMouseDown(e: React.MouseEvent, n: WhiteboardNode): void {
+    e.stopPropagation();
+    if (connectMode) return;
+    drag.current = { kind: 'resize', id: n.id, startX: e.clientX, startY: e.clientY, orig: { x: n.x, y: n.y }, origSize: { w: n.w, h: n.h } };
+  }
+  function setNodeColor(nid: string, color: string): void {
+    setNodes((ns) => ns.map((x) => x.id === nid ? { ...x, color } : x));
+    setColorMenu(null);
+  }
   useEffect(() => {
     function onMove(e: MouseEvent): void {
       const d = drag.current;
@@ -96,6 +90,9 @@ export function WhiteboardModule({ caseId }: Props): JSX.Element {
       const dx = e.clientX - d.startX, dy = e.clientY - d.startY;
       if (d.kind === 'pan') {
         setView((v) => ({ ...v, tx: d.orig.x + dx, ty: d.orig.y + dy }));
+      } else if (d.kind === 'resize' && d.id && d.origSize) {
+        const s = clampNodeSize(d.origSize.w + dx / view.scale, d.origSize.h + dy / view.scale);
+        setNodes((ns) => ns.map((n) => n.id === d.id ? { ...n, w: s.w, h: s.h } : n));
       } else if (d.id) {
         setNodes((ns) => ns.map((n) => n.id === d.id ? { ...n, x: d.orig.x + dx / view.scale, y: d.orig.y + dy / view.scale } : n));
       }
@@ -194,8 +191,16 @@ export function WhiteboardModule({ caseId }: Props): JSX.Element {
           {nodes.map((n) => (
             <NodeView key={n.id} node={n} caseId={caseId} connecting={connectMode} isSource={connectFrom === n.id}
               onMouseDown={(e) => onNodeMouseDown(e, n)} onClick={() => onNodeClick(n)}
+              onResizeMouseDown={(e) => onResizeMouseDown(e, n)}
               onDelete={() => removeNode(n.id)}
-              onCycleColor={() => setNodes((ns) => ns.map((x) => x.id === n.id ? { ...x, color: nextColorKey(x.color) } : x))}
+              colorMenuOpen={colorMenu === n.id}
+              onToggleColorMenu={() => setColorMenu((c) => (c === n.id ? null : n.id))}
+              onCloseColorMenu={() => setColorMenu(null)}
+              onPickColor={(color) => setNodeColor(n.id, color)}
+              onRename={async () => {
+                const nm = await promptDialog('Name this item:', n.name ?? '', 'Rename');
+                if (nm !== null) setNodes((ns) => ns.map((x) => x.id === n.id ? { ...x, name: nm } : x));
+              }}
               onEditText={async () => {
                 const t = await promptDialog('Edit text:', n.text ?? '', 'Edit node');
                 if (t !== null) setNodes((ns) => ns.map((x) => x.id === n.id ? { ...x, text: t } : x));
@@ -207,11 +212,13 @@ export function WhiteboardModule({ caseId }: Props): JSX.Element {
   );
 }
 
-function NodeView({ node, caseId, connecting, isSource, onMouseDown, onClick, onDelete, onCycleColor, onEditText }: {
+function NodeView({ node, caseId, connecting, isSource, onMouseDown, onClick, onResizeMouseDown, onDelete, colorMenuOpen, onToggleColorMenu, onCloseColorMenu, onPickColor, onRename, onEditText }: {
   node: WhiteboardNode; caseId: string; connecting: boolean; isSource: boolean;
-  onMouseDown: (e: React.MouseEvent) => void; onClick: () => void; onDelete: () => void; onCycleColor: () => void; onEditText: () => void;
+  onMouseDown: (e: React.MouseEvent) => void; onClick: () => void; onResizeMouseDown: (e: React.MouseEvent) => void; onDelete: () => void;
+  colorMenuOpen: boolean; onToggleColorMenu: () => void; onCloseColorMenu: () => void; onPickColor: (color: string) => void;
+  onRename: () => void; onEditText: () => void;
 }): JSX.Element {
-  const pal = nodeColor(node.color);
+  const pal = resolveNodeColor(node.color);
   return (
     <div
       onMouseDown={onMouseDown}
@@ -220,17 +227,34 @@ function NodeView({ node, caseId, connecting, isSource, onMouseDown, onClick, on
         position: 'absolute', left: node.x, top: node.y, width: node.w, height: node.h,
         background: pal.body, border: `2px solid ${isSource ? '#000080' : pal.head}`,
         boxShadow: '2px 2px 6px rgba(0,0,0,0.3)', display: 'flex', flexDirection: 'column',
-        cursor: connecting ? 'pointer' : 'move', overflow: 'hidden', fontSize: 12
+        cursor: connecting ? 'pointer' : 'move', overflow: 'visible', fontSize: 12
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: pal.head, color: '#fff', fontSize: 10, padding: '1px 4px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: pal.head, color: '#fff', fontSize: 10, padding: '1px 4px', position: 'relative' }}>
         <span
-          onMouseDown={(e) => { e.stopPropagation(); onCycleColor(); }}
+          onMouseDown={(e) => { e.stopPropagation(); onToggleColorMenu(); }}
           title="Change tile colour"
-          style={{ width: 11, height: 11, flexShrink: 0, borderRadius: 2, cursor: 'pointer', background: nodeColor(nextColorKey(node.color)).head, border: '1px solid rgba(255,255,255,0.85)' }}
+          style={{ width: 11, height: 11, flexShrink: 0, borderRadius: 2, cursor: 'pointer', background: pal.head, border: '1px solid rgba(255,255,255,0.85)' }}
         />
-        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{node.type}</span>
+        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'text' }}
+          title="Double-click to rename" onDoubleClick={(e) => { e.stopPropagation(); onRename(); }}>{headerLabel(node)}</span>
         <span style={{ cursor: 'pointer' }} onMouseDown={(e) => { e.stopPropagation(); onDelete(); }} title="Delete">×</span>
+        {colorMenuOpen && (
+          <>
+            <div onMouseDown={(e) => { e.stopPropagation(); onCloseColorMenu(); }}
+              style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
+            <div className="ga98-wb-colormenu" onMouseDown={(e) => e.stopPropagation()}>
+              {NODE_COLORS.map((c) => (
+                <span key={c.key} title={c.key} onMouseDown={(e) => { e.stopPropagation(); onPickColor(c.key); }}
+                  style={{ width: 16, height: 16, borderRadius: 2, cursor: 'pointer', background: c.head, border: '1px solid rgba(0,0,0,0.35)' }} />
+              ))}
+              <input type="color" title="Custom colour"
+                onMouseDown={(e) => e.stopPropagation()}
+                onChange={(e) => onPickColor(e.target.value)}
+                style={{ width: 16, height: 16, padding: 0, border: 'none', background: 'none', cursor: 'pointer' }} />
+            </div>
+          </>
+        )}
       </div>
       <div style={{ flex: 1, overflow: 'hidden', padding: 4 }}>
         {node.type === 'text' && <div onDoubleClick={onEditText} style={{ whiteSpace: 'pre-wrap', cursor: 'text', height: '100%' }}>{node.text || '(double-click to edit)'}</div>}
@@ -243,6 +267,7 @@ function NodeView({ node, caseId, connecting, isSource, onMouseDown, onClick, on
           </div>
         )}
       </div>
+      <div className="ga98-wb-resize" onMouseDown={onResizeMouseDown} title="Drag to resize" />
     </div>
   );
 }

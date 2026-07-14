@@ -379,6 +379,34 @@ input, textarea, [contenteditable="true"], .ga98-selectable {
   height: 100%;
 }
 
+/* Whiteboard v2: bottom-right resize grip on each node (drag to resize; scale-aware in JS). */
+.ga98-wb-resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  background: linear-gradient(135deg, transparent 50%, rgba(0, 0, 0, 0.35) 50%);
+}
+
+/* Whiteboard v2: per-node colour picker popover (7 presets + a custom-hex input). */
+.ga98-wb-colormenu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 41;
+  margin-top: 2px;
+  display: grid;
+  grid-template-columns: repeat(4, 16px);
+  gap: 4px;
+  padding: 5px;
+  background: var(--ga98-grey);
+  border: 2px solid;
+  border-color: var(--ga98-shadow-light) var(--ga98-shadow-dark) var(--ga98-shadow-dark) var(--ga98-shadow-light);
+  box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.4);
+}
+
 .ga98-pane {
   padding: 6px;
   overflow: auto;
