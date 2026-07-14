@@ -21,13 +21,15 @@ vi.mock('mammoth', () => ({ default: { convertToHtml: vi.fn() } }));
 import { DocViewerModule } from '../src/renderer/modules/doc-viewer/DocViewerModule';
 
 const readBytes = vi.fn();
+const readEml = vi.fn();
 
 let container: HTMLDivElement;
 let root: Root;
 
 beforeEach(() => {
   (globalThis as unknown as { window: { api: unknown } }).window.api = {
-    documents: { readBytes, export: vi.fn() }
+    documents: { readBytes, export: vi.fn() },
+    files: { readEml, revealAttachment: vi.fn() }
   };
   container = document.createElement('div');
   document.body.appendChild(container);
@@ -84,5 +86,18 @@ describe('DocViewerModule — selectable bodies', () => {
     const div = [...container.querySelectorAll('div')].reverse().find((d) => d.textContent?.includes('hello html'));
     expect(div).toBeTruthy();
     expect(div!.className).toContain('ga98-selectable');
+  });
+
+  it('EmlBody plain-text fallback <pre> carries ga98-selectable', async () => {
+    readEml.mockResolvedValueOnce({
+      from: 'a@example.com', to: 'b@example.com', cc: '', subject: 'Plain text msg',
+      date: '', headers: [], text: 'plain body content', html: null, attachments: []
+    });
+    await act(async () => { root.render(<DocViewerModule source="case" caseId="case-1" fileName="msg.eml" />); });
+    await flush();
+    const pre = container.querySelector('pre');
+    expect(pre).toBeTruthy();
+    expect(pre!.textContent).toContain('plain body content');
+    expect(pre!.className).toContain('ga98-selectable');
   });
 });

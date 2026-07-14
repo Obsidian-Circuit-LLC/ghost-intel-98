@@ -464,7 +464,7 @@ function EmlBody({ caseId, fileName }: { caseId: string; fileName: string }): JS
           </div>
         )}
       </div>
-      {eml.html ? <SanitizedHtml html={eml.html} /> : <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'inherit' }}>{eml.text}</pre>}
+      {eml.html ? <SanitizedHtml html={eml.html} /> : <pre className="ga98-selectable" style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'inherit' }}>{eml.text}</pre>}
     </div>
   );
 }
