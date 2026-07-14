@@ -365,7 +365,7 @@ function CsvBody({ bytes, error }: BytesProps): JSX.Element {
   return (
     <div style={{ padding: 8 }}>
       <input className="ga98-text" placeholder="Filter rows…" value={filter} onChange={(e) => setFilter(e.target.value)} style={{ marginBottom: 8 }} />
-      <div style={{ overflow: 'auto' }}>
+      <div className="ga98-selectable" style={{ overflow: 'auto' }}>
         <table style={{ borderCollapse: 'collapse', fontSize: 12 }}>
           <tbody>
             {shown.map((r, i) => (
@@ -391,7 +391,7 @@ function JsonBody({ bytes, error }: BytesProps): JSX.Element {
   }, [bytes]);
   if (error) return <Centered>Could not load: {error}</Centered>;
   if (!bytes) return <Centered>Loading…</Centered>;
-  return <pre style={{ padding: 12, margin: 0, fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{pretty}</pre>;
+  return <pre className="ga98-selectable" style={{ padding: 12, margin: 0, fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{pretty}</pre>;
 }
 
 function SanitizedHtml({ html }: { html: string }): JSX.Element {
@@ -403,7 +403,7 @@ function SanitizedHtml({ html }: { html: string }): JSX.Element {
     const handler = wireExternalLinks(el);
     return () => el.removeEventListener('click', handler);
   }, [safe]);
-  return <div ref={ref} style={{ padding: 12, fontSize: 13, lineHeight: 1.5 }} dangerouslySetInnerHTML={{ __html: safe }} />;
+  return <div ref={ref} className="ga98-selectable" style={{ padding: 12, fontSize: 13, lineHeight: 1.5 }} dangerouslySetInnerHTML={{ __html: safe }} />;
 }
 
 function HtmlBody({ bytes, error }: BytesProps): JSX.Element {
@@ -434,7 +434,7 @@ function TextBody({ bytes, error }: BytesProps): JSX.Element {
   if (error) return <Centered>Could not load: {error}</Centered>;
   if (!bytes) return <Centered>Loading…</Centered>;
   if (looksBinary(bytes)) return <Centered>This file is not a previewable text/document type. Use Reveal to open it externally.</Centered>;
-  return <pre style={{ padding: 12, margin: 0, fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{bytesToText(bytes)}</pre>;
+  return <pre className="ga98-selectable" style={{ padding: 12, margin: 0, fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{bytesToText(bytes)}</pre>;
 }
 
 function EmlBody({ caseId, fileName }: { caseId: string; fileName: string }): JSX.Element {
