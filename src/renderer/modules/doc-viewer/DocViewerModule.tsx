@@ -290,17 +290,40 @@ function PdfBody({ bytes, error }: BytesProps): JSX.Element {
           if (cancelled) return;
           const page = await pdf.getPage(i);
           const viewport = page.getViewport({ scale });
+          // Positioned wrapper so the transparent text layer can overlay the canvas exactly.
+          const pageWrap = document.createElement('div');
+          pageWrap.style.position = 'relative';
+          pageWrap.style.margin = '8px auto';
+          pageWrap.style.width = `${viewport.width}px`;
+          pageWrap.style.height = `${viewport.height}px`;
           const canvas = document.createElement('canvas');
           canvas.width = viewport.width;
           canvas.height = viewport.height;
           canvas.style.display = 'block';
-          canvas.style.margin = '8px auto';
           canvas.style.boxShadow = '0 0 4px rgba(0,0,0,0.4)';
-          container.appendChild(canvas);
+          pageWrap.appendChild(canvas);
+          container.appendChild(pageWrap);
           // pdf.js 5.x: hand it the canvas element and let it derive the 2D context.
           // Passing BOTH `canvas` and `canvasContext` is rejected in v5 (the context path
           // requires canvas to be null), which made every page render throw → blank viewer.
           await page.render({ canvas, viewport }).promise;
+          // Overlay a selectable text layer (transparent spans) so PDF text can be copied.
+          // pdf.js 5.x TextLayer sizes its own container (setLayerDimensions); CSS just
+          // absolutely positions it over the canvas. Guarded so a text-layer failure never
+          // blanks the already-rendered page canvas.
+          try {
+            const textDiv = document.createElement('div');
+            textDiv.className = 'ga98-selectable ga98-pdf-textlayer';
+            pageWrap.appendChild(textDiv);
+            const textLayer = new pdfjsLib.TextLayer({
+              textContentSource: page.streamTextContent(),
+              container: textDiv,
+              viewport
+            });
+            await textLayer.render();
+          } catch {
+            // Non-fatal: the page canvas stands on its own without a selectable overlay.
+          }
         }
       } catch (e) {
         if (!cancelled) setRenderError((e as Error).message);
