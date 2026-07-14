@@ -95,6 +95,24 @@ describe('DocViewerModule — PDF text layer', () => {
     expect(state.args!.container).toBe(textDiv);
   });
 
+  it('sets --total-scale-factor on the text-layer container so span sizing tracks the canvas', async () => {
+    // pdf.js 5.x's TextLayer only writes --font-height/--scale-x/--rotate (per span) and
+    // --min-font-size (per container); the font-size/transform calc()s in theme.css depend on
+    // --total-scale-factor, which pdf.js does NOT set (the full PDFViewer would). If the host
+    // omits it, the calc()s are invalid and spans fall back to the app default font-size,
+    // mis-sizing the invisible selection boxes. Assert the viewer sets it to the render scale.
+    mockOnePagePdf();
+    const bytes = Array.from(new TextEncoder().encode('%PDF-1.4 fake'));
+    readBytes.mockResolvedValueOnce(bytes);
+    await act(async () => { root.render(<DocViewerModule source="documents" relPath="a.pdf" name="a.pdf" />); });
+    await flush();
+
+    const textDiv = container.querySelector('.ga98-pdf-textlayer') as HTMLElement | null;
+    expect(textDiv).toBeTruthy();
+    // DocViewerModule's PDF pane renders at its default scale of 1.2.
+    expect(textDiv!.style.getPropertyValue('--total-scale-factor')).toBe('1.2');
+  });
+
   it('a text-layer failure does not blank the page canvas', async () => {
     mockOnePagePdf();
     textLayerRender.mockRejectedValueOnce(new Error('boom'));

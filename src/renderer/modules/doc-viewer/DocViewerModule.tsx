@@ -314,6 +314,12 @@ function PdfBody({ bytes, error }: BytesProps): JSX.Element {
           try {
             const textDiv = document.createElement('div');
             textDiv.className = 'ga98-selectable ga98-pdf-textlayer';
+            // pdf.js writes per-span --font-height/--scale-x/--rotate but leaves the CSS zoom,
+            // --total-scale-factor, to the host (we don't use the full PDFViewer that sets it).
+            // Without it the stylesheet's font-size/transform calc()s are invalid and spans
+            // fall back to the app default size, mis-tracking the canvas glyphs. It equals the
+            // viewport scale we rendered the canvas at.
+            textDiv.style.setProperty('--total-scale-factor', String(scale));
             pageWrap.appendChild(textDiv);
             const textLayer = new pdfjsLib.TextLayer({
               textContentSource: page.streamTextContent(),

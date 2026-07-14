@@ -408,13 +408,24 @@ input, textarea, [contenteditable="true"], .ga98-selectable {
 }
 
 /* Doc-viewer v2: pdf.js text layer overlaid on the page canvas (transparent, selectable spans).
-   The TextLayer class sizes the container itself; this only positions it over the canvas. */
+   The TextLayer class sizes the container itself; this only positions it over the canvas.
+   pdf.js 5.x deliberately leaves the per-span font-size/transform to the stylesheet: render()
+   writes only --font-height / --scale-x / --rotate (per span) and --min-font-size (per container);
+   the actual `font-size` and `transform` declarations, plus --text-scale-factor / --min-font-size-inv,
+   live here (mirroring the official pdf_viewer.css). --total-scale-factor is the CSS zoom and is
+   set inline on the container in DocViewerModule (= the viewport scale); without it every span would
+   fall back to the app's default font-size and the invisible selection boxes would mis-track the
+   canvas glyphs. */
 .ga98-pdf-textlayer {
   position: absolute;
   inset: 0;
   overflow: hidden;
   line-height: 1;
   opacity: 1;
+  transform-origin: 0 0;
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
 }
 
 .ga98-pdf-textlayer span {
@@ -423,6 +434,11 @@ input, textarea, [contenteditable="true"], .ga98-selectable {
   white-space: pre;
   transform-origin: 0 0;
   cursor: text;
+  --font-height: 0;
+  --scale-x: 1;
+  --rotate: 0deg;
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
 }
 
 .ga98-pdf-textlayer ::selection {
