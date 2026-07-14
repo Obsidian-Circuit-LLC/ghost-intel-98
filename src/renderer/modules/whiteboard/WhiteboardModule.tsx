@@ -80,9 +80,23 @@ export function WhiteboardModule({ caseId }: Props): JSX.Element {
     drag.current = { kind: 'resize', id: n.id, startX: e.clientX, startY: e.clientY, orig: { x: n.x, y: n.y }, origSize: { w: n.w, h: n.h } };
   }
   function setNodeColor(nid: string, color: string): void {
+    // Apply the colour WITHOUT closing the popover — the custom <input type=color> fires onChange
+    // while the native OS picker is still open, so closing here would unmount the input mid-pick.
+    // Preset swatches close explicitly; outside-click (below) closes for everything else.
     setNodes((ns) => ns.map((x) => x.id === nid ? { ...x, color } : x));
-    setColorMenu(null);
   }
+  // Close the colour popover on any outside mousedown. A position:fixed backdrop can't do this — the
+  // popover lives inside the board's CSS transform, which becomes the containing block for fixed
+  // descendants, so a fixed backdrop only covers the transformed board box, not the viewport.
+  useEffect(() => {
+    if (colorMenu === null) return;
+    function onDocDown(e: MouseEvent): void {
+      const t = e.target as HTMLElement | null;
+      if (t && !t.closest('.ga98-wb-colormenu') && !t.closest('.ga98-wb-swatch')) setColorMenu(null);
+    }
+    window.addEventListener('mousedown', onDocDown);
+    return () => window.removeEventListener('mousedown', onDocDown);
+  }, [colorMenu]);
   useEffect(() => {
     function onMove(e: MouseEvent): void {
       const d = drag.current;
@@ -232,6 +246,7 @@ function NodeView({ node, caseId, connecting, isSource, onMouseDown, onClick, on
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: pal.head, color: '#fff', fontSize: 10, padding: '1px 4px', position: 'relative' }}>
         <span
+          className="ga98-wb-swatch"
           onMouseDown={(e) => { e.stopPropagation(); onToggleColorMenu(); }}
           title="Change tile colour"
           style={{ width: 11, height: 11, flexShrink: 0, borderRadius: 2, cursor: 'pointer', background: pal.head, border: '1px solid rgba(255,255,255,0.85)' }}
@@ -240,20 +255,16 @@ function NodeView({ node, caseId, connecting, isSource, onMouseDown, onClick, on
           title="Double-click to rename" onDoubleClick={(e) => { e.stopPropagation(); onRename(); }}>{headerLabel(node)}</span>
         <span style={{ cursor: 'pointer' }} onMouseDown={(e) => { e.stopPropagation(); onDelete(); }} title="Delete">×</span>
         {colorMenuOpen && (
-          <>
-            <div onMouseDown={(e) => { e.stopPropagation(); onCloseColorMenu(); }}
-              style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
-            <div className="ga98-wb-colormenu" onMouseDown={(e) => e.stopPropagation()}>
-              {NODE_COLORS.map((c) => (
-                <span key={c.key} title={c.key} onMouseDown={(e) => { e.stopPropagation(); onPickColor(c.key); }}
-                  style={{ width: 16, height: 16, borderRadius: 2, cursor: 'pointer', background: c.head, border: '1px solid rgba(0,0,0,0.35)' }} />
-              ))}
-              <input type="color" title="Custom colour"
-                onMouseDown={(e) => e.stopPropagation()}
-                onChange={(e) => onPickColor(e.target.value)}
-                style={{ width: 16, height: 16, padding: 0, border: 'none', background: 'none', cursor: 'pointer' }} />
-            </div>
-          </>
+          <div className="ga98-wb-colormenu" onMouseDown={(e) => e.stopPropagation()}>
+            {NODE_COLORS.map((c) => (
+              <span key={c.key} title={c.key} onMouseDown={(e) => { e.stopPropagation(); onPickColor(c.key); onCloseColorMenu(); }}
+                style={{ width: 16, height: 16, borderRadius: 2, cursor: 'pointer', background: c.head, border: '1px solid rgba(0,0,0,0.35)' }} />
+            ))}
+            <input type="color" title="Custom colour (stays open — click away when done)"
+              onMouseDown={(e) => e.stopPropagation()}
+              onChange={(e) => onPickColor(e.target.value)}
+              style={{ width: 16, height: 16, padding: 0, border: 'none', background: 'none', cursor: 'pointer' }} />
+          </div>
         )}
       </div>
       <div style={{ flex: 1, overflow: 'hidden', padding: 4 }}>
