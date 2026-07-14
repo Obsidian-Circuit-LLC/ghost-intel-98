@@ -290,17 +290,46 @@ function PdfBody({ bytes, error }: BytesProps): JSX.Element {
           if (cancelled) return;
           const page = await pdf.getPage(i);
           const viewport = page.getViewport({ scale });
+          // Positioned wrapper so the transparent text layer can overlay the canvas exactly.
+          const pageWrap = document.createElement('div');
+          pageWrap.style.position = 'relative';
+          pageWrap.style.margin = '8px auto';
+          pageWrap.style.width = `${viewport.width}px`;
+          pageWrap.style.height = `${viewport.height}px`;
           const canvas = document.createElement('canvas');
           canvas.width = viewport.width;
           canvas.height = viewport.height;
           canvas.style.display = 'block';
-          canvas.style.margin = '8px auto';
           canvas.style.boxShadow = '0 0 4px rgba(0,0,0,0.4)';
-          container.appendChild(canvas);
+          pageWrap.appendChild(canvas);
+          container.appendChild(pageWrap);
           // pdf.js 5.x: hand it the canvas element and let it derive the 2D context.
           // Passing BOTH `canvas` and `canvasContext` is rejected in v5 (the context path
           // requires canvas to be null), which made every page render throw → blank viewer.
           await page.render({ canvas, viewport }).promise;
+          // Overlay a selectable text layer (transparent spans) so PDF text can be copied.
+          // pdf.js 5.x TextLayer sizes its own container (setLayerDimensions); CSS just
+          // absolutely positions it over the canvas. Guarded so a text-layer failure never
+          // blanks the already-rendered page canvas.
+          try {
+            const textDiv = document.createElement('div');
+            textDiv.className = 'ga98-selectable ga98-pdf-textlayer';
+            // pdf.js writes per-span --font-height/--scale-x/--rotate but leaves the CSS zoom,
+            // --total-scale-factor, to the host (we don't use the full PDFViewer that sets it).
+            // Without it the stylesheet's font-size/transform calc()s are invalid and spans
+            // fall back to the app default size, mis-tracking the canvas glyphs. It equals the
+            // viewport scale we rendered the canvas at.
+            textDiv.style.setProperty('--total-scale-factor', String(scale));
+            pageWrap.appendChild(textDiv);
+            const textLayer = new pdfjsLib.TextLayer({
+              textContentSource: page.streamTextContent(),
+              container: textDiv,
+              viewport
+            });
+            await textLayer.render();
+          } catch {
+            // Non-fatal: the page canvas stands on its own without a selectable overlay.
+          }
         }
       } catch (e) {
         if (!cancelled) setRenderError((e as Error).message);
@@ -365,7 +394,7 @@ function CsvBody({ bytes, error }: BytesProps): JSX.Element {
   return (
     <div style={{ padding: 8 }}>
       <input className="ga98-text" placeholder="Filter rows…" value={filter} onChange={(e) => setFilter(e.target.value)} style={{ marginBottom: 8 }} />
-      <div style={{ overflow: 'auto' }}>
+      <div className="ga98-selectable" style={{ overflow: 'auto' }}>
         <table style={{ borderCollapse: 'collapse', fontSize: 12 }}>
           <tbody>
             {shown.map((r, i) => (
@@ -391,7 +420,7 @@ function JsonBody({ bytes, error }: BytesProps): JSX.Element {
   }, [bytes]);
   if (error) return <Centered>Could not load: {error}</Centered>;
   if (!bytes) return <Centered>Loading…</Centered>;
-  return <pre style={{ padding: 12, margin: 0, fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{pretty}</pre>;
+  return <pre className="ga98-selectable" style={{ padding: 12, margin: 0, fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{pretty}</pre>;
 }
 
 function SanitizedHtml({ html }: { html: string }): JSX.Element {
@@ -403,7 +432,7 @@ function SanitizedHtml({ html }: { html: string }): JSX.Element {
     const handler = wireExternalLinks(el);
     return () => el.removeEventListener('click', handler);
   }, [safe]);
-  return <div ref={ref} style={{ padding: 12, fontSize: 13, lineHeight: 1.5 }} dangerouslySetInnerHTML={{ __html: safe }} />;
+  return <div ref={ref} className="ga98-selectable" style={{ padding: 12, fontSize: 13, lineHeight: 1.5 }} dangerouslySetInnerHTML={{ __html: safe }} />;
 }
 
 function HtmlBody({ bytes, error }: BytesProps): JSX.Element {
@@ -434,7 +463,7 @@ function TextBody({ bytes, error }: BytesProps): JSX.Element {
   if (error) return <Centered>Could not load: {error}</Centered>;
   if (!bytes) return <Centered>Loading…</Centered>;
   if (looksBinary(bytes)) return <Centered>This file is not a previewable text/document type. Use Reveal to open it externally.</Centered>;
-  return <pre style={{ padding: 12, margin: 0, fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{bytesToText(bytes)}</pre>;
+  return <pre className="ga98-selectable" style={{ padding: 12, margin: 0, fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{bytesToText(bytes)}</pre>;
 }
 
 function EmlBody({ caseId, fileName }: { caseId: string; fileName: string }): JSX.Element {
@@ -464,7 +493,7 @@ function EmlBody({ caseId, fileName }: { caseId: string; fileName: string }): JS
           </div>
         )}
       </div>
-      {eml.html ? <SanitizedHtml html={eml.html} /> : <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'inherit' }}>{eml.text}</pre>}
+      {eml.html ? <SanitizedHtml html={eml.html} /> : <pre className="ga98-selectable" style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'inherit' }}>{eml.text}</pre>}
     </div>
   );
 }

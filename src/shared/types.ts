@@ -297,6 +297,8 @@ export interface WhiteboardNode {
   fileName?: string;
   /** Optional node accent colour (CSS hex). */
   color?: string;
+  /** Optional user-given label shown in the node header; falls back to the type. */
+  name?: string;
 }
 
 export interface WhiteboardEdge {
