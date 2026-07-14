@@ -242,6 +242,7 @@ export function ensureWhiteboard(raw: unknown): Whiteboard {
     const text = wbStr(n['text'], 20000); if (text !== undefined) node.text = text;
     const url = wbStr(n['url'], 2048); if (url !== undefined) node.url = url;
     const color = wbStr(n['color'], 16); if (color !== undefined) node.color = color;
+    const name = wbStr(n['name'], 120); if (name !== undefined) node.name = name;
     if (n['fileName'] !== undefined) {
       try { node.fileName = ensureFileName(n['fileName'], 'fileName'); } catch { continue; }
     }
