@@ -86,12 +86,16 @@ export function ReportsModule(): JSX.Element {
 
   async function uploadBanner(file: File): Promise<void> {
     if (!report) return;
-    const bytes = Array.from(new Uint8Array(await file.arrayBuffer()));
-    const mime = file.type === 'image/jpeg' ? 'image/jpeg' : 'image/png';
-    const ref = await window.api.reports.putAsset(bytes, mime);
-    const a = await window.api.reports.getAsset(ref);
-    if (a) setAssets((prev) => ({ ...prev, [ref]: a.dataUrl }));
-    setReport((prev) => (prev ? { ...prev, bannerRef: ref } : prev));
+    try {
+      const bytes = Array.from(new Uint8Array(await file.arrayBuffer()));
+      const mime = file.type === 'image/jpeg' ? 'image/jpeg' : 'image/png';
+      const ref = await window.api.reports.putAsset(bytes, mime);
+      const a = await window.api.reports.getAsset(ref);
+      if (a) setAssets((prev) => ({ ...prev, [ref]: a.dataUrl }));
+      setReport((prev) => (prev ? { ...prev, bannerRef: ref } : prev));
+    } catch {
+      toast.error('Could not set banner — image must be a PNG/JPEG under 2 MB.');
+    }
   }
 
   function removeBanner(): void {
@@ -111,9 +115,13 @@ export function ReportsModule(): JSX.Element {
 
   async function addPhoto(file: File): Promise<void> {
     if (!report) return;
-    const bytes = Array.from(new Uint8Array(await file.arrayBuffer()));
-    const mime = file.type === 'image/jpeg' ? 'image/jpeg' : 'image/png';
-    await addPhotoBytes(bytes, mime);
+    try {
+      const bytes = Array.from(new Uint8Array(await file.arrayBuffer()));
+      const mime = file.type === 'image/jpeg' ? 'image/jpeg' : 'image/png';
+      await addPhotoBytes(bytes, mime);
+    } catch {
+      toast.error('Could not add photo — image must be a PNG/JPEG under 2 MB.');
+    }
   }
 
   // Import selected case photos: read each attachment's bytes from ITS case (loadAttachmentBytes is

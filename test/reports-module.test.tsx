@@ -15,6 +15,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { ReportsModule } from '../src/renderer/modules/reports/ReportsModule';
 import { ContactBook } from '../src/renderer/modules/reports/ContactBook';
+import { toast } from '../src/renderer/state/toasts';
 
 let container: HTMLDivElement;
 let root: Root;
@@ -73,6 +74,12 @@ function buttonByText(text: string): HTMLButtonElement {
   return btn as HTMLButtonElement;
 }
 
+/** Simulate a file pick on a <input type=file> the way a real selection would (set .files + change). */
+function pickFile(input: HTMLInputElement, file: File): void {
+  Object.defineProperty(input, 'files', { value: [file], configurable: true });
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
 describe('ReportsModule', () => {
   it('lists saved reports and opens the editor header (banner / From / To)', async () => {
     await act(async () => { root.render(<ReportsModule />); });
@@ -92,6 +99,44 @@ describe('ReportsModule', () => {
     await act(async () => { root.render(<ReportsModule />); });
     await act(async () => { buttonByText('New report').click(); });
     await vi.waitFor(() => expect((window as any).api.reports.save).toHaveBeenCalled());
+  });
+
+  it('toasts an error when an over-cap photo upload rejects (putAsset >2 MB)', async () => {
+    // Main rejects the oversized asset (ensureAssetInput cap); the renderer must surface it, not
+    // swallow the rejection as an unhandled void promise.
+    stubApi({ putAsset: vi.fn(async () => { throw new Error('asset too large (max 2MB)'); }) });
+    const errSpy = vi.spyOn(toast, 'error');
+
+    await act(async () => { root.render(<ReportsModule />); });
+    await act(async () => { buttonByText('Case 42').click(); });
+
+    const input = await vi.waitFor(() => {
+      const el = container.querySelector('input[aria-label="Add photo"]') as HTMLInputElement | null;
+      if (!el) throw new Error('add-photo input not mounted');
+      return el;
+    });
+    await act(async () => { pickFile(input, new File([new Uint8Array(10)], 'big.jpg', { type: 'image/jpeg' })); });
+
+    await vi.waitFor(() => expect(errSpy).toHaveBeenCalled());
+    expect((window as any).api.reports.putAsset).toHaveBeenCalled();
+  });
+
+  it('toasts an error when an over-cap banner upload rejects (putAsset >2 MB)', async () => {
+    stubApi({ putAsset: vi.fn(async () => { throw new Error('asset too large (max 2MB)'); }) });
+    const errSpy = vi.spyOn(toast, 'error');
+
+    await act(async () => { root.render(<ReportsModule />); });
+    await act(async () => { buttonByText('Case 42').click(); });
+
+    const input = await vi.waitFor(() => {
+      const el = container.querySelector('input[aria-label="Upload banner"]') as HTMLInputElement | null;
+      if (!el) throw new Error('banner input not mounted');
+      return el;
+    });
+    await act(async () => { pickFile(input, new File([new Uint8Array(10)], 'logo.png', { type: 'image/png' })); });
+
+    await vi.waitFor(() => expect(errSpy).toHaveBeenCalled());
+    expect((window as any).api.reports.putAsset).toHaveBeenCalled();
   });
 });
 
