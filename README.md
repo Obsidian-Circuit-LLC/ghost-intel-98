@@ -38,13 +38,15 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`GhostIntel98-Setup-3.45.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
+> **Install:** download [`GhostIntel98-Setup-3.46.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
 
 > **📘 User guides** — plain-language, step-by-step (download or read in-browser):
 > - [**SOCMINT: X, Telegram & WhatsApp**](docs/guides/SOCMINT-Tutorial.pdf) — set up and run the social-media collectors, per platform, with the Tor / clearnet and opsec caveats. ([markdown](docs/guides/socmint-tutorial.md))
 > - [**How Searchlight Learns**](docs/guides/Searchlight-Learning-Guide.pdf) — how the username-sweep detector gets smarter from your own labels, and when to turn ML on. ([markdown](docs/guides/searchlight-learning.md))
 
 ## Status
+
+**v3.46.0** — **Whiteboard export + import.** A GhostExodus request: get an investigation board out as a document, and move boards around. **Export → PDF / DOCX** produces a **visual snapshot** of the board (nodes at their positions, colors, photos, connecting lines) *plus* a **structured appendix** listing every node and connection — the PDF renders the layout, the DOCX embeds the same board image. **Board file (`.gboard`)** is a portable, self-contained export/import: it bundles the board graph *and* its referenced photos, so you can move a board between cases or machines, share it, or back it up — round-trippable, re-writing photos through the vault on import. All node text is escaped into the exports (no injection), attachment reads are capped, and export goes only through the OS save dialog. **3,404 automated tests** green (1 skipped); typecheck clean; no new egress; no new dependency; encrypt-at-rest unchanged. *Everything from v3.45.0 carries forward.*
 
 **v3.45.0** — **Whiteboard upgrades: selectable file text, resizable nodes, colors + names.** A GhostExodus feature batch on the per-case Whiteboard. **(1) File views are now copyable** — opening a dropped file's viewer (text/CSV/JSON/HTML/**DOCX**/EML) lets you highlight and copy text, and **PDFs get a real selectable text layer** over the page so PDF text copies like a normal document (the app is globally selection-locked for its Win98 feel; the viewer bodies now opt back in). **(2) Nodes resize** — a bottom-right drag handle grows any node to fit clipped content (scale-aware, autosaved). **(3) Colors + names** — the header swatch opens a color picker (7 presets **plus a custom hex input**), and you can **double-click a node's header to give it a name** (falls back to the type when unnamed). Built subagent-driven across 5 TDD tasks with a parallel adversarial whole-branch review that caught + fixed a PDF text-layer sizing bug and two color-popover interaction bugs before ship. **3,391 automated tests** green (1 skipped); typecheck clean; no new egress; no new dependency; encrypt-at-rest unchanged. *Everything from v3.44.0 carries forward.*
 
@@ -521,7 +523,7 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases) and run it.
 
-Direct link to the current release: [`GhostIntel98-Setup-3.45.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.45.0/GhostIntel98-Setup-3.45.0.exe)
+Direct link to the current release: [`GhostIntel98-Setup-3.46.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.46.0/GhostIntel98-Setup-3.46.0.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is **formally verified internally** — symbolic (ProVerif) +
 computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not**
 FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.6.8/GhostIntel98-Setup-3.6.8.exe).
@@ -529,7 +531,7 @@ FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Se
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\GhostIntel98-Setup-3.45.0.exe -Algorithm SHA256
+Get-FileHash .\GhostIntel98-Setup-3.46.0.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
