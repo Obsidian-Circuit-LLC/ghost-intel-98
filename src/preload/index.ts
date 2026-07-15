@@ -412,7 +412,13 @@ const api = {
   },
   whiteboard: {
     read: (caseId: string) => ipcRenderer.invoke(channels.whiteboard.read, caseId),
-    write: (caseId: string, board: unknown) => ipcRenderer.invoke(channels.whiteboard.write, caseId, board)
+    write: (caseId: string, board: unknown) => ipcRenderer.invoke(channels.whiteboard.write, caseId, board),
+    exportPdf: (caseId: string, payload: { png: string; nodes: unknown[]; edges: unknown[] }) =>
+      ipcRenderer.invoke(channels.whiteboard.exportPdf, caseId, payload),
+    exportDocx: (caseId: string, payload: { png: string; nodes: unknown[]; edges: unknown[] }) =>
+      ipcRenderer.invoke(channels.whiteboard.exportDocx, caseId, payload),
+    exportFile: (caseId: string) => ipcRenderer.invoke(channels.whiteboard.exportFile, caseId),
+    importFile: (caseId: string) => ipcRenderer.invoke(channels.whiteboard.importFile, caseId)
   },
   auth: {
     status: () => ipcRenderer.invoke(channels.auth.status),

@@ -261,6 +261,27 @@ export function ensureWhiteboard(raw: unknown): Whiteboard {
   return { nodes, edges };
 }
 
+const MAX_BOARD_ASSETS = 2000;
+const MAX_ASSET_B64 = 34 * 1024 * 1024; // ~25 MB decoded
+
+/** Validate + bound a portable `.gboard` file: reuses `ensureWhiteboard` for nodes/edges,
+ *  bounds asset count + per-asset size, and drops any asset not referenced by a node fileName. */
+export function ensureBoardFile(raw: unknown): import('@shared/board-file').BoardFile {
+  const o = (raw ?? {}) as { nodes?: unknown; edges?: unknown; assets?: unknown };
+  const wb = ensureWhiteboard({ nodes: o.nodes, edges: o.edges }); // reuse node/edge validation
+  const refs = new Set(wb.nodes.map((n) => n.fileName).filter((f): f is string => !!f));
+  const assetsIn = (o.assets && typeof o.assets === 'object') ? o.assets as Record<string, unknown> : {};
+  const assets: Record<string, string> = {};
+  let n = 0;
+  for (const [name, v] of Object.entries(assetsIn)) {
+    if (n >= MAX_BOARD_ASSETS) break;
+    if (typeof v !== 'string' || v.length === 0 || v.length > MAX_ASSET_B64) continue;
+    if (!refs.has(name)) continue; // only referenced assets
+    assets[name] = v; n++;
+  }
+  return { version: 1, nodes: wb.nodes, edges: wb.edges, assets };
+}
+
 // ---------- FTP (remote paths/names — bounded, control-char-free) ----------
 
 /** A single remote file name for download (no path separators — navigation is via cd). */

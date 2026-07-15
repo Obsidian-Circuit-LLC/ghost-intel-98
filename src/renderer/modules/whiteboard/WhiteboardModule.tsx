@@ -11,6 +11,7 @@ import { promptDialog } from '../../state/dialogs';
 import { toast } from '../../state/toasts';
 import { loadAttachmentBytes } from '../../lib/attachmentBytes';
 import { NODE_COLORS, resolveNodeColor, clampNodeSize, headerLabel } from './node-visual';
+import { boardToPng } from './board-raster';
 
 interface Props { caseId: string }
 
@@ -27,6 +28,8 @@ export function WhiteboardModule({ caseId }: Props): JSX.Element {
   const [connectMode, setConnectMode] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [colorMenu, setColorMenu] = useState<string | null>(null);
+  const [exportMenu, setExportMenu] = useState(false);
+  const [busy, setBusy] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{ kind: 'pan' | 'node' | 'resize'; id?: string; startX: number; startY: number; orig: { x: number; y: number }; origSize?: { w: number; h: number } } | null>(null);
 
@@ -97,6 +100,16 @@ export function WhiteboardModule({ caseId }: Props): JSX.Element {
     window.addEventListener('mousedown', onDocDown);
     return () => window.removeEventListener('mousedown', onDocDown);
   }, [colorMenu]);
+  // Close the Export menu on any outside mousedown.
+  useEffect(() => {
+    if (!exportMenu) return;
+    function onDocDown(e: MouseEvent): void {
+      const t = e.target as HTMLElement | null;
+      if (t && !t.closest('.ga98-wb-export')) setExportMenu(false);
+    }
+    window.addEventListener('mousedown', onDocDown);
+    return () => window.removeEventListener('mousedown', onDocDown);
+  }, [exportMenu]);
   useEffect(() => {
     function onMove(e: MouseEvent): void {
       const d = drag.current;
@@ -158,6 +171,40 @@ export function WhiteboardModule({ caseId }: Props): JSX.Element {
     } catch (err) { toast.error(`Import failed: ${(err as Error).message}`); }
   }
 
+  // ----- export / import -----
+  async function exportSnapshot(kind: 'pdf' | 'docx'): Promise<void> {
+    setExportMenu(false);
+    if (busy) return;
+    setBusy(true);
+    try {
+      const png = await boardToPng(nodes, edges, caseId);
+      const saved = kind === 'pdf'
+        ? await window.api.whiteboard.exportPdf(caseId, { png, nodes, edges })
+        : await window.api.whiteboard.exportDocx(caseId, { png, nodes, edges });
+      if (saved) toast.success(`Exported ${saved}`);
+    } catch (err) { toast.error(`Export failed: ${(err as Error).message}`); }
+    finally { setBusy(false); }
+  }
+  async function exportBoardFile(): Promise<void> {
+    setExportMenu(false);
+    if (busy) return;
+    setBusy(true);
+    try {
+      const saved = await window.api.whiteboard.exportFile(caseId);
+      if (saved) toast.success(`Saved ${saved}`);
+    } catch (err) { toast.error(`Export failed: ${(err as Error).message}`); }
+    finally { setBusy(false); }
+  }
+  async function importBoardFile(): Promise<void> {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const b = await window.api.whiteboard.importFile(caseId);
+      if (b) { setNodes(b.nodes); setEdges(b.edges); toast.success('Board imported.'); }
+    } catch (err) { toast.error(`Import failed: ${(err as Error).message}`); }
+    finally { setBusy(false); }
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div className="ga98-toolbar">
@@ -172,6 +219,18 @@ export function WhiteboardModule({ caseId }: Props): JSX.Element {
           {connectMode ? (connectFrom ? 'Pick target…' : 'Pick source…') : 'Connect'}
         </button>
         <button onClick={() => setView({ tx: 40, ty: 40, scale: 1 })}>Reset view</button>
+        <span className="ga98-wb-export" style={{ position: 'relative', display: 'inline-flex' }}>
+          <button disabled={busy} onClick={() => setExportMenu((m) => !m)} title="Export this board">Export ▾</button>
+          {exportMenu && (
+            <div className="ga98-wb-exportmenu" onMouseDown={(e) => e.stopPropagation()}
+              style={{ position: 'absolute', top: '100%', left: 0, zIndex: 20, display: 'flex', flexDirection: 'column', background: '#c0c0c0', border: '2px outset #fff', padding: 2, minWidth: 140 }}>
+              <button onClick={() => void exportSnapshot('pdf')}>PDF (snapshot)</button>
+              <button onClick={() => void exportSnapshot('docx')}>Word (.docx)</button>
+              <button onClick={() => void exportBoardFile()}>Board file (.gboard)</button>
+            </div>
+          )}
+        </span>
+        <button disabled={busy} onClick={() => void importBoardFile()} title="Import a .gboard file into this case">Import board</button>
         <span style={{ flex: 1 }} />
         <span style={{ fontSize: 11, opacity: 0.7 }}>{nodes.length} nodes · {Math.round(view.scale * 100)}% · drag bg to pan, wheel to zoom, drop files to add</span>
       </div>

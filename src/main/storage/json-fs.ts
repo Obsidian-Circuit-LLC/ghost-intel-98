@@ -562,6 +562,28 @@ export const fileStore: FileStore = {
     });
   },
 
+  async importBytes(id, originalName, bytes) {
+    return withLock(caseLockKey(id), async () => {
+      await ensureCaseLayout(id);
+      const safeName = await uniqueAttachmentName(id, originalName);
+      const dest = join(caseAttachmentsDir(id), safeName);
+      // Write through the shim (encrypts iff the vault is unlocked) — same at-rest path as
+      // importDropped; hash binds the PLAINTEXT so the digest is stable across encrypt/disable.
+      await secureWriteFile(dest, bytes);
+      const meta: AttachmentMeta = {
+        fileName: safeName,
+        originalName,
+        importedAt: nowIso(),
+        size: bytes.length,
+        sourcePath: null,
+        sha256: createHash('sha256').update(bytes).digest('hex')
+      };
+      await writeJson(`${dest}.meta.json`, meta);
+      await touchUnlocked(id);
+      return meta;
+    });
+  },
+
   async listAttachments(id) {
     return listAttachmentsImpl(id);
   },

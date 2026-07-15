@@ -27,7 +27,9 @@ import type {
   TaskItem,
   TimelineEvent,
   WebLink,
-  Whiteboard
+  Whiteboard,
+  WhiteboardNode,
+  WhiteboardEdge
 } from '../shared/types';
 import type { EntityCreateInput, EntityLinkOpts, BioAddInput, AuthStatus, LocalAiStatus, LocalAiProgress, MemoryStatus, MemoryProgress, MemoryItem, RecallPreview, LibraryDoc, MemoryGraphShape, BondShape, XCollectResultShape, XSessionMeta, XSessionTestResult, LearningModelMeta, GhostScrapeConfig, GhostScrapeResult, ScrapingCaseStoreId, ScrapingImportResult } from '../shared/ipc-contracts';
 import type { InvestigationScene, SceneDelta } from '../shared/investigation-graph';
@@ -494,6 +496,14 @@ export interface GhostApi {
   whiteboard: {
     read(caseId: string): Promise<Whiteboard>;
     write(caseId: string, board: Whiteboard): Promise<void>;
+    /** Export the board as a PDF (snapshot + appendix). Returns the saved file name, or null on cancel. */
+    exportPdf(caseId: string, payload: { png: string; nodes: WhiteboardNode[]; edges: WhiteboardEdge[] }): Promise<string | null>;
+    /** Export the board as an editable DOCX (snapshot figure + appendix). Null on cancel. */
+    exportDocx(caseId: string, payload: { png: string; nodes: WhiteboardNode[]; edges: WhiteboardEdge[] }): Promise<string | null>;
+    /** Export the whole board (graph + embedded assets) as a portable .gboard file. Null on cancel. */
+    exportFile(caseId: string): Promise<string | null>;
+    /** Import a .gboard into this case (assets re-written through the vault). Returns the new board, or null on cancel. */
+    importFile(caseId: string): Promise<Whiteboard | null>;
   };
   auth: {
     status(): Promise<AuthStatus>;
