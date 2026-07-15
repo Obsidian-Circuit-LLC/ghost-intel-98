@@ -4,19 +4,36 @@
  *  `html` the caller receives (and ultimately persists) is therefore ALWAYS the sanitized output,
  *  never the raw contentEditable DOM. This is the renderer half of the security spine: `main` has
  *  no DOM/DOMPurify, so nothing downstream (report-html.ts, docx.ts) may treat unsanitized html as
- *  safe — this component is where the guarantee is established. */
-import { useRef } from 'react';
-import type { ReportBlock } from '@shared/reports-types';
-import { sanitizeReportHtml, FONT_SIZES } from '../rich-text';
+ *  safe — this component is where the guarantee is established.
+ *
+ *  Task 7 adds the descriptor right-click menu: `onContextMenu` opens a small popover listing every
+ *  descriptor (name + a short body preview) with two insert actions. Insertion splices the
+ *  `descriptorInsertHtml` output (already HTML-escaped — a descriptor is plain-text data, never
+ *  trusted markup) into the caret position via the Range/Selection API, then runs the usual
+ *  `commit()` — so an inserted descriptor is re-sanitized exactly like any other edit. The plan text
+ *  suggested `document.execCommand('insertHTML', ...)`; this repo's Electron/Chromium target does
+ *  support it, but PRE-FLIGHT trust-the-repo applies here too: a Range-based insert (the same API
+ *  `applySize` below already relies on) is used instead so the insert path is deterministically
+ *  testable in jsdom, which has no `execCommand` implementation at all. */
+import { useEffect, useRef, useState } from 'react';
+import type { ReportBlock, Descriptor } from '@shared/reports-types';
+import { sanitizeReportHtml, descriptorInsertHtml, FONT_SIZES } from '../rich-text';
 
 export interface TextBlockProps {
   block: Extract<ReportBlock, { kind: 'text' }>;
   onChange: (html: string) => void;
+  /** The report's descriptor library, for the right-click insert menu. Optional so existing
+   *  callers/tests that don't care about descriptors keep working unchanged. */
+  descriptors?: Descriptor[];
 }
 
 export function TextBlock(props: TextBlockProps): JSX.Element {
-  const { block, onChange } = props;
+  const { block, onChange, descriptors = [] } = props;
   const ref = useRef<HTMLDivElement | null>(null);
+  // The selection at the moment the context menu opened, cloned so it survives the ensuing blur
+  // when the operator clicks a menu button (blur can collapse/clear the live selection).
+  const savedRange = useRef<Range | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
 
   /** Sanitize the live DOM and hand the result up. Called on every input + on blur, so the stored
    *  html is never a moment behind an unsanitized edit. */
@@ -62,6 +79,71 @@ export function TextBlock(props: TextBlockProps): JSX.Element {
     commit();
   }
 
+  /** Right-click: capture the caret/selection (so a later blur can't lose it) and open the
+   *  descriptor popover at the pointer position. */
+  function openDescriptorMenu(e: React.MouseEvent): void {
+    e.preventDefault();
+    const el = ref.current;
+    if (!el) return;
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0) {
+      const r = sel.getRangeAt(0);
+      savedRange.current = el.contains(r.commonAncestorContainer) ? r.cloneRange() : null;
+    } else {
+      savedRange.current = null;
+    }
+    setMenu({ x: e.clientX, y: e.clientY });
+  }
+
+  /** Splice a descriptor's insert HTML into the block at the saved caret (falling back to the end
+   *  of the block if there wasn't one), then close the menu and re-sanitize via `commit()`. Uses
+   *  the Range/Selection API (not `execCommand`) — see the file header for why. */
+  function insertDescriptor(d: Descriptor, mode: 'text' | 'title'): void {
+    const el = ref.current;
+    if (!el) return;
+    el.focus();
+
+    const tpl = document.createElement('template');
+    tpl.innerHTML = descriptorInsertHtml(d, mode);
+    const frag = tpl.content.cloneNode(true) as DocumentFragment;
+    const lastNode = frag.lastChild;
+
+    let range = savedRange.current;
+    if (!range || !el.contains(range.commonAncestorContainer)) {
+      range = document.createRange();
+      range.selectNodeContents(el);
+      range.collapse(false);
+    }
+    range.deleteContents();
+    range.insertNode(frag);
+
+    if (lastNode) {
+      const after = document.createRange();
+      after.setStartAfter(lastNode);
+      after.collapse(true);
+      const sel = window.getSelection();
+      sel?.removeAllRanges();
+      sel?.addRange(after);
+    }
+
+    savedRange.current = null;
+    setMenu(null);
+    commit();
+  }
+
+  // Close the descriptor popover on any outside mousedown — mirrors the whiteboard colour-popover
+  // fix (a position:fixed backdrop can't be relied on the same way here either: the report body can
+  // scroll/transform independently of the viewport).
+  useEffect(() => {
+    if (!menu) return;
+    function onDocDown(e: MouseEvent): void {
+      const t = e.target as HTMLElement | null;
+      if (t && !t.closest('.ga98-report-descmenu')) setMenu(null);
+    }
+    window.addEventListener('mousedown', onDocDown);
+    return () => window.removeEventListener('mousedown', onDocDown);
+  }, [menu]);
+
   return (
     <div className="ga98-report-textblock">
       <div className="ga98-report-textblock-toolbar" role="toolbar" aria-label="Text formatting">
@@ -98,7 +180,39 @@ export function TextBlock(props: TextBlockProps): JSX.Element {
         dangerouslySetInnerHTML={{ __html: block.html }}
         onInput={commit}
         onBlur={commit}
+        onContextMenu={openDescriptorMenu}
       />
+      {menu ? (
+        <div
+          className="ga98-report-descmenu"
+          role="menu"
+          aria-label="Insert descriptor"
+          style={{ position: 'fixed', left: menu.x, top: menu.y }}
+        >
+          {descriptors.length === 0 ? (
+            <div className="ga98-report-descmenu-empty">No descriptors yet.</div>
+          ) : descriptors.map((d) => (
+            <div key={d.id} className="ga98-report-descmenu-item" role="none">
+              <div className="ga98-report-descmenu-name">{d.name}</div>
+              <div className="ga98-report-descmenu-preview">{d.body.slice(0, 120)}</div>
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => insertDescriptor(d, 'text')}
+              >
+                Insert text
+              </button>
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => insertDescriptor(d, 'title')}
+              >
+                Insert with title
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

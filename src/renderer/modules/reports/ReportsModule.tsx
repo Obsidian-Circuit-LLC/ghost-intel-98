@@ -4,9 +4,10 @@
  *  `assets`) for the live preview. Export (PDF/DOCX) is main-side by id; the renderer never builds
  *  the export buffer. Contacts are managed through the <ContactBook> overlay. */
 import { useCallback, useEffect, useState } from 'react';
-import type { Report, Contact } from '@shared/reports-types';
+import type { Report, Contact, Descriptor } from '@shared/reports-types';
 import { ReportEditor } from './ReportEditor';
 import { ContactBook } from './ContactBook';
+import { DescriptorLibrary } from './DescriptorLibrary';
 import { toast } from '../../state/toasts';
 
 function uid(): string { return crypto.randomUUID(); }
@@ -21,8 +22,10 @@ export function ReportsModule(): JSX.Element {
   const [list, setList] = useState<Report[]>([]);
   const [report, setReport] = useState<Report | null>(null);
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [descriptors, setDescriptors] = useState<Descriptor[]>([]);
   const [assets, setAssets] = useState<Record<string, string>>({});
   const [showContacts, setShowContacts] = useState(false);
+  const [showDescriptors, setShowDescriptors] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const refresh = useCallback(async (): Promise<void> => {
@@ -31,8 +34,13 @@ export function ReportsModule(): JSX.Element {
   const refreshContacts = useCallback(async (): Promise<void> => {
     setContacts(await window.api.reports.contacts.list());
   }, []);
+  const refreshDescriptors = useCallback(async (): Promise<void> => {
+    setDescriptors(await window.api.reports.descriptors.list());
+  }, []);
 
-  useEffect(() => { void refresh(); void refreshContacts(); }, [refresh, refreshContacts]);
+  useEffect(() => {
+    void refresh(); void refreshContacts(); void refreshDescriptors();
+  }, [refresh, refreshContacts, refreshDescriptors]);
 
   // Resolve every asset ref a report references (banner + image blocks) into the local data-URL
   // cache so the preview embeds them exactly as the exported PDF/DOCX will.
@@ -136,11 +144,13 @@ export function ReportsModule(): JSX.Element {
                 report={report}
                 assets={assets}
                 contacts={contacts}
+                descriptors={descriptors}
                 onChange={setReport}
                 onAutosave={(r) => { void autosave(r); }}
                 onUploadBanner={(f) => { void uploadBanner(f); }}
                 onRemoveBanner={removeBanner}
                 onManageContacts={() => setShowContacts(true)}
+                onManageDescriptors={() => setShowDescriptors(true)}
               />
             </>
           ) : (
@@ -153,6 +163,12 @@ export function ReportsModule(): JSX.Element {
         <ContactBook
           onUse={useContact}
           onClose={() => { setShowContacts(false); void refreshContacts(); }}
+        />
+      ) : null}
+
+      {showDescriptors ? (
+        <DescriptorLibrary
+          onClose={() => { setShowDescriptors(false); void refreshDescriptors(); }}
         />
       ) : null}
     </div>

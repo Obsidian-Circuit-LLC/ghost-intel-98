@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { TextBlock } from '../src/renderer/modules/reports/blocks/TextBlock';
-import type { ReportBlock } from '../src/shared/reports-types';
+import type { ReportBlock, Descriptor } from '../src/shared/reports-types';
 
 type TextBlockData = Extract<ReportBlock, { kind: 'text' }>;
 
@@ -80,5 +80,96 @@ describe('TextBlock', () => {
     const select = container.querySelector('select[aria-label="Font size"]');
     expect(select).toBeTruthy();
     expect(select?.querySelectorAll('option').length).toBeGreaterThanOrEqual(4);
+  });
+});
+
+/**
+ * Task 7: descriptor library right-click insert. TextBlock's contentEditable body opens a small
+ * context menu on right-click listing every descriptor by name with a body preview; "Insert text" /
+ * "Insert with title" call `descriptorInsertHtml` and splice the (already-escaped) result into the
+ * block at the caret, then re-sanitize on the resulting commit — descriptors are plain-text data,
+ * never trusted markup, same spine as every other edit.
+ */
+describe('TextBlock descriptor context menu', () => {
+  const descriptors: Descriptor[] = [
+    { id: 'd1', name: 'OSINT.Industries', body: 'A tool that finds public links across many platforms and more than that even.' },
+  ];
+
+  it('renders a descriptor name + body preview + both insert actions on right-click', async () => {
+    const block: TextBlockData = { id: 'b4', kind: 'text', html: '' };
+    await act(async () => {
+      root.render(<TextBlock block={block} onChange={vi.fn()} descriptors={descriptors} />);
+    });
+
+    const body = container.querySelector('.ga98-report-textblock-body') as HTMLDivElement;
+    await act(async () => {
+      body.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 }));
+    });
+
+    expect(container.textContent).toContain('OSINT.Industries');
+    expect(container.textContent).toContain('A tool that finds public links');
+    const buttons = Array.from(container.querySelectorAll('button')).map((b) => b.textContent);
+    expect(buttons).toContain('Insert text');
+    expect(buttons).toContain('Insert with title');
+  });
+
+  it('clicking "Insert text" splices the descriptor body into the block and sanitizes on commit', async () => {
+    const block: TextBlockData = { id: 'b5', kind: 'text', html: '' };
+    const onChange = vi.fn();
+    await act(async () => {
+      root.render(<TextBlock block={block} onChange={onChange} descriptors={descriptors} />);
+    });
+
+    const body = container.querySelector('.ga98-report-textblock-body') as HTMLDivElement;
+    await act(async () => {
+      body.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 5, clientY: 5 }));
+    });
+
+    const insertBtn = Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Insert text') as HTMLButtonElement;
+    expect(insertBtn).toBeTruthy();
+    await act(async () => { insertBtn.click(); });
+
+    expect(onChange).toHaveBeenCalled();
+    const saved = onChange.mock.calls[onChange.mock.calls.length - 1][0] as string;
+    expect(saved).toContain('A tool that finds public links');
+  });
+
+  it('clicking "Insert with title" prefixes a bold escaped name', async () => {
+    const block: TextBlockData = { id: 'b6', kind: 'text', html: '' };
+    const onChange = vi.fn();
+    await act(async () => {
+      root.render(<TextBlock block={block} onChange={onChange} descriptors={descriptors} />);
+    });
+
+    const body = container.querySelector('.ga98-report-textblock-body') as HTMLDivElement;
+    await act(async () => {
+      body.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 5, clientY: 5 }));
+    });
+
+    const insertBtn = Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Insert with title') as HTMLButtonElement;
+    expect(insertBtn).toBeTruthy();
+    await act(async () => { insertBtn.click(); });
+
+    const saved = onChange.mock.calls[onChange.mock.calls.length - 1][0] as string;
+    expect(saved).toContain('<b>OSINT.Industries</b>');
+    expect(saved).toContain('A tool that finds public links');
+  });
+
+  it('closes the menu on an outside mousedown', async () => {
+    const block: TextBlockData = { id: 'b7', kind: 'text', html: '' };
+    await act(async () => {
+      root.render(<TextBlock block={block} onChange={vi.fn()} descriptors={descriptors} />);
+    });
+
+    const body = container.querySelector('.ga98-report-textblock-body') as HTMLDivElement;
+    await act(async () => {
+      body.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 5, clientY: 5 }));
+    });
+    expect(container.querySelector('.ga98-report-descmenu')).toBeTruthy();
+
+    await act(async () => {
+      document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    });
+    expect(container.querySelector('.ga98-report-descmenu')).toBeNull();
   });
 });

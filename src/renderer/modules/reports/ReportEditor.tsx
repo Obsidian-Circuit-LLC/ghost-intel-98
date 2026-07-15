@@ -8,7 +8,7 @@
  *  window.api.reports.save — the same debounce cadence as the whiteboard. Photo blocks arrive in
  *  Task 8. */
 import { useEffect, useRef } from 'react';
-import type { Report, Contact, ReportBlock } from '@shared/reports-types';
+import type { Report, Contact, Descriptor, ReportBlock } from '@shared/reports-types';
 import { TextBlock } from './blocks/TextBlock';
 
 export interface ReportEditorProps {
@@ -16,18 +16,21 @@ export interface ReportEditorProps {
   /** ref → data URL cache for the banner preview (resolved from the encrypted store). */
   assets: Record<string, string>;
   contacts: Contact[];
+  /** The report's descriptor library — handed down to every TextBlock for its right-click insert menu. */
+  descriptors: Descriptor[];
   onChange: (r: Report) => void;
   /** Debounced-persist hook — the module writes to the encrypted store + refreshes its list. */
   onAutosave: (r: Report) => void;
   onUploadBanner: (file: File) => void;
   onRemoveBanner: () => void;
   onManageContacts: () => void;
+  onManageDescriptors: () => void;
 }
 
 const AUTOSAVE_MS = 600;
 
 export function ReportEditor(props: ReportEditorProps): JSX.Element {
-  const { report, assets, contacts, onChange, onAutosave, onUploadBanner, onRemoveBanner, onManageContacts } = props;
+  const { report, assets, contacts, descriptors, onChange, onAutosave, onUploadBanner, onRemoveBanner, onManageContacts, onManageDescriptors } = props;
 
   // Debounced autosave: after the report stops changing for AUTOSAVE_MS, persist it. Skip the first
   // run (the report was just loaded, not edited) so opening a report doesn't immediately rewrite it.
@@ -114,10 +117,18 @@ export function ReportEditor(props: ReportEditorProps): JSX.Element {
       <div className="ga98-report-body">
         <div className="ga98-report-body-toolbar">
           <button type="button" onClick={addTextBlock}>+ Text</button>
+          <button type="button" onClick={onManageDescriptors}>Manage descriptors</button>
         </div>
         {report.blocks.map((b) => (
           b.kind === 'text'
-            ? <TextBlock key={b.id} block={b} onChange={(html) => updateTextBlock(b.id, html)} />
+            ? (
+              <TextBlock
+                key={b.id}
+                block={b}
+                onChange={(html) => updateTextBlock(b.id, html)}
+                descriptors={descriptors}
+              />
+            )
             : null /* image blocks render via Task 8's ImageBlock */
         ))}
       </div>
