@@ -85,6 +85,7 @@ import { renderInvoicePdf } from '../invoices/export';
 import { renderInvoiceDocx } from '../invoices/docx';
 import * as reportStore from '../reports/store';
 import { reportToPdf } from '../reports/report-html';
+import { renderReportDocx } from '../reports/docx';
 import { adHocAllowlist } from '../media/protocol';
 import { parseM3u, toM3u } from '../media/m3u';
 import { parseFeedList, feedToUpsert } from '../services/feed-import';
@@ -1495,6 +1496,28 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     }
     const pdf = await reportToPdf(report, assets, contact);
     return saveBufferWithDialog(getWindow(), `${report.title || 'report'}.pdf`, pdf);
+  });
+  // DOCX export — same id-in resolution as exportPdf, but an editable OOXML .docx. renderReportDocx
+  // is synchronous/pure (adm-zip in memory) and treats each text block's stored html as already
+  // sanitized; only the OS save dialog writes to disk, never the encrypted store.
+  safeHandle(channels.reports.exportDocx, async (...a) => {
+    const id = a[0] as string;
+    const report = (await reportStore.listReports()).find((r) => r.id === id);
+    if (!report) return null;
+    const contact = report.fromContactId
+      ? (await reportStore.listContacts()).find((c) => c.id === report.fromContactId) ?? null
+      : null;
+    const refs = new Set<string>();
+    if (report.bannerRef) refs.add(report.bannerRef);
+    for (const b of report.blocks) if (b.kind === 'image') refs.add(b.assetRef);
+    const assets: Record<string, string> = {};
+    for (const ref of refs) {
+      try {
+        const asset = await reportStore.getAsset(ref);
+        if (asset) assets[ref] = `data:${asset.mime};base64,${asset.bytes.toString('base64')}`;
+      } catch { /* a malformed/missing ref must not abort the whole export */ }
+    }
+    return saveBufferWithDialog(getWindow(), `${report.title || 'report'}.docx`, renderReportDocx(report, assets, contact));
   });
 
   // ---- GeoINT (vault-gated; network is app-layer gated by settings.geoint.networkEnabled) ----

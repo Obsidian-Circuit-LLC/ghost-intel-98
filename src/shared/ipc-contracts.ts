@@ -652,7 +652,8 @@ export const channels = {
   // Chain-of-Custody report generator (Task 3: PDF export only — CRUD/contacts/descriptors/asset
   // channels land with the editor UI in a later task).
   reports: {
-    exportPdf: 'reports:exportPdf'
+    exportPdf: 'reports:exportPdf',
+    exportDocx: 'reports:exportDocx'
   }
 } as const;
 
@@ -1137,6 +1138,8 @@ export interface ApiContracts {
   // renderer never re-sends the whole document) and writes only via the OS save dialog; returns
   // the saved filename, or null if the user cancels.
   [channels.reports.exportPdf]: { args: [string]; returns: string | null };
+  // Same id-in / saved-filename-out contract as exportPdf, but renders an editable OOXML .docx.
+  [channels.reports.exportDocx]: { args: [string]; returns: string | null };
 }
 
 export const BGCONN_LOCK_EXEMPT_CHANNELS = ['bgconn:status', 'bgconn:stop'] as const;

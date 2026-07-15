@@ -401,8 +401,9 @@ export interface GhostApi {
     exportDocx(args: { invoice: Invoice; assets: Record<string, string> }): Promise<string | null>;
   };
   reports: {
-    // PDF export only (Task 3) — main resolves the report/contact/assets itself from the id.
+    // Main resolves the report/contact/assets itself from the id for both exporters.
     exportPdf(id: string): Promise<string | null>;
+    exportDocx(id: string): Promise<string | null>;
   };
   geoint: {
     snapshot(): Promise<GeoSnapshot>;
