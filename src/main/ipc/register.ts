@@ -212,6 +212,10 @@ const MAX_GBOARD_BYTES = 256 * 1024 * 1024;
 // per page is NOT concatenable — decode each page to bytes, join, then re-encode once).
 async function readWholeAttachmentBase64(caseId: string, fileName: string): Promise<string | null> {
   const PAGE = 4 * 1024 * 1024;
+  // Cap the accumulated read at ~25 MB — the same decoded ceiling ensureBoardFile enforces on import.
+  // Every other attachment read clamps (REPORT_IMG_PER_CAP); without this an oversize attachment could
+  // OOM the .gboard export, and there is no point embedding an asset the import would then drop.
+  const MAX_EXPORT_ASSET_BYTES = 25 * 1024 * 1024;
   const chunks: Buffer[] = [];
   let offset = 0;
   for (;;) {
@@ -219,6 +223,7 @@ async function readWholeAttachmentBase64(caseId: string, fileName: string): Prom
     if (!res.base64) break;
     chunks.push(Buffer.from(res.base64, 'base64'));
     offset += res.length;
+    if (offset > MAX_EXPORT_ASSET_BYTES) return null; // over the cap → skip this asset
     if (!res.hasMore || res.length === 0) break;
   }
   return chunks.length ? Buffer.concat(chunks).toString('base64') : null;
