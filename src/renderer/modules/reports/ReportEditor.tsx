@@ -1,11 +1,15 @@
-/** ReportEditor — the report's fixed header plus (in later tasks) its block body. Task 5 lands the
- *  header: a banner slot (upload → encrypted putAsset, preview, Remove), a From <select> of saved
- *  contacts with a "Manage contacts" affordance, a To recipient <input>, and a title <input>.
- *  Editing is controlled (onChange lifts every keystroke to the module, which owns the Report), and
- *  a 600ms debounced autosave persists the working report through window.api.reports.save — the
- *  same debounce cadence as the whiteboard. Block editing (text/photo) arrives in Tasks 6/8. */
+/** ReportEditor — the report's fixed header plus its block body. Task 5 landed the header: a
+ *  banner slot (upload → encrypted putAsset, preview, Remove), a From <select> of saved contacts
+ *  with a "Manage contacts" affordance, a To recipient <input>, and a title <input>. Task 6 adds
+ *  the body's rich-text blocks: "+ Text" appends a block, each block renders as a <TextBlock>
+ *  whose html is already `sanitizeReportHtml`-clean by the time it reaches `patch` (TextBlock's own
+ *  security spine). Editing is controlled (onChange lifts every keystroke to the module, which owns
+ *  the Report), and a 600ms debounced autosave persists the working report through
+ *  window.api.reports.save — the same debounce cadence as the whiteboard. Photo blocks arrive in
+ *  Task 8. */
 import { useEffect, useRef } from 'react';
-import type { Report, Contact } from '@shared/reports-types';
+import type { Report, Contact, ReportBlock } from '@shared/reports-types';
+import { TextBlock } from './blocks/TextBlock';
 
 export interface ReportEditorProps {
   report: Report;
@@ -39,6 +43,15 @@ export function ReportEditor(props: ReportEditorProps): JSX.Element {
   const bannerUrl = report.bannerRef ? assets[report.bannerRef] : undefined;
 
   function patch(p: Partial<Report>): void { onChange({ ...report, ...p }); }
+
+  function addTextBlock(): void {
+    const block: ReportBlock = { id: crypto.randomUUID(), kind: 'text', html: '' };
+    patch({ blocks: [...report.blocks, block] });
+  }
+
+  function updateTextBlock(id: string, html: string): void {
+    patch({ blocks: report.blocks.map((b) => (b.id === id && b.kind === 'text' ? { ...b, html } : b)) });
+  }
 
   return (
     <div className="ga98-report-editor">
@@ -98,8 +111,16 @@ export function ReportEditor(props: ReportEditorProps): JSX.Element {
         </label>
       </div>
 
-      {/* Block body (text / photo) is wired in Tasks 6 & 8. */}
-      <div className="ga98-report-body" />
+      <div className="ga98-report-body">
+        <div className="ga98-report-body-toolbar">
+          <button type="button" onClick={addTextBlock}>+ Text</button>
+        </div>
+        {report.blocks.map((b) => (
+          b.kind === 'text'
+            ? <TextBlock key={b.id} block={b} onChange={(html) => updateTextBlock(b.id, html)} />
+            : null /* image blocks render via Task 8's ImageBlock */
+        ))}
+      </div>
     </div>
   );
 }
