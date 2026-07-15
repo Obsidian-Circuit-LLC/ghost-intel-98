@@ -40,9 +40,9 @@ const CATEGORIES: { label: string; glyph: string; items: { module: ModuleKey; la
     { module: 'dialterm', label: 'DialTerm' }, { module: 'mail', label: 'Mail' },
     { module: 'chat', label: 'Chat (beta)' }, { module: 'bookmarks', label: 'Bookmarks' } ] },
   { label: 'Organizer', glyph: '📅', items: [
-    { module: 'invoices', label: 'Invoices' }, { module: 'calendar', label: 'Calendar' },
-    { module: 'reminders', label: 'Reminders' }, { module: 'alarm', label: 'Alarm' },
-    { module: 'number-muncher', label: 'Number Muncher' } ] }
+    { module: 'invoices', label: 'Invoices' }, { module: 'report', label: 'Reports' },
+    { module: 'calendar', label: 'Calendar' }, { module: 'reminders', label: 'Reminders' },
+    { module: 'alarm', label: 'Alarm' }, { module: 'number-muncher', label: 'Number Muncher' } ] }
 ];
 
 /** Shared flyout shell for a category — extracted from the original Games submenu markup so

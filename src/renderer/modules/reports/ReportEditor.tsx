@@ -7,9 +7,10 @@
  *  the Report), and a 600ms debounced autosave persists the working report through
  *  window.api.reports.save — the same debounce cadence as the whiteboard. Photo blocks arrive in
  *  Task 8. */
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Report, Contact, Descriptor, ReportBlock } from '@shared/reports-types';
 import { TextBlock } from './blocks/TextBlock';
+import { ImageBlock } from './blocks/ImageBlock';
 
 export interface ReportEditorProps {
   report: Report;
@@ -25,12 +26,20 @@ export interface ReportEditorProps {
   onRemoveBanner: () => void;
   onManageContacts: () => void;
   onManageDescriptors: () => void;
+  /** Encrypt + append one image file (from "+ Photo" or a drag-drop) as a new photo block. The
+   *  module owns the putAsset round-trip + asset-cache population; the editor only forwards files. */
+  onAddPhoto: (file: File) => void;
+  /** Open the "Import from case" picker (module-owned overlay). */
+  onImportFromCase: () => void;
 }
+
+const IMAGE_MIME = ['image/png', 'image/jpeg'];
 
 const AUTOSAVE_MS = 600;
 
 export function ReportEditor(props: ReportEditorProps): JSX.Element {
-  const { report, assets, contacts, descriptors, onChange, onAutosave, onUploadBanner, onRemoveBanner, onManageContacts, onManageDescriptors } = props;
+  const { report, assets, contacts, descriptors, onChange, onAutosave, onUploadBanner, onRemoveBanner, onManageContacts, onManageDescriptors, onAddPhoto, onImportFromCase } = props;
+  const [dragOver, setDragOver] = useState(false);
 
   // Debounced autosave: after the report stops changing for AUTOSAVE_MS, persist it. Skip the first
   // run (the report was just loaded, not edited) so opening a report doesn't immediately rewrite it.
@@ -54,6 +63,24 @@ export function ReportEditor(props: ReportEditorProps): JSX.Element {
 
   function updateTextBlock(id: string, html: string): void {
     patch({ blocks: report.blocks.map((b) => (b.id === id && b.kind === 'text' ? { ...b, html } : b)) });
+  }
+
+  function updateImageBlock(id: string, p: Partial<Extract<ReportBlock, { kind: 'image' }>>): void {
+    patch({ blocks: report.blocks.map((b) => (b.id === id && b.kind === 'image' ? { ...b, ...p } : b)) });
+  }
+
+  function removeBlock(id: string): void {
+    patch({ blocks: report.blocks.filter((b) => b.id !== id) });
+  }
+
+  // Drag-drop images onto the body → same encrypt-and-append path as "+ Photo". Only png/jpeg (the
+  // report asset store's supported mimes) are taken; anything else is ignored rather than stored as
+  // an unrenderable blob.
+  function onBodyDrop(e: React.DragEvent): void {
+    e.preventDefault();
+    setDragOver(false);
+    const files = Array.from(e.dataTransfer?.files ?? []).filter((f) => IMAGE_MIME.includes(f.type));
+    for (const f of files) onAddPhoto(f);
   }
 
   return (
@@ -114,9 +141,24 @@ export function ReportEditor(props: ReportEditorProps): JSX.Element {
         </label>
       </div>
 
-      <div className="ga98-report-body">
+      <div
+        className={`ga98-report-body${dragOver ? ' ga98-report-body-dragover' : ''}`}
+        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={onBodyDrop}
+      >
         <div className="ga98-report-body-toolbar">
           <button type="button" onClick={addTextBlock}>+ Text</button>
+          <label className="ga98-report-addphoto">
+            <span>+ Photo</span>
+            <input
+              aria-label="Add photo"
+              type="file"
+              accept="image/png,image/jpeg"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) onAddPhoto(f); e.target.value = ''; }}
+            />
+          </label>
+          <button type="button" onClick={onImportFromCase}>Import from case</button>
           <button type="button" onClick={onManageDescriptors}>Manage descriptors</button>
         </div>
         {report.blocks.map((b) => (
@@ -129,8 +171,19 @@ export function ReportEditor(props: ReportEditorProps): JSX.Element {
                 descriptors={descriptors}
               />
             )
-            : null /* image blocks render via Task 8's ImageBlock */
+            : (
+              <ImageBlock
+                key={b.id}
+                block={b}
+                src={assets[b.assetRef]}
+                onChange={(p) => updateImageBlock(b.id, p)}
+                onRemove={() => removeBlock(b.id)}
+              />
+            )
         ))}
+        {report.blocks.length === 0 ? (
+          <div className="ga98-report-body-empty">Add a text block or a photo to begin.</div>
+        ) : null}
       </div>
     </div>
   );

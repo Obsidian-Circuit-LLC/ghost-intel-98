@@ -4,10 +4,12 @@
  *  `assets`) for the live preview. Export (PDF/DOCX) is main-side by id; the renderer never builds
  *  the export buffer. Contacts are managed through the <ContactBook> overlay. */
 import { useCallback, useEffect, useState } from 'react';
-import type { Report, Contact, Descriptor } from '@shared/reports-types';
+import type { Report, Contact, Descriptor, ReportBlock } from '@shared/reports-types';
 import { ReportEditor } from './ReportEditor';
 import { ContactBook } from './ContactBook';
 import { DescriptorLibrary } from './DescriptorLibrary';
+import { CasePhotoPicker, type CasePhotoPick } from './CasePhotoPicker';
+import { loadAttachmentBytes } from '../../lib/attachmentBytes';
 import { toast } from '../../state/toasts';
 
 function uid(): string { return crypto.randomUUID(); }
@@ -26,6 +28,7 @@ export function ReportsModule(): JSX.Element {
   const [assets, setAssets] = useState<Record<string, string>>({});
   const [showContacts, setShowContacts] = useState(false);
   const [showDescriptors, setShowDescriptors] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const refresh = useCallback(async (): Promise<void> => {
@@ -95,6 +98,40 @@ export function ReportsModule(): JSX.Element {
     setReport((prev) => (prev ? { ...prev, bannerRef: undefined } : prev));
   }
 
+  // Encrypt one image's bytes into the report asset store, cache its preview URL, and append a photo
+  // block. Shared by "+ Photo", drag-drop, and import-from-case so every photo path goes through the
+  // same encrypt-at-rest putAsset (bytes never sit in the report JSON — only the assetRef does).
+  const addPhotoBytes = useCallback(async (bytes: number[], mime: string): Promise<void> => {
+    const ref = await window.api.reports.putAsset(bytes, mime);
+    const a = await window.api.reports.getAsset(ref);
+    if (a) setAssets((prev) => ({ ...prev, [ref]: a.dataUrl }));
+    const block: ReportBlock = { id: uid(), kind: 'image', assetRef: ref, widthPct: 60, caption: '' };
+    setReport((prev) => (prev ? { ...prev, blocks: [...prev.blocks, block] } : prev));
+  }, []);
+
+  async function addPhoto(file: File): Promise<void> {
+    if (!report) return;
+    const bytes = Array.from(new Uint8Array(await file.arrayBuffer()));
+    const mime = file.type === 'image/jpeg' ? 'image/jpeg' : 'image/png';
+    await addPhotoBytes(bytes, mime);
+  }
+
+  // Import selected case photos: read each attachment's bytes from ITS case (loadAttachmentBytes is
+  // path-confined per-case in main) and re-encrypt them as report assets. A single unreadable pick
+  // is toasted and skipped, never aborting the rest.
+  async function importCasePhotos(picks: CasePhotoPick[]): Promise<void> {
+    if (!report) return;
+    for (const p of picks) {
+      try {
+        const bytes = await loadAttachmentBytes(p.caseId, p.fileName);
+        const mime = /\.jpe?g$/i.test(p.originalName || p.fileName) ? 'image/jpeg' : 'image/png';
+        await addPhotoBytes(Array.from(bytes), mime);
+      } catch {
+        toast.error(`Could not import ${p.originalName || p.fileName}`);
+      }
+    }
+  }
+
   async function exportPdf(): Promise<void> {
     if (!report) return;
     setBusy(true);
@@ -151,6 +188,8 @@ export function ReportsModule(): JSX.Element {
                 onRemoveBanner={removeBanner}
                 onManageContacts={() => setShowContacts(true)}
                 onManageDescriptors={() => setShowDescriptors(true)}
+                onAddPhoto={(f) => { void addPhoto(f); }}
+                onImportFromCase={() => setShowImport(true)}
               />
             </>
           ) : (
@@ -169,6 +208,13 @@ export function ReportsModule(): JSX.Element {
       {showDescriptors ? (
         <DescriptorLibrary
           onClose={() => { setShowDescriptors(false); void refreshDescriptors(); }}
+        />
+      ) : null}
+
+      {showImport ? (
+        <CasePhotoPicker
+          onAdd={(picks) => { void importCasePhotos(picks); }}
+          onClose={() => setShowImport(false)}
         />
       ) : null}
     </div>

@@ -51,6 +51,7 @@ export type ModuleKey =
   | 'minds-eye'
   | 'investigation-graph'
   | 'invoices'
+  | 'report'
   | 'number-muncher';
 
 export interface WindowSpec {
