@@ -1215,3 +1215,105 @@ export function ensureProfile(v: unknown): import('@shared/invoice-types').Profi
   if (typeof o.id !== 'string' || (o.kind !== 'sender' && o.kind !== 'client')) throw new ValidationError('bad profile');
   return v as import('@shared/invoice-types').Profile;
 }
+
+// ---------- reports (Chain of Custody report generator) ----------
+
+const MAX_REPORT_TITLE = 200;
+const MAX_REPORT_TO = 400;
+const MAX_REPORT_BLOCK_HTML = 50_000;
+const MAX_REPORT_CAPTION = 500;
+const MAX_DESCRIPTOR_BODY = 10_000;
+const MAX_CONTACT_FIELD = 400;
+const MAX_BLOCKS_PER_REPORT = 400;
+
+function reportStr(v: unknown, max: number): string {
+  return typeof v === 'string' ? v.slice(0, max) : '';
+}
+
+/** Clamp a renderer-supplied image-block width percentage into [10,100]; a non-finite/missing
+ *  value falls back to a sane default rather than throwing (the block still renders). */
+function clampWidthPct(v: unknown): number {
+  const n = typeof v === 'number' && Number.isFinite(v) ? v : 60;
+  return Math.max(10, Math.min(100, Math.round(n)));
+}
+
+/** Validate + clamp a single report block. Returns null for an unknown `kind` so a corrupted or
+ *  hostile payload silently drops that block rather than persisting an unrecognized shape that
+ *  report-html.ts / docx.ts would then have to special-case. */
+function ensureReportBlock(raw: unknown): import('@shared/reports-types').ReportBlock | null {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  const id = typeof o['id'] === 'string' && o['id'].length > 0 && o['id'].length <= 64 ? o['id'] : randomUUID();
+  if (o['kind'] === 'text') {
+    return { id, kind: 'text', html: reportStr(o['html'], MAX_REPORT_BLOCK_HTML) };
+  }
+  if (o['kind'] === 'image') {
+    let assetRef: string;
+    try { assetRef = ensureFileName(o['assetRef'], 'block.assetRef'); } catch { return null; }
+    return { id, kind: 'image', assetRef, widthPct: clampWidthPct(o['widthPct']), caption: reportStr(o['caption'], MAX_REPORT_CAPTION) };
+  }
+  return null;
+}
+
+/** Validate + clamp a renderer-supplied Report before it is persisted: bounds every string field,
+ *  caps the block count (MAX_BLOCKS_PER_REPORT), clamps image widthPct into [10,100], drops any
+ *  block of an unknown kind, and routes bannerRef through ensureFileName (defense-in-depth —
+ *  reports/store.ts's getAsset re-validates independently, but a malformed ref should never even
+ *  be written to disk). */
+export function ensureReport(raw: unknown): import('@shared/reports-types').Report {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  if (typeof o['id'] !== 'string' || o['id'].length === 0) throw new ValidationError('report.id must be a non-empty string');
+  const blocksIn = Array.isArray(o['blocks']) ? o['blocks'].slice(0, MAX_BLOCKS_PER_REPORT) : [];
+  const blocks: import('@shared/reports-types').ReportBlock[] = [];
+  for (const b of blocksIn) {
+    const block = ensureReportBlock(b);
+    if (block) blocks.push(block);
+  }
+  const out: import('@shared/reports-types').Report = {
+    id: o['id'],
+    title: reportStr(o['title'], MAX_REPORT_TITLE),
+    createdAt: typeof o['createdAt'] === 'string' ? o['createdAt'] : new Date().toISOString(),
+    updatedAt: typeof o['updatedAt'] === 'string' ? o['updatedAt'] : new Date().toISOString(),
+    to: reportStr(o['to'], MAX_REPORT_TO),
+    blocks
+  };
+  if (o['bannerRef'] !== undefined) {
+    try { out.bannerRef = ensureFileName(o['bannerRef'], 'bannerRef'); } catch { /* drop a malformed ref */ }
+  }
+  if (typeof o['fromContactId'] === 'string' && o['fromContactId'].length > 0 && o['fromContactId'].length <= 64) {
+    out.fromContactId = o['fromContactId'];
+  }
+  return out;
+}
+
+/** Validate + clamp a renderer-supplied Contact before it is persisted: bounds every field
+ *  (MAX_CONTACT_FIELD), routes logoRef through ensureFileName. */
+export function ensureContact(raw: unknown): import('@shared/reports-types').Contact {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  if (typeof o['id'] !== 'string' || o['id'].length === 0) throw new ValidationError('contact.id must be a non-empty string');
+  const opt = (k: string): string | undefined => {
+    const s = reportStr(o[k], MAX_CONTACT_FIELD);
+    return s.length > 0 ? s : undefined;
+  };
+  const out: import('@shared/reports-types').Contact = { id: o['id'], name: reportStr(o['name'], MAX_CONTACT_FIELD) };
+  const title = opt('title'); if (title !== undefined) out.title = title;
+  const org = opt('org'); if (org !== undefined) out.org = org;
+  const email = opt('email'); if (email !== undefined) out.email = email;
+  const phone = opt('phone'); if (phone !== undefined) out.phone = phone;
+  const address = opt('address'); if (address !== undefined) out.address = address;
+  if (o['logoRef'] !== undefined) {
+    try { out.logoRef = ensureFileName(o['logoRef'], 'logoRef'); } catch { /* drop a malformed ref */ }
+  }
+  return out;
+}
+
+/** Validate + clamp a renderer-supplied Descriptor before it is persisted: bounds name
+ *  (MAX_CONTACT_FIELD) and body (MAX_DESCRIPTOR_BODY). */
+export function ensureDescriptor(raw: unknown): import('@shared/reports-types').Descriptor {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  if (typeof o['id'] !== 'string' || o['id'].length === 0) throw new ValidationError('descriptor.id must be a non-empty string');
+  return {
+    id: o['id'],
+    name: reportStr(o['name'], MAX_CONTACT_FIELD),
+    body: reportStr(o['body'], MAX_DESCRIPTOR_BODY)
+  };
+}
