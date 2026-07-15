@@ -331,6 +331,10 @@ const api = {
     exportPdf: (html: string) => ipcRenderer.invoke(channels.invoices.exportPdf, { html }),
     exportDocx: (args: { invoice: unknown; assets: Record<string, string> }) => ipcRenderer.invoke(channels.invoices.exportDocx, args)
   },
+  reports: {
+    // PDF export only (Task 3) — main resolves the report/contact/assets itself from the id.
+    exportPdf: (id: string) => ipcRenderer.invoke(channels.reports.exportPdf, id)
+  },
   geoint: {
     snapshot: () => ipcRenderer.invoke(channels.geoint.snapshot),
     addSource: (s: unknown) => ipcRenderer.invoke(channels.geoint.addSource, s),

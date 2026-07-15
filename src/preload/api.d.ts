@@ -400,6 +400,10 @@ export interface GhostApi {
     exportPdf(html: string): Promise<string | null>;
     exportDocx(args: { invoice: Invoice; assets: Record<string, string> }): Promise<string | null>;
   };
+  reports: {
+    // PDF export only (Task 3) — main resolves the report/contact/assets itself from the id.
+    exportPdf(id: string): Promise<string | null>;
+  };
   geoint: {
     snapshot(): Promise<GeoSnapshot>;
     addSource(input: { label: string; url: string; type: GeoSourceType; xmlMap?: GeoXmlMap }): Promise<GeoSource>;

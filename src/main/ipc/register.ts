@@ -83,6 +83,8 @@ import * as mediaLib from '../media/library';
 import * as invoiceStore from '../invoices/store';
 import { renderInvoicePdf } from '../invoices/export';
 import { renderInvoiceDocx } from '../invoices/docx';
+import * as reportStore from '../reports/store';
+import { reportToPdf } from '../reports/report-html';
 import { adHocAllowlist } from '../media/protocol';
 import { parseM3u, toM3u } from '../media/m3u';
 import { parseFeedList, feedToUpsert } from '../services/feed-import';
@@ -1466,6 +1468,33 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     catch (err) { if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err; }
     await writeFile(r.filePath, buf);
     return basename(r.filePath);
+  });
+
+  // ---- Reports (Chain of Custody generator; PDF export only here — CRUD/contacts/descriptors/
+  // asset IPC land with the editor UI in a later task). Unlike invoices, main resolves the report
+  // + its banner/image assets + From-contact itself from the encrypted store (the renderer sends
+  // only the id) and writes the PDF only via the OS save dialog, never inside the encrypted
+  // store. A ref that fails to resolve (dropped/never uploaded/corrupt) is skipped rather than
+  // aborting the whole export — the surrounding text still renders. ----
+  safeHandle(channels.reports.exportPdf, async (...a) => {
+    const id = a[0] as string;
+    const report = (await reportStore.listReports()).find((r) => r.id === id);
+    if (!report) return null;
+    const contact = report.fromContactId
+      ? (await reportStore.listContacts()).find((c) => c.id === report.fromContactId) ?? null
+      : null;
+    const refs = new Set<string>();
+    if (report.bannerRef) refs.add(report.bannerRef);
+    for (const b of report.blocks) if (b.kind === 'image') refs.add(b.assetRef);
+    const assets: Record<string, string> = {};
+    for (const ref of refs) {
+      try {
+        const asset = await reportStore.getAsset(ref);
+        if (asset) assets[ref] = `data:${asset.mime};base64,${asset.bytes.toString('base64')}`;
+      } catch { /* a malformed/missing ref must not abort the whole export */ }
+    }
+    const pdf = await reportToPdf(report, assets, contact);
+    return saveBufferWithDialog(getWindow(), `${report.title || 'report'}.pdf`, pdf);
   });
 
   // ---- GeoINT (vault-gated; network is app-layer gated by settings.geoint.networkEnabled) ----
