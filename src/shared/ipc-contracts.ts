@@ -648,6 +648,16 @@ export const channels = {
     listProfiles: 'invoices:listProfiles', saveProfile: 'invoices:saveProfile', removeProfile: 'invoices:removeProfile',
     putAsset: 'invoices:putAsset', getAsset: 'invoices:getAsset', exportPdf: 'invoices:exportPdf',
     exportDocx: 'invoices:exportDocx'
+  },
+  // Chain-of-Custody report generator. CRUD + contacts/descriptors libraries + asset blobs +
+  // main-side id→buffer PDF/DOCX export (renderer never builds the export buffer).
+  reports: {
+    list: 'reports:list', save: 'reports:save', remove: 'reports:remove',
+    putAsset: 'reports:putAsset', getAsset: 'reports:getAsset',
+    contactsList: 'reports:contacts:list', contactsSave: 'reports:contacts:save', contactsRemove: 'reports:contacts:remove',
+    descriptorsList: 'reports:descriptors:list', descriptorsSave: 'reports:descriptors:save', descriptorsRemove: 'reports:descriptors:remove',
+    exportPdf: 'reports:exportPdf',
+    exportDocx: 'reports:exportDocx'
   }
 } as const;
 
@@ -1126,6 +1136,14 @@ export interface ApiContracts {
   [channels.invoices.exportDocx]: { args: [{ invoice: Invoice; assets: Record<string, string> }]; returns: string | null };
   // ^ builds an editable OOXML .docx via renderInvoiceDocx (adm-zip) — numbers foot with the PDF
   //   via calc.ts; the renderer resolves asset refs → data URLs (same map exportPdf uses).
+
+  // Chain-of-Custody report generator — export the saved report identified by id as a PDF.
+  // Unlike invoices, main resolves the report/contact/assets itself from the encrypted store (the
+  // renderer never re-sends the whole document) and writes only via the OS save dialog; returns
+  // the saved filename, or null if the user cancels.
+  [channels.reports.exportPdf]: { args: [string]; returns: string | null };
+  // Same id-in / saved-filename-out contract as exportPdf, but renders an editable OOXML .docx.
+  [channels.reports.exportDocx]: { args: [string]; returns: string | null };
 }
 
 export const BGCONN_LOCK_EXEMPT_CHANNELS = ['bgconn:status', 'bgconn:stop'] as const;

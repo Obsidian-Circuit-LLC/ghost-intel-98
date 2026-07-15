@@ -331,6 +331,26 @@ const api = {
     exportPdf: (html: string) => ipcRenderer.invoke(channels.invoices.exportPdf, { html }),
     exportDocx: (args: { invoice: unknown; assets: Record<string, string> }) => ipcRenderer.invoke(channels.invoices.exportDocx, args)
   },
+  reports: {
+    list: () => ipcRenderer.invoke(channels.reports.list),
+    save: (report: unknown) => ipcRenderer.invoke(channels.reports.save, report),
+    remove: (id: string) => ipcRenderer.invoke(channels.reports.remove, id),
+    putAsset: (bytes: number[], mime: string) => ipcRenderer.invoke(channels.reports.putAsset, { bytes, mime }),
+    getAsset: (ref: string) => ipcRenderer.invoke(channels.reports.getAsset, ref),
+    contacts: {
+      list: () => ipcRenderer.invoke(channels.reports.contactsList),
+      save: (contact: unknown) => ipcRenderer.invoke(channels.reports.contactsSave, contact),
+      remove: (id: string) => ipcRenderer.invoke(channels.reports.contactsRemove, id)
+    },
+    descriptors: {
+      list: () => ipcRenderer.invoke(channels.reports.descriptorsList),
+      save: (descriptor: unknown) => ipcRenderer.invoke(channels.reports.descriptorsSave, descriptor),
+      remove: (id: string) => ipcRenderer.invoke(channels.reports.descriptorsRemove, id)
+    },
+    // Main resolves the report/contact/assets itself from the id for both exporters.
+    exportPdf: (id: string) => ipcRenderer.invoke(channels.reports.exportPdf, id),
+    exportDocx: (id: string) => ipcRenderer.invoke(channels.reports.exportDocx, id)
+  },
   geoint: {
     snapshot: () => ipcRenderer.invoke(channels.geoint.snapshot),
     addSource: (s: unknown) => ipcRenderer.invoke(channels.geoint.addSource, s),
