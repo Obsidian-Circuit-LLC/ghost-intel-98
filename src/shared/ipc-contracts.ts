@@ -649,9 +649,13 @@ export const channels = {
     putAsset: 'invoices:putAsset', getAsset: 'invoices:getAsset', exportPdf: 'invoices:exportPdf',
     exportDocx: 'invoices:exportDocx'
   },
-  // Chain-of-Custody report generator (Task 3: PDF export only — CRUD/contacts/descriptors/asset
-  // channels land with the editor UI in a later task).
+  // Chain-of-Custody report generator. CRUD + contacts/descriptors libraries + asset blobs +
+  // main-side id→buffer PDF/DOCX export (renderer never builds the export buffer).
   reports: {
+    list: 'reports:list', save: 'reports:save', remove: 'reports:remove',
+    putAsset: 'reports:putAsset', getAsset: 'reports:getAsset',
+    contactsList: 'reports:contacts:list', contactsSave: 'reports:contacts:save', contactsRemove: 'reports:contacts:remove',
+    descriptorsList: 'reports:descriptors:list', descriptorsSave: 'reports:descriptors:save', descriptorsRemove: 'reports:descriptors:remove',
     exportPdf: 'reports:exportPdf',
     exportDocx: 'reports:exportDocx'
   }

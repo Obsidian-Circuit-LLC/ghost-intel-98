@@ -69,7 +69,7 @@ import * as aiConvos from '../storage/ai-conversations';
 import * as briefcase from '../storage/briefcase';
 import * as journal from '../storage/journal';
 import * as voiceModel from '../voice/model-protocol';
-import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityType, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureShellProgram, ensureWhiteboard, ensureBoardFile, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon, ensureSaveToCaseOpts, ensureGeoItem, ensureThreatLayerId, ensureKeyedLayerId, ensureLayerKey, isKeyedLayerId, ensureBookmarkBoard, ensureMarketsSettings, ensureStickyNotes, ensureAiConversation, ensureBriefcaseNote, ensureJournalEntry, ensurePin, ensureUid, ensureMailFlag, stripProtectedSettings, ensureBounds, ensureDocRelPath, ensureDocName, ensureImportSourcePath, ensureNoteBody, ensureIdArray, ensureInvoice, ensureProfile, ensureAssetInput } from '../security/validate';
+import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityType, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureShellProgram, ensureWhiteboard, ensureBoardFile, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon, ensureSaveToCaseOpts, ensureGeoItem, ensureThreatLayerId, ensureKeyedLayerId, ensureLayerKey, isKeyedLayerId, ensureBookmarkBoard, ensureMarketsSettings, ensureStickyNotes, ensureAiConversation, ensureBriefcaseNote, ensureJournalEntry, ensurePin, ensureUid, ensureMailFlag, stripProtectedSettings, ensureBounds, ensureDocRelPath, ensureDocName, ensureImportSourcePath, ensureNoteBody, ensureIdArray, ensureInvoice, ensureProfile, ensureAssetInput, ensureReport, ensureContact, ensureDescriptor } from '../security/validate';
 import * as entities from '../storage/entities';
 import * as bioStore from '../storage/bio-images';
 import * as ftp from '../services/ftp';
@@ -1477,6 +1477,25 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   // only the id) and writes the PDF only via the OS save dialog, never inside the encrypted
   // store. A ref that fails to resolve (dropped/never uploaded/corrupt) is skipped rather than
   // aborting the whole export — the surrounding text still renders. ----
+  // Reports CRUD + libraries. Every renderer-supplied record is clamped/validated (ensureReport /
+  // ensureContact / ensureDescriptor) before it touches the encrypted store; getAsset re-validates
+  // the ref (store also re-validates independently) and converts the stored bytes to a preview data
+  // URL for the renderer (the renderer never receives raw vault bytes).
+  safeHandle(channels.reports.list, () => reportStore.listReports());
+  safeHandle(channels.reports.save, (...a) => reportStore.saveReport(ensureReport(a[0])));
+  safeHandle(channels.reports.remove, (...a) => reportStore.removeReport(a[0] as string));
+  safeHandle(channels.reports.putAsset, (...a) => { const { bytes, mime } = ensureAssetInput(a[0]); return reportStore.putAsset(bytes, mime); });
+  safeHandle(channels.reports.getAsset, async (...a) => {
+    const asset = await reportStore.getAsset(ensureFileName(a[0], 'assetRef'));
+    return asset ? { mime: asset.mime, dataUrl: `data:${asset.mime};base64,${asset.bytes.toString('base64')}` } : null;
+  });
+  safeHandle(channels.reports.contactsList, () => reportStore.listContacts());
+  safeHandle(channels.reports.contactsSave, (...a) => reportStore.saveContact(ensureContact(a[0])));
+  safeHandle(channels.reports.contactsRemove, (...a) => reportStore.removeContact(a[0] as string));
+  safeHandle(channels.reports.descriptorsList, () => reportStore.listDescriptors());
+  safeHandle(channels.reports.descriptorsSave, (...a) => reportStore.saveDescriptor(ensureDescriptor(a[0])));
+  safeHandle(channels.reports.descriptorsRemove, (...a) => reportStore.removeDescriptor(a[0] as string));
+
   safeHandle(channels.reports.exportPdf, async (...a) => {
     const id = a[0] as string;
     const report = (await reportStore.listReports()).find((r) => r.id === id);

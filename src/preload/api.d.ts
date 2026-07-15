@@ -77,6 +77,7 @@ import type {
 import type { HarvestedItem, MonitoredChannel } from '../shared/socmint/types';
 import type { DocEntry, DocImportResult } from '../shared/documents-types';
 import type { Invoice, Profile, InvoiceAsset } from '../shared/invoice-types';
+import type { Report, Contact, Descriptor } from '../shared/reports-types';
 
 export interface MailDraft {
   id: string;
@@ -401,6 +402,22 @@ export interface GhostApi {
     exportDocx(args: { invoice: Invoice; assets: Record<string, string> }): Promise<string | null>;
   };
   reports: {
+    list(): Promise<Report[]>;
+    save(report: Report): Promise<Report>;
+    remove(id: string): Promise<void>;
+    putAsset(bytes: number[], mime: string): Promise<string>;
+    /** Resolve an asset ref to a preview data URL (main converts the stored bytes). */
+    getAsset(ref: string): Promise<{ mime: string; dataUrl: string } | null>;
+    contacts: {
+      list(): Promise<Contact[]>;
+      save(contact: Contact): Promise<Contact>;
+      remove(id: string): Promise<void>;
+    };
+    descriptors: {
+      list(): Promise<Descriptor[]>;
+      save(descriptor: Descriptor): Promise<Descriptor>;
+      remove(id: string): Promise<void>;
+    };
     // Main resolves the report/contact/assets itself from the id for both exporters.
     exportPdf(id: string): Promise<string | null>;
     exportDocx(id: string): Promise<string | null>;
