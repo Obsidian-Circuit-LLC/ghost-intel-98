@@ -94,7 +94,7 @@ export function ReportsModule(): JSX.Element {
       if (a) setAssets((prev) => ({ ...prev, [ref]: a.dataUrl }));
       setReport((prev) => (prev ? { ...prev, bannerRef: ref } : prev));
     } catch {
-      toast.error('Could not set banner — image must be a PNG/JPEG under 2 MB.');
+      toast.error('Could not set banner — image must be a PNG/JPEG under 25 MB.');
     }
   }
 
@@ -120,7 +120,7 @@ export function ReportsModule(): JSX.Element {
       const mime = file.type === 'image/jpeg' ? 'image/jpeg' : 'image/png';
       await addPhotoBytes(bytes, mime);
     } catch {
-      toast.error('Could not add photo — image must be a PNG/JPEG under 2 MB.');
+      toast.error('Could not add photo — image must be a PNG/JPEG under 25 MB.');
     }
   }
 

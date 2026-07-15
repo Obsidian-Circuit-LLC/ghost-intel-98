@@ -1200,6 +1200,18 @@ export function ensureAssetInput(v: unknown): { bytes: Buffer; mime: string } {
   return { bytes: Buffer.from(o.bytes as number[]), mime: o.mime };
 }
 
+const MAX_REPORT_ASSET = 25 * 1024 * 1024;
+/** Report banners/photos are full-size images (a phone photo is several MB) — unlike the small invoice
+ *  logos ensureAssetInput bounds at 2MB. Reports get a 25 MB per-image cap so real photos can be added. */
+export function ensureReportAssetInput(v: unknown): { bytes: Buffer; mime: string } {
+  if (!v || typeof v !== 'object') throw new ValidationError('asset must be an object');
+  const o = v as { bytes?: unknown; mime?: unknown };
+  if (o.mime !== 'image/png' && o.mime !== 'image/jpeg') throw new ValidationError('asset.mime must be image/png or image/jpeg');
+  if (!Array.isArray(o.bytes)) throw new ValidationError('asset.bytes must be a byte array');
+  if (o.bytes.length > MAX_REPORT_ASSET) throw new ValidationError('asset too large (max 25MB)');
+  return { bytes: Buffer.from(o.bytes as number[]), mime: o.mime };
+}
+
 /** Minimal shape guard for a persisted invoice — the store is the source of truth for the rest. */
 export function ensureInvoice(v: unknown): import('@shared/invoice-types').Invoice {
   if (!v || typeof v !== 'object') throw new ValidationError('invoice must be an object');
