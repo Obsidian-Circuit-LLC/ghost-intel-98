@@ -418,7 +418,15 @@ export const channels = {
   },
   whiteboard: {
     read: 'whiteboard:read',
-    write: 'whiteboard:write'
+    write: 'whiteboard:write',
+    // Export the board as a PDF / DOCX (visual snapshot PNG + a structured node/edge appendix), or
+    // as a portable, self-contained `.gboard` file; and import a `.gboard` back into a case. Every
+    // export writes ONLY via the OS save dialog (never inside the encrypted store); import re-writes
+    // embedded assets THROUGH the vault so encrypt-at-rest is preserved.
+    exportPdf: 'whiteboard:exportPdf',
+    exportDocx: 'whiteboard:exportDocx',
+    exportFile: 'whiteboard:exportFile',
+    importFile: 'whiteboard:importFile'
   },
   auth: {
     status: 'auth:status',

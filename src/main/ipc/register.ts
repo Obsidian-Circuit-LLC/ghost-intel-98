@@ -69,13 +69,16 @@ import * as aiConvos from '../storage/ai-conversations';
 import * as briefcase from '../storage/briefcase';
 import * as journal from '../storage/journal';
 import * as voiceModel from '../voice/model-protocol';
-import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityType, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureShellProgram, ensureWhiteboard, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon, ensureSaveToCaseOpts, ensureGeoItem, ensureThreatLayerId, ensureKeyedLayerId, ensureLayerKey, isKeyedLayerId, ensureBookmarkBoard, ensureMarketsSettings, ensureStickyNotes, ensureAiConversation, ensureBriefcaseNote, ensureJournalEntry, ensurePin, ensureUid, ensureMailFlag, stripProtectedSettings, ensureBounds, ensureDocRelPath, ensureDocName, ensureImportSourcePath, ensureNoteBody, ensureIdArray, ensureInvoice, ensureProfile, ensureAssetInput } from '../security/validate';
+import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityType, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureShellProgram, ensureWhiteboard, ensureBoardFile, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon, ensureSaveToCaseOpts, ensureGeoItem, ensureThreatLayerId, ensureKeyedLayerId, ensureLayerKey, isKeyedLayerId, ensureBookmarkBoard, ensureMarketsSettings, ensureStickyNotes, ensureAiConversation, ensureBriefcaseNote, ensureJournalEntry, ensurePin, ensureUid, ensureMailFlag, stripProtectedSettings, ensureBounds, ensureDocRelPath, ensureDocName, ensureImportSourcePath, ensureNoteBody, ensureIdArray, ensureInvoice, ensureProfile, ensureAssetInput } from '../security/validate';
 import * as entities from '../storage/entities';
 import * as bioStore from '../storage/bio-images';
 import * as ftp from '../services/ftp';
 import * as backup from '../services/backup';
 import * as exiftool from '../services/exiftool';
 import * as whiteboard from '../storage/whiteboard';
+import { buildBoardFile, remapBoardAssetNames } from '../whiteboard/board-file';
+import { boardToPdf } from '../whiteboard/board-export';
+import { renderBoardDocx } from '../whiteboard/board-docx';
 import * as mediaLib from '../media/library';
 import * as invoiceStore from '../invoices/store';
 import { renderInvoicePdf } from '../invoices/export';
@@ -186,6 +189,39 @@ async function saveBufferWithDialog(win: BrowserWindow | null, defaultName: stri
     throw err;
   }
   return basename(result.filePath);
+}
+
+// ---- whiteboard export/import helpers ----
+// The board snapshot is a renderer-produced PNG/JPEG data URL. Constrain it to a strict base64 data
+// URL so it is safe to interpolate into the PDF's `<img src="…">` (no quote/angle-bracket break-out)
+// and so decodeDataUrl in board-docx accepts it; bound its length too.
+const MAX_BOARD_SNAPSHOT_B64 = 40 * 1024 * 1024; // ~30 MB decoded
+function ensureBoardSnapshot(png: unknown): string {
+  if (typeof png !== 'string' || png.length > MAX_BOARD_SNAPSHOT_B64
+    || !/^data:image\/(?:png|jpe?g);base64,[A-Za-z0-9+/=]+$/.test(png)) {
+    throw new Error('Invalid board snapshot image.');
+  }
+  return png;
+}
+
+// A .gboard is user-selected via the OS dialog, but its bytes are untrusted; cap the whole-file read
+// so a pathological file can't OOM JSON.parse before ensureBoardFile gets to bound it.
+const MAX_GBOARD_BYTES = 256 * 1024 * 1024;
+
+// Assemble an attachment's full bytes as a single base64 string by paging readAttachmentBytes (base64
+// per page is NOT concatenable — decode each page to bytes, join, then re-encode once).
+async function readWholeAttachmentBase64(caseId: string, fileName: string): Promise<string | null> {
+  const PAGE = 4 * 1024 * 1024;
+  const chunks: Buffer[] = [];
+  let offset = 0;
+  for (;;) {
+    const res = await fileStore.readAttachmentBytes(caseId, fileName, offset, PAGE);
+    if (!res.base64) break;
+    chunks.push(Buffer.from(res.base64, 'base64'));
+    offset += res.length;
+    if (!res.hasMore || res.length === 0) break;
+  }
+  return chunks.length ? Buffer.concat(chunks).toString('base64') : null;
 }
 
 type Handler = (...args: unknown[]) => unknown | Promise<unknown>;
@@ -924,6 +960,63 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   // ---- whiteboard ----
   safeHandle(channels.whiteboard.read, (...args) => whiteboard.read(ensureUuid(args[0], 'caseId')));
   safeHandle(channels.whiteboard.write, (...args) => whiteboard.write(ensureUuid(args[0], 'caseId'), ensureWhiteboard(args[1])));
+  // The renderer rasterises the board to a PNG (board-raster) and hands it here with the node/edge
+  // graph; main builds the PDF/DOCX (snapshot + an HTML/XML-escaped appendix) and writes ONLY via the
+  // OS save dialog — never inside the encrypted store. Node/edge counts are re-validated main-side.
+  safeHandle(channels.whiteboard.exportPdf, async (...args) => {
+    ensureUuid(args[0], 'caseId');
+    const { png, nodes, edges } = (args[1] ?? {}) as { png?: unknown; nodes?: unknown; edges?: unknown };
+    const wb = ensureWhiteboard({ nodes, edges });
+    const pdf = await boardToPdf(ensureBoardSnapshot(png), wb.nodes, wb.edges);
+    return saveBufferWithDialog(getWindow(), 'board.pdf', pdf);
+  });
+  safeHandle(channels.whiteboard.exportDocx, async (...args) => {
+    ensureUuid(args[0], 'caseId');
+    const { png, nodes, edges } = (args[1] ?? {}) as { png?: unknown; nodes?: unknown; edges?: unknown };
+    const wb = ensureWhiteboard({ nodes, edges });
+    const buf = renderBoardDocx(ensureBoardSnapshot(png), wb.nodes, wb.edges);
+    return saveBufferWithDialog(getWindow(), 'board.docx', buf);
+  });
+  // Portable .gboard: bundle the board graph + a base64 copy of every referenced attachment (read
+  // through the vault), so the file is self-contained. Written via the OS dialog only.
+  safeHandle(channels.whiteboard.exportFile, async (...args) => {
+    const caseId = ensureUuid(args[0], 'caseId');
+    const board = await whiteboard.read(caseId);
+    const assets: Record<string, string> = {};
+    for (const n of board.nodes) {
+      if (!n.fileName || n.fileName in assets) continue;
+      const b64 = await readWholeAttachmentBase64(caseId, n.fileName);
+      if (b64) assets[n.fileName] = b64;
+    }
+    const file = buildBoardFile(board, assets);
+    return saveBufferWithDialog(getWindow(), 'board.gboard', Buffer.from(JSON.stringify(file), 'utf8'));
+  });
+  // Import a .gboard: validate + bound it (ensureBoardFile drops orphan/oversize assets), re-write
+  // each embedded asset THROUGH the vault as a fresh dedup-safe attachment (encrypt-at-rest kept),
+  // remap node.fileName → the new vault name, then persist. Returns the new board (or null on cancel).
+  safeHandle(channels.whiteboard.importFile, async (...args) => {
+    const caseId = ensureUuid(args[0], 'caseId');
+    const win = getWindow();
+    const filters = [{ name: 'Board file', extensions: ['gboard'] }];
+    const result = win
+      ? await dialog.showOpenDialog(win, { properties: ['openFile'], filters })
+      : await dialog.showOpenDialog({ properties: ['openFile'], filters });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    const path = result.filePaths[0];
+    const st = await stat(path);
+    if (st.size > MAX_GBOARD_BYTES) throw new Error('Board file is too large to import.');
+    const file = ensureBoardFile(JSON.parse(await readFile(path, 'utf8')));
+    const rename: Record<string, string> = {};
+    for (const [name, b64] of Object.entries(file.assets)) {
+      try {
+        const meta = await fileStore.importBytes(caseId, name, Buffer.from(b64, 'base64'));
+        rename[name] = meta.fileName;
+      } catch { /* skip a single unwritable asset — its node renders as a missing-asset placeholder */ }
+    }
+    const board = ensureWhiteboard({ nodes: remapBoardAssetNames(file.nodes, rename), edges: file.edges });
+    await whiteboard.write(caseId, board);
+    return board;
+  });
   safeHandle(channels.files.pickOpen, async (...args) => {
     const opts = (args[0] as { multi?: boolean; filters?: unknown }) ?? {};
     const filters = validatePickFilters(opts.filters);

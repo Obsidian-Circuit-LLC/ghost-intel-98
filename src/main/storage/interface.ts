@@ -40,6 +40,10 @@ export interface CaseStore {
 
 export interface FileStore {
   importDropped(id: CaseId, files: { sourcePath: string; originalName: string }[]): Promise<AttachmentMeta[]>;
+  /** Import an in-memory buffer as a fresh (collision-safe) case attachment, written THROUGH the
+   *  vault (encrypt-at-rest preserved). Used by the .gboard import path, which has decoded bytes
+   *  rather than a plaintext source file on disk. Returns the attachment's actual on-disk name. */
+  importBytes(id: CaseId, originalName: string, bytes: Buffer): Promise<AttachmentMeta>;
   listAttachments(id: CaseId): Promise<AttachmentMeta[]>;
   deleteAttachment(id: CaseId, fileName: string): Promise<void>;
   attachmentAbsolutePath(id: CaseId, fileName: string): string;
