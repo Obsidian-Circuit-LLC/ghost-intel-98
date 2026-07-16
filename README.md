@@ -38,13 +38,15 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`GhostIntel98-Setup-3.49.1.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
+> **Install:** download [`GhostIntel98-Setup-3.50.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
 
 > **📘 User guides** — plain-language, step-by-step (download or read in-browser):
 > - [**SOCMINT: X, Telegram & WhatsApp**](docs/guides/SOCMINT-Tutorial.pdf) — set up and run the social-media collectors, per platform, with the Tor / clearnet and opsec caveats. ([markdown](docs/guides/socmint-tutorial.md))
 > - [**How Searchlight Learns**](docs/guides/Searchlight-Learning-Guide.pdf) — how the username-sweep detector gets smarter from your own labels, and when to turn ML on. ([markdown](docs/guides/searchlight-learning.md))
 
 ## Status
+
+**v3.50.0** — **Report Templates + a word-processor editor.** The final piece of the "Chain of Custody Report and Template Generator" vision. **Templates:** save any report as a reusable **template** (its banner/photos are deep-copied so it's self-contained), browse your templates in the new **Templates** nav branch with a live **preview** (rendered in a sandboxed frame, matching the export), and **Use Template** deep-copies one into a fresh report — lighting up all the previously-greyed Templates controls. **Editor:** opening or creating a report now drops you **straight into a typable document** (a focused text body under the header — no "+ Text" click), and reports gain chain-of-custody **metadata** — Case #, Reference #, Classification, and a Signature line — shown in the header and carried into the PDF/DOCX exports. Built subagent-driven across **7 TDD tasks** with a parallel adversarial whole-branch review that caught and fixed a real focus bug (File→New while editing left the new document unfocused). Templates keep the encrypted-store + block model + sanitizer; template previews are script-sandboxed; every new field is escaped into the exports. **3,591 automated tests** green (1 skipped); typecheck clean; no new egress; no new dependency. *Everything from v3.49.1 carries forward.*
 
 **v3.49.1** — **Reports goes classic Windows 98 + recurring calendar reminders.** Two GhostExodus requests. **(1)** The **Reports** module is reskinned to a true Windows-98 look end-to-end — dashboard, editor, and dialogs: classic silver chrome with 3-D bevels, blue MDI-style title bars on the Navigation / Quick Actions / Dashboard panels, folder/house/page tree icons, a toolbar with icons, white sunken inputs and lists, the document page floating on a grey workspace, and a `Ready · Workspace · 🔒 ENCRYPTED` status bar. The dark "intelligence-workstation" hero is kept, framed inside the light Dashboard. (Reports only — the other modules keep the dark theme.) **(2)** **Recurring calendar reminders**: right-click a reminder → **Make recurring ▸ Daily / Weekly / Monthly** (and **Remove recurring**). A repeating reminder now shows on every matching day of the month with a 🔁 badge and keeps firing its notification each period. Built on an immutable-anchor + `lastFiredAt` model so it survives the app being closed for weeks without a notification burst (it catches up with a single reminder, then resumes). Built subagent-driven with a parallel adversarial whole-branch review that caught and fixed three real bugs (a catch-up notification burst, a stale-refresh race, a remove-recurring re-fire). **3,563 automated tests** green (1 skipped); typecheck clean; no new egress; no new dependency. *Everything from v3.49.0 carries forward.*
 
@@ -531,7 +533,7 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases) and run it.
 
-Direct link to the current release: [`GhostIntel98-Setup-3.49.1.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.49.1/GhostIntel98-Setup-3.49.1.exe)
+Direct link to the current release: [`GhostIntel98-Setup-3.50.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.50.0/GhostIntel98-Setup-3.50.0.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is **formally verified internally** — symbolic (ProVerif) +
 computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not**
 FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.6.8/GhostIntel98-Setup-3.6.8.exe).
@@ -539,7 +541,7 @@ FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Se
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\GhostIntel98-Setup-3.49.1.exe -Algorithm SHA256
+Get-FileHash .\GhostIntel98-Setup-3.50.0.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
