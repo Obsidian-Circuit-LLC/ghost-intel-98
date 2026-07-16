@@ -38,13 +38,15 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`GhostIntel98-Setup-3.50.2.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
+> **Install:** download [`GhostIntel98-Setup-3.51.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
 
 > **📘 User guides** — plain-language, step-by-step (download or read in-browser):
 > - [**SOCMINT: X, Telegram & WhatsApp**](docs/guides/SOCMINT-Tutorial.pdf) — set up and run the social-media collectors, per platform, with the Tor / clearnet and opsec caveats. ([markdown](docs/guides/socmint-tutorial.md))
 > - [**How Searchlight Learns**](docs/guides/Searchlight-Learning-Guide.pdf) — how the username-sweep detector gets smarter from your own labels, and when to turn ML on. ([markdown](docs/guides/searchlight-learning.md))
 
 ## Status
+
+**v3.51.0** — **Report editor: font pickers that apply, and a structured recipient.** Two follow-ups from GhostExodus's field testing of the Report Template Generator. **(1)** The **font-family and font-size pickers** did nothing (also the source of the "some functions have no response" report) — the native dropdowns stole focus from the editor and lost your text selection before the change could apply. The editor now **snapshots the selection when you open a picker and restores it**, so the font/size lands on the highlighted text — the same technique the working B/I/U + link buttons already use. **(2)** The report **recipient is now a real Contact** instead of a bare name — pick or add one through the Contact-book popup with **Organization, Name, Title, Email, Phone, Address**, for both sender *and* recipient (delivering the "coming next release" promise from v3.50.2). The structured "To" renders into **PDF and DOCX** exactly like the "From" block; existing reports with a plain "To" line still export unchanged, and `toContactId` carries through the save-as-template / create-from-template paths with validators on both. The v3.50.2 typing/text-body internals are untouched. Built subagent-driven over 4 TDD tasks with a **parallel adversarial whole-branch review** that caught a plan gap (the recipient contact was being dropped through the *template* round-trip) and a tautological test, both fixed before ship. **3,626 automated tests** green (1 skipped); typecheck clean; no new egress; no new dependency. *Everything from v3.50.x carries forward.*
 
 **v3.50.2** — **Report editor typing fix.** A field bug: typing into a report's text body produced **character-reversed** text ("This is a test" → "tset a si sihT") and the align/list/link toolbar buttons felt unresponsive. Root cause: the editable area fed its live value back into React on every keystroke, which rebuilt the DOM and dropped the cursor to the start — so each character landed at the front and the toolbar lost its text selection. The editable body is now truly uncontrolled (set once, never re-clobbered), so the cursor stays put and the formatting buttons work. The text body also had **no styling at all** — it collapsed to a single hard-to-find line — so it now renders as a real 140px document area with a focus ring and a "Type your report here…" placeholder. **3,602 automated tests** green (1 skipped, +1 regression guard); typecheck clean; no new egress; no new dependency. *(Richer To/From recipient contacts — GhostExodus's other request — are coming in the next release.)*
 
@@ -537,7 +539,7 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases) and run it.
 
-Direct link to the current release: [`GhostIntel98-Setup-3.50.2.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.50.2/GhostIntel98-Setup-3.50.2.exe)
+Direct link to the current release: [`GhostIntel98-Setup-3.51.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.51.0/GhostIntel98-Setup-3.51.0.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is **formally verified internally** — symbolic (ProVerif) +
 computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not**
 FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.6.8/GhostIntel98-Setup-3.6.8.exe).
@@ -545,7 +547,7 @@ FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Se
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\GhostIntel98-Setup-3.50.2.exe -Algorithm SHA256
+Get-FileHash .\GhostIntel98-Setup-3.51.0.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
