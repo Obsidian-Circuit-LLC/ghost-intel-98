@@ -8,6 +8,7 @@ import type { Report, Contact, Descriptor, ReportBlock } from '@shared/reports-t
 import { ReportEditor } from './ReportEditor';
 import { ContactBook } from './ContactBook';
 import { DescriptorLibrary } from './DescriptorLibrary';
+import { IntroductionLibrary } from './IntroductionLibrary';
 import { CasePhotoPicker, type CasePhotoPick } from './CasePhotoPicker';
 import { loadAttachmentBytes } from '../../lib/attachmentBytes';
 import { toast } from '../../state/toasts';
@@ -28,7 +29,9 @@ export function ReportsModule(): JSX.Element {
   const [assets, setAssets] = useState<Record<string, string>>({});
   const [showContacts, setShowContacts] = useState(false);
   const [showDescriptors, setShowDescriptors] = useState(false);
+  const [showIntroductions, setShowIntroductions] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [zoom, setZoom] = useState(1);
   const [busy, setBusy] = useState(false);
 
   const refresh = useCallback(async (): Promise<void> => {
@@ -203,9 +206,12 @@ export function ReportsModule(): JSX.Element {
                 onRemoveBanner={removeBanner}
                 onManageContacts={() => setShowContacts(true)}
                 onManageDescriptors={() => setShowDescriptors(true)}
+                onManageIntroductions={() => setShowIntroductions(true)}
                 onAddPhoto={(f) => { void addPhoto(f); }}
                 onAddTable={addTable}
                 onImportFromCase={() => setShowImport(true)}
+                zoom={zoom}
+                onZoom={setZoom}
               />
             </>
           ) : (
@@ -224,6 +230,12 @@ export function ReportsModule(): JSX.Element {
       {showDescriptors ? (
         <DescriptorLibrary
           onClose={() => { setShowDescriptors(false); void refreshDescriptors(); }}
+        />
+      ) : null}
+
+      {showIntroductions ? (
+        <IntroductionLibrary
+          onClose={() => setShowIntroductions(false)}
         />
       ) : null}
 
