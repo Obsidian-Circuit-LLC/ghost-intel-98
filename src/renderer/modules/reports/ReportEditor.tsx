@@ -13,6 +13,7 @@ import { TextBlock } from './blocks/TextBlock';
 import { ImageBlock } from './blocks/ImageBlock';
 import { TableBlock } from './blocks/TableBlock';
 import { RightRail } from './panels/RightRail';
+import { ContactBook } from './ContactBook';
 import { extractOutline, wordCount, estimatePageCount } from './outline';
 
 export interface ReportEditorProps {
@@ -69,6 +70,9 @@ export function ReportEditor(props: ReportEditorProps): JSX.Element {
   const [dragOver, setDragOver] = useState(false);
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
+  // Which header field a "Choose…" click opened the ContactBook popup for — null when it's closed.
+  // The one popup instance serves both fields; `onUse` below reads this to decide which id to patch.
+  const [contactTarget, setContactTarget] = useState<'from' | 'to' | null>(null);
   const [pageCount, setPageCount] = useState(1);
   const pageRef = useRef<HTMLDivElement | null>(null);
   // The id of the report whose text body we've already auto-focused. Keyed on report identity (not a
@@ -172,7 +176,16 @@ export function ReportEditor(props: ReportEditorProps): JSX.Element {
   }
   function runCtx(fn: () => void): void { fn(); setCtxMenu(null); }
 
+  // Fills whichever field (`from` or `to`) the ContactBook popup was opened for — the popup itself
+  // doesn't know which header field asked for it, so this reads the target set by "Choose…".
+  function useContactFor(id: string): void {
+    if (contactTarget === 'to') patch({ toContactId: id });
+    else if (contactTarget === 'from') patch({ fromContactId: id });
+    setContactTarget(null);
+  }
+
   const fromContact = contacts.find((c) => c.id === report.fromContactId);
+  const toContact = contacts.find((c) => c.id === report.toContactId);
 
   return (
     <div className="ga98-report-shell ga98-report-editor">
@@ -293,17 +306,32 @@ export function ReportEditor(props: ReportEditorProps): JSX.Element {
                     ))}
                   </select>
                 </label>
+                <button type="button" aria-label="Choose From contact" onClick={() => setContactTarget('from')}>Choose…</button>
                 {fromContact ? <span className="ga98-report-from-org">{fromContact.org}</span> : null}
               </div>
 
-              <label className="ga98-report-to">
-                <span>To</span>
-                <input
-                  aria-label="To recipient"
-                  value={report.to}
-                  onChange={(e) => patch({ to: e.target.value })}
-                />
-              </label>
+              <div className="ga98-report-to">
+                <label>
+                  <span>To</span>
+                  <select
+                    aria-label="To contact"
+                    value={report.toContactId ?? ''}
+                    onChange={(e) => patch({ toContactId: e.target.value || undefined })}
+                  >
+                    <option value="">— none —</option>
+                    {contacts.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name || 'Unnamed'}{c.org ? ` (${c.org})` : ''}</option>
+                    ))}
+                  </select>
+                </label>
+                <button type="button" aria-label="Choose To contact" onClick={() => setContactTarget('to')}>Choose…</button>
+                {toContact ? <span className="ga98-report-to-org">{toContact.org}</span> : null}
+                {/* Legacy reports carried a free-text recipient string with no structured contact.
+                    Show it read-only so an old report doesn't visibly lose its recipient. */}
+                {!report.toContactId && report.to ? (
+                  <span className="ga98-report-to-legacy">{report.to}</span>
+                ) : null}
+              </div>
 
               <div className="ga98-report-metafields">
                 <label className="ga98-report-meta-field">
@@ -412,6 +440,10 @@ export function ReportEditor(props: ReportEditorProps): JSX.Element {
             <button type="button" onClick={() => runCtx(onManageIntroductions)}>Add introduction…</button>
           </div>
         </>
+      ) : null}
+
+      {contactTarget ? (
+        <ContactBook onUse={useContactFor} onClose={() => setContactTarget(null)} />
       ) : null}
     </div>
   );

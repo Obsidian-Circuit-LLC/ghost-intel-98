@@ -150,7 +150,7 @@ describe('ReportsModule — Templates actions', () => {
     expect((window as any).api.reports.copyAsset).toHaveBeenCalledWith('banner.png');
     expect(seed.bannerRef).toBe('banner.png-copy');
     // Editor swapped in.
-    await vi.waitFor(() => expect(container.querySelector('input[aria-label="To recipient"]')).toBeTruthy());
+    await vi.waitFor(() => expect(container.querySelector('select[aria-label="To contact"]')).toBeTruthy());
   });
 
   it('none of the Templates controls are disabled', async () => {
