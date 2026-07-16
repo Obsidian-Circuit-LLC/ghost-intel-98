@@ -528,6 +528,7 @@ export function ReportsModule(): JSX.Element {
       {showImport ? (
         <CasePhotoPicker
           onAdd={(picks) => { void importCasePhotos(picks); }}
+          onUploadFile={(f) => { void addPhoto(f); }}
           onClose={() => setShowImport(false)}
         />
       ) : null}

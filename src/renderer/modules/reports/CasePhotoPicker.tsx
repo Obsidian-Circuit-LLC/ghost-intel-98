@@ -25,11 +25,14 @@ export interface CasePhotoPick {
 
 export interface CasePhotoPickerProps {
   onAdd: (picks: CasePhotoPick[]) => void;
+  /** Upload from computer: hands a raw File straight to the same add-photo path the "+ Photo"
+   *  toolbar button uses (addPhoto/addPhotoBytes), bypassing the case-attachment list entirely. */
+  onUploadFile: (file: File) => void;
   onClose: () => void;
 }
 
 export function CasePhotoPicker(props: CasePhotoPickerProps): JSX.Element {
-  const { onAdd, onClose } = props;
+  const { onAdd, onUploadFile, onClose } = props;
   const [cases, setCases] = useState<CaseSummary[]>([]);
   const [caseId, setCaseId] = useState<string>('');
   const [attachments, setAttachments] = useState<AttachmentMeta[]>([]);
@@ -66,6 +69,13 @@ export function CasePhotoPicker(props: CasePhotoPickerProps): JSX.Element {
     onClose();
   }
 
+  function uploadFromComputer(e: React.ChangeEvent<HTMLInputElement>): void {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    onUploadFile(f);
+    onClose();
+  }
+
   return (
     <div className="ga98-report-overlay" role="dialog" aria-label="Import photos from a case" onMouseDown={onClose}>
       <div className="ga98-report-casepicker" onMouseDown={(e) => e.stopPropagation()}>
@@ -82,6 +92,16 @@ export function CasePhotoPicker(props: CasePhotoPickerProps): JSX.Element {
               <option key={c.id} value={c.id}>{c.title || c.reference || c.id}</option>
             ))}
           </select>
+        </label>
+
+        <label className="ga98-report-casepicker-upload">
+          <span>Upload from computer</span>
+          <input
+            aria-label="Upload photo from computer"
+            type="file"
+            accept="image/png,image/jpeg"
+            onChange={uploadFromComputer}
+          />
         </label>
 
         <div className="ga98-report-casepicker-list">
