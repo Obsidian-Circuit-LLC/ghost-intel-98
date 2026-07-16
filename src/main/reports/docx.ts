@@ -70,8 +70,8 @@ const EMU_MAX = 0x7fffffff; // clamp DrawingML extents to a sane positive 31-bit
 interface Media { rId: string; part: string; ext: string; bytes: Buffer; cx: number; cy: number }
 
 function para(runs: string, pPr = ''): string { return `<w:p>${pPr}${runs}</w:p>`; }
-function richRun(text: string, opts: { bold?: boolean; italic?: boolean; underline?: boolean; size?: number }): string {
-  const rPr = `<w:rPr>${opts.bold ? '<w:b/>' : ''}${opts.italic ? '<w:i/>' : ''}${opts.underline ? '<w:u w:val="single"/>' : ''}${opts.size ? `<w:sz w:val="${opts.size}"/>` : ''}</w:rPr>`;
+function richRun(text: string, opts: { bold?: boolean; italic?: boolean; underline?: boolean; size?: number; font?: string }): string {
+  const rPr = `<w:rPr>${opts.bold ? '<w:b/>' : ''}${opts.italic ? '<w:i/>' : ''}${opts.underline ? '<w:u w:val="single"/>' : ''}${opts.size ? `<w:sz w:val="${opts.size}"/>` : ''}${opts.font ? `<w:rFonts w:ascii="${esc(opts.font)}" w:hAnsi="${esc(opts.font)}"/>` : ''}</w:rPr>`;
   return `<w:r>${rPr}<w:t xml:space="preserve">${esc(text)}</w:t></w:r>`;
 }
 function imageRun(m: Media, id: number): string {
@@ -87,28 +87,38 @@ function clampPct(v: number): number {
   return Number.isFinite(v) ? Math.max(10, Math.min(100, Math.round(v))) : 60;
 }
 
+interface ParaOut { runs: string; pPr: string }
+
 /**
- * Tokenize sanitizer-constrained block html (`b/strong/i/em/u/p/br/span[font-size]`) into an array
- * of paragraph run-strings. A small stack of open-tag state (bold/italic/underline counters + a
- * font-size stack) is walked; text tokens become `<w:r>` runs with the current formatting; `<p>`
- * boundaries and `<br>` split/break. Unmatched closes clamp at zero so malformed input can't crash.
+ * Tokenize sanitizer-constrained block html (`b/strong/i/em/u/p/br/span[font-size|font-family]`
+ * + `ul/ol/li` + scheme-guarded `a[href]`) into an array of paragraph descriptors. A small stack of
+ * open-tag state (bold/italic/underline counters + font-size and font-family stacks) is walked; text
+ * tokens become `<w:r>` runs with the current formatting; `<p>` boundaries and `<br>` split/break;
+ * `<li>` boundaries flush a list paragraph carrying `<w:numPr>`. Paragraph-level properties
+ * (alignment from `<p style="text-align:…">`, list numbering) attach to `<w:pPr>`, so each entry is
+ * `{ runs, pPr }` rather than a bare run-string. A hyperlink wraps its runs in a `w:fldSimple`
+ * HYPERLINK field (no relationship part needed). Unmatched closes clamp at zero so malformed input
+ * can't crash.
  */
-function blockRuns(html: string): string[] {
+function blockRuns(html: string): ParaOut[] {
   let bold = 0, italic = 0, underline = 0;
   const sizeStack: (number | null)[] = []; // one entry per open <span>; null = span without font-size
-  const paragraphs: string[] = [];
+  const fontStack: (string | null)[] = []; // one entry per open <span>; null = span without font-family
+  let listDepth = 0;                 // >0 while inside ul/ol
+  let ordered = false;               // last-opened list type
+  let curAlign = '';                 // from the current <p style="text-align:...">
+  let linkUrl = '';                  // href of the open <a>, or ''
+  const paragraphs: ParaOut[] = [];
   let current = '';
 
-  const flush = (): void => {
-    if (current) { paragraphs.push(current); current = ''; }
-  };
-  const effSize = (): number | undefined => {
-    for (let i = sizeStack.length - 1; i >= 0; i--) {
-      const s = sizeStack[i];
-      if (s != null) return s;
-    }
-    return undefined;
-  };
+  const jc = (a: string): string => (a ? `<w:pPr><w:jc w:val="${a}"/></w:pPr>` : '');
+  const listPPr = (): string => `<w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="${ordered ? 2 : 1}"/></w:numPr></w:pPr>`;
+
+  const flushPara = (): void => { if (current) { paragraphs.push({ runs: current, pPr: jc(curAlign) }); current = ''; } curAlign = ''; };
+  const flushListItem = (): void => { if (current) { paragraphs.push({ runs: current, pPr: listPPr() }); current = ''; } };
+
+  const effSize = (): number | undefined => { for (let i = sizeStack.length - 1; i >= 0; i--) { const s = sizeStack[i]; if (s != null) return s; } return undefined; };
+  const effFont = (): string | undefined => { for (let i = fontStack.length - 1; i >= 0; i--) { const f = fontStack[i]; if (f != null) return f; } return undefined; };
 
   // Split into tags and the text between them.
   const parts = String(html ?? '').split(/(<[^>]*>)/);
@@ -122,14 +132,19 @@ function blockRuns(html: string): string[] {
       else if (name === 'i' || name === 'em') { closing ? (italic = Math.max(0, italic - 1)) : italic++; }
       else if (name === 'u') { closing ? (underline = Math.max(0, underline - 1)) : underline++; }
       else if (name === 'span') {
-        if (closing) { sizeStack.pop(); }
+        if (closing) { sizeStack.pop(); fontStack.pop(); }
         else {
           const sz = /font-size:\s*(\d+(?:\.\d+)?)pt/i.exec(tok);
           sizeStack.push(sz ? parseFloat(sz[1]) : null);
+          const fm = /font-family:\s*([^;"]+)/i.exec(tok);
+          fontStack.push(fm ? fm[1].trim() : null);
         }
       }
+      else if (name === 'a') { if (closing) linkUrl = ''; else { const h = /href="([^"]*)"/.exec(tok); linkUrl = h ? h[1] : ''; } }
+      else if (name === 'ul' || name === 'ol') { if (closing) listDepth = Math.max(0, listDepth - 1); else { listDepth++; ordered = name === 'ol'; } }
+      else if (name === 'li') { if (closing) flushListItem(); }
       else if (name === 'br') { current += '<w:r><w:br/></w:r>'; }
-      else if (name === 'p') { if (closing) flush(); else flush(); }
+      else if (name === 'p') { if (closing) flushPara(); else { flushPara(); const a = /text-align:\s*(left|center|right)/i.exec(tok); curAlign = a ? a[1].toLowerCase() : ''; } }
       // any other tag (shouldn't occur post-sanitize) is ignored
       continue;
     }
@@ -137,10 +152,25 @@ function blockRuns(html: string): string[] {
     const text = decodeEntities(tok);
     if (text === '') continue;
     const size = effSize();
-    current += richRun(text, { bold: bold > 0, italic: italic > 0, underline: underline > 0, size: size != null ? Math.round(size * 2) : undefined });
+    const run = richRun(text, { bold: bold > 0, italic: italic > 0, underline: underline > 0, size: size != null ? Math.round(size * 2) : undefined, font: effFont() });
+    current += linkUrl ? `<w:fldSimple w:instr="HYPERLINK &quot;${esc(linkUrl)}&quot;">${run}</w:fldSimple>` : run;
   }
-  flush();
+  if (listDepth > 0) flushListItem(); else flushPara();
   return paragraphs;
+}
+
+/** Render a rectangular string grid (validator-bounded) as a bordered `<w:tbl>`; each cell's text is
+ *  run through `blockRuns` so cell content follows the same allowlist as text blocks. */
+function tableXml(cells: string[][]): string {
+  const rows = cells.map((row) => {
+    const tcs = row.map((cell) => {
+      const paras = blockRuns(cell);
+      const cellBody = paras.length ? paras.map((p) => para(p.runs, p.pPr)).join('') : para('');
+      return `<w:tc><w:tcPr><w:tcBorders><w:top w:val="single" w:sz="4"/><w:left w:val="single" w:sz="4"/><w:bottom w:val="single" w:sz="4"/><w:right w:val="single" w:sz="4"/></w:tcBorders></w:tcPr>${cellBody}</w:tc>`;
+    }).join('');
+    return `<w:tr>${tcs}</w:tr>`;
+  }).join('');
+  return `<w:tbl><w:tblPr><w:tblBorders><w:top w:val="single" w:sz="4"/><w:left w:val="single" w:sz="4"/><w:bottom w:val="single" w:sz="4"/><w:right w:val="single" w:sz="4"/><w:insideH w:val="single" w:sz="4"/><w:insideV w:val="single" w:sz="4"/></w:tblBorders></w:tblPr>${rows}</w:tbl>`;
 }
 
 export function renderReportDocx(report: Report, assets: Record<string, string>, contact: Contact | null): Buffer {
@@ -178,12 +208,15 @@ export function renderReportDocx(report: Report, assets: Record<string, string>,
   for (const line of contactLines) body.push(para(richRun(line, {})));
   body.push(para(richRun('To', { bold: true })));
   body.push(para(richRun(report.to, {})));
+  if (report.reportDate) body.push(para(richRun('Date: ' + report.reportDate, {})));
 
   for (const b of report.blocks as ReportBlock[]) {
     if (b.kind === 'text') {
       const paras = blockRuns(b.html);
       if (paras.length === 0) { body.push(para('')); continue; }
-      for (const runs of paras) body.push(para(runs));
+      for (const p of paras) body.push(para(p.runs, p.pPr));
+    } else if (b.kind === 'table') {
+      body.push(tableXml(b.cells));
     } else {
       const m = addImage(b.assetRef, b.widthPct);
       if (m) body.push(para(imageRun(m, imgId++)));
@@ -195,17 +228,25 @@ export function renderReportDocx(report: Report, assets: Record<string, string>,
     + `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">`
     + `<w:body>${body.join('')}<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720" w:header="0" w:footer="0" w:gutter="0"/></w:sectPr></w:body></w:document>`;
 
+  const numberingXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`
+    + `<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">`
+    + `<w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:numFmt w:val="bullet"/><w:lvlText w:val="•"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:lvl></w:abstractNum>`
+    + `<w:abstractNum w:abstractNumId="1"><w:lvl w:ilvl="0"><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:lvl></w:abstractNum>`
+    + `<w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num><w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num></w:numbering>`;
+
   const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`
     + `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">`
     + `<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>`
     + `<Default Extension="xml" ContentType="application/xml"/>`
     + `<Default Extension="png" ContentType="image/png"/><Default Extension="jpg" ContentType="image/jpeg"/>`
-    + `<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`;
+    + `<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>`
+    + `<Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/></Types>`;
   const rootRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`
     + `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">`
     + `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`;
   const docRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`
     + `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">`
+    + `<Relationship Id="rIdNum" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>`
     + media.map((m) => `<Relationship Id="${m.rId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image${m.part.split('image')[1]}"/>`).join('')
     + `</Relationships>`;
 
@@ -214,6 +255,7 @@ export function renderReportDocx(report: Report, assets: Record<string, string>,
   zip.addFile('_rels/.rels', Buffer.from(rootRels, 'utf8'));
   zip.addFile('word/document.xml', Buffer.from(documentXml, 'utf8'));
   zip.addFile('word/_rels/document.xml.rels', Buffer.from(docRels, 'utf8'));
+  zip.addFile('word/numbering.xml', Buffer.from(numberingXml, 'utf8'));
   for (const m of media) zip.addFile(m.part, m.bytes);
   return zip.toBuffer();
 }

@@ -74,3 +74,44 @@ describe('renderReportDocx', () => {
     expect(doc).not.toContain('undefined');
   });
 });
+
+function docXml(buf: Buffer): string {
+  return new AdmZip(buf).readAsText('word/document.xml');
+}
+function baseReport(blocks: Report['blocks']): Report {
+  return { id: 'r', title: 'T', createdAt: '', updatedAt: '', to: 'you', blocks };
+}
+
+describe('renderReportDocx expansion', () => {
+  it('emits centered paragraph alignment', () => {
+    const xml = docXml(renderReportDocx(baseReport([{ id: 'b', kind: 'text', html: '<p style="text-align:center">hi</p>' }]), {}, null));
+    expect(xml).toContain('<w:jc w:val="center"/>');
+  });
+
+  it('emits a run font from font-family', () => {
+    const xml = docXml(renderReportDocx(baseReport([{ id: 'b', kind: 'text', html: '<span style="font-family:Georgia">hi</span>' }]), {}, null));
+    expect(xml).toContain('w:rFonts');
+    expect(xml).toContain('Georgia');
+  });
+
+  it('emits list paragraphs for ul/li', () => {
+    const xml = docXml(renderReportDocx(baseReport([{ id: 'b', kind: 'text', html: '<ul><li>a</li><li>b</li></ul>' }]), {}, null));
+    expect(xml).toContain('<w:numPr>');
+  });
+
+  it('emits a hyperlink for a link', () => {
+    const xml = docXml(renderReportDocx(baseReport([{ id: 'b', kind: 'text', html: '<a href="https://x.co">L</a>' }]), {}, null));
+    expect(xml).toMatch(/w:hyperlink|HYPERLINK/);
+  });
+
+  it('emits a w:tbl for a table block', () => {
+    const xml = docXml(renderReportDocx(baseReport([{ id: 'b', kind: 'table', cells: [['a', 'b'], ['c', 'd']] }]), {}, null));
+    expect(xml).toContain('<w:tbl>');
+    expect((xml.match(/<w:tc>/g) || []).length).toBe(4);
+  });
+
+  it('emits reportDate', () => {
+    const r = baseReport([]); r.reportDate = '2026-07-16';
+    expect(docXml(renderReportDocx(r, {}, null))).toContain('2026-07-16');
+  });
+});
