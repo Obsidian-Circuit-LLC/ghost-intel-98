@@ -349,8 +349,10 @@ export function ReportsModule(): JSX.Element {
       </div>
 
       <div className="ga98-statusbar ga98-report-statusbar-shell">
-        <span>{hasOpenReport ? `Editing: ${report?.title || 'Untitled report'}` : `${list.length} report${list.length === 1 ? '' : 's'}`}</span>
-        {busy ? <span>Working…</span> : null}
+        <span className="ga98-report-statusbar-field">{busy ? 'Working…' : hasOpenReport ? `Editing: ${report?.title || 'Untitled report'}` : 'Ready'}</span>
+        <span className="ga98-report-statusbar-field">{list.length} report{list.length === 1 ? '' : 's'}</span>
+        <span className="ga98-report-statusbar-field">Current Workspace: Default</span>
+        <span className="ga98-report-statusbar-field ga98-report-statusbar-enc">🔒 ENCRYPTED</span>
       </div>
 
       {showContacts ? (

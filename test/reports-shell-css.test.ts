@@ -75,26 +75,27 @@ describe('ga98-report app-shell / dashboard / nav / recent-table stylesheet (Tas
     const draft = statusColor('draft');
     const completed = statusColor('completed');
     const archived = statusColor('archived');
-    // Each is explicitly coloured…
-    expect(draft).toBe('rgb(200, 192, 0)');
-    expect(completed).toBe('rgb(63, 191, 95)');
-    expect(archived).toBe('rgb(138, 138, 138)');
+    // Each is explicitly coloured (darkened for contrast on the white Win98 rows)…
+    expect(draft).toBe('rgb(184, 134, 11)');
+    expect(completed).toBe('rgb(0, 128, 0)');
+    expect(archived).toBe('rgb(128, 128, 128)');
     // …and all three differ (a draft-coloured "archived" would be a real bug).
     expect(new Set([draft, completed, archived]).size).toBe(3);
   });
 
-  it('.ga98-report-recent td restates its background on the CLASS (beats the 98.css native-table white)', () => {
-    // The 98.css cascade paints every native `<td>` white; the dashboard table lives on the dark
-    // workspace, so the dark cell background MUST be restated on the class selector to win on
-    // specificity (the 98css-table-white-cascade lesson). A deleted rule → transparent/white → fail.
+  it('.ga98-report-recent header restates the silver background on the CLASS (beats the 98.css cascade)', () => {
+    // Win98 light skin: the list rows are white and the header row is silver. Both are RESTATED on
+    // the class selectors (`.ga98-report-recent td` / `th`) so they win deterministically over
+    // 98.css's native `<td>`/`<th>` rules on specificity (the 98css-table-white-cascade lesson) —
+    // a deleted rule would let the cascade repaint them. td = white; th = #c0c0c0 silver.
     inject('src/renderer/styles/theme.css');
     const table = el('ga98-report-recent', 'table');
     const tr = document.createElement('tr');
     const td = document.createElement('td');
-    tr.appendChild(td);
+    const th = document.createElement('th');
+    tr.appendChild(td); tr.appendChild(th);
     table.appendChild(tr);
-    expect(getComputedStyle(td).backgroundColor).toBe('rgb(36, 21, 57)');
-    // and it is emphatically not the native-table white the cascade would otherwise apply.
-    expect(getComputedStyle(td).backgroundColor).not.toBe('rgb(255, 255, 255)');
+    expect(getComputedStyle(td).backgroundColor).toBe('rgb(255, 255, 255)');
+    expect(getComputedStyle(th).backgroundColor).toBe('rgb(192, 192, 192)');
   });
 });

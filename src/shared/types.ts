@@ -92,7 +92,8 @@ export interface Reminder {
   title: string;
   body?: string;
   fireAt: ISODate;
-  repeat?: 'none' | 'daily' | 'weekly';
+  repeat?: 'none' | 'daily' | 'weekly' | 'monthly';
+  lastFiredAt?: ISODate;
   fired?: boolean;
 }
 

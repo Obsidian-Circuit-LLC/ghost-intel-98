@@ -9,6 +9,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CaseSummary, Reminder } from '@shared/types';
+import { occurrencesInLocalMonth, type Repeat } from '@shared/recurrence';
 import { promptDialog, confirmDialog } from '../../state/dialogs';
 import { toast } from '../../state/toasts';
 
@@ -18,6 +19,10 @@ interface Event {
   kind: 'reminder' | 'case-due';
   /** Present only for global reminders created here — the only events deletable from the calendar. */
   globalReminderId?: string;
+  /** The reminder's recurrence, carried so the context menu knows Make vs Remove recurring. */
+  repeat?: Repeat;
+  /** True for expanded occurrences of a repeating reminder (drives the 🔁 badge). */
+  recurring?: boolean;
 }
 
 /**
@@ -43,7 +48,10 @@ export function CalendarModule(): JSX.Element {
   const [refreshTick, setRefreshTick] = useState(0);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; ev: Event } | null>(null);
 
-  const refresh = useCallback(async () => {
+  // `isCurrent` guards against a last-write-wins race: rapid Prev/Next launches overlapping async
+  // refreshes whose per-case reads can finish out of order. The effect below invalidates the prior
+  // run before starting a new one, so only the latest cursor's run is allowed to setEvents.
+  const refresh = useCallback(async (isCurrent: () => boolean = () => true) => {
     try {
       const [globals, cases] = await Promise.all([
         window.api.reminders.listGlobal(),
@@ -51,7 +59,16 @@ export function CalendarModule(): JSX.Element {
       ]);
       const evs: Event[] = [];
       const broken: string[] = [];
-      for (const r of globals) evs.push({ date: ymd(new Date(r.fireAt)), label: r.title, kind: 'reminder', globalReminderId: r.id });
+      for (const r of globals) {
+        if (r.repeat && r.repeat !== 'none') {
+          const occ = occurrencesInLocalMonth(new Date(r.fireAt).getTime(), r.repeat, cursor.getFullYear(), cursor.getMonth());
+          for (const ms of occ) {
+            evs.push({ date: ymd(new Date(ms)), label: r.title, kind: 'reminder', globalReminderId: r.id, repeat: r.repeat, recurring: true });
+          }
+        } else {
+          evs.push({ date: ymd(new Date(r.fireAt)), label: r.title, kind: 'reminder', globalReminderId: r.id, repeat: r.repeat });
+        }
+      }
       for (const c of cases) {
         try {
           const detail = await window.api.cases.read(c.id);
@@ -67,17 +84,21 @@ export function CalendarModule(): JSX.Element {
           console.warn('[calendar] case read failed', c.id, err);
         }
       }
+      if (!isCurrent()) return; // a newer cursor's refresh superseded this one — drop its results
       setEvents(evs);
       if (broken.length > 0) {
         toast.warn(`Calendar: ${broken.length} case${broken.length === 1 ? '' : 's'} could not be loaded — see console.`);
       }
     } catch (err) {
+      if (!isCurrent()) return;
       toast.error(`Calendar refresh failed: ${(err as Error).message}`);
     }
-  }, []);
+  }, [cursor]);
 
   useEffect(() => {
-    void refresh();
+    let active = true;
+    void refresh(() => active);
+    return () => { active = false; };
   }, [cursor, refreshTick, refresh]);
 
   const grid = useMemo(() => buildMonthGrid(cursor), [cursor]);
@@ -103,6 +124,30 @@ export function CalendarModule(): JSX.Element {
       setRefreshTick((n) => n + 1);
     } catch (err) {
       toast.error(`Reminder failed: ${(err as Error).message}`);
+    }
+  }
+
+  async function setRecurrence(ev: Event, repeat: 'none' | 'daily' | 'weekly' | 'monthly'): Promise<void> {
+    setCtxMenu(null);
+    if (!ev.globalReminderId) return;
+    const all = await window.api.reminders.listGlobal();
+    const r = all.find((x) => x.id === ev.globalReminderId);
+    if (!r) return;
+    try {
+      // Removing recurrence turns the reminder back into a one-time reminder anchored at fireAt.
+      // If that anchor is already in the past, mark it fired so drainDue's non-recurring branch does
+      // NOT re-notify the stale anchor (a recurring reminder never latches fired). A still-future
+      // anchor stays unfired so it fires once at its time.
+      const fired = repeat === 'none'
+        ? new Date(r.fireAt).getTime() <= Date.now()
+        : r.fired;
+      await window.api.reminders.upsertGlobal({
+        ...r, repeat, fired, lastFiredAt: repeat === 'none' ? undefined : r.lastFiredAt
+      });
+      toast.success(repeat === 'none' ? 'Recurrence removed.' : `Repeats ${repeat}.`);
+      setRefreshTick((n) => n + 1);
+    } catch (err) {
+      toast.error(`Update failed: ${(err as Error).message}`);
     }
   }
 
@@ -161,6 +206,7 @@ export function CalendarModule(): JSX.Element {
                       setCtxMenu({ x: me.clientX, y: me.clientY, ev: e });
                     }}
                   >
+                    {e.recurring ? <span className="ga98-cal-recurring" aria-hidden="true">🔁</span> : null}
                     {e.label}
                   </div>
                 ))}
@@ -176,9 +222,20 @@ export function CalendarModule(): JSX.Element {
           <div style={{ position: 'fixed', inset: 0, zIndex: 29999 }} onMouseDown={() => setCtxMenu(null)} />
           <div className="ga98-context-menu" style={{ left: ctxMenu.x, top: ctxMenu.y }}>
             {ctxMenu.ev.globalReminderId ? (
-              <button className="ga98-context-menu-item" onClick={() => void deleteReminder(ctxMenu.ev)}>
-                Delete reminder
-              </button>
+              <>
+                {(!ctxMenu.ev.repeat || ctxMenu.ev.repeat === 'none') ? (
+                  <>
+                    <button className="ga98-context-menu-item" onClick={() => void setRecurrence(ctxMenu.ev, 'daily')}>Repeat daily</button>
+                    <button className="ga98-context-menu-item" onClick={() => void setRecurrence(ctxMenu.ev, 'weekly')}>Repeat weekly</button>
+                    <button className="ga98-context-menu-item" onClick={() => void setRecurrence(ctxMenu.ev, 'monthly')}>Repeat monthly</button>
+                  </>
+                ) : (
+                  <button className="ga98-context-menu-item" onClick={() => void setRecurrence(ctxMenu.ev, 'none')}>Remove recurring</button>
+                )}
+                <button className="ga98-context-menu-item" onClick={() => void deleteReminder(ctxMenu.ev)}>
+                  Delete reminder
+                </button>
+              </>
             ) : (
               <button
                 className="ga98-context-menu-item"

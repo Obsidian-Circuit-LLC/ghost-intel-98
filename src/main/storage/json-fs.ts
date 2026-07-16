@@ -34,6 +34,7 @@ import { simpleParser, type AddressObject } from 'mailparser';
 import { resolveCaseEntities } from './entities';
 import * as bioImages from './bio-images';
 import { defaultSettings, reconcileShortcuts } from '@shared/types';
+import { nextOccurrence, latestOccurrenceAtOrBefore } from '@shared/recurrence';
 import type { CaseStore, FileStore, NoteStore, ReminderStore, SettingsStore, ShredStore } from './interface';
 import {
   caseAttachmentsDir,
@@ -1023,7 +1024,20 @@ export const reminderStore: ReminderStore = {
       const globals = await readJson<Reminder[]>(globalRemindersFile(), []);
       let changed = false;
       for (const r of globals) {
-        if (!r.fired && new Date(r.fireAt) <= now) {
+        const repeat = r.repeat && r.repeat !== 'none' ? r.repeat : null;
+        if (repeat) {
+          const anchorMs = new Date(r.fireAt).getTime();
+          const afterMs = r.lastFiredAt ? new Date(r.lastFiredAt).getTime() : anchorMs - 1;
+          const dueMs = nextOccurrence(anchorMs, repeat, afterMs);
+          if (dueMs !== null && dueMs <= now.getTime()) {
+            due.push({ ...r, fireAt: new Date(dueMs).toISOString() }); // notify for THIS occurrence (once)
+            // Collapse any backlog (machine off for weeks / recurrence just enabled on a past anchor):
+            // jump progress to the LATEST occurrence <= now so we fire once, not one-per-tick. do NOT set fired.
+            const caughtUp = latestOccurrenceAtOrBefore(anchorMs, repeat, now.getTime());
+            r.lastFiredAt = new Date(caughtUp ?? dueMs).toISOString();
+            changed = true;
+          }
+        } else if (!r.fired && new Date(r.fireAt) <= now) {
           due.push(r);
           r.fired = true;
           changed = true;
@@ -1048,7 +1062,19 @@ export const reminderStore: ReminderStore = {
           const list = await readJson<Reminder[]>(path, []);
           let changed = false;
           for (const r of list) {
-            if (!r.fired && new Date(r.fireAt) <= now) {
+            const repeat = r.repeat && r.repeat !== 'none' ? r.repeat : null;
+            if (repeat) {
+              const anchorMs = new Date(r.fireAt).getTime();
+              const afterMs = r.lastFiredAt ? new Date(r.lastFiredAt).getTime() : anchorMs - 1;
+              const dueMs = nextOccurrence(anchorMs, repeat, afterMs);
+              if (dueMs !== null && dueMs <= now.getTime()) {
+                due.push({ ...r, caseId: cid, fireAt: new Date(dueMs).toISOString() }); // notify for THIS occurrence (once)
+                // Collapse any backlog: jump progress to the LATEST occurrence <= now (fire once, not per-tick).
+                const caughtUp = latestOccurrenceAtOrBefore(anchorMs, repeat, now.getTime());
+                r.lastFiredAt = new Date(caughtUp ?? dueMs).toISOString();              // advance progress; do NOT set fired
+                changed = true;
+              }
+            } else if (!r.fired && new Date(r.fireAt) <= now) {
               due.push({ ...r, caseId: cid });
               r.fired = true;
               changed = true;

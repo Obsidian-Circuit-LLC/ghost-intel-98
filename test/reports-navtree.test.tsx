@@ -72,7 +72,7 @@ describe('ReportsNavTree', () => {
         <ReportsNavTree active="dashboard" onSelect={vi.fn()} onNewReport={vi.fn()} onManageContacts={vi.fn()} />
       );
     });
-    const tpl = Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Use Template') as HTMLButtonElement;
+    const tpl = Array.from(container.querySelectorAll('button')).find((b) => (b.textContent || '').includes('Use Template')) as HTMLButtonElement;
     expect(tpl).toBeTruthy();
     expect(tpl.disabled).toBe(true);
   });
@@ -85,10 +85,10 @@ describe('ReportsNavTree', () => {
         <ReportsNavTree active="dashboard" onSelect={vi.fn()} onNewReport={onNewReport} onManageContacts={onManageContacts} />
       );
     });
-    const newBtn = Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Start New Report') as HTMLButtonElement;
+    const newBtn = Array.from(container.querySelectorAll('button')).find((b) => (b.textContent || '').includes('Start New Report')) as HTMLButtonElement;
     await act(async () => { newBtn.click(); });
     expect(onNewReport).toHaveBeenCalled();
-    const contactsBtn = Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Manage Contacts') as HTMLButtonElement;
+    const contactsBtn = Array.from(container.querySelectorAll('button')).find((b) => (b.textContent || '').includes('Manage Contacts')) as HTMLButtonElement;
     await act(async () => { contactsBtn.click(); });
     expect(onManageContacts).toHaveBeenCalled();
   });

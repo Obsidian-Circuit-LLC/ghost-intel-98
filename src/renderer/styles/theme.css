@@ -551,6 +551,8 @@ input.ga98-text, select.ga98-text {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Recurring-reminder badge (🔁) — a small inline glyph before a repeating occurrence's label. */
+.ga98-cal-recurring { margin-right: 2px; font-size: 9px; }
 
 .ga98-coming-soon {
   display: flex;
@@ -1483,53 +1485,55 @@ input.ga98-text, select.ga98-text {
  * PAGE is the one white surface (it is paper), so block/table/image content restates its own light
  * colours ON A CLASS SELECTOR to win over 98.css's native element rules (white-cascade lesson). All
  * rules are namespaced under .ga98-report-* so they cannot leak into other modules. */
-.ga98-report-shell { display: grid; grid-template-columns: 210px 1fr 230px; gap: 6px; height: 100%; overflow: hidden; background: #1a0f2e; color: #ece6f7; }
-.ga98-report-leftrail, .ga98-report-rightrail { overflow-y: auto; background: #241539; border: 1px solid #5a3aa8; padding: 6px; display: flex; flex-direction: column; gap: 10px; }
+/* Editor view — light Win98 to match the shell (GhostExodus mockup): silver rails, a grey document
+ * workspace with the white page floating on it, beveled toolbar buttons, white sunken inputs/lists. */
+.ga98-report-shell { display: grid; grid-template-columns: 210px 1fr 230px; gap: 3px; height: 100%; overflow: hidden; background: #c0c0c0; color: #000; padding: 3px; }
+.ga98-report-leftrail, .ga98-report-rightrail { overflow-y: auto; background: #c0c0c0; border: 2px solid; border-color: #fff #808080 #808080 #fff; padding: 6px; display: flex; flex-direction: column; gap: 10px; }
 .ga98-report-center { display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
-.ga98-report-toolbar { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; background: #241539; border: 1px solid #5a3aa8; align-items: center; }
-.ga98-report-toolbar button, .ga98-report-toolbar select { background: #241539; color: #ece6f7; border: 1px solid #7c4dff; font-size: 11px; min-height: 22px; cursor: pointer; }
-.ga98-report-toolbar button[aria-pressed='true'], .ga98-report-toolbar button.active { background: var(--ga98-blue); color: #fff; }
-.ga98-report-pagescroll { flex: 1; overflow: auto; background: #12081f; display: flex; justify-content: center; padding: 16px; }
-.ga98-report-page { width: 816px; min-height: 1056px; margin: 0 auto; background: #fff; color: #111; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.6); padding: 72px; box-sizing: border-box; transform: scale(var(--ga98-report-zoom, 1)); transform-origin: top center; }
+.ga98-report-toolbar { display: flex; flex-wrap: wrap; gap: 3px; padding: 3px; background: #c0c0c0; border: 2px solid; border-color: #fff #808080 #808080 #fff; align-items: center; }
+.ga98-report-toolbar button, .ga98-report-toolbar select { background: #c0c0c0; color: #000; border: 2px solid; border-color: #fff #808080 #808080 #fff; font-size: 11px; min-height: 22px; cursor: pointer; }
+.ga98-report-toolbar button:active:not(:disabled) { border-color: #808080 #fff #fff #808080; }
+.ga98-report-toolbar button[aria-pressed='true'], .ga98-report-toolbar button.active { border-color: #808080 #fff #fff #808080; background: #b0b0b0; }
+.ga98-report-pagescroll { flex: 1; overflow: auto; background: #808080; display: flex; justify-content: center; padding: 16px; }
+.ga98-report-page { width: 816px; min-height: 1056px; margin: 0 auto; background: #fff; color: #111; box-shadow: 2px 2px 8px rgba(0, 0, 0, 0.5); padding: 72px; box-sizing: border-box; transform: scale(var(--ga98-report-zoom, 1)); transform-origin: top center; }
 .ga98-report-banner-img { max-width: 100%; display: block; margin-bottom: 16px; }
 .ga98-report-imageblock-img { max-width: 100%; display: block; }
 .ga98-report-doc-table { border-collapse: collapse; width: 100%; margin: 12px 0; background: #fff; }
 .ga98-report-doc-table td, .ga98-report-doc-table th { border: 1px solid #333; padding: 4px 6px; background: #fff; color: #111; vertical-align: top; }
 .ga98-report-doc-table th { font-weight: bold; }
-.ga98-report-statusbar { display: flex; gap: 16px; padding: 3px 8px; background: #241539; border-top: 1px solid #5a3aa8; font-size: 11px; color: #ece6f7; }
-.ga98-report-rightrail section { border-bottom: 1px solid #5a3aa8; padding-bottom: 8px; }
+.ga98-report-statusbar { display: flex; gap: 16px; padding: 3px 8px; background: #c0c0c0; border-top: 1px solid #fff; font-size: 11px; color: #000; }
+.ga98-report-rightrail section { border-bottom: 1px solid #808080; padding-bottom: 8px; }
 .ga98-report-rightrail section:last-child { border-bottom: 0; }
 .ga98-report-panel-title { font-weight: bold; font-size: 11px; margin-bottom: 4px; }
 .ga98-report-outline-item { cursor: pointer; padding: 2px 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ga98-report-outline-item:hover { background: var(--ga98-blue); color: #fff; }
-/* Left-rail reusable-text libraries (contacts / descriptors / introductions) mirror the invoice-block
- * list styling — a dark list on the purple rail with a highlighted selection row. These three overlay
- * components (ContactBook / DescriptorLibrary / IntroductionLibrary) share one structure: a `-head`
- * bar (title + add/close), a `-list` <ul>, an `-empty` placeholder <li>, name/preview spans, and a
- * `-editor`. Styling targets the ACTUAL namespaced classes the components render, not a generic
- * `-library` namespace no component references. */
-.ga98-report-contactbook, .ga98-report-descriptorlib, .ga98-report-introlib { display: flex; flex-direction: column; gap: 4px; background: #241539; border: 1px solid #5a3aa8; padding: 6px; }
+/* Left-rail reusable-text libraries (contacts / descriptors / introductions) — silver panels with a
+ * white sunken list and a blue selection row. These three overlay components (ContactBook /
+ * DescriptorLibrary / IntroductionLibrary) share one structure: a `-head` bar, a `-list` <ul>, an
+ * `-empty` placeholder, name/preview spans, and a `-editor`. Targets the ACTUAL namespaced classes. */
+.ga98-report-contactbook, .ga98-report-descriptorlib, .ga98-report-introlib { display: flex; flex-direction: column; gap: 4px; background: #c0c0c0; border: 2px solid; border-color: #fff #808080 #808080 #fff; padding: 6px; color: #000; }
 .ga98-report-contactbook-head, .ga98-report-descriptorlib-head, .ga98-report-introlib-head { font-weight: bold; font-size: 11px; display: flex; justify-content: space-between; align-items: center; gap: 4px; }
-.ga98-report-contactbook-list, .ga98-report-descriptorlib-list, .ga98-report-introlib-list { list-style: none; margin: 0; padding: 0; }
+.ga98-report-contactbook-list, .ga98-report-descriptorlib-list, .ga98-report-introlib-list { list-style: none; margin: 0; padding: 2px; background: #fff; border: 2px solid; border-color: #808080 #fff #fff #808080; }
 .ga98-report-contactbook-list li, .ga98-report-descriptorlib-list li, .ga98-report-introlib-list li { display: flex; align-items: center; gap: 2px; padding: 2px 4px; cursor: pointer; }
-.ga98-report-contactbook-list li:hover, .ga98-report-descriptorlib-list li:hover, .ga98-report-introlib-list li:hover { background: #2f1c4d; }
+.ga98-report-contactbook-list li:hover, .ga98-report-descriptorlib-list li:hover, .ga98-report-introlib-list li:hover { background: #d8d8d8; }
 .ga98-report-contactbook-list li.selected, .ga98-report-descriptorlib-list li.selected, .ga98-report-introlib-list li.selected { background: var(--ga98-blue); color: #fff; }
-.ga98-report-contactbook-empty, .ga98-report-descriptorlib-empty, .ga98-report-introlib-empty { color: #a68fd6; font-style: italic; padding: 4px; font-size: 11px; }
+.ga98-report-contactbook-empty, .ga98-report-descriptorlib-empty, .ga98-report-introlib-empty { color: #808080; font-style: italic; padding: 4px; font-size: 11px; }
 .ga98-report-contact-name, .ga98-report-descriptor-name, .ga98-report-introduction-name { font-weight: bold; }
-.ga98-report-contact-org, .ga98-report-descriptor-preview, .ga98-report-introduction-preview { color: #a68fd6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ga98-report-contact-org, .ga98-report-descriptor-preview, .ga98-report-introduction-preview { color: #606060; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ga98-report-contact-editor, .ga98-report-descriptor-editor, .ga98-report-introduction-editor { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
 .ga98-report-contact-editor label, .ga98-report-descriptor-editor label, .ga98-report-introduction-editor label { display: flex; flex-direction: column; gap: 2px; font-size: 11px; }
 .ga98-report-contact-editor-actions, .ga98-report-descriptor-editor-actions, .ga98-report-introduction-editor-actions { display: flex; gap: 4px; }
-.ga98-report-contactbook button, .ga98-report-descriptorlib button, .ga98-report-introlib button { background: #241539; color: #ece6f7; border: 1px solid #7c4dff; font-size: 11px; cursor: pointer; }
-.ga98-report-contactbook input, .ga98-report-contactbook textarea, .ga98-report-descriptorlib input, .ga98-report-descriptorlib textarea, .ga98-report-introlib input, .ga98-report-introlib textarea { background: #12081f; color: #ece6f7; border: 1px solid #5a3aa8; }
-.ga98-report-contactbook input:focus, .ga98-report-contactbook textarea:focus, .ga98-report-descriptorlib input:focus, .ga98-report-descriptorlib textarea:focus, .ga98-report-introlib input:focus, .ga98-report-introlib textarea:focus { outline: 2px solid #7c4dff; }
-/* Inline popover menu (descriptor/introduction insert, link URL) — a small floating panel. */
-.ga98-report-descmenu, .ga98-report-linkpopover { position: absolute; z-index: 10; background: #241539; border: 1px solid #7c4dff; padding: 6px; display: flex; flex-direction: column; gap: 4px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6); }
-.ga98-report-descmenu button { background: #241539; color: #ece6f7; border: 1px solid #5a3aa8; font-size: 11px; text-align: left; cursor: pointer; }
+.ga98-report-contactbook button, .ga98-report-descriptorlib button, .ga98-report-introlib button { background: #c0c0c0; color: #000; border: 2px solid; border-color: #fff #808080 #808080 #fff; font-size: 11px; cursor: pointer; min-height: 22px; padding: 1px 8px; }
+.ga98-report-contactbook button:active, .ga98-report-descriptorlib button:active, .ga98-report-introlib button:active { border-color: #808080 #fff #fff #808080; }
+.ga98-report-contactbook input, .ga98-report-contactbook textarea, .ga98-report-descriptorlib input, .ga98-report-descriptorlib textarea, .ga98-report-introlib input, .ga98-report-introlib textarea { background: #fff; color: #000; border: 2px solid; border-color: #808080 #fff #fff #808080; }
+.ga98-report-contactbook input:focus, .ga98-report-contactbook textarea:focus, .ga98-report-descriptorlib input:focus, .ga98-report-descriptorlib textarea:focus, .ga98-report-introlib input:focus, .ga98-report-introlib textarea:focus { outline: 1px dotted #000; outline-offset: -3px; }
+/* Inline popover menu (descriptor/introduction insert, link URL) — a small floating silver panel. */
+.ga98-report-descmenu, .ga98-report-linkpopover { position: absolute; z-index: 10; background: #c0c0c0; border: 2px solid; border-color: #fff #808080 #808080 #fff; padding: 6px; display: flex; flex-direction: column; gap: 4px; box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.35); color: #000; }
+.ga98-report-descmenu button { background: #c0c0c0; color: #000; border: 2px solid; border-color: #fff #808080 #808080 #fff; font-size: 11px; text-align: left; cursor: pointer; }
 .ga98-report-descmenu button:hover { background: var(--ga98-blue); color: #fff; }
 /* Right-click block context menu. */
-.ga98-report-ctxmenu { position: fixed; z-index: 20; background: #241539; border: 1px solid #7c4dff; padding: 2px; display: flex; flex-direction: column; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6); }
-.ga98-report-ctxmenu button { background: transparent; color: #ece6f7; border: 0; font-size: 11px; text-align: left; padding: 3px 12px; cursor: pointer; }
+.ga98-report-ctxmenu { position: fixed; z-index: 20; background: #c0c0c0; border: 2px solid; border-color: #fff #808080 #808080 #fff; padding: 2px; display: flex; flex-direction: column; box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.35); }
+.ga98-report-ctxmenu button { background: transparent; color: #000; border: 0; font-size: 11px; text-align: left; padding: 3px 12px; cursor: pointer; }
 .ga98-report-ctxmenu button:hover { background: var(--ga98-blue); color: #fff; }
 /* The text block is the positioned ancestor the inline link popover (position:absolute) anchors to,
  * so the popover floats over the block body instead of anchoring to a distant ancestor. */
@@ -1538,23 +1542,22 @@ input.ga98-text, select.ga98-text {
  * button; without an explicit size the handle is a 0×0 (unclickable) box, so drag-to-resize is dead. */
 .ga98-report-imageblock { margin: 8px 0; }
 .ga98-report-imageblock-frame { position: relative; display: inline-block; max-width: 100%; }
-.ga98-report-imageblock.selected .ga98-report-imageblock-frame { outline: 2px solid #7c4dff; }
-.ga98-report-imageblock-handle { position: absolute; right: 0; bottom: 0; width: 12px; height: 12px; background: #7c4dff; border: 1px solid #fff; cursor: nwse-resize; }
-.ga98-report-imageblock-remove { position: absolute; top: 2px; right: 2px; background: #241539; color: #ece6f7; border: 1px solid #7c4dff; font-size: 11px; line-height: 1; cursor: pointer; }
-.ga98-report-imageblock-loading { color: #a68fd6; font-style: italic; font-size: 11px; }
+.ga98-report-imageblock.selected .ga98-report-imageblock-frame { outline: 2px solid #000080; }
+.ga98-report-imageblock-handle { position: absolute; right: 0; bottom: 0; width: 12px; height: 12px; background: #000080; border: 1px solid #fff; cursor: nwse-resize; }
+.ga98-report-imageblock-remove { position: absolute; top: 2px; right: 2px; background: #c0c0c0; color: #000; border: 2px solid; border-color: #fff #808080 #808080 #fff; font-size: 11px; line-height: 1; cursor: pointer; }
+.ga98-report-imageblock-loading { color: #808080; font-style: italic; font-size: 11px; }
 .ga98-report-imageblock-caption { display: block; width: 100%; margin-top: 4px; background: transparent; color: #111; border: 0; border-bottom: 1px solid #ccc; font-size: 11px; font-style: italic; }
-/* "Import from case" modal overlay + picker panel — a centered dialog dimming the editor beneath it.
- * Every one of these classes was previously unstyled, so the picker rendered inline in document flow. */
-.ga98-report-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6); display: flex; align-items: center; justify-content: center; z-index: 100; }
-.ga98-report-casepicker { background: #241539; border: 1px solid #7c4dff; padding: 12px; display: flex; flex-direction: column; gap: 8px; min-width: 360px; max-width: 90vw; max-height: 80vh; color: #ece6f7; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.7); }
+/* "Import from case" modal overlay + picker panel — a centered dialog dimming the editor beneath it. */
+.ga98-report-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; z-index: 100; }
+.ga98-report-casepicker { background: #c0c0c0; border: 2px solid; border-color: #fff #808080 #808080 #fff; padding: 12px; display: flex; flex-direction: column; gap: 8px; min-width: 360px; max-width: 90vw; max-height: 80vh; color: #000; box-shadow: 3px 3px 10px rgba(0, 0, 0, 0.5); }
 .ga98-report-casepicker-head { display: flex; justify-content: space-between; align-items: center; font-weight: bold; font-size: 12px; }
 .ga98-report-casepicker-select { display: flex; flex-direction: column; gap: 2px; font-size: 11px; }
-.ga98-report-casepicker-list { overflow-y: auto; max-height: 40vh; display: flex; flex-direction: column; gap: 2px; border: 1px solid #5a3aa8; padding: 4px; background: #12081f; }
+.ga98-report-casepicker-list { overflow-y: auto; max-height: 40vh; display: flex; flex-direction: column; gap: 2px; border: 2px solid; border-color: #808080 #fff #fff #808080; padding: 4px; background: #fff; }
 .ga98-report-casepicker-item { display: flex; align-items: center; gap: 6px; padding: 2px 4px; cursor: pointer; }
-.ga98-report-casepicker-item:hover { background: #2f1c4d; }
-.ga98-report-casepicker-empty { color: #a68fd6; font-style: italic; padding: 4px; font-size: 11px; }
+.ga98-report-casepicker-item:hover { background: #d8d8d8; }
+.ga98-report-casepicker-empty { color: #808080; font-style: italic; padding: 4px; font-size: 11px; }
 .ga98-report-casepicker-actions { display: flex; gap: 4px; justify-content: flex-end; }
-.ga98-report-casepicker button, .ga98-report-casepicker select { background: #241539; color: #ece6f7; border: 1px solid #7c4dff; font-size: 11px; cursor: pointer; }
+.ga98-report-casepicker button, .ga98-report-casepicker select { background: #c0c0c0; color: #000; border: 2px solid; border-color: #fff #808080 #808080 #fff; font-size: 11px; cursor: pointer; min-height: 22px; padding: 1px 8px; }
 
 /* ── Reports app shell (Task 7): menu bar · toolbar · nav tree · dashboard · recent table · status bar.
    The shell stacks four rows (menu / toolbar / body / status); the body row splits the left Explorer
@@ -1562,78 +1565,101 @@ input.ga98-text, select.ga98-text {
    palette (#241539 panel, #12081f workspace, #7c4dff/#5a3aa8 borders, #ece6f7 text, #a68fd6 muted,
    #000080 = --ga98-blue selection). Restated as literals where jsdom's computed-style guard reads
    them (it does not resolve var()). */
-.ga98-report-appshell { display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden; background: #12081f; color: #ece6f7; }
-.ga98-report-appbody { flex: 1; display: flex; flex-direction: row; min-height: 0; overflow: hidden; }
+/* ===== Win98 light-grey skin (Reports module ONLY) — matches GhostExodus's Chain-of-Custody mockup.
+   Reports diverges from the app's dark theme BY DESIGN (operator call): classic silver #c0c0c0 chrome
+   with 3-D bevels + blue MDI-style panel title bars, and ONE dark intelligence-workstation hero framed
+   inside the Dashboard. Bevels: raised = border-color #fff #808080 #808080 #fff; sunken = the reverse.
+   All namespaced under .ga98-report-* so it cannot leak into the dark modules. */
+.ga98-report-appshell { display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden; background: #c0c0c0; color: #000; }
+.ga98-report-appbody { flex: 1; display: flex; flex-direction: row; min-height: 0; overflow: hidden; padding: 3px; gap: 3px; }
 .ga98-report-appmain { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
-.ga98-report-statusbar-shell { justify-content: space-between; }
+.ga98-report-statusbar-shell { justify-content: flex-start; gap: 3px; padding: 2px; background: #c0c0c0; border-top: 1px solid #fff; }
+.ga98-report-statusbar-field { font-size: 11px; color: #000; padding: 1px 6px; border: 1px solid; border-color: #808080 #fff #fff #808080; }
+.ga98-report-statusbar-enc { margin-left: auto; }
+.ga98-report-dashboard > .ga98-report-panel { flex: 1; min-height: 0; }
 
-/* Menu bar — a row of top-level buttons over the purple rail; each opens a ga98-context-menu dropdown
-   re-tinted to the shell palette (the shared base is Win98 grey + position:fixed, both overridden). */
-.ga98-report-menubar { display: flex; align-items: stretch; background: #241539; border-bottom: 1px solid #5a3aa8; padding: 1px 2px; }
+/* Raised silver panel with a blue MDI-style title bar (Navigation / Quick Actions / Dashboard). */
+.ga98-report-panel { display: flex; flex-direction: column; background: #c0c0c0; border: 2px solid; border-color: #fff #808080 #808080 #fff; min-height: 0; }
+.ga98-report-titlebar { display: flex; align-items: center; justify-content: space-between; background: linear-gradient(90deg, #000080, #1084d0); color: #fff; font-size: 11px; font-weight: bold; padding: 2px 3px; }
+.ga98-report-titlebar-x { min-width: 16px; height: 14px; font-size: 9px; line-height: 1; background: #c0c0c0; color: #000; border: 2px solid; border-color: #fff #808080 #808080 #fff; cursor: default; }
+.ga98-report-panel-body { flex: 1; overflow: auto; padding: 4px; min-height: 0; }
+
+/* Menu bar — silver, black text, blue highlight on open. */
+.ga98-report-menubar { display: flex; align-items: stretch; background: #c0c0c0; border-bottom: 1px solid #808080; padding: 1px 2px; }
 .ga98-report-menu { position: relative; }
-.ga98-report-menu-top { background: transparent; color: #ece6f7; border: 1px solid transparent; font-size: 11px; padding: 2px 8px; cursor: pointer; }
-.ga98-report-menu-top:hover, .ga98-report-menu-top-open { background: var(--ga98-blue); color: #fff; }
-.ga98-report-menu-dropdown { position: absolute; top: 100%; left: 0; z-index: 30000; min-width: 180px; background: #241539; border: 1px solid #7c4dff; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6); padding: 2px; }
-.ga98-report-menu-dropdown .ga98-context-menu-item { color: #ece6f7; }
-.ga98-report-menu-dropdown .ga98-context-menu-item:hover:not(:disabled) { background: var(--ga98-blue); color: #fff; }
-.ga98-report-menu-dropdown .ga98-context-menu-item:disabled { color: #7a6ba0; cursor: default; }
-.ga98-report-menu-sep { height: 0; border-top: 1px solid #5a3aa8; margin: 2px 4px; }
+.ga98-report-menu-top { background: transparent; color: #000; border: 1px solid transparent; font-size: 11px; padding: 2px 8px; cursor: pointer; }
+.ga98-report-menu-top:hover, .ga98-report-menu-top-open { background: #000080; color: #fff; }
+.ga98-report-menu-dropdown { position: absolute; top: 100%; left: 0; z-index: 30000; min-width: 180px; background: #c0c0c0; border: 2px solid; border-color: #fff #808080 #808080 #fff; box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.35); padding: 2px; }
+.ga98-report-menu-dropdown .ga98-context-menu-item { color: #000; }
+.ga98-report-menu-dropdown .ga98-context-menu-item:hover:not(:disabled) { background: #000080; color: #fff; }
+.ga98-report-menu-dropdown .ga98-context-menu-item:disabled { color: #808080; cursor: default; }
+.ga98-report-menu-sep { height: 0; border-top: 1px solid #808080; border-bottom: 1px solid #fff; margin: 2px 4px; }
 
-/* Toolbar — reuses .ga98-toolbar / .ga98-report-toolbar containers; just the button + separator skins. */
-.ga98-report-toolbar-btn { background: #241539; color: #ece6f7; border: 1px solid #7c4dff; font-size: 11px; min-height: 24px; padding: 2px 8px; cursor: pointer; }
-.ga98-report-toolbar-btn:hover:not(:disabled) { background: var(--ga98-blue); color: #fff; }
-.ga98-report-toolbar-btn:disabled { opacity: 0.5; cursor: default; }
-.ga98-report-toolbar-sep { width: 1px; align-self: stretch; margin: 2px 4px; background: #5a3aa8; }
+/* Toolbar — raised silver buttons that depress on click. Scoped to the SHELL toolbar (which uniquely
+   carries both `ga98-toolbar` and `ga98-report-toolbar`) so it never reskins the editor's own
+   `.ga98-report-toolbar` row, which stays on the dark v3.48.0 palette. */
+.ga98-toolbar.ga98-report-toolbar { display: flex; flex-wrap: wrap; gap: 2px; padding: 3px; background: #c0c0c0; border-bottom: 1px solid #808080; align-items: center; }
+.ga98-report-toolbar-btn { display: inline-flex; align-items: center; gap: 4px; background: #c0c0c0; color: #000; border: 2px solid; border-color: #fff #808080 #808080 #fff; font-size: 11px; min-height: 24px; padding: 2px 8px; cursor: pointer; }
+.ga98-report-toolbar-btn:active:not(:disabled) { border-color: #808080 #fff #fff #808080; }
+.ga98-report-toolbar-btn:disabled { color: #808080; }
+.ga98-report-toolbar-btn:disabled .ga98-report-btn-ico { opacity: 0.4; }
+.ga98-report-toolbar-sep { width: 2px; align-self: stretch; margin: 2px 3px; border-left: 1px solid #808080; border-right: 1px solid #fff; }
+.ga98-report-btn-ico { font-size: 13px; line-height: 1; }
 
-/* Left Explorer nav tree + Quick Actions. */
-.ga98-report-nav { flex: 0 0 200px; width: 200px; display: flex; flex-direction: column; background: #1a0f2e; border-right: 1px solid #5a3aa8; overflow: auto; }
-.ga98-report-nav-tree { display: flex; flex-direction: column; padding: 6px 4px; gap: 1px; }
+/* Left column — Navigation + Quick Actions panels. */
+.ga98-report-nav { flex: 0 0 210px; width: 210px; display: flex; flex-direction: column; gap: 3px; background: transparent; overflow: hidden; }
+.ga98-report-nav .ga98-report-panel:first-child { flex: 1 1 auto; }
+.ga98-report-nav-tree { display: flex; flex-direction: column; padding: 4px; gap: 1px; background: #fff; border: 2px solid; border-color: #808080 #fff #fff #808080; flex: 1; overflow: auto; }
 .ga98-report-nav-branch { display: flex; flex-direction: column; }
-.ga98-report-nav-branch-head { display: flex; align-items: center; gap: 4px; background: transparent; color: #ece6f7; border: 0; text-align: left; font-size: 11px; font-weight: bold; padding: 2px 4px; cursor: pointer; }
-.ga98-report-nav-twisty { display: inline-block; width: 12px; text-align: center; color: #a68fd6; }
-.ga98-report-nav-children { display: flex; flex-direction: column; padding-left: 14px; }
-.ga98-report-nav-leaf { background: transparent; color: #ece6f7; border: 0; text-align: left; font-size: 11px; padding: 2px 6px; cursor: pointer; }
-.ga98-report-nav-leaf:hover { background: #2f1c4d; }
-/* Active node — dark-blue-on-white Win98 selection. Placed AFTER -nav-leaf so it wins at equal specificity. */
+.ga98-report-nav-branch-head { display: flex; align-items: center; gap: 3px; background: transparent; color: #000; border: 0; text-align: left; font-size: 11px; padding: 1px 3px; cursor: pointer; }
+.ga98-report-nav-twisty { display: inline-block; width: 11px; height: 11px; line-height: 9px; text-align: center; font-size: 9px; border: 1px solid #808080; background: #fff; color: #000; }
+.ga98-report-nav-ico { font-size: 12px; line-height: 1; }
+.ga98-report-nav-children { display: flex; flex-direction: column; padding-left: 16px; }
+.ga98-report-nav-leaf { display: flex; align-items: center; gap: 3px; background: transparent; color: #000; border: 0; text-align: left; font-size: 11px; padding: 1px 4px; cursor: pointer; }
+.ga98-report-nav-leaf:hover { background: #d8d8d8; }
 .ga98-report-nav-active { background: #000080; color: #fff; }
-.ga98-report-nav-quick { margin-top: auto; display: flex; flex-direction: column; gap: 4px; padding: 8px 6px; border-top: 1px solid #5a3aa8; }
-.ga98-report-nav-quick-title { font-weight: bold; font-size: 11px; color: #a68fd6; }
-.ga98-report-nav-quick-btn { background: #241539; color: #ece6f7; border: 1px solid #7c4dff; font-size: 11px; min-height: 24px; padding: 2px 8px; text-align: left; cursor: pointer; }
-.ga98-report-nav-quick-btn:hover:not(:disabled) { background: var(--ga98-blue); color: #fff; }
-.ga98-report-nav-quick-btn:disabled { opacity: 0.5; cursor: default; }
+.ga98-report-nav-quick { display: flex; flex-direction: column; gap: 4px; padding: 6px; }
+.ga98-report-nav-quick-title { display: none; }
+.ga98-report-nav-quick-btn { display: flex; align-items: center; gap: 5px; background: #c0c0c0; color: #000; border: 2px solid; border-color: #fff #808080 #808080 #fff; font-size: 11px; min-height: 26px; padding: 2px 8px; text-align: left; cursor: pointer; }
+.ga98-report-nav-quick-btn:active:not(:disabled) { border-color: #808080 #fff #fff #808080; }
+.ga98-report-nav-quick-btn:disabled { color: #808080; }
 
-/* Dashboard — welcome header + action tiles over the dark workspace, then the recent-reports table. */
-.ga98-report-dashboard { flex: 1; display: flex; flex-direction: column; gap: 12px; padding: 16px; overflow: auto; background: #12081f; }
-.ga98-report-dashboard-welcome { border-bottom: 1px solid #5a3aa8; padding-bottom: 8px; }
-.ga98-report-dashboard-title { margin: 0 0 4px; font-size: 20px; font-weight: bold; color: #ece6f7; }
-.ga98-report-dashboard-sub { margin: 0; font-size: 12px; color: #a68fd6; }
-.ga98-report-tiles { display: flex; flex-wrap: wrap; gap: 12px; }
-.ga98-report-tile { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; width: 120px; height: 88px; background: #241539; border: 1px solid #7c4dff; color: #ece6f7; font-size: 11px; cursor: pointer; }
-.ga98-report-tile:hover:not(:disabled) { background: #2f1c4d; }
-.ga98-report-tile:disabled { opacity: 0.5; cursor: default; }
-.ga98-report-tile-icon { font-size: 28px; line-height: 1; }
+/* Center Dashboard — a titled panel; its body holds the DARK intelligence-workstation hero, then the
+   light Recent Reports list. */
+.ga98-report-dashboard { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; background: #c0c0c0; }
+.ga98-report-dashboard .ga98-report-panel-body { display: flex; flex-direction: column; gap: 10px; padding: 8px; }
+.ga98-report-hero { background: #0a1428; background-image: radial-gradient(circle, #14294d 1px, transparent 1px); background-size: 14px 14px; border: 2px solid; border-color: #808080 #fff #fff #808080; padding: 16px; display: flex; flex-direction: column; gap: 16px; align-items: center; }
+.ga98-report-dashboard-welcome { text-align: center; }
+.ga98-report-dashboard-title { margin: 0 0 2px; font-size: 22px; font-weight: bold; color: #33ccff; text-shadow: 0 0 6px rgba(51, 204, 255, 0.4); font-family: 'Courier New', monospace; }
+.ga98-report-dashboard-sub { margin: 0; font-size: 13px; color: #7fd4ff; font-family: 'Courier New', monospace; }
+.ga98-report-tiles { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; }
+.ga98-report-tile { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; width: 128px; height: 96px; background: #060d1c; border: 1px solid #2a4a7a; color: #cfe4ff; font-size: 11px; cursor: pointer; }
+.ga98-report-tile:hover:not(:disabled) { border-color: #4da6ff; background: #0c1a33; }
+.ga98-report-tile:disabled { opacity: 0.4; cursor: default; }
+.ga98-report-tile-icon { font-size: 30px; line-height: 1; }
 .ga98-report-tile-label { text-align: center; }
 .ga98-report-dashboard-recent { display: flex; flex-direction: column; gap: 4px; }
+.ga98-report-recent-heading { font-size: 12px; font-weight: bold; color: #000; }
 
-/* Recent Reports table. The 98.css cascade paints every native <td>/<th> white; the dashboard table
-   sits on the dark workspace, so its cell backgrounds are RESTATED on the class selectors to beat the
-   element rule on specificity (the 98css-table-white-cascade lesson). Default cell text colour is set
-   via inheritance from the table (NOT on `td`), so the per-status colour classes — which match the
-   `<td>` element directly — win over it and stay visible inside the grid. */
+/* Recent Reports table — light Win98: white rows, black text, sunken frame; coloured statuses.
+   The table's default text colour is set on the TABLE (inherited by td) — NOT on `td` — so the
+   per-status colour classes, which match the <td> element directly, out-rank inheritance and stay
+   visible. th/td backgrounds are restated on the class to beat 98.css's native-table rules. */
 .ga98-report-recent-wrap { display: flex; flex-direction: column; gap: 6px; }
-.ga98-report-recent { width: 100%; border-collapse: collapse; background: #241539; color: #ece6f7; font-size: 11px; }
-.ga98-report-recent th { background: #2f1c4d; color: #ece6f7; text-align: left; font-weight: bold; padding: 3px 8px; border: 1px solid #5a3aa8; cursor: pointer; user-select: none; }
-.ga98-report-recent td { background: #241539; padding: 3px 8px; border: 1px solid #5a3aa8; }
-.ga98-report-recent tbody tr:hover td { background: #2f1c4d; }
-.ga98-report-recent-selected td { background: #000080; }
+.ga98-report-recent { width: 100%; border-collapse: collapse; background: #fff; color: #000; font-size: 11px; border: 2px solid; border-color: #808080 #fff #fff #808080; }
+.ga98-report-recent th { background: #c0c0c0; color: #000; text-align: left; font-weight: bold; padding: 3px 8px; border: 1px solid #808080; cursor: pointer; user-select: none; }
+.ga98-report-recent td { background: #fff; padding: 3px 8px; border-bottom: 1px solid #dfdfdf; }
+.ga98-report-recent tbody tr:hover td { background: #e8eef7; }
+.ga98-report-recent-selected td { background: #000080; color: #fff; }
 .ga98-report-recent-selected { color: #fff; }
-.ga98-report-recent-empty { color: #a68fd6; font-style: italic; text-align: center; padding: 8px; }
+.ga98-report-recent-empty { color: #808080; font-style: italic; text-align: center; padding: 8px; }
 .ga98-report-recent-actions { display: flex; gap: 6px; }
-.ga98-report-recent-actions button { background: #241539; color: #ece6f7; border: 1px solid #7c4dff; font-size: 11px; min-height: 22px; padding: 2px 8px; cursor: pointer; }
-.ga98-report-recent-actions button:disabled { opacity: 0.5; cursor: default; }
+.ga98-report-recent-actions button { background: #c0c0c0; color: #000; border: 2px solid; border-color: #fff #808080 #808080 #fff; font-size: 11px; min-height: 24px; padding: 2px 10px; cursor: pointer; }
+.ga98-report-recent-actions button:active:not(:disabled) { border-color: #808080 #fff #fff #808080; }
+.ga98-report-recent-actions button:disabled { color: #808080; }
 
-/* Status colours — set directly on the status <td> class so they beat the table's inherited text
-   colour (inheritance has no specificity; any directly-matching declaration wins). Distinct hues. */
-.ga98-report-status-draft { color: #c8c000; font-weight: bold; }
-.ga98-report-status-completed { color: #3fbf5f; font-weight: bold; }
-.ga98-report-status-archived { color: #8a8a8a; font-weight: bold; }
+/* Status colours on the <td> class (beat the table's inherited #000 by matching the element directly).
+   Darkened for contrast on the white rows. */
+.ga98-report-status-draft { color: #b8860b; font-weight: bold; }
+.ga98-report-status-completed { color: #008000; font-weight: bold; }
+.ga98-report-status-archived { color: #808080; font-weight: bold; }
