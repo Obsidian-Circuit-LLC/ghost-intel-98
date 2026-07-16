@@ -120,4 +120,37 @@ describe('ImageBlock', () => {
       }
     }
   });
+
+  it('maps the pointer to a COLUMN-relative widthPct, not the frame\'s own shrunk width', async () => {
+    // Regression: the frame is now sized to widthPct% of the column (WS5 hug-the-image change),
+    // so dividing the drag delta by the frame's own width snaps a sub-100% photo to 100% on grab.
+    // The denominator must be the constant column width (the frame's block parent), so nudging the
+    // right-edge handle a few px tracks the pointer proportionally instead of ballooning.
+    const block: ImageData = { id: 'i4', kind: 'image', assetRef: 'a.png', widthPct: 40, caption: '' };
+    const onChange = vi.fn();
+    await act(async () => {
+      root.render(<ImageBlock block={block} src="x" onChange={onChange} />);
+    });
+
+    const frame = container.querySelector('.ga98-report-imageblock-frame') as HTMLElement;
+    const parent = container.querySelector('.ga98-report-imageblock') as HTMLElement;
+    const rect = (width: number): DOMRect =>
+      ({ width, left: 0, right: width, top: 0, bottom: 0, height: 0, x: 0, y: 0, toJSON() {} } as DOMRect);
+    // Column is 500px; a 40% frame is 200px wide, its right-edge handle sits at x≈200.
+    parent.getBoundingClientRect = () => rect(500);
+    frame.getBoundingClientRect = () => rect(200);
+
+    const handle = container.querySelector('.ga98-report-imageblock-handle') as HTMLElement;
+    // Grab the handle at its resting position (x=200) and nudge it 10px right.
+    await act(async () => {
+      handle.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: 200 }));
+      window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: 210 }));
+      window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: 210 }));
+    });
+
+    expect(onChange).toHaveBeenCalled();
+    const last = onChange.mock.calls[onChange.mock.calls.length - 1][0];
+    // 210/500*100 = 42. Frame-relative math would give 210/200*100 = 105 → clamp → 100.
+    expect(last.widthPct).toBe(42);
+  });
 });
