@@ -71,6 +71,35 @@ export function ReportEditor(props: ReportEditorProps): JSX.Element {
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
   const [pageCount, setPageCount] = useState(1);
   const pageRef = useRef<HTMLDivElement | null>(null);
+  // The id of the report whose text body we've already auto-focused. Keyed on report identity (not a
+  // one-shot boolean) so an in-editor report swap — File▸New / any setReport that keeps this instance
+  // mounted (non-null → non-null, no remount) — re-focuses the *new* report's body. A plain boolean
+  // would latch true on report A and leave report B's freshly-mounted body unfocused, silently
+  // breaking type-immediately on the create-while-open path.
+  const focusedReportId = useRef<string | null>(null);
+
+  // Word-processor feel: a report always has a typable text body. If none of the blocks is a text
+  // block, seed one empty text block at the front (once — guarded by `.some`, so re-renders after
+  // the seed don't loop or double-seed). This lifts through onChange, exactly the way an edit does,
+  // so the module's setReport owns the seeded block and autosave persists it.
+  useEffect(() => {
+    if (!report.blocks.some((b) => b.kind === 'text')) {
+      const seed: ReportBlock = { id: crypto.randomUUID(), kind: 'text', html: '' };
+      onChange({ ...report, blocks: [seed, ...report.blocks] });
+    }
+  }, [report, onChange]);
+
+  // Focus the first text body once it exists (after the seed round-trips, or immediately for a
+  // report that already has one) so the operator can type straight away. Guarded in try/catch —
+  // headless/jsdom focus is a no-op there but must not throw.
+  useEffect(() => {
+    if (focusedReportId.current === report.id) return;
+    const el = pageRef.current?.querySelector<HTMLElement>('.ga98-report-textblock-body');
+    if (el) {
+      focusedReportId.current = report.id;
+      try { el.focus(); } catch { /* focus unsupported in this environment; non-fatal */ }
+    }
+  }, [report]);
 
   // Debounced autosave: after the report stops changing for AUTOSAVE_MS, persist it. Skip the first
   // run (the report was just loaded, not edited) so opening a report doesn't immediately rewrite it.
@@ -275,6 +304,41 @@ export function ReportEditor(props: ReportEditorProps): JSX.Element {
                   onChange={(e) => patch({ to: e.target.value })}
                 />
               </label>
+
+              <div className="ga98-report-metafields">
+                <label className="ga98-report-meta-field">
+                  <span>Case #</span>
+                  <input
+                    aria-label="Case #"
+                    value={report.caseNumber ?? ''}
+                    onChange={(e) => patch({ caseNumber: e.target.value || undefined })}
+                  />
+                </label>
+                <label className="ga98-report-meta-field">
+                  <span>Reference #</span>
+                  <input
+                    aria-label="Reference #"
+                    value={report.referenceNumber ?? ''}
+                    onChange={(e) => patch({ referenceNumber: e.target.value || undefined })}
+                  />
+                </label>
+                <label className="ga98-report-meta-field">
+                  <span>Classification</span>
+                  <input
+                    aria-label="Classification"
+                    value={report.classification ?? ''}
+                    onChange={(e) => patch({ classification: e.target.value || undefined })}
+                  />
+                </label>
+                <label className="ga98-report-meta-field">
+                  <span>Signature</span>
+                  <input
+                    aria-label="Signature"
+                    value={report.signature ?? ''}
+                    onChange={(e) => patch({ signature: e.target.value || undefined })}
+                  />
+                </label>
+              </div>
             </div>
 
             <div className="ga98-report-body">

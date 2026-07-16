@@ -7,9 +7,10 @@
  *  the renderer never builds the export buffer. Contacts are managed through the <ContactBook>
  *  overlay. The default author for a freshly-seeded report comes from settings.reports.author. */
 import { useCallback, useEffect, useState } from 'react';
-import type { Report, Contact, Descriptor, ReportBlock } from '@shared/reports-types';
+import type { Report, Contact, Descriptor, ReportBlock, ReportTemplate } from '@shared/reports-types';
 import { ReportEditor } from './ReportEditor';
 import { ReportsDashboard } from './ReportsDashboard';
+import { TemplatePreview } from './TemplatePreview';
 import { ReportsMenuBar, type ReportsActionId } from './ReportsMenuBar';
 import { ReportsToolbar } from './ReportsToolbar';
 import { ReportsNavTree } from './ReportsNavTree';
@@ -20,6 +21,7 @@ import { DescriptorLibrary } from './DescriptorLibrary';
 import { IntroductionLibrary } from './IntroductionLibrary';
 import { CasePhotoPicker, type CasePhotoPick } from './CasePhotoPicker';
 import { loadAttachmentBytes } from '../../lib/attachmentBytes';
+import { promptDialog } from '../../state/dialogs';
 import { toast } from '../../state/toasts';
 
 function uid(): string { return crypto.randomUUID(); }
@@ -27,7 +29,10 @@ function nowIso(): string { return new Date().toISOString(); }
 
 function seedReport(author: string): Report {
   const stamp = nowIso();
-  return { id: uid(), title: 'Untitled report', createdAt: stamp, updatedAt: stamp, to: '', status: 'draft', author, blocks: [] };
+  // Seed one empty text block so "Create New Report" opens straight into a typable document (the
+  // editor also self-seeds a text body, but seeding here means the very first persisted revision
+  // already carries it).
+  return { id: uid(), title: 'Untitled report', createdAt: stamp, updatedAt: stamp, to: '', status: 'draft', author, blocks: [{ id: uid(), kind: 'text', html: '' }] };
 }
 
 export function ReportsModule(): JSX.Element {
@@ -36,6 +41,12 @@ export function ReportsModule(): JSX.Element {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [descriptors, setDescriptors] = useState<Descriptor[]>([]);
   const [introductions, setIntroductions] = useState<Descriptor[]>([]);
+  const [templates, setTemplates] = useState<ReportTemplate[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [templatePreviewHtml, setTemplatePreviewHtml] = useState('');
+  // Whether the Templates library is the active center view. It isn't a report NavNode (which drives
+  // the Dashboard filter), so it rides its own flag; opening a report or any nav node clears it.
+  const [templatesView, setTemplatesView] = useState(false);
   const [assets, setAssets] = useState<Record<string, string>>({});
   const [showContacts, setShowContacts] = useState(false);
   const [showDescriptors, setShowDescriptors] = useState(false);
@@ -61,10 +72,16 @@ export function ReportsModule(): JSX.Element {
   const refreshIntroductions = useCallback(async (): Promise<void> => {
     setIntroductions(await window.api.reports.introductions.list());
   }, []);
+  // Templates access is optional-chained/try-wrapped so an older preload or a bare test stub (which
+  // may not expose reports.templates) simply keeps an empty library rather than crashing the shell.
+  const refreshTemplates = useCallback(async (): Promise<void> => {
+    try { setTemplates((await window.api.reports.templates?.list?.()) ?? []); }
+    catch { /* keep the empty library */ }
+  }, []);
 
   useEffect(() => {
-    void refresh(); void refreshContacts(); void refreshDescriptors(); void refreshIntroductions();
-  }, [refresh, refreshContacts, refreshDescriptors, refreshIntroductions]);
+    void refresh(); void refreshContacts(); void refreshDescriptors(); void refreshIntroductions(); void refreshTemplates();
+  }, [refresh, refreshContacts, refreshDescriptors, refreshIntroductions, refreshTemplates]);
 
   // Load the default report author from settings.reports.author (deep-merged, so it survives an
   // upgrade). Defensive: the read is optional-chained and try/wrapped so a settings API that isn't
@@ -129,6 +146,75 @@ export function ReportsModule(): JSX.Element {
     const r = list.find((x) => x.id === id);
     if (!r) return;
     await window.api.reports.save(duplicateReport(r, uid(), nowIso()));
+    await refresh();
+  }
+
+  // Select a template in the library: ask main to build its buildReportHtml (assets resolved
+  // main-side) and drop it into the sandboxed preview iframe. previewTemplate is optional-chained so
+  // an older preload/test stub degrades to a blank preview instead of throwing.
+  async function selectTemplate(id: string): Promise<void> {
+    setSelectedTemplateId(id);
+    try { setTemplatePreviewHtml((await window.api.reports.previewTemplate?.(id)) ?? ''); }
+    catch { setTemplatePreviewHtml(''); }
+  }
+
+  // Deep-copy a report/template body's assets so the clone owns independent bytes: every banner +
+  // image ref is re-encrypted via copyAsset (fresh uuid) and every block gets a fresh id. This is
+  // what makes a template survive deletion of its source report (and vice-versa). A ref that fails
+  // to copy falls back to the original so the body is never left dangling.
+  async function copyBody(src: { bannerRef?: string; blocks: ReportBlock[] }): Promise<{ bannerRef?: string; blocks: ReportBlock[] }> {
+    const bannerRef = src.bannerRef ? (await window.api.reports.copyAsset(src.bannerRef)) ?? src.bannerRef : undefined;
+    const blocks: ReportBlock[] = [];
+    for (const b of src.blocks) {
+      if (b.kind === 'image') {
+        const copied = await window.api.reports.copyAsset(b.assetRef);
+        blocks.push({ ...b, id: uid(), assetRef: copied ?? b.assetRef });
+      } else {
+        blocks.push({ ...b, id: uid() });
+      }
+    }
+    return { bannerRef, blocks };
+  }
+
+  // Save the open report as a reusable template. Prompts for a name via the themed promptDialog
+  // (never window.prompt — a no-op in Electron), deep-copies the banner + image assets so the
+  // template owns independent bytes, persists it, and refreshes the library.
+  async function saveAsTemplate(): Promise<void> {
+    if (!report) return;
+    const name = await promptDialog('Template name:', report.title || 'Untitled template', 'Save as Template');
+    if (name === null) return;
+    const trimmed = name.trim();
+    if (trimmed.length === 0) return;
+    const stamp = nowIso();
+    const { bannerRef, blocks } = await copyBody(report);
+    const template: ReportTemplate = {
+      id: uid(), name: trimmed, createdAt: stamp, updatedAt: stamp,
+      bannerRef, fromContactId: report.fromContactId, to: report.to, reportDate: report.reportDate,
+      caseNumber: report.caseNumber, referenceNumber: report.referenceNumber,
+      classification: report.classification, signature: report.signature,
+      blocks
+    };
+    await window.api.reports.templates.save(template);
+    await refreshTemplates();
+    toast.success(`Saved template “${trimmed}”.`);
+  }
+
+  // Clone a template into a fresh draft report and open it in the editor. Its banner + image assets
+  // are deep-copied (copyBody) so the report and template own separate bytes; block ids are
+  // regenerated so the new document is independent. The default author comes from settings, exactly
+  // like a blank new report.
+  async function createFromTemplate(t: ReportTemplate): Promise<void> {
+    const stamp = nowIso();
+    const { bannerRef, blocks } = await copyBody(t);
+    const seed: Report = {
+      id: uid(), title: t.name || 'Untitled report', createdAt: stamp, updatedAt: stamp,
+      bannerRef, fromContactId: t.fromContactId, to: t.to, reportDate: t.reportDate,
+      caseNumber: t.caseNumber, referenceNumber: t.referenceNumber, classification: t.classification,
+      signature: t.signature, status: 'draft', author,
+      blocks
+    };
+    const saved = await window.api.reports.save(seed);
+    await openReport(saved);
     await refresh();
   }
 
@@ -246,13 +332,26 @@ export function ReportsModule(): JSX.Element {
     if (report) void autosave(report);
     setReport(null);
     setAssets({});
+    setTemplatesView(false);
+    // Clear the template selection + preview so re-entering the Templates library doesn't flash the
+    // previously-selected template's stale preview until the user re-selects.
+    setSelectedTemplateId(null);
+    setTemplatePreviewHtml('');
     setNavNode(node);
   }
 
+  // Open the Templates library center view (close any open editor first, flushing its pending save
+  // the same way showDashboard does).
+  function showTemplatesLibrary(): void {
+    if (report) void autosave(report);
+    setReport(null);
+    setAssets({});
+    setTemplatesView(true);
+  }
+
   // Central action dispatcher — every menu item, toolbar button and dashboard tile routes its
-  // ReportsActionId here. Editor-only ids (save/export/print/edit ops) are already gated `disabled`
-  // by the menu/toolbar when no report is open; the guards below are belt-and-suspenders. Templates
-  // ids are rendered disabled (deferred to sub-project B) and never reach this dispatcher.
+  // ReportsActionId here. Editor-only ids (save/export/print/edit ops + Save-as-Template) are gated
+  // `disabled` by the menu/toolbar when no report is open; the guards below are belt-and-suspenders.
   function dispatch(id: ReportsActionId): void {
     switch (id) {
       case 'new': void newReport(); break;
@@ -274,8 +373,9 @@ export function ReportsModule(): JSX.Element {
       case 'cut': document.execCommand('cut'); break;
       case 'copy': document.execCommand('copy'); break;
       case 'paste': document.execCommand('paste'); break;
-      // Templates deferred to sub-project B — rendered disabled, never dispatched.
-      case 'templateSave': case 'templateLibrary': case 'templateUse': break;
+      // Templates: save the open report as a template, or open the library to pick one.
+      case 'templateSave': if (report) void saveAsTemplate(); break;
+      case 'templateLibrary': case 'templateUse': showTemplatesLibrary(); break;
     }
   }
 
@@ -296,6 +396,8 @@ export function ReportsModule(): JSX.Element {
   }
 
   const hasOpenReport = report !== null;
+  const showTemplates = !hasOpenReport && templatesView;
+  const selectedTemplate = templates.find((t) => t.id === selectedTemplateId) ?? null;
 
   return (
     <div className="ga98-report-appshell">
@@ -308,10 +410,58 @@ export function ReportsModule(): JSX.Element {
           onSelect={onNavSelect}
           onNewReport={() => { void newReport(); }}
           onManageContacts={() => setShowContacts(true)}
+          onViewTemplates={showTemplatesLibrary}
+          templatesActive={showTemplates}
         />
 
         <div className="ga98-report-appmain">
-          {report ? (
+          {showTemplates ? (
+            <div className="ga98-report-dashboard">
+              <div className="ga98-report-panel">
+                <div className="ga98-report-titlebar">
+                  <span>Templates</span>
+                  <span className="ga98-report-titlebar-x" aria-hidden="true">×</span>
+                </div>
+                <div className="ga98-report-panel-body ga98-report-tpl-view">
+                  <div className="ga98-report-tpl-list">
+                    {templates.length === 0 ? (
+                      <div className="ga98-report-tpl-empty">No templates yet. Open a report and choose “Save as Template.”</div>
+                    ) : (
+                      templates.map((t) => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          data-tpl={t.id}
+                          className={`ga98-report-tpl-row${selectedTemplateId === t.id ? ' ga98-report-tpl-row-active' : ''}`}
+                          onClick={() => { void selectTemplate(t.id); }}
+                        >
+                          <span className="ga98-report-tpl-row-name">{t.name}</span>
+                          {t.category ? <span className="ga98-report-tpl-row-cat">{t.category}</span> : null}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                  {selectedTemplate ? (
+                    <TemplatePreview
+                      html={templatePreviewHtml}
+                      templateName={selectedTemplate.name}
+                      onSelect={() => { void createFromTemplate(selectedTemplate); }}
+                    />
+                  ) : (
+                    <div className="ga98-report-panel ga98-report-tpl-preview">
+                      <div className="ga98-report-titlebar">
+                        <span>Preview</span>
+                        <span className="ga98-report-titlebar-x" aria-hidden="true">×</span>
+                      </div>
+                      <div className="ga98-report-panel-body ga98-report-tpl-preview-empty">
+                        Select a template to preview it.
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : report ? (
             <ReportEditor
               report={report}
               assets={assets}
@@ -341,6 +491,7 @@ export function ReportsModule(): JSX.Element {
               onContext={onReportContext}
               onNewReport={() => { void newReport(); }}
               onManageContacts={() => setShowContacts(true)}
+              onUseTemplate={showTemplatesLibrary}
               onExportSelected={() => { if (selectedId) void exportReportById(selectedId); }}
               onViewAll={() => setNavNode('all')}
             />

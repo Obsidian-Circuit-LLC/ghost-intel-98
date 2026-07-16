@@ -20,6 +20,7 @@ import { basename, dirname, join, sep } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { channels, BGCONN_LOCK_EXEMPT_CHANNELS } from '@shared/ipc-contracts';
 import type { MailAccount, MailSendInput, SshHostProfile, AiChatRequest, MediaTrack, AiConversation } from '@shared/post-mvp-types';
+import type { Report } from '@shared/reports-types';
 import type { MediaUrlResult, CaseRecord } from '@shared/types';
 import { defaultSettings } from '@shared/types';
 import type { SearchlightCase } from '@shared/searchlight/types';
@@ -69,7 +70,7 @@ import * as aiConvos from '../storage/ai-conversations';
 import * as briefcase from '../storage/briefcase';
 import * as journal from '../storage/journal';
 import * as voiceModel from '../voice/model-protocol';
-import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityType, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureShellProgram, ensureWhiteboard, ensureBoardFile, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon, ensureSaveToCaseOpts, ensureGeoItem, ensureThreatLayerId, ensureKeyedLayerId, ensureLayerKey, isKeyedLayerId, ensureBookmarkBoard, ensureMarketsSettings, ensureStickyNotes, ensureAiConversation, ensureBriefcaseNote, ensureJournalEntry, ensurePin, ensureUid, ensureMailFlag, stripProtectedSettings, ensureBounds, ensureDocRelPath, ensureDocName, ensureImportSourcePath, ensureNoteBody, ensureIdArray, ensureInvoice, ensureProfile, ensureAssetInput, ensureReport, ensureContact, ensureDescriptor, ensureIntroduction, ensureReportAssetInput } from '../security/validate';
+import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityType, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureShellProgram, ensureWhiteboard, ensureBoardFile, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon, ensureSaveToCaseOpts, ensureGeoItem, ensureThreatLayerId, ensureKeyedLayerId, ensureLayerKey, isKeyedLayerId, ensureBookmarkBoard, ensureMarketsSettings, ensureStickyNotes, ensureAiConversation, ensureBriefcaseNote, ensureJournalEntry, ensurePin, ensureUid, ensureMailFlag, stripProtectedSettings, ensureBounds, ensureDocRelPath, ensureDocName, ensureImportSourcePath, ensureNoteBody, ensureIdArray, ensureInvoice, ensureProfile, ensureAssetInput, ensureReport, ensureContact, ensureDescriptor, ensureIntroduction, ensureReportTemplate, ensureReportAssetInput } from '../security/validate';
 import * as entities from '../storage/entities';
 import * as bioStore from '../storage/bio-images';
 import * as ftp from '../services/ftp';
@@ -84,7 +85,7 @@ import * as invoiceStore from '../invoices/store';
 import { renderInvoicePdf } from '../invoices/export';
 import { renderInvoiceDocx } from '../invoices/docx';
 import * as reportStore from '../reports/store';
-import { reportToPdf } from '../reports/report-html';
+import { reportToPdf, buildReportHtml } from '../reports/report-html';
 import { renderReportDocx } from '../reports/docx';
 import { adHocAllowlist } from '../media/protocol';
 import { parseM3u, toM3u } from '../media/m3u';
@@ -1489,6 +1490,9 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     const asset = await reportStore.getAsset(ensureFileName(a[0], 'assetRef'));
     return asset ? { mime: asset.mime, dataUrl: `data:${asset.mime};base64,${asset.bytes.toString('base64')}` } : null;
   });
+  // Deep-copy an asset (fresh uuid ref owning its own bytes) so a template/report clone is
+  // independent of its source. ensureFileName gates the ref (the store re-validates too).
+  safeHandle(channels.reports.copyAsset, (...a) => reportStore.copyAsset(ensureFileName(a[0], 'assetRef')));
   safeHandle(channels.reports.contactsList, () => reportStore.listContacts());
   safeHandle(channels.reports.contactsSave, (...a) => reportStore.saveContact(ensureContact(a[0])));
   safeHandle(channels.reports.contactsRemove, (...a) => reportStore.removeContact(a[0] as string));
@@ -1498,6 +1502,41 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.reports.introductionsList, () => reportStore.listIntroductions());
   safeHandle(channels.reports.introductionsSave, (...a) => reportStore.saveIntroduction(ensureIntroduction(a[0])));
   safeHandle(channels.reports.introductionsRemove, (...a) => reportStore.removeIntroduction(a[0] as string));
+  safeHandle(channels.reports.templatesList, () => reportStore.listTemplates());
+  safeHandle(channels.reports.templatesSave, (...a) => reportStore.saveTemplate(ensureReportTemplate(a[0])));
+  safeHandle(channels.reports.templatesRemove, (...a) => reportStore.removeTemplate(a[0] as string));
+
+  // Template preview — resolve the template + its banner/image assets main-side and return the exact
+  // buildReportHtml document the exporters emit, so the renderer's sandboxed srcdoc iframe is faithful
+  // to the eventual PDF/DOCX. buildReportHtml stays main-only; the renderer never builds export HTML.
+  safeHandle(channels.reports.previewTemplate, async (...a) => {
+    const id = a[0] as string;
+    const template = (await reportStore.listTemplates()).find((t) => t.id === id);
+    if (!template) return '';
+    const contact = template.fromContactId
+      ? (await reportStore.listContacts()).find((c) => c.id === template.fromContactId) ?? null
+      : null;
+    const refs = new Set<string>();
+    if (template.bannerRef) refs.add(template.bannerRef);
+    for (const b of template.blocks) if (b.kind === 'image') refs.add(b.assetRef);
+    const assets: Record<string, string> = {};
+    for (const ref of refs) {
+      try {
+        const asset = await reportStore.getAsset(ref);
+        if (asset) assets[ref] = `data:${asset.mime};base64,${asset.bytes.toString('base64')}`;
+      } catch { /* a malformed/missing ref must not abort the whole preview */ }
+    }
+    // A template carries the same body a report does, minus report identity/status — project it onto
+    // the Report shape buildReportHtml expects (name→title, no author/status shown in the export).
+    const asReport: Report = {
+      id: template.id, title: template.name, createdAt: template.createdAt, updatedAt: template.updatedAt,
+      bannerRef: template.bannerRef, fromContactId: template.fromContactId, to: template.to,
+      reportDate: template.reportDate, caseNumber: template.caseNumber, referenceNumber: template.referenceNumber,
+      classification: template.classification, signature: template.signature,
+      status: 'draft', author: '', blocks: template.blocks
+    };
+    return buildReportHtml(asReport, assets, contact);
+  });
 
   safeHandle(channels.reports.exportPdf, async (...a) => {
     const id = a[0] as string;

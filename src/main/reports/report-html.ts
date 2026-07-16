@@ -47,6 +47,13 @@ export function buildReportHtml(report: Report, assets: Record<string, string>, 
   const from = `<div class="from"><h3>From</h3>${contactHtml(contact)}</div>`;
   const to = `<div class="to"><h3>To</h3><div>${escapeHtml(report.to)}</div></div>`;
   const dateLine = report.reportDate ? `<div class="reportdate">Date: ${escapeHtml(report.reportDate)}</div>` : '';
+  const metaLines = [
+    report.caseNumber ? `<div class="metaline">Case #: ${escapeHtml(report.caseNumber)}</div>` : '',
+    report.referenceNumber ? `<div class="metaline">Reference #: ${escapeHtml(report.referenceNumber)}</div>` : '',
+    report.classification ? `<div class="metaline">Classification: ${escapeHtml(report.classification)}</div>` : ''
+  ].join('');
+  const meta = metaLines ? `<div class="meta">${metaLines}</div>` : '';
+  const signature = report.signature ? `<div class="signature">Signature: ${escapeHtml(report.signature)}</div>` : '';
   const blocks = report.blocks
     .map((b) => {
       if (b.kind === 'text') return `<div class="block block-text">${b.html}</div>`;
@@ -66,6 +73,9 @@ body{font-family:'Segoe UI',sans-serif;margin:0;color:#111;background:#fff}
 .page{max-width:8.5in;margin:0 auto;padding:0.75in}
 .banner{max-width:100%;margin-bottom:1.5em;display:block}
 .reportdate{margin-bottom:1em;color:#333}
+.meta{margin-bottom:1em;color:#333}
+.meta .metaline{margin-bottom:0.15em}
+.signature{margin-top:1.5em;color:#333}
 .from,.to{margin-bottom:1em}
 .from h3,.to h3{margin:0 0 0.25em;font-size:0.85em;text-transform:uppercase;letter-spacing:0.05em;color:#555}
 .block{margin:1em 0}
@@ -80,7 +90,9 @@ ${banner}
 ${from}
 ${to}
 ${dateLine}
+${meta}
 ${blocks}
+${signature}
 </div>
 </body></html>`;
 }

@@ -4,7 +4,7 @@
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { mkdir } from 'node:fs/promises';
-import type { Report, Contact, Descriptor, ReportStoreData, ReportAsset } from '@shared/reports-types';
+import type { Report, Contact, Descriptor, ReportTemplate, ReportStoreData, ReportAsset } from '@shared/reports-types';
 import { secureReadText, secureReadFile, secureWriteFile } from '../storage/secure-fs';
 import { dataRoot } from '../storage/paths';
 import { ensureFileName } from '../security/validate';
@@ -18,18 +18,19 @@ const MAX_REPORTS = 500;
 const MAX_CONTACTS = 500;
 const MAX_DESCRIPTORS = 500;
 const MAX_INTRODUCTIONS = 500;
+const MAX_TEMPLATES = 500;
 
 async function read(): Promise<ReportStoreData> {
   // Build a fresh object with fresh arrays — never spread a shared EMPTY const, or a JSON blob
   // that lacks a field would alias that const's array and later writes would mutate it.
   try {
     const p = JSON.parse(await secureReadText(file())) as Partial<ReportStoreData>;
-    return { reports: p.reports ?? [], contacts: p.contacts ?? [], descriptors: p.descriptors ?? [], introductions: p.introductions ?? [] };
-  } catch { return { reports: [], contacts: [], descriptors: [], introductions: [] }; }
+    return { reports: p.reports ?? [], contacts: p.contacts ?? [], descriptors: p.descriptors ?? [], introductions: p.introductions ?? [], templates: p.templates ?? [] };
+  } catch { return { reports: [], contacts: [], descriptors: [], introductions: [], templates: [] }; }
 }
 async function write(d: ReportStoreData): Promise<void> { await secureWriteFile(file(), JSON.stringify(d, null, 2)); }
 
-export async function _resetForTest(): Promise<void> { await write({ reports: [], contacts: [], descriptors: [], introductions: [] }); }
+export async function _resetForTest(): Promise<void> { await write({ reports: [], contacts: [], descriptors: [], introductions: [], templates: [] }); }
 
 export async function listReports(): Promise<Report[]> { return (await read()).reports; }
 export async function saveReport(r: Report): Promise<Report> {
@@ -79,6 +80,18 @@ export async function removeIntroduction(id: string): Promise<void> {
   const d = await read(); d.introductions = d.introductions.filter((x) => x.id !== id); await write(d);
 }
 
+export async function listTemplates(): Promise<ReportTemplate[]> { return (await read()).templates; }
+export async function saveTemplate(t: ReportTemplate): Promise<ReportTemplate> {
+  const d = await read();
+  const i = d.templates.findIndex((x) => x.id === t.id);
+  if (i >= 0) d.templates[i] = t; else d.templates.push(t);
+  if (d.templates.length > MAX_TEMPLATES) d.templates = d.templates.slice(d.templates.length - MAX_TEMPLATES);
+  await write(d); return t;
+}
+export async function removeTemplate(id: string): Promise<void> {
+  const d = await read(); d.templates = d.templates.filter((x) => x.id !== id); await write(d);
+}
+
 function extFor(mime: string): string { return mime === 'image/png' ? 'png' : mime === 'image/jpeg' ? 'jpg' : 'bin'; }
 function mimeFor(ref: string): string { return ref.endsWith('.png') ? 'image/png' : ref.endsWith('.jpg') ? 'image/jpeg' : 'application/octet-stream'; }
 
@@ -98,4 +111,12 @@ export async function getAsset(ref: string): Promise<ReportAsset | null> {
     const bytes = await secureReadFile(join(assetsDir(), ref));
     return { bytes, mime: mimeFor(ref) };
   } catch { return null; }
+}
+
+/** Deep-copy an asset so a template owns its own bytes: a template's ref survives deletion of the
+ *  source report's asset (and vice-versa). Returns null when the source ref doesn't resolve. */
+export async function copyAsset(ref: string): Promise<string | null> {
+  const a = await getAsset(ref);          // re-validates ref (ensureFileName) internally
+  if (!a) return null;
+  return putAsset(a.bytes, a.mime);        // fresh uuid ref owning its own bytes
 }

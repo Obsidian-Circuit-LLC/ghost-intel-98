@@ -4,8 +4,8 @@
  * The menu bar is a `role="menubar"` row of top-level menus (File / Edit / View / Reports /
  * Templates / Tools / Help); clicking a top-level opens a `ga98-context-menu`-style dropdown whose
  * items dispatch a shared action-id union via `onAction(id)`. Editor-only items (Save, Export, Edit
- * ops, …) are `disabled` unless `hasOpenReport`; every Templates item is `disabled` (deferred to
- * sub-project B — greyed, never a no-op). The toolbar is a `ga98-toolbar` row of the same actions.
+ * ops, Save as Template) are `disabled` unless `hasOpenReport`; Template Library / Use Template are
+ * always live (they open the library). The toolbar is a `ga98-toolbar` row of the same actions.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
@@ -54,12 +54,23 @@ describe('ReportsMenuBar', () => {
     expect(onAction).toHaveBeenCalledWith('new');
   });
 
-  it('every Templates menu item is disabled (deferred to sub-project B)', async () => {
-    await act(async () => { root.render(<ReportsMenuBar hasOpenReport onAction={vi.fn()} />); });
+  it('Templates items are live with a report open and dispatch their action', async () => {
+    const onAction = vi.fn();
+    await act(async () => { root.render(<ReportsMenuBar hasOpenReport onAction={onAction} />); });
     await act(async () => { topMenu('Templates').click(); });
     const items = Array.from(container.querySelectorAll('.ga98-report-menu-dropdown [data-menu-action]')) as HTMLButtonElement[];
     expect(items.length).toBeGreaterThan(0);
-    for (const it of items) expect(it.disabled).toBe(true);
+    for (const it of items) expect(it.disabled).toBe(false);
+    await act(async () => { menuItem('templateSave').click(); });
+    expect(onAction).toHaveBeenCalledWith('templateSave');
+  });
+
+  it('Save as Template is disabled with no report open; Library/Use stay live', async () => {
+    await act(async () => { root.render(<ReportsMenuBar hasOpenReport={false} onAction={vi.fn()} />); });
+    await act(async () => { topMenu('Templates').click(); });
+    expect(menuItem('templateSave').disabled).toBe(true);
+    expect(menuItem('templateLibrary').disabled).toBe(false);
+    expect(menuItem('templateUse').disabled).toBe(false);
   });
 
   it('Edit → Copy is disabled when no report is open and enabled when one is', async () => {

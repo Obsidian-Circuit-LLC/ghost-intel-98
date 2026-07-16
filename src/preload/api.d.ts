@@ -77,7 +77,7 @@ import type {
 import type { HarvestedItem, MonitoredChannel } from '../shared/socmint/types';
 import type { DocEntry, DocImportResult } from '../shared/documents-types';
 import type { Invoice, Profile, InvoiceAsset } from '../shared/invoice-types';
-import type { Report, Contact, Descriptor } from '../shared/reports-types';
+import type { Report, Contact, Descriptor, ReportTemplate } from '../shared/reports-types';
 
 export interface MailDraft {
   id: string;
@@ -408,6 +408,8 @@ export interface GhostApi {
     putAsset(bytes: number[], mime: string): Promise<string>;
     /** Resolve an asset ref to a preview data URL (main converts the stored bytes). */
     getAsset(ref: string): Promise<{ mime: string; dataUrl: string } | null>;
+    /** Deep-copy an asset (fresh uuid ref owning its own bytes); null if the source ref doesn't resolve. */
+    copyAsset(ref: string): Promise<string | null>;
     contacts: {
       list(): Promise<Contact[]>;
       save(contact: Contact): Promise<Contact>;
@@ -423,6 +425,13 @@ export interface GhostApi {
       save(introduction: Descriptor): Promise<Descriptor>;
       remove(id: string): Promise<void>;
     };
+    templates: {
+      list(): Promise<ReportTemplate[]>;
+      save(template: ReportTemplate): Promise<ReportTemplate>;
+      remove(id: string): Promise<void>;
+    };
+    /** Build a template's buildReportHtml (main-side) for the sandboxed preview iframe; '' if unknown. */
+    previewTemplate(id: string): Promise<string>;
     // Main resolves the report/contact/assets itself from the id for both exporters.
     exportPdf(id: string): Promise<string | null>;
     exportDocx(id: string): Promise<string | null>;

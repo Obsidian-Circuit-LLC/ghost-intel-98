@@ -31,13 +31,37 @@ export interface Report {
   fromContactId?: string;
   to: string;
   reportDate?: string;
+  caseNumber?: string;
+  referenceNumber?: string;
+  classification?: string;
+  signature?: string;
   status: 'draft' | 'completed' | 'archived';
   author: string;
   blocks: ReportBlock[];
 }
 
-/** On-disk shape (one encrypted JSON file) — four libraries side by side. */
-export interface ReportStoreData { reports: Report[]; contacts: Contact[]; descriptors: Descriptor[]; introductions: Descriptor[] }
+/** A saved report you clone. Carries the same body a report does, minus report identity/status;
+ *  its assets are deep-copied on save/create so it is independent of any source report. */
+export interface ReportTemplate {
+  id: string;
+  name: string;
+  category?: string;          // free text, optional (e.g. "Chain of Custody")
+  createdAt: string;
+  updatedAt: string;
+  // A template carries the same body a report does, minus report identity/status:
+  bannerRef?: string;
+  fromContactId?: string;
+  to: string;
+  reportDate?: string;
+  caseNumber?: string;        // (from sub-project C's metadata; present on both)
+  referenceNumber?: string;
+  classification?: string;
+  signature?: string;
+  blocks: ReportBlock[];
+}
+
+/** On-disk shape (one encrypted JSON file) — libraries side by side. */
+export interface ReportStoreData { reports: Report[]; contacts: Contact[]; descriptors: Descriptor[]; introductions: Descriptor[]; templates: ReportTemplate[] }
 
 /** getAsset result — raw bytes + mime; callers (report-html/docx/IPC) build the data URI. */
 export interface ReportAsset { bytes: Buffer; mime: string }
