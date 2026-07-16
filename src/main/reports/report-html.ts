@@ -40,12 +40,17 @@ function safeWidthPct(v: number): number {
  * caption. A missing asset ref (dropped/never uploaded) degrades to an empty `src` rather than
  * throwing — the export still completes with the surrounding text intact.
  */
-export function buildReportHtml(report: Report, assets: Record<string, string>, contact: Contact | null): string {
+export function buildReportHtml(
+  report: Report,
+  assets: Record<string, string>,
+  contact: Contact | null,
+  toContact: Contact | null = null
+): string {
   const banner = report.bannerRef && assets[report.bannerRef]
     ? `<img src="${assets[report.bannerRef]}" class="banner" alt="">`
     : '';
   const from = `<div class="from"><h3>From</h3>${contactHtml(contact)}</div>`;
-  const to = `<div class="to"><h3>To</h3><div>${escapeHtml(report.to)}</div></div>`;
+  const to = `<div class="to"><h3>To</h3>${toContact ? contactHtml(toContact) : `<div>${escapeHtml(report.to)}</div>`}</div>`;
   const dateLine = report.reportDate ? `<div class="reportdate">Date: ${escapeHtml(report.reportDate)}</div>` : '';
   const metaLines = [
     report.caseNumber ? `<div class="metaline">Case #: ${escapeHtml(report.caseNumber)}</div>` : '',
@@ -101,7 +106,8 @@ ${signature}
 export async function reportToPdf(
   report: Report,
   assets: Record<string, string>,
-  contact: Contact | null
+  contact: Contact | null,
+  toContact: Contact | null = null
 ): Promise<Buffer> {
-  return htmlToPdf(buildReportHtml(report, assets, contact));
+  return htmlToPdf(buildReportHtml(report, assets, contact, toContact));
 }
