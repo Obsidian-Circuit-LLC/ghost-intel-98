@@ -26,6 +26,11 @@ export interface MemoryItem {
   /** Pinned items are user-authoritative: exempt from decay/expiry, confidence held at 1. */
   pinned: boolean;
   source: 'extractor' | 'user';
+  /** Reversible tombstone (mirrors `AiConversation.memoryExcluded`): set when the sole conversation
+   *  this fact was distilled from is Forgotten. While true the fact is neither injected into chats
+   *  (`recallProfile`) nor rendered in the Mind's Eye (`buildGraph`), but it stays on disk so Remember
+   *  can restore it and the Memory panel can still inspect/erase it. Absent/false = live. */
+  memoryExcluded?: boolean;
 }
 
 /** Lowercased, whitespace-collapsed, trimmed — the canonical form used to match a candidate

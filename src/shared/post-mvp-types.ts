@@ -282,6 +282,10 @@ export interface AiConversation {
   updatedAt: string;
   messages: AiChatMessage[];
   caseId?: string;
+  /** Tombstone: when true the chat record survives in AI Assistant but is omitted from the
+   *  memory index by `reindexConversations` (so its graph node/chunks vanish). Absent = included.
+   *  Reversible — clearing the flag and reindexing brings the conversation back into memory. */
+  memoryExcluded?: boolean;
 }
 
 /** Lightweight row for the conversation sidebar — full messages fetched on open. */
@@ -290,6 +294,9 @@ export interface AiConversationSummary {
   title: string;
   updatedAt: string;
   messageCount: number;
+  /** Mirrors `AiConversation.memoryExcluded` so the conversation list can render the
+   *  Forget/Remember-from-memory toggle without fetching the full record. Absent = included. */
+  memoryExcluded?: boolean;
 }
 
 /** What the renderer sends to persist a conversation (timestamps managed by the store). */
@@ -298,6 +305,9 @@ export interface AiConversationInput {
   title: string;
   messages: AiChatMessage[];
   caseId?: string;
+  /** Optional memory-tombstone flag. Renderer saves omit it (the store preserves any existing
+   *  value); the forget/remember IPC handlers pass it explicitly to set/clear the tombstone. */
+  memoryExcluded?: boolean;
 }
 
 // ---------- Bookmarks dashboard (offline start.me-style board) ----------

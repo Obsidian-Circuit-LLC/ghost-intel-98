@@ -15,7 +15,10 @@ import { createBonds } from '../bonds';
 import type { GraphEdge, MemoryGraph } from './model';
 
 export async function buildGraph(): Promise<MemoryGraph> {
-  const [shards, profile] = await Promise.all([loadAllShards(), profileList()]);
+  const [shards, rawProfile] = await Promise.all([loadAllShards(), profileList()]);
+  // Facts tombstoned by a Forgotten conversation stay on disk (so Remember can restore them and the
+  // Memory panel can still inspect/erase them) but must NOT render as Mind's Eye nodes.
+  const profile = rawProfile.filter((it) => !it.memoryExcluded);
   // Computed once here (not re-derived from `conflict`-flagged nodes) so the "one thing to fix"
   // tray gets an actual conflicting pair rather than guessing from node iteration order.
   const conflictPairs = detectConflicts(profile);
@@ -31,4 +34,11 @@ export async function buildGraph(): Promise<MemoryGraph> {
   } catch { /* best-effort */ }
 
   return { nodes, edges: [...autoEdgeList, ...bondEdges], conflictPairs };
+}
+
+/** Drop every user-drawn bond touching `nodeId`. Called when a node is tombstoned (e.g. a
+ *  forgotten conversation) so its edges don't dangle to a graph node that no longer exists —
+ *  the bond write goes through the encrypted bond store (secure-fs), never a raw file write. */
+export async function pruneBondsForNode(nodeId: string): Promise<void> {
+  await createBonds().removeAllForNode(nodeId);
 }

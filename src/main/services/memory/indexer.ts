@@ -81,6 +81,7 @@ export async function reindexConversations(): Promise<ReindexResult> {
   for (const s of summaries) {
     const convo = await conversations.get(s.id);
     if (!convo) continue;
+    if (convo.memoryExcluded) continue; // tombstoned: keep the chat, omit it from the memory index
     const text = convo.messages.map((m) => `${m.role}: ${m.content}`).join('\n').trim();
     if (text) sources.push({ key: `convo:${convo.id}`, kind: 'chat', ref: convo.title || 'conversation', text });
   }

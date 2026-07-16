@@ -169,7 +169,9 @@ export async function recallProfile(
 ): Promise<{ items: MemoryItem[]; summary: string; block: string }> {
   try {
     const d = getDeps();
-    const inScope = await d.store.byScope(scopes);
+    // Facts tombstoned by a Forgotten conversation stay on disk (Remember must be able to restore
+    // them) but must NOT be injected — filter them out before selection/formatting.
+    const inScope = (await d.store.byScope(scopes)).filter((it) => !it.memoryExcluded);
     const items = selectProfileItems(inScope, scopes);
     const summaries = parseSummaries(await d.summaryIo.read());
     const summary = scopes
@@ -331,5 +333,34 @@ export async function profileWipe(scope?: MemoryScope): Promise<void> {
       delete rest[scope];
       await d.summaryIo.write(JSON.stringify(rest));
     }
+  });
+}
+
+/**
+ * Forget/Remember the facts a conversation was distilled into — the profile-store half of the
+ * conversation tombstone (register.ts:forgetConversation/rememberConversation). `learnFromConversation`
+ * tags each distilled item with provenance `conversation:<id>`, so Forget must also stop those facts
+ * from being injected and rendered — otherwise the conversation's content survives Forget in the
+ * profile even though its chat chunks and graph node are gone.
+ *
+ * Only facts derived SOLELY from this conversation are affected — an item whose provenance also names
+ * another conversation or a note has independent support (reconcile.ts merges provenance on
+ * reinforcement) and is left live. This is a REVERSIBLE tombstone: we set/clear `memoryExcluded`
+ * rather than deleting, so Remember restores exactly what Forget hid. Persisted through the profile
+ * store (secure-fs, encrypted at rest) under the same lock as every other profile write.
+ */
+export async function setConversationFactsExcluded(convoId: string, excluded: boolean): Promise<void> {
+  const d = getDeps();
+  const tag = `conversation:${convoId}`;
+  await withLock(PROFILE_LOCK, async () => {
+    const all = await d.store.all();
+    const affected = all.filter(
+      (it) =>
+        it.provenance.length === 1 &&
+        it.provenance[0] === tag &&
+        Boolean(it.memoryExcluded) !== excluded
+    );
+    if (affected.length === 0) return;
+    await d.store.put(affected.map((it) => ({ ...it, memoryExcluded: excluded })));
   });
 }

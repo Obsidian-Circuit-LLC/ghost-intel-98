@@ -10,8 +10,20 @@ import { useEffect, useState } from 'react';
 import type { GraphNodeShape, MemoryGraphShape } from '@shared/ipc-contracts';
 import { GraphCanvas } from '../../components/graph-canvas/GraphCanvas';
 import type { RenderGraph } from '../../components/graph-canvas/svg-scene';
+import { confirmDialog, alertDialog } from '../../state/dialogs';
 
 const VIEW = { w: 720, h: 500 };
+
+/** Conversation `doc`-graph nodes carry `__conversations__:convo:<id>` as their node id (see
+ *  `conversations/sources.ts`). Strip that prefix to recover the AiConversation id the
+ *  forget/remember IPC expects. Anything else (an entity node, a malformed id) yields `null` so
+ *  the caller bails rather than forgetting the wrong record. */
+const CONVO_NODE_PREFIX = '__conversations__:convo:';
+export function convoIdFromNodeId(id: string): string | null {
+  return id.startsWith(CONVO_NODE_PREFIX) && id.length > CONVO_NODE_PREFIX.length
+    ? id.slice(CONVO_NODE_PREFIX.length)
+    : null;
+}
 
 /** Uploaded-library `doc` nodes carry `doc:<docId>` as a segment of their node id (see
  *  `library/sources.ts`'s `doc:${docId}` sourceKey → `build.ts`'s `${caseId}:${sourceKey}` node
@@ -79,6 +91,29 @@ export function MindsEyeModule(): JSX.Element {
     try {
       await window.api.memory.forgetDoc(docId);
       load();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Forget a conversation's *memory* (a tombstone, not a delete): the chat survives in AI
+   *  Assistant, but `memoryExcluded` is set so `reindexConversations()` drops its chunks and its
+   *  graph node vanishes. Reversible from the AI Assistant list (rememberConversation). Confirm
+   *  first; surface any reindex failure (embed engine down) instead of a silent success. */
+  async function forgetConversation(node: GraphNodeShape): Promise<void> {
+    const id = convoIdFromNodeId(node.id);
+    if (id === null) return; // not a conversation-backed node — nothing to forget
+    const ok = await confirmDialog(
+      "Forget this conversation's memory? The chat stays in AI Assistant, but it will no longer be recalled.",
+      'Forget conversation',
+    );
+    if (!ok) return;
+    setBusy(true);
+    try {
+      await window.api.memory.forgetConversation(id);
+      load();
+    } catch (e: unknown) {
+      await alertDialog(e instanceof Error ? e.message : String(e), 'Could not forget conversation');
     } finally {
       setBusy(false);
     }
@@ -224,8 +259,11 @@ export function MindsEyeModule(): JSX.Element {
                     Forget
                   </button>
                 )}
-                {(selected.kind === 'conversation' || selected.kind === 'entity') && (
-                  <button disabled title="Forgetting conversations/entities isn't supported yet">Forget</button>
+                {selected.kind === 'conversation' && (
+                  <button disabled={busy} onClick={() => forgetConversation(selected)}>Forget</button>
+                )}
+                {selected.kind === 'entity' && (
+                  <button disabled title="Entity memory is a per-case aggregate — manage it in the case tool">Forget</button>
                 )}
                 <button disabled={busy} onClick={() => recallIntoChat(selected)}>Recall into chat</button>
               </div>

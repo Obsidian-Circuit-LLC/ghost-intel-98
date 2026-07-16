@@ -587,6 +587,11 @@ export interface GhostApi {
     /** Mind's Eye curation: forget a `doc`-kind node — removes it from the library AND reindexes
      *  the library shard synchronously so recall stops surfacing it right away. */
     forgetDoc(docId: string): Promise<void>;
+    /** Mind's Eye curation: forget a conversation's memory — a reversible tombstone. The chat stays
+     *  in the AI Assistant; it stops being indexed/recalled and its graph node disappears. */
+    forgetConversation(id: string): Promise<void>;
+    /** Undo forgetConversation — clears the tombstone and reindexes so the node/chunks return. */
+    rememberConversation(id: string): Promise<void>;
     /** Merge a duplicate fact (`dropId`) into another (`keepId`) — unions provenance, keeps the
      *  higher confidence, drops the other. Returns the full post-merge item set. */
     mergeItems(keepId: string, dropId: string): Promise<MemoryItem[]>;
