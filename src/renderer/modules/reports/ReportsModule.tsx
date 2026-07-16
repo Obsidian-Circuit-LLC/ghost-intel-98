@@ -333,6 +333,10 @@ export function ReportsModule(): JSX.Element {
     setReport(null);
     setAssets({});
     setTemplatesView(false);
+    // Clear the template selection + preview so re-entering the Templates library doesn't flash the
+    // previously-selected template's stale preview until the user re-selects.
+    setSelectedTemplateId(null);
+    setTemplatePreviewHtml('');
     setNavNode(node);
   }
 
