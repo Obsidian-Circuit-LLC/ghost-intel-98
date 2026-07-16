@@ -1447,3 +1447,58 @@ input.ga98-text, select.ga98-text {
 .ga98-calc-conv-row { grid-column: 1 / -1; display: flex; align-items: flex-end; gap: 6px; }
 .ga98-calc-conv-label { display: flex; flex-direction: column; gap: 2px; font-size: 11px; flex: 1; }
 .ga98-calc-conv-swap { flex: 0 0 auto; align-self: center; min-height: 22px; }
+
+/* ===== Reports (Report Template Generator) =====
+ * Root-cause fix (v3.47.0 shipped Reports with ZERO ga98-report styling): a three-column shell with a
+ * fixed-width white "paper" page in the middle. Dark chrome matches the invoice block palette; the
+ * PAGE is the one white surface (it is paper), so block/table/image content restates its own light
+ * colours ON A CLASS SELECTOR to win over 98.css's native element rules (white-cascade lesson). All
+ * rules are namespaced under .ga98-report-* so they cannot leak into other modules. */
+.ga98-report-shell { display: grid; grid-template-columns: 210px 1fr 230px; gap: 6px; height: 100%; overflow: hidden; background: #1a0f2e; color: #ece6f7; }
+.ga98-report-leftrail, .ga98-report-rightrail { overflow-y: auto; background: #241539; border: 1px solid #5a3aa8; padding: 6px; display: flex; flex-direction: column; gap: 10px; }
+.ga98-report-center { display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+.ga98-report-toolbar { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; background: #241539; border: 1px solid #5a3aa8; align-items: center; }
+.ga98-report-toolbar button, .ga98-report-toolbar select { background: #241539; color: #ece6f7; border: 1px solid #7c4dff; font-size: 11px; min-height: 22px; cursor: pointer; }
+.ga98-report-toolbar button[aria-pressed='true'], .ga98-report-toolbar button.active { background: var(--ga98-blue); color: #fff; }
+.ga98-report-pagescroll { flex: 1; overflow: auto; background: #12081f; display: flex; justify-content: center; padding: 16px; }
+.ga98-report-page { width: 816px; min-height: 1056px; margin: 0 auto; background: #fff; color: #111; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.6); padding: 72px; box-sizing: border-box; transform: scale(var(--ga98-report-zoom, 1)); transform-origin: top center; }
+.ga98-report-banner-img { max-width: 100%; display: block; margin-bottom: 16px; }
+.ga98-report-imageblock-img { max-width: 100%; display: block; }
+.ga98-report-doc-table { border-collapse: collapse; width: 100%; margin: 12px 0; background: #fff; }
+.ga98-report-doc-table td, .ga98-report-doc-table th { border: 1px solid #333; padding: 4px 6px; background: #fff; color: #111; vertical-align: top; }
+.ga98-report-doc-table th { font-weight: bold; }
+.ga98-report-statusbar { display: flex; gap: 16px; padding: 3px 8px; background: #241539; border-top: 1px solid #5a3aa8; font-size: 11px; color: #ece6f7; }
+.ga98-report-rightrail section { border-bottom: 1px solid #5a3aa8; padding-bottom: 8px; }
+.ga98-report-rightrail section:last-child { border-bottom: 0; }
+.ga98-report-panel-title { font-weight: bold; font-size: 11px; margin-bottom: 4px; }
+.ga98-report-outline-item { cursor: pointer; padding: 2px 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ga98-report-outline-item:hover { background: var(--ga98-blue); color: #fff; }
+/* Left-rail reusable-text libraries (contacts / descriptors / introductions) mirror the invoice-block
+ * list styling — a dark list on the purple rail with a highlighted selection row. These three overlay
+ * components (ContactBook / DescriptorLibrary / IntroductionLibrary) share one structure: a `-head`
+ * bar (title + add/close), a `-list` <ul>, an `-empty` placeholder <li>, name/preview spans, and a
+ * `-editor`. Styling targets the ACTUAL namespaced classes the components render, not a generic
+ * `-library` namespace no component references. */
+.ga98-report-contactbook, .ga98-report-descriptorlib, .ga98-report-introlib { display: flex; flex-direction: column; gap: 4px; background: #241539; border: 1px solid #5a3aa8; padding: 6px; }
+.ga98-report-contactbook-head, .ga98-report-descriptorlib-head, .ga98-report-introlib-head { font-weight: bold; font-size: 11px; display: flex; justify-content: space-between; align-items: center; gap: 4px; }
+.ga98-report-contactbook-list, .ga98-report-descriptorlib-list, .ga98-report-introlib-list { list-style: none; margin: 0; padding: 0; }
+.ga98-report-contactbook-list li, .ga98-report-descriptorlib-list li, .ga98-report-introlib-list li { display: flex; align-items: center; gap: 2px; padding: 2px 4px; cursor: pointer; }
+.ga98-report-contactbook-list li:hover, .ga98-report-descriptorlib-list li:hover, .ga98-report-introlib-list li:hover { background: #2f1c4d; }
+.ga98-report-contactbook-list li.selected, .ga98-report-descriptorlib-list li.selected, .ga98-report-introlib-list li.selected { background: var(--ga98-blue); color: #fff; }
+.ga98-report-contactbook-empty, .ga98-report-descriptorlib-empty, .ga98-report-introlib-empty { color: #a68fd6; font-style: italic; padding: 4px; font-size: 11px; }
+.ga98-report-contact-name, .ga98-report-descriptor-name, .ga98-report-introduction-name { font-weight: bold; }
+.ga98-report-contact-org, .ga98-report-descriptor-preview, .ga98-report-introduction-preview { color: #a68fd6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ga98-report-contact-editor, .ga98-report-descriptor-editor, .ga98-report-introduction-editor { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+.ga98-report-contact-editor label, .ga98-report-descriptor-editor label, .ga98-report-introduction-editor label { display: flex; flex-direction: column; gap: 2px; font-size: 11px; }
+.ga98-report-contact-editor-actions, .ga98-report-descriptor-editor-actions, .ga98-report-introduction-editor-actions { display: flex; gap: 4px; }
+.ga98-report-contactbook button, .ga98-report-descriptorlib button, .ga98-report-introlib button { background: #241539; color: #ece6f7; border: 1px solid #7c4dff; font-size: 11px; cursor: pointer; }
+.ga98-report-contactbook input, .ga98-report-contactbook textarea, .ga98-report-descriptorlib input, .ga98-report-descriptorlib textarea, .ga98-report-introlib input, .ga98-report-introlib textarea { background: #12081f; color: #ece6f7; border: 1px solid #5a3aa8; }
+.ga98-report-contactbook input:focus, .ga98-report-contactbook textarea:focus, .ga98-report-descriptorlib input:focus, .ga98-report-descriptorlib textarea:focus, .ga98-report-introlib input:focus, .ga98-report-introlib textarea:focus { outline: 2px solid #7c4dff; }
+/* Inline popover menu (descriptor/introduction insert, link URL) — a small floating panel. */
+.ga98-report-descmenu, .ga98-report-linkpopover { position: absolute; z-index: 10; background: #241539; border: 1px solid #7c4dff; padding: 6px; display: flex; flex-direction: column; gap: 4px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6); }
+.ga98-report-descmenu button { background: #241539; color: #ece6f7; border: 1px solid #5a3aa8; font-size: 11px; text-align: left; cursor: pointer; }
+.ga98-report-descmenu button:hover { background: var(--ga98-blue); color: #fff; }
+/* Right-click block context menu. */
+.ga98-report-ctxmenu { position: fixed; z-index: 20; background: #241539; border: 1px solid #7c4dff; padding: 2px; display: flex; flex-direction: column; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6); }
+.ga98-report-ctxmenu button { background: transparent; color: #ece6f7; border: 0; font-size: 11px; text-align: left; padding: 3px 12px; cursor: pointer; }
+.ga98-report-ctxmenu button:hover { background: var(--ga98-blue); color: #fff; }
