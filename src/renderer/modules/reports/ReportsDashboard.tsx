@@ -54,7 +54,7 @@ export function ReportsDashboard(props: ReportsDashboardProps): JSX.Element {
           onClick={onExportSelected}
         >
           <span className="ga98-report-tile-icon" aria-hidden="true">🖨️</span>
-          <span className="ga98-report-tile-label">Export / Print</span>
+          <span className="ga98-report-tile-label">Export PDF</span>
         </button>
         {/* Templates deferred to sub-project B — rendered disabled, never a no-op handler. */}
         <button type="button" className="ga98-report-tile" disabled title="Templates coming soon">

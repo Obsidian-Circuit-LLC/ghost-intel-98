@@ -58,11 +58,23 @@ describe('ga98-report app-shell / dashboard / nav / recent-table stylesheet (Tas
     expect(getComputedStyle(active).color).toBe('rgb(255, 255, 255)');
   });
 
-  it('the three status classes resolve to distinct, non-default colours', () => {
+  it('the three status classes resolve to distinct colours ON A <td> inside the recent table', () => {
+    // Match real usage: RecentReportsTable applies `ga98-report-status-<status>` directly on the
+    // <td>, which sits inside `.ga98-report-recent` (whose cells inherit the light workspace text
+    // colour). The status colour must win on that real element, so assert it there — not on a bare
+    // span that never exercises the recent-table inheritance the component actually faces.
     inject('src/renderer/styles/theme.css');
-    const draft = getComputedStyle(el('ga98-report-status-draft', 'span')).color;
-    const completed = getComputedStyle(el('ga98-report-status-completed', 'span')).color;
-    const archived = getComputedStyle(el('ga98-report-status-archived', 'span')).color;
+    const statusColor = (status: string): string => {
+      const table = el('ga98-report-recent', 'table');
+      const tr = document.createElement('tr');
+      const td = document.createElement('td');
+      td.className = `ga98-report-status-${status}`;
+      tr.appendChild(td); table.appendChild(tr);
+      return getComputedStyle(td).color;
+    };
+    const draft = statusColor('draft');
+    const completed = statusColor('completed');
+    const archived = statusColor('archived');
     // Each is explicitly coloured…
     expect(draft).toBe('rgb(200, 192, 0)');
     expect(completed).toBe('rgb(63, 191, 95)');

@@ -1308,6 +1308,7 @@ export function ensureReport(raw: unknown): import('@shared/reports-types').Repo
     const block = ensureReportBlock(b);
     if (block) blocks.push(block);
   }
+  const authorRaw = reportStr(o['author'], MAX_CONTACT_FIELD);
   const out: import('@shared/reports-types').Report = {
     id: o['id'],
     title: reportStr(o['title'], MAX_REPORT_TITLE),
@@ -1315,7 +1316,7 @@ export function ensureReport(raw: unknown): import('@shared/reports-types').Repo
     updatedAt: typeof o['updatedAt'] === 'string' ? o['updatedAt'] : new Date().toISOString(),
     to: reportStr(o['to'], MAX_REPORT_TO),
     status: (o['status'] === 'completed' || o['status'] === 'archived' || o['status'] === 'draft') ? o['status'] : 'draft',
-    author: reportStr(o['author'], MAX_CONTACT_FIELD).length > 0 ? reportStr(o['author'], MAX_CONTACT_FIELD) : 'Investigator',
+    author: authorRaw.length > 0 ? authorRaw : 'Investigator',
     blocks
   };
   if (o['bannerRef'] !== undefined) {
