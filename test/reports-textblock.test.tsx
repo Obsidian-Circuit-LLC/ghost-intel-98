@@ -164,6 +164,31 @@ describe('TextBlock descriptor context menu', () => {
     expect(saved).toContain('A tool that finds public links');
   });
 
+  it('lists introductions with insert actions and splices one into the block on commit', async () => {
+    const introductions: Descriptor[] = [
+      { id: 'i1', name: 'Standard preamble', body: 'This report was prepared for the recipient named above.' },
+    ];
+    const block: TextBlockData = { id: 'bi', kind: 'text', html: '' };
+    const onChange = vi.fn();
+    await act(async () => {
+      root.render(<TextBlock block={block} onChange={onChange} introductions={introductions} />);
+    });
+
+    const body = container.querySelector('.ga98-report-textblock-body') as HTMLDivElement;
+    await act(async () => {
+      body.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 5, clientY: 5 }));
+    });
+
+    expect(container.textContent).toContain('Standard preamble');
+    const insertBtn = Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Insert introduction') as HTMLButtonElement;
+    expect(insertBtn).toBeTruthy();
+    await act(async () => { insertBtn.click(); });
+
+    expect(onChange).toHaveBeenCalled();
+    const saved = onChange.mock.calls[onChange.mock.calls.length - 1][0] as string;
+    expect(saved).toContain('This report was prepared for the recipient named above.');
+  });
+
   it('closes the menu on an outside mousedown', async () => {
     const block: TextBlockData = { id: 'b7', kind: 'text', html: '' };
     await act(async () => {

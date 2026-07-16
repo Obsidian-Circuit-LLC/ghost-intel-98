@@ -9,7 +9,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { TableBlock } from '../src/renderer/modules/reports/blocks/TableBlock';
+import { TableBlock, addRow, addCol, MAX_TABLE_ROWS, MAX_TABLE_COLS } from '../src/renderer/modules/reports/blocks/TableBlock';
 import type { ReportBlock } from '../src/shared/reports-types';
 
 type TableData = Extract<ReportBlock, { kind: 'table' }>;
@@ -82,6 +82,21 @@ describe('TableBlock', () => {
     await act(async () => { addColBtn.click(); });
 
     expect(onChange).toHaveBeenCalledWith([['a', 'b', ''], ['c', 'd', '']]);
+  });
+
+  it('caps the grid at the validator bounds so a save can never silently truncate cells', async () => {
+    // addRow/addCol are no-ops at the caps (the validator clamps oversize grids on save, so an
+    // unbounded editor would drop the truncated cells on the next autosave — total table loss).
+    const atRowCap: TableData = { id: 't', kind: 'table', cells: Array.from({ length: MAX_TABLE_ROWS }, () => ['x']) };
+    expect(addRow(atRowCap.cells)).toBe(atRowCap.cells);
+    const atColCap: TableData = { id: 't', kind: 'table', cells: [Array.from({ length: MAX_TABLE_COLS }, () => 'x')] };
+    expect(addCol(atColCap.cells)).toBe(atColCap.cells);
+
+    // And the toolbar buttons are disabled at the caps so the operator can't try.
+    const onChange = vi.fn();
+    await act(async () => { root.render(<TableBlock block={atColCap} onChange={onChange} />); });
+    const addColBtn = Array.from(container.querySelectorAll('button')).find((b) => b.textContent === '+ Col') as HTMLButtonElement;
+    expect(addColBtn.disabled).toBe(true);
   });
 
   it('shows a Remove table control only when onRemove is provided', async () => {

@@ -1270,14 +1270,20 @@ function ensureReportBlock(raw: unknown): import('@shared/reports-types').Report
   }
   if (o['kind'] === 'table') {
     const rows = o['cells'];
-    if (!Array.isArray(rows) || rows.length === 0 || rows.length > MAX_TABLE_ROWS) return null;
-    const width = Array.isArray(rows[0]) ? rows[0].length : -1;
-    if (width <= 0 || width > MAX_TABLE_COLS) return null;
+    if (!Array.isArray(rows) || rows.length === 0) return null;
+    // Oversize grids are CLAMPED to the caps, not dropped: dropping the whole block silently
+    // destroyed every cell the moment the editor exceeded a bound (data-loss defect). Truncating to
+    // MAX_TABLE_ROWS × MAX_TABLE_COLS preserves the in-bounds content and keeps the grid rectangular.
+    const clampedRows = rows.slice(0, MAX_TABLE_ROWS);
+    const rawWidth = Array.isArray(clampedRows[0]) ? clampedRows[0].length : -1;
+    if (rawWidth <= 0) return null;
+    const width = Math.min(rawWidth, MAX_TABLE_COLS);
     const cells: string[][] = [];
-    for (const row of rows) {
-      if (!Array.isArray(row) || row.length !== width) return null;              // ragged → drop block
+    for (const row of clampedRows) {
+      if (!Array.isArray(row) || row.length !== rawWidth) return null;           // ragged → drop block
       const outRow: string[] = [];
-      for (const cell of row) {
+      for (let j = 0; j < width; j++) {                                          // clamp columns to width
+        const cell = row[j];
         if (typeof cell !== 'string') return null;                               // non-string → drop block
         outRow.push(cell.slice(0, MAX_REPORT_BLOCK_HTML));
       }

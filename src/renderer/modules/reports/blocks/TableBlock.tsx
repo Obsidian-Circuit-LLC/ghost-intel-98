@@ -9,8 +9,14 @@ import { sanitizeReportHtml } from '../rich-text';
 
 type TableData = Extract<ReportBlock, { kind: 'table' }>;
 
-export function addRow(cells: string[][]): string[][] { const w = cells[0]?.length ?? 1; return [...cells, Array(w).fill('')]; }
-export function addCol(cells: string[][]): string[][] { return cells.map((r) => [...r, '']); }
+// Mirror the main-process validator caps (validate.ts MAX_TABLE_ROWS/MAX_TABLE_COLS). The editor
+// must never let the grid exceed them: the validator clamps oversize grids on save, so an
+// unbounded editor would silently drop the truncated cells on the next autosave.
+export const MAX_TABLE_ROWS = 50;
+export const MAX_TABLE_COLS = 12;
+
+export function addRow(cells: string[][]): string[][] { if (cells.length >= MAX_TABLE_ROWS) return cells; const w = cells[0]?.length ?? 1; return [...cells, Array(w).fill('')]; }
+export function addCol(cells: string[][]): string[][] { if ((cells[0]?.length ?? 0) >= MAX_TABLE_COLS) return cells; return cells.map((r) => [...r, '']); }
 export function removeRow(cells: string[][], i: number): string[][] { return cells.length <= 1 ? cells : cells.filter((_, x) => x !== i); }
 export function removeCol(cells: string[][], j: number): string[][] { return (cells[0]?.length ?? 0) <= 1 ? cells : cells.map((r) => r.filter((_, x) => x !== j)); }
 
@@ -23,8 +29,8 @@ export function TableBlock({ block, onChange, onRemove }: TableBlockProps): JSX.
   return (
     <div className="ga98-report-tableblock">
       <div className="ga98-report-tableblock-toolbar">
-        <button type="button" onClick={() => onChange(addRow(block.cells))}>+ Row</button>
-        <button type="button" onClick={() => onChange(addCol(block.cells))}>+ Col</button>
+        <button type="button" disabled={block.cells.length >= MAX_TABLE_ROWS} onClick={() => onChange(addRow(block.cells))}>+ Row</button>
+        <button type="button" disabled={(block.cells[0]?.length ?? 0) >= MAX_TABLE_COLS} onClick={() => onChange(addCol(block.cells))}>+ Col</button>
         {onRemove ? <button type="button" aria-label="Remove table" onClick={onRemove}>✕</button> : null}
       </div>
       <table className="ga98-report-doc-table">

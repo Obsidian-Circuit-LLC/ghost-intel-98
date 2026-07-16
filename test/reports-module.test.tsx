@@ -44,6 +44,11 @@ function stubApi(overrides: Record<string, any> = {}): void {
       save: vi.fn(async (d: any) => d),
       remove: vi.fn(async () => undefined),
     },
+    introductions: {
+      list: vi.fn(async () => []),
+      save: vi.fn(async (d: any) => d),
+      remove: vi.fn(async () => undefined),
+    },
     ...overrides,
   } };
 }

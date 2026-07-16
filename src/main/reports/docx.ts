@@ -71,7 +71,10 @@ interface Media { rId: string; part: string; ext: string; bytes: Buffer; cx: num
 
 function para(runs: string, pPr = ''): string { return `<w:p>${pPr}${runs}</w:p>`; }
 function richRun(text: string, opts: { bold?: boolean; italic?: boolean; underline?: boolean; size?: number; font?: string }): string {
-  const rPr = `<w:rPr>${opts.bold ? '<w:b/>' : ''}${opts.italic ? '<w:i/>' : ''}${opts.underline ? '<w:u w:val="single"/>' : ''}${opts.size ? `<w:sz w:val="${opts.size}"/>` : ''}${opts.font ? `<w:rFonts w:ascii="${esc(opts.font)}" w:hAnsi="${esc(opts.font)}"/>` : ''}</w:rPr>`;
+  // rPr children MUST follow the ECMA-376 CT_RPr/EG_RPrBase sequence: rFonts, b, i, …, sz, …, u.
+  // Emitting out of order (e.g. rFonts last, or u before sz) yields a schema-invalid part that strict
+  // OOXML importers reject/repair. Order here: rFonts → b → i → sz → u.
+  const rPr = `<w:rPr>${opts.font ? `<w:rFonts w:ascii="${esc(opts.font)}" w:hAnsi="${esc(opts.font)}"/>` : ''}${opts.bold ? '<w:b/>' : ''}${opts.italic ? '<w:i/>' : ''}${opts.size ? `<w:sz w:val="${opts.size}"/>` : ''}${opts.underline ? '<w:u w:val="single"/>' : ''}</w:rPr>`;
   return `<w:r>${rPr}<w:t xml:space="preserve">${esc(text)}</w:t></w:r>`;
 }
 function imageRun(m: Media, id: number): string {

@@ -17,7 +17,7 @@
  *  testable in jsdom, which has no `execCommand` implementation at all. */
 import { useEffect, useRef, useState } from 'react';
 import type { ReportBlock, Descriptor } from '@shared/reports-types';
-import { sanitizeReportHtml, descriptorInsertHtml, FONT_SIZES, FONT_FAMILIES } from '../rich-text';
+import { sanitizeReportHtml, descriptorInsertHtml, introductionInsertHtml, FONT_SIZES, FONT_FAMILIES } from '../rich-text';
 
 export interface TextBlockProps {
   block: Extract<ReportBlock, { kind: 'text' }>;
@@ -25,10 +25,13 @@ export interface TextBlockProps {
   /** The report's descriptor library, for the right-click insert menu. Optional so existing
    *  callers/tests that don't care about descriptors keep working unchanged. */
   descriptors?: Descriptor[];
+  /** The report's reusable-introduction library, insertable from the same right-click menu. Optional
+   *  for the same backward-compat reason as `descriptors`. */
+  introductions?: Descriptor[];
 }
 
 export function TextBlock(props: TextBlockProps): JSX.Element {
-  const { block, onChange, descriptors = [] } = props;
+  const { block, onChange, descriptors = [], introductions = [] } = props;
   const ref = useRef<HTMLDivElement | null>(null);
   // The selection at the moment the context menu opened, cloned so it survives the ensuing blur
   // when the operator clicks a menu button (blur can collapse/clear the live selection).
@@ -184,16 +187,16 @@ export function TextBlock(props: TextBlockProps): JSX.Element {
     setMenu({ x: e.clientX, y: e.clientY });
   }
 
-  /** Splice a descriptor's insert HTML into the block at the saved caret (falling back to the end
+  /** Splice already-escaped insert HTML into the block at the saved caret (falling back to the end
    *  of the block if there wasn't one), then close the menu and re-sanitize via `commit()`. Uses
    *  the Range/Selection API (not `execCommand`) — see the file header for why. */
-  function insertDescriptor(d: Descriptor, mode: 'text' | 'title'): void {
+  function insertFragment(html: string): void {
     const el = ref.current;
     if (!el) return;
     el.focus();
 
     const tpl = document.createElement('template');
-    tpl.innerHTML = descriptorInsertHtml(d, mode);
+    tpl.innerHTML = html;
     const frag = tpl.content.cloneNode(true) as DocumentFragment;
     const lastNode = frag.lastChild;
 
@@ -219,6 +222,9 @@ export function TextBlock(props: TextBlockProps): JSX.Element {
     setMenu(null);
     commit();
   }
+
+  function insertDescriptor(d: Descriptor, mode: 'text' | 'title'): void { insertFragment(descriptorInsertHtml(d, mode)); }
+  function insertIntroduction(d: Descriptor, mode: 'text' | 'title'): void { insertFragment(introductionInsertHtml(d, mode)); }
 
   // Close the descriptor popover on any outside mousedown — mirrors the whiteboard colour-popover
   // fix (a position:fixed backdrop can't be relied on the same way here either: the report body can
@@ -276,7 +282,7 @@ export function TextBlock(props: TextBlockProps): JSX.Element {
         <button type="button" aria-label="Insert link" onMouseDown={(e) => e.preventDefault()} onClick={openLink}>🔗</button>
       </div>
       {linkOpen ? (
-        <div className="ga98-report-linkmenu" role="dialog" aria-label="Insert link">
+        <div className="ga98-report-linkpopover" role="dialog" aria-label="Insert link">
           <input
             type="text"
             aria-label="Link URL"
@@ -309,13 +315,14 @@ export function TextBlock(props: TextBlockProps): JSX.Element {
         <div
           className="ga98-report-descmenu"
           role="menu"
-          aria-label="Insert descriptor"
+          aria-label="Insert descriptor or introduction"
           style={{ position: 'fixed', left: menu.x, top: menu.y }}
         >
-          {descriptors.length === 0 ? (
-            <div className="ga98-report-descmenu-empty">No descriptors yet.</div>
-          ) : descriptors.map((d) => (
-            <div key={d.id} className="ga98-report-descmenu-item" role="none">
+          {descriptors.length === 0 && introductions.length === 0 ? (
+            <div className="ga98-report-descmenu-empty">No descriptors or introductions yet.</div>
+          ) : null}
+          {descriptors.map((d) => (
+            <div key={`desc-${d.id}`} className="ga98-report-descmenu-item" role="none">
               <div className="ga98-report-descmenu-name">{d.name}</div>
               <div className="ga98-report-descmenu-preview">{d.body.slice(0, 120)}</div>
               <button
@@ -329,6 +336,26 @@ export function TextBlock(props: TextBlockProps): JSX.Element {
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => insertDescriptor(d, 'title')}
+              >
+                Insert with title
+              </button>
+            </div>
+          ))}
+          {introductions.map((d) => (
+            <div key={`intro-${d.id}`} className="ga98-report-descmenu-item" role="none">
+              <div className="ga98-report-descmenu-name">{d.name}</div>
+              <div className="ga98-report-descmenu-preview">{d.body.slice(0, 120)}</div>
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => insertIntroduction(d, 'text')}
+              >
+                Insert introduction
+              </button>
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => insertIntroduction(d, 'title')}
               >
                 Insert with title
               </button>

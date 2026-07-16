@@ -94,6 +94,21 @@ describe('renderReportDocx expansion', () => {
     expect(xml).toContain('Georgia');
   });
 
+  it('emits rPr children in ECMA-376 CT_RPr sequence order (rFonts, b, i, sz, u)', () => {
+    const xml = docXml(renderReportDocx(baseReport([
+      { id: 'b', kind: 'text', html: '<span style="font-size:12pt;font-family:Arial"><b><u>Hi</u></b></span>' }
+    ]), {}, null));
+    // Pick the run-properties block for our span (the one carrying the rFonts), not the title's.
+    const rPr = (xml.match(/<w:rPr>[\s\S]*?<\/w:rPr>/g) ?? []).find((b) => b.includes('<w:rFonts')) ?? '';
+    const order = ['<w:rFonts', '<w:b/>', '<w:sz', '<w:u '].map((t) => rPr.indexOf(t));
+    // Every element is present…
+    expect(order.every((i) => i >= 0)).toBe(true);
+    // …and strictly ascending: rFonts before b before sz before u (u after sz is the schema rule).
+    expect(order).toEqual([...order].sort((a, z) => a - z));
+    expect(rPr.indexOf('<w:rFonts')).toBeLessThan(rPr.indexOf('<w:b/>'));
+    expect(rPr.indexOf('<w:sz')).toBeLessThan(rPr.indexOf('<w:u '));
+  });
+
   it('emits list paragraphs for ul/li', () => {
     const xml = docXml(renderReportDocx(baseReport([{ id: 'b', kind: 'text', html: '<ul><li>a</li><li>b</li></ul>' }]), {}, null));
     expect(xml).toContain('<w:numPr>');

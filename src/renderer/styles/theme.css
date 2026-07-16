@@ -1502,3 +1502,27 @@ input.ga98-text, select.ga98-text {
 .ga98-report-ctxmenu { position: fixed; z-index: 20; background: #241539; border: 1px solid #7c4dff; padding: 2px; display: flex; flex-direction: column; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6); }
 .ga98-report-ctxmenu button { background: transparent; color: #ece6f7; border: 0; font-size: 11px; text-align: left; padding: 3px 12px; cursor: pointer; }
 .ga98-report-ctxmenu button:hover { background: var(--ga98-blue); color: #fff; }
+/* The text block is the positioned ancestor the inline link popover (position:absolute) anchors to,
+ * so the popover floats over the block body instead of anchoring to a distant ancestor. */
+.ga98-report-textblock { position: relative; }
+/* Photo block: the frame is the positioning context for the corner resize handle and the remove
+ * button; without an explicit size the handle is a 0×0 (unclickable) box, so drag-to-resize is dead. */
+.ga98-report-imageblock { margin: 8px 0; }
+.ga98-report-imageblock-frame { position: relative; display: inline-block; max-width: 100%; }
+.ga98-report-imageblock.selected .ga98-report-imageblock-frame { outline: 2px solid #7c4dff; }
+.ga98-report-imageblock-handle { position: absolute; right: 0; bottom: 0; width: 12px; height: 12px; background: #7c4dff; border: 1px solid #fff; cursor: nwse-resize; }
+.ga98-report-imageblock-remove { position: absolute; top: 2px; right: 2px; background: #241539; color: #ece6f7; border: 1px solid #7c4dff; font-size: 11px; line-height: 1; cursor: pointer; }
+.ga98-report-imageblock-loading { color: #a68fd6; font-style: italic; font-size: 11px; }
+.ga98-report-imageblock-caption { display: block; width: 100%; margin-top: 4px; background: transparent; color: #111; border: 0; border-bottom: 1px solid #ccc; font-size: 11px; font-style: italic; }
+/* "Import from case" modal overlay + picker panel — a centered dialog dimming the editor beneath it.
+ * Every one of these classes was previously unstyled, so the picker rendered inline in document flow. */
+.ga98-report-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6); display: flex; align-items: center; justify-content: center; z-index: 100; }
+.ga98-report-casepicker { background: #241539; border: 1px solid #7c4dff; padding: 12px; display: flex; flex-direction: column; gap: 8px; min-width: 360px; max-width: 90vw; max-height: 80vh; color: #ece6f7; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.7); }
+.ga98-report-casepicker-head { display: flex; justify-content: space-between; align-items: center; font-weight: bold; font-size: 12px; }
+.ga98-report-casepicker-select { display: flex; flex-direction: column; gap: 2px; font-size: 11px; }
+.ga98-report-casepicker-list { overflow-y: auto; max-height: 40vh; display: flex; flex-direction: column; gap: 2px; border: 1px solid #5a3aa8; padding: 4px; background: #12081f; }
+.ga98-report-casepicker-item { display: flex; align-items: center; gap: 6px; padding: 2px 4px; cursor: pointer; }
+.ga98-report-casepicker-item:hover { background: #2f1c4d; }
+.ga98-report-casepicker-empty { color: #a68fd6; font-style: italic; padding: 4px; font-size: 11px; }
+.ga98-report-casepicker-actions { display: flex; gap: 4px; justify-content: flex-end; }
+.ga98-report-casepicker button, .ga98-report-casepicker select { background: #241539; color: #ece6f7; border: 1px solid #7c4dff; font-size: 11px; cursor: pointer; }

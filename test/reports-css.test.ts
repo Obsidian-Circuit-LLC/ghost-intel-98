@@ -81,6 +81,50 @@ describe('ga98-report stylesheet (root-cause fix)', () => {
     expect(getComputedStyle(head).display).toBe('flex');
   });
 
+  it('the inline link popover renders the class that is actually styled (.ga98-report-linkpopover)', () => {
+    // Regression: TextBlock rendered .ga98-report-linkmenu while only .ga98-report-linkpopover was
+    // styled, so the popover floated in-flow unstyled. It must resolve position:absolute + z-index.
+    inject('src/renderer/styles/theme.css');
+    const pop = document.createElement('div');
+    pop.className = 'ga98-report-linkpopover';
+    document.body.appendChild(pop);
+    expect(getComputedStyle(pop).position).toBe('absolute');
+    expect(getComputedStyle(pop).zIndex).toBe('10');
+  });
+
+  it('the image resize handle has a nonzero, positioned hit target (drag-to-resize is clickable)', () => {
+    inject('src/renderer/styles/theme.css');
+    const frame = document.createElement('div');
+    frame.className = 'ga98-report-imageblock-frame';
+    const handle = document.createElement('span');
+    handle.className = 'ga98-report-imageblock-handle';
+    frame.appendChild(handle);
+    document.body.appendChild(frame);
+    // The frame is the positioning context…
+    expect(getComputedStyle(frame).position).toBe('relative');
+    // …and the handle is a sized, absolutely-positioned, resize-cursored corner (not a 0×0 box).
+    expect(getComputedStyle(handle).position).toBe('absolute');
+    expect(getComputedStyle(handle).width).toBe('12px');
+    expect(getComputedStyle(handle).height).toBe('12px');
+    expect(getComputedStyle(handle).cursor).toBe('nwse-resize');
+  });
+
+  it('the Import-from-case modal (overlay + picker) is styled, not raw in-flow content', () => {
+    inject('src/renderer/styles/theme.css');
+    const overlay = document.createElement('div');
+    overlay.className = 'ga98-report-overlay';
+    const picker = document.createElement('div');
+    picker.className = 'ga98-report-casepicker';
+    overlay.appendChild(picker);
+    document.body.appendChild(overlay);
+    // Fixed, centered backdrop above the editor.
+    expect(getComputedStyle(overlay).position).toBe('fixed');
+    expect(getComputedStyle(overlay).justifyContent).toBe('center');
+    // The picker panel gets the purple-rail background + flex column layout (not left transparent).
+    expect(getComputedStyle(picker).backgroundColor).toBe('rgb(36, 21, 57)');
+    expect(getComputedStyle(picker).display).toBe('flex');
+  });
+
   it('.ga98-report-doc-table td restates its background on the CLASS (wins over 98.css element rule)', () => {
     inject('src/renderer/styles/theme.css');
     const table = document.createElement('table');

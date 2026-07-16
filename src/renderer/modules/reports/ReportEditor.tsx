@@ -22,6 +22,8 @@ export interface ReportEditorProps {
   contacts: Contact[];
   /** The report's descriptor library — handed down to every TextBlock for its right-click insert menu. */
   descriptors: Descriptor[];
+  /** The report's reusable-introduction library — also insertable from every TextBlock's right-click menu. */
+  introductions: Descriptor[];
   onChange: (r: Report) => void;
   /** Debounced-persist hook — the module writes to the encrypted store + refreshes its list. */
   onAutosave: (r: Report) => void;
@@ -60,7 +62,7 @@ function clampZoom(z: number): number { return Math.max(ZOOM_MIN, Math.min(ZOOM_
 
 export function ReportEditor(props: ReportEditorProps): JSX.Element {
   const {
-    report, assets, contacts, descriptors, onChange, onAutosave, onUploadBanner, onRemoveBanner,
+    report, assets, contacts, descriptors, introductions, onChange, onAutosave, onUploadBanner, onRemoveBanner,
     onManageContacts, onManageDescriptors, onManageIntroductions, onAddPhoto, onAddTable,
     onImportFromCase, zoom, onZoom
   } = props;
@@ -271,6 +273,7 @@ export function ReportEditor(props: ReportEditorProps): JSX.Element {
                         block={b}
                         onChange={(html) => updateTextBlock(b.id, html)}
                         descriptors={descriptors}
+                        introductions={introductions}
                       />
                     </div>
                   );

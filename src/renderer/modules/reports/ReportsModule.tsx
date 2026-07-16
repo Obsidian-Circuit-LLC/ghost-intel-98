@@ -26,6 +26,7 @@ export function ReportsModule(): JSX.Element {
   const [report, setReport] = useState<Report | null>(null);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [descriptors, setDescriptors] = useState<Descriptor[]>([]);
+  const [introductions, setIntroductions] = useState<Descriptor[]>([]);
   const [assets, setAssets] = useState<Record<string, string>>({});
   const [showContacts, setShowContacts] = useState(false);
   const [showDescriptors, setShowDescriptors] = useState(false);
@@ -43,10 +44,13 @@ export function ReportsModule(): JSX.Element {
   const refreshDescriptors = useCallback(async (): Promise<void> => {
     setDescriptors(await window.api.reports.descriptors.list());
   }, []);
+  const refreshIntroductions = useCallback(async (): Promise<void> => {
+    setIntroductions(await window.api.reports.introductions.list());
+  }, []);
 
   useEffect(() => {
-    void refresh(); void refreshContacts(); void refreshDescriptors();
-  }, [refresh, refreshContacts, refreshDescriptors]);
+    void refresh(); void refreshContacts(); void refreshDescriptors(); void refreshIntroductions();
+  }, [refresh, refreshContacts, refreshDescriptors, refreshIntroductions]);
 
   // Resolve every asset ref a report references (banner + image blocks) into the local data-URL
   // cache so the preview embeds them exactly as the exported PDF/DOCX will.
@@ -200,6 +204,7 @@ export function ReportsModule(): JSX.Element {
                 assets={assets}
                 contacts={contacts}
                 descriptors={descriptors}
+                introductions={introductions}
                 onChange={setReport}
                 onAutosave={(r) => { void autosave(r); }}
                 onUploadBanner={(f) => { void uploadBanner(f); }}
@@ -235,7 +240,7 @@ export function ReportsModule(): JSX.Element {
 
       {showIntroductions ? (
         <IntroductionLibrary
-          onClose={() => setShowIntroductions(false)}
+          onClose={() => { setShowIntroductions(false); void refreshIntroductions(); }}
         />
       ) : null}
 
