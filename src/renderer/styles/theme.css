@@ -1663,3 +1663,29 @@ input.ga98-text, select.ga98-text {
 .ga98-report-status-draft { color: #b8860b; font-weight: bold; }
 .ga98-report-status-completed { color: #008000; font-weight: bold; }
 .ga98-report-status-archived { color: #808080; font-weight: bold; }
+
+/* --- Templates: preview panel + metadata fields (v3.50.0) -------------------------------------
+   Light-Win98 skin, namespaced under .ga98-report-* so it cannot leak into the dark modules.
+   The Templates view is a silver MDI panel holding a white sunken list on the left and a white
+   sunken iframe preview on the right; the editor header gains a wrapped row of compact labelled
+   metadata inputs (Case # / Reference # / Classification / Signature). */
+.ga98-report-tpl-view { display: flex; flex-direction: row; gap: 3px; align-items: stretch; }
+.ga98-report-tpl-list { flex: 0 0 220px; display: flex; flex-direction: column; gap: 1px; padding: 4px; overflow: auto; background: #fff; border: 2px solid; border-color: #808080 #fff #fff #808080; }
+.ga98-report-tpl-empty { color: #808080; font-style: italic; padding: 6px 4px; font-size: 11px; }
+.ga98-report-tpl-row { display: flex; align-items: baseline; gap: 6px; background: transparent; color: #000; border: 0; text-align: left; font-size: 11px; padding: 2px 4px; cursor: pointer; }
+.ga98-report-tpl-row:hover { background: #d8d8d8; }
+.ga98-report-tpl-row-active { background: #000080; color: #fff; }
+.ga98-report-tpl-row-name { font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ga98-report-tpl-row-cat { color: #606060; font-size: 10px; }
+.ga98-report-tpl-row-active .ga98-report-tpl-row-cat { color: #c0c0c0; }
+.ga98-report-tpl-preview { flex: 1; min-width: 0; background: #c0c0c0; }
+.ga98-report-tpl-preview-body { display: flex; flex-direction: column; gap: 4px; }
+.ga98-report-tpl-preview-frame { flex: 1; width: 100%; min-height: 320px; background: #fff; border: 2px solid; border-color: #808080 #fff #fff #808080; }
+.ga98-report-tpl-preview-actions { display: flex; justify-content: flex-end; }
+.ga98-report-tpl-preview-empty { color: #808080; font-style: italic; padding: 8px; font-size: 11px; }
+
+.ga98-report-metafields { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 6px; }
+.ga98-report-meta-field { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: #000; }
+.ga98-report-meta-field > span { font-weight: bold; }
+.ga98-report-meta-field input { width: 150px; background: #fff; color: #000; border: 2px solid; border-color: #808080 #fff #fff #808080; font-size: 11px; padding: 1px 3px; }
+.ga98-report-meta-field input:focus { outline: 1px dotted #000; outline-offset: -3px; }
