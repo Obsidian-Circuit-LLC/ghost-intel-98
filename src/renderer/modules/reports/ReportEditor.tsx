@@ -1,16 +1,19 @@
-/** ReportEditor — the report's fixed header plus its block body. Task 5 landed the header: a
- *  banner slot (upload → encrypted putAsset, preview, Remove), a From <select> of saved contacts
- *  with a "Manage contacts" affordance, a To recipient <input>, and a title <input>. Task 6 adds
- *  the body's rich-text blocks: "+ Text" appends a block, each block renders as a <TextBlock>
- *  whose html is already `sanitizeReportHtml`-clean by the time it reaches `patch` (TextBlock's own
- *  security spine). Editing is controlled (onChange lifts every keystroke to the module, which owns
- *  the Report), and a 600ms debounced autosave persists the working report through
- *  window.api.reports.save — the same debounce cadence as the whiteboard. Photo blocks arrive in
- *  Task 8. */
+/** ReportEditor — the report's three-column "Report Template Generator" shell. Left rail hosts the
+ *  reusable-text library affordances (contacts / descriptors / introductions); the center column is a
+ *  global toolbar (block-add actions + zoom) over a fixed-width white "paper" page (banner, date,
+ *  From/To header, then the rich-text / table / image blocks) with a status bar (word + page count +
+ *  zoom); the right rail is <RightRail> (descriptor preview, live document outline, image
+ *  properties). Editing stays controlled (onChange lifts every keystroke to the module, which owns
+ *  the Report); a 600ms debounced autosave persists the working report through the module's
+ *  onAutosave. Text-block html is already `sanitizeReportHtml`-clean by the time it reaches `patch`
+ *  (TextBlock's own security spine) — the editor never re-parses block html as untrusted markup. */
 import { useEffect, useRef, useState } from 'react';
 import type { Report, Contact, Descriptor, ReportBlock } from '@shared/reports-types';
 import { TextBlock } from './blocks/TextBlock';
 import { ImageBlock } from './blocks/ImageBlock';
+import { TableBlock } from './blocks/TableBlock';
+import { RightRail } from './panels/RightRail';
+import { extractOutline, wordCount, estimatePageCount } from './outline';
 
 export interface ReportEditorProps {
   report: Report;
@@ -19,6 +22,8 @@ export interface ReportEditorProps {
   contacts: Contact[];
   /** The report's descriptor library — handed down to every TextBlock for its right-click insert menu. */
   descriptors: Descriptor[];
+  /** The report's reusable-introduction library — also insertable from every TextBlock's right-click menu. */
+  introductions: Descriptor[];
   onChange: (r: Report) => void;
   /** Debounced-persist hook — the module writes to the encrypted store + refreshes its list. */
   onAutosave: (r: Report) => void;
@@ -26,20 +31,46 @@ export interface ReportEditorProps {
   onRemoveBanner: () => void;
   onManageContacts: () => void;
   onManageDescriptors: () => void;
+  /** Open the reusable-introductions library overlay. */
+  onManageIntroductions: () => void;
   /** Encrypt + append one image file (from "+ Photo" or a drag-drop) as a new photo block. The
    *  module owns the putAsset round-trip + asset-cache population; the editor only forwards files. */
   onAddPhoto: (file: File) => void;
+  /** Append a new (empty 2×2) table block. Module-owned so every block append goes through the same
+   *  working-report owner; the editor only surfaces the "+ Table" affordance. */
+  onAddTable: () => void;
   /** Open the "Import from case" picker (module-owned overlay). */
   onImportFromCase: () => void;
+  /** Page zoom (1 = 100%); the module owns the state so it survives a re-render of the editor. */
+  zoom: number;
+  onZoom: (z: number) => void;
 }
 
 const IMAGE_MIME = ['image/png', 'image/jpeg'];
 
 const AUTOSAVE_MS = 600;
 
+/** The white page's content height in CSS px (min-height 1056 = US-Letter at 96dpi) — the page-count
+ *  denominator so a report that overflows one paper page reads "~2 pages". */
+const PAGE_HEIGHT_PX = 1056;
+
+const ZOOM_MIN = 0.5;
+const ZOOM_MAX = 1.5;
+const ZOOM_STEP = 0.1;
+
+function clampZoom(z: number): number { return Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, Math.round(z * 100) / 100)); }
+
 export function ReportEditor(props: ReportEditorProps): JSX.Element {
-  const { report, assets, contacts, descriptors, onChange, onAutosave, onUploadBanner, onRemoveBanner, onManageContacts, onManageDescriptors, onAddPhoto, onImportFromCase } = props;
+  const {
+    report, assets, contacts, descriptors, introductions, onChange, onAutosave, onUploadBanner, onRemoveBanner,
+    onManageContacts, onManageDescriptors, onManageIntroductions, onAddPhoto, onAddTable,
+    onImportFromCase, zoom, onZoom
+  } = props;
   const [dragOver, setDragOver] = useState(false);
+  const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
+  const [pageCount, setPageCount] = useState(1);
+  const pageRef = useRef<HTMLDivElement | null>(null);
 
   // Debounced autosave: after the report stops changing for AUTOSAVE_MS, persist it. Skip the first
   // run (the report was just loaded, not edited) so opening a report doesn't immediately rewrite it.
@@ -52,7 +83,20 @@ export function ReportEditor(props: ReportEditorProps): JSX.Element {
     return () => clearTimeout(t);
   }, [report, onAutosave]);
 
+  // Re-measure the page's rendered height whenever the blocks or zoom change, so the status bar's
+  // page estimate tracks content growth. scrollHeight is the un-zoomed content height (transform:
+  // scale doesn't change layout height), so the estimate is zoom-independent, as intended.
+  useEffect(() => {
+    const el = pageRef.current;
+    setPageCount(estimatePageCount(el ? el.scrollHeight : 0, PAGE_HEIGHT_PX));
+  }, [report, zoom]);
+
   const bannerUrl = report.bannerRef ? assets[report.bannerRef] : undefined;
+  const outline = extractOutline(report.blocks);
+  const words = wordCount(report.blocks);
+  const selectedImage = report.blocks.find(
+    (b): b is Extract<ReportBlock, { kind: 'image' }> => b.kind === 'image' && b.id === selectedImageId
+  ) ?? null;
 
   function patch(p: Partial<Report>): void { onChange({ ...report, ...p }); }
 
@@ -69,7 +113,12 @@ export function ReportEditor(props: ReportEditorProps): JSX.Element {
     patch({ blocks: report.blocks.map((b) => (b.id === id && b.kind === 'image' ? { ...b, ...p } : b)) });
   }
 
+  function updateTableBlock(id: string, cells: string[][]): void {
+    patch({ blocks: report.blocks.map((b) => (b.id === id && b.kind === 'table' ? { ...b, cells } : b)) });
+  }
+
   function removeBlock(id: string): void {
+    if (id === selectedImageId) setSelectedImageId(null);
     patch({ blocks: report.blocks.filter((b) => b.id !== id) });
   }
 
@@ -83,71 +132,42 @@ export function ReportEditor(props: ReportEditorProps): JSX.Element {
     for (const f of files) onAddPhoto(f);
   }
 
+  function onOutlineJump(id: string): void {
+    const el = document.getElementById(`ga98-report-block-${id}`);
+    if (el) el.scrollIntoView({ block: 'start' });
+  }
+
+  function openContextMenu(e: React.MouseEvent): void {
+    e.preventDefault();
+    setCtxMenu({ x: e.clientX, y: e.clientY });
+  }
+  function runCtx(fn: () => void): void { fn(); setCtxMenu(null); }
+
+  const fromContact = contacts.find((c) => c.id === report.fromContactId);
+
   return (
-    <div className="ga98-report-editor">
-      <div className="ga98-report-header">
-        <label className="ga98-report-title-field">
-          <span>Title</span>
-          <input
-            aria-label="Report title"
-            value={report.title}
-            onChange={(e) => patch({ title: e.target.value })}
-          />
-        </label>
-
-        <div className="ga98-report-banner">
-          {bannerUrl ? (
-            <>
-              <img className="ga98-report-banner-img" src={bannerUrl} alt="Report banner" />
-              <button onClick={onRemoveBanner}>Remove banner</button>
-            </>
+    <div className="ga98-report-shell ga98-report-editor">
+      <div className="ga98-report-leftrail">
+        <section>
+          <div className="ga98-report-panel-title">Libraries</div>
+          <button type="button" onClick={onManageContacts}>Contacts…</button>
+          <button type="button" onClick={onManageDescriptors}>Descriptors…</button>
+          <button type="button" onClick={onManageIntroductions}>Introductions…</button>
+        </section>
+        <section>
+          <div className="ga98-report-panel-title">Descriptors</div>
+          {descriptors.length === 0 ? (
+            <div className="ga98-report-descriptorlib-empty">None yet.</div>
           ) : (
-            <label className="ga98-report-banner-upload">
-              <span>Upload banner</span>
-              <input
-                aria-label="Upload banner"
-                type="file"
-                accept="image/png,image/jpeg"
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) onUploadBanner(f); e.target.value = ''; }}
-              />
-            </label>
+            descriptors.map((d) => (
+              <div key={d.id} className="ga98-report-descriptor-name">{d.name || 'Untitled'}</div>
+            ))
           )}
-        </div>
-
-        <div className="ga98-report-from">
-          <label>
-            <span>From</span>
-            <select
-              aria-label="From contact"
-              value={report.fromContactId ?? ''}
-              onChange={(e) => patch({ fromContactId: e.target.value || undefined })}
-            >
-              <option value="">— none —</option>
-              {contacts.map((c) => (
-                <option key={c.id} value={c.id}>{c.name || 'Unnamed'}{c.org ? ` (${c.org})` : ''}</option>
-              ))}
-            </select>
-          </label>
-          <button onClick={onManageContacts}>Manage contacts</button>
-        </div>
-
-        <label className="ga98-report-to">
-          <span>To</span>
-          <input
-            aria-label="To recipient"
-            value={report.to}
-            onChange={(e) => patch({ to: e.target.value })}
-          />
-        </label>
+        </section>
       </div>
 
-      <div
-        className={`ga98-report-body${dragOver ? ' ga98-report-body-dragover' : ''}`}
-        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={onBodyDrop}
-      >
-        <div className="ga98-report-body-toolbar">
+      <div className="ga98-report-center">
+        <div className="ga98-report-toolbar">
           <button type="button" onClick={addTextBlock}>+ Text</button>
           <label className="ga98-report-addphoto">
             <span>+ Photo</span>
@@ -158,33 +178,164 @@ export function ReportEditor(props: ReportEditorProps): JSX.Element {
               onChange={(e) => { const f = e.target.files?.[0]; if (f) onAddPhoto(f); e.target.value = ''; }}
             />
           </label>
+          <button type="button" onClick={onAddTable}>+ Table</button>
           <button type="button" onClick={onImportFromCase}>Import from case</button>
-          <button type="button" onClick={onManageDescriptors}>Manage descriptors</button>
+          <span className="ga98-report-toolbar-spacer" />
+          <button type="button" aria-label="Zoom out" onClick={() => onZoom(clampZoom(zoom - ZOOM_STEP))}>−</button>
+          <span className="ga98-report-zoom-label">{Math.round(zoom * 100)}%</span>
+          <button type="button" aria-label="Zoom in" onClick={() => onZoom(clampZoom(zoom + ZOOM_STEP))}>+</button>
         </div>
-        {report.blocks.map((b) => (
-          b.kind === 'text'
-            ? (
-              <TextBlock
-                key={b.id}
-                block={b}
-                onChange={(html) => updateTextBlock(b.id, html)}
-                descriptors={descriptors}
-              />
-            )
-            : (
-              <ImageBlock
-                key={b.id}
-                block={b}
-                src={assets[b.assetRef]}
-                onChange={(p) => updateImageBlock(b.id, p)}
-                onRemove={() => removeBlock(b.id)}
-              />
-            )
-        ))}
-        {report.blocks.length === 0 ? (
-          <div className="ga98-report-body-empty">Add a text block or a photo to begin.</div>
-        ) : null}
+
+        <div
+          className={`ga98-report-pagescroll${dragOver ? ' ga98-report-body-dragover' : ''}`}
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={onBodyDrop}
+        >
+          <div
+            className="ga98-report-page"
+            ref={pageRef}
+            style={{ ['--ga98-report-zoom' as string]: String(zoom) }}
+            onContextMenu={openContextMenu}
+          >
+            <div className="ga98-report-banner">
+              {bannerUrl ? (
+                <>
+                  <img className="ga98-report-banner-img" src={bannerUrl} alt="Report banner" />
+                  <button onClick={onRemoveBanner}>Remove banner</button>
+                </>
+              ) : (
+                <label className="ga98-report-banner-upload">
+                  <span>Upload banner</span>
+                  <input
+                    aria-label="Upload banner"
+                    type="file"
+                    accept="image/png,image/jpeg"
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) onUploadBanner(f); e.target.value = ''; }}
+                  />
+                </label>
+              )}
+            </div>
+
+            <div className="ga98-report-header">
+              <label className="ga98-report-title-field">
+                <span>Title</span>
+                <input
+                  aria-label="Report title"
+                  value={report.title}
+                  onChange={(e) => patch({ title: e.target.value })}
+                />
+              </label>
+
+              <label className="ga98-report-date">
+                <span>Date</span>
+                <input
+                  aria-label="Report date"
+                  type="date"
+                  value={report.reportDate ?? ''}
+                  onChange={(e) => patch({ reportDate: e.target.value || undefined })}
+                />
+              </label>
+
+              <div className="ga98-report-from">
+                <label>
+                  <span>From</span>
+                  <select
+                    aria-label="From contact"
+                    value={report.fromContactId ?? ''}
+                    onChange={(e) => patch({ fromContactId: e.target.value || undefined })}
+                  >
+                    <option value="">— none —</option>
+                    {contacts.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name || 'Unnamed'}{c.org ? ` (${c.org})` : ''}</option>
+                    ))}
+                  </select>
+                </label>
+                {fromContact ? <span className="ga98-report-from-org">{fromContact.org}</span> : null}
+              </div>
+
+              <label className="ga98-report-to">
+                <span>To</span>
+                <input
+                  aria-label="To recipient"
+                  value={report.to}
+                  onChange={(e) => patch({ to: e.target.value })}
+                />
+              </label>
+            </div>
+
+            <div className="ga98-report-body">
+              {report.blocks.map((b) => {
+                if (b.kind === 'text') {
+                  return (
+                    <div key={b.id} id={`ga98-report-block-${b.id}`} className="ga98-report-block">
+                      <TextBlock
+                        block={b}
+                        onChange={(html) => updateTextBlock(b.id, html)}
+                        descriptors={descriptors}
+                        introductions={introductions}
+                      />
+                    </div>
+                  );
+                }
+                if (b.kind === 'table') {
+                  return (
+                    <div key={b.id} id={`ga98-report-block-${b.id}`} className="ga98-report-block">
+                      <TableBlock
+                        block={b}
+                        onChange={(cells) => updateTableBlock(b.id, cells)}
+                        onRemove={() => removeBlock(b.id)}
+                      />
+                    </div>
+                  );
+                }
+                return (
+                  <div key={b.id} id={`ga98-report-block-${b.id}`} className="ga98-report-block">
+                    <ImageBlock
+                      block={b}
+                      src={assets[b.assetRef]}
+                      selected={b.id === selectedImageId}
+                      onSelect={() => setSelectedImageId(b.id)}
+                      onChange={(p) => updateImageBlock(b.id, p)}
+                      onRemove={() => removeBlock(b.id)}
+                    />
+                  </div>
+                );
+              })}
+              {report.blocks.length === 0 ? (
+                <div className="ga98-report-body-empty">Add a text block or a photo to begin.</div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+
+        <div className="ga98-report-statusbar">
+          <span>Words: {words}</span>
+          <span>~{pageCount} {pageCount === 1 ? 'page' : 'pages'}</span>
+          <span>{Math.round(zoom * 100)}%</span>
+        </div>
       </div>
+
+      <RightRail
+        descriptors={descriptors}
+        outline={outline}
+        selectedImage={selectedImage}
+        onOutlineJump={onOutlineJump}
+        onImagePatch={(p) => { if (selectedImageId) updateImageBlock(selectedImageId, p); }}
+      />
+
+      {ctxMenu ? (
+        <>
+          <div className="ga98-report-ctxmenu-backdrop" onClick={() => setCtxMenu(null)} onContextMenu={(e) => { e.preventDefault(); setCtxMenu(null); }} />
+          <div className="ga98-report-ctxmenu" style={{ left: ctxMenu.x, top: ctxMenu.y }}>
+            <button type="button" onClick={() => runCtx(addTextBlock)}>Add text</button>
+            <button type="button" onClick={() => runCtx(onAddTable)}>Insert table</button>
+            <button type="button" onClick={() => runCtx(onImportFromCase)}>Insert image</button>
+            <button type="button" onClick={() => runCtx(onManageDescriptors)}>Add descriptor…</button>
+            <button type="button" onClick={() => runCtx(onManageIntroductions)}>Add introduction…</button>
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }

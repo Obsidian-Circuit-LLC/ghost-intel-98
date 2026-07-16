@@ -8,6 +8,7 @@ import type { Report, Contact, Descriptor, ReportBlock } from '@shared/reports-t
 import { ReportEditor } from './ReportEditor';
 import { ContactBook } from './ContactBook';
 import { DescriptorLibrary } from './DescriptorLibrary';
+import { IntroductionLibrary } from './IntroductionLibrary';
 import { CasePhotoPicker, type CasePhotoPick } from './CasePhotoPicker';
 import { loadAttachmentBytes } from '../../lib/attachmentBytes';
 import { toast } from '../../state/toasts';
@@ -25,10 +26,13 @@ export function ReportsModule(): JSX.Element {
   const [report, setReport] = useState<Report | null>(null);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [descriptors, setDescriptors] = useState<Descriptor[]>([]);
+  const [introductions, setIntroductions] = useState<Descriptor[]>([]);
   const [assets, setAssets] = useState<Record<string, string>>({});
   const [showContacts, setShowContacts] = useState(false);
   const [showDescriptors, setShowDescriptors] = useState(false);
+  const [showIntroductions, setShowIntroductions] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [zoom, setZoom] = useState(1);
   const [busy, setBusy] = useState(false);
 
   const refresh = useCallback(async (): Promise<void> => {
@@ -40,10 +44,13 @@ export function ReportsModule(): JSX.Element {
   const refreshDescriptors = useCallback(async (): Promise<void> => {
     setDescriptors(await window.api.reports.descriptors.list());
   }, []);
+  const refreshIntroductions = useCallback(async (): Promise<void> => {
+    setIntroductions(await window.api.reports.introductions.list());
+  }, []);
 
   useEffect(() => {
-    void refresh(); void refreshContacts(); void refreshDescriptors();
-  }, [refresh, refreshContacts, refreshDescriptors]);
+    void refresh(); void refreshContacts(); void refreshDescriptors(); void refreshIntroductions();
+  }, [refresh, refreshContacts, refreshDescriptors, refreshIntroductions]);
 
   // Resolve every asset ref a report references (banner + image blocks) into the local data-URL
   // cache so the preview embeds them exactly as the exported PDF/DOCX will.
@@ -112,6 +119,13 @@ export function ReportsModule(): JSX.Element {
     const block: ReportBlock = { id: uid(), kind: 'image', assetRef: ref, widthPct: 60, caption: '' };
     setReport((prev) => (prev ? { ...prev, blocks: [...prev.blocks, block] } : prev));
   }, []);
+
+  // Append an empty 2×2 table block to the working report. The rectangular grid is what the
+  // validator's table branch expects; the per-cell editor keeps it rectangular from here on.
+  function addTable(): void {
+    const block: ReportBlock = { id: uid(), kind: 'table', cells: [['', ''], ['', '']] };
+    setReport((prev) => (prev ? { ...prev, blocks: [...prev.blocks, block] } : prev));
+  }
 
   async function addPhoto(file: File): Promise<void> {
     if (!report) return;
@@ -190,14 +204,19 @@ export function ReportsModule(): JSX.Element {
                 assets={assets}
                 contacts={contacts}
                 descriptors={descriptors}
+                introductions={introductions}
                 onChange={setReport}
                 onAutosave={(r) => { void autosave(r); }}
                 onUploadBanner={(f) => { void uploadBanner(f); }}
                 onRemoveBanner={removeBanner}
                 onManageContacts={() => setShowContacts(true)}
                 onManageDescriptors={() => setShowDescriptors(true)}
+                onManageIntroductions={() => setShowIntroductions(true)}
                 onAddPhoto={(f) => { void addPhoto(f); }}
+                onAddTable={addTable}
                 onImportFromCase={() => setShowImport(true)}
+                zoom={zoom}
+                onZoom={setZoom}
               />
             </>
           ) : (
@@ -216,6 +235,12 @@ export function ReportsModule(): JSX.Element {
       {showDescriptors ? (
         <DescriptorLibrary
           onClose={() => { setShowDescriptors(false); void refreshDescriptors(); }}
+        />
+      ) : null}
+
+      {showIntroductions ? (
+        <IntroductionLibrary
+          onClose={() => { setShowIntroductions(false); void refreshIntroductions(); }}
         />
       ) : null}
 

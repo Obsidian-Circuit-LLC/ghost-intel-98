@@ -68,3 +68,29 @@ describe('buildReportHtml', () => {
     expect(html).toContain('src="" ');
   });
 });
+
+function base(blocks: Report['blocks']): Report {
+  return { id: 'r', title: 'T', createdAt: '', updatedAt: '', to: 'you', blocks };
+}
+
+describe('buildReportHtml expansion', () => {
+  it('renders a table block as an HTML table with all cells', () => {
+    const html = buildReportHtml(base([{ id: 'b', kind: 'table', cells: [['a', 'b'], ['c', 'd']] }]), {}, null);
+    expect(html).toContain('<table');
+    expect((html.match(/<td/g) || []).length).toBe(4);
+  });
+
+  it('renders reportDate when present', () => {
+    const r = base([]); r.reportDate = '2026-07-16';
+    expect(buildReportHtml(r, {}, null)).toContain('2026-07-16');
+  });
+
+  it('applies image align', () => {
+    const html = buildReportHtml(base([{ id: 'b', kind: 'image', assetRef: 'x', widthPct: 40, caption: 'c', align: 'center' }]), { x: 'data:image/png;base64,AA' }, null);
+    expect(html).toMatch(/margin:0 auto|text-align:center|align.*center/i);
+  });
+
+  it('embeds a fixed-width page style', () => {
+    expect(buildReportHtml(base([]), {}, null)).toMatch(/max-width:\s*8\.5in|width:\s*8\.5in|816px/);
+  });
+});

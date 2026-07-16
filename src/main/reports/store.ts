@@ -17,18 +17,19 @@ const assetsDir = (): string => join(dataRoot(), 'report-assets');
 const MAX_REPORTS = 500;
 const MAX_CONTACTS = 500;
 const MAX_DESCRIPTORS = 500;
+const MAX_INTRODUCTIONS = 500;
 
 async function read(): Promise<ReportStoreData> {
   // Build a fresh object with fresh arrays — never spread a shared EMPTY const, or a JSON blob
   // that lacks a field would alias that const's array and later writes would mutate it.
   try {
     const p = JSON.parse(await secureReadText(file())) as Partial<ReportStoreData>;
-    return { reports: p.reports ?? [], contacts: p.contacts ?? [], descriptors: p.descriptors ?? [] };
-  } catch { return { reports: [], contacts: [], descriptors: [] }; }
+    return { reports: p.reports ?? [], contacts: p.contacts ?? [], descriptors: p.descriptors ?? [], introductions: p.introductions ?? [] };
+  } catch { return { reports: [], contacts: [], descriptors: [], introductions: [] }; }
 }
 async function write(d: ReportStoreData): Promise<void> { await secureWriteFile(file(), JSON.stringify(d, null, 2)); }
 
-export async function _resetForTest(): Promise<void> { await write({ reports: [], contacts: [], descriptors: [] }); }
+export async function _resetForTest(): Promise<void> { await write({ reports: [], contacts: [], descriptors: [], introductions: [] }); }
 
 export async function listReports(): Promise<Report[]> { return (await read()).reports; }
 export async function saveReport(r: Report): Promise<Report> {
@@ -64,6 +65,18 @@ export async function saveDescriptor(desc: Descriptor): Promise<Descriptor> {
 }
 export async function removeDescriptor(id: string): Promise<void> {
   const d = await read(); d.descriptors = d.descriptors.filter((x) => x.id !== id); await write(d);
+}
+
+export async function listIntroductions(): Promise<Descriptor[]> { return (await read()).introductions; }
+export async function saveIntroduction(desc: Descriptor): Promise<Descriptor> {
+  const d = await read();
+  const i = d.introductions.findIndex((x) => x.id === desc.id);
+  if (i >= 0) d.introductions[i] = desc; else d.introductions.push(desc);
+  if (d.introductions.length > MAX_INTRODUCTIONS) d.introductions = d.introductions.slice(d.introductions.length - MAX_INTRODUCTIONS);
+  await write(d); return desc;
+}
+export async function removeIntroduction(id: string): Promise<void> {
+  const d = await read(); d.introductions = d.introductions.filter((x) => x.id !== id); await write(d);
 }
 
 function extFor(mime: string): string { return mime === 'image/png' ? 'png' : mime === 'image/jpeg' ? 'jpg' : 'bin'; }

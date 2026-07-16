@@ -656,6 +656,7 @@ export const channels = {
     putAsset: 'reports:putAsset', getAsset: 'reports:getAsset',
     contactsList: 'reports:contacts:list', contactsSave: 'reports:contacts:save', contactsRemove: 'reports:contacts:remove',
     descriptorsList: 'reports:descriptors:list', descriptorsSave: 'reports:descriptors:save', descriptorsRemove: 'reports:descriptors:remove',
+    introductionsList: 'reports:introductions:list', introductionsSave: 'reports:introductions:save', introductionsRemove: 'reports:introductions:remove',
     exportPdf: 'reports:exportPdf',
     exportDocx: 'reports:exportDocx'
   }

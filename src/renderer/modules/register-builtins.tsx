@@ -287,6 +287,6 @@ export function registerBuiltins(): void {
   registerModule({ key: 'minds-eye', title: "Mind's Eye", glyph: '👁', component: MindsEyeAdapter, builtin: true, defaultWidth: 760, defaultHeight: 560 });
   registerModule({ key: 'investigation-graph', title: 'Investigation Graph', glyph: '🕸', component: InvestigationGraphAdapter, builtin: true, defaultWidth: 900, defaultHeight: 640, category: 'osint', subcategory: 'Identity' });
   registerModule({ key: 'invoices', title: 'Ghost Ledger 98', glyph: '📒', component: InvoicesAdapter, builtin: true, defaultWidth: 900, defaultHeight: 640 });
-  registerModule({ key: 'report', title: 'Reports', glyph: '📋', component: ReportsAdapter, builtin: true, defaultWidth: 900, defaultHeight: 680 });
+  registerModule({ key: 'report', title: 'Reports', glyph: '📋', component: ReportsAdapter, builtin: true, defaultWidth: 1040, defaultHeight: 680 });
   registerModule({ key: 'number-muncher', title: 'Number Muncher', glyph: '🧮', component: NumberMuncherAdapter, builtin: true, defaultWidth: 320, defaultHeight: 450 });
 }

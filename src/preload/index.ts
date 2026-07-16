@@ -347,6 +347,11 @@ const api = {
       save: (descriptor: unknown) => ipcRenderer.invoke(channels.reports.descriptorsSave, descriptor),
       remove: (id: string) => ipcRenderer.invoke(channels.reports.descriptorsRemove, id)
     },
+    introductions: {
+      list: () => ipcRenderer.invoke(channels.reports.introductionsList),
+      save: (introduction: unknown) => ipcRenderer.invoke(channels.reports.introductionsSave, introduction),
+      remove: (id: string) => ipcRenderer.invoke(channels.reports.introductionsRemove, id)
+    },
     // Main resolves the report/contact/assets itself from the id for both exporters.
     exportPdf: (id: string) => ipcRenderer.invoke(channels.reports.exportPdf, id),
     exportDocx: (id: string) => ipcRenderer.invoke(channels.reports.exportDocx, id)

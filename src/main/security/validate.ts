@@ -1237,6 +1237,8 @@ const MAX_REPORT_CAPTION = 500;
 const MAX_DESCRIPTOR_BODY = 10_000;
 const MAX_CONTACT_FIELD = 400;
 const MAX_BLOCKS_PER_REPORT = 400;
+const MAX_TABLE_ROWS = 50;
+const MAX_TABLE_COLS = 12;
 
 function reportStr(v: unknown, max: number): string {
   return typeof v === 'string' ? v.slice(0, max) : '';
@@ -1261,7 +1263,33 @@ function ensureReportBlock(raw: unknown): import('@shared/reports-types').Report
   if (o['kind'] === 'image') {
     let assetRef: string;
     try { assetRef = ensureFileName(o['assetRef'], 'block.assetRef'); } catch { return null; }
-    return { id, kind: 'image', assetRef, widthPct: clampWidthPct(o['widthPct']), caption: reportStr(o['caption'], MAX_REPORT_CAPTION) };
+    const align = o['align'] === 'left' || o['align'] === 'center' || o['align'] === 'right' ? o['align'] : undefined;
+    const img: import('@shared/reports-types').ReportBlock = { id, kind: 'image', assetRef, widthPct: clampWidthPct(o['widthPct']), caption: reportStr(o['caption'], MAX_REPORT_CAPTION) };
+    if (align) (img as { align?: string }).align = align;
+    return img;
+  }
+  if (o['kind'] === 'table') {
+    const rows = o['cells'];
+    if (!Array.isArray(rows) || rows.length === 0) return null;
+    // Oversize grids are CLAMPED to the caps, not dropped: dropping the whole block silently
+    // destroyed every cell the moment the editor exceeded a bound (data-loss defect). Truncating to
+    // MAX_TABLE_ROWS × MAX_TABLE_COLS preserves the in-bounds content and keeps the grid rectangular.
+    const clampedRows = rows.slice(0, MAX_TABLE_ROWS);
+    const rawWidth = Array.isArray(clampedRows[0]) ? clampedRows[0].length : -1;
+    if (rawWidth <= 0) return null;
+    const width = Math.min(rawWidth, MAX_TABLE_COLS);
+    const cells: string[][] = [];
+    for (const row of clampedRows) {
+      if (!Array.isArray(row) || row.length !== rawWidth) return null;           // ragged → drop block
+      const outRow: string[] = [];
+      for (let j = 0; j < width; j++) {                                          // clamp columns to width
+        const cell = row[j];
+        if (typeof cell !== 'string') return null;                               // non-string → drop block
+        outRow.push(cell.slice(0, MAX_REPORT_BLOCK_HTML));
+      }
+      cells.push(outRow);
+    }
+    return { id, kind: 'table', cells };
   }
   return null;
 }
@@ -1293,6 +1321,9 @@ export function ensureReport(raw: unknown): import('@shared/reports-types').Repo
   }
   if (typeof o['fromContactId'] === 'string' && o['fromContactId'].length > 0 && o['fromContactId'].length <= 64) {
     out.fromContactId = o['fromContactId'];
+  }
+  if (typeof o['reportDate'] === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(o['reportDate'])) {
+    out.reportDate = o['reportDate'];
   }
   return out;
 }
@@ -1328,4 +1359,9 @@ export function ensureDescriptor(raw: unknown): import('@shared/reports-types').
     name: reportStr(o['name'], MAX_CONTACT_FIELD),
     body: reportStr(o['body'], MAX_DESCRIPTOR_BODY)
   };
+}
+
+/** An introduction is a named reusable text, structurally identical to a Descriptor. */
+export function ensureIntroduction(raw: unknown): import('@shared/reports-types').Descriptor {
+  return ensureDescriptor(raw);
 }

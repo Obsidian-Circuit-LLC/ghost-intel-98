@@ -74,3 +74,73 @@ describe('renderReportDocx', () => {
     expect(doc).not.toContain('undefined');
   });
 });
+
+function docXml(buf: Buffer): string {
+  return new AdmZip(buf).readAsText('word/document.xml');
+}
+function baseReport(blocks: Report['blocks']): Report {
+  return { id: 'r', title: 'T', createdAt: '', updatedAt: '', to: 'you', blocks };
+}
+
+describe('renderReportDocx expansion', () => {
+  it('emits centered paragraph alignment', () => {
+    const xml = docXml(renderReportDocx(baseReport([{ id: 'b', kind: 'text', html: '<p style="text-align:center">hi</p>' }]), {}, null));
+    expect(xml).toContain('<w:jc w:val="center"/>');
+  });
+
+  it('emits a run font from font-family', () => {
+    const xml = docXml(renderReportDocx(baseReport([{ id: 'b', kind: 'text', html: '<span style="font-family:Georgia">hi</span>' }]), {}, null));
+    expect(xml).toContain('w:rFonts');
+    expect(xml).toContain('Georgia');
+  });
+
+  it('emits rPr children in ECMA-376 CT_RPr sequence order (rFonts, b, i, sz, u)', () => {
+    const xml = docXml(renderReportDocx(baseReport([
+      { id: 'b', kind: 'text', html: '<span style="font-size:12pt;font-family:Arial"><b><u>Hi</u></b></span>' }
+    ]), {}, null));
+    // Pick the run-properties block for our span (the one carrying the rFonts), not the title's.
+    const rPr = (xml.match(/<w:rPr>[\s\S]*?<\/w:rPr>/g) ?? []).find((b) => b.includes('<w:rFonts')) ?? '';
+    const order = ['<w:rFonts', '<w:b/>', '<w:sz', '<w:u '].map((t) => rPr.indexOf(t));
+    // Every element is present…
+    expect(order.every((i) => i >= 0)).toBe(true);
+    // …and strictly ascending: rFonts before b before sz before u (u after sz is the schema rule).
+    expect(order).toEqual([...order].sort((a, z) => a - z));
+    expect(rPr.indexOf('<w:rFonts')).toBeLessThan(rPr.indexOf('<w:b/>'));
+    expect(rPr.indexOf('<w:sz')).toBeLessThan(rPr.indexOf('<w:u '));
+  });
+
+  it('emits list paragraphs for ul/li', () => {
+    const xml = docXml(renderReportDocx(baseReport([{ id: 'b', kind: 'text', html: '<ul><li>a</li><li>b</li></ul>' }]), {}, null));
+    expect(xml).toContain('<w:numPr>');
+  });
+
+  it('emits a hyperlink for a link', () => {
+    const xml = docXml(renderReportDocx(baseReport([{ id: 'b', kind: 'text', html: '<a href="https://x.co">L</a>' }]), {}, null));
+    expect(xml).toMatch(/w:hyperlink|HYPERLINK/);
+  });
+
+  it('emits a w:tbl for a table block', () => {
+    const xml = docXml(renderReportDocx(baseReport([{ id: 'b', kind: 'table', cells: [['a', 'b'], ['c', 'd']] }]), {}, null));
+    expect(xml).toContain('<w:tbl>');
+    expect((xml.match(/<w:tc>/g) || []).length).toBe(4);
+  });
+
+  it('emits reportDate', () => {
+    const r = baseReport([]); r.reportDate = '2026-07-16';
+    expect(docXml(renderReportDocx(r, {}, null))).toContain('2026-07-16');
+  });
+
+  it('escapes a hyperlink URL exactly once (no &amp;amp; on query params)', () => {
+    // The sanitizer serializes an href '&' as '&amp;'; the tokenizer must decode it before esc()
+    // so the field instruction carries a single '&amp;', not a double-escaped '&amp;amp;'.
+    const xml = docXml(renderReportDocx(baseReport([{ id: 'b', kind: 'text', html: '<a href="https://x.co?a=1&amp;b=2">L</a>' }]), {}, null));
+    expect(xml).toContain('https://x.co?a=1&amp;b=2');
+    expect(xml).not.toContain('&amp;amp;');
+  });
+
+  it('follows a trailing table block with a separating paragraph (Word repair guard)', () => {
+    const xml = docXml(renderReportDocx(baseReport([{ id: 'b', kind: 'table', cells: [['a']] }]), {}, null));
+    // the body must not end directly on </w:tbl><w:sectPr> — a paragraph sits between them
+    expect(xml).toMatch(/<\/w:tbl><w:p><\/w:p>/);
+  });
+});

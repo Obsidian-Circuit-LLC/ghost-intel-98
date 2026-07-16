@@ -6,8 +6,11 @@
  * (PDF) and `docx.ts` (DOCX) then treat the stored block html as already-safe and interpolate it
  * verbatim — so this sanitizer is the sole barrier against script/handler/style injection reaching
  * the exporters. The shared `lib/sanitizeHtml` FORBIDS `style` and is WRONG here: rich text needs a
- * font-size, and only a font-size — hence a dedicated allowlist that keeps exactly `font-size:<n>pt`
- * on `style` and nothing else (no `color`, `position`, `url(...)`, expressions, ...).
+ * bounded set of formatting — hence a dedicated allowlist. Tags: `b/strong/i/em/u/p/br/span/ul/ol/li/a`.
+ * On `style`, ONLY these declarations survive: `font-size:<n>pt`, `font-family:<one of FONT_FAMILIES>`,
+ * and `text-align:left|center|right` — every other property (color, position, url(...), expressions)
+ * is dropped. On `a`, `href` survives ONLY for the `http:`/`https:`/`mailto:` schemes (no
+ * `javascript:`/`data:`). Nothing else — no `img`, no event handlers, no scripts — is kept.
  */
 import DOMPurify from 'dompurify';
 
@@ -26,37 +29,56 @@ export const FONT_SIZES: FontSize[] = [
   { key: 'heading', label: 'Heading', pt: 18, bold: true }
 ];
 
+/** Closed whitelist of typefaces guaranteed present on Windows (the only ship target). The sanitizer
+ *  accepts font-family ONLY when the value is exactly one of these strings. */
+export const FONT_FAMILIES: string[] = ['Segoe UI', 'Arial', 'Times New Roman', 'Georgia', 'Courier New', 'Verdana'];
+
+const ALIGNS = new Set(['left', 'center', 'right']);
+
 let hookInstalled = false;
 
 function installHook(): void {
   if (hookInstalled) return;
   hookInstalled = true;
-  // A global `uponSanitizeAttribute` hook: for a `style` attribute keep ONLY a `font-size:<n>pt`
-  // declaration and drop the attribute otherwise. This hook is global to DOMPurify, but it is
-  // inert for the doc-viewer `sanitizeHtml` path (that path lists `style` under FORBID_ATTR, so
-  // the attribute is stripped regardless of what this hook decides) — no cross-contamination.
+  // A global `uponSanitizeAttribute` hook. For `style` it keeps only the whitelisted declarations
+  // (font-size:<n>pt, font-family from FONT_FAMILIES, text-align:left|center|right) and drops the
+  // attribute if none survive. For `href` it drops the attribute unless the scheme is http/https/
+  // mailto. This hook is global to DOMPurify, but it is inert for the doc-viewer `sanitizeHtml`
+  // path (that path lists `style` under FORBID_ATTR, so the attribute is stripped regardless of
+  // what this hook decides) — no cross-contamination.
   DOMPurify.addHook('uponSanitizeAttribute', (_node, data) => {
     if (data.attrName === 'style') {
-      const m = /font-size:\s*(\d+(?:\.\d+)?)pt/i.exec(data.attrValue || '');
-      if (m) {
-        data.attrValue = `font-size:${m[1]}pt`;
-      } else {
-        data.keepAttr = false;
+      const decls: string[] = [];
+      const raw = data.attrValue || '';
+      const size = /font-size:\s*(\d+(?:\.\d+)?)pt/i.exec(raw);
+      if (size) decls.push(`font-size:${size[1]}pt`);
+      const fam = /font-family:\s*([^;]+)/i.exec(raw);
+      if (fam) {
+        const name = fam[1].trim().replace(/^['"]|['"]$/g, '');
+        if (FONT_FAMILIES.includes(name)) decls.push(`font-family:${name}`);
       }
+      const align = /text-align:\s*(left|center|right)/i.exec(raw);
+      if (align && ALIGNS.has(align[1].toLowerCase())) decls.push(`text-align:${align[1].toLowerCase()}`);
+      if (decls.length > 0) data.attrValue = decls.join(';');
+      else data.keepAttr = false;
+    } else if (data.attrName === 'href') {
+      const v = (data.attrValue || '').trim();
+      if (!/^(https?:|mailto:)/i.test(v)) data.keepAttr = false;
     }
   });
 }
 
 /**
  * Sanitize a rich-text block's HTML down to the fixed allowlist the DOCX tokenizer + PDF path
- * rely on: `b/strong/i/em/u/p/br/span`, with `style` reduced to a single `font-size:<n>pt`.
- * Everything else — scripts, event handlers, images, links, arbitrary style props — is removed.
+ * rely on: `b/strong/i/em/u/p/br/span/ul/ol/li/a`, with `style` reduced to font-size:<n>pt /
+ * font-family:<whitelisted> / text-align:left|center|right, and `a[href]` scheme-guarded to
+ * http/https/mailto. Everything else — scripts, event handlers, images, other schemes/props — is removed.
  */
 export function sanitizeReportHtml(html: string): string {
   installHook();
   return DOMPurify.sanitize(String(html ?? ''), {
-    ALLOWED_TAGS: ['b', 'strong', 'i', 'em', 'u', 'p', 'br', 'span'],
-    ALLOWED_ATTR: ['style'],
+    ALLOWED_TAGS: ['b', 'strong', 'i', 'em', 'u', 'p', 'br', 'span', 'ul', 'ol', 'li', 'a'],
+    ALLOWED_ATTR: ['style', 'href'],
     ALLOW_DATA_ATTR: false
   });
 }
@@ -79,4 +101,9 @@ export function descriptorInsertHtml(d: { name: string; body: string }, mode: 't
     return `<b>${escape(d.name)}</b> — ${body}`;
   }
   return body;
+}
+
+/** An introduction inserts identically to a descriptor (both are escaped plain-text data). */
+export function introductionInsertHtml(d: { name: string; body: string }, mode: 'text' | 'title'): string {
+  return descriptorInsertHtml(d, mode);
 }

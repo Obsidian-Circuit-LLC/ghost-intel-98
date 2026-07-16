@@ -26,13 +26,18 @@ export interface ImageBlockProps {
   /** Resolved preview URL for `block.assetRef` (data URL from the encrypted store), or undefined
    *  while it's still loading / missing. */
   src?: string;
-  /** Patch the block — `widthPct` from a resize, `caption` from the caption field. */
-  onChange: (patch: Partial<Pick<ImageBlockData, 'widthPct' | 'caption'>>) => void;
+  /** Patch the block — `widthPct` from a resize, `caption` from the caption field, `align` from the
+   *  right-rail properties panel. */
+  onChange: (patch: Partial<Pick<ImageBlockData, 'widthPct' | 'caption' | 'align'>>) => void;
   onRemove?: () => void;
+  /** Mark this block as the right-rail's selected image (clicking the frame selects it). */
+  onSelect?: () => void;
+  /** True when this is the right-rail's selected image — draws a selection outline. */
+  selected?: boolean;
 }
 
 export function ImageBlock(props: ImageBlockProps): JSX.Element {
-  const { block, src, onChange, onRemove } = props;
+  const { block, src, onChange, onRemove, onSelect, selected } = props;
   const frameRef = useRef<HTMLDivElement | null>(null);
 
   /** Begin a resize drag from the bottom-right handle. Width is computed from the pointer's x
@@ -61,18 +66,22 @@ export function ImageBlock(props: ImageBlockProps): JSX.Element {
   }
 
   return (
-    <div className="ga98-report-imageblock">
+    <div
+      className={`ga98-report-imageblock${selected ? ' selected' : ''}`}
+      style={{ textAlign: block.align ?? 'left' }}
+      onClick={onSelect}
+    >
       <div className="ga98-report-imageblock-frame" ref={frameRef}>
         {src ? (
           <img
             className="ga98-report-imageblock-img"
             src={src}
             alt={block.caption || 'Report photo'}
-            style={{ width: `${clampPct(block.widthPct)}%` }}
+            style={{ width: `${clampPct(block.widthPct)}%`, display: 'inline-block' }}
             draggable={false}
           />
         ) : (
-          <div className="ga98-report-imageblock-loading" style={{ width: `${clampPct(block.widthPct)}%` }}>
+          <div className="ga98-report-imageblock-loading" style={{ width: `${clampPct(block.widthPct)}%`, display: 'inline-block' }}>
             Loading image…
           </div>
         )}
