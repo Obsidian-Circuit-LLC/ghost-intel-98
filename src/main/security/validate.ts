@@ -1128,6 +1128,19 @@ export function ensureDocName(value: unknown, context = 'name'): string {
   return value;
 }
 
+/** Validate a saved-conversation id arriving over IPC (memory forget/remember). Mirrors forgetDoc's
+ *  docId check: a non-empty, bounded, separator-free token — no ':' (so it can't escape the
+ *  `__conversations__:convo:<id>` node-id scheme) and no path separators. */
+export function ensureConversationId(value: unknown, context = 'conversation id'): string {
+  if (typeof value !== 'string' || value.length === 0 || value.length > 128) {
+    throw new ValidationError(`Invalid ${context}: empty or too long`);
+  }
+  if (!/^[A-Za-z0-9_-]+$/.test(value)) {
+    throw new ValidationError(`Invalid ${context}: unexpected characters`);
+  }
+  return value;
+}
+
 /** Validate the HOST source path of a dropped-file import. Unlike a documents rel-path this may
  *  legitimately point outside the documents root (it is the drag source), so it cannot be confined
  *  to the root — but it must still be a structurally valid absolute, NUL-free string rather than an

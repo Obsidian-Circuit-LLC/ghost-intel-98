@@ -302,6 +302,9 @@ export interface AiConversationInput {
   title: string;
   messages: AiChatMessage[];
   caseId?: string;
+  /** Optional memory-tombstone flag. Renderer saves omit it (the store preserves any existing
+   *  value); the forget/remember IPC handlers pass it explicitly to set/clear the tombstone. */
+  memoryExcluded?: boolean;
 }
 
 // ---------- Bookmarks dashboard (offline start.me-style board) ----------

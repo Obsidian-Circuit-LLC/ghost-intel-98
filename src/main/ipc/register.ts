@@ -55,6 +55,7 @@ import { createProfileStore } from '../services/memory/profile/profile-store';
 import { mergeItems as mergeProfileItems } from '../services/memory/graph/merge';
 import { createLibrary } from '../services/memory/library/store';
 import { createBonds } from '../services/memory/bonds';
+import { pruneBondsForNode } from '../services/memory/graph';
 import { withLock } from '../util/mutex';
 import type { MemoryItem } from '@shared/ipc-contracts';
 import * as localAi from '../services/local-ai';
@@ -70,7 +71,7 @@ import * as aiConvos from '../storage/ai-conversations';
 import * as briefcase from '../storage/briefcase';
 import * as journal from '../storage/journal';
 import * as voiceModel from '../voice/model-protocol';
-import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityType, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureShellProgram, ensureWhiteboard, ensureBoardFile, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon, ensureSaveToCaseOpts, ensureGeoItem, ensureThreatLayerId, ensureKeyedLayerId, ensureLayerKey, isKeyedLayerId, ensureBookmarkBoard, ensureMarketsSettings, ensureStickyNotes, ensureAiConversation, ensureBriefcaseNote, ensureJournalEntry, ensurePin, ensureUid, ensureMailFlag, stripProtectedSettings, ensureBounds, ensureDocRelPath, ensureDocName, ensureImportSourcePath, ensureNoteBody, ensureIdArray, ensureInvoice, ensureProfile, ensureAssetInput, ensureReport, ensureContact, ensureDescriptor, ensureIntroduction, ensureReportTemplate, ensureReportAssetInput } from '../security/validate';
+import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityType, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureShellProgram, ensureWhiteboard, ensureBoardFile, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon, ensureSaveToCaseOpts, ensureGeoItem, ensureThreatLayerId, ensureKeyedLayerId, ensureLayerKey, isKeyedLayerId, ensureBookmarkBoard, ensureMarketsSettings, ensureStickyNotes, ensureAiConversation, ensureBriefcaseNote, ensureJournalEntry, ensurePin, ensureUid, ensureMailFlag, stripProtectedSettings, ensureBounds, ensureDocRelPath, ensureDocName, ensureImportSourcePath, ensureNoteBody, ensureIdArray, ensureInvoice, ensureProfile, ensureAssetInput, ensureReport, ensureContact, ensureDescriptor, ensureIntroduction, ensureReportTemplate, ensureReportAssetInput, ensureConversationId } from '../security/validate';
 import * as entities from '../storage/entities';
 import * as bioStore from '../storage/bio-images';
 import * as ftp from '../services/ftp';
@@ -1864,6 +1865,25 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     if (!/^[A-Za-z0-9_-]+$/.test(docId)) throw new Error('forgetDoc: invalid docId');
     await createLibrary().remove(docId);
     await memory.reindexLibrary();
+  });
+
+  // ---- Mind's Eye curation: forget/remember a conversation's memory (reversible tombstone) ----
+  // The chat record SURVIVES in the AI Assistant — we only set `memoryExcluded` so
+  // reindexConversations omits it, then reindex synchronously (awaited: an embed-engine failure
+  // rejects rather than reporting a false success) and prune any dangling user bond to the now-gone
+  // node. Remember clears the flag and reindexes so the node/chunks return.
+  safeHandle(channels.memory.forgetConversation, async (...args) => {
+    const id = ensureConversationId(args[0]);
+    const convo = await aiConvos.get(id);
+    if (convo) await aiConvos.save({ ...convo, memoryExcluded: true });
+    await memory.reindexConversations();
+    await pruneBondsForNode(`__conversations__:convo:${id}`);
+  });
+  safeHandle(channels.memory.rememberConversation, async (...args) => {
+    const id = ensureConversationId(args[0]);
+    const convo = await aiConvos.get(id);
+    if (convo) await aiConvos.save({ ...convo, memoryExcluded: false });
+    await memory.reindexConversations();
   });
 
   // ---- plugins ----

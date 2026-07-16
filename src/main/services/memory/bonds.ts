@@ -62,6 +62,7 @@ export function createBonds(io: BondIO = defaultIO()): {
   list(): Promise<Bond[]>;
   add(a: string, b: string): Promise<void>;
   remove(a: string, b: string): Promise<void>;
+  removeAllForNode(id: string): Promise<void>;
   neighbors(id: string): Promise<string[]>;
 } {
   async function readAll(): Promise<Bond[]> {
@@ -88,6 +89,12 @@ export function createBonds(io: BondIO = defaultIO()): {
       const [na, nb] = normalizePair(a, b);
       const existing = await readAll();
       await writeAll(existing.filter((bond) => !(bond.a === na && bond.b === nb)));
+    },
+
+    async removeAllForNode(id: string) {
+      const existing = await readAll();
+      const next = existing.filter((bond) => bond.a !== id && bond.b !== id);
+      if (next.length !== existing.length) await writeAll(next); // only rewrite if something matched
     },
 
     async neighbors(id: string) {

@@ -468,6 +468,13 @@ export const channels = {
     // above, which only fires a debounced live-reindex — forgetDoc reindexes synchronously so the
     // "forgotten" node/evidence is gone from the graph and recall on the very next call).
     forgetDoc: 'memory:forgetDoc',
+    // Mind's Eye curation: forget/remember a *conversation's* memory. A reversible tombstone —
+    // forgetConversation sets `memoryExcluded` on the chat record (the chat itself SURVIVES in the
+    // AI Assistant), reindexes conversations synchronously so its node/chunks vanish, and prunes any
+    // dangling user bond to that node; rememberConversation clears the flag and reindexes so the
+    // node/chunks return. Both await the reindex, so an embed-engine failure rejects (no silent success).
+    forgetConversation: 'memory:forgetConversation',
+    rememberConversation: 'memory:rememberConversation',
     // Mind's Eye curation: merge a duplicate fact (`dropId`) into another (`keepId`) — unions
     // provenance, keeps the higher confidence, drops the other. Also how the "one thing to fix"
     // tray resolves a detected conflict pair (see graph/merge.ts's detectConflicts/mergeItems).
@@ -987,6 +994,8 @@ export interface ApiContracts {
   [channels.memory.libraryAdd]: { args: [{ title: string; mime: string; text: string }]; returns: LibraryDoc };
   [channels.memory.libraryRemove]: { args: [string]; returns: void };
   [channels.memory.forgetDoc]: { args: [string]; returns: void };
+  [channels.memory.forgetConversation]: { args: [string]; returns: void };
+  [channels.memory.rememberConversation]: { args: [string]; returns: void };
   [channels.memory.mergeItems]: { args: [{ keepId: string; dropId: string }]; returns: MemoryItem[] };
   [channels.memory.graph]: { args: []; returns: MemoryGraphShape };
   [channels.memory.bondList]: { args: []; returns: BondShape[] };

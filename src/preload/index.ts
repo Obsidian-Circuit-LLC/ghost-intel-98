@@ -509,6 +509,11 @@ const api = {
     /** Mind's Eye curation: forget a `doc`-kind node — removes it from the library AND reindexes
      *  synchronously so the node/evidence is gone from the graph and recall right away. */
     forgetDoc: (docId: string): Promise<void> => ipcRenderer.invoke(channels.memory.forgetDoc, docId),
+    /** Mind's Eye curation: forget a conversation's memory — a reversible tombstone. The chat stays
+     *  in the AI Assistant; it stops being indexed/recalled and its graph node disappears. */
+    forgetConversation: (id: string): Promise<void> => ipcRenderer.invoke(channels.memory.forgetConversation, id),
+    /** Undo forgetConversation — clears the tombstone and reindexes so the node/chunks return. */
+    rememberConversation: (id: string): Promise<void> => ipcRenderer.invoke(channels.memory.rememberConversation, id),
     /** Merge a duplicate fact (`dropId`) into another (`keepId`) — unions provenance, keeps the
      *  higher confidence, drops the other. Returns the full post-merge item set. */
     mergeItems: (keepId: string, dropId: string): Promise<MemoryItem[]> =>

@@ -32,3 +32,10 @@ export async function buildGraph(): Promise<MemoryGraph> {
 
   return { nodes, edges: [...autoEdgeList, ...bondEdges], conflictPairs };
 }
+
+/** Drop every user-drawn bond touching `nodeId`. Called when a node is tombstoned (e.g. a
+ *  forgotten conversation) so its edges don't dangle to a graph node that no longer exists —
+ *  the bond write goes through the encrypted bond store (secure-fs), never a raw file write. */
+export async function pruneBondsForNode(nodeId: string): Promise<void> {
+  await createBonds().removeAllForNode(nodeId);
+}

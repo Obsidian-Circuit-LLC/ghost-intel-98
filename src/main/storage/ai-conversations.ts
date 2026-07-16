@@ -69,7 +69,11 @@ export async function save(input: AiConversationInput): Promise<AiConversation> 
       // Whatever case (if any) is selected as context at save time, verbatim — never carried
       // forward from a prior save, so clearing the case selector actually stops scoping this
       // conversation's learned facts to that case.
-      caseId: input.caseId
+      caseId: input.caseId,
+      // Memory-tombstone flag. Unlike caseId it IS carried forward: a normal renderer save (which
+      // never sends this field) must not silently un-forget a tombstoned conversation, so an absent
+      // input preserves the existing flag. forget/remember pass true/false explicitly to change it.
+      memoryExcluded: input.memoryExcluded ?? existing?.memoryExcluded
     };
     const others = all.filter((c) => c.id !== input.id);
     // Newest first, capped — drops the oldest beyond MAX_CONVOS.
