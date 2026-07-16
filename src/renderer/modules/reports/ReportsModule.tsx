@@ -27,7 +27,10 @@ function nowIso(): string { return new Date().toISOString(); }
 
 function seedReport(author: string): Report {
   const stamp = nowIso();
-  return { id: uid(), title: 'Untitled report', createdAt: stamp, updatedAt: stamp, to: '', status: 'draft', author, blocks: [] };
+  // Seed one empty text block so "Create New Report" opens straight into a typable document (the
+  // editor also self-seeds a text body, but seeding here means the very first persisted revision
+  // already carries it).
+  return { id: uid(), title: 'Untitled report', createdAt: stamp, updatedAt: stamp, to: '', status: 'draft', author, blocks: [{ id: uid(), kind: 'text', html: '' }] };
 }
 
 export function ReportsModule(): JSX.Element {
