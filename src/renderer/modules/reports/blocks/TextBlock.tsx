@@ -17,7 +17,7 @@
  *  testable in jsdom, which has no `execCommand` implementation at all. */
 import { useEffect, useRef, useState } from 'react';
 import type { ReportBlock, Descriptor } from '@shared/reports-types';
-import { sanitizeReportHtml, descriptorInsertHtml, FONT_SIZES } from '../rich-text';
+import { sanitizeReportHtml, descriptorInsertHtml, FONT_SIZES, FONT_FAMILIES } from '../rich-text';
 
 export interface TextBlockProps {
   block: Extract<ReportBlock, { kind: 'text' }>;
@@ -34,6 +34,13 @@ export function TextBlock(props: TextBlockProps): JSX.Element {
   // when the operator clicks a menu button (blur can collapse/clear the live selection).
   const savedRange = useRef<Range | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  // Link popover state. The URL is gathered through an inline input, NOT `window.prompt` — prompt
+  // returns null in Electron's renderer (no dialog), so a prompt-gated link would be a silent no-op
+  // in the shipped app. `linkRange` snapshots the selection the link should wrap so the ensuing
+  // focus shift into the popover input can't lose it.
+  const linkRange = useRef<Range | null>(null);
+  const [linkOpen, setLinkOpen] = useState(false);
+  const [linkUrl, setLinkUrl] = useState('');
 
   /** Sanitize the live DOM and hand the result up. Called on every input + on blur, so the stored
    *  html is never a moment behind an unsanitized edit. */
@@ -76,6 +83,88 @@ export function TextBlock(props: TextBlockProps): JSX.Element {
     after.selectNodeContents(wrapper);
     sel.addRange(after);
 
+    commit();
+  }
+
+  /** Wrap the current selection in a `<span style="font-family:${name}">`. Mirrors `applySize`'s
+   *  Range-wrap approach (deterministic in jsdom, which has no execCommand) rather than a font-family
+   *  execCommand. `sanitizeReportHtml` re-checks the value against the six-family whitelist on commit,
+   *  so a name that isn't whitelisted is dropped downstream regardless. No-ops on an empty selection. */
+  function applyFont(name: string): void {
+    const el = ref.current;
+    if (!el) return;
+    // Read the range BEFORE focusing the editable: changing the font-family `<select>` moves focus to
+    // the select (blurring the body). A real browser keeps the prior selection retrievable via
+    // getSelection() while blurred; jsdom collapses it on el.focus(). Reading first is correct in both.
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return;
+    const range = sel.getRangeAt(0);
+    if (!el.contains(range.commonAncestorContainer)) return;
+
+    const span = document.createElement('span');
+    span.style.fontFamily = name;
+    span.appendChild(range.extractContents());
+    range.insertNode(span);
+
+    el.focus();
+    sel.removeAllRanges();
+    const after = document.createRange();
+    after.selectNodeContents(span);
+    sel.addRange(after);
+
+    commit();
+  }
+
+  /** Paragraph alignment via the guarded execCommand path `format()` uses (jsdom has no execCommand,
+   *  so the try/catch keeps the tests running); the alignment survives to persistence only because
+   *  `sanitizeReportHtml` allows `text-align:left|center|right`. */
+  function align(dir: 'Left' | 'Center' | 'Right'): void {
+    ref.current?.focus();
+    try { document.execCommand(`justify${dir}`); } catch { /* unsupported in this environment; no-op */ }
+    commit();
+  }
+
+  /** Bulleted / numbered list toggle — same guarded execCommand path; sanitizer allows `ul/ol/li`. */
+  function list(cmd: 'insertUnorderedList' | 'insertOrderedList'): void {
+    ref.current?.focus();
+    try { document.execCommand(cmd); } catch { /* unsupported in this environment; no-op */ }
+    commit();
+  }
+
+  /** Open the inline link popover, snapshotting the current selection (so the focus shift into the
+   *  URL input can't lose the range the link should wrap). */
+  function openLink(): void {
+    const el = ref.current;
+    if (!el) return;
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0) {
+      const r = sel.getRangeAt(0);
+      linkRange.current = el.contains(r.commonAncestorContainer) ? r.cloneRange() : null;
+    } else {
+      linkRange.current = null;
+    }
+    setLinkUrl('');
+    setLinkOpen(true);
+  }
+
+  /** Restore the snapshotted selection, wrap it in an anchor via guarded `createLink`, and re-sanitize
+   *  on commit — the sanitizer scheme-guards `href` to http/https/mailto, so a bad scheme is stripped. */
+  function confirmLink(): void {
+    const el = ref.current;
+    if (!el) { setLinkOpen(false); return; }
+    el.focus();
+    const range = linkRange.current;
+    if (range && el.contains(range.commonAncestorContainer)) {
+      const sel = window.getSelection();
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+    }
+    const url = linkUrl.trim();
+    if (url) {
+      try { document.execCommand('createLink', false, url); } catch { /* unsupported in this environment; no-op */ }
+    }
+    linkRange.current = null;
+    setLinkOpen(false);
     commit();
   }
 
@@ -165,7 +254,41 @@ export function TextBlock(props: TextBlockProps): JSX.Element {
             <option key={f.key} value={f.key}>{f.label}</option>
           ))}
         </select>
+        <select
+          aria-label="Font family"
+          defaultValue=""
+          onChange={(e) => {
+            const name = e.target.value;
+            e.target.value = '';
+            if (name) applyFont(name);
+          }}
+        >
+          <option value="" disabled>Font</option>
+          {FONT_FAMILIES.map((f) => (
+            <option key={f} value={f}>{f}</option>
+          ))}
+        </select>
+        <button type="button" aria-label="Align left" onMouseDown={(e) => e.preventDefault()} onClick={() => align('Left')}>◧</button>
+        <button type="button" aria-label="Align center" onMouseDown={(e) => e.preventDefault()} onClick={() => align('Center')}>▥</button>
+        <button type="button" aria-label="Align right" onMouseDown={(e) => e.preventDefault()} onClick={() => align('Right')}>◨</button>
+        <button type="button" aria-label="Bulleted list" onMouseDown={(e) => e.preventDefault()} onClick={() => list('insertUnorderedList')}>•≡</button>
+        <button type="button" aria-label="Numbered list" onMouseDown={(e) => e.preventDefault()} onClick={() => list('insertOrderedList')}>1≡</button>
+        <button type="button" aria-label="Insert link" onMouseDown={(e) => e.preventDefault()} onClick={openLink}>🔗</button>
       </div>
+      {linkOpen ? (
+        <div className="ga98-report-linkmenu" role="dialog" aria-label="Insert link">
+          <input
+            type="text"
+            aria-label="Link URL"
+            placeholder="https://…"
+            value={linkUrl}
+            onChange={(e) => setLinkUrl(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); confirmLink(); } }}
+          />
+          <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={confirmLink}>Add link</button>
+          <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { linkRange.current = null; setLinkOpen(false); }}>Cancel</button>
+        </div>
+      ) : null}
       <div
         ref={ref}
         className="ga98-report-textblock-body"

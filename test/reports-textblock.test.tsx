@@ -16,6 +16,15 @@ type TextBlockData = Extract<ReportBlock, { kind: 'text' }>;
 let container: HTMLDivElement;
 let root: Root;
 
+/** Set a React-controlled/uncontrolled element's value the way a real interaction would (native
+ *  prototype setter + change event) so React's value tracker observes the change and fires onChange. */
+function setValue(el: HTMLInputElement | HTMLSelectElement, value: string): void {
+  const proto = el instanceof HTMLSelectElement ? window.HTMLSelectElement.prototype : window.HTMLInputElement.prototype;
+  const setter = Object.getOwnPropertyDescriptor(proto, 'value')!.set!;
+  setter.call(el, value);
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
 beforeEach(() => {
   container = document.createElement('div');
   document.body.appendChild(container);
@@ -171,5 +180,58 @@ describe('TextBlock descriptor context menu', () => {
       document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
     });
     expect(container.querySelector('.ga98-report-descmenu')).toBeNull();
+  });
+});
+
+/**
+ * Task 7: TextBlock toolbar expansion — font-family select, alignment buttons, list buttons, and a
+ * link control. Font-family wraps the selection in a `<span style="font-family:…">` via the same
+ * Range API `applySize` uses (deterministic in jsdom, which has no execCommand); align/list/link go
+ * through guarded `document.execCommand`. Every action re-`commit()`s, so the sanitizer stays the
+ * sole barrier — a non-whitelisted family never survives to `onChange`.
+ */
+describe('TextBlock toolbar expansion (Task 7)', () => {
+  it('renders font-family, align, list, and link controls', async () => {
+    const block: TextBlockData = { id: 'b8', kind: 'text', html: '' };
+    await act(async () => { root.render(<TextBlock block={block} onChange={vi.fn()} />); });
+
+    expect(container.querySelector('select[aria-label="Font family"]')).toBeTruthy();
+    expect(container.querySelector('button[aria-label="Align left"]')).toBeTruthy();
+    expect(container.querySelector('button[aria-label="Align center"]')).toBeTruthy();
+    expect(container.querySelector('button[aria-label="Align right"]')).toBeTruthy();
+    expect(container.querySelector('button[aria-label="Bulleted list"]')).toBeTruthy();
+    expect(container.querySelector('button[aria-label="Numbered list"]')).toBeTruthy();
+    expect(container.querySelector('button[aria-label="Insert link"]')).toBeTruthy();
+  });
+
+  it('applying a font-family wraps the selection and emits a sanitized font-family span', async () => {
+    const block: TextBlockData = { id: 'b9', kind: 'text', html: '<p>hello</p>' };
+    const onChange = vi.fn();
+    await act(async () => { root.render(<TextBlock block={block} onChange={onChange} />); });
+
+    const body = container.querySelector('.ga98-report-textblock-body') as HTMLDivElement;
+    // Select all text in the contentEditable so applyFont has a non-collapsed Range to wrap.
+    const range = document.createRange();
+    range.selectNodeContents(body);
+    const sel = window.getSelection()!;
+    sel.removeAllRanges();
+    sel.addRange(range);
+
+    const select = container.querySelector('select[aria-label="Font family"]') as HTMLSelectElement;
+    await act(async () => { setValue(select, 'Georgia'); });
+
+    expect(onChange).toHaveBeenCalled();
+    const saved = onChange.mock.calls[onChange.mock.calls.length - 1][0] as string;
+    expect(saved).toContain('font-family:Georgia');
+  });
+
+  it('opens an inline URL popover for the link button (not window.prompt)', async () => {
+    const block: TextBlockData = { id: 'b10', kind: 'text', html: '' };
+    await act(async () => { root.render(<TextBlock block={block} onChange={vi.fn()} />); });
+
+    expect(container.querySelector('input[aria-label="Link URL"]')).toBeNull();
+    const linkBtn = container.querySelector('button[aria-label="Insert link"]') as HTMLButtonElement;
+    await act(async () => { linkBtn.click(); });
+    expect(container.querySelector('input[aria-label="Link URL"]')).toBeTruthy();
   });
 });
