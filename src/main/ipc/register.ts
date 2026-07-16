@@ -50,12 +50,11 @@ import * as sounds from '../services/sounds';
 import * as ai from '../services/ai';
 import { liveReindex } from '../services/memory/live-reindex.singleton';
 import { initSettingsNotify, notifySettingsChanged } from '../services/settings-notify';
-import { learnFromConversation, profileList, profileSummaries, profileUpsert, profileDelete, profileWipe } from '../services/memory/profile';
+import { learnFromConversation, profileList, profileSummaries, profileUpsert, profileDelete, profileWipe, setConversationFactsExcluded } from '../services/memory/profile';
 import { createProfileStore } from '../services/memory/profile/profile-store';
 import { mergeItems as mergeProfileItems } from '../services/memory/graph/merge';
 import { createLibrary } from '../services/memory/library/store';
 import { createBonds } from '../services/memory/bonds';
-import { pruneBondsForNode } from '../services/memory/graph';
 import { withLock } from '../util/mutex';
 import type { MemoryItem } from '@shared/ipc-contracts';
 import * as localAi from '../services/local-ai';
@@ -1870,20 +1869,29 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   // ---- Mind's Eye curation: forget/remember a conversation's memory (reversible tombstone) ----
   // The chat record SURVIVES in the AI Assistant — we only set `memoryExcluded` so
   // reindexConversations omits it, then reindex synchronously (awaited: an embed-engine failure
-  // rejects rather than reporting a false success) and prune any dangling user bond to the now-gone
-  // node. Remember clears the flag and reindexes so the node/chunks return.
+  // rejects rather than reporting a false success) and ALSO tombstone the adaptive-memory facts this
+  // conversation was distilled into (setConversationFactsExcluded) — otherwise the conversation's
+  // content survives Forget in the profile (still injected into every answer, still a Mind's Eye fact
+  // node) even though its chat chunks and graph node are gone. Remember reverses BOTH steps.
+  //
+  // User-drawn bonds to the conversation node are deliberately NOT pruned: pruning was destructive
+  // and irreversible (bonds.json has no undo), which broke the "reversible tombstone" promise — a
+  // forget→remember round-trip silently lost hand-curated bonds. A dangling bond is already handled
+  // gracefully (svg-scene skips edges with a missing endpoint), and the sibling forgetDoc path
+  // likewise does not prune, so the bond simply survives the tombstone and reconnects on Remember.
   safeHandle(channels.memory.forgetConversation, async (...args) => {
     const id = ensureConversationId(args[0]);
     const convo = await aiConvos.get(id);
     if (convo) await aiConvos.save({ ...convo, memoryExcluded: true });
     await memory.reindexConversations();
-    await pruneBondsForNode(`__conversations__:convo:${id}`);
+    await setConversationFactsExcluded(id, true);
   });
   safeHandle(channels.memory.rememberConversation, async (...args) => {
     const id = ensureConversationId(args[0]);
     const convo = await aiConvos.get(id);
     if (convo) await aiConvos.save({ ...convo, memoryExcluded: false });
     await memory.reindexConversations();
+    await setConversationFactsExcluded(id, false);
   });
 
   // ---- plugins ----

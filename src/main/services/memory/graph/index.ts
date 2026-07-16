@@ -15,7 +15,10 @@ import { createBonds } from '../bonds';
 import type { GraphEdge, MemoryGraph } from './model';
 
 export async function buildGraph(): Promise<MemoryGraph> {
-  const [shards, profile] = await Promise.all([loadAllShards(), profileList()]);
+  const [shards, rawProfile] = await Promise.all([loadAllShards(), profileList()]);
+  // Facts tombstoned by a Forgotten conversation stay on disk (so Remember can restore them and the
+  // Memory panel can still inspect/erase them) but must NOT render as Mind's Eye nodes.
+  const profile = rawProfile.filter((it) => !it.memoryExcluded);
   // Computed once here (not re-derived from `conflict`-flagged nodes) so the "one thing to fix"
   // tray gets an actual conflicting pair rather than guessing from node iteration order.
   const conflictPairs = detectConflicts(profile);
