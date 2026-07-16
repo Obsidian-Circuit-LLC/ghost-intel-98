@@ -54,6 +54,20 @@ export function TextBlock(props: TextBlockProps): JSX.Element {
   const linkRange = useRef<Range | null>(null);
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
+  // The selection at the moment a font picker (`<select>`) was pressed, cloned so it survives the
+  // blur a native select steals when it opens. Without this snapshot, applySize/applyFont would read
+  // window.getSelection() AFTER the select already stole focus and collapsed it — a silent no-op in
+  // a real browser (jsdom doesn't reproduce the collapse, which is why this bug shipped unnoticed).
+  const fontRange = useRef<Range | null>(null);
+
+  /** Snapshot the current selection on `onMouseDown` of a font picker — BEFORE the native select
+   *  steals focus and collapses it. Mirrors `openLink`'s `linkRange` capture. */
+  function snapshotFontRange(): void {
+    const el = ref.current;
+    const sel = window.getSelection();
+    fontRange.current = (el && sel && sel.rangeCount > 0 && !sel.isCollapsed
+      && el.contains(sel.getRangeAt(0).commonAncestorContainer)) ? sel.getRangeAt(0).cloneRange() : null;
+  }
 
   /** Sanitize the live DOM and hand the result up. Called on every input + on blur, so the stored
    *  html is never a moment behind an unsanitized edit. */
@@ -72,17 +86,16 @@ export function TextBlock(props: TextBlockProps): JSX.Element {
     commit();
   }
 
-  /** Wrap the current selection in a `<span style="font-size:${pt}pt">` (heading additionally
-   *  wraps in `<b>` — sanitizeReportHtml strips any `font-weight` style prop, so bold must be a
-   *  real `<b>` element, not a style declaration). No-ops on a collapsed/empty selection. */
+  /** Wrap the SNAPSHOTTED selection (`fontRange`, captured on the picker's `onMouseDown`) in a
+   *  `<span style="font-size:${pt}pt">` (heading additionally wraps in `<b>` — sanitizeReportHtml
+   *  strips any `font-weight` style prop, so bold must be a real `<b>` element, not a style
+   *  declaration). No-ops if there was no snapshot (nothing was selected when the picker opened) or
+   *  it no longer resolves inside this block. */
   function applySize(pt: number, bold?: boolean): void {
     const el = ref.current;
     if (!el) return;
-    el.focus();
-    const sel = window.getSelection();
-    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return;
-    const range = sel.getRangeAt(0);
-    if (!el.contains(range.commonAncestorContainer)) return;
+    const range = fontRange.current;
+    if (!range || range.collapsed || !el.contains(range.commonAncestorContainer)) return;
 
     const span = document.createElement('span');
     span.style.fontSize = `${pt}pt`;
@@ -91,28 +104,30 @@ export function TextBlock(props: TextBlockProps): JSX.Element {
     if (bold) wrapper.appendChild(span);
     range.insertNode(wrapper);
 
-    sel.removeAllRanges();
+    el.focus();
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
     const after = document.createRange();
     after.selectNodeContents(wrapper);
-    sel.addRange(after);
+    sel?.addRange(after);
+    fontRange.current = null;
 
     commit();
   }
 
-  /** Wrap the current selection in a `<span style="font-family:${name}">`. Mirrors `applySize`'s
-   *  Range-wrap approach (deterministic in jsdom, which has no execCommand) rather than a font-family
-   *  execCommand. `sanitizeReportHtml` re-checks the value against the six-family whitelist on commit,
-   *  so a name that isn't whitelisted is dropped downstream regardless. No-ops on an empty selection. */
+  /** Wrap the SNAPSHOTTED selection (`fontRange`, captured on the picker's `onMouseDown`) in a
+   *  `<span style="font-family:${name}">`. Mirrors `applySize`'s Range-wrap approach (deterministic
+   *  in jsdom, which has no execCommand) rather than a font-family execCommand. `sanitizeReportHtml`
+   *  re-checks the value against the six-family whitelist on commit, so a name that isn't whitelisted
+   *  is dropped downstream regardless. The snapshot exists because opening a native `<select>` blurs
+   *  the contentEditable, so by the time `onChange` fires here the LIVE selection would already read
+   *  collapsed — reading `fontRange.current` instead (set before the select stole focus) is what
+   *  makes this actually apply. */
   function applyFont(name: string): void {
     const el = ref.current;
     if (!el) return;
-    // Read the range BEFORE focusing the editable: changing the font-family `<select>` moves focus to
-    // the select (blurring the body). A real browser keeps the prior selection retrievable via
-    // getSelection() while blurred; jsdom collapses it on el.focus(). Reading first is correct in both.
-    const sel = window.getSelection();
-    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return;
-    const range = sel.getRangeAt(0);
-    if (!el.contains(range.commonAncestorContainer)) return;
+    const range = fontRange.current;
+    if (!range || range.collapsed || !el.contains(range.commonAncestorContainer)) return;
 
     const span = document.createElement('span');
     span.style.fontFamily = name;
@@ -120,10 +135,12 @@ export function TextBlock(props: TextBlockProps): JSX.Element {
     range.insertNode(span);
 
     el.focus();
-    sel.removeAllRanges();
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
     const after = document.createRange();
     after.selectNodeContents(span);
-    sel.addRange(after);
+    sel?.addRange(after);
+    fontRange.current = null;
 
     commit();
   }
@@ -258,6 +275,7 @@ export function TextBlock(props: TextBlockProps): JSX.Element {
         <select
           aria-label="Font size"
           defaultValue=""
+          onMouseDown={snapshotFontRange}
           onChange={(e) => {
             const key = e.target.value;
             const preset = FONT_SIZES.find((f) => f.key === key);
@@ -273,6 +291,7 @@ export function TextBlock(props: TextBlockProps): JSX.Element {
         <select
           aria-label="Font family"
           defaultValue=""
+          onMouseDown={snapshotFontRange}
           onChange={(e) => {
             const name = e.target.value;
             e.target.value = '';

@@ -243,6 +243,10 @@ describe('TextBlock toolbar expansion (Task 7)', () => {
     sel.addRange(range);
 
     const select = container.querySelector('select[aria-label="Font family"]') as HTMLSelectElement;
+    // Task 1 fix: the picker snapshots the selection on mousedown (before it steals focus), so the
+    // real interaction is mousedown THEN change — see test/reports-fontpicker.test.tsx for the
+    // dedicated coverage of that fix.
+    await act(async () => { select.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); });
     await act(async () => { setValue(select, 'Georgia'); });
 
     expect(onChange).toHaveBeenCalled();
