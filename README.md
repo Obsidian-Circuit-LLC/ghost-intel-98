@@ -38,13 +38,15 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`GhostIntel98-Setup-3.50.1.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
+> **Install:** download [`GhostIntel98-Setup-3.50.2.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
 
 > **📘 User guides** — plain-language, step-by-step (download or read in-browser):
 > - [**SOCMINT: X, Telegram & WhatsApp**](docs/guides/SOCMINT-Tutorial.pdf) — set up and run the social-media collectors, per platform, with the Tor / clearnet and opsec caveats. ([markdown](docs/guides/socmint-tutorial.md))
 > - [**How Searchlight Learns**](docs/guides/Searchlight-Learning-Guide.pdf) — how the username-sweep detector gets smarter from your own labels, and when to turn ML on. ([markdown](docs/guides/searchlight-learning.md))
 
 ## Status
+
+**v3.50.2** — **Report editor typing fix.** A field bug: typing into a report's text body produced **character-reversed** text ("This is a test" → "tset a si sihT") and the align/list/link toolbar buttons felt unresponsive. Root cause: the editable area fed its live value back into React on every keystroke, which rebuilt the DOM and dropped the cursor to the start — so each character landed at the front and the toolbar lost its text selection. The editable body is now truly uncontrolled (set once, never re-clobbered), so the cursor stays put and the formatting buttons work. The text body also had **no styling at all** — it collapsed to a single hard-to-find line — so it now renders as a real 140px document area with a focus ring and a "Type your report here…" placeholder. **3,602 automated tests** green (1 skipped, +1 regression guard); typecheck clean; no new egress; no new dependency. *(Richer To/From recipient contacts — GhostExodus's other request — are coming in the next release.)*
 
 **v3.50.1** — **Minds Eye: forget a conversation's memory.** The "Forget" button on a **conversation** node in the Minds Eye memory graph is now live. It's a **tombstone, not a delete** — the chat stays in AI Assistant history, but the conversation stops being recalled and its node leaves the graph, reversibly ("Remember" restores it; a Forget/Remember toggle also lives in the AI Assistant conversation list). Crucially it forgets the conversation across *both* memory channels: its vector-index chunks **and** the adaptive-memory facts distilled from it — while a fact that also has independent support from another conversation stays live. **Entity** memory Forget stays intentionally disabled (an entity node is a per-case aggregate, managed in the case tool). Built subagent-driven with a parallel adversarial whole-branch review that caught a real gap — the first cut only excluded the vector chunks and would have left the distilled facts still influencing answers. Everything goes through the encrypted memory store; a failed re-index surfaces as an error, never a silent success. **3,601 automated tests** green (1 skipped); typecheck clean; no new egress; no new dependency. *Everything from v3.50.0 carries forward.*
 
@@ -535,7 +537,7 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases) and run it.
 
-Direct link to the current release: [`GhostIntel98-Setup-3.50.1.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.50.1/GhostIntel98-Setup-3.50.1.exe)
+Direct link to the current release: [`GhostIntel98-Setup-3.50.2.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.50.2/GhostIntel98-Setup-3.50.2.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is **formally verified internally** — symbolic (ProVerif) +
 computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not**
 FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.6.8/GhostIntel98-Setup-3.6.8.exe).
@@ -543,7 +545,7 @@ FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Se
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\GhostIntel98-Setup-3.50.1.exe -Algorithm SHA256
+Get-FileHash .\GhostIntel98-Setup-3.50.2.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
