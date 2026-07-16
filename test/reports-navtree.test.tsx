@@ -4,8 +4,8 @@
  * The tree exposes the nav nodes (Dashboard · Reports[All/Recent/Drafts/Archived] · Contacts[My
  * Contacts]); clicking a node calls `onSelect(node)` and the active node carries the
  * `ga98-report-nav-active` selection class. The Quick Actions panel offers "Start New Report"
- * (→ onNewReport) and "Manage Contacts" (→ onManageContacts); the "Use Template" quick-action is
- * rendered `disabled` (deferred to sub-project B — never a no-op handler).
+ * (→ onNewReport) and "Manage Contacts" (→ onManageContacts); the "Use Template" quick-action opens
+ * the Templates library (→ onViewTemplates).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
@@ -66,15 +66,18 @@ describe('ReportsNavTree', () => {
     expect(navEl('archived').className).not.toContain('ga98-report-nav-active');
   });
 
-  it('"Use Template" quick-action is disabled (deferred to sub-project B)', async () => {
+  it('"Use Template" quick-action is live and opens the Templates library', async () => {
+    const onViewTemplates = vi.fn();
     await act(async () => {
       root.render(
-        <ReportsNavTree active="dashboard" onSelect={vi.fn()} onNewReport={vi.fn()} onManageContacts={vi.fn()} />
+        <ReportsNavTree active="dashboard" onSelect={vi.fn()} onNewReport={vi.fn()} onManageContacts={vi.fn()} onViewTemplates={onViewTemplates} />
       );
     });
-    const tpl = Array.from(container.querySelectorAll('button')).find((b) => (b.textContent || '').includes('Use Template')) as HTMLButtonElement;
+    const tpl = Array.from(container.querySelectorAll('.ga98-report-nav-quick-btn')).find((b) => (b.textContent || '').includes('Use Template')) as HTMLButtonElement;
     expect(tpl).toBeTruthy();
-    expect(tpl.disabled).toBe(true);
+    expect(tpl.disabled).toBe(false);
+    await act(async () => { tpl.click(); });
+    expect(onViewTemplates).toHaveBeenCalled();
   });
 
   it('"Start New Report" calls onNewReport and "Manage Contacts" calls onManageContacts', async () => {

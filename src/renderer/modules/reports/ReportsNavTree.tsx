@@ -4,9 +4,9 @@
  *  Contacts] · Templates[My Templates]) with classic folder / house / page glyphs; selecting a node
  *  calls `onSelect(node)` and
  *  the active node carries `ga98-report-nav-active` (dark-blue-on-white). Quick Actions offers
- *  "Start New Report" (→ onNewReport) and "Manage Contacts" (→ onManageContacts); "Use Template" is
- *  rendered `disabled` (Templates deferred to sub-project B — greyed, never a no-op). The title-bar
- *  "×" is a decorative aria-hidden span (window chrome), NOT an operable control. */
+ *  "Start New Report" (→ onNewReport), "Manage Contacts" (→ onManageContacts) and "Use Template"
+ *  (→ onViewTemplates, opening the Templates library). The title-bar "×" is a decorative aria-hidden
+ *  span (window chrome), NOT an operable control. */
 import { useState } from 'react';
 import type { NavNode } from './reports-filters';
 
@@ -152,8 +152,7 @@ export function ReportsNavTree({ active, onSelect, onNewReport, onManageContacts
           <button type="button" className="ga98-report-nav-quick-btn" onClick={onManageContacts}>
             <span className="ga98-report-btn-ico" aria-hidden="true">👥</span> Manage Contacts
           </button>
-          {/* Templates deferred to sub-project B — rendered disabled, never a no-op handler. */}
-          <button type="button" className="ga98-report-nav-quick-btn" disabled title="Templates coming soon">
+          <button type="button" className="ga98-report-nav-quick-btn" title="Create a report from a saved template" onClick={() => onViewTemplates?.()}>
             <span className="ga98-report-btn-ico" aria-hidden="true">📋</span> Use Template
           </button>
         </div>

@@ -2,9 +2,9 @@
  *  editor). A welcome header over the dark workspace, a row of action tiles (Create New Report /
  *  Manage Contacts / Export or Print the selected report / a disabled "Use Template" tile), and the
  *  <RecentReportsTable> fed the nav-filtered report list. The module owns every handler and the
- *  report list; this component is presentational. Templates are deferred to sub-project B, so the
- *  "Use Template" tile is rendered `disabled` — greyed, never a no-op handler. Export/Print acts on
- *  the currently-selected row and is disabled when nothing is selected (no dead button). */
+ *  report list; this component is presentational. The "Use Template" tile opens the Templates
+ *  library (`onUseTemplate`) — fully functional, never greyed. Export/Print acts on the
+ *  currently-selected row and is disabled when nothing is selected (no dead button). */
 import type { Report } from '@shared/reports-types';
 import { RecentReportsTable, type ReportContextAction } from './RecentReportsTable';
 
@@ -19,6 +19,8 @@ export interface ReportsDashboardProps {
   onContext: (id: string, action: ReportContextAction) => void;
   onNewReport: () => void;
   onManageContacts: () => void;
+  /** Open the Templates library to create a report from a saved template. */
+  onUseTemplate: () => void;
   /** Export/Print the selected report (by id, main-side) — disabled when no row is selected. */
   onExportSelected: () => void;
   /** "View All Reports" footer — the shell switches the nav node to `all`. */
@@ -26,7 +28,7 @@ export interface ReportsDashboardProps {
 }
 
 export function ReportsDashboard(props: ReportsDashboardProps): JSX.Element {
-  const { reports, author, selectedId, onSelect, onOpen, onContext, onNewReport, onManageContacts, onExportSelected, onViewAll } = props;
+  const { reports, author, selectedId, onSelect, onOpen, onContext, onNewReport, onManageContacts, onUseTemplate, onExportSelected, onViewAll } = props;
 
   return (
     <div className="ga98-report-dashboard">
@@ -65,8 +67,7 @@ export function ReportsDashboard(props: ReportsDashboardProps): JSX.Element {
                 <span className="ga98-report-tile-icon" aria-hidden="true">🖨️</span>
                 <span className="ga98-report-tile-label">Export PDF</span>
               </button>
-              {/* Templates deferred to sub-project B — rendered disabled, never a no-op handler. */}
-              <button type="button" className="ga98-report-tile" disabled title="Templates coming soon">
+              <button type="button" className="ga98-report-tile" title="Create a report from a saved template" onClick={onUseTemplate}>
                 <span className="ga98-report-tile-icon" aria-hidden="true">🗂️</span>
                 <span className="ga98-report-tile-label">Use Template</span>
               </button>

@@ -1490,6 +1490,9 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     const asset = await reportStore.getAsset(ensureFileName(a[0], 'assetRef'));
     return asset ? { mime: asset.mime, dataUrl: `data:${asset.mime};base64,${asset.bytes.toString('base64')}` } : null;
   });
+  // Deep-copy an asset (fresh uuid ref owning its own bytes) so a template/report clone is
+  // independent of its source. ensureFileName gates the ref (the store re-validates too).
+  safeHandle(channels.reports.copyAsset, (...a) => reportStore.copyAsset(ensureFileName(a[0], 'assetRef')));
   safeHandle(channels.reports.contactsList, () => reportStore.listContacts());
   safeHandle(channels.reports.contactsSave, (...a) => reportStore.saveContact(ensureContact(a[0])));
   safeHandle(channels.reports.contactsRemove, (...a) => reportStore.removeContact(a[0] as string));

@@ -408,6 +408,8 @@ export interface GhostApi {
     putAsset(bytes: number[], mime: string): Promise<string>;
     /** Resolve an asset ref to a preview data URL (main converts the stored bytes). */
     getAsset(ref: string): Promise<{ mime: string; dataUrl: string } | null>;
+    /** Deep-copy an asset (fresh uuid ref owning its own bytes); null if the source ref doesn't resolve. */
+    copyAsset(ref: string): Promise<string | null>;
     contacts: {
       list(): Promise<Contact[]>;
       save(contact: Contact): Promise<Contact>;

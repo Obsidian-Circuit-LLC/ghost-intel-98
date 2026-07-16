@@ -1,9 +1,9 @@
 /** ReportsMenuBar — the Reports shell's Win98 menu bar (File / Edit / View / Reports / Templates /
  *  Tools / Help). It's a `role="menubar"` row of top-level buttons; clicking one opens a
  *  `ga98-context-menu`-style dropdown whose items dispatch a shared action-id union via
- *  `onAction(id)`. Editor-only items (Save/Save As/Export/Print/Close + all Edit ops) are `disabled`
- *  unless a report is open (`hasOpenReport`); every Templates item is `disabled` — Templates are
- *  deferred to sub-project B, so they're greyed, never a no-op handler. An outside mousedown closes
+ *  `onAction(id)`. Editor-only items (Save/Save As/Export/Print/Close + all Edit ops + Save as
+ *  Template) are `disabled` unless a report is open (`hasOpenReport`); Template Library / Use
+ *  Template are always available (they open the library). An outside mousedown closes
  *  the open dropdown (mirrors the TextBlock descriptor-popover close). The `ReportsActionId` union is
  *  the shell's canonical action vocabulary — `ReportsToolbar` and the Task 6 dispatcher both use it. */
 import { useEffect, useState } from 'react';
@@ -27,8 +27,6 @@ interface MenuItem {
   label?: string;
   /** disabled unless a report is open. */
   editorOnly?: boolean;
-  /** always disabled — deferred to sub-project B. */
-  templates?: boolean;
 }
 
 interface Menu {
@@ -85,9 +83,9 @@ const MENUS: Menu[] = [
   {
     label: 'Templates',
     items: [
-      { action: 'templateSave', label: 'Save as Template…', templates: true },
-      { action: 'templateLibrary', label: 'Template Library…', templates: true },
-      { action: 'templateUse', label: 'Use Template…', templates: true }
+      { action: 'templateSave', label: 'Save as Template…', editorOnly: true },
+      { action: 'templateLibrary', label: 'Template Library…' },
+      { action: 'templateUse', label: 'Use Template…' }
     ]
   },
   {
@@ -124,7 +122,6 @@ export function ReportsMenuBar({ hasOpenReport, onAction }: ReportsMenuBarProps)
   }, [open]);
 
   function isDisabled(item: MenuItem): boolean {
-    if (item.templates) return true;
     if (item.editorOnly && !hasOpenReport) return true;
     return false;
   }

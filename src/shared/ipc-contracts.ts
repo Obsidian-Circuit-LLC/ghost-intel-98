@@ -653,7 +653,7 @@ export const channels = {
   // main-side id→buffer PDF/DOCX export (renderer never builds the export buffer).
   reports: {
     list: 'reports:list', save: 'reports:save', remove: 'reports:remove',
-    putAsset: 'reports:putAsset', getAsset: 'reports:getAsset',
+    putAsset: 'reports:putAsset', getAsset: 'reports:getAsset', copyAsset: 'reports:copyAsset',
     contactsList: 'reports:contacts:list', contactsSave: 'reports:contacts:save', contactsRemove: 'reports:contacts:remove',
     descriptorsList: 'reports:descriptors:list', descriptorsSave: 'reports:descriptors:save', descriptorsRemove: 'reports:descriptors:remove',
     introductionsList: 'reports:introductions:list', introductionsSave: 'reports:introductions:save', introductionsRemove: 'reports:introductions:remove',

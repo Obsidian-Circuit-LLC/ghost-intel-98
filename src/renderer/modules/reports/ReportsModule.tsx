@@ -21,6 +21,7 @@ import { DescriptorLibrary } from './DescriptorLibrary';
 import { IntroductionLibrary } from './IntroductionLibrary';
 import { CasePhotoPicker, type CasePhotoPick } from './CasePhotoPicker';
 import { loadAttachmentBytes } from '../../lib/attachmentBytes';
+import { promptDialog } from '../../state/dialogs';
 import { toast } from '../../state/toasts';
 
 function uid(): string { return crypto.randomUUID(); }
@@ -157,18 +158,60 @@ export function ReportsModule(): JSX.Element {
     catch { setTemplatePreviewHtml(''); }
   }
 
-  // Clone a template into a fresh draft report and open it in the editor. Block ids are regenerated
-  // so the new document is independent; asset refs are reused as-is here (Task 6 hardens this to a
-  // deep copyAsset so the report and template own separate bytes). The default author comes from
-  // settings, exactly like a blank new report.
+  // Deep-copy a report/template body's assets so the clone owns independent bytes: every banner +
+  // image ref is re-encrypted via copyAsset (fresh uuid) and every block gets a fresh id. This is
+  // what makes a template survive deletion of its source report (and vice-versa). A ref that fails
+  // to copy falls back to the original so the body is never left dangling.
+  async function copyBody(src: { bannerRef?: string; blocks: ReportBlock[] }): Promise<{ bannerRef?: string; blocks: ReportBlock[] }> {
+    const bannerRef = src.bannerRef ? (await window.api.reports.copyAsset(src.bannerRef)) ?? src.bannerRef : undefined;
+    const blocks: ReportBlock[] = [];
+    for (const b of src.blocks) {
+      if (b.kind === 'image') {
+        const copied = await window.api.reports.copyAsset(b.assetRef);
+        blocks.push({ ...b, id: uid(), assetRef: copied ?? b.assetRef });
+      } else {
+        blocks.push({ ...b, id: uid() });
+      }
+    }
+    return { bannerRef, blocks };
+  }
+
+  // Save the open report as a reusable template. Prompts for a name via the themed promptDialog
+  // (never window.prompt — a no-op in Electron), deep-copies the banner + image assets so the
+  // template owns independent bytes, persists it, and refreshes the library.
+  async function saveAsTemplate(): Promise<void> {
+    if (!report) return;
+    const name = await promptDialog('Template name:', report.title || 'Untitled template', 'Save as Template');
+    if (name === null) return;
+    const trimmed = name.trim();
+    if (trimmed.length === 0) return;
+    const stamp = nowIso();
+    const { bannerRef, blocks } = await copyBody(report);
+    const template: ReportTemplate = {
+      id: uid(), name: trimmed, createdAt: stamp, updatedAt: stamp,
+      bannerRef, fromContactId: report.fromContactId, to: report.to, reportDate: report.reportDate,
+      caseNumber: report.caseNumber, referenceNumber: report.referenceNumber,
+      classification: report.classification, signature: report.signature,
+      blocks
+    };
+    await window.api.reports.templates.save(template);
+    await refreshTemplates();
+    toast.success(`Saved template “${trimmed}”.`);
+  }
+
+  // Clone a template into a fresh draft report and open it in the editor. Its banner + image assets
+  // are deep-copied (copyBody) so the report and template own separate bytes; block ids are
+  // regenerated so the new document is independent. The default author comes from settings, exactly
+  // like a blank new report.
   async function createFromTemplate(t: ReportTemplate): Promise<void> {
     const stamp = nowIso();
+    const { bannerRef, blocks } = await copyBody(t);
     const seed: Report = {
       id: uid(), title: t.name || 'Untitled report', createdAt: stamp, updatedAt: stamp,
-      bannerRef: t.bannerRef, fromContactId: t.fromContactId, to: t.to, reportDate: t.reportDate,
+      bannerRef, fromContactId: t.fromContactId, to: t.to, reportDate: t.reportDate,
       caseNumber: t.caseNumber, referenceNumber: t.referenceNumber, classification: t.classification,
       signature: t.signature, status: 'draft', author,
-      blocks: t.blocks.map((b) => ({ ...b, id: uid() }))
+      blocks
     };
     const saved = await window.api.reports.save(seed);
     await openReport(saved);
@@ -303,9 +346,8 @@ export function ReportsModule(): JSX.Element {
   }
 
   // Central action dispatcher — every menu item, toolbar button and dashboard tile routes its
-  // ReportsActionId here. Editor-only ids (save/export/print/edit ops) are already gated `disabled`
-  // by the menu/toolbar when no report is open; the guards below are belt-and-suspenders. Templates
-  // ids are rendered disabled (deferred to sub-project B) and never reach this dispatcher.
+  // ReportsActionId here. Editor-only ids (save/export/print/edit ops + Save-as-Template) are gated
+  // `disabled` by the menu/toolbar when no report is open; the guards below are belt-and-suspenders.
   function dispatch(id: ReportsActionId): void {
     switch (id) {
       case 'new': void newReport(); break;
@@ -327,8 +369,9 @@ export function ReportsModule(): JSX.Element {
       case 'cut': document.execCommand('cut'); break;
       case 'copy': document.execCommand('copy'); break;
       case 'paste': document.execCommand('paste'); break;
-      // Templates deferred to sub-project B — rendered disabled, never dispatched.
-      case 'templateSave': case 'templateLibrary': case 'templateUse': break;
+      // Templates: save the open report as a template, or open the library to pick one.
+      case 'templateSave': if (report) void saveAsTemplate(); break;
+      case 'templateLibrary': case 'templateUse': showTemplatesLibrary(); break;
     }
   }
 
@@ -444,6 +487,7 @@ export function ReportsModule(): JSX.Element {
               onContext={onReportContext}
               onNewReport={() => { void newReport(); }}
               onManageContacts={() => setShowContacts(true)}
+              onUseTemplate={showTemplatesLibrary}
               onExportSelected={() => { if (selectedId) void exportReportById(selectedId); }}
               onViewAll={() => setNavNode('all')}
             />

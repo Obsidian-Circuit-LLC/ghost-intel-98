@@ -337,6 +337,7 @@ const api = {
     remove: (id: string) => ipcRenderer.invoke(channels.reports.remove, id),
     putAsset: (bytes: number[], mime: string) => ipcRenderer.invoke(channels.reports.putAsset, { bytes, mime }),
     getAsset: (ref: string) => ipcRenderer.invoke(channels.reports.getAsset, ref),
+    copyAsset: (ref: string) => ipcRenderer.invoke(channels.reports.copyAsset, ref),
     contacts: {
       list: () => ipcRenderer.invoke(channels.reports.contactsList),
       save: (contact: unknown) => ipcRenderer.invoke(channels.reports.contactsSave, contact),
