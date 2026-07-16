@@ -71,17 +71,21 @@ export function ImageBlock(props: ImageBlockProps): JSX.Element {
       style={{ textAlign: block.align ?? 'left' }}
       onClick={onSelect}
     >
-      <div className="ga98-report-imageblock-frame" ref={frameRef}>
+      <div
+        className="ga98-report-imageblock-frame"
+        ref={frameRef}
+        style={{ width: `${clampPct(block.widthPct)}%` }}
+      >
         {src ? (
           <img
             className="ga98-report-imageblock-img"
             src={src}
             alt={block.caption || 'Report photo'}
-            style={{ width: `${clampPct(block.widthPct)}%`, display: 'inline-block' }}
+            style={{ width: '100%', display: 'block' }}
             draggable={false}
           />
         ) : (
-          <div className="ga98-report-imageblock-loading" style={{ width: `${clampPct(block.widthPct)}%`, display: 'inline-block' }}>
+          <div className="ga98-report-imageblock-loading" style={{ width: '100%', display: 'block' }}>
             Loading image…
           </div>
         )}

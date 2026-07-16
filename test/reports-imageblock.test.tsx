@@ -52,16 +52,27 @@ afterEach(() => {
 });
 
 describe('ImageBlock', () => {
-  it('renders the image at its widthPct, a resize handle, and a caption input', async () => {
-    const block: ImageData = { id: 'i1', kind: 'image', assetRef: 'a.png', widthPct: 60, caption: 'Scene' };
+  it('sizes the FRAME to widthPct (not the image) so the frame hugs the image — no whitespace', async () => {
+    const block: ImageData = { id: 'i1', kind: 'image', assetRef: 'a.png', widthPct: 40, caption: 'Scene' };
     await act(async () => {
       root.render(<ImageBlock block={block} src="data:image/png;base64,AAAA" onChange={vi.fn()} />);
     });
 
+    const frame = container.querySelector('.ga98-report-imageblock-frame') as HTMLElement;
+    expect(frame).toBeTruthy();
+    // The frame — not the image — tracks widthPct, so an empty column no longer flanks the photo.
+    expect(frame.style.width).toBe('40%');
+
     const img = container.querySelector('img') as HTMLImageElement;
     expect(img).toBeTruthy();
-    expect(img.style.width).toBe('60%');
-    expect(container.querySelector('.ga98-report-imageblock-handle')).toBeTruthy();
+    // The image fills its (now correctly sized) frame rather than a fraction of the full column.
+    expect(img.style.width).toBe('100%');
+
+    // The resize handle is a child of the frame, so it lands on the image's own corner, not the
+    // column's — it never sits far off to the right of a narrow photo.
+    const handle = container.querySelector('.ga98-report-imageblock-handle');
+    expect(handle).toBeTruthy();
+    expect(frame.contains(handle)).toBe(true);
 
     const cap = container.querySelector('input[aria-label="Photo caption"]') as HTMLInputElement;
     expect(cap).toBeTruthy();
