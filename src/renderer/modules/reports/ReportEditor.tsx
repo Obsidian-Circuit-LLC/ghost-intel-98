@@ -11,6 +11,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Report, Contact, Descriptor, ReportBlock } from '@shared/reports-types';
 import { TextBlock } from './blocks/TextBlock';
 import { ImageBlock } from './blocks/ImageBlock';
+import { TableBlock } from './blocks/TableBlock';
 
 export interface ReportEditorProps {
   report: Report;
@@ -29,6 +30,9 @@ export interface ReportEditorProps {
   /** Encrypt + append one image file (from "+ Photo" or a drag-drop) as a new photo block. The
    *  module owns the putAsset round-trip + asset-cache population; the editor only forwards files. */
   onAddPhoto: (file: File) => void;
+  /** Append a new (empty 2×2) table block. Module-owned so every block append goes through the same
+   *  working-report owner; the editor only surfaces the "+ Table" affordance. */
+  onAddTable: () => void;
   /** Open the "Import from case" picker (module-owned overlay). */
   onImportFromCase: () => void;
 }
@@ -38,7 +42,7 @@ const IMAGE_MIME = ['image/png', 'image/jpeg'];
 const AUTOSAVE_MS = 600;
 
 export function ReportEditor(props: ReportEditorProps): JSX.Element {
-  const { report, assets, contacts, descriptors, onChange, onAutosave, onUploadBanner, onRemoveBanner, onManageContacts, onManageDescriptors, onAddPhoto, onImportFromCase } = props;
+  const { report, assets, contacts, descriptors, onChange, onAutosave, onUploadBanner, onRemoveBanner, onManageContacts, onManageDescriptors, onAddPhoto, onAddTable, onImportFromCase } = props;
   const [dragOver, setDragOver] = useState(false);
 
   // Debounced autosave: after the report stops changing for AUTOSAVE_MS, persist it. Skip the first
@@ -67,6 +71,10 @@ export function ReportEditor(props: ReportEditorProps): JSX.Element {
 
   function updateImageBlock(id: string, p: Partial<Extract<ReportBlock, { kind: 'image' }>>): void {
     patch({ blocks: report.blocks.map((b) => (b.id === id && b.kind === 'image' ? { ...b, ...p } : b)) });
+  }
+
+  function updateTableBlock(id: string, cells: string[][]): void {
+    patch({ blocks: report.blocks.map((b) => (b.id === id && b.kind === 'table' ? { ...b, cells } : b)) });
   }
 
   function removeBlock(id: string): void {
@@ -158,29 +166,41 @@ export function ReportEditor(props: ReportEditorProps): JSX.Element {
               onChange={(e) => { const f = e.target.files?.[0]; if (f) onAddPhoto(f); e.target.value = ''; }}
             />
           </label>
+          <button type="button" onClick={onAddTable}>+ Table</button>
           <button type="button" onClick={onImportFromCase}>Import from case</button>
           <button type="button" onClick={onManageDescriptors}>Manage descriptors</button>
         </div>
-        {report.blocks.map((b) => (
-          b.kind === 'text'
-            ? (
+        {report.blocks.map((b) => {
+          if (b.kind === 'text') {
+            return (
               <TextBlock
                 key={b.id}
                 block={b}
                 onChange={(html) => updateTextBlock(b.id, html)}
                 descriptors={descriptors}
               />
-            )
-            : (
-              <ImageBlock
+            );
+          }
+          if (b.kind === 'table') {
+            return (
+              <TableBlock
                 key={b.id}
                 block={b}
-                src={assets[b.assetRef]}
-                onChange={(p) => updateImageBlock(b.id, p)}
+                onChange={(cells) => updateTableBlock(b.id, cells)}
                 onRemove={() => removeBlock(b.id)}
               />
-            )
-        ))}
+            );
+          }
+          return (
+            <ImageBlock
+              key={b.id}
+              block={b}
+              src={assets[b.assetRef]}
+              onChange={(p) => updateImageBlock(b.id, p)}
+              onRemove={() => removeBlock(b.id)}
+            />
+          );
+        })}
         {report.blocks.length === 0 ? (
           <div className="ga98-report-body-empty">Add a text block or a photo to begin.</div>
         ) : null}

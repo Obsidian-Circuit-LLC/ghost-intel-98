@@ -113,6 +113,13 @@ export function ReportsModule(): JSX.Element {
     setReport((prev) => (prev ? { ...prev, blocks: [...prev.blocks, block] } : prev));
   }, []);
 
+  // Append an empty 2×2 table block to the working report. The rectangular grid is what the
+  // validator's table branch expects; the per-cell editor keeps it rectangular from here on.
+  function addTable(): void {
+    const block: ReportBlock = { id: uid(), kind: 'table', cells: [['', ''], ['', '']] };
+    setReport((prev) => (prev ? { ...prev, blocks: [...prev.blocks, block] } : prev));
+  }
+
   async function addPhoto(file: File): Promise<void> {
     if (!report) return;
     try {
@@ -197,6 +204,7 @@ export function ReportsModule(): JSX.Element {
                 onManageContacts={() => setShowContacts(true)}
                 onManageDescriptors={() => setShowDescriptors(true)}
                 onAddPhoto={(f) => { void addPhoto(f); }}
+                onAddTable={addTable}
                 onImportFromCase={() => setShowImport(true)}
               />
             </>
