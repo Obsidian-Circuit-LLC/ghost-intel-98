@@ -38,13 +38,15 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`GhostIntel98-Setup-3.48.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
+> **Install:** download [`GhostIntel98-Setup-3.49.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
 
 > **📘 User guides** — plain-language, step-by-step (download or read in-browser):
 > - [**SOCMINT: X, Telegram & WhatsApp**](docs/guides/SOCMINT-Tutorial.pdf) — set up and run the social-media collectors, per platform, with the Tor / clearnet and opsec caveats. ([markdown](docs/guides/socmint-tutorial.md))
 > - [**How Searchlight Learns**](docs/guides/Searchlight-Learning-Guide.pdf) — how the username-sweep detector gets smarter from your own labels, and when to turn ML on. ([markdown](docs/guides/searchlight-learning.md))
 
 ## Status
+
+**v3.49.0** — **Reports Dashboard + a filled My Cases pane.** Two things GhostExodus asked for. **(1)** Opening **Reports** now lands on a proper Win98 **Dashboard** — a "Report Generator" welcome, quick-action tiles (Create New Report, Manage Contacts, Export PDF), and a **Recent Reports table** (Name / Status / Last Modified / Created By) with single-click select, double-click open, column sort, and a right-click menu (Open / Rename / Duplicate / Export / Archive / Delete). A left **Navigation tree** (Dashboard · Reports: All / Recent / Drafts / Archived · Contacts) filters the table, backed by a new **status** (draft / completed / archived, colour-coded) and **author** on every report. The window gains a full **menu bar + toolbar** (File / Edit / View / Reports / Templates / Tools / Help); editor-only and not-yet-built items are **greyed, never dead**. The v3.48.0 three-column editor is unchanged and opens when you pick a report. (Templates — save / reuse / preview — are the next sub-project; their menu + "Use Template" tile are present but disabled.) **(2)** The **My Cases** detail pane is no longer a blank grey void when no case is selected — it now shows GhostExodus's branded magnifying-glass artwork (*"Trust nothing. Verify everything."*). Built subagent-driven across **7 TDD tasks** with a parallel adversarial whole-branch review that caught and fixed **two real bugs** (a view-swap that discarded the editor's pending autosave; a deleted report leaving the Export/Open controls pointing at a dead id). **3,541 automated tests** green (1 skipped); typecheck clean; no new egress; no new dependency. *Everything from v3.48.0 carries forward.*
 
 **v3.48.0** — **Report Template Generator — the Reports tool, redesigned.** The v3.47.0 Reports tool worked but shipped **unstyled** — an uploaded banner and inserted photos rendered at full native size and swamped a grey, top-left-collapsed editor. This release writes the missing stylesheet as the **root-cause fix** and rebuilds Reports toward a proper document editor: a **centered fixed-width page** (banner and photos capped to page width), a **three-column layout** — reusable **Contact**, **Introductions**, and **Descriptor** libraries on the left; the document in the middle; **Descriptor Preview**, a **Document Outline**, and **Image Properties** on the right — plus a **status bar** (word count, ~page count, zoom). The toolbar gains **font family** (six Windows-standard typefaces, no bundled font files), **alignment**, **bullet/numbered lists**, and **scheme-guarded hyperlinks** (http/https/mailto only). A new **table** block (simple grid, add/remove rows & columns) rounds out the document, and everything exports to **PDF and DOCX** with matching fidelity. The renderer sanitizer grew to match — `font-family` constrained to the exact whitelist, alignment/lists, and links stripped of `javascript:`/`data:` — and remains the sole trust boundary before the exporters. Built subagent-driven across **9 TDD tasks** with a parallel adversarial whole-branch review that caught and fixed **six real defects** (table data-loss, three still-unstyled panels, a DOCX schema-order bug, a dead introduction-insert path). **3,504 automated tests** green (1 skipped); typecheck clean; no new egress; no new dependency. *Everything from v3.47.0 carries forward.*
 
@@ -527,7 +529,7 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases) and run it.
 
-Direct link to the current release: [`GhostIntel98-Setup-3.48.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.48.0/GhostIntel98-Setup-3.48.0.exe)
+Direct link to the current release: [`GhostIntel98-Setup-3.49.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.49.0/GhostIntel98-Setup-3.49.0.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is **formally verified internally** — symbolic (ProVerif) +
 computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not**
 FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.6.8/GhostIntel98-Setup-3.6.8.exe).
@@ -535,7 +537,7 @@ FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Se
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\GhostIntel98-Setup-3.48.0.exe -Algorithm SHA256
+Get-FileHash .\GhostIntel98-Setup-3.49.0.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
