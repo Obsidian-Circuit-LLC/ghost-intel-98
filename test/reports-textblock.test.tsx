@@ -259,4 +259,23 @@ describe('TextBlock toolbar expansion (Task 7)', () => {
     await act(async () => { linkBtn.click(); });
     expect(container.querySelector('input[aria-label="Link URL"]')).toBeTruthy();
   });
+
+  it('is UNCONTROLLED: a changed block.html prop does NOT re-clobber the editable DOM (backwards-typing fix)', async () => {
+    // Root cause of "typed text comes out backwards": feeding the live block.html into
+    // dangerouslySetInnerHTML made React rewrite innerHTML on every keystroke, dropping the caret to
+    // position 0. The fix freezes the initial html, so after mount React must LEAVE THE DOM ALONE even
+    // when the block prop's html changes. Simulate the parent lifting an edit and re-rendering with the
+    // new html: the body must still hold the ORIGINAL DOM (React did not clobber it), which is exactly
+    // what keeps the browser's caret intact between keystrokes.
+    const b1: TextBlockData = { id: 'bU', kind: 'text', html: '<p>A</p>' };
+    await act(async () => { root.render(<TextBlock block={b1} onChange={vi.fn()} />); });
+    const body = container.querySelector('.ga98-report-textblock-body') as HTMLElement;
+    expect(body.innerHTML).toBe('<p>A</p>');
+
+    // Parent re-renders the SAME block id with new html (as it would after commit). React must NOT
+    // re-apply innerHTML — the DOM stays as the browser left it.
+    const b2: TextBlockData = { id: 'bU', kind: 'text', html: '<p>A CLOBBERED</p>' };
+    await act(async () => { root.render(<TextBlock block={b2} onChange={vi.fn()} />); });
+    expect(body.innerHTML).toBe('<p>A</p>'); // unchanged — not clobbered to "A CLOBBERED"
+  });
 });

@@ -33,6 +33,16 @@ export interface TextBlockProps {
 export function TextBlock(props: TextBlockProps): JSX.Element {
   const { block, onChange, descriptors = [], introductions = [] } = props;
   const ref = useRef<HTMLDivElement | null>(null);
+  // FROZEN initial HTML — the fix for "typed text comes out backwards". The editable div is truly
+  // UNCONTROLLED: React must set its innerHTML exactly once (on mount) and NEVER re-apply it. Feeding
+  // the live `block.html` into `dangerouslySetInnerHTML` re-wrote innerHTML on every keystroke (commit
+  // → onChange → parent re-render → new `block.html` → React rebuilds the DOM), which destroyed the
+  // caret and dropped it to position 0 — so each character inserted at the start ("abc" → "cba") and
+  // execCommand toolbar buttons lost their selection. Capturing the html at first render (via a ref,
+  // stable across re-renders) keeps `dangerouslySetInnerHTML`'s value constant, so React leaves the DOM
+  // alone after mount. A different block re-mounts this component (keyed by block.id in ReportEditor),
+  // re-freezing to the new content. `commit()` still lifts every edit up for persistence/export.
+  const initialHtml = useRef(block.html).current;
   // The selection at the moment the context menu opened, cloned so it survives the ensuing blur
   // when the operator clicks a menu button (blur can collapse/clear the live selection).
   const savedRange = useRef<Range | null>(null);
@@ -303,10 +313,11 @@ export function TextBlock(props: TextBlockProps): JSX.Element {
         role="textbox"
         aria-multiline="true"
         aria-label="Report text block"
-        // Uncontrolled by design: re-rendering from `block.html` on every keystroke would fight the
-        // browser's own caret/selection state. The DOM is the source of truth between commits;
-        // `onChange` (via `commit`) is how it re-joins React state.
-        dangerouslySetInnerHTML={{ __html: block.html }}
+        data-placeholder="Type your report here…"
+        // Uncontrolled: seeded once from the FROZEN `initialHtml` (see the useRef above) and never
+        // re-applied by React, so the browser owns the caret/selection between commits. `onChange`
+        // (via `commit`) is how the DOM re-joins React state without React clobbering the DOM back.
+        dangerouslySetInnerHTML={{ __html: initialHtml }}
         onInput={commit}
         onBlur={commit}
         onContextMenu={openDescriptorMenu}

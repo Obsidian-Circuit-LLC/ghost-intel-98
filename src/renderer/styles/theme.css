@@ -1538,6 +1538,28 @@ input.ga98-text, select.ga98-text {
 /* The text block is the positioned ancestor the inline link popover (position:absolute) anchors to,
  * so the popover floats over the block body instead of anchoring to a distant ancestor. */
 .ga98-report-textblock { position: relative; }
+/* The editable body was an unstyled bare contentEditable — it collapsed to a single line and was hard
+   to find. Give it a real document-sized typing area (white sunken field) with a visible focus ring and
+   an italic placeholder while empty, so you can see where to type. */
+.ga98-report-textblock-body {
+  min-height: 140px;
+  padding: 8px 10px;
+  background: #fff;
+  color: #111;
+  border: 2px solid;
+  border-color: #808080 #fff #fff #808080;
+  outline: none;
+  font-size: 13px;
+  line-height: 1.5;
+  cursor: text;
+}
+.ga98-report-textblock-body:focus { border-color: #000080 #000080 #000080 #000080; }
+.ga98-report-textblock-body:empty::before {
+  content: attr(data-placeholder);
+  color: #9a9a9a;
+  font-style: italic;
+  pointer-events: none;
+}
 /* Photo block: the frame is the positioning context for the corner resize handle and the remove
  * button; without an explicit size the handle is a 0×0 (unclickable) box, so drag-to-resize is dead. */
 .ga98-report-imageblock { margin: 8px 0; }
