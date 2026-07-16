@@ -26,13 +26,15 @@ const WEEKLY: Reminder = { id: 'g1', title: 'CCF Call 6PM', fireAt: anchorIso, r
 let container: HTMLDivElement;
 let root: Root;
 let listGlobal: ReturnType<typeof vi.fn>;
+let upsertGlobal: ReturnType<typeof vi.fn>;
 let casesList: ReturnType<typeof vi.fn>;
 
 function installApi(reminders: Reminder[]): void {
   listGlobal = vi.fn().mockResolvedValue(reminders);
+  upsertGlobal = vi.fn().mockResolvedValue(undefined);
   casesList = vi.fn().mockResolvedValue([]);
   (globalThis as unknown as { window: { api: unknown } }).window.api = {
-    reminders: { listGlobal, upsertGlobal: vi.fn(), deleteGlobal: vi.fn() },
+    reminders: { listGlobal, upsertGlobal, deleteGlobal: vi.fn() },
     cases: { list: casesList, read: vi.fn() },
   };
 }
@@ -82,5 +84,65 @@ describe('Calendar recurring expansion (Task 3)', () => {
       .filter((el) => (el.textContent ?? '').includes('One-off'));
     expect(eventEls.length).toBe(1);
     expect(container.querySelectorAll('.ga98-cal-recurring').length).toBe(0);
+  });
+});
+
+function menuButtons(): HTMLButtonElement[] {
+  return Array.from(container.querySelectorAll('.ga98-context-menu .ga98-context-menu-item')) as HTMLButtonElement[];
+}
+
+function menuLabels(): string[] {
+  return menuButtons().map((b) => (b.textContent ?? '').trim());
+}
+
+async function openMenuFor(label: string): Promise<void> {
+  const el = Array.from(container.querySelectorAll('.ga98-cal-event'))
+    .find((e) => (e.textContent ?? '').includes(label));
+  if (!el) throw new Error(`no calendar event with label ${label}`);
+  await act(async () => {
+    el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+  });
+}
+
+async function clickMenu(label: string): Promise<void> {
+  const btn = menuButtons().find((b) => (b.textContent ?? '').trim() === label);
+  if (!btn) throw new Error(`no menu button ${label}`);
+  await act(async () => { btn.click(); });
+  await flush();
+}
+
+describe('Calendar right-click Make/Remove recurring (Task 4)', () => {
+  it('offers Repeat daily/weekly/monthly on a NON-recurring reminder and upserts the chosen freq', async () => {
+    installApi([{ id: 'g2', title: 'One-off', fireAt: anchorIso, repeat: 'none', fired: false }]);
+    await act(async () => { root.render(<CalendarModule />); });
+    await flush();
+
+    await openMenuFor('One-off');
+    const labels = menuLabels();
+    expect(labels).toContain('Repeat daily');
+    expect(labels).toContain('Repeat weekly');
+    expect(labels).toContain('Repeat monthly');
+    expect(labels).not.toContain('Remove recurring');
+
+    await clickMenu('Repeat weekly');
+    expect(upsertGlobal).toHaveBeenCalledTimes(1);
+    expect(upsertGlobal.mock.calls[0][0]).toMatchObject({ id: 'g2', repeat: 'weekly' });
+  });
+
+  it('offers Remove recurring on a recurring reminder and upserts repeat:none', async () => {
+    installApi([WEEKLY]);
+    await act(async () => { root.render(<CalendarModule />); });
+    await flush();
+
+    await openMenuFor('CCF Call 6PM');
+    const labels = menuLabels();
+    expect(labels).toContain('Remove recurring');
+    expect(labels).not.toContain('Repeat daily');
+    expect(labels).not.toContain('Repeat weekly');
+    expect(labels).not.toContain('Repeat monthly');
+
+    await clickMenu('Remove recurring');
+    expect(upsertGlobal).toHaveBeenCalledTimes(1);
+    expect(upsertGlobal.mock.calls[0][0]).toMatchObject({ id: 'g1', repeat: 'none' });
   });
 });

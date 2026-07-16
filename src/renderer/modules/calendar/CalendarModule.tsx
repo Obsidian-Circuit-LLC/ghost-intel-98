@@ -120,6 +120,21 @@ export function CalendarModule(): JSX.Element {
     }
   }
 
+  async function setRecurrence(ev: Event, repeat: 'none' | 'daily' | 'weekly' | 'monthly'): Promise<void> {
+    setCtxMenu(null);
+    if (!ev.globalReminderId) return;
+    const all = await window.api.reminders.listGlobal();
+    const r = all.find((x) => x.id === ev.globalReminderId);
+    if (!r) return;
+    try {
+      await window.api.reminders.upsertGlobal({ ...r, repeat, lastFiredAt: repeat === 'none' ? undefined : r.lastFiredAt });
+      toast.success(repeat === 'none' ? 'Recurrence removed.' : `Repeats ${repeat}.`);
+      setRefreshTick((n) => n + 1);
+    } catch (err) {
+      toast.error(`Update failed: ${(err as Error).message}`);
+    }
+  }
+
   async function deleteReminder(ev: Event): Promise<void> {
     setCtxMenu(null);
     if (!ev.globalReminderId) return;
@@ -191,9 +206,20 @@ export function CalendarModule(): JSX.Element {
           <div style={{ position: 'fixed', inset: 0, zIndex: 29999 }} onMouseDown={() => setCtxMenu(null)} />
           <div className="ga98-context-menu" style={{ left: ctxMenu.x, top: ctxMenu.y }}>
             {ctxMenu.ev.globalReminderId ? (
-              <button className="ga98-context-menu-item" onClick={() => void deleteReminder(ctxMenu.ev)}>
-                Delete reminder
-              </button>
+              <>
+                {(!ctxMenu.ev.repeat || ctxMenu.ev.repeat === 'none') ? (
+                  <>
+                    <button className="ga98-context-menu-item" onClick={() => void setRecurrence(ctxMenu.ev, 'daily')}>Repeat daily</button>
+                    <button className="ga98-context-menu-item" onClick={() => void setRecurrence(ctxMenu.ev, 'weekly')}>Repeat weekly</button>
+                    <button className="ga98-context-menu-item" onClick={() => void setRecurrence(ctxMenu.ev, 'monthly')}>Repeat monthly</button>
+                  </>
+                ) : (
+                  <button className="ga98-context-menu-item" onClick={() => void setRecurrence(ctxMenu.ev, 'none')}>Remove recurring</button>
+                )}
+                <button className="ga98-context-menu-item" onClick={() => void deleteReminder(ctxMenu.ev)}>
+                  Delete reminder
+                </button>
+              </>
             ) : (
               <button
                 className="ga98-context-menu-item"
