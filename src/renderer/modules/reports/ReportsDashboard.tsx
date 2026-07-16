@@ -30,49 +30,61 @@ export function ReportsDashboard(props: ReportsDashboardProps): JSX.Element {
 
   return (
     <div className="ga98-report-dashboard">
-      <div className="ga98-report-dashboard-welcome">
-        <h1 className="ga98-report-dashboard-title">Report Generator</h1>
-        <p className="ga98-report-dashboard-sub">
-          Signed in as <strong>{author || 'Investigator'}</strong>. Create a new chain-of-custody report or open a recent one below.
-        </p>
-      </div>
+      <div className="ga98-report-panel">
+        {/* Win98 MDI-style title bar; the "×" is decorative chrome (aria-hidden span), not a control. */}
+        <div className="ga98-report-titlebar">
+          <span>Dashboard</span>
+          <span className="ga98-report-titlebar-x" aria-hidden="true">×</span>
+        </div>
+        <div className="ga98-report-panel-body">
+          {/* Dark intelligence-workstation hero — the one dark surface, framed inside the light shell. */}
+          <div className="ga98-report-hero">
+            <div className="ga98-report-dashboard-welcome">
+              <h1 className="ga98-report-dashboard-title">Welcome to Ghost Intel 98</h1>
+              <p className="ga98-report-dashboard-sub">
+                Chain of Custody Report and Template Generator — signed in as {author || 'Investigator'}.
+              </p>
+            </div>
 
-      <div className="ga98-report-tiles">
-        <button type="button" className="ga98-report-tile" onClick={onNewReport}>
-          <span className="ga98-report-tile-icon" aria-hidden="true">📄</span>
-          <span className="ga98-report-tile-label">Create New Report</span>
-        </button>
-        <button type="button" className="ga98-report-tile" onClick={onManageContacts}>
-          <span className="ga98-report-tile-icon" aria-hidden="true">👤</span>
-          <span className="ga98-report-tile-label">Manage Contacts</span>
-        </button>
-        <button
-          type="button"
-          className="ga98-report-tile"
-          disabled={selectedId === null}
-          title={selectedId === null ? 'Select a report first' : 'Export the selected report'}
-          onClick={onExportSelected}
-        >
-          <span className="ga98-report-tile-icon" aria-hidden="true">🖨️</span>
-          <span className="ga98-report-tile-label">Export PDF</span>
-        </button>
-        {/* Templates deferred to sub-project B — rendered disabled, never a no-op handler. */}
-        <button type="button" className="ga98-report-tile" disabled title="Templates coming soon">
-          <span className="ga98-report-tile-icon" aria-hidden="true">🗂️</span>
-          <span className="ga98-report-tile-label">Use Template</span>
-        </button>
-      </div>
+            <div className="ga98-report-tiles">
+              <button type="button" className="ga98-report-tile" onClick={onNewReport}>
+                <span className="ga98-report-tile-icon" aria-hidden="true">📝</span>
+                <span className="ga98-report-tile-label">Create New Report</span>
+              </button>
+              <button type="button" className="ga98-report-tile" onClick={onManageContacts}>
+                <span className="ga98-report-tile-icon" aria-hidden="true">👥</span>
+                <span className="ga98-report-tile-label">Manage Contacts</span>
+              </button>
+              <button
+                type="button"
+                className="ga98-report-tile"
+                disabled={selectedId === null}
+                title={selectedId === null ? 'Select a report first' : 'Export the selected report'}
+                onClick={onExportSelected}
+              >
+                <span className="ga98-report-tile-icon" aria-hidden="true">🖨️</span>
+                <span className="ga98-report-tile-label">Export PDF</span>
+              </button>
+              {/* Templates deferred to sub-project B — rendered disabled, never a no-op handler. */}
+              <button type="button" className="ga98-report-tile" disabled title="Templates coming soon">
+                <span className="ga98-report-tile-icon" aria-hidden="true">🗂️</span>
+                <span className="ga98-report-tile-label">Use Template</span>
+              </button>
+            </div>
+          </div>
 
-      <div className="ga98-report-dashboard-recent">
-        <div className="ga98-report-panel-title">Recent Reports</div>
-        <RecentReportsTable
-          reports={reports}
-          selectedId={selectedId}
-          onSelect={onSelect}
-          onOpen={onOpen}
-          onContext={onContext}
-          onViewAll={onViewAll}
-        />
+          <div className="ga98-report-dashboard-recent">
+            <div className="ga98-report-recent-heading">Recent Reports</div>
+            <RecentReportsTable
+              reports={reports}
+              selectedId={selectedId}
+              onSelect={onSelect}
+              onOpen={onOpen}
+              onContext={onContext}
+              onViewAll={onViewAll}
+            />
+          </div>
+        </div>
       </div>
     </div>
   );

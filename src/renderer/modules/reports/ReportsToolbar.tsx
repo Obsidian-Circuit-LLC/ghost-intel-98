@@ -14,24 +14,25 @@ export interface ReportsToolbarProps {
 interface ToolButton {
   action?: ReportsActionId;
   label?: string;
+  icon?: string;
   editorOnly?: boolean;
 }
 
 const SEP: ToolButton = {};
 
 const BUTTONS: ToolButton[] = [
-  { action: 'new', label: 'New' },
-  { action: 'open', label: 'Open' },
+  { action: 'new', label: 'New', icon: '📄' },
+  { action: 'open', label: 'Open', icon: '📂' },
   SEP,
-  { action: 'save', label: 'Save', editorOnly: true },
-  { action: 'saveAs', label: 'Save As', editorOnly: true },
+  { action: 'save', label: 'Save', icon: '💾', editorOnly: true },
+  { action: 'saveAs', label: 'Save As', icon: '🖫', editorOnly: true },
   SEP,
-  { action: 'exportPdf', label: 'Export PDF', editorOnly: true },
-  { action: 'exportDocx', label: 'Export DOCX', editorOnly: true },
-  { action: 'print', label: 'Print', editorOnly: true },
+  { action: 'exportPdf', label: 'Export PDF', icon: '📕', editorOnly: true },
+  { action: 'exportDocx', label: 'Export DOCX', icon: '📘', editorOnly: true },
+  { action: 'print', label: 'Print', icon: '🖨️', editorOnly: true },
   SEP,
-  { action: 'options', label: 'Options' },
-  { action: 'about', label: 'Help' }
+  { action: 'options', label: 'Options', icon: '⚙️' },
+  { action: 'about', label: 'Help', icon: '❓' }
 ];
 
 export function ReportsToolbar({ hasOpenReport, onAction }: ReportsToolbarProps): JSX.Element {
@@ -51,6 +52,7 @@ export function ReportsToolbar({ hasOpenReport, onAction }: ReportsToolbarProps)
             disabled={btn.editorOnly === true && !hasOpenReport}
             onClick={() => onAction(action)}
           >
+            {btn.icon ? <span className="ga98-report-btn-ico" aria-hidden="true">{btn.icon}</span> : null}
             {btn.label}
           </button>
         );
