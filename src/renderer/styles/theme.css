@@ -551,6 +551,8 @@ input.ga98-text, select.ga98-text {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Recurring-reminder badge (🔁) — a small inline glyph before a repeating occurrence's label. */
+.ga98-cal-recurring { margin-right: 2px; font-size: 9px; }
 
 .ga98-coming-soon {
   display: flex;
