@@ -1,11 +1,20 @@
-/** ReportsModule — the Chain-of-Custody report generator host: a saved-reports list (New / Open /
- *  Delete) beside the <ReportEditor>. Owns persistence — talks to window.api.reports.* (the
- *  encrypted main-process store) and resolves banner/image asset refs to data URLs (cached in
- *  `assets`) for the live preview. Export (PDF/DOCX) is main-side by id; the renderer never builds
- *  the export buffer. Contacts are managed through the <ContactBook> overlay. */
+/** ReportsModule — the Chain-of-Custody report generator shell. It owns persistence (talks to
+ *  window.api.reports.* — the encrypted main-process store — and resolves banner/image asset refs to
+ *  data URLs cached in `assets` for the live preview) and hosts the Win98 app shell: a menu bar +
+ *  toolbar over a body row of the left Explorer nav tree and a center view that swaps between the
+ *  landing <ReportsDashboard> (when no report is open) and the <ReportEditor>. A central `dispatch`
+ *  maps every menu/toolbar/tile/quick-action id to a handler. Export (PDF/DOCX) is main-side by id;
+ *  the renderer never builds the export buffer. Contacts are managed through the <ContactBook>
+ *  overlay. The default author for a freshly-seeded report comes from settings.reports.author. */
 import { useCallback, useEffect, useState } from 'react';
 import type { Report, Contact, Descriptor, ReportBlock } from '@shared/reports-types';
 import { ReportEditor } from './ReportEditor';
+import { ReportsDashboard } from './ReportsDashboard';
+import { ReportsMenuBar, type ReportsActionId } from './ReportsMenuBar';
+import { ReportsToolbar } from './ReportsToolbar';
+import { ReportsNavTree } from './ReportsNavTree';
+import { filterReports, duplicateReport, type NavNode } from './reports-filters';
+import type { ReportContextAction } from './RecentReportsTable';
 import { ContactBook } from './ContactBook';
 import { DescriptorLibrary } from './DescriptorLibrary';
 import { IntroductionLibrary } from './IntroductionLibrary';
@@ -16,9 +25,9 @@ import { toast } from '../../state/toasts';
 function uid(): string { return crypto.randomUUID(); }
 function nowIso(): string { return new Date().toISOString(); }
 
-function seedReport(): Report {
+function seedReport(author: string): Report {
   const stamp = nowIso();
-  return { id: uid(), title: 'Untitled report', createdAt: stamp, updatedAt: stamp, to: '', status: 'draft', author: 'Investigator', blocks: [] };
+  return { id: uid(), title: 'Untitled report', createdAt: stamp, updatedAt: stamp, to: '', status: 'draft', author, blocks: [] };
 }
 
 export function ReportsModule(): JSX.Element {
@@ -34,6 +43,11 @@ export function ReportsModule(): JSX.Element {
   const [showImport, setShowImport] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [busy, setBusy] = useState(false);
+  // Shell state: which nav node the Dashboard filters by, which recent-table row is selected, and the
+  // default author seeded onto a new report (loaded from settings.reports.author on mount).
+  const [navNode, setNavNode] = useState<NavNode>('dashboard');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [author, setAuthor] = useState('Investigator');
 
   const refresh = useCallback(async (): Promise<void> => {
     setList(await window.api.reports.list());
@@ -52,6 +66,20 @@ export function ReportsModule(): JSX.Element {
     void refresh(); void refreshContacts(); void refreshDescriptors(); void refreshIntroductions();
   }, [refresh, refreshContacts, refreshDescriptors, refreshIntroductions]);
 
+  // Load the default report author from settings.reports.author (deep-merged, so it survives an
+  // upgrade). Defensive: the read is optional-chained and try/wrapped so a settings API that isn't
+  // present (older preload, a bare test stub) simply keeps the 'Investigator' default rather than
+  // crashing the shell.
+  useEffect(() => {
+    void (async () => {
+      try {
+        const s = await window.api.settings?.read?.();
+        const a = s?.reports?.author;
+        if (typeof a === 'string' && a.trim().length > 0) setAuthor(a.trim());
+      } catch { /* keep the 'Investigator' default */ }
+    })();
+  }, []);
+
   // Resolve every asset ref a report references (banner + image blocks) into the local data-URL
   // cache so the preview embeds them exactly as the exported PDF/DOCX will.
   const loadAssetsFor = useCallback(async (r: Report): Promise<Record<string, string>> => {
@@ -67,7 +95,7 @@ export function ReportsModule(): JSX.Element {
   }, []);
 
   async function newReport(): Promise<void> {
-    const seed = seedReport();
+    const seed = seedReport(author);
     const saved = await window.api.reports.save(seed);
     setAssets({});
     setReport(saved);
@@ -79,10 +107,43 @@ export function ReportsModule(): JSX.Element {
     setAssets(await loadAssetsFor(r));
   }
 
+  function openReportById(id: string): void {
+    const r = list.find((x) => x.id === id);
+    if (r) void openReport(r);
+  }
+
   async function removeReport(id: string): Promise<void> {
     await window.api.reports.remove(id);
     if (report?.id === id) { setReport(null); setAssets({}); }
     await refresh();
+  }
+
+  // Persist a copy of the given report under a fresh id (Save As / Duplicate). Uses the pure
+  // duplicateReport transform (fresh id, "(copy)" title, status reset to draft) so every duplicate
+  // path is identical.
+  async function duplicateReportById(id: string): Promise<void> {
+    const r = list.find((x) => x.id === id);
+    if (!r) return;
+    await window.api.reports.save(duplicateReport(r, uid(), nowIso()));
+    await refresh();
+  }
+
+  // Flip a report to archived from the dashboard context menu (no need to open it). Keep the open
+  // editor in sync if it happens to be the same report.
+  async function archiveReport(id: string): Promise<void> {
+    const r = list.find((x) => x.id === id);
+    if (!r) return;
+    const saved = await window.api.reports.save({ ...r, status: 'archived', updatedAt: nowIso() });
+    if (report?.id === id) setReport(saved);
+    await refresh();
+  }
+
+  // Export any report by id (main-side) — used by the dashboard Export/Print tile + row context menu,
+  // which act on a selected report without first opening it into the editor.
+  async function exportReportById(id: string): Promise<void> {
+    setBusy(true);
+    try { const f = await window.api.reports.exportPdf(id); if (f) toast.success(`Exported ${f}`); }
+    finally { setBusy(false); }
   }
 
   // Debounced-autosave sink from the editor: persist the working report + quietly refresh the list.
@@ -172,57 +233,116 @@ export function ReportsModule(): JSX.Element {
     setShowContacts(false);
   }
 
-  return (
-    <div className="ga98-reports">
-      <div className="ga98-reports-body">
-        <div className="ga98-reports-list">
-          <div className="ga98-reports-toolbar">
-            <button onClick={() => { void newReport(); }}>New report</button>
-          </div>
-          <ul>
-            {list.map((r) => (
-              <li key={r.id} className={report?.id === r.id ? 'selected' : undefined}>
-                <button className="ga98-reports-open" onClick={() => { void openReport(r); }}>
-                  {r.title || 'Untitled report'}
-                </button>
-                <button aria-label="Delete report" onClick={() => { void removeReport(r.id); }}>✕</button>
-              </li>
-            ))}
-            {list.length === 0 ? <li className="ga98-reports-empty">No reports yet.</li> : null}
-          </ul>
-        </div>
+  // Return to the Dashboard (close the editor) on a given nav node — used by "Close Report",
+  // "Dashboard", "Open Report…" and the nav-tree node clicks.
+  function showDashboard(node: NavNode): void {
+    setReport(null);
+    setAssets({});
+    setNavNode(node);
+  }
 
-        <div className="ga98-reports-editor">
+  // Central action dispatcher — every menu item, toolbar button and dashboard tile routes its
+  // ReportsActionId here. Editor-only ids (save/export/print/edit ops) are already gated `disabled`
+  // by the menu/toolbar when no report is open; the guards below are belt-and-suspenders. Templates
+  // ids are rendered disabled (deferred to sub-project B) and never reach this dispatcher.
+  function dispatch(id: ReportsActionId): void {
+    switch (id) {
+      case 'new': void newReport(); break;
+      case 'open': showDashboard('all'); break;
+      case 'dashboard': showDashboard('dashboard'); break;
+      case 'refresh': void refresh(); break;
+      case 'save': if (report) { void autosave(report); toast.success('Report saved.'); } break;
+      case 'saveAs': if (report) void duplicateReportById(report.id); break;
+      case 'exportPdf': void exportPdf(); break;
+      case 'exportDocx': void exportDocx(); break;
+      case 'print': window.print(); break;
+      case 'close': showDashboard(navNode); break;
+      case 'contacts': setShowContacts(true); break;
+      case 'options': toast.info('Reports options live in Start ▸ Settings.'); break;
+      case 'about': toast.info('Ghost Intel 98 — Report Generator'); break;
+      // Native rich-text ops on the focused contentEditable block (real behaviour, not a no-op).
+      case 'undo': document.execCommand('undo'); break;
+      case 'redo': document.execCommand('redo'); break;
+      case 'cut': document.execCommand('cut'); break;
+      case 'copy': document.execCommand('copy'); break;
+      case 'paste': document.execCommand('paste'); break;
+      // Templates deferred to sub-project B — rendered disabled, never dispatched.
+      case 'templateSave': case 'templateLibrary': case 'templateUse': break;
+    }
+  }
+
+  // Nav-tree node selection: switch the Dashboard filter and return to the Dashboard view.
+  function onNavSelect(node: NavNode): void { showDashboard(node); }
+
+  // Recent-table row context menu (Open/Rename/Duplicate/Export/Archive/Delete). Rename has no
+  // standalone dialog in this shell (Electron's window.prompt is a no-op), so it opens the report
+  // into the editor where the title field lives — a real edit path, never a dead handler.
+  function onReportContext(id: string, action: ReportContextAction): void {
+    switch (action) {
+      case 'open': case 'rename': openReportById(id); break;
+      case 'duplicate': void duplicateReportById(id); break;
+      case 'export': void exportReportById(id); break;
+      case 'archive': void archiveReport(id); break;
+      case 'delete': void removeReport(id); break;
+    }
+  }
+
+  const hasOpenReport = report !== null;
+
+  return (
+    <div className="ga98-report-appshell">
+      <ReportsMenuBar hasOpenReport={hasOpenReport} onAction={dispatch} />
+      <ReportsToolbar hasOpenReport={hasOpenReport} onAction={dispatch} />
+
+      <div className="ga98-report-appbody">
+        <ReportsNavTree
+          active={navNode}
+          onSelect={onNavSelect}
+          onNewReport={() => { void newReport(); }}
+          onManageContacts={() => setShowContacts(true)}
+        />
+
+        <div className="ga98-report-appmain">
           {report ? (
-            <>
-              <div className="ga98-reports-actions">
-                <button disabled={busy} onClick={() => { void exportPdf(); }}>Export PDF</button>
-                <button disabled={busy} onClick={() => { void exportDocx(); }}>Export DOCX</button>
-              </div>
-              <ReportEditor
-                report={report}
-                assets={assets}
-                contacts={contacts}
-                descriptors={descriptors}
-                introductions={introductions}
-                onChange={setReport}
-                onAutosave={(r) => { void autosave(r); }}
-                onUploadBanner={(f) => { void uploadBanner(f); }}
-                onRemoveBanner={removeBanner}
-                onManageContacts={() => setShowContacts(true)}
-                onManageDescriptors={() => setShowDescriptors(true)}
-                onManageIntroductions={() => setShowIntroductions(true)}
-                onAddPhoto={(f) => { void addPhoto(f); }}
-                onAddTable={addTable}
-                onImportFromCase={() => setShowImport(true)}
-                zoom={zoom}
-                onZoom={setZoom}
-              />
-            </>
+            <ReportEditor
+              report={report}
+              assets={assets}
+              contacts={contacts}
+              descriptors={descriptors}
+              introductions={introductions}
+              onChange={setReport}
+              onAutosave={(r) => { void autosave(r); }}
+              onUploadBanner={(f) => { void uploadBanner(f); }}
+              onRemoveBanner={removeBanner}
+              onManageContacts={() => setShowContacts(true)}
+              onManageDescriptors={() => setShowDescriptors(true)}
+              onManageIntroductions={() => setShowIntroductions(true)}
+              onAddPhoto={(f) => { void addPhoto(f); }}
+              onAddTable={addTable}
+              onImportFromCase={() => setShowImport(true)}
+              zoom={zoom}
+              onZoom={setZoom}
+            />
           ) : (
-            <div className="ga98-reports-placeholder">Select a report or create a new one.</div>
+            <ReportsDashboard
+              reports={filterReports(list, navNode)}
+              author={author}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              onOpen={openReportById}
+              onContext={onReportContext}
+              onNewReport={() => { void newReport(); }}
+              onManageContacts={() => setShowContacts(true)}
+              onExportSelected={() => { if (selectedId) void exportReportById(selectedId); }}
+              onViewAll={() => setNavNode('all')}
+            />
           )}
         </div>
+      </div>
+
+      <div className="ga98-statusbar ga98-report-statusbar-shell">
+        <span>{hasOpenReport ? `Editing: ${report?.title || 'Untitled report'}` : `${list.length} report${list.length === 1 ? '' : 's'}`}</span>
+        {busy ? <span>Working…</span> : null}
       </div>
 
       {showContacts ? (

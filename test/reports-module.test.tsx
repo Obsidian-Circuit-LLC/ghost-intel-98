@@ -21,36 +21,43 @@ let container: HTMLDivElement;
 let root: Root;
 
 const savedReport = {
-  id: 'r1', title: 'Case 42', createdAt: 't', updatedAt: 't', to: 'Det. Vance', blocks: [] as any[],
+  id: 'r1', title: 'Case 42', createdAt: 't', updatedAt: '2026-07-14', to: 'Det. Vance',
+  status: 'draft' as const, author: 'Investigator', blocks: [] as any[],
 };
 const savedContact = { id: 'c1', name: 'A. Investigator', org: 'Ghost Intel' };
 
 function stubApi(overrides: Record<string, any> = {}): void {
-  (globalThis as any).window.api = { reports: {
-    list: vi.fn(async () => [savedReport]),
-    save: vi.fn(async (r: any) => r),
-    remove: vi.fn(async () => undefined),
-    putAsset: vi.fn(async () => 'banner-ref-1'),
-    getAsset: vi.fn(async () => null),
-    exportPdf: vi.fn(async () => 'r.pdf'),
-    exportDocx: vi.fn(async () => 'r.docx'),
-    contacts: {
-      list: vi.fn(async () => [savedContact]),
-      save: vi.fn(async (c: any) => c),
+  (globalThis as any).window.api = {
+    reports: {
+      list: vi.fn(async () => [savedReport]),
+      save: vi.fn(async (r: any) => r),
       remove: vi.fn(async () => undefined),
+      putAsset: vi.fn(async () => 'banner-ref-1'),
+      getAsset: vi.fn(async () => null),
+      exportPdf: vi.fn(async () => 'r.pdf'),
+      exportDocx: vi.fn(async () => 'r.docx'),
+      contacts: {
+        list: vi.fn(async () => [savedContact]),
+        save: vi.fn(async (c: any) => c),
+        remove: vi.fn(async () => undefined),
+      },
+      descriptors: {
+        list: vi.fn(async () => []),
+        save: vi.fn(async (d: any) => d),
+        remove: vi.fn(async () => undefined),
+      },
+      introductions: {
+        list: vi.fn(async () => []),
+        save: vi.fn(async (d: any) => d),
+        remove: vi.fn(async () => undefined),
+      },
+      ...overrides,
     },
-    descriptors: {
-      list: vi.fn(async () => []),
-      save: vi.fn(async (d: any) => d),
-      remove: vi.fn(async () => undefined),
+    settings: {
+      read: vi.fn(async () => ({ reports: { author: 'Investigator' } })),
+      update: vi.fn(async (p: any) => p),
     },
-    introductions: {
-      list: vi.fn(async () => []),
-      save: vi.fn(async (d: any) => d),
-      remove: vi.fn(async () => undefined),
-    },
-    ...overrides,
-  } };
+  };
 }
 
 beforeEach(() => {
@@ -74,9 +81,21 @@ function typeInto(el: HTMLInputElement, value: string): void {
 }
 
 function buttonByText(text: string): HTMLButtonElement {
-  const btn = Array.from(container.querySelectorAll('button')).find((b) => (b.textContent || '').trim() === text);
+  // Tile/toolbar buttons may carry a decorative (aria-hidden) icon span before the label, so match
+  // on contained text rather than exact equality.
+  const btn = Array.from(container.querySelectorAll('button')).find((b) => (b.textContent || '').includes(text));
   if (!btn) throw new Error(`button "${text}" not found`);
   return btn as HTMLButtonElement;
+}
+
+/** Open the seeded "Case 42" report into the editor by double-clicking its Recent Reports row. */
+async function openSavedReport(): Promise<void> {
+  const row = await vi.waitFor(() => {
+    const el = container.querySelector('tbody tr[data-report-id="r1"]') as HTMLElement | null;
+    if (!el) throw new Error('report row not mounted');
+    return el;
+  });
+  await act(async () => { row.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); });
 }
 
 /** Simulate a file pick on a <input type=file> the way a real selection would (set .files + change). */
@@ -86,12 +105,15 @@ function pickFile(input: HTMLInputElement, file: File): void {
 }
 
 describe('ReportsModule', () => {
-  it('lists saved reports and opens the editor header (banner / From / To)', async () => {
+  it('lists saved reports on the Dashboard and opens the editor header (banner / From / To)', async () => {
     await act(async () => { root.render(<ReportsModule />); });
     await vi.waitFor(() => expect((window as any).api.reports.list).toHaveBeenCalled());
 
-    // Open the saved report into the editor.
-    await act(async () => { buttonByText('Case 42').click(); });
+    // The Dashboard's Recent Reports table lists the saved report.
+    expect(container.textContent).toContain('Case 42');
+
+    // Open the saved report into the editor (double-click its row).
+    await openSavedReport();
 
     await vi.waitFor(() => {
       expect(container.querySelector('.ga98-report-banner')).toBeTruthy();
@@ -100,9 +122,10 @@ describe('ReportsModule', () => {
     });
   });
 
-  it('New report seeds + saves a report and opens it', async () => {
+  it('Create New Report seeds + saves a report and opens it', async () => {
     await act(async () => { root.render(<ReportsModule />); });
-    await act(async () => { buttonByText('New report').click(); });
+    await vi.waitFor(() => expect((window as any).api.reports.list).toHaveBeenCalled());
+    await act(async () => { buttonByText('Create New Report').click(); });
     await vi.waitFor(() => expect((window as any).api.reports.save).toHaveBeenCalled());
   });
 
@@ -113,7 +136,7 @@ describe('ReportsModule', () => {
     const errSpy = vi.spyOn(toast, 'error');
 
     await act(async () => { root.render(<ReportsModule />); });
-    await act(async () => { buttonByText('Case 42').click(); });
+    await openSavedReport();
 
     const input = await vi.waitFor(() => {
       const el = container.querySelector('input[aria-label="Add photo"]') as HTMLInputElement | null;
@@ -131,7 +154,7 @@ describe('ReportsModule', () => {
     const errSpy = vi.spyOn(toast, 'error');
 
     await act(async () => { root.render(<ReportsModule />); });
-    await act(async () => { buttonByText('Case 42').click(); });
+    await openSavedReport();
 
     const input = await vi.waitFor(() => {
       const el = container.querySelector('input[aria-label="Upload banner"]') as HTMLInputElement | null;
