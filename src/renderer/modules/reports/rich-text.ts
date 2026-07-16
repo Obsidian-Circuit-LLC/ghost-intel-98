@@ -6,8 +6,11 @@
  * (PDF) and `docx.ts` (DOCX) then treat the stored block html as already-safe and interpolate it
  * verbatim — so this sanitizer is the sole barrier against script/handler/style injection reaching
  * the exporters. The shared `lib/sanitizeHtml` FORBIDS `style` and is WRONG here: rich text needs a
- * font-size, and only a font-size — hence a dedicated allowlist that keeps exactly `font-size:<n>pt`
- * on `style` and nothing else (no `color`, `position`, `url(...)`, expressions, ...).
+ * bounded set of formatting — hence a dedicated allowlist. Tags: `b/strong/i/em/u/p/br/span/ul/ol/li/a`.
+ * On `style`, ONLY these declarations survive: `font-size:<n>pt`, `font-family:<one of FONT_FAMILIES>`,
+ * and `text-align:left|center|right` — every other property (color, position, url(...), expressions)
+ * is dropped. On `a`, `href` survives ONLY for the `http:`/`https:`/`mailto:` schemes (no
+ * `javascript:`/`data:`). Nothing else — no `img`, no event handlers, no scripts — is kept.
  */
 import DOMPurify from 'dompurify';
 
@@ -37,10 +40,12 @@ let hookInstalled = false;
 function installHook(): void {
   if (hookInstalled) return;
   hookInstalled = true;
-  // A global `uponSanitizeAttribute` hook: for a `style` attribute keep ONLY a `font-size:<n>pt`
-  // declaration and drop the attribute otherwise. This hook is global to DOMPurify, but it is
-  // inert for the doc-viewer `sanitizeHtml` path (that path lists `style` under FORBID_ATTR, so
-  // the attribute is stripped regardless of what this hook decides) — no cross-contamination.
+  // A global `uponSanitizeAttribute` hook. For `style` it keeps only the whitelisted declarations
+  // (font-size:<n>pt, font-family from FONT_FAMILIES, text-align:left|center|right) and drops the
+  // attribute if none survive. For `href` it drops the attribute unless the scheme is http/https/
+  // mailto. This hook is global to DOMPurify, but it is inert for the doc-viewer `sanitizeHtml`
+  // path (that path lists `style` under FORBID_ATTR, so the attribute is stripped regardless of
+  // what this hook decides) — no cross-contamination.
   DOMPurify.addHook('uponSanitizeAttribute', (_node, data) => {
     if (data.attrName === 'style') {
       const decls: string[] = [];
@@ -65,8 +70,9 @@ function installHook(): void {
 
 /**
  * Sanitize a rich-text block's HTML down to the fixed allowlist the DOCX tokenizer + PDF path
- * rely on: `b/strong/i/em/u/p/br/span`, with `style` reduced to a single `font-size:<n>pt`.
- * Everything else — scripts, event handlers, images, links, arbitrary style props — is removed.
+ * rely on: `b/strong/i/em/u/p/br/span/ul/ol/li/a`, with `style` reduced to font-size:<n>pt /
+ * font-family:<whitelisted> / text-align:left|center|right, and `a[href]` scheme-guarded to
+ * http/https/mailto. Everything else — scripts, event handlers, images, other schemes/props — is removed.
  */
 export function sanitizeReportHtml(html: string): string {
   installHook();

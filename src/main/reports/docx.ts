@@ -143,7 +143,7 @@ function blockRuns(html: string): ParaOut[] {
           fontStack.push(fm ? fm[1].trim() : null);
         }
       }
-      else if (name === 'a') { if (closing) linkUrl = ''; else { const h = /href="([^"]*)"/.exec(tok); linkUrl = h ? h[1] : ''; } }
+      else if (name === 'a') { if (closing) linkUrl = ''; else { const h = /href="([^"]*)"/.exec(tok); linkUrl = h ? decodeEntities(h[1]) : ''; } }
       else if (name === 'ul' || name === 'ol') { if (closing) listDepth = Math.max(0, listDepth - 1); else { listDepth++; ordered = name === 'ol'; } }
       else if (name === 'li') { if (closing) flushListItem(); }
       else if (name === 'br') { current += '<w:r><w:br/></w:r>'; }
@@ -220,6 +220,10 @@ export function renderReportDocx(report: Report, assets: Record<string, string>,
       for (const p of paras) body.push(para(p.runs, p.pPr));
     } else if (b.kind === 'table') {
       body.push(tableXml(b.cells));
+      // OOXML requires a block-level element to separate adjacent tables and to sit between a
+      // trailing table and <w:sectPr>; without it Word inserts one on open (repair prompt on some
+      // versions). An empty paragraph after every table covers both cases harmlessly.
+      body.push(para(''));
     } else {
       const m = addImage(b.assetRef, b.widthPct);
       if (m) body.push(para(imageRun(m, imgId++)));

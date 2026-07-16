@@ -129,4 +129,18 @@ describe('renderReportDocx expansion', () => {
     const r = baseReport([]); r.reportDate = '2026-07-16';
     expect(docXml(renderReportDocx(r, {}, null))).toContain('2026-07-16');
   });
+
+  it('escapes a hyperlink URL exactly once (no &amp;amp; on query params)', () => {
+    // The sanitizer serializes an href '&' as '&amp;'; the tokenizer must decode it before esc()
+    // so the field instruction carries a single '&amp;', not a double-escaped '&amp;amp;'.
+    const xml = docXml(renderReportDocx(baseReport([{ id: 'b', kind: 'text', html: '<a href="https://x.co?a=1&amp;b=2">L</a>' }]), {}, null));
+    expect(xml).toContain('https://x.co?a=1&amp;b=2');
+    expect(xml).not.toContain('&amp;amp;');
+  });
+
+  it('follows a trailing table block with a separating paragraph (Word repair guard)', () => {
+    const xml = docXml(renderReportDocx(baseReport([{ id: 'b', kind: 'table', cells: [['a']] }]), {}, null));
+    // the body must not end directly on </w:tbl><w:sectPr> — a paragraph sits between them
+    expect(xml).toMatch(/<\/w:tbl><w:p><\/w:p>/);
+  });
 });

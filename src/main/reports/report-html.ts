@@ -1,10 +1,13 @@
 /**
  * Chain-of-Custody report → HTML (+ PDF). The main process has no DOM/DOMPurify, so this file
  * treats a text block's stored `html` as already-safe: the renderer's `sanitizeReportHtml`
- * (font-size-only style allowlist) is the sole barrier against script/handler/style injection and
- * runs at every edit, BEFORE the block is persisted. Every OTHER field that lands in this HTML —
- * the report title, the To recipient, an image caption, every contact field — is plain text and is
- * escaped here with the shared `escapeHtml` (main/whiteboard/board-export.ts) before interpolation.
+ * (bounded style/tag allowlist) is the sole barrier against script/handler/style injection and
+ * runs at every edit, BEFORE the block is persisted. Table-block CELLS are the second category
+ * interpolated verbatim — each cell is `sanitizeReportHtml`-clean too (TableBlock sanitizes every
+ * cell edit before persist), so it carries the same guarantee as a text block. Every OTHER field
+ * that lands in this HTML — the report title, the To recipient, an image caption, the reportDate,
+ * every contact field — is plain text and is escaped here with the shared `escapeHtml`
+ * (main/whiteboard/board-export.ts) before interpolation.
  *
  * `buildReportHtml` is pure (no Electron) and unit-tested directly; `reportToPdf` is the thin
  * Electron-dependent wrapper (mirrors invoices/export.ts, board-export.ts) that hands the built
