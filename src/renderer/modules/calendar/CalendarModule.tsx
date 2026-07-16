@@ -9,6 +9,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CaseSummary, Reminder } from '@shared/types';
+import { occurrencesInLocalMonth, type Repeat } from '@shared/recurrence';
 import { promptDialog, confirmDialog } from '../../state/dialogs';
 import { toast } from '../../state/toasts';
 
@@ -18,6 +19,10 @@ interface Event {
   kind: 'reminder' | 'case-due';
   /** Present only for global reminders created here — the only events deletable from the calendar. */
   globalReminderId?: string;
+  /** The reminder's recurrence, carried so the context menu knows Make vs Remove recurring. */
+  repeat?: Repeat;
+  /** True for expanded occurrences of a repeating reminder (drives the 🔁 badge). */
+  recurring?: boolean;
 }
 
 /**
@@ -51,7 +56,16 @@ export function CalendarModule(): JSX.Element {
       ]);
       const evs: Event[] = [];
       const broken: string[] = [];
-      for (const r of globals) evs.push({ date: ymd(new Date(r.fireAt)), label: r.title, kind: 'reminder', globalReminderId: r.id });
+      for (const r of globals) {
+        if (r.repeat && r.repeat !== 'none') {
+          const occ = occurrencesInLocalMonth(new Date(r.fireAt).getTime(), r.repeat, cursor.getFullYear(), cursor.getMonth());
+          for (const ms of occ) {
+            evs.push({ date: ymd(new Date(ms)), label: r.title, kind: 'reminder', globalReminderId: r.id, repeat: r.repeat, recurring: true });
+          }
+        } else {
+          evs.push({ date: ymd(new Date(r.fireAt)), label: r.title, kind: 'reminder', globalReminderId: r.id, repeat: r.repeat });
+        }
+      }
       for (const c of cases) {
         try {
           const detail = await window.api.cases.read(c.id);
@@ -74,7 +88,7 @@ export function CalendarModule(): JSX.Element {
     } catch (err) {
       toast.error(`Calendar refresh failed: ${(err as Error).message}`);
     }
-  }, []);
+  }, [cursor]);
 
   useEffect(() => {
     void refresh();
@@ -161,6 +175,7 @@ export function CalendarModule(): JSX.Element {
                       setCtxMenu({ x: me.clientX, y: me.clientY, ev: e });
                     }}
                   >
+                    {e.recurring ? <span className="ga98-cal-recurring" aria-hidden="true">🔁</span> : null}
                     {e.label}
                   </div>
                 ))}
