@@ -19,7 +19,8 @@ export interface Descriptor { id: string; name: string; body: string }
 
 export type ReportBlock =
   | { id: string; kind: 'text'; html: string }
-  | { id: string; kind: 'image'; assetRef: string; widthPct: number; caption: string };
+  | { id: string; kind: 'image'; assetRef: string; widthPct: number; caption: string; align?: 'left' | 'center' | 'right' }
+  | { id: string; kind: 'table'; cells: string[][] };
 
 export interface Report {
   id: string;
@@ -29,11 +30,12 @@ export interface Report {
   bannerRef?: string;
   fromContactId?: string;
   to: string;
+  reportDate?: string;
   blocks: ReportBlock[];
 }
 
-/** On-disk shape (one encrypted JSON file) — three libraries side by side. */
-export interface ReportStoreData { reports: Report[]; contacts: Contact[]; descriptors: Descriptor[] }
+/** On-disk shape (one encrypted JSON file) — four libraries side by side. */
+export interface ReportStoreData { reports: Report[]; contacts: Contact[]; descriptors: Descriptor[]; introductions: Descriptor[] }
 
 /** getAsset result — raw bytes + mime; callers (report-html/docx/IPC) build the data URI. */
 export interface ReportAsset { bytes: Buffer; mime: string }

@@ -1237,6 +1237,8 @@ const MAX_REPORT_CAPTION = 500;
 const MAX_DESCRIPTOR_BODY = 10_000;
 const MAX_CONTACT_FIELD = 400;
 const MAX_BLOCKS_PER_REPORT = 400;
+const MAX_TABLE_ROWS = 50;
+const MAX_TABLE_COLS = 12;
 
 function reportStr(v: unknown, max: number): string {
   return typeof v === 'string' ? v.slice(0, max) : '';
@@ -1261,7 +1263,27 @@ function ensureReportBlock(raw: unknown): import('@shared/reports-types').Report
   if (o['kind'] === 'image') {
     let assetRef: string;
     try { assetRef = ensureFileName(o['assetRef'], 'block.assetRef'); } catch { return null; }
-    return { id, kind: 'image', assetRef, widthPct: clampWidthPct(o['widthPct']), caption: reportStr(o['caption'], MAX_REPORT_CAPTION) };
+    const align = o['align'] === 'left' || o['align'] === 'center' || o['align'] === 'right' ? o['align'] : undefined;
+    const img: import('@shared/reports-types').ReportBlock = { id, kind: 'image', assetRef, widthPct: clampWidthPct(o['widthPct']), caption: reportStr(o['caption'], MAX_REPORT_CAPTION) };
+    if (align) (img as { align?: string }).align = align;
+    return img;
+  }
+  if (o['kind'] === 'table') {
+    const rows = o['cells'];
+    if (!Array.isArray(rows) || rows.length === 0 || rows.length > MAX_TABLE_ROWS) return null;
+    const width = Array.isArray(rows[0]) ? rows[0].length : -1;
+    if (width <= 0 || width > MAX_TABLE_COLS) return null;
+    const cells: string[][] = [];
+    for (const row of rows) {
+      if (!Array.isArray(row) || row.length !== width) return null;              // ragged → drop block
+      const outRow: string[] = [];
+      for (const cell of row) {
+        if (typeof cell !== 'string') return null;                               // non-string → drop block
+        outRow.push(cell.slice(0, MAX_REPORT_BLOCK_HTML));
+      }
+      cells.push(outRow);
+    }
+    return { id, kind: 'table', cells };
   }
   return null;
 }
@@ -1293,6 +1315,9 @@ export function ensureReport(raw: unknown): import('@shared/reports-types').Repo
   }
   if (typeof o['fromContactId'] === 'string' && o['fromContactId'].length > 0 && o['fromContactId'].length <= 64) {
     out.fromContactId = o['fromContactId'];
+  }
+  if (typeof o['reportDate'] === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(o['reportDate'])) {
+    out.reportDate = o['reportDate'];
   }
   return out;
 }
@@ -1328,4 +1353,9 @@ export function ensureDescriptor(raw: unknown): import('@shared/reports-types').
     name: reportStr(o['name'], MAX_CONTACT_FIELD),
     body: reportStr(o['body'], MAX_DESCRIPTOR_BODY)
   };
+}
+
+/** An introduction is a named reusable text, structurally identical to a Descriptor. */
+export function ensureIntroduction(raw: unknown): import('@shared/reports-types').Descriptor {
+  return ensureDescriptor(raw);
 }
