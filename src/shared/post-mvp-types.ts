@@ -282,6 +282,10 @@ export interface AiConversation {
   updatedAt: string;
   messages: AiChatMessage[];
   caseId?: string;
+  /** Tombstone: when true the chat record survives in AI Assistant but is omitted from the
+   *  memory index by `reindexConversations` (so its graph node/chunks vanish). Absent = included.
+   *  Reversible — clearing the flag and reindexing brings the conversation back into memory. */
+  memoryExcluded?: boolean;
 }
 
 /** Lightweight row for the conversation sidebar — full messages fetched on open. */
