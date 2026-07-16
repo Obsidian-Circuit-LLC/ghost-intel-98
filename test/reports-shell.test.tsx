@@ -71,6 +71,14 @@ function buttonByText(text: string): HTMLButtonElement {
   return btn as HTMLButtonElement;
 }
 
+function tileByText(text: string): HTMLButtonElement {
+  // Scope to the dashboard tiles — "Export PDF" also labels a toolbar button, so a plain
+  // text match would be ambiguous; the tile is the one carrying `.ga98-report-tile`.
+  const btn = Array.from(container.querySelectorAll('button.ga98-report-tile')).find((b) => (b.textContent || '').includes(text));
+  if (!btn) throw new Error(`tile "${text}" not found`);
+  return btn as HTMLButtonElement;
+}
+
 /** Set a React-controlled <select>'s value the way a real change would (native setter + change event). */
 function selectValue(el: HTMLSelectElement, value: string): void {
   const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value')!.set!;
@@ -147,7 +155,7 @@ describe('ReportsModule shell (Task 6)', () => {
     const row = container.querySelector('tr[data-report-id="r1"]') as HTMLTableRowElement;
     expect(row).toBeTruthy();
     await act(async () => { row.click(); });
-    expect(buttonByText('Export / Print').disabled).toBe(false);
+    expect(tileByText('Export PDF').disabled).toBe(false);
 
     // Right-click the row to open the context menu (also selects it), then Delete.
     await act(async () => {
@@ -160,7 +168,7 @@ describe('ReportsModule shell (Task 6)', () => {
 
     // remove() was invoked and the selection was cleared → the Export/Print tile is disabled again.
     await vi.waitFor(() => expect((window as any).api.reports.remove).toHaveBeenCalledWith('r1'));
-    await vi.waitFor(() => expect(buttonByText('Export / Print').disabled).toBe(true));
+    await vi.waitFor(() => expect(tileByText('Export PDF').disabled).toBe(true));
   });
 
   it('the editor header status <select> updates report.status on change', async () => {
