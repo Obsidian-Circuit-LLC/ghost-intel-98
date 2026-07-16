@@ -583,6 +583,10 @@ export interface AppSettings {
      *  be toggled on. Default false. */
     clearnetAcknowledged: boolean;
   };
+  /** Reports module: the default author seeded onto a newly created report. Nested
+   *  fixed-shape block — MUST be deep-merged in mergeSettings so an older persisted
+   *  settings block that predates it keeps the key on upgrade (v3.24.0 dataloss class). */
+  reports?: { author?: string };
 }
 
 export const defaultShortcuts: AccessShortcut[] = [
@@ -732,6 +736,7 @@ export const defaultSettings: AppSettings = {
   searchlight: { networkEnabled: false, torConcurrency: 8, clearnetConcurrency: 16, scorer: { foundThreshold: null, maybeFloor: null, lightweightMode: false, useMl: false } },
   socmint: { networkEnabled: false, transport: 'direct' },
   x: { networkEnabled: false, clearnetAcknowledged: false },
+  reports: { author: '' },
   plugins: {},
   offensive: { confirmMode: 'per-scan', rateLimitPerSec: 10, downstreamProxy: null, requireSignedAuthorization: false, issuerKeys: [] },
   bgconn: { idleTeardownAfterMinutes: 120, defaultRouting: 'tor', maxReconnects: 20, maxSessionAgeMinutes: 720 }

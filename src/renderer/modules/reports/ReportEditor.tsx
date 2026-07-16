@@ -237,6 +237,19 @@ export function ReportEditor(props: ReportEditorProps): JSX.Element {
                 />
               </label>
 
+              <label className="ga98-report-status-field">
+                <span>Status</span>
+                <select
+                  aria-label="Report status"
+                  value={report.status}
+                  onChange={(e) => patch({ status: e.target.value as Report['status'] })}
+                >
+                  <option value="draft">Draft</option>
+                  <option value="completed">Completed</option>
+                  <option value="archived">Archived</option>
+                </select>
+              </label>
+
               <div className="ga98-report-from">
                 <label>
                   <span>From</span>
