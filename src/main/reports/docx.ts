@@ -247,7 +247,9 @@ export function renderReportDocx(
     }
   }
 
-  if (report.signature) body.push(para(richRun('Signature: ' + report.signature, {})));
+  const signatureImg = addImage(report.signatureRef, 40);
+  if (signatureImg) body.push(para(imageRun(signatureImg, imgId++)));
+  else if (report.signature) body.push(para(richRun('Signature: ' + report.signature, {})));
 
   const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`
     + `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">`

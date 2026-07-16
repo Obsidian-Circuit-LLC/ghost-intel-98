@@ -1494,7 +1494,7 @@ input.ga98-text, select.ga98-text {
 .ga98-report-toolbar button, .ga98-report-toolbar select { background: #c0c0c0; color: #000; border: 2px solid; border-color: #fff #808080 #808080 #fff; font-size: 11px; min-height: 22px; cursor: pointer; }
 .ga98-report-toolbar button:active:not(:disabled) { border-color: #808080 #fff #fff #808080; }
 .ga98-report-toolbar button[aria-pressed='true'], .ga98-report-toolbar button.active { border-color: #808080 #fff #fff #808080; background: #b0b0b0; }
-.ga98-report-pagescroll { flex: 1; overflow: auto; background: #808080; display: flex; justify-content: center; padding: 16px; }
+.ga98-report-pagescroll { flex: 1; overflow: auto; background: #808080; display: flex; justify-content: center; align-items: flex-start; padding: 16px; }
 .ga98-report-page { width: 816px; min-height: 1056px; margin: 0 auto; background: #fff; color: #111; box-shadow: 2px 2px 8px rgba(0, 0, 0, 0.5); padding: 72px; box-sizing: border-box; transform: scale(var(--ga98-report-zoom, 1)); transform-origin: top center; }
 .ga98-report-banner-img { max-width: 100%; display: block; margin-bottom: 16px; }
 .ga98-report-imageblock-img { max-width: 100%; display: block; }

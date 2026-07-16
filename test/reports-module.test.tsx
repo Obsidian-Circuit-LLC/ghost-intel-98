@@ -119,7 +119,7 @@ describe('ReportsModule', () => {
     await vi.waitFor(() => {
       expect(container.querySelector('.ga98-report-banner')).toBeTruthy();
       expect(container.querySelector('select[aria-label="From contact"]')).toBeTruthy();
-      expect(container.querySelector('select[aria-label="To contact"]')).toBeTruthy();
+      expect(container.querySelector('input[aria-label="To recipient"]')).toBeTruthy();
     });
   });
 

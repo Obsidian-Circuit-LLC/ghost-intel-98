@@ -41,21 +41,27 @@ export function ImageBlock(props: ImageBlockProps): JSX.Element {
   const frameRef = useRef<HTMLDivElement | null>(null);
 
   /** Begin a resize drag from the bottom-right handle. Width is computed from the pointer's x
-   *  relative to the image frame's left edge, as a percentage of the frame's own width, then
-   *  clamped. Listeners are attached to `window` (not the handle) so the drag keeps tracking even
-   *  when the pointer outruns the small handle. */
+   *  relative to the image frame's left edge, as a percentage of the body COLUMN width (the frame's
+   *  block parent), then clamped. The denominator must be the column, not the frame's own rect:
+   *  since Task 3 the frame itself is sized to widthPct% of the column, so the handle rests at the
+   *  frame's right edge (px ≈ frameWidth) — dividing by the frame width would read 100% the instant
+   *  a sub-100% photo is grabbed. Dividing by the (constant) column width makes the drag track the
+   *  pointer proportionally. Listeners are attached to `window` (not the handle) so the drag keeps
+   *  tracking even when the pointer outruns the small handle. */
   function startResize(e: React.MouseEvent): void {
     e.preventDefault();
     e.stopPropagation();
     const frame = frameRef.current;
     if (!frame) return;
     const rect = frame.getBoundingClientRect();
-    // Fall back to a sane frame width if layout gives 0 (jsdom): keeps the delta finite.
-    const frameWidth = rect.width > 0 ? rect.width : 100;
+    // widthPct is a fraction of the body column; the frame's block parent spans that column.
+    const columnRect = (frame.parentElement ?? frame).getBoundingClientRect();
+    // Fall back to a sane column width if layout gives 0 (jsdom): keeps the delta finite.
+    const columnWidth = columnRect.width > 0 ? columnRect.width : 100;
 
     function onMove(ev: MouseEvent): void {
       const px = ev.clientX - rect.left;
-      onChange({ widthPct: clampPct((px / frameWidth) * 100) });
+      onChange({ widthPct: clampPct((px / columnWidth) * 100) });
     }
     function onUp(): void {
       window.removeEventListener('mousemove', onMove);
@@ -71,17 +77,21 @@ export function ImageBlock(props: ImageBlockProps): JSX.Element {
       style={{ textAlign: block.align ?? 'left' }}
       onClick={onSelect}
     >
-      <div className="ga98-report-imageblock-frame" ref={frameRef}>
+      <div
+        className="ga98-report-imageblock-frame"
+        ref={frameRef}
+        style={{ width: `${clampPct(block.widthPct)}%` }}
+      >
         {src ? (
           <img
             className="ga98-report-imageblock-img"
             src={src}
             alt={block.caption || 'Report photo'}
-            style={{ width: `${clampPct(block.widthPct)}%`, display: 'inline-block' }}
+            style={{ width: '100%', display: 'block' }}
             draggable={false}
           />
         ) : (
-          <div className="ga98-report-imageblock-loading" style={{ width: `${clampPct(block.widthPct)}%`, display: 'inline-block' }}>
+          <div className="ga98-report-imageblock-loading" style={{ width: '100%', display: 'block' }}>
             Loading image…
           </div>
         )}

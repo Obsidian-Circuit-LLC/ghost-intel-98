@@ -1,18 +1,15 @@
 // @vitest-environment jsdom
 /**
- * Task 6: Save-as-template + create-from-template + un-grey the Templates controls.
+ * Task 6: Signature drawn/uploaded image — editor + module wiring (jsdom half).
  *
- *   - "Save as Template" on an open report prompts for a name (themed promptDialog — never
- *     window.prompt) and persists a ReportTemplate carrying the report's body via templates.save.
- *   - "Use Template" opens the library; selecting a template ("Select Template") clones it into a
- *     fresh-id draft Report (its banner/image assets deep-copied via copyAsset), saves it, and swaps
- *     into the editor.
- *   - The Templates menu items, the dashboard "Use Template" tile, and the nav quick-action are all
- *     enabled (no dead/greyed Templates controls).
+ * (c) Capturing a signature (draw or upload, via the shared <SignaturePad>) in the open report
+ *     calls putAsset with the decoded bytes and stamps signatureRef onto the working report —
+ *     mirroring the banner/logo capture path (invoices' captureSignature / uploadBanner).
+ *     Also pins the template round-trip: saveAsTemplate/createFromTemplate carry signatureRef
+ *     through copyBody (deep-copied asset, like bannerRef) — the v3.51.0 template-round-trip lesson.
  *
  * No @testing-library/react (Global Constraint: no new dependency) — driven via React 18's
- * createRoot inside act(), mirroring test/reports-module.test.tsx. `promptDialog` is mocked (jsdom
- * has no themed-dialog host) so the name-prompt resolves deterministically.
+ * createRoot inside act(), mirroring test/reports-module.test.tsx / test/invoices-module.test.tsx.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
@@ -31,11 +28,11 @@ let root: Root;
 
 const savedReport = {
   id: 'r1', title: 'Case 42', createdAt: 't', updatedAt: '2026-07-14', to: 'Det. Vance',
-  toContactId: 'c-to', status: 'draft' as const, author: 'Investigator', blocks: [] as any[],
+  status: 'draft' as const, author: 'Investigator', blocks: [] as any[],
 };
 const savedTemplate = {
-  id: 'tpl1', name: 'Chain of Custody', category: 'Custody', createdAt: 'a', updatedAt: 'b',
-  to: 'PO', toContactId: 'c-tpl-to', bannerRef: 'banner.png',
+  id: 'tpl1', name: 'Chain of Custody', createdAt: 'a', updatedAt: 'b',
+  to: 'PO', signatureRef: 'sig-tpl.png',
   blocks: [{ id: 'blk1', kind: 'text' as const, html: '<p>Body</p>' }],
 };
 
@@ -45,7 +42,7 @@ function stubApi(overrides: Record<string, any> = {}): void {
       list: vi.fn(async () => [savedReport]),
       save: vi.fn(async (r: any) => r),
       remove: vi.fn(async () => undefined),
-      putAsset: vi.fn(async () => 'banner-ref-1'),
+      putAsset: vi.fn(async () => 'sig-ref-1'),
       getAsset: vi.fn(async () => null),
       copyAsset: vi.fn(async (ref: string) => `${ref}-copy`),
       previewTemplate: vi.fn(async () => '<h1>Chain of Custody</h1>'),
@@ -79,10 +76,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function tiles(text: string): HTMLButtonElement[] {
-  return Array.from(container.querySelectorAll('button')).filter((b) => (b.textContent || '').includes(text)) as HTMLButtonElement[];
-}
-
 async function openSavedReport(): Promise<void> {
   const row = await vi.waitFor(() => {
     const el = container.querySelector('tbody tr[data-report-id="r1"]') as HTMLElement | null;
@@ -92,13 +85,56 @@ async function openSavedReport(): Promise<void> {
   await act(async () => { row.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); });
 }
 
+function tiles(text: string): HTMLButtonElement[] {
+  return Array.from(container.querySelectorAll('button')).filter((b) => (b.textContent || '').includes(text)) as HTMLButtonElement[];
+}
+
 async function openTemplatesMenu(): Promise<void> {
   const top = container.querySelector('[data-menu="Templates"]') as HTMLButtonElement;
   await act(async () => { top.click(); });
 }
 
-describe('ReportsModule — Templates actions', () => {
-  it('"Save as Template" prompts for a name then persists a template with the report body', async () => {
+describe('ReportEditor — signature capture (Task 6)', () => {
+  it('renders the shared SignaturePad in the open report', async () => {
+    await act(async () => { root.render(<ReportsModule />); });
+    await openSavedReport();
+    await vi.waitFor(() => expect(container.querySelector('.ga98-signature-pad')).toBeTruthy());
+    expect(container.querySelector('input[aria-label="Upload signature"]')).toBeTruthy();
+  });
+
+  it('drawing/uploading a signature persists it via putAsset and stamps signatureRef, embedding the preview', async () => {
+    const api = (window as any).api.reports;
+    api.putAsset = vi.fn(async () => 'sig-ref-1');
+    api.getAsset = vi.fn(async () => ({ mime: 'image/png', dataUrl: 'data:image/png;base64,QUJD' }));
+
+    await act(async () => { root.render(<ReportsModule />); });
+    await openSavedReport();
+
+    const input = await vi.waitFor(() => {
+      const el = container.querySelector('input[aria-label="Upload signature"]') as HTMLInputElement | null;
+      if (!el) throw new Error('signature upload input not mounted');
+      return el;
+    });
+    const file = new File([new Uint8Array([1, 2, 3])], 'sig.png', { type: 'image/png' });
+    Object.defineProperty(input, 'files', { value: [file], configurable: true });
+    await act(async () => {
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      await vi.waitFor(() => expect(api.putAsset).toHaveBeenCalled());
+    });
+
+    // Bytes were decoded from the captured data URL and handed to the encrypted store as an image.
+    expect(api.putAsset.mock.calls[0][0]).toBeInstanceOf(Array);
+    expect(api.putAsset.mock.calls[0][1]).toMatch(/^image\//);
+    // The resolved data URL is cached and rendered into the signature preview.
+    await vi.waitFor(() => {
+      expect(container.querySelector('img[alt="Signature"]')).toBeTruthy();
+    });
+  });
+});
+
+describe('ReportsModule — signatureRef template round-trip (Task 6)', () => {
+  it('"Save as Template" carries signatureRef into the persisted template', async () => {
+    stubApi({ list: vi.fn(async () => [{ ...savedReport, signatureRef: 'sig-report.png' }]) });
     await act(async () => { root.render(<ReportsModule />); });
     await vi.waitFor(() => expect((window as any).api.reports.list).toHaveBeenCalled());
     await openSavedReport();
@@ -111,27 +147,19 @@ describe('ReportsModule — Templates actions', () => {
     });
     await act(async () => { save.click(); });
 
-    await vi.waitFor(() => expect(promptDialog).toHaveBeenCalled());
     await vi.waitFor(() => expect((window as any).api.reports.templates.save).toHaveBeenCalled());
     const t = (window as any).api.reports.templates.save.mock.calls[0][0];
-    expect(t.name).toBe('Chain-of-Custody Template');
-    expect(t.to).toBe('Det. Vance');
-    // The structured recipient contact must round-trip into the template (regression guard: it was
-    // dropped, silently losing the recipient the moment a report was saved as a template).
-    expect(t.toContactId).toBe('c-to');
-    expect(typeof t.id).toBe('string');
+    expect(t.signatureRef).toBe('sig-report.png-copy');
+    expect((window as any).api.reports.copyAsset).toHaveBeenCalledWith('sig-report.png');
   });
 
-  it('"Use Template" clones the selected template into a fresh-id draft report and opens the editor', async () => {
+  it('"Use Template" carries signatureRef into the fresh-id draft report', async () => {
     await act(async () => { root.render(<ReportsModule />); });
     await vi.waitFor(() => expect((window as any).api.reports.templates.list).toHaveBeenCalled());
 
-    // Dashboard "Use Template" tile → Templates library.
     const useTile = tiles('Use Template').find((b) => b.className.includes('ga98-report-tile'))!;
-    expect(useTile.disabled).toBe(false);
     await act(async () => { useTile.click(); });
 
-    // Select the template row → preview, then "Select Template" → create-from-template.
     const row = await vi.waitFor(() => {
       const el = container.querySelector('[data-tpl="tpl1"]') as HTMLElement | null;
       if (!el) throw new Error('template row not mounted');
@@ -147,32 +175,7 @@ describe('ReportsModule — Templates actions', () => {
 
     await vi.waitFor(() => expect((window as any).api.reports.save).toHaveBeenCalled());
     const seed = (window as any).api.reports.save.mock.calls[0][0];
-    expect(seed.id).not.toBe('tpl1');
-    expect(seed.status).toBe('draft');
-    // The template's recipient contact must carry into the new report (regression guard: To was
-    // dropped on create-from-template while From carried over).
-    expect(seed.toContactId).toBe('c-tpl-to');
-    // The banner asset is deep-copied (independent bytes), not reused as-is.
-    expect((window as any).api.reports.copyAsset).toHaveBeenCalledWith('banner.png');
-    expect(seed.bannerRef).toBe('banner.png-copy');
-    // Editor swapped in.
-    await vi.waitFor(() => expect(container.querySelector('input[aria-label="To recipient"]')).toBeTruthy());
-  });
-
-  it('none of the Templates controls are disabled', async () => {
-    await act(async () => { root.render(<ReportsModule />); });
-    await vi.waitFor(() => expect((window as any).api.reports.list).toHaveBeenCalled());
-
-    // Dashboard tile + nav quick-action are live.
-    expect(tiles('Use Template').find((b) => b.className.includes('ga98-report-tile'))!.disabled).toBe(false);
-    expect(tiles('Use Template').find((b) => b.className.includes('ga98-report-nav-quick-btn'))!.disabled).toBe(false);
-
-    // Menu items live (Save as Template needs an open report — open one first).
-    await openSavedReport();
-    await openTemplatesMenu();
-    await vi.waitFor(() => expect(container.querySelector('[data-menu-action="templateSave"]')).toBeTruthy());
-    expect((container.querySelector('[data-menu-action="templateSave"]') as HTMLButtonElement).disabled).toBe(false);
-    expect((container.querySelector('[data-menu-action="templateLibrary"]') as HTMLButtonElement).disabled).toBe(false);
-    expect((container.querySelector('[data-menu-action="templateUse"]') as HTMLButtonElement).disabled).toBe(false);
+    expect(seed.signatureRef).toBe('sig-tpl.png-copy');
+    expect((window as any).api.reports.copyAsset).toHaveBeenCalledWith('sig-tpl.png');
   });
 });

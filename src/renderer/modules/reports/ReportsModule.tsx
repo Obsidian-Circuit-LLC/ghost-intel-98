@@ -162,8 +162,9 @@ export function ReportsModule(): JSX.Element {
   // image ref is re-encrypted via copyAsset (fresh uuid) and every block gets a fresh id. This is
   // what makes a template survive deletion of its source report (and vice-versa). A ref that fails
   // to copy falls back to the original so the body is never left dangling.
-  async function copyBody(src: { bannerRef?: string; blocks: ReportBlock[] }): Promise<{ bannerRef?: string; blocks: ReportBlock[] }> {
+  async function copyBody(src: { bannerRef?: string; signatureRef?: string; blocks: ReportBlock[] }): Promise<{ bannerRef?: string; signatureRef?: string; blocks: ReportBlock[] }> {
     const bannerRef = src.bannerRef ? (await window.api.reports.copyAsset(src.bannerRef)) ?? src.bannerRef : undefined;
+    const signatureRef = src.signatureRef ? (await window.api.reports.copyAsset(src.signatureRef)) ?? src.signatureRef : undefined;
     const blocks: ReportBlock[] = [];
     for (const b of src.blocks) {
       if (b.kind === 'image') {
@@ -173,7 +174,7 @@ export function ReportsModule(): JSX.Element {
         blocks.push({ ...b, id: uid() });
       }
     }
-    return { bannerRef, blocks };
+    return { bannerRef, signatureRef, blocks };
   }
 
   // Save the open report as a reusable template. Prompts for a name via the themed promptDialog
@@ -186,12 +187,12 @@ export function ReportsModule(): JSX.Element {
     const trimmed = name.trim();
     if (trimmed.length === 0) return;
     const stamp = nowIso();
-    const { bannerRef, blocks } = await copyBody(report);
+    const { bannerRef, signatureRef, blocks } = await copyBody(report);
     const template: ReportTemplate = {
       id: uid(), name: trimmed, createdAt: stamp, updatedAt: stamp,
       bannerRef, fromContactId: report.fromContactId, toContactId: report.toContactId, to: report.to, reportDate: report.reportDate,
       caseNumber: report.caseNumber, referenceNumber: report.referenceNumber,
-      classification: report.classification, signature: report.signature,
+      classification: report.classification, signature: report.signature, signatureRef,
       blocks
     };
     await window.api.reports.templates.save(template);
@@ -205,12 +206,12 @@ export function ReportsModule(): JSX.Element {
   // like a blank new report.
   async function createFromTemplate(t: ReportTemplate): Promise<void> {
     const stamp = nowIso();
-    const { bannerRef, blocks } = await copyBody(t);
+    const { bannerRef, signatureRef, blocks } = await copyBody(t);
     const seed: Report = {
       id: uid(), title: t.name || 'Untitled report', createdAt: stamp, updatedAt: stamp,
       bannerRef, fromContactId: t.fromContactId, toContactId: t.toContactId, to: t.to, reportDate: t.reportDate,
       caseNumber: t.caseNumber, referenceNumber: t.referenceNumber, classification: t.classification,
-      signature: t.signature, status: 'draft', author,
+      signature: t.signature, signatureRef, status: 'draft', author,
       blocks
     };
     const saved = await window.api.reports.save(seed);
@@ -258,6 +259,27 @@ export function ReportsModule(): JSX.Element {
 
   function removeBanner(): void {
     setReport((prev) => (prev ? { ...prev, bannerRef: undefined } : prev));
+  }
+
+  // Signature capture (draw or upload, via the shared <SignaturePad>) arrives as a data URL. Mirror
+  // uploadBanner/invoices' captureSignature: decode to bytes, persist as an encrypted asset via
+  // putAsset, cache the resolved data URL, and stamp signatureRef so it flows into the preview and
+  // both exports (report-html.ts / docx.ts).
+  async function captureSignature(dataUrl: string, mime: 'image/png' | 'image/jpeg'): Promise<void> {
+    if (!report) return;
+    const m = /^data:([^;,]+)[^,]*?(;base64)?,([\s\S]*)$/.exec(dataUrl);
+    if (!m) return;
+    const resolvedMime = m[1] === 'image/jpeg' ? 'image/jpeg' : mime;
+    const bin = m[2] ? atob(m[3]) : decodeURIComponent(m[3]);
+    const bytes = Array.from(bin, (ch) => ch.charCodeAt(0));
+    try {
+      const ref = await window.api.reports.putAsset(bytes, resolvedMime);
+      const a = await window.api.reports.getAsset(ref);
+      if (a) setAssets((prev) => ({ ...prev, [ref]: a.dataUrl }));
+      setReport((prev) => (prev ? { ...prev, signatureRef: ref } : prev));
+    } catch {
+      toast.error('Could not save signature — image must be a PNG/JPEG under 25 MB.');
+    }
   }
 
   // Encrypt one image's bytes into the report asset store, cache its preview URL, and append a photo
@@ -472,6 +494,7 @@ export function ReportsModule(): JSX.Element {
               onAutosave={(r) => { void autosave(r); }}
               onUploadBanner={(f) => { void uploadBanner(f); }}
               onRemoveBanner={removeBanner}
+              onCaptureSignature={(dataUrl, mime) => { void captureSignature(dataUrl, mime); }}
               onManageContacts={() => setShowContacts(true)}
               onManageDescriptors={() => setShowDescriptors(true)}
               onManageIntroductions={() => setShowIntroductions(true)}
@@ -528,6 +551,7 @@ export function ReportsModule(): JSX.Element {
       {showImport ? (
         <CasePhotoPicker
           onAdd={(picks) => { void importCasePhotos(picks); }}
+          onUploadFile={(f) => { void addPhoto(f); }}
           onClose={() => setShowImport(false)}
         />
       ) : null}

@@ -115,9 +115,11 @@ describe('TextBlock descriptor context menu', () => {
       body.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 }));
     });
 
-    expect(container.textContent).toContain('OSINT.Industries');
-    expect(container.textContent).toContain('A tool that finds public links');
-    const buttons = Array.from(container.querySelectorAll('button')).map((b) => b.textContent);
+    // Task 1: the descriptor menu is portaled to document.body (see test/reports-descmenu.test.tsx),
+    // so its content is queried against `document`, not the render `container`.
+    expect(document.body.textContent).toContain('OSINT.Industries');
+    expect(document.body.textContent).toContain('A tool that finds public links');
+    const buttons = Array.from(document.querySelectorAll('.ga98-report-descmenu button')).map((b) => b.textContent);
     expect(buttons).toContain('Insert text');
     expect(buttons).toContain('Insert with title');
   });
@@ -134,7 +136,7 @@ describe('TextBlock descriptor context menu', () => {
       body.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 5, clientY: 5 }));
     });
 
-    const insertBtn = Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Insert text') as HTMLButtonElement;
+    const insertBtn = Array.from(document.querySelectorAll('.ga98-report-descmenu button')).find((b) => b.textContent === 'Insert text') as HTMLButtonElement;
     expect(insertBtn).toBeTruthy();
     await act(async () => { insertBtn.click(); });
 
@@ -155,7 +157,7 @@ describe('TextBlock descriptor context menu', () => {
       body.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 5, clientY: 5 }));
     });
 
-    const insertBtn = Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Insert with title') as HTMLButtonElement;
+    const insertBtn = Array.from(document.querySelectorAll('.ga98-report-descmenu button')).find((b) => b.textContent === 'Insert with title') as HTMLButtonElement;
     expect(insertBtn).toBeTruthy();
     await act(async () => { insertBtn.click(); });
 
@@ -179,8 +181,8 @@ describe('TextBlock descriptor context menu', () => {
       body.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 5, clientY: 5 }));
     });
 
-    expect(container.textContent).toContain('Standard preamble');
-    const insertBtn = Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Insert introduction') as HTMLButtonElement;
+    expect(document.body.textContent).toContain('Standard preamble');
+    const insertBtn = Array.from(document.querySelectorAll('.ga98-report-descmenu button')).find((b) => b.textContent === 'Insert introduction') as HTMLButtonElement;
     expect(insertBtn).toBeTruthy();
     await act(async () => { insertBtn.click(); });
 
@@ -199,12 +201,12 @@ describe('TextBlock descriptor context menu', () => {
     await act(async () => {
       body.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 5, clientY: 5 }));
     });
-    expect(container.querySelector('.ga98-report-descmenu')).toBeTruthy();
+    expect(document.querySelector('.ga98-report-descmenu')).toBeTruthy();
 
     await act(async () => {
       document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
     });
-    expect(container.querySelector('.ga98-report-descmenu')).toBeNull();
+    expect(document.querySelector('.ga98-report-descmenu')).toBeNull();
   });
 });
 
