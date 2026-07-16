@@ -143,4 +143,33 @@ describe('renderReportDocx expansion', () => {
     // the body must not end directly on </w:tbl><w:sectPr> — a paragraph sits between them
     expect(xml).toMatch(/<\/w:tbl><w:p><\/w:p>/);
   });
+
+  it('emits case/reference/classification/signature metadata (escaped) when present', () => {
+    const r = baseReport([]);
+    r.caseNumber = 'CASE-1';
+    r.referenceNumber = 'REF-2';
+    r.classification = 'Confidential';
+    r.signature = 'J. McGraw';
+    const xml = docXml(renderReportDocx(r, {}, null));
+    expect(xml).toContain('CASE-1');
+    expect(xml).toContain('REF-2');
+    expect(xml).toContain('Confidential');
+    expect(xml).toContain('J. McGraw');
+  });
+
+  it('escapes metadata field values (no raw markup)', () => {
+    const r = baseReport([]);
+    r.caseNumber = '<b>x</b>';
+    const xml = docXml(renderReportDocx(r, {}, null));
+    expect(xml).not.toContain('<b>x</b>');
+    expect(xml).toContain('&lt;b&gt;x&lt;/b&gt;');
+  });
+
+  it('omits metadata when fields are absent', () => {
+    const xml = docXml(renderReportDocx(baseReport([]), {}, null));
+    expect(xml).not.toContain('Case #');
+    expect(xml).not.toContain('Reference #');
+    expect(xml).not.toContain('Classification:');
+    expect(xml).not.toContain('Signature:');
+  });
 });

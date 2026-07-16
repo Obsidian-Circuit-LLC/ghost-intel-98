@@ -212,6 +212,9 @@ export function renderReportDocx(report: Report, assets: Record<string, string>,
   body.push(para(richRun('To', { bold: true })));
   body.push(para(richRun(report.to, {})));
   if (report.reportDate) body.push(para(richRun('Date: ' + report.reportDate, {})));
+  if (report.caseNumber) body.push(para(richRun('Case #: ' + report.caseNumber, {})));
+  if (report.referenceNumber) body.push(para(richRun('Reference #: ' + report.referenceNumber, {})));
+  if (report.classification) body.push(para(richRun('Classification: ' + report.classification, {})));
 
   for (const b of report.blocks as ReportBlock[]) {
     if (b.kind === 'text') {
@@ -230,6 +233,8 @@ export function renderReportDocx(report: Report, assets: Record<string, string>,
       body.push(para(richRun(b.caption, { size: smallSz })));
     }
   }
+
+  if (report.signature) body.push(para(richRun('Signature: ' + report.signature, {})));
 
   const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`
     + `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">`

@@ -93,4 +93,36 @@ describe('buildReportHtml expansion', () => {
   it('embeds a fixed-width page style', () => {
     expect(buildReportHtml(base([]), {}, null)).toMatch(/max-width:\s*8\.5in|width:\s*8\.5in|816px/);
   });
+
+  it('renders case/reference/classification/signature metadata (escaped) when present', () => {
+    const r = base([]);
+    r.caseNumber = 'CASE-1';
+    r.referenceNumber = 'REF-2';
+    r.classification = 'Confidential';
+    r.signature = 'J. McGraw';
+    const html = buildReportHtml(r, {}, null);
+    expect(html).toContain('CASE-1');
+    expect(html).toContain('REF-2');
+    expect(html).toContain('Confidential');
+    expect(html).toContain('J. McGraw');
+  });
+
+  it('escapes metadata field values (no raw markup)', () => {
+    const r = base([]);
+    r.caseNumber = '<b>x</b>';
+    r.signature = '<i>sig</i>';
+    const html = buildReportHtml(r, {}, null);
+    expect(html).not.toContain('<b>x</b>');
+    expect(html).toContain('&lt;b&gt;x&lt;/b&gt;');
+    expect(html).not.toContain('<i>sig</i>');
+    expect(html).toContain('&lt;i&gt;sig&lt;/i&gt;');
+  });
+
+  it('omits metadata lines entirely when fields are absent', () => {
+    const html = buildReportHtml(base([]), {}, null);
+    expect(html).not.toContain('Case #');
+    expect(html).not.toContain('Reference #');
+    expect(html).not.toContain('Classification');
+    expect(html).not.toContain('Signature');
+  });
 });
