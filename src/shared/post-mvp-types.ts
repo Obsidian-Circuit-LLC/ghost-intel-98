@@ -294,6 +294,9 @@ export interface AiConversationSummary {
   title: string;
   updatedAt: string;
   messageCount: number;
+  /** Mirrors `AiConversation.memoryExcluded` so the conversation list can render the
+   *  Forget/Remember-from-memory toggle without fetching the full record. Absent = included. */
+  memoryExcluded?: boolean;
 }
 
 /** What the renderer sends to persist a conversation (timestamps managed by the store). */

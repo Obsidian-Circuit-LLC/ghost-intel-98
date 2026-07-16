@@ -46,7 +46,7 @@ export async function list(): Promise<AiConversationSummary[]> {
   return all
     .slice()
     .sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''))
-    .map((c) => ({ id: c.id, title: c.title, updatedAt: c.updatedAt, messageCount: c.messages?.length ?? 0 }));
+    .map((c) => ({ id: c.id, title: c.title, updatedAt: c.updatedAt, messageCount: c.messages?.length ?? 0, memoryExcluded: c.memoryExcluded }));
 }
 
 export async function get(id: string): Promise<AiConversation | null> {

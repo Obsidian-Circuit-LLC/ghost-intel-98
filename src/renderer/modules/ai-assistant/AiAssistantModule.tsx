@@ -148,6 +148,16 @@ export function AiAssistantModule(): JSX.Element {
       refreshConvos();
     } catch (err) { toast.error(`Delete failed: ${(err as Error).message}`); }
   }
+  // Reversible memory tombstone: forgetting keeps the chat here but drops it from the memory index
+  // (its Mind's Eye node/chunks vanish); remembering brings it back. The chat record is never
+  // deleted by this toggle — that's what makes it reversible.
+  async function toggleMemory(c: AiConversationSummary): Promise<void> {
+    try {
+      if (c.memoryExcluded) await window.api.memory.rememberConversation(c.id);
+      else await window.api.memory.forgetConversation(c.id);
+      refreshConvos();
+    } catch (err) { toast.error(`Memory update failed: ${(err as Error).message}`); }
+  }
 
   // --- Memory panel (transparency + governance, Task 10) ---
   // "Recalled" = exactly what was injected for the last answer (RAG hits + adaptive-profile
@@ -613,6 +623,14 @@ export function AiAssistantModule(): JSX.Element {
           {convos.map((c) => (
             <li key={c.id} data-selected={c.id === convoIdRef.current} title={`${c.messageCount} message${c.messageCount === 1 ? '' : 's'} · ${new Date(c.updatedAt).toLocaleString()}`}>
               <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer', fontSize: 11 }} onClick={() => void loadConvo(c.id)}>{c.title}</span>
+              <button
+                onClick={() => void toggleMemory(c)}
+                style={{ minWidth: 0, padding: '0 5px', opacity: c.memoryExcluded ? 0.5 : 1 }}
+                aria-label={c.memoryExcluded ? 'Remember' : 'Forget from memory'}
+                title={c.memoryExcluded
+                  ? 'Remember: bring this chat back into memory (recalled again, reappears in Mind’s Eye)'
+                  : 'Forget from memory: the chat stays here, but it stops being recalled and leaves Mind’s Eye'}
+              >🧠</button>
               <button onClick={() => void deleteConvo(c.id)} style={{ minWidth: 0, padding: '0 5px' }} title="Delete this conversation">×</button>
             </li>
           ))}
