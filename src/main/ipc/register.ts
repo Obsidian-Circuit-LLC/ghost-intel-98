@@ -1513,8 +1513,12 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     const id = a[0] as string;
     const template = (await reportStore.listTemplates()).find((t) => t.id === id);
     if (!template) return '';
+    const contacts = await reportStore.listContacts();
     const contact = template.fromContactId
-      ? (await reportStore.listContacts()).find((c) => c.id === template.fromContactId) ?? null
+      ? contacts.find((c) => c.id === template.fromContactId) ?? null
+      : null;
+    const toContact = template.toContactId
+      ? contacts.find((c) => c.id === template.toContactId) ?? null
       : null;
     const refs = new Set<string>();
     if (template.bannerRef) refs.add(template.bannerRef);
@@ -1530,20 +1534,24 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     // the Report shape buildReportHtml expects (name→title, no author/status shown in the export).
     const asReport: Report = {
       id: template.id, title: template.name, createdAt: template.createdAt, updatedAt: template.updatedAt,
-      bannerRef: template.bannerRef, fromContactId: template.fromContactId, to: template.to,
+      bannerRef: template.bannerRef, fromContactId: template.fromContactId, toContactId: template.toContactId, to: template.to,
       reportDate: template.reportDate, caseNumber: template.caseNumber, referenceNumber: template.referenceNumber,
       classification: template.classification, signature: template.signature,
       status: 'draft', author: '', blocks: template.blocks
     };
-    return buildReportHtml(asReport, assets, contact);
+    return buildReportHtml(asReport, assets, contact, toContact);
   });
 
   safeHandle(channels.reports.exportPdf, async (...a) => {
     const id = a[0] as string;
     const report = (await reportStore.listReports()).find((r) => r.id === id);
     if (!report) return null;
+    const contacts = await reportStore.listContacts();
     const contact = report.fromContactId
-      ? (await reportStore.listContacts()).find((c) => c.id === report.fromContactId) ?? null
+      ? contacts.find((c) => c.id === report.fromContactId) ?? null
+      : null;
+    const toContact = report.toContactId
+      ? contacts.find((c) => c.id === report.toContactId) ?? null
       : null;
     const refs = new Set<string>();
     if (report.bannerRef) refs.add(report.bannerRef);
@@ -1555,7 +1563,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
         if (asset) assets[ref] = `data:${asset.mime};base64,${asset.bytes.toString('base64')}`;
       } catch { /* a malformed/missing ref must not abort the whole export */ }
     }
-    const pdf = await reportToPdf(report, assets, contact);
+    const pdf = await reportToPdf(report, assets, contact, toContact);
     return saveBufferWithDialog(getWindow(), `${report.title || 'report'}.pdf`, pdf);
   });
   // DOCX export — same id-in resolution as exportPdf, but an editable OOXML .docx. renderReportDocx
@@ -1565,8 +1573,12 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     const id = a[0] as string;
     const report = (await reportStore.listReports()).find((r) => r.id === id);
     if (!report) return null;
+    const contacts = await reportStore.listContacts();
     const contact = report.fromContactId
-      ? (await reportStore.listContacts()).find((c) => c.id === report.fromContactId) ?? null
+      ? contacts.find((c) => c.id === report.fromContactId) ?? null
+      : null;
+    const toContact = report.toContactId
+      ? contacts.find((c) => c.id === report.toContactId) ?? null
       : null;
     const refs = new Set<string>();
     if (report.bannerRef) refs.add(report.bannerRef);
@@ -1578,7 +1590,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
         if (asset) assets[ref] = `data:${asset.mime};base64,${asset.bytes.toString('base64')}`;
       } catch { /* a malformed/missing ref must not abort the whole export */ }
     }
-    return saveBufferWithDialog(getWindow(), `${report.title || 'report'}.docx`, renderReportDocx(report, assets, contact));
+    return saveBufferWithDialog(getWindow(), `${report.title || 'report'}.docx`, renderReportDocx(report, assets, contact, toContact));
   });
 
   // ---- GeoINT (vault-gated; network is app-layer gated by settings.geoint.networkEnabled) ----

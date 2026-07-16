@@ -176,7 +176,12 @@ function tableXml(cells: string[][]): string {
   return `<w:tbl><w:tblPr><w:tblBorders><w:top w:val="single" w:sz="4"/><w:left w:val="single" w:sz="4"/><w:bottom w:val="single" w:sz="4"/><w:right w:val="single" w:sz="4"/><w:insideH w:val="single" w:sz="4"/><w:insideV w:val="single" w:sz="4"/></w:tblBorders></w:tblPr>${rows}</w:tbl>`;
 }
 
-export function renderReportDocx(report: Report, assets: Record<string, string>, contact: Contact | null): Buffer {
+export function renderReportDocx(
+  report: Report,
+  assets: Record<string, string>,
+  contact: Contact | null,
+  toContact: Contact | null = null
+): Buffer {
   const media: Media[] = [];
   const addImage = (ref: string | undefined, widthPct: number): Media | null => {
     if (!ref || !assets[ref]) return null;
@@ -201,6 +206,10 @@ export function renderReportDocx(report: Report, assets: Record<string, string>,
     ? [contact.name, contact.title, contact.org, contact.email, contact.phone, contact.address]
         .filter((v): v is string => typeof v === 'string' && v.length > 0)
     : [];
+  const toContactLines = toContact
+    ? [toContact.name, toContact.title, toContact.org, toContact.email, toContact.phone, toContact.address]
+        .filter((v): v is string => typeof v === 'string' && v.length > 0)
+    : [];
 
   const banner = addImage(report.bannerRef, 100);
 
@@ -210,7 +219,11 @@ export function renderReportDocx(report: Report, assets: Record<string, string>,
   body.push(para(richRun('From', { bold: true })));
   for (const line of contactLines) body.push(para(richRun(line, {})));
   body.push(para(richRun('To', { bold: true })));
-  body.push(para(richRun(report.to, {})));
+  if (toContactLines.length > 0) {
+    for (const line of toContactLines) body.push(para(richRun(line, {})));
+  } else {
+    body.push(para(richRun(report.to, {})));
+  }
   if (report.reportDate) body.push(para(richRun('Date: ' + report.reportDate, {})));
   if (report.caseNumber) body.push(para(richRun('Case #: ' + report.caseNumber, {})));
   if (report.referenceNumber) body.push(para(richRun('Reference #: ' + report.referenceNumber, {})));

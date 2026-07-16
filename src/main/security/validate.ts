@@ -1339,6 +1339,9 @@ export function ensureReport(raw: unknown): import('@shared/reports-types').Repo
   if (typeof o['fromContactId'] === 'string' && o['fromContactId'].length > 0 && o['fromContactId'].length <= 64) {
     out.fromContactId = o['fromContactId'];
   }
+  if (typeof o['toContactId'] === 'string' && o['toContactId'].length > 0 && o['toContactId'].length <= 64) {
+    out.toContactId = o['toContactId'];
+  }
   if (typeof o['reportDate'] === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(o['reportDate'])) {
     out.reportDate = o['reportDate'];
   }
@@ -1379,6 +1382,9 @@ export function ensureReportTemplate(raw: unknown): import('@shared/reports-type
   }
   if (typeof o['fromContactId'] === 'string' && o['fromContactId'].length > 0 && o['fromContactId'].length <= 64) {
     out.fromContactId = o['fromContactId'];
+  }
+  if (typeof o['toContactId'] === 'string' && o['toContactId'].length > 0 && o['toContactId'].length <= 64) {
+    out.toContactId = o['toContactId'];
   }
   if (typeof o['reportDate'] === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(o['reportDate'])) {
     out.reportDate = o['reportDate'];

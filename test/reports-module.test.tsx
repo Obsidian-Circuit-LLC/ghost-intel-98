@@ -4,7 +4,8 @@
  *
  * Render smoke test — pins the load-bearing shell wiring: the module lists saved reports and can
  * open the editor, whose fixed header exposes a banner slot, a From <select> of contacts, and a To
- * <input>; the ContactBook lists a saved contact and persists a new one via reports.contacts.save.
+ * contact <select>; the ContactBook lists a saved contact and persists a new one via
+ * reports.contacts.save.
  *
  * No @testing-library/react (Global Constraint: no new dependency) — driven via React 18's
  * createRoot inside act(), mirroring test/invoices-module.test.tsx. window.api.reports is stubbed
@@ -118,7 +119,7 @@ describe('ReportsModule', () => {
     await vi.waitFor(() => {
       expect(container.querySelector('.ga98-report-banner')).toBeTruthy();
       expect(container.querySelector('select[aria-label="From contact"]')).toBeTruthy();
-      expect(container.querySelector('input[aria-label="To recipient"]')).toBeTruthy();
+      expect(container.querySelector('select[aria-label="To contact"]')).toBeTruthy();
     });
   });
 

@@ -31,11 +31,11 @@ let root: Root;
 
 const savedReport = {
   id: 'r1', title: 'Case 42', createdAt: 't', updatedAt: '2026-07-14', to: 'Det. Vance',
-  status: 'draft' as const, author: 'Investigator', blocks: [] as any[],
+  toContactId: 'c-to', status: 'draft' as const, author: 'Investigator', blocks: [] as any[],
 };
 const savedTemplate = {
   id: 'tpl1', name: 'Chain of Custody', category: 'Custody', createdAt: 'a', updatedAt: 'b',
-  to: 'PO', bannerRef: 'banner.png',
+  to: 'PO', toContactId: 'c-tpl-to', bannerRef: 'banner.png',
   blocks: [{ id: 'blk1', kind: 'text' as const, html: '<p>Body</p>' }],
 };
 
@@ -116,6 +116,9 @@ describe('ReportsModule — Templates actions', () => {
     const t = (window as any).api.reports.templates.save.mock.calls[0][0];
     expect(t.name).toBe('Chain-of-Custody Template');
     expect(t.to).toBe('Det. Vance');
+    // The structured recipient contact must round-trip into the template (regression guard: it was
+    // dropped, silently losing the recipient the moment a report was saved as a template).
+    expect(t.toContactId).toBe('c-to');
     expect(typeof t.id).toBe('string');
   });
 
@@ -146,11 +149,14 @@ describe('ReportsModule — Templates actions', () => {
     const seed = (window as any).api.reports.save.mock.calls[0][0];
     expect(seed.id).not.toBe('tpl1');
     expect(seed.status).toBe('draft');
+    // The template's recipient contact must carry into the new report (regression guard: To was
+    // dropped on create-from-template while From carried over).
+    expect(seed.toContactId).toBe('c-tpl-to');
     // The banner asset is deep-copied (independent bytes), not reused as-is.
     expect((window as any).api.reports.copyAsset).toHaveBeenCalledWith('banner.png');
     expect(seed.bannerRef).toBe('banner.png-copy');
     // Editor swapped in.
-    await vi.waitFor(() => expect(container.querySelector('input[aria-label="To recipient"]')).toBeTruthy());
+    await vi.waitFor(() => expect(container.querySelector('select[aria-label="To contact"]')).toBeTruthy());
   });
 
   it('none of the Templates controls are disabled', async () => {
