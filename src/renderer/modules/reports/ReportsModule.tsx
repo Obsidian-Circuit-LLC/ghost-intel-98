@@ -18,7 +18,7 @@ function nowIso(): string { return new Date().toISOString(); }
 
 function seedReport(): Report {
   const stamp = nowIso();
-  return { id: uid(), title: 'Untitled report', createdAt: stamp, updatedAt: stamp, to: '', blocks: [] };
+  return { id: uid(), title: 'Untitled report', createdAt: stamp, updatedAt: stamp, to: '', status: 'draft', author: 'Investigator', blocks: [] };
 }
 
 export function ReportsModule(): JSX.Element {

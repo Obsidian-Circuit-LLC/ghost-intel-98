@@ -31,6 +31,8 @@ export interface Report {
   fromContactId?: string;
   to: string;
   reportDate?: string;
+  status: 'draft' | 'completed' | 'archived';
+  author: string;
   blocks: ReportBlock[];
 }
 

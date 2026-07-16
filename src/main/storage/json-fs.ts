@@ -965,6 +965,7 @@ export function mergeSettings(base: AppSettings, patch: Partial<AppSettings>): A
       watchlist: { ...base.markets.watchlist, ...(patch.markets?.watchlist ?? {}) }
     },
     socmint: { ...base.socmint, ...(patch.socmint ?? {}) },
+    reports: { ...base.reports, ...(patch.reports ?? {}) },
     // Flat config objects: deep-merge so a sub-field added to defaults in a later build
     // survives an older persisted block that predates it (same class as the searchlight
     // scorer regression). plugins is a dynamic Record, so it is intentionally left to the

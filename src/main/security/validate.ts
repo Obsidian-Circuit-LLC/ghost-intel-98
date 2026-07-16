@@ -1314,6 +1314,8 @@ export function ensureReport(raw: unknown): import('@shared/reports-types').Repo
     createdAt: typeof o['createdAt'] === 'string' ? o['createdAt'] : new Date().toISOString(),
     updatedAt: typeof o['updatedAt'] === 'string' ? o['updatedAt'] : new Date().toISOString(),
     to: reportStr(o['to'], MAX_REPORT_TO),
+    status: (o['status'] === 'completed' || o['status'] === 'archived' || o['status'] === 'draft') ? o['status'] : 'draft',
+    author: reportStr(o['author'], MAX_CONTACT_FIELD).length > 0 ? reportStr(o['author'], MAX_CONTACT_FIELD) : 'Investigator',
     blocks
   };
   if (o['bannerRef'] !== undefined) {
