@@ -26,6 +26,12 @@ export const FONT_SIZES: FontSize[] = [
   { key: 'heading', label: 'Heading', pt: 18, bold: true }
 ];
 
+/** Closed whitelist of typefaces guaranteed present on Windows (the only ship target). The sanitizer
+ *  accepts font-family ONLY when the value is exactly one of these strings. */
+export const FONT_FAMILIES: string[] = ['Segoe UI', 'Arial', 'Times New Roman', 'Georgia', 'Courier New', 'Verdana'];
+
+const ALIGNS = new Set(['left', 'center', 'right']);
+
 let hookInstalled = false;
 
 function installHook(): void {
@@ -37,12 +43,22 @@ function installHook(): void {
   // the attribute is stripped regardless of what this hook decides) — no cross-contamination.
   DOMPurify.addHook('uponSanitizeAttribute', (_node, data) => {
     if (data.attrName === 'style') {
-      const m = /font-size:\s*(\d+(?:\.\d+)?)pt/i.exec(data.attrValue || '');
-      if (m) {
-        data.attrValue = `font-size:${m[1]}pt`;
-      } else {
-        data.keepAttr = false;
+      const decls: string[] = [];
+      const raw = data.attrValue || '';
+      const size = /font-size:\s*(\d+(?:\.\d+)?)pt/i.exec(raw);
+      if (size) decls.push(`font-size:${size[1]}pt`);
+      const fam = /font-family:\s*([^;]+)/i.exec(raw);
+      if (fam) {
+        const name = fam[1].trim().replace(/^['"]|['"]$/g, '');
+        if (FONT_FAMILIES.includes(name)) decls.push(`font-family:${name}`);
       }
+      const align = /text-align:\s*(left|center|right)/i.exec(raw);
+      if (align && ALIGNS.has(align[1].toLowerCase())) decls.push(`text-align:${align[1].toLowerCase()}`);
+      if (decls.length > 0) data.attrValue = decls.join(';');
+      else data.keepAttr = false;
+    } else if (data.attrName === 'href') {
+      const v = (data.attrValue || '').trim();
+      if (!/^(https?:|mailto:)/i.test(v)) data.keepAttr = false;
     }
   });
 }
@@ -55,8 +71,8 @@ function installHook(): void {
 export function sanitizeReportHtml(html: string): string {
   installHook();
   return DOMPurify.sanitize(String(html ?? ''), {
-    ALLOWED_TAGS: ['b', 'strong', 'i', 'em', 'u', 'p', 'br', 'span'],
-    ALLOWED_ATTR: ['style'],
+    ALLOWED_TAGS: ['b', 'strong', 'i', 'em', 'u', 'p', 'br', 'span', 'ul', 'ol', 'li', 'a'],
+    ALLOWED_ATTR: ['style', 'href'],
     ALLOW_DATA_ATTR: false
   });
 }
@@ -79,4 +95,9 @@ export function descriptorInsertHtml(d: { name: string; body: string }, mode: 't
     return `<b>${escape(d.name)}</b> — ${body}`;
   }
   return body;
+}
+
+/** An introduction inserts identically to a descriptor (both are escaped plain-text data). */
+export function introductionInsertHtml(d: { name: string; body: string }, mode: 'text' | 'title'): string {
+  return descriptorInsertHtml(d, mode);
 }
