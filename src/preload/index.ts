@@ -352,6 +352,11 @@ const api = {
       save: (introduction: unknown) => ipcRenderer.invoke(channels.reports.introductionsSave, introduction),
       remove: (id: string) => ipcRenderer.invoke(channels.reports.introductionsRemove, id)
     },
+    templates: {
+      list: () => ipcRenderer.invoke(channels.reports.templatesList),
+      save: (template: unknown) => ipcRenderer.invoke(channels.reports.templatesSave, template),
+      remove: (id: string) => ipcRenderer.invoke(channels.reports.templatesRemove, id)
+    },
     // Main resolves the report/contact/assets itself from the id for both exporters.
     exportPdf: (id: string) => ipcRenderer.invoke(channels.reports.exportPdf, id),
     exportDocx: (id: string) => ipcRenderer.invoke(channels.reports.exportDocx, id)

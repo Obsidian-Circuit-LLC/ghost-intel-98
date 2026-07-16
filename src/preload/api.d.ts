@@ -77,7 +77,7 @@ import type {
 import type { HarvestedItem, MonitoredChannel } from '../shared/socmint/types';
 import type { DocEntry, DocImportResult } from '../shared/documents-types';
 import type { Invoice, Profile, InvoiceAsset } from '../shared/invoice-types';
-import type { Report, Contact, Descriptor } from '../shared/reports-types';
+import type { Report, Contact, Descriptor, ReportTemplate } from '../shared/reports-types';
 
 export interface MailDraft {
   id: string;
@@ -421,6 +421,11 @@ export interface GhostApi {
     introductions: {
       list(): Promise<Descriptor[]>;
       save(introduction: Descriptor): Promise<Descriptor>;
+      remove(id: string): Promise<void>;
+    };
+    templates: {
+      list(): Promise<ReportTemplate[]>;
+      save(template: ReportTemplate): Promise<ReportTemplate>;
       remove(id: string): Promise<void>;
     };
     // Main resolves the report/contact/assets itself from the id for both exporters.
