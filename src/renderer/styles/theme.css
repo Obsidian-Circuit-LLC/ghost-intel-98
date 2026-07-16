@@ -455,6 +455,35 @@ input, textarea, [contenteditable="true"], .ga98-selectable {
   border-right: none;
 }
 
+/* My Cases empty-state hero — fills the otherwise-blank detail pane with the branded
+   magnifying-glass artwork (tagline baked in) centred, with a small next-action hint. */
+.ga98-cases-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 100%;
+  width: 100%;
+  padding: 16px;
+  box-sizing: border-box;
+  text-align: center;
+}
+.ga98-cases-empty-hero {
+  max-width: min(88%, 720px);
+  max-height: 76%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.ga98-cases-empty-hint {
+  margin: 0;
+  color: #666;
+  font-style: italic;
+}
+
 .ga98-stack {
   display: flex;
   flex-direction: column;

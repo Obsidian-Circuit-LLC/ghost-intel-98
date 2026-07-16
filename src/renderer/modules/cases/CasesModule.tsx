@@ -11,6 +11,7 @@ import { toast } from '../../state/toasts';
 import { shortcutBus, type ShortcutEventDetail } from '../../shell/Shortcuts';
 import { useSettings } from '../../state/store';
 import { resolveCollapsed, toggleCollapsed } from './collapse';
+import emptyHero from '../../assets/cases-empty-hero.jpg';
 
 const PRIORITY_ORDER: Record<CasePriority, number> = { critical: 3, high: 2, medium: 1, low: 0 };
 const STATUS_ORDER: Record<CaseStatus, number> = { new: 4, open: 3, pending: 2, closed: 1, archived: 0 };
@@ -342,7 +343,13 @@ export function CasesModule({ initialCaseId }: { initialCaseId?: string } = {}):
             }}
           />
         ) : (
-          <p style={{ color: '#666' }}>Select a case, or click New.</p>
+          // Empty-state hero: fill the otherwise-blank detail pane with the branded
+          // magnifying-glass artwork (tagline baked into the image). A small hint keeps the
+          // clear next-action visible (low-friction, one obvious action).
+          <div className="ga98-cases-empty">
+            <img className="ga98-cases-empty-hero" src={emptyHero} alt="Ghost Intel 98 — Trust nothing. Verify everything." />
+            <p className="ga98-cases-empty-hint">Select a case, or click New.</p>
+          </div>
         )}
       </div>
     </div>
