@@ -62,6 +62,12 @@ describe('TextBlock font pickers (selection snapshot)', () => {
     await act(async () => {
       select.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
     });
+    // Reproduce the real-browser behaviour a plain jsdom test misses: opening a native <select>
+    // blurs the contentEditable and COLLAPSES the live selection before onChange fires. The fix must
+    // apply from the mousedown snapshot (fontRange.current), NOT the now-collapsed window.getSelection().
+    // Without this collapse the assertion is a tautology — reverting the fix to read getSelection()
+    // directly would still pass because jsdom leaves the selection intact.
+    window.getSelection()?.removeAllRanges();
     await act(async () => { setValue(select, 'Arial'); });
 
     expect(onChange).toHaveBeenCalled();
@@ -98,6 +104,9 @@ describe('TextBlock font pickers (selection snapshot)', () => {
     await act(async () => {
       select.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
     });
+    // Collapse the live selection the way opening a native <select> does — the fix must apply from
+    // the mousedown snapshot, not window.getSelection() (see the font-family case above).
+    window.getSelection()?.removeAllRanges();
     await act(async () => { setValue(select, 'large'); });
 
     expect(onChange).toHaveBeenCalled();

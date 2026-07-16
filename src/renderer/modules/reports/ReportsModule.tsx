@@ -189,7 +189,7 @@ export function ReportsModule(): JSX.Element {
     const { bannerRef, blocks } = await copyBody(report);
     const template: ReportTemplate = {
       id: uid(), name: trimmed, createdAt: stamp, updatedAt: stamp,
-      bannerRef, fromContactId: report.fromContactId, to: report.to, reportDate: report.reportDate,
+      bannerRef, fromContactId: report.fromContactId, toContactId: report.toContactId, to: report.to, reportDate: report.reportDate,
       caseNumber: report.caseNumber, referenceNumber: report.referenceNumber,
       classification: report.classification, signature: report.signature,
       blocks
@@ -208,7 +208,7 @@ export function ReportsModule(): JSX.Element {
     const { bannerRef, blocks } = await copyBody(t);
     const seed: Report = {
       id: uid(), title: t.name || 'Untitled report', createdAt: stamp, updatedAt: stamp,
-      bannerRef, fromContactId: t.fromContactId, to: t.to, reportDate: t.reportDate,
+      bannerRef, fromContactId: t.fromContactId, toContactId: t.toContactId, to: t.to, reportDate: t.reportDate,
       caseNumber: t.caseNumber, referenceNumber: t.referenceNumber, classification: t.classification,
       signature: t.signature, status: 'draft', author,
       blocks

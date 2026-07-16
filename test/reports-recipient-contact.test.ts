@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import AdmZip from 'adm-zip';
-import { ensureReport } from '../src/main/security/validate';
+import { ensureReport, ensureReportTemplate } from '../src/main/security/validate';
 import { buildReportHtml } from '../src/main/reports/report-html';
 import { renderReportDocx } from '../src/main/reports/docx';
 import type { Report, Contact } from '../src/shared/reports-types';
@@ -29,6 +29,34 @@ describe('toContactId model + validator', () => {
   it('drops an empty-string toContactId', () => {
     const r = ensureReport({ id: 'r1', to: '', toContactId: '', blocks: [] });
     expect(r.toContactId).toBeUndefined();
+  });
+});
+
+describe('ensureReportTemplate — toContactId (recipient survives a template save)', () => {
+  it('preserves a valid toContactId, exactly like fromContactId', () => {
+    const t = ensureReportTemplate({ id: 't1', name: 'Tpl', to: '', fromContactId: 'c-from', toContactId: 'c-recipient', blocks: [] });
+    expect(t.toContactId).toBe('c-recipient');
+    expect(t.fromContactId).toBe('c-from');
+  });
+
+  it('leaves toContactId unset when absent', () => {
+    const t = ensureReportTemplate({ id: 't1', name: 'Tpl', to: '', blocks: [] });
+    expect(t.toContactId).toBeUndefined();
+  });
+
+  it('drops an over-long toContactId', () => {
+    const t = ensureReportTemplate({ id: 't1', name: 'Tpl', to: '', toContactId: 'x'.repeat(65), blocks: [] });
+    expect(t.toContactId).toBeUndefined();
+  });
+
+  it('drops a non-string toContactId', () => {
+    const t = ensureReportTemplate({ id: 't1', name: 'Tpl', to: '', toContactId: 12345, blocks: [] });
+    expect(t.toContactId).toBeUndefined();
+  });
+
+  it('drops an empty-string toContactId', () => {
+    const t = ensureReportTemplate({ id: 't1', name: 'Tpl', to: '', toContactId: '', blocks: [] });
+    expect(t.toContactId).toBeUndefined();
   });
 });
 
