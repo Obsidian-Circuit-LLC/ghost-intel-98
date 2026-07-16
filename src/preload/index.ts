@@ -357,6 +357,8 @@ const api = {
       save: (template: unknown) => ipcRenderer.invoke(channels.reports.templatesSave, template),
       remove: (id: string) => ipcRenderer.invoke(channels.reports.templatesRemove, id)
     },
+    // Main builds the template's buildReportHtml (assets resolved main-side) for the sandboxed preview.
+    previewTemplate: (id: string) => ipcRenderer.invoke(channels.reports.previewTemplate, id),
     // Main resolves the report/contact/assets itself from the id for both exporters.
     exportPdf: (id: string) => ipcRenderer.invoke(channels.reports.exportPdf, id),
     exportDocx: (id: string) => ipcRenderer.invoke(channels.reports.exportDocx, id)

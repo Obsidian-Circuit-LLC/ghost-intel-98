@@ -658,6 +658,7 @@ export const channels = {
     descriptorsList: 'reports:descriptors:list', descriptorsSave: 'reports:descriptors:save', descriptorsRemove: 'reports:descriptors:remove',
     introductionsList: 'reports:introductions:list', introductionsSave: 'reports:introductions:save', introductionsRemove: 'reports:introductions:remove',
     templatesList: 'reports:templates:list', templatesSave: 'reports:templates:save', templatesRemove: 'reports:templates:remove',
+    previewTemplate: 'reports:previewTemplate',
     exportPdf: 'reports:exportPdf',
     exportDocx: 'reports:exportDocx'
   }
@@ -1146,6 +1147,10 @@ export interface ApiContracts {
   [channels.reports.exportPdf]: { args: [string]; returns: string | null };
   // Same id-in / saved-filename-out contract as exportPdf, but renders an editable OOXML .docx.
   [channels.reports.exportDocx]: { args: [string]; returns: string | null };
+  // Template preview — main resolves the template + its assets from the id and returns the exact
+  // buildReportHtml document the exporters use (keeps buildReportHtml main-only). The renderer drops
+  // it into a sandbox="" srcdoc iframe. Empty string if the id is unknown.
+  [channels.reports.previewTemplate]: { args: [string]; returns: string };
 }
 
 export const BGCONN_LOCK_EXEMPT_CHANNELS = ['bgconn:status', 'bgconn:stop'] as const;

@@ -428,6 +428,8 @@ export interface GhostApi {
       save(template: ReportTemplate): Promise<ReportTemplate>;
       remove(id: string): Promise<void>;
     };
+    /** Build a template's buildReportHtml (main-side) for the sandboxed preview iframe; '' if unknown. */
+    previewTemplate(id: string): Promise<string>;
     // Main resolves the report/contact/assets itself from the id for both exporters.
     exportPdf(id: string): Promise<string | null>;
     exportDocx(id: string): Promise<string | null>;

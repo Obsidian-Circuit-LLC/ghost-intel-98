@@ -7,9 +7,10 @@
  *  the renderer never builds the export buffer. Contacts are managed through the <ContactBook>
  *  overlay. The default author for a freshly-seeded report comes from settings.reports.author. */
 import { useCallback, useEffect, useState } from 'react';
-import type { Report, Contact, Descriptor, ReportBlock } from '@shared/reports-types';
+import type { Report, Contact, Descriptor, ReportBlock, ReportTemplate } from '@shared/reports-types';
 import { ReportEditor } from './ReportEditor';
 import { ReportsDashboard } from './ReportsDashboard';
+import { TemplatePreview } from './TemplatePreview';
 import { ReportsMenuBar, type ReportsActionId } from './ReportsMenuBar';
 import { ReportsToolbar } from './ReportsToolbar';
 import { ReportsNavTree } from './ReportsNavTree';
@@ -39,6 +40,12 @@ export function ReportsModule(): JSX.Element {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [descriptors, setDescriptors] = useState<Descriptor[]>([]);
   const [introductions, setIntroductions] = useState<Descriptor[]>([]);
+  const [templates, setTemplates] = useState<ReportTemplate[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [templatePreviewHtml, setTemplatePreviewHtml] = useState('');
+  // Whether the Templates library is the active center view. It isn't a report NavNode (which drives
+  // the Dashboard filter), so it rides its own flag; opening a report or any nav node clears it.
+  const [templatesView, setTemplatesView] = useState(false);
   const [assets, setAssets] = useState<Record<string, string>>({});
   const [showContacts, setShowContacts] = useState(false);
   const [showDescriptors, setShowDescriptors] = useState(false);
@@ -64,10 +71,16 @@ export function ReportsModule(): JSX.Element {
   const refreshIntroductions = useCallback(async (): Promise<void> => {
     setIntroductions(await window.api.reports.introductions.list());
   }, []);
+  // Templates access is optional-chained/try-wrapped so an older preload or a bare test stub (which
+  // may not expose reports.templates) simply keeps an empty library rather than crashing the shell.
+  const refreshTemplates = useCallback(async (): Promise<void> => {
+    try { setTemplates((await window.api.reports.templates?.list?.()) ?? []); }
+    catch { /* keep the empty library */ }
+  }, []);
 
   useEffect(() => {
-    void refresh(); void refreshContacts(); void refreshDescriptors(); void refreshIntroductions();
-  }, [refresh, refreshContacts, refreshDescriptors, refreshIntroductions]);
+    void refresh(); void refreshContacts(); void refreshDescriptors(); void refreshIntroductions(); void refreshTemplates();
+  }, [refresh, refreshContacts, refreshDescriptors, refreshIntroductions, refreshTemplates]);
 
   // Load the default report author from settings.reports.author (deep-merged, so it survives an
   // upgrade). Defensive: the read is optional-chained and try/wrapped so a settings API that isn't
@@ -132,6 +145,33 @@ export function ReportsModule(): JSX.Element {
     const r = list.find((x) => x.id === id);
     if (!r) return;
     await window.api.reports.save(duplicateReport(r, uid(), nowIso()));
+    await refresh();
+  }
+
+  // Select a template in the library: ask main to build its buildReportHtml (assets resolved
+  // main-side) and drop it into the sandboxed preview iframe. previewTemplate is optional-chained so
+  // an older preload/test stub degrades to a blank preview instead of throwing.
+  async function selectTemplate(id: string): Promise<void> {
+    setSelectedTemplateId(id);
+    try { setTemplatePreviewHtml((await window.api.reports.previewTemplate?.(id)) ?? ''); }
+    catch { setTemplatePreviewHtml(''); }
+  }
+
+  // Clone a template into a fresh draft report and open it in the editor. Block ids are regenerated
+  // so the new document is independent; asset refs are reused as-is here (Task 6 hardens this to a
+  // deep copyAsset so the report and template own separate bytes). The default author comes from
+  // settings, exactly like a blank new report.
+  async function createFromTemplate(t: ReportTemplate): Promise<void> {
+    const stamp = nowIso();
+    const seed: Report = {
+      id: uid(), title: t.name || 'Untitled report', createdAt: stamp, updatedAt: stamp,
+      bannerRef: t.bannerRef, fromContactId: t.fromContactId, to: t.to, reportDate: t.reportDate,
+      caseNumber: t.caseNumber, referenceNumber: t.referenceNumber, classification: t.classification,
+      signature: t.signature, status: 'draft', author,
+      blocks: t.blocks.map((b) => ({ ...b, id: uid() }))
+    };
+    const saved = await window.api.reports.save(seed);
+    await openReport(saved);
     await refresh();
   }
 
@@ -249,7 +289,17 @@ export function ReportsModule(): JSX.Element {
     if (report) void autosave(report);
     setReport(null);
     setAssets({});
+    setTemplatesView(false);
     setNavNode(node);
+  }
+
+  // Open the Templates library center view (close any open editor first, flushing its pending save
+  // the same way showDashboard does).
+  function showTemplatesLibrary(): void {
+    if (report) void autosave(report);
+    setReport(null);
+    setAssets({});
+    setTemplatesView(true);
   }
 
   // Central action dispatcher — every menu item, toolbar button and dashboard tile routes its
@@ -299,6 +349,8 @@ export function ReportsModule(): JSX.Element {
   }
 
   const hasOpenReport = report !== null;
+  const showTemplates = !hasOpenReport && templatesView;
+  const selectedTemplate = templates.find((t) => t.id === selectedTemplateId) ?? null;
 
   return (
     <div className="ga98-report-appshell">
@@ -311,10 +363,58 @@ export function ReportsModule(): JSX.Element {
           onSelect={onNavSelect}
           onNewReport={() => { void newReport(); }}
           onManageContacts={() => setShowContacts(true)}
+          onViewTemplates={showTemplatesLibrary}
+          templatesActive={showTemplates}
         />
 
         <div className="ga98-report-appmain">
-          {report ? (
+          {showTemplates ? (
+            <div className="ga98-report-dashboard">
+              <div className="ga98-report-panel">
+                <div className="ga98-report-titlebar">
+                  <span>Templates</span>
+                  <span className="ga98-report-titlebar-x" aria-hidden="true">×</span>
+                </div>
+                <div className="ga98-report-panel-body ga98-report-tpl-view">
+                  <div className="ga98-report-tpl-list">
+                    {templates.length === 0 ? (
+                      <div className="ga98-report-tpl-empty">No templates yet. Open a report and choose “Save as Template.”</div>
+                    ) : (
+                      templates.map((t) => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          data-tpl={t.id}
+                          className={`ga98-report-tpl-row${selectedTemplateId === t.id ? ' ga98-report-tpl-row-active' : ''}`}
+                          onClick={() => { void selectTemplate(t.id); }}
+                        >
+                          <span className="ga98-report-tpl-row-name">{t.name}</span>
+                          {t.category ? <span className="ga98-report-tpl-row-cat">{t.category}</span> : null}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                  {selectedTemplate ? (
+                    <TemplatePreview
+                      html={templatePreviewHtml}
+                      templateName={selectedTemplate.name}
+                      onSelect={() => { void createFromTemplate(selectedTemplate); }}
+                    />
+                  ) : (
+                    <div className="ga98-report-panel ga98-report-tpl-preview">
+                      <div className="ga98-report-titlebar">
+                        <span>Preview</span>
+                        <span className="ga98-report-titlebar-x" aria-hidden="true">×</span>
+                      </div>
+                      <div className="ga98-report-panel-body ga98-report-tpl-preview-empty">
+                        Select a template to preview it.
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : report ? (
             <ReportEditor
               report={report}
               assets={assets}
