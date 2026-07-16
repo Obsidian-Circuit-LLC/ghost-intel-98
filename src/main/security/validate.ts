@@ -1232,6 +1232,7 @@ export function ensureProfile(v: unknown): import('@shared/invoice-types').Profi
 
 const MAX_REPORT_TITLE = 200;
 const MAX_REPORT_TO = 400;
+const MAX_REPORT_META = 400;
 const MAX_REPORT_BLOCK_HTML = 50_000;
 const MAX_REPORT_CAPTION = 500;
 const MAX_DESCRIPTOR_BODY = 10_000;
@@ -1328,6 +1329,51 @@ export function ensureReport(raw: unknown): import('@shared/reports-types').Repo
   if (typeof o['reportDate'] === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(o['reportDate'])) {
     out.reportDate = o['reportDate'];
   }
+  const caseNumber = reportStr(o['caseNumber'], MAX_REPORT_META); if (caseNumber.length > 0) out.caseNumber = caseNumber;
+  const referenceNumber = reportStr(o['referenceNumber'], MAX_REPORT_META); if (referenceNumber.length > 0) out.referenceNumber = referenceNumber;
+  const classification = reportStr(o['classification'], MAX_REPORT_META); if (classification.length > 0) out.classification = classification;
+  const signature = reportStr(o['signature'], MAX_REPORT_META); if (signature.length > 0) out.signature = signature;
+  return out;
+}
+
+/** Validate + clamp a renderer-supplied ReportTemplate before it is persisted. Mirrors
+ *  ensureReport but requires both `id` and `name` (a template is addressed by both), bounds
+ *  `name`/`category`/`to`/metadata, reuses ensureReportBlock for the body (so image assetRefs are
+ *  routed through ensureFileName + unknown-kind blocks dropped), caps the block count, routes
+ *  bannerRef through ensureFileName, and defaults the timestamps. Carries no report identity/status. */
+export function ensureReportTemplate(raw: unknown): import('@shared/reports-types').ReportTemplate {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  if (typeof o['id'] !== 'string' || o['id'].length === 0) throw new ValidationError('template.id must be a non-empty string');
+  const name = reportStr(o['name'], MAX_REPORT_TITLE);
+  if (name.length === 0) throw new ValidationError('template.name must be a non-empty string');
+  const blocksIn = Array.isArray(o['blocks']) ? o['blocks'].slice(0, MAX_BLOCKS_PER_REPORT) : [];
+  const blocks: import('@shared/reports-types').ReportBlock[] = [];
+  for (const b of blocksIn) {
+    const block = ensureReportBlock(b);
+    if (block) blocks.push(block);
+  }
+  const out: import('@shared/reports-types').ReportTemplate = {
+    id: o['id'],
+    name,
+    createdAt: typeof o['createdAt'] === 'string' ? o['createdAt'] : new Date().toISOString(),
+    updatedAt: typeof o['updatedAt'] === 'string' ? o['updatedAt'] : new Date().toISOString(),
+    to: reportStr(o['to'], MAX_REPORT_TO),
+    blocks
+  };
+  const category = reportStr(o['category'], MAX_REPORT_META); if (category.length > 0) out.category = category;
+  if (o['bannerRef'] !== undefined) {
+    try { out.bannerRef = ensureFileName(o['bannerRef'], 'bannerRef'); } catch { /* drop a malformed ref */ }
+  }
+  if (typeof o['fromContactId'] === 'string' && o['fromContactId'].length > 0 && o['fromContactId'].length <= 64) {
+    out.fromContactId = o['fromContactId'];
+  }
+  if (typeof o['reportDate'] === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(o['reportDate'])) {
+    out.reportDate = o['reportDate'];
+  }
+  const caseNumber = reportStr(o['caseNumber'], MAX_REPORT_META); if (caseNumber.length > 0) out.caseNumber = caseNumber;
+  const referenceNumber = reportStr(o['referenceNumber'], MAX_REPORT_META); if (referenceNumber.length > 0) out.referenceNumber = referenceNumber;
+  const classification = reportStr(o['classification'], MAX_REPORT_META); if (classification.length > 0) out.classification = classification;
+  const signature = reportStr(o['signature'], MAX_REPORT_META); if (signature.length > 0) out.signature = signature;
   return out;
 }
 
