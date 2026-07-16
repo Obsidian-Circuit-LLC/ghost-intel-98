@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { nextOccurrence, occurrencesInLocalMonth } from '../src/shared/recurrence';
+import { nextOccurrence, occurrencesInLocalMonth, latestOccurrenceAtOrBefore } from '../src/shared/recurrence';
 
 // A local anchor: Thu 2026-07-16 18:00.
 const anchor = new Date(2026, 6, 16, 18, 0, 0, 0).getTime();
@@ -18,6 +18,30 @@ describe('nextOccurrence', () => {
     const n = new Date(nextOccurrence(jan31, 'monthly', jan31)!);
     expect(n.getMonth()).toBe(2); // March
     expect(n.getDate()).toBe(31);
+  });
+});
+
+describe('latestOccurrenceAtOrBefore', () => {
+  it('returns null for none', () => {
+    expect(latestOccurrenceAtOrBefore(anchor, 'none', anchor)).toBeNull();
+  });
+  it('returns null when the anchor itself is still in the future', () => {
+    expect(latestOccurrenceAtOrBefore(anchor, 'daily', anchor - 1)).toBeNull();
+  });
+  it('returns the anchor when at is exactly the anchor', () => {
+    expect(latestOccurrenceAtOrBefore(anchor, 'daily', anchor)).toBe(anchor);
+  });
+  it('respects the anchor time-of-day when flooring a multi-day backlog', () => {
+    // anchor is 18:00; at 09:00 on the 26th the 26th-18:00 occurrence has not happened, so latest is the 25th
+    const at = new Date(2026, 6, 26, 9, 0, 0, 0).getTime();
+    const latest = new Date(latestOccurrenceAtOrBefore(anchor, 'daily', at)!);
+    expect(latest.getDate()).toBe(25);
+    expect(latest.getHours()).toBe(18);
+  });
+  it('weekly floors to the most recent matching weekday <= at', () => {
+    const at = new Date(2026, 6, 31, 12, 0, 0, 0).getTime(); // Fri Jul 31; last Thursday <= at is Jul 30
+    const latest = new Date(latestOccurrenceAtOrBefore(anchor, 'weekly', at)!);
+    expect(latest.getDate()).toBe(30);
   });
 });
 

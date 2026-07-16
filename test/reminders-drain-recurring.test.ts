@@ -54,6 +54,32 @@ describe('reminderStore.drainDue — recurring reschedule', () => {
     expect(second.some((r) => r.id === 'g1')).toBe(false); // next occurrence (Jul 23) is not yet due
   });
 
+  it('collapses a weeks-long backlog to ONE fire and jumps lastFiredAt to the latest occurrence <= now', async () => {
+    // Daily reminder anchored 30 days before now with no lastFiredAt (machine off for weeks, or
+    // recurrence just enabled on a past anchor). It must NOT replay ~30 occurrences one-per-tick.
+    const anchor = new Date(2026, 5, 16, 18, 0, 0, 0); // Tue 2026-06-16 18:00
+    await reminderStore.upsertGlobal({
+      id: 'g3', title: 'Daily standup', fireAt: anchor.toISOString(), repeat: 'daily',
+    } as Reminder);
+
+    const now = new Date(2026, 6, 16, 9, 0, 0, 0); // 2026-07-16 09:00 — 30 days later, before today's 18:00
+    const first = await reminderStore.drainDue(now);
+    expect(first.filter((r) => r.id === 'g3').length).toBe(1); // exactly one notification, not a burst
+
+    const stored = (await reminderStore.listGlobal()).find((r) => r.id === 'g3')!;
+    expect(stored.fireAt).toBe(anchor.toISOString());     // anchor immutable
+    expect(stored.fired).not.toBe(true);                  // repeating never latches fired
+    // lastFiredAt jumped to the latest occurrence <= now (Jul 15 18:00 — Jul 16 18:00 is still future at 09:00)
+    const jumped = new Date(stored.lastFiredAt!);
+    expect(jumped.getMonth()).toBe(6);
+    expect(jumped.getDate()).toBe(15);
+    expect(jumped.getHours()).toBe(18);
+
+    // A second drain at the same now must fire nothing (backlog already collapsed).
+    const second = await reminderStore.drainDue(now);
+    expect(second.some((r) => r.id === 'g3')).toBe(false);
+  });
+
   it('a non-repeating due reminder fires once and latches fired = true (unchanged behavior)', async () => {
     const fireAt = new Date(2026, 6, 16, 18, 0, 0, 0);
     await reminderStore.upsertGlobal({

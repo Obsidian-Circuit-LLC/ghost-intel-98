@@ -29,6 +29,23 @@ export function nextOccurrence(anchorMs: number, repeat: Repeat, afterMs: number
   return d.getTime();
 }
 
+/** Latest occurrence at or before `atMs`, or null if the anchor itself is after `atMs` (nothing
+ *  due yet) or `repeat` is `none`. Used to COLLAPSE a backlog: when a machine was off for weeks,
+ *  drainDue jumps progress to this instead of replaying every missed occurrence as a notification. */
+export function latestOccurrenceAtOrBefore(anchorMs: number, repeat: Repeat, atMs: number): number | null {
+  if (repeat === 'none') return null;
+  const anchor = new Date(anchorMs);
+  let d = withAnchorTime(anchor.getFullYear(), anchor.getMonth(), anchor.getDate(), anchor);
+  if (d.getTime() > atMs) return null;
+  let guard = 0;
+  while (guard < 100000) {
+    const next = advance(d, anchor, repeat);
+    if (next.getTime() > atMs) break;
+    d = next; guard++;
+  }
+  return d.getTime();
+}
+
 /** Every occurrence whose LOCAL civil date is in [year, month] (0-based month), from the anchor
  *  forward (nothing before the anchor's own day). Computed directly per-frequency (O(days)). */
 export function occurrencesInLocalMonth(anchorMs: number, repeat: Repeat, year: number, month: number): number[] {

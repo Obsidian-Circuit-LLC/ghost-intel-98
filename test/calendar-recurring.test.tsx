@@ -145,4 +145,32 @@ describe('Calendar right-click Make/Remove recurring (Task 4)', () => {
     expect(upsertGlobal).toHaveBeenCalledTimes(1);
     expect(upsertGlobal.mock.calls[0][0]).toMatchObject({ id: 'g1', repeat: 'none' });
   });
+
+  it('Remove recurring on a PAST-anchored reminder marks it fired so drainDue will not re-notify the stale anchor', async () => {
+    // System time is Jul 10 2026 (beforeEach). Anchor Jul 2 is already in the past.
+    const pastIso = new Date(2026, 6, 2, 18, 0, 0, 0).toISOString();
+    installApi([{ id: 'g4', title: 'Past weekly', fireAt: pastIso, repeat: 'weekly', fired: false }]);
+    await act(async () => { root.render(<CalendarModule />); });
+    await flush();
+
+    await openMenuFor('Past weekly');
+    await clickMenu('Remove recurring');
+    expect(upsertGlobal).toHaveBeenCalledTimes(1);
+    const arg = upsertGlobal.mock.calls[0][0];
+    expect(arg).toMatchObject({ id: 'g4', repeat: 'none', fired: true });
+    expect(arg.lastFiredAt).toBeUndefined();
+    expect(arg.fireAt).toBe(pastIso); // anchor immutable
+  });
+
+  it('Remove recurring on a FUTURE-anchored reminder leaves it unfired so it still fires at its time', async () => {
+    // Anchor Jul 16 18:00 is in the future relative to the Jul 10 system time.
+    installApi([WEEKLY]);
+    await act(async () => { root.render(<CalendarModule />); });
+    await flush();
+
+    await openMenuFor('CCF Call 6PM');
+    await clickMenu('Remove recurring');
+    expect(upsertGlobal).toHaveBeenCalledTimes(1);
+    expect(upsertGlobal.mock.calls[0][0]).toMatchObject({ id: 'g1', repeat: 'none', fired: false });
+  });
 });

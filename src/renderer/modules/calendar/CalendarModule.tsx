@@ -48,7 +48,10 @@ export function CalendarModule(): JSX.Element {
   const [refreshTick, setRefreshTick] = useState(0);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; ev: Event } | null>(null);
 
-  const refresh = useCallback(async () => {
+  // `isCurrent` guards against a last-write-wins race: rapid Prev/Next launches overlapping async
+  // refreshes whose per-case reads can finish out of order. The effect below invalidates the prior
+  // run before starting a new one, so only the latest cursor's run is allowed to setEvents.
+  const refresh = useCallback(async (isCurrent: () => boolean = () => true) => {
     try {
       const [globals, cases] = await Promise.all([
         window.api.reminders.listGlobal(),
@@ -81,17 +84,21 @@ export function CalendarModule(): JSX.Element {
           console.warn('[calendar] case read failed', c.id, err);
         }
       }
+      if (!isCurrent()) return; // a newer cursor's refresh superseded this one — drop its results
       setEvents(evs);
       if (broken.length > 0) {
         toast.warn(`Calendar: ${broken.length} case${broken.length === 1 ? '' : 's'} could not be loaded — see console.`);
       }
     } catch (err) {
+      if (!isCurrent()) return;
       toast.error(`Calendar refresh failed: ${(err as Error).message}`);
     }
   }, [cursor]);
 
   useEffect(() => {
-    void refresh();
+    let active = true;
+    void refresh(() => active);
+    return () => { active = false; };
   }, [cursor, refreshTick, refresh]);
 
   const grid = useMemo(() => buildMonthGrid(cursor), [cursor]);
@@ -127,7 +134,16 @@ export function CalendarModule(): JSX.Element {
     const r = all.find((x) => x.id === ev.globalReminderId);
     if (!r) return;
     try {
-      await window.api.reminders.upsertGlobal({ ...r, repeat, lastFiredAt: repeat === 'none' ? undefined : r.lastFiredAt });
+      // Removing recurrence turns the reminder back into a one-time reminder anchored at fireAt.
+      // If that anchor is already in the past, mark it fired so drainDue's non-recurring branch does
+      // NOT re-notify the stale anchor (a recurring reminder never latches fired). A still-future
+      // anchor stays unfired so it fires once at its time.
+      const fired = repeat === 'none'
+        ? new Date(r.fireAt).getTime() <= Date.now()
+        : r.fired;
+      await window.api.reminders.upsertGlobal({
+        ...r, repeat, fired, lastFiredAt: repeat === 'none' ? undefined : r.lastFiredAt
+      });
       toast.success(repeat === 'none' ? 'Recurrence removed.' : `Repeats ${repeat}.`);
       setRefreshTick((n) => n + 1);
     } catch (err) {
