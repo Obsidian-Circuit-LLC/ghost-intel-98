@@ -115,6 +115,10 @@ export function ReportsModule(): JSX.Element {
   async function removeReport(id: string): Promise<void> {
     await window.api.reports.remove(id);
     if (report?.id === id) { setReport(null); setAssets({}); }
+    // Clear the dashboard selection if it pointed at the deleted report, otherwise the Export/Print
+    // tile + "Open Selected Report" stay enabled pointing at a now-nonexistent id (exportPdf on a
+    // dead id / a silent no-op open).
+    if (selectedId === id) setSelectedId(null);
     await refresh();
   }
 
@@ -236,6 +240,10 @@ export function ReportsModule(): JSX.Element {
   // Return to the Dashboard (close the editor) on a given nav node — used by "Close Report",
   // "Dashboard", "Open Report…" and the nav-tree node clicks.
   function showDashboard(node: NavNode): void {
+    // Flush the editor's pending debounced autosave before unmounting it: nulling `report` unmounts
+    // <ReportEditor>, whose effect cleanup clearTimeout()s the queued 600ms save, so the last edit
+    // (already lifted into `report` via onChange) would otherwise never reach the store.
+    if (report) void autosave(report);
     setReport(null);
     setAssets({});
     setNavNode(node);

@@ -109,6 +109,60 @@ describe('ReportsModule shell (Task 6)', () => {
     await vi.waitFor(() => expect(container.querySelector('.ga98-report-editor')).toBeTruthy());
   });
 
+  it('flushes the editor\'s pending edit to the store when swapping back to the Dashboard', async () => {
+    // Finding 1 (data loss): nulling `report` unmounts <ReportEditor>, whose effect cleanup
+    // clearTimeout()s the queued 600ms autosave. showDashboard() must flush the working report
+    // first, or the last edit — already lifted into `report` state — never reaches window.api.save.
+    await act(async () => { root.render(<ReportsModule />); });
+    await vi.waitFor(() => expect((window as any).api.settings.read).toHaveBeenCalled());
+    await act(async () => { buttonByText('Create New Report').click(); });
+
+    // Edit the open report (status select lifts the change into module `report` state).
+    const select = await vi.waitFor(() => {
+      const el = container.querySelector('select[aria-label="Report status"]') as HTMLSelectElement | null;
+      if (!el) throw new Error('status select not mounted');
+      return el;
+    });
+    const saveCallsBeforeSwap = (window as any).api.reports.save.mock.calls.length;
+    await act(async () => { selectValue(select, 'completed'); });
+
+    // Immediately return to the Dashboard (before the 600ms debounce could fire).
+    await act(async () => { buttonByText('Dashboard').click(); });
+
+    // The swap itself persisted the edited report (a save AFTER the edit), carrying status:'completed'.
+    const calls = (window as any).api.reports.save.mock.calls;
+    expect(calls.length).toBeGreaterThan(saveCallsBeforeSwap);
+    expect(calls[calls.length - 1][0].status).toBe('completed');
+    // And we are back on the Dashboard.
+    await vi.waitFor(() => expect(container.querySelector('.ga98-report-dashboard')).toBeTruthy());
+  });
+
+  it('clears the dashboard selection when the selected report is deleted (no dead Export/Print tile)', async () => {
+    // Finding 2: selectedId must be cleared on delete, or the Export/Print tile + "Open Selected
+    // Report" stay enabled pointing at a now-nonexistent report (exportPdf on a dead id).
+    await act(async () => { root.render(<ReportsModule />); });
+    await vi.waitFor(() => expect((window as any).api.reports.list).toHaveBeenCalled());
+
+    // Select the recent-table row → the Export/Print tile becomes enabled.
+    const row = container.querySelector('tr[data-report-id="r1"]') as HTMLTableRowElement;
+    expect(row).toBeTruthy();
+    await act(async () => { row.click(); });
+    expect(buttonByText('Export / Print').disabled).toBe(false);
+
+    // Right-click the row to open the context menu (also selects it), then Delete.
+    await act(async () => {
+      row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 10, clientY: 10 }));
+    });
+    const del = Array.from(container.querySelectorAll('.ga98-context-menu-item'))
+      .find((b) => (b.textContent || '').trim() === 'Delete') as HTMLButtonElement;
+    expect(del).toBeTruthy();
+    await act(async () => { del.click(); });
+
+    // remove() was invoked and the selection was cleared → the Export/Print tile is disabled again.
+    await vi.waitFor(() => expect((window as any).api.reports.remove).toHaveBeenCalledWith('r1'));
+    await vi.waitFor(() => expect(buttonByText('Export / Print').disabled).toBe(true));
+  });
+
   it('the editor header status <select> updates report.status on change', async () => {
     await act(async () => { root.render(<ReportsModule />); });
     await vi.waitFor(() => expect((window as any).api.settings.read).toHaveBeenCalled());
