@@ -1349,6 +1349,9 @@ export function ensureReport(raw: unknown): import('@shared/reports-types').Repo
   const referenceNumber = reportStr(o['referenceNumber'], MAX_REPORT_META); if (referenceNumber.length > 0) out.referenceNumber = referenceNumber;
   const classification = reportStr(o['classification'], MAX_REPORT_META); if (classification.length > 0) out.classification = classification;
   const signature = reportStr(o['signature'], MAX_REPORT_META); if (signature.length > 0) out.signature = signature;
+  if (o['signatureRef'] !== undefined) {
+    try { out.signatureRef = ensureFileName(o['signatureRef'], 'signatureRef'); } catch { /* drop a malformed ref */ }
+  }
   return out;
 }
 
@@ -1393,6 +1396,9 @@ export function ensureReportTemplate(raw: unknown): import('@shared/reports-type
   const referenceNumber = reportStr(o['referenceNumber'], MAX_REPORT_META); if (referenceNumber.length > 0) out.referenceNumber = referenceNumber;
   const classification = reportStr(o['classification'], MAX_REPORT_META); if (classification.length > 0) out.classification = classification;
   const signature = reportStr(o['signature'], MAX_REPORT_META); if (signature.length > 0) out.signature = signature;
+  if (o['signatureRef'] !== undefined) {
+    try { out.signatureRef = ensureFileName(o['signatureRef'], 'signatureRef'); } catch { /* drop a malformed ref */ }
+  }
   return out;
 }
 

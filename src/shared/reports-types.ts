@@ -36,6 +36,9 @@ export interface Report {
   referenceNumber?: string;
   classification?: string;
   signature?: string;
+  /** Drawn/uploaded signature image asset ref (encrypted store, like bannerRef); when set it takes
+   *  priority over the legacy `signature` text in every export. */
+  signatureRef?: string;
   status: 'draft' | 'completed' | 'archived';
   author: string;
   blocks: ReportBlock[];
@@ -59,6 +62,9 @@ export interface ReportTemplate {
   referenceNumber?: string;
   classification?: string;
   signature?: string;
+  /** Drawn/uploaded signature image asset ref — mirrors Report.signatureRef so a template's captured
+   *  signature survives save-as-template/create-from-template exactly like bannerRef. */
+  signatureRef?: string;
   blocks: ReportBlock[];
 }
 

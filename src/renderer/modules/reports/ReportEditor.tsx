@@ -14,6 +14,7 @@ import { ImageBlock } from './blocks/ImageBlock';
 import { TableBlock } from './blocks/TableBlock';
 import { RightRail } from './panels/RightRail';
 import { ContactBook } from './ContactBook';
+import { SignaturePad } from '../invoices/SignaturePad';
 import { extractOutline, wordCount, estimatePageCount } from './outline';
 
 export interface ReportEditorProps {
@@ -30,6 +31,9 @@ export interface ReportEditorProps {
   onAutosave: (r: Report) => void;
   onUploadBanner: (file: File) => void;
   onRemoveBanner: () => void;
+  /** Draw/upload a signature (shared <SignaturePad>) — the module encrypts it via putAsset, caches
+   *  the resolved data URL, and stamps signatureRef onto the working report, exactly like a banner. */
+  onCaptureSignature: (dataUrl: string, mime: 'image/png' | 'image/jpeg') => void;
   onManageContacts: () => void;
   onManageDescriptors: () => void;
   /** Open the reusable-introductions library overlay. */
@@ -64,7 +68,7 @@ function clampZoom(z: number): number { return Math.max(ZOOM_MIN, Math.min(ZOOM_
 export function ReportEditor(props: ReportEditorProps): JSX.Element {
   const {
     report, assets, contacts, descriptors, introductions, onChange, onAutosave, onUploadBanner, onRemoveBanner,
-    onManageContacts, onManageDescriptors, onManageIntroductions, onAddPhoto, onAddTable,
+    onCaptureSignature, onManageContacts, onManageDescriptors, onManageIntroductions, onAddPhoto, onAddTable,
     onImportFromCase, zoom, onZoom
   } = props;
   const [dragOver, setDragOver] = useState(false);
@@ -368,13 +372,26 @@ export function ReportEditor(props: ReportEditorProps): JSX.Element {
                   />
                 </label>
                 <label className="ga98-report-meta-field">
-                  <span>Signature</span>
+                  <span>Signature (label)</span>
                   <input
                     aria-label="Signature"
                     value={report.signature ?? ''}
                     onChange={(e) => patch({ signature: e.target.value || undefined })}
                   />
                 </label>
+              </div>
+
+              <div className="ga98-report-signature-box">
+                {report.signatureRef && assets[report.signatureRef] ? (
+                  <>
+                    <img src={assets[report.signatureRef]} alt="Signature" className="ga98-report-sig-img" />
+                    <button type="button" aria-label="Remove signature" className="ga98-report-img-remove"
+                      onClick={() => patch({ signatureRef: undefined })}>✕ Remove signature</button>
+                  </>
+                ) : (
+                  <span className="ga98-report-sig-empty">No signature</span>
+                )}
+                <SignaturePad onCapture={onCaptureSignature} />
               </div>
             </div>
 
