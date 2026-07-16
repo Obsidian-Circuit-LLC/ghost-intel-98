@@ -29,6 +29,7 @@ export interface Report {
   updatedAt: string;
   bannerRef?: string;
   fromContactId?: string;
+  toContactId?: string;
   to: string;
   reportDate?: string;
   caseNumber?: string;
@@ -51,6 +52,7 @@ export interface ReportTemplate {
   // A template carries the same body a report does, minus report identity/status:
   bannerRef?: string;
   fromContactId?: string;
+  toContactId?: string;
   to: string;
   reportDate?: string;
   caseNumber?: string;        // (from sub-project C's metadata; present on both)
