@@ -418,6 +418,11 @@ export interface GhostApi {
       save(descriptor: Descriptor): Promise<Descriptor>;
       remove(id: string): Promise<void>;
     };
+    introductions: {
+      list(): Promise<Descriptor[]>;
+      save(introduction: Descriptor): Promise<Descriptor>;
+      remove(id: string): Promise<void>;
+    };
     // Main resolves the report/contact/assets itself from the id for both exporters.
     exportPdf(id: string): Promise<string | null>;
     exportDocx(id: string): Promise<string | null>;
