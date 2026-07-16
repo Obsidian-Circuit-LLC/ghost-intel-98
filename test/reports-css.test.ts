@@ -75,8 +75,8 @@ describe('ga98-report stylesheet (root-cause fix)', () => {
     head.className = 'ga98-report-descriptorlib-head';
     lib.appendChild(head);
     document.body.appendChild(lib);
-    // Container gets the purple-rail panel background (not left transparent/unstyled).
-    expect(getComputedStyle(lib).backgroundColor).toBe('rgb(36, 21, 57)');
+    // Container gets the silver Win98 panel background (not left transparent/unstyled).
+    expect(getComputedStyle(lib).backgroundColor).toBe('rgb(192, 192, 192)');
     // The head bar gets its flex layout from the class the component actually renders.
     expect(getComputedStyle(head).display).toBe('flex');
   });
@@ -120,8 +120,8 @@ describe('ga98-report stylesheet (root-cause fix)', () => {
     // Fixed, centered backdrop above the editor.
     expect(getComputedStyle(overlay).position).toBe('fixed');
     expect(getComputedStyle(overlay).justifyContent).toBe('center');
-    // The picker panel gets the purple-rail background + flex column layout (not left transparent).
-    expect(getComputedStyle(picker).backgroundColor).toBe('rgb(36, 21, 57)');
+    // The picker panel gets the silver Win98 background + flex column layout (not left transparent).
+    expect(getComputedStyle(picker).backgroundColor).toBe('rgb(192, 192, 192)');
     expect(getComputedStyle(picker).display).toBe('flex');
   });
 
