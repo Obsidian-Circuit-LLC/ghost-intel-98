@@ -71,7 +71,12 @@ export function ReportEditor(props: ReportEditorProps): JSX.Element {
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
   const [pageCount, setPageCount] = useState(1);
   const pageRef = useRef<HTMLDivElement | null>(null);
-  const didFocusBody = useRef(false);
+  // The id of the report whose text body we've already auto-focused. Keyed on report identity (not a
+  // one-shot boolean) so an in-editor report swap — File▸New / any setReport that keeps this instance
+  // mounted (non-null → non-null, no remount) — re-focuses the *new* report's body. A plain boolean
+  // would latch true on report A and leave report B's freshly-mounted body unfocused, silently
+  // breaking type-immediately on the create-while-open path.
+  const focusedReportId = useRef<string | null>(null);
 
   // Word-processor feel: a report always has a typable text body. If none of the blocks is a text
   // block, seed one empty text block at the front (once — guarded by `.some`, so re-renders after
@@ -88,10 +93,10 @@ export function ReportEditor(props: ReportEditorProps): JSX.Element {
   // report that already has one) so the operator can type straight away. Guarded in try/catch —
   // headless/jsdom focus is a no-op there but must not throw.
   useEffect(() => {
-    if (didFocusBody.current) return;
+    if (focusedReportId.current === report.id) return;
     const el = pageRef.current?.querySelector<HTMLElement>('.ga98-report-textblock-body');
     if (el) {
-      didFocusBody.current = true;
+      focusedReportId.current = report.id;
       try { el.focus(); } catch { /* focus unsupported in this environment; non-fatal */ }
     }
   }, [report]);

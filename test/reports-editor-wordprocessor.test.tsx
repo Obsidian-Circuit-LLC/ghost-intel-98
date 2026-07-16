@@ -30,8 +30,15 @@ function baseReport(overrides: Partial<Report> = {}): Report {
   };
 }
 
-function Harness(props: { initial: Report; onReportChange?: (r: Report) => void }): JSX.Element {
+function Harness(props: {
+  initial: Report;
+  onReportChange?: (r: Report) => void;
+  onReady?: (setReport: (r: Report) => void) => void;
+}): JSX.Element {
   const [r, setR] = useState<Report>(props.initial);
+  // Expose the setter so a test can imitate ReportsModule's newReport(): a direct setReport(saved)
+  // that swaps the open report while this same <ReportEditor> instance stays mounted (no key).
+  props.onReady?.(setR);
   return (
     <ReportEditor
       report={r}
@@ -82,6 +89,34 @@ describe('ReportEditor word-processor body + metadata (Task 4)', () => {
     expect(body).toBeTruthy();
     // Type-immediately: the seeded body is focused after mount.
     expect(document.activeElement).toBe(body);
+  });
+
+  it('re-focuses the new text body when the open report is swapped in place (File▸New while editing)', async () => {
+    // Report A opens with an existing text body and is auto-focused.
+    let swap: ((r: Report) => void) | undefined;
+    await act(async () => {
+      root.render(
+        <Harness
+          initial={baseReport({ id: 'A', blocks: [{ id: 'a-text', kind: 'text', html: '<p>alpha</p>' }] })}
+          onReady={(s) => { swap = s; }}
+        />,
+      );
+    });
+    const bodyA = container.querySelector('.ga98-report-textblock-body') as HTMLElement | null;
+    expect(bodyA).toBeTruthy();
+    expect(document.activeElement).toBe(bodyA);
+
+    // Imitate newReport(): swap report A → a fresh report B (new id, new text block) without
+    // remounting the editor. The center-view renders <ReportEditor> with no key, so React preserves
+    // this instance; a one-shot focus guard would leave B's body unfocused.
+    await act(async () => {
+      swap!(baseReport({ id: 'B', blocks: [{ id: 'b-text', kind: 'text', html: '' }] }));
+    });
+
+    const bodyB = container.querySelector('.ga98-report-textblock-body') as HTMLElement | null;
+    expect(bodyB).toBeTruthy();
+    expect(bodyB).not.toBe(bodyA); // a genuinely new contentEditable (fresh block id)
+    expect(document.activeElement).toBe(bodyB);
   });
 
   it('renders the four metadata header inputs', async () => {
