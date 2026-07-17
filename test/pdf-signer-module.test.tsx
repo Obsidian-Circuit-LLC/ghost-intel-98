@@ -127,6 +127,19 @@ describe('PdfSignerModule', () => {
     expect(api.pdfsign.read).toHaveBeenCalledWith('/tmp/x/contract.pdf');
   });
 
+  it('shows the empty-state illustration only until a PDF is opened', async () => {
+    mockPdf(1);
+    await act(async () => { root.render(<PdfSignerModule />); });
+    await flush();
+    // Before any PDF is open, the decorative empty-state art fills the blank body.
+    expect(container.querySelector('.ga98-pdfsign-empty-art img')).toBeTruthy();
+    // Once a PDF is loaded the rendered page takes that space and the art is gone.
+    await act(async () => { findButton(/open pdf/i).click(); });
+    await flush();
+    await flush();
+    expect(container.querySelector('.ga98-pdfsign-empty-art')).toBeNull();
+  });
+
   it('Sign & Save is disabled with no PDF and no signature', async () => {
     await act(async () => { root.render(<PdfSignerModule />); });
     await flush();
