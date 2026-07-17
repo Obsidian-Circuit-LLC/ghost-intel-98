@@ -149,6 +149,19 @@ describe('PdfSignerModule', () => {
     expect(findButton(/sign.*save/i).disabled).toBe(false);
   });
 
+  it('renders the resize handle with a real hit area (non-zero width/height), so it is grabbable', async () => {
+    await openPdfAndCaptureSignature();
+    const handle = container.querySelector('.ga98-pdfsign-overlay-handle') as HTMLElement | null;
+    expect(handle).toBeTruthy();
+    // The module ships no stylesheet for the handle, so its size must come from inline styles.
+    // An absolutely-positioned empty span with no width/height collapses to 0x0 — invisible and
+    // with no pointer hit-area, so startResize could never fire.
+    expect(handle!.style.width).not.toBe('');
+    expect(handle!.style.height).not.toBe('');
+    expect(parseFloat(handle!.style.width)).toBeGreaterThan(0);
+    expect(parseFloat(handle!.style.height)).toBeGreaterThan(0);
+  });
+
   it('Sign & Save calls pdfsign.sign with pdfBytes/signatureDataUrl/placement', async () => {
     await openPdfAndCaptureSignature();
     await act(async () => { findButton(/sign.*save/i).click(); });

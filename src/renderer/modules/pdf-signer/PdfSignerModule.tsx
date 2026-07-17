@@ -174,9 +174,18 @@ export function PdfSignerModule(): JSX.Element {
                 aria-label="Resize signature"
                 onPointerDown={startResize}
                 style={{
+                  // The module ships no stylesheet, so the handle's hit area must be inline —
+                  // an empty absolutely-positioned span collapses to 0x0 (invisible, no pointer
+                  // target), which makes startResize unreachable. 12x12 matches the app's other
+                  // resize grips; straddle the overlay's right edge.
                   position: 'absolute',
                   left: overlayPx.left + overlayPx.width - 6,
-                  top: overlayPx.top,
+                  top: overlayPx.top - 6,
+                  width: 12,
+                  height: 12,
+                  background: '#000',
+                  border: '1px solid #fff',
+                  boxSizing: 'border-box',
                   cursor: 'nwse-resize',
                   touchAction: 'none'
                 }}
