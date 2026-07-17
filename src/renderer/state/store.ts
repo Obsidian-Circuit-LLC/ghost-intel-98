@@ -52,7 +52,8 @@ export type ModuleKey =
   | 'investigation-graph'
   | 'invoices'
   | 'report'
-  | 'number-muncher';
+  | 'number-muncher'
+  | 'pdf-signer';
 
 export interface WindowSpec {
   id: string;
