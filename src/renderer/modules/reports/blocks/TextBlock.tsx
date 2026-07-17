@@ -16,6 +16,7 @@
  *  `applySize` below already relies on) is used instead so the insert path is deterministically
  *  testable in jsdom, which has no `execCommand` implementation at all. */
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { ReportBlock, Descriptor } from '@shared/reports-types';
 import { sanitizeReportHtml, descriptorInsertHtml, introductionInsertHtml, FONT_SIZES, FONT_FAMILIES } from '../rich-text';
 
@@ -199,9 +200,13 @@ export function TextBlock(props: TextBlockProps): JSX.Element {
   }
 
   /** Right-click: capture the caret/selection (so a later blur can't lose it) and open the
-   *  descriptor popover at the pointer position. */
+   *  descriptor popover at the pointer position. `stopPropagation` is required alongside
+   *  `preventDefault` — without it the native `contextmenu` event still bubbles up to
+   *  `ReportEditor`'s block-level `onContextMenu` on `.ga98-report-page`, which opens ITS OWN menu
+   *  on top of this one (the "double menu" bug). */
   function openDescriptorMenu(e: React.MouseEvent): void {
     e.preventDefault();
+    e.stopPropagation();
     const el = ref.current;
     if (!el) return;
     const sel = window.getSelection();
@@ -341,7 +346,14 @@ export function TextBlock(props: TextBlockProps): JSX.Element {
         onBlur={commit}
         onContextMenu={openDescriptorMenu}
       />
-      {menu ? (
+      {/* Portaled to document.body — `.ga98-report-page` (the report editor's page ancestor) carries
+       *  `transform: scale(...)` for zoom, and a CSS transform on an ancestor becomes the containing
+       *  block for `position:fixed` descendants. Left as a direct child, this menu's "fixed"
+       *  left/top (set from clientX/clientY below) would resolve against the SCALED page rather than
+       *  the true viewport, landing off-screen/mis-scaled at any zoom other than 100%. Portaling out
+       *  from under the transformed ancestor restores the real viewport as the fixed containing
+       *  block, so the click coordinates land where the pointer actually was. */}
+      {menu ? createPortal(
         <div
           className="ga98-report-descmenu"
           role="menu"
@@ -391,7 +403,8 @@ export function TextBlock(props: TextBlockProps): JSX.Element {
               </button>
             </div>
           ))}
-        </div>
+        </div>,
+        document.body,
       ) : null}
     </div>
   );

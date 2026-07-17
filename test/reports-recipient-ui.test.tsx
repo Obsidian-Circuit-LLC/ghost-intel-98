@@ -2,12 +2,11 @@
 /**
  * Task 3: Recipient as a Contact in the editor.
  *
- * The "To" field becomes a contact <select> bound to `report.toContactId`, mirroring the existing
- * From <select> (:282-297). A "Choose…" affordance next to either field opens the shared ContactBook
- * popup, generalized with a 'from' | 'to' target so the same popup can fill the recipient as well as
- * the sender — previously "Use" always hard-set fromContactId. A report carrying only the legacy
- * `to` string (no toContactId) still shows it as a read-only fallback line so old reports don't lose
- * their recipient in the UI.
+ * A "Choose…" affordance next to either header field opens the shared ContactBook popup,
+ * generalized with a 'from' | 'to' target so the same popup can fill the recipient as well as the
+ * sender — previously "Use" always hard-set fromContactId. From is still a contact <select>
+ * (:298-311). To became a combobox (Task 2, test/reports-to-combobox.test.tsx owns its dedicated
+ * coverage) — this file's To-field assertions below reflect that.
  *
  * No @testing-library/react (Global Constraint: no new dependency) — driven via React 18's
  * createRoot inside act(), mirroring test/reports-editor-wordprocessor.test.tsx. <ContactBook> talks
@@ -72,13 +71,6 @@ function Harness(props: { initial: Report; onReportChange?: (r: Report) => void 
   );
 }
 
-/** Set a React-controlled <select>'s value the way a real pick would (native setter + change event). */
-function selectValue(el: HTMLSelectElement, value: string): void {
-  const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value')!.set!;
-  setter.call(el, value);
-  el.dispatchEvent(new Event('change', { bubbles: true }));
-}
-
 beforeEach(() => {
   stubApi();
   container = document.createElement('div');
@@ -93,23 +85,11 @@ afterEach(() => {
 });
 
 describe('ReportEditor recipient contact (Task 3)', () => {
-  it('renders the To field as a contact select bound to toContactId', async () => {
+  it('renders the To field as a combobox input showing the resolved contact', async () => {
     await act(async () => { root.render(<Harness initial={baseReport({ toContactId: 'c2' })} />); });
-    const sel = container.querySelector('select[aria-label="To contact"]') as HTMLSelectElement | null;
-    expect(sel).toBeTruthy();
-    expect(sel!.value).toBe('c2');
-  });
-
-  it('changing the To select patches toContactId (not fromContactId)', async () => {
-    const onReportChange = vi.fn();
-    await act(async () => { root.render(<Harness initial={baseReport()} onReportChange={onReportChange} />); });
-
-    const sel = container.querySelector('select[aria-label="To contact"]') as HTMLSelectElement;
-    await act(async () => { selectValue(sel, 'c1'); });
-
-    const last = onReportChange.mock.calls[onReportChange.mock.calls.length - 1][0] as Report;
-    expect(last.toContactId).toBe('c1');
-    expect(last.fromContactId).toBeUndefined();
+    const input = container.querySelector('input[aria-label="To recipient"]') as HTMLInputElement | null;
+    expect(input).toBeTruthy();
+    expect(input!.value).toBe('Det. Vance (Metro PD)');
   });
 
   it('opening the ContactBook targeted at the recipient and choosing a contact sets toContactId, not fromContactId', async () => {
@@ -150,17 +130,18 @@ describe('ReportEditor recipient contact (Task 3)', () => {
     expect(last.toContactId).toBeFalsy();
   });
 
-  it('shows the legacy report.to string as a read-only fallback when toContactId is unset', async () => {
+  it('shows the legacy report.to string in the To combobox when toContactId is unset', async () => {
     await act(async () => { root.render(<Harness initial={baseReport({ to: 'Det. Vance (legacy)' })} />); });
-    expect(container.textContent).toContain('Det. Vance (legacy)');
-    // no more free-text "To recipient" input — recipient is a Contact now.
-    expect(container.querySelector('input[aria-label="To recipient"]')).toBeFalsy();
+    const input = container.querySelector('input[aria-label="To recipient"]') as HTMLInputElement;
+    expect(input.value).toBe('Det. Vance (legacy)');
   });
 
-  it('does not show the legacy fallback once a toContactId is set', async () => {
+  it('shows the resolved contact, not the stale legacy text, once a toContactId is set', async () => {
     await act(async () => {
       root.render(<Harness initial={baseReport({ to: 'stale legacy text', toContactId: 'c1' })} />);
     });
-    expect(container.textContent).not.toContain('stale legacy text');
+    const input = container.querySelector('input[aria-label="To recipient"]') as HTMLInputElement;
+    expect(input.value).not.toBe('stale legacy text');
+    expect(input.value).toBe('A. Investigator (Ghost Intel)');
   });
 });

@@ -58,7 +58,9 @@ export function buildReportHtml(
     report.classification ? `<div class="metaline">Classification: ${escapeHtml(report.classification)}</div>` : ''
   ].join('');
   const meta = metaLines ? `<div class="meta">${metaLines}</div>` : '';
-  const signature = report.signature ? `<div class="signature">Signature: ${escapeHtml(report.signature)}</div>` : '';
+  const signature = report.signatureRef && assets[report.signatureRef]
+    ? `<div class="signature"><img src="${assets[report.signatureRef]}" class="signature-img" alt="Signature"></div>`
+    : report.signature ? `<div class="signature">Signature: ${escapeHtml(report.signature)}</div>` : '';
   const blocks = report.blocks
     .map((b) => {
       if (b.kind === 'text') return `<div class="block block-text">${b.html}</div>`;
@@ -81,6 +83,7 @@ body{font-family:'Segoe UI',sans-serif;margin:0;color:#111;background:#fff}
 .meta{margin-bottom:1em;color:#333}
 .meta .metaline{margin-bottom:0.15em}
 .signature{margin-top:1.5em;color:#333}
+.signature-img{max-height:1.5in;display:block}
 .from,.to{margin-bottom:1em}
 .from h3,.to h3{margin:0 0 0.25em;font-size:0.85em;text-transform:uppercase;letter-spacing:0.05em;color:#555}
 .block{margin:1em 0}
