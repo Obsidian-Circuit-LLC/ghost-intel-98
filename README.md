@@ -38,13 +38,15 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`GhostIntel98-Setup-3.52.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
+> **Install:** download [`GhostIntel98-Setup-3.53.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
 
 > **📘 User guides** — plain-language, step-by-step (download or read in-browser):
 > - [**SOCMINT: X, Telegram & WhatsApp**](docs/guides/SOCMINT-Tutorial.pdf) — set up and run the social-media collectors, per platform, with the Tor / clearnet and opsec caveats. ([markdown](docs/guides/socmint-tutorial.md))
 > - [**How Searchlight Learns**](docs/guides/Searchlight-Learning-Guide.pdf) — how the username-sweep detector gets smarter from your own labels, and when to turn ML on. ([markdown](docs/guides/searchlight-learning.md))
 
 ## Status
+
+**v3.53.0** — **New tool: a no-frills, fully-offline PDF Signer.** From GhostExodus's request (there's no free offline way to sign a PDF without an iPhone): **Access ▸ Organizer ▸ PDF Signer** opens a `.pdf`, lets you **draw a signature with the mouse or upload an image** of one (the invoice-module signature pad), drag it onto the page and resize it on the corner, then **Sign & Save** a signed copy. The signature is stamped into the real PDF with a bundled pure-JS library (`pdf-lib`) so the **original text/pages are preserved** (not flattened to an image); **nothing leaves your machine** (no egress, source PDF read transiently and never vaulted). New main-process `signPdf` (honors page rotation), two IPC channels, a single-page pdfjs renderer, placement helpers, and the module + Organizer entry; one new dependency (`pdf-lib`, MIT, pure-JS, offline). Built subagent-driven over 6 TDD tasks with a **parallel adversarial whole-branch review** that caught + fixed four real issues before ship — ignored page `/Rotate`, an unbounded decoded-PNG size (memory bomb), an invisible 0×0 resize handle, and a half-covered placement test. **3,690 automated tests** green (1 skipped); typecheck clean. *Everything from v3.52.0 carries forward.*
 
 **v3.52.0** — **Report editor polish: sane descriptor popup, flexible recipient, real signature, growing document.** Six fixes + one feature from GhostExodus's continued Report-editor testing. **(1)** The right-click **descriptor/introduction popup** used to open two overlapping menus and land off-screen — the click both opened the descriptor menu and bubbled up to open the block menu, and `position:fixed` was broken by the page's zoom transform; now one menu opens at the pointer and dismisses on outside click. **(2)** Dropped **images** no longer have a huge white margin and resize on their **corner** — the frame hugs the image instead of spanning the column (and the resize drag tracks the pointer relative to the page width). **(3)** The **document grows with content** instead of stopping at one screen (a flexbox `align-items` fix). **(4)** The **"To" recipient is a combobox** — pick a saved contact *or* free-type a name (restoring free entry alongside v3.51.0's picker). **(5)** The **signature can be drawn or uploaded** (the invoice-module signature pad) and renders as a real image in PDF + DOCX, not a line of text. **(6)** The photo picker now offers **upload from computer** alongside case photos. One model field (`signatureRef`) carries through the report + template paths + both exporters with validators; no new dependency or egress; the v3.50.2 typing fix and v3.51.0 picker/recipient work are untouched. Built subagent-driven over 6 TDD tasks with a **parallel adversarial whole-branch review** that caught + fixed a resize-calibration regression the image-frame change introduced. **3,656 automated tests** green (1 skipped); typecheck clean. *Everything from v3.51.0 carries forward.*
 
@@ -541,7 +543,7 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases) and run it.
 
-Direct link to the current release: [`GhostIntel98-Setup-3.52.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.52.0/GhostIntel98-Setup-3.52.0.exe)
+Direct link to the current release: [`GhostIntel98-Setup-3.53.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.53.0/GhostIntel98-Setup-3.53.0.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is **formally verified internally** — symbolic (ProVerif) +
 computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not**
 FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.6.8/GhostIntel98-Setup-3.6.8.exe).
@@ -549,7 +551,7 @@ FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Se
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\GhostIntel98-Setup-3.52.0.exe -Algorithm SHA256
+Get-FileHash .\GhostIntel98-Setup-3.53.0.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
