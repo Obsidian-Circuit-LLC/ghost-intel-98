@@ -13,7 +13,7 @@ Three small fixes after the v3.51–v3.53 report-editor and PDF-Signer work land
 ## Verification
 
 - CSS overlap and alignment are invisible to JSDOM, so both report-editor fixes were verified with a **headless computed-style + screenshot pass** against the real stylesheet (measured rail-vs-document overshoot went 19px → 0; the ✕ buttons measured inside the popup frame). The PDF Signer empty-state composition was screenshot-checked against the requested layout, plus a new render test asserts the illustration shows only until a PDF is open.
-- **3,690 automated tests** passing (1 skipped); `pnpm typecheck` clean across both project configs. No new dependency, no new network egress.
+- **3,691 automated tests** passing (1 skipped); `pnpm typecheck` clean across both project configs. No new dependency, no new network egress.
 
 ## Install
 
