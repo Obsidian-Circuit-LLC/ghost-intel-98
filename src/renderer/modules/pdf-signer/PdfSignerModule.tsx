@@ -14,6 +14,7 @@ import { PdfPage, type PdfPageInfo } from './pdf-page';
 import { toNormalized, fromNormalized, type NormalizedPlacement } from './placement';
 import { SignaturePad, scaleToBitmap } from '../invoices/SignaturePad';
 import { toast } from '../../state/toasts';
+import emptyArt from '../../assets/pdf-signer-empty.jpg';
 
 /** Sane starting spot for a freshly-captured signature: lower-left-ish, a fifth of the page wide.
  *  The operator drags/resizes from here — nothing here is load-bearing beyond "on the page". */
@@ -196,6 +197,22 @@ export function PdfSignerModule(): JSX.Element {
         <div className="ga98-pdfsign-sigpane">
           <SignaturePad onCapture={onSignatureCapture} />
         </div>
+        {!pdfBytes ? (
+          // Decorative empty-state art (module ships no stylesheet → inline styles). Only while no
+          // PDF is open, so it never competes with the rendered page. Mirrors the cases-empty-hero
+          // sizing (capped, object-fit contain); aria-hidden since it carries no information.
+          <div
+            className="ga98-pdfsign-empty-art"
+            style={{ textAlign: 'center', padding: '12px', pointerEvents: 'none' }}
+          >
+            <img
+              src={emptyArt}
+              alt=""
+              aria-hidden="true"
+              style={{ display: 'inline-block', maxWidth: 'min(90%, 620px)', maxHeight: '58vh', objectFit: 'contain' }}
+            />
+          </div>
+        ) : null}
       </div>
     </div>
   );

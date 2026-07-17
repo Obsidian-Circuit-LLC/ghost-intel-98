@@ -1487,8 +1487,11 @@ input.ga98-text, select.ga98-text {
  * rules are namespaced under .ga98-report-* so they cannot leak into other modules. */
 /* Editor view — light Win98 to match the shell (GhostExodus mockup): silver rails, a grey document
  * workspace with the white page floating on it, beveled toolbar buttons, white sunken inputs/lists. */
-.ga98-report-shell { display: grid; grid-template-columns: 210px 1fr 230px; gap: 3px; height: 100%; overflow: hidden; background: #c0c0c0; color: #000; padding: 3px; }
-.ga98-report-leftrail, .ga98-report-rightrail { overflow-y: auto; background: #c0c0c0; border: 2px solid; border-color: #fff #808080 #808080 #fff; padding: 6px; display: flex; flex-direction: column; gap: 10px; }
+.ga98-report-shell { position: relative; display: grid; grid-template-columns: 210px 1fr 230px; gap: 3px; height: 100%; overflow: hidden; background: #c0c0c0; color: #000; padding: 3px; --ga98-report-statusbar-h: 21px; }
+/* Reserve the statusbar's height under both rails so their bottoms line up with the center document
+ * workspace (the statusbar lives inside .ga98-report-center only) instead of hanging a statusbar-height
+ * below it. The shared var keeps the rail inset and the pinned statusbar height in lockstep. */
+.ga98-report-leftrail, .ga98-report-rightrail { overflow-y: auto; background: #c0c0c0; border: 2px solid; border-color: #fff #808080 #808080 #fff; padding: 6px; display: flex; flex-direction: column; gap: 10px; margin-bottom: var(--ga98-report-statusbar-h); }
 .ga98-report-center { display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
 .ga98-report-toolbar { display: flex; flex-wrap: wrap; gap: 3px; padding: 3px; background: #c0c0c0; border: 2px solid; border-color: #fff #808080 #808080 #fff; align-items: center; }
 .ga98-report-toolbar button, .ga98-report-toolbar select { background: #c0c0c0; color: #000; border: 2px solid; border-color: #fff #808080 #808080 #fff; font-size: 11px; min-height: 22px; cursor: pointer; }
@@ -1501,7 +1504,7 @@ input.ga98-text, select.ga98-text {
 .ga98-report-doc-table { border-collapse: collapse; width: 100%; margin: 12px 0; background: #fff; }
 .ga98-report-doc-table td, .ga98-report-doc-table th { border: 1px solid #333; padding: 4px 6px; background: #fff; color: #111; vertical-align: top; }
 .ga98-report-doc-table th { font-weight: bold; }
-.ga98-report-statusbar { display: flex; gap: 16px; padding: 3px 8px; background: #c0c0c0; border-top: 1px solid #fff; font-size: 11px; color: #000; }
+.ga98-report-statusbar { display: flex; align-items: center; gap: 16px; height: var(--ga98-report-statusbar-h); box-sizing: border-box; padding: 3px 8px; background: #c0c0c0; border-top: 1px solid #fff; font-size: 11px; color: #000; }
 .ga98-report-rightrail section { border-bottom: 1px solid #808080; padding-bottom: 8px; }
 .ga98-report-rightrail section:last-child { border-bottom: 0; }
 .ga98-report-panel-title { font-weight: bold; font-size: 11px; margin-bottom: 4px; }
@@ -1512,6 +1515,12 @@ input.ga98-text, select.ga98-text {
  * DescriptorLibrary / IntroductionLibrary) share one structure: a `-head` bar, a `-list` <ul>, an
  * `-empty` placeholder, name/preview spans, and a `-editor`. Targets the ACTUAL namespaced classes. */
 .ga98-report-contactbook, .ga98-report-descriptorlib, .ga98-report-introlib { display: flex; flex-direction: column; gap: 4px; background: #c0c0c0; border: 2px solid; border-color: #fff #808080 #808080 #fff; padding: 6px; color: #000; }
+/* When the ContactBook is opened from the editor's From/To "Choose…" it is the 4th child of the
+ * 3-column shell grid; left unpinned it flowed into the 210px left track, so its rows overflowed the
+ * cell and the right rail painted over the row ✕ buttons. Float it as a proper bottom-left popup wide
+ * enough to enclose every row (name/org/Use/Edit/✕) and above both rails. Scoped to the shell so the
+ * shared descriptor/intro-library styling elsewhere is untouched. */
+.ga98-report-shell > .ga98-report-contactbook { position: absolute; left: 6px; bottom: 6px; width: 360px; max-width: calc(100% - 12px); max-height: 60%; overflow-y: auto; z-index: 30; box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.4); }
 .ga98-report-contactbook-head, .ga98-report-descriptorlib-head, .ga98-report-introlib-head { font-weight: bold; font-size: 11px; display: flex; justify-content: space-between; align-items: center; gap: 4px; }
 .ga98-report-contactbook-list, .ga98-report-descriptorlib-list, .ga98-report-introlib-list { list-style: none; margin: 0; padding: 2px; background: #fff; border: 2px solid; border-color: #808080 #fff #fff #808080; }
 .ga98-report-contactbook-list li, .ga98-report-descriptorlib-list li, .ga98-report-introlib-list li { display: flex; align-items: center; gap: 2px; padding: 2px 4px; cursor: pointer; }
