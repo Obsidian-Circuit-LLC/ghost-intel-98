@@ -31,7 +31,7 @@ import type {
   WhiteboardNode,
   WhiteboardEdge
 } from '../shared/types';
-import type { EntityCreateInput, EntityLinkOpts, BioAddInput, AuthStatus, LocalAiStatus, LocalAiProgress, MemoryStatus, MemoryProgress, MemoryItem, RecallPreview, LibraryDoc, MemoryGraphShape, BondShape, XCollectResultShape, XSessionMeta, XSessionTestResult, LearningModelMeta, GhostScrapeConfig, GhostScrapeResult, ScrapingCaseStoreId, ScrapingImportResult } from '../shared/ipc-contracts';
+import type { EntityCreateInput, EntityLinkOpts, BioAddInput, AuthStatus, LocalAiStatus, LocalAiProgress, MemoryStatus, MemoryProgress, MemoryItem, RecallPreview, LibraryDoc, MemoryGraphShape, BondShape, XCollectResultShape, XSessionMeta, XSessionTestResult, LearningModelMeta, GhostScrapeConfig, GhostScrapeResult, ScrapingCaseStoreId, ScrapingImportResult, PdfSignPlacement } from '../shared/ipc-contracts';
 import type { InvestigationScene, SceneDelta } from '../shared/investigation-graph';
 import type { RunEvent } from '../shared/investigation-agent';
 import type { RunBudget } from '../shared/investigation-types';
@@ -435,6 +435,13 @@ export interface GhostApi {
     // Main resolves the report/contact/assets itself from the id for both exporters.
     exportPdf(id: string): Promise<string | null>;
     exportDocx(id: string): Promise<string | null>;
+  };
+  pdfsign: {
+    /** Capped transient read of a host path (picked via files.pickOpen); never written to the vault. */
+    read(path: string): Promise<Uint8Array>;
+    /** Overlays the signature onto the chosen page (main-side signPdf) and saves via the OS dialog;
+     *  `sourceName` only shapes the save dialog's default filename stem. */
+    sign(args: { pdfBytes: Uint8Array; signatureDataUrl: string; placement: PdfSignPlacement; sourceName?: string }): Promise<{ saved: boolean }>;
   };
   geoint: {
     snapshot(): Promise<GeoSnapshot>;

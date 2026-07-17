@@ -5,7 +5,7 @@
 
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import { channels } from '../shared/ipc-contracts';
-import type { LocalAiStatus, LocalAiProgress, MemoryStatus, MemoryProgress, MemoryItem, RecallPreview, LibraryDoc, MemoryGraphShape, BondShape, GhostScrapeConfig, GhostScrapeResult, ScrapingCaseStoreId } from '../shared/ipc-contracts';
+import type { LocalAiStatus, LocalAiProgress, MemoryStatus, MemoryProgress, MemoryItem, RecallPreview, LibraryDoc, MemoryGraphShape, BondShape, GhostScrapeConfig, GhostScrapeResult, ScrapingCaseStoreId, PdfSignPlacement } from '../shared/ipc-contracts';
 import type { InvestigationScene, SceneDelta } from '../shared/investigation-graph';
 import type { EntityType, AppSettings } from '../shared/types';
 import type { RunEvent } from '../shared/investigation-agent';
@@ -363,6 +363,13 @@ const api = {
     // Main resolves the report/contact/assets itself from the id for both exporters.
     exportPdf: (id: string) => ipcRenderer.invoke(channels.reports.exportPdf, id),
     exportDocx: (id: string) => ipcRenderer.invoke(channels.reports.exportDocx, id)
+  },
+  pdfsign: {
+    // Capped transient read of a host path (picked via files.pickOpen) — never written to the vault.
+    read: (path: string) => ipcRenderer.invoke(channels.pdfsign.read, path),
+    // Main validates the placement/signature, overlays it (pdf-lib signPdf) and saves via the OS dialog.
+    sign: (args: { pdfBytes: Uint8Array; signatureDataUrl: string; placement: PdfSignPlacement; sourceName?: string }) =>
+      ipcRenderer.invoke(channels.pdfsign.sign, args)
   },
   geoint: {
     snapshot: () => ipcRenderer.invoke(channels.geoint.snapshot),

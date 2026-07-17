@@ -668,6 +668,13 @@ export const channels = {
     previewTemplate: 'reports:previewTemplate',
     exportPdf: 'reports:exportPdf',
     exportDocx: 'reports:exportDocx'
+  },
+  // PDF Signer (core module) — capped transient read of a picked PDF + pdf-lib overlay sign + save
+  // dialog. The source PDF is never written to the vault; only the signed copy hits disk (via the
+  // OS save dialog, at a user-chosen path).
+  pdfsign: {
+    read: 'pdfsign:read',
+    sign: 'pdfsign:sign'
   }
 } as const;
 
@@ -839,6 +846,10 @@ export interface LocalAiProgress {
   totalBytes?: number | null;
   message?: string;
 }
+
+/** Signature placement: top-left-anchored fractions of the target page (0..1), clamped main-side
+ *  by ensurePlacement. Structurally identical to the `Placement` interface `signPdf` consumes. */
+export interface PdfSignPlacement { page: number; xFrac: number; yFrac: number; wFrac: number }
 
 export type Channels = typeof channels;
 
@@ -1160,6 +1171,15 @@ export interface ApiContracts {
   // buildReportHtml document the exporters use (keeps buildReportHtml main-only). The renderer drops
   // it into a sandbox="" srcdoc iframe. Empty string if the id is unknown.
   [channels.reports.previewTemplate]: { args: [string]; returns: string };
+
+  // PDF Signer — read is a capped transient file read (path picked via files.pickOpen); sign
+  // composites the signature onto one page (pdf-lib, main-side signPdf) and saves via the OS
+  // dialog. `sourceName` is optional and only shapes the save dialog's default filename stem.
+  [channels.pdfsign.read]: { args: [string]; returns: Uint8Array };
+  [channels.pdfsign.sign]: {
+    args: [{ pdfBytes: Uint8Array; signatureDataUrl: string; placement: PdfSignPlacement; sourceName?: string }];
+    returns: { saved: boolean };
+  };
 }
 
 export const BGCONN_LOCK_EXEMPT_CHANNELS = ['bgconn:status', 'bgconn:stop'] as const;
