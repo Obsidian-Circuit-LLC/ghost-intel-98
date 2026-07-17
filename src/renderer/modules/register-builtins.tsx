@@ -49,6 +49,7 @@ import { InvestigationGraphModule } from './investigation-graph/InvestigationGra
 import { InvoicesModule } from './invoices/InvoicesModule';
 import { ReportsModule } from './reports/ReportsModule';
 import { NumberMuncherModule } from './number-muncher/NumberMuncherModule';
+import { PdfSignerModule } from './pdf-signer/PdfSignerModule';
 
 // ---------------------------------------------------------------------------
 // Adapter components — each has the uniform { spec: WindowSpec } signature and
@@ -239,6 +240,10 @@ function NumberMuncherAdapter({ spec: _spec }: { spec: WindowSpec }): JSX.Elemen
   return <NumberMuncherModule />;
 }
 
+function PdfSignerAdapter({ spec: _spec }: { spec: WindowSpec }): JSX.Element {
+  return <PdfSignerModule />;
+}
+
 // ---------------------------------------------------------------------------
 // Registration
 // Titles are VERBATIM from Desktop.tsx moduleTitles.
@@ -289,4 +294,5 @@ export function registerBuiltins(): void {
   registerModule({ key: 'invoices', title: 'Ghost Ledger 98', glyph: '📒', component: InvoicesAdapter, builtin: true, defaultWidth: 900, defaultHeight: 640 });
   registerModule({ key: 'report', title: 'Reports', glyph: '📋', component: ReportsAdapter, builtin: true, defaultWidth: 1040, defaultHeight: 680 });
   registerModule({ key: 'number-muncher', title: 'Number Muncher', glyph: '🧮', component: NumberMuncherAdapter, builtin: true, defaultWidth: 320, defaultHeight: 450 });
+  registerModule({ key: 'pdf-signer', title: 'PDF Signer', glyph: '✒️', component: PdfSignerAdapter, builtin: true, defaultWidth: 900, defaultHeight: 720 });
 }

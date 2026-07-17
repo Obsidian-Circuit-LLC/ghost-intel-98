@@ -42,7 +42,8 @@ const CATEGORIES: { label: string; glyph: string; items: { module: ModuleKey; la
   { label: 'Organizer', glyph: '📅', items: [
     { module: 'invoices', label: 'Invoices' }, { module: 'report', label: 'Reports' },
     { module: 'calendar', label: 'Calendar' }, { module: 'reminders', label: 'Reminders' },
-    { module: 'alarm', label: 'Alarm' }, { module: 'number-muncher', label: 'Number Muncher' } ] }
+    { module: 'alarm', label: 'Alarm' }, { module: 'number-muncher', label: 'Number Muncher' },
+    { module: 'pdf-signer', label: 'PDF Signer' } ] }
 ];
 
 /** Shared flyout shell for a category — extracted from the original Games submenu markup so

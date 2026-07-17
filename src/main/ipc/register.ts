@@ -70,7 +70,8 @@ import * as aiConvos from '../storage/ai-conversations';
 import * as briefcase from '../storage/briefcase';
 import * as journal from '../storage/journal';
 import * as voiceModel from '../voice/model-protocol';
-import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityType, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureShellProgram, ensureWhiteboard, ensureBoardFile, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon, ensureSaveToCaseOpts, ensureGeoItem, ensureThreatLayerId, ensureKeyedLayerId, ensureLayerKey, isKeyedLayerId, ensureBookmarkBoard, ensureMarketsSettings, ensureStickyNotes, ensureAiConversation, ensureBriefcaseNote, ensureJournalEntry, ensurePin, ensureUid, ensureMailFlag, stripProtectedSettings, ensureBounds, ensureDocRelPath, ensureDocName, ensureImportSourcePath, ensureNoteBody, ensureIdArray, ensureInvoice, ensureProfile, ensureAssetInput, ensureReport, ensureContact, ensureDescriptor, ensureIntroduction, ensureReportTemplate, ensureReportAssetInput, ensureConversationId } from '../security/validate';
+import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityType, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureShellProgram, ensureWhiteboard, ensureBoardFile, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon, ensureSaveToCaseOpts, ensureGeoItem, ensureThreatLayerId, ensureKeyedLayerId, ensureLayerKey, isKeyedLayerId, ensureBookmarkBoard, ensureMarketsSettings, ensureStickyNotes, ensureAiConversation, ensureBriefcaseNote, ensureJournalEntry, ensurePin, ensureUid, ensureMailFlag, stripProtectedSettings, ensureBounds, ensureDocRelPath, ensureDocName, ensureImportSourcePath, ensureNoteBody, ensureIdArray, ensureInvoice, ensureProfile, ensureAssetInput, ensureReport, ensureContact, ensureDescriptor, ensureIntroduction, ensureReportTemplate, ensureReportAssetInput, ensureConversationId, MAX_PDF_SIGN_BYTES, ensurePdfBytes, parseSignatureDataUrl, ensurePlacement } from '../security/validate';
+import { signPdf } from '../pdf-signer/sign';
 import * as entities from '../storage/entities';
 import * as bioStore from '../storage/bio-images';
 import * as ftp from '../services/ftp';
@@ -2366,6 +2367,27 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   });
   safeHandle(channels.ghostscrape.start, (...a) => ghostScrapeHandlers.start(a[0]));
   safeHandle(channels.ghostscrape.cancel, (...a) => ghostScrapeHandlers.cancel(a[0]));
+
+  // ---- PDF Signer (core module) — capped transient read of a picked PDF + pdf-lib overlay sign
+  // + save dialog. The source PDF is read here only to composite the signature; it is never
+  // written into the vault, and only the signed copy hits disk (at a user-chosen save path). ----
+  safeHandle(channels.pdfsign.read, async (...a) => {
+    const path = ensureImportSourcePath(a[0], 'path');
+    const st = await stat(path);
+    if (st.size > MAX_PDF_SIGN_BYTES) throw new Error('PDF is too large to sign (max 25 MB).');
+    return new Uint8Array(await readFile(path));
+  });
+  safeHandle(channels.pdfsign.sign, async (...a) => {
+    const o = (a[0] ?? {}) as Record<string, unknown>;
+    const pdfBytes = ensurePdfBytes(o.pdfBytes);
+    const sig = parseSignatureDataUrl(o.signatureDataUrl);
+    const placement = ensurePlacement(o.placement);
+    const signed = await signPdf(pdfBytes, sig.bytes, sig.mime, placement);
+    const sourceName = typeof o.sourceName === 'string' ? ensureFileName(o.sourceName, 'sourceName') : undefined;
+    const stem = sourceName ? sourceName.replace(/\.[^.]+$/, '') : 'document';
+    const saved = await saveBufferWithDialog(getWindow(), `${stem}-signed.pdf`, Buffer.from(signed));
+    return { saved: saved !== null };
+  });
 
   startMailPoller(getWindow);
 }

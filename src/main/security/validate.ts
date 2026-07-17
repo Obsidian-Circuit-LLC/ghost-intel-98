@@ -1225,6 +1225,58 @@ export function ensureReportAssetInput(v: unknown): { bytes: Buffer; mime: strin
   return { bytes: Buffer.from(o.bytes as number[]), mime: o.mime };
 }
 
+// ---------- PDF signer ----------
+
+/** Ceiling on the raw bytes of a PDF crossing the IPC boundary — either the capped file read for
+ *  `pdfsign:read`, or the bytes handed back in from the renderer for `pdfsign:sign`. Modeled on
+ *  MAX_EXPORT_ASSET_BYTES; the source PDF is read/handled transiently and never persisted. */
+export const MAX_PDF_SIGN_BYTES = 25 * 1024 * 1024;
+
+/** Validates a PDF byte buffer crossing the IPC boundary — must be an actual byte array, bounded
+ *  by MAX_PDF_SIGN_BYTES so a hostile renderer can't force an unbounded pdf-lib parse in main. */
+export function ensurePdfBytes(v: unknown): Uint8Array {
+  if (!(v instanceof Uint8Array)) throw new ValidationError('pdfBytes must be a byte array');
+  if (v.length > MAX_PDF_SIGN_BYTES) throw new ValidationError('PDF is too large to sign (max 25 MB)');
+  return v;
+}
+
+const SIGNATURE_DATA_URL_RE = /^data:(image\/png|image\/jpeg);base64,([A-Za-z0-9+/=]+)$/;
+
+/** Decodes + validates a renderer-supplied signature `data:image/(png|jpeg);base64,...` URL for
+ *  `pdfsign:sign`. The length guard runs before the regex/decode so a pathological string can't
+ *  balloon the base64 decode; the decoded bytes then go through ensureAssetInput so the mime/size
+ *  rules (2 MiB cap) live in exactly one place rather than being duplicated here. */
+export function parseSignatureDataUrl(value: unknown): { bytes: Buffer; mime: 'image/png' | 'image/jpeg' } {
+  if (typeof value !== 'string' || value.length > 3_000_000) {
+    throw new ValidationError('signature must be a base64 image data URL');
+  }
+  const m = SIGNATURE_DATA_URL_RE.exec(value);
+  if (!m) throw new ValidationError('signature must be a data:image/png or data:image/jpeg base64 URL');
+  const mime = m[1] as 'image/png' | 'image/jpeg';
+  const decoded = Buffer.from(m[2], 'base64');
+  const { bytes } = ensureAssetInput({ bytes: Array.from(decoded), mime });
+  return { bytes, mime };
+}
+
+/** Validates a renderer-supplied signature placement (page index + 0..1 fractions of the page).
+ *  Fractions are clamped rather than rejected — a drag position slightly past the page edge is
+ *  normal UI slop, not a hostile input, and clamping keeps the pdf-lib drawImage math well-defined. */
+export function ensurePlacement(v: unknown): { page: number; xFrac: number; yFrac: number; wFrac: number } {
+  if (!v || typeof v !== 'object') throw new ValidationError('placement must be an object');
+  const o = v as Record<string, unknown>;
+  if (typeof o.page !== 'number' || !Number.isInteger(o.page) || o.page < 0) {
+    throw new ValidationError('placement.page must be a non-negative integer');
+  }
+  const frac = (key: string): number => {
+    const n = o[key];
+    if (typeof n !== 'number' || !Number.isFinite(n)) {
+      throw new ValidationError(`placement.${key} must be a finite number`);
+    }
+    return Math.min(1, Math.max(0, n));
+  };
+  return { page: o.page, xFrac: frac('xFrac'), yFrac: frac('yFrac'), wFrac: frac('wFrac') };
+}
+
 /** Minimal shape guard for a persisted invoice — the store is the source of truth for the rest. */
 export function ensureInvoice(v: unknown): import('@shared/invoice-types').Invoice {
   if (!v || typeof v !== 'object') throw new ValidationError('invoice must be an object');
