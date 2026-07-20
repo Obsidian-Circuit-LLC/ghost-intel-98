@@ -282,9 +282,7 @@ function LinkEditor({ editing, networkEnabled, onCancel, onSave }: {
 
   return (
     <div className="ga98-dialog-veil">
-      {/* height:fit-content + maxHeight defensively guarantee a compact dialog: as an inline style it
-          overrides any stray cascade that would otherwise stretch the .window to full height. */}
-      <div className="window" style={{ width: 420, height: 'fit-content', maxHeight: '85vh', overflowY: 'auto' }}>
+      <div className="window ga98-dialog-window" style={{ width: 420 }}>
         <div className="title-bar"><div className="title-bar-text">{editing.isNew ? 'Add link' : 'Edit link'}</div></div>
         <div className="window-body ga98-stack">
           <div style={{ display: 'grid', gridTemplateColumns: '70px 1fr', gap: 6, alignItems: 'center' }}>
