@@ -15,19 +15,18 @@ describe('assertResolvedPublic (SSRF DNS guard)', () => {
   });
 });
 
-// Finding 5 — the per-card resize height must survive the ensureBookmarkBoard round-trip.
-describe('ensureBookmarkBoard carries category height', () => {
-  it('keeps a valid height', () => {
-    const b = ensureBookmarkBoard({ categories: [{ id: 'c1', title: 'T', height: 420, links: [] }], networkEnabled: false });
-    expect(b.categories[0].height).toBe(420);
-  });
-  it('clamps an out-of-range height', () => {
-    const b = ensureBookmarkBoard({ categories: [{ id: 'c2', title: 'T', height: 99999, links: [] }], networkEnabled: false });
-    expect(b.categories[0].height).toBe(4000);
-  });
-  it('leaves height undefined when absent or non-numeric', () => {
-    expect(ensureBookmarkBoard({ categories: [{ id: 'c3', title: 'T', links: [] }], networkEnabled: false }).categories[0].height).toBeUndefined();
-    expect(ensureBookmarkBoard({ categories: [{ id: 'c4', title: 'T', height: 'tall', links: [] }], networkEnabled: false }).categories[0].height).toBeUndefined();
+// Finding 5 (SUPERSEDED v3.55.0) — the per-card resize feature was retired; cards auto-fit their
+// links. The validator now DROPS any stored `height` on the get/save round-trip so no legacy board
+// data can resurface a full-height card. This block now guards the retirement instead of the carry.
+describe('ensureBookmarkBoard strips retired category height', () => {
+  const h = (cat: object): unknown =>
+    (ensureBookmarkBoard({ categories: [{ id: 'c', title: 'T', links: [], ...cat }], networkEnabled: false })
+      .categories[0] as { height?: number }).height;
+  it('drops a valid height (retired)', () => { expect(h({ height: 420 })).toBeUndefined(); });
+  it('drops an out-of-range height (retired)', () => { expect(h({ height: 99999 })).toBeUndefined(); });
+  it('is undefined when absent or non-numeric', () => {
+    expect(h({})).toBeUndefined();
+    expect(h({ height: 'tall' })).toBeUndefined();
   });
 });
 
