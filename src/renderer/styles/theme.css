@@ -1159,11 +1159,15 @@ input.ga98-text, select.ga98-text {
 }
 
 /* ── Bookmarks dashboard (offline start.me-style board) ────────────────────── */
+/* Masonry: a flex row of fixed-width columns; the module packs each category into the shortest
+   column (by estimated height) so cards fill tightly with no reserved full-height columns and no
+   large empty band on a wide window. align-items:flex-start keeps columns top-anchored. */
 .ga98-bm-board {
   flex: 1; overflow: auto; padding: 8px;
-  column-width: 240px; column-gap: 8px;
+  display: flex; align-items: flex-start; gap: 8px;
 }
-.ga98-bm-card { break-inside: avoid; margin: 0 0 8px; display: inline-block; width: 100%; }
+.ga98-bm-col { display: flex; flex-direction: column; gap: 8px; flex: 0 0 240px; width: 240px; }
+.ga98-bm-card { width: 100%; }
 .ga98-bm-card .title-bar { cursor: grab; }
 .ga98-bm-title-input {
   flex: 1; background: transparent; border: none; color: #fff; font-weight: bold;
