@@ -14,12 +14,14 @@ describe('ensureBookmarkBoard', () => {
     expect(b.categories[0].links[0].url).toBe('https://example.com/');
   });
 
-  it('accepts a legacy board carrying a per-card height (back-compat — auto-fit ignores it at render)', () => {
+  it('strips a legacy per-card height (retired v3.55.0 — cards auto-fit; load must not fail)', () => {
     const b = ensureBookmarkBoard({
       categories: [{ id: 'c1', title: 'Legacy', height: 240, links: [{ id: 'l1', name: 'Ex', url: 'https://example.com' }] }]
     });
     expect(b.categories).toHaveLength(1);
-    expect(b.categories[0].height).toBe(240); // validator still carries the field — load doesn't fail
+    // The field is retired: the validator drops it on the get/save round-trip so old board data
+    // self-heals and no stored height can ever resurface a full-height card.
+    expect((b.categories[0] as { height?: number }).height).toBeUndefined();
     expect(b.categories[0].links[0].url).toBe('https://example.com/');
   });
 

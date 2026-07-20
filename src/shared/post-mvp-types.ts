@@ -329,9 +329,8 @@ export interface BookmarkCategory {
   id: string;
   title: string;
   links: BookmarkLink[];
-  /** User-set height (px) of the card's link area. Undefined = auto (fits its links). The card
-   *  is resizable, so a sparse category can be shortened and others stack beneath it in column. */
-  height?: number;
+  // NOTE: a legacy `height?: number` (manual per-card resize) was retired in v3.55.0. Cards now
+  // always auto-fit their links; `ensureBookmarkBoard` strips any stored height on load/save.
 }
 
 /** The whole dashboard. Persisted under dataRoot, encrypted at rest when login is enabled.

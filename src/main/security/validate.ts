@@ -816,11 +816,12 @@ export function ensureBookmarkBoard(raw: unknown): BookmarkBoard {
         && fav.length <= MAX_BM_FAVICON) link.favicon = fav;
       links.push(link);
     }
-    // Carry the per-card resize height (clamped) — without this the bookmarks resize feature
-    // is silently dropped on the save/get round-trip.
-    const rawH = (c as { height?: unknown }).height;
-    const height = typeof rawH === 'number' && Number.isFinite(rawH) ? Math.max(60, Math.min(rawH, 4000)) : undefined;
-    categories.push({ id: bmId(c.id), title: bmText(c.title, 200) || 'Untitled', links, ...(height !== undefined ? { height } : {}) });
+    // Legacy per-card resize height is intentionally DROPPED (not carried): the manual-resize
+    // feature was removed in v3.14.0-beta.7 and cards auto-fit their links, so any `height`
+    // persisted by an old build is stripped here on the next get/save round-trip and can never
+    // resurface. Both the get and save IPC handlers run through this validator, so a stored board
+    // self-heals on first load and rewrites clean on first save.
+    categories.push({ id: bmId(c.id), title: bmText(c.title, 200) || 'Untitled', links });
   }
   return { categories, networkEnabled: o.networkEnabled === true };
 }
