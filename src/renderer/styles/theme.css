@@ -1179,16 +1179,30 @@ input.ga98-text, select.ga98-text {
 }
 
 /* ── Bookmarks dashboard (offline start.me-style board) ────────────────────── */
-/* Masonry: a flex row of fixed-width columns; the module packs each category into the shortest
-   column (by estimated height) so cards fill tightly with no reserved full-height columns and no
-   large empty band on a wide window. align-items:flex-start keeps columns top-anchored. */
+/* start.me-style column board: a flex row of fixed-width columns; the user drags each category into
+   a column and it stays there (layout.ts holds the placement). Columns STRETCH to the board height so
+   the whole column — including the space below the last card — is a reliable drop target for
+   "append to the bottom of this column". */
 .ga98-bm-board {
   flex: 1; overflow: auto; padding: 8px;
-  display: flex; align-items: flex-start; gap: 8px;
+  display: flex; align-items: stretch; gap: 8px;
 }
-.ga98-bm-col { display: flex; flex-direction: column; gap: 8px; flex: 0 0 240px; width: 240px; }
+.ga98-bm-col { display: flex; flex-direction: column; gap: 8px; flex: 0 0 240px; width: 240px; min-height: 60px; }
+.ga98-bm-col[data-droptarget='true'] { background: rgba(0, 0, 128, 0.06); outline: 1px dashed #000080; outline-offset: -1px; }
+/* Cards carry `class="ga98-bm-card window"`, so — exactly like the modal-dialog case — the
+   `.ga98-window-shell .window { height:100% }` + `.window-body { flex:1 }` rules (which size a
+   MODULE's window to fill its shell) would stretch each card to the full column height now that
+   columns stretch. Re-anchor cards + their link body to content height. Equal specificity to the
+   window-shell rules, so these must stay AFTER them in source order (this block is far below). */
+.ga98-bm-card.window { height: fit-content; }
+.ga98-bm-card .window-body { flex: 0 0 auto; }
 .ga98-bm-card { width: 100%; }
+.ga98-bm-card[data-dragging='true'] { opacity: 0.4; }
 .ga98-bm-card .title-bar { cursor: grab; }
+.ga98-bm-card .title-bar:active { cursor: grabbing; }
+/* Drop indicator: a navy line marking where the dragged category will land (above a card, or at a
+   column's bottom). Negative margin keeps it from adding to the 8px inter-card gap. */
+.ga98-bm-dropline { height: 3px; background: #000080; margin: -1px 0; border-radius: 1px; flex: 0 0 auto; }
 .ga98-bm-title-input {
   flex: 1; background: transparent; border: none; color: #fff; font-weight: bold;
   font-size: 11px; padding: 0 2px; min-width: 0;

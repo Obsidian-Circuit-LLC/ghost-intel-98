@@ -821,7 +821,15 @@ export function ensureBookmarkBoard(raw: unknown): BookmarkBoard {
     // persisted by an old build is stripped here on the next get/save round-trip and can never
     // resurface. Both the get and save IPC handlers run through this validator, so a stored board
     // self-heals on first load and rewrites clean on first save.
-    categories.push({ id: bmId(c.id), title: bmText(c.title, 200) || 'Untitled', links });
+    //
+    // Carry the drag-placement column (v3.59.0): a finite non-negative integer, clamped to a sane
+    // ceiling so a corrupt file can't request an absurd column count. Absent ⇒ legacy card, migrated
+    // to an explicit column by the renderer on first load.
+    const rawCol = (c as { column?: unknown }).column;
+    const column = typeof rawCol === 'number' && Number.isFinite(rawCol)
+      ? Math.max(0, Math.min(Math.trunc(rawCol), 63))
+      : undefined;
+    categories.push({ id: bmId(c.id), title: bmText(c.title, 200) || 'Untitled', links, ...(column !== undefined ? { column } : {}) });
   }
   return { categories, networkEnabled: o.networkEnabled === true };
 }

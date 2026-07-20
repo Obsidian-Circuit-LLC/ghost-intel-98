@@ -329,6 +329,10 @@ export interface BookmarkCategory {
   id: string;
   title: string;
   links: BookmarkLink[];
+  /** 0-based column the card is placed in (start.me-style drag placement, v3.59.0). Absolute: it
+   *  folds into the last visible column on a narrow window and springs back when widened. Absent on
+   *  a legacy board — migrated to an explicit column on first load. */
+  column?: number;
   // NOTE: a legacy `height?: number` (manual per-card resize) was retired in v3.55.0. Cards now
   // always auto-fit their links; `ensureBookmarkBoard` strips any stored height on load/save.
 }

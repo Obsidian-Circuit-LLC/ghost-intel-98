@@ -25,6 +25,24 @@ describe('ensureBookmarkBoard', () => {
     expect(b.categories[0].links[0].url).toBe('https://example.com/');
   });
 
+  it('carries a valid drag-placement column, clamps out-of-range, drops garbage (v3.59.0)', () => {
+    const b = ensureBookmarkBoard({
+      categories: [
+        { id: 'a', title: 'A', column: 2, links: [] },
+        { id: 'b', title: 'B', column: 9999, links: [] },     // clamp to ceiling
+        { id: 'c', title: 'C', column: -5, links: [] },       // clamp to 0
+        { id: 'd', title: 'D', column: 'nope', links: [] },   // garbage → absent
+        { id: 'e', title: 'E', links: [] }                    // legacy (no column) → absent
+      ]
+    });
+    const col = (i: number) => (b.categories[i] as { column?: number }).column;
+    expect(col(0)).toBe(2);
+    expect(col(1)).toBe(63);   // MAX
+    expect(col(2)).toBe(0);
+    expect(col(3)).toBeUndefined();
+    expect(col(4)).toBeUndefined();
+  });
+
   it('drops non-http(s) links (no javascript:/file:/mailto: on the board)', () => {
     const b = ensureBookmarkBoard({
       categories: [{
