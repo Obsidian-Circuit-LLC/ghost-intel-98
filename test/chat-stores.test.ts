@@ -95,9 +95,21 @@ describe('PrekeyStore', () => {
     const id = generateIdentity();
     const store = new PrekeyStore(await tmp('prekeys.json'), id);
     const quiet = await store.issueNext('cid-quiet');           // the id our quiet peer will present
-    for (let i = 0; i < 1000; i++) await store.issueNext(`cid-other-${i}`); // churn elsewhere
+    // The index is bounded PER CONTACT with no global cap (rev-4 goal 7), so churn on other contacts
+    // must never evict another contact's entry. We assert ALL churned contacts still resolve — a
+    // re-introduced GLOBAL cap (the rev-1 defect) would evict the oldest across contacts and fail this,
+    // a stronger guard than checking only the quiet contact. CHURN is kept high enough to trip any
+    // realistically re-introduced cap while bounding runtime: 1000 real ML-KEM-1024 mints + the
+    // O(n^2) whole-file rewrites per issueNext pushed this test to ~20s nominal and past its 60s budget
+    // under CI load (the flake). 256 mints run in a few seconds with a comfortable timeout margin.
+    const CHURN = 256;
+    const others: Awaited<ReturnType<typeof store.issueNext>>[] = [];
+    for (let i = 0; i < CHURN; i++) others.push(await store.issueNext(`cid-other-${i}`));
     expect(await store.identifyContact(quiet.prekeyId)).toBe('cid-quiet'); // NOT evicted
-  }, 60000); // 1000 ML-KEM-1024 mints ~20s; the assertion is what's under test, not the runtime
+    for (let i = 0; i < CHURN; i++) {
+      expect(await store.identifyContact(others[i].prekeyId)).toBe(`cid-other-${i}`); // no global eviction
+    }
+  }, 30000);
 
   it('per-contact index retains >= MINT_CAP recent ids per contact (coupling invariant)', async () => {
     const id = generateIdentity();
