@@ -38,13 +38,15 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`GhostIntel98-Setup-3.55.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
+> **Install:** download [`GhostIntel98-Setup-3.56.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
 
 > **📘 User guides** — plain-language, step-by-step (download or read in-browser):
 > - [**SOCMINT: X, Telegram & WhatsApp**](docs/guides/SOCMINT-Tutorial.pdf) — set up and run the social-media collectors, per platform, with the Tor / clearnet and opsec caveats. ([markdown](docs/guides/socmint-tutorial.md))
 > - [**How Searchlight Learns**](docs/guides/Searchlight-Learning-Guide.pdf) — how the username-sweep detector gets smarter from your own labels, and when to turn ML on. ([markdown](docs/guides/searchlight-learning.md))
 
 ## Status
+
+**v3.56.0** — **Jukebox: fix mp3 playback cutting out after a minute or two (GhostExodus).** A track would start fine and then go silent at some random point a minute or two in — since the Windows-Media-Player reskin that added the Web-Audio EQ graph. Root cause: the Jukebox routes the `<audio>` element through `createMediaElementSource → EQ → analyser → destination`, but the **source node was held only in a local variable** — the one node in the graph with no lasting reference. Chromium garbage-collects an unreferenced `MediaElementAudioSourceNode` *even while it's connected*, which severs the element from the speakers; the element keeps "playing" (its clock advances) but no sound comes out, and because GC timing is non-deterministic it struck "randomly after a minute or two." The fix retains the source node on the graph instance (as the context, EQ bands, and analyser already were). Diagnosed systematically — ruled out a stray timer (there is none) and an audio-element remount (the element sits outside the shade/mode switches) before landing on the GC cause; a regression test asserts the node is retained. **3,692 automated tests** green (1 skipped); typecheck clean. *Everything from v3.55.0 carries forward.*
 
 **v3.55.0** — **Bookmarks: retire the vestigial per-card height field.** A data-hygiene hardening. The Bookmarks board once let you manually resize a category card and stored a per-card `height`; that resize feature was removed back in v3.14.0-beta.7 (cards now **auto-fit their links** and the Add-link dialog is a compact centered modal), but the board validator still round-tripped any stored `height`, so legacy board data carried it forever. It was harmless — the renderer ignores it — but it's a smell, and a stored height should never be able to resurface a full-height card. Now `ensureBookmarkBoard` **drops** it (both the get and save IPC paths run through the validator, so a stored board self-heals on first load and rewrites clean on first save) and the field is removed from the `BookmarkCategory` type. **No visible change** — the compact dialog and auto-fit cards have shipped since v3.14; this just cleans the persisted data. *If you're seeing full-height Bookmark cards or a full-height Add-link popup, you're on a build older than v3.14 — update and it's already fixed.* **3,691 automated tests** green (1 skipped); typecheck clean. *Everything from v3.54.0 carries forward.*
 
@@ -547,7 +549,7 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases) and run it.
 
-Direct link to the current release: [`GhostIntel98-Setup-3.55.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.55.0/GhostIntel98-Setup-3.55.0.exe)
+Direct link to the current release: [`GhostIntel98-Setup-3.56.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.56.0/GhostIntel98-Setup-3.56.0.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is **formally verified internally** — symbolic (ProVerif) +
 computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not**
 FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.6.8/GhostIntel98-Setup-3.6.8.exe).
@@ -555,7 +557,7 @@ FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Se
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\GhostIntel98-Setup-3.55.0.exe -Algorithm SHA256
+Get-FileHash .\GhostIntel98-Setup-3.56.0.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
