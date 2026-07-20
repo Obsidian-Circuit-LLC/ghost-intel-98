@@ -9,13 +9,36 @@
  * when login is on. Nothing here depends on a third-party site staying up.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { BookmarkBoard, BookmarkCategory, BookmarkLink } from '@shared/post-mvp-types';
 import { toast } from '../../state/toasts';
 import { confirmDialog } from '../../state/dialogs';
 
 function uid(): string { return crypto.randomUUID(); }
 const EMPTY: BookmarkBoard = { categories: [], networkEnabled: false };
+
+// Masonry layout. CSS multi-column reserved a full-height column per card (or crammed everything into
+// a couple of columns leaving the rest of a wide window empty), which wasted space badly. Instead we
+// pack each category into the currently-shortest column so cards fill tightly. Column heights are
+// ESTIMATED from link count (no measure/reflow pass, no flicker) — the estimate only needs to balance,
+// not be pixel-perfect. Column COUNT is derived from the live board width via a ResizeObserver.
+const BM_CARD_W = 240;
+const BM_CARD_GAP = 8;
+const BM_EST_HEADER = 26; // title bar
+const BM_EST_LINK_ROW = 22; // one link row
+const BM_EST_FOOTER = 32; // "+ Add link" + padding
+
+function distributeIntoColumns(categories: BookmarkCategory[], colCount: number): BookmarkCategory[][] {
+  const cols = Array.from({ length: Math.max(1, colCount) }, () => ({ items: [] as BookmarkCategory[], h: 0 }));
+  for (const c of categories) {
+    const est = BM_EST_HEADER + c.links.length * BM_EST_LINK_ROW + BM_EST_FOOTER;
+    let target = cols[0];
+    for (const col of cols) if (col.h < target.h) target = col;
+    target.items.push(c);
+    target.h += est + BM_CARD_GAP;
+  }
+  return cols.map((col) => col.items);
+}
 
 interface Editing { catId: string; link: BookmarkLink; isNew: boolean }
 
@@ -29,6 +52,21 @@ export function BookmarksModule(): JSX.Element {
   useEffect(() => {
     void window.api.bookmarks.get().then((b) => { setBoard(b ?? EMPTY); setLoaded(true); });
   }, []);
+
+  // Masonry column count, tracked from the live board width (falls back to 1 where ResizeObserver
+  // is unavailable, e.g. jsdom in tests — cards still render, just in a single column).
+  const boardRef = useRef<HTMLDivElement>(null);
+  const [colCount, setColCount] = useState(1);
+  useEffect(() => {
+    const el = boardRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const measure = () => setColCount(Math.max(1, Math.floor((el.clientWidth + BM_CARD_GAP) / (BM_CARD_W + BM_CARD_GAP))));
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const columns = useMemo(() => distributeIntoColumns(board.categories, colCount), [board.categories, colCount]);
 
   // Persist on every mutation (board is small; no debounce needed).
   const persist = useCallback((next: BookmarkBoard) => {
@@ -139,11 +177,13 @@ export function BookmarksModule(): JSX.Element {
         </label>
       </div>
 
-      <div className="ga98-bm-board">
+      <div className="ga98-bm-board" ref={boardRef}>
         {board.categories.length === 0 && (
           <div style={{ color: '#666', padding: 16 }}>No categories yet. Click <b>+ Category</b> to start your board.</div>
         )}
-        {board.categories.map((c) => (
+        {columns.map((col, ci) => (
+          <div className="ga98-bm-col" key={`col-${ci}`}>
+            {col.map((c) => (
           <div
             key={c.id}
             className="ga98-bm-card window"
@@ -194,6 +234,8 @@ export function BookmarksModule(): JSX.Element {
               >+ Add link</button>
             </div>
           </div>
+            ))}
+          </div>
         ))}
       </div>
 
@@ -240,7 +282,9 @@ function LinkEditor({ editing, networkEnabled, onCancel, onSave }: {
 
   return (
     <div className="ga98-dialog-veil">
-      <div className="window" style={{ width: 420 }}>
+      {/* height:fit-content + maxHeight defensively guarantee a compact dialog: as an inline style it
+          overrides any stray cascade that would otherwise stretch the .window to full height. */}
+      <div className="window" style={{ width: 420, height: 'fit-content', maxHeight: '85vh', overflowY: 'auto' }}>
         <div className="title-bar"><div className="title-bar-text">{editing.isNew ? 'Add link' : 'Edit link'}</div></div>
         <div className="window-body ga98-stack">
           <div style={{ display: 'grid', gridTemplateColumns: '70px 1fr', gap: 6, alignItems: 'center' }}>

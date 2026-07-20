@@ -553,6 +553,13 @@ input.ga98-text, select.ga98-text {
 }
 /* Recurring-reminder badge (🔁) — a small inline glyph before a repeating occurrence's label. */
 .ga98-cal-recurring { margin-right: 2px; font-size: 9px; }
+/* Note badge (📝) — marks an event that carries a hover note. */
+.ga98-cal-noted { margin-right: 2px; font-size: 9px; }
+/* Colour palette row inside the event context menu. */
+.ga98-context-menu-swatches { display: flex; flex-wrap: wrap; gap: 3px; padding: 4px 8px; max-width: 132px; }
+.ga98-cal-swatch { width: 16px; height: 16px; min-width: 16px; min-height: 16px; padding: 0; border: 1px solid; border-color: #808080 #fff #fff #808080; cursor: pointer; box-sizing: border-box; }
+.ga98-cal-swatch:hover { outline: 1px dotted #000; outline-offset: 1px; }
+.ga98-cal-swatch-clear { background: #c0c0c0; color: #000; font-size: 11px; line-height: 1; display: flex; align-items: center; justify-content: center; }
 
 .ga98-coming-soon {
   display: flex;
@@ -1159,11 +1166,15 @@ input.ga98-text, select.ga98-text {
 }
 
 /* ── Bookmarks dashboard (offline start.me-style board) ────────────────────── */
+/* Masonry: a flex row of fixed-width columns; the module packs each category into the shortest
+   column (by estimated height) so cards fill tightly with no reserved full-height columns and no
+   large empty band on a wide window. align-items:flex-start keeps columns top-anchored. */
 .ga98-bm-board {
   flex: 1; overflow: auto; padding: 8px;
-  column-width: 240px; column-gap: 8px;
+  display: flex; align-items: flex-start; gap: 8px;
 }
-.ga98-bm-card { break-inside: avoid; margin: 0 0 8px; display: inline-block; width: 100%; }
+.ga98-bm-col { display: flex; flex-direction: column; gap: 8px; flex: 0 0 240px; width: 240px; }
+.ga98-bm-card { width: 100%; }
 .ga98-bm-card .title-bar { cursor: grab; }
 .ga98-bm-title-input {
   flex: 1; background: transparent; border: none; color: #fff; font-weight: bold;

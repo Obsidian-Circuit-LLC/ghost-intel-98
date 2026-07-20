@@ -174,3 +174,68 @@ describe('Calendar right-click Make/Remove recurring (Task 4)', () => {
     expect(upsertGlobal.mock.calls[0][0]).toMatchObject({ id: 'g1', repeat: 'none', fired: false });
   });
 });
+
+describe('Calendar event colour + note (v3.57)', () => {
+  const ONEOFF: Reminder = { id: 'g2', title: 'One-off', fireAt: anchorIso, repeat: 'none', fired: false };
+
+  it('applies a chosen colour swatch to the reminder (upsert carries the hex)', async () => {
+    installApi([ONEOFF]);
+    await act(async () => { root.render(<CalendarModule />); });
+    await flush();
+
+    await openMenuFor('One-off');
+    const swatch = container.querySelector('.ga98-cal-swatch:not(.ga98-cal-swatch-clear)') as HTMLButtonElement;
+    expect(swatch).toBeTruthy();
+    await act(async () => { swatch.click(); });
+    await flush();
+    expect(upsertGlobal).toHaveBeenCalledTimes(1);
+    expect(typeof upsertGlobal.mock.calls[0][0].color).toBe('string');
+  });
+
+  it('renders a colour-carrying reminder as a tinted chip', async () => {
+    // jsdom's cssstyle expands the `background` shorthand into `backgroundColor`.
+    installApi([{ ...ONEOFF, color: '#800000' }]);
+    await act(async () => { root.render(<CalendarModule />); });
+    await flush();
+    const chip = Array.from(container.querySelectorAll('.ga98-cal-event'))
+      .find((e) => (e.textContent ?? '').includes('One-off')) as HTMLElement;
+    expect(chip.style.backgroundColor).toBeTruthy();
+  });
+
+  it('clears the colour via the × swatch (upsert sets color undefined)', async () => {
+    installApi([{ ...ONEOFF, color: '#800000' }]);
+    await act(async () => { root.render(<CalendarModule />); });
+    await flush();
+    await openMenuFor('One-off');
+    const clear = container.querySelector('.ga98-cal-swatch-clear') as HTMLButtonElement;
+    await act(async () => { clear.click(); });
+    await flush();
+    expect(upsertGlobal.mock.calls[0][0].color).toBeUndefined();
+  });
+
+  it('shows a note badge + puts the note in the hover title, and Delete note clears it', async () => {
+    installApi([{ ...ONEOFF, note: 'bring the deck' }]);
+    await act(async () => { root.render(<CalendarModule />); });
+    await flush();
+
+    const chip = Array.from(container.querySelectorAll('.ga98-cal-event'))
+      .find((e) => (e.textContent ?? '').includes('One-off')) as HTMLElement;
+    expect(chip.querySelector('.ga98-cal-noted')).toBeTruthy();       // 📝 badge present
+    expect(chip.getAttribute('title')).toContain('bring the deck');    // hover shows the note
+
+    await openMenuFor('One-off');
+    expect(menuLabels()).toContain('Edit note…');
+    await clickMenu('Delete note');
+    expect(upsertGlobal.mock.calls[0][0].note).toBeUndefined();
+  });
+
+  it('offers "Add note…" (not Edit) when the reminder has no note', async () => {
+    installApi([ONEOFF]);
+    await act(async () => { root.render(<CalendarModule />); });
+    await flush();
+    await openMenuFor('One-off');
+    expect(menuLabels()).toContain('Add note…');
+    expect(menuLabels()).not.toContain('Edit note…');
+    expect(menuLabels()).not.toContain('Delete note');
+  });
+});
