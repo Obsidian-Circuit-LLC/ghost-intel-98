@@ -29,6 +29,18 @@ describe('JukeboxGraph', () => {
     g.applyGains(new Array(EQ_BANDS.length).fill(99));
     for (const f of (g as any).bands as any[]) expect(f.gain.value).toBe(12);
   });
+  it('retains the MediaElementAudioSourceNode so it cannot be GC-collected mid-playback', () => {
+    // An unreferenced MediaElementAudioSourceNode is garbage-collected by Chromium even while
+    // connected, which severs the <audio> element from ctx.destination — sound stops after a
+    // non-deterministic delay while <audio>.currentTime keeps advancing. The graph must keep a
+    // live JS reference to the source node (as it already does for the ctx, bands, and analyser).
+    let ctx: any;
+    (globalThis as any).AudioContext = vi.fn(() => { ctx = fakeCtx(); return ctx; });
+    const g = new JukeboxGraph({} as HTMLAudioElement);
+    const src = ctx._nodes[0]; // createMediaElementSource is built first
+    expect(Object.values(g).includes(src)).toBe(true); // retained on the instance, not a local const
+    expect(src.connect).toHaveBeenCalledWith((g as any).bands[0]); // still feeds the EQ chain
+  });
   it('chains band[i] -> band[i+1] and the last band -> analyser (analyser taps AFTER the EQ)', () => {
     const g = new JukeboxGraph({} as HTMLAudioElement);
     const bands = (g as any).bands as any[];
