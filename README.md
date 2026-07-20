@@ -38,13 +38,15 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`GhostIntel98-Setup-3.58.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
+> **Install:** download [`GhostIntel98-Setup-3.59.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
 
 > **📘 User guides** — plain-language, step-by-step (download or read in-browser):
 > - [**SOCMINT: X, Telegram & WhatsApp**](docs/guides/SOCMINT-Tutorial.pdf) — set up and run the social-media collectors, per platform, with the Tor / clearnet and opsec caveats. ([markdown](docs/guides/socmint-tutorial.md))
 > - [**How Searchlight Learns**](docs/guides/Searchlight-Learning-Guide.pdf) — how the username-sweep detector gets smarter from your own labels, and when to turn ML on. ([markdown](docs/guides/searchlight-learning.md))
 
 ## Status
+
+**v3.59.0** — **Bookmarks: drag categories anywhere, start.me-style (GhostExodus).** The v3.57 masonry auto-placed category cards by height, so new ones piled into the shortest column ("goes downward") and you couldn't control placement. Now it works like start.me: **drag a category's title bar and drop it wherever you want** — above another card (a navy line shows exactly where it'll land) or into a column's empty space to append — and **it stays there**. Each category remembers its column; new ones join the emptiest column until you move them. The column count still adapts to the window width — a card folds into the last visible column when you narrow the window and springs back to where you placed it when you widen it. Existing boards migrate seamlessly (nothing jumps on first load). Placement logic is pure and unit-tested (10 tests); the `column` field round-trips through the board validator. Also re-anchored the cards to content height so the module-window sizing rule can't stretch them (the same window-shell descendant-selector class as the v3.58 dialog fix — this time verified headless *with* the window shell in place). **3,711 automated tests** green (1 skipped); typecheck clean. *Everything from v3.58.0 carries forward.*
 
 **v3.58.0** — **Fix: modal dialogs no longer render full-height (GhostExodus).** The Jukebox **Add station** dialog (and the Bookmarks **Add link** dialog) opened as a full-height overlay — giant input boxes, tall stretched OK/Cancel bars — instead of a compact centered box. Root cause, found by systematic reproduction: a modal dialog is a **DOM descendant of its module's draggable window**, so the rule that sizes a *module's own* window to fill that window (`.ga98-window-shell .window { height: 100% }` + `.window-body { flex: 1 }`) was also matching the dialog; inside the full-viewport modal veil, `height: 100%` blew it up to full height. It only reproduced once the dialog was rendered **inside a window shell** (my earlier harness omitted that, which is why it kept showing compact and I wrongly guessed "stale build" — apologies). The fix re-anchors dialogs to their content height (`.ga98-dialog-veil .window { height: fit-content }`, capped at 90vh), placed after the window-shell rule so it wins on source order. It touches only height, not the body's flex, so the intentionally-tall **scrollable** dialogs (mail compose, chat share, net-explorer) keep scrolling — both cases verified headless. This fixes **all** modal dialogs app-wide at once, with a cascade-regression test. **3,700 automated tests** green (1 skipped); typecheck clean. *Everything from v3.57.0 carries forward.*
 
@@ -553,7 +555,7 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases) and run it.
 
-Direct link to the current release: [`GhostIntel98-Setup-3.58.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.58.0/GhostIntel98-Setup-3.58.0.exe)
+Direct link to the current release: [`GhostIntel98-Setup-3.59.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.59.0/GhostIntel98-Setup-3.59.0.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is **formally verified internally** — symbolic (ProVerif) +
 computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not**
 FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.6.8/GhostIntel98-Setup-3.6.8.exe).
@@ -561,7 +563,7 @@ FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Se
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\GhostIntel98-Setup-3.58.0.exe -Algorithm SHA256
+Get-FileHash .\GhostIntel98-Setup-3.59.0.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
