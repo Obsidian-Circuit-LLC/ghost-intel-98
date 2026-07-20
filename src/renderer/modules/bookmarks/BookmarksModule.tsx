@@ -13,48 +13,36 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { BookmarkBoard, BookmarkCategory, BookmarkLink } from '@shared/post-mvp-types';
 import { toast } from '../../state/toasts';
 import { confirmDialog } from '../../state/dialogs';
+import { toColumns, assignColumns, needsMigration, newColumn, placeCategory } from './layout';
 
 function uid(): string { return crypto.randomUUID(); }
 const EMPTY: BookmarkBoard = { categories: [], networkEnabled: false };
 
-// Masonry layout. CSS multi-column reserved a full-height column per card (or crammed everything into
-// a couple of columns leaving the rest of a wide window empty), which wasted space badly. Instead we
-// pack each category into the currently-shortest column so cards fill tightly. Column heights are
-// ESTIMATED from link count (no measure/reflow pass, no flicker) — the estimate only needs to balance,
-// not be pixel-perfect. Column COUNT is derived from the live board width via a ResizeObserver.
+// Board columns. Cards are placed by the user (drag), NOT auto-arranged by height — see layout.ts.
+// Column COUNT is derived from the live board width via a ResizeObserver; each card remembers its
+// column and folds into the last visible one on a narrow window.
 const BM_CARD_W = 240;
 const BM_CARD_GAP = 8;
-const BM_EST_HEADER = 26; // title bar
-const BM_EST_LINK_ROW = 22; // one link row
-const BM_EST_FOOTER = 32; // "+ Add link" + padding
-
-function distributeIntoColumns(categories: BookmarkCategory[], colCount: number): BookmarkCategory[][] {
-  const cols = Array.from({ length: Math.max(1, colCount) }, () => ({ items: [] as BookmarkCategory[], h: 0 }));
-  for (const c of categories) {
-    const est = BM_EST_HEADER + c.links.length * BM_EST_LINK_ROW + BM_EST_FOOTER;
-    let target = cols[0];
-    for (const col of cols) if (col.h < target.h) target = col;
-    target.items.push(c);
-    target.h += est + BM_CARD_GAP;
-  }
-  return cols.map((col) => col.items);
-}
 
 interface Editing { catId: string; link: BookmarkLink; isNew: boolean }
+// Where a dragged card will land: above `beforeId` in its column, or at the bottom of `column`.
+interface DropTarget { column: number; beforeId: string | null }
 
 export function BookmarksModule(): JSX.Element {
   const [board, setBoard] = useState<BookmarkBoard>(EMPTY);
   const [loaded, setLoaded] = useState(false);
   const [editing, setEditing] = useState<Editing | null>(null);
-  // Drag state: a card index, or a link with its source category.
+  // Drag state: a card being repositioned, or a link with its source category.
   const drag = useRef<{ kind: 'card'; catId: string } | { kind: 'link'; catId: string; linkId: string } | null>(null);
+  // Live drop indicator while dragging a card (where it will land).
+  const [dropAt, setDropAt] = useState<DropTarget | null>(null);
 
   useEffect(() => {
     void window.api.bookmarks.get().then((b) => { setBoard(b ?? EMPTY); setLoaded(true); });
   }, []);
 
-  // Masonry column count, tracked from the live board width (falls back to 1 where ResizeObserver
-  // is unavailable, e.g. jsdom in tests — cards still render, just in a single column).
+  // Column count, tracked from the live board width (falls back to 1 where ResizeObserver is
+  // unavailable, e.g. jsdom in tests — cards still render, just in a single column).
   const boardRef = useRef<HTMLDivElement>(null);
   const [colCount, setColCount] = useState(1);
   useEffect(() => {
@@ -66,7 +54,7 @@ export function BookmarksModule(): JSX.Element {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-  const columns = useMemo(() => distributeIntoColumns(board.categories, colCount), [board.categories, colCount]);
+  const columns = useMemo(() => toColumns(board.categories, colCount), [board.categories, colCount]);
 
   // Persist on every mutation (board is small; no debounce needed).
   const persist = useCallback((next: BookmarkBoard) => {
@@ -78,8 +66,21 @@ export function BookmarksModule(): JSX.Element {
     persist({ ...board, categories: fn(board.categories) });
   }, [board, persist]);
 
+  // One-time migration: a board saved before v3.59.0 has cards with no `column`. Once the real column
+  // count is known (after the ResizeObserver fires), assign every card an explicit column via the old
+  // shortest-column packing — so the board looks the same on this first render — then persist. From
+  // then on placement is fully user-controlled. Guarded so it runs at most once.
+  const migrated = useRef(false);
+  useEffect(() => {
+    if (!loaded || migrated.current || colCount < 1) return;
+    if (needsMigration(board.categories) && board.categories.length > 0) {
+      migrated.current = true;
+      persist({ ...board, categories: assignColumns(board.categories, colCount) });
+    }
+  }, [loaded, colCount, board, persist]);
+
   function addCategory(): void {
-    mutateCats((cats) => [...cats, { id: uid(), title: 'New category', links: [] }]);
+    mutateCats((cats) => [...cats, { id: uid(), title: 'New category', links: [], column: newColumn(cats, colCount) }]);
   }
   function renameCategory(catId: string, title: string): void {
     mutateCats((cats) => cats.map((c) => c.id === catId ? { ...c, title } : c));
@@ -100,17 +101,14 @@ export function BookmarksModule(): JSX.Element {
     mutateCats((cats) => cats.map((c) => c.id === catId ? { ...c, links: c.links.filter((l) => l.id !== linkId) } : c));
   }
   // --- drag/drop reorganize ---
-  function moveCardBefore(targetCatId: string): void {
+  // Commit a card drag to the pending drop target (start.me-style placement): the dragged card lands
+  // in `dropAt.column`, above `dropAt.beforeId` (or at the column's bottom when null).
+  function dropCard(): void {
     const d = drag.current;
-    if (!d || d.kind !== 'card' || d.catId === targetCatId) return;
-    mutateCats((cats) => {
-      const from = cats.findIndex((c) => c.id === d.catId);
-      const moving = cats[from];
-      const rest = cats.filter((c) => c.id !== d.catId);
-      const to = rest.findIndex((c) => c.id === targetCatId);
-      rest.splice(to < 0 ? rest.length : to, 0, moving);
-      return rest;
-    });
+    const t = dropAt;
+    setDropAt(null);
+    if (!d || d.kind !== 'card' || !t) return;
+    mutateCats((cats) => placeCategory(cats, d.catId, t.column, t.beforeId));
   }
   function dropLinkOnCategory(targetCatId: string, beforeLinkId?: string): void {
     const d = drag.current;
@@ -182,22 +180,34 @@ export function BookmarksModule(): JSX.Element {
           <div style={{ color: '#666', padding: 16 }}>No categories yet. Click <b>+ Category</b> to start your board.</div>
         )}
         {columns.map((col, ci) => (
-          <div className="ga98-bm-col" key={`col-${ci}`}>
+          <div
+            className="ga98-bm-col"
+            key={`col-${ci}`}
+            data-droptarget={drag.current?.kind === 'card' && dropAt?.column === ci ? 'true' : undefined}
+            onDragOver={(e) => { if (drag.current?.kind === 'card') { e.preventDefault(); setDropAt({ column: ci, beforeId: null }); } }}
+            onDrop={() => { if (drag.current?.kind === 'card') dropCard(); }}
+          >
             {col.map((c) => (
           <div
             key={c.id}
             className="ga98-bm-card window"
-            onDragOver={(e) => { if (drag.current?.kind === 'link') e.preventDefault(); }}
-            onDrop={() => { if (drag.current?.kind === 'link') dropLinkOnCategory(c.id); }}
+            data-dragging={drag.current?.kind === 'card' && drag.current.catId === c.id ? 'true' : undefined}
+            onDragOver={(e) => {
+              if (drag.current?.kind === 'link') { e.preventDefault(); return; }
+              if (drag.current?.kind === 'card') { e.preventDefault(); e.stopPropagation(); setDropAt({ column: ci, beforeId: c.id }); }
+            }}
+            onDrop={(e) => {
+              if (drag.current?.kind === 'link') { dropLinkOnCategory(c.id); return; }
+              if (drag.current?.kind === 'card') { e.stopPropagation(); dropCard(); }
+            }}
           >
+            {dropAt?.column === ci && dropAt.beforeId === c.id && <div className="ga98-bm-dropline" aria-hidden="true" />}
             <div
               className="title-bar"
               draggable
-              onDragStart={() => { drag.current = { kind: 'card', catId: c.id }; }}
-              onDragEnd={() => { drag.current = null; }}
-              onDragOver={(e) => { if (drag.current?.kind === 'card') e.preventDefault(); }}
-              onDrop={() => { if (drag.current?.kind === 'card') moveCardBefore(c.id); }}
-              title="Drag to reorder this card"
+              onDragStart={(e) => { drag.current = { kind: 'card', catId: c.id }; e.stopPropagation(); }}
+              onDragEnd={() => { drag.current = null; setDropAt(null); }}
+              title="Drag to move this category"
             >
               <input
                 className="ga98-bm-title-input"
@@ -235,6 +245,7 @@ export function BookmarksModule(): JSX.Element {
             </div>
           </div>
             ))}
+            {dropAt?.column === ci && dropAt.beforeId === null && <div className="ga98-bm-dropline" aria-hidden="true" />}
           </div>
         ))}
       </div>
