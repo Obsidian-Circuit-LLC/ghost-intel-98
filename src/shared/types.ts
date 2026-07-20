@@ -95,6 +95,10 @@ export interface Reminder {
   repeat?: 'none' | 'daily' | 'weekly' | 'monthly';
   lastFiredAt?: ISODate;
   fired?: boolean;
+  /** Optional colour (hex, e.g. "#800000") for the calendar event chip. Undefined = default navy. */
+  color?: string;
+  /** Optional free-text note shown on hover over the calendar event; edited via its right-click menu. */
+  note?: string;
 }
 
 export interface Alarm {

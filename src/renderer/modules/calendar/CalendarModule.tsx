@@ -23,6 +23,20 @@ interface Event {
   repeat?: Repeat;
   /** True for expanded occurrences of a repeating reminder (drives the 🔁 badge). */
   recurring?: boolean;
+  /** Colour + note carried from the reminder: colour tints the chip, note shows on hover. */
+  color?: string;
+  note?: string;
+}
+
+/** Colour palette for event chips (Win98-ish, all legible under an auto-picked black/white label). */
+const EVENT_COLORS = ['#000080', '#800000', '#006000', '#808000', '#800080', '#008080', '#c05000', '#404040'];
+
+/** Black or white label for a hex background, by perceived luminance. */
+function labelColorFor(bg: string): string {
+  const n = parseInt(bg.replace('#', ''), 16);
+  if (Number.isNaN(n)) return '#fff';
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  return (0.299 * r + 0.587 * g + 0.114 * b) > 140 ? '#000' : '#fff';
 }
 
 /**
@@ -63,10 +77,10 @@ export function CalendarModule(): JSX.Element {
         if (r.repeat && r.repeat !== 'none') {
           const occ = occurrencesInLocalMonth(new Date(r.fireAt).getTime(), r.repeat, cursor.getFullYear(), cursor.getMonth());
           for (const ms of occ) {
-            evs.push({ date: ymd(new Date(ms)), label: r.title, kind: 'reminder', globalReminderId: r.id, repeat: r.repeat, recurring: true });
+            evs.push({ date: ymd(new Date(ms)), label: r.title, kind: 'reminder', globalReminderId: r.id, repeat: r.repeat, recurring: true, color: r.color, note: r.note });
           }
         } else {
-          evs.push({ date: ymd(new Date(r.fireAt)), label: r.title, kind: 'reminder', globalReminderId: r.id, repeat: r.repeat });
+          evs.push({ date: ymd(new Date(r.fireAt)), label: r.title, kind: 'reminder', globalReminderId: r.id, repeat: r.repeat, color: r.color, note: r.note });
         }
       }
       for (const c of cases) {
@@ -151,6 +165,41 @@ export function CalendarModule(): JSX.Element {
     }
   }
 
+  // Patch a single field on the underlying global reminder, then refresh. Shared by colour + note.
+  async function patchReminder(ev: Event, patch: Partial<Reminder>, okMsg?: string): Promise<void> {
+    setCtxMenu(null);
+    if (!ev.globalReminderId) return;
+    const all = await window.api.reminders.listGlobal();
+    const r = all.find((x) => x.id === ev.globalReminderId);
+    if (!r) return;
+    try {
+      await window.api.reminders.upsertGlobal({ ...r, ...patch });
+      if (okMsg) toast.success(okMsg);
+      setRefreshTick((n) => n + 1);
+    } catch (err) {
+      toast.error(`Update failed: ${(err as Error).message}`);
+    }
+  }
+
+  async function editNote(ev: Event): Promise<void> {
+    setCtxMenu(null);
+    if (!ev.globalReminderId) return;
+    const all = await window.api.reminders.listGlobal();
+    const r = all.find((x) => x.id === ev.globalReminderId);
+    if (!r) return;
+    const next = await promptDialog(`Note for "${r.title}":`, r.note ?? '', 'Event note');
+    if (next === null) return; // cancelled — leave the note as-is
+    const trimmed = next.trim();
+    // Reuse patchReminder via a direct upsert so an empty note clears the field (undefined).
+    try {
+      await window.api.reminders.upsertGlobal({ ...r, note: trimmed || undefined });
+      toast.success(trimmed ? 'Note saved.' : 'Note cleared.');
+      setRefreshTick((n) => n + 1);
+    } catch (err) {
+      toast.error(`Note failed: ${(err as Error).message}`);
+    }
+  }
+
   async function deleteReminder(ev: Event): Promise<void> {
     setCtxMenu(null);
     if (!ev.globalReminderId) return;
@@ -199,7 +248,13 @@ export function CalendarModule(): JSX.Element {
                   <div
                     key={j}
                     className="ga98-cal-event"
-                    title={e.globalReminderId ? `${e.label} (right-click to delete)` : e.label}
+                    style={e.color ? { background: e.color, color: labelColorFor(e.color) } : undefined}
+                    title={
+                      // Hover shows the note automatically (native tooltip); falls back to the label.
+                      e.note
+                        ? `${e.label}\n📝 ${e.note}`
+                        : e.globalReminderId ? `${e.label} (right-click for options)` : e.label
+                    }
                     onContextMenu={(me) => {
                       me.preventDefault();
                       me.stopPropagation();
@@ -207,6 +262,7 @@ export function CalendarModule(): JSX.Element {
                     }}
                   >
                     {e.recurring ? <span className="ga98-cal-recurring" aria-hidden="true">🔁</span> : null}
+                    {e.note ? <span className="ga98-cal-noted" aria-hidden="true" title="">📝</span> : null}
                     {e.label}
                   </div>
                 ))}
@@ -232,6 +288,32 @@ export function CalendarModule(): JSX.Element {
                 ) : (
                   <button className="ga98-context-menu-item" onClick={() => void setRecurrence(ctxMenu.ev, 'none')}>Remove recurring</button>
                 )}
+                <div className="ga98-context-menu-swatches" role="group" aria-label="Event colour">
+                  {EVENT_COLORS.map((col) => (
+                    <button
+                      key={col}
+                      className="ga98-cal-swatch"
+                      style={{ background: col }}
+                      title={`Colour: ${col}`}
+                      aria-label={`Set colour ${col}`}
+                      onClick={() => void patchReminder(ctxMenu.ev, { color: col })}
+                    />
+                  ))}
+                  <button
+                    className="ga98-cal-swatch ga98-cal-swatch-clear"
+                    title="Default colour"
+                    aria-label="Clear colour"
+                    onClick={() => void patchReminder(ctxMenu.ev, { color: undefined })}
+                  >×</button>
+                </div>
+                <button className="ga98-context-menu-item" onClick={() => void editNote(ctxMenu.ev)}>
+                  {ctxMenu.ev.note ? 'Edit note…' : 'Add note…'}
+                </button>
+                {ctxMenu.ev.note ? (
+                  <button className="ga98-context-menu-item" onClick={() => void patchReminder(ctxMenu.ev, { note: undefined }, 'Note deleted.')}>
+                    Delete note
+                  </button>
+                ) : null}
                 <button className="ga98-context-menu-item" onClick={() => void deleteReminder(ctxMenu.ev)}>
                   Delete reminder
                 </button>

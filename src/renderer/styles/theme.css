@@ -553,6 +553,13 @@ input.ga98-text, select.ga98-text {
 }
 /* Recurring-reminder badge (🔁) — a small inline glyph before a repeating occurrence's label. */
 .ga98-cal-recurring { margin-right: 2px; font-size: 9px; }
+/* Note badge (📝) — marks an event that carries a hover note. */
+.ga98-cal-noted { margin-right: 2px; font-size: 9px; }
+/* Colour palette row inside the event context menu. */
+.ga98-context-menu-swatches { display: flex; flex-wrap: wrap; gap: 3px; padding: 4px 8px; max-width: 132px; }
+.ga98-cal-swatch { width: 16px; height: 16px; min-width: 16px; min-height: 16px; padding: 0; border: 1px solid; border-color: #808080 #fff #fff #808080; cursor: pointer; box-sizing: border-box; }
+.ga98-cal-swatch:hover { outline: 1px dotted #000; outline-offset: 1px; }
+.ga98-cal-swatch-clear { background: #c0c0c0; color: #000; font-size: 11px; line-height: 1; display: flex; align-items: center; justify-content: center; }
 
 .ga98-coming-soon {
   display: flex;
