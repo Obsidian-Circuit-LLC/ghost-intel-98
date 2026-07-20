@@ -38,13 +38,15 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`GhostIntel98-Setup-3.56.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
+> **Install:** download [`GhostIntel98-Setup-3.57.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
 
 > **📘 User guides** — plain-language, step-by-step (download or read in-browser):
 > - [**SOCMINT: X, Telegram & WhatsApp**](docs/guides/SOCMINT-Tutorial.pdf) — set up and run the social-media collectors, per platform, with the Tor / clearnet and opsec caveats. ([markdown](docs/guides/socmint-tutorial.md))
 > - [**How Searchlight Learns**](docs/guides/Searchlight-Learning-Guide.pdf) — how the username-sweep detector gets smarter from your own labels, and when to turn ML on. ([markdown](docs/guides/searchlight-learning.md))
 
 ## Status
+
+**v3.57.0** — **Bookmarks masonry layout + Calendar event colours & notes (GhostExodus).** Three things. (1) **Bookmarks board** now packs categories with a **masonry layout** — the old CSS multi-column reserved a full-height column per card (or crammed everything into two columns on a wide window, leaving the right two-thirds empty). Cards now flow into whichever column is currently shortest, sized to their links, using the full width with no dead space; column count tracks the window width. *(This is the fix GhostExodus actually asked for — the earlier v3.55 Bookmarks change was data-only and invisible; my apologies for the miss.)* (2) **Calendar events** get a **right-click colour palette** (8 Win98 swatches + clear) — the chip is tinted with an auto-picked black/white label for contrast — and a **note**: right-click **Add/Edit/Delete note**, marked with a 📝 badge, shown automatically on hover. New `Reminder.color`/`note` fields round-trip through storage. (3) The **Add-link dialog** is now defensively pinned compact (`height: fit-content`, capped at 85vh) so nothing can stretch it. Plus a de-flaked prekey-store test (256 mints instead of 1000, with a stronger no-global-eviction assertion). Layout verified headless at multiple widths; **3,697 automated tests** green (1 skipped); typecheck clean. *Everything from v3.56.0 carries forward.*
 
 **v3.56.0** — **Jukebox: fix mp3 playback cutting out after a minute or two (GhostExodus).** A track would start fine and then go silent at some random point a minute or two in — since the Windows-Media-Player reskin that added the Web-Audio EQ graph. Root cause: the Jukebox routes the `<audio>` element through `createMediaElementSource → EQ → analyser → destination`, but the **source node was held only in a local variable** — the one node in the graph with no lasting reference. Chromium garbage-collects an unreferenced `MediaElementAudioSourceNode` *even while it's connected*, which severs the element from the speakers; the element keeps "playing" (its clock advances) but no sound comes out, and because GC timing is non-deterministic it struck "randomly after a minute or two." The fix retains the source node on the graph instance (as the context, EQ bands, and analyser already were). Diagnosed systematically — ruled out a stray timer (there is none) and an audio-element remount (the element sits outside the shade/mode switches) before landing on the GC cause; a regression test asserts the node is retained. **3,692 automated tests** green (1 skipped); typecheck clean. *Everything from v3.55.0 carries forward.*
 
@@ -549,7 +551,7 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases) and run it.
 
-Direct link to the current release: [`GhostIntel98-Setup-3.56.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.56.0/GhostIntel98-Setup-3.56.0.exe)
+Direct link to the current release: [`GhostIntel98-Setup-3.57.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.57.0/GhostIntel98-Setup-3.57.0.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is **formally verified internally** — symbolic (ProVerif) +
 computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not**
 FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.6.8/GhostIntel98-Setup-3.6.8.exe).
@@ -557,7 +559,7 @@ FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Se
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\GhostIntel98-Setup-3.56.0.exe -Algorithm SHA256
+Get-FileHash .\GhostIntel98-Setup-3.57.0.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
