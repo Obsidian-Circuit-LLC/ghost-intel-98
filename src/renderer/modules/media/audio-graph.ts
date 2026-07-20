@@ -6,11 +6,17 @@ import { EQ_BANDS, clampGain } from './eq';
 export class JukeboxGraph {
   private ctx: AudioContext;
   private bands: BiquadFilterNode[] = [];
+  // Retained for its LIFETIME, not just connected: an unreferenced MediaElementAudioSourceNode is
+  // garbage-collected by Chromium even while wired into the graph, which severs the <audio> element
+  // from ctx.destination — playback goes silent after a non-deterministic delay while the element's
+  // currentTime keeps advancing. Holding the reference here (as we do for ctx/bands/analyser) fixes it.
+  readonly src: MediaElementAudioSourceNode;
   readonly analyser: AnalyserNode;
 
   constructor(audio: HTMLAudioElement) {
     this.ctx = new AudioContext();
     const src = this.ctx.createMediaElementSource(audio);
+    this.src = src;
     let node: AudioNode = src;
     for (const hz of EQ_BANDS) {
       const f = this.ctx.createBiquadFilter();
