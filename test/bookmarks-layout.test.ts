@@ -71,6 +71,16 @@ describe('bookmarks layout — column placement', () => {
     expect(placeCategory(cats, 'A', 0, 'A')).toBe(cats);
   });
 
+  it('assignColumns re-spreads a board stuck in one column (Auto-arrange recovery)', () => {
+    // The v3.59.0 bug migrated at colCount=1, piling everything into column 0. Auto-arrange re-runs
+    // assignColumns at the real column count to spread them back out.
+    const stuck = [cat('A', 3, 0), cat('B', 0, 0), cat('C', 0, 0), cat('D', 0, 0)];
+    const spread = assignColumns(stuck, 3);
+    const cols = toColumns(spread, 3);
+    expect(cols.every((c) => c.length > 0)).toBe(true); // no longer all in one column
+    expect(cols.flat().length).toBe(4);
+  });
+
   it('moving a card between columns does not disturb the order of other columns', () => {
     const cats = [cat('A', 0, 0), cat('B', 0, 1), cat('C', 0, 0), cat('D', 0, 1)];
     const next = placeCategory(cats, 'A', 1, 'D'); // A moves to col1, above D

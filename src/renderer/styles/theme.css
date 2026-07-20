@@ -1187,6 +1187,14 @@ input.ga98-text, select.ga98-text {
   flex: 1; overflow: auto; padding: 8px;
   display: flex; align-items: stretch; gap: 8px;
 }
+/* While a category is being dragged, show a faint column grid so the (otherwise invisible) empty
+   columns read as snap targets — a 240px column + 8px gutter = 248px repeat. GhostExodus's idea. */
+.ga98-bm-board[data-dragging='true'] {
+  background-image: repeating-linear-gradient(90deg,
+    rgba(0, 0, 128, 0.05) 0, rgba(0, 0, 128, 0.05) 240px,
+    rgba(0, 0, 128, 0.12) 240px, rgba(0, 0, 128, 0.12) 248px);
+  background-position: 8px 0; /* align with the board's 8px padding */
+}
 .ga98-bm-col { display: flex; flex-direction: column; gap: 8px; flex: 0 0 240px; width: 240px; min-height: 60px; }
 .ga98-bm-col[data-droptarget='true'] { background: rgba(0, 0, 128, 0.06); outline: 1px dashed #000080; outline-offset: -1px; }
 /* Cards carry `class="ga98-bm-card window"`, so — exactly like the modal-dialog case — the

@@ -9,7 +9,7 @@
  * when login is on. Nothing here depends on a third-party site staying up.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { BookmarkBoard, BookmarkCategory, BookmarkLink } from '@shared/post-mvp-types';
 import { toast } from '../../state/toasts';
 import { confirmDialog } from '../../state/dialogs';
@@ -41,20 +41,29 @@ export function BookmarksModule(): JSX.Element {
     void window.api.bookmarks.get().then((b) => { setBoard(b ?? EMPTY); setLoaded(true); });
   }, []);
 
-  // Column count, tracked from the live board width (falls back to 1 where ResizeObserver is
-  // unavailable, e.g. jsdom in tests — cards still render, just in a single column).
+  // Column count, tracked from the live board width. Starts at 0 = NOT YET MEASURED (distinct from a
+  // real 1-column narrow window) — a v3.59.0 bug migrated the board at the stale initial count before
+  // the width was known, piling every category into column 0 and leaving no droppable columns (the
+  // "no-drop" cursor). We now: (a) only accept a measurement when clientWidth > 0; (b) measure in a
+  // layout effect + rAF + ResizeObserver so a not-yet-laid-out board still gets a real width; (c) gate
+  // the migration on colCount >= 1 so it can never run at the unmeasured sentinel. jsdom has no layout
+  // (clientWidth 0) so colCount stays 0 there ⇒ render clamps to 1 column; fine for tests.
   const boardRef = useRef<HTMLDivElement>(null);
-  const [colCount, setColCount] = useState(1);
-  useEffect(() => {
+  const [colCount, setColCount] = useState(0);
+  useLayoutEffect(() => {
     const el = boardRef.current;
-    if (!el || typeof ResizeObserver === 'undefined') return;
-    const measure = () => setColCount(Math.max(1, Math.floor((el.clientWidth + BM_CARD_GAP) / (BM_CARD_W + BM_CARD_GAP))));
+    if (!el) return;
+    const measure = () => {
+      const w = el.clientWidth;
+      if (w > 0) setColCount(Math.max(1, Math.floor((w + BM_CARD_GAP) / (BM_CARD_W + BM_CARD_GAP))));
+    };
     measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
+    let ro: ResizeObserver | undefined;
+    if (typeof ResizeObserver !== 'undefined') { ro = new ResizeObserver(measure); ro.observe(el); }
+    const raf = typeof requestAnimationFrame !== 'undefined' ? requestAnimationFrame(measure) : 0;
+    return () => { if (ro) ro.disconnect(); if (raf) cancelAnimationFrame(raf); };
   }, []);
-  const columns = useMemo(() => toColumns(board.categories, colCount), [board.categories, colCount]);
+  const columns = useMemo(() => toColumns(board.categories, Math.max(1, colCount)), [board.categories, colCount]);
 
   // Persist on every mutation (board is small; no debounce needed).
   const persist = useCallback((next: BookmarkBoard) => {
@@ -80,7 +89,12 @@ export function BookmarksModule(): JSX.Element {
   }, [loaded, colCount, board, persist]);
 
   function addCategory(): void {
-    mutateCats((cats) => [...cats, { id: uid(), title: 'New category', links: [], column: newColumn(cats, colCount) }]);
+    mutateCats((cats) => [...cats, { id: uid(), title: 'New category', links: [], column: newColumn(cats, Math.max(1, colCount)) }]);
+  }
+  // Re-spread every category across the columns by the shortest-column packing. Recovers a board that
+  // a broken build left all in one column, and is a handy one-click "tidy" in general.
+  function autoArrange(): void {
+    mutateCats((cats) => assignColumns(cats, Math.max(1, colCount)));
   }
   function renameCategory(catId: string, title: string): void {
     mutateCats((cats) => cats.map((c) => c.id === catId ? { ...c, title } : c));
@@ -163,6 +177,7 @@ export function BookmarksModule(): JSX.Element {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div className="ga98-toolbar">
         <button onClick={addCategory}>+ Category</button>
+        <button onClick={autoArrange} disabled={board.categories.length === 0} title="Spread the categories evenly across the columns">Auto-arrange</button>
         <button onClick={() => void shareBoard()} disabled={board.categories.length === 0} title="Export this board to a .ghostbookmarks file to share">Share…</button>
         <button onClick={() => void importBoard()}>Import…</button>
         <span style={{ flex: 1 }} />
@@ -175,7 +190,16 @@ export function BookmarksModule(): JSX.Element {
         </label>
       </div>
 
-      <div className="ga98-bm-board" ref={boardRef}>
+      <div
+        className="ga98-bm-board"
+        ref={boardRef}
+        data-dragging={drag.current?.kind === 'card' ? 'true' : undefined}
+        // Board-level fallback so a drop in the empty space beyond the columns lands in the last
+        // column instead of showing the "no-drop" cursor. Column/card handlers stopPropagation, so
+        // this only fires over bare board space.
+        onDragOver={(e) => { if (drag.current?.kind === 'card') { e.preventDefault(); setDropAt({ column: Math.max(1, colCount) - 1, beforeId: null }); } }}
+        onDrop={() => { if (drag.current?.kind === 'card') dropCard(); }}
+      >
         {board.categories.length === 0 && (
           <div style={{ color: '#666', padding: 16 }}>No categories yet. Click <b>+ Category</b> to start your board.</div>
         )}
@@ -184,8 +208,8 @@ export function BookmarksModule(): JSX.Element {
             className="ga98-bm-col"
             key={`col-${ci}`}
             data-droptarget={drag.current?.kind === 'card' && dropAt?.column === ci ? 'true' : undefined}
-            onDragOver={(e) => { if (drag.current?.kind === 'card') { e.preventDefault(); setDropAt({ column: ci, beforeId: null }); } }}
-            onDrop={() => { if (drag.current?.kind === 'card') dropCard(); }}
+            onDragOver={(e) => { if (drag.current?.kind === 'card') { e.preventDefault(); e.stopPropagation(); setDropAt({ column: ci, beforeId: null }); } }}
+            onDrop={(e) => { if (drag.current?.kind === 'card') { e.stopPropagation(); dropCard(); } }}
           >
             {col.map((c) => (
           <div
