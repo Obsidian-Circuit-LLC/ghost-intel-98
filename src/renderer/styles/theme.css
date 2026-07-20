@@ -323,6 +323,19 @@ input, textarea, [contenteditable="true"], .ga98-selectable {
   margin: 0;
 }
 
+/* Modal dialogs (`.ga98-dialog-veil > .window`) are rendered INSIDE a module, so they are DOM
+   descendants of that module's `.ga98-window-shell` — which means the two rules just above
+   (`.ga98-window-shell .window { height: 100% }` + `.window-body { flex: 1 }`, meant to size a
+   module's OWN window to fill its draggable shell) also match the dialog's `.window`/`.window-body`.
+   The veil is a full-viewport fixed container, so `height: 100%` blew the dialog up to full height and
+   `flex: 1` stretched its body — the giant inputs / tall OK-Cancel bug. Re-anchor dialogs to content
+   height. Equal specificity to the window-shell rules, so this must stay AFTER them in source order.
+   Only `height` is re-anchored (not the body's flex): content-heavy dialogs (mail compose, chat share,
+   net-explorer) set their own inline `display:flex; max-height` and rely on `.window-body{flex:1;
+   overflow:auto}` to scroll — overriding the body's flex would break their scroll. With height:fit-content
+   a compact dialog collapses to its content, while a tall one grows to max-height and scrolls as before. */
+.ga98-dialog-veil .window { height: fit-content; max-height: 90vh; }
+
 .ga98-titlebar-buttons {
   display: flex;
 }
