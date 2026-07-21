@@ -38,13 +38,15 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`GhostIntel98-Setup-3.60.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
+> **Install:** download [`GhostIntel98-Setup-3.61.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
 
 > **📘 User guides** — plain-language, step-by-step (download or read in-browser):
 > - [**SOCMINT: X, Telegram & WhatsApp**](docs/guides/SOCMINT-Tutorial.pdf) — set up and run the social-media collectors, per platform, with the Tor / clearnet and opsec caveats. ([markdown](docs/guides/socmint-tutorial.md))
 > - [**How Searchlight Learns**](docs/guides/Searchlight-Learning-Guide.pdf) — how the username-sweep detector gets smarter from your own labels, and when to turn ML on. ([markdown](docs/guides/searchlight-learning.md))
 
 ## Status
+
+**v3.61.0** — **Bookmarks: dropping a category now actually moves it to another column (GhostExodus).** After v3.60.0 the categories still "didn't budge" — dragging one reordered it but never changed its column. Re-examining the recording, the drag grid spanned the full board width, so the column count was fine; the real bug was the **drop reading a stale target**: the final "drag-over" updates React state, but the drop handler could fire before that state flushed, so it committed the category to the *old* target (or none). The drop target is now mirrored into a ref and the drop commits from the ref, so it always uses the latest position. As insurance the board width measurement was also hardened (the board is forced to fill its module, and if it ever measures too narrow it falls back to the module window's own width). If your board is still all in one column from an earlier build, drag the categories out (it works now) or click **Auto-arrange**. **3,712 automated tests** green (1 skipped); typecheck clean. *Everything from v3.60.0 carries forward.*
 
 **v3.60.0** — **Bookmarks: fix categories piling into one column + Auto-arrange + drag grid (GhostExodus).** A v3.59.0 regression: every category stacked in the leftmost column, the rest of the board rejected drops (the "no-drop" cursor), and you couldn't drag a card out. Root cause: the board decides how many columns to show from its width, but the one-time migration that gives each category a column ran **before that width was measured** — so it assigned everything to column 0, and only one column rendered (nothing else was a drop target). Fixed the measurement (a distinct "not-yet-measured" state, measured in a layout effect + animation frame + resize observer, only accepting a real width) and gated the migration so it can't run until the width is known. Added an **Auto-arrange** button to instantly re-spread a board a broken build already saved into one column, a board-wide drop fallback (drop in empty space → last column, no more no-drop cursor), and — GhostExodus's idea — a **faint column grid** that appears while you drag so the empty snap columns are visible. **3,712 automated tests** green (1 skipped); typecheck clean. *Everything from v3.59.0 carries forward.*
 
@@ -557,7 +559,7 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases) and run it.
 
-Direct link to the current release: [`GhostIntel98-Setup-3.60.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.60.0/GhostIntel98-Setup-3.60.0.exe)
+Direct link to the current release: [`GhostIntel98-Setup-3.61.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.61.0/GhostIntel98-Setup-3.61.0.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is **formally verified internally** — symbolic (ProVerif) +
 computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not**
 FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.6.8/GhostIntel98-Setup-3.6.8.exe).
@@ -565,7 +567,7 @@ FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Se
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\GhostIntel98-Setup-3.60.0.exe -Algorithm SHA256
+Get-FileHash .\GhostIntel98-Setup-3.61.0.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
