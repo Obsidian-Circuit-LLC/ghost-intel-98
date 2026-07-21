@@ -38,13 +38,15 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`GhostIntel98-Setup-3.62.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
+> **Install:** download [`GhostIntel98-Setup-3.63.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
 
 > **📘 User guides** — plain-language, step-by-step (download or read in-browser):
 > - [**SOCMINT: X, Telegram & WhatsApp**](docs/guides/SOCMINT-Tutorial.pdf) — set up and run the social-media collectors, per platform, with the Tor / clearnet and opsec caveats. ([markdown](docs/guides/socmint-tutorial.md))
 > - [**How Searchlight Learns**](docs/guides/Searchlight-Learning-Guide.pdf) — how the username-sweep detector gets smarter from your own labels, and when to turn ML on. ([markdown](docs/guides/searchlight-learning.md))
 
 ## Status
+
+**v3.63.0** — **Bookmarks: the dragged card actually un-dims now, even when it changes column (GhostExodus).** v3.62 was supposed to fix the stuck "shadow," and it did — but only for cards dropped back into the *same* column. A card dropped into a *different* column stayed dimmed until you reopened the window. The reason: when the card moves columns, it's re-created in the new column's DOM, which destroys the original dragged element before its "drag ended" event can fire — so the handler that clears the dim never ran. The dim is now cleared on the **drop** event (which fires before that happens), so a moved card returns to full opacity immediately. **3,712 automated tests** green (1 skipped); typecheck clean. *Everything from v3.62.0 carries forward.*
 
 **v3.62.0** — **Bookmarks: all columns are now droppable + the dragged card un-dims on drop (GhostExodus).** Two follow-ups now that drag works. (1) Only ~3 columns accepted drops even though the drag grid showed the full width's worth — the column count was measured from the board element, which kept reading under-sized in the real window. It's now measured from the module's own draggable **window** (which carries an explicit width from the window manager), so the count matches the actual width and the whole board is usable. (2) After dropping, the dragged category stayed **dimmed** until you reopened the window — the dim was driven off a ref (which doesn't trigger a re-render), so it never cleared; it's now React state and un-dims the moment you release. **3,712 automated tests** green (1 skipped); typecheck clean. *Everything from v3.61.0 carries forward.*
 
@@ -561,7 +563,7 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases) and run it.
 
-Direct link to the current release: [`GhostIntel98-Setup-3.62.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.62.0/GhostIntel98-Setup-3.62.0.exe)
+Direct link to the current release: [`GhostIntel98-Setup-3.63.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.63.0/GhostIntel98-Setup-3.63.0.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is **formally verified internally** — symbolic (ProVerif) +
 computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not**
 FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.6.8/GhostIntel98-Setup-3.6.8.exe).
@@ -569,7 +571,7 @@ FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Se
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\GhostIntel98-Setup-3.62.0.exe -Algorithm SHA256
+Get-FileHash .\GhostIntel98-Setup-3.63.0.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
