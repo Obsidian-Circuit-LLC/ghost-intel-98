@@ -1186,6 +1186,10 @@ input.ga98-text, select.ga98-text {
 .ga98-bm-board {
   flex: 1; overflow: auto; padding: 8px;
   display: flex; align-items: stretch; gap: 8px;
+  /* Force the board to fill the module width. Without this it could size to its content (one column ≈
+     256px) instead of stretching, so the width measurement read ~1 column and every category piled
+     into column 0. box-sizing keeps the 8px padding inside the 100%. */
+  width: 100%; min-width: 0; box-sizing: border-box;
 }
 /* While a category is being dragged, show a faint column grid so the (otherwise invisible) empty
    columns read as snap targets — a 240px column + 8px gutter = 248px repeat. GhostExodus's idea. */

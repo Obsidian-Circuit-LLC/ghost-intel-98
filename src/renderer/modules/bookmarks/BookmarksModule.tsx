@@ -34,34 +34,52 @@ export function BookmarksModule(): JSX.Element {
   const [editing, setEditing] = useState<Editing | null>(null);
   // Drag state: a card being repositioned, or a link with its source category.
   const drag = useRef<{ kind: 'card'; catId: string } | { kind: 'link'; catId: string; linkId: string } | null>(null);
-  // Live drop indicator while dragging a card (where it will land).
-  const [dropAt, setDropAt] = useState<DropTarget | null>(null);
+  // Live drop indicator while dragging a card (where it will land). Mirrored into a ref so the drop
+  // handler commits the LATEST target even if the final dragover's re-render hasn't flushed yet.
+  const [dropAt, setDropAtState] = useState<DropTarget | null>(null);
+  const dropAtRef = useRef<DropTarget | null>(null);
+  const setDropAt = useCallback((t: DropTarget | null): void => { dropAtRef.current = t; setDropAtState(t); }, []);
 
   useEffect(() => {
     void window.api.bookmarks.get().then((b) => { setBoard(b ?? EMPTY); setLoaded(true); });
   }, []);
 
-  // Column count, tracked from the live board width. Starts at 0 = NOT YET MEASURED (distinct from a
-  // real 1-column narrow window) — a v3.59.0 bug migrated the board at the stale initial count before
-  // the width was known, piling every category into column 0 and leaving no droppable columns (the
-  // "no-drop" cursor). We now: (a) only accept a measurement when clientWidth > 0; (b) measure in a
-  // layout effect + rAF + ResizeObserver so a not-yet-laid-out board still gets a real width; (c) gate
-  // the migration on colCount >= 1 so it can never run at the unmeasured sentinel. jsdom has no layout
-  // (clientWidth 0) so colCount stays 0 there ⇒ render clamps to 1 column; fine for tests.
+  // Column count, from the board width. Starts at 0 = NOT YET MEASURED (distinct from a real 1-column
+  // window). Two earlier fixes measured `board.clientWidth`, which in the real Electron window kept
+  // coming back too small (< one card), trapping every category in column 0 with no droppable columns.
+  // We no longer trust the board's own width alone: if it measures smaller than a single card (i.e. it
+  // hasn't been laid out to fill its container yet), we fall back to the WINDOW width — the Bookmarks
+  // module effectively fills the window — so we still get a real column count. Measured in a layout
+  // effect + rAF + a few timed retries + ResizeObserver + window resize; migration is gated on
+  // colCount >= 1 so it can never run at the unmeasured sentinel.
   const boardRef = useRef<HTMLDivElement>(null);
   const [colCount, setColCount] = useState(0);
   useLayoutEffect(() => {
-    const el = boardRef.current;
-    if (!el) return;
     const measure = () => {
-      const w = el.clientWidth;
+      const el = boardRef.current;
+      let w = el ? el.getBoundingClientRect().width : 0;
+      // If the board measured narrower than a single card it hasn't stretched to fill its container —
+      // fall back to the module's own draggable window (`.ga98-window-shell`), which is the real width
+      // whether the module is maximized or floating (window.innerWidth would be the whole app viewport
+      // and over-count a small floating window).
+      if (w < BM_CARD_W && el) {
+        const shell = el.closest('.ga98-window-shell');
+        if (shell) w = shell.getBoundingClientRect().width;
+      }
       if (w > 0) setColCount(Math.max(1, Math.floor((w + BM_CARD_GAP) / (BM_CARD_W + BM_CARD_GAP))));
     };
     measure();
     let ro: ResizeObserver | undefined;
-    if (typeof ResizeObserver !== 'undefined') { ro = new ResizeObserver(measure); ro.observe(el); }
+    if (boardRef.current && typeof ResizeObserver !== 'undefined') { ro = new ResizeObserver(measure); ro.observe(boardRef.current); }
     const raf = typeof requestAnimationFrame !== 'undefined' ? requestAnimationFrame(measure) : 0;
-    return () => { if (ro) ro.disconnect(); if (raf) cancelAnimationFrame(raf); };
+    const timers = [50, 200, 500].map((ms) => setTimeout(measure, ms)); // catch layout that settles late
+    if (typeof window !== 'undefined') window.addEventListener('resize', measure);
+    return () => {
+      if (ro) ro.disconnect();
+      if (raf) cancelAnimationFrame(raf);
+      timers.forEach((t) => clearTimeout(t));
+      if (typeof window !== 'undefined') window.removeEventListener('resize', measure);
+    };
   }, []);
   const columns = useMemo(() => toColumns(board.categories, Math.max(1, colCount)), [board.categories, colCount]);
 
@@ -119,7 +137,7 @@ export function BookmarksModule(): JSX.Element {
   // in `dropAt.column`, above `dropAt.beforeId` (or at the column's bottom when null).
   function dropCard(): void {
     const d = drag.current;
-    const t = dropAt;
+    const t = dropAtRef.current; // ref = the latest target, not a possibly-stale render closure
     setDropAt(null);
     if (!d || d.kind !== 'card' || !t) return;
     mutateCats((cats) => placeCategory(cats, d.catId, t.column, t.beforeId));
