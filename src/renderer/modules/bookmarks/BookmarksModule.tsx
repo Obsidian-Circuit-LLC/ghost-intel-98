@@ -137,6 +137,12 @@ export function BookmarksModule(): JSX.Element {
   function dropCard(): void {
     const d = drag.current;
     const t = dropAtRef.current; // ref = the latest target, not a possibly-stale render closure
+    // Clear the drag/dim HERE, on the drop event — NOT only in onDragEnd. When a card is dropped into
+    // a different column, placeCategory moves it and React unmounts the original dragged node (it
+    // re-mounts in the new column), so `dragend` never fires on it and the dim would stay stuck.
+    // `drop` fires before that unmount, so clearing here reliably un-dims the moved card.
+    drag.current = null;
+    setDraggingId(null);
     setDropAt(null);
     if (!d || d.kind !== 'card' || !t) return;
     mutateCats((cats) => placeCategory(cats, d.catId, t.column, t.beforeId));
