@@ -32,8 +32,13 @@ export function BookmarksModule(): JSX.Element {
   const [board, setBoard] = useState<BookmarkBoard>(EMPTY);
   const [loaded, setLoaded] = useState(false);
   const [editing, setEditing] = useState<Editing | null>(null);
-  // Drag state: a card being repositioned, or a link with its source category.
+  // Drag state: a card being repositioned, or a link with its source category. Kept in a ref because
+  // the dragover/drop handlers read it synchronously at event time.
   const drag = useRef<{ kind: 'card'; catId: string } | { kind: 'link'; catId: string; linkId: string } | null>(null);
+  // The id of the card being dragged, as STATE — the dimming ("shadow") is driven off this so it
+  // reliably clears on dragend (a ref change alone would not re-render, leaving the card stuck dimmed
+  // until the next unrelated render — the bug where it stayed shadowed until you reopened the window).
+  const [draggingId, setDraggingId] = useState<string | null>(null);
   // Live drop indicator while dragging a card (where it will land). Mirrored into a ref so the drop
   // handler commits the LATEST target even if the final dragover's re-render hasn't flushed yet.
   const [dropAt, setDropAtState] = useState<DropTarget | null>(null);
@@ -44,33 +49,27 @@ export function BookmarksModule(): JSX.Element {
     void window.api.bookmarks.get().then((b) => { setBoard(b ?? EMPTY); setLoaded(true); });
   }, []);
 
-  // Column count, from the board width. Starts at 0 = NOT YET MEASURED (distinct from a real 1-column
-  // window). Two earlier fixes measured `board.clientWidth`, which in the real Electron window kept
-  // coming back too small (< one card), trapping every category in column 0 with no droppable columns.
-  // We no longer trust the board's own width alone: if it measures smaller than a single card (i.e. it
-  // hasn't been laid out to fill its container yet), we fall back to the WINDOW width — the Bookmarks
-  // module effectively fills the window — so we still get a real column count. Measured in a layout
-  // effect + rAF + a few timed retries + ResizeObserver + window resize; migration is gated on
-  // colCount >= 1 so it can never run at the unmeasured sentinel.
+  // Column count. Measured from the MODULE'S WINDOW (`.ga98-window-shell`), not the board: the board's
+  // own width kept coming back under-sized in the real Electron window (it read ~3 columns even on a
+  // wide window, so only 3 columns were droppable while the drag-grid showed the full width). The
+  // window-shell has an explicit width set by the window manager, so it is the reliable container.
+  // Subtract the shell→board chrome (window + board padding) so columns aren't over-counted; observe
+  // the shell so the count updates when the window is resized. colCount starts at 0 = unmeasured.
+  const SHELL_CHROME = 32; // window padding (3) + board padding (8) + scrollbar/border slack, both sides
   const boardRef = useRef<HTMLDivElement>(null);
   const [colCount, setColCount] = useState(0);
   useLayoutEffect(() => {
+    const el = boardRef.current;
+    const shell = el ? el.closest('.ga98-window-shell') : null;
+    const target = shell ?? el; // prefer the module window; fall back to the board
     const measure = () => {
-      const el = boardRef.current;
-      let w = el ? el.getBoundingClientRect().width : 0;
-      // If the board measured narrower than a single card it hasn't stretched to fill its container —
-      // fall back to the module's own draggable window (`.ga98-window-shell`), which is the real width
-      // whether the module is maximized or floating (window.innerWidth would be the whole app viewport
-      // and over-count a small floating window).
-      if (w < BM_CARD_W && el) {
-        const shell = el.closest('.ga98-window-shell');
-        if (shell) w = shell.getBoundingClientRect().width;
-      }
+      let w = target ? target.getBoundingClientRect().width - SHELL_CHROME : 0;
+      if (w < BM_CARD_W && typeof window !== 'undefined') w = window.innerWidth - SHELL_CHROME;
       if (w > 0) setColCount(Math.max(1, Math.floor((w + BM_CARD_GAP) / (BM_CARD_W + BM_CARD_GAP))));
     };
     measure();
     let ro: ResizeObserver | undefined;
-    if (boardRef.current && typeof ResizeObserver !== 'undefined') { ro = new ResizeObserver(measure); ro.observe(boardRef.current); }
+    if (target && typeof ResizeObserver !== 'undefined') { ro = new ResizeObserver(measure); ro.observe(target); }
     const raf = typeof requestAnimationFrame !== 'undefined' ? requestAnimationFrame(measure) : 0;
     const timers = [50, 200, 500].map((ms) => setTimeout(measure, ms)); // catch layout that settles late
     if (typeof window !== 'undefined') window.addEventListener('resize', measure);
@@ -211,7 +210,7 @@ export function BookmarksModule(): JSX.Element {
       <div
         className="ga98-bm-board"
         ref={boardRef}
-        data-dragging={drag.current?.kind === 'card' ? 'true' : undefined}
+        data-dragging={draggingId ? 'true' : undefined}
         // Board-level fallback so a drop in the empty space beyond the columns lands in the last
         // column instead of showing the "no-drop" cursor. Column/card handlers stopPropagation, so
         // this only fires over bare board space.
@@ -233,7 +232,7 @@ export function BookmarksModule(): JSX.Element {
           <div
             key={c.id}
             className="ga98-bm-card window"
-            data-dragging={drag.current?.kind === 'card' && drag.current.catId === c.id ? 'true' : undefined}
+            data-dragging={draggingId === c.id ? 'true' : undefined}
             onDragOver={(e) => {
               if (drag.current?.kind === 'link') { e.preventDefault(); return; }
               if (drag.current?.kind === 'card') { e.preventDefault(); e.stopPropagation(); setDropAt({ column: ci, beforeId: c.id }); }
@@ -247,8 +246,8 @@ export function BookmarksModule(): JSX.Element {
             <div
               className="title-bar"
               draggable
-              onDragStart={(e) => { drag.current = { kind: 'card', catId: c.id }; e.stopPropagation(); }}
-              onDragEnd={() => { drag.current = null; setDropAt(null); }}
+              onDragStart={(e) => { drag.current = { kind: 'card', catId: c.id }; setDraggingId(c.id); e.stopPropagation(); }}
+              onDragEnd={() => { drag.current = null; setDraggingId(null); setDropAt(null); }}
               title="Drag to move this category"
             >
               <input
