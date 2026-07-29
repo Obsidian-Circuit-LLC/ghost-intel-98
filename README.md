@@ -38,13 +38,15 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`GhostIntel98-Setup-3.63.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
+> **Install:** download [`GhostIntel98-Setup-3.64.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
 
 > **📘 User guides** — plain-language, step-by-step (download or read in-browser):
 > - [**SOCMINT: X, Telegram & WhatsApp**](docs/guides/SOCMINT-Tutorial.pdf) — set up and run the social-media collectors, per platform, with the Tor / clearnet and opsec caveats. ([markdown](docs/guides/socmint-tutorial.md))
 > - [**How Searchlight Learns**](docs/guides/Searchlight-Learning-Guide.pdf) — how the username-sweep detector gets smarter from your own labels, and when to turn ML on. ([markdown](docs/guides/searchlight-learning.md))
 
 ## Status
+
+**v3.64.0** — **GeoINT Event Details dossier — Phase 1 (GhostExodus concept).** Clicking a map incident used to give you a bare title + "open" link, while the War-Tracker feed was already delivering (and the code was discarding) the event type, full description, country, and confidence per event. This adds a dedicated **Event Details** panel between the map and the command rail: select a blip (or right-click → *View details*) and it opens a real dossier — a color-coded severity badge (a high-confidence conflict shows red, e.g. "US MILITARY STRIKE"), the headline, location + coordinates + date + source, an Event Type / Confidence / Severity grid, the full description, and derived tags — all built from **real feed data, nothing fabricated**. War-Tracker's unverified social-OSINT provenance and its own confidence are shown as-is, not laundered. The Media / Sources / Intel Summary tabs are present but **disabled ("· soon")** rather than filled with fake data — they're Phases 2 (corroboration Sources + Related + regional grouping) and 3 (a clearly-labeled *offline*-AI summary + entities). No new network egress (War-Tracker was already a gated feed), no new dependency. Built subagent-driven over 6 TDD tasks with a parallel adversarial whole-branch review; the layout was headless-verified (dossier scrolls internally, not stretched by the window-shell rule) and repositioned to match the concept mockup. **3,734 automated tests** green (1 skipped); typecheck clean. *Everything from v3.63.0 carries forward.*
 
 **v3.63.0** — **Bookmarks: the dragged card actually un-dims now, even when it changes column (GhostExodus).** v3.62 was supposed to fix the stuck "shadow," and it did — but only for cards dropped back into the *same* column. A card dropped into a *different* column stayed dimmed until you reopened the window. The reason: when the card moves columns, it's re-created in the new column's DOM, which destroys the original dragged element before its "drag ended" event can fire — so the handler that clears the dim never ran. The dim is now cleared on the **drop** event (which fires before that happens), so a moved card returns to full opacity immediately. **3,712 automated tests** green (1 skipped); typecheck clean. *Everything from v3.62.0 carries forward.*
 
@@ -563,7 +565,7 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases) and run it.
 
-Direct link to the current release: [`GhostIntel98-Setup-3.63.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.63.0/GhostIntel98-Setup-3.63.0.exe)
+Direct link to the current release: [`GhostIntel98-Setup-3.64.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.64.0/GhostIntel98-Setup-3.64.0.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is **formally verified internally** — symbolic (ProVerif) +
 computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not**
 FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.6.8/GhostIntel98-Setup-3.6.8.exe).
@@ -571,7 +573,7 @@ FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Se
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\GhostIntel98-Setup-3.63.0.exe -Algorithm SHA256
+Get-FileHash .\GhostIntel98-Setup-3.64.0.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
