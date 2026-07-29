@@ -19,12 +19,18 @@
  *   http(s) before it is offered as a clickable anchor.
  */
 
+import { useMemo, useState } from 'react';
 import type { GeoItem } from '@shared/post-mvp-types';
-import { resolveEventFields, deriveTags } from './event-details';
+import { resolveEventFields, deriveTags, relatedEvents, sourceLabel } from './event-details';
+import { corroboratingItems } from './corroborate';
 
 export interface EventDetailsPanelProps {
   /** The selected incident. `null` → the panel renders nothing (grid reflows to 3-col upstream). */
   item: GeoItem | null;
+  /** Full in-scope item set the corroboration/related selectors run against (already-fetched, no egress). */
+  allItems: GeoItem[];
+  /** sourceId → human label resolution for the Sources list (never invented; falls back to the raw id). */
+  sources: { id: string; label: string }[];
   /** Close the panel (✕). */
   onClose: () => void;
   /** Open a link externally via the caller's existing safe-open path (system.openExternal). */
@@ -58,7 +64,7 @@ const factValueStyle: React.CSSProperties = { fontSize: 12, color: '#e6edf6', fo
 const TABS: { key: string; label: string; live: boolean }[] = [
   { key: 'overview', label: 'OVERVIEW', live: true },
   { key: 'media', label: 'MEDIA', live: false },
-  { key: 'sources', label: 'SOURCES', live: false },
+  { key: 'sources', label: 'SOURCES', live: true },
   { key: 'intel', label: 'INTEL SUMMARY', live: false }
 ];
 
@@ -83,7 +89,42 @@ function safeHref(link?: string): string | null {
 
 export function EventDetailsPanel(props: EventDetailsPanelProps): JSX.Element | null {
   const { item, onClose, onOpenLink, onPin, pinned } = props;
+  const allItems = props.allItems ?? [];
+  const sources = props.sources ?? [];
+  const [activeTab, setActiveTab] = useState<'overview' | 'sources'>('overview');
+  const [srcFilter, setSrcFilter] = useState<'all' | 'this' | 'other'>('all');
+
+  // Corroboration = the OTHER items co-located with this event in space (and, when both dated, time).
+  // Uses the same radius/window defaults as the map halo. NOTE: the halo caps its distinct-source count
+  // at SRC_CAP (16) for perf; this dossier shows the TRUE, uncapped distinct-source count, so for a very
+  // dense cluster (>16 co-located feeds) the tab may read higher than the halo — intentional (a details
+  // panel should show the real number). Pure/deterministic (Task 1).
+  const corr = useMemo(() => (item ? corroboratingItems(item, allItems) : []), [item, allItems]);
+  // N = distinct OTHER sourceIds among the corroborating items (this event's own source is not a "source").
+  const distinctOther = useMemo(
+    () => (item ? new Set(corr.filter((c) => c.item.sourceId !== item.sourceId).map((c) => c.item.sourceId)).size : 0),
+    [corr, item]
+  );
+  // Related-in-region excludes the corroboration set (related ≠ duplicate of the same event). Task 2.
+  const related = useMemo(
+    () => (item ? relatedEvents(item, allItems, new Set(corr.map((c) => c.item.id))) : []),
+    [item, allItems, corr]
+  );
+
   if (!item) return null;
+
+  // One row per distinct OTHER feed (nearest report; `corr` is sorted nearest-first) so the visible
+  // "Other feeds" list length equals the SOURCES (N) header — no silent header-vs-rowcount divergence.
+  // Same-source items (this event's own feed reporting again) are kept separate under "This source".
+  const seenOther = new Set<string>();
+  const otherBySource = corr.filter((c) => {
+    if (c.item.sourceId === item.sourceId || seenOther.has(c.item.sourceId)) return false;
+    seenOther.add(c.item.sourceId);
+    return true;
+  });
+  const sameSource = corr.filter((c) => c.item.sourceId === item.sourceId);
+  const shownCorr =
+    srcFilter === 'this' ? sameSource : srcFilter === 'other' ? otherBySource : [...otherBySource, ...sameSource];
 
   const { eventType, detail, severityLabel, confidenceLabel, badgeColor, badgeLabel } = resolveEventFields(item);
   const tags = deriveTags(item);
@@ -95,24 +136,28 @@ export function EventDetailsPanel(props: EventDetailsPanelProps): JSX.Element | 
     <div className="ga98-pane ga98-geo-details" style={panelStyle}>
       {/* Tab bar — OVERVIEW live, the rest disabled/"coming soon" (Phases 2-3, no fabricated data). */}
       <div style={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            disabled={!t.live}
-            aria-pressed={t.live}
-            title={t.live ? undefined : 'Coming soon'}
-            style={{
-              fontSize: 10, fontWeight: 'bold', letterSpacing: 0.4, padding: '3px 8px',
-              background: t.live ? '#1b2230' : '#11161f',
-              color: t.live ? '#e6edf6' : '#4a5468',
-              border: '1px solid #2a3344',
-              borderBottomColor: t.live ? '#5a7fb0' : '#2a3344',
-              cursor: t.live ? 'default' : 'not-allowed'
-            }}
-          >
-            {t.label}{t.live ? '' : ' · soon'}
-          </button>
-        ))}
+        {TABS.map((t) => {
+          const active = t.live && activeTab === t.key;
+          return (
+            <button
+              key={t.key}
+              disabled={!t.live}
+              aria-pressed={active}
+              onClick={t.live ? () => setActiveTab(t.key as 'overview' | 'sources') : undefined}
+              title={t.live ? undefined : 'Coming soon'}
+              style={{
+                fontSize: 10, fontWeight: 'bold', letterSpacing: 0.4, padding: '3px 8px',
+                background: t.live ? (active ? '#1b2230' : '#141a26') : '#11161f',
+                color: t.live ? '#e6edf6' : '#4a5468',
+                border: '1px solid #2a3344',
+                borderBottomColor: active ? '#5a7fb0' : '#2a3344',
+                cursor: t.live ? 'pointer' : 'not-allowed'
+              }}
+            >
+              {t.label}{t.live ? '' : ' · soon'}
+            </button>
+          );
+        })}
         <span style={{ flex: 1 }} />
         <button
           onClick={onClose}
@@ -122,6 +167,7 @@ export function EventDetailsPanel(props: EventDetailsPanelProps): JSX.Element | 
         >×</button>
       </div>
 
+      {activeTab === 'overview' && (<>
       {/* Header: severity/type badge + headline. Badge color is a transparent function of severity. */}
       <div style={sectionStyle}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
@@ -217,6 +263,80 @@ export function EventDetailsPanel(props: EventDetailsPanelProps): JSX.Element | 
         )}
         <p style={noteStyle}>ID: {item.id} · Source: {item.sourceId}{absDate ? ` · Updated: ${absDate}` : ''}</p>
       </div>
+      </>)}
+
+      {activeTab === 'sources' && (<>
+      {/* SOURCES: the OTHER feeds reporting THIS event — factual corroboration, no authority tiers.
+          Each row is the source's real label/time/distance; a chatter-category item keeps its explicit
+          "unverified social-OSINT" stamp. External opens go only through the safe onOpenLink path. */}
+      <div style={sectionStyle}>
+        <div style={legendStyle}>SOURCES ({distinctOther})</div>
+        <div style={{ display: 'flex', gap: 4, margin: '0 0 6px', flexWrap: 'wrap' }}>
+          {([['all', 'All'], ['this', 'This source'], ['other', 'Other feeds']] as const).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setSrcFilter(key)}
+              aria-pressed={srcFilter === key}
+              style={{
+                fontSize: 10, padding: '2px 8px', cursor: 'pointer',
+                background: srcFilter === key ? '#1b2230' : '#11161f',
+                color: '#cdd6e4', border: '1px solid #2a3344',
+                borderBottomColor: srcFilter === key ? '#5a7fb0' : '#2a3344'
+              }}
+            >{label}</button>
+          ))}
+        </div>
+        {shownCorr.length === 0 ? (
+          <p style={noteStyle}>{srcFilter === 'this' ? 'No additional reports from this source.' : 'No other feeds reporting this event.'}</p>
+        ) : shownCorr.map((c) => {
+          const rowHref = safeHref(c.item.link);
+          return (
+            <div key={c.item.id} style={{ borderTop: '1px solid #1c2330', padding: '6px 0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 12, fontWeight: 'bold', color: '#e6edf6', wordBreak: 'break-word' }}>{sourceLabel(c.item.sourceId, sources)}</span>
+                <span style={{ flex: 1 }} />
+                <button
+                  onClick={() => rowHref && onOpenLink(c.item.link!)}
+                  disabled={!rowHref}
+                  title={rowHref ? 'Open this source externally' : 'No source link'}
+                  style={{ fontSize: 11, padding: '2px 8px', cursor: rowHref ? 'pointer' : 'not-allowed' }}
+                >Open</button>
+              </div>
+              <div style={{ fontSize: 10, color: '#8a96a8' }}>{formatAbsolute(c.item.published) || 'undated'} · {c.distanceKm.toFixed(1)} km</div>
+              {c.item.category === 'chatter' && <p style={noteStyle}>⚠ unverified social-OSINT</p>}
+            </div>
+          );
+        })}
+        <p style={noteStyle}>Other feeds reporting the same place/time — shown as-is. Not a verification; provenance is each feed's own.</p>
+      </div>
+
+      {/* RELATED IN REGION: same-country, same-relation-key events near in time — distinct from the
+          same-event corroboration set above (related ≠ duplicate). */}
+      <div style={sectionStyle}>
+        <div style={legendStyle}>Related in Region</div>
+        {related.length === 0 ? (
+          <p style={noteStyle}>No related events in this region.</p>
+        ) : related.map((r) => {
+          const rHref = safeHref(r.link);
+          return (
+            <div key={r.id} style={{ borderTop: '1px solid #1c2330', padding: '6px 0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 12, color: '#e6edf6', wordBreak: 'break-word' }}>{r.title}</span>
+                <span style={{ flex: 1 }} />
+                <button
+                  onClick={() => rHref && onOpenLink(r.link!)}
+                  disabled={!rHref}
+                  title={rHref ? 'Open this event externally' : 'No source link'}
+                  style={{ fontSize: 11, padding: '2px 8px', cursor: rHref ? 'pointer' : 'not-allowed' }}
+                >Open</button>
+              </div>
+              <div style={{ fontSize: 10, color: '#8a96a8' }}>{sourceLabel(r.sourceId, sources)} · {formatAbsolute(r.published) || 'undated'}</div>
+              {r.category === 'chatter' && <p style={noteStyle}>⚠ unverified social-OSINT</p>}
+            </div>
+          );
+        })}
+      </div>
+      </>)}
     </div>
   );
 }

@@ -75,6 +75,7 @@ function railProps(over: Partial<CommandRailProps> = {}): CommandRailProps {
     onAddMonitor: vi.fn(),
     onRemoveMonitor: vi.fn(),
     onViewDetails: vi.fn(),
+    onGroupRegion: vi.fn(),
     ...over
   };
 }

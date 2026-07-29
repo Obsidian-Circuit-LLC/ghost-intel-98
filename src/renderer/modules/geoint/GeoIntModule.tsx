@@ -84,6 +84,14 @@ const STORY_ADVANCE_MS = 5000;
 // GeoINT renders on the MapLibre GL 3D globe (MapGL). The former Leaflet fallback (MapPane) was
 // removed once the globe was confirmed in a built/GPU smoke test (v3.14.0-beta.11).
 
+/** View-only region grouping: items whose country matches `country` (case-insensitive). `null` → all.
+ *  Items without a country are excluded when a region is active. Pure; nothing persisted. */
+export function filterByRegion(items: GeoItem[], country: string | null): GeoItem[] {
+  if (!country) return items;
+  const c = country.trim().toLowerCase();
+  return items.filter((i) => (i.country?.trim().toLowerCase() ?? '') === c);
+}
+
 function GeoIntModuleInner(): JSX.Element {
   const settings = useSettings((s) => s.settings);
   const patch = useSettings((s) => s.patch);
@@ -126,6 +134,9 @@ function GeoIntModuleInner(): JSX.Element {
   // Timeline scrubber: cursor (epoch ms) is the "show events up to" point; playing animates it.
   const [timeCursor, setTimeCursor] = useState(0);
   const [timePlaying, setTimePlaying] = useState(false);
+  // View-only "Group regional events" filter: a country code/name set via a row right-click. Buckets
+  // the map + Situation Feed by country; dismissable chip clears it. Nothing persisted.
+  const [regionFilter, setRegionFilter] = useState<string | null>(null);
   // Story mode: chronological walk through the visible+located events. null = not running.
   const [story, setStory] = useState<{ index: number; playing: boolean } | null>(null);
   // Street View overlay (embed). Tracks the map center so it opens the spot you're looking at.
@@ -584,8 +595,20 @@ function GeoIntModuleInner(): JSX.Element {
     if (bounds) setTimeCursor((cur) => (cur < bounds.min || cur > bounds.max || cur === 0 ? bounds.max : cur));
   }, [bounds]);
 
-  // The set handed to the map: events at or before the cursor (undated always shown).
-  const visibleItems = useMemo(() => itemsUpTo(items, timeCursor), [items, timeCursor]);
+  // The set handed to the map: events at or before the cursor (undated always shown), then narrowed
+  // to the active region grouping (if any) AFTER the timeline slice.
+  const visibleItems = useMemo(
+    () => filterByRegion(itemsUpTo(items, timeCursor), regionFilter),
+    [items, timeCursor, regionFilter]
+  );
+
+  // Row right-click → "Group regional events": bucket the view by the item's country. No-op (with a
+  // toast) when the item carries no country. View-only — nothing persisted.
+  const groupRegion = (id: string): void => {
+    const it = items.find((i) => i.id === id);
+    if (!it?.country) { toast.warn('This event has no country to group by.'); return; }
+    setRegionFilter(it.country);
+  };
 
   // Command-center rail (R9): every category key present in the visible set (uncategorized bucketed
   // under UNCATEGORIZED), and the ENABLED subset = present minus disabledCategories. Used only in
@@ -1053,6 +1076,10 @@ function GeoIntModuleInner(): JSX.Element {
 
         <fieldset style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
           <legend>Events ({itemsTotal > MAX_ITEMS ? `${items.length} of ${itemsTotal}` : items.length})</legend>
+          {regionFilter && (
+            <button onClick={() => setRegionFilter(null)} title="Clear region grouping"
+              style={{ fontSize: 10, padding: '2px 8px', margin: '0 0 4px' }}>Region: {regionFilter} ✕</button>
+          )}
           <input className="ga98-text" placeholder="Filter…" value={filter} onChange={(e) => setFilter(e.target.value)} />
           <ul className="ga98-list ga98-geo-events" style={{ flex: 1, overflow: 'auto', marginTop: 4 }}>
             {items.map((i) => (
@@ -1150,6 +1177,8 @@ function GeoIntModuleInner(): JSX.Element {
       {selectedEvent && (
         <EventDetailsPanel
           item={selectedEvent}
+          allItems={items}
+          sources={(snap?.sources ?? []).map((s) => ({ id: s.id, label: s.label }))}
           onClose={clearSelectedEvent}
           onOpenLink={(link) => void window.api.system.openExternal(link)}
           onPin={(id) => { if (pinned.has(id)) void removeMonitor(id); else void addMonitor(id); }}
@@ -1173,6 +1202,7 @@ function GeoIntModuleInner(): JSX.Element {
         onAddMonitor={addMonitor}
         onRemoveMonitor={removeMonitor}
         onViewDetails={selectEvent}
+        onGroupRegion={groupRegion}
       />
       {saveItem && <SaveEventDialog item={saveItem} onClose={() => setSaveItem(null)} />}
     </div>
