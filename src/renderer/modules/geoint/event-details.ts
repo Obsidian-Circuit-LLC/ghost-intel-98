@@ -158,3 +158,42 @@ export function deriveTags(item: GeoItem): string[] {
 
   return out.slice(0, TAG_CAP);
 }
+
+/** Resolve a `sourceId` to its human label, falling back to the raw id (never blank, never invented). */
+export function sourceLabel(sourceId: string, sources: { id: string; label: string }[]): string {
+  const hit = sources.find((s) => s.id === sourceId);
+  return hit ? hit.label : sourceId;
+}
+
+/** Same-region (`country`), same-relation-key (`eventType` else `category`) events within `windowHours`
+ *  of `target`, excluding the target and the same-event corroboration set (`excludeIds`). Pure and
+ *  deterministic: recency desc, then id asc; capped at `max`. `[]` if the target lacks a country or key. */
+export function relatedEvents(
+  target: GeoItem,
+  items: GeoItem[],
+  excludeIds: ReadonlySet<string>,
+  opts: { windowHours?: number; max?: number } = {}
+): GeoItem[] {
+  const W = (opts.windowHours ?? 168) * 3600_000, max = opts.max ?? 8;
+  const country = target.country?.trim().toLowerCase();
+  const key = (target.eventType ?? target.category ?? '').trim().toLowerCase();
+  if (!country || !key) return [];
+  const tt = target.published ? Date.parse(target.published) : NaN;
+  const parsed = (i: GeoItem): number => (i.published ? Date.parse(i.published) : NaN);
+  const matched = items.filter((i) => {
+    if (i.id === target.id || excludeIds.has(i.id)) return false;
+    if ((i.country?.trim().toLowerCase() ?? '') !== country) return false;
+    if (((i.eventType ?? i.category ?? '').trim().toLowerCase()) !== key) return false;
+    const ti = parsed(i);
+    if (!Number.isNaN(tt) && !Number.isNaN(ti) && Math.abs(tt - ti) > W) return false;
+    return true;
+  });
+  matched.sort((a, b) => {
+    const pa = parsed(a), pb = parsed(b);
+    if (!Number.isNaN(pa) && !Number.isNaN(pb) && pa !== pb) return pb - pa;
+    if (Number.isNaN(pa) && !Number.isNaN(pb)) return 1;
+    if (Number.isNaN(pb) && !Number.isNaN(pa)) return -1;
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+  });
+  return matched.slice(0, max);
+}
