@@ -99,6 +99,38 @@ describe('parseWarTracker', () => {
     expect(items.find((i) => i.id === 'wartracker:785248')!.severity).toBe('high');
   });
 
+  it('preserves detail/eventType/confidence/country/media (Event Details Phase 1)', () => {
+    const inc = items.find((i) => i.id === 'wartracker:785248')!;
+    expect(inc).toBeTruthy();
+    expect(inc.detail).toBe('Russian Southern grouping claims superiority on the Slavyansk front.');
+    expect(inc.eventType).toBe('Military Offensive');
+    expect(inc.confidence).toBe('HIGH'); // raw source string, surfaced as-is (not laundered)
+    expect(inc.country).toBe('UA'); // ISO2 `country` preferred
+    expect(inc.hasMedia).toBe(true);
+    expect(inc.isVideo).toBe(true);
+    // existing behaviour unchanged
+    expect(inc.title).toBe('Slavyansk, Ukraine');
+    expect(inc.severity).toBe('high');
+  });
+
+  it('falls back to country_name when ISO2 country is absent, omits missing/false media', () => {
+    const out = parseWarTracker({
+      events: [
+        { id: 1, lat: 1, lng: 2, country_name: 'Iraq', description: 'x', has_media: false },
+        { id: 2, lat: 1, lng: 2 }
+      ]
+    });
+    const a = out.find((i) => i.id === 'wartracker:1')!;
+    expect(a.country).toBe('Iraq');
+    expect(a.hasMedia).toBeUndefined(); // has_media:false ⇒ undefined (not carried)
+    expect(a.isVideo).toBeUndefined();
+    const b = out.find((i) => i.id === 'wartracker:2')!;
+    expect(b.detail).toBeUndefined();
+    expect(b.eventType).toBeUndefined();
+    expect(b.confidence).toBeUndefined();
+    expect(b.country).toBeUndefined();
+  });
+
   it('falls back to low severity for unknown/missing confidence', () => {
     const out = parseWarTracker({ events: [{ id: 9, lat: 1, lng: 2, confidence: 'weird' }] });
     expect(out[0].severity).toBe('low');

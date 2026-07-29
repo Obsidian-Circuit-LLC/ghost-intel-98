@@ -20,6 +20,7 @@ import { timeBounds, itemsUpTo } from './timeline';
 import { TimelineBar } from './TimelineBar';
 import { StoryControls } from './StoryControls';
 import { CommandRail } from './CommandRail';
+import { EventDetailsPanel } from './EventDetailsPanel';
 import { filterByCategories, UNCATEGORIZED } from './threat';
 import { SpaceSatellitesPanel } from './satellites/SpaceSatellitesPanel';
 import { SatelliteManager } from './satellites/SatelliteManager';
@@ -199,6 +200,14 @@ function GeoIntModuleInner(): JSX.Element {
     const ids = await window.api.geoint.removeMonitor(id);
     setPinnedState(new Set(ids));
   }, []);
+
+  // Event Details (Phase 1): the currently-selected incident's id. The panel is a transient view of
+  // the selected event (no persistence). `selectEvent` opens it (blip click + right-click View
+  // details), `clearSelectedEvent` closes it (✕). The item itself is resolved from the live `items`
+  // set below so the panel always reflects the latest data (and hides if the item leaves the set).
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const selectEvent = useCallback((id: string) => setSelectedEventId(id), []);
+  const clearSelectedEvent = useCallback(() => setSelectedEventId(null), []);
 
   // Threat layers (R5): on-demand, ephemeral. `layerItems` holds the fetched GeoItem[] per enabled
   // layer; toggling a layer off drops its items. `usgsFeed` is the allowlisted feed/timeframe for
@@ -554,6 +563,14 @@ function GeoIntModuleInner(): JSX.Element {
     return { items: matched.length > MAX_ITEMS ? matched.slice(0, MAX_ITEMS) : matched, itemsTotal: matched.length };
   }, [snap, layerItems, filter]);
 
+  // Event Details: resolve the selected id to a live item from the current set. Deriving (rather
+  // than snapshotting the item into state) keeps the panel in sync with refreshes and auto-closes
+  // it if the item drops out of the set (e.g. a threat layer toggled off).
+  const selectedEvent = useMemo(
+    () => (selectedEventId ? items.find((i) => i.id === selectedEventId) ?? null : null),
+    [items, selectedEventId]
+  );
+
   // Corroboration count per item (distinct other sources nearby in time). Computed on the FULL
   // `items` set (not the timeline-filtered subset) so confidence is stable as the cursor moves —
   // MapPane keys corroboration by id, so a filtered subset of ids is fine.
@@ -644,7 +661,7 @@ function GeoIntModuleInner(): JSX.Element {
   }
 
   return (
-    <div className={`ga98-split ga98-geo ga98-geo-3col${railCollapsed ? ' ga98-geo-railclosed' : ''}`} style={{ height: '100%' }}>
+    <div className={`ga98-split ga98-geo ${selectedEvent ? 'ga98-geo-4col' : 'ga98-geo-3col'}${railCollapsed ? ' ga98-geo-railclosed' : ''}`} style={{ height: '100%' }}>
       <div className="ga98-pane ga98-geo-left">
         <button
           type="button"
@@ -1074,6 +1091,7 @@ function GeoIntModuleInner(): JSX.Element {
             showShips={showShips}
             onShipSelect={(id) => console.debug('[GeoINT] ship selected:', id)}
             onBboxChange={setBbox}
+            onSelectItem={selectEvent}
           />
         {streetView && net && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', background: '#000' }}>
@@ -1125,8 +1143,21 @@ function GeoIntModuleInner(): JSX.Element {
           onAll={() => { setTimePlaying(false); if (bounds) setTimeCursor(bounds.max); }}
         />
       </div>
-      {/* Command-center right rail — 3rd column. All data is owned by this module and passed down;
-          the rail mirrors handlers rather than duplicating logic. */}
+      {/* Event Details dossier — the wide column BETWEEN the map and the command rail (per the
+          approved mockup). Opens on blip click / right-click "View details"; rendered only when an
+          event is selected (else the grid stays 3-col). onOpenLink routes through the existing safe
+          external-open path (no new egress). */}
+      {selectedEvent && (
+        <EventDetailsPanel
+          item={selectedEvent}
+          onClose={clearSelectedEvent}
+          onOpenLink={(link) => void window.api.system.openExternal(link)}
+          onPin={(id) => { if (pinned.has(id)) void removeMonitor(id); else void addMonitor(id); }}
+          pinned={pinned.has(selectedEvent.id)}
+        />
+      )}
+      {/* Command-center right rail — the far-right column (Live News / Threat / Monitored / feeds).
+          All data is owned by this module and passed down; the rail mirrors handlers. */}
       <CommandRail
         visibleItems={visibleItems}
         corroboration={corroboration}
@@ -1141,6 +1172,7 @@ function GeoIntModuleInner(): JSX.Element {
         pinned={pinned}
         onAddMonitor={addMonitor}
         onRemoveMonitor={removeMonitor}
+        onViewDetails={selectEvent}
       />
       {saveItem && <SaveEventDialog item={saveItem} onClose={() => setSaveItem(null)} />}
     </div>

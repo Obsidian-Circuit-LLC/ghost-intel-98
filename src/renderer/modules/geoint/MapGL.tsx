@@ -195,7 +195,8 @@ export function rebuildItemMarkers(
   store: Map<string, maplibregl.Marker>,
   items: GeoItem[],
   corroboration?: Map<string, number>,
-  onPopup?: (p: maplibregl.Popup) => void
+  onPopup?: (p: maplibregl.Popup) => void,
+  onSelect?: (id: string) => void
 ): { shown: number; total: number } | null {
   for (const mk of store.values()) mk.remove();
   store.clear();
@@ -211,8 +212,14 @@ export function rebuildItemMarkers(
       const popup = new maplibregl.Popup({ closeButton: true, closeOnClick: true })
         .setDOMContent(buildPopup(it.title, it.link));
       onPopup?.(popup); // single-open tracking: opening this closes any other open popup
+      // Event Details (Phase 1): a marker click also opens the dossier panel. The listener sits on
+      // the marker's own element (not the Marker object) so it never touches the popup/close-button
+      // behaviour and needs no MapLibre event plumbing. Blip click thus opens BOTH the popup
+      // (MapLibre's default marker→popup toggle) AND the panel (this handler).
+      const element = buildIconElement(it, corroboration?.get(it.id) ?? 0);
+      if (onSelect) element.addEventListener('click', () => onSelect(it.id));
       // CRITICAL: MapLibre uses [lng, lat] (GeoJSON order), the OPPOSITE of Leaflet's [lat, lng].
-      const mk = new maplibregl.Marker({ element: buildIconElement(it, corroboration?.get(it.id) ?? 0) })
+      const mk = new maplibregl.Marker({ element })
         .setLngLat([it.lon as number, it.lat as number])
         .setPopup(popup)
         .addTo(map);
@@ -271,6 +278,8 @@ export interface MapGLProps {
   onShipSelect?: (id: string) => void;
   /** Reports the viewport bounding box after each pan/zoom (~500 ms debounced). */
   onBboxChange?: (b: Bounds) => void;
+  /** A marker (blip) click also selects the event and opens the Event Details dossier panel. */
+  onSelectItem?: (id: string) => void;
 }
 
 export function MapGL(props: MapGLProps = {}): JSX.Element {
@@ -283,7 +292,7 @@ export function MapGL(props: MapGLProps = {}): JSX.Element {
     onSatelliteSelect, onSatellitesPropagated, trackSatId = null, satTickMs = 2000,
     aircraft = [], showAircraft = false, onAircraftSelect,
     ships = [], showShips = false, onShipSelect,
-    onBboxChange
+    onBboxChange, onSelectItem
   } = props;
   const ref = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
@@ -315,6 +324,9 @@ export function MapGL(props: MapGLProps = {}): JSX.Element {
   const showShipsRef = useRef(showShips); showShipsRef.current = showShips;
   const onShipSelectRef = useRef(onShipSelect); onShipSelectRef.current = onShipSelect;
   const onBboxChangeRef = useRef(onBboxChange); onBboxChangeRef.current = onBboxChange;
+  // Read the selection callback through a ref so a changed handler doesn't re-thrash the whole
+  // marker set (the rebuild effect keys off the item SET + corroboration only).
+  const onSelectItemRef = useRef(onSelectItem); onSelectItemRef.current = onSelectItem;
   const bboxDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Only ONE popup open at a time. MapLibre's closeOnClick closes popups on a MAP click but NOT
   // when another marker is clicked, so clicking through co-located "blips" left a stack of popups
@@ -447,7 +459,7 @@ export function MapGL(props: MapGLProps = {}): JSX.Element {
   useEffect(() => {
     const m = map.current;
     if (!m) return;
-    setTruncated(rebuildItemMarkers(m, markers.current, items, corroboration, trackPopup));
+    setTruncated(rebuildItemMarkers(m, markers.current, items, corroboration, trackPopup, (id) => onSelectItemRef.current?.(id)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, corroboration]);
 

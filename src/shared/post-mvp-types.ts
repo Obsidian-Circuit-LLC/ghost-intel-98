@@ -228,6 +228,23 @@ export interface GeoItem {
   severity?: 'low' | 'medium' | 'high';
   /** Item image URL (JSON Feed `image`/`banner_image`). Optional; other parsers don't set it yet. */
   image?: string;
+  /** Full description / body: war-tracker `description`, RSS `summary` long form. Event Details
+   *  dossier surfaces this as the Overview description. Optional/additive (back-compat). */
+  detail?: string;
+  /** Event-type label: war-tracker `event_type` ("Military Strike"); derived category label
+   *  otherwise. Distinct from the map `category`. Optional/additive. */
+  eventType?: string;
+  /** Raw source confidence string ("HIGH") — surfaced as-is (provenance not laundered). Distinct
+   *  from the derived `severity`. Optional/additive. */
+  confidence?: string;
+  /** ISO2 or country name: war-tracker `country`/`country_name`; RSS via offline gazetteer.
+   *  Optional/additive. */
+  country?: string;
+  /** War-tracker `has_media` — media reported at source (Phase 3 shows an "open source"
+   *  affordance, never a fabricated gallery). Optional/additive. */
+  hasMedia?: boolean;
+  /** War-tracker `is_video` — reported media is video. Optional/additive. */
+  isVideo?: boolean;
 }
 
 export interface GeoSnapshot {

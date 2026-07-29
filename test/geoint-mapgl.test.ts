@@ -261,6 +261,26 @@ describe('GeoINT MapGL marker port (R3)', () => {
     expect(seen[1]).toBe(markers[1].popup);
   });
 
+  it('wires onSelect to each marker element — a marker-element click fires onSelect(id)', () => {
+    const m = freshMap();
+    const store = new Map<string, maplibregl.Marker>();
+    const selected: string[] = [];
+    rebuildItemMarkers(
+      m as unknown as maplibregl.Map,
+      store as unknown as Map<string, maplibregl.Marker>,
+      [item({ id: 'a', lat: 1, lon: 2 }), item({ id: 'b', lat: 3, lon: 4 })],
+      undefined,
+      undefined,
+      (id) => selected.push(id)
+    );
+    // The click handler is attached to the marker's element (the buildIconElement span).
+    const elA = (markers[0].opts as { element: HTMLElement }).element;
+    const elB = (markers[1].opts as { element: HTMLElement }).element;
+    elA.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    elB.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(selected).toEqual(['a', 'b']);
+  });
+
   it('rejects null / NaN / out-of-range coords — no poisoned marker reaches the map', () => {
     // validCoord is the gate; assert it directly...
     expect(validCoord(null, 5)).toBe(false);
