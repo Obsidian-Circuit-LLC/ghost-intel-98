@@ -95,7 +95,10 @@ export function EventDetailsPanel(props: EventDetailsPanelProps): JSX.Element | 
   const [srcFilter, setSrcFilter] = useState<'all' | 'this' | 'other'>('all');
 
   // Corroboration = the OTHER items co-located with this event in space (and, when both dated, time).
-  // Same defaults as the map halo so the tab list and the halo agree. Pure/deterministic (Task 1).
+  // Uses the same radius/window defaults as the map halo. NOTE: the halo caps its distinct-source count
+  // at SRC_CAP (16) for perf; this dossier shows the TRUE, uncapped distinct-source count, so for a very
+  // dense cluster (>16 co-located feeds) the tab may read higher than the halo — intentional (a details
+  // panel should show the real number). Pure/deterministic (Task 1).
   const corr = useMemo(() => (item ? corroboratingItems(item, allItems) : []), [item, allItems]);
   // N = distinct OTHER sourceIds among the corroborating items (this event's own source is not a "source").
   const distinctOther = useMemo(
@@ -110,8 +113,18 @@ export function EventDetailsPanel(props: EventDetailsPanelProps): JSX.Element | 
 
   if (!item) return null;
 
-  const shownCorr = corr.filter((c) =>
-    srcFilter === 'all' ? true : srcFilter === 'this' ? c.item.sourceId === item.sourceId : c.item.sourceId !== item.sourceId);
+  // One row per distinct OTHER feed (nearest report; `corr` is sorted nearest-first) so the visible
+  // "Other feeds" list length equals the SOURCES (N) header — no silent header-vs-rowcount divergence.
+  // Same-source items (this event's own feed reporting again) are kept separate under "This source".
+  const seenOther = new Set<string>();
+  const otherBySource = corr.filter((c) => {
+    if (c.item.sourceId === item.sourceId || seenOther.has(c.item.sourceId)) return false;
+    seenOther.add(c.item.sourceId);
+    return true;
+  });
+  const sameSource = corr.filter((c) => c.item.sourceId === item.sourceId);
+  const shownCorr =
+    srcFilter === 'this' ? sameSource : srcFilter === 'other' ? otherBySource : [...otherBySource, ...sameSource];
 
   const { eventType, detail, severityLabel, confidenceLabel, badgeColor, badgeLabel } = resolveEventFields(item);
   const tags = deriveTags(item);
@@ -274,7 +287,7 @@ export function EventDetailsPanel(props: EventDetailsPanelProps): JSX.Element | 
           ))}
         </div>
         {shownCorr.length === 0 ? (
-          <p style={noteStyle}>No other feeds reporting this event.</p>
+          <p style={noteStyle}>{srcFilter === 'this' ? 'No additional reports from this source.' : 'No other feeds reporting this event.'}</p>
         ) : shownCorr.map((c) => {
           const rowHref = safeHref(c.item.link);
           return (
@@ -306,16 +319,19 @@ export function EventDetailsPanel(props: EventDetailsPanelProps): JSX.Element | 
         ) : related.map((r) => {
           const rHref = safeHref(r.link);
           return (
-            <div key={r.id} style={{ borderTop: '1px solid #1c2330', padding: '6px 0', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 12, color: '#e6edf6', wordBreak: 'break-word' }}>{r.title}</span>
-              <span style={{ fontSize: 10, color: '#8a96a8' }}>{formatAbsolute(r.published) || 'undated'}</span>
-              <span style={{ flex: 1 }} />
-              <button
-                onClick={() => rHref && onOpenLink(r.link!)}
-                disabled={!rHref}
-                title={rHref ? 'Open this event externally' : 'No source link'}
-                style={{ fontSize: 11, padding: '2px 8px', cursor: rHref ? 'pointer' : 'not-allowed' }}
-              >Open</button>
+            <div key={r.id} style={{ borderTop: '1px solid #1c2330', padding: '6px 0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 12, color: '#e6edf6', wordBreak: 'break-word' }}>{r.title}</span>
+                <span style={{ flex: 1 }} />
+                <button
+                  onClick={() => rHref && onOpenLink(r.link!)}
+                  disabled={!rHref}
+                  title={rHref ? 'Open this event externally' : 'No source link'}
+                  style={{ fontSize: 11, padding: '2px 8px', cursor: rHref ? 'pointer' : 'not-allowed' }}
+                >Open</button>
+              </div>
+              <div style={{ fontSize: 10, color: '#8a96a8' }}>{sourceLabel(r.sourceId, sources)} · {formatAbsolute(r.published) || 'undated'}</div>
+              {r.category === 'chatter' && <p style={noteStyle}>⚠ unverified social-OSINT</p>}
             </div>
           );
         })}
