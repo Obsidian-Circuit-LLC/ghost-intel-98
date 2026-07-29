@@ -661,7 +661,7 @@ function GeoIntModuleInner(): JSX.Element {
   }
 
   return (
-    <div className={`ga98-split ga98-geo ga98-geo-3col${railCollapsed ? ' ga98-geo-railclosed' : ''}`} style={{ height: '100%' }}>
+    <div className={`ga98-split ga98-geo ${selectedEvent ? 'ga98-geo-4col' : 'ga98-geo-3col'}${railCollapsed ? ' ga98-geo-railclosed' : ''}`} style={{ height: '100%' }}>
       <div className="ga98-pane ga98-geo-left">
         <button
           type="button"

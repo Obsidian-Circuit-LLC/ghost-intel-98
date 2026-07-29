@@ -987,6 +987,16 @@ input.ga98-text, select.ga98-text {
    to a thin strip showing only the » reopen button, handing the freed width to the map. */
 .ga98-geo-rail-toggle { align-self: flex-end; min-width: 0; padding: 0 6px; height: 18px; line-height: 16px; flex: 0 0 auto; }
 .ga98-geo-3col.ga98-geo-railclosed { grid-template-columns: 22px minmax(0, 1fr) minmax(0, 300px); }
+/* 4-column layout (Event Details Phase 1): the Event Details dossier opens as a 4th grid track when
+   an incident is selected, and the root reflows back to .ga98-geo-3col when it's closed. Track order
+   follows DOM order: left controls (380px) | globe (1fr, flexes) | CommandRail (300px) | Event
+   Details panel (360px, the readable dossier width). The panel is a rail-style .ga98-geo-details div
+   (NOT a .window), so the .ga98-window-shell .window{height:100%} stretch trap does not apply — it
+   sizes to its 100%-height grid track and scrolls internally. minmax(0,…) on the flexible + right
+   tracks so a narrow window shrinks the globe (then the rails) FIRST rather than clipping the 380px
+   left controls, matching the 3-col rationale above. */
+.ga98-geo-4col { grid-template-columns: 380px minmax(0, 1fr) minmax(0, 300px) minmax(0, 360px); }
+.ga98-geo-4col.ga98-geo-railclosed { grid-template-columns: 22px minmax(0, 1fr) minmax(0, 300px) minmax(0, 360px); }
 .ga98-geo-railclosed .ga98-geo-left { overflow: hidden; padding: 2px; gap: 0; }
 .ga98-geo-railclosed .ga98-geo-left > *:not(.ga98-geo-rail-toggle) { display: none; }
 .ga98-geo-railclosed .ga98-geo-rail-toggle { align-self: stretch; width: 100%; padding: 0; }
