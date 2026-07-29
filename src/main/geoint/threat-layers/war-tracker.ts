@@ -107,7 +107,7 @@ export function parseWarTracker(json: unknown): GeoItem[] {
       category: 'chatter',
       severity: severityForConfidence(e?.confidence),
       detail: desc ? clip(desc) : undefined,
-      eventType: etype || undefined,
+      eventType: etype ? clip(etype) : undefined,
       confidence: confidence ? clip(confidence) : undefined,
       country: country ? clip(country) : undefined,
       hasMedia: e?.has_media === true || undefined,
