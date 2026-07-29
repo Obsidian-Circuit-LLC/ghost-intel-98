@@ -76,3 +76,42 @@ export function corroborate(
   }
   return out;
 }
+
+export interface CorroboratingItem { item: GeoItem; distanceKm: number; }
+
+/** The OTHER items co-located with `target` in space (and, when both are dated, time) — the concrete
+ *  list behind the corroboration count. Same defaults as {@link corroborate} so the list and the map
+ *  halo agree. Same-source items are included (the panel's "this source" filter needs them); the
+ *  target itself is never included. Pure and deterministic: sorted by distance, then recency, then id. */
+export function corroboratingItems(
+  target: GeoItem,
+  items: GeoItem[],
+  opts: { radiusKm?: number; windowHours?: number } = {}
+): CorroboratingItem[] {
+  const R = opts.radiusKm ?? 25, W = (opts.windowHours ?? 48) * 3600_000;
+  if (!Number.isFinite(target.lat) || !Number.isFinite(target.lon)) return [];
+  const t = (i: GeoItem): number | null => {
+    const p = i.published ? Date.parse(i.published) : NaN;
+    return Number.isNaN(p) ? null : p;
+  };
+  const tt = t(target);
+  const out: CorroboratingItem[] = [];
+  for (const b of items) {
+    if (b.id === target.id) continue;
+    if (!Number.isFinite(b.lat) || !Number.isFinite(b.lon)) continue;
+    const d = haversineKm(target.lat!, target.lon!, b.lat!, b.lon!);
+    if (d > R) continue;
+    const tb = t(b);
+    if (tt != null && tb != null && Math.abs(tt - tb) > W) continue;
+    out.push({ item: b, distanceKm: d });
+  }
+  out.sort((x, y) => {
+    if (x.distanceKm !== y.distanceKm) return x.distanceKm - y.distanceKm;
+    const px = t(x.item), py = t(y.item);
+    if (px != null && py != null && px !== py) return py - px; // recent first
+    if (px == null && py != null) return 1;
+    if (py == null && px != null) return -1;
+    return x.item.id < y.item.id ? -1 : x.item.id > y.item.id ? 1 : 0;
+  });
+  return out;
+}
