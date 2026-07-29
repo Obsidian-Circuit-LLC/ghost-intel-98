@@ -1150,6 +1150,8 @@ function GeoIntModuleInner(): JSX.Element {
       {selectedEvent && (
         <EventDetailsPanel
           item={selectedEvent}
+          allItems={items}
+          sources={(snap?.sources ?? []).map((s) => ({ id: s.id, label: s.label }))}
           onClose={clearSelectedEvent}
           onOpenLink={(link) => void window.api.system.openExternal(link)}
           onPin={(id) => { if (pinned.has(id)) void removeMonitor(id); else void addMonitor(id); }}
