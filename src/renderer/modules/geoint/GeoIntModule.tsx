@@ -1143,8 +1143,21 @@ function GeoIntModuleInner(): JSX.Element {
           onAll={() => { setTimePlaying(false); if (bounds) setTimeCursor(bounds.max); }}
         />
       </div>
-      {/* Command-center right rail — 3rd column. All data is owned by this module and passed down;
-          the rail mirrors handlers rather than duplicating logic. */}
+      {/* Event Details dossier — the wide column BETWEEN the map and the command rail (per the
+          approved mockup). Opens on blip click / right-click "View details"; rendered only when an
+          event is selected (else the grid stays 3-col). onOpenLink routes through the existing safe
+          external-open path (no new egress). */}
+      {selectedEvent && (
+        <EventDetailsPanel
+          item={selectedEvent}
+          onClose={clearSelectedEvent}
+          onOpenLink={(link) => void window.api.system.openExternal(link)}
+          onPin={(id) => { if (pinned.has(id)) void removeMonitor(id); else void addMonitor(id); }}
+          pinned={pinned.has(selectedEvent.id)}
+        />
+      )}
+      {/* Command-center right rail — the far-right column (Live News / Threat / Monitored / feeds).
+          All data is owned by this module and passed down; the rail mirrors handlers. */}
       <CommandRail
         visibleItems={visibleItems}
         corroboration={corroboration}
@@ -1161,18 +1174,6 @@ function GeoIntModuleInner(): JSX.Element {
         onRemoveMonitor={removeMonitor}
         onViewDetails={selectEvent}
       />
-      {/* Event Details dossier — 4th column. Opens on blip click / right-click "View details";
-          renders only when an event is selected (else the grid stays 3-col). All state owned here;
-          onOpenLink routes through the existing safe external-open path (no new egress). */}
-      {selectedEvent && (
-        <EventDetailsPanel
-          item={selectedEvent}
-          onClose={clearSelectedEvent}
-          onOpenLink={(link) => void window.api.system.openExternal(link)}
-          onPin={(id) => { if (pinned.has(id)) void removeMonitor(id); else void addMonitor(id); }}
-          pinned={pinned.has(selectedEvent.id)}
-        />
-      )}
       {saveItem && <SaveEventDialog item={saveItem} onClose={() => setSaveItem(null)} />}
     </div>
   );
