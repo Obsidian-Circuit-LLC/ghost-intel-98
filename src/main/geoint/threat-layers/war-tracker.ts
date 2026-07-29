@@ -48,6 +48,12 @@ interface WtEvent {
   confidence?: unknown;
   description?: unknown;
   source_url?: unknown;
+  // Present in the raw /events JSON (verified 2026-06-15) but previously dropped by parseWarTracker;
+  // Event Details Phase 1 stops discarding them. Typed `unknown` — validated at the mapping seam.
+  country?: unknown;
+  country_name?: unknown;
+  has_media?: unknown;
+  is_video?: unknown;
 }
 interface WtResponse { events?: unknown }
 
