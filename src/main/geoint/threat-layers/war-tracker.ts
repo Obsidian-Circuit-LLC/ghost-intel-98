@@ -82,6 +82,13 @@ export function parseWarTracker(json: unknown): GeoItem[] {
     const loc = typeof e?.location === 'string' ? e.location.trim() : '';
     const etype = typeof e?.event_type === 'string' ? e.event_type.trim() : '';
     const desc = typeof e?.description === 'string' ? e.description.trim() : '';
+    // Event Details Phase 1: stop dropping these. Prefer ISO2 `country`, fall back to
+    // `country_name`. Confidence surfaced as the raw source string (provenance not laundered —
+    // distinct from the derived `severity`). Media flags carried only when truthy.
+    const iso2 = typeof e?.country === 'string' ? e.country.trim() : '';
+    const cname = typeof e?.country_name === 'string' ? e.country_name.trim() : '';
+    const country = iso2 || cname || undefined;
+    const confidence = typeof e?.confidence === 'string' && e.confidence.trim() ? e.confidence.trim() : undefined;
     const title = clip(loc || etype || desc.slice(0, MAX_TITLE) || 'War-Tracker event').slice(0, MAX_FIELD);
     // Attribute via canonical share url; source_url (when non-null) is the original OSINT post.
     const srcUrl = typeof e?.source_url === 'string' && e.source_url ? e.source_url : '';
@@ -98,7 +105,13 @@ export function parseWarTracker(json: unknown): GeoItem[] {
       lon: lng,
       located: 'geo',
       category: 'chatter',
-      severity: severityForConfidence(e?.confidence)
+      severity: severityForConfidence(e?.confidence),
+      detail: desc ? clip(desc) : undefined,
+      eventType: etype || undefined,
+      confidence: confidence ? clip(confidence) : undefined,
+      country: country ? clip(country) : undefined,
+      hasMedia: e?.has_media === true || undefined,
+      isVideo: e?.is_video === true || undefined
     });
   }
   return out;
