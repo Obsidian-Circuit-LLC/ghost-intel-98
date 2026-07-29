@@ -60,6 +60,8 @@ export interface CommandRailProps {
   onAddMonitor: (id: string) => void;
   /** Unpin an item id from the monitor set. */
   onRemoveMonitor: (id: string) => void;
+  /** Open the Event Details dossier panel for an item id (right-click → View details). */
+  onViewDetails: (id: string) => void;
 }
 
 // Shared dark-panel chrome: keeps the Win98 fieldset/legend conventions but on a dark face so the
@@ -79,7 +81,7 @@ export function CommandRail(props: CommandRailProps): JSX.Element {
     visibleItems, corroboration, onFocus,
     categoryFilter, onToggleCategory,
     basemap, onBasemap, labels, onLabels, net,
-    pinned, onAddMonitor, onRemoveMonitor
+    pinned, onAddMonitor, onRemoveMonitor, onViewDetails
   } = props;
 
   // Context menu state for the Situation Feed right-click.
@@ -132,6 +134,10 @@ export function CommandRail(props: CommandRailProps): JSX.Element {
           }}
           onClick={(e) => e.stopPropagation()}
         >
+          <div
+            style={{ padding: '6px 12px', fontSize: 12, cursor: 'pointer', borderBottom: '1px solid #2a3344' }}
+            onClick={() => { onViewDetails(ctxMenu.id); setCtxMenu(null); }}
+          >View details</div>
           {pinned.has(ctxMenu.id) ? (
             <div
               style={{ padding: '6px 12px', fontSize: 12, cursor: 'pointer' }}
