@@ -38,13 +38,15 @@ that never depend on a third-party staying up:
 - **Private by construction:** no telemetry, no phone-home; all egress is explicit and consent-gated;
   optional encrypt-at-rest login (AES-256-GCM). Windows installer; per-user, no admin.
 
-> **Install:** download [`GhostIntel98-Setup-3.64.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
+> **Install:** download [`GhostIntel98-Setup-3.65.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/latest), verify the SHA-256, **More info → Run anyway** (unsigned). *(Current build includes the Tor P2P chat — handshake **formally verified internally**: symbolic (ProVerif) + computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not** FIPS-validated. See Status.)*
 
 > **📘 User guides** — plain-language, step-by-step (download or read in-browser):
 > - [**SOCMINT: X, Telegram & WhatsApp**](docs/guides/SOCMINT-Tutorial.pdf) — set up and run the social-media collectors, per platform, with the Tor / clearnet and opsec caveats. ([markdown](docs/guides/socmint-tutorial.md))
 > - [**How Searchlight Learns**](docs/guides/Searchlight-Learning-Guide.pdf) — how the username-sweep detector gets smarter from your own labels, and when to turn ML on. ([markdown](docs/guides/searchlight-learning.md))
 
 ## Status
+
+**v3.65.0** — **GeoINT Event Details dossier — Phase 2 (Sources & Related).** Phase 1 gave a map incident a real Overview dossier; Phase 2 brings the **SOURCES** tab live and adds regional grouping. Selecting an incident now lists **the other feeds reporting the same event** — surfaced from the app's existing corroboration engine (co-location in place, and time when both are dated) — each shown by its real label, recency, and distance. The **SOURCES (N)** header counts **distinct other feeds** (repeat reports from one feed dedupe to a single row; the incident's own source is never counted), with an **All / This source / Other feeds** filter. Below it, **Related in Region** lists other incidents of the same type in the same country within a window — explicitly excluding the same-event duplicates above. Right-click a Situation-Feed row → **Group regional events** filters the map + feed to that country (a view, nothing saved). **Honesty:** the mockup's *Official / Independent / Social* source tiers were **dropped** — the app only knows a feed's format, never its authority, so ranking sources would assert authority the data can't back; sources are shown factually instead. War-Tracker / social-OSINT `chatter` items keep their **⚠ unverified social-OSINT** stamp **everywhere** they appear — the corroboration list *and* the Related list (an adversarial whole-branch review caught the Related list initially missing it; now stamped + regression-tested). No new egress, no new dependency; two new pure deterministic selectors, no data-model change. Built subagent-driven over 5 TDD tasks with a parallel adversarial whole-branch review (correctness / charter / tests / security), controller-verified with a headless computed-style layout check. **3,756 automated tests** green (1 skipped); typecheck clean. *Everything from v3.64.0 carries forward.*
 
 **v3.64.0** — **GeoINT Event Details dossier — Phase 1 (GhostExodus concept).** Clicking a map incident used to give you a bare title + "open" link, while the War-Tracker feed was already delivering (and the code was discarding) the event type, full description, country, and confidence per event. This adds a dedicated **Event Details** panel between the map and the command rail: select a blip (or right-click → *View details*) and it opens a real dossier — a color-coded severity badge (a high-confidence conflict shows red, e.g. "US MILITARY STRIKE"), the headline, location + coordinates + date + source, an Event Type / Confidence / Severity grid, the full description, and derived tags — all built from **real feed data, nothing fabricated**. War-Tracker's unverified social-OSINT provenance and its own confidence are shown as-is, not laundered. The Media / Sources / Intel Summary tabs are present but **disabled ("· soon")** rather than filled with fake data — they're Phases 2 (corroboration Sources + Related + regional grouping) and 3 (a clearly-labeled *offline*-AI summary + entities). No new network egress (War-Tracker was already a gated feed), no new dependency. Built subagent-driven over 6 TDD tasks with a parallel adversarial whole-branch review; the layout was headless-verified (dossier scrolls internally, not stretched by the window-shell rule) and repositioned to match the concept mockup. **3,734 automated tests** green (1 skipped); typecheck clean. *Everything from v3.63.0 carries forward.*
 
@@ -565,7 +567,7 @@ on-device Vosk STT + OS TTS, fully local. See [Releases & changelog](#releases--
 
 Download the latest installer from the [Releases page](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases) and run it.
 
-Direct link to the current release: [`GhostIntel98-Setup-3.64.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.64.0/GhostIntel98-Setup-3.64.0.exe)
+Direct link to the current release: [`GhostIntel98-Setup-3.65.0.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.65.0/GhostIntel98-Setup-3.65.0.exe)
 (Tor P2P chat + Piper TTS; the chat handshake is **formally verified internally** — symbolic (ProVerif) +
 computational (CryptoVerif), internally adversarially reviewed; **not** independently audited and **not**
 FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Setup-3.6.8.exe`](https://github.com/Obsidian-Circuit-LLC/ghost-intel-98/releases/download/v3.6.8/GhostIntel98-Setup-3.6.8.exe).
@@ -573,7 +575,7 @@ FIPS-validated — see Status). The last fully-stable build is [`GhostIntel98-Se
 **Verify the download** before running it — compare its SHA-256 against the value in the release notes:
 
 ```powershell
-Get-FileHash .\GhostIntel98-Setup-3.64.0.exe -Algorithm SHA256
+Get-FileHash .\GhostIntel98-Setup-3.65.0.exe -Algorithm SHA256
 # compare against the SHA-256 printed in that version's release notes
 ```
 
