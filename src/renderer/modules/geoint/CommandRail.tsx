@@ -62,6 +62,8 @@ export interface CommandRailProps {
   onRemoveMonitor: (id: string) => void;
   /** Open the Event Details dossier panel for an item id (right-click → View details). */
   onViewDetails: (id: string) => void;
+  /** Group the map + feed by the item's country (right-click → Group regional events). */
+  onGroupRegion: (id: string) => void;
 }
 
 // Shared dark-panel chrome: keeps the Win98 fieldset/legend conventions but on a dark face so the
@@ -81,7 +83,7 @@ export function CommandRail(props: CommandRailProps): JSX.Element {
     visibleItems, corroboration, onFocus,
     categoryFilter, onToggleCategory,
     basemap, onBasemap, labels, onLabels, net,
-    pinned, onAddMonitor, onRemoveMonitor, onViewDetails
+    pinned, onAddMonitor, onRemoveMonitor, onViewDetails, onGroupRegion
   } = props;
 
   // Context menu state for the Situation Feed right-click.
@@ -138,6 +140,11 @@ export function CommandRail(props: CommandRailProps): JSX.Element {
             style={{ padding: '6px 12px', fontSize: 12, cursor: 'pointer', borderBottom: '1px solid #2a3344' }}
             onClick={() => { onViewDetails(ctxMenu.id); setCtxMenu(null); }}
           >View details</div>
+          <div
+            role="menuitem"
+            style={{ padding: '6px 12px', fontSize: 12, cursor: 'pointer', borderBottom: '1px solid #2a3344' }}
+            onClick={() => { onGroupRegion(ctxMenu.id); setCtxMenu(null); }}
+          >Group regional events</div>
           {pinned.has(ctxMenu.id) ? (
             <div
               style={{ padding: '6px 12px', fontSize: 12, cursor: 'pointer' }}
