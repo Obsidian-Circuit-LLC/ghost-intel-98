@@ -102,19 +102,17 @@ describe('EventDetailsPanel — Overview tab', () => {
     expect(txt).toContain('strike');
   });
 
-  it('shows the MEDIA / INTEL SUMMARY tabs DISABLED ("coming soon"), not populated (SOURCES is now live)', () => {
+  it('shows all four tabs ENABLED — MEDIA/INTEL went live in Phase 3 (none is "coming soon")', () => {
     render(
       <EventDetailsPanel item={strike} onClose={vi.fn()} onOpenLink={vi.fn()} onPin={vi.fn()} pinned={false} />
     );
-    for (const label of ['MEDIA', 'INTEL SUMMARY']) {
+    // MEDIA / INTEL SUMMARY went live in Phase 3 (SOURCES in Phase 2) — all four tabs are now enabled.
+    for (const label of ['MEDIA', 'INTEL SUMMARY', 'SOURCES']) {
       const tab = findButton(container, new RegExp(`^${label}`));
       expect(tab, `${label} tab present`).toBeTruthy();
-      expect(tab!.disabled, `${label} tab disabled`).toBe(true);
+      expect(tab!.disabled, `${label} tab enabled`).toBe(false);
+      expect(tab!.textContent ?? '', `${label} tab not "· soon"`).not.toContain('· soon');
     }
-    // SOURCES went live in Phase 2 — it is now an enabled, clickable tab.
-    const sourcesTab = findButton(container, /^SOURCES/);
-    expect(sourcesTab, 'SOURCES tab present').toBeTruthy();
-    expect(sourcesTab!.disabled, 'SOURCES tab enabled').toBe(false);
   });
 
   it('wires the action buttons: Open/source-link → onOpenLink(link), close → onClose, pin → onPin', () => {
