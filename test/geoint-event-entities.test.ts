@@ -34,4 +34,15 @@ describe('deriveEntities', () => {
     const item = mk({ id: 'T', title: 'x', detail: 'Forces near Bakhmut and Soledar advanced.' });
     expect(deriveEntities(item)).toEqual(deriveEntities(item));
   });
+
+  it('does NOT turn a Title-Case / ALL-CAPS headline into one bogus entity (title excluded)', () => {
+    const e = deriveEntities(mk({ id: 'T', title: 'US Military Strike Near The Airport', detail: 'Forces advanced near Bakhmut.' }));
+    expect(e.mentions).not.toContain('US Military Strike Near The Airport');
+    expect(e.mentions).toContain('Bakhmut');   // real proper noun from prose still surfaces
+  });
+
+  it('skips an over-long capitalized run rather than emitting a fabricated compound', () => {
+    const e = deriveEntities(mk({ id: 'T', title: 'x', detail: 'Then Alpha Bravo Charlie Delta Echo Foxtrot moved.' }));
+    expect(e.mentions.every((m) => m.split(' ').length <= 5)).toBe(true);
+  });
 });

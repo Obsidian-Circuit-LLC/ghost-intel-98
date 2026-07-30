@@ -28,13 +28,21 @@ describe('Intel/Media contract', () => {
     expect(panel.classList.contains('window')).toBe(false);
     expect(panel.style.overflowY).toBe('auto');
     const tabButtons = Array.from(container.querySelectorAll('button')).filter((b) => /OVERVIEW|SOURCES|MEDIA|INTEL/.test(b.textContent ?? ''));
+    expect(tabButtons.length).toBe(4);   // guard: a vacuous .every()/.some() on an empty array must not pass
     expect(tabButtons.every((b) => !(b as HTMLButtonElement).disabled)).toBe(true);
     expect(tabButtons.some((b) => /· soon/.test(b.textContent ?? ''))).toBe(false);
-    for (const re of [/MEDIA/, /INTEL/, /SOURCES/]) {
+    // Charter, on EVERY tab (Overview included): no remote-src <img>/<video> (egress) and no element
+    // that was handed injected HTML (XSS) — the panel renders React text only.
+    for (const re of [/OVERVIEW/, /SOURCES/, /MEDIA/, /INTEL/]) {
       const b = tabButtons.find((x) => re.test(x.textContent ?? ''))!;
       act(() => b.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+      expect((b as HTMLButtonElement).getAttribute('aria-pressed')).toBe('true');   // the switch actually happened
       const remote = Array.from(panel.querySelectorAll('img,video')).filter((el) => /^https?:/i.test(el.getAttribute('src') ?? ''));
       expect(remote.length).toBe(0);
+      // No React node injected raw markup: every panel element's own text is plain (React escapes text
+      // nodes); assert there is no element whose innerHTML contains an un-escaped tag it did not create.
+      const injected = Array.from(panel.querySelectorAll('*')).filter((el) => /<\s*(script|img|iframe|svg)\b/i.test(el.innerHTML));
+      expect(injected.length).toBe(0);
     }
   });
 });

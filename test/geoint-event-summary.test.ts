@@ -49,10 +49,12 @@ describe('summarizeEvent (isolated local-Ollama path)', () => {
     expect(body.messages[body.messages.length - 1].content).toContain('Missiles hit two districts');
   });
 
-  it('returns available:false when the local model call fails', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('ECONNREFUSED'); }));
+  it('returns available:false when the local model call fails (having reached the fetch branch)', async () => {
+    const f = vi.fn(async () => { throw new Error('ECONNREFUSED'); });
+    vi.stubGlobal('fetch', f);
     const r = await summarizeEvent('A strike was reported.');
+    expect(f).toHaveBeenCalledTimes(1);      // proves the fetch branch was reached, not an earlier bail-out
     expect(r.available).toBe(false);
-    expect(r.reason).toBeTruthy();
+    expect(r.reason).toContain('did not respond');
   });
 });

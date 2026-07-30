@@ -18,6 +18,9 @@ const flush = async (): Promise<void> => { await act(async () => { await Promise
 
 const mk = (o: Partial<GeoItem> & { id: string; sourceId: string }): GeoItem => ({ title: o.id, located: 'geo', ...o } as GeoItem);
 const item = mk({ id: 'T', sourceId: 'wt', title: 'Strike near Mariupol', category: 'chatter', link: 'https://ex.org/e',
+  // image is a REMOTE URL: the fixture carries it so the no-remote-media assertion actually bites — a
+  // regression that renders <img src={item.image}> would beacon out and MUST fail this test.
+  image: 'https://ex.org/p.jpg',
   detail: 'Missiles hit two districts near Mariupol. At least three people were killed. Casualties remain unconfirmed.',
   hasMedia: true, isVideo: true, place: 'Mariupol', country: 'Ukraine' });
 

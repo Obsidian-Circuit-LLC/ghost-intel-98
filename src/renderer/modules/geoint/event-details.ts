@@ -181,7 +181,10 @@ export function deriveEntities(item: GeoItem): EventEntities {
     const t = p?.trim();
     if (t && !seen.has(t.toLowerCase())) { seen.add(t.toLowerCase()); places.push(t); }
   }
-  const body = `${item.title}. ${item.detail ?? item.summary ?? ''}`;
+  // Extract mentions from the PROSE body only, NOT the title: war-tracker / news titles are routinely
+  // Title-Case or ALL-CAPS ("US MILITARY STRIKE"), where every word capitalizes and a maximal run is
+  // the whole headline — not an entity. Mixed-case prose is where a capitalized run is real signal.
+  const body = `${item.detail ?? item.summary ?? ''}`;
   const mentions: string[] = [];
   const sentences = body.split(/(?<=[.!?])\s+/);
   for (const s of sentences) {
@@ -192,6 +195,9 @@ export function deriveEntities(item: GeoItem): EventEntities {
       const words = m[0].trim().split(/\s+/);
       const atStart = s.slice(0, m.index).trim() === '';
       while (words.length > 1 && START_STOP.has(words[0])) words.shift();
+      // A run longer than this is a headline fragment / run-on, not a single proper noun — skip it
+      // rather than emit a fabricated compound entity.
+      if (words.length > 5) continue;
       if (words.length === 1 && (atStart || START_STOP.has(words[0]))) continue;
       const clean = words.join(' ');
       const key = clean.toLowerCase();
@@ -245,10 +251,11 @@ export interface ClaimPhrase { text: string; }
 
 /** Vocabulary marking a casualty or a verification claim. Literal lowercase substrings (so 'casualt'
  *  catches casualty/casualties, 'fatalit' catches fatality/fatalities, 'alleg' catches alleged/…). */
-const CLAIM_VOCAB = [
-  'killed', 'dead', 'death', 'wounded', 'injured', 'casualt', 'fatalit', 'missing',
-  'confirmed', 'unconfirmed', 'unverified', 'reported', 'alleg', 'claim'
-];
+// Word-boundary-anchored so a vocab term only matches as (the start of) a real word — 'dead' does not
+// fire on "deadline", 'claim' does not fire on "reclaimed", 'missing' not on "dismissing". The `\w*`
+// suffix lets a stem cover its inflections (casualt→casualty/casualties, fatalit→fatality/fatalities,
+// alleg→alleged/allegedly, death→death/deaths, claim→claim/claims/claimed).
+const CLAIM_RE = /\b(?:killed|killing|kills|dead(?:ly|s)?|deaths?|wounded|wounds|injured|injur(?:y|ies|ing)|casualt\w*|fatalit\w*|missing|confirmed|unconfirmed|unverified|reportedly|reported|reports|alleg\w*|claim(?:s|ed|ing)?)\b/i;
 const CLAIM_CAP = 6;
 
 /** Sentences from the item body that STATE a casualty/verification claim — extracted verbatim, never
@@ -264,7 +271,7 @@ export function extractClaimPhrases(item: GeoItem): ClaimPhrase[] {
     const s = raw.trim();
     if (!s) continue;
     const low = s.toLowerCase();
-    if (CLAIM_VOCAB.some((v) => low.includes(v)) && !seen.has(low)) {
+    if (CLAIM_RE.test(s) && !seen.has(low)) {
       seen.add(low);
       out.push({ text: s });
     }
