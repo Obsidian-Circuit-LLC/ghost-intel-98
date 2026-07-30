@@ -159,6 +159,55 @@ export function deriveTags(item: GeoItem): string[] {
   return out.slice(0, TAG_CAP);
 }
 
+export interface EventEntities { places: string[]; mentions: string[]; }
+
+/** Capitalized words that, standing alone at a sentence's head, are not evidence of a proper noun. */
+const START_STOP = new Set([
+  'The', 'A', 'An', 'This', 'That', 'These', 'Those', 'In', 'On', 'At', 'After', 'Before', 'During',
+  'As', 'It', 'Its', 'He', 'She', 'They', 'We', 'His', 'Her', 'Their', 'Our', 'Two', 'Three', 'Several',
+  'Multiple', 'Many', 'Some', 'No', 'Reports', 'Report', 'Sources', 'Local', 'Officials'
+]);
+const CAP_RUN = /[A-Z][A-Za-z'’\-]*(?:\s+[A-Z][A-Za-z'’\-]*)*/g;
+const ENTITY_CAP = 10;
+
+/** People/orgs/places surfaced from the item — deterministically, from its own text. `places` are the
+ *  known geography (place, country); `mentions` are maximal capitalized runs in title+body, minus
+ *  sentence-initial single words / leading start-stopwords / anything already a place. No fabrication
+ *  and no person-vs-org typing (the app can't substantiate the type). */
+export function deriveEntities(item: GeoItem): EventEntities {
+  const places: string[] = [];
+  const seen = new Set<string>();
+  for (const p of [item.place, item.country]) {
+    const t = p?.trim();
+    if (t && !seen.has(t.toLowerCase())) { seen.add(t.toLowerCase()); places.push(t); }
+  }
+  // Extract mentions from the PROSE body only, NOT the title: war-tracker / news titles are routinely
+  // Title-Case or ALL-CAPS ("US MILITARY STRIKE"), where every word capitalizes and a maximal run is
+  // the whole headline — not an entity. Mixed-case prose is where a capitalized run is real signal.
+  const body = `${item.detail ?? item.summary ?? ''}`;
+  const mentions: string[] = [];
+  const sentences = body.split(/(?<=[.!?])\s+/);
+  for (const s of sentences) {
+    if (mentions.length >= ENTITY_CAP) break;
+    const re = new RegExp(CAP_RUN.source, 'g');
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(s)) !== null) {
+      const words = m[0].trim().split(/\s+/);
+      const atStart = s.slice(0, m.index).trim() === '';
+      while (words.length > 1 && START_STOP.has(words[0])) words.shift();
+      // A run longer than this is a headline fragment / run-on, not a single proper noun — skip it
+      // rather than emit a fabricated compound entity.
+      if (words.length > 5) continue;
+      if (words.length === 1 && (atStart || START_STOP.has(words[0]))) continue;
+      const clean = words.join(' ');
+      const key = clean.toLowerCase();
+      if (clean && !seen.has(key)) { seen.add(key); mentions.push(clean); }
+      if (mentions.length >= ENTITY_CAP) break;
+    }
+  }
+  return { places, mentions };
+}
+
 /** Resolve a `sourceId` to its human label, falling back to the raw id (never blank, never invented). */
 export function sourceLabel(sourceId: string, sources: { id: string; label: string }[]): string {
   const hit = sources.find((s) => s.id === sourceId);
@@ -196,4 +245,36 @@ export function relatedEvents(
     return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
   });
   return matched.slice(0, max);
+}
+
+export interface ClaimPhrase { text: string; }
+
+/** Vocabulary marking a casualty or a verification claim. Literal lowercase substrings (so 'casualt'
+ *  catches casualty/casualties, 'fatalit' catches fatality/fatalities, 'alleg' catches alleged/…). */
+// Word-boundary-anchored so a vocab term only matches as (the start of) a real word — 'dead' does not
+// fire on "deadline", 'claim' does not fire on "reclaimed", 'missing' not on "dismissing". The `\w*`
+// suffix lets a stem cover its inflections (casualt→casualty/casualties, fatalit→fatality/fatalities,
+// alleg→alleged/allegedly, death→death/deaths, claim→claim/claims/claimed).
+const CLAIM_RE = /\b(?:killed|killing|kills|dead(?:ly|s)?|deaths?|wounded|wounds|injured|injur(?:y|ies|ing)|casualt\w*|fatalit\w*|missing|confirmed|unconfirmed|unverified|reportedly|reported|reports|alleg\w*|claim(?:s|ed|ing)?)\b/i;
+const CLAIM_CAP = 6;
+
+/** Sentences from the item body that STATE a casualty/verification claim — extracted verbatim, never
+ *  aggregated or turned into a number. The UI shows them as quotes labeled "extracted · unverified".
+ *  This is the ONLY place casualty/verification detail may surface (charter). */
+export function extractClaimPhrases(item: GeoItem): ClaimPhrase[] {
+  const body = (item.detail ?? item.summary ?? '').trim();
+  if (!body) return [];
+  const out: ClaimPhrase[] = [];
+  const seen = new Set<string>();
+  for (const raw of body.split(/(?<=[.!?])\s+/)) {
+    if (out.length >= CLAIM_CAP) break;
+    const s = raw.trim();
+    if (!s) continue;
+    const low = s.toLowerCase();
+    if (CLAIM_RE.test(s) && !seen.has(low)) {
+      seen.add(low);
+      out.push({ text: s });
+    }
+  }
+  return out;
 }

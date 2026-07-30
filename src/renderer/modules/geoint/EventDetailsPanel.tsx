@@ -8,20 +8,22 @@
  *
  * HONESTY CONSTRAINTS (charter):
  * - No fabrication. Every field is a transparent derivation of the item's OWN real data. Casualties /
- *   "verified" status are NOT synthesized (those are Phase 3, quoted-only). The war-tracker source and
- *   its raw `confidence` are surfaced AS-IS — never laundered into apparent authority.
- * - The MEDIA / SOURCES / INTEL SUMMARY tabs are shown DISABLED ("coming soon"). They are Phases 2-3
- *   and are deliberately NOT populated with any data here.
- * - No new egress, no new dependency. External opens go through the caller's existing safe-open path
- *   (`onOpenLink`); nothing here fetches.
+ *   "verified" status are NEVER synthesized — they surface only as verbatim extracted quotes labeled
+ *   "extracted · unverified". The war-tracker source and its raw `confidence` are surfaced AS-IS —
+ *   never laundered into apparent authority.
+ * - All four tabs are live: OVERVIEW (Phase 1), SOURCES (Phase 2 corroboration/related), MEDIA and
+ *   INTEL SUMMARY (Phase 3). MEDIA is an affordance only (it NEVER inlines a remote <img>/<video> —
+ *   that would beacon out); the INTEL AI summary is local-only (Ollama), isolated, and "AI · unverified".
+ * - No new egress beyond one loopback Ollama call from the isolated summarizeEvent path. External opens
+ *   go through the caller's existing safe-open path (`onOpenLink`).
  * - XSS-safe: all untrusted feed content (title, detail, place, tags, source) is rendered as React
  *   text (never dangerouslySetInnerHTML), mirroring popup.ts. The canonical link is scheme-guarded to
  *   http(s) before it is offered as a clickable anchor.
  */
 
-import { useMemo, useState } from 'react';
-import type { GeoItem } from '@shared/post-mvp-types';
-import { resolveEventFields, deriveTags, relatedEvents, sourceLabel } from './event-details';
+import { useEffect, useMemo, useState } from 'react';
+import type { GeoItem, EventSummaryResult } from '@shared/post-mvp-types';
+import { resolveEventFields, deriveTags, relatedEvents, sourceLabel, deriveEntities, extractClaimPhrases } from './event-details';
 import { corroboratingItems } from './corroborate';
 
 export interface EventDetailsPanelProps {
@@ -59,13 +61,13 @@ const noteStyle: React.CSSProperties = { fontSize: 10, color: '#6b7688', margin:
 const factLabelStyle: React.CSSProperties = { fontSize: 10, color: '#8a96a8', textTransform: 'uppercase', letterSpacing: 0.4 };
 const factValueStyle: React.CSSProperties = { fontSize: 12, color: '#e6edf6', fontWeight: 'bold', wordBreak: 'break-word' };
 
-// The Overview tab is the only live tab in Phase 1. The rest are shown as disabled affordances so the
-// frame matches the mockup WITHOUT fabricating data (charter). Phase 2 = Sources; Phase 3 = Media/Intel.
+// All four tabs are live: Overview (Phase 1), Sources (Phase 2), Media + Intel Summary (Phase 3). The
+// `live` flag remains so a future tab can ship disabled without fabricating data (charter).
 const TABS: { key: string; label: string; live: boolean }[] = [
   { key: 'overview', label: 'OVERVIEW', live: true },
-  { key: 'media', label: 'MEDIA', live: false },
+  { key: 'media', label: 'MEDIA', live: true },
   { key: 'sources', label: 'SOURCES', live: true },
-  { key: 'intel', label: 'INTEL SUMMARY', live: false }
+  { key: 'intel', label: 'INTEL SUMMARY', live: true }
 ];
 
 /** Absolute date, locale-formatted; '' when the item carries no parseable `published`. */
@@ -91,8 +93,32 @@ export function EventDetailsPanel(props: EventDetailsPanelProps): JSX.Element | 
   const { item, onClose, onOpenLink, onPin, pinned } = props;
   const allItems = props.allItems ?? [];
   const sources = props.sources ?? [];
-  const [activeTab, setActiveTab] = useState<'overview' | 'sources'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'sources' | 'media' | 'intel'>('overview');
   const [srcFilter, setSrcFilter] = useState<'all' | 'this' | 'other'>('all');
+  // `forId` binds a summary to the event it was produced for. The panel instance persists across event
+  // switches (no key upstream), so without this the PREVIOUS event's AI summary would paint under the
+  // NEW event's dossier for a frame — a misattribution the render below refuses by gating on forId.
+  const [summary, setSummary] = useState<{ loading: boolean; result?: EventSummaryResult; forId?: string }>({ loading: false });
+
+  // Isolated local-Ollama AI summary (Task 3), fetched only when the INTEL tab is open and the item
+  // carries a description. Guarded against setting state after unmount / item change. The AI section
+  // degrading NEVER blocks Entities/Phrases — those render deterministically regardless (charter).
+  const detailForSummary = item?.detail ?? item?.summary ?? '';
+  const itemId = item?.id;
+  useEffect(() => {
+    if (activeTab !== 'intel' || !itemId) return;
+    const fn = (globalThis as unknown as { window?: { api?: { geoint?: { summarizeEvent?: (d: string) => Promise<EventSummaryResult> } } } }).window?.api?.geoint?.summarizeEvent;
+    if (!fn) { setSummary({ loading: false, forId: itemId, result: { available: false, reason: 'Local AI model not available.' } }); return; }
+    if (!detailForSummary.trim()) { setSummary({ loading: false, forId: itemId, result: { available: false, reason: 'No description to summarize.' } }); return; }
+    let cancelled = false;
+    setSummary({ loading: true, forId: itemId });
+    void fn(detailForSummary).then((result) => {
+      if (!cancelled) setSummary({ loading: false, result, forId: itemId });
+    }).catch(() => {
+      if (!cancelled) setSummary({ loading: false, result: { available: false, reason: 'Local AI model did not respond.' }, forId: itemId });
+    });
+    return () => { cancelled = true; };
+  }, [activeTab, detailForSummary, itemId]);
 
   // Corroboration = the OTHER items co-located with this event in space (and, when both dated, time).
   // Uses the same radius/window defaults as the map halo. NOTE: the halo caps its distinct-source count
@@ -128,13 +154,15 @@ export function EventDetailsPanel(props: EventDetailsPanelProps): JSX.Element | 
 
   const { eventType, detail, severityLabel, confidenceLabel, badgeColor, badgeLabel } = resolveEventFields(item);
   const tags = deriveTags(item);
+  const entities = deriveEntities(item);
+  const claimPhrases = extractClaimPhrases(item);
   const href = safeHref(item.link);
   const absDate = formatAbsolute(item.published);
   const hasCoords = Number.isFinite(item.lat) && Number.isFinite(item.lon);
 
   return (
     <div className="ga98-pane ga98-geo-details" style={panelStyle}>
-      {/* Tab bar — OVERVIEW live, the rest disabled/"coming soon" (Phases 2-3, no fabricated data). */}
+      {/* Tab bar — all four tabs live; a `live:false` tab (should one ship later) renders "· soon". */}
       <div style={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
         {TABS.map((t) => {
           const active = t.live && activeTab === t.key;
@@ -143,7 +171,7 @@ export function EventDetailsPanel(props: EventDetailsPanelProps): JSX.Element | 
               key={t.key}
               disabled={!t.live}
               aria-pressed={active}
-              onClick={t.live ? () => setActiveTab(t.key as 'overview' | 'sources') : undefined}
+              onClick={t.live ? () => setActiveTab(t.key as 'overview' | 'sources' | 'media' | 'intel') : undefined}
               title={t.live ? undefined : 'Coming soon'}
               style={{
                 fontSize: 10, fontWeight: 'bold', letterSpacing: 0.4, padding: '3px 8px',
@@ -335,6 +363,87 @@ export function EventDetailsPanel(props: EventDetailsPanelProps): JSX.Element | 
             </div>
           );
         })}
+      </div>
+      </>)}
+
+      {activeTab === 'media' && (<>
+      {/* MEDIA — AFFORDANCE ONLY (charter). We NEVER render an <img>/<video> with a remote src: an
+          un-neutralized remote media element would beacon out, exactly what sanitizeHtml.ts strips
+          remote <img> to prevent. We name what media the source REPORTS + offer a safe external open. */}
+      <div style={sectionStyle}>
+        <div style={legendStyle}>Media</div>
+        {(item.hasMedia || item.isVideo || (item.image?.trim() ?? '') !== '') ? (<>
+          <div style={{ fontSize: 12, color: '#e6edf6' }}>
+            Media reported by source: {item.isVideo ? 'video' : item.hasMedia ? 'photo' : 'image'}
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+            <button
+              onClick={() => href && onOpenLink(item.link!)}
+              disabled={!href}
+              title={href ? 'Open the source post (with its media) in the external browser' : 'No source link'}
+              style={{ fontSize: 11, padding: '3px 10px', cursor: href ? 'pointer' : 'not-allowed' }}
+            >Open source ↗</button>
+          </div>
+          <p style={noteStyle}>The source reports attached media. To honor offline-first / no-egress, media is never inlined here — open the source to view it.</p>
+        </>) : (
+          <p style={noteStyle}>No media reported for this event.</p>
+        )}
+      </div>
+      </>)}
+
+      {activeTab === 'intel' && (<>
+      {/* KEY ENTITIES — deterministic, extracted from the item's OWN text (Task 1). Not typed as
+          person/org (the app can't substantiate the type). */}
+      <div style={sectionStyle}>
+        <div style={legendStyle}>Key Entities</div>
+        {(entities.places.length > 0 || entities.mentions.length > 0) ? (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+            {entities.places.map((p) => (
+              <span key={`p:${p}`} style={{ fontSize: 10, color: '#0a0f1a', background: '#8fb7e0', border: '1px solid #2a3344', padding: '1px 6px', borderRadius: 2 }}>{p}</span>
+            ))}
+            {entities.mentions.map((m) => (
+              <span key={`m:${m}`} style={{ fontSize: 10, color: '#8fb7e0', background: '#1b2230', border: '1px solid #2a3344', padding: '1px 6px', borderRadius: 2 }}>{m}</span>
+            ))}
+          </div>
+        ) : (
+          <p style={noteStyle}>None extracted.</p>
+        )}
+        <p style={noteStyle}>Places are the known geography; the rest are capitalized mentions extracted from the report text — deterministic, offline. Not typed as person/org.</p>
+      </div>
+
+      {/* CASUALTY / VERIFICATION PHRASES — verbatim QUOTES only (Task 2). Never a synthesized number
+          or an invented "verified" badge (charter). Each is labeled "extracted · unverified". */}
+      <div style={sectionStyle}>
+        <div style={legendStyle}>Reported casualty / verification phrases</div>
+        {claimPhrases.length > 0 ? claimPhrases.map((c, i) => (
+          <div key={i} style={{ borderLeft: '3px solid #5a7fb0', padding: '2px 0 2px 8px', margin: '6px 0' }}>
+            <div style={{ fontSize: 12, color: '#cdd6e4', lineHeight: 1.4, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontStyle: 'italic' }}>“{c.text}”</div>
+            <p style={{ ...noteStyle, margin: '2px 0 0' }}>extracted · unverified</p>
+          </div>
+        )) : (
+          <p style={noteStyle}>No casualty or verification phrases in the report.</p>
+        )}
+      </div>
+
+      {/* AI SUMMARY — isolated local-Ollama path (Task 3). Stamped "AI · unverified"; a summary of the
+          UNVERIFIED report, not an assessment of its truth. Degrades to the returned reason with no
+          local model — never blocks Entities/Phrases above. */}
+      <div style={sectionStyle}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+          <span style={legendStyle}>AI Summary</span>
+          <span style={{ flex: 1 }} />
+          <span style={{ fontSize: 9, fontWeight: 'bold', letterSpacing: 0.4, color: '#0a0f1a', background: '#d9a441', padding: '1px 6px', borderRadius: 2 }}>AI · unverified</span>
+        </div>
+        {/* Only trust the summary if it was produced for THIS event; otherwise it's stale from the
+            previously-selected incident — show loading, never the wrong event's text. */}
+        {(summary.forId !== item.id || summary.loading) ? (
+          <p style={noteStyle}>Summarizing with the local model…</p>
+        ) : summary.result?.available ? (
+          <div style={{ fontSize: 12, color: '#cdd6e4', lineHeight: 1.4, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{summary.result.text}</div>
+        ) : (
+          <p style={noteStyle}>{summary.result?.reason ?? 'Local AI model not available.'}</p>
+        )}
+        <p style={noteStyle}>Local-only (Ollama), isolated — no web, no memory. Summarizes the unverified report; it does not verify it.</p>
       </div>
       </>)}
     </div>

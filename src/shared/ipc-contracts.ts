@@ -30,7 +30,7 @@ import type {
   TimelineEvent,
   WebLink
 } from './types';
-import type { MediaLibrarySnapshot, MediaStation, MediaTrack, GeoSnapshot, GeoSource, GeoItem, SavedGeoEvent, MarketSnapshot } from './post-mvp-types';
+import type { MediaLibrarySnapshot, MediaStation, MediaTrack, GeoSnapshot, GeoSource, GeoItem, SavedGeoEvent, MarketSnapshot, EventSummaryResult } from './post-mvp-types';
 import type { SiteCatalogEntry, SweepResult, SearchlightCase, SearchlightCaseSummary } from './searchlight/types';
 import type { InvestigationScene, SceneDelta } from './investigation-graph';
 import type { RunEvent } from './investigation-agent';
@@ -362,7 +362,8 @@ export const channels = {
     setMonitors: 'geoint:setMonitors',
     addMonitor: 'geoint:addMonitor',
     removeMonitor: 'geoint:removeMonitor',
-    cctvTorReady: 'geoint:cctvTorReady'
+    cctvTorReady: 'geoint:cctvTorReady',
+    summarizeEvent: 'geoint:summarizeEvent'
   },
   markets: {
     fetch: 'markets:fetch'
@@ -953,6 +954,7 @@ export interface ApiContracts {
   [channels.geoint.addMonitor]: { args: [string]; returns: string[] };
   [channels.geoint.removeMonitor]: { args: [string]; returns: string[] };
   [channels.geoint.cctvTorReady]: { args: []; returns: boolean };
+  [channels.geoint.summarizeEvent]: { args: [string]; returns: EventSummaryResult };
 
   [channels.markets.fetch]: { args: []; returns: MarketSnapshot };
 
