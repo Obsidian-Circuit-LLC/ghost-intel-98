@@ -240,3 +240,34 @@ export function relatedEvents(
   });
   return matched.slice(0, max);
 }
+
+export interface ClaimPhrase { text: string; }
+
+/** Vocabulary marking a casualty or a verification claim. Literal lowercase substrings (so 'casualt'
+ *  catches casualty/casualties, 'fatalit' catches fatality/fatalities, 'alleg' catches alleged/…). */
+const CLAIM_VOCAB = [
+  'killed', 'dead', 'death', 'wounded', 'injured', 'casualt', 'fatalit', 'missing',
+  'confirmed', 'unconfirmed', 'unverified', 'reported', 'alleg', 'claim'
+];
+const CLAIM_CAP = 6;
+
+/** Sentences from the item body that STATE a casualty/verification claim — extracted verbatim, never
+ *  aggregated or turned into a number. The UI shows them as quotes labeled "extracted · unverified".
+ *  This is the ONLY place casualty/verification detail may surface (charter). */
+export function extractClaimPhrases(item: GeoItem): ClaimPhrase[] {
+  const body = (item.detail ?? item.summary ?? '').trim();
+  if (!body) return [];
+  const out: ClaimPhrase[] = [];
+  const seen = new Set<string>();
+  for (const raw of body.split(/(?<=[.!?])\s+/)) {
+    if (out.length >= CLAIM_CAP) break;
+    const s = raw.trim();
+    if (!s) continue;
+    const low = s.toLowerCase();
+    if (CLAIM_VOCAB.some((v) => low.includes(v)) && !seen.has(low)) {
+      seen.add(low);
+      out.push({ text: s });
+    }
+  }
+  return out;
+}
