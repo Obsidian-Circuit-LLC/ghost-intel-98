@@ -159,6 +159,49 @@ export function deriveTags(item: GeoItem): string[] {
   return out.slice(0, TAG_CAP);
 }
 
+export interface EventEntities { places: string[]; mentions: string[]; }
+
+/** Capitalized words that, standing alone at a sentence's head, are not evidence of a proper noun. */
+const START_STOP = new Set([
+  'The', 'A', 'An', 'This', 'That', 'These', 'Those', 'In', 'On', 'At', 'After', 'Before', 'During',
+  'As', 'It', 'Its', 'He', 'She', 'They', 'We', 'His', 'Her', 'Their', 'Our', 'Two', 'Three', 'Several',
+  'Multiple', 'Many', 'Some', 'No', 'Reports', 'Report', 'Sources', 'Local', 'Officials'
+]);
+const CAP_RUN = /[A-Z][A-Za-z'’\-]*(?:\s+[A-Z][A-Za-z'’\-]*)*/g;
+const ENTITY_CAP = 10;
+
+/** People/orgs/places surfaced from the item — deterministically, from its own text. `places` are the
+ *  known geography (place, country); `mentions` are maximal capitalized runs in title+body, minus
+ *  sentence-initial single words / leading start-stopwords / anything already a place. No fabrication
+ *  and no person-vs-org typing (the app can't substantiate the type). */
+export function deriveEntities(item: GeoItem): EventEntities {
+  const places: string[] = [];
+  const seen = new Set<string>();
+  for (const p of [item.place, item.country]) {
+    const t = p?.trim();
+    if (t && !seen.has(t.toLowerCase())) { seen.add(t.toLowerCase()); places.push(t); }
+  }
+  const body = `${item.title}. ${item.detail ?? item.summary ?? ''}`;
+  const mentions: string[] = [];
+  const sentences = body.split(/(?<=[.!?])\s+/);
+  for (const s of sentences) {
+    if (mentions.length >= ENTITY_CAP) break;
+    const re = new RegExp(CAP_RUN.source, 'g');
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(s)) !== null) {
+      const words = m[0].trim().split(/\s+/);
+      const atStart = s.slice(0, m.index).trim() === '';
+      while (words.length > 1 && START_STOP.has(words[0])) words.shift();
+      if (words.length === 1 && (atStart || START_STOP.has(words[0]))) continue;
+      const clean = words.join(' ');
+      const key = clean.toLowerCase();
+      if (clean && !seen.has(key)) { seen.add(key); mentions.push(clean); }
+      if (mentions.length >= ENTITY_CAP) break;
+    }
+  }
+  return { places, mentions };
+}
+
 /** Resolve a `sourceId` to its human label, falling back to the raw id (never blank, never invented). */
 export function sourceLabel(sourceId: string, sources: { id: string; label: string }[]): string {
   const hit = sources.find((s) => s.id === sourceId);
