@@ -277,6 +277,11 @@ export interface AiChatMessage {
   content: string;
 }
 
+/** Result of the isolated local-Ollama incident summary (Phase 3 Intel tab). `available:false` +
+ *  `reason` when no local model / bad endpoint / call failed — the UI shows the reason and every
+ *  other tab still works. */
+export interface EventSummaryResult { available: boolean; text?: string; reason?: string; }
+
 export interface AiChatRequest {
   /** Concatenated context to prepend (typically: selected case bundle). */
   context?: string;

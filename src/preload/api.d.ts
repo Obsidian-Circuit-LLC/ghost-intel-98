@@ -66,7 +66,8 @@ import type {
   BriefcaseNote,
   BriefcaseNoteSummary,
   BriefcaseNoteInput,
-  HostInfo
+  HostInfo,
+  EventSummaryResult
 } from '../shared/post-mvp-types';
 import type {
   SiteCatalogEntry,
@@ -483,6 +484,10 @@ export interface GhostApi {
     removeMonitor(id: string): Promise<string[]>;
     /** Returns true when the background Tor circuit is bootstrapped and the ga98cctv:// proxy is usable. */
     cctvTorReady(): Promise<boolean>;
+    /** Isolated local-Ollama summary of a single incident description (Phase 3 Intel tab). Ollama-only,
+     *  no RAG/web/memory; returns {available:false, reason} when no local model / bad endpoint / call
+     *  failed so the UI can degrade gracefully. */
+    summarizeEvent(description: string): Promise<EventSummaryResult>;
   };
   markets: {
     fetch(): Promise<MarketSnapshot>;
