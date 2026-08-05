@@ -94,6 +94,31 @@ const EXEMPT: string[] = [
 // smallest module with real chrome renders ~12, so nothing substantive is near this line.
 const SUBSTANTIVE_ELEMENT_MIN = 3;
 
+// Fix 5 (SSR coverage honesty): the element-count gate alone lets an effect-only module count as
+// "audited" when renderToStaticMarkup emits only its structural SHELL — a few wrapper divs / a
+// toolbar with no words — while the real, text-bearing surface never renders. A shell like that
+// carries no text to contrast-check and typically no chrome light island either, so a zero-flag
+// result is meaningless, not clean. We therefore require a SECOND signal: at least one element that
+// actually bears rendered text. A module that clears the element count but renders ZERO text nodes
+// is routed to the COVERAGE-GAP list ("shell-only") with that reason, never silently passed. This
+// only strengthens the signal where the DOM makes it visible; a module whose real surface simply
+// cannot be server-rendered still lands on the gap list with its render error / stub reason.
+const SUBSTANTIVE_TEXT_MIN = 1;
+
+/** Count elements in a rendered fragment that carry their own non-whitespace text node. */
+function countTextBearingElements(container: Element): number {
+  let n = 0;
+  for (const el of Array.from(container.querySelectorAll('*'))) {
+    for (const node of Array.from(el.childNodes)) {
+      if (node.nodeType === 3 && (node.nodeValue ?? '').trim() !== '') {
+        n += 1;
+        break;
+      }
+    }
+  }
+  return n;
+}
+
 interface ModuleRenderResult {
   key: string;
   title: string;
@@ -283,6 +308,20 @@ beforeAll(async () => {
             `data/PIN load that renderToStaticMarkup does not run; not exercised by this oracle`
         };
       }
+      // Fix 5: an element-rich but TEXT-LESS render is a structural shell whose real (text-bearing)
+      // surface is effect-driven — a zero-flag audit of it is not evidence of clean, so it is a gap.
+      const textBearing = countTextBearingElements(probe);
+      if (textBearing < SUBSTANTIVE_TEXT_MIN) {
+        return {
+          key: m.key,
+          title: m.title,
+          html,
+          gap:
+            `shell-only static render (${elementCount} elements, ${textBearing} text-bearing) — only ` +
+            `structural chrome server-rendered; the real text surface is built by an effect-driven ` +
+            `data load renderToStaticMarkup never runs, so its contrast is NOT audited here`
+        };
+      }
       return { key: m.key, title: m.title, html };
     } catch (err) {
       return { key: m.key, title: m.title, error: (err as Error)?.message ?? String(err) };
@@ -359,7 +398,8 @@ describe('QUIET AMETHYST rendered-contrast oracle', () => {
         for (const f of contrast) {
           lines.push(
             `- \`${f.descriptor}\` ratio **${f.ratio}** — fg \`${f.color}\` on bg \`${f.bg}\`` +
-              ` (${f.fontSize}px${f.bold ? ' bold' : ''}) — "${(f.text ?? '').replace(/`/g, "'")}"`
+              ` (${f.fontSize}px${f.bold ? ' bold' : ''}${f.gradient ? ', gradient bg' : ''}) —` +
+              ` "${(f.text ?? '').replace(/`/g, "'")}"${f.note ? ` _[${f.note}]_` : ''}`
           );
         }
         lines.push('');
@@ -368,7 +408,10 @@ describe('QUIET AMETHYST rendered-contrast oracle', () => {
         lines.push('**Light islands:**');
         lines.push('');
         for (const f of islands) {
-          lines.push(`- \`${f.descriptor}\` bg \`${f.bg}\` (lum ${f.bgLum}, area ${f.area}px²)`);
+          lines.push(
+            `- \`${f.descriptor}\`${f.gradient ? ' (gradient)' : ''} bg \`${f.bg}\`` +
+              ` (lum ${f.bgLum}, area ${f.area}px²)`
+          );
         }
         lines.push('');
       }
@@ -391,6 +434,15 @@ describe('QUIET AMETHYST rendered-contrast oracle', () => {
       `[amethyst-oracle] rendered=${rendered} flaggedModules=${flaggedModules.length} ` +
         `totalFlags=${totalFlags} coverageGaps=${coverageGaps.length} → inventory at ${outPath}`
     );
+    // Honesty rule: PRINT the coverage-gap list every run — a module the oracle could not audit is
+    // never a silent clean pass. Always emit the header (and an explicit "none") so the absence of
+    // gaps is an asserted fact in the log, not an ambiguous empty section.
+    // eslint-disable-next-line no-console
+    console.log(`[amethyst-oracle][coverage-gaps] ${coverageGaps.length} module(s) not audited:`);
+    if (coverageGaps.length === 0) {
+      // eslint-disable-next-line no-console
+      console.log('[amethyst-oracle][coverage-gap] (none — every built-in module rendered an auditable surface)');
+    }
     for (const g of coverageGaps) {
       // eslint-disable-next-line no-console
       console.log(`[amethyst-oracle][coverage-gap] ${g.key}: ${g.error.slice(0, 160)}`);

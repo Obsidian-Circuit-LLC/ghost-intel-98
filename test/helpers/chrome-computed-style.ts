@@ -175,11 +175,14 @@ export async function launchChrome(): Promise<ChromeSession> {
 // surface with that chain present) and walks every element in a REAL cascade+var
 // engine, flagging:
 //   (a) CONTRAST — any element with its own visible text whose resolved colour
-//       fails WCAG against the nearest non-transparent ancestor background
-//       (< 4.5:1 normal, < 3:1 for >=18px or bold), and
-//   (b) LIGHT-ISLAND — any element whose resolved background luminance > 0.6 with a
-//       rendered box area above a small threshold (a bright island on the near-black
-//       amethyst desktop) unless it (or an ancestor) matches an exemption selector.
+//       fails WCAG against its effective (alpha-composited, gradient-aware) background
+//       (< 4.5:1 normal; < 3:1 only for TRUE large text: >=24px, or bold and >=18.66px), and
+//   (b) LIGHT-ISLAND — any element whose effective background luminance clears the amethyst
+//       surface band (cutpoint derived from the resolved --ga98-desktop-bg/--ga98-grey tokens,
+//       ~0.22; see ISLAND_CUT) with a rendered box area above a small threshold — a bright island
+//       on the near-black amethyst desktop — unless it (or an ancestor) matches an exemption
+//       selector. Both checks understand gradient/background-image surfaces and semi-transparent
+//       (rgba / opacity<1) layers, which the earlier backgroundColor-only walk skipped silently.
 // ───────────────────────────────────────────────────────────────────────────
 
 export interface ContrastFlag {
@@ -202,6 +205,10 @@ export interface ContrastFlag {
   bgLum?: number;
   /** Rendered box area in px² (light-island flags only). */
   area?: number;
+  /** True when the flagged background is a gradient/background-image surface (either kind). */
+  gradient?: boolean;
+  /** Manual-review note — set when alpha compositing (rgba fg/bg or opacity<1) influenced the math. */
+  note?: string;
 }
 
 export interface AuditOptions {
@@ -263,11 +270,57 @@ export async function auditRenderedContrast(page: ChromePage, opts: AuditOptions
        function lin(v){ v/=255; return v<=0.03928 ? v/12.92 : Math.pow((v+0.055)/1.055,2.4); }
        function lum(c){ return 0.2126*lin(c.r)+0.7152*lin(c.g)+0.0722*lin(c.b); }
        function contrast(a,b){ const L1=lum(a),L2=lum(b),hi=Math.max(L1,L2),lo=Math.min(L1,L2); return (hi+0.05)/(lo+0.05); }
+       // Fix 4 (alpha): composite a possibly semi-transparent colour \`fg\` OVER an opaque colour \`bg\`.
+       function over(fg,bg){ const a = fg.a===undefined?1:fg.a; if(a>=1) return {r:fg.r,g:fg.g,b:fg.b,a:1};
+         return {r:fg.r*a+bg.r*(1-a), g:fg.g*a+bg.g*(1-a), b:fg.b*a+bg.b*(1-a), a:1}; }
+       // Resolve any CSS colour string (incl. hex token values) to rgb via a throwaway probe;
+       // fast-path already-rgb strings so gradient stops (browser-normalised to rgb()) parse directly.
+       const probe = document.createElement('span'); probe.style.cssText='display:none'; document.body.appendChild(probe);
+       function toRGB(str){ if(!str) return null; str=(''+str).trim(); if(!str) return null;
+         if(/^rgba?\\(/.test(str)) return parseRGB(str);
+         probe.style.color=''; probe.style.color=str; return parseRGB(getComputedStyle(probe).color); }
+
+       // ── Fix 1: light-island cutpoint DERIVED from the resolved amethyst surface tokens. ──
+       const dv = getComputedStyle(document.documentElement);
+       function tokenColor(name,fallback){ return toRGB(dv.getPropertyValue(name)) || toRGB(fallback); }
+       const DESK = tokenColor('--ga98-desktop-bg','#0c0a12') || {r:12,g:10,b:18,a:1};
+       const GREY = tokenColor('--ga98-grey','#1a1822') || {r:26,g:24,b:34,a:1};
+       const surfaceBandMax = Math.max(lum(DESK), lum(GREY));
+       // The four amethyst chrome surfaces (#0c0a12/#141119/#1a1822/#211d2b) resolve to lum ~0.003–0.014;
+       // the LIGHTEST chrome surface --ga98-grey (#1a1822) is ~0.0099. A classic light surface leaking
+       // through unthemed is Windows silver #c0c0c0 (0.527) or light-grey #b0b0b0 (0.434). Cut at
+       // max(0.22 floor, 8× surface band): the 0.22 floor sits ~22× above the surface band yet BELOW
+       // light-grey 0.434 and silver 0.527, so both classic surfaces are caught while all four dark
+       // amethyst surfaces are ignored; the 8× term re-derives the cut upward automatically if the
+       // surface tokens are ever lightened. (The old 0.6 sat ABOVE silver 0.527 → silver islands passed.)
+       const ISLAND_CUT = Math.max(0.22, surfaceBandMax * 8);
+
        function isExempt(el){ for(let n=el; n && n!==document.documentElement; n=n.parentElement){
          for(const sel of EXEMPT){ try{ if(n.matches(sel)) return true; }catch(e){} } } return false; }
-       function bgOf(el){ for(let n=el; n && n!==document.documentElement; n=n.parentElement){
-         const c=parseRGB(getComputedStyle(n).backgroundColor); if(c && c.a>0) return c; }
-         const b=parseRGB(getComputedStyle(document.body).backgroundColor); return (b&&b.a>0)?b:{r:255,g:255,b:255,a:1}; }
+       // Fix 2: parse a gradient/background-image's colour stops (computed value normalises them to
+       // rgb()); returns the opaque stops, or null when the element has no gradient image.
+       function gradientStops(cs){ const bi = cs.backgroundImage;
+         if(!bi || bi==='none' || bi.indexOf('gradient')===-1) return null;
+         const stops=[]; const re=/rgba?\\([^)]*\\)/g; let m;
+         while((m=re.exec(bi))){ const c=parseRGB(m[0]); if(c && c.a>0) stops.push(c); }
+         return stops.length?stops:null; }
+       // Effective OPAQUE backdrop candidate(s) for \`el\`. Walks ancestors (self included when
+       // includeSelf): the first solid opaque bg OR gradient (Fix 2: gradients are opaque, stop the
+       // walk) is the base; semi-transparent solid layers above it are composited down (Fix 4). A
+       // gradient base yields ONE candidate PER stop so the caller can take the worst case. Falls back
+       // to the body/desktop background, else white.
+       function bgCandidates(el, includeSelf){
+         const solids=[]; let base=null;
+         for(let n=includeSelf?el:el.parentElement; n && n!==document.documentElement; n=n.parentElement){
+           const cs=getComputedStyle(n); const solid=parseRGB(cs.backgroundColor);
+           if(solid && solid.a>0){ if(solid.a>=1){ base=[solid]; break; } solids.push(solid); continue; }
+           const stops=gradientStops(cs); if(stops){ base=stops.slice(); break; } }
+         if(!base){ const b=parseRGB(getComputedStyle(document.body).backgroundColor);
+           base=[ (b&&b.a>0) ? (b.a>=1?b:over(b,{r:255,g:255,b:255})) : {r:255,g:255,b:255,a:1} ]; }
+         // Composite the collected semi-transparent solids (bottom-most first) onto each base candidate.
+         return base.map((bc)=>{ let acc={r:bc.r,g:bc.g,b:bc.b,a:1};
+           for(let i=solids.length-1;i>=0;i--){ acc=over(solids[i],acc); } return acc; });
+       }
        function visible(el){ const cs=getComputedStyle(el);
          if(cs.display==='none'||cs.visibility==='hidden'||parseFloat(cs.opacity)===0) return false;
          return el.getClientRects().length>0; }
@@ -282,35 +335,50 @@ export async function auditRenderedContrast(page: ChromePage, opts: AuditOptions
          const cs = getComputedStyle(el);
          const txt = directText(el);
          if(txt){
-           const fg = parseRGB(cs.color);
-           if(fg && fg.a>0){
-             const bg = bgOf(el);
-             const ratio = contrast(fg,bg);
+           const fgRaw = parseRGB(cs.color);
+           if(fgRaw && fgRaw.a>0){
+             const cands = bgCandidates(el, true);
+             const elOpacity = parseFloat(cs.opacity);
+             // Fix 4: fold rgba() text alpha AND element opacity into the effective foreground alpha,
+             // composite it over each backdrop candidate — never measure alpha text at full opacity.
+             const aEff = (fgRaw.a===undefined?1:fgRaw.a) * (isFinite(elOpacity)?elOpacity:1);
+             // Worst-case (lowest) contrast across gradient-stop candidates.
+             let worst=Infinity, worstBg=null;
+             for(const bc of cands){ const fg=over({r:fgRaw.r,g:fgRaw.g,b:fgRaw.b,a:aEff}, bc);
+               const r=contrast(fg,bc); if(r<worst){ worst=r; worstBg=bc; } }
              const fsize = parseFloat(cs.fontSize);
              const bold = parseInt(cs.fontWeight,10) >= 700;
-             const large = fsize>=18 || bold;
+             // Fix 3: WCAG large text = fontSize>=24px, OR (bold AND fontSize>=18.66px). Else 4.5:1.
+             const large = fsize>=24 || (bold && fsize>=18.66);
              const floor = large ? 3 : 4.5;
-             if(ratio < floor){
+             if(worst < floor){
                const key = 'c|'+desc(el)+'|'+txt.slice(0,24);
                if(!seen.has(key)){ seen.add(key);
+                 const alpha = (fgRaw.a<1) || (isFinite(elOpacity)&&elOpacity<1) || cands.length>1;
                  flags.push({kind:'contrast',descriptor:desc(el),text:txt.slice(0,60),
-                   color:cs.color,bg:'rgb('+Math.round(bg.r)+','+Math.round(bg.g)+','+Math.round(bg.b)+')',
-                   ratio:Math.round(ratio*100)/100,fontSize:fsize,bold:bold}); }
+                   color:cs.color,bg:'rgb('+Math.round(worstBg.r)+','+Math.round(worstBg.g)+','+Math.round(worstBg.b)+')',
+                   ratio:Math.round(worst*100)/100,fontSize:fsize,bold:bold,
+                   gradient: cands.length>1 || undefined,
+                   note: alpha ? 'alpha-composited (rgba/opacity<1 or gradient stop) — verify manually' : undefined}); }
              }
            }
          }
-         const own = parseRGB(cs.backgroundColor);
-         if(own && own.a>0){
-           const L = lum(own);
-           if(L>0.6){
-             const r = el.getBoundingClientRect();
-             const area = r.width*r.height;
-             if(area>100){
-               const key = 'i|'+desc(el);
-               if(!seen.has(key)){ seen.add(key);
-                 flags.push({kind:'light-island',descriptor:desc(el),bg:cs.backgroundColor,
-                   bgLum:Math.round(L*1000)/1000,area:Math.round(area)}); }
-             }
+         // ── Light-island check on the element's OWN background (solid or gradient — Fix 1 + Fix 2). ──
+         const ownSolid = parseRGB(cs.backgroundColor);
+         const ownStops = gradientStops(cs);
+         let islandLum=-1, islandBg=null, isGrad=false;
+         if(ownSolid && ownSolid.a>0){ islandLum=lum(ownSolid.a>=1?ownSolid:over(ownSolid,DESK)); islandBg=cs.backgroundColor; }
+         if(ownStops){ let mx=-1; for(const s of ownStops){ const l=lum(s); if(l>mx) mx=l; } // worst case = lightest stop
+           if(mx>islandLum){ islandLum=mx; islandBg=(cs.backgroundImage||'').slice(0,120); isGrad=true; } }
+         if(islandLum > ISLAND_CUT){
+           const r = el.getBoundingClientRect();
+           const area = r.width*r.height;
+           if(area>100){
+             const key = 'i|'+desc(el);
+             if(!seen.has(key)){ seen.add(key);
+               flags.push({kind:'light-island',descriptor:desc(el),bg:islandBg,
+                 bgLum:Math.round(islandLum*1000)/1000,area:Math.round(area),
+                 gradient: isGrad || undefined}); }
            }
          }
        }
