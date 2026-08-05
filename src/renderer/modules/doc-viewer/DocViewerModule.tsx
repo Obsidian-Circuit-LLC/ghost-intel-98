@@ -90,7 +90,7 @@ function useDocBytes(relPath: string): BytesProps {
 }
 
 function Centered({ children }: { children: React.ReactNode }): JSX.Element {
-  return <div style={{ padding: 16, color: '#666' }}>{children}</div>;
+  return <div style={{ padding: 16, color: 'var(--ga98-dim-soft)' }}>{children}</div>;
 }
 
 export function DocViewerModule(props: Props): JSX.Element {
@@ -184,7 +184,7 @@ function UnsupportedPanel({ relPath, name }: { relPath: string; name: string }):
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   return (
-    <div style={{ padding: 24, color: '#555' }}>
+    <div style={{ padding: 24, color: 'var(--ga98-dim-mid)' }}>
       <p style={{ marginTop: 0 }}>Can&apos;t preview this file type in-app.</p>
       <p style={{ fontSize: 12, opacity: 0.8, wordBreak: 'break-word' }}>{name}</p>
       <button

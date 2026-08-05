@@ -106,7 +106,7 @@ export function JournalModule(): JSX.Element {
   // ---- render ----------------------------------------------------------------------------------
 
   if (gate === 'loading') {
-    return <div className="ga98-pane" style={{ padding: 12, color: '#666' }}>Opening your journal…</div>;
+    return <div className="ga98-pane" style={{ padding: 12, color: 'var(--ga98-dim-soft)' }}>Opening your journal…</div>;
   }
 
   if (gate === 'set-pin' || gate === 'locked') {
@@ -118,7 +118,7 @@ export function JournalModule(): JSX.Element {
           <div style={{ fontWeight: 'bold', marginBottom: 8 }}>
             {setting ? 'Set a 4-digit journal PIN' : 'Enter your journal PIN'}
           </div>
-          <div style={{ fontSize: 11, color: '#444', marginBottom: 10 }}>
+          <div style={{ fontSize: 11, color: 'var(--ga98-dim-strong)', marginBottom: 10 }}>
             The PIN locks this journal from casual access. Your entries are encrypted at rest by the
             app vault — the PIN is a convenience gate, not the encryption key.
           </div>
@@ -166,7 +166,7 @@ export function JournalModule(): JSX.Element {
           <button onClick={newEntry} title="Start a new entry">New</button>
         </div>
         <ul className="ga98-list" style={{ flex: 1, overflow: 'auto', margin: 0 }}>
-          {entries.length === 0 && <li style={{ color: '#666', fontSize: 11 }}>Empty. Click New, write, then Save.</li>}
+          {entries.length === 0 && <li style={{ color: 'var(--ga98-dim-soft)', fontSize: 11 }}>Empty. Click New, write, then Save.</li>}
           {entries.map((e) => (
             <li key={e.id} data-selected={e.id === id} title={`${fmtBytes(e.bytes)} · ${new Date(e.updatedAt).toLocaleString()}`}>
               <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }} onClick={() => void openEntry(e.id)}>{e.title}</span>
@@ -181,7 +181,7 @@ export function JournalModule(): JSX.Element {
           <button onClick={() => void save()}>{dirty ? 'Save *' : 'Save'}</button>
           {id && <button onClick={() => void del(id)} title="Delete this entry">Delete</button>}
         </div>
-        <div style={{ padding: '4px 6px', fontSize: 11, color: '#333', borderBottom: '1px solid #808080', fontStyle: 'italic' }}>
+        <div style={{ padding: '4px 6px', fontSize: 11, color: 'var(--ga98-dim-deep)', borderBottom: '1px solid #808080', fontStyle: 'italic' }}>
           {headerDate}
         </div>
         <textarea

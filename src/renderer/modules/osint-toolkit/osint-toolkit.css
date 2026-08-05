@@ -93,3 +93,7 @@
 :root[data-ga98-theme='amethyst'] .ot-tile,
 :root[data-ga98-theme='amethyst'] .ot-tile-title { color: var(--ga98-text); }
 :root[data-ga98-theme='amethyst'] .ot-tile:hover { background: var(--ga98-select-bg); color: var(--ga98-text); }
+
+/* QUIET AMETHYST — tile hover keeps its classic light #d4d0c8 fill; under the
+   amethyst skin flip to the dark row-hover surface so the tile stays legible. */
+:root[data-ga98-theme='amethyst'] .ot-tile:hover { background: var(--ga98-row-hover); }

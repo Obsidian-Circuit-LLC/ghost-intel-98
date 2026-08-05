@@ -1506,3 +1506,9 @@
   color: var(--ga98-text);
   border-color: var(--ga98-shadow-dark) var(--ga98-shadow-light) var(--ga98-shadow-light) var(--ga98-shadow-dark);
 }
+
+/* QUIET AMETHYST — graph-props labels are #404040/#606060 (classic), too dark on
+   the self-consistent #0a0a14 console; under the amethyst skin route them to the
+   light dim-text token so they read legibly. Classic keeps its literal (parity). */
+:root[data-ga98-theme='amethyst'] .sl-graph-props-type-label { color: var(--ga98-text-dim); }
+:root[data-ga98-theme='amethyst'] .sl-graph-props-field-label { color: var(--ga98-text-dim); }

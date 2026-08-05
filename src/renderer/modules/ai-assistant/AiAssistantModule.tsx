@@ -619,7 +619,7 @@ export function AiAssistantModule(): JSX.Element {
       <div className="ga98-pane" style={{ width: 170, flex: '0 0 auto', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <button onClick={newChat} style={{ margin: 4 }} title="Start a new conversation (the current one is saved)">+ New chat</button>
         <ul className="ga98-list" style={{ flex: 1, overflow: 'auto', margin: 0 }}>
-          {convos.length === 0 && <li style={{ color: '#666', fontSize: 11 }}>No saved chats yet.</li>}
+          {convos.length === 0 && <li style={{ color: 'var(--ga98-dim-soft)', fontSize: 11 }}>No saved chats yet.</li>}
           {convos.map((c) => (
             <li key={c.id} data-selected={c.id === convoIdRef.current} title={`${c.messageCount} message${c.messageCount === 1 ? '' : 's'} · ${new Date(c.updatedAt).toLocaleString()}`}>
               <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer', fontSize: 11 }} onClick={() => void loadConvo(c.id)}>{c.title}</span>
@@ -903,7 +903,7 @@ export function AiAssistantModule(): JSX.Element {
           <div style={{ padding: 6, borderBottom: '1px solid #ccc' }}>
             <div style={{ fontSize: 11, fontWeight: 'bold', marginBottom: 4 }}>Recalled for the last answer</div>
             {recallLabels.length === 0 ? (
-              <div style={{ fontSize: 11, color: '#666' }}>Nothing recalled yet.</div>
+              <div style={{ fontSize: 11, color: 'var(--ga98-dim-soft)' }}>Nothing recalled yet.</div>
             ) : (
               <ul style={{ margin: 0, paddingLeft: 16, fontSize: 11 }}>
                 {recallLabels.map((label, i) => <li key={i}>{label}</li>)}
@@ -927,7 +927,7 @@ export function AiAssistantModule(): JSX.Element {
               </span>
             </div>
             {!hasLearned && (
-              <div style={{ fontSize: 11, color: '#666' }}>
+              <div style={{ fontSize: 11, color: 'var(--ga98-dim-soft)' }}>
                 Nothing learned yet. Turn on &ldquo;adaptive memory&rdquo; in Settings to let the
                 assistant start building an inspectable long-term profile.
               </div>
@@ -941,7 +941,7 @@ export function AiAssistantModule(): JSX.Element {
                   </button>
                 </div>
                 {groupSummary(g.scope) && (
-                  <div className="ga98-t8-surface" style={{ fontSize: 11, fontStyle: 'italic', color: '#333', background: '#f4f0ff', border: '1px solid #ddd', padding: '3px 4px', margin: '2px 0', whiteSpace: 'pre-wrap' }} title="Rolling summary of prior conversations, injected into chats for this scope">
+                  <div className="ga98-t8-surface" style={{ fontSize: 11, fontStyle: 'italic', color: 'var(--ga98-dim-deep)', background: '#f4f0ff', border: '1px solid #ddd', padding: '3px 4px', margin: '2px 0', whiteSpace: 'pre-wrap' }} title="Rolling summary of prior conversations, injected into chats for this scope">
                     Summary: {groupSummary(g.scope)}
                   </div>
                 )}
@@ -982,7 +982,7 @@ export function AiAssistantModule(): JSX.Element {
                       Wipe
                     </button>
                   </div>
-                  <div className="ga98-t8-surface" style={{ fontSize: 11, fontStyle: 'italic', color: '#333', background: '#f4f0ff', border: '1px solid #ddd', padding: '3px 4px', margin: '2px 0', whiteSpace: 'pre-wrap' }} title="Rolling summary of prior conversations, injected into chats for this scope">
+                  <div className="ga98-t8-surface" style={{ fontSize: 11, fontStyle: 'italic', color: 'var(--ga98-dim-deep)', background: '#f4f0ff', border: '1px solid #ddd', padding: '3px 4px', margin: '2px 0', whiteSpace: 'pre-wrap' }} title="Rolling summary of prior conversations, injected into chats for this scope">
                     Summary: {text}
                   </div>
                 </div>

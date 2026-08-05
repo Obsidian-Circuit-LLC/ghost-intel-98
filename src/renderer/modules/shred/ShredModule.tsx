@@ -65,7 +65,7 @@ export function ShredModule(): JSX.Element {
         <button onClick={() => void purgeAll()} disabled={list.length === 0}>Empty Shred</button>
       </div>
       <ul className="ga98-list">
-        {list.length === 0 && <li style={{ color: '#666' }}>Shred is empty.</li>}
+        {list.length === 0 && <li style={{ color: 'var(--ga98-dim-soft)' }}>Shred is empty.</li>}
         {list.map((e) => (
           <li key={e.id}>
             <span style={{ width: 90, fontSize: 11, opacity: 0.7 }}>[{e.kind}]</span>

@@ -141,15 +141,15 @@ export function NetExplorerModule(): JSX.Element {
         <div style={{ fontSize: 40 }}>🦊</div>
         <h3 style={{ margin: 0 }}>Browse with Firefox Portable</h3>
         {status === null ? (
-          <p style={{ color: '#666' }}>Checking for the bundled Firefox…</p>
+          <p style={{ color: 'var(--ga98-dim-soft)' }}>Checking for the bundled Firefox…</p>
         ) : status.installed ? (
           <>
-            <p style={{ maxWidth: 460, color: '#333' }}>
+            <p style={{ maxWidth: 460, color: 'var(--ga98-dim-deep)' }}>
               Type a URL above (or pick a bookmark) and choose <b>Open in Firefox</b>. Pages open in a
               separate Firefox window with its own engine, cookies, and downloads. Use <b>Save URL</b> to
               attach the address to a case.
             </p>
-            <p style={{ fontSize: 11, color: '#777', wordBreak: 'break-all' }}>Firefox: {status.path}</p>
+            <p style={{ fontSize: 11, color: 'var(--ga98-dim-cap)', wordBreak: 'break-all' }}>Firefox: {status.path}</p>
           </>
         ) : (
           <div className="ga98-firefox-missing">
@@ -164,7 +164,7 @@ export function NetExplorerModule(): JSX.Element {
               <button onClick={() => void openFirefoxDir()}>📂 Open the Firefox folder</button>
               <button onClick={() => void window.api.browser.firefoxStatus().then(setStatus)}>Re-check</button>
             </div>
-            {status.dir && <p style={{ fontSize: 11, color: '#777', wordBreak: 'break-all', marginTop: 4 }}>Folder: {status.dir}</p>}
+            {status.dir && <p style={{ fontSize: 11, color: 'var(--ga98-dim-cap)', wordBreak: 'break-all', marginTop: 4 }}>Folder: {status.dir}</p>}
           </div>
         )}
       </div>
@@ -216,7 +216,7 @@ function HistoryPanel({ entries, onClose, onOpen, onClear }: {
         </div>
         <div className="window-body" style={{ overflow: 'auto', flex: 1 }}>
           {entries.length === 0
-            ? <p style={{ color: '#666' }}>No URLs launched yet.</p>
+            ? <p style={{ color: 'var(--ga98-dim-soft)' }}>No URLs launched yet.</p>
             : (
               <ul className="ga98-list">
                 {entries.map((h) => (

@@ -101,7 +101,7 @@ export function BriefcaseModule({ initialNoteId }: { initialNoteId?: string } = 
           onDragOver={(ev) => ev.preventDefault()}
           onDrop={(ev) => void onListDrop(ev)}
         >
-          {notes.length === 0 && <li style={{ color: '#666', fontSize: 11 }}>Empty. Click New, type, then Save.</li>}
+          {notes.length === 0 && <li style={{ color: 'var(--ga98-dim-soft)', fontSize: 11 }}>Empty. Click New, type, then Save.</li>}
           {notes.map((n) => (
             <li
               key={n.id}
