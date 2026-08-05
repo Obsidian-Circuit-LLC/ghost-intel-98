@@ -40,6 +40,17 @@ Operator decision (2026-08-05): **full dark, everything — no seams anywhere.**
 
 **Testing widens accordingly:** the no-straggler guard and contrast gate cover **all themed modules** (with the allow-list), and a **98.css-control smoke** asserts representative controls (`.window`, `input`, `select`, `table`, `ul.tree-view`, scrollbar thumb) render dark under `data-ga98-theme='amethyst'`.
 
+### Amendment 2 (2026-08-05) — status/honesty tokens are **theme-aware but LOCKED** (supersedes the single-value fixed tier)
+
+The foundation-pass adversarial review empirically disproved the "one value, identical in every theme" fixed tier: a single colour cannot contrast **both** the light classic surface (`#c0c0c0`) and the near-black amethyst surface (`#1a1822`) as foreground text (for ≥3:1 on light the colour must be dark, L≤0.14; for ≥3:1 on dark it must be light, L≥0.15 — no value is both). The delivered branch shipped classic status text at 2.15:1 (LockScreen error, down from `#a00`'s 4.26:1). **Operator decision (2026-08-05): status/honesty tokens become theme-aware but locked.**
+
+- **Locked ≠ single-value.** Semantic/honesty tokens are defined in **every built-in theme** (base `:root` for classic, the amethyst block for amethyst) with **legible, hue-consistent** values per surface. They are still **LOCKED**: a user-authored skin pack cannot set them (they are excluded from the pack API), so the charter guarantee — a skin can never recolour or hide a status or honesty stamp — is fully preserved.
+- **Roles.** Two roles, because a status colour is used both as foreground text and as a filled background:
+  - `--ga98-status-{error,success,warning,info}` — **foreground/border** role, theme-aware: classic `#a01722 / #0a5c30 / #7a4f00 / #124a8f` (dark, legible on light); amethyst `#ff6b70 / #4bd07f / #f5b53d / #6ba9ff` (bright, legible on near-black).
+  - `--ga98-status-{…}-fill` — **filled-background** role for chips/toast title-bars carrying light text; dark enough for white in both themes (same as the classic foreground darks). Fixes the toast white-on-amber regression.
+- **Honesty stays self-contained + invariant.** `--ga98-unverified` (`#d9a441` amber background) + `--ga98-unverified-ink` (`#0a0f1a` dark ink), identical in every theme — a self-contained badge that is legible regardless of surface. The badge INK is theme-invariant (never `--ga98-text`), which fixes the audit's miscategorisation.
+- **Enforcement changes:** the two-tier test shifts from "fixed tokens absent from every override block" to: a canonical `LOCKED_TOKENS` list (the 8 status + 2 honesty tokens) is (a) fully defined in each built-in theme block, (b) contrast-passing in each per the contrast gate, and (c) excluded from any future user-pack loader. `themes.ts` exports `LOCKED_TOKENS`.
+
 ## Architecture
 
 ### Mechanism
