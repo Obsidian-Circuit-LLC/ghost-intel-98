@@ -13,7 +13,7 @@ const STEPS = [
     body: (
       <>
         <p>This is a Windows 98–inspired case-management desktop. Twelve modules covering case files, mail, browser, SSH, camera streams, AI assistance, and more — all local-first, no telemetry, no phone-home.</p>
-        <p style={{ fontSize: 11, color: 'var(--ga98-text-dim)' }}>Three-step intro. Click <b>Next</b> to continue or <b>Skip</b> to dismiss.</p>
+        <p style={{ fontSize: 11, color: 'var(--ga98-welcome-helper)' }}>Three-step intro. Click <b>Next</b> to continue or <b>Skip</b> to dismiss.</p>
       </>
     )
   },

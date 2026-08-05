@@ -140,8 +140,8 @@ export function LockScreen(): JSX.Element {
               style={{
                 marginTop: 12,
                 border: '1px solid var(--ga98-shadow-dark)',
-                borderTop: '1px solid var(--ga98-shadow-deep)',
-                borderLeft: '1px solid var(--ga98-shadow-deep)',
+                borderTop: '1px solid var(--ga98-lock-bevel)',
+                borderLeft: '1px solid var(--ga98-lock-bevel)',
                 padding: '6px 8px',
                 background: 'var(--ga98-grey)',
                 fontSize: '0.85em'

@@ -1602,7 +1602,7 @@ Per-row `target` is the deterministic suggested mapping (rule-derived from the c
 | `src/renderer/modules/geoint/EventDetailsPanel.tsx:405` | `#2a3344` | palette | `--ga98-text-dim` |
 | `src/renderer/modules/geoint/EventDetailsPanel.tsx:419` | `#5a7fb0` | palette | `--ga98-accent` |
 | `src/renderer/modules/geoint/EventDetailsPanel.tsx:420` | `#cdd6e4` | palette | `--ga98-text` |
-| `src/renderer/modules/geoint/EventDetailsPanel.tsx:435` | `#0a0f1a` | palette | `--ga98-text` |
+| `src/renderer/modules/geoint/EventDetailsPanel.tsx:435` | `#0a0f1a` | honesty | `--ga98-unverified-ink` |
 | `src/renderer/modules/geoint/EventDetailsPanel.tsx:435` | `#d9a441` | honesty | `--ga98-unverified` |
 | `src/renderer/modules/geoint/EventDetailsPanel.tsx:442` | `#cdd6e4` | palette | `--ga98-text` |
 | `src/renderer/modules/markets/MarketsModule.tsx:104` | `#bfe0bf` | content-intrinsic | `allow-list` |

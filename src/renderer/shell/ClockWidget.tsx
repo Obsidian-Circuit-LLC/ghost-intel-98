@@ -65,7 +65,7 @@ function AnalogFace({ now }: { now: Date }): JSX.Element {
       {nums}
       <Hand angle={(h + m / 60) * 30} len={24} width={2.4} color="var(--ga98-text)" />
       <Hand angle={(m + s / 60) * 6} len={34} width={1.6} color="var(--ga98-text)" />
-      <Hand angle={s * 6} len={36} width={0.8} color="var(--ga98-status-error)" />
+      <Hand angle={s * 6} len={36} width={0.8} color="var(--ga98-clock-secondhand)" />
       <circle cx={50} cy={50} r={2} style={{ fill: 'var(--ga98-text)' }} />
     </svg>
   );

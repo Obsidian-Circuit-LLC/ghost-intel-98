@@ -34,6 +34,16 @@
   /* error-tint SURFACE — theme-aware, NOT locked (a background, not a status stamp):
      pale red in classic, dark red in amethyst; carries status-error text at >=4.5:1. */
   --ga98-status-error-tint: #ffeeee;
+  /* ── purpose tokens: classic-parity-exact literals routed to theme-aware tokens ──────
+     Each classic value below equals the ORIGINAL inline literal EXACTLY (classic parity
+     is sacred); the amethyst block redefines each for the near-black skin. These sites
+     use INLINE styles, which a stylesheet rule cannot override, so they route through a
+     token instead of keeping the literal + an amethyst-only CSS override. NOT locked
+     (skinnable palette detail, excluded from LOCKED_TOKENS on purpose). */
+  --ga98-clock-secondhand: #c00000; /* ClockWidget analog second hand */
+  --ga98-lock-bevel: #404040;       /* LockScreen bgconn inset bevel (top/left) */
+  --ga98-flyout-outset: #f5f5f5;    /* AccessMenu flyout `outset` highlight edge */
+  --ga98-welcome-helper: #444444;   /* Welcome first-step helper text */
 }
 
 html, body, #root {
@@ -125,6 +135,11 @@ input, textarea, [contenteditable="true"], .ga98-selectable {
   --ga98-unverified-ink: #0a0f1a;
   /* error-tint surface — dark red-tint variant for the near-black skin */
   --ga98-status-error-tint: #2a1418;
+  /* purpose tokens — amethyst variants (classic-parity values live in base :root) */
+  --ga98-clock-secondhand: var(--ga98-accent);      /* single glowing accent for the sweep hand */
+  --ga98-lock-bevel: var(--ga98-shadow-deep);       /* darkest edge = inset groove on near-black */
+  --ga98-flyout-outset: var(--ga98-shadow-light);   /* raised-edge highlight on the dark skin */
+  --ga98-welcome-helper: var(--ga98-text-dim);      /* dimmed body text, legible on dark */
 }
 
 .ga98-desktop {

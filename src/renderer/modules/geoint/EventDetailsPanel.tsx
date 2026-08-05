@@ -432,7 +432,7 @@ export function EventDetailsPanel(props: EventDetailsPanelProps): JSX.Element | 
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
           <span style={legendStyle}>AI Summary</span>
           <span style={{ flex: 1 }} />
-          <span style={{ fontSize: 9, fontWeight: 'bold', letterSpacing: 0.4, color: '#0a0f1a', background: '#d9a441', padding: '1px 6px', borderRadius: 2 }}>AI · unverified</span>
+          <span style={{ fontSize: 9, fontWeight: 'bold', letterSpacing: 0.4, color: 'var(--ga98-unverified-ink)', background: 'var(--ga98-unverified)', padding: '1px 6px', borderRadius: 2 }}>AI · unverified</span>
         </div>
         {/* Only trust the summary if it was produced for THIS event; otherwise it's stale from the
             previously-selected incident — show loading, never the wrong event's text. */}
