@@ -86,7 +86,7 @@ export function SaveEventDialog({ item, onClose }: { item: GeoItem; onClose: () 
               </div>
             </fieldset>
           )}
-          {item.place && <p style={{ fontSize: 11, color: '#555', margin: 0 }}>A location entity for &ldquo;{item.place}&rdquo; will be linked automatically.</p>}
+          {item.place && <p style={{ fontSize: 11, color: 'var(--ga98-dim-mid)', margin: 0 }}>A location entity for &ldquo;{item.place}&rdquo; will be linked automatically.</p>}
 
           <div className="field-row" style={{ gap: 4 }}>
             <button onClick={() => void save()} disabled={!caseId || busy}>{busy ? 'Saving…' : 'Save'}</button>

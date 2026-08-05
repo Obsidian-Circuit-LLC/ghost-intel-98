@@ -68,7 +68,7 @@ function HlsVideo({ url }: { url: string }): JSX.Element {
       autoPlay
       playsInline
       controls
-      style={{ width: '100%', height: '100%', background: '#000' }}
+      style={{ width: '100%', height: '100%', background: 'var(--ga98-shadow-deep)' }}
     />
   );
 }

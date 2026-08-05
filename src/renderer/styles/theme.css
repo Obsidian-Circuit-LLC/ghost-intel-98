@@ -61,6 +61,22 @@
   --ga98-inset-panel: #f4f4f4; /* sunken detail-box fill (Cases / CaseDetail metadata) */
   --ga98-inset-border: #d0d0d0; /* sunken detail-box border (Cases / CaseDetail) */
   --ga98-navy-accent: #000080; /* navy inline accent: links / primary-image marker (Cases) */
+  /* ── Task 7 module purpose tokens (GeoINT command-panel / dialogs inline literals) ─────
+     Same contract: each classic value equals the ORIGINAL inline literal EXACTLY (byte-for-byte
+     classic), amethyst block redefines for the near-black skin. These are inline styles, so a
+     stylesheet rule cannot override them — they route through a token. The fixed status tier
+     (#e5484d / #30a46c) is NOT used for these because as FOREGROUND text on the classic light-grey
+     window it fails the WCAG contrast floor (≈2.2 / ≈1.7:1); a parity-exact purpose token keeps
+     classic legible and lets amethyst pick a light-on-dark value. NOT locked. */
+  --ga98-dim-deep: #333;        /* dim counter/aux text (StoryControls / TimelineBar / KEV rows) */
+  --ga98-dim-cap: #777;         /* faint source-caption text (GeoINT layer captions) */
+  --ga98-danger-ink: #900;      /* danger/error caption + load-error box text */
+  --ga98-ok-dot: #060;          /* network "● on" status dot */
+  --ga98-error-surface: #fee;   /* light error-box fill (GeoINT load error / MapErrorBoundary) */
+  --ga98-error-border: #c00;    /* GeoINT load-error box border */
+  --ga98-error-border-soft: #c99; /* MapErrorBoundary code-box border */
+  --ga98-ok-surface: #bfe0bf;   /* network-on toggle success fill */
+  --ga98-ok-ink: #003300;       /* network-on toggle success text */
 }
 
 html, body, #root {
@@ -170,6 +186,16 @@ input, textarea, [contenteditable="true"], .ga98-selectable {
   --ga98-inset-panel: #141119;                      /* deep recessed detail box */
   --ga98-inset-border: var(--ga98-shadow-dark);
   --ga98-navy-accent: var(--ga98-accent);           /* navy → glowing accent on the dark skin */
+  /* Task 7 module purpose tokens — amethyst variants (classic-parity values in base :root). */
+  --ga98-dim-deep: var(--ga98-text-dim);
+  --ga98-dim-cap: var(--ga98-text-dim);
+  --ga98-danger-ink: #ff8a8a;                        /* light red, legible on near-black */
+  --ga98-ok-dot: #6fdc9a;                            /* light green status dot on dark */
+  --ga98-error-surface: #2a1418;                     /* deep desaturated red fill */
+  --ga98-error-border: #7a2327;
+  --ga98-error-border-soft: #6a3236;
+  --ga98-ok-surface: #16301e;                        /* deep green fill */
+  --ga98-ok-ink: #7fd6a0;                            /* light green text on the deep-green fill */
 }
 
 .ga98-desktop {

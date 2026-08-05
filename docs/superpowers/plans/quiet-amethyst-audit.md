@@ -3060,5 +3060,31 @@ const THEME_COLOR_ALLOWLIST = [
   '#ff4444',  // src/renderer/modules/searchlight/panels/ReportsPanel.tsx
   '#ffc800',  // src/renderer/modules/searchlight/panels/ReportsPanel.tsx
   'rgba(0,0,0,0.8)',  // src/renderer/modules/cases/BioImagesSection.tsx (lightbox modal scrim)
+  // Task 7: GeoINT EventDetailsPanel + CommandRail are self-consistent dark-blue intel consoles
+  // (bg #0a0f1a/#11161f, light text #cdd6e4/#e6edf6 in BOTH themes) — a deliberate always-dark
+  // dossier surface, legible under classic and amethyst alike. Recolouring the console to the
+  // amethyst palette would both break classic (currently blue) and constitute a redesign, so its
+  // chrome literals are content-intrinsic (left as-is). NewsStreamView's placeholder text sits on
+  // the always-black video surface. rgba black scrims + the purple located-count tint are neutral.
+  '#11161f',  // src/renderer/modules/geoint/CommandRail.tsx, src/renderer/modules/geoint/EventDetailsPanel.tsx
+  '#141a26',  // src/renderer/modules/geoint/EventDetailsPanel.tsx
+  '#1b2230',  // src/renderer/modules/geoint/CommandRail.tsx, src/renderer/modules/geoint/EventDetailsPanel.tsx
+  '#1c2330',  // src/renderer/modules/geoint/EventDetailsPanel.tsx
+  '#2a3344',  // src/renderer/modules/geoint/CommandRail.tsx, src/renderer/modules/geoint/EventDetailsPanel.tsx
+  '#4a5468',  // src/renderer/modules/geoint/EventDetailsPanel.tsx
+  '#5a7fb0',  // src/renderer/modules/geoint/EventDetailsPanel.tsx
+  '#6b7688',  // src/renderer/modules/geoint/CommandRail.tsx, src/renderer/modules/geoint/EventDetailsPanel.tsx
+  '#8a96a8',  // src/renderer/modules/geoint/EventDetailsPanel.tsx
+  '#8fb7e0',  // src/renderer/modules/geoint/CommandRail.tsx, src/renderer/modules/geoint/EventDetailsPanel.tsx
+  '#9ad',  // src/renderer/modules/geoint/NewsStreamView.tsx (info text on always-black video)
+  '#cdd6e4',  // src/renderer/modules/geoint/CommandRail.tsx, src/renderer/modules/geoint/EventDetailsPanel.tsx
+  '#e6edf6',  // src/renderer/modules/geoint/CommandRail.tsx, src/renderer/modules/geoint/EventDetailsPanel.tsx
+  '#e88',  // src/renderer/modules/geoint/NewsStreamView.tsx (error text on always-black video)
+  'rgba(0,0,0,.5)',  // src/renderer/modules/geoint/CommandRail.tsx
+  'rgba(0,0,0,0.6)',  // src/renderer/modules/geoint/CommandRail.tsx
+  'rgba(93,58,125,0.15)',  // src/renderer/modules/geoint/CommandRail.tsx (located-count tint)
+  'rgba(255,255,255,.7)',  // src/renderer/modules/geoint/MapGL.tsx (marker cluster-glow ring — content-intrinsic map glyph)
+  'rgba(0,0,0,.4)',  // src/renderer/modules/geoint/GeoIntModule.tsx (story-controls drop shadow — neutral)
+  'rgba(0,0,0,0.3)',  // src/renderer/modules/geoint/SaveEventDialog.tsx (modal scrim — neutral)
 ];
 ```

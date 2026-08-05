@@ -71,7 +71,7 @@ export function LiveFeedsPanel(p: LiveFeedsPanelProps): JSX.Element {
           Live Ships (AIS) ({p.shipCount})
         </label>
         {p.net && !p.hasAisKey && (
-          <span style={{ fontSize: 11, color: '#555', marginLeft: 4 }}>
+          <span style={{ fontSize: 11, color: 'var(--ga98-dim-mid)', marginLeft: 4 }}>
             — store a key below to enable
           </span>
         )}
@@ -99,11 +99,11 @@ export function LiveFeedsPanel(p: LiveFeedsPanelProps): JSX.Element {
 
       {/* AIS socket status */}
       {p.aisStatus && (
-        <div style={{ fontSize: 11, color: '#555', marginTop: 2 }}>{p.aisStatus}</div>
+        <div style={{ fontSize: 11, color: 'var(--ga98-dim-mid)', marginTop: 2 }}>{p.aisStatus}</div>
       )}
 
       {/* ADS-B ODbL attribution */}
-      <div style={{ fontSize: 10, color: '#777', marginTop: 6 }}>
+      <div style={{ fontSize: 10, color: 'var(--ga98-dim-cap)', marginTop: 6 }}>
         ADS-B data &copy; adsb.lol / contributors (ODbL)
       </div>
     </fieldset>

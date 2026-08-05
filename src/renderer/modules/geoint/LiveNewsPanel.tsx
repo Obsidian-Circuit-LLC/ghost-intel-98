@@ -47,7 +47,7 @@ export function LiveNewsPanel(): JSX.Element {
 
       <div
         className="ga98-livenews-video"
-        style={{ position: 'relative', width: '100%', aspectRatio: '16 / 9', background: '#000', marginBottom: 6 }}
+        style={{ position: 'relative', width: '100%', aspectRatio: '16 / 9', background: 'var(--ga98-shadow-deep)', marginBottom: 6 }}
       >
         {!active ? (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ad', fontSize: 12, textAlign: 'center', padding: 12 }}>

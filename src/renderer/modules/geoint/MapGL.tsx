@@ -560,7 +560,7 @@ export function MapGL(props: MapGLProps = {}): JSX.Element {
       {truncated && (
         <div
           className="ga98-panel"
-          style={{ position: 'absolute', left: 6, bottom: 6, zIndex: 500, fontSize: 11, padding: '2px 6px', background: 'var(--ga98-face,#c0c0c0)', border: '2px outset #fff', pointerEvents: 'none' }}
+          style={{ position: 'absolute', left: 6, bottom: 6, zIndex: 500, fontSize: 11, padding: '2px 6px', background: 'var(--ga98-face,#c0c0c0)', border: '2px outset var(--ga98-shadow-light)', pointerEvents: 'none' }}
         >
           Showing {truncated.shown} of {truncated.total} located events
         </div>

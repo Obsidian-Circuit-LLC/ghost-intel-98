@@ -37,10 +37,10 @@ export function NewsViewModule({ stream }: { stream?: NewsStream } = {}): JSX.El
     // here legitimately scrolls). See docs/superpowers/specs/2026-07-11-v3.43.0-...
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       <NewsFeedControls />
-      <div className="ga98-panel" style={{ padding: '2px 6px', fontSize: 11, borderBottom: '1px solid #808080' }}>
+      <div className="ga98-panel" style={{ padding: '2px 6px', fontSize: 11, borderBottom: '1px solid var(--ga98-shadow-dark)' }}>
         {active.label} <span style={{ opacity: 0.6 }}>({active.kind})</span>
       </div>
-      <div style={{ position: 'relative', flex: 1, minHeight: 0, background: '#000' }}>
+      <div style={{ position: 'relative', flex: 1, minHeight: 0, background: 'var(--ga98-shadow-deep)' }}>
         <NewsStreamView stream={active} />
       </div>
     </div>
