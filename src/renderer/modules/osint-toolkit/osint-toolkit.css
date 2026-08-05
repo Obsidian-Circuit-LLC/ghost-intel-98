@@ -82,6 +82,14 @@
   -webkit-box-orient: vertical;
 }
 
-/* ── QUIET AMETHYST — additive dark overrides (Task 8). The tile chrome already rides palette tokens
-   (it darkens automatically); only the light `:hover` fill is a residual light island. */
+/* ── QUIET AMETHYST — additive dark overrides (Task 8).
+   The tile/root BACKGROUNDS ride --ga98-grey / --ga98-desktop-bg and darken automatically, but the
+   classic FOREGROUND literals (dark text meant for a silver surface) do NOT survive the inversion:
+   #000 tile labels, #000080 navy headings, and #404040 empty text all collapse to ~1:1 on the
+   near-black skin. Reroute each foreground to its light palette token; classic literals above stay
+   byte-for-byte for parity. */
+:root[data-ga98-theme='amethyst'] .ot-empty { color: var(--ga98-text-dim); }
+:root[data-ga98-theme='amethyst'] .ot-group-heading { color: var(--ga98-accent); }
+:root[data-ga98-theme='amethyst'] .ot-tile,
+:root[data-ga98-theme='amethyst'] .ot-tile-title { color: var(--ga98-text); }
 :root[data-ga98-theme='amethyst'] .ot-tile:hover { background: var(--ga98-select-bg); color: var(--ga98-text); }

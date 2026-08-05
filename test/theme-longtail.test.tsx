@@ -49,9 +49,14 @@ const MARKUP =
   '<button class="sl-sweep-btn" id="sl-btn">Sweep</button>' +
   '<div class="sl-graph-toolbar" id="sl-toolbar">tb</div>' +
   '<div class="sl-graph-props" id="sl-props">props</div>' +
-  // osint-toolkit tile (hover surface exercised via .ot-tile:hover below is hard to force;
-  // assert the base tile chrome instead — it rides tokens already, kept as a control)
-  '<div class="ot-grid"><div class="ot-tile" id="ot-tile">tool</div></div>' +
+  // osint-toolkit launcher: tile labels (#000), group heading (#000080 navy), empty text (#404040)
+  // are dark FOREGROUND literals that must reroute to light palette tokens under amethyst — their
+  // BACKGROUNDS darken automatically but the classic dark text does not survive the inversion.
+  '<div class="ot-root" id="ot-root">' +
+  '<p class="ot-empty" id="ot-empty">No tools</p>' +
+  '<div class="ot-group"><div class="ot-group-heading" id="ot-heading">People</div>' +
+  '<div class="ot-grid"><div class="ot-tile" id="ot-tile">tool<span class="ot-tile-title" id="ot-title">Name</span></div></div>' +
+  '</div></div>' +
   // content-intrinsic controls: a solitaire card face + a cyber-neon success swatch
   '<div class="ga98-card ga98-card-face" id="sol-card"><span class="ga98-card-corner" id="sol-corner">A</span></div>' +
   '<span id="neon" style="color:#00ff88">online</span>' +
@@ -122,6 +127,17 @@ describe('AMETHYST — long-tail Win98 chrome darkens with legible text', () => 
     expect(await lumOf('#sl-toolbar', 'background-color'), 'graph toolbar dark').toBeLessThan(0.3);
     expect(await lumOf('#sl-props', 'background-color'), 'graph props dark').toBeLessThan(0.3);
   });
+  it('osint-toolkit tile/heading/empty foregrounds darken bg but stay legible light text', async () => {
+    // tile + label: dark #000 literal must reroute to light --ga98-text on the darkened tile bg
+    expect(await lumOf('#ot-tile', 'background-color'), 'tile bg dark').toBeLessThan(0.25);
+    expect(await lumOf('#ot-tile', 'color'), 'tile label light').toBeGreaterThan(0.4);
+    expect(await lumOf('#ot-title', 'color'), 'tile title light').toBeGreaterThan(0.4);
+    // group heading: navy #000080 must reroute to the glowing accent, legible on near-black root
+    expect(await lumOf('#ot-heading', 'color'), 'group heading light-accent').toBeGreaterThan(0.15);
+    // empty text: #404040 must reroute to --ga98-text-dim, legible on the dark root
+    expect(await lumOf('#ot-root', 'background-color'), 'ot root dark').toBeLessThan(0.25);
+    expect(await lumOf('#ot-empty', 'color'), 'empty text dim-but-legible').toBeGreaterThan(0.15);
+  });
 });
 
 describe('CLASSIC PARITY — the same long-tail chrome stays light Win98 under classic', () => {
@@ -135,6 +151,11 @@ describe('CLASSIC PARITY — the same long-tail chrome stays light Win98 under c
   it('searchlight sweep input light, button silver', async () => {
     expect(await lumOf('#sl-input', 'background-color'), 'classic sweep input light').toBeGreaterThan(0.7);
     expect(await lumOf('#sl-btn', 'background-color'), 'classic sweep button silver').toBeGreaterThan(0.4);
+  });
+  it('osint-toolkit keeps its classic dark foreground literals (parity: overrides are amethyst-only)', async () => {
+    expect(await colorOf('#ot-tile', 'color'), 'classic tile label #000').toBe('rgb(0, 0, 0)');
+    expect(await colorOf('#ot-heading', 'color'), 'classic heading navy #000080').toBe('rgb(0, 0, 128)');
+    expect(await colorOf('#ot-empty', 'color'), 'classic empty #404040').toBe('rgb(64, 64, 64)');
   });
 });
 
