@@ -141,6 +141,50 @@ function countTextBearingElements(container: Element): number {
   return n;
 }
 
+// Class-name shapes that denote a DATA container (the thing populated by a runtime fetch): a list,
+// table body, result/feed/timeline surface, card/entry grid. Matched as a whole hyphen/underscore
+// segment so `.searchlight-results` / `.geo-event-list` / `.socmint-feed` hit but `.blocklist-note`
+// does not fire on an incidental substring.
+const DATA_CONTAINER_CLASS =
+  /(^|[-_])(results?|rows?|list|listing|feed|timeline|items?|entries|cards?|grid|events|matches|hits|records|table-body|tbody)([-_]|$)/i;
+
+/**
+ * COVERAGE HONESTY — detect whether a rendered fragment's SUBSTANTIVE data surface is effect-gated:
+ * the module server-rendered a non-trivial empty-state SHELL, but its key data containers (lists /
+ * table bodies / result grids / feeds) came back EMPTY because renderToStaticMarkup never runs the
+ * effect that fetches and populates the rows. Such a module IS still audited here (its chrome +
+ * empty-state IS a real, worthwhile regression surface) — but a zero-flag result on it must NOT be
+ * reported as full contrast coverage, because the populated rows/cells (where most runtime text
+ * contrast actually lives) never rendered. Returns a short reason naming the empty data containers,
+ * or null when nothing on the surface looks data-gated (e.g. a game board or a self-contained tool).
+ */
+function detectEmptyDataSurface(container: Element): string | null {
+  const empties = new Set<string>();
+  const childless = (el: Element): boolean => el.children.length === 0;
+  for (const el of Array.from(container.querySelectorAll('ul, ol'))) {
+    if (el.querySelector(':scope > li') == null) empties.add(el.tagName.toLowerCase());
+  }
+  for (const el of Array.from(container.querySelectorAll('tbody'))) {
+    if (el.querySelector(':scope > tr') == null) empties.add('tbody');
+  }
+  for (const el of Array.from(container.querySelectorAll('table'))) {
+    if (el.querySelector('tr') == null) empties.add('table');
+  }
+  for (const role of ['list', 'grid', 'table', 'listbox', 'feed', 'rowgroup', 'tree']) {
+    for (const el of Array.from(container.querySelectorAll(`[role="${role}"]`))) {
+      if (childless(el)) empties.add(`role=${role}`);
+    }
+  }
+  for (const el of Array.from(container.querySelectorAll('[class]'))) {
+    const cls = typeof el.className === 'string' ? el.className : '';
+    if (DATA_CONTAINER_CLASS.test(cls) && childless(el)) {
+      empties.add('.' + (cls.trim().split(/\s+/).find((c) => DATA_CONTAINER_CLASS.test(c)) ?? cls.trim().split(/\s+/)[0]));
+    }
+  }
+  if (empties.size === 0) return null;
+  return `empty data container(s): ${Array.from(empties).slice(0, 6).join(', ')}`;
+}
+
 interface ModuleRenderResult {
   key: string;
   title: string;
@@ -148,6 +192,12 @@ interface ModuleRenderResult {
   error?: string;
   /** Set when the module rendered but too shallowly to audit — routed to the coverage-gap list. */
   gap?: string;
+  /**
+   * Set when the module DID render an auditable empty-state shell but its data containers are empty
+   * (effect-gated). The module is still audited; this flag routes it to the honest "empty-state-only
+   * (data surfaces unaudited)" tally instead of overstating it as fully-covered.
+   */
+  dataGated?: string;
 }
 
 let session: ChromeSession;
@@ -344,7 +394,10 @@ beforeAll(async () => {
             `data load renderToStaticMarkup never runs, so its contrast is NOT audited here`
         };
       }
-      return { key: m.key, title: m.title, html };
+      // The shell is auditable, but flag whether its substantive data surface is effect-gated so the
+      // oracle reports it as "empty-state-only", not as full coverage (COVERAGE HONESTY).
+      const dataGated = detectEmptyDataSurface(probe) ?? undefined;
+      return { key: m.key, title: m.title, html, dataGated };
     } catch (err) {
       return { key: m.key, title: m.title, error: (err as Error)?.message ?? String(err) };
     }
@@ -369,7 +422,7 @@ async function auditModule(html: string): Promise<ContrastFlag[]> {
 
 describe('QUIET AMETHYST rendered-contrast oracle', () => {
   it('renders every built-in module, audits it, and writes the full inventory', async () => {
-    const perModuleFlags: { key: string; title: string; flags: ContrastFlag[] }[] = [];
+    const perModuleFlags: { key: string; title: string; flags: ContrastFlag[]; dataGated?: string }[] = [];
     const coverageGaps: { key: string; title: string; error: string }[] = [];
 
     for (const r of renderResults) {
@@ -384,12 +437,18 @@ describe('QUIET AMETHYST rendered-contrast oracle', () => {
         continue;
       }
       const flags = await auditModule(r.html);
-      perModuleFlags.push({ key: r.key, title: r.title, flags });
+      perModuleFlags.push({ key: r.key, title: r.title, flags, dataGated: r.dataGated });
     }
 
-    const rendered = perModuleFlags.length;
+    const audited = perModuleFlags.length;
     const totalFlags = perModuleFlags.reduce((n, m) => n + m.flags.length, 0);
     const flaggedModules = perModuleFlags.filter((m) => m.flags.length > 0);
+    // COVERAGE HONESTY: split the audited set. `fullyRendered` modules exposed their real surface to
+    // the walker; `emptyStateOnly` modules rendered an auditable shell but their data containers are
+    // empty (effect-gated), so their populated rows/cells were NOT audited. Both are audited for
+    // chrome + empty-state contrast; only the first is honestly "fully covered".
+    const emptyStateOnly = perModuleFlags.filter((m) => m.dataGated);
+    const fullyRendered = perModuleFlags.filter((m) => !m.dataGated);
 
     // ── Write the inventory artifact (always, so it tracks the live sweep). ──────────────────────
     const outPath = join(ROOT, 'docs/superpowers/plans/quiet-amethyst-oracle-inventory.md');
@@ -398,12 +457,31 @@ describe('QUIET AMETHYST rendered-contrast oracle', () => {
     lines.push('');
     lines.push('Generated by `test/theme-rendered-contrast.test.ts` (do not hand-edit — rerun the oracle).');
     lines.push('');
-    lines.push(`- modules rendered: **${rendered}**`);
+    lines.push(`- modules audited: **${audited}**`);
+    lines.push(`  - fully rendered (data surface present): **${fullyRendered.length}**`);
+    lines.push(`  - empty-state-only (data surfaces UNAUDITED): **${emptyStateOnly.length}**`);
     lines.push(`- modules with flagged sites: **${flaggedModules.length}**`);
     lines.push(`- total flagged sites: **${totalFlags}**`);
-    lines.push(`- coverage gaps (could not render): **${coverageGaps.length}**`);
+    lines.push(`- coverage gaps (could not render an auditable surface): **${coverageGaps.length}**`);
     lines.push(`- exemptions in force: ${EXEMPT.length ? EXEMPT.map((e) => '`' + e + '`').join(', ') : '_none_'}`);
     lines.push('');
+    lines.push('> **What this oracle proves — and does not.** It is a strong regression guard for the');
+    lines.push('> rendered CHROME and EMPTY-STATE surface of every built-in module under QUIET AMETHYST');
+    lines.push('> (real Chrome cascade + `var()` resolution, WCAG contrast, light-island + gradient +');
+    lines.push('> alpha/opacity compositing). It is NOT a proof of total coverage: the empty-state-only');
+    lines.push('> modules above rendered their shell but not their populated rows/cells (those are built');
+    lines.push('> by effects `renderToStaticMarkup` never runs), and the walker has disclosed latent gaps');
+    lines.push('> (raster background-image islands, `::before`/`::after` pseudo-element text, SSR');
+    lines.push('> layout-area dependence — see `test/helpers/chrome-computed-style.ts`).');
+    lines.push('');
+    if (emptyStateOnly.length) {
+      lines.push('## Empty-state-only modules (audited shell; data surfaces UNAUDITED)');
+      lines.push('');
+      for (const m of emptyStateOnly) {
+        lines.push(`- **${m.key}** (${m.title}): ${m.dataGated}`);
+      }
+      lines.push('');
+    }
     lines.push('## Flagged sites by module');
     lines.push('');
     if (flaggedModules.length === 0) {
@@ -453,9 +531,28 @@ describe('QUIET AMETHYST rendered-contrast oracle', () => {
     // ── Console summary (visible in the vitest run). ────────────────────────────────────────────
     // eslint-disable-next-line no-console
     console.log(
-      `[amethyst-oracle] rendered=${rendered} flaggedModules=${flaggedModules.length} ` +
+      `[amethyst-oracle] audited=${audited} (fully-rendered=${fullyRendered.length} ` +
+        `empty-state-only=${emptyStateOnly.length}) flaggedModules=${flaggedModules.length} ` +
         `totalFlags=${totalFlags} coverageGaps=${coverageGaps.length} → inventory at ${outPath}`
     );
+    // COVERAGE HONESTY caveat — printed every run so the numbers above are never read as a claim of
+    // total coverage. The oracle guards rendered chrome + empty-state surfaces; it does NOT prove the
+    // contrast of data-populated rows (never server-rendered) nor the disclosed latent walker gaps.
+    // eslint-disable-next-line no-console
+    console.log(
+      `[amethyst-oracle][caveat] STRONG REGRESSION GUARD for rendered chrome/empty-state surfaces — ` +
+        `NOT a proof of total coverage: ${emptyStateOnly.length} module(s) audited in their empty-state ` +
+        `shell ONLY (populated rows/cells never render under renderToStaticMarkup); latent walker gaps ` +
+        `(raster background-image islands, ::before/::after text, SSR layout-area dependence) remain accepted.`
+    );
+    if (emptyStateOnly.length) {
+      // eslint-disable-next-line no-console
+      console.log(`[amethyst-oracle][empty-state-only] ${emptyStateOnly.length} module(s), data surfaces UNAUDITED:`);
+      for (const m of emptyStateOnly) {
+        // eslint-disable-next-line no-console
+        console.log(`[amethyst-oracle][empty-state-only] ${m.key}: ${(m.dataGated ?? '').slice(0, 140)}`);
+      }
+    }
     // Honesty rule: PRINT the coverage-gap list every run — a module the oracle could not audit is
     // never a silent clean pass. Always emit the header (and an explicit "none") so the absence of
     // gaps is an asserted fact in the log, not an ambiguous empty section.
@@ -474,7 +571,7 @@ describe('QUIET AMETHYST rendered-contrast oracle', () => {
     // The exemption list must stay small (content-intrinsic only).
     expect(EXEMPT.length, 'exemptions must stay small — content-intrinsic only').toBeLessThanOrEqual(8);
     // At least most modules must actually render (a mass render failure would hide the audit).
-    expect(rendered, 'a majority of built-in modules must server-render for the audit to be meaningful').toBeGreaterThan(
+    expect(audited, 'a majority of built-in modules must server-render for the audit to be meaningful').toBeGreaterThan(
       renderResults.length / 2
     );
 
@@ -484,4 +581,68 @@ describe('QUIET AMETHYST rendered-contrast oracle', () => {
       .join(', ');
     expect(totalFlags, `flagged contrast/light-island sites remain: ${summary}`).toBe(0);
   }, 180000);
+
+  // ── Regression: ANCESTOR OPACITY is folded into effective foreground alpha. ───────────────────
+  // An ancestor wrapper at opacity:0.55 (the CommandRail category-row pattern) uniformly dims its
+  // descendant text; the earlier walker folded only the text element's OWN opacity and missed this,
+  // so dimmed-to-unreadable text passed. #999 on the #1a1822 surface clears 4.5:1 at full alpha
+  // (~6.1:1) but drops to ~2.7:1 once the 0.55 ancestor opacity is applied — the walker must now
+  // flag it. A sibling control at full opacity with identical colour must NOT be flagged, proving the
+  // dimming (not the colour) is what the walker caught.
+  it('folds ancestor opacity into effective foreground alpha (dimmed text is flagged)', async () => {
+    const flags = await auditRenderedContrast(session.page, {
+      css: CSS,
+      theme: 'amethyst',
+      exempt: [],
+      bodyHtml:
+        '<div style="background:#1a1822;padding:8px">' +
+        '<div class="dim-wrap" style="opacity:0.55">' +
+        '<span class="dimmed-text" style="color:#999999">dimmed by ancestor opacity</span>' +
+        '</div>' +
+        '<div class="bright-wrap" style="opacity:1">' +
+        '<span class="bright-text" style="color:#999999">same colour at full opacity</span>' +
+        '</div>' +
+        '</div>'
+    });
+    const dimmed = flags.find((f) => f.kind === 'contrast' && f.descriptor.includes('dimmed-text'));
+    const bright = flags.find((f) => f.kind === 'contrast' && f.descriptor.includes('bright-text'));
+    expect(dimmed, 'text dimmed by an ancestor opacity:0.55 wrapper must be flagged for contrast').toBeTruthy();
+    expect(dimmed?.note, 'the flag must disclose that alpha/opacity compositing drove the math').toMatch(/alpha-composited/);
+    expect(bright, 'the same colour at full opacity clears the threshold and must NOT be flagged').toBeFalsy();
+  }, 60000);
+
+  // ── Regression: exemption scope is the named element + its SUBTREE, never the ancestor chain. ──
+  // An exemption on a leaf (`.ga98-geo-threat`) must suppress that element (and anything inside it),
+  // but must NOT suppress a low-contrast SIBLING or the enclosing wrapper — those chrome/text
+  // surfaces stay audited. This locks isExempt to self-or-enclosing-match and guards against a
+  // regression where a contained exemption leaks upward and silences the surface around it.
+  it('scopes exemptions to the named element/subtree, not the ancestor chain', async () => {
+    const bodyHtml =
+      '<div class="outer-row" style="background:#1a1822;padding:8px;display:flex;gap:8px;align-items:center">' +
+      // The exempt datum pill: a bright fill that WOULD be a light island, plus near-black-on-fill text.
+      '<span class="ga98-geo-threat" style="background:#22cc77;color:#0a0f1a;font-size:11px;padding:1px 8px">SEVERE</span>' +
+      // A genuinely low-contrast SIBLING that shares the row: must remain audited (not suppressed).
+      '<span class="leak-probe" style="color:#2a2a33;font-size:11px">low-contrast sibling</span>' +
+      '</div>';
+    const withExempt = await auditRenderedContrast(session.page, {
+      css: CSS,
+      theme: 'amethyst',
+      exempt: ['.ga98-geo-threat'],
+      bodyHtml
+    });
+    // The exemption suppresses the pill's own light-island + text …
+    expect(
+      withExempt.some((f) => f.descriptor.includes('ga98-geo-threat')),
+      'the named pill (and its subtree) must be exempt'
+    ).toBe(false);
+    // … but the sibling that merely shares the ancestor row is STILL flagged.
+    const sibling = withExempt.find((f) => f.kind === 'contrast' && f.descriptor.includes('leak-probe'));
+    expect(sibling, 'a low-contrast sibling of an exempt element must remain audited (no ancestor-chain leak)').toBeTruthy();
+    // Control: with NO exemption, the pill itself surfaces a flag (proving it was genuinely suppressible).
+    const noExempt = await auditRenderedContrast(session.page, { css: CSS, theme: 'amethyst', exempt: [], bodyHtml });
+    expect(
+      noExempt.some((f) => f.descriptor.includes('ga98-geo-threat')),
+      'without the exemption the pill must produce a flag — otherwise the exemption test proves nothing'
+    ).toBe(true);
+  }, 60000);
 });

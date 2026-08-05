@@ -183,6 +183,25 @@ export async function launchChrome(): Promise<ChromeSession> {
 //       on the near-black amethyst desktop — unless it (or an ancestor) matches an exemption
 //       selector. Both checks understand gradient/background-image surfaces and semi-transparent
 //       (rgba / opacity<1) layers, which the earlier backgroundColor-only walk skipped silently.
+//
+// KNOWN LATENT GAPS (ACCEPTED LIMITATIONS — this oracle is a strong regression guard for rendered
+// chrome + empty-state surfaces, NOT a proof of total contrast coverage; these are disclosed, not
+// silently ignored):
+//   1. RASTER background-image light-islands. The light-island check parses only CSS <gradient>
+//      colour stops. A `background-image:url(...)` (PNG/JPG/SVG raster, incl. data: URIs) is not
+//      decoded, so a bright bitmap tile painted onto the dark desktop is NOT caught. Gradient and
+//      solid backgrounds ARE covered; raster fills are the blind spot. (The GeoINT star-field /
+//      map tiles are the canonical example and are additionally exemption-scoped.)
+//   2. ::before / ::after PSEUDO-ELEMENT text. The walk reads each element's OWN direct text
+//      nodes; generated `content:` text (and any colour it carries) lives on a pseudo-element that
+//      `querySelectorAll('*')` never returns, so pseudo-element glyph/icon contrast is unaudited.
+//   3. SSR LAYOUT-AREA dependence. Light-island flags gate on `getBoundingClientRect()` area, and
+//      contrast large-text classification gates on the resolved font-size. Both are measured in a
+//      fixed 960px-wide headless viewport with the module's server-rendered (pre-effect) DOM. An
+//      element whose real rendered size/position differs at runtime (flex/grid that only resolves
+//      once data populates, media-query breakpoints, virtualised rows) can be mis-sized here — a
+//      sub-threshold box may be under-counted, or an off-screen node measured at 0 area. The
+//      empty-state shell is measured faithfully; populated/relaid-out geometry is not proven.
 // ───────────────────────────────────────────────────────────────────────────
 
 export interface ContrastFlag {
@@ -295,8 +314,31 @@ export async function auditRenderedContrast(page: ChromePage, opts: AuditOptions
        // surface tokens are ever lightened. (The old 0.6 sat ABOVE silver 0.527 → silver islands passed.)
        const ISLAND_CUT = Math.max(0.22, surfaceBandMax * 8);
 
-       function isExempt(el){ for(let n=el; n && n!==document.documentElement; n=n.parentElement){
-         for(const sel of EXEMPT){ try{ if(n.matches(sel)) return true; }catch(e){} } } return false; }
+       // An exemption is SCOPED to the element it names and that element's SUBTREE — nothing else.
+       // An element is exempt iff it matches an exemption selector itself, OR it lies inside the
+       // subtree of a matching element (its nearest ENCLOSING match). It is NOT exempt merely because
+       // some element beside or far below it matches; and, crucially, the ancestor CHAIN that only
+       // CONTAINS an exempt element (e.g. the rail row / panel wrapping a \`.ga98-geo-threat\` pill) is
+       // NOT itself exempt — so a leaf exemption cannot silence chrome or text above or beside it.
+       // \`Element.closest(sel)\` expresses exactly this self-or-enclosing-match relationship; the old
+       // hand-rolled ancestor walk matched the same set but read as "check the element AND all its
+       // ancestors", inviting the misreading that a contained exemption leaks upward. It does not.
+       function isExempt(el){ for(const sel of EXEMPT){ try{ if(el.closest(sel)) return true; }catch(e){} } return false; }
+       // Fold EVERY ancestor's opacity into a descendant's effective alpha. CSS opacity<1 on ANY
+       // ancestor (e.g. a CommandRail category row at opacity:0.55) uniformly dims the whole subtree
+       // it wraps — including this element's text — yet the element's OWN computed opacity does not
+       // capture an ancestor's. Walk from the element up to the root, multiplying each element's own
+       // computed opacity, to recover the real on-screen alpha the viewer perceives.
+       function effectiveOpacity(el){ let o=1; for(let n=el; n && n!==document.documentElement; n=n.parentElement){
+         const op=parseFloat(getComputedStyle(n).opacity); if(isFinite(op)) o*=op; } return o; }
+       // WCAG 2.x SC 1.4.3 EXPLICITLY exempts "inactive user interface components" from the contrast
+       // minimum: a disabled control is INTENTIONALLY dimmed (e.g. \`.ga98-report-tile:disabled{opacity:0.4}\`)
+       // to signal unavailability — that dimming is an affordance, not a defect. So text inside a
+       // disabled / aria-disabled control is not contrast-checked. This is NARROW — it fires only on a
+       // genuinely inactive control; a merely de-emphasised but still-active element (e.g. an "off"
+       // filter toggle at opacity:0.55) is NOT exempt and stays fully audited by the ancestor-opacity path.
+       function inInactiveControl(el){ for(let n=el; n && n!==document.documentElement; n=n.parentElement){
+         try{ if(n.matches(':disabled, [disabled], [aria-disabled="true"]')) return true; }catch(e){} } return false; }
        // Fix 2: parse a gradient/background-image's colour stops (computed value normalises them to
        // rgb()); returns the opaque stops, or null when the element has no gradient image.
        function gradientStops(cs){ const bi = cs.backgroundImage;
@@ -336,12 +378,18 @@ export async function auditRenderedContrast(page: ChromePage, opts: AuditOptions
          const txt = directText(el);
          if(txt){
            const fgRaw = parseRGB(cs.color);
-           if(fgRaw && fgRaw.a>0){
+           // Skip contrast for text inside an inactive (disabled) control — WCAG SC 1.4.3 exempts it.
+           if(fgRaw && fgRaw.a>0 && !inInactiveControl(el)){
              const cands = bgCandidates(el, true);
-             const elOpacity = parseFloat(cs.opacity);
-             // Fix 4: fold rgba() text alpha AND element opacity into the effective foreground alpha,
-             // composite it over each backdrop candidate — never measure alpha text at full opacity.
-             const aEff = (fgRaw.a===undefined?1:fgRaw.a) * (isFinite(elOpacity)?elOpacity:1);
+             // Fix 4 + ANCESTOR OPACITY: fold rgba() text alpha AND the ACCUMULATED opacity of this
+             // element plus every ancestor into the effective foreground alpha, then composite it over
+             // each backdrop candidate — never measure alpha/dimmed text at full opacity. An ancestor
+             // wrapper at opacity:0.55 dims its descendant text just as surely as the text's own alpha.
+             const accOpacity = effectiveOpacity(el);
+             const aEff = (fgRaw.a===undefined?1:fgRaw.a) * accOpacity;
+             // aEff===0 means an ancestor (or the element) is opacity:0 → the text is invisible, not a
+             // contrast defect; skip it rather than flagging fully-transparent text as "low contrast".
+             if(aEff>0){
              // Worst-case (lowest) contrast across gradient-stop candidates.
              let worst=Infinity, worstBg=null;
              for(const bc of cands){ const fg=over({r:fgRaw.r,g:fgRaw.g,b:fgRaw.b,a:aEff}, bc);
@@ -354,13 +402,14 @@ export async function auditRenderedContrast(page: ChromePage, opts: AuditOptions
              if(worst < floor){
                const key = 'c|'+desc(el)+'|'+txt.slice(0,24);
                if(!seen.has(key)){ seen.add(key);
-                 const alpha = (fgRaw.a<1) || (isFinite(elOpacity)&&elOpacity<1) || cands.length>1;
+                 const alpha = (fgRaw.a<1) || (accOpacity<1) || cands.length>1;
                  flags.push({kind:'contrast',descriptor:desc(el),text:txt.slice(0,60),
                    color:cs.color,bg:'rgb('+Math.round(worstBg.r)+','+Math.round(worstBg.g)+','+Math.round(worstBg.b)+')',
                    ratio:Math.round(worst*100)/100,fontSize:fsize,bold:bold,
                    gradient: cands.length>1 || undefined,
                    note: alpha ? 'alpha-composited (rgba/opacity<1 or gradient stop) — verify manually' : undefined}); }
              }
+             } // end if(aEff>0)
            }
          }
          // ── Light-island check on the element's OWN background (solid or gradient — Fix 1 + Fix 2). ──
