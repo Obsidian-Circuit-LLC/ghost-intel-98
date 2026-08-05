@@ -101,11 +101,25 @@ button:focus {
 :root[data-ga98-theme='amethyst'] button,
 :root[data-ga98-theme='amethyst'] input[type='reset'],
 :root[data-ga98-theme='amethyst'] input[type='submit'] {
-  background: var(--ga98-grey);
+  /* background-COLOR (longhand), NOT the `background` shorthand: the shorthand
+     resets background-position/-repeat, and this rule ties 98.css's
+     `.title-bar-controls button[aria-label=…]` on specificity while loading
+     later — so the shorthand would win and tile the window-control glyphs from
+     the top-left corner. Longhand leaves 98.css's glyph placement intact. */
+  background-color: var(--ga98-grey);
   color: var(--ga98-text);
   box-shadow: inset -1px -1px var(--ga98-shadow-deep), inset 1px 1px var(--ga98-shadow-light),
     inset -2px -2px var(--ga98-shadow-dark), inset 2px 2px #3a3648;
   text-shadow: none;
+}
+/* 98.css's disabled-button cue is `:disabled{color:grey}`, which the button
+   `color` above outranks — restate a dimmed label so disabled buttons stay
+   visually distinct from enabled ones under amethyst. */
+:root[data-ga98-theme='amethyst'] button:disabled,
+:root[data-ga98-theme='amethyst'] input[type='reset']:disabled,
+:root[data-ga98-theme='amethyst'] input[type='submit']:disabled,
+:root[data-ga98-theme='amethyst'] :disabled + label {
+  color: var(--ga98-text-dim);
 }
 :root[data-ga98-theme='amethyst'] input[type='text'],
 :root[data-ga98-theme='amethyst'] input[type='search'],
@@ -212,13 +226,13 @@ button:focus {
    98.css draws every control glyph — title-bar Minimize/Maximize/Restore/Close,
    the select dropdown arrow, the checkbox/radio check-mark & dot, the scrollbar
    arrows, the tree-view +/- marker — as a hardcoded BLACK (`fill='%23000'`) SVG
-   data-URI. On the amethyst near-black surface a black glyph is invisible, and
-   the amethyst `button { background: … }` shorthand above further flattens the
-   title-bar buttons. Re-supply each glyph as a light-fill (`%23efeaff`, the
-   amethyst `--ga98-titlebar-text` ink) data-URI so the icon reads on dark. These
-   are amethyst-only (the gate never matches classic), so classic parity is
-   untouched. `background-image` only — the base rules' background-position /
-   -repeat (higher specificity than the `button` shorthand) still place them.
+   data-URI. On the amethyst near-black surface a black glyph is invisible.
+   Re-supply each glyph as a light-fill (`%23efeaff`, the amethyst
+   `--ga98-titlebar-text` ink) data-URI so the icon reads on dark. These are
+   amethyst-only (the gate never matches classic), so classic parity is
+   untouched. `background-image` only — because the amethyst `button` rule uses
+   `background-color` (longhand, above), 98.css's per-glyph background-position /
+   background-repeat survive and place these correctly (no tiling).
    ============================================================================ */
 
 /* Native form-control internals (checkbox/radio boxes the app renders with

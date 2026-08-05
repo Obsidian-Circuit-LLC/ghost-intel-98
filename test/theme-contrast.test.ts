@@ -132,3 +132,19 @@ describe('LOCKED honesty tokens — badge ink legible on its own amber (>= 4.5:1
     });
   }
 });
+
+describe('LOCKED status-error text on its skinnable error-tint surface — composite legible (>= 4.5:1)', () => {
+  // ModuleErrorBoundary paints the LOCKED --ga98-status-error foreground on the
+  // (deliberately skinnable) --ga98-status-error-tint surface. The per-token gates
+  // above never test that rendered pairing, so guard the composite directly: if a
+  // future retune of either token regresses the error stamp's legibility, this fails.
+  for (const theme of [null, 'amethyst'] as const) {
+    it(`${theme ?? 'classic'}: --ga98-status-error vs --ga98-status-error-tint clears 4.5:1`, async () => {
+      await setTheme(theme);
+      const fg = lumFromRgbTriplet(parseRgb(await resolvedRgb('--ga98-status-error')));
+      const tint = lumFromRgbTriplet(parseRgb(await resolvedRgb('--ga98-status-error-tint')));
+      const r = contrast(fg, tint);
+      expect(r, `status-error vs status-error-tint = ${r.toFixed(3)}`).toBeGreaterThanOrEqual(4.5);
+    });
+  }
+});
