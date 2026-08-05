@@ -26,12 +26,12 @@ Per-row `target` is the deterministic suggested mapping (rule-derived from the c
 | `src/renderer/modules/whiteboard/WhiteboardModule.tsx:254` | `#37474f` | content-intrinsic | `allow-list` |
 | `src/renderer/modules/whiteboard/WhiteboardModule.tsx:255` | `#fff` | content-intrinsic | `allow-list` |
 | `src/renderer/modules/whiteboard/WhiteboardModule.tsx:255` | `#37474f` | content-intrinsic | `allow-list` |
-| `src/renderer/modules/whiteboard/WhiteboardModule.tsx:301` | `#000080` | palette | `--ga98-blue` |
-| `src/renderer/modules/whiteboard/WhiteboardModule.tsx:302` | `rgba(0,0,0,0.3)` | palette | `--ga98-shadow-deep` |
-| `src/renderer/modules/whiteboard/WhiteboardModule.tsx:306` | `#fff` | palette | `--ga98-text` |
-| `src/renderer/modules/whiteboard/WhiteboardModule.tsx:311` | `rgba(255,255,255,0.85)` | palette | `--ga98-shadow-light` |
-| `src/renderer/modules/whiteboard/WhiteboardModule.tsx:320` | `rgba(0,0,0,0.35)` | palette | `--ga98-shadow-deep` |
-| `src/renderer/modules/whiteboard/WhiteboardModule.tsx:331` | `#000080` | semantic | `--ga98-status-info` |
+| `src/renderer/modules/whiteboard/WhiteboardModule.tsx:301` | `#000080` | content-intrinsic | `allow-list` |
+| `src/renderer/modules/whiteboard/WhiteboardModule.tsx:302` | `rgba(0,0,0,0.3)` | content-intrinsic | `allow-list` |
+| `src/renderer/modules/whiteboard/WhiteboardModule.tsx:306` | `#fff` | content-intrinsic | `allow-list` |
+| `src/renderer/modules/whiteboard/WhiteboardModule.tsx:311` | `rgba(255,255,255,0.85)` | content-intrinsic | `allow-list` |
+| `src/renderer/modules/whiteboard/WhiteboardModule.tsx:320` | `rgba(0,0,0,0.35)` | content-intrinsic | `allow-list` |
+| `src/renderer/modules/whiteboard/WhiteboardModule.tsx:331` | `#000080` | content-intrinsic | `allow-list` |
 | `src/renderer/App.tsx:123` | `#008080` | palette | `--ga98-desktop-bg` |
 | `src/renderer/modules/briefcase/BriefcaseModule.tsx:104` | `#666` | palette | `--ga98-text-dim` |
 | `src/renderer/styles/98.overrides.css:23` | `grey` | palette | `--ga98-shadow-dark` |
@@ -2914,7 +2914,7 @@ Deduped content-intrinsic colour literals (theme-invariant). Task 10 / Task 9 no
 const THEME_COLOR_ALLOWLIST = [
   '#000',  // src/renderer/modules/calendar/CalendarModule.tsx, src/renderer/modules/chess/ChessModule.tsx, src/renderer/modules/investigation-graph/InvestigationGraphModule.tsx, src/renderer/modules/minesweeper/MinesweeperModule.tsx, src/renderer/modules/my-documents/file-icons.tsx, src/renderer/shell/ClockWidget.tsx, src/renderer/shell/Icon.tsx
   '#000000',  // src/renderer/modules/minesweeper/MinesweeperModule.tsx
-  '#000080',  // src/renderer/modules/calendar/CalendarModule.tsx, src/renderer/modules/minesweeper/MinesweeperModule.tsx
+  '#000080',  // src/renderer/modules/calendar/CalendarModule.tsx, src/renderer/modules/minesweeper/MinesweeperModule.tsx, src/renderer/modules/whiteboard/WhiteboardModule.tsx
   '#0000ff',  // src/renderer/modules/minesweeper/MinesweeperModule.tsx
   '#003300',  // src/renderer/modules/markets/MarketsModule.tsx
   '#006000',  // src/renderer/modules/calendar/CalendarModule.tsx
@@ -3087,7 +3087,7 @@ const THEME_COLOR_ALLOWLIST = [
   'rgba(93,58,125,0.15)',  // src/renderer/modules/geoint/CommandRail.tsx (located-count tint)
   'rgba(255,255,255,.7)',  // src/renderer/modules/geoint/MapGL.tsx (marker cluster-glow ring — content-intrinsic map glyph)
   'rgba(0,0,0,.4)',  // src/renderer/modules/geoint/GeoIntModule.tsx (story-controls drop shadow — neutral)
-  'rgba(0,0,0,0.3)',  // src/renderer/modules/geoint/SaveEventDialog.tsx (modal scrim — neutral)
+  'rgba(0,0,0,0.3)',  // src/renderer/modules/geoint/SaveEventDialog.tsx (modal scrim — neutral), src/renderer/modules/whiteboard/WhiteboardModule.tsx (node-card drop shadow)
   // Task 8: long-tail game-piece / terminal-glyph intrinsics left hardcoded (theme-invariant).
   // Solitaire is a green-felt card game: the felt + playing-card faces/pips/backs are the game's
   // physical objects, not chrome, so they render identically under both themes (only the .ga98-sol-bar
@@ -3099,5 +3099,13 @@ const THEME_COLOR_ALLOWLIST = [
   '#1a3fa0',  // src/renderer/styles/theme.css (.ga98-card-back weave)
   '#2a5fd0',  // src/renderer/styles/theme.css (.ga98-card-back weave)
   '#aaffaa',  // src/renderer/modules/dialterm/DialTermModule.tsx (terminal green phosphor glyphs)
+  // Task 8: Whiteboard node cards are theme-invariant coloured mind-map objects, not app chrome.
+  // A card's body/head come from the per-node user-chosen NODE_COLORS palette (node-visual.ts); the
+  // card renders identically under classic and amethyst, legible on the tokenised dark canvas
+  // (--ga98-recessed-bg). Its self-consistent trim is therefore content-intrinsic, not palette:
+  // #000080 = connection-source border + link-node ink (navy on the light card body); #fff = header
+  // label on the coloured header; the rgba pair = node drop shadow + swatch borders. Left hardcoded.
+  'rgba(0,0,0,0.35)',  // src/renderer/modules/whiteboard/WhiteboardModule.tsx (colour-menu swatch border)
+  'rgba(255,255,255,0.85)',  // src/renderer/modules/whiteboard/WhiteboardModule.tsx (header swatch border)
 ];
 ```
