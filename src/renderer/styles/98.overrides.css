@@ -62,6 +62,150 @@ button:focus {
   background: var(--ga98-shadow-dark);
 }
 
+/* ============================================================================
+   QUIET AMETHYST — dark 98.css control override sheet (plan Task 4).
+
+   The bundled `98.css` hardcodes every control colour (silver surfaces, white
+   fields, navy selection) with NO custom properties, so a var()-only theme
+   cannot reach them. This block, gated on `[data-ga98-theme='amethyst']` and
+   loaded AFTER 98.css (see main.tsx import order), dark-restyles every common
+   control. Classic is untouched (the gate never matches).
+
+   Bevel box-shadows are rebuilt from the amethyst surface tones so the raised/
+   sunken 3-D edges read against the near-black field. Palette tokens come from
+   theme.css; the three control-local shades below are derived from the palette.
+   ============================================================================ */
+:root[data-ga98-theme='amethyst'] {
+  --ga98-field-bg: #211d2b;
+  --ga98-recessed-bg: #141119;
+  --ga98-select-bg: #4a3568;
+}
+:root[data-ga98-theme='amethyst'] .window {
+  background: var(--ga98-grey);
+  box-shadow: inset -1px -1px var(--ga98-shadow-deep), inset 1px 1px var(--ga98-shadow-light),
+    inset -2px -2px var(--ga98-shadow-dark), inset 2px 2px var(--ga98-shadow-light);
+}
+:root[data-ga98-theme='amethyst'] .window-body,
+:root[data-ga98-theme='amethyst'] .window {
+  color: var(--ga98-text);
+}
+:root[data-ga98-theme='amethyst'] .title-bar {
+  background: linear-gradient(90deg, var(--ga98-blue), var(--ga98-titlebar-to));
+}
+:root[data-ga98-theme='amethyst'] .title-bar.inactive {
+  background: linear-gradient(90deg, #2a2733, #3a3644);
+}
+:root[data-ga98-theme='amethyst'] .title-bar-text {
+  color: var(--ga98-titlebar-text);
+}
+:root[data-ga98-theme='amethyst'] button,
+:root[data-ga98-theme='amethyst'] input[type='reset'],
+:root[data-ga98-theme='amethyst'] input[type='submit'] {
+  background: var(--ga98-grey);
+  color: var(--ga98-text);
+  box-shadow: inset -1px -1px var(--ga98-shadow-deep), inset 1px 1px var(--ga98-shadow-light),
+    inset -2px -2px var(--ga98-shadow-dark), inset 2px 2px #3a3648;
+  text-shadow: none;
+}
+:root[data-ga98-theme='amethyst'] input[type='text'],
+:root[data-ga98-theme='amethyst'] input[type='search'],
+:root[data-ga98-theme='amethyst'] input[type='password'],
+:root[data-ga98-theme='amethyst'] input[type='email'],
+:root[data-ga98-theme='amethyst'] input[type='number'],
+:root[data-ga98-theme='amethyst'] input[type='tel'],
+:root[data-ga98-theme='amethyst'] input[type='url'],
+:root[data-ga98-theme='amethyst'] textarea,
+:root[data-ga98-theme='amethyst'] select {
+  background-color: var(--ga98-field-bg);
+  color: var(--ga98-text);
+}
+/* 98.css repaints disabled/read-only fields `silver`/`#fff` (light islands) — restate dark. */
+:root[data-ga98-theme='amethyst'] input[type='text']:disabled,
+:root[data-ga98-theme='amethyst'] input[type='text']:read-only,
+:root[data-ga98-theme='amethyst'] input[type='search']:disabled,
+:root[data-ga98-theme='amethyst'] input[type='search']:read-only,
+:root[data-ga98-theme='amethyst'] input[type='password']:disabled,
+:root[data-ga98-theme='amethyst'] input[type='password']:read-only,
+:root[data-ga98-theme='amethyst'] input[type='email']:disabled,
+:root[data-ga98-theme='amethyst'] input[type='email']:read-only,
+:root[data-ga98-theme='amethyst'] input[type='number']:disabled,
+:root[data-ga98-theme='amethyst'] input[type='number']:read-only,
+:root[data-ga98-theme='amethyst'] input[type='tel']:disabled,
+:root[data-ga98-theme='amethyst'] input[type='tel']:read-only,
+:root[data-ga98-theme='amethyst'] input[type='url']:disabled,
+:root[data-ga98-theme='amethyst'] input[type='url']:read-only,
+:root[data-ga98-theme='amethyst'] textarea:disabled {
+  background-color: var(--ga98-recessed-bg);
+  color: var(--ga98-text-dim);
+}
+:root[data-ga98-theme='amethyst'] select:focus {
+  background-color: var(--ga98-select-bg);
+  color: var(--ga98-titlebar-text);
+}
+:root[data-ga98-theme='amethyst'] select:focus option {
+  background-color: var(--ga98-field-bg);
+  color: var(--ga98-text);
+}
+:root[data-ga98-theme='amethyst'] .sunken-panel,
+:root[data-ga98-theme='amethyst'] table,
+:root[data-ga98-theme='amethyst'] pre,
+:root[data-ga98-theme='amethyst'] ul.tree-view,
+:root[data-ga98-theme='amethyst'] .field-border {
+  background-color: var(--ga98-recessed-bg);
+  color: var(--ga98-text);
+}
+:root[data-ga98-theme='amethyst'] table > thead > tr > * {
+  background: var(--ga98-grey);
+  color: var(--ga98-text);
+}
+:root[data-ga98-theme='amethyst'] table > tbody > tr.highlighted,
+:root[data-ga98-theme='amethyst'] ul.tree-view a:focus {
+  background-color: var(--ga98-select-bg);
+  color: var(--ga98-titlebar-text);
+}
+:root[data-ga98-theme='amethyst'] ul.tree-view a {
+  color: var(--ga98-text);
+}
+:root[data-ga98-theme='amethyst'] a {
+  color: var(--ga98-accent);
+}
+:root[data-ga98-theme='amethyst'] .status-bar-field {
+  color: var(--ga98-text);
+  box-shadow: inset -1px -1px var(--ga98-shadow-light), inset 1px 1px var(--ga98-shadow-dark);
+}
+/* 98.css paints these two field frames `silver` — light islands under amethyst; restate dark. */
+:root[data-ga98-theme='amethyst'] .field-border-disabled,
+:root[data-ga98-theme='amethyst'] .status-field-border {
+  background: var(--ga98-recessed-bg);
+  color: var(--ga98-text-dim);
+}
+:root[data-ga98-theme='amethyst'] menu[role='tablist'] > li {
+  background: var(--ga98-grey);
+}
+:root[data-ga98-theme='amethyst'] menu[role='tablist'] > li > a,
+:root[data-ga98-theme='amethyst'] menu[role='tablist'] > li[aria-selected='true'] > a {
+  color: var(--ga98-text);
+}
+:root[data-ga98-theme='amethyst'] menu[role='tablist'] > li[aria-selected='true'] {
+  background-color: var(--ga98-grey);
+}
+:root[data-ga98-theme='amethyst'] legend {
+  background: var(--ga98-grey);
+  color: var(--ga98-text);
+}
+:root[data-ga98-theme='amethyst'] .progress-indicator > .progress-indicator-bar {
+  background-color: var(--ga98-accent);
+}
+:root[data-ga98-theme='amethyst'] ::-webkit-scrollbar-thumb {
+  background-color: var(--ga98-shadow-light);
+  box-shadow: inset -1px -1px var(--ga98-shadow-deep), inset 1px 1px #3a3648,
+    inset -2px -2px var(--ga98-shadow-dark), inset 2px 2px var(--ga98-grey);
+}
+:root[data-ga98-theme='amethyst'] ::-webkit-scrollbar-corner,
+:root[data-ga98-theme='amethyst'] ::-webkit-scrollbar-track {
+  background: var(--ga98-recessed-bg);
+}
+
 /* ---- Login lock screen ---- */
 .ga98-lock-overlay {
   position: absolute;
