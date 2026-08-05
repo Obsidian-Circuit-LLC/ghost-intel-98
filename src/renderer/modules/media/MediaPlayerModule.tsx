@@ -447,7 +447,7 @@ export function MediaPlayerModule({ spec }: { spec: WindowSpec }): JSX.Element {
             <fieldset className="ga98-jukebox-pane">
               <legend>Library ({queue.length})</legend>
               {queue.length === 0
-                ? <p style={{ fontSize: 11, color: '#555' }}>No tracks. Add a music folder or open files.</p>
+                ? <p style={{ fontSize: 11, color: 'var(--ga98-text-dim)' }}>No tracks. Add a music folder or open files.</p>
                 : <ul className="ga98-list ga98-jukebox-list">
                     {queue.map((q, i) => (
                       <li key={`${q.path ?? q.url}-${i}`} data-active={i === current}
