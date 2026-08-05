@@ -102,6 +102,15 @@
      inline style). NOT locked (skinnable palette detail). */
   --ga98-badge-error-ink: #a00000; /* X-session "Expired ✗" badge + X test status-error text */
   --ga98-badge-warn-ink: #a06000;  /* X test status inconclusive/warn text */
+  /* ── Rendered-contrast oracle sweep — purpose tokens ────────────────────────────────────
+     Each classic value equals the ORIGINAL inline/stylesheet literal EXACTLY (byte-for-byte
+     classic parity is sacred); the amethyst block redefines each for the near-black skin. All
+     are INLINE-style sites (a stylesheet rule cannot override an inline style) except where a
+     class-scoped amethyst override is added directly. NOT locked (skinnable palette detail). */
+  --ga98-link-ext: #0000aa;        /* Help ExtLink / external-reference hyperlink ink */
+  --ga98-role-assistant: #400080;  /* AI-assistant role/memory label ink (assistant purple) */
+  --ga98-geoint-note: #6b7688;     /* GeoINT command-rail dim source-caption text (dark cockpit) */
+  --ga98-neg-ink: #a00;            /* negative/error inline ink (Markets loss %, Journal pin error) */
 }
 
 html, body, #root {
@@ -234,6 +243,11 @@ input, textarea, [contenteditable="true"], .ga98-selectable {
   /* Task B (finish) status-badge inks — amethyst variants (classic-parity values in base :root). */
   --ga98-badge-error-ink: #ff7b7b; /* bright red badge ink, >=4.5:1 on the #1a1822 surface */
   --ga98-badge-warn-ink: #f0a94a;  /* bright amber warn ink, legible on near-black */
+  /* Rendered-contrast oracle sweep — amethyst variants (classic-parity values in base :root). */
+  --ga98-link-ext: var(--ga98-accent);       /* glowing accent link on the near-black skin */
+  --ga98-role-assistant: var(--ga98-accent); /* assistant label → accent, legible bold on dark */
+  --ga98-geoint-note: var(--ga98-text-dim);  /* dim caption, >=4.5:1 on the #11161f cockpit panel */
+  --ga98-neg-ink: #ff8a8a;                   /* light red loss/error ink, legible on near-black */
 }
 
 /* ── QUIET AMETHYST — Task 8 long-tail utility classes ──────────────────────────────────────────
@@ -1331,6 +1345,9 @@ input.ga98-text, select.ga98-text {
 .ga98-mkt-quotes { display: flex; flex-direction: column; gap: 6px; }
 .ga98-mkt-table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .ga98-mkt-table td { padding: 1px 4px; border-bottom: 1px solid #d8d8d8; }
+/* Amethyst: the #d8d8d8 row divider is a light hairline that reads as a bright rule on the
+   near-black table. Classic is untouched; restate the divider as the dark inset groove. */
+:root[data-ga98-theme='amethyst'] .ga98-mkt-table td { border-bottom-color: var(--ga98-shadow-light); }
 .ga98-mkt-px { text-align: right; font-family: 'Courier New', monospace; }
 .ga98-mkt-chg { text-align: right; font-family: 'Courier New', monospace; width: 76px; }
 
@@ -1485,6 +1502,13 @@ input.ga98-text, select.ga98-text {
 .ga98-bm-link-open:hover { color: #0a0acc; }
 .ga98-bm-link-edit { min-width: 0; padding: 0 5px; font-size: 11px; }
 .ga98-bm-add-link { margin-top: 4px; font-size: 11px; }
+/* Amethyst: the bookmark card is themed chrome. Classic keeps the navy link ink (#00188f / #0a0acc
+   hover) and the #d8d8d8 light row-hover; under the near-black skin those read as dark-navy-on-dark
+   (unreadable link) and a bright hover island. The amethyst-only overrides restate the link as the
+   glowing accent (brightening on hover) and the hover as the dark raised surface. Classic untouched. */
+:root[data-ga98-theme='amethyst'] .ga98-bm-link:hover { background: var(--ga98-row-hover); }
+:root[data-ga98-theme='amethyst'] .ga98-bm-link-open { color: var(--ga98-accent); }
+:root[data-ga98-theme='amethyst'] .ga98-bm-link-open:hover { color: var(--ga98-titlebar-text); }
 
 /* ── Sticky notes (Win95-style desktop note layer) ─────────────────────────────
    Full-screen overlay that is click-through (pointer-events:none); only the notes and
@@ -1626,6 +1650,22 @@ input.ga98-text, select.ga98-text {
 .ga98-invoices-list li.selected { background: var(--ga98-blue); color: #fff; }
 .ga98-invoices-open { flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ga98-invoices-empty { color: var(--ga98-shadow-dark); padding: 8px; font-style: italic; }
+/* Amethyst: shadow-dark (#0e0c14) is a bevel ink — dark-on-dark as text here. Classic (#808080 on
+   the light list) is untouched; the amethyst-only override restates a legible dim. */
+:root[data-ga98-theme='amethyst'] .ga98-invoices-empty,
+:root[data-ga98-theme='amethyst'] .ga98-invoices-placeholder { color: var(--ga98-text-dim); }
+/* AI-assistant empty-state hint. Classic keeps the dim-soft (#666) helper ink. It sits on the
+   chat scroll pane, which under amethyst is the raised shadow-light surface (#2c2938) — dim-soft's
+   amethyst value (text-dim) drops to ~4.05:1 there, so the amethyst-only override restates it as
+   full body text to clear the WCAG floor. Classic is untouched. */
+.ga98-ai-empty-hint { color: var(--ga98-dim-soft); }
+:root[data-ga98-theme='amethyst'] .ga98-ai-empty-hint { color: var(--ga98-text); }
+/* Reminders "jump-to" highlight flash. Classic keeps the canonical yellow-marker band (#ffff00 /
+   #000). Under amethyst a full-width #ffff00 row is a bright island on the near-black list, so the
+   amethyst-only override flashes the accent band with dark ink (dark-on-accent clears the floor and
+   reads as a vivid selection). Classic is untouched. */
+.ga98-reminder-hit { background: #ffff00; color: #000; }
+:root[data-ga98-theme='amethyst'] .ga98-reminder-hit { background: var(--ga98-accent); color: var(--ga98-desktop-bg); }
 .ga98-invoices-editor { flex: 1; display: flex; flex-direction: column; overflow-y: auto; padding: 8px; }
 .ga98-invoices-actions { display: flex; gap: 6px; margin-bottom: 8px; }
 .ga98-invoices-placeholder { margin: auto; color: var(--ga98-shadow-dark); }
@@ -1749,6 +1789,11 @@ input.ga98-text, select.ga98-text {
   color: var(--ga98-shadow-dark); padding: 2px 2px 0; border-top: 1px solid var(--ga98-shadow-dark);
 }
 .ga98-calc-status-result { font-family: 'Courier New', monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Amethyst: the statusbar (+ info-grid keys) set their ink to shadow-dark (#0e0c14) — a bevel ink
+   that reads dark-on-dark once the surface flips. Classic (#808080 dim status) is untouched; the
+   amethyst-only override restates a legible dim. */
+:root[data-ga98-theme='amethyst'] .ga98-calc-statusbar,
+:root[data-ga98-theme='amethyst'] .ga98-calc-info-grid dt { color: var(--ga98-text-dim); }
 .ga98-calc-history-drawer {
   position: absolute; inset: 0; z-index: 5;
   display: flex; flex-direction: column; padding: 6px; background: var(--ga98-grey);

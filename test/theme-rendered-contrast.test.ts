@@ -69,13 +69,20 @@ const EXEMPT: string[] = [
   // GAME-BOARD CONTENT (a named card game), not theming chrome. A white card under a dark skin is a
   // card, exactly the "named game board" the honesty rule cites. Tightly scoped to `.ga98-card`
   // (faces, backs, empty-foundation suit watermark) so it never masks a real chrome light island.
-  '.ga98-card'
-  // NOTE — Chess pieces/squares (white glyphs on the canonical #f0d9b1 / wood squares) are ALSO
-  // content-intrinsic game-board colour, but the chess board paints squares/pieces with INLINE
-  // styles and exposes no stable class hook to scope an exemption to. Rather than fabricate a
-  // matching selector (which would risk over-exempting real chrome), those sites are LEFT IN the
-  // inventory below and flagged for the next phase to resolve (add a board class, or accept as
-  // content). Minesweeper rendered no flagged content at static mount, so it needs no exemption.
+  '.ga98-card',
+  // Chess board: the canonical lichess/chess.com two-tone board (#f0d9b5 light / #b58863 dark
+  // squares) with white pieces (#fff) that carry a 2px black text-shadow outline making them
+  // legible on the light squares (the WCAG fill-vs-bg ratio the walker computes ignores the
+  // outline). This is content-intrinsic NAMED-GAME-BOARD colour, exactly the honesty-rule cite.
+  // A stable class hook (`ga98-chess-board`, added in ChessModule) scopes the exemption to the
+  // grid so it never masks a real chrome light island elsewhere.
+  '.ga98-chess-board',
+  // PDF Signer capture pad: a WYSIWYG white "paper" canvas you sign in black ink; the captured
+  // strokes are composited onto the white PDF page, so the pad MUST match the output medium
+  // (black-on-white). This is content-paper (the "print paper" cite), not chrome. Scoped to the
+  // single `.ga98-sig-canvas` element.
+  '.ga98-sig-canvas'
+  // Minesweeper rendered no flagged content at static mount, so it needs no exemption.
 ];
 
 interface ModuleRenderResult {

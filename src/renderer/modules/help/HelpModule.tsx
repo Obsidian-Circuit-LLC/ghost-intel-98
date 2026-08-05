@@ -111,7 +111,7 @@ function ExtLink({ href }: { href: string }): JSX.Element {
     <a
       href={href}
       onClick={(e) => { e.preventDefault(); void window.api.system.openExternal(href); }}
-      style={{ color: '#0000aa' }}
+      style={{ color: 'var(--ga98-link-ext)' }}
     >{href}</a>
   );
 }

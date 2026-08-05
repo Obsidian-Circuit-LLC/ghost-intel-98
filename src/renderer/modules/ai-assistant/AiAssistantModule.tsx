@@ -809,7 +809,7 @@ export function AiAssistantModule(): JSX.Element {
         onDrop={handleChatDrop}
       >
         {messages.length === 0 && (
-          <div style={{ color: 'var(--ga98-dim-soft)', padding: 16 }}>
+          <div className="ga98-ai-empty-hint" style={{ padding: 16 }}>
             Set a provider in Settings, optionally pick a case for context, and type below.
             Selecting a case sends its metadata (description, tasks, links, timeline, file list).
             Tick <b>Include file contents</b> to also send note &amp; text-attachment bodies — with a
@@ -830,7 +830,7 @@ export function AiAssistantModule(): JSX.Element {
             }}
             title="Drag to select text, or right-click to copy"
           >
-            <div style={{ fontSize: 11, fontWeight: 'bold', color: m.role === 'user' ? '#000080' : '#400080' }}>
+            <div style={{ fontSize: 11, fontWeight: 'bold', color: m.role === 'user' ? 'var(--ga98-navy-accent)' : 'var(--ga98-role-assistant)' }}>
               {m.role === 'user' ? 'You' : 'Assistant'}{m.streaming ? ' · streaming…' : ''}
             </div>
             {formatted && m.role === 'assistant'
@@ -935,7 +935,7 @@ export function AiAssistantModule(): JSX.Element {
             {profileGroups.map((g) => (
               <div key={g.scope} style={{ marginBottom: 10 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span className="ga98-t8-accent-text" style={{ fontSize: 11, fontWeight: 'bold', color: '#400080' }}>{g.label}</span>
+                  <span className="ga98-t8-accent-text" style={{ fontSize: 11, fontWeight: 'bold', color: 'var(--ga98-role-assistant)' }}>{g.label}</span>
                   <button style={{ fontSize: 10 }} onClick={() => void wipeMemory(g.scope, `everything learned under "${g.label}"`)} title={`Erase everything learned under ${g.label}`}>
                     Wipe
                   </button>
@@ -977,7 +977,7 @@ export function AiAssistantModule(): JSX.Element {
               return (
                 <div key={`summary:${scope}`} style={{ marginBottom: 10 }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: 11, fontWeight: 'bold', color: '#400080' }}>{label}</span>
+                    <span style={{ fontSize: 11, fontWeight: 'bold', color: 'var(--ga98-role-assistant)' }}>{label}</span>
                     <button style={{ fontSize: 10 }} onClick={() => void wipeMemory(scope, `everything learned under "${label}"`)} title={`Erase everything learned under ${label}`}>
                       Wipe
                     </button>

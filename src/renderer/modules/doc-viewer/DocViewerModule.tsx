@@ -44,8 +44,10 @@ const IMAGE_EXT = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'tif', 'ti
 const VIDEO_EXT = ['mp4', 'm4v', 'webm', 'ogv', 'mov'];
 const AUDIO_EXT = ['mp3', 'm4a', 'aac', 'flac', 'wav', 'ogg', 'oga', 'opus'];
 
-function kindFor(name: string): Kind {
-  const ext = name.toLowerCase().split('.').pop() ?? '';
+function kindFor(name: string | undefined): Kind {
+  // Degrade gracefully when opened without a name (e.g. a spec with no file yet): fall through to
+  // the text/loading chrome rather than throwing on `undefined.toLowerCase()`.
+  const ext = (name ?? '').toLowerCase().split('.').pop() ?? '';
   if (ext === 'pdf') return 'pdf';
   if (IMAGE_EXT.includes(ext)) return 'image';
   if (VIDEO_EXT.includes(ext)) return 'video';

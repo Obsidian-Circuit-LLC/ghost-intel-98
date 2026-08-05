@@ -146,7 +146,7 @@ export function JournalModule(): JSX.Element {
                 style={{ width: '100%', marginBottom: 6 }}
               />
             )}
-            {pinError && <div style={{ color: '#a00', fontSize: 11, marginBottom: 6 }}>{pinError}</div>}
+            {pinError && <div style={{ color: 'var(--ga98-neg-ink)', fontSize: 11, marginBottom: 6 }}>{pinError}</div>}
             <button type="submit" style={{ width: '100%' }}>{setting ? 'Set PIN & Open' : 'Unlock'}</button>
           </form>
         </div>

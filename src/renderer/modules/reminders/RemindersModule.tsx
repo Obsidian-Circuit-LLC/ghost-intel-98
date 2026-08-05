@@ -65,7 +65,7 @@ export function RemindersModule({ highlight }: Props): JSX.Element {
         <ul className="ga98-list">
           {list.length === 0 && <li style={{ color: 'var(--ga98-dim-soft)' }}>None.</li>}
           {list.map((r) => (
-            <li key={r.id} style={r.id === highlight ? { background: '#ffff00', color: '#000' } : undefined}>
+            <li key={r.id} className={r.id === highlight ? 'ga98-reminder-hit' : undefined}>
               <span style={{ flex: 1 }}>
                 <b>{r.title}</b>{r.body ? ` — ${r.body}` : ''}
                 <span style={{ opacity: 0.7 }}> · {new Date(r.fireAt).toLocaleString()}</span>

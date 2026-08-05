@@ -113,7 +113,7 @@ export function ChessModule(): JSX.Element {
         <strong>{status}</strong>
         <button onClick={newGame}>New game</button>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 52px)', gridTemplateRows: 'repeat(8, 52px)', border: '3px solid #5d4037', userSelect: 'none' }}>
+      <div className="ga98-chess-board" style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 52px)', gridTemplateRows: 'repeat(8, 52px)', border: '3px solid #5d4037', userSelect: 'none' }}>
         {order.map((i) => {
           const p = state.board[i];
           const [r, c] = RC(i);

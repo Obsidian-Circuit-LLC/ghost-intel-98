@@ -57,7 +57,7 @@ const legendStyle: React.CSSProperties = {
   fontSize: 11, fontWeight: 'bold', letterSpacing: 0.5, textTransform: 'uppercase',
   color: '#8fb7e0', margin: '0 0 6px'
 };
-const noteStyle: React.CSSProperties = { fontSize: 10, color: '#6b7688', margin: '6px 0 0' };
+const noteStyle: React.CSSProperties = { fontSize: 10, color: 'var(--ga98-geoint-note)', margin: '6px 0 0' };
 const factLabelStyle: React.CSSProperties = { fontSize: 10, color: '#8a96a8', textTransform: 'uppercase', letterSpacing: 0.4 };
 const factValueStyle: React.CSSProperties = { fontSize: 12, color: '#e6edf6', fontWeight: 'bold', wordBreak: 'break-word' };
 
@@ -287,7 +287,7 @@ export function EventDetailsPanel(props: EventDetailsPanelProps): JSX.Element | 
             style={{ fontSize: 11, color: '#8fb7e0', wordBreak: 'break-all' }}
           >Open in source ↗</a>
         ) : (
-          <span style={{ fontSize: 11, color: '#6b7688' }}>No source link.</span>
+          <span style={{ fontSize: 11, color: 'var(--ga98-geoint-note)' }}>No source link.</span>
         )}
         <p style={noteStyle}>ID: {item.id} · Source: {item.sourceId}{absDate ? ` · Updated: ${absDate}` : ''}</p>
       </div>

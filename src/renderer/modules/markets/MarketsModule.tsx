@@ -101,7 +101,7 @@ export function MarketsModule(): JSX.Element {
         <legend>Network</legend>
         <div className="field-row" style={{ gap: 6, alignItems: 'center' }}>
           <button onClick={() => patchMarkets({ networkEnabled: !net })} aria-pressed={net}
-            style={net ? { borderStyle: 'inset', background: '#bfe0bf', color: '#003300', fontWeight: 'bold' } : { fontWeight: 'bold' }}>
+            style={net ? { borderStyle: 'inset', background: 'var(--ga98-ok-surface)', color: 'var(--ga98-ok-ink)', fontWeight: 'bold' } : { fontWeight: 'bold' }}>
             {net ? 'Disable market data' : 'Enable market data'}
           </button>
           <span style={{ fontSize: 11, color: net ? 'var(--ga98-ok-dot)' : 'var(--ga98-danger-ink)' }}>{net ? '● on' : '○ off'}</span>
@@ -161,7 +161,7 @@ export function MarketsModule(): JSX.Element {
                   <tr key={`${q.symbol}-${i}`}>
                     <td className="ga98-mkt-sym" title={q.source}>{q.label}</td>
                     <td className="ga98-mkt-px">{fmtNum(q.price)}</td>
-                    <td className="ga98-mkt-chg" style={{ color: q.changePct == null ? 'var(--ga98-dim-mid)' : q.changePct >= 0 ? '#060' : '#a00' }}>{fmtPct(q.changePct)}</td>
+                    <td className="ga98-mkt-chg" style={{ color: q.changePct == null ? 'var(--ga98-dim-mid)' : q.changePct >= 0 ? 'var(--ga98-ok-dot)' : 'var(--ga98-neg-ink)' }}>{fmtPct(q.changePct)}</td>
                   </tr>
                 ))}
               </tbody>

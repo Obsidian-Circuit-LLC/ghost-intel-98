@@ -76,7 +76,7 @@ const railLegendStyle: React.CSSProperties = {
   fontSize: 11, fontWeight: 'bold', letterSpacing: 0.5, textTransform: 'uppercase',
   color: '#8fb7e0', margin: '0 0 6px'
 };
-const sourceNoteStyle: React.CSSProperties = { fontSize: 10, color: '#6b7688', margin: '6px 0 0' };
+const sourceNoteStyle: React.CSSProperties = { fontSize: 10, color: 'var(--ga98-geoint-note)', margin: '6px 0 0' };
 
 export function CommandRail(props: CommandRailProps): JSX.Element {
   const {
@@ -179,10 +179,10 @@ export function CommandRail(props: CommandRailProps): JSX.Element {
             background: LEVEL_COLOR[threat.level] ?? '#555', color: '#0a0f1a',
             fontSize: 11, fontWeight: 'bold', padding: '1px 8px', borderRadius: 2, letterSpacing: 0.5
           }}>{threat.level}</span>
-          <span style={{ fontSize: 10, color: '#6b7688' }}>{threat.basis}</span>
+          <span style={{ fontSize: 10, color: 'var(--ga98-geoint-note)' }}>{threat.basis}</span>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {catKeys.length === 0 && <span style={{ fontSize: 11, color: '#6b7688' }}>No events in view.</span>}
+          {catKeys.length === 0 && <span style={{ fontSize: 11, color: 'var(--ga98-geoint-note)' }}>No events in view.</span>}
           {catKeys.map((k) => {
             const on = categoryFilter.has(k);
             return (
@@ -202,7 +202,7 @@ export function CommandRail(props: CommandRailProps): JSX.Element {
       <div style={railPanelStyle}>
         <div style={railLegendStyle}>Monitored Situations ({situations.length})</div>
         {situations.length === 0 ? (
-          <p style={{ fontSize: 11, color: '#6b7688', margin: 0 }}>No corroborated clusters in view.</p>
+          <p style={{ fontSize: 11, color: 'var(--ga98-geoint-note)', margin: 0 }}>No corroborated clusters in view.</p>
         ) : (
           <ul style={{ listStyle: 'none', margin: 0, padding: 0, maxHeight: 200, overflowY: 'auto' }}>
             {situations.map(({ item, count }) => (
@@ -248,7 +248,7 @@ export function CommandRail(props: CommandRailProps): JSX.Element {
       <div style={railPanelStyle}>
         <div style={railLegendStyle}>Situation Feed ({visibleItems.length})</div>
         {visibleItems.length === 0 ? (
-          <p style={{ fontSize: 11, color: '#6b7688', margin: 0 }}>No events in view.</p>
+          <p style={{ fontSize: 11, color: 'var(--ga98-geoint-note)', margin: 0 }}>No events in view.</p>
         ) : (
           <ul style={{ listStyle: 'none', margin: 0, padding: 0, maxHeight: 280, overflowY: 'auto' }}>
             {visibleItems.map((i) => {
@@ -266,7 +266,7 @@ export function CommandRail(props: CommandRailProps): JSX.Element {
                   <span style={{ flex: '0 0 auto', marginTop: 3, width: 8, height: 8, borderRadius: '50%', background: colorFor(cat), border: '1px solid rgba(0,0,0,.5)' }} />
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ fontSize: 11, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i.title}</span>
-                    <span style={{ fontSize: 9, color: '#6b7688' }}>{i.sourceId}{placeable ? '' : ' · no location'}{isPinned ? ' · pinned' : ''}</span>
+                    <span style={{ fontSize: 9, color: 'var(--ga98-geoint-note)' }}>{i.sourceId}{placeable ? '' : ' · no location'}{isPinned ? ' · pinned' : ''}</span>
                   </span>
                 </li>
               );

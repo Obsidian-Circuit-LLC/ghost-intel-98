@@ -171,7 +171,6 @@ export const THEME_COLOR_ALLOWLIST: readonly string[] = [
   '#2a3344',
   '#4a5468',
   '#5a7fb0',
-  '#6b7688',
   '#8a96a8',
   '#8fb7e0',
   '#9ad',
@@ -204,10 +203,9 @@ export const THEME_COLOR_ALLOWLIST: readonly string[] = [
   '#00000055',  // sticky-note & swatch hairline border (translucent black; decorative)
   '#00000066',  // desktop-card sunken frame border (translucent black bevel)
   '#000040',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
-  '#0000aa',  // help link/error-tint (content-intrinsic)
   '#0000cc',  // AI-assistant learned/markdown island: classic value (t8/dim-covered)
   '#0006',  // stream-test status dot border (translucent black)
-  '#00188f',  // bookmark-manager link text (classic navy-blue link)
+  '#00188f',  // bookmark-manager link text: classic navy link, amethyst via .ga98-bm-link-open override
   '#021502',  // dialup-client CRT node face (self-consistent dark-green console)
   '#040010',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
   '#05070e',  // .ga98-geo-map globe backdrop (self-consistent dark, both themes)
@@ -327,7 +325,6 @@ export const THEME_COLOR_ALLOWLIST: readonly string[] = [
   '#3d1a5c',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
   '#3d6a3d',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
   '#400000',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
-  '#400080',  // AI-assistant learned/markdown island: classic value (t8/dim-covered)
   '#404070',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
   '#404870',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
   '#4060a0',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
@@ -444,7 +441,7 @@ export const THEME_COLOR_ALLOWLIST: readonly string[] = [
   '#d4e3fc',  // classic dropzone hot-fill (amethyst via .ga98-dropzone override)
   '#d8c8ff',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
   '#d8d880',  // self-consistent dark SOCMINT console (#0a0a14)
-  '#d8d8d8',  // self-consistent dark X-collector console (#0a0a14)
+  '#d8d8d8',  // light row/tab/link hover + mkt table divider: classic value, amethyst-overridden to dark
   '#d8e8ff',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
   '#d8f5d8',  // sticky-note "green" paper (content-intrinsic note colour)
   '#d8ffd8',  // self-consistent dark X-collector console (#0a0a14)
