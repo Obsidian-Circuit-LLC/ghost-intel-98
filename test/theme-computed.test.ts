@@ -10,7 +10,8 @@
  *  - classic (attribute unset): `--ga98-grey` resolves to `#c0c0c0`; body `color` → rgb(0,0,0).
  *  - amethyst: `--ga98-grey` → `#1a1822`; `--ga98-desktop-bg` → `#0c0a12`; body `color` →
  *    rgb(207,201,221) (the global text wire flips light through `color: var(--ga98-text)`).
- *  - `--ga98-status-error` resolves to the SAME value under BOTH themes (fixed tier is skin-proof).
+ *  - LOCKED tier (Amendment 2): `--ga98-status-error` is theme-AWARE (classic dark vs amethyst
+ *    bright), while a FILL token (`--ga98-status-error-fill`) stays identical across themes.
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -75,13 +76,23 @@ describe("theme.css computed cascade — amethyst (data-ga98-theme='amethyst')",
   });
 });
 
-describe('theme.css fixed tier — skin-proof across themes', () => {
-  it('--ga98-status-error resolves to the SAME value under classic and amethyst', async () => {
+describe('theme.css LOCKED tier — theme-aware FG, invariant FILL (Amendment 2)', () => {
+  it('--ga98-status-error is theme-AWARE (classic dark, amethyst bright)', async () => {
     await setTheme(null);
     const classic = await tokenValue('--ga98-status-error');
     await setTheme('amethyst');
     const amethyst = await tokenValue('--ga98-status-error');
-    expect(classic).toBe('#e5484d');
+    expect(classic).toBe('#9a1621');
+    expect(amethyst).toBe('#ff6b70');
+    expect(amethyst).not.toBe(classic);
+  });
+
+  it('--ga98-status-error-fill resolves to the SAME value under classic and amethyst', async () => {
+    await setTheme(null);
+    const classic = await tokenValue('--ga98-status-error-fill');
+    await setTheme('amethyst');
+    const amethyst = await tokenValue('--ga98-status-error-fill');
+    expect(classic).toBe('#a01722');
     expect(amethyst).toBe(classic);
   });
 });

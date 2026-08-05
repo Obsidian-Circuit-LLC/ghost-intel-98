@@ -12,13 +12,15 @@ const GLYPH: Record<ToastKind, string> = {
   error: '✕'
 };
 
-// Role-bearing status colours → the fixed semantic tier (identical in every theme; never
-// recoloured by a skin). Each toast kind maps to its own status token by role.
+// The toast title-bar is a FILLED status background carrying 98.css's WHITE title text, so it uses
+// the LOCKED status FILL role (dark enough for >=4.5:1 white contrast in BOTH themes) — not the
+// FOREGROUND status token, whose amethyst values are bright and would fail white-on-colour. LOCKED:
+// theme-aware but never recoloured or hidden by a user skin.
 const COLOR: Record<ToastKind, string> = {
-  info: 'var(--ga98-status-info)',
-  success: 'var(--ga98-status-success)',
-  warn: 'var(--ga98-status-warning)',
-  error: 'var(--ga98-status-error)'
+  info: 'var(--ga98-status-info-fill)',
+  success: 'var(--ga98-status-success-fill)',
+  warn: 'var(--ga98-status-warning-fill)',
+  error: 'var(--ga98-status-error-fill)'
 };
 
 export function Toaster(): JSX.Element {

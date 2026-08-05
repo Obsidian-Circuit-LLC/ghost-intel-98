@@ -13,12 +13,27 @@
   --ga98-accent: #1084d0;
   --ga98-text: #000000;
   --ga98-text-dim: #3a3a3a;
-  /* fixed tier — semantic + honesty; identical in every theme, in NO override block */
-  --ga98-status-error: #e5484d;
-  --ga98-status-success: #30a46c;
-  --ga98-status-warning: #d98a00;
-  --ga98-status-info: #4c8dff;
-  --ga98-unverified: #d98a00;
+  /* ── LOCKED status/honesty tier (Amendment 2, 2026-08-05) ────────────────────
+     Theme-AWARE but LOCKED: defined in EVERY built-in theme block with legible,
+     contrast-gated, hue-consistent values, and excluded from any user-pack loader
+     (themes.ts LOCKED_TOKENS) so a skin can never recolour or hide a status/honesty
+     stamp. These are the classic values (legible on the light #c0c0c0 surface). */
+  /* status FOREGROUND/border role — theme-aware; classic darks, >=4.5:1 on #c0c0c0 */
+  --ga98-status-error: #9a1621;
+  --ga98-status-success: #0a5a2f;
+  --ga98-status-warning: #6b4600;
+  --ga98-status-info: #124a8f;
+  /* status FILL role — chips/toast title-bars under WHITE text; dark enough in BOTH themes */
+  --ga98-status-error-fill: #a01722;
+  --ga98-status-success-fill: #0a5c30;
+  --ga98-status-warning-fill: #7a4f00;
+  --ga98-status-info-fill: #124a8f;
+  /* honesty — self-contained + theme-INVARIANT amber badge with dark ink */
+  --ga98-unverified: #d9a441;
+  --ga98-unverified-ink: #0a0f1a;
+  /* error-tint SURFACE — theme-aware, NOT locked (a background, not a status stamp):
+     pale red in classic, dark red in amethyst; carries status-error text at >=4.5:1. */
+  --ga98-status-error-tint: #ffeeee;
 }
 
 html, body, #root {
@@ -78,8 +93,11 @@ input, textarea, [contenteditable="true"], .ga98-selectable {
 
 /* ── QUIET AMETHYST palette skin ─────────────────────────────────────────────
    Driven by data-ga98-theme='amethyst' on <html> (set in App.tsx via resolveTheme).
-   Overrides ONLY skinnable palette tokens; the fixed semantic/honesty tier stays in
-   base :root and is deliberately absent here (charter-critical two-tier invariant). */
+   Overrides the skinnable palette tokens AND redefines the LOCKED status/honesty tier
+   at its amethyst values (Amendment 2). The status tokens are theme-AWARE — a single
+   value cannot contrast both the light classic surface and this near-black one — but
+   they remain LOCKED (themes.ts LOCKED_TOKENS excludes them from user packs), so a
+   user skin still can never recolour or hide a status/honesty stamp. */
 :root[data-ga98-theme='amethyst'] {
   --ga98-desktop-bg: #0c0a12;
   --ga98-grey: #1a1822;
@@ -92,6 +110,21 @@ input, textarea, [contenteditable="true"], .ga98-selectable {
   --ga98-accent: #9d6bff;
   --ga98-text: #cfc9dd;
   --ga98-text-dim: #8a86a0;
+  /* LOCKED status FOREGROUND — bright, >=4.5:1 on the #1a1822 surface */
+  --ga98-status-error: #ff6b70;
+  --ga98-status-success: #4bd07f;
+  --ga98-status-warning: #f5b53d;
+  --ga98-status-info: #6ba9ff;
+  /* LOCKED status FILL — identical to classic (white text safe in both themes) */
+  --ga98-status-error-fill: #a01722;
+  --ga98-status-success-fill: #0a5c30;
+  --ga98-status-warning-fill: #7a4f00;
+  --ga98-status-info-fill: #124a8f;
+  /* LOCKED honesty — theme-INVARIANT (same as classic) */
+  --ga98-unverified: #d9a441;
+  --ga98-unverified-ink: #0a0f1a;
+  /* error-tint surface — dark red-tint variant for the near-black skin */
+  --ga98-status-error-tint: #2a1418;
 }
 
 .ga98-desktop {
