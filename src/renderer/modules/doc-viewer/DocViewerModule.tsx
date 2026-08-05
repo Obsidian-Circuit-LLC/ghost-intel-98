@@ -105,7 +105,7 @@ export function DocViewerModule(props: Props): JSX.Element {
 function CaseViewer({ caseId, fileName, originalName }: { caseId: string; fileName: string; originalName: string }): JSX.Element {
   const kind = kindFor(originalName || fileName);
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#fff' }}>
+    <div className="ga98-docviewer-surface" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div className="ga98-toolbar">
         <b style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{originalName}</b>
         <span style={{ flex: 1 }} />
@@ -157,7 +157,7 @@ function DocumentsViewer({ relPath, name }: { relPath: string; name: string }): 
   const kind = kindFor(name);
   const supported = docSupported(name);
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#fff' }}>
+    <div className="ga98-docviewer-surface" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div className="ga98-toolbar">
         <b style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</b>
         <span style={{ flex: 1 }} />

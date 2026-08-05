@@ -192,64 +192,68 @@ export const THEME_COLOR_ALLOWLIST: readonly string[] = [
   'rgba(0,0,0,0.35)',
   'rgba(255,255,255,0.85)',
   // ── Task 9 additions: reviewed intentional literals (guard exemption b) ──────
-  //   Genuine dark-on-dark dim TEXT was routed to --ga98-dim-* / status / t8
-  //   tokens instead; the entries below are self-consistent dark consoles,
-  //   content-intrinsic surfaces, Task-8 classic-values-with-t8-override, and
-  //   theme-tolerant island/decorative literals confirmed to stay legible.
-  '#00000030',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
-  '#00000055',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
-  '#00000066',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  //   Every entry names a SPECIFIC content-intrinsic reason: a named always-dark
+  //   module console (self-consistent in both themes), a named decorative device
+  //   skin (jukebox WMP shell, sticky-note paper, dialup CRT), a content data
+  //   colour (status dots, map links, graph node kinds), or a classic-parity
+  //   value kept + re-routed for amethyst via a [data-ga98-theme=amethyst]
+  //   override. No entry is a bare light BACKGROUND on a chrome/panel selector —
+  //   those are themed, not allow-listed (blanket "theme-tolerant chrome"
+  //   justifications were removed and their literals routed to dark tokens).
+  '#00000030',  // jukebox WMP-shell inset bevel (translucent black lower edge)
+  '#00000055',  // sticky-note & swatch hairline border (translucent black; decorative)
+  '#00000066',  // desktop-card sunken frame border (translucent black bevel)
   '#000040',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
   '#0000aa',  // help link/error-tint (content-intrinsic)
   '#0000cc',  // AI-assistant learned/markdown island: classic value (t8/dim-covered)
-  '#0006',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
-  '#00188f',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
-  '#021502',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  '#0006',  // stream-test status dot border (translucent black)
+  '#00188f',  // bookmark-manager link text (classic navy-blue link)
+  '#021502',  // dialup-client CRT node face (self-consistent dark-green console)
   '#040010',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
-  '#05070e',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
-  '#052805',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
-  '#060d1c',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  '#05070e',  // .ga98-geo-map globe backdrop (self-consistent dark, both themes)
+  '#052805',  // dialup-client "done" stage panel (dark-green console)
+  '#060d1c',  // Reports dark intelligence hero tile (self-consistent dark, both themes)
   '#07070f',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
   '#070710',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
   '#080',  // reminders highlight-flash yellow (content-intrinsic)
   '#0a0814',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
   '#0a0a1a',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
   '#0a0a2a',  // self-consistent dark SOCMINT console (#0a0a14)
-  '#0a0acc',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  '#0a0acc',  // bookmark-manager link hover text (classic blue link)
   '#0a1030',  // self-consistent dark X-collector console (#0a0a14)
-  '#0a1428',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  '#0a1428',  // Reports dark intelligence hero backdrop (self-consistent dark)
   '#0a1a2a',  // self-consistent dark X-collector console (#0a0a14)
   '#0a1a3a',  // self-consistent dark X-collector console (#0a0a14)
   '#0a2a0a',  // self-consistent dark X-collector console (#0a0a14)
-  '#0a2f0a',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
-  '#0a3a0a',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  '#0a2f0a',  // dialup-client link-progress track (dark-green console)
+  '#0a3a0a',  // dialup-client logo/divider border (dark-green console)
   '#0a7d28',  // chat unit: classic value, amethyst via .ga98-t8-* override
-  '#0b1a0b',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
-  '#0b1a2b',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
-  '#0c1a33',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
-  '#0d0518',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  '#0b1a0b',  // calculator terminal chip fill (self-consistent dark-green)
+  '#0b1a2b',  // Jukebox Now-Playing LCD panel (self-consistent dark)
+  '#0c1a33',  // Reports dark hero tile hover (self-consistent dark)
+  '#0d0518',  // Invoices ledger-canvas gradient stop (self-consistent dark-purple)
   '#0d0a1e',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
   '#0d0d1a',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
   '#0e0a1a',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
   '#0f1a2a',  // self-consistent dark X-collector console (#0a0a14)
   '#0f2a0f',  // self-consistent dark X-collector console (#0a0a14)
   '#10141c',  // self-consistent dark GhostScrape console (#0a0a14)
-  '#10233a',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
-  '#1084d0',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  '#10233a',  // Jukebox equalizer LCD panel (self-consistent dark)
+  '#1084d0',  // classic --ga98-accent value in decorative titlebar/stripe gradient stops
   '#111',  // EyeSpy dark video-wall tile (always-dark surface)
   '#111124',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
-  '#12081f',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  '#12081f',  // Invoices dark-purple module workspace (self-consistent dark)
   '#12124a',  // self-consistent dark SOCMINT console (#0a0a14)
   '#12162200',  // self-consistent dark GhostScrape console (#0a0a14)
   '#141119',  // investigation-graph dark canvas island
   '#14182400',  // self-consistent dark GhostScrape console (#0a0a14)
   '#14182a',  // self-consistent dark GhostScrape console (#0a0a14)
-  '#14294d',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  '#14294d',  // Reports dark hero dot-grid pattern (self-consistent dark)
   '#15092a',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
-  '#17324f',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  '#17324f',  // Jukebox format/kbps badge fill (self-consistent dark)
   '#1a0808',  // self-consistent dark X-collector console (#0a0a14)
   '#1a0f2a',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
-  '#1a0f2e',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  '#1a0f2e',  // Invoices dark-purple module base (self-consistent dark)
   '#1a1000',  // self-consistent dark X-collector console (#0a0a14)
   '#1a1040',  // self-consistent dark SOCMINT console (#0a0a14)
   '#1a1200',  // self-consistent dark X-collector console (#0a0a14)
@@ -269,21 +273,21 @@ export const THEME_COLOR_ALLOWLIST: readonly string[] = [
   '#1a4a1a',  // self-consistent dark X-collector console (#0a0a14)
   '#1a5fff',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
   '#1c2030',  // self-consistent dark GhostScrape console (#0a0a14)
-  '#1d4d1d',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  '#1d4d1d',  // dialup-client CRT node border (dark-green console)
   '#1e0f33',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
-  '#1f5f1f',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  '#1f5f1f',  // dialup-client CRT glow/text-shadow (dark-green console)
   '#200808',  // self-consistent dark SOCMINT console (#0a0a14)
   '#200a0a',  // self-consistent dark SOCMINT console (#0a0a14)
   '#202840',  // self-consistent dark X-collector console (#0a0a14)
   '#22304a',  // self-consistent dark GhostScrape console (#0a0a14)
-  '#241539',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  '#241539',  // Invoices dark-purple panel/button (self-consistent dark)
   '#27364d',  // chat unit: classic value, amethyst via .ga98-t8-* override
   '#2a0808',  // self-consistent dark X-collector console (#0a0a14)
   '#2a0e0e',  // self-consistent dark SOCMINT console (#0a0a14)
   '#2a0f0f',  // self-consistent dark X-collector console (#0a0a14)
   '#2a0f40',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
   '#2a1040',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
-  '#2a1418',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  '#2a1418',  // --ga98-status-error-tint value (error-fill literal, matches token)
   '#2a1a00',  // self-consistent dark X-collector console (#0a0a14)
   '#2a2040',  // self-consistent dark X-collector console (#0a0a14)
   '#2a2050',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
@@ -292,12 +296,12 @@ export const THEME_COLOR_ALLOWLIST: readonly string[] = [
   '#2a2f3c',  // self-consistent dark GhostScrape console (#0a0a14)
   '#2a3060',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
   '#2a3555',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
-  '#2a4664',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
-  '#2a4a7a',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  '#2a4664',  // Jukebox LCD inset border (self-consistent dark)
+  '#2a4a7a',  // Reports dark hero tile border (self-consistent dark)
   '#2a5080',  // self-consistent dark X-collector console (#0a0a14)
   '#2a6a2a',  // self-consistent dark X-collector console (#0a0a14)
-  '#2f2',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
-  '#2f5578',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  '#2f2',  // dialup-client packet/glow green + stream-test ok dot (content-intrinsic green)
+  '#2f5578',  // Jukebox badge border (self-consistent dark)
   '#304060',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
   '#333',  // investigation-graph dark canvas island
   '#3fbf7f',  // investigation-graph node-kind fill: doc (content-intrinsic data colour)
@@ -305,7 +309,7 @@ export const THEME_COLOR_ALLOWLIST: readonly string[] = [
   '#9aa5b1',  // investigation-graph node-kind fill: default/unknown (content-intrinsic data colour)
   '#b07cf0',  // investigation-graph node-kind fill: entity (content-intrinsic data colour)
   '#333355',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
-  '#33ccff',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  '#33ccff',  // Reports dark hero title text (cyan on dark hero)
   '#343a4c',  // self-consistent dark GhostScrape console (#0a0a14)
   '#3a1a1a',  // self-consistent dark X-collector console (#0a0a14)
   '#3a2060',  // self-consistent dark SOCMINT console (#0a0a14)
@@ -319,7 +323,7 @@ export const THEME_COLOR_ALLOWLIST: readonly string[] = [
   '#3a5a8a',  // self-consistent dark GhostScrape console (#0a0a14)
   '#3a6a3a',  // self-consistent dark SOCMINT console (#0a0a14)
   '#3a7a3a',  // self-consistent dark SOCMINT console (#0a0a14)
-  '#3c3',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  '#3c3',  // stream-test "ok" status dot (content-intrinsic green)
   '#3d1a5c',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
   '#3d6a3d',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
   '#400000',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
@@ -328,11 +332,11 @@ export const THEME_COLOR_ALLOWLIST: readonly string[] = [
   '#404870',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
   '#4060a0',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
   '#4499ff',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
-  '#4a3568',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  '#4a3568',  // amethyst --ga98-select-bg value (selection fill on dark skin)
   '#4a7aad',  // self-consistent dark X-collector console (#0a0a14)
-  '#4da6ff',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  '#4da6ff',  // Reports dark hero tile hover border (self-consistent dark)
   '#5050c0',  // self-consistent dark SOCMINT console (#0a0a14)
-  '#5a3aa8',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  '#5a3aa8',  // Invoices dark-purple border accent (self-consistent dark)
   '#5a4000',  // chat unit: classic value, amethyst via .ga98-t8-* override
   '#5a4020',  // minds-eye sepia vision-card (content-intrinsic)
   '#5aad5a',  // self-consistent dark X-collector console (#0a0a14)
@@ -344,13 +348,12 @@ export const THEME_COLOR_ALLOWLIST: readonly string[] = [
   '#6080c0',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
   '#6090c0',  // self-consistent dark X-collector console (#0a0a14)
   '#6090d0',  // self-consistent dark X-collector console (#0a0a14)
-  '#666',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
   '#667',  // EyeSpy dark video-wall tile (always-dark surface)
   '#6a5a85',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
   '#6a5a8a',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
   '#6a6a20',  // self-consistent dark SOCMINT console (#0a0a14)
   '#6f7cc4',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
-  '#6f7f9c',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  '#6f7f9c',  // Jukebox WMP-shell frame border (metallic device skin)
   '#6f9bff',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
   '#700',  // chat unit: classic value, amethyst via .ga98-t8-* override
   '#7070a0',  // self-consistent dark X-collector console (#0a0a14)
@@ -360,13 +363,13 @@ export const THEME_COLOR_ALLOWLIST: readonly string[] = [
   '#7a3030',  // self-consistent dark X-collector console (#0a0a14)
   '#7a5000',  // self-consistent dark X-collector console (#0a0a14)
   '#7a6aa0',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
-  '#7c4dff',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  '#7c4dff',  // Invoices dark-purple focus/border accent (self-consistent dark)
   '#7d3a3a',  // self-consistent dark SOCMINT console (#0a0a14)
   '#7d5a1a',  // self-consistent dark X-collector console (#0a0a14)
   '#7d5aad',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
-  '#7dff7d',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
-  '#7fbfff',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
-  '#7fd4ff',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  '#7dff7d',  // calculator terminal chip text (self-consistent dark-green)
+  '#7fbfff',  // sticky-note "blue" swatch/paper (content-intrinsic note colour)
+  '#7fd4ff',  // Reports dark hero subtitle text (cyan on dark hero)
   '#803000',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
   '#806090',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
   '#8080a0',  // self-consistent dark X-collector console (#0a0a14)
@@ -375,20 +378,20 @@ export const THEME_COLOR_ALLOWLIST: readonly string[] = [
   '#80b0e8',  // self-consistent dark X-collector console (#0a0a14)
   '#80c0ff',  // self-consistent dark X-collector console (#0a0a14)
   '#80d880',  // self-consistent dark X-collector console (#0a0a14)
-  '#888',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  '#888',  // --ga98-dim-faint value + calendar-muted day number (classic; amethyst via grid override) + PDF-viewer backdrop
   '#8890a8',  // self-consistent dark GhostScrape console (#0a0a14)
   '#8a7000',  // self-consistent dark X-collector console (#0a0a14)
   '#8b2020',  // self-consistent dark SOCMINT console (#0a0a14)
-  '#8ec5ff',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
-  '#8fa0bd',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
-  '#8fd0ff',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
-  '#8fe08f',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  '#8ec5ff',  // GeoINT map popup link text (map content)
+  '#8fa0bd',  // Jukebox WMP-shell metallic gradient/inset border (device skin)
+  '#8fd0ff',  // Jukebox badge text (self-consistent dark)
+  '#8fe08f',  // sticky-note "green" swatch (content-intrinsic note colour)
   '#9090c0',  // self-consistent dark X-collector console (#0a0a14)
   '#90b0d0',  // self-consistent dark X-collector console (#0a0a14)
   '#90e890',  // self-consistent dark SOCMINT console (#0a0a14)
   '#999',  // AI-assistant learned/markdown island: classic value (t8/dim-covered)
   '#9a86c4',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
-  '#9db8d8',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  '#9db8d8',  // Jukebox LCD secondary text (self-consistent dark)
   '#9fb0c8',  // self-consistent dark SOCMINT console (#0a0a14)
   '#9fb6d6',  // chat unit: classic value, amethyst via .ga98-t8-* override
   '#a080c0',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
@@ -404,18 +407,18 @@ export const THEME_COLOR_ALLOWLIST: readonly string[] = [
   '#aaaa30',  // self-consistent dark SOCMINT console (#0a0a14)
   '#ad4a4a',  // self-consistent dark X-collector console (#0a0a14)
   '#ad5a5a',  // self-consistent dark X-collector console (#0a0a14)
-  '#b0b0b0',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  '#b0b0b0',  // --ga98-hairline value + Reports toolbar pressed face (classic; amethyst via report override)
   '#b0b6c8',  // self-consistent dark GhostScrape console (#0a0a14)
-  '#b8860b',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  '#b8860b',  // Reports Recent "draft" status amber (classic; amethyst via status-warning override)
   '#b8c8b8',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
-  '#b9c6dc',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  '#b9c6dc',  // Jukebox WMP-shell metallic gradient mid-stop (device skin)
   '#bb66ff',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
   '#c06060',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
   '#c08040',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
   '#c0a0a0',  // self-consistent dark SOCMINT console (#0a0a14)
   '#c0a0e8',  // self-consistent dark SOCMINT console (#0a0a14)
-  '#c0c8d8',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
-  '#c33',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  '#c0c8d8',  // retro-terminal sunken well bevel (decorative Win98 well)
+  '#c33',  // stream-test "fail" status dot (content-intrinsic red)
   '#c8a000',  // chat unit: classic value, amethyst via .ga98-t8-* override
   '#c8a0e0',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
   '#c8a860',  // self-consistent dark GhostScrape console (#0a0a14)
@@ -423,33 +426,32 @@ export const THEME_COLOR_ALLOWLIST: readonly string[] = [
   '#c8b8ff',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
   '#c8c0d8',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
   '#c8d0e8',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
-  '#cc3',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  '#cc3',  // stream-test "testing" status dot (content-intrinsic amber)
   '#cc3030',  // self-consistent dark SOCMINT console (#0a0a14)
   '#cc4040',  // self-consistent dark X-collector console (#0a0a14)
   '#ccc',  // EyeSpy dark video-wall tile (always-dark surface)
   '#cde',  // EyeSpy dark video-wall tile (always-dark surface)
   '#cfd8dc',  // whiteboard node-card bevel (content-intrinsic)
   '#cfe0ff',  // self-consistent dark GhostScrape console (#0a0a14)
-  '#cfe3ff',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
-  '#cfe4ff',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
-  '#d0d0d0',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  '#cfe3ff',  // Jukebox LCD primary text (self-consistent dark)
+  '#cfe4ff',  // Reports dark hero tile label (self-consistent dark)
   '#d0e0ff',  // self-consistent dark X-collector console (#0a0a14)
   '#d0e8ff',  // self-consistent dark X-collector console (#0a0a14)
   '#d33',  // chat unit: classic value, amethyst via .ga98-t8-* override
   '#d3e8ff',  // chat unit: classic value, amethyst via .ga98-t8-* override
   '#d4a017',  // mail flagged-star amber glyph (content-intrinsic)
   '#d4d0c8',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
-  '#d4e3fc',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  '#d4e3fc',  // classic dropzone hot-fill (amethyst via .ga98-dropzone override)
   '#d8c8ff',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
   '#d8d880',  // self-consistent dark SOCMINT console (#0a0a14)
   '#d8d8d8',  // self-consistent dark X-collector console (#0a0a14)
   '#d8e8ff',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
-  '#d8f5d8',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  '#d8f5d8',  // sticky-note "green" paper (content-intrinsic note colour)
   '#d8ffd8',  // self-consistent dark X-collector console (#0a0a14)
   '#ddaa00',  // self-consistent dark X-collector console (#0a0a14)
   '#ddd',  // AI-assistant learned/markdown island: classic value (t8/dim-covered)
-  '#dfdfdf',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
-  '#dfe7f2',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  '#dfdfdf',  // --ga98-track value + Reports Recent row border (classic; amethyst via Recent override)
+  '#dfe7f2',  // Jukebox WMP-shell metallic gradient top-stop + stations drawer (device skin)
   '#e0e4f0',  // self-consistent dark GhostScrape console (#0a0a14)
   '#e8b0b0',  // self-consistent dark SOCMINT console (#0a0a14)
   '#e8c080',  // self-consistent dark SOCMINT console (#0a0a14)
@@ -457,12 +459,12 @@ export const THEME_COLOR_ALLOWLIST: readonly string[] = [
   '#e8d0a0',  // self-consistent dark X-collector console (#0a0a14)
   '#e8d8ff',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
   '#e8e8ff',  // self-consistent dark SOCMINT console (#0a0a14)
-  '#e8eef7',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
-  '#e8eeff',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  '#e8eef7',  // Reports Recent row hover (classic light; amethyst via Recent override)
+  '#e8eeff',  // dialup-client brand readout text (light on dark-green console)
   '#e8f0ff',  // my-documents selection highlight (light unit)
   '#e9e1f5',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
-  '#eaf4ff',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
-  '#ece6f7',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  '#eaf4ff',  // Jukebox Now-Playing title text (light on dark LCD)
+  '#ece6f7',  // Invoices dark-purple body text (self-consistent dark)
   '#ee3030',  // self-consistent dark X-collector console (#0a0a14)
   '#eecc30',  // self-consistent dark GhostScrape console (#0a0a14)
   '#eee',  // chat unit: classic value, amethyst via .ga98-t8-* override
@@ -474,30 +476,30 @@ export const THEME_COLOR_ALLOWLIST: readonly string[] = [
   '#f0e0b0',  // self-consistent dark GhostScrape console (#0a0a14)
   '#f3eefb',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
   '#f4f0ff',  // AI-assistant learned/markdown island: classic value (t8/dim-covered)
-  '#f4f4f4',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  '#f4f4f4',  // classic idle fill (dropzone/calendar-muted/--ga98-inset-panel); amethyst via overrides
   '#ff5566',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
   '#ff6060',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
-  '#ff6b6b',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  '#ff6b6b',  // --ga98-pw-vweak value + calculator error text (bright red on dark)
   '#ff8040',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
   '#ff8080',  // self-consistent dark X-collector console (#0a0a14)
-  '#ff8fc7',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  '#ff8fc7',  // sticky-note "pink" swatch (content-intrinsic note colour)
   '#ff9090',  // self-consistent dark SOCMINT console (#0a0a14)
   '#ffa040',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
   '#ffcc80',  // self-consistent dark X-collector console (#0a0a14)
   '#ffd0d0',  // self-consistent dark X-collector console (#0a0a14)
-  '#ffd6ea',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  '#ffd6ea',  // sticky-note "pink" paper (content-intrinsic note colour)
   '#ffd8d8',  // self-consistent dark X-collector console (#0a0a14)
   '#ffdd80',  // self-consistent dark GhostScrape console (#0a0a14)
-  '#ffe',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  '#ffe',  // calendar drag-create hover affordance (classic; amethyst via grid override)
   '#ffe080',  // self-consistent dark X-collector console (#0a0a14)
-  '#ffe600',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  '#ffe600',  // sticky-note "yellow" swatch (content-intrinsic note colour)
   '#ffecec',  // chat unit: classic value, amethyst via .ga98-t8-* override
   '#ffee80',  // self-consistent dark X-collector console (#0a0a14)
   '#fff8e0',  // chat unit: classic value, amethyst via .ga98-t8-* override
-  '#fff9b1',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  '#fff9b1',  // sticky-note "yellow" paper (content-intrinsic note colour)
   '#ffff00',  // reminders highlight-flash yellow (content-intrinsic)
-  '#ffffff66',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
-  '#ffffff80',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
-  '#ffffffcc',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
-  'navy',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
+  '#ffffff66',  // desktop-card dashed border (translucent white; decorative)
+  '#ffffff80',  // desktop-card placeholder glyph (translucent white; decorative)
+  '#ffffffcc',  // jukebox WMP-shell inset bevel (translucent white top edge)
+  'navy',  // jukebox/stations active-row selection fill (navy = classic --ga98-blue)
 ];

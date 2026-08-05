@@ -577,7 +577,7 @@ input, textarea, [contenteditable="true"], .ga98-selectable {
   display: flex;
   align-items: center;
   gap: 8px;
-  border-bottom: 1px solid #d0d0d0;
+  border-bottom: 1px solid var(--ga98-inset-border); /* classic #d0d0d0; amethyst → dark shadow border */
 }
 
 .ga98-list li[data-selected='true'] {
@@ -705,7 +705,7 @@ input, textarea, [contenteditable="true"], .ga98-selectable {
 }
 .ga98-cases-empty-hint {
   margin: 0;
-  color: #666;
+  color: var(--ga98-dim-soft); /* classic #666; amethyst → --ga98-text-dim (legible on dark) */
   font-style: italic;
 }
 
@@ -785,6 +785,22 @@ input.ga98-text, select.ga98-text {
 .ga98-cal-swatch { width: 16px; height: 16px; min-width: 16px; min-height: 16px; padding: 0; border: 1px solid; border-color: #808080 #fff #fff #808080; cursor: pointer; box-sizing: border-box; }
 .ga98-cal-swatch:hover { outline: 1px dotted #000; outline-offset: 1px; }
 .ga98-cal-swatch-clear { background: #c0c0c0; color: #000; font-size: 11px; line-height: 1; display: flex; align-items: center; justify-content: center; }
+
+/* ── QUIET AMETHYST — Calendar grid dark override ────────────────────────────────────────────────
+   The classic month grid paints in-month cells #fff, out-of-month (muted) #f4f4f4 with #888 day
+   numbers — light islands on the near-black desktop. Restate dark cells with legible day numbers;
+   classic is byte-exact (the gate never matches). */
+:root[data-ga98-theme='amethyst'] .ga98-grid-calendar > div {
+  background: var(--ga98-recessed-bg);
+  color: var(--ga98-text);
+}
+:root[data-ga98-theme='amethyst'] .ga98-grid-calendar > div[data-muted='true'] {
+  background: var(--ga98-grey);
+  color: var(--ga98-text-dim);
+}
+:root[data-ga98-theme='amethyst'] .ga98-grid-calendar > div[data-clickable='true']:hover {
+  background: var(--ga98-select-bg);
+}
 
 .ga98-coming-soon {
   display: flex;
@@ -1983,6 +1999,8 @@ input.ga98-text, select.ga98-text {
 .ga98-report-tpl-row-active .ga98-report-tpl-row-cat { color: #c0c0c0; }
 .ga98-report-tpl-preview { flex: 1; min-width: 0; background: #c0c0c0; }
 .ga98-report-tpl-preview-body { display: flex; flex-direction: column; gap: 4px; }
+/* CONTENT PAPER: this iframe renders the printable template document — it is the printed sheet, so it
+   stays white under amethyst (like a dark-mode editor keeping the page white). Not a chrome island. */
 .ga98-report-tpl-preview-frame { flex: 1; width: 100%; min-height: 320px; background: #fff; border: 2px solid; border-color: #808080 #fff #fff #808080; }
 .ga98-report-tpl-preview-actions { display: flex; justify-content: flex-end; }
 .ga98-report-tpl-preview-empty { color: #808080; font-style: italic; padding: 8px; font-size: 11px; }
@@ -2091,3 +2109,56 @@ input.ga98-text, select.ga98-text {
 :root[data-ga98-theme='amethyst'] .ga98-report-contactbook-list li.selected,
 :root[data-ga98-theme='amethyst'] .ga98-report-descriptorlib-list li.selected,
 :root[data-ga98-theme='amethyst'] .ga98-report-introlib-list li.selected { background: #4a3568; color: var(--ga98-titlebar-text); }
+
+/* Center Dashboard + Recent-Reports table + Templates list — classic paints these light silver/white
+   (chrome, not paper); darken them so the dashboard is not a light island. The DARK intelligence
+   hero + tiles are self-consistent (dark in both themes) and need no override. The .ga98-report-page /
+   -doc-table / -tpl-preview-frame paper stays white (handled above). */
+:root[data-ga98-theme='amethyst'] .ga98-report-dashboard,
+:root[data-ga98-theme='amethyst'] .ga98-report-tpl-preview { background: var(--ga98-grey); }
+:root[data-ga98-theme='amethyst'] .ga98-report-recent-heading { color: var(--ga98-text); }
+:root[data-ga98-theme='amethyst'] .ga98-report-recent {
+  background: var(--ga98-recessed-bg);
+  color: var(--ga98-text);
+  border-color: var(--ga98-shadow-dark) var(--ga98-shadow-light) var(--ga98-shadow-light) var(--ga98-shadow-dark);
+}
+:root[data-ga98-theme='amethyst'] .ga98-report-recent th {
+  background: var(--ga98-grey);
+  color: var(--ga98-text);
+  border-color: var(--ga98-shadow-dark);
+}
+:root[data-ga98-theme='amethyst'] .ga98-report-recent td {
+  background: var(--ga98-recessed-bg);
+  color: var(--ga98-text);
+  border-bottom-color: var(--ga98-shadow-dark);
+}
+:root[data-ga98-theme='amethyst'] .ga98-report-recent tbody tr:hover td {
+  background: var(--ga98-select-bg);
+  color: var(--ga98-titlebar-text);
+}
+/* Status inks: darkened amber/green read poorly on near-black → route to the bright status tokens. */
+:root[data-ga98-theme='amethyst'] .ga98-report-status-draft { color: var(--ga98-status-warning); }
+:root[data-ga98-theme='amethyst'] .ga98-report-status-completed { color: var(--ga98-status-success); }
+:root[data-ga98-theme='amethyst'] .ga98-report-status-archived { color: var(--ga98-text-dim); }
+:root[data-ga98-theme='amethyst'] .ga98-report-recent-empty,
+:root[data-ga98-theme='amethyst'] .ga98-report-tpl-empty,
+:root[data-ga98-theme='amethyst'] .ga98-report-tpl-preview-empty,
+:root[data-ga98-theme='amethyst'] .ga98-report-tpl-row-cat { color: var(--ga98-text-dim); }
+/* Templates sunken list + rows. */
+:root[data-ga98-theme='amethyst'] .ga98-report-tpl-list {
+  background: var(--ga98-recessed-bg);
+  border-color: var(--ga98-shadow-dark) var(--ga98-shadow-light) var(--ga98-shadow-light) var(--ga98-shadow-dark);
+}
+:root[data-ga98-theme='amethyst'] .ga98-report-tpl-row { color: var(--ga98-text); }
+:root[data-ga98-theme='amethyst'] .ga98-report-tpl-row:hover { background: var(--ga98-shadow-light); }
+:root[data-ga98-theme='amethyst'] .ga98-report-tpl-row-active { background: var(--ga98-select-bg); color: var(--ga98-titlebar-text); }
+:root[data-ga98-theme='amethyst'] .ga98-report-tpl-row-active .ga98-report-tpl-row-cat { color: var(--ga98-titlebar-text); }
+
+/* Doc-viewer body wrapper — classic white sheet behind text/code/eml bodies. Image/PDF bodies paint
+   their own dark inner container (so this only shows behind the text bodies). Under amethyst the
+   non-paper text bodies get a dark recessed surface with legible light text. */
+.ga98-docviewer-surface { background: #fff; }
+:root[data-ga98-theme='amethyst'] .ga98-docviewer-surface {
+  background: var(--ga98-recessed-bg);
+  color: var(--ga98-text);
+}
