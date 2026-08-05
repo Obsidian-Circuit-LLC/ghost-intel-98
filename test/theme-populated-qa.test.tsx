@@ -357,6 +357,217 @@ function loadSettings(): string {
   );
 }
 
+// ── Batch B seed data + populated fragment builders ─────────────────────────────────────────────
+//
+// WHAT IS SEEDED, PER MODULE (Batch B):
+//  - solitaire      — the REAL SolitaireModule, SSR'd under a SEEDED Math.random so the `deal()`
+//                     in its useState initialiser produces a deterministic dealt board (7 tableau
+//                     columns, face-up tops + face-down stacks, a face-down stock). The card faces
+//                     (#fff paper) and their red/black pip ink are CONTENT-INTRINSIC playing-card
+//                     chrome — a card is white with red/black suits regardless of app theme — so
+//                     `.ga98-card` is exemption-scoped exactly like the geoint map/swatch, and the
+//                     green felt (#047a32) is the table surface, not app chrome.
+//  - number-muncher — the calc shell in a RESULT state: display showing a computed value, the
+//                     memory register non-zero, the real StandardKeypad, the statusbar reading
+//                     "Last: …", and the History drawer OPEN with seeded entries. The green-on-black
+//                     LCD (`.ga98-calc-display`) is an intrinsic calculator readout, not themed chrome.
+//  - journal        — the unlocked ('open') split view: a seeded entry list (one selected) on the
+//                     left, the editor (title input + italic date header + body textarea) on the right.
+//  - minds-eye      — the REAL shared GraphCanvas fed a seeded populated RenderGraph (fact/doc/
+//                     conversation/entity nodes, a pinned + a conflicting pair, a bond edge) PLUS the
+//                     module's "one thing to fix" conflict tray. The graph canvas is a deliberately
+//                     dark, self-contained visualization surface (#111820 field, #cfd8e0 labels, the
+//                     kind→colour node fills) — those colours are content-intrinsic to the graph, not
+//                     theme tokens, so dark-on-dark there is by design rather than a skin regression.
+
+/** Deterministic mulberry32 PRNG so the SSR'd solitaire deal is stable run-to-run. */
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return (): number => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+async function loadSolitaire(): Promise<string> {
+  const { SolitaireModule } = await import('../src/renderer/modules/solitaire/SolitaireModule');
+  // Seed Math.random ONLY around the synchronous SSR so the dealt board is deterministic; the
+  // shuffle is the game's one legitimate RNG site (see engine.ts) and this never touches a
+  // correctness-critical path — it just fixes the screenshot's layout.
+  const orig = Math.random;
+  Math.random = mulberry32(0x5eed);
+  try {
+    return renderToStaticMarkup(createElement(SolitaireModule));
+  } finally {
+    Math.random = orig;
+  }
+}
+
+async function loadNumberMuncher(): Promise<string> {
+  const { StandardKeypad } = await import('../src/renderer/modules/number-muncher/StandardKeypad');
+  const noop = (): void => {};
+  const modes = ['Standard', 'Scientific', 'Programmer', 'Converter', 'Statistics', 'Date Calc', 'Unit Calc'];
+  const history = [
+    '128 × 64 = 8192',
+    '8192 ÷ 3 = 2730.6666667',
+    '√(2730.6666667) = 52.255781',
+    '52.255781 + 1000 = 1052.255781'
+  ];
+  const display = '1,052.255781';
+  const memory = 8192;
+  const lastResult = display;
+  const keypad = createElement(StandardKeypad, {
+    onDigit: noop, onDot: noop, onOp: noop, onEquals: noop,
+    onUnary: noop, onClear: noop, onClearEntry: noop, onBackspace: noop
+  });
+  return renderToStaticMarkup(
+    <div className="ga98-calc">
+      <div className="ga98-calc-tabs" role="tablist" aria-label="Calculator modes">
+        {modes.map((m, i) => (
+          <button key={m} type="button" role="tab" aria-selected={i === 0} className="ga98-calc-mode" data-active={i === 0}>
+            {m}
+          </button>
+        ))}
+      </div>
+      <div className="ga98-calc-main">
+        <div className="ga98-calc-topbar">
+          <div className="ga98-calc-display" data-error={false}>{display}</div>
+          <button type="button" className="ga98-calc-hist-toggle" aria-pressed={true} aria-label="Toggle history" title="History">🕘</button>
+        </div>
+        <div className="ga98-calc-mem-row">
+          {['MC', 'MR', 'MS', 'M+', 'M-'].map((op) => (
+            <button key={op} type="button" className="ga98-calc-key ga98-calc-mem">{op}</button>
+          ))}
+          <span className="ga98-calc-mem-reg">M = {memory}</span>
+        </div>
+        {keypad}
+        <div className="ga98-calc-statusbar">
+          <span className="ga98-calc-status-mode">Standard</span>
+          <span>64-bit</span>
+          <span className="ga98-calc-status-result">Last: {lastResult}</span>
+        </div>
+        {/* Real drawer is `position:absolute; inset:0` (overlays the keypad). For the QA shot only,
+            flow it inline so the result display + keypad AND the seeded history list are BOTH visible
+            and audited in one frame — a presentational tweak, no colour is changed. */}
+        <div className="ga98-calc-history-drawer" style={{ position: 'static', height: 150, marginTop: 6 }}>
+          <div className="ga98-calc-panel-title">
+            History
+            <span className="ga98-calc-hist-actions">
+              <button type="button" className="ga98-calc-hist-clear">Clear</button>
+              <button type="button" className="ga98-calc-hist-clear">Close</button>
+            </span>
+          </div>
+          <ul className="ga98-calc-hist-list">
+            {history.map((h, i) => (
+              <li key={i} className="ga98-calc-hist-item">{h}</li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function loadJournal(): string {
+  const fmtBytes = (n: number): string => (n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} KB`);
+  const entries = [
+    { id: 'j1', title: 'Field notes — Kharkiv desk', updatedAt: '2026-08-05T09:12:00Z', bytes: 1840 },
+    { id: 'j2', title: 'PQC reading list (ML-DSA, ML-KEM)', updatedAt: '2026-08-04T22:03:00Z', bytes: 512 },
+    { id: 'j3', title: 'Untitled', updatedAt: '2026-08-03T14:20:00Z', bytes: 64 }
+  ];
+  const selId = 'j1';
+  const title = 'Field notes — Kharkiv desk';
+  const body =
+    'Two outlets now corroborate the substation strike. Casualties still unconfirmed — hold the number.\n\n' +
+    'Cross-check the cyber claim against the utility’s own status page before it goes in the dossier.';
+  const createdAt = '2026-08-05T09:12:00Z';
+  const headerDate = new Date(createdAt).toLocaleDateString(undefined, {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+  });
+  return renderToStaticMarkup(
+    <div className="ga98-split" style={{ height: '100%' }}>
+      <div className="ga98-pane" style={{ width: 200, flex: '0 0 auto', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', gap: 4, padding: 4 }}>
+          <button title="Start a new entry">New</button>
+        </div>
+        <ul className="ga98-list" style={{ flex: 1, overflow: 'auto', margin: 0 }}>
+          {entries.map((e) => (
+            <li key={e.id} data-selected={e.id === selId} title={`${fmtBytes(e.bytes)} · ${new Date(e.updatedAt).toLocaleString()}`}>
+              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }}>{e.title}</span>
+              <button style={{ minWidth: 0, padding: '0 5px' }} title="Delete">×</button>
+            </li>
+          ))}
+        </ul>
+      </div>
+      <div className="ga98-pane" style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+        <div className="ga98-toolbar">
+          <input className="ga98-text" defaultValue={title} placeholder="entry title" style={{ flex: 1 }} />
+          <button>Save</button>
+          <button title="Delete this entry">Delete</button>
+        </div>
+        <div style={{ padding: '4px 6px', fontSize: 11, color: 'var(--ga98-dim-deep)', borderBottom: '1px solid #808080', fontStyle: 'italic' }}>
+          {headerDate}
+        </div>
+        <textarea
+          className="ga98-text"
+          style={{ flex: 1, resize: 'none', fontFamily: 'Courier New, monospace', fontSize: 12, minHeight: 260 }}
+          defaultValue={body}
+          placeholder="Dear journal…"
+        />
+      </div>
+    </div>
+  );
+}
+
+async function loadMindsEye(): Promise<string> {
+  const { GraphCanvas } = await import('../src/renderer/components/graph-canvas/GraphCanvas');
+  const noop = (): void => {};
+  const graph = {
+    nodes: [
+      { id: 'f1', x: 10, y: 20, strength: 0.85, label: 'Operator prefers Tor-first egress', cls: 'node-fact pinned' },
+      { id: 'f2', x: 120, y: 60, strength: 0.5, label: 'Case ATLAS opened 2026-07', cls: 'node-fact' },
+      { id: 'd1', x: 60, y: 150, strength: 0.6, label: 'dossier-kharkiv.pdf', cls: 'node-doc' },
+      { id: 'c1', x: 210, y: 110, strength: 0.7, label: 'Chat: PQC handshake review', cls: 'node-conversation' },
+      { id: 'e1', x: 175, y: 30, strength: 0.95, label: 'Entity: BleepingComputer', cls: 'node-entity' },
+      { id: 'f3', x: 235, y: 175, strength: 0.45, label: 'Wallet signs with ML-DSA-65', cls: 'node-fact conflict' },
+      { id: 'f4', x: 30, y: 95, strength: 0.55, label: 'Wallet signs with ECDSA', cls: 'node-fact conflict' }
+    ],
+    edges: [
+      { source: 'f1', target: 'd1', cls: 'edge-derived' },
+      { source: 'f2', target: 'c1', cls: 'edge-derived' },
+      { source: 'e1', target: 'c1', cls: 'edge-bond' },
+      { source: 'f3', target: 'f4', cls: 'edge-conflict' }
+    ]
+  };
+  const canvas = createElement(GraphCanvas, {
+    graph,
+    view: { w: 720, h: 500 },
+    ariaLabel: "Mind's Eye memory graph",
+    onNodeClick: noop,
+    onDrawEdge: noop,
+    onEdgeClick: noop,
+    emptyMessage: 'Nothing remembered yet — start chatting or ➕ add a document.',
+    renderInspector: () => null
+  });
+  // Reproduce the module's "one thing to fix" conflict tray (intrinsic dark amber surface) above it.
+  return renderToStaticMarkup(
+    <div style={{ display: 'flex', flexDirection: 'column', height: 560, background: '#111820' }}>
+      <div style={{ padding: 8, fontSize: 12, background: '#3a2a1a', color: '#f0d8b0', borderBottom: '1px solid #5a4020' }}>
+        <div style={{ fontWeight: 'bold', marginBottom: 4 }}>One thing to fix: conflicting facts</div>
+        <div style={{ marginBottom: 6 }}>&ldquo;Wallet signs with ML-DSA-65&rdquo; vs &ldquo;Wallet signs with ECDSA&rdquo;</div>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button>Keep &ldquo;Wallet signs with ML-DSA-65&rdquo;</button>
+          <button>Keep &ldquo;Wallet signs with ECDSA&rdquo;</button>
+        </div>
+      </div>
+      {canvas}
+    </div>
+  );
+}
+
 let session: ChromeSession;
 
 beforeAll(async () => {
@@ -368,9 +579,11 @@ afterAll(async () => {
   await session?.close();
 });
 
-/** Audit a populated fragment under amethyst, capture its PNG, and return the flags. */
-async function auditAndShoot(module: string, bodyHtml: string): Promise<ContrastFlag[]> {
-  const flags = await auditRenderedContrast(session.page, { bodyHtml, css: CSS, theme: 'amethyst', exempt: EXEMPT });
+/** Audit a populated fragment under amethyst, capture its PNG, and return the flags. `exempt`
+ *  defaults to the Batch-A geoint content-intrinsic set; callers pass a module-specific list
+ *  (e.g. solitaire's playing-card chrome) when their intrinsic surfaces differ. */
+async function auditAndShoot(module: string, bodyHtml: string, exempt: string[] = EXEMPT): Promise<ContrastFlag[]> {
+  const flags = await auditRenderedContrast(session.page, { bodyHtml, css: CSS, theme: 'amethyst', exempt });
   await captureScreenshot(session, join(QA_DIR, `${module}.png`), { width: 900, height: 620 });
   return flags;
 }
@@ -412,6 +625,38 @@ describe('QUIET AMETHYST populated-state QA — Batch A', () => {
   it('settings (mid-strength password meter + recovery key) — populated', async () => {
     const flags = await auditAndShoot('settings', loadSettings());
     report('settings', flags);
+    expect(Array.isArray(flags)).toBe(true);
+  }, 120000);
+});
+
+describe('QUIET AMETHYST populated-state QA — Batch B', () => {
+  it('solitaire (seeded dealt board — real module) — populated', async () => {
+    // `.ga98-card` is content-intrinsic playing-card chrome (white paper + red/black suit ink,
+    // fixed regardless of app theme) — exemption-scoped exactly like the geoint map/swatch so the
+    // white card faces don't mask a real theme island; the green felt (#047a32) is the table.
+    const flags = await auditAndShoot('solitaire', await loadSolitaire(), ['.ga98-card']);
+    report('solitaire', flags);
+    expect(Array.isArray(flags)).toBe(true);
+  }, 120000);
+
+  it('number-muncher (result state + open history drawer + real keypad) — populated', async () => {
+    const flags = await auditAndShoot('number-muncher', await loadNumberMuncher(), []);
+    report('number-muncher', flags);
+    expect(Array.isArray(flags)).toBe(true);
+  }, 120000);
+
+  it('journal (unlocked split: entry list + editor) — populated', async () => {
+    const flags = await auditAndShoot('journal', loadJournal(), []);
+    report('journal', flags);
+    expect(Array.isArray(flags)).toBe(true);
+  }, 120000);
+
+  it("minds-eye (populated graph + conflict tray — real GraphCanvas) — populated", async () => {
+    // The graph canvas is a self-contained dark visualization surface (#111820 field, #cfd8e0
+    // labels, kind→colour node fills, the #3a2a1a conflict tray) — those are content-intrinsic
+    // graph colours, not theme tokens, so no theme-token exemption is needed here.
+    const flags = await auditAndShoot('minds-eye', await loadMindsEye(), []);
+    report('minds-eye', flags);
     expect(Array.isArray(flags)).toBe(true);
   }, 120000);
 });
