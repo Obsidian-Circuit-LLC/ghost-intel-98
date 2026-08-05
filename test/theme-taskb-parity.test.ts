@@ -73,7 +73,12 @@ const CASES: Array<{ site: string; cssVar: string; literal: string; rgb: string 
   { site: 'Local AI ready caption', cssVar: '--ga98-ok-text-deep', literal: '#006400', rgb: 'rgb(0, 100, 0)' },
   { site: 'Cases alert-rule fired marker', cssVar: '--ga98-ok-text-fired', literal: '#080', rgb: 'rgb(0, 136, 0)' },
   // (3) #900 danger ink — the single parity-exact token every #900 site routes to
-  { site: 'danger/error caption ink', cssVar: '--ga98-danger-ink', literal: '#900', rgb: 'rgb(153, 0, 0)' }
+  { site: 'danger/error caption ink', cssVar: '--ga98-danger-ink', literal: '#900', rgb: 'rgb(153, 0, 0)' },
+  // (4) status-badge inks — original literals differ from the LOCKED status tier
+  //     (--ga98-status-error #9a1621 / --ga98-status-warning #6b4600), so routing through it shifted
+  //     the classic hue. Parity-exact purpose tokens restore the byte-exact original literal.
+  { site: 'X-session Expired badge + status-error text', cssVar: '--ga98-badge-error-ink', literal: '#a00000', rgb: 'rgb(160, 0, 0)' },
+  { site: 'X test status inconclusive/warn text', cssVar: '--ga98-badge-warn-ink', literal: '#a06000', rgb: 'rgb(160, 96, 0)' }
 ];
 
 describe('CLASSIC PARITY (Task B) — corrected tokens resolve to their exact original literal (classic theme)', () => {
@@ -99,4 +104,56 @@ describe('CLASSIC PARITY (Task B) — corrected tokens resolve to their exact or
       expect(got, `${v} must differ from status-success in classic`).not.toBe(success);
     }
   });
+
+  it('the badge inks do NOT collapse onto the LOCKED status tier in classic (hue not shifted)', async () => {
+    // LOCKED tier classic values that the sweep had wrongly routed these badges to.
+    expect(await resolvedRgb('--ga98-status-error')).toBe('rgb(154, 22, 33)'); // #9a1621
+    expect(await resolvedRgb('--ga98-status-warning')).toBe('rgb(107, 70, 0)'); // #6b4600
+    expect(
+      await resolvedRgb('--ga98-badge-error-ink'),
+      'badge-error-ink must NOT equal status-error (#9a1621) in classic',
+    ).not.toBe('rgb(154, 22, 33)');
+    expect(
+      await resolvedRgb('--ga98-badge-warn-ink'),
+      'badge-warn-ink must NOT equal status-warning (#6b4600) in classic',
+    ).not.toBe('rgb(107, 70, 0)');
+  });
+});
+
+/** Relative luminance (WCAG 2.x) of an `rgb(r, g, b)` string. */
+function luminance(rgb: string): number {
+  const [r, g, b] = (rgb.match(/\d+/g) ?? ['0', '0', '0']).map(Number).map((c) => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/** WCAG contrast ratio between two `rgb()` strings. */
+function contrast(a: string, b: string): number {
+  const la = luminance(a);
+  const lb = luminance(b);
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}
+
+describe('AMETHYST LEGIBILITY (Task B) — badge inks read legibly on the near-black skin', () => {
+  beforeAll(async () => {
+    await session.page.evaluate(`document.documentElement.dataset.ga98Theme = 'amethyst'`);
+  });
+  afterAll(async () => {
+    await session.page.evaluate(`delete document.documentElement.dataset.ga98Theme`);
+  });
+
+  // The amethyst window-body surface these captions sit on (--ga98-grey in the amethyst block).
+  const AMETHYST_SURFACE = 'rgb(26, 24, 34)'; // #1a1822
+
+  for (const cssVar of ['--ga98-badge-error-ink', '--ga98-badge-warn-ink']) {
+    it(`${cssVar} is legible (>=4.5:1) on the amethyst surface and differs from its classic value`, async () => {
+      const amethyst = await resolvedRgb(cssVar);
+      const classic = CASES.find((c) => c.cssVar === cssVar)?.rgb;
+      expect(amethyst, `${cssVar} must be redefined for amethyst (not the dark classic literal)`).not.toBe(classic);
+      const ratio = contrast(amethyst, AMETHYST_SURFACE);
+      expect(ratio, `${cssVar} amethyst=${amethyst} contrast ${ratio.toFixed(2)}:1 on ${AMETHYST_SURFACE}`).toBeGreaterThanOrEqual(4.5);
+    });
+  }
 });

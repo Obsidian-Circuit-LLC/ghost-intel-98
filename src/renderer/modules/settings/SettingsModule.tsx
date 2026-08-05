@@ -977,7 +977,7 @@ function fmtRelative(iso: string | undefined, now: number): string {
 
 const STATUS_BADGE: Record<XSessionMeta['status'], { text: string; color: string }> = {
   valid: { text: 'Valid ✓', color: 'var(--ga98-ok-text)' },
-  expired: { text: 'Expired ✗', color: 'var(--ga98-status-error)' },
+  expired: { text: 'Expired ✗', color: 'var(--ga98-badge-error-ink)' },
   untested: { text: 'Untested •', color: 'var(--ga98-dim-faint)' },
 };
 
@@ -1284,7 +1284,7 @@ export function XPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSett
             style={{
               fontSize: 11,
               margin: '6px 0 0 0',
-              color: status.kind === 'ok' ? 'var(--ga98-ok-text)' : status.kind === 'error' ? 'var(--ga98-status-error)' : 'var(--ga98-status-warning)',
+              color: status.kind === 'ok' ? 'var(--ga98-ok-text)' : status.kind === 'error' ? 'var(--ga98-badge-error-ink)' : 'var(--ga98-badge-warn-ink)',
             }}
           >
             {status.msg}

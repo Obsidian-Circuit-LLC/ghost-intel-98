@@ -93,6 +93,15 @@
   --ga98-pw-fair: #a0a000;      /* password-strength meter step 2 — fair */
   --ga98-pw-good: #2080a0;      /* password-strength meter step 3 — good */
   --ga98-pw-strong: #008000;    /* password-strength meter step 4 — strong */
+  /* ── Task B (finish) — status-badge inks ───────────────────────────────────────────────
+     The LOCKED status tier (--ga98-status-error #9a1621 / --ga98-status-warning #6b4600) does
+     NOT equal these original inline literals, so routing the X-session status badge / test-status
+     text through it SHIFTED the classic hue (#a00000 → #9a1621, #a06000 → #6b4600). These purpose
+     tokens keep the byte-exact classic literal (parity is sacred) and let amethyst pick a bright,
+     legible value. Inline-style sites → routed through a token (a CSS rule cannot override an
+     inline style). NOT locked (skinnable palette detail). */
+  --ga98-badge-error-ink: #a00000; /* X-session "Expired ✗" badge + X test status-error text */
+  --ga98-badge-warn-ink: #a06000;  /* X test status inconclusive/warn text */
 }
 
 html, body, #root {
@@ -222,6 +231,9 @@ input, textarea, [contenteditable="true"], .ga98-selectable {
   --ga98-pw-fair: #e6d24a;      /* step 2 — bright olive/yellow on dark */
   --ga98-pw-good: #56b6d6;      /* step 3 — bright teal on dark */
   --ga98-pw-strong: #5fd98a;    /* step 4 — bright green on dark */
+  /* Task B (finish) status-badge inks — amethyst variants (classic-parity values in base :root). */
+  --ga98-badge-error-ink: #ff7b7b; /* bright red badge ink, >=4.5:1 on the #1a1822 surface */
+  --ga98-badge-warn-ink: #f0a94a;  /* bright amber warn ink, legible on near-black */
 }
 
 /* ── QUIET AMETHYST — Task 8 long-tail utility classes ──────────────────────────────────────────
