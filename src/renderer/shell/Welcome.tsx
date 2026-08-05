@@ -13,7 +13,7 @@ const STEPS = [
     body: (
       <>
         <p>This is a Windows 98–inspired case-management desktop. Twelve modules covering case files, mail, browser, SSH, camera streams, AI assistance, and more — all local-first, no telemetry, no phone-home.</p>
-        <p style={{ fontSize: 11, color: '#444' }}>Three-step intro. Click <b>Next</b> to continue or <b>Skip</b> to dismiss.</p>
+        <p style={{ fontSize: 11, color: 'var(--ga98-text-dim)' }}>Three-step intro. Click <b>Next</b> to continue or <b>Skip</b> to dismiss.</p>
       </>
     )
   },
@@ -96,7 +96,7 @@ export function Welcome(): JSX.Element | null {
             {current.body}
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 6, padding: 8, borderTop: '1px solid #808080', justifyContent: 'flex-end' }}>
+        <div style={{ display: 'flex', gap: 6, padding: 8, borderTop: '1px solid var(--ga98-shadow-dark)', justifyContent: 'flex-end' }}>
           <button onClick={() => void skip()} disabled={persisting}>Skip</button>
           <button onClick={() => setStep(Math.max(0, step - 1))} disabled={step === 0 || persisting}>‹ Back</button>
           <button onClick={() => void next()} disabled={persisting} autoFocus>{isLast ? (persisting ? 'Saving…' : 'Finish') : 'Next ›'}</button>

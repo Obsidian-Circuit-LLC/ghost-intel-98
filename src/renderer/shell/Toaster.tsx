@@ -12,11 +12,13 @@ const GLYPH: Record<ToastKind, string> = {
   error: '✕'
 };
 
+// Role-bearing status colours → the fixed semantic tier (identical in every theme; never
+// recoloured by a skin). Each toast kind maps to its own status token by role.
 const COLOR: Record<ToastKind, string> = {
-  info: '#000080',
-  success: '#006400',
-  warn: '#8a5a00',
-  error: '#900000'
+  info: 'var(--ga98-status-info)',
+  success: 'var(--ga98-status-success)',
+  warn: 'var(--ga98-status-warning)',
+  error: 'var(--ga98-status-error)'
 };
 
 export function Toaster(): JSX.Element {

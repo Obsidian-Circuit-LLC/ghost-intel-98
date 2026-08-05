@@ -44,7 +44,9 @@ function digitalTime(now: Date, hour12: boolean): string {
 
 function Hand({ angle, len, width, color }: { angle: number; len: number; width: number; color: string }): JSX.Element {
   const rad = (angle - 90) * (Math.PI / 180);
-  return <line x1={50} y1={50} x2={50 + len * Math.cos(rad)} y2={50 + len * Math.sin(rad)} stroke={color} strokeWidth={width} strokeLinecap="round" />;
+  // `stroke` goes through inline style, not the presentation attribute: SVG presentation
+  // attributes do not resolve CSS `var()`, so a token colour must be applied via `style`.
+  return <line x1={50} y1={50} x2={50 + len * Math.cos(rad)} y2={50 + len * Math.sin(rad)} style={{ stroke: color }} strokeWidth={width} strokeLinecap="round" />;
 }
 
 function AnalogFace({ now }: { now: Date }): JSX.Element {
@@ -53,18 +55,18 @@ function AnalogFace({ now }: { now: Date }): JSX.Element {
   for (let i = 1; i <= 12; i += 1) {
     const a = i * 30 * (Math.PI / 180);
     nums.push(
-      <text key={i} x={50 + 38 * Math.sin(a)} y={50 - 38 * Math.cos(a)} textAnchor="middle" dominantBaseline="central" fontSize={9} fontFamily="'MS Sans Serif', Tahoma, sans-serif" fill="#000">{i}</text>
+      <text key={i} x={50 + 38 * Math.sin(a)} y={50 - 38 * Math.cos(a)} textAnchor="middle" dominantBaseline="central" fontSize={9} fontFamily="'MS Sans Serif', Tahoma, sans-serif" style={{ fill: 'var(--ga98-text)' }}>{i}</text>
     );
   }
   return (
     <svg viewBox="0 0 100 100" width="100%" height="100%" style={{ display: 'block' }}>
-      <circle cx={50} cy={50} r={47} fill="#fff" stroke="#808080" strokeWidth={2} />
-      <circle cx={50} cy={50} r={47} fill="none" stroke="#000" strokeWidth={0.5} />
+      <circle cx={50} cy={50} r={47} style={{ fill: 'var(--ga98-shadow-light)' }} stroke="#808080" strokeWidth={2} />
+      <circle cx={50} cy={50} r={47} fill="none" style={{ stroke: 'var(--ga98-text)' }} strokeWidth={0.5} />
       {nums}
-      <Hand angle={(h + m / 60) * 30} len={24} width={2.4} color="#000" />
-      <Hand angle={(m + s / 60) * 6} len={34} width={1.6} color="#000" />
-      <Hand angle={s * 6} len={36} width={0.8} color="#c00000" />
-      <circle cx={50} cy={50} r={2} fill="#000" />
+      <Hand angle={(h + m / 60) * 30} len={24} width={2.4} color="var(--ga98-text)" />
+      <Hand angle={(m + s / 60) * 6} len={34} width={1.6} color="var(--ga98-text)" />
+      <Hand angle={s * 6} len={36} width={0.8} color="var(--ga98-status-error)" />
+      <circle cx={50} cy={50} r={2} style={{ fill: 'var(--ga98-text)' }} />
     </svg>
   );
 }

@@ -81,9 +81,9 @@ export class ModuleErrorBoundary extends Component<Props, State> {
             <code
               style={{
                 display: 'block',
-                background: '#fee',
-                color: '#900',
-                border: '1px solid #c99',
+                background: 'var(--ga98-shadow-light)',
+                color: 'var(--ga98-status-error)',
+                border: '1px solid var(--ga98-status-error)',
                 padding: '2px 6px',
                 fontSize: 11,
                 maxWidth: '100%',

@@ -58,7 +58,7 @@ export function SplashScreen({ onDone }: { onDone: () => void }): JSX.Element {
         position: 'fixed',
         inset: 0,
         zIndex: 20000,
-        background: `#000 url(${JSON.stringify(splash)}) center / cover no-repeat`,
+        background: `var(--ga98-shadow-deep) url(${JSON.stringify(splash)}) center / cover no-repeat`,
         opacity: hiding ? 0 : 1,
         transition: `opacity ${FADE_MS}ms ease`
       }}
