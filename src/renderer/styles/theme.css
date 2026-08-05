@@ -8,6 +8,17 @@
   --ga98-shadow-deep: #000000;
   --ga98-taskbar-height: 32px;
   --ga98-blue: #000080;
+  --ga98-titlebar-to: #1084d0;
+  --ga98-titlebar-text: #ffffff;
+  --ga98-accent: #1084d0;
+  --ga98-text: #000000;
+  --ga98-text-dim: #3a3a3a;
+  /* fixed tier — semantic + honesty; identical in every theme, in NO override block */
+  --ga98-status-error: #e5484d;
+  --ga98-status-success: #30a46c;
+  --ga98-status-warning: #d98a00;
+  --ga98-status-info: #4c8dff;
+  --ga98-unverified: #d98a00;
 }
 
 html, body, #root {
@@ -16,7 +27,7 @@ html, body, #root {
   height: 100%;
   font-family: 'Pixelated MS Sans Serif', Arial, sans-serif;
   font-size: 12px;
-  color: #000;
+  color: var(--ga98-text);
   overflow: hidden;
   user-select: none;
   background: var(--ga98-desktop-bg);
@@ -63,6 +74,24 @@ input, textarea, [contenteditable="true"], .ga98-selectable {
   background:
     repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.18) 0 1px, transparent 1px 3px),
     radial-gradient(ellipse at center, transparent 58%, rgba(0, 0, 0, 0.28) 100%);
+}
+
+/* ── QUIET AMETHYST palette skin ─────────────────────────────────────────────
+   Driven by data-ga98-theme='amethyst' on <html> (set in App.tsx via resolveTheme).
+   Overrides ONLY skinnable palette tokens; the fixed semantic/honesty tier stays in
+   base :root and is deliberately absent here (charter-critical two-tier invariant). */
+:root[data-ga98-theme='amethyst'] {
+  --ga98-desktop-bg: #0c0a12;
+  --ga98-grey: #1a1822;
+  --ga98-shadow-dark: #0e0c14;
+  --ga98-shadow-light: #2c2938;
+  --ga98-shadow-deep: #000000;
+  --ga98-blue: #241a33;
+  --ga98-titlebar-to: #3a2a52;
+  --ga98-titlebar-text: #efeaff;
+  --ga98-accent: #9d6bff;
+  --ga98-text: #cfc9dd;
+  --ga98-text-dim: #8a86a0;
 }
 
 .ga98-desktop {
