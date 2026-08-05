@@ -42,7 +42,7 @@ export function StationsDrawer(
   if (!streamingEnabled) {
     return (
       <div className="ga98-stations-drawer">
-        <p style={{ fontSize: 11, color: '#555' }}>Internet streaming is off. Local playback never touches the network; turning this on lets the Jukebox reach the internet for radio.</p>
+        <p style={{ fontSize: 11, color: 'var(--ga98-dim-mid)' }}>Internet streaming is off. Local playback never touches the network; turning this on lets the Jukebox reach the internet for radio.</p>
         <button onClick={onEnableStreaming}>Allow internet streaming</button>
       </div>
     );

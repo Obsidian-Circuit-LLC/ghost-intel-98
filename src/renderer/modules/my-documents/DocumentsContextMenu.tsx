@@ -32,7 +32,7 @@ export function DocumentsContextMenu(p: Props): JSX.Element {
   return (
     <div
       role="menu"
-      style={{ position: 'fixed', left: p.target.x, top: p.target.y, minWidth: 150, background: '#c0c0c0', border: '2px outset #f5f5f5', boxShadow: '2px 2px 5px rgba(0,0,0,0.4)', zIndex: 40 }}
+      style={{ position: 'fixed', left: p.target.x, top: p.target.y, minWidth: 150, background: 'var(--ga98-grey)', border: '2px outset var(--ga98-flyout-outset)', boxShadow: '2px 2px 5px rgba(0,0,0,0.4)', zIndex: 40 }}
       onMouseDown={(ev) => ev.stopPropagation()}
     >
       {item('New Folder', p.onNewFolder)}

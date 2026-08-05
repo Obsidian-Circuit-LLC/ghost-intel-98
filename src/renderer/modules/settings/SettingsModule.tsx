@@ -16,6 +16,7 @@ import { LocalAiPane } from './LocalAiPane';
 import { playMailNotify, clearMailChimeCache } from '../../audio/synth';
 import logoUrl from '../../assets/logo.png';
 import { CLEARNET_DIALOG_TEXT, xGateEffective, xGateToggleAction } from '../x/x-settings-logic';
+import { THEMES } from '../../styles/themes';
 import type { XSessionMeta } from '@shared/ipc-contracts';
 
 type SectionKey = 'about' | 'sound' | 'theme' | 'cases' | 'shortcuts' | 'ai' | 'browser' | 'terminal' | 'mail' | 'backup' | 'security' | 'searchlight' | 'geoint' | 'socmint' | 'x';
@@ -136,7 +137,7 @@ function AboutPane({ info }: { info: { version: string; userData: string; platfo
   return (
     <>
       <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 12 }}>
-        <img src={logoUrl} alt="Ghost Intel 98 logo" style={{ width: 96, height: 96, imageRendering: 'pixelated', border: '1px solid #808080' }} />
+        <img src={logoUrl} alt="Ghost Intel 98 logo" style={{ width: 96, height: 96, imageRendering: 'pixelated', border: '1px solid var(--ga98-shadow-dark)' }} />
         <div>
           <h3 style={{ margin: '0 0 4px 0' }}>Ghost Intel 98</h3>
           <p style={{ margin: 0 }}>v{info?.version ?? '—'} · {info?.platform ?? '—'}</p>
@@ -151,13 +152,13 @@ function AboutPane({ info }: { info: { version: string; userData: string; platfo
         <legend>Secrets backend</legend>
         <p style={{ margin: '4px 0' }}><code>{info?.secretBackend ?? '—'}</code></p>
         {info?.secretBackend === 'basic_text' && (
-          <p style={{ color: '#900', margin: '4px 0' }}>
+          <p style={{ color: 'var(--ga98-danger-ink)', margin: '4px 0' }}>
             ⚠ No OS keyring detected. Secrets are obfuscated, not encrypted against a local attacker.
             Install gnome-keyring or KWallet.
           </p>
         )}
         {info?.secretBackend === 'unavailable' && (
-          <p style={{ color: '#900', margin: '4px 0' }}>
+          <p style={{ color: 'var(--ga98-danger-ink)', margin: '4px 0' }}>
             ⚠ Encryption backend is unavailable. Mail / SSH / AI credentials cannot be saved.
           </p>
         )}
@@ -212,12 +213,12 @@ function SoundPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSetting
           Change chime (open sounds folder)…
         </button>
       </div>
-      <p style={{ fontSize: 11, color: '#444', marginTop: 8 }}>
+      <p style={{ fontSize: 11, color: 'var(--ga98-dim-strong)', marginTop: 8 }}>
         Sounds are synthesised at runtime via Web Audio by default. The optional <strong>Legacy sound
         pack</strong> swaps the startup chime and DialTerm dial-up for bundled AI-reworked recordings of
         the classic Windows jingle and dial-up handshake — derivative works of their originals, off by default.
       </p>
-      <p style={{ fontSize: 11, color: '#444', marginTop: 4 }}>
+      <p style={{ fontSize: 11, color: 'var(--ga98-dim-strong)', marginTop: 4 }}>
         The <strong>"You've got mail" chime</strong> is yours to change: click <em>Change chime</em> to
         open the sounds folder and replace <code>mail-notify.wav</code> with any <code>.wav</code> you
         like (keep the same filename). It takes effect on the next new mail.
@@ -226,10 +227,16 @@ function SoundPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSetting
   );
 }
 
-function ThemePane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSettings>) => Promise<void> }): JSX.Element {
+export function ThemePane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSettings>) => Promise<void> }): JSX.Element {
   return (
     <fieldset>
       <legend>Theme</legend>
+      <label>Theme:&nbsp;
+        <select className="ga98-text" value={s.themeName} onChange={(e) => void patch({ themeName: e.target.value })}>
+          {THEMES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+        </select>
+      </label>
+      <br />
       <label>Intensity:&nbsp;
         <select className="ga98-text" value={s.themeIntensity} onChange={(e) => void patch({ themeIntensity: e.target.value as AppSettings['themeIntensity'] })}>
           <option value="lite">Lite</option>
@@ -410,13 +417,13 @@ export function AiPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSet
             </button>
           </div>
           {!isOnionUrl(s.ai.searxngOnion) && (
-            <span style={{ fontSize: 11, color: '#900' }}>
+            <span style={{ fontSize: 11, color: 'var(--ga98-danger-ink)' }}>
               ⚠ Must be a .onion URL (include http://). SearXNG search fails closed for a non-onion — it is never routed over clearnet.
             </span>
           )}
         </label>
       </div>
-      <p style={{ fontSize: 11, color: '#444', marginTop: 8 }}>
+      <p style={{ fontSize: 11, color: 'var(--ga98-dim-strong)', marginTop: 8 }}>
         The API key is sent to the configured endpoint only when you send an AI message.
         It never leaves your machine for any other reason. The renderer never sees the key
         in plaintext — it lives encrypted in <code>secrets.enc</code> and is read by the
@@ -430,13 +437,13 @@ export function AiPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSet
             onChange={(e) => void patch({ ai: { ...s.ai, useMemory: e.target.checked } })} />
           Memory (recall across all conversations, cases &amp; documents)
         </label>
-        <p style={{ fontSize: 11, color: '#444', margin: '6px 0' }}>
+        <p style={{ fontSize: 11, color: 'var(--ga98-dim-strong)', margin: '6px 0' }}>
           Builds a local vector index of your cases, conversations, and documents using the bundled
           embedding model ({memStatus?.model ?? 'nomic-embed-text'}). Everything stays on this
           machine (loopback only) and is encrypted at rest with your vault. Retrieval is
           deterministic.
         </p>
-        <p style={{ fontSize: 11, color: '#444', margin: '6px 0' }}>
+        <p style={{ fontSize: 11, color: 'var(--ga98-dim-strong)', margin: '6px 0' }}>
           Embedding engine: {embedHealth === 'model-missing'
             ? 'model not loaded — click "Rebuild memory index" below'
             : embedHealth === 'unavailable'
@@ -445,7 +452,7 @@ export function AiPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSet
         </p>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           <button onClick={() => void rebuildIndex()} disabled={memBusy}>{memBusy ? 'Rebuilding…' : 'Rebuild memory index'}</button>
-          <span style={{ fontSize: 11, color: '#444' }}>
+          <span style={{ fontSize: 11, color: 'var(--ga98-dim-strong)' }}>
             {memBusy ? memProgress : memStatus ? `${memStatus.cases} case(s) · ${memStatus.chunks} chunk(s) indexed` : ''}
           </span>
         </div>
@@ -454,7 +461,7 @@ export function AiPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSet
             onChange={(e) => void patch({ ai: { ...s.ai, autoReindex: e.target.checked } })} />
           Keep the memory index live (auto-reindex on save)
         </label>
-        <p style={{ fontSize: 11, color: '#444', margin: '6px 0' }}>
+        <p style={{ fontSize: 11, color: 'var(--ga98-dim-strong)', margin: '6px 0' }}>
           When on, saving a note, case, or conversation quietly refreshes the local index in the
           background (debounced) so recall reflects the latest content without a manual rebuild.
           Still local, still offline.
@@ -464,7 +471,7 @@ export function AiPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSet
             onChange={(e) => void patch({ ai: { ...s.ai, adaptiveMemory: e.target.checked } })} />
           Let the assistant learn a long-term profile from conversations
         </label>
-        <p style={{ fontSize: 11, color: '#444', margin: '6px 0' }}>
+        <p style={{ fontSize: 11, color: 'var(--ga98-dim-strong)', margin: '6px 0' }}>
           When on (and Ollama is the provider), the assistant distills durable facts and a rolling
           summary from each conversation after it settles, and injects them into future replies.
           Local only, encrypted at rest, off by default. Every learned item is visible, editable,
@@ -525,7 +532,7 @@ function TerminalPane({ s, reload }: { s: AppSettings; reload: () => Promise<voi
           <option value="powershell">PowerShell</option>
         </select>
       </label>
-      <p style={{ fontSize: 11, color: '#444', marginTop: 8 }}>
+      <p style={{ fontSize: 11, color: 'var(--ga98-dim-strong)', marginTop: 8 }}>
         Off by default. Turning it on opens a confirmation prompt. The local shell runs on your
         machine with your account's privileges; it is not a remote connection. The terminal backend
         is loaded only when you open a shell session.
@@ -539,7 +546,7 @@ function MailPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSettings
     <fieldset>
       <legend>Mail</legend>
       <p style={{ fontSize: 12, marginTop: 0 }}>Add accounts from the Mail module. Each account stores its IMAP/SMTP password in <code>secrets.enc</code>, encrypted via your OS keyring.</p>
-      <hr style={{ margin: '8px 0', borderColor: '#ccc' }} />
+      <hr style={{ margin: '8px 0', borderColor: 'var(--ga98-divider)' }} />
       <label>
         <input
           type="checkbox"
@@ -548,7 +555,7 @@ function MailPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSettings
         />
         {' '}Check for new mail in the background
       </label>
-      <p style={{ fontSize: 11, color: '#444', margin: '6px 0 0' }}>
+      <p style={{ fontSize: 11, color: 'var(--ga98-dim-strong)', margin: '6px 0 0' }}>
         When on, Ghost Intel 98 checks your inbox about once a minute even when the Mail window is
         closed, and plays the “You’ve got mail” chime + a toast when new mail arrives. Off by default
         (no background network use until you enable it). The chime also needs <strong>Sound → Enable
@@ -580,7 +587,7 @@ function BackupPane(): JSX.Element {
           } catch (err) { toast.error(`Restore failed: ${(err as Error).message}`); }
         }}>Restore…</button>
       </div>
-      <p style={{ fontSize: 11, color: '#900', marginTop: 8 }}>
+      <p style={{ fontSize: 11, color: 'var(--ga98-danger-ink)', marginTop: 8 }}>
         Encrypted credentials (Mail / SSH / AI passwords) are OS-keyring-bound and do not transfer to
         another machine — re-enter them there.
       </p>
@@ -598,7 +605,7 @@ function SearchlightPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppS
         <input type="checkbox" checked={sl.networkEnabled} onChange={(e) => set({ networkEnabled: e.target.checked })} />
         {' '}Enable Searchlight network (sweeps). Off = Searchlight sends nothing.
       </label>
-      <p style={{ fontSize: 11, color: '#444', margin: '6px 0' }}>
+      <p style={{ fontSize: 11, color: 'var(--ga98-dim-strong)', margin: '6px 0' }}>
         Sweeps run through Tor by default. A per-sweep clearnet checkbox is in the Sweep panel.
       </p>
       <div style={{ display: 'grid', gridTemplateColumns: '160px 80px', gap: 6, alignItems: 'center', marginTop: 8 }}>
@@ -664,7 +671,7 @@ function SearchlightPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppS
             onChange={(e) => set({ scorer: { ...sl.scorer, maybeFloor: e.target.value === '' ? null : Number(e.target.value) } })}
           />
         </div>
-        <p style={{ fontSize: 11, color: '#444', margin: '6px 0' }}>
+        <p style={{ fontSize: 11, color: 'var(--ga98-dim-strong)', margin: '6px 0' }}>
           Leave thresholds blank to use the model&apos;s own calibrated values.
         </p>
         <button onClick={() => set({ scorer: { foundThreshold: null, maybeFloor: null, lightweightMode: false, useMl: false } })}>
@@ -724,9 +731,9 @@ export function GeoINTPane({ s, patch }: { s: AppSettings; patch: (p: Partial<Ap
           </button>
         </div>
         {hasKey && (
-          <span style={{ fontSize: 11, color: '#008000', marginTop: 4, display: 'block' }}>✓ key stored</span>
+          <span style={{ fontSize: 11, color: 'var(--ga98-ok-text)', marginTop: 4, display: 'block' }}>✓ key stored</span>
         )}
-        <p style={{ fontSize: 11, color: '#444', margin: '6px 0 0' }}>
+        <p style={{ fontSize: 11, color: 'var(--ga98-dim-strong)', margin: '6px 0 0' }}>
           AISStream.io key for the Live Ships feed. Stored encrypted; never leaves this machine.
           The ADS-B aircraft feed needs no key.
         </p>
@@ -873,15 +880,15 @@ function SocmintPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSetti
             <span>Tor (per-burner circuit)</span>
           </label>
         </div>
-        <p style={{ fontSize: 11, color: '#444', margin: '6px 0 0' }}>
+        <p style={{ fontSize: 11, color: 'var(--ga98-dim-strong)', margin: '6px 0 0' }}>
           Direct sends traffic over your normal connection; Tor routes each burner through its own circuit.
           In Tor mode a bootstrapped Tor connection is required — the collector refuses when Tor is down.
         </p>
       </div>
-      <hr style={{ margin: '10px 0', borderColor: '#ccc' }} />
+      <hr style={{ margin: '10px 0', borderColor: 'var(--ga98-divider)' }} />
       <div>
         <p style={{ fontSize: 12, margin: '0 0 8px 0', fontWeight: 'bold' }}>Burner identity</p>
-        <p style={{ fontSize: 11, color: '#444', margin: '0 0 8px 0' }}>
+        <p style={{ fontSize: 11, color: 'var(--ga98-dim-strong)', margin: '0 0 8px 0' }}>
           Burner credentials are stored encrypted via the OS keyring under
           {' '}<code>socmint.burner.&lt;id&gt;.*</code>. Only a boolean{' '}
           <strong>has credential</strong> status is shown here — the secret values
@@ -932,13 +939,13 @@ function SocmintPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSetti
             {saving ? 'Saving…' : 'Save burner credentials'}
           </button>
           {burnerId.trim() && hasBurner && (
-            <span style={{ fontSize: 11, color: '#008000' }}>✓ credential stored</span>
+            <span style={{ fontSize: 11, color: 'var(--ga98-ok-text)' }}>✓ credential stored</span>
           )}
           {burnerId.trim() && !hasBurner && (
-            <span style={{ fontSize: 11, color: '#888' }}>no credential stored</span>
+            <span style={{ fontSize: 11, color: 'var(--ga98-dim-faint)' }}>no credential stored</span>
           )}
         </div>
-        <p style={{ fontSize: 11, color: '#444', margin: '8px 0 0' }}>
+        <p style={{ fontSize: 11, color: 'var(--ga98-dim-strong)', margin: '8px 0 0' }}>
           The Telegram collector is built to interface; live validation and library
           lock are pending the operator smoke test (spec §7). Setting credentials
           here prepares the identity for when the library is pinned.
@@ -969,9 +976,9 @@ function fmtRelative(iso: string | undefined, now: number): string {
 }
 
 const STATUS_BADGE: Record<XSessionMeta['status'], { text: string; color: string }> = {
-  valid: { text: 'Valid ✓', color: '#008000' },
-  expired: { text: 'Expired ✗', color: '#a00000' },
-  untested: { text: 'Untested •', color: '#888' },
+  valid: { text: 'Valid ✓', color: 'var(--ga98-ok-text)' },
+  expired: { text: 'Expired ✗', color: 'var(--ga98-badge-error-ink)' },
+  untested: { text: 'Untested •', color: 'var(--ga98-dim-faint)' },
 };
 
 /**
@@ -1137,13 +1144,13 @@ export function XPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSett
           />
           <span>
             <strong>Enable authenticated X collection</strong>
-            <span style={{ display: 'block', fontSize: 11, color: '#900' }}>
+            <span style={{ display: 'block', fontSize: 11, color: 'var(--ga98-danger-ink)' }}>
               Uses your real clearnet IP — X has no Tor path.
             </span>
           </span>
         </label>
 
-        <p style={{ fontSize: 11, color: '#444', margin: '10px 0 0 0' }}>
+        <p style={{ fontSize: 11, color: 'var(--ga98-dim-strong)', margin: '10px 0 0 0' }}>
           Both <code>settings.x.networkEnabled</code> and <code>settings.x.clearnetAcknowledged</code>{' '}
           must be true before any X egress path is entered. Enabling here confirms the
           clearnet disclosure once; disabling leaves the acknowledgement in place so
@@ -1156,7 +1163,7 @@ export function XPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSett
       {/* Stored sessions */}
       <fieldset>
         <legend>Stored sessions</legend>
-        <p style={{ fontSize: 11, color: '#444', margin: '0 0 8px 0' }}>
+        <p style={{ fontSize: 11, color: 'var(--ga98-dim-strong)', margin: '0 0 8px 0' }}>
           A session is a matched <code>auth_token</code> + <code>ct0</code> pair, stored
           encrypted in the OS keyring; only non-secret metadata (label, last-tested handle,
           status) is shown here — the cookies are never echoed back to the UI. The @handle
@@ -1164,7 +1171,7 @@ export function XPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSett
         </p>
 
         {sessions.length === 0 ? (
-          <p style={{ fontSize: 11, color: '#888', margin: 0 }}>No sessions stored yet.</p>
+          <p style={{ fontSize: 11, color: 'var(--ga98-dim-faint)', margin: 0 }}>No sessions stored yet.</p>
         ) : (
           <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
             {sessions.map((m) => {
@@ -1178,8 +1185,8 @@ export function XPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSett
                 >
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <strong style={{ fontSize: 12 }}>{m.label}</strong>
-                    {handle && <span style={{ fontSize: 11, color: '#444' }}> · @{handle}</span>}
-                    <span style={{ display: 'block', fontSize: 10, color: '#888' }}>
+                    {handle && <span style={{ fontSize: 11, color: 'var(--ga98-dim-strong)' }}> · @{handle}</span>}
+                    <span style={{ display: 'block', fontSize: 10, color: 'var(--ga98-dim-faint)' }}>
                       Last tested: {fmtRelative(m.lastTestedAt, now)}
                     </span>
                   </span>
@@ -1202,7 +1209,7 @@ export function XPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSett
       {/* Add session — atomic auth_token+ct0 pairing */}
       <fieldset>
         <legend>Add session</legend>
-        <p style={{ fontSize: 11, color: '#444', margin: '0 0 8px 0' }}>
+        <p style={{ fontSize: 11, color: 'var(--ga98-dim-strong)', margin: '0 0 8px 0' }}>
           Paste a matched <code>auth_token</code> + <code>ct0</code> from ONE logged-in
           x.com browser session on your burner account. Both cookies are required together
           so a mismatched pair can't be stored. Test &amp; Save validates them against X
@@ -1268,7 +1275,7 @@ export function XPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSett
         </div>
 
         {!gateOn && (
-          <p style={{ fontSize: 11, color: '#900', margin: '6px 0 0 0' }}>
+          <p style={{ fontSize: 11, color: 'var(--ga98-danger-ink)', margin: '6px 0 0 0' }}>
             Enable authenticated X collection first to test a session.
           </p>
         )}
@@ -1277,7 +1284,7 @@ export function XPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSett
             style={{
               fontSize: 11,
               margin: '6px 0 0 0',
-              color: status.kind === 'ok' ? '#008000' : status.kind === 'error' ? '#a00000' : '#a06000',
+              color: status.kind === 'ok' ? 'var(--ga98-ok-text)' : status.kind === 'error' ? 'var(--ga98-badge-error-ink)' : 'var(--ga98-badge-warn-ink)',
             }}
           >
             {status.msg}
@@ -1300,7 +1307,7 @@ const MIN_PW_LEN = 12;
 
 /** Lightweight inline strength estimate (no external dep). Heuristic only — length + variety. */
 function pwStrength(pw: string): { score: number; label: string; color: string } {
-  if (!pw) return { score: 0, label: '', color: '#c0c0c0' };
+  if (!pw) return { score: 0, label: '', color: 'var(--ga98-grey)' };
   let s = 0;
   if (pw.length >= MIN_PW_LEN) s++;
   if (pw.length >= 16) s++;
@@ -1311,7 +1318,7 @@ function pwStrength(pw: string): { score: number; label: string; color: string }
   return {
     score,
     label: ['Very weak', 'Weak', 'Fair', 'Good', 'Strong'][score],
-    color: ['#a00000', '#c06000', '#a0a000', '#2080a0', '#008000'][score]
+    color: ['var(--ga98-pw-vweak)', 'var(--ga98-pw-weak)', 'var(--ga98-pw-fair)', 'var(--ga98-pw-good)', 'var(--ga98-pw-strong)'][score]
   };
 }
 
@@ -1320,7 +1327,7 @@ function StrengthMeter({ pw }: { pw: string }): JSX.Element | null {
   const { score, label, color } = pwStrength(pw);
   return (
     <div style={{ marginTop: 2 }}>
-      <div style={{ height: 6, background: '#dfdfdf', border: '1px solid #808080' }}>
+      <div style={{ height: 6, background: 'var(--ga98-track)', border: '1px solid var(--ga98-shadow-dark)' }}>
         <div style={{ height: '100%', width: `${(score + 1) * 20}%`, background: color }} />
       </div>
       <span style={{ fontSize: 11, color }}>
@@ -1411,12 +1418,12 @@ function SecurityPane(): JSX.Element {
     return (
       <fieldset>
         <legend>Save your recovery key</legend>
-        <p style={{ color: '#900', marginTop: 4 }}>
+        <p style={{ color: 'var(--ga98-danger-ink)', marginTop: 4 }}>
           This is shown <strong>once</strong>. It is the only way back in if you forget your password.
           Write it down and store it somewhere safe — it is not saved anywhere you can read it again.
         </p>
         <p
-          style={{ fontFamily: 'monospace', fontSize: 16, letterSpacing: 1, padding: 8, border: '1px solid #808080', background: '#fff', userSelect: 'all', textAlign: 'center' }}
+          style={{ fontFamily: 'monospace', fontSize: 16, letterSpacing: 1, padding: 8, border: '1px solid var(--ga98-shadow-dark)', background: 'var(--ga98-shadow-light)', userSelect: 'all', textAlign: 'center' }}
         >
           {recoveryKey}
         </p>
@@ -1437,10 +1444,10 @@ function SecurityPane(): JSX.Element {
             Protect Ghost Intel 98 with a master password. When enabled, all case data is encrypted
             at rest (AES-256-GCM); the app stays locked until you enter the password.
           </p>
-          <p style={{ color: '#900', fontSize: 11 }}>
+          <p style={{ color: 'var(--ga98-danger-ink)', fontSize: 11 }}>
             There is no password reset. You will get a one-time recovery key — keep it safe.
           </p>
-          <p style={{ color: '#555', fontSize: 11 }}>
+          <p style={{ color: 'var(--ga98-dim-mid)', fontSize: 11 }}>
             A backup file (.ga98) carries your encrypted key, so anyone who gets it can guess your
             password offline at their leisure. Use {MIN_PW_LEN}+ characters — a long passphrase is best.
           </p>
@@ -1486,11 +1493,11 @@ function SecurityPane(): JSX.Element {
         <div className="field-row" style={{ justifyContent: 'flex-end', marginTop: 8 }}>
           <button onClick={() => void changePassword()} disabled={busy || !npw || !npw2}>Change password</button>
         </div>
-        <p style={{ fontSize: 11, color: '#555' }}>The recovery key is unchanged by a password change.</p>
+        <p style={{ fontSize: 11, color: 'var(--ga98-dim-mid)' }}>The recovery key is unchanged by a password change.</p>
       </fieldset>
       <fieldset>
         <legend>Disable login</legend>
-        <p style={{ marginTop: 4, color: '#900' }}>Decrypts all data back to plaintext on disk and removes the password.</p>
+        <p style={{ marginTop: 4, color: 'var(--ga98-danger-ink)' }}>Decrypts all data back to plaintext on disk and removes the password.</p>
         <div className="field-row-stacked">
           <label htmlFor="ga98-dpw">Confirm with your password</label>
           <input id="ga98-dpw" type="password" value={dpw} disabled={busy} onChange={(e) => setDpw(e.target.value)} />

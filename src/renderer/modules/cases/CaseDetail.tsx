@@ -151,7 +151,7 @@ export function CaseDetail({ record, onChange, onArchive, onRefresh, onUpdateFie
           Drag files from Windows here to attach them to this case.
         </div>
         {record.attachments.length === 0 ? (
-          <p style={{ color: '#666' }}>No attachments yet.</p>
+          <p style={{ color: 'var(--ga98-dim-soft)' }}>No attachments yet.</p>
         ) : (
           <ul className="ga98-list">
             {record.attachments.map((a) => (
@@ -177,7 +177,7 @@ export function CaseDetail({ record, onChange, onArchive, onRefresh, onUpdateFie
         <ul className="ga98-list">
           {record.links.map((l) => (
             <li key={l.id}>
-              <a onClick={() => void window.api.system.openExternal(l.url)} style={{ flex: 1, cursor: 'pointer', color: '#000080' }}>
+              <a onClick={() => void window.api.system.openExternal(l.url)} style={{ flex: 1, cursor: 'pointer', color: 'var(--ga98-navy-accent)' }}>
                 {l.title}
               </a>
               <button onClick={async () => { await window.api.cases.deleteLink(record.id, l.id); await onRefresh(); }}>×</button>
@@ -228,7 +228,7 @@ export function CaseDetail({ record, onChange, onArchive, onRefresh, onUpdateFie
             <li key={r.id}>
               <span style={{ flex: 1 }}>
                 {r.title} <span style={{ opacity: 0.7 }}>· {new Date(r.fireAt).toLocaleString()}</span>
-                {r.fired ? <span style={{ color: '#080' }}> · fired</span> : null}
+                {r.fired ? <span style={{ color: 'var(--ga98-ok-text-fired)' }}> · fired</span> : null}
               </span>
               <button onClick={async () => { await window.api.cases.deleteReminder(record.id, r.id); await onRefresh(); }}>×</button>
             </li>
@@ -295,7 +295,7 @@ function GeoEventsSection({ caseId }: { caseId: string }): JSX.Element {
     <fieldset>
       <legend>GeoINT events</legend>
       {events.length === 0
-        ? <p style={{ fontSize: 11, color: '#555', margin: 0 }}>No saved events.</p>
+        ? <p style={{ fontSize: 11, color: 'var(--ga98-dim-mid)', margin: 0 }}>No saved events.</p>
         : <ul className="ga98-list">
             {events.map((ev) => {
               const http = typeof ev.link === 'string' && /^https?:\/\//i.test(ev.link);
@@ -387,7 +387,7 @@ function AttachmentRow({ caseId, att, onRefresh }: {
         }}>Shred</button>
       </div>
       {showDetails && meta && (
-        <div style={{ fontSize: 11, background: '#f4f4f4', border: '1px solid #d0d0d0', margin: '4px 0 0 22px', padding: 6 }}>
+        <div style={{ fontSize: 11, background: 'var(--ga98-inset-panel)', border: '1px solid var(--ga98-inset-border)', margin: '4px 0 0 22px', padding: 6 }}>
           <div>Type: {meta.fileType} · Size: {meta.size} bytes</div>
           {meta.modifiedAt && <div>Modified: {new Date(meta.modifiedAt).toLocaleString()}</div>}
           {meta.originalPath && <div>Original path: <code>{meta.originalPath}</code></div>}
@@ -406,7 +406,7 @@ function AttachmentRow({ caseId, att, onRefresh }: {
               <div style={{ maxHeight: 220, overflow: 'auto', marginTop: 4, fontFamily: 'monospace' }}>
                 {Object.entries(exif.tags).map(([k, v]) => (
                   <div key={k} style={{ display: 'flex', gap: 6 }}>
-                    <span style={{ color: '#555', minWidth: 180, flexShrink: 0 }}>{k}</span>
+                    <span style={{ color: 'var(--ga98-dim-mid)', minWidth: 180, flexShrink: 0 }}>{k}</span>
                     <span style={{ wordBreak: 'break-word' }}>{typeof v === 'object' ? JSON.stringify(v) : String(v)}</span>
                   </div>
                 ))}

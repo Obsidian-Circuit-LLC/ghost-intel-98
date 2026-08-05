@@ -113,7 +113,7 @@ export function MinesweeperModule(): JSX.Element {
   const face = state === 'won' ? '😎' : state === 'lost' ? '😵' : '🙂';
 
   return (
-    <div style={{ height: '100%', overflow: 'auto', padding: 10, background: '#c0c0c0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+    <div style={{ height: '100%', overflow: 'auto', padding: 10, background: 'var(--ga98-grey)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
         {LEVELS.map((lv) => (
           <button key={lv.name} onClick={() => reset(lv)} style={{ fontWeight: lv.name === level.name ? 'bold' : 'normal' }}>{lv.name}</button>
@@ -125,7 +125,7 @@ export function MinesweeperModule(): JSX.Element {
           <button onClick={() => reset(level)} title="New game" style={{ fontSize: 18, lineHeight: 1, minWidth: 36 }}>{face}</button>
           <span style={{ background: '#000', color: '#f00', padding: '2px 6px', minWidth: 48, textAlign: 'center', fontWeight: 'bold' }}>{String(seconds).padStart(3, '0')}</span>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${level.cols}, 22px)`, gap: 0, userSelect: 'none' }}>
+        <div className="ga98-mine-grid" style={{ display: 'grid', gridTemplateColumns: `repeat(${level.cols}, 22px)`, gap: 0, userSelect: 'none' }}>
           {board.map((row, r) => row.map((cell, c) => {
             const open = cell.revealed;
             return (

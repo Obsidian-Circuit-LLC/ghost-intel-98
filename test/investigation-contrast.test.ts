@@ -52,7 +52,13 @@ describe('investigation.css exists and styles the previously-unstyled cockpit cl
     for (const selector of selectorLines) {
       const parts = selector.split(',').map((p) => p.trim());
       for (const part of parts) {
-        expect(part).toMatch(/^\.(investigation-side-panel|run-panel|graph-pane-toolbar)/);
+        // The real invariant is "no bleed": every selector must TARGET a module class so it can never
+        // reach the dark graph-canvas/node area. QUIET AMETHYST adds theme-scoped overrides prefixed
+        // with `:root[data-ga98-theme='amethyst'] ` — still scoped to a module class (narrower, never
+        // broader), so allow that optional prefix.
+        expect(part).toMatch(
+          /^(:root\[data-ga98-theme=[^\]]+\]\s+)?\.(investigation-side-panel|run-panel|graph-pane-toolbar)/
+        );
       }
     }
   });

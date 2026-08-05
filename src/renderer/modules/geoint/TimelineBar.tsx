@@ -31,7 +31,7 @@ export function TimelineBar({ bounds, cursor, playing, onCursor, onTogglePlay, o
         style={{ flex: 1 }}
         aria-label="Timeline cursor"
       />
-      <span style={{ fontSize: 11, whiteSpace: 'nowrap', color: '#333' }}>{new Date(cursor).toLocaleString()}</span>
+      <span style={{ fontSize: 11, whiteSpace: 'nowrap', color: 'var(--ga98-dim-deep)' }}>{new Date(cursor).toLocaleString()}</span>
     </div>
   );
 }

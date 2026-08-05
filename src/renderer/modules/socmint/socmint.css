@@ -393,3 +393,32 @@
   color: #c0a0a0;
   line-height: 1.4;
 }
+
+/* ── QUIET AMETHYST — additive dark overrides (Task 8). SOCMINT interior is a self-consistent dark
+   cyber panel (.sm-root #0a0a14, content-intrinsic); only its Win98 grey tab-strip, the light tab
+   hover, and the plain grey .sm-btn chrome buttons are light islands under the skin. */
+:root[data-ga98-theme='amethyst'] .sm-tabs { background: var(--ga98-grey); }
+:root[data-ga98-theme='amethyst'] .sm-tab { color: var(--ga98-text); }
+/* The empty-state placeholder dims its text with opacity 0.5; on the near-black skin that fades the
+   light copy below the WCAG floor (4.07:1). Lift the opacity under amethyst — the muted feel stays,
+   the text clears >8:1. Classic keeps 0.5 (amethyst-scoped). */
+:root[data-ga98-theme='amethyst'] .sm-placeholder { opacity: 0.8; }
+:root[data-ga98-theme='amethyst'] .sm-tab:hover { background: var(--ga98-row-hover); }
+:root[data-ga98-theme='amethyst'] .sm-btn {
+  background: var(--ga98-grey);
+  color: var(--ga98-text);
+  border-top-color: var(--ga98-shadow-light);
+  border-left-color: var(--ga98-shadow-light);
+  border-right-color: var(--ga98-shadow-dark);
+  border-bottom-color: var(--ga98-shadow-dark);
+}
+/* Semantic variants: the generic `.sm-btn` amethyst override above is specificity (0,3,0) and would
+   flatten primary/danger/accept/reject (each only (0,1,0)) to the plain grey chrome, erasing their
+   meaning. Re-assert each variant at equal (0,3,0), placed AFTER the generic rule so it wins on
+   source order, restoring the semantic hue as a legible-on-dark fill (accent primary / green accept
+   / red danger+reject — the same dark, light-inked values the classic panel already uses, which
+   read cleanly on the near-black amethyst skin). Classic rules (above) are untouched. */
+:root[data-ga98-theme='amethyst'] .sm-btn-primary { background: #3d1a5c; color: #e8d8ff; }
+:root[data-ga98-theme='amethyst'] .sm-btn-accept { background: #1a4a1a; color: #d8ffd8; }
+:root[data-ga98-theme='amethyst'] .sm-btn-danger { background: #5c1a1a; color: #ffd8d8; }
+:root[data-ga98-theme='amethyst'] .sm-btn-reject { background: #5c1a1a; color: #ffd8d8; }

@@ -1,6 +1,6 @@
 /* ── Searchlight shell ───────────────────────────────────────────────────── */
 .sl-root { display: flex; flex-direction: column; height: 100%; background: #0a0a14; color: #d8d8e0; position: relative; }
-.sl-tabs { display: flex; gap: 2px; padding: 2px; flex: 0 0 auto; background: #c0c0c0; border-bottom: 1px solid #808080; }
+.sl-tabs { display: flex; gap: 2px; padding: 2px; flex: 0 0 auto; background: var(--ga98-grey); border-bottom: 1px solid var(--ga98-shadow-dark); }
 .sl-tab { font: inherit; padding: 2px 10px; cursor: pointer; }
 .sl-tab-active { font-weight: bold; }
 .sl-body { flex: 1 1 auto; overflow: auto; background: #0a0a14; color: #d8d8e0; }
@@ -1478,3 +1478,45 @@
 .sl-learning-fake { color: #ff5566; }
 .sl-learning-fake:hover { border-color: #ff5566; }
 .sl-learning-labeled { opacity: 0.5; text-decoration: line-through; }
+
+/* ── QUIET AMETHYST — additive dark overrides (Task 8). The sweep UI is Win98 chrome (light input,
+   grey buttons, grey toolbar, beige props panel) layered over the dark graph canvas; the canvas +
+   neon status/accent literals are content-intrinsic (left as-is, allow-listed). These light-chrome
+   islands are the only surfaces that must darken under the skin. */
+:root[data-ga98-theme='amethyst'] .sl-sweep-input {
+  background: var(--ga98-field-bg);
+  color: var(--ga98-text);
+  border-color: var(--ga98-shadow-dark);
+}
+:root[data-ga98-theme='amethyst'] .sl-sweep-input:focus { background: var(--ga98-select-bg); }
+:root[data-ga98-theme='amethyst'] .sl-sweep-input::placeholder { color: var(--ga98-text-dim); }
+:root[data-ga98-theme='amethyst'] .sl-sweep-btn {
+  background: var(--ga98-grey);
+  color: var(--ga98-text);
+  border-color: var(--ga98-shadow-light) var(--ga98-shadow-dark) var(--ga98-shadow-dark) var(--ga98-shadow-light);
+}
+:root[data-ga98-theme='amethyst'] .sl-sweep-btn:active { border-color: var(--ga98-shadow-dark) var(--ga98-shadow-light) var(--ga98-shadow-light) var(--ga98-shadow-dark); }
+:root[data-ga98-theme='amethyst'] .sl-sweep-btn:disabled { color: var(--ga98-text-dim); }
+/* Semantic variants: the generic `.sl-sweep-btn` amethyst override above is specificity (0,3,0) and
+   would flatten the primary (classic navy #000080) and danger (classic maroon #800000) sweep buttons
+   — each only (0,1,0) — to the plain grey chrome, erasing their meaning. Re-assert each at equal
+   (0,3,0), placed AFTER the generic rule so it wins on source order, restoring the semantic hue via
+   the theme's own LOCKED status FILL tokens (blue info-fill / red error-fill, both designed to carry
+   white text on the near-black skin). Classic rules (above, raw #000080/#800000) are untouched. */
+:root[data-ga98-theme='amethyst'] .sl-sweep-btn-primary { background: var(--ga98-status-info-fill); color: #fff; }
+:root[data-ga98-theme='amethyst'] .sl-sweep-btn-danger { background: var(--ga98-status-error-fill); color: #fff; }
+:root[data-ga98-theme='amethyst'] .sl-graph-toolbar {
+  background: var(--ga98-grey);
+  border-color: var(--ga98-shadow-light) var(--ga98-shadow-dark) var(--ga98-shadow-dark) var(--ga98-shadow-light);
+}
+:root[data-ga98-theme='amethyst'] .sl-graph-props {
+  background: var(--ga98-recessed-bg);
+  color: var(--ga98-text);
+  border-color: var(--ga98-shadow-dark) var(--ga98-shadow-light) var(--ga98-shadow-light) var(--ga98-shadow-dark);
+}
+
+/* QUIET AMETHYST — graph-props labels are #404040/#606060 (classic), too dark on
+   the self-consistent #0a0a14 console; under the amethyst skin route them to the
+   light dim-text token so they read legibly. Classic keeps its literal (parity). */
+:root[data-ga98-theme='amethyst'] .sl-graph-props-type-label { color: var(--ga98-text-dim); }
+:root[data-ga98-theme='amethyst'] .sl-graph-props-field-label { color: var(--ga98-text-dim); }

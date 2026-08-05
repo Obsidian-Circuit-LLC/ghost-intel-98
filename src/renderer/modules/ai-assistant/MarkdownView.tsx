@@ -17,7 +17,7 @@ function renderInline(nodes: Inline[], onLinkClick?: OnLinkClick): ReactNode[] {
       case 'text': return <span key={i}>{n.v}</span>;
       case 'bold': return <strong key={i}>{renderInline(n.children, onLinkClick)}</strong>;
       case 'italic': return <em key={i}>{renderInline(n.children, onLinkClick)}</em>;
-      case 'code': return <code key={i} style={{ fontFamily: 'monospace', background: '#eee', padding: '0 2px' }}>{n.v}</code>;
+      case 'code': return <code key={i} className="ga98-t8-surface" style={{ fontFamily: 'monospace', background: '#eee', padding: '0 2px' }}>{n.v}</code>;
       case 'link': {
         // safeHref is the SINGLE render-time choke-point: a non-http/https or userinfo-bearing
         // href renders as INERT TEXT (no anchor), so a hostile [x](javascript:…) is never navigable.
@@ -40,6 +40,7 @@ function renderInline(nodes: Inline[], onLinkClick?: OnLinkClick): ReactNode[] {
             title={`${safe} — opens in your clearnet browser`}
             onClick={(e) => { e.preventDefault(); onLinkClick?.(safe); }}
             onAuxClick={(e) => { e.preventDefault(); if (e.button === 1) onLinkClick?.(safe); }}
+            className="ga98-t8-accent-text"
             style={LINK_STYLE}
           >
             {renderInline(n.children, onLinkClick)}
@@ -74,13 +75,13 @@ export function MarkdownView({ text, onLinkClick }: { text: string; onLinkClick?
                 <table style={{ borderCollapse: 'collapse', fontSize: 13 }}>
                   <thead>
                     <tr>{b.header.map((cell, h) => (
-                      <th key={h} style={{ border: '1px solid #808080', padding: '2px 6px', textAlign: 'left', background: '#c0c0c0', verticalAlign: 'top' }}>{renderInline(cell, onLinkClick)}</th>
+                      <th key={h} style={{ border: '1px solid var(--ga98-shadow-dark)', padding: '2px 6px', textAlign: 'left', background: 'var(--ga98-grey)', color: 'var(--ga98-text)', verticalAlign: 'top' }}>{renderInline(cell, onLinkClick)}</th>
                     ))}</tr>
                   </thead>
                   <tbody>
                     {b.rows.map((row, r) => (
                       <tr key={r}>{row.map((cell, c) => (
-                        <td key={c} style={{ border: '1px solid #808080', padding: '2px 6px', background: '#fff', verticalAlign: 'top' }}>{renderInline(cell, onLinkClick)}</td>
+                        <td key={c} style={{ border: '1px solid var(--ga98-shadow-dark)', padding: '2px 6px', background: 'var(--ga98-shadow-light)', color: 'var(--ga98-text)', verticalAlign: 'top' }}>{renderInline(cell, onLinkClick)}</td>
                       ))}</tr>
                     ))}
                   </tbody>
@@ -89,13 +90,13 @@ export function MarkdownView({ text, onLinkClick }: { text: string; onLinkClick?
             );
           case 'quote':
             return (
-              <div key={i} style={{ borderLeft: '3px solid #808080', background: '#f0f0f0', padding: '4px 8px', margin: '0 0 6px', whiteSpace: 'pre-wrap' }}>
+              <div key={i} className="ga98-t8-surface" style={{ borderLeft: '3px solid #808080', background: '#f0f0f0', padding: '4px 8px', margin: '0 0 6px', whiteSpace: 'pre-wrap' }}>
                 {renderInline(b.children, onLinkClick)}
               </div>
             );
           case 'codeblock':
             return (
-              <pre key={i} style={{ background: '#eee', border: '1px solid #c0c0c0', padding: '6px 8px', margin: '0 0 6px', overflowX: 'auto', fontFamily: 'monospace', fontSize: 12, whiteSpace: 'pre' }}>
+              <pre key={i} className="ga98-t8-surface" style={{ background: '#eee', border: '1px solid #c0c0c0', padding: '6px 8px', margin: '0 0 6px', overflowX: 'auto', fontFamily: 'monospace', fontSize: 12, whiteSpace: 'pre' }}>
                 <code>{b.v}</code>
               </pre>
             );

@@ -249,7 +249,7 @@ export function MailModule(): JSX.Element {
         <div className="ga98-pane">
           {leftView === 'inbox' ? (
             <ul className="ga98-list">
-              {inbox.length === 0 && <li style={{ color: '#666' }}>No messages — click "Get mail".</li>}
+              {inbox.length === 0 && <li style={{ color: 'var(--ga98-dim-soft)' }}>No messages — click "Get mail".</li>}
               {inbox.map((m) => (
                 <li key={m.uid} data-selected={selected?.uid === m.uid} onClick={() => void openMessage(m.uid)}>
                   <span style={{ width: 16 }}>{m.unseen ? '●' : ''}{m.flagged ? <span style={{ color: '#d4a017' }}>★</span> : ''}</span>
@@ -266,7 +266,7 @@ export function MailModule(): JSX.Element {
             </ul>
           ) : (
             <ul className="ga98-list">
-              {drafts.length === 0 && <li style={{ color: '#666' }}>No drafts.</li>}
+              {drafts.length === 0 && <li style={{ color: 'var(--ga98-dim-soft)' }}>No drafts.</li>}
               {drafts.map((d) => (
                 <li key={d.id} onClick={() => openCompose(d)}>
                   <div style={{ flex: 1, overflow: 'hidden' }}>
@@ -293,7 +293,7 @@ export function MailModule(): JSX.Element {
                 <button onClick={() => void printSelected()}>Print</button>
                 <button onClick={() => void deleteSelected()}>Delete</button>
               </div>
-              <div className="ga98-selectable" style={{ borderBottom: '1px solid #999', paddingBottom: 4, marginBottom: 4 }}>
+              <div className="ga98-selectable" style={{ borderBottom: '1px solid var(--ga98-dim-hint)', paddingBottom: 4, marginBottom: 4 }}>
                 <div><b>From:</b> {selected.from}</div>
                 <div><b>Subject:</b> {selected.subject}</div>
                 <div style={{ fontSize: 11, opacity: 0.7 }}>{new Date(selected.date).toLocaleString()}</div>
@@ -317,7 +317,7 @@ export function MailModule(): JSX.Element {
                 {selected.body}
               </pre>
             </>
-          ) : <p style={{ color: '#666' }}>Select a message to preview.</p>}
+          ) : <p style={{ color: 'var(--ga98-dim-soft)' }}>Select a message to preview.</p>}
         </div>
       </div>
       {showSetup && <AccountSetup accounts={accounts} onClose={() => { setShowSetup(false); void loadAccounts(); }} />}
@@ -420,7 +420,7 @@ function AccountSetup({ accounts, onClose }: { accounts: MailAccount[]; onClose:
               <input className="ga98-text" type="number" value={draft.smtpPort} onChange={(e) => setDraft({ ...draft, smtpPort: Number(e.target.value) })} />
               <label><input type="checkbox" checked={draft.smtpSecure} onChange={(e) => setDraft({ ...draft, smtpSecure: e.target.checked })} />TLS</label>
             </div>
-            <p style={{ fontSize: 11, color: '#444', margin: '6px 2px 0', lineHeight: 1.4 }}>
+            <p style={{ fontSize: 11, color: 'var(--ga98-dim-strong)', margin: '6px 2px 0', lineHeight: 1.4 }}>
               <b>Gmail, Outlook, Yahoo and iCloud reject your normal password.</b> Generate an
               <b> App Password</b> in that account's security settings (2FA must be on) and enable IMAP,
               then paste the app password above. SMTP on port 587 uses STARTTLS (leave TLS unchecked);

@@ -130,11 +130,11 @@ export function MyDocumentsModule(): JSX.Element {
           Files are encrypted at rest — open them here, not in Explorer.
         </div>
       )}
-      {doc.error && <div className="ga98-mydocs-error" style={{ padding: '2px 6px', color: '#a00' }}>{doc.error}</div>}
+      {doc.error && <div className="ga98-mydocs-error ga98-t8-err-text" style={{ padding: '2px 6px', color: '#a00' }}>{doc.error}</div>}
       <div
         className="ga98-mydocs-view"
         data-drophot={dropHot}
-        style={{ flex: 1, overflow: 'auto', padding: 6, background: dropHot ? '#e8f0ff' : undefined }}
+        style={{ flex: 1, overflow: 'auto', padding: 6, background: dropHot ? 'var(--ga98-select-bg, #e8f0ff)' : undefined }}
         onContextMenu={(e) => openMenu(e, null)}
         onDragOver={(e) => { e.preventDefault(); setDropHot(true); }}
         onDragLeave={() => setDropHot(false)}
@@ -148,7 +148,7 @@ export function MyDocumentsModule(): JSX.Element {
               className="ga98-mydocs-tile"
               style={{
                 width: 88, textAlign: 'center', cursor: 'pointer', userSelect: 'none', padding: 4,
-                background: hoverFolder === e.name ? '#e8f0ff' : undefined
+                background: hoverFolder === e.name ? 'var(--ga98-select-bg, #e8f0ff)' : undefined
               }}
               title={e.name}
               draggable

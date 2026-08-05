@@ -65,7 +65,7 @@ function InvestigationCockpit({ caseId }: { caseId: string }): JSX.Element {
       <div
         style={{
           background: 'var(--ga98-grey)',
-          color: '#000',
+          color: 'var(--ga98-text)',
           padding: '4px 10px',
           fontSize: 12,
           borderBottom: '1px solid var(--ga98-shadow-dark)',

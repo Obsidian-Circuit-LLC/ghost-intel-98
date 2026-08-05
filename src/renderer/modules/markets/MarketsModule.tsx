@@ -101,15 +101,15 @@ export function MarketsModule(): JSX.Element {
         <legend>Network</legend>
         <div className="field-row" style={{ gap: 6, alignItems: 'center' }}>
           <button onClick={() => patchMarkets({ networkEnabled: !net })} aria-pressed={net}
-            style={net ? { borderStyle: 'inset', background: '#bfe0bf', color: '#003300', fontWeight: 'bold' } : { fontWeight: 'bold' }}>
+            style={net ? { borderStyle: 'inset', background: 'var(--ga98-ok-surface)', color: 'var(--ga98-ok-ink)', fontWeight: 'bold' } : { fontWeight: 'bold' }}>
             {net ? 'Disable market data' : 'Enable market data'}
           </button>
-          <span style={{ fontSize: 11, color: net ? '#060' : '#900' }}>{net ? '● on' : '○ off'}</span>
+          <span style={{ fontSize: 11, color: net ? 'var(--ga98-ok-dot)' : 'var(--ga98-danger-ink)' }}>{net ? '● on' : '○ off'}</span>
           <button onClick={() => void refresh()} disabled={!net || busy}>{busy ? 'Refreshing…' : 'Refresh'}</button>
           <button onClick={() => setShowTutorial(true)} title="Show the Markets intro" style={{ minWidth: 24 }}>?</button>
-          {snap && <span style={{ fontSize: 11, color: '#555' }}>updated {new Date(snap.fetchedAt).toLocaleTimeString()}</span>}
+          {snap && <span style={{ fontSize: 11, color: 'var(--ga98-dim-mid)' }}>updated {new Date(snap.fetchedAt).toLocaleTimeString()}</span>}
         </div>
-        <p style={{ fontSize: 11, color: '#555', margin: '4px 0' }}>Off by default — no quote is fetched until you enable it. Free keyless sources: CoinGecko, Frankfurter (ECB), Yahoo Finance.</p>
+        <p style={{ fontSize: 11, color: 'var(--ga98-dim-mid)', margin: '4px 0' }}>Off by default — no quote is fetched until you enable it. Free keyless sources: CoinGecko, Frankfurter (ECB), Yahoo Finance.</p>
       </fieldset>
 
       <fieldset>
@@ -127,7 +127,7 @@ export function MarketsModule(): JSX.Element {
 
       <fieldset>
         <legend>Custom feeds</legend>
-        <p style={{ fontSize: 11, color: '#555', margin: '2px 0' }}>Bring your own HTTPS endpoint returning <code>[{'{'}symbol, price, change?, changePct?, label?{'}'}]</code> (or <code>{'{'}quotes:[…]{'}'}</code>).</p>
+        <p style={{ fontSize: 11, color: 'var(--ga98-dim-mid)', margin: '2px 0' }}>Bring your own HTTPS endpoint returning <code>[{'{'}symbol, price, change?, changePct?, label?{'}'}]</code> (or <code>{'{'}quotes:[…]{'}'}</code>).</p>
         <ul className="ga98-list">
           {customFeeds.map((f) => (
             <li key={f.id} title={f.url}>
@@ -144,14 +144,14 @@ export function MarketsModule(): JSX.Element {
       </fieldset>
 
       {snap?.errors.length ? (
-        <div style={{ background: '#fee', color: '#900', padding: '4px 8px', fontSize: 11, border: '1px solid #c00' }}>
+        <div style={{ background: 'var(--ga98-error-surface)', color: 'var(--ga98-danger-ink)', padding: '4px 8px', fontSize: 11, border: '1px solid var(--ga98-error-border)' }}>
           {snap.errors.map((e, i) => <div key={i}>{e}</div>)}
         </div>
       ) : null}
 
       <div className="ga98-mkt-quotes">
-        {!net && <p style={{ color: '#555', padding: 8 }}>Market data is off. Enable it above to see live quotes.</p>}
-        {net && groups.length === 0 && <p style={{ color: '#555', padding: 8 }}>{busy ? 'Fetching quotes…' : 'No quotes yet. Check your watchlist and Refresh.'}</p>}
+        {!net && <p style={{ color: 'var(--ga98-dim-mid)', padding: 8 }}>Market data is off. Enable it above to see live quotes.</p>}
+        {net && groups.length === 0 && <p style={{ color: 'var(--ga98-dim-mid)', padding: 8 }}>{busy ? 'Fetching quotes…' : 'No quotes yet. Check your watchlist and Refresh.'}</p>}
         {groups.map((g) => (
           <fieldset key={g.k}>
             <legend>{CLASS_LABEL[g.k]}</legend>
@@ -161,7 +161,7 @@ export function MarketsModule(): JSX.Element {
                   <tr key={`${q.symbol}-${i}`}>
                     <td className="ga98-mkt-sym" title={q.source}>{q.label}</td>
                     <td className="ga98-mkt-px">{fmtNum(q.price)}</td>
-                    <td className="ga98-mkt-chg" style={{ color: q.changePct == null ? '#555' : q.changePct >= 0 ? '#060' : '#a00' }}>{fmtPct(q.changePct)}</td>
+                    <td className="ga98-mkt-chg" style={{ color: q.changePct == null ? 'var(--ga98-dim-mid)' : q.changePct >= 0 ? 'var(--ga98-ok-dot)' : 'var(--ga98-neg-ink)' }}>{fmtPct(q.changePct)}</td>
                   </tr>
                 ))}
               </tbody>

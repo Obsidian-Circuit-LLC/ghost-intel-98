@@ -43,7 +43,7 @@ export function Wall({ slots, byId, activeSlot, columns = 3, onActivate, onClear
           // did nothing, reading as "non-responsive".)
           return (
             <div key={i} onClick={() => { onActivate(i); onAddNew(i); }}
-              style={{ border, background: '#111', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#777', cursor: 'pointer' }}>
+              style={{ border, background: '#111', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--ga98-dim-cap)', cursor: 'pointer' }}>
               {firstEmpty ? <><div style={{ fontSize: 28 }}>＋</div><div style={{ fontSize: 11 }}>Add new feed</div></> : <><div style={{ fontSize: 20 }}>＋</div><div style={{ fontSize: 10 }}>empty</div></>}
             </div>
           );
@@ -63,7 +63,7 @@ export function Wall({ slots, byId, activeSlot, columns = 3, onActivate, onClear
           (assignToSlot appends, growing the wall). A real <button> (not a bare <div>) so it is a
           reliable, focusable click + keyboard target — the div form was reported non-responsive. */}
       <button key="__add__" type="button" title="Add a new camera feed" onClick={() => onAddNew()}
-        style={{ border: '1px dashed #444', background: '#111', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#777', cursor: 'pointer', width: '100%', height: '100%', padding: 0, font: 'inherit' }}>
+        style={{ border: '1px dashed #444', background: '#111', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--ga98-dim-cap)', cursor: 'pointer', width: '100%', height: '100%', padding: 0, font: 'inherit' }}>
         <div style={{ fontSize: 28 }}>➕</div><div style={{ fontSize: 11 }}>Add new feed</div>
       </button>
     </div>

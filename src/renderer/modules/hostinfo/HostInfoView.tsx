@@ -33,12 +33,12 @@ export function HostInfoView({ stream, defaultOpen = false }: { stream: CameraSt
   // result exists, the cached setting is used only as a pre-run hint.
   const resolveDisabled = info != null && info.errors.includes('resolve-disabled');
   return (
-    <details open={defaultOpen} onToggle={onToggle} style={{ fontSize: 11, padding: '4px 6px', borderTop: '1px solid #808080' }}>
+    <details open={defaultOpen} onToggle={onToggle} style={{ fontSize: 11, padding: '4px 6px', borderTop: '1px solid var(--ga98-shadow-dark)' }}>
       <summary style={{ cursor: 'pointer' }}>Host resolution{loading ? ' — resolving via Tor…' : ''}</summary>
       {(info ? resolveDisabled : !resolveHosts) ? (
         <div style={{ marginTop: 4, opacity: 0.8 }}>Host resolution is turned off in Settings → GeoINT.</div>
       ) : torNotReady ? (
-        <div style={{ color: '#a33', marginTop: 4 }}>
+        <div className="ga98-t8-err-text" style={{ color: '#a33', marginTop: 4 }}>
           Host resolution needs Tor (bootstrapping / unavailable).{' '}
           <button style={{ marginLeft: 4 }} onClick={() => run(true)}>Retry</button>
         </div>
@@ -49,13 +49,13 @@ export function HostInfoView({ stream, defaultOpen = false }: { stream: CameraSt
           {info.ptr && <div><b>PTR:</b> {info.ptr}</div>}
           {info.rdap && <div><b>rdap:</b> {[info.rdap.org, info.rdap.asn, info.rdap.country, info.rdap.range].filter(Boolean).join(' · ')}</div>}
           {info.errors.filter((e) => e !== 'resolve-disabled').length > 0 &&
-            <div style={{ color: '#a33' }}>Couldn't fully resolve via Tor ({info.errors.filter((e) => e !== 'resolve-disabled').join(', ')}).</div>}
-          {info.via === 'clearnet' && <div style={{ color: '#a33' }}>Resolved over CLEARNET — real IP exposed.</div>}
+            <div className="ga98-t8-err-text" style={{ color: '#a33' }}>Couldn't fully resolve via Tor ({info.errors.filter((e) => e !== 'resolve-disabled').join(', ')}).</div>}
+          {info.via === 'clearnet' && <div className="ga98-t8-err-text" style={{ color: '#a33' }}>Resolved over CLEARNET — real IP exposed.</div>}
           <button style={{ marginTop: 4 }} onClick={() => run(true)}>Refresh</button>
           <span style={{ opacity: 0.6, marginLeft: 6 }}>{info.resolvedAt}</span>
         </div>
       ) : (
-        !loading && opened && <div style={{ color: '#a33', marginTop: 4 }}>Couldn't resolve via Tor.</div>
+        !loading && opened && <div className="ga98-t8-err-text" style={{ color: '#a33', marginTop: 4 }}>Couldn't resolve via Tor.</div>
       )}
     </details>
   );

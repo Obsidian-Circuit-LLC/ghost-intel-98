@@ -83,7 +83,7 @@ export function ChessModule(): JSX.Element {
   const order = flip ? Array.from({ length: 64 }, (_, d) => 63 - d) : Array.from({ length: 64 }, (_, d) => d);
 
   return (
-    <div style={{ height: '100%', overflow: 'auto', padding: 12, background: '#c0c0c0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+    <div style={{ height: '100%', overflow: 'auto', padding: 12, background: 'var(--ga98-grey)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
         <label style={{ fontSize: 12 }}>Mode:&nbsp;
           <select className="ga98-text" value={mode} onChange={(e) => { setMode(e.target.value as Mode); newGame(); }}>
@@ -113,7 +113,7 @@ export function ChessModule(): JSX.Element {
         <strong>{status}</strong>
         <button onClick={newGame}>New game</button>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 52px)', gridTemplateRows: 'repeat(8, 52px)', border: '3px solid #5d4037', userSelect: 'none' }}>
+      <div className="ga98-chess-board" style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 52px)', gridTemplateRows: 'repeat(8, 52px)', border: '3px solid #5d4037', userSelect: 'none' }}>
         {order.map((i) => {
           const p = state.board[i];
           const [r, c] = RC(i);

@@ -194,7 +194,7 @@ export function BookmarksModule(): JSX.Element {
     } catch (err) { toast.error(`Import failed: ${(err as Error).message}`); }
   }
 
-  if (!loaded) return <div style={{ padding: 16, color: '#666' }}>Loading…</div>;
+  if (!loaded) return <div style={{ padding: 16, color: 'var(--ga98-dim-soft)' }}>Loading…</div>;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -224,7 +224,7 @@ export function BookmarksModule(): JSX.Element {
         onDrop={() => { if (drag.current?.kind === 'card') dropCard(); }}
       >
         {board.categories.length === 0 && (
-          <div style={{ color: '#666', padding: 16 }}>No categories yet. Click <b>+ Category</b> to start your board.</div>
+          <div style={{ color: 'var(--ga98-dim-soft)', padding: 16 }}>No categories yet. Click <b>+ Category</b> to start your board.</div>
         )}
         {columns.map((col, ci) => (
           <div

@@ -42,7 +42,7 @@ export function SatelliteManager({ onAdded }: { onAdded: () => void }): JSX.Elem
           <textarea className="ga98-text" rows={2} placeholder="TLE line 2 (2 …)" value={l2} onChange={(e) => setL2(e.target.value)} />
           <input className="ga98-text" placeholder="Optional tag / notes" value={tag} onChange={(e) => setTag(e.target.value)} />
           <label style={{ display: 'inline-flex', gap: 4 }}><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />Set active (show on globe)</label>
-          {err && <div style={{ color: '#900' }}>{err}</div>}
+          {err && <div style={{ color: 'var(--ga98-danger-ink)' }}>{err}</div>}
           <button onClick={() => void add()}>Add Satellite</button>
         </div>
       ) : (

@@ -12,11 +12,18 @@ const GLYPH: Record<ToastKind, string> = {
   error: '✕'
 };
 
+// The toast title-bar is a FILLED background carrying 98.css's WHITE title text. It routes to a
+// dedicated Task P purpose FILL token per kind: the CLASSIC value is the byte-exact original toast
+// title-bar colour (classic parity is sacred), and the amethyst value is a dark fill that keeps the
+// white title text legible (>=4.5:1) on the near-black skin. It deliberately does NOT use the LOCKED
+// --ga98-status-*-fill tier — those classic values differ from the toast literals, so routing to
+// them shifted every classic toast's title bar (the badge-ink precedent: give the site its own
+// parity-exact purpose token, never bend a LOCKED token).
 const COLOR: Record<ToastKind, string> = {
-  info: '#000080',
-  success: '#006400',
-  warn: '#8a5a00',
-  error: '#900000'
+  info: 'var(--ga98-toast-info-fill)',
+  success: 'var(--ga98-toast-success-fill)',
+  warn: 'var(--ga98-toast-warn-fill)',
+  error: 'var(--ga98-toast-error-fill)'
 };
 
 export function Toaster(): JSX.Element {

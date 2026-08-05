@@ -111,7 +111,7 @@ function ExtLink({ href }: { href: string }): JSX.Element {
     <a
       href={href}
       onClick={(e) => { e.preventDefault(); void window.api.system.openExternal(href); }}
-      style={{ color: '#0000aa' }}
+      style={{ color: 'var(--ga98-link-ext)' }}
     >{href}</a>
   );
 }
@@ -230,9 +230,9 @@ function OpChildSafetyPane(): JSX.Element {
           {OPCS_INTRO.map((p, i) => (
             <p key={i} style={{ margin: '0 0 8px' }}>{p}</p>
           ))}
-          <p style={{
+          <p className="ga98-t8-err" style={{
             margin: '8px 0', padding: '6px 8px', fontWeight: 'bold',
-            color: '#900', background: '#ffecec', border: '1px solid #c00'
+            color: 'var(--ga98-danger-ink)', background: '#ffecec', border: '1px solid #c00'
           }}>
             !!! DO NOT INTENTIONALLY VIEW, DOWNLOAD, SCREENSHOT, OR SEARCH FOR CSAM !!!
           </p>
@@ -333,7 +333,7 @@ function OsintPane(): JSX.Element {
     <div className="ga98-stack">
       <fieldset>
         <legend>OSINT</legend>
-        <p style={{ fontSize: 12, color: '#555' }}>
+        <p style={{ fontSize: 12, color: 'var(--ga98-dim-mid)' }}>
           Open-Source Intelligence tradecraft — methodology, lawful collection, and source handling.
           This section is in progress and will be published in a forthcoming update.
         </p>

@@ -223,7 +223,7 @@ export function WhiteboardModule({ caseId }: Props): JSX.Element {
           <button disabled={busy} onClick={() => setExportMenu((m) => !m)} title="Export this board">Export ▾</button>
           {exportMenu && (
             <div className="ga98-wb-exportmenu" onMouseDown={(e) => e.stopPropagation()}
-              style={{ position: 'absolute', top: '100%', left: 0, zIndex: 20, display: 'flex', flexDirection: 'column', background: '#c0c0c0', border: '2px outset #fff', padding: 2, minWidth: 140 }}>
+              style={{ position: 'absolute', top: '100%', left: 0, zIndex: 20, display: 'flex', flexDirection: 'column', background: 'var(--ga98-grey)', border: '2px outset var(--ga98-shadow-light)', padding: 2, minWidth: 140 }}>
               <button onClick={() => void exportSnapshot('pdf')}>PDF (snapshot)</button>
               <button onClick={() => void exportSnapshot('docx')}>Word (.docx)</button>
               <button onClick={() => void exportBoardFile()}>Board file (.gboard)</button>
@@ -236,7 +236,7 @@ export function WhiteboardModule({ caseId }: Props): JSX.Element {
       </div>
       <div
         ref={containerRef}
-        style={{ flex: 1, position: 'relative', overflow: 'hidden', background: '#cfd8dc', cursor: connectMode ? 'crosshair' : 'default' }}
+        style={{ flex: 1, position: 'relative', overflow: 'hidden', background: 'var(--ga98-recessed-bg, #cfd8dc)', cursor: connectMode ? 'crosshair' : 'default' }}
         onMouseDown={onBgMouseDown}
         onWheel={onWheel}
         onDrop={(e) => void onDrop(e)}

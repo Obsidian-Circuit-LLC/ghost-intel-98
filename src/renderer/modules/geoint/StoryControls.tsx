@@ -22,7 +22,7 @@ export function StoryControls({ count, index, playing, onPlay, onPause, onPrev, 
       <button onClick={onPrev} disabled={index <= 0} title="Previous event" style={{ minWidth: 0, padding: '0 8px' }}>⏮ Prev</button>
       <button onClick={onNext} disabled={index >= count - 1} title="Next event" style={{ minWidth: 0, padding: '0 8px' }}>⏭ Next</button>
       <button onClick={onStop} title="Stop story" style={{ minWidth: 0, padding: '0 8px' }}>⏹ Stop</button>
-      <span style={{ fontSize: 11, whiteSpace: 'nowrap', color: '#333' }}>{count ? index + 1 : 0} / {count}</span>
+      <span style={{ fontSize: 11, whiteSpace: 'nowrap', color: 'var(--ga98-dim-deep)' }}>{count ? index + 1 : 0} / {count}</span>
     </div>
   );
 }

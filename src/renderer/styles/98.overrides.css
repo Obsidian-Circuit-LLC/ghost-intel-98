@@ -62,6 +62,277 @@ button:focus {
   background: var(--ga98-shadow-dark);
 }
 
+/* ============================================================================
+   QUIET AMETHYST — dark 98.css control override sheet (plan Task 4).
+
+   The bundled `98.css` hardcodes every control colour (silver surfaces, white
+   fields, navy selection) with NO custom properties, so a var()-only theme
+   cannot reach them. This block, gated on `[data-ga98-theme='amethyst']` and
+   loaded AFTER 98.css (see main.tsx import order), dark-restyles every common
+   control. Classic is untouched (the gate never matches).
+
+   Bevel box-shadows are rebuilt from the amethyst surface tones so the raised/
+   sunken 3-D edges read against the near-black field. Palette tokens come from
+   theme.css; the three control-local shades below are derived from the palette.
+   ============================================================================ */
+:root[data-ga98-theme='amethyst'] {
+  --ga98-field-bg: #211d2b;
+  --ga98-recessed-bg: #141119;
+  --ga98-select-bg: #4a3568;
+}
+:root[data-ga98-theme='amethyst'] .window {
+  background: var(--ga98-grey);
+  box-shadow: inset -1px -1px var(--ga98-shadow-deep), inset 1px 1px var(--ga98-shadow-light),
+    inset -2px -2px var(--ga98-shadow-dark), inset 2px 2px var(--ga98-shadow-light);
+}
+:root[data-ga98-theme='amethyst'] .window-body,
+:root[data-ga98-theme='amethyst'] .window {
+  color: var(--ga98-text);
+}
+:root[data-ga98-theme='amethyst'] .title-bar {
+  background: linear-gradient(90deg, var(--ga98-blue), var(--ga98-titlebar-to));
+}
+:root[data-ga98-theme='amethyst'] .title-bar.inactive {
+  background: linear-gradient(90deg, #2a2733, #3a3644);
+}
+:root[data-ga98-theme='amethyst'] .title-bar-text {
+  color: var(--ga98-titlebar-text);
+}
+:root[data-ga98-theme='amethyst'] button,
+:root[data-ga98-theme='amethyst'] input[type='reset'],
+:root[data-ga98-theme='amethyst'] input[type='submit'] {
+  /* background-COLOR (longhand), NOT the `background` shorthand: the shorthand
+     resets background-position/-repeat, and this rule ties 98.css's
+     `.title-bar-controls button[aria-label=…]` on specificity while loading
+     later — so the shorthand would win and tile the window-control glyphs from
+     the top-left corner. Longhand leaves 98.css's glyph placement intact. */
+  background-color: var(--ga98-grey);
+  color: var(--ga98-text);
+  box-shadow: inset -1px -1px var(--ga98-shadow-deep), inset 1px 1px var(--ga98-shadow-light),
+    inset -2px -2px var(--ga98-shadow-dark), inset 2px 2px #3a3648;
+  text-shadow: none;
+}
+/* 98.css's disabled-button cue is `:disabled{color:grey}`, which the button
+   `color` above outranks — restate a dimmed label so disabled buttons stay
+   visually distinct from enabled ones under amethyst. */
+:root[data-ga98-theme='amethyst'] button:disabled,
+:root[data-ga98-theme='amethyst'] input[type='reset']:disabled,
+:root[data-ga98-theme='amethyst'] input[type='submit']:disabled,
+:root[data-ga98-theme='amethyst'] :disabled + label {
+  color: var(--ga98-text-dim);
+}
+/* Opacity-dimmed inactive controls (rendered-contrast oracle, hardened alpha pass). Several modules
+   express a control's disabled/muted state with an inline `opacity` multiplier on a <label> that
+   wraps a disabled <input> (e.g. GeoINT feed toggles gated on `net`, the AI-assistant "Include file
+   contents" gate). On the LIGHT classic skin that fades dark text toward white and stays legible; on
+   the near-black amethyst skin the SAME multiplier fades LIGHT text toward black, sinking it below
+   the WCAG floor (the alpha the hardened oracle now folds in). The theme-correct disabled cue is a
+   legible DIM COLOUR, not sunk opacity — matching the `button:disabled → text-dim` rule above — so
+   under amethyst we neutralise the inline opacity and carry the affordance with --ga98-text-dim
+   (~5:1 on the surface). Classic is byte-for-byte untouched (rule is amethyst-scoped). */
+:root[data-ga98-theme='amethyst'] label:has(> input:disabled),
+:root[data-ga98-theme='amethyst'] label:has(> input[type='checkbox']:disabled),
+:root[data-ga98-theme='amethyst'] label:has(> input[type='radio']:disabled) {
+  opacity: 1 !important;
+  color: var(--ga98-text-dim);
+}
+:root[data-ga98-theme='amethyst'] input[type='text'],
+:root[data-ga98-theme='amethyst'] input[type='search'],
+:root[data-ga98-theme='amethyst'] input[type='password'],
+:root[data-ga98-theme='amethyst'] input[type='email'],
+:root[data-ga98-theme='amethyst'] input[type='number'],
+:root[data-ga98-theme='amethyst'] input[type='tel'],
+:root[data-ga98-theme='amethyst'] input[type='url'],
+:root[data-ga98-theme='amethyst'] textarea,
+:root[data-ga98-theme='amethyst'] select {
+  background-color: var(--ga98-field-bg);
+  color: var(--ga98-text);
+}
+/* 98.css repaints disabled/read-only fields `silver`/`#fff` (light islands) — restate dark. */
+:root[data-ga98-theme='amethyst'] input[type='text']:disabled,
+:root[data-ga98-theme='amethyst'] input[type='text']:read-only,
+:root[data-ga98-theme='amethyst'] input[type='search']:disabled,
+:root[data-ga98-theme='amethyst'] input[type='search']:read-only,
+:root[data-ga98-theme='amethyst'] input[type='password']:disabled,
+:root[data-ga98-theme='amethyst'] input[type='password']:read-only,
+:root[data-ga98-theme='amethyst'] input[type='email']:disabled,
+:root[data-ga98-theme='amethyst'] input[type='email']:read-only,
+:root[data-ga98-theme='amethyst'] input[type='number']:disabled,
+:root[data-ga98-theme='amethyst'] input[type='number']:read-only,
+:root[data-ga98-theme='amethyst'] input[type='tel']:disabled,
+:root[data-ga98-theme='amethyst'] input[type='tel']:read-only,
+:root[data-ga98-theme='amethyst'] input[type='url']:disabled,
+:root[data-ga98-theme='amethyst'] input[type='url']:read-only,
+:root[data-ga98-theme='amethyst'] textarea:disabled {
+  background-color: var(--ga98-recessed-bg);
+  color: var(--ga98-text-dim);
+}
+:root[data-ga98-theme='amethyst'] select:focus {
+  background-color: var(--ga98-select-bg);
+  color: var(--ga98-titlebar-text);
+}
+:root[data-ga98-theme='amethyst'] select:focus option {
+  background-color: var(--ga98-field-bg);
+  color: var(--ga98-text);
+}
+:root[data-ga98-theme='amethyst'] .sunken-panel,
+:root[data-ga98-theme='amethyst'] table,
+:root[data-ga98-theme='amethyst'] pre,
+:root[data-ga98-theme='amethyst'] ul.tree-view,
+:root[data-ga98-theme='amethyst'] .field-border {
+  background-color: var(--ga98-recessed-bg);
+  color: var(--ga98-text);
+}
+:root[data-ga98-theme='amethyst'] table > thead > tr > * {
+  background: var(--ga98-grey);
+  color: var(--ga98-text);
+}
+:root[data-ga98-theme='amethyst'] table > tbody > tr.highlighted,
+:root[data-ga98-theme='amethyst'] ul.tree-view a:focus {
+  background-color: var(--ga98-select-bg);
+  color: var(--ga98-titlebar-text);
+}
+:root[data-ga98-theme='amethyst'] ul.tree-view a {
+  color: var(--ga98-text);
+}
+:root[data-ga98-theme='amethyst'] a {
+  color: var(--ga98-accent);
+}
+:root[data-ga98-theme='amethyst'] .status-bar-field {
+  color: var(--ga98-text);
+  box-shadow: inset -1px -1px var(--ga98-shadow-light), inset 1px 1px var(--ga98-shadow-dark);
+}
+/* 98.css paints these two field frames `silver` — light islands under amethyst; restate dark. */
+:root[data-ga98-theme='amethyst'] .field-border-disabled,
+:root[data-ga98-theme='amethyst'] .status-field-border {
+  background: var(--ga98-recessed-bg);
+  color: var(--ga98-text-dim);
+}
+:root[data-ga98-theme='amethyst'] menu[role='tablist'] > li {
+  background: var(--ga98-grey);
+}
+:root[data-ga98-theme='amethyst'] menu[role='tablist'] > li > a,
+:root[data-ga98-theme='amethyst'] menu[role='tablist'] > li[aria-selected='true'] > a {
+  color: var(--ga98-text);
+}
+:root[data-ga98-theme='amethyst'] menu[role='tablist'] > li[aria-selected='true'] {
+  background-color: var(--ga98-grey);
+}
+:root[data-ga98-theme='amethyst'] legend {
+  background: var(--ga98-grey);
+  color: var(--ga98-text);
+}
+:root[data-ga98-theme='amethyst'] .progress-indicator > .progress-indicator-bar {
+  background-color: var(--ga98-accent);
+}
+:root[data-ga98-theme='amethyst'] ::-webkit-scrollbar-thumb {
+  background-color: var(--ga98-shadow-light);
+  box-shadow: inset -1px -1px var(--ga98-shadow-deep), inset 1px 1px #3a3648,
+    inset -2px -2px var(--ga98-shadow-dark), inset 2px 2px var(--ga98-grey);
+}
+:root[data-ga98-theme='amethyst'] ::-webkit-scrollbar-corner,
+:root[data-ga98-theme='amethyst'] ::-webkit-scrollbar-track {
+  background: var(--ga98-recessed-bg);
+}
+
+/* ============================================================================
+   QUIET AMETHYST — control GLYPH restoration.
+
+   98.css draws every control glyph — title-bar Minimize/Maximize/Restore/Close,
+   the select dropdown arrow, the checkbox/radio check-mark & dot, the scrollbar
+   arrows, the tree-view +/- marker — as a hardcoded BLACK (`fill='%23000'`) SVG
+   data-URI. On the amethyst near-black surface a black glyph is invisible.
+   Re-supply each glyph as a light-fill (`%23efeaff`, the amethyst
+   `--ga98-titlebar-text` ink) data-URI so the icon reads on dark. These are
+   amethyst-only (the gate never matches classic), so classic parity is
+   untouched. `background-image` only — because the amethyst `button` rule uses
+   `background-color` (longhand, above), 98.css's per-glyph background-position /
+   background-repeat survive and place these correctly (no tiling).
+   ============================================================================ */
+
+/* Native form-control internals (checkbox/radio boxes the app renders with
+   `appearance:auto`, default scrollbars in un-skinned scroll areas) render
+   dark-appropriately instead of as light Chromium islands. */
+:root[data-ga98-theme='amethyst'] {
+  color-scheme: dark;
+}
+
+/* Title-bar controls */
+:root[data-ga98-theme='amethyst'] .title-bar-controls button[aria-label='Minimize'],
+:root[data-ga98-theme='amethyst'] .title-bar-controls button[aria-label].minimize {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg width='6' height='2' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='%23efeaff' d='M0 0h6v2H0z'/%3E%3C/svg%3E");
+}
+:root[data-ga98-theme='amethyst'] .title-bar-controls button[aria-label='Maximize'],
+:root[data-ga98-theme='amethyst'] .title-bar-controls button[aria-label].maximize {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg width='9' height='9' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M9 0H0v9h9V0zM8 2H1v6h7V2z' fill='%23efeaff'/%3E%3C/svg%3E");
+}
+:root[data-ga98-theme='amethyst'] .title-bar-controls button[aria-label='Restore'],
+:root[data-ga98-theme='amethyst'] .title-bar-controls button[aria-label].restore {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg width='8' height='9' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='%23efeaff' d='M2 0h6v2H2zM7 2h1v4H7zM2 2h1v1H2zM6 5h1v1H6zM0 3h6v2H0zM5 5h1v4H5zM0 5h1v4H0zM1 8h4v1H1z'/%3E%3C/svg%3E");
+}
+:root[data-ga98-theme='amethyst'] .title-bar-controls button[aria-label='Help'],
+:root[data-ga98-theme='amethyst'] .title-bar-controls button[aria-label].help {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg width='6' height='9' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='%23efeaff' d='M0 1h2v2H0zM1 0h4v1H1zM4 1h2v2H4zM3 3h2v1H3zM2 4h2v2H2zM2 7h2v2H2z'/%3E%3C/svg%3E");
+}
+:root[data-ga98-theme='amethyst'] .title-bar-controls button[aria-label='Close'],
+:root[data-ga98-theme='amethyst'] .title-bar-controls button[aria-label].close {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg width='8' height='7' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M0 0h2v1h1v1h2V1h1V0h2v1H7v1H6v1H5v1h1v1h1v1h1v1H6V6H5V5H3v1H2v1H0V6h1V5h1V4h1V3H2V2H1V1H0V0z' fill='%23efeaff'/%3E%3C/svg%3E");
+}
+
+/* Select dropdown arrow — a light chevron on the dark field (base draws a light
+   3-D silver button face + black arrow, a light island on dark). */
+:root[data-ga98-theme='amethyst'] select {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg width='16' height='17' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M11 6H4v1h1v1h1v1h1v1h1V9h1V8h1V7h1V6z' fill='%23efeaff'/%3E%3C/svg%3E");
+}
+:root[data-ga98-theme='amethyst'] select:active {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg width='16' height='17' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M12 7H5v1h1v1h1v1h1v1h1v-1h1V9h1V8h1V7z' fill='%23efeaff'/%3E%3C/svg%3E");
+}
+
+/* Checkbox / radio 98.css-markup glyphs (`input + label` sibling pattern): dark
+   box, light check-mark / dot. (The app's own controls nest input-in-label and
+   render `appearance:auto` native boxes — handled by `color-scheme:dark` above —
+   but any 98.css-markup control stays correct under amethyst too.) */
+:root[data-ga98-theme='amethyst'] input[type='checkbox'] + label:before {
+  background-color: var(--ga98-field-bg);
+}
+:root[data-ga98-theme='amethyst'] input[type='checkbox']:checked + label:after {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg width='7' height='7' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M7 0H6v1H5v1H4v1H3v1H2V3H1V2H0v3h1v1h1v1h1V6h1V5h1V4h1V3h1V0z' fill='%23efeaff'/%3E%3C/svg%3E");
+}
+:root[data-ga98-theme='amethyst'] input[type='radio']:checked + label:after {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg width='4' height='4' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M3 0H1v1H0v2h1v1h2V3h1V1H3V0z' fill='%23efeaff'/%3E%3C/svg%3E");
+}
+
+/* Scrollbar arrow buttons — light arrow on a dark raised face (base is a full
+   silver 3-D SVG, a light island on the dark scrollbar). */
+:root[data-ga98-theme='amethyst'] ::-webkit-scrollbar-button:vertical:start,
+:root[data-ga98-theme='amethyst'] ::-webkit-scrollbar-button:vertical:end,
+:root[data-ga98-theme='amethyst'] ::-webkit-scrollbar-button:horizontal:start,
+:root[data-ga98-theme='amethyst'] ::-webkit-scrollbar-button:horizontal:end {
+  background-color: var(--ga98-shadow-light);
+  background-repeat: no-repeat;
+  box-shadow: inset -1px -1px var(--ga98-shadow-deep), inset 1px 1px #3a3648,
+    inset -2px -2px var(--ga98-shadow-dark), inset 2px 2px var(--ga98-grey);
+}
+:root[data-ga98-theme='amethyst'] ::-webkit-scrollbar-button:vertical:start {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg width='16' height='17' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='%23efeaff' d='M8 6H7v1H6v1H5v1H4v1h7V9h-1V8H9V7H8V6z'/%3E%3C/svg%3E");
+}
+:root[data-ga98-theme='amethyst'] ::-webkit-scrollbar-button:vertical:end {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg width='16' height='17' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='%23efeaff' d='M11 6H4v1h1v1h1v1h1v1h1V9h1V8h1V7h1V6z'/%3E%3C/svg%3E");
+}
+:root[data-ga98-theme='amethyst'] ::-webkit-scrollbar-button:horizontal:start {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg width='16' height='17' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='%23efeaff' d='M9 4H8v1H7v1H6v1H5v1h1v1h1v1h1v1h1V4z'/%3E%3C/svg%3E");
+}
+:root[data-ga98-theme='amethyst'] ::-webkit-scrollbar-button:horizontal:end {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg width='16' height='17' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='%23efeaff' d='M7 4H6v7h1v-1h1V9h1V8h1V7H9V6H8V5H7V4z'/%3E%3C/svg%3E");
+}
+
+/* Tree-view expand/collapse marker (`+`/`-` in a box) — dark box, light glyph. */
+:root[data-ga98-theme='amethyst'] ul.tree-view details > summary:before {
+  background-color: var(--ga98-field-bg);
+  border-color: var(--ga98-shadow-light);
+  color: var(--ga98-text);
+}
+
 /* ---- Login lock screen ---- */
 .ga98-lock-overlay {
   position: absolute;

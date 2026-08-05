@@ -694,7 +694,7 @@ function GeoIntModuleInner(): JSX.Element {
           onClick={() => setRailCollapsed((v) => !v)}
         >{railCollapsed ? '»' : '«'}</button>
         {loadError && (
-          <div style={{ background: '#fee', color: '#900', padding: '4px 8px', fontSize: 11, border: '1px solid #c00', marginBottom: 4 }}>
+          <div style={{ background: 'var(--ga98-error-surface)', color: 'var(--ga98-danger-ink)', padding: '4px 8px', fontSize: 11, border: '1px solid var(--ga98-error-border)', marginBottom: 4 }}>
             GeoINT data failed to load: {loadError}
           </div>
         )}
@@ -702,12 +702,12 @@ function GeoIntModuleInner(): JSX.Element {
           <legend>Network</legend>
           <div className="field-row" style={{ gap: 6, alignItems: 'center' }}>
             <button onClick={() => setNetwork(!net)} aria-pressed={net}
-              style={net ? { borderStyle: 'inset', background: '#bfe0bf', color: '#003300', fontWeight: 'bold' } : { fontWeight: 'bold' }}>
+              style={net ? { borderStyle: 'inset', background: 'var(--ga98-ok-surface)', color: 'var(--ga98-ok-ink)', fontWeight: 'bold' } : { fontWeight: 'bold' }}>
               {net ? 'Disable GeoINT network' : 'Enable GeoINT network'}
             </button>
-            <span style={{ fontSize: 11, color: net ? '#060' : '#900' }}>{net ? '● on' : '○ off'}</span>
+            <span style={{ fontSize: 11, color: net ? 'var(--ga98-ok-dot)' : 'var(--ga98-danger-ink)' }}>{net ? '● on' : '○ off'}</span>
           </div>
-          <p style={{ fontSize: 11, color: '#555', margin: '4px 0' }}>Off by default. When off, nothing is fetched and the map loads no tiles — feeds and map both stay quiet until you enable it.</p>
+          <p style={{ fontSize: 11, color: 'var(--ga98-dim-mid)', margin: '4px 0' }}>Off by default. When off, nothing is fetched and the map loads no tiles — feeds and map both stay quiet until you enable it.</p>
           <div className="field-row">
             <label style={{ minWidth: 60 }}>Tiles:</label>
             <input className="ga98-text" placeholder={DEFAULT_TILE_URL} value={tileDraft} disabled={!net}
@@ -742,21 +742,21 @@ function GeoIntModuleInner(): JSX.Element {
               title="Step chronologically through the located events, recentering and opening each">
               ▶ Play story
             </button>
-            <span style={{ fontSize: 11, color: '#555' }}>{storyItems.length} located event{storyItems.length === 1 ? '' : 's'}</span>
+            <span style={{ fontSize: 11, color: 'var(--ga98-dim-mid)' }}>{storyItems.length} located event{storyItems.length === 1 ? '' : 's'}</span>
           </div>
         </fieldset>
 
         <fieldset>
           <legend>Legend</legend>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 10px', alignItems: 'center' }}>
+          <div className="ga98-geo-legend" style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 10px', alignItems: 'center' }}>
             {Object.entries(CATEGORY_COLOR).map(([cat, color]) => (
               <span key={cat} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11 }}>
-                <span style={{ display: 'inline-block', width: 11, height: 11, borderRadius: '50%', background: color, border: '1px solid rgba(0,0,0,.5)' }} />
+                <span className="ga98-geo-cat-swatch" style={{ display: 'inline-block', width: 11, height: 11, borderRadius: '50%', background: color, border: '1px solid rgba(0,0,0,.5)' }} />
                 {cat}
               </span>
             ))}
           </div>
-          <p style={{ fontSize: 10, color: '#777', margin: '6px 0 0' }}>Places © GeoNames (CC-BY 4.0)</p>
+          <p style={{ fontSize: 10, color: 'var(--ga98-dim-cap)', margin: '6px 0 0' }}>Places © GeoNames (CC-BY 4.0)</p>
         </fieldset>
 
         <fieldset>
@@ -794,7 +794,7 @@ function GeoIntModuleInner(): JSX.Element {
             <button onClick={() => void refresh()} disabled={busy}>{busy ? 'Refreshing…' : 'Refresh'}</button>
             <span style={{ flex: 1 }} />
             <button onClick={() => void confirmPurge()} title="Purge ALL GeoINT sources + cached events and reset the map (recovery escape hatch)"
-              style={{ color: '#900', fontWeight: 'bold' }}>Purge cache</button>
+              style={{ color: 'var(--ga98-danger-ink)', fontWeight: 'bold' }}>Purge cache</button>
           </div>
           <ul className="ga98-list" style={{ marginTop: 6 }}>
             {(snap?.sources ?? []).map((s) => (
@@ -843,8 +843,8 @@ function GeoIntModuleInner(): JSX.Element {
 
         <fieldset>
           <legend>Threat Layers</legend>
-          <p style={{ fontSize: 11, color: '#555', margin: '0 0 4px' }}>On-demand public feeds. Toggling a layer on fetches it now (network required); off drops it. Not cached.</p>
-          {layerError && <p style={{ fontSize: 11, color: '#900', margin: '0 0 4px' }}>Layer error: {layerError}</p>}
+          <p style={{ fontSize: 11, color: 'var(--ga98-dim-mid)', margin: '0 0 4px' }}>On-demand public feeds. Toggling a layer on fetches it now (network required); off drops it. Not cached.</p>
+          {layerError && <p style={{ fontSize: 11, color: 'var(--ga98-danger-ink)', margin: '0 0 4px' }}>Layer error: {layerError}</p>}
           <div className="field-row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
             <label style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4, opacity: net ? 1 : 0.5 }}>
               <input
@@ -869,9 +869,9 @@ function GeoIntModuleInner(): JSX.Element {
             >
               {USGS_FEED_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
-            {layerBusy === 'usgs' && <span style={{ fontSize: 11, color: '#555' }}>loading…</span>}
+            {layerBusy === 'usgs' && <span style={{ fontSize: 11, color: 'var(--ga98-dim-mid)' }}>loading…</span>}
           </div>
-          <p style={{ fontSize: 10, color: '#777', margin: '4px 0 0' }}>USGS — U.S. Public Domain</p>
+          <p style={{ fontSize: 10, color: 'var(--ga98-dim-cap)', margin: '4px 0 0' }}>USGS — U.S. Public Domain</p>
 
           <div className="field-row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap', marginTop: 6 }}>
             <label style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4, opacity: net ? 1 : 0.5 }}>
@@ -883,9 +883,9 @@ function GeoIntModuleInner(): JSX.Element {
               />
               GDACS disasters
             </label>
-            {layerBusy === 'gdacs' && <span style={{ fontSize: 11, color: '#555' }}>loading…</span>}
+            {layerBusy === 'gdacs' && <span style={{ fontSize: 11, color: 'var(--ga98-dim-mid)' }}>loading…</span>}
           </div>
-          <p style={{ fontSize: 10, color: '#777', margin: '4px 0 0' }}>GDACS — UN OCHA / EC-JRC</p>
+          <p style={{ fontSize: 10, color: 'var(--ga98-dim-cap)', margin: '4px 0 0' }}>GDACS — UN OCHA / EC-JRC</p>
 
           <div className="field-row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap', marginTop: 6 }}>
             <label style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4, opacity: net ? 1 : 0.5 }}>
@@ -908,9 +908,9 @@ function GeoIntModuleInner(): JSX.Element {
               onBlur={() => { if (enabledLayers.has('wartracker')) void toggleLayer('wartracker', true, { country: wtCountry }); }}
               title="Optional ISO-3166 alpha-2 country filter (e.g. UA)"
             />
-            {layerBusy === 'wartracker' && <span style={{ fontSize: 11, color: '#555' }}>loading…</span>}
+            {layerBusy === 'wartracker' && <span style={{ fontSize: 11, color: 'var(--ga98-dim-mid)' }}>loading…</span>}
           </div>
-          <p style={{ fontSize: 10, color: '#900', margin: '4px 0 0' }}>War-Tracker — unverified social-OSINT (Telegram/LLM-classified)</p>
+          <p style={{ fontSize: 10, color: 'var(--ga98-danger-ink)', margin: '4px 0 0' }}>War-Tracker — unverified social-OSINT (Telegram/LLM-classified)</p>
 
           <div className="field-row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap', marginTop: 6 }}>
             <label style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4, opacity: net ? 1 : 0.5 }}>
@@ -933,9 +933,9 @@ function GeoIntModuleInner(): JSX.Element {
               onBlur={() => { if (enabledLayers.has('gdelt')) void toggleLayer('gdelt', true, { query: gdeltQuery }); }}
               title="GDELT DOC query (keywords / OR / quotes)"
             />
-            {layerBusy === 'gdelt' && <span style={{ fontSize: 11, color: '#555' }}>loading…</span>}
+            {layerBusy === 'gdelt' && <span style={{ fontSize: 11, color: 'var(--ga98-dim-mid)' }}>loading…</span>}
           </div>
-          <p style={{ fontSize: 10, color: '#777', margin: '4px 0 0' }}>GDELT DOC — news articles, COUNTRY-LEVEL location (not precise)</p>
+          <p style={{ fontSize: 10, color: 'var(--ga98-dim-cap)', margin: '4px 0 0' }}>GDELT DOC — news articles, COUNTRY-LEVEL location (not precise)</p>
 
           <div className="field-row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap', marginTop: 6 }}>
             <label style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4, opacity: net ? 1 : 0.5 }}>
@@ -947,14 +947,14 @@ function GeoIntModuleInner(): JSX.Element {
               />
               ReliefWeb disasters
             </label>
-            {layerBusy === 'reliefweb' && <span style={{ fontSize: 11, color: '#555' }}>loading…</span>}
+            {layerBusy === 'reliefweb' && <span style={{ fontSize: 11, color: 'var(--ga98-dim-mid)' }}>loading…</span>}
           </div>
-          <p style={{ fontSize: 10, color: '#777', margin: '4px 0 0' }}>ReliefWeb — UN OCHA (links to source reports). Humanitarian — country-level; appname must be registered with ReliefWeb.</p>
+          <p style={{ fontSize: 10, color: 'var(--ga98-dim-cap)', margin: '4px 0 0' }}>ReliefWeb — UN OCHA (links to source reports). Humanitarian — country-level; appname must be registered with ReliefWeb.</p>
 
           {/* ---- Keyed layers: each needs a per-user API key/token stored in the OS secret store.
                The toggle is disabled until a key is saved; the key is never echoed back. ---- */}
-          <hr style={{ margin: '8px 0', borderColor: '#ccc' }} />
-          <p style={{ fontSize: 11, color: '#555', margin: '0 0 4px' }}>Keyed layers — store your own API key (encrypted, kept on this device; never sent to the renderer).</p>
+          <hr style={{ margin: '8px 0', borderColor: 'var(--ga98-divider)' }} />
+          <p style={{ fontSize: 11, color: 'var(--ga98-dim-mid)', margin: '0 0 4px' }}>Keyed layers — store your own API key (encrypted, kept on this device; never sent to the renderer).</p>
 
           {/* FIRMS */}
           <div className="field-row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap', marginTop: 4 }}>
@@ -977,9 +977,9 @@ function GeoIntModuleInner(): JSX.Element {
               title="FIRMS MAP_KEY (free, email-issued at firms.modaps.eosdis.nasa.gov)"
             />
             <button disabled={keySaving === 'firms'} onClick={() => void saveLayerKey('firms')}>Save</button>
-            {layerBusy === 'firms' && <span style={{ fontSize: 11, color: '#555' }}>loading…</span>}
+            {layerBusy === 'firms' && <span style={{ fontSize: 11, color: 'var(--ga98-dim-mid)' }}>loading…</span>}
           </div>
-          <p style={{ fontSize: 10, color: '#777', margin: '4px 0 0' }}>
+          <p style={{ fontSize: 10, color: 'var(--ga98-dim-cap)', margin: '4px 0 0' }}>
             {hasKey.firms ? 'NASA FIRMS — open, cite-on-use' : 'Needs a free MAP_KEY (email-issued). NASA FIRMS — open, cite-on-use.'}
           </p>
 
@@ -1004,9 +1004,9 @@ function GeoIntModuleInner(): JSX.Element {
               title="gdeltcloud.com API key (Bearer token)"
             />
             <button disabled={keySaving === 'gdeltcloud'} onClick={() => void saveLayerKey('gdeltcloud')}>Save</button>
-            {layerBusy === 'gdeltcloud' && <span style={{ fontSize: 11, color: '#555' }}>loading…</span>}
+            {layerBusy === 'gdeltcloud' && <span style={{ fontSize: 11, color: 'var(--ga98-dim-mid)' }}>loading…</span>}
           </div>
-          <p style={{ fontSize: 10, color: '#900', margin: '4px 0 0' }}>Routes your queries through gdeltcloud (a third party that sees them).</p>
+          <p style={{ fontSize: 10, color: 'var(--ga98-danger-ink)', margin: '4px 0 0' }}>Routes your queries through gdeltcloud (a third party that sees them).</p>
 
           {/* UCDP */}
           <div className="field-row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap', marginTop: 6 }}>
@@ -1029,21 +1029,21 @@ function GeoIntModuleInner(): JSX.Element {
               title="UCDP access token (x-ucdp-access-token; request from UCDP)"
             />
             <button disabled={keySaving === 'ucdp'} onClick={() => void saveLayerKey('ucdp')}>Save</button>
-            {layerBusy === 'ucdp' && <span style={{ fontSize: 11, color: '#555' }}>loading…</span>}
+            {layerBusy === 'ucdp' && <span style={{ fontSize: 11, color: 'var(--ga98-dim-mid)' }}>loading…</span>}
           </div>
-          <p style={{ fontSize: 10, color: '#777', margin: '4px 0 0' }}>
+          <p style={{ fontSize: 10, color: 'var(--ga98-dim-cap)', margin: '4px 0 0' }}>
             UCDP GED — CC BY 4.0. Cite: Davies, Pettersson &amp; Öberg (2026) JPR; Sundberg &amp; Melander (2013) JPR 50(4).
           </p>
         </fieldset>
 
         <fieldset>
           <legend>CISA KEV / Alerts</legend>
-          <p style={{ fontSize: 11, color: '#555', margin: '0 0 4px' }}>
+          <p style={{ fontSize: 11, color: 'var(--ga98-dim-mid)', margin: '0 0 4px' }}>
             CISA Known Exploited Vulnerabilities — an advisory catalog (no map location). On-demand; not cached.
           </p>
           <div className="field-row" style={{ gap: 6, alignItems: 'center', marginBottom: 4 }}>
             <button onClick={() => void refreshKev()} disabled={!net || kevBusy}>{kevBusy ? 'Loading…' : 'Refresh'}</button>
-            <span style={{ fontSize: 11, color: '#555' }}>{kev.length > 0 ? `${kev.length} entries` : ''}</span>
+            <span style={{ fontSize: 11, color: 'var(--ga98-dim-mid)' }}>{kev.length > 0 ? `${kev.length} entries` : ''}</span>
           </div>
           {kev.length > 0 && (
             <ul className="ga98-list" style={{ maxHeight: 180, overflow: 'auto' }}>
@@ -1063,7 +1063,7 @@ function GeoIntModuleInner(): JSX.Element {
                         RANSOMWARE
                       </span>
                     )}
-                    <div style={{ fontSize: 11, color: '#333' }}>
+                    <div style={{ fontSize: 11, color: 'var(--ga98-dim-deep)' }}>
                       <span style={{ opacity: 0.7 }}>{k.vendorProject} {k.product}</span> — {k.vulnerabilityName}
                     </div>
                   </li>
@@ -1071,7 +1071,7 @@ function GeoIntModuleInner(): JSX.Element {
               })}
             </ul>
           )}
-          <p style={{ fontSize: 10, color: '#777', margin: '4px 0 0' }}>CISA KEV — U.S. Public Domain</p>
+          <p style={{ fontSize: 10, color: 'var(--ga98-dim-cap)', margin: '4px 0 0' }}>CISA KEV — U.S. Public Domain</p>
         </fieldset>
 
         <fieldset style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
@@ -1088,12 +1088,12 @@ function GeoIntModuleInner(): JSX.Element {
                   {i.title} <span style={{ opacity: 0.5, fontSize: 10 }}>{i.located === 'none' ? '(no location)' : ''}</span>
                 </span>
                 <button title="Click then click the map to set this event's location" onClick={() => setPickFor(i.id)}
-                  style={{ minWidth: 0, padding: '0 6px', outline: pickFor === i.id ? '2px solid navy' : undefined }}>📍</button>
+                  style={{ minWidth: 0, padding: '0 6px', outline: pickFor === i.id ? '2px solid var(--ga98-navy-accent)' : undefined }}>📍</button>
                 <button title="Save this event to a case" onClick={() => setSaveItem(i)} style={{ minWidth: 0, padding: '0 6px' }}>📁</button>
               </li>
             ))}
           </ul>
-          {pickFor && <p style={{ fontSize: 11, color: 'navy', margin: '4px 0' }}>Pin mode: click the map to locate the selected event.</p>}
+          {pickFor && <p style={{ fontSize: 11, color: 'var(--ga98-navy-accent)', margin: '4px 0' }}>Pin mode: click the map to locate the selected event.</p>}
         </fieldset>
       </div>
 
@@ -1121,7 +1121,7 @@ function GeoIntModuleInner(): JSX.Element {
             onSelectItem={selectEvent}
           />
         {streetView && net && (
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', background: '#000' }}>
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', background: 'var(--ga98-shadow-deep)' }}>
             <div className="ga98-toolbar" style={{ flex: '0 0 auto' }}>
               <b style={{ fontSize: 11 }}>Street View — {center.lat.toFixed(4)}, {center.lon.toFixed(4)}</b>
               <span style={{ flex: 1 }} />
@@ -1147,7 +1147,7 @@ function GeoIntModuleInner(): JSX.Element {
             it stays draggable; z-index sits above Leaflet tiles/markers (panes 200–500)
             but below Leaflet's own zoom control (800+). */}
         {story && (
-          <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', zIndex: 600, display: 'inline-flex', background: 'var(--ga98-face,#c0c0c0)', border: '2px outset #fff', padding: 2, boxShadow: '0 1px 4px rgba(0,0,0,.4)' }}>
+          <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', zIndex: 600, display: 'inline-flex', background: 'var(--ga98-grey)', border: '2px outset var(--ga98-shadow-light)', padding: 2, boxShadow: '0 1px 4px rgba(0,0,0,.4)' }}>
             <StoryControls
               count={storyItems.length}
               index={story.index}

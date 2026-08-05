@@ -56,12 +56,12 @@ export function AlarmModule(): JSX.Element {
       <fieldset>
         <legend>Active alarms</legend>
         <ul className="ga98-list">
-          {list.length === 0 && <li style={{ color: '#666' }}>No alarms.</li>}
+          {list.length === 0 && <li style={{ color: 'var(--ga98-dim-soft)' }}>No alarms.</li>}
           {list.map((r) => (
             <li key={r.id}>
               <span style={{ flex: 1 }}>
                 <b>{r.title}</b> <span style={{ opacity: 0.7 }}>· {new Date(r.fireAt).toLocaleString()}</span>
-                {r.fired ? <span style={{ color: '#080' }}> · rang</span> : ''}
+                {r.fired ? <span className="ga98-t8-ok-text" style={{ color: '#080' }}> · rang</span> : ''}
               </span>
               <button onClick={async () => { await window.api.reminders.deleteGlobal(r.id); await refresh(); }}>×</button>
             </li>

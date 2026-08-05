@@ -44,8 +44,10 @@ const IMAGE_EXT = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'tif', 'ti
 const VIDEO_EXT = ['mp4', 'm4v', 'webm', 'ogv', 'mov'];
 const AUDIO_EXT = ['mp3', 'm4a', 'aac', 'flac', 'wav', 'ogg', 'oga', 'opus'];
 
-function kindFor(name: string): Kind {
-  const ext = name.toLowerCase().split('.').pop() ?? '';
+function kindFor(name: string | undefined): Kind {
+  // Degrade gracefully when opened without a name (e.g. a spec with no file yet): fall through to
+  // the text/loading chrome rather than throwing on `undefined.toLowerCase()`.
+  const ext = (name ?? '').toLowerCase().split('.').pop() ?? '';
   if (ext === 'pdf') return 'pdf';
   if (IMAGE_EXT.includes(ext)) return 'image';
   if (VIDEO_EXT.includes(ext)) return 'video';
@@ -90,7 +92,7 @@ function useDocBytes(relPath: string): BytesProps {
 }
 
 function Centered({ children }: { children: React.ReactNode }): JSX.Element {
-  return <div style={{ padding: 16, color: '#666' }}>{children}</div>;
+  return <div style={{ padding: 16, color: 'var(--ga98-dim-soft)' }}>{children}</div>;
 }
 
 export function DocViewerModule(props: Props): JSX.Element {
@@ -105,7 +107,7 @@ export function DocViewerModule(props: Props): JSX.Element {
 function CaseViewer({ caseId, fileName, originalName }: { caseId: string; fileName: string; originalName: string }): JSX.Element {
   const kind = kindFor(originalName || fileName);
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#fff' }}>
+    <div className="ga98-docviewer-surface" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div className="ga98-toolbar">
         <b style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{originalName}</b>
         <span style={{ flex: 1 }} />
@@ -157,7 +159,7 @@ function DocumentsViewer({ relPath, name }: { relPath: string; name: string }): 
   const kind = kindFor(name);
   const supported = docSupported(name);
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#fff' }}>
+    <div className="ga98-docviewer-surface" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div className="ga98-toolbar">
         <b style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</b>
         <span style={{ flex: 1 }} />
@@ -184,7 +186,7 @@ function UnsupportedPanel({ relPath, name }: { relPath: string; name: string }):
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   return (
-    <div style={{ padding: 24, color: '#555' }}>
+    <div style={{ padding: 24, color: 'var(--ga98-dim-mid)' }}>
       <p style={{ marginTop: 0 }}>Can&apos;t preview this file type in-app.</p>
       <p style={{ fontSize: 12, opacity: 0.8, wordBreak: 'break-word' }}>{name}</p>
       <button
@@ -406,7 +408,7 @@ function CsvBody({ bytes, error }: BytesProps): JSX.Element {
             ))}
           </tbody>
         </table>
-        {rows.length >= 2000 && <p style={{ fontSize: 11, color: '#900' }}>Showing first 2000 rows.</p>}
+        {rows.length >= 2000 && <p style={{ fontSize: 11, color: 'var(--ga98-danger-ink)' }}>Showing first 2000 rows.</p>}
       </div>
     </div>
   );

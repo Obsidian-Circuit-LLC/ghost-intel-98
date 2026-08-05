@@ -65,7 +65,7 @@ export function FtpBrowser({ host }: { host: SshHostProfile }): JSX.Element {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#fff', color: '#000' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--ga98-shadow-light)', color: 'var(--ga98-text)' }}>
       <div className="ga98-toolbar">
         <button onClick={() => void cd('..')} disabled={busy} title="Up one directory">↑ Up</button>
         <span style={{ flex: 1, fontFamily: 'monospace', fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cwd}</span>
@@ -74,12 +74,12 @@ export function FtpBrowser({ host }: { host: SshHostProfile }): JSX.Element {
         <button onClick={() => void disconnect()}>Disconnect</button>
       </div>
       <ul className="ga98-list" style={{ flex: 1, overflow: 'auto', margin: 0 }}>
-        {entries.length === 0 && <li style={{ color: '#666' }}>(empty directory)</li>}
+        {entries.length === 0 && <li style={{ color: 'var(--ga98-dim-soft)' }}>(empty directory)</li>}
         {entries.map((e) => (
           <li key={e.name}>
             <span style={{ width: 22 }} aria-hidden="true">{e.type === 'dir' ? '📁' : e.type === 'link' ? '🔗' : '📄'}</span>
             {e.type === 'dir'
-              ? <a style={{ flex: 1, cursor: 'pointer', color: '#000080' }} onClick={() => void cd(e.name)}>{e.name}/</a>
+              ? <a style={{ flex: 1, cursor: 'pointer', color: 'var(--ga98-navy-accent)' }} onClick={() => void cd(e.name)}>{e.name}/</a>
               : <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.name} <span style={{ opacity: 0.6, fontSize: 10 }}>({Math.ceil(e.size / 1024)} KB)</span></span>}
             {e.type === 'file' && <button onClick={() => void download(e.name)}>Download</button>}
           </li>

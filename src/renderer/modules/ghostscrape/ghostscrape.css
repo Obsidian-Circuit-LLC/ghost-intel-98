@@ -167,6 +167,9 @@ select.gs-input {
   cursor: pointer;
 }
 .gs-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+/* On the amethyst skin the 0.5 disabled opacity fades the (already dim, text-dim) button label below
+   the WCAG floor; the disabled affordance is carried by the text-dim colour, so drop the opacity. */
+:root[data-ga98-theme='amethyst'] .gs-btn:disabled { opacity: 1; }
 .gs-btn-primary {
   background: #22304a;
   border-color: #3a5a8a;

@@ -99,7 +99,7 @@ export function LockScreen(): JSX.Element {
   return (
     <div
       className="ga98-lock-overlay"
-      style={{ background: `#000 url(${JSON.stringify(splash)}) center / cover no-repeat` }}
+      style={{ background: `var(--ga98-shadow-deep) url(${JSON.stringify(splash)}) center / cover no-repeat` }}
     >
       <div className="window ga98-lock-window">
         <div className="title-bar">
@@ -122,7 +122,10 @@ export function LockScreen(): JSX.Element {
                 aria-label={mode === 'password' ? 'Master password' : 'Recovery key'}
               />
             </div>
-            {error && <p role="alert" style={{ color: '#a00', margin: '4px 0' }}>{error}</p>}
+            {/* Unlock-error ink: the ORIGINAL classic literal was #a00 — route to the parity-exact
+                --ga98-neg-ink (#a00) its sibling sites use, NOT the LOCKED status tier (#9a1621),
+                which would shift the classic hue. Amethyst variant (#ff8a8a) stays legible on dark. */}
+            {error && <p role="alert" style={{ color: 'var(--ga98-neg-ink)', margin: '4px 0' }}>{error}</p>}
             <div className="field-row" style={{ justifyContent: 'space-between', gap: 6, marginTop: 8 }}>
               <button
                 type="button"
@@ -139,11 +142,11 @@ export function LockScreen(): JSX.Element {
               className="ga98-lock-bgconn"
               style={{
                 marginTop: 12,
-                border: '1px solid #808080',
-                borderTop: '1px solid #404040',
-                borderLeft: '1px solid #404040',
+                border: '1px solid var(--ga98-shadow-dark)',
+                borderTop: '1px solid var(--ga98-lock-bevel)',
+                borderLeft: '1px solid var(--ga98-lock-bevel)',
                 padding: '6px 8px',
-                background: '#c0c0c0',
+                background: 'var(--ga98-grey)',
                 fontSize: '0.85em'
               }}
             >

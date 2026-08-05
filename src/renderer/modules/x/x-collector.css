@@ -351,3 +351,38 @@
   font-size: 12px;
   padding: 8px 0;
 }
+
+/* ── QUIET AMETHYST — additive dark overrides (Task 8). The X-collector interior is already a
+   self-consistent dark cyber panel (.xc-root #0a0a14, dark coloured buttons/badges with light text,
+   all content-intrinsic); the only light islands are its Win98 grey tab-strip, the light tab hover,
+   and the plain grey .xc-btn chrome buttons — those darken so nothing glows white on the skin. */
+:root[data-ga98-theme='amethyst'] .xc-tabs { background: var(--ga98-grey); }
+:root[data-ga98-theme='amethyst'] .xc-tab { color: var(--ga98-text); }
+/* Empty-state placeholder dims via opacity 0.5 — below the WCAG floor on the near-black skin
+   (4.07:1). Lift the opacity under amethyst so the muted copy clears >8:1; classic keeps 0.5. */
+:root[data-ga98-theme='amethyst'] .xc-placeholder { opacity: 0.8; }
+:root[data-ga98-theme='amethyst'] .xc-tab:hover { background: var(--ga98-row-hover); }
+:root[data-ga98-theme='amethyst'] .xc-btn {
+  background: var(--ga98-grey);
+  color: var(--ga98-text);
+  border-top-color: var(--ga98-shadow-light);
+  border-left-color: var(--ga98-shadow-light);
+  border-right-color: var(--ga98-shadow-dark);
+  border-bottom-color: var(--ga98-shadow-dark);
+}
+:root[data-ga98-theme='amethyst'] .xc-btn:active {
+  border-top-color: var(--ga98-shadow-dark);
+  border-left-color: var(--ga98-shadow-dark);
+  border-right-color: var(--ga98-shadow-light);
+  border-bottom-color: var(--ga98-shadow-light);
+}
+/* Semantic variants: the generic `.xc-btn` amethyst override above is specificity (0,3,0) and would
+   flatten accept/reject/primary/danger (each only (0,1,0)) to the plain grey chrome, erasing their
+   meaning. Re-assert each variant at equal (0,3,0), placed AFTER the generic rule so it wins on
+   source order, restoring the semantic hue as a legible-on-dark fill (blue primary / green accept /
+   red reject+danger — the same dark, light-inked values the classic collector already uses, which
+   read cleanly on the near-black amethyst skin). Classic rules (above) are untouched. */
+:root[data-ga98-theme='amethyst'] .xc-btn-primary { background: #1a2a3a; color: #d0e8ff; }
+:root[data-ga98-theme='amethyst'] .xc-btn-accept { background: #1a4a1a; color: #d8ffd8; }
+:root[data-ga98-theme='amethyst'] .xc-btn-reject { background: #5c1a1a; color: #ffd8d8; }
+:root[data-ga98-theme='amethyst'] .xc-btn-danger { background: #3a1a1a; color: #ffd0d0; }

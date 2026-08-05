@@ -259,16 +259,16 @@ export function CasesModule({ initialCaseId }: { initialCaseId?: string } = {}):
           <label style={{ fontSize: 11 }}>
             <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} /> Show archived
           </label>
-          <div style={{ fontSize: 10, color: '#666' }}>Right-click a case to move it into a category.</div>
+          <div style={{ fontSize: 10, color: 'var(--ga98-dim-soft)' }}>Right-click a case to move it into a category.</div>
           <div className="ga98-list" style={{ listStyle: 'none' }}>
-            {visible.length === 0 && <div style={{ color: '#666', padding: '4px 6px' }}>No cases. Click <b>New</b>.</div>}
+            {visible.length === 0 && <div style={{ color: 'var(--ga98-dim-soft)', padding: '4px 6px' }}>No cases. Click <b>New</b>.</div>}
             {groups.map((g) => {
               const isCollapsed = resolveCollapsed(collapsed, g.name);
               return (
                 <div key={g.name}>
                   <div
                     onClick={() => void patchSettings({ caseCategoryCollapsed: toggleCollapsed(collapsed, g.name) })}
-                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 6px', cursor: 'pointer', fontWeight: 'bold', background: '#d8d8d8', borderBottom: '1px solid #b0b0b0', userSelect: 'none' }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 6px', cursor: 'pointer', fontWeight: 'bold', background: 'var(--ga98-row-hover)', borderBottom: '1px solid var(--ga98-hairline)', userSelect: 'none' }}
                   >
                     <span style={{ width: 10 }}>{isCollapsed ? '▸' : '▾'}</span>
                     <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -294,7 +294,7 @@ export function CasesModule({ initialCaseId }: { initialCaseId?: string } = {}):
                           onContextMenu={(e) => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY, c }); }}
                         >
                           {c.primaryBioThumb && (
-                            <img src={c.primaryBioThumb} alt="" style={{ width: 20, height: 20, objectFit: 'cover', marginRight: 4, border: '1px solid #808080' }} />
+                            <img src={c.primaryBioThumb} alt="" style={{ width: 20, height: 20, objectFit: 'cover', marginRight: 4, border: '1px solid var(--ga98-shadow-dark)' }} />
                           )}
                           <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             <b>{c.title}</b>
@@ -314,7 +314,7 @@ export function CasesModule({ initialCaseId }: { initialCaseId?: string } = {}):
       {ctxMenu && (
         <>
           <div onClick={() => setCtxMenu(null)} style={{ position: 'fixed', inset: 0, zIndex: 99 }} />
-          <div className="ga98-menu" style={{ position: 'fixed', left: ctxMenu.x, top: ctxMenu.y, zIndex: 100, background: '#c0c0c0', border: '2px outset #fff' }}>
+          <div className="ga98-menu" style={{ position: 'fixed', left: ctxMenu.x, top: ctxMenu.y, zIndex: 100, background: 'var(--ga98-grey)', border: '2px outset var(--ga98-shadow-light)' }}>
             <div
               onClick={() => { const c = ctxMenu.c; setCtxMenu(null); void moveToCategory(c); }}
               style={{ padding: '3px 12px', cursor: 'pointer' }}

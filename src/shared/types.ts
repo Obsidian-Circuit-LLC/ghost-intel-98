@@ -353,6 +353,7 @@ export type JukeboxMode = 'strip' | 'deck' | 'full';
 export interface AppSettings {
   soundEnabled: boolean;
   themeIntensity: 'lite' | 'classic' | 'maximum';
+  themeName: string;
   /** Desktop background colour (CSS hex). Defaults to the classic Win98 teal. */
   wallpaperColor: string;
   /** Optional desktop background image as a data: URI (covers the colour when set). */
@@ -673,6 +674,7 @@ export function reconcileShortcuts(
 export const defaultSettings: AppSettings = {
   soundEnabled: true,
   themeIntensity: 'classic',
+  themeName: 'classic',
   wallpaperColor: '#008080',
   wallpaperImage: null,
   startupSoundEnabled: true,

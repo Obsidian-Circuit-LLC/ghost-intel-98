@@ -50,7 +50,7 @@ export class MapErrorBoundary extends Component<
       <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-start', fontSize: 12, maxWidth: '100%' }}>
         <p style={{ margin: 0 }}>The map hit an error.</p>
         {this.state.message && (
-          <code style={{ background: '#fee', color: '#900', border: '1px solid #c99', padding: '2px 6px', fontSize: 11, maxWidth: '100%', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+          <code style={{ background: 'var(--ga98-error-surface)', color: 'var(--ga98-danger-ink)', border: '1px solid var(--ga98-error-border-soft)', padding: '2px 6px', fontSize: 11, maxWidth: '100%', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
             {this.state.message}
           </code>
         )}
@@ -58,7 +58,7 @@ export class MapErrorBoundary extends Component<
           {this.state.purging ? 'Purging…' : 'Reset GeoINT (purge cache + tiles) & reload'}
         </button>
         {this.state.stack && (
-          <details style={{ fontSize: 10, color: '#555', maxWidth: '100%' }}>
+          <details style={{ fontSize: 10, color: 'var(--ga98-dim-mid)', maxWidth: '100%' }}>
             <summary style={{ cursor: 'pointer' }}>Show error details (stays on this device)</summary>
             <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: '4px 0 0', maxHeight: 180, overflow: 'auto' }}>{this.state.stack}</pre>
           </details>
