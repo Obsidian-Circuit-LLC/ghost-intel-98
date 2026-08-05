@@ -412,3 +412,13 @@
   border-right-color: var(--ga98-shadow-dark);
   border-bottom-color: var(--ga98-shadow-dark);
 }
+/* Semantic variants: the generic `.sm-btn` amethyst override above is specificity (0,3,0) and would
+   flatten primary/danger/accept/reject (each only (0,1,0)) to the plain grey chrome, erasing their
+   meaning. Re-assert each variant at equal (0,3,0), placed AFTER the generic rule so it wins on
+   source order, restoring the semantic hue as a legible-on-dark fill (accent primary / green accept
+   / red danger+reject — the same dark, light-inked values the classic panel already uses, which
+   read cleanly on the near-black amethyst skin). Classic rules (above) are untouched. */
+:root[data-ga98-theme='amethyst'] .sm-btn-primary { background: #3d1a5c; color: #e8d8ff; }
+:root[data-ga98-theme='amethyst'] .sm-btn-accept { background: #1a4a1a; color: #d8ffd8; }
+:root[data-ga98-theme='amethyst'] .sm-btn-danger { background: #5c1a1a; color: #ffd8d8; }
+:root[data-ga98-theme='amethyst'] .sm-btn-reject { background: #5c1a1a; color: #ffd8d8; }

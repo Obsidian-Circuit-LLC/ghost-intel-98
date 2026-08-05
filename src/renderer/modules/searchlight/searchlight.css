@@ -1497,6 +1497,14 @@
 }
 :root[data-ga98-theme='amethyst'] .sl-sweep-btn:active { border-color: var(--ga98-shadow-dark) var(--ga98-shadow-light) var(--ga98-shadow-light) var(--ga98-shadow-dark); }
 :root[data-ga98-theme='amethyst'] .sl-sweep-btn:disabled { color: var(--ga98-text-dim); }
+/* Semantic variants: the generic `.sl-sweep-btn` amethyst override above is specificity (0,3,0) and
+   would flatten the primary (classic navy #000080) and danger (classic maroon #800000) sweep buttons
+   — each only (0,1,0) — to the plain grey chrome, erasing their meaning. Re-assert each at equal
+   (0,3,0), placed AFTER the generic rule so it wins on source order, restoring the semantic hue via
+   the theme's own LOCKED status FILL tokens (blue info-fill / red error-fill, both designed to carry
+   white text on the near-black skin). Classic rules (above, raw #000080/#800000) are untouched. */
+:root[data-ga98-theme='amethyst'] .sl-sweep-btn-primary { background: var(--ga98-status-info-fill); color: #fff; }
+:root[data-ga98-theme='amethyst'] .sl-sweep-btn-danger { background: var(--ga98-status-error-fill); color: #fff; }
 :root[data-ga98-theme='amethyst'] .sl-graph-toolbar {
   background: var(--ga98-grey);
   border-color: var(--ga98-shadow-light) var(--ga98-shadow-dark) var(--ga98-shadow-dark) var(--ga98-shadow-light);
