@@ -81,9 +81,13 @@ export class ModuleErrorBoundary extends Component<Props, State> {
             <code
               style={{
                 display: 'block',
-                background: 'var(--ga98-status-error-tint)',
-                color: 'var(--ga98-status-error)',
-                border: '1px solid var(--ga98-status-error)',
+                // Parity-exact purpose tokens mirroring MapErrorBoundary (this boundary was modeled
+                // on it): the ORIGINAL classic literals were bg #fee / text #900 / border #c99. Routing
+                // to the LOCKED status tier (#9a1621) had shifted the classic text+border hue; these
+                // three tokens carry the byte-exact classic literal and an amethyst-legible variant.
+                background: 'var(--ga98-error-surface)',
+                color: 'var(--ga98-danger-ink)',
+                border: '1px solid var(--ga98-error-border-soft)',
                 padding: '2px 6px',
                 fontSize: 11,
                 maxWidth: '100%',

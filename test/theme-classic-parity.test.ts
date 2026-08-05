@@ -14,7 +14,7 @@
  *
  *   ClockWidget analog second hand        #c00000  -> --ga98-clock-secondhand
  *   LockScreen bgconn inset bevel         #404040  -> --ga98-lock-bevel
- *   ModuleErrorBoundary code-block bg     #ffeeee  -> --ga98-status-error-tint
+ *   error-tint surface (amethyst t8-err)  #ffeeee  -> --ga98-status-error-tint
  *   AccessMenu flyout `outset` highlight  #f5f5f5  -> --ga98-flyout-outset
  *   Welcome first-step helper text        #444444  -> --ga98-welcome-helper
  */
@@ -62,7 +62,7 @@ async function resolvedRgb(cssVar: string): Promise<string> {
 const CASES: Array<{ site: string; cssVar: string; literal: string; rgb: string }> = [
   { site: 'ClockWidget analog second hand', cssVar: '--ga98-clock-secondhand', literal: '#c00000', rgb: 'rgb(192, 0, 0)' },
   { site: 'LockScreen bgconn inset bevel', cssVar: '--ga98-lock-bevel', literal: '#404040', rgb: 'rgb(64, 64, 64)' },
-  { site: 'ModuleErrorBoundary code-block bg', cssVar: '--ga98-status-error-tint', literal: '#ffeeee', rgb: 'rgb(255, 238, 238)' },
+  { site: 'error-tint surface (amethyst t8-err)', cssVar: '--ga98-status-error-tint', literal: '#ffeeee', rgb: 'rgb(255, 238, 238)' },
   { site: 'AccessMenu flyout outset highlight', cssVar: '--ga98-flyout-outset', literal: '#f5f5f5', rgb: 'rgb(245, 245, 245)' },
   { site: 'Welcome first-step helper text', cssVar: '--ga98-welcome-helper', literal: '#444444', rgb: 'rgb(68, 68, 68)' }
 ];

@@ -23,7 +23,11 @@
   --ga98-status-success: #0a5a2f;
   --ga98-status-warning: #6b4600;
   --ga98-status-info: #124a8f;
-  /* status FILL role — chips/toast title-bars under WHITE text; dark enough in BOTH themes */
+  /* status FILL role — chips + status-unit fills under WHITE text; dark enough in BOTH themes.
+     Theme-INVARIANT under the LOCKED contract (identical classic + amethyst): one dark value clears
+     >=4.5:1 white-text on both surfaces. The Toaster does NOT use this tier — it routes to the
+     parity-exact --ga98-toast-*-fill purpose tokens (classic values = the exact toast literals);
+     bending this LOCKED tier to those literals is forbidden by the sacred-parity rule. */
   --ga98-status-error-fill: #a01722;
   --ga98-status-success-fill: #0a5c30;
   --ga98-status-warning-fill: #7a4f00;
@@ -111,6 +115,20 @@
   --ga98-role-assistant: #400080;  /* AI-assistant role/memory label ink (assistant purple) */
   --ga98-geoint-note: #6b7688;     /* GeoINT command-rail dim source-caption text (dark cockpit) */
   --ga98-neg-ink: #a00;            /* negative/error inline ink (Markets loss %, Journal pin error) */
+  /* ── Task P purpose tokens (Toaster title-bar fills) ────────────────────────────────────
+     The Toaster routed its four title-bar fills to the LOCKED --ga98-status-*-fill tier, whose
+     classic values (#a01722 / #0a5c30 / #7a4f00 / #124a8f) do NOT equal the original toast title-bar
+     literals — shifting every classic toast's title bar. Mirroring the badge-ink precedent (parity is
+     sacred: a site whose literal differs from a LOCKED token gets its OWN purpose token, never bends
+     the LOCKED token), these dedicated FILL tokens hold the byte-exact classic toast colour and let
+     amethyst pick a dark fill that keeps 98.css's WHITE title text legible (>=4.5:1) on the near-black
+     skin. The LOCKED --ga98-status-*-fill tier is left untouched (its theme-invariant contract
+     intact). Inline-style site (a stylesheet rule cannot override an inline style) → routed through a
+     token. NOT locked (skinnable palette detail). */
+  --ga98-toast-info-fill: #000080;    /* Toaster "Information" title bar — classic literal */
+  --ga98-toast-success-fill: #006400; /* Toaster "Success" title bar — classic literal */
+  --ga98-toast-warn-fill: #8a5a00;    /* Toaster "Warning" title bar — classic literal */
+  --ga98-toast-error-fill: #900000;   /* Toaster "Error" title bar — classic literal */
 }
 
 html, body, #root {
@@ -248,6 +266,12 @@ input, textarea, [contenteditable="true"], .ga98-selectable {
   --ga98-role-assistant: var(--ga98-accent); /* assistant label → accent, legible bold on dark */
   --ga98-geoint-note: var(--ga98-text-dim);  /* dim caption, >=4.5:1 on the #11161f cockpit panel */
   --ga98-neg-ink: #ff8a8a;                   /* light red loss/error ink, legible on near-black */
+  /* Task P purpose tokens (Toaster fills) — amethyst variants (classic-parity values in base :root).
+     Each stays a dark fill carrying 98.css's WHITE title text at >=4.5:1 on the near-black skin. */
+  --ga98-toast-info-fill: #124a8f;
+  --ga98-toast-success-fill: #0a5c30;
+  --ga98-toast-warn-fill: #7a4f00;
+  --ga98-toast-error-fill: #a01722;
 }
 
 /* ── QUIET AMETHYST — Task 8 long-tail utility classes ──────────────────────────────────────────

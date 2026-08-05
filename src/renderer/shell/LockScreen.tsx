@@ -122,7 +122,10 @@ export function LockScreen(): JSX.Element {
                 aria-label={mode === 'password' ? 'Master password' : 'Recovery key'}
               />
             </div>
-            {error && <p role="alert" style={{ color: 'var(--ga98-status-error)', margin: '4px 0' }}>{error}</p>}
+            {/* Unlock-error ink: the ORIGINAL classic literal was #a00 — route to the parity-exact
+                --ga98-neg-ink (#a00) its sibling sites use, NOT the LOCKED status tier (#9a1621),
+                which would shift the classic hue. Amethyst variant (#ff8a8a) stays legible on dark. */}
+            {error && <p role="alert" style={{ color: 'var(--ga98-neg-ink)', margin: '4px 0' }}>{error}</p>}
             <div className="field-row" style={{ justifyContent: 'space-between', gap: 6, marginTop: 8 }}>
               <button
                 type="button"

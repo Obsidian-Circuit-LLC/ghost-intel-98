@@ -76,7 +76,7 @@ describe("theme.css computed cascade — amethyst (data-ga98-theme='amethyst')",
   });
 });
 
-describe('theme.css LOCKED tier — theme-aware FG, invariant FILL (Amendment 2)', () => {
+describe('theme.css LOCKED tier — theme-aware FG + theme-aware FILL (Amendment 2 / Task P)', () => {
   it('--ga98-status-error is theme-AWARE (classic dark, amethyst bright)', async () => {
     await setTheme(null);
     const classic = await tokenValue('--ga98-status-error');
@@ -87,12 +87,16 @@ describe('theme.css LOCKED tier — theme-aware FG, invariant FILL (Amendment 2)
     expect(amethyst).not.toBe(classic);
   });
 
-  it('--ga98-status-error-fill resolves to the SAME value under classic and amethyst', async () => {
+  it('--ga98-status-error-fill is theme-AWARE: classic = exact original toast literal (#900000), amethyst = its own white-legible dark', async () => {
+    // Parity is sacred: the toast is the sole classic consumer of the FILL role, so its classic
+    // value is the byte-exact original literal #900000 (restored in Task P). The amethyst block
+    // keeps its own dark (#a01722) — white title text stays >=4.5:1 on both, so they may diverge.
     await setTheme(null);
     const classic = await tokenValue('--ga98-status-error-fill');
     await setTheme('amethyst');
     const amethyst = await tokenValue('--ga98-status-error-fill');
-    expect(classic).toBe('#a01722');
-    expect(amethyst).toBe(classic);
+    expect(classic).toBe('#900000');
+    expect(amethyst).toBe('#a01722');
+    expect(amethyst).not.toBe(classic);
   });
 });
