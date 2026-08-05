@@ -96,9 +96,10 @@ const EXEMPT: string[] = [
   '.ga98-geo-map',
   // GeoINT legend colour key: the category-colour swatches (conflict/cyber/protest…) are the map's
   // data legend — chart/series colour, content-intrinsic per the spec (only the protest orange
-  // #e67e22 crosses the island cut). Scoped to a `ga98-geo-legend` hook on the swatch row so no
-  // surrounding chrome is masked.
-  '.ga98-geo-legend',
+  // #e67e22 crosses the island cut). Scoped to the `ga98-geo-cat-swatch` hook on the individual
+  // colour CHIPS (in GeoIntModule's Legend + CommandRail's category rows) so ONLY the data-colour
+  // dot is exempt — the adjacent category-NAME text labels stay audited (never mask chrome/text).
+  '.ga98-geo-cat-swatch',
   // GeoINT threat-level pill: a status-severity indicator whose FILL is the datum — a green→red step
   // scale (NONE #2c7 … SEVERE #e33) carrying near-black ink at high contrast. The colour IS the
   // message (a traffic-light severity readout), exactly the spec's "severity scale" content cite;
