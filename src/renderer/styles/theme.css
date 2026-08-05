@@ -77,6 +77,22 @@
   --ga98-error-border-soft: #c99; /* MapErrorBoundary code-box border */
   --ga98-ok-surface: #bfe0bf;   /* network-on toggle success fill */
   --ga98-ok-ink: #003300;       /* network-on toggle success text */
+  /* ── Task B purpose tokens (semantic greens + decorative pw-strength gradient) ─────────
+     Each classic value below equals the ORIGINAL inline literal EXACTLY (byte-for-byte
+     classic), so the default theme renders unchanged; the amethyst block redefines each for
+     the near-black skin. These are INLINE-style sites — a stylesheet rule cannot override an
+     inline style — so they route through a token rather than keeping the literal + a CSS
+     override. The fixed --ga98-status-success (#0a5a2f) is deliberately NOT used: its classic
+     value differs from these greens, so routing through it would shift the classic hue. NOT
+     locked. The five pw-* tokens are a DECORATIVE strength gradient, not the status tier. */
+  --ga98-ok-text: #008000;      /* genuine success caption text (Settings stored/valid/status-ok) */
+  --ga98-ok-text-deep: #006400; /* deep-green "ready" caption (Local AI) */
+  --ga98-ok-text-fired: #080;   /* alert-rule "fired" success marker (Cases) */
+  --ga98-pw-vweak: #a00000;     /* password-strength meter step 0 — very weak */
+  --ga98-pw-weak: #c06000;      /* password-strength meter step 1 — weak */
+  --ga98-pw-fair: #a0a000;      /* password-strength meter step 2 — fair */
+  --ga98-pw-good: #2080a0;      /* password-strength meter step 3 — good */
+  --ga98-pw-strong: #008000;    /* password-strength meter step 4 — strong */
 }
 
 html, body, #root {
@@ -196,6 +212,16 @@ input, textarea, [contenteditable="true"], .ga98-selectable {
   --ga98-error-border-soft: #6a3236;
   --ga98-ok-surface: #16301e;                        /* deep green fill */
   --ga98-ok-ink: #7fd6a0;                            /* light green text on the deep-green fill */
+  /* Task B purpose tokens — amethyst variants (classic-parity values in base :root). The five
+     pw-* steps stay visually distinct (5 hues) and legible on the near-black surface. */
+  --ga98-ok-text: #5fd38a;      /* light green success text on dark */
+  --ga98-ok-text-deep: #4bc47a; /* slightly deeper light green on dark */
+  --ga98-ok-text-fired: #6fe89a;/* bright green "fired" marker on dark */
+  --ga98-pw-vweak: #ff6b6b;     /* step 0 — bright red on dark */
+  --ga98-pw-weak: #ff9d4d;      /* step 1 — bright orange on dark */
+  --ga98-pw-fair: #e6d24a;      /* step 2 — bright olive/yellow on dark */
+  --ga98-pw-good: #56b6d6;      /* step 3 — bright teal on dark */
+  --ga98-pw-strong: #5fd98a;    /* step 4 — bright green on dark */
 }
 
 /* ── QUIET AMETHYST — Task 8 long-tail utility classes ──────────────────────────────────────────

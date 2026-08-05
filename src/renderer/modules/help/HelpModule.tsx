@@ -232,7 +232,7 @@ function OpChildSafetyPane(): JSX.Element {
           ))}
           <p className="ga98-t8-err" style={{
             margin: '8px 0', padding: '6px 8px', fontWeight: 'bold',
-            color: '#900', background: '#ffecec', border: '1px solid #c00'
+            color: 'var(--ga98-danger-ink)', background: '#ffecec', border: '1px solid #c00'
           }}>
             !!! DO NOT INTENTIONALLY VIEW, DOWNLOAD, SCREENSHOT, OR SEARCH FOR CSAM !!!
           </p>

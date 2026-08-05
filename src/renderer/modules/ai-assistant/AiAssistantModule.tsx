@@ -842,7 +842,7 @@ export function AiAssistantModule(): JSX.Element {
       {ttsSupported() && (
         <div style={{ padding: '3px 6px', display: 'flex', gap: 6, alignItems: 'center', borderTop: '1px solid #999', background: 'var(--ga98-grey)', fontSize: 11, flexWrap: 'wrap' }}>
           {modelInstalled === false ? (
-            <span style={{ color: '#900' }} title="Vosk speech model not bundled">
+            <span style={{ color: 'var(--ga98-danger-ink)' }} title="Vosk speech model not bundled">
               🎙 Voice input needs a Vosk model in <code>resources/vosk/</code> — speak-aloud (TTS) still works.
             </span>
           ) : voiceMode === 'off' ? (

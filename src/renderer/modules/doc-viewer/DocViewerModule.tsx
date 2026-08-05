@@ -406,7 +406,7 @@ function CsvBody({ bytes, error }: BytesProps): JSX.Element {
             ))}
           </tbody>
         </table>
-        {rows.length >= 2000 && <p style={{ fontSize: 11, color: '#900' }}>Showing first 2000 rows.</p>}
+        {rows.length >= 2000 && <p style={{ fontSize: 11, color: 'var(--ga98-danger-ink)' }}>Showing first 2000 rows.</p>}
       </div>
     </div>
   );

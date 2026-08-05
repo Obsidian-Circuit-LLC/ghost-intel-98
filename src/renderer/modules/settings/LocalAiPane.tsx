@@ -71,7 +71,7 @@ export function LocalAiPane(): JSX.Element {
     return (
       <fieldset>
         <legend>Local AI</legend>
-        <p style={{ margin: '4px 0', color: 'var(--ga98-status-success)' }}>
+        <p style={{ margin: '4px 0', color: 'var(--ga98-ok-text-deep)' }}>
           &#10003; Local AI is ready (llama3.1).
         </p>
         <div className="field-row" style={{ marginTop: 8 }}>

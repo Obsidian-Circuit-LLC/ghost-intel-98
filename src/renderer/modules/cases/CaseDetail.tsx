@@ -228,7 +228,7 @@ export function CaseDetail({ record, onChange, onArchive, onRefresh, onUpdateFie
             <li key={r.id}>
               <span style={{ flex: 1 }}>
                 {r.title} <span style={{ opacity: 0.7 }}>· {new Date(r.fireAt).toLocaleString()}</span>
-                {r.fired ? <span style={{ color: 'var(--ga98-status-success)' }}> · fired</span> : null}
+                {r.fired ? <span style={{ color: 'var(--ga98-ok-text-fired)' }}> · fired</span> : null}
               </span>
               <button onClick={async () => { await window.api.cases.deleteReminder(record.id, r.id); await onRefresh(); }}>×</button>
             </li>

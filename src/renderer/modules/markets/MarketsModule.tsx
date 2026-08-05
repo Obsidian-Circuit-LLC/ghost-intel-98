@@ -104,7 +104,7 @@ export function MarketsModule(): JSX.Element {
             style={net ? { borderStyle: 'inset', background: '#bfe0bf', color: '#003300', fontWeight: 'bold' } : { fontWeight: 'bold' }}>
             {net ? 'Disable market data' : 'Enable market data'}
           </button>
-          <span style={{ fontSize: 11, color: net ? '#060' : '#900' }}>{net ? '● on' : '○ off'}</span>
+          <span style={{ fontSize: 11, color: net ? 'var(--ga98-ok-dot)' : 'var(--ga98-danger-ink)' }}>{net ? '● on' : '○ off'}</span>
           <button onClick={() => void refresh()} disabled={!net || busy}>{busy ? 'Refreshing…' : 'Refresh'}</button>
           <button onClick={() => setShowTutorial(true)} title="Show the Markets intro" style={{ minWidth: 24 }}>?</button>
           {snap && <span style={{ fontSize: 11, color: 'var(--ga98-dim-mid)' }}>updated {new Date(snap.fetchedAt).toLocaleTimeString()}</span>}
@@ -144,7 +144,7 @@ export function MarketsModule(): JSX.Element {
       </fieldset>
 
       {snap?.errors.length ? (
-        <div style={{ background: '#fee', color: '#900', padding: '4px 8px', fontSize: 11, border: '1px solid #c00' }}>
+        <div style={{ background: 'var(--ga98-error-surface)', color: 'var(--ga98-danger-ink)', padding: '4px 8px', fontSize: 11, border: '1px solid var(--ga98-error-border)' }}>
           {snap.errors.map((e, i) => <div key={i}>{e}</div>)}
         </div>
       ) : null}

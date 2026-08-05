@@ -152,13 +152,13 @@ function AboutPane({ info }: { info: { version: string; userData: string; platfo
         <legend>Secrets backend</legend>
         <p style={{ margin: '4px 0' }}><code>{info?.secretBackend ?? '—'}</code></p>
         {info?.secretBackend === 'basic_text' && (
-          <p style={{ color: 'var(--ga98-status-error)', margin: '4px 0' }}>
+          <p style={{ color: 'var(--ga98-danger-ink)', margin: '4px 0' }}>
             ⚠ No OS keyring detected. Secrets are obfuscated, not encrypted against a local attacker.
             Install gnome-keyring or KWallet.
           </p>
         )}
         {info?.secretBackend === 'unavailable' && (
-          <p style={{ color: 'var(--ga98-status-error)', margin: '4px 0' }}>
+          <p style={{ color: 'var(--ga98-danger-ink)', margin: '4px 0' }}>
             ⚠ Encryption backend is unavailable. Mail / SSH / AI credentials cannot be saved.
           </p>
         )}
@@ -417,7 +417,7 @@ export function AiPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSet
             </button>
           </div>
           {!isOnionUrl(s.ai.searxngOnion) && (
-            <span style={{ fontSize: 11, color: 'var(--ga98-status-error)' }}>
+            <span style={{ fontSize: 11, color: 'var(--ga98-danger-ink)' }}>
               ⚠ Must be a .onion URL (include http://). SearXNG search fails closed for a non-onion — it is never routed over clearnet.
             </span>
           )}
@@ -587,7 +587,7 @@ function BackupPane(): JSX.Element {
           } catch (err) { toast.error(`Restore failed: ${(err as Error).message}`); }
         }}>Restore…</button>
       </div>
-      <p style={{ fontSize: 11, color: 'var(--ga98-status-error)', marginTop: 8 }}>
+      <p style={{ fontSize: 11, color: 'var(--ga98-danger-ink)', marginTop: 8 }}>
         Encrypted credentials (Mail / SSH / AI passwords) are OS-keyring-bound and do not transfer to
         another machine — re-enter them there.
       </p>
@@ -731,7 +731,7 @@ export function GeoINTPane({ s, patch }: { s: AppSettings; patch: (p: Partial<Ap
           </button>
         </div>
         {hasKey && (
-          <span style={{ fontSize: 11, color: 'var(--ga98-status-success)', marginTop: 4, display: 'block' }}>✓ key stored</span>
+          <span style={{ fontSize: 11, color: 'var(--ga98-ok-text)', marginTop: 4, display: 'block' }}>✓ key stored</span>
         )}
         <p style={{ fontSize: 11, color: 'var(--ga98-dim-strong)', margin: '6px 0 0' }}>
           AISStream.io key for the Live Ships feed. Stored encrypted; never leaves this machine.
@@ -939,7 +939,7 @@ function SocmintPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSetti
             {saving ? 'Saving…' : 'Save burner credentials'}
           </button>
           {burnerId.trim() && hasBurner && (
-            <span style={{ fontSize: 11, color: 'var(--ga98-status-success)' }}>✓ credential stored</span>
+            <span style={{ fontSize: 11, color: 'var(--ga98-ok-text)' }}>✓ credential stored</span>
           )}
           {burnerId.trim() && !hasBurner && (
             <span style={{ fontSize: 11, color: 'var(--ga98-dim-faint)' }}>no credential stored</span>
@@ -976,7 +976,7 @@ function fmtRelative(iso: string | undefined, now: number): string {
 }
 
 const STATUS_BADGE: Record<XSessionMeta['status'], { text: string; color: string }> = {
-  valid: { text: 'Valid ✓', color: 'var(--ga98-status-success)' },
+  valid: { text: 'Valid ✓', color: 'var(--ga98-ok-text)' },
   expired: { text: 'Expired ✗', color: 'var(--ga98-status-error)' },
   untested: { text: 'Untested •', color: 'var(--ga98-dim-faint)' },
 };
@@ -1144,7 +1144,7 @@ export function XPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSett
           />
           <span>
             <strong>Enable authenticated X collection</strong>
-            <span style={{ display: 'block', fontSize: 11, color: 'var(--ga98-status-error)' }}>
+            <span style={{ display: 'block', fontSize: 11, color: 'var(--ga98-danger-ink)' }}>
               Uses your real clearnet IP — X has no Tor path.
             </span>
           </span>
@@ -1275,7 +1275,7 @@ export function XPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSett
         </div>
 
         {!gateOn && (
-          <p style={{ fontSize: 11, color: 'var(--ga98-status-error)', margin: '6px 0 0 0' }}>
+          <p style={{ fontSize: 11, color: 'var(--ga98-danger-ink)', margin: '6px 0 0 0' }}>
             Enable authenticated X collection first to test a session.
           </p>
         )}
@@ -1284,7 +1284,7 @@ export function XPane({ s, patch }: { s: AppSettings; patch: (p: Partial<AppSett
             style={{
               fontSize: 11,
               margin: '6px 0 0 0',
-              color: status.kind === 'ok' ? 'var(--ga98-status-success)' : status.kind === 'error' ? 'var(--ga98-status-error)' : 'var(--ga98-status-warning)',
+              color: status.kind === 'ok' ? 'var(--ga98-ok-text)' : status.kind === 'error' ? 'var(--ga98-status-error)' : 'var(--ga98-status-warning)',
             }}
           >
             {status.msg}
@@ -1318,7 +1318,7 @@ function pwStrength(pw: string): { score: number; label: string; color: string }
   return {
     score,
     label: ['Very weak', 'Weak', 'Fair', 'Good', 'Strong'][score],
-    color: ['var(--ga98-status-error)', 'var(--ga98-status-warning)', 'var(--ga98-status-warning)', 'var(--ga98-status-info)', 'var(--ga98-status-success)'][score]
+    color: ['var(--ga98-pw-vweak)', 'var(--ga98-pw-weak)', 'var(--ga98-pw-fair)', 'var(--ga98-pw-good)', 'var(--ga98-pw-strong)'][score]
   };
 }
 
@@ -1418,7 +1418,7 @@ function SecurityPane(): JSX.Element {
     return (
       <fieldset>
         <legend>Save your recovery key</legend>
-        <p style={{ color: 'var(--ga98-status-error)', marginTop: 4 }}>
+        <p style={{ color: 'var(--ga98-danger-ink)', marginTop: 4 }}>
           This is shown <strong>once</strong>. It is the only way back in if you forget your password.
           Write it down and store it somewhere safe — it is not saved anywhere you can read it again.
         </p>
@@ -1444,7 +1444,7 @@ function SecurityPane(): JSX.Element {
             Protect Ghost Intel 98 with a master password. When enabled, all case data is encrypted
             at rest (AES-256-GCM); the app stays locked until you enter the password.
           </p>
-          <p style={{ color: 'var(--ga98-status-error)', fontSize: 11 }}>
+          <p style={{ color: 'var(--ga98-danger-ink)', fontSize: 11 }}>
             There is no password reset. You will get a one-time recovery key — keep it safe.
           </p>
           <p style={{ color: 'var(--ga98-dim-mid)', fontSize: 11 }}>
@@ -1497,7 +1497,7 @@ function SecurityPane(): JSX.Element {
       </fieldset>
       <fieldset>
         <legend>Disable login</legend>
-        <p style={{ marginTop: 4, color: 'var(--ga98-status-error)' }}>Decrypts all data back to plaintext on disk and removes the password.</p>
+        <p style={{ marginTop: 4, color: 'var(--ga98-danger-ink)' }}>Decrypts all data back to plaintext on disk and removes the password.</p>
         <div className="field-row-stacked">
           <label htmlFor="ga98-dpw">Confirm with your password</label>
           <input id="ga98-dpw" type="password" value={dpw} disabled={busy} onChange={(e) => setDpw(e.target.value)} />

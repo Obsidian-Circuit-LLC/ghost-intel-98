@@ -153,7 +153,7 @@ export function NetExplorerModule(): JSX.Element {
           </>
         ) : (
           <div className="ga98-firefox-missing">
-            <p style={{ maxWidth: 520, color: '#900' }}>
+            <p style={{ maxWidth: 520, color: 'var(--ga98-danger-ink)' }}>
               <b>Firefox Portable isn&rsquo;t installed yet.</b> Click <b>Open the Firefox folder</b> below,
               then copy your Firefox Portable files into it — so that one of <code>FirefoxPortable.exe</code>,
               <code> firefox.exe</code>, or <code>App\Firefox64\firefox.exe</code> ends up inside that folder.
