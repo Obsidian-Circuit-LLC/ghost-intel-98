@@ -503,3 +503,69 @@ export const THEME_COLOR_ALLOWLIST: readonly string[] = [
   '#ffffffcc',  // jukebox WMP-shell inset bevel (translucent white top edge)
   'navy',  // jukebox/stations active-row selection fill (navy = classic --ga98-blue)
 ];
+
+// ── Paper-background SELECTOR SCOPE (closes the value-only guard blind spot) ───────────────────
+// THEME_COLOR_ALLOWLIST is value-only + global, so any selector could paint one of the base light
+// "paper" literals below as a BACKGROUND fill and inherit the exemption WITHOUT its own review.
+// A real light chrome ISLAND therefore rode the paper literal silently (e.g. `.ga98-calc-hist-list`
+// — a white <ul> whose rows inherited --ga98-text → unreadable light-on-white under amethyst) and
+// still passed the guard. To make "the guard cannot be passed by allow-listing a real island"
+// actually enforced, these literals are SELECTOR-SCOPED when they appear in a CSS `background*`
+// value: the enclosing selector MUST match a reviewed entry in PAPER_SURFACE_ALLOW, otherwise the
+// site is a straggler even though the literal is in THEME_COLOR_ALLOWLIST.
+//
+// Deliberately NARROW: this scoping applies ONLY to hex paper literals used in a CSS background
+// declaration whose value has no var(--token, …) (a token-driven background is themed by the token,
+// so the literal is only a fallback). Foreground / border uses of the same literals, keyword colours,
+// and TSX inline styles keep the global value behaviour — the demonstrated failure mode was a CSS
+// chrome surface, and an inline-style content colour cannot carry a [data-ga98-theme] override.
+export const PAPER_BG_LITERALS: readonly string[] = [
+  '#fff',
+  '#ffffff',
+  '#c0c0c0',
+  '#f4f4f4',
+  '#f0f0f0',
+];
+
+export interface PaperSurface {
+  /** Substring matched against the enclosing CSS selector text. Grouped selectors are one string,
+   *  so a fragment matches any member of the group. */
+  readonly selector: string;
+  readonly note: string;
+}
+
+// Every entry is REVIEWED: the selector is EITHER content-paper (intentionally light in BOTH themes
+// — the page/canvas the user reads or draws on) OR classic-parity chrome that carries a named
+// [data-ga98-theme='amethyst'] override (so it is not light-on-light under the skin). A NEW light
+// chrome surface will NOT match any fragment and so fails the guard until it is tokenised, given an
+// amethyst override, or added here with justification — which is the point.
+export const PAPER_SURFACE_ALLOW: readonly PaperSurface[] = [
+  // ── content-paper — intentionally white in both themes ──────────────────────────────────────
+  { selector: '.ga98-sticky', note: 'sticky-note paper + swatch (content-intrinsic note colour)' },
+  { selector: '.ga98-card-face', note: 'memory-match card face (content paper)' },
+  { selector: '.ga98-sig-canvas', note: 'signature drawing canvas (white content paper)' },
+  { selector: '.ga98-invoice-logo-box', note: 'invoice logo drop-well (white paper for pasted image)' },
+  { selector: '.ga98-invoice-sig-box', note: 'invoice signature drop-well (white paper)' },
+  { selector: '.ga98-invoice-preview', note: 'invoice document preview (white printed paper)' },
+  { selector: '.ga98-docviewer-surface', note: 'document viewer paper (amethyst override present)' },
+  { selector: '.ga98-report', note: 'Report module: classic-parity Win98 chrome, fully amethyst-overridden (theme.css Reports-amethyst block); content-paper .ga98-report-page/-doc-table stay white by design' },
+  // ── classic-parity chrome — each carries a [data-ga98-theme=amethyst] override ──────────────
+  { selector: '.ga98-dropzone', note: 'amethyst override at theme.css .ga98-dropzone' },
+  { selector: '.ga98-grid-calendar', note: 'amethyst override at theme.css .ga98-grid-calendar > div[…]' },
+  { selector: '.ga98-calc-hist-list', note: 'calculator history list — classic #fff, amethyst dark-inset override at theme.css' },
+  // ── readable classic-chrome islands — explicit dark text on the rule, or a globally themed form
+  //    element; dark-on-light, never light-on-light ────────────────────────────────────────────
+  { selector: 'textarea.ga98-text', note: 'textarea — globally amethyst-themed (98.overrides textarea rule)' },
+  { selector: '.ga98-cdp-field', note: 'coordinate-entry field — input, globally amethyst-themed' },
+  { selector: '.ga98-cal-swatch-clear', note: 'calendar swatch-clear button — explicit color:#000 (readable)' },
+  { selector: '.ga98-file-button', note: 'file-picker button — explicit color:#000 (readable)' },
+  { selector: '.ga98-geo-map-placeholder', note: 'map-unavailable placeholder — explicit color:#555 (readable)' },
+  // ── module chrome — each carries a module-local [data-ga98-theme=amethyst] override ─────────
+  { selector: '.sl-sweep-btn', note: 'Searchlight sweep button — amethyst override in searchlight.css' },
+  { selector: '.sl-graph-toolbar', note: 'Searchlight graph toolbar — amethyst override in searchlight.css' },
+  { selector: '.xc-tabs', note: 'X-collector tabs — amethyst override in x-collector.css' },
+  { selector: '.xc-btn', note: 'X-collector button — amethyst override in x-collector.css' },
+  { selector: '.sm-tabs', note: 'SOCMINT tabs — amethyst override in socmint.css' },
+  { selector: '.sm-btn', note: 'SOCMINT button — amethyst override in socmint.css' },
+  { selector: '.run-panel__feed', note: 'investigation run feed — amethyst override in investigation.css' },
+];

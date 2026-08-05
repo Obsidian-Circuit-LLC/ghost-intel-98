@@ -21,7 +21,11 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { THEME_COLOR_ALLOWLIST } from './helpers/theme-allowlist';
+import {
+  PAPER_BG_LITERALS,
+  PAPER_SURFACE_ALLOW,
+  THEME_COLOR_ALLOWLIST,
+} from './helpers/theme-allowlist';
 
 const ROOT = join(__dirname, '..');
 
@@ -67,6 +71,14 @@ function collectFiles(): string[] {
 
 // ── literal detection ───────────────────────────────────────────────────────
 const ALLOW = new Set(THEME_COLOR_ALLOWLIST.map((s) => s.toLowerCase()));
+// Base light "paper" literals whose BACKGROUND use is selector-scoped (see theme-allowlist.ts).
+const PAPER_BG = new Set(PAPER_BG_LITERALS.map((s) => s.toLowerCase()));
+// A property that paints a surface fill: `background`, `background-color`, `background-image`.
+const BG_PROP_RE = /background/i;
+// A reviewed paper surface is any selector CONTAINING one of the allow fragments.
+function selectorAllowsPaper(selector: string): boolean {
+  return PAPER_SURFACE_ALLOW.some((p) => selector.includes(p.selector));
+}
 const KEYWORDS = ['silver', 'navy', 'white', 'black', 'grey', 'gray', 'teal'];
 // A hex colour token: 3, 4, 6 or 8 hex digits.
 const HEX_RE = /#[0-9a-fA-F]{3,8}\b/g;
@@ -131,9 +143,34 @@ function lineOf(text: string, index: number): number {
   return n;
 }
 
+// The selector text of the CSS rule enclosing `index`. Scans back to the rule's `{`, then to the
+// preceding `}` / `{` / `;` (or start). The stylesheets are flat (no nesting), so this yields the
+// full — possibly comma-grouped — prelude, e.g. `.ga98-report-toolbar button, .ga98-report select`.
+function enclosingSelector(text: string, index: number): string {
+  const open = text.lastIndexOf('{', index);
+  if (open === -1) return '';
+  let start = 0;
+  for (let i = open - 1; i >= 0; i--) {
+    const c = text[i];
+    if (c === '}' || c === '{' || c === ';') {
+      start = i + 1;
+      break;
+    }
+  }
+  return text.slice(start, open).replace(/\s+/g, ' ').trim();
+}
+
+interface ValueContext {
+  colorish: boolean; // property can carry a colour keyword value
+  isBg: boolean; // property is a background* fill
+  isCss: boolean; // .css file (selector scoping only applies to CSS)
+  selector: string; // enclosing CSS selector (empty for TSX inline styles)
+  hasVar: boolean; // value references var(--token, …) → background is token-driven
+}
+
 function pushLiteralsFromValue(
   val: string,
-  colorish: boolean,
+  ctx: ValueContext,
   file: string,
   line: number,
   src: string,
@@ -144,10 +181,19 @@ function pushLiteralsFromValue(
   while ((hm = HEX_RE.exec(val)) !== null) {
     const tok = hm[0];
     if (!isValidHex(tok)) continue;
-    if (ALLOW.has(tok.toLowerCase())) continue;
+    const low = tok.toLowerCase();
+    // Selector-scoped paper-background enforcement: a base light "paper" literal used as a CSS
+    // background fill (not a var() fallback) is exempt ONLY on a REVIEWED paper surface. This closes
+    // the value-only blind spot — a real light chrome island can no longer ride the global exemption.
+    if (ctx.isCss && ctx.isBg && !ctx.hasVar && PAPER_BG.has(low)) {
+      if (selectorAllowsPaper(ctx.selector)) continue;
+      out.push({ file, line, literal: tok, src });
+      continue;
+    }
+    if (ALLOW.has(low)) continue;
     out.push({ file, line, literal: tok, src });
   }
-  if (!colorish) return; // keywords only count inside a colour-property value
+  if (!ctx.colorish) return; // keywords only count inside a colour-property value
   KEYWORD_VALUE_RE.lastIndex = 0;
   let km: RegExpExecArray | null;
   while ((km = KEYWORD_VALUE_RE.exec(val)) !== null) {
@@ -157,10 +203,7 @@ function pushLiteralsFromValue(
   }
 }
 
-function scanFile(abs: string): Straggler[] {
-  const rel = relative(ROOT, abs).replace(/\\/g, '/');
-  const isCss = abs.endsWith('.css');
-  const raw = readFileSync(abs, 'utf8');
+function scanText(rel: string, raw: string, isCss: boolean): Straggler[] {
   const cleaned = isCss
     ? stripCssComments(stripExemptRegions(raw))
     : stripJsComments(stripExemptRegions(raw));
@@ -189,7 +232,20 @@ function scanFile(abs: string): Straggler[] {
     if (prop.startsWith('--')) continue; // token definition → exempt
     const val = cleaned.slice(valStart, end);
     const line = lineOf(cleaned, valStart);
-    pushLiteralsFromValue(val, COLOR_KEY_STEM.test(prop), rel, line, (rawLines[line - 1] ?? '').trim(), out);
+    pushLiteralsFromValue(
+      val,
+      {
+        colorish: COLOR_KEY_STEM.test(prop),
+        isBg: BG_PROP_RE.test(prop),
+        isCss,
+        selector: isCss ? enclosingSelector(cleaned, m.index) : '',
+        hasVar: /var\(/.test(val),
+      },
+      rel,
+      line,
+      (rawLines[line - 1] ?? '').trim(),
+      out,
+    );
   }
 
   // Continuation lines of a multi-line CSS value (e.g. a gradient's colour
@@ -214,6 +270,11 @@ function scanFile(abs: string): Straggler[] {
   return out;
 }
 
+function scanFile(abs: string): Straggler[] {
+  const rel = relative(ROOT, abs).replace(/\\/g, '/');
+  return scanText(rel, readFileSync(abs, 'utf8'), abs.endsWith('.css'));
+}
+
 describe('quiet-amethyst no-straggler guard', () => {
   it('has no un-tokenised palette/text colour literals in themed source', () => {
     const files = collectFiles();
@@ -228,5 +289,25 @@ describe('quiet-amethyst no-straggler guard', () => {
       console.error(`\n${stragglers.length} straggler(s):\n${report}\n`);
     }
     expect(stragglers.map((s) => `${s.file}:${s.line} ${s.literal}`)).toEqual([]);
+  });
+
+  // Proves the criterion the value-only allowlist could NOT enforce: a real light chrome island
+  // painted with an already-allow-listed paper literal can no longer ride the exemption — the
+  // exemption is now tied to a REVIEWED selector, not the bare value.
+  it('selector-scopes paper backgrounds so a real light island cannot ride a paper literal', () => {
+    // An un-reviewed selector painting a paper literal as its background → straggler (the bug class).
+    const island = scanText('synthetic.css', '.ga98-made-up-drawer { background: #fff; }', true);
+    expect(island.map((s) => s.literal)).toEqual(['#fff']);
+
+    // A reviewed content-paper surface with the SAME literal → exempt.
+    expect(scanText('synthetic.css', '.ga98-report-page { background: #fff; }', true)).toEqual([]);
+
+    // A token-driven background (literal is only a var() fallback) → exempt, theme owns it.
+    expect(
+      scanText('synthetic.css', '.ga98-made-up { background: var(--ga98-grey, #c0c0c0); }', true),
+    ).toEqual([]);
+
+    // A FOREGROUND use of the same literal is not selector-scoped → stays globally exempt.
+    expect(scanText('synthetic.css', '.ga98-made-up { color: #fff; }', true)).toEqual([]);
   });
 });

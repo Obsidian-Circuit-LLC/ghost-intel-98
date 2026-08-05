@@ -1747,6 +1747,16 @@ input.ga98-text, select.ga98-text {
 .ga98-calc-hist-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; background: #fff; border: 1px solid var(--ga98-shadow-dark); }
 .ga98-calc-hist-item, .ga98-calc-hist-empty { font-family: 'Courier New', monospace; font-size: 11px; padding: 2px 4px; border-bottom: 1px solid #eee; }
 .ga98-calc-hist-empty { color: var(--ga98-shadow-dark); font-family: inherit; font-style: italic; }
+/* Amethyst: the history list is classic #fff "paper" chrome, but its rows set no color and the
+   empty-state uses --ga98-shadow-dark. Under the near-black skin the list bg stays #fff while
+   --ga98-text (#cfc9dd) is inherited by the rows → unreadable light-on-white, and the empty text
+   (shadow-dark) would be dark-on-dark once flipped. Flip the list to the dark inset surface and
+   restate the row hairline + empty text so both states stay legible. Classic parity is untouched
+   (these rules never apply under the default theme). */
+:root[data-ga98-theme='amethyst'] .ga98-calc-hist-list { background: var(--ga98-inset-panel); }
+:root[data-ga98-theme='amethyst'] .ga98-calc-hist-item,
+:root[data-ga98-theme='amethyst'] .ga98-calc-hist-empty { border-bottom-color: var(--ga98-shadow-light); }
+:root[data-ga98-theme='amethyst'] .ga98-calc-hist-empty { color: var(--ga98-text-dim); }
 /* Two-column key/value grid — reused by the Statistics keypad's results readout. */
 .ga98-calc-info-grid { display: grid; grid-template-columns: auto 1fr; gap: 2px 6px; margin: 0; font-size: 11px; }
 .ga98-calc-info-grid dt { color: var(--ga98-shadow-dark); }

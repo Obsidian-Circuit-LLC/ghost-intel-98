@@ -38,6 +38,13 @@ const MARKUP =
   '<tbody><tr><td id="rec-td">Operation Report</td></tr></tbody></table></div>' +
   // Doc-viewer text-body wrapper (white sheet behind text/code/eml bodies).
   '<div class="ga98-docviewer-surface" id="doc-surface"><pre>plain text body</pre></div>' +
+  // Calculator history drawer: a white <ul> list whose rows set NO colour (inherit --ga98-text)
+  // plus an empty-state row. Under amethyst the list must go dark so the inherited light text (and
+  // the dim empty text) stays legible instead of light-on-white.
+  '<div class="ga98-calc-history-drawer">' +
+  '<ul class="ga98-calc-hist-list" id="calc-hist"><li class="ga98-calc-hist-item" id="calc-hist-item">2 + 2 = 4</li></ul>' +
+  '<ul class="ga98-calc-hist-list"><li class="ga98-calc-hist-empty" id="calc-hist-empty">No history yet</li></ul>' +
+  '</div>' +
   '</div></div></div>';
 
 const DOC =
@@ -135,5 +142,22 @@ describe('AMETHYST light-island sweep — doc-viewer text body', () => {
     expect(bg.classic, 'classic doc surface white').toBeGreaterThan(0.7);
     expect(bg.amethyst, 'amethyst doc surface dark').toBeLessThan(DARK);
     expect(fg.amethyst, 'amethyst doc text light').toBeGreaterThan(LIGHT);
+  });
+});
+
+describe('AMETHYST light-island sweep — Calculator history drawer', () => {
+  it('list: white→dark surface, rows inherit light text under amethyst (classic light/dark)', async () => {
+    const bg = await acrossThemes('#calc-hist', 'background-color');
+    const fg = await acrossThemes('#calc-hist-item', 'color');
+    expect(bg.classic, 'classic list white').toBeGreaterThan(0.7);
+    expect(bg.amethyst, 'amethyst list dark').toBeLessThan(DARK); // --ga98-inset-panel #141119
+    expect(fg.amethyst, 'amethyst row text light').toBeGreaterThan(LIGHT);
+    expect(fg.classic, 'classic row text dark').toBeLessThan(DARK);
+  });
+  it('empty state: dim text stays lighter than the dark surface under amethyst', async () => {
+    const bg = await acrossThemes('#calc-hist', 'background-color');
+    const fg = await acrossThemes('#calc-hist-empty', 'color');
+    expect(fg.amethyst, 'amethyst empty text legible on dark').toBeGreaterThan(bg.amethyst);
+    expect(fg.amethyst, 'amethyst empty text reaches light floor').toBeGreaterThan(0.12);
   });
 });
