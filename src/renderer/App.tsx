@@ -21,6 +21,7 @@ import { playReminder, playMouseClick, playMailNotifyDeduped } from './audio/syn
 import { toast } from './state/toasts';
 import defaultWallpaper from './assets/wallpaper-dcs98.jpg';
 import { installPluginBridge, importPluginChunks } from './plugins/load-renderer-plugins';
+import { resolveTheme } from './styles/themes';
 
 export function App(): JSX.Element {
   const windows = useWindows((s) => s.windows);
@@ -71,7 +72,8 @@ export function App(): JSX.Element {
   // theme.css can style the whole shell (desktop, windows, lock screen) per level.
   useEffect(() => {
     document.documentElement.dataset.ga98Intensity = settings?.themeIntensity ?? 'classic';
-  }, [settings?.themeIntensity]);
+    document.documentElement.dataset.ga98Theme = resolveTheme(settings?.themeName);
+  }, [settings?.themeIntensity, settings?.themeName]);
 
   useEffect(() => {
     const off = window.api.system.onReminderFired(({ reminder }) => {
