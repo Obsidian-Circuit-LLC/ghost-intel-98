@@ -176,7 +176,10 @@ describe('SOURCE WIRING — rerouted module sites reference tokens, not raw lite
   it('SettingsModule routes dim text + status + track to tokens', () => {
     const s = read('src/renderer/modules/settings/SettingsModule.tsx');
     expect(s).toContain('var(--ga98-dim-strong)');
-    expect(s).toContain('var(--ga98-status-error)');
+    // Error/status sites route to the parity-exact purpose tokens (danger-ink #900,
+    // badge-error-ink #a00000) — NOT the LOCKED status tier, whose classic value
+    // differs and would shift classic. See theme-taskb-parity.
+    expect(s).toContain('var(--ga98-danger-ink)');
     expect(s).toContain('var(--ga98-track)');
     expect(s).not.toMatch(/color: '#444'/);
     expect(s).not.toMatch(/color: '#900'/);
