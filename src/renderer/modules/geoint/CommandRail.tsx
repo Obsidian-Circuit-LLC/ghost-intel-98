@@ -175,7 +175,7 @@ export function CommandRail(props: CommandRailProps): JSX.Element {
           title={`Threat level is a step function of the high-severity count: ${threat.basis}`}
           style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}
         >
-          <span style={{
+          <span className="ga98-geo-threat" style={{
             background: LEVEL_COLOR[threat.level] ?? '#555', color: '#0a0f1a',
             fontSize: 11, fontWeight: 'bold', padding: '1px 8px', borderRadius: 2, letterSpacing: 0.5
           }}>{threat.level}</span>
@@ -188,7 +188,7 @@ export function CommandRail(props: CommandRailProps): JSX.Element {
             return (
               <label key={k} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, cursor: 'pointer', opacity: on ? 1 : 0.55 }}>
                 <input type="checkbox" checked={on} onChange={(e) => onToggleCategory(k, e.target.checked)} />
-                <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: colorFor(k), border: '1px solid rgba(0,0,0,.5)' }} />
+                <span className="ga98-geo-cat-swatch" style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: colorFor(k), border: '1px solid rgba(0,0,0,.5)' }} />
                 <span style={{ flex: 1, textTransform: k === UNCATEGORIZED ? 'none' : 'capitalize' }}>{k === UNCATEGORIZED ? 'uncategorized' : k}</span>
                 <span style={{ color: '#8a96a8' }}>{counts.get(k)}</span>
               </label>
@@ -263,7 +263,7 @@ export function CommandRail(props: CommandRailProps): JSX.Element {
                   title={placeable ? 'Click to fly · right-click to pin/unpin monitor' : 'No location · right-click to pin/unpin monitor'}
                   style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '3px 2px', cursor: placeable ? 'pointer' : 'default', borderBottom: '1px solid #1b2230', background: isPinned ? 'rgba(93,58,125,0.15)' : undefined }}
                 >
-                  <span style={{ flex: '0 0 auto', marginTop: 3, width: 8, height: 8, borderRadius: '50%', background: colorFor(cat), border: '1px solid rgba(0,0,0,.5)' }} />
+                  <span className="ga98-geo-cat-swatch" style={{ flex: '0 0 auto', marginTop: 3, width: 8, height: 8, borderRadius: '50%', background: colorFor(cat), border: '1px solid rgba(0,0,0,.5)' }} />
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ fontSize: 11, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i.title}</span>
                     <span style={{ fontSize: 9, color: 'var(--ga98-geoint-note)' }}>{i.sourceId}{placeable ? '' : ' · no location'}{isPinned ? ' · pinned' : ''}</span>

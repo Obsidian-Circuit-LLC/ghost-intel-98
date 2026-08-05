@@ -399,6 +399,10 @@
    hover, and the plain grey .sm-btn chrome buttons are light islands under the skin. */
 :root[data-ga98-theme='amethyst'] .sm-tabs { background: var(--ga98-grey); }
 :root[data-ga98-theme='amethyst'] .sm-tab { color: var(--ga98-text); }
+/* The empty-state placeholder dims its text with opacity 0.5; on the near-black skin that fades the
+   light copy below the WCAG floor (4.07:1). Lift the opacity under amethyst — the muted feel stays,
+   the text clears >8:1. Classic keeps 0.5 (amethyst-scoped). */
+:root[data-ga98-theme='amethyst'] .sm-placeholder { opacity: 0.8; }
 :root[data-ga98-theme='amethyst'] .sm-tab:hover { background: var(--ga98-row-hover); }
 :root[data-ga98-theme='amethyst'] .sm-btn {
   background: var(--ga98-grey);

@@ -1147,6 +1147,16 @@ input.ga98-text, select.ga98-text {
   border: 1px solid #6f7f9c;
   box-shadow: inset 0 1px 0 #ffffffcc, inset 0 -1px 0 #00000030;
 }
+/* The WMP rounded shell is a light silver/blue chrome frame (GhostExodus's mockup) — a large light
+   island on the near-black amethyst skin, and its transport/volume labels (--ga98-text) sit DIRECTLY
+   on it (~1:1). Restate the frame as a dark amethyst bevel gradient (lightest stop --ga98-shadow-light,
+   lum ~0.02, well under the island cut); the light text then reads at >10:1. Classic keeps the silver
+   frame (this override is amethyst-scoped). */
+:root[data-ga98-theme='amethyst'] .ga98-jukebox-rounded {
+  background: linear-gradient(180deg, var(--ga98-shadow-light) 0%, var(--ga98-grey) 42%, var(--ga98-shadow-dark) 100%);
+  border-color: var(--ga98-shadow-dark);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 -1px 0 rgba(0, 0, 0, 0.4);
+}
 .ga98-wmp-deck { display: flex; flex-direction: column; gap: 4px; }
 /* Now-Playing readout: inset LCD panel — big title, artist, format/kbps badges + the spectrum. */
 .ga98-np {
@@ -1694,6 +1704,15 @@ input.ga98-text, select.ga98-text {
   padding: 2px 10px; cursor: pointer; font-size: 11px; font-family: inherit; text-align: center;
 }
 .ga98-file-button:active { border-style: inset; }
+/* Classic Win98 raised silver file-picker button — app chrome, so it darkens on the amethyst skin
+   (a #c0c0c0 raised button is a light island). Restate as the amethyst button face; classic keeps
+   the silver (amethyst-scoped). */
+:root[data-ga98-theme='amethyst'] .ga98-file-button {
+  background: var(--ga98-grey);
+  color: var(--ga98-text);
+  border-color: var(--ga98-shadow-light);
+}
+:root[data-ga98-theme='amethyst'] .ga98-file-button:active { border-color: var(--ga98-shadow-dark); }
 .ga98-signature-pad { display: inline-flex; flex-direction: column; gap: 4px; }
 .ga98-sig-canvas {
   border: 1px solid var(--ga98-shadow-dark); background: #fff; box-shadow: inset 1px 1px 0 var(--ga98-shadow-dark);
@@ -1989,6 +2008,10 @@ input.ga98-text, select.ga98-text {
 .ga98-report-toolbar-btn:active:not(:disabled) { border-color: #808080 #fff #fff #808080; }
 .ga98-report-toolbar-btn:disabled { color: #808080; }
 .ga98-report-toolbar-btn:disabled .ga98-report-btn-ico { opacity: 0.4; }
+/* On the near-black skin the 0.4 disabled-icon opacity fades the emoji glyph below the WCAG floor
+   (there is no colour lever for an emoji — opacity is the only knob, and any value under ~0.95
+   fails). Restore full opacity under amethyst; the disabled cue survives on the button chrome. */
+:root[data-ga98-theme='amethyst'] .ga98-report-toolbar-btn:disabled .ga98-report-btn-ico { opacity: 1; }
 .ga98-report-toolbar-sep { width: 2px; align-self: stretch; margin: 2px 3px; border-left: 1px solid #808080; border-right: 1px solid #fff; }
 .ga98-report-btn-ico { font-size: 13px; line-height: 1; }
 

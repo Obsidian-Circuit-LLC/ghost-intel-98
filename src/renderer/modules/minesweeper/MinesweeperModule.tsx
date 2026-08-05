@@ -125,7 +125,7 @@ export function MinesweeperModule(): JSX.Element {
           <button onClick={() => reset(level)} title="New game" style={{ fontSize: 18, lineHeight: 1, minWidth: 36 }}>{face}</button>
           <span style={{ background: '#000', color: '#f00', padding: '2px 6px', minWidth: 48, textAlign: 'center', fontWeight: 'bold' }}>{String(seconds).padStart(3, '0')}</span>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${level.cols}, 22px)`, gap: 0, userSelect: 'none' }}>
+        <div className="ga98-mine-grid" style={{ display: 'grid', gridTemplateColumns: `repeat(${level.cols}, 22px)`, gap: 0, userSelect: 'none' }}>
           {board.map((row, r) => row.map((cell, c) => {
             const open = cell.revealed;
             return (

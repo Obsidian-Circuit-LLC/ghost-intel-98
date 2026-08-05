@@ -81,8 +81,29 @@ const EXEMPT: string[] = [
   // strokes are composited onto the white PDF page, so the pad MUST match the output medium
   // (black-on-white). This is content-paper (the "print paper" cite), not chrome. Scoped to the
   // single `.ga98-sig-canvas` element.
-  '.ga98-sig-canvas'
-  // Minesweeper rendered no flagged content at static mount, so it needs no exemption.
+  '.ga98-sig-canvas',
+  // Minesweeper board: the canonical Windows Minesweeper grid — #c0c0c0 raised-bevel cells whose
+  // classic per-count number palette (blue 1 / green 2 / red 3 …) is designed to read on the silver
+  // cell. Darkening the cells would break that iconic content palette. This is NAMED-GAME-BOARD
+  // content, exactly the chess/solitaire cite. Scoped to the grid via a stable `ga98-mine-grid`
+  // hook so the (already dark) mine-counter LEDs and level chrome are still audited.
+  '.ga98-mine-grid',
+  // GeoINT map canvas: the MapLibre surface — a dark night-map (base #05070e) with, before tiles
+  // load, a decorative sub-2px white star-field. The gradient-stop island heuristic takes the
+  // brightest stop (a 1px star) and cannot weight it by its <2% coverage, so a genuinely dark map
+  // reads as a light island. Real tiles are likewise map DATA (content-intrinsic per the theme
+  // spec's map-data-layer cite). Scoped to `.ga98-geo-map`.
+  '.ga98-geo-map',
+  // GeoINT legend colour key: the category-colour swatches (conflict/cyber/protest…) are the map's
+  // data legend — chart/series colour, content-intrinsic per the spec (only the protest orange
+  // #e67e22 crosses the island cut). Scoped to a `ga98-geo-legend` hook on the swatch row so no
+  // surrounding chrome is masked.
+  '.ga98-geo-legend',
+  // GeoINT threat-level pill: a status-severity indicator whose FILL is the datum — a green→red step
+  // scale (NONE #2c7 … SEVERE #e33) carrying near-black ink at high contrast. The colour IS the
+  // message (a traffic-light severity readout), exactly the spec's "severity scale" content cite;
+  // darkening it would erase the encoding. Scoped to a `ga98-geo-threat` hook on the pill only.
+  '.ga98-geo-threat'
 ];
 
 // A module whose static render produces fewer than this many elements has no auditable chrome — it

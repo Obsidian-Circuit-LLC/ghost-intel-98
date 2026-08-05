@@ -748,10 +748,10 @@ function GeoIntModuleInner(): JSX.Element {
 
         <fieldset>
           <legend>Legend</legend>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 10px', alignItems: 'center' }}>
+          <div className="ga98-geo-legend" style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 10px', alignItems: 'center' }}>
             {Object.entries(CATEGORY_COLOR).map(([cat, color]) => (
               <span key={cat} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11 }}>
-                <span style={{ display: 'inline-block', width: 11, height: 11, borderRadius: '50%', background: color, border: '1px solid rgba(0,0,0,.5)' }} />
+                <span className="ga98-geo-cat-swatch" style={{ display: 'inline-block', width: 11, height: 11, borderRadius: '50%', background: color, border: '1px solid rgba(0,0,0,.5)' }} />
                 {cat}
               </span>
             ))}

@@ -358,6 +358,9 @@
    and the plain grey .xc-btn chrome buttons — those darken so nothing glows white on the skin. */
 :root[data-ga98-theme='amethyst'] .xc-tabs { background: var(--ga98-grey); }
 :root[data-ga98-theme='amethyst'] .xc-tab { color: var(--ga98-text); }
+/* Empty-state placeholder dims via opacity 0.5 — below the WCAG floor on the near-black skin
+   (4.07:1). Lift the opacity under amethyst so the muted copy clears >8:1; classic keeps 0.5. */
+:root[data-ga98-theme='amethyst'] .xc-placeholder { opacity: 0.8; }
 :root[data-ga98-theme='amethyst'] .xc-tab:hover { background: var(--ga98-row-hover); }
 :root[data-ga98-theme='amethyst'] .xc-btn {
   background: var(--ga98-grey);

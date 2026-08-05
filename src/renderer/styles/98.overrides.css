@@ -121,6 +121,21 @@ button:focus {
 :root[data-ga98-theme='amethyst'] :disabled + label {
   color: var(--ga98-text-dim);
 }
+/* Opacity-dimmed inactive controls (rendered-contrast oracle, hardened alpha pass). Several modules
+   express a control's disabled/muted state with an inline `opacity` multiplier on a <label> that
+   wraps a disabled <input> (e.g. GeoINT feed toggles gated on `net`, the AI-assistant "Include file
+   contents" gate). On the LIGHT classic skin that fades dark text toward white and stays legible; on
+   the near-black amethyst skin the SAME multiplier fades LIGHT text toward black, sinking it below
+   the WCAG floor (the alpha the hardened oracle now folds in). The theme-correct disabled cue is a
+   legible DIM COLOUR, not sunk opacity — matching the `button:disabled → text-dim` rule above — so
+   under amethyst we neutralise the inline opacity and carry the affordance with --ga98-text-dim
+   (~5:1 on the surface). Classic is byte-for-byte untouched (rule is amethyst-scoped). */
+:root[data-ga98-theme='amethyst'] label:has(> input:disabled),
+:root[data-ga98-theme='amethyst'] label:has(> input[type='checkbox']:disabled),
+:root[data-ga98-theme='amethyst'] label:has(> input[type='radio']:disabled) {
+  opacity: 1 !important;
+  color: var(--ga98-text-dim);
+}
 :root[data-ga98-theme='amethyst'] input[type='text'],
 :root[data-ga98-theme='amethyst'] input[type='search'],
 :root[data-ga98-theme='amethyst'] input[type='password'],
