@@ -43,12 +43,12 @@ export function LocalAiPane(): JSX.Element {
     const msg = (progress.receivedBytes != null && progress.totalBytes)
       ? `${Math.round((progress.receivedBytes / progress.totalBytes) * 100)}%`
       : (progress.message ?? 'Working…');
-    return <p style={{ fontSize: 11, color: '#555', marginTop: 6 }}>{msg}</p>;
+    return <p style={{ fontSize: 11, color: 'var(--ga98-dim-mid)', marginTop: 6 }}>{msg}</p>;
   }
 
   // Attribution line shown whenever a setup action is offered.
   const Attribution = (
-    <p style={{ fontSize: 10, color: '#888', marginTop: 8 }}>
+    <p style={{ fontSize: 10, color: 'var(--ga98-dim-faint)', marginTop: 8 }}>
       Built with Llama. Llama&nbsp;3.1 is licensed under the Llama&nbsp;3.1 Community License,
       &copy;&nbsp;Meta Platforms,&nbsp;Inc.
     </p>
@@ -71,7 +71,7 @@ export function LocalAiPane(): JSX.Element {
     return (
       <fieldset>
         <legend>Local AI</legend>
-        <p style={{ margin: '4px 0', color: '#006400' }}>
+        <p style={{ margin: '4px 0', color: 'var(--ga98-status-success)' }}>
           &#10003; Local AI is ready (llama3.1).
         </p>
         <div className="field-row" style={{ marginTop: 8 }}>
@@ -90,7 +90,7 @@ export function LocalAiPane(): JSX.Element {
           A local Ollama is running but the llama3.1 model is not installed.
         </p>
         {!bundled && (
-          <p style={{ fontSize: 11, color: '#555', marginTop: 4 }}>
+          <p style={{ fontSize: 11, color: 'var(--ga98-dim-mid)', marginTop: 4 }}>
             Clicking "Install model" will download llama3.1 from the internet (a few GB, one time).
           </p>
         )}
@@ -138,7 +138,7 @@ export function LocalAiPane(): JSX.Element {
       <p style={{ margin: '4px 0' }}>
         Run AI features entirely on your machine, with no data sent to any cloud service.
       </p>
-      <p style={{ fontSize: 11, color: '#555', marginTop: 4 }}>
+      <p style={{ fontSize: 11, color: 'var(--ga98-dim-mid)', marginTop: 4 }}>
         No local runtime detected. Install Ollama (a free, one-click installer), then press
         <strong> Re-check</strong> — Ghost Intel 98 will download the llama3.1 model and
         configure itself. (Fully automatic and offline-bundled setup arrive in a later build.)

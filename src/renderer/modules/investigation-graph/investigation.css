@@ -17,7 +17,7 @@
   min-width: 320px;
   height: 100%;
   background: var(--ga98-grey);
-  color: #000;
+  color: var(--ga98-text);
   border-left: 1px solid var(--ga98-shadow-dark);
   box-shadow: inset 1px 0 0 var(--ga98-shadow-light);
   font-size: 12px;
@@ -37,7 +37,7 @@
   gap: 8px;
   padding: 6px 8px;
   background: var(--ga98-grey);
-  color: #000;
+  color: var(--ga98-text);
   border-bottom: 1px solid var(--ga98-shadow-dark);
   box-shadow: inset 0 -1px 0 var(--ga98-shadow-light);
 }
@@ -49,7 +49,7 @@
 
 .investigation-side-panel__tab {
   background: var(--ga98-grey);
-  color: #000;
+  color: var(--ga98-text);
   border-top: 1px solid var(--ga98-shadow-light);
   border-left: 1px solid var(--ga98-shadow-light);
   border-bottom: 1px solid var(--ga98-shadow-dark);
@@ -71,7 +71,7 @@
 .investigation-side-panel__expand,
 .investigation-side-panel__collapse {
   background: var(--ga98-grey);
-  color: #000;
+  color: var(--ga98-text);
   border-top: 1px solid var(--ga98-shadow-light);
   border-left: 1px solid var(--ga98-shadow-light);
   border-bottom: 1px solid var(--ga98-shadow-dark);
@@ -85,12 +85,12 @@
   min-height: 0;
   overflow-y: auto;
   background: var(--ga98-grey);
-  color: #000;
+  color: var(--ga98-text);
 }
 
 .run-panel {
   background: var(--ga98-grey);
-  color: #000;
+  color: var(--ga98-text);
   padding: 10px;
   display: flex;
   flex-direction: column;
@@ -100,7 +100,7 @@
 .run-panel__title {
   margin: 0 0 6px 0;
   font-size: 13px;
-  color: #000;
+  color: var(--ga98-text);
 }
 
 .run-panel__muted {
@@ -109,7 +109,7 @@
 
 .run-panel__card {
   background: var(--ga98-grey);
-  color: #000;
+  color: var(--ga98-text);
   border-top: 1px solid var(--ga98-shadow-dark);
   border-left: 1px solid var(--ga98-shadow-dark);
   border-bottom: 1px solid var(--ga98-shadow-light);
@@ -122,7 +122,7 @@
 }
 
 .run-panel__status--terminal {
-  color: #000;
+  color: var(--ga98-text);
 }
 
 .run-panel__hint {
@@ -135,7 +135,7 @@
   margin: 0;
   padding: 6px;
   background: #fff;
-  color: #000;
+  color: var(--ga98-text);
   border-top: 1px solid var(--ga98-shadow-dark);
   border-left: 1px solid var(--ga98-shadow-dark);
   border-bottom: 1px solid var(--ga98-shadow-light);
@@ -171,7 +171,19 @@
 
 .graph-pane-toolbar {
   background: var(--ga98-grey);
-  color: #000;
+  color: var(--ga98-text);
   border-bottom: 1px solid var(--ga98-shadow-dark);
   box-shadow: inset 0 -1px 0 var(--ga98-shadow-light);
+}
+
+/* ── QUIET AMETHYST — additive dark overrides (Task 6). The panel surfaces/borders above already
+   ride the palette tokens (they darken automatically); only these classic literals need a skin
+   value: the #404040 muted text (kept byte-exact in classic) and the #fff recessed run-feed. */
+:root[data-ga98-theme='amethyst'] .run-panel__muted,
+:root[data-ga98-theme='amethyst'] .run-panel__hint,
+:root[data-ga98-theme='amethyst'] .run-panel__seed-type {
+  color: var(--ga98-text-dim);
+}
+:root[data-ga98-theme='amethyst'] .run-panel__feed {
+  background: #141119;
 }

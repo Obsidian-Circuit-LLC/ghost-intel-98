@@ -80,7 +80,7 @@ export function EntitiesSection({ caseId, entities, attachments, onRefresh }: {
           <button disabled={!linkExistingId} onClick={() => void linkExisting()}>Link</button>
         </div>
       )}
-      {entities.length === 0 ? <p style={{ color: '#666' }}>No entities linked.</p> : BUCKETS.map((b) => {
+      {entities.length === 0 ? <p style={{ color: 'var(--ga98-dim-soft)' }}>No entities linked.</p> : BUCKETS.map((b) => {
         const items = entities.filter((e) => (e.relationship ?? 'untagged') === b.key);
         if (items.length === 0) return null;
         return (
@@ -164,7 +164,7 @@ function EntityRow({ caseId, item, attachments, onRefresh }: {
         }}>×</button>
       </div>
       {otherCases && (
-        <div style={{ fontSize: 11, background: '#f4f4f4', border: '1px solid #d0d0d0', margin: '4px 0 0 8px', padding: 6 }}>
+        <div style={{ fontSize: 11, background: 'var(--ga98-inset-panel)', border: '1px solid var(--ga98-inset-border)', margin: '4px 0 0 8px', padding: 6 }}>
           {otherCases.length === 0 ? 'Not referenced in any other case.' : <>Also in: {otherCases.map((c) => c.title).join(', ')}</>}
         </div>
       )}

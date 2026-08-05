@@ -44,6 +44,23 @@
   --ga98-lock-bevel: #404040;       /* LockScreen bgconn inset bevel (top/left) */
   --ga98-flyout-outset: #f5f5f5;    /* AccessMenu flyout `outset` highlight edge */
   --ga98-welcome-helper: #444444;   /* Welcome first-step helper text */
+  /* ── Task 6 module purpose tokens (Cases / Settings / Reports inline-style literals) ───
+     Same contract: each classic value below equals the ORIGINAL inline literal EXACTLY, so
+     classic renders byte-for-byte; the amethyst block redefines each for the near-black skin.
+     These sites use INLINE styles (a stylesheet rule cannot override an inline style), so they
+     route through a token rather than keeping the literal + a CSS override. NOT locked. */
+  --ga98-dim-strong: #444;   /* dim secondary/helper text (Settings) */
+  --ga98-dim-mid: #555;      /* dim secondary text (Settings / LocalAI / CaseDetail) */
+  --ga98-dim-soft: #666;     /* dim secondary text (Cases) */
+  --ga98-dim-faint: #888;    /* faint status/aux text (Settings / LocalAI) */
+  --ga98-dim-hint: #999;     /* faintest placeholder text (BioImages "no preview") */
+  --ga98-divider: #ccc;      /* thin <hr> divider rule (Settings) */
+  --ga98-track: #dfdfdf;     /* recessed meter/track fill (Settings password strength) */
+  --ga98-row-hover: #d8d8d8; /* light-grey row/header hover surface (Cases) */
+  --ga98-hairline: #b0b0b0;  /* thin light-grey border (Cases category header) */
+  --ga98-inset-panel: #f4f4f4; /* sunken detail-box fill (Cases / CaseDetail metadata) */
+  --ga98-inset-border: #d0d0d0; /* sunken detail-box border (Cases / CaseDetail) */
+  --ga98-navy-accent: #000080; /* navy inline accent: links / primary-image marker (Cases) */
 }
 
 html, body, #root {
@@ -140,6 +157,19 @@ input, textarea, [contenteditable="true"], .ga98-selectable {
   --ga98-lock-bevel: var(--ga98-shadow-deep);       /* darkest edge = inset groove on near-black */
   --ga98-flyout-outset: var(--ga98-shadow-light);   /* raised-edge highlight on the dark skin */
   --ga98-welcome-helper: var(--ga98-text-dim);      /* dimmed body text, legible on dark */
+  /* Task 6 module purpose tokens — amethyst variants (classic-parity values in base :root). */
+  --ga98-dim-strong: var(--ga98-text-dim);
+  --ga98-dim-mid: var(--ga98-text-dim);
+  --ga98-dim-soft: var(--ga98-text-dim);
+  --ga98-dim-faint: var(--ga98-text-dim);
+  --ga98-dim-hint: var(--ga98-text-dim);
+  --ga98-divider: var(--ga98-shadow-light);         /* visible groove on the dark surface */
+  --ga98-track: #141119;                            /* deep recessed meter track */
+  --ga98-row-hover: var(--ga98-shadow-light);       /* subtle raised hover on dark */
+  --ga98-hairline: var(--ga98-shadow-dark);         /* thin dark border */
+  --ga98-inset-panel: #141119;                      /* deep recessed detail box */
+  --ga98-inset-border: var(--ga98-shadow-dark);
+  --ga98-navy-accent: var(--ga98-accent);           /* navy → glowing accent on the dark skin */
 }
 
 .ga98-desktop {
@@ -1871,3 +1901,102 @@ input.ga98-text, select.ga98-text {
 .ga98-report-meta-field > span { font-weight: bold; }
 .ga98-report-meta-field input { width: 150px; background: #fff; color: #000; border: 2px solid; border-color: #808080 #fff #fff #808080; font-size: 11px; padding: 1px 3px; }
 .ga98-report-meta-field input:focus { outline: 1px dotted #000; outline-offset: -3px; }
+
+/* ── QUIET AMETHYST — Reports module dark override (Task 6) ──────────────────────────────────
+   The Reports module ships a by-design light-silver Win98 skin (all rules ABOVE, left untouched →
+   byte-exact classic parity). This block is purely ADDITIVE under the amethyst attribute: every
+   CHROME surface darkens so Reports is not a light island. The printable "paper" — .ga98-report-page,
+   .ga98-report-doc-table, .ga98-report-textblock-body — deliberately STAYS WHITE (it is the document
+   you print/export: content-intrinsic), floating on the now-dark workspace, mirroring how dark-mode
+   document editors keep the page white. */
+:root[data-ga98-theme='amethyst'] .ga98-report-shell,
+:root[data-ga98-theme='amethyst'] .ga98-report-appshell,
+:root[data-ga98-theme='amethyst'] .ga98-report-leftrail,
+:root[data-ga98-theme='amethyst'] .ga98-report-rightrail,
+:root[data-ga98-theme='amethyst'] .ga98-report-toolbar,
+:root[data-ga98-theme='amethyst'] .ga98-report-toolbar button,
+:root[data-ga98-theme='amethyst'] .ga98-report-toolbar select,
+:root[data-ga98-theme='amethyst'] .ga98-report-statusbar,
+:root[data-ga98-theme='amethyst'] .ga98-report-statusbar-shell,
+:root[data-ga98-theme='amethyst'] .ga98-report-statusbar-field,
+:root[data-ga98-theme='amethyst'] .ga98-report-contactbook,
+:root[data-ga98-theme='amethyst'] .ga98-report-descriptorlib,
+:root[data-ga98-theme='amethyst'] .ga98-report-introlib,
+:root[data-ga98-theme='amethyst'] .ga98-report-contactbook button,
+:root[data-ga98-theme='amethyst'] .ga98-report-descriptorlib button,
+:root[data-ga98-theme='amethyst'] .ga98-report-introlib button,
+:root[data-ga98-theme='amethyst'] .ga98-report-descmenu,
+:root[data-ga98-theme='amethyst'] .ga98-report-descmenu button,
+:root[data-ga98-theme='amethyst'] .ga98-report-ctxmenu,
+:root[data-ga98-theme='amethyst'] .ga98-report-imageblock-remove,
+:root[data-ga98-theme='amethyst'] .ga98-report-casepicker,
+:root[data-ga98-theme='amethyst'] .ga98-report-casepicker button,
+:root[data-ga98-theme='amethyst'] .ga98-report-casepicker select,
+:root[data-ga98-theme='amethyst'] .ga98-report-panel,
+:root[data-ga98-theme='amethyst'] .ga98-report-titlebar-x,
+:root[data-ga98-theme='amethyst'] .ga98-report-menubar,
+:root[data-ga98-theme='amethyst'] .ga98-report-menu-dropdown,
+:root[data-ga98-theme='amethyst'] .ga98-toolbar.ga98-report-toolbar,
+:root[data-ga98-theme='amethyst'] .ga98-report-toolbar-btn,
+:root[data-ga98-theme='amethyst'] .ga98-report-meta-field input {
+  background: var(--ga98-grey);
+  color: var(--ga98-text);
+  border-color: var(--ga98-shadow-light) var(--ga98-shadow-dark) var(--ga98-shadow-dark) var(--ga98-shadow-light);
+}
+:root[data-ga98-theme='amethyst'] .ga98-report-meta-field,
+:root[data-ga98-theme='amethyst'] .ga98-report-panel-title,
+:root[data-ga98-theme='amethyst'] .ga98-report-menu-top,
+:root[data-ga98-theme='amethyst'] .ga98-report-ctxmenu button,
+:root[data-ga98-theme='amethyst'] .ga98-report-menu-dropdown .ga98-context-menu-item,
+:root[data-ga98-theme='amethyst'] .ga98-report-outline-item,
+:root[data-ga98-theme='amethyst'] .ga98-report-nav-branch-head,
+:root[data-ga98-theme='amethyst'] .ga98-report-nav-leaf { color: var(--ga98-text); }
+/* Document workspace behind the paper — deepest recess. */
+:root[data-ga98-theme='amethyst'] .ga98-report-pagescroll { background: var(--ga98-shadow-deep); }
+/* Sunken white lists / trees / fields → deep recessed dark with light text. */
+:root[data-ga98-theme='amethyst'] .ga98-report-contactbook-list,
+:root[data-ga98-theme='amethyst'] .ga98-report-descriptorlib-list,
+:root[data-ga98-theme='amethyst'] .ga98-report-introlib-list,
+:root[data-ga98-theme='amethyst'] .ga98-report-casepicker-list,
+:root[data-ga98-theme='amethyst'] .ga98-report-nav-tree,
+:root[data-ga98-theme='amethyst'] .ga98-report-nav-twisty,
+:root[data-ga98-theme='amethyst'] .ga98-report-contactbook input,
+:root[data-ga98-theme='amethyst'] .ga98-report-contactbook textarea,
+:root[data-ga98-theme='amethyst'] .ga98-report-descriptorlib input,
+:root[data-ga98-theme='amethyst'] .ga98-report-descriptorlib textarea,
+:root[data-ga98-theme='amethyst'] .ga98-report-introlib input,
+:root[data-ga98-theme='amethyst'] .ga98-report-introlib textarea {
+  background: #141119; color: var(--ga98-text);
+  border-color: var(--ga98-shadow-dark) var(--ga98-shadow-light) var(--ga98-shadow-light) var(--ga98-shadow-dark);
+}
+/* Dim placeholders / previews / empties / disabled. */
+:root[data-ga98-theme='amethyst'] .ga98-report-contact-org,
+:root[data-ga98-theme='amethyst'] .ga98-report-descriptor-preview,
+:root[data-ga98-theme='amethyst'] .ga98-report-introduction-preview,
+:root[data-ga98-theme='amethyst'] .ga98-report-contactbook-empty,
+:root[data-ga98-theme='amethyst'] .ga98-report-descriptorlib-empty,
+:root[data-ga98-theme='amethyst'] .ga98-report-introlib-empty,
+:root[data-ga98-theme='amethyst'] .ga98-report-casepicker-empty,
+:root[data-ga98-theme='amethyst'] .ga98-report-imageblock-loading,
+:root[data-ga98-theme='amethyst'] .ga98-report-menu-dropdown .ga98-context-menu-item:disabled { color: var(--ga98-text-dim); }
+/* Panel / MDI title bars → amethyst gradient. */
+:root[data-ga98-theme='amethyst'] .ga98-report-titlebar { background: linear-gradient(90deg, var(--ga98-blue), var(--ga98-titlebar-to)); color: var(--ga98-titlebar-text); }
+/* Hover / pressed states → subtle raised tone. */
+:root[data-ga98-theme='amethyst'] .ga98-report-nav-leaf:hover,
+:root[data-ga98-theme='amethyst'] .ga98-report-casepicker-item:hover,
+:root[data-ga98-theme='amethyst'] .ga98-report-contactbook-list li:hover,
+:root[data-ga98-theme='amethyst'] .ga98-report-descriptorlib-list li:hover,
+:root[data-ga98-theme='amethyst'] .ga98-report-introlib-list li:hover { background: var(--ga98-shadow-light); }
+:root[data-ga98-theme='amethyst'] .ga98-report-toolbar button[aria-pressed='true'],
+:root[data-ga98-theme='amethyst'] .ga98-report-toolbar button.active { background: var(--ga98-shadow-dark); }
+/* Selection states (navy #000080 in classic) → purple selection on the dark skin. */
+:root[data-ga98-theme='amethyst'] .ga98-report-nav-active,
+:root[data-ga98-theme='amethyst'] .ga98-report-menu-top:hover,
+:root[data-ga98-theme='amethyst'] .ga98-report-menu-top-open,
+:root[data-ga98-theme='amethyst'] .ga98-report-menu-dropdown .ga98-context-menu-item:hover:not(:disabled),
+:root[data-ga98-theme='amethyst'] .ga98-report-descmenu button:hover,
+:root[data-ga98-theme='amethyst'] .ga98-report-ctxmenu button:hover,
+:root[data-ga98-theme='amethyst'] .ga98-report-outline-item:hover,
+:root[data-ga98-theme='amethyst'] .ga98-report-contactbook-list li.selected,
+:root[data-ga98-theme='amethyst'] .ga98-report-descriptorlib-list li.selected,
+:root[data-ga98-theme='amethyst'] .ga98-report-introlib-list li.selected { background: #4a3568; color: var(--ga98-titlebar-text); }

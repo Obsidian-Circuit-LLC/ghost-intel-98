@@ -97,11 +97,11 @@ export function BioImagesSection({ caseId, images, onRefresh }: {
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
           {images.map((img) => (
             <div key={img.id} style={{ width: 104, fontSize: 10, textAlign: 'center' }}>
-              <div style={{ position: 'relative', border: img.isPrimary ? '2px solid #000080' : '1px solid #808080', background: '#fff', height: 104, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ position: 'relative', border: img.isPrimary ? '2px solid var(--ga98-navy-accent)' : '1px solid var(--ga98-shadow-dark)', background: 'var(--ga98-shadow-light)', height: 104, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 {img.thumbDataUri
                   ? <img src={img.thumbDataUri} alt={img.originalName} title="Click to view full size" style={{ maxWidth: '100%', maxHeight: '100%', cursor: 'zoom-in' }} onClick={() => void openFull(img.id)} />
-                  : <span style={{ color: '#999' }}>no preview</span>}
-                {img.isPrimary && <span style={{ position: 'absolute', top: 0, left: 2, color: '#000080' }} title="Primary">★</span>}
+                  : <span style={{ color: 'var(--ga98-dim-hint)' }}>no preview</span>}
+                {img.isPrimary && <span style={{ position: 'absolute', top: 0, left: 2, color: 'var(--ga98-navy-accent)' }} title="Primary">★</span>}
               </div>
               <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={img.originalName}>{img.caption || img.originalName}</div>
               <div style={{ display: 'flex', gap: 2, justifyContent: 'center', marginTop: 2 }}>
@@ -128,7 +128,7 @@ export function BioImagesSection({ caseId, images, onRefresh }: {
       {lightbox && (
         <div onClick={() => setLightbox(null)}
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, cursor: 'zoom-out' }}>
-          <img src={lightbox} alt="" style={{ maxWidth: '92%', maxHeight: '92%', boxShadow: '0 0 20px #000' }} />
+          <img src={lightbox} alt="" style={{ maxWidth: '92%', maxHeight: '92%', boxShadow: '0 0 20px var(--ga98-shadow-deep)' }} />
         </div>
       )}
     </fieldset>

@@ -3051,5 +3051,14 @@ const THEME_COLOR_ALLOWLIST = [
   'rgba(5,5,20,0.95)',  // src/renderer/modules/searchlight/panels/GraphView.tsx
   'teal',  // src/renderer/shell/Icon.tsx
   'white',  // src/renderer/modules/calendar/CalendarModule.tsx, src/renderer/modules/chess/ChessModule.tsx, src/renderer/modules/my-documents/file-icons.tsx, src/renderer/shell/Icon.tsx
+  // Task 6: Searchlight Dashboard/ReportsPanel are self-consistent dark cyber panels (.sl-root bg
+  // #0a0a14 in BOTH themes), so their neon status/accent literals are content-intrinsic (theme-aware
+  // status tokens go DARK in classic and would vanish on searchlight's own dark surface). Left as-is.
+  '#30405a',  // src/renderer/modules/searchlight/panels/Dashboard.tsx
+  '#5a6480',  // src/renderer/modules/searchlight/panels/ReportsPanel.tsx
+  '#d8a83a',  // src/renderer/modules/searchlight/panels/ReportsPanel.tsx
+  '#ff4444',  // src/renderer/modules/searchlight/panels/ReportsPanel.tsx
+  '#ffc800',  // src/renderer/modules/searchlight/panels/ReportsPanel.tsx
+  'rgba(0,0,0,0.8)',  // src/renderer/modules/cases/BioImagesSection.tsx (lightbox modal scrim)
 ];
 ```
