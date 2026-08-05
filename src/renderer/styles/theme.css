@@ -416,6 +416,20 @@ input, textarea, [contenteditable="true"], .ga98-selectable {
   background: #d4e3fc;
 }
 
+/* The classic dropzone paints `#f4f4f4` (idle) / `#d4e3fc` (hot) — light islands under the
+   near-black amethyst skin. Restate dark surfaces with legible light text; classic is untouched
+   (the gate never matches). */
+:root[data-ga98-theme='amethyst'] .ga98-dropzone {
+  background: var(--ga98-grey);
+  border-color: var(--ga98-shadow-light);
+  color: var(--ga98-text);
+}
+:root[data-ga98-theme='amethyst'] .ga98-dropzone[data-hot='true'] {
+  background: var(--ga98-blue);
+  border-color: var(--ga98-accent);
+  color: var(--ga98-text);
+}
+
 .ga98-list {
   list-style: none;
   padding: 0;
