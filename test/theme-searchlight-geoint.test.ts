@@ -175,6 +175,53 @@ describe('Searchlight shell dark + legible under amethyst; grey tab chrome darke
   });
 });
 
+// --- Proof C.2: STORY-CONTROLS FLOATING PANEL composition -------------------------------------
+// The isolated #probe test resolves tokens in a vacuum; it cannot see the real face-panel
+// composition, where the amethyst counter text (--ga98-dim-deep #8a86a0) sits ON the panel bg.
+// A bg of var(--ga98-face,#c0c0c0) (undefined token) fell back to silver in BOTH themes — a light
+// island under amethyst with 1.92:1 counter text. This composes the ACTUAL panel (bg --ga98-grey +
+// StoryControls counter --ga98-dim-deep) and measures the real contrast + classic bg parity.
+describe('Story-controls floating panel: dark under amethyst, legible counter, classic bg parity', () => {
+  beforeAll(async () => {
+    // Mirror the real GeoIntModule story-panel markup: outer face-panel with the counter text
+    // that StoryControls renders (color: var(--ga98-dim-deep)) directly on the panel bg.
+    await session.page.evaluate(
+      `(() => {
+         const host = document.getElementById('probe').parentElement;
+         const panel = document.createElement('div');
+         panel.id = 'story-panel';
+         panel.style.background = 'var(--ga98-grey)';
+         const counter = document.createElement('span');
+         counter.id = 'story-counter';
+         counter.style.color = 'var(--ga98-dim-deep)';
+         counter.style.fontSize = '11px';
+         counter.textContent = '3 / 7';
+         panel.appendChild(counter);
+         host.appendChild(panel);
+         return true;
+       })()`
+    );
+  });
+
+  const contrast = (a: number, b: number): number => {
+    const [hi, lo] = a >= b ? [a, b] : [b, a];
+    return (hi + 0.05) / (lo + 0.05);
+  };
+
+  it('amethyst: panel bg is near-black (no silver island), counter text is legible (>= 4.5:1)', async () => {
+    await setTheme('amethyst');
+    const bgLum = await lumOf('#story-panel', 'background-color');
+    expect(bgLum, 'panel bg dark under amethyst').toBeLessThan(0.06);
+    const txtLum = await lumOf('#story-counter', 'color');
+    expect(contrast(txtLum, bgLum), 'counter contrast on amethyst panel').toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('classic: panel bg is the exact original silver #c0c0c0 (byte-for-byte parity)', async () => {
+    await setTheme(null);
+    expect(await styleOf('#story-panel', 'background-color')).toBe('rgb(192, 192, 192)');
+  });
+});
+
 describe('SOURCE WIRING — GeoINT sites reference tokens, not raw literals', () => {
   const read = (p: string): string => readFileSync(join(ROOT, p), 'utf8');
   it('GeoIntModule routes dim text / danger / error box / success toggle to tokens', () => {
@@ -191,6 +238,10 @@ describe('SOURCE WIRING — GeoINT sites reference tokens, not raw literals', ()
     // content-intrinsic category colours stay hardcoded (NOT tokenised)
     expect(g).toContain('#c0392b');
     expect(g).toContain('#8e44ad');
+    // story-controls floating panel bg routes to the skinnable surface token, and the
+    // never-defined --ga98-face token (silvered both themes) is gone entirely.
+    expect(g).toContain("background: 'var(--ga98-grey)'");
+    expect(g).not.toContain('ga98-face');
   });
   it('MapErrorBoundary / StoryControls / TimelineBar / SaveEventDialog / NewsViewModule route to tokens', () => {
     expect(read('src/renderer/modules/geoint/MapErrorBoundary.tsx')).toContain('var(--ga98-error-surface)');

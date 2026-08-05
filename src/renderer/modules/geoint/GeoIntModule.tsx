@@ -1147,7 +1147,7 @@ function GeoIntModuleInner(): JSX.Element {
             it stays draggable; z-index sits above Leaflet tiles/markers (panes 200–500)
             but below Leaflet's own zoom control (800+). */}
         {story && (
-          <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', zIndex: 600, display: 'inline-flex', background: 'var(--ga98-face,#c0c0c0)', border: '2px outset var(--ga98-shadow-light)', padding: 2, boxShadow: '0 1px 4px rgba(0,0,0,.4)' }}>
+          <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', zIndex: 600, display: 'inline-flex', background: 'var(--ga98-grey)', border: '2px outset var(--ga98-shadow-light)', padding: 2, boxShadow: '0 1px 4px rgba(0,0,0,.4)' }}>
             <StoryControls
               count={storyItems.length}
               index={story.index}
