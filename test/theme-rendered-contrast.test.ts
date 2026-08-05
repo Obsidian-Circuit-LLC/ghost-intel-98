@@ -85,11 +85,22 @@ const EXEMPT: string[] = [
   // Minesweeper rendered no flagged content at static mount, so it needs no exemption.
 ];
 
+// A module whose static render produces fewer than this many elements has no auditable chrome — it
+// is a bare loading / PIN-gate / empty-state stub (e.g. `<div>Loading…</div>`) because its real
+// surface is built only after an effect-driven data load that renderToStaticMarkup never runs. Such
+// a module is NOT "audited clean"; it is a module the oracle CANNOT meaningfully render, so it goes
+// on the explicit COVERAGE-GAP list (honesty rule) rather than silently passing with zero flags.
+// Threshold is deliberately low with a wide margin: the four known stubs render 1 element each; the
+// smallest module with real chrome renders ~12, so nothing substantive is near this line.
+const SUBSTANTIVE_ELEMENT_MIN = 3;
+
 interface ModuleRenderResult {
   key: string;
   title: string;
   html?: string;
   error?: string;
+  /** Set when the module rendered but too shallowly to audit — routed to the coverage-gap list. */
+  gap?: string;
 }
 
 let session: ChromeSession;
@@ -255,6 +266,23 @@ beforeAll(async () => {
     const spec = { id: `oracle-${m.key}`, module: m.key, title: m.title, props: {} };
     try {
       const html = renderToStaticMarkup(createElement(m.component, { spec }));
+      // Count real elements in the fragment (jsdom is the test environment). A stub render with no
+      // auditable chrome is a coverage gap, not a clean pass — see SUBSTANTIVE_ELEMENT_MIN.
+      const probe = document.createElement('div');
+      probe.innerHTML = html;
+      const elementCount = probe.querySelectorAll('*').length;
+      if (elementCount < SUBSTANTIVE_ELEMENT_MIN) {
+        const stubText = (probe.textContent ?? '').trim().slice(0, 60);
+        return {
+          key: m.key,
+          title: m.title,
+          html,
+          gap:
+            `non-substantive static render (${elementCount} element${elementCount === 1 ? '' : 's'}` +
+            `${stubText ? `: "${stubText}"` : ''}) — real surface is gated behind an effect-driven ` +
+            `data/PIN load that renderToStaticMarkup does not run; not exercised by this oracle`
+        };
+      }
       return { key: m.key, title: m.title, html };
     } catch (err) {
       return { key: m.key, title: m.title, error: (err as Error)?.message ?? String(err) };
@@ -286,6 +314,12 @@ describe('QUIET AMETHYST rendered-contrast oracle', () => {
     for (const r of renderResults) {
       if (r.error != null || r.html == null) {
         coverageGaps.push({ key: r.key, title: r.title, error: r.error ?? 'no html produced' });
+        continue;
+      }
+      // A module that rendered only a stub (loading/PIN gate) is reported as a coverage gap, NOT
+      // audited as clean — the oracle cannot meaningfully render its real surface (honesty rule).
+      if (r.gap != null) {
+        coverageGaps.push({ key: r.key, title: r.title, error: r.gap });
         continue;
       }
       const flags = await auditModule(r.html);
