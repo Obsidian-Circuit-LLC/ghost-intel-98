@@ -76,21 +76,21 @@ export function ChatSharePicker({
                   key={c.contactId}
                   onClick={() => onPick({ kind: 'contact', id: c.contactId, name: c.displayName })}
                   style={{ padding: '4px 6px', cursor: 'pointer', fontSize: 12 }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = '#000080'; e.currentTarget.style.color = '#fff'; }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--ga98-blue)'; e.currentTarget.style.color = 'var(--ga98-titlebar-text)'; }}
                   onMouseLeave={(e) => { e.currentTarget.style.background = ''; e.currentTarget.style.color = ''; }}
                 >
                   👤 {c.displayName}{c.verified ? ' ✔' : ''}
                 </div>
               ))}
               {allowGroups && groups.length > 0 && (
-                <div style={{ padding: '4px 6px', fontSize: 10, opacity: 0.6, borderTop: '1px solid #c0c0c0', marginTop: 4 }}>GROUPS</div>
+                <div style={{ padding: '4px 6px', fontSize: 10, opacity: 0.6, borderTop: '1px solid var(--ga98-grey)', marginTop: 4 }}>GROUPS</div>
               )}
               {allowGroups && groups.map((g) => (
                 <div
                   key={g.groupId}
                   onClick={() => onPick({ kind: 'group', id: g.groupId, name: g.name })}
                   style={{ padding: '4px 6px', cursor: 'pointer', fontSize: 12 }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = '#000080'; e.currentTarget.style.color = '#fff'; }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--ga98-blue)'; e.currentTarget.style.color = 'var(--ga98-titlebar-text)'; }}
                   onMouseLeave={(e) => { e.currentTarget.style.background = ''; e.currentTarget.style.color = ''; }}
                 >
                   👥 {g.name}

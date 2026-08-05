@@ -333,7 +333,7 @@ function OsintPane(): JSX.Element {
     <div className="ga98-stack">
       <fieldset>
         <legend>OSINT</legend>
-        <p style={{ fontSize: 12, color: 'var(--ga98-text-dim)' }}>
+        <p style={{ fontSize: 12, color: 'var(--ga98-dim-mid)' }}>
           Open-Source Intelligence tradecraft — methodology, lawful collection, and source handling.
           This section is in progress and will be published in a forthcoming update.
         </p>

@@ -29,7 +29,7 @@ export function PromptDialog({ title, label, placeholder, initial, submitLabel =
   const submit = (): void => { if (trimmed) onSubmit(trimmed); };
   return (
     <div style={OVERLAY} role="dialog" aria-label={title}>
-      <fieldset style={{ background: '#c0c0c0', minWidth: 300 }}>
+      <fieldset style={{ background: 'var(--ga98-grey)', minWidth: 300 }}>
         <legend>{title}</legend>
         <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr', gap: 4, alignItems: 'center' }}>
           <label htmlFor="case-dialog-input">{label}:</label>
@@ -65,7 +65,7 @@ export function ChoiceDialog({ title, label, options, submitLabel = 'Import', on
   const submit = (): void => { if (selected) onSubmit(selected); };
   return (
     <div style={OVERLAY} role="dialog" aria-label={title}>
-      <fieldset style={{ background: '#c0c0c0', minWidth: 320 }}>
+      <fieldset style={{ background: 'var(--ga98-grey)', minWidth: 320 }}>
         <legend>{title}</legend>
         <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr', gap: 4, alignItems: 'center' }}>
           <label htmlFor="case-dialog-select">{label}:</label>

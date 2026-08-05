@@ -300,6 +300,10 @@ export const THEME_COLOR_ALLOWLIST: readonly string[] = [
   '#2f5578',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
   '#304060',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
   '#333',  // investigation-graph dark canvas island
+  '#3fbf7f',  // investigation-graph node-kind fill: doc (content-intrinsic data colour)
+  '#4aa3ff',  // investigation-graph node-kind fill: fact (content-intrinsic data colour)
+  '#9aa5b1',  // investigation-graph node-kind fill: default/unknown (content-intrinsic data colour)
+  '#b07cf0',  // investigation-graph node-kind fill: entity (content-intrinsic data colour)
   '#333355',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
   '#33ccff',  // theme.css self-consistent island / decorative gradient / theme-tolerant chrome
   '#343a4c',  // self-consistent dark GhostScrape console (#0a0a14)

@@ -26,11 +26,22 @@ import { THEME_COLOR_ALLOWLIST } from './helpers/theme-allowlist';
 const ROOT = join(__dirname, '..');
 
 // ── which files are "themed source" ────────────────────────────────────────
+// Every renderer file that paints skinned UI. `components/**` is included
+// alongside shell + modules because App-level dialogs (CaseDialogs) and pickers
+// (ChatSharePicker) and the graph canvas live there and carry live colour
+// literals — omitting them let silver/navy islands hide under amethyst while the
+// guard stayed green.
 const SCAN: Array<{ dir: string; exts: string[] }> = [
   { dir: 'src/renderer/shell', exts: ['.tsx', '.css'] },
   { dir: 'src/renderer/modules', exts: ['.tsx', '.css'] },
+  { dir: 'src/renderer/components', exts: ['.tsx', '.css'] },
 ];
-const SINGLE_FILES = ['src/renderer/styles/theme.css', 'src/renderer/styles/98.overrides.css'];
+const SINGLE_FILES = [
+  'src/renderer/styles/theme.css',
+  'src/renderer/styles/98.overrides.css',
+  'src/renderer/App.tsx',
+  'src/renderer/main.tsx',
+];
 
 function walk(dir: string, exts: string[], out: string[]): void {
   let entries: string[];
