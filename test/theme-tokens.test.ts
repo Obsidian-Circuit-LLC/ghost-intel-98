@@ -65,11 +65,12 @@ const AMETHYST_PALETTE: Record<string, string> = {
  * The 10 LOCKED status/honesty tokens and their per-theme values.
  *  - status FOREGROUND tokens are theme-AWARE (classic dark → legible on #c0c0c0; amethyst bright
  *    → legible on #1a1822).
- *  - status FILL tokens carry white text in both themes, so they hold one dark value in each block.
- *    Their CLASSIC values are the EXACT original toast title-bar literals (parity is sacred — the
- *    Toaster is the sole classic consumer): info #000080 / success #006400 / warn #8a5a00 /
- *    error #900000. The amethyst block keeps its own white-legible darks (they need not match
- *    classic — white title text is >=4.5:1 on both), so the FILL role is theme-AWARE, not invariant.
+ *  - status FILL tokens carry white text in both themes, so they hold one dark value in each block,
+ *    theme-INVARIANT (identical classic + amethyst). The Toaster does NOT consume this LOCKED tier —
+ *    it routes to the dedicated parity-exact --ga98-toast-*-fill purpose tokens (whose classic values
+ *    are the exact original toast title-bar literals), so the LOCKED FILL role is never bent to an
+ *    ad-hoc site literal ("CLASSIC PARITY IS SACRED": a site whose literal differs from a LOCKED
+ *    token gets its own purpose token — the badge-ink precedent — it does not mutate the LOCKED one).
  *  - honesty tokens are self-contained and theme-INVARIANT (identical in every block).
  */
 const LOCKED_CLASSIC: Record<string, string> = {
@@ -77,10 +78,10 @@ const LOCKED_CLASSIC: Record<string, string> = {
   '--ga98-status-success': '#0a5a2f',
   '--ga98-status-warning': '#6b4600',
   '--ga98-status-info': '#124a8f',
-  '--ga98-status-error-fill': '#900000',
-  '--ga98-status-success-fill': '#006400',
-  '--ga98-status-warning-fill': '#8a5a00',
-  '--ga98-status-info-fill': '#000080',
+  '--ga98-status-error-fill': '#a01722',
+  '--ga98-status-success-fill': '#0a5c30',
+  '--ga98-status-warning-fill': '#7a4f00',
+  '--ga98-status-info-fill': '#124a8f',
   '--ga98-unverified': '#d9a441',
   '--ga98-unverified-ink': '#0a0f1a'
 };
@@ -167,16 +168,12 @@ describe('theme.css token layer — LOCKED status/honesty tier (Amendment 2)', (
     }
   });
 
-  it('keeps status FILL tokens theme-AWARE: classic = exact original toast literal, amethyst = its own dark', () => {
-    // Parity is sacred: the classic FILL value must be the byte-exact original toast title-bar
-    // literal (asserted against LOCKED_CLASSIC above); the amethyst FILL keeps its own white-legible
-    // dark. The two need NOT be equal — white title text stays >=4.5:1 on both (proven in
-    // theme-taskp-parity.test.ts). They diverge here precisely because the classic literals were
-    // restored.
+  it('keeps status FILL tokens identical across themes (white-text safe in both)', () => {
+    // The LOCKED FILL role is theme-INVARIANT: one dark value clears >=4.5:1 white title text on
+    // BOTH surfaces, so classic == amethyst. Toast classic parity is carried by the dedicated
+    // --ga98-toast-*-fill purpose tokens (see theme-taskp-parity.test.ts), NOT by bending this tier.
     for (const name of LOCKED_TOKENS.filter((t) => t.endsWith('-fill'))) {
-      expect(base[name], `classic ${name}`).toBe(LOCKED_CLASSIC[name]);
-      expect(amethyst[name], `amethyst ${name}`).toBe(LOCKED_AMETHYST[name]);
-      expect(amethyst[name], `${name} is theme-aware, classic and amethyst differ`).not.toBe(base[name]);
+      expect(amethyst[name], `${name} must be identical across themes`).toBe(base[name]);
     }
   });
 });

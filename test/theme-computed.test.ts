@@ -76,7 +76,7 @@ describe("theme.css computed cascade — amethyst (data-ga98-theme='amethyst')",
   });
 });
 
-describe('theme.css LOCKED tier — theme-aware FG + theme-aware FILL (Amendment 2 / Task P)', () => {
+describe('theme.css LOCKED tier — theme-aware FG + theme-INVARIANT FILL (Amendment 2 / Task P)', () => {
   it('--ga98-status-error is theme-AWARE (classic dark, amethyst bright)', async () => {
     await setTheme(null);
     const classic = await tokenValue('--ga98-status-error');
@@ -87,14 +87,27 @@ describe('theme.css LOCKED tier — theme-aware FG + theme-aware FILL (Amendment
     expect(amethyst).not.toBe(classic);
   });
 
-  it('--ga98-status-error-fill is theme-AWARE: classic = exact original toast literal (#900000), amethyst = its own white-legible dark', async () => {
-    // Parity is sacred: the toast is the sole classic consumer of the FILL role, so its classic
-    // value is the byte-exact original literal #900000 (restored in Task P). The amethyst block
-    // keeps its own dark (#a01722) — white title text stays >=4.5:1 on both, so they may diverge.
+  it('--ga98-status-error-fill is theme-INVARIANT: identical dark (#a01722) in BOTH themes', async () => {
+    // The LOCKED FILL tier carries WHITE text under both surfaces, so one dark value (#a01722)
+    // clears >=4.5:1 in classic AND amethyst — it is left theme-invariant. Parity is sacred: the
+    // Toaster does NOT bend this LOCKED token to its own #900000 literal; it routes to the dedicated
+    // theme-aware --ga98-toast-error-fill purpose token instead (asserted below).
     await setTheme(null);
     const classic = await tokenValue('--ga98-status-error-fill');
     await setTheme('amethyst');
     const amethyst = await tokenValue('--ga98-status-error-fill');
+    expect(classic).toBe('#a01722');
+    expect(amethyst).toBe('#a01722');
+    expect(amethyst).toBe(classic);
+  });
+
+  it('--ga98-toast-error-fill is the theme-AWARE Toaster purpose token: classic = exact literal (#900000), amethyst = its own white-legible dark', async () => {
+    // Parity is sacred: the Toaster's classic title bar must be byte-exact #900000. The amethyst
+    // block picks its own dark (#a01722) — white title text stays >=4.5:1 on both, so they diverge.
+    await setTheme(null);
+    const classic = await tokenValue('--ga98-toast-error-fill');
+    await setTheme('amethyst');
+    const amethyst = await tokenValue('--ga98-toast-error-fill');
     expect(classic).toBe('#900000');
     expect(amethyst).toBe('#a01722');
     expect(amethyst).not.toBe(classic);

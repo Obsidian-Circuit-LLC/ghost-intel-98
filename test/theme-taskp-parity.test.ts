@@ -1,33 +1,36 @@
 // @vitest-environment node
 /**
- * CLASSIC PARITY — Task P: three shell sites that had been routed to the theme-aware LOCKED
- * status tier, shifting their classic colour. Each is restored to a parity-EXACT value (a purpose
- * token whose CLASSIC value equals the original literal byte-for-byte, or — for the toast fills —
- * the LOCKED FILL role whose classic value IS the original literal), while the amethyst variant
- * stays legible.
+ * CLASSIC PARITY — Task P: three shell sites that had been routed to the theme-aware LOCKED status
+ * tier, shifting their classic colour. Each is restored to a parity-EXACT purpose token whose CLASSIC
+ * value equals the original inline literal byte-for-byte, while the amethyst variant stays legible.
  *
  *   (1) Toaster.tsx — the four toast title-bar FILLS (dark backgrounds carrying 98.css WHITE title
- *       text). The original literals were info #000080 / success #006400 / warn #8a5a00 /
- *       error #900000. The LOCKED --ga98-status-*-fill role is the ONLY classic consumer, so its
- *       classic values ARE those literals now (byte-exact); the amethyst variants stay dark enough
- *       for white text (>=4.5:1).
+ *       text). Original literals info #000080 / success #006400 / warn #8a5a00 / error #900000 had
+ *       gone to the LOCKED --ga98-status-*-fill tier (#124a8f / #0a5c30 / #7a4f00 / #a01722), shifting
+ *       every classic toast. Restored to DEDICATED --ga98-toast-*-fill purpose tokens (byte-exact
+ *       classic literals; amethyst kept white-legible). The LOCKED fill tier is left UNTOUCHED —
+ *       "CLASSIC PARITY IS SACRED" forbids bending a LOCKED token to a site literal (badge-ink
+ *       precedent: give the site its own parity-exact purpose token).
  *   (2) ModuleErrorBoundary.tsx — the error code-box. Original literals bg #fee / text #900 /
  *       border #c99 (modeled on MapErrorBoundary). Routing text+border to --ga98-status-error
- *       (#9a1621) had shifted the classic hue; restored to the parity-exact MapErrorBoundary
- *       trio --ga98-error-surface / --ga98-danger-ink / --ga98-error-border-soft.
- *   (3) LockScreen.tsx — the unlock-error text. Original literal #a00; routing to
- *       --ga98-status-error (#9a1621) had shifted it. Restored to the sibling --ga98-neg-ink (#a00).
+ *       (#9a1621) had shifted the classic hue; restored to the parity-exact MapErrorBoundary trio
+ *       --ga98-error-surface / --ga98-danger-ink / --ga98-error-border-soft.
+ *   (3) LockScreen.tsx — the unlock-error text. Original literal #a00; routing to --ga98-status-error
+ *       (#9a1621) had shifted it. Restored to the sibling --ga98-neg-ink (#a00).
  *
- * Each token must resolve to its EXACT original classic literal under the DEFAULT (classic) theme.
- * jsdom cannot resolve var(); the standing constraint mandates the CDP-over-ws colour harness
- * against /opt/google/chrome/chrome, mounting within .ga98-window-shell > .window > .window-body.
+ * Each token must resolve to its EXACT original classic literal under the DEFAULT (classic) theme,
+ * and to a legible value under amethyst. jsdom cannot resolve var(); the standing constraint mandates
+ * the CDP-over-ws colour harness against /opt/google/chrome/chrome, mounting within
+ * .ga98-window-shell > .window > .window-body.
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { launchChrome, type ChromeSession } from './helpers/chrome-computed-style';
 
-const THEME_CSS = readFileSync(join(process.cwd(), 'src/renderer/styles/theme.css'), 'utf8');
+const ROOT = process.cwd();
+const read = (p: string): string => readFileSync(join(ROOT, p), 'utf8');
+const THEME_CSS = read('src/renderer/styles/theme.css');
 
 const DOC =
   '<head><style>' +
@@ -52,6 +55,14 @@ afterAll(async () => {
   await session?.close();
 });
 
+async function setTheme(value: string | null): Promise<void> {
+  if (value === null) {
+    await session.page.evaluate(`delete document.documentElement.dataset.ga98Theme; true`);
+  } else {
+    await session.page.evaluate(`document.documentElement.dataset.ga98Theme = '${value}'; true`);
+  }
+}
+
 /** Resolve a custom property through the ACTIVE cascade to a computed rgb() string. */
 async function resolvedRgb(cssVar: string): Promise<string> {
   return session.page.evaluate<string>(
@@ -64,6 +75,8 @@ async function resolvedRgb(cssVar: string): Promise<string> {
 }
 
 const WHITE = 'rgb(255, 255, 255)'; // 98.css title-bar text
+// The amethyst window-body surface the code-box / error captions sit on (--ga98-grey in amethyst).
+const AMETHYST_SURFACE = 'rgb(26, 24, 34)'; // #1a1822
 
 /** Relative luminance (WCAG 2.x) of an `rgb(r, g, b)` string. */
 function luminance(rgb: string): number {
@@ -81,13 +94,21 @@ function contrast(a: string, b: string): number {
   return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
 }
 
-// ── (1) Toaster title-bar fills: classic = exact original literal ────────────────────────────────
+// ── (1) Toaster title-bar fills: classic = exact original literal (dedicated purpose tokens) ──────
 const TOAST_FILLS: Array<{ kind: string; cssVar: string; literal: string; rgb: string }> = [
-  { kind: 'info', cssVar: '--ga98-status-info-fill', literal: '#000080', rgb: 'rgb(0, 0, 128)' },
-  { kind: 'success', cssVar: '--ga98-status-success-fill', literal: '#006400', rgb: 'rgb(0, 100, 0)' },
-  { kind: 'warn', cssVar: '--ga98-status-warning-fill', literal: '#8a5a00', rgb: 'rgb(138, 90, 0)' },
-  { kind: 'error', cssVar: '--ga98-status-error-fill', literal: '#900000', rgb: 'rgb(144, 0, 0)' }
+  { kind: 'info', cssVar: '--ga98-toast-info-fill', literal: '#000080', rgb: 'rgb(0, 0, 128)' },
+  { kind: 'success', cssVar: '--ga98-toast-success-fill', literal: '#006400', rgb: 'rgb(0, 100, 0)' },
+  { kind: 'warn', cssVar: '--ga98-toast-warn-fill', literal: '#8a5a00', rgb: 'rgb(138, 90, 0)' },
+  { kind: 'error', cssVar: '--ga98-toast-error-fill', literal: '#900000', rgb: 'rgb(144, 0, 0)' }
 ];
+
+// The LOCKED --ga98-status-*-fill classic values the toast must NOT collapse onto (Amendment-2 tier).
+const LOCKED_FILL_CLASSIC: Record<string, string> = {
+  info: 'rgb(18, 74, 143)', // #124a8f
+  success: 'rgb(10, 92, 48)', // #0a5c30
+  warn: 'rgb(122, 79, 0)', // #7a4f00
+  error: 'rgb(160, 23, 34)' // #a01722
+};
 
 // ── (2)+(3) code-box + unlock-error inks/border/surface: classic = exact original literal ────────
 const INKS: Array<{ site: string; cssVar: string; literal: string; rgb: string }> = [
@@ -98,6 +119,8 @@ const INKS: Array<{ site: string; cssVar: string; literal: string; rgb: string }
 ];
 
 describe('CLASSIC PARITY (Task P) — the three restored shell sites resolve to their exact original literal', () => {
+  beforeAll(async () => { await setTheme(null); });
+
   for (const c of TOAST_FILLS) {
     it(`Toaster ${c.kind} fill: ${c.cssVar} === ${c.literal}`, async () => {
       const got = await resolvedRgb(c.cssVar);
@@ -111,7 +134,24 @@ describe('CLASSIC PARITY (Task P) — the three restored shell sites resolve to 
     });
   }
 
-  it('the ModuleErrorBoundary code-box text does NOT collapse onto the LOCKED status tier in classic', async () => {
+  it('the four toast fills do NOT collapse onto the LOCKED --ga98-status-*-fill tier in classic', async () => {
+    for (const c of TOAST_FILLS) {
+      const toast = await resolvedRgb(c.cssVar);
+      expect(
+        toast,
+        `${c.cssVar} must differ from the LOCKED status-${c.kind}-fill in classic`,
+      ).not.toBe(LOCKED_FILL_CLASSIC[c.kind]);
+    }
+  });
+
+  it('leaves the LOCKED --ga98-status-*-fill tier UNTOUCHED at its Amendment-2 classic values', async () => {
+    expect(await resolvedRgb('--ga98-status-info-fill')).toBe(LOCKED_FILL_CLASSIC.info);
+    expect(await resolvedRgb('--ga98-status-success-fill')).toBe(LOCKED_FILL_CLASSIC.success);
+    expect(await resolvedRgb('--ga98-status-warning-fill')).toBe(LOCKED_FILL_CLASSIC.warn);
+    expect(await resolvedRgb('--ga98-status-error-fill')).toBe(LOCKED_FILL_CLASSIC.error);
+  });
+
+  it('the code-box + unlock-error inks do NOT collapse onto the LOCKED status tier in classic', async () => {
     expect(await resolvedRgb('--ga98-status-error')).toBe('rgb(154, 22, 33)'); // #9a1621
     expect(
       await resolvedRgb('--ga98-danger-ink'),
@@ -130,18 +170,18 @@ describe('CLASSIC PARITY (Task P) — the three restored shell sites resolve to 
       expect(ratio, `${c.cssVar} classic=${fill} white-text ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5);
     }
   });
+
+  it('the ModuleErrorBoundary code-box text is legible on its classic error surface (>=4.5:1)', async () => {
+    const text = await resolvedRgb('--ga98-danger-ink');
+    const surface = await resolvedRgb('--ga98-error-surface');
+    const ratio = contrast(text, surface);
+    expect(ratio, `danger-ink=${text} on error-surface=${surface} → ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5);
+  });
 });
 
 describe('AMETHYST LEGIBILITY (Task P) — the restored sites stay legible on the near-black skin', () => {
-  beforeAll(async () => {
-    await session.page.evaluate(`document.documentElement.dataset.ga98Theme = 'amethyst'`);
-  });
-  afterAll(async () => {
-    await session.page.evaluate(`delete document.documentElement.dataset.ga98Theme`);
-  });
-
-  // The amethyst window-body surface these captions sit on (--ga98-grey in the amethyst block).
-  const AMETHYST_SURFACE = 'rgb(26, 24, 34)'; // #1a1822
+  beforeAll(async () => { await setTheme('amethyst'); });
+  afterAll(async () => { await setTheme(null); });
 
   it('every toast fill keeps WHITE title text legible under amethyst (>=4.5:1)', async () => {
     for (const c of TOAST_FILLS) {
@@ -170,5 +210,32 @@ describe('AMETHYST LEGIBILITY (Task P) — the restored sites stay legible on th
       const classic = INKS.find((c) => c.cssVar === cssVar)?.rgb;
       expect(amethyst, `${cssVar} must be redefined for amethyst`).not.toBe(classic);
     }
+  });
+});
+
+// ── source routing: each site references the parity-exact token, none the LOCKED status tier ──────
+describe('Task P source routing — each shell site uses its parity-exact purpose token', () => {
+  it('ModuleErrorBoundary routes the code-box to danger-ink + error-border-soft + error-surface', () => {
+    const src = read('src/renderer/shell/ModuleErrorBoundary.tsx');
+    expect(src).toContain('var(--ga98-danger-ink)');
+    expect(src).toContain('var(--ga98-error-border-soft)');
+    expect(src).toContain('var(--ga98-error-surface)');
+    expect(src, 'code-box must not route to the LOCKED status tier').not.toContain('var(--ga98-status-error)');
+  });
+
+  it('Toaster routes all four fills to --ga98-toast-*-fill, never the LOCKED status fills', () => {
+    const src = read('src/renderer/shell/Toaster.tsx');
+    for (const t of ['info', 'success', 'warn', 'error']) {
+      expect(src, `toast ${t} fill`).toContain(`var(--ga98-toast-${t}-fill)`);
+    }
+    expect(src.match(/var\(--ga98-status-\w+-fill\)/), 'Toaster must not use the LOCKED status fills').toBeNull();
+  });
+
+  it('LockScreen routes the unlock-error ink to --ga98-neg-ink, not the LOCKED status tier', () => {
+    const src = read('src/renderer/shell/LockScreen.tsx');
+    expect(src).toContain(`color: 'var(--ga98-neg-ink)'`);
+    expect(src, 'unlock error must not route to the LOCKED status tier').not.toContain(
+      `color: 'var(--ga98-status-error)'`
+    );
   });
 });
