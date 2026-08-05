@@ -299,7 +299,7 @@ export function DialTermModule(): JSX.Element {
           ? <button onClick={() => void hangup()}>Hang up</button>
           : <button onClick={() => void dial()} disabled={!activeId || localShellBlocked || state === 'connecting'}>Dial</button>)}
         <span style={{ flex: 1 }} />
-        {localShellBlocked && <span style={{ fontSize: 11, color: '#900' }}>Local shell disabled — enable in Settings → Terminal</span>}
+        {localShellBlocked && <span style={{ fontSize: 11, color: 'var(--ga98-danger-ink)' }}>Local shell disabled — enable in Settings → Terminal</span>}
         <span style={{ fontSize: 11 }}>{activeIsFtp ? 'FTP' : isLocalShellSelected ? 'LOCAL' : state.toUpperCase()}{activeHost ? ` · ${activeHost.host}:${activeHost.port}` : ''}{sessionId ? ` · ${sessionId.slice(0, 8)}` : ''}</span>
       </div>
       <div
@@ -493,7 +493,7 @@ function HostSetup({ hosts, onClose }: { hosts: SshHostProfile[]; onClose: () =>
               <label>Port:</label>
               <input className="ga98-text" type="number" value={draft.port} onChange={(e) => setDraft({ ...draft, port: Number(e.target.value) })} />
               <label></label>
-              <span style={{ fontSize: 10, color: '#666' }}>Any port 1–65535 (e.g. SSH on 2222).</span>
+              <span style={{ fontSize: 10, color: 'var(--ga98-dim-soft)' }}>Any port 1–65535 (e.g. SSH on 2222).</span>
               <label>Username:</label>
               <input className="ga98-text" value={draft.username} onChange={(e) => setDraft({ ...draft, username: e.target.value })} />
               {(draft.protocol ?? 'ssh') === 'ssh' ? (
@@ -542,7 +542,7 @@ function HostSetup({ hosts, onClose }: { hosts: SshHostProfile[]; onClose: () =>
           <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
             <button onClick={() => void save()}>Save</button>
             <button onClick={onClose}>Cancel</button>
-            {error && <span style={{ color: '#900', fontSize: 11, marginLeft: 8 }}>{error}</span>}
+            {error && <span style={{ color: 'var(--ga98-danger-ink)', fontSize: 11, marginLeft: 8 }}>{error}</span>}
           </div>
         </div>
       </div>

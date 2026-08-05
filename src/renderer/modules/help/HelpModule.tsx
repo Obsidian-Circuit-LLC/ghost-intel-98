@@ -230,7 +230,7 @@ function OpChildSafetyPane(): JSX.Element {
           {OPCS_INTRO.map((p, i) => (
             <p key={i} style={{ margin: '0 0 8px' }}>{p}</p>
           ))}
-          <p style={{
+          <p className="ga98-t8-err" style={{
             margin: '8px 0', padding: '6px 8px', fontWeight: 'bold',
             color: '#900', background: '#ffecec', border: '1px solid #c00'
           }}>

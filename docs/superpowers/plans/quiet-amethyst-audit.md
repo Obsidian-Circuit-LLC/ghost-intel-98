@@ -3088,5 +3088,16 @@ const THEME_COLOR_ALLOWLIST = [
   'rgba(255,255,255,.7)',  // src/renderer/modules/geoint/MapGL.tsx (marker cluster-glow ring — content-intrinsic map glyph)
   'rgba(0,0,0,.4)',  // src/renderer/modules/geoint/GeoIntModule.tsx (story-controls drop shadow — neutral)
   'rgba(0,0,0,0.3)',  // src/renderer/modules/geoint/SaveEventDialog.tsx (modal scrim — neutral)
+  // Task 8: long-tail game-piece / terminal-glyph intrinsics left hardcoded (theme-invariant).
+  // Solitaire is a green-felt card game: the felt + playing-card faces/pips/backs are the game's
+  // physical objects, not chrome, so they render identically under both themes (only the .ga98-sol-bar
+  // toolbar text was routed off the invisible-on-dark #000 to --ga98-text). DialTerm's terminal is a
+  // black console with green phosphor glyphs — a deliberate always-dark surface.
+  '#047a32',  // src/renderer/styles/theme.css (.ga98-sol green felt)
+  '#101010',  // src/renderer/styles/theme.css (.ga98-card-corner / pip ink)
+  '#c00000',  // src/renderer/styles/theme.css (.ga98-card-face[data-red] red suit)
+  '#1a3fa0',  // src/renderer/styles/theme.css (.ga98-card-back weave)
+  '#2a5fd0',  // src/renderer/styles/theme.css (.ga98-card-back weave)
+  '#aaffaa',  // src/renderer/modules/dialterm/DialTermModule.tsx (terminal green phosphor glyphs)
 ];
 ```

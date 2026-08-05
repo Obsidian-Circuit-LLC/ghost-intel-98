@@ -212,7 +212,7 @@ export function ChatModule(): JSX.Element {
 
   return (
     <div className="ga98-stack" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '6px 8px', background: '#eef3fb', border: '2px solid #9fb6d6', color: '#27364d', fontSize: 12 }}>
+      <div className="ga98-t8-info" style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '6px 8px', background: '#eef3fb', border: '2px solid #9fb6d6', color: '#27364d', fontSize: 12 }}>
         <div style={{ flex: 1 }}>
           🔒 <b>Encrypted, Tor-only.</b> Nothing leaves your machine except onion traffic to your contact.
         </div>
@@ -230,7 +230,7 @@ export function ChatModule(): JSX.Element {
       ) : (
         <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
           {/* left: identity + contacts */}
-          <div style={{ width: 240, borderRight: '1px solid #808080', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          <div style={{ width: 240, borderRight: '1px solid var(--ga98-shadow-dark)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
             <div style={{ padding: 6, fontSize: 11 }}>
               <div><b>Your address</b></div>
               <div style={{ wordBreak: 'break-all', fontFamily: 'monospace', opacity: onion ? 1 : 0.6 }}>{onion ?? 'publishing onion…'}</div>
@@ -258,7 +258,7 @@ export function ChatModule(): JSX.Element {
                 {!groupForm ? (
                   <button onClick={() => setGroupForm({ name: '', members: new Set() })} disabled={contacts.length === 0} title={contacts.length === 0 ? 'Add a contact first' : 'Create a group'}>New group…</button>
                 ) : (
-                  <div style={{ border: '1px solid #808080', padding: 4 }}>
+                  <div style={{ border: '1px solid var(--ga98-shadow-dark)', padding: 4 }}>
                     <div><b>New group</b></div>
                     <input
                       className="ga98-text"
@@ -291,7 +291,7 @@ export function ChatModule(): JSX.Element {
                 )}
               </div>
             </div>
-            <div style={{ borderTop: '1px solid #808080', overflowY: 'auto', flex: 1 }}>
+            <div style={{ borderTop: '1px solid var(--ga98-shadow-dark)', overflowY: 'auto', flex: 1 }}>
               {contacts.length === 0 && <div style={{ padding: 6, fontSize: 11, opacity: 0.7 }}>No contacts yet — create an invite or accept one.</div>}
               {contacts.map((c) => {
                 const active = selectedKind === 'contact' && c.contactId === selected;
@@ -299,7 +299,7 @@ export function ChatModule(): JSX.Element {
                   <div
                     key={c.contactId}
                     onClick={() => open(c.contactId)}
-                    style={{ padding: '4px 6px', cursor: 'pointer', fontSize: 12, background: active ? 'navy' : undefined, color: active ? '#fff' : undefined }}
+                    style={{ padding: '4px 6px', cursor: 'pointer', fontSize: 12, background: active ? 'var(--ga98-navy-accent)' : undefined, color: active ? 'var(--ga98-titlebar-text)' : undefined }}
                   >
                     {statuses[c.contactId] === 'online' ? '🟢' : statuses[c.contactId] === 'connecting' ? '🟡' : statuses[c.contactId] === 'needs-reinvite' ? <span title="Link expired — request a fresh invite out-of-band">⚠</span> : '⚪'} {c.displayName}
                     {c.verified ? ' ✔' : ''}
@@ -307,7 +307,7 @@ export function ChatModule(): JSX.Element {
                 );
               })}
               {groups.length > 0 && (
-                <div style={{ padding: '4px 6px', fontSize: 10, opacity: 0.6, borderTop: '1px solid #c0c0c0', marginTop: 4 }}>GROUPS</div>
+                <div style={{ padding: '4px 6px', fontSize: 10, opacity: 0.6, borderTop: '1px solid var(--ga98-grey)', marginTop: 4 }}>GROUPS</div>
               )}
               {groups.map((g) => {
                 const active = selectedKind === 'group' && g.groupId === selected;
@@ -315,7 +315,7 @@ export function ChatModule(): JSX.Element {
                   <div
                     key={g.groupId}
                     onClick={() => openGroup(g.groupId)}
-                    style={{ padding: '4px 6px', cursor: 'pointer', fontSize: 12, background: active ? 'navy' : undefined, color: active ? '#fff' : undefined }}
+                    style={{ padding: '4px 6px', cursor: 'pointer', fontSize: 12, background: active ? 'var(--ga98-navy-accent)' : undefined, color: active ? 'var(--ga98-titlebar-text)' : undefined }}
                   >
                     👥 {g.name} <span style={{ fontSize: 10, opacity: 0.7 }}>({g.memberIds.length + 1})</span>
                   </div>
@@ -331,12 +331,12 @@ export function ChatModule(): JSX.Element {
             ) : (
               <>
                 {sel && (
-                  <div style={{ padding: '4px 8px', borderBottom: '1px solid #808080', fontSize: 11 }}>
+                  <div style={{ padding: '4px 8px', borderBottom: '1px solid var(--ga98-shadow-dark)', fontSize: 11 }}>
                     <b>{sel.displayName}</b> {sel.verified
-                      ? <span style={{ color: '#0a7d28' }}>✔ verified</span>
-                      : <span style={{ color: '#a00' }}>⚠ UNVERIFIED</span>}
+                      ? <span className="ga98-t8-ok-text" style={{ color: '#0a7d28' }}>✔ verified</span>
+                      : <span className="ga98-t8-err-text" style={{ color: '#a00' }}>⚠ UNVERIFIED</span>}
                     {!sel.verified && (
-                      <div style={{ marginTop: 3, padding: '4px 6px', background: '#ffecec', border: '1px solid #d33', color: '#700', fontSize: 10 }}>
+                      <div className="ga98-t8-err" style={{ marginTop: 3, padding: '4px 6px', background: '#ffecec', border: '1px solid #d33', color: '#700', fontSize: 10 }}>
                         This contact is <b>pinned but not verified</b> (TOFU). Until you compare the safety
                         number out-of-band, a machine-in-the-middle on first contact cannot be ruled out.
                         Compare the number below by phone/in person, then{' '}
@@ -346,14 +346,14 @@ export function ChatModule(): JSX.Element {
                     <div style={{ marginTop: 2 }}>safety number (compare out-of-band):</div>
                     <div style={{ fontFamily: 'monospace', fontSize: 10 }}>{sel.safetyNumber}</div>
                     {statuses[sel.contactId] === 'needs-reinvite' && (
-                      <div style={{ marginTop: 3, padding: '4px 6px', background: '#fff8e0', border: '1px solid #c8a000', color: '#5a4000', fontSize: 10 }}>
+                      <div className="ga98-t8-warn" style={{ marginTop: 3, padding: '4px 6px', background: '#fff8e0', border: '1px solid #c8a000', color: '#5a4000', fontSize: 10 }}>
                         ⚠ <b>Link expired — reconnect failed terminally.</b> Request a fresh invite from this contact out-of-band, then accept it below.
                       </div>
                     )}
                   </div>
                 )}
                 {selGroup && (
-                  <div style={{ padding: '4px 8px', borderBottom: '1px solid #808080', fontSize: 11 }}>
+                  <div style={{ padding: '4px 8px', borderBottom: '1px solid var(--ga98-shadow-dark)', fontSize: 11 }}>
                     <b>👥 {selGroup.name}</b> — {selGroup.memberIds.length + 1} members
                     <div style={{ fontSize: 10, opacity: 0.7 }}>
                       {selGroup.memberIds.map(nameFor).join(', ') || 'no other members'}
@@ -368,7 +368,7 @@ export function ChatModule(): JSX.Element {
                         <div style={{ fontSize: 9, opacity: 0.6 }}>{nameFor(m.sender)}</div>
                       )}
                       {m.kind === 'file' && m.file ? (
-                        <span style={{ background: m.direction === 'out' ? '#d3e8ff' : '#eee', padding: '4px 8px', borderRadius: 3, display: 'inline-block', maxWidth: '80%', textAlign: 'left' }}>
+                        <span className={m.direction === 'out' ? 'ga98-t8-bubble-out' : 'ga98-t8-bubble'} style={{ background: m.direction === 'out' ? '#d3e8ff' : '#eee', padding: '4px 8px', borderRadius: 3, display: 'inline-block', maxWidth: '80%', textAlign: 'left' }}>
                           <div>📎 <b>{m.file.name}</b> <span style={{ opacity: 0.6, fontSize: 10 }}>({formatBytes(m.file.size)})</span></div>
                           <div style={{ fontSize: 10, opacity: 0.7 }}>
                             {m.file.status === 'transferring' ? 'transferring…' : m.file.status === 'failed' ? '⚠ transfer failed' : 'received'}
@@ -378,7 +378,7 @@ export function ChatModule(): JSX.Element {
                           )}
                         </span>
                       ) : (
-                        <span style={{ background: m.direction === 'out' ? '#d3e8ff' : '#eee', padding: '2px 6px', borderRadius: 3, display: 'inline-block', maxWidth: '80%', wordBreak: 'break-word' }}>
+                        <span className={m.direction === 'out' ? 'ga98-t8-bubble-out' : 'ga98-t8-bubble'} style={{ background: m.direction === 'out' ? '#d3e8ff' : '#eee', padding: '2px 6px', borderRadius: 3, display: 'inline-block', maxWidth: '80%', wordBreak: 'break-word' }}>
                           {m.text}
                         </span>
                       )}
@@ -390,7 +390,7 @@ export function ChatModule(): JSX.Element {
                     </div>
                   ))}
                 </div>
-                <div style={{ display: 'flex', gap: 4, padding: 6, borderTop: '1px solid #808080' }}>
+                <div style={{ display: 'flex', gap: 4, padding: 6, borderTop: '1px solid var(--ga98-shadow-dark)' }}>
                   <input
                     className="ga98-text"
                     style={{ flex: 1 }}

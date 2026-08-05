@@ -113,7 +113,7 @@ export function MinesweeperModule(): JSX.Element {
   const face = state === 'won' ? '😎' : state === 'lost' ? '😵' : '🙂';
 
   return (
-    <div style={{ height: '100%', overflow: 'auto', padding: 10, background: '#c0c0c0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+    <div style={{ height: '100%', overflow: 'auto', padding: 10, background: 'var(--ga98-grey)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
         {LEVELS.map((lv) => (
           <button key={lv.name} onClick={() => reset(lv)} style={{ fontWeight: lv.name === level.name ? 'bold' : 'normal' }}>{lv.name}</button>

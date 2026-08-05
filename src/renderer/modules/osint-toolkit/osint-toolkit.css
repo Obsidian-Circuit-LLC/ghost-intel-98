@@ -81,3 +81,7 @@
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
 }
+
+/* ── QUIET AMETHYST — additive dark overrides (Task 8). The tile chrome already rides palette tokens
+   (it darkens automatically); only the light `:hover` fill is a residual light island. */
+:root[data-ga98-theme='amethyst'] .ot-tile:hover { background: var(--ga98-select-bg); color: var(--ga98-text); }

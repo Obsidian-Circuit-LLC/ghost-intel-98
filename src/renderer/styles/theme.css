@@ -198,6 +198,45 @@ input, textarea, [contenteditable="true"], .ga98-selectable {
   --ga98-ok-ink: #7fd6a0;                            /* light green text on the deep-green fill */
 }
 
+/* ── QUIET AMETHYST — Task 8 long-tail utility classes ──────────────────────────────────────────
+   Some long-tail modules paint self-consistent light "unit" surfaces INLINE (banners, message
+   bubbles, info panels, standalone status text). Inline styles win the cascade, so classic renders
+   byte-for-byte unchanged (these rules never apply under the default theme); under the amethyst skin
+   the class flips the unit to a dark fill with legible, status-tinted text via `!important`. Applied
+   ADDITIVELY (the element keeps its original inline literal as the classic value). */
+:root[data-ga98-theme='amethyst'] .ga98-t8-surface {
+  background: var(--ga98-recessed-bg, #141119) !important;
+  color: var(--ga98-text) !important;
+  border-color: var(--ga98-shadow-dark) !important;
+}
+:root[data-ga98-theme='amethyst'] .ga98-t8-bubble {
+  background: var(--ga98-recessed-bg, #141119) !important;
+  color: var(--ga98-text) !important;
+}
+:root[data-ga98-theme='amethyst'] .ga98-t8-bubble-out {
+  background: var(--ga98-select-bg, #4a3568) !important;
+  color: var(--ga98-titlebar-text) !important;
+}
+:root[data-ga98-theme='amethyst'] .ga98-t8-info {
+  background: var(--ga98-status-info-fill) !important;
+  color: var(--ga98-titlebar-text) !important;
+  border-color: var(--ga98-status-info) !important;
+}
+:root[data-ga98-theme='amethyst'] .ga98-t8-err {
+  background: var(--ga98-status-error-tint, #2a1418) !important;
+  color: var(--ga98-status-error) !important;
+  border-color: var(--ga98-status-error) !important;
+}
+:root[data-ga98-theme='amethyst'] .ga98-t8-warn {
+  background: var(--ga98-status-warning-fill) !important;
+  color: var(--ga98-titlebar-text) !important;
+  border-color: var(--ga98-status-warning) !important;
+}
+:root[data-ga98-theme='amethyst'] .ga98-t8-err-text { color: var(--ga98-status-error) !important; }
+:root[data-ga98-theme='amethyst'] .ga98-t8-ok-text { color: var(--ga98-status-success) !important; }
+:root[data-ga98-theme='amethyst'] .ga98-t8-accent-text { color: var(--ga98-accent) !important; }
+:root[data-ga98-theme='amethyst'] .ga98-t8-dim-text { color: var(--ga98-text-dim) !important; }
+
 .ga98-desktop {
   position: absolute;
   inset: 0 0 var(--ga98-taskbar-height) 0;
@@ -1480,7 +1519,7 @@ input.ga98-text, select.ga98-text {
 /* ── Solitaire (Klondike) ──────────────────────────────────────────────────── */
 .ga98-sol { position: relative; height: 100%; display: flex; flex-direction: column; background: #047a32; overflow: auto; user-select: none; }
 .ga98-sol-bar { display: flex; align-items: center; gap: 6px; padding: 4px 6px; background: var(--ga98-grey); border-bottom: 1px solid var(--ga98-shadow-dark); font-size: 11px; }
-.ga98-sol-bar span { color: #000; }
+.ga98-sol-bar span { color: var(--ga98-text); }
 .ga98-sol-top { display: flex; gap: 10px; padding: 10px; }
 .ga98-sol-slot { position: relative; width: 64px; height: 88px; flex: 0 0 auto; }
 .ga98-sol-tableau { display: flex; gap: 10px; padding: 0 10px 10px; align-items: flex-start; }

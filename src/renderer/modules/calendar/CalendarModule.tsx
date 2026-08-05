@@ -224,7 +224,7 @@ export function CalendarModule(): JSX.Element {
         <button onClick={() => setCursor(new Date(today.getFullYear(), today.getMonth(), 1))}>Today</button>
         <button onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))} title="Next month">Next ›</button>
       </div>
-      <p style={{ fontSize: 11, padding: '4px 8px 0 8px', margin: 0, color: '#444' }}>
+      <p style={{ fontSize: 11, padding: '4px 8px 0 8px', margin: 0, color: 'var(--ga98-dim-strong)' }}>
         Click any day to add a quick reminder. Right-click a reminder you added to delete it.
       </p>
       <div className="ga98-grid-calendar" style={{ margin: 6 }}>

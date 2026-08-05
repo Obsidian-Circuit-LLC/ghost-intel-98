@@ -55,15 +55,15 @@ export function SearchModule(): JSX.Element {
         <button onClick={() => void exportResults()} disabled={!results || results.length === 0}>Export…</button>
       </div>
       {results && (
-        <div style={{ fontSize: 11, color: '#444', margin: '6px 0' }}>
+        <div style={{ fontSize: 11, color: 'var(--ga98-dim-strong)', margin: '6px 0' }}>
           {results.length === 0 ? 'No matches.' : `${total} hit${total === 1 ? '' : 's'} in ${results.length} case${results.length === 1 ? '' : 's'}.`}
         </div>
       )}
       <div style={{ flex: 1, overflow: 'auto' }}>
         {results?.map((r) => (
-          <div key={r.caseId} style={{ marginBottom: 10, border: '1px solid #c0c0c0', background: '#fff' }}>
+          <div key={r.caseId} style={{ marginBottom: 10, border: '1px solid var(--ga98-grey)', background: 'var(--ga98-shadow-light)' }}>
             <div
-              style={{ background: '#000080', color: '#fff', padding: '2px 6px', cursor: 'pointer' }}
+              style={{ background: 'var(--ga98-navy-accent)', color: 'var(--ga98-titlebar-text)', padding: '2px 6px', cursor: 'pointer' }}
               onClick={() => useWindows.getState().open({ module: 'cases', title: `My Cases — ${r.caseTitle}`, props: { caseId: r.caseId } })}
               title="Open this case"
             >
@@ -75,7 +75,7 @@ export function SearchModule(): JSX.Element {
                   key={i}
                   style={{ padding: '2px 4px', cursor: 'pointer', borderRadius: 2 }}
                   onClick={() => navigateToHit(r, h)}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = '#cfe2ff'; }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--ga98-select-bg, #cfe2ff)'; }}
                   onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
                   title={h.kind === 'note' ? 'Open this note' : h.kind === 'file' ? 'Open this file' : 'Open this case'}
                 >

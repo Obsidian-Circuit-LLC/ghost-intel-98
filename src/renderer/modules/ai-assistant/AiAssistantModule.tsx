@@ -798,18 +798,18 @@ export function AiAssistantModule(): JSX.Element {
         )}
       </div>
       {contextError && (
-        <div style={{ background: '#fee', color: '#900', padding: '4px 8px', fontSize: 11, borderBottom: '1px solid #c00' }}>
+        <div style={{ background: 'var(--ga98-error-surface)', color: 'var(--ga98-danger-ink)', padding: '4px 8px', fontSize: 11, borderBottom: '1px solid var(--ga98-error-border)' }}>
           Context unavailable: {contextError} — clear the dropdown or retry before sending.
         </div>
       )}
       <div
         ref={scrollRef}
-        style={{ flex: 1, overflow: 'auto', padding: 8, background: '#fff' }}
+        style={{ flex: 1, overflow: 'auto', padding: 8, background: 'var(--ga98-shadow-light)' }}
         onDragOver={(e) => e.preventDefault()}
         onDrop={handleChatDrop}
       >
         {messages.length === 0 && (
-          <div style={{ color: '#666', padding: 16 }}>
+          <div style={{ color: 'var(--ga98-dim-soft)', padding: 16 }}>
             Set a provider in Settings, optionally pick a case for context, and type below.
             Selecting a case sends its metadata (description, tasks, links, timeline, file list).
             Tick <b>Include file contents</b> to also send note &amp; text-attachment bodies — with a
@@ -935,13 +935,13 @@ export function AiAssistantModule(): JSX.Element {
             {profileGroups.map((g) => (
               <div key={g.scope} style={{ marginBottom: 10 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: 11, fontWeight: 'bold', color: '#400080' }}>{g.label}</span>
+                  <span className="ga98-t8-accent-text" style={{ fontSize: 11, fontWeight: 'bold', color: '#400080' }}>{g.label}</span>
                   <button style={{ fontSize: 10 }} onClick={() => void wipeMemory(g.scope, `everything learned under "${g.label}"`)} title={`Erase everything learned under ${g.label}`}>
                     Wipe
                   </button>
                 </div>
                 {groupSummary(g.scope) && (
-                  <div style={{ fontSize: 11, fontStyle: 'italic', color: '#333', background: '#f4f0ff', border: '1px solid #ddd', padding: '3px 4px', margin: '2px 0', whiteSpace: 'pre-wrap' }} title="Rolling summary of prior conversations, injected into chats for this scope">
+                  <div className="ga98-t8-surface" style={{ fontSize: 11, fontStyle: 'italic', color: '#333', background: '#f4f0ff', border: '1px solid #ddd', padding: '3px 4px', margin: '2px 0', whiteSpace: 'pre-wrap' }} title="Rolling summary of prior conversations, injected into chats for this scope">
                     Summary: {groupSummary(g.scope)}
                   </div>
                 )}
@@ -982,7 +982,7 @@ export function AiAssistantModule(): JSX.Element {
                       Wipe
                     </button>
                   </div>
-                  <div style={{ fontSize: 11, fontStyle: 'italic', color: '#333', background: '#f4f0ff', border: '1px solid #ddd', padding: '3px 4px', margin: '2px 0', whiteSpace: 'pre-wrap' }} title="Rolling summary of prior conversations, injected into chats for this scope">
+                  <div className="ga98-t8-surface" style={{ fontSize: 11, fontStyle: 'italic', color: '#333', background: '#f4f0ff', border: '1px solid #ddd', padding: '3px 4px', margin: '2px 0', whiteSpace: 'pre-wrap' }} title="Rolling summary of prior conversations, injected into chats for this scope">
                     Summary: {text}
                   </div>
                 </div>

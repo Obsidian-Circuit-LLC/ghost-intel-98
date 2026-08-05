@@ -393,3 +393,18 @@
   color: #c0a0a0;
   line-height: 1.4;
 }
+
+/* ── QUIET AMETHYST — additive dark overrides (Task 8). SOCMINT interior is a self-consistent dark
+   cyber panel (.sm-root #0a0a14, content-intrinsic); only its Win98 grey tab-strip, the light tab
+   hover, and the plain grey .sm-btn chrome buttons are light islands under the skin. */
+:root[data-ga98-theme='amethyst'] .sm-tabs { background: var(--ga98-grey); }
+:root[data-ga98-theme='amethyst'] .sm-tab { color: var(--ga98-text); }
+:root[data-ga98-theme='amethyst'] .sm-tab:hover { background: var(--ga98-row-hover); }
+:root[data-ga98-theme='amethyst'] .sm-btn {
+  background: var(--ga98-grey);
+  color: var(--ga98-text);
+  border-top-color: var(--ga98-shadow-light);
+  border-left-color: var(--ga98-shadow-light);
+  border-right-color: var(--ga98-shadow-dark);
+  border-bottom-color: var(--ga98-shadow-dark);
+}

@@ -17,7 +17,7 @@ export function HostInfoModule({ stream }: { stream?: CameraStream }): JSX.Eleme
   if (!stream) return <HostInfoStandalone />;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div className="ga98-panel" style={{ padding: '2px 6px', fontSize: 11, borderBottom: '1px solid #808080' }}>
+      <div className="ga98-panel" style={{ padding: '2px 6px', fontSize: 11, borderBottom: '1px solid var(--ga98-shadow-dark)' }}>
         Host resolution — {stream.label}
       </div>
       <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: 4 }}>
@@ -52,10 +52,10 @@ function HostInfoStandalone(): JSX.Element {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div className="ga98-panel" style={{ padding: '2px 6px', fontSize: 11, borderBottom: '1px solid #808080' }}>
+      <div className="ga98-panel" style={{ padding: '2px 6px', fontSize: 11, borderBottom: '1px solid var(--ga98-shadow-dark)' }}>
         Host resolution
       </div>
-      <div style={{ padding: 6, borderBottom: '1px solid #808080', display: 'flex', gap: 6, alignItems: 'center' }}>
+      <div style={{ padding: 6, borderBottom: '1px solid var(--ga98-shadow-dark)', display: 'flex', gap: 6, alignItems: 'center' }}>
         <label className="ga98-text" style={{ fontSize: 11 }} htmlFor="hostinfo-entry">Host / IP</label>
         <input
           id="hostinfo-entry"

@@ -351,3 +351,25 @@
   font-size: 12px;
   padding: 8px 0;
 }
+
+/* ── QUIET AMETHYST — additive dark overrides (Task 8). The X-collector interior is already a
+   self-consistent dark cyber panel (.xc-root #0a0a14, dark coloured buttons/badges with light text,
+   all content-intrinsic); the only light islands are its Win98 grey tab-strip, the light tab hover,
+   and the plain grey .xc-btn chrome buttons — those darken so nothing glows white on the skin. */
+:root[data-ga98-theme='amethyst'] .xc-tabs { background: var(--ga98-grey); }
+:root[data-ga98-theme='amethyst'] .xc-tab { color: var(--ga98-text); }
+:root[data-ga98-theme='amethyst'] .xc-tab:hover { background: var(--ga98-row-hover); }
+:root[data-ga98-theme='amethyst'] .xc-btn {
+  background: var(--ga98-grey);
+  color: var(--ga98-text);
+  border-top-color: var(--ga98-shadow-light);
+  border-left-color: var(--ga98-shadow-light);
+  border-right-color: var(--ga98-shadow-dark);
+  border-bottom-color: var(--ga98-shadow-dark);
+}
+:root[data-ga98-theme='amethyst'] .xc-btn:active {
+  border-top-color: var(--ga98-shadow-dark);
+  border-left-color: var(--ga98-shadow-dark);
+  border-right-color: var(--ga98-shadow-light);
+  border-bottom-color: var(--ga98-shadow-light);
+}
