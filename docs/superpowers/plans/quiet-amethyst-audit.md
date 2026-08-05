@@ -2924,6 +2924,7 @@ const THEME_COLOR_ALLOWLIST = [
   '#00e5ff',  // src/renderer/modules/searchlight/panels/GraphView.tsx
   '#00ff88',  // src/renderer/modules/searchlight/panels/GraphView.tsx
   '#060',  // src/renderer/modules/markets/MarketsModule.tsx
+  '#0a0a14',  // src/renderer/modules/searchlight/searchlight.css (self-consistent dark console bg — left hardcoded per rubric)
   '#0a0c1c',  // src/renderer/modules/pinball/PinballModule.tsx
   '#0a0e22',  // src/renderer/modules/pinball/PinballModule.tsx
   '#0a0f1a',  // src/renderer/modules/geoint/CommandRail.tsx, src/renderer/modules/geoint/EventDetailsPanel.tsx
@@ -2999,6 +3000,7 @@ const THEME_COLOR_ALLOWLIST = [
   '#cfd8e0',  // src/renderer/components/graph-canvas/GraphCanvas.tsx
   '#cfe4ef',  // src/renderer/modules/investigation-graph/InvestigationGraphModule.tsx
   '#d8d1ba',  // src/renderer/shell/Icon.tsx
+  '#d8d8e0',  // src/renderer/modules/searchlight/searchlight.css (self-consistent dark console text — left hardcoded per rubric)
   '#d9a83f',  // src/renderer/modules/my-documents/file-icons.tsx
   '#dfe6ec',  // src/renderer/components/graph-canvas/GraphCanvas.tsx
   '#e0457b',  // src/renderer/modules/pinball/PinballModule.tsx
