@@ -396,7 +396,7 @@ export const THEME_COLOR_ALLOWLIST: readonly string[] = [
   '#9fb6d6',  // chat unit: classic value, amethyst via .ga98-t8-* override
   '#a080c0',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
   '#a090c0',  // self-consistent dark SOCMINT console (#0a0a14)
-  '#a0a0c0',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
+  '#a0a0c0',  // Searchlight .sl-sweep-btn-active classic grey face (parity); amethyst via searchlight.css .sl-sweep-btn override (1486-1499)
   '#a0a0d0',  // self-consistent dark X-collector console (#0a0a14)
   '#a0aac0',  // self-consistent dark GhostScrape console (#0a0a14)
   '#a0c8ff',  // self-consistent dark GhostScrape console (#0a0a14)
@@ -462,7 +462,7 @@ export const THEME_COLOR_ALLOWLIST: readonly string[] = [
   '#e8eef7',  // Reports Recent row hover (classic light; amethyst via Recent override)
   '#e8eeff',  // dialup-client brand readout text (light on dark-green console)
   '#e8f0ff',  // my-documents selection highlight (light unit)
-  '#e9e1f5',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
+  '#e9e1f5',  // Searchlight .sl-sweep-input classic light field bg (parity); amethyst via searchlight.css .sl-sweep-input override (1486-1499)
   '#eaf4ff',  // Jukebox Now-Playing title text (light on dark LCD)
   '#ece6f7',  // Invoices dark-purple body text (self-consistent dark)
   '#ee3030',  // self-consistent dark X-collector console (#0a0a14)
@@ -474,7 +474,7 @@ export const THEME_COLOR_ALLOWLIST: readonly string[] = [
   '#f0c0c0',  // self-consistent dark SOCMINT console (#0a0a14)
   '#f0d8b0',  // minds-eye sepia vision-card (content-intrinsic)
   '#f0e0b0',  // self-consistent dark GhostScrape console (#0a0a14)
-  '#f3eefb',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
+  '#f3eefb',  // Searchlight .sl-sweep-input:focus classic light field bg (parity); amethyst via searchlight.css :focus override (1486-1499)
   '#f4f0ff',  // AI-assistant learned/markdown island: classic value (t8/dim-covered)
   '#f4f4f4',  // classic idle fill (dropzone/calendar-muted/--ga98-inset-panel); amethyst via overrides
   '#ff5566',  // self-consistent dark Searchlight console (bg #0a0a14 in both themes)
