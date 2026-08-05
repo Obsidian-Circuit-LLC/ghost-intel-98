@@ -21,6 +21,8 @@
  */
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createRequire } from 'node:module';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 import http from 'node:http';
 
 const require = createRequire(__filename);
@@ -34,6 +36,14 @@ export interface ChromePage {
   setContent(html: string): Promise<void>;
   /** Evaluate a JS expression in the page and return its value (by value). */
   evaluate<T = unknown>(expression: string): Promise<T>;
+  /**
+   * Capture a PNG of the CURRENT page content at a fixed device size and return the raw base64
+   * string (CDP `Page.captureScreenshot`, format png). Sizing the device metrics first makes the
+   * capture deterministic regardless of the launcher's default viewport. This is a VISUAL ARTIFACT
+   * only — never an audit input; `auditRenderedContrast` leaves its injected content in place, so a
+   * screenshot taken right after an audit call frames exactly what was measured.
+   */
+  screenshot(opts: { width: number; height: number }): Promise<string>;
 }
 
 export interface ChromeSession {
@@ -150,6 +160,24 @@ export async function launchChrome(): Promise<ChromeSession> {
         throw new Error('page.evaluate threw: ' + JSON.stringify(inner.exceptionDetails));
       }
       return inner?.result?.value as T;
+    },
+    async screenshot(opts: { width: number; height: number }): Promise<string> {
+      // Pin the device metrics so the frame is exactly opts.width×opts.height regardless of the
+      // launcher's default viewport, then clip to that box for a byte-stable capture.
+      await sessionCmd('Emulation.setDeviceMetricsOverride', {
+        width: opts.width,
+        height: opts.height,
+        deviceScaleFactor: 1,
+        mobile: false
+      });
+      const r = (await sessionCmd('Page.captureScreenshot', {
+        format: 'png',
+        clip: { x: 0, y: 0, width: opts.width, height: opts.height, scale: 1 },
+        captureBeyondViewport: true
+      })) as { result?: { data?: string }; error?: unknown };
+      const data = (r.result as { data?: string } | undefined)?.data;
+      if (!data) throw new Error('Page.captureScreenshot returned no data: ' + JSON.stringify(r.error ?? r));
+      return data;
     }
   };
 
@@ -251,6 +279,25 @@ export interface AuditOptions {
  * for contrast + light-island violations. Reuses one Chrome session across many calls (the caller
  * owns lifecycle). Returns the flat flag list (empty === clean).
  */
+/**
+ * Capture the page's current content as a PNG and write it to `filePath` (default 900×620, a
+ * legible size). Creates parent directories as needed. Returns the absolute-ish path written.
+ * Intended to be called immediately after `auditRenderedContrast` so the saved image frames exactly
+ * the populated surface that was just measured.
+ */
+export async function captureScreenshot(
+  session: ChromeSession,
+  filePath: string,
+  opts: { width?: number; height?: number } = {}
+): Promise<string> {
+  const width = opts.width ?? 900;
+  const height = opts.height ?? 620;
+  const base64 = await session.page.screenshot({ width, height });
+  mkdirSync(dirname(filePath), { recursive: true });
+  writeFileSync(filePath, Buffer.from(base64, 'base64'));
+  return filePath;
+}
+
 export async function auditRenderedContrast(page: ChromePage, opts: AuditOptions): Promise<ContrastFlag[]> {
   const styleTags = opts.css.map((c) => '<style>' + c + '</style>').join('');
   const themeAttr = opts.theme ? ` data-ga98-theme="${opts.theme}"` : '';
