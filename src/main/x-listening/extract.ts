@@ -94,13 +94,33 @@ export interface XPostMetrics {
  *  - `metrics` are rounded-display-safe (`{raw,value,approx}` per field).
  *  - `media` are local `data:` thumbnails only — never a remote URL.
  */
+/**
+ * What the captured item is, relative to the profile timeline being observed:
+ *  - `post`    — the target's own top-level tweet.
+ *  - `reply`   — the target's own reply to another account.
+ *  - `repost`  — a DIFFERENT account's tweet the target reposted (the original
+ *                author is recorded honestly; it is filed under the target's channel).
+ *  - `comment` — a THIRD PARTY's reply seen under one of the target's posts.
+ */
+export type XItemKind = 'post' | 'reply' | 'repost' | 'comment';
+
+/** The three surrounding-thread collect toggles (mirror of `AppSettings.xListening.collect`). */
+export interface XCollectSettings {
+  replies: boolean;
+  reposts: boolean;
+  comments: boolean;
+}
+
 export interface XHarvestedItem extends HarvestedItem {
   captureProvenance: 'visible-capture';
   verified: false;
   metrics: XPostMetrics;
   media: string[];
-  /** X3 emits `'post'`; replies/reposts/comments are tagged in X4. */
-  kind: 'post';
+  /** post / reply / repost / comment — see `XItemKind`. */
+  kind: XItemKind;
+  /** For a `comment`: the target root-post id whose thread it was seen under. Honest
+   *  lineage only — never a fabricated "in reply to". Absent for every other kind. */
+  parentId?: string;
 }
 
 /** Context the pure normalizer needs but cannot observe from a single post. */
@@ -211,7 +231,7 @@ function dataUrisOnly(media: readonly string[] | undefined): string[] {
  * twitter.com URL with no userinfo; otherwise ''. Inlined (not imported from the
  * socmint namespace) to keep the clearnet-quarantine import graph clean.
  */
-function guardXPermalink(url: string): string {
+export function guardXPermalink(url: string): string {
   try {
     const u = new URL(String(url));
     if (u.protocol !== 'https:') return '';
@@ -226,16 +246,22 @@ function guardXPermalink(url: string): string {
 // ---- post normalizer ----------------------------------------------------
 
 /**
- * Map one captured raw post → an `XHarvestedItem`, stamped for honesty and free
- * of any remote media URL. Pure: every timestamp/id is derived from the input or
- * the injected context, never from a clock read here.
+ * Map one captured raw item → an `XHarvestedItem` tagged with `kind`, stamped for
+ * honesty and free of any remote media URL. Pure: every timestamp/id is derived
+ * from the input or the injected context, never from a clock read here. `parentId`
+ * is admitted only for a `comment` (the target root post it appeared under).
  */
-export function normalizePost(raw: RawPost, ctx: NormalizeContext): XHarvestedItem {
+function normalizeItem(
+  raw: RawPost,
+  ctx: NormalizeContext,
+  kind: XItemKind,
+  parentId?: string,
+): XHarvestedItem {
   const messageId = String(raw.id ?? '');
   const username = String(raw.username ?? '').replace(/^@+/, '');
   const media = dataUrisOnly(raw.media);
 
-  return {
+  const item: XHarvestedItem = {
     id: xItemId(ctx.channelId, messageId),
     platform: 'x',
     authorHandle: username ? `@${username}` : '',
@@ -265,6 +291,121 @@ export function normalizePost(raw: RawPost, ctx: NormalizeContext): XHarvestedIt
       views: parseMetricText(raw.metricsRaw?.views ?? ''),
     },
     media,
-    kind: 'post',
+    kind,
   };
+  // Only a comment carries a parent — never fabricate lineage for other kinds.
+  if (kind === 'comment' && parentId != null && parentId !== '') {
+    item.parentId = String(parentId);
+  }
+  return item;
+}
+
+/** The target's own top-level post → an `XHarvestedItem` (`kind:'post'`). */
+export function normalizePost(raw: RawPost, ctx: NormalizeContext): XHarvestedItem {
+  return normalizeItem(raw, ctx, 'post');
+}
+
+/** The target's own reply → an `XHarvestedItem` (`kind:'reply'`). */
+export function normalizeReply(raw: RawPost, ctx: NormalizeContext): XHarvestedItem {
+  return normalizeItem(raw, ctx, 'reply');
+}
+
+/**
+ * A different account's tweet the target reposted → an `XHarvestedItem`
+ * (`kind:'repost'`). The original author is recorded honestly (from `raw.username`);
+ * the item is still filed under the observed target's channel.
+ */
+export function normalizeRepost(raw: RawPost, ctx: NormalizeContext): XHarvestedItem {
+  return normalizeItem(raw, ctx, 'repost');
+}
+
+/**
+ * A third party's reply seen under one of the target's posts → an `XHarvestedItem`
+ * (`kind:'comment'`), linked to the target root post via `parentId`.
+ */
+export function normalizeComment(
+  raw: RawPost,
+  ctx: NormalizeContext,
+  parentId: string,
+): XHarvestedItem {
+  return normalizeItem(raw, ctx, 'comment', parentId);
+}
+
+// ---- collect gate (port of main.cjs:551-570 / :472-500) -----------------
+
+/** Case-insensitive handle equality, tolerant of a leading `@`. */
+function handleEq(a: string, b: string): boolean {
+  return (
+    String(a ?? '').replace(/^@+/, '').toLowerCase() ===
+    String(b ?? '').replace(/^@+/, '').toLowerCase()
+  );
+}
+
+/**
+ * The profile-timeline capture gate (pure). Given the visible timeline items, the
+ * observed target handle, and the collect toggles, decide what to capture and how
+ * to tag it — a port of the `scrapeProfile` classification loop
+ * (`main.cjs:551-570`):
+ *
+ *  - a target top-level post is ALWAYS captured (`post`);
+ *  - a target reply only when `collect.replies` (`reply`);
+ *  - a someone-else repost only when `collect.reposts` (`repost`);
+ *  - a non-target, non-repost item is dropped — it is not the target's speech.
+ *
+ * Comments are NOT sourced here (they live in a post's thread) — see
+ * `selectThreadComments`.
+ */
+export function selectTimelineCaptures(
+  raws: readonly RawPost[] | undefined,
+  targetUsername: string,
+  collect: XCollectSettings,
+): Array<{ raw: RawPost; kind: Exclude<XItemKind, 'comment'> }> {
+  const out: Array<{ raw: RawPost; kind: Exclude<XItemKind, 'comment'> }> = [];
+  for (const raw of raws ?? []) {
+    const authorMatches = handleEq(raw.username, targetUsername);
+    if (raw.isRepost && !authorMatches) {
+      if (collect.reposts) out.push({ raw, kind: 'repost' });
+      continue;
+    }
+    if (!authorMatches) continue;
+    if (raw.isReply) {
+      if (collect.replies) out.push({ raw, kind: 'reply' });
+    } else {
+      out.push({ raw, kind: 'post' });
+    }
+  }
+  return out;
+}
+
+/**
+ * The third-party-comment gate (pure). Given the items visible in one root post's
+ * thread, the observed target handle, and the root post id, return the THIRD PARTY
+ * replies — a port of `scrapeCommentsForPosts` (`main.cjs:490-499`):
+ *
+ *  - empty unless `collect.comments` is on;
+ *  - the root post itself is excluded (it is the target's own post);
+ *  - the target's OWN replies are excluded (captured on the timeline as `reply`,
+ *    not as "comments");
+ *  - duplicates (same status id) are collapsed.
+ *
+ * The caller normalizes each survivor with `normalizeComment(raw, ctx, rootPostId)`.
+ */
+export function selectThreadComments(
+  threadRaws: readonly RawPost[] | undefined,
+  targetUsername: string,
+  rootPostId: string,
+  collect: XCollectSettings,
+): RawPost[] {
+  if (!collect.comments) return [];
+  const out: RawPost[] = [];
+  const seen = new Set<string>();
+  for (const raw of threadRaws ?? []) {
+    const id = String(raw.id ?? '');
+    if (!id || id === String(rootPostId)) continue;
+    if (handleEq(raw.username, targetUsername)) continue;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(raw);
+  }
+  return out;
 }

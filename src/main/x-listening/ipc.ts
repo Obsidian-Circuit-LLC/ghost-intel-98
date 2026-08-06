@@ -29,9 +29,17 @@ import { remoteMediaToDataUri, type MediaCapturePage } from '../capture/security
 import {
   X_POST_SCRIPT,
   normalizePost,
+  normalizeReply,
+  normalizeRepost,
+  normalizeComment,
+  selectTimelineCaptures,
+  selectThreadComments,
+  guardXPermalink,
   type RawPost,
   type NormalizeContext,
-  type XHarvestedItem
+  type XHarvestedItem,
+  type XItemKind,
+  type XCollectSettings
 } from './extract';
 import { prodXStore } from './store';
 
@@ -196,6 +204,28 @@ export interface CaptureRequest {
   /** The profile/timeline being observed (the HarvestedItem "channel"). */
   channelId: string;
   channelLabel: string;
+  /** Which surrounding-thread kinds to capture (X4). Sourced MAIN-side from
+   *  `AppSettings.xListening.collect` — never trusted from the renderer. Defaults
+   *  to all-off, so a target's own top-level posts are captured but nothing else. */
+  collect?: XCollectSettings;
+}
+
+/** All-off collect gate — a target's own posts only. The trusted default. */
+export const DEFAULT_COLLECT: XCollectSettings = {
+  replies: false,
+  reposts: false,
+  comments: false
+};
+
+/** The kind→normalizer map for the timeline path (comments are sourced separately). */
+function normalizeByKind(
+  raw: RawPost,
+  ctx: NormalizeContext,
+  kind: Exclude<XItemKind, 'comment'>
+): XHarvestedItem {
+  if (kind === 'reply') return normalizeReply(raw, ctx);
+  if (kind === 'repost') return normalizeRepost(raw, ctx);
+  return normalizePost(raw, ctx);
 }
 
 export interface TimelineCaptureResult {
@@ -284,13 +314,18 @@ export async function captureVisibleTimeline(
     channelLabel: req.channelLabel
   };
 
+  const collect = req.collect ?? DEFAULT_COLLECT;
   const gated = await deps.guard(win, async () => {
     const rawCollected = await deps.runCapture(win, X_POST_SCRIPT);
     const raws: RawPost[] = Array.isArray(rawCollected) ? (rawCollected as RawPost[]) : [];
+    // Gate on the collect toggles FIRST (X4): a target's own posts are always
+    // captured; replies/reposts only when their toggle is on; a stray non-target,
+    // non-repost item is never the target's speech and is dropped.
+    const selected = selectTimelineCaptures(raws, req.channelId, collect);
     const items: XHarvestedItem[] = [];
-    for (const raw of raws) {
+    for (const { raw, kind } of selected) {
       const withMedia = await resolveRawMedia(win, raw, deps.resolveMedia);
-      items.push(normalizePost(withMedia, ctx));
+      items.push(normalizeByKind(withMedia, ctx, kind));
     }
     return items;
   });
@@ -302,6 +337,116 @@ export async function captureVisibleTimeline(
   const items = gated.result ?? [];
   const { added, skipped } = await deps.saveItems(req.caseId, items);
   return { blocked: false, added, skipped, items };
+}
+
+// ---- X4: third-party comments on a target's post ------------------------
+
+/** A capture of the third-party replies under ONE of the target's root posts. */
+export interface ThreadCaptureRequest {
+  caseId: string;
+  jobId: string;
+  /** The observed target profile (used to exclude the target's OWN replies). */
+  channelId: string;
+  channelLabel: string;
+  /** The target root post whose thread is being read. */
+  rootPostId: string;
+  /** The root post permalink to navigate to — scheme/host guarded before use. */
+  rootPostUrl: string;
+  collect?: XCollectSettings;
+}
+
+/** Injectable seams for the thread-comment path — adds navigation to the timeline deps. */
+export interface ThreadCaptureDeps extends TimelineCaptureDeps {
+  /** Navigate the live capture window to a (already scheme-guarded) thread URL. */
+  navigate: (win: Electron.BrowserWindow, url: string) => Promise<void>;
+}
+
+function defaultThreadDeps(): ThreadCaptureDeps {
+  return {
+    ...defaultCaptureDeps(),
+    navigate: async (win, url) => {
+      await win.webContents.loadURL(url);
+    }
+  };
+}
+
+/**
+ * Capture the THIRD-PARTY comments under one of the target's posts (X4). Gated on
+ * `collect.comments`: when off, the window is NEVER navigated and nothing is
+ * captured. The root URL is scheme/host guarded (x.com/twitter.com https only)
+ * before any navigation — a scraped/off-domain URL is refused, never loaded. The
+ * challenge-refusal gate (X2) still fronts the capture, and only third-party
+ * replies survive `selectThreadComments` (the root post and the target's own
+ * replies are excluded — those are the target's speech, captured on the timeline).
+ * Port of quarantine `scrapeCommentsForPosts` (`main.cjs:472-500`).
+ */
+export async function captureThreadComments(
+  win: Electron.BrowserWindow,
+  req: ThreadCaptureRequest,
+  overrides: Partial<ThreadCaptureDeps> = {}
+): Promise<TimelineCaptureResult> {
+  const collect = req.collect ?? DEFAULT_COLLECT;
+  if (!collect.comments) {
+    return { blocked: false, added: 0, skipped: 0, items: [] };
+  }
+  const safeUrl = guardXPermalink(String(req.rootPostUrl ?? ''));
+  if (!safeUrl) {
+    return {
+      blocked: true,
+      reason: 'The root post URL is not a valid x.com/twitter.com permalink — refused to navigate it.',
+      added: 0,
+      skipped: 0,
+      items: []
+    };
+  }
+
+  const deps = { ...defaultThreadDeps(), ...overrides };
+  const ctx: NormalizeContext = {
+    caseId: req.caseId,
+    jobId: req.jobId,
+    collectorVersion: X_COLLECTOR_VERSION,
+    harvestedAt: deps.now(),
+    channelId: req.channelId,
+    channelLabel: req.channelLabel
+  };
+
+  const gated = await deps.guard(win, async () => {
+    await deps.navigate(win, safeUrl);
+    const rawCollected = await deps.runCapture(win, X_POST_SCRIPT);
+    const raws: RawPost[] = Array.isArray(rawCollected) ? (rawCollected as RawPost[]) : [];
+    const comments = selectThreadComments(raws, req.channelId, req.rootPostId, collect);
+    const items: XHarvestedItem[] = [];
+    for (const raw of comments) {
+      const withMedia = await resolveRawMedia(win, raw, deps.resolveMedia);
+      items.push(normalizeComment(withMedia, ctx, req.rootPostId));
+    }
+    return items;
+  });
+
+  if (gated.blocked) {
+    return { blocked: true, reason: gated.reason, added: 0, skipped: 0, items: [] };
+  }
+
+  const items = gated.result ?? [];
+  const { added, skipped } = await deps.saveItems(req.caseId, items);
+  return { blocked: false, added, skipped, items };
+}
+
+/**
+ * Read the collect toggles from persisted settings, MAIN-side and trusted. Lazy
+ * dynamic import so this module never pulls the settings/store graph at import
+ * time (keeps the electron-minimal test mocks + the clearnet-quarantine import
+ * graph clean). Falls back to the all-off default on any read error — capture
+ * never silently WIDENS on a settings failure.
+ */
+async function loadCollectSettings(): Promise<XCollectSettings> {
+  try {
+    const { settingsStore } = await import('../storage/json-fs');
+    const settings = await settingsStore.read();
+    return settings.xListening?.collect ?? DEFAULT_COLLECT;
+  } catch {
+    return DEFAULT_COLLECT;
+  }
 }
 
 type HandleWithEvent = (
@@ -332,7 +477,7 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
     assertTrustedSender(e);
     return xSessionStatus();
   });
-  deps.handle(channels.xListening.capture, (e, reqArg) => {
+  deps.handle(channels.xListening.capture, async (e, reqArg) => {
     assertTrustedSender(e);
     if (!xWindow || xWindow.isDestroyed()) {
       throw new Error('X is not connected. Open the connect window and sign in before capturing.');
@@ -341,11 +486,15 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
     if (!req || typeof req.caseId !== 'string' || typeof req.channelId !== 'string') {
       throw new Error('Capture requires a caseId and a target channelId.');
     }
+    // The collect toggles are read MAIN-side from settings — the renderer never gets
+    // to widen capture beyond what the operator opted into (X4 trust boundary).
+    const collect = await loadCollectSettings();
     return captureVisibleTimeline(xWindow, {
       caseId: req.caseId,
       jobId: typeof req.jobId === 'string' ? req.jobId : req.caseId,
       channelId: req.channelId,
-      channelLabel: typeof req.channelLabel === 'string' ? req.channelLabel : `@${req.channelId}`
+      channelLabel: typeof req.channelLabel === 'string' ? req.channelLabel : `@${req.channelId}`,
+      collect
     });
   });
 }
