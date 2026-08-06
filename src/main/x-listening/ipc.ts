@@ -894,6 +894,10 @@ export interface ArchiveLoopResult {
   reason?: string;
   /** True iff `shouldCancel` halted the loop early. */
   cancelled: boolean;
+  /** Every completed cycle's captured items, in run order — so the renderer can surface a
+   *  multi-cycle RUN in the LIVE FEED exactly like a single RUN ONE CYCLE. A cycle that did
+   *  not complete (toggle off / challenge-blocked) contributes nothing. */
+  items: XHarvestedItem[];
   /** The latest archive state observed (advanced by the last completed cycle). */
   state: XArchiveState;
 }
@@ -928,30 +932,33 @@ export async function runArchiveCycles(
 
   let cyclesRun = 0;
   let totalAdded = 0;
+  const items: XHarvestedItem[] = [];
   let state: XArchiveState =
     (await (overrides.readState ?? defaultArchiveDeps().readState)(req.caseId)) ??
     EMPTY_ARCHIVE_STATE;
 
   for (let i = 0; i < maxCycles; i++) {
     if (shouldCancel()) {
-      return { cyclesRun, totalAdded, blocked: false, cancelled: true, state };
+      return { cyclesRun, totalAdded, blocked: false, cancelled: true, items, state };
     }
     const res = await runArchiveCycle(win, req, overrides);
     state = res.state;
     if (!res.ran) {
       // Toggle off or challenge-blocked: an incomplete cycle stops the run.
-      return { cyclesRun, totalAdded, blocked: res.blocked, reason: res.reason, cancelled: false, state };
+      return { cyclesRun, totalAdded, blocked: res.blocked, reason: res.reason, cancelled: false, items, state };
     }
     cyclesRun++;
     totalAdded += res.added;
+    // Carry this completed cycle's captured records out so the UI can surface them live.
+    if (res.items.length) items.push(...res.items);
     if (i < maxCycles - 1) {
       if (shouldCancel()) {
-        return { cyclesRun, totalAdded, blocked: false, cancelled: true, state };
+        return { cyclesRun, totalAdded, blocked: false, cancelled: true, items, state };
       }
       await sleep(delayMs);
     }
   }
-  return { cyclesRun, totalAdded, blocked: false, cancelled: false, state };
+  return { cyclesRun, totalAdded, blocked: false, cancelled: false, items, state };
 }
 
 // ---- X8: exports (reuse the app's existing PDF/DOCX exporters) ----------

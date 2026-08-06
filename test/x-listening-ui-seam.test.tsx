@@ -169,6 +169,41 @@ describe('XListeningModule — UI seam (the UI actually invokes each channel)', 
     );
   });
 
+  it('RUN CYCLES surfaces the run\'s captured records in the LIVE FEED (like RUN ONE CYCLE)', async () => {
+    xls.runArchiveCycles.mockResolvedValueOnce({
+      cyclesRun: 2,
+      totalAdded: 1,
+      blocked: false,
+      cancelled: false,
+      items: [ITEM],
+      state: { cursor: null, cycles: 2, lastRunAt: 't' },
+    } as any);
+    await mount();
+    await addTarget('target');
+    await click('ARCHIVE');
+    await click('RUN CYCLES');
+    await click('LIVE FEED');
+    expect((container.textContent || '')).toContain('hello world');
+  });
+
+  it('a network account card renders a single @ (handle already carries a leading @)', async () => {
+    xls.captureFollowers.mockResolvedValueOnce({
+      blocked: false,
+      target: '@target',
+      kind: 'followers',
+      accounts: [{ handle: '@alice', displayName: 'Alice', bio: '', avatar: '' }],
+    } as any);
+    await mount();
+    await addTarget('target');
+    await click('FOLLOWER NETWORK');
+    await click('CAPTURE FOLLOWERS');
+    const handleSpan = Array.from(container.querySelectorAll('.xls-account-body span')).find((s) =>
+      (s.textContent || '').includes('alice'),
+    );
+    expect(handleSpan?.textContent).toBe('@alice');
+    expect(container.textContent || '').not.toContain('@@alice');
+  });
+
   it('the rendered NotesPanel saves through saveNote({ caseId, findingId, text })', async () => {
     await mount();
     await addTarget('target');

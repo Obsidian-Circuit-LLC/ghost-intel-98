@@ -220,6 +220,36 @@ describe('runArchiveCycles: bounded + cancellable loop', () => {
     expect(res.state.cycles).toBe(3);
   });
 
+  it('accumulates every completed cycle\'s captured items (so RUN CYCLES can surface them like RUN ONE CYCLE)', async () => {
+    const { runArchiveCycles } = await import('../src/main/x-listening/ipc');
+    const store = memState();
+    let n = 0;
+    const capture = vi.fn(
+      async (): Promise<TimelineCaptureResult> => ({
+        blocked: false,
+        added: 1,
+        skipped: 0,
+        items: [item(String(n++))],
+      }),
+    );
+    const res = await runArchiveCycles(
+      {} as unknown as Electron.BrowserWindow,
+      REQ,
+      { maxCycles: 3, delayMs: 0, sleep: async () => {} },
+      {
+        isEnabled: async () => true,
+        capture,
+        readState: store.readState,
+        writeState: store.writeState,
+        now: () => '2026-08-06T12:00:00.000Z',
+      },
+    );
+    expect(res.cyclesRun).toBe(3);
+    expect(res.totalAdded).toBe(3);
+    // Every completed cycle's items ride out on the result, in order.
+    expect(res.items.map((i) => i.messageId)).toEqual(['0', '1', '2']);
+  });
+
   it('off-toggle → the loop runs zero cycles', async () => {
     const { runArchiveCycles } = await import('../src/main/x-listening/ipc');
     const store = memState();
@@ -284,5 +314,7 @@ describe('runArchiveCycles: bounded + cancellable loop', () => {
     expect(res.blocked).toBe(true);
     expect(res.reason).toMatch(/rate limit/i);
     expect(res.cyclesRun).toBe(1); // only the first cycle completed
+    // Only the completed cycle's items are surfaced; the blocked cycle contributes none.
+    expect(res.items.map((i) => i.messageId)).toEqual(['1']);
   });
 });

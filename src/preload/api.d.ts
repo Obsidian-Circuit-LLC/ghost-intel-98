@@ -878,6 +878,9 @@ export interface GhostApi {
       blocked: boolean;
       reason?: string;
       cancelled: boolean;
+      /** Every completed cycle's captured records, in run order — surfaced in the LIVE FEED
+       *  just like a single RUN ONE CYCLE. */
+      items: HarvestedItem[];
       state: { cursor: string | null; cycles: number; lastRunAt: string | null };
     }>;
   };

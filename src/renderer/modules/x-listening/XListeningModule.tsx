@@ -406,6 +406,8 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
           setNotice(res.reason ?? 'Archive run stopped — X presented a challenge.');
           return;
         }
+        // Surface the run's captured records in the LIVE FEED, exactly like RUN ONE CYCLE.
+        mergeItems((res.items ?? []) as unknown as XFeedItem[]);
         setNotice(
           res.cyclesRun > 0
             ? `Ran ${res.cyclesRun} archive cycle(s); ${res.totalAdded} new record(s).`
@@ -413,7 +415,7 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
         );
       }, `Archive run complete for @${handle}.`);
     },
-    [requireCase, run, archiveMaxCycles]
+    [requireCase, run, mergeItems, archiveMaxCycles]
   );
 
   // ── item export ──────────────────────────────────────────────────────────
@@ -641,7 +643,7 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
                   )}
                   <div className="xls-account-body">
                     <strong>{acc.displayName || 'Not visible'}</strong>
-                    <span>@{acc.handle}</span>
+                    <span>@{String(acc.handle).replace(/^@+/, '')}</span>
                     <p>{acc.bio || 'No visible bio captured.'}</p>
                   </div>
                 </article>
