@@ -308,6 +308,82 @@ describe('captureThreadComments: comment gate end-to-end', () => {
     expect(res.added).toBe(1);
   });
 
+  it('navigates the thread BEFORE the challenge-refusal guard probes it', async () => {
+    // Regression: the guard must probe the LOADED thread page, not the pre-nav
+    // page. Navigating into a thread is exactly when X throws a challenge; the
+    // probe has to see it. We record call order — navigate must precede guard.
+    const { captureThreadComments } = await import('../src/main/x-listening/ipc');
+    const order: string[] = [];
+    const navigate = vi.fn(async () => {
+      order.push('navigate');
+    });
+    const guard = vi.fn(async (_win: unknown, capture: () => Promise<unknown>) => {
+      order.push('guard');
+      return { blocked: false, result: await capture() };
+    });
+    await captureThreadComments(
+      {} as unknown as Electron.BrowserWindow,
+      {
+        caseId: 'case-a',
+        jobId: 'job-1',
+        channelId: 'target',
+        channelLabel: '@target',
+        rootPostId: '100',
+        rootPostUrl: 'https://x.com/target/status/100',
+        collect: { replies: false, reposts: false, comments: true },
+      },
+      {
+        navigate,
+        guard: guard as never,
+        runCapture: async () => [],
+        resolveMedia: async () => 'data:image/jpeg;base64,ZZZ',
+        saveItems: async (_c, items) => ({ added: items.length, skipped: 0 }),
+        now: () => '2026-08-06T12:00:00.000Z',
+      },
+    );
+    expect(order).toEqual(['navigate', 'guard']);
+  });
+
+  it('STOPS on a challenge presented by the LOADED thread page — no capture, no persist', async () => {
+    // With navigation moved ahead of the guard, a rate-limit / verification
+    // interstitial thrown by the thread navigation is seen by the probe: the
+    // guard returns blocked and the payload never runs. Honesty invariant intact.
+    const { captureThreadComments } = await import('../src/main/x-listening/ipc');
+    const navigate = vi.fn(async () => {});
+    const runCapture = vi.fn(async () => []);
+    const saveItems = vi.fn(async () => ({ added: 0, skipped: 0 }));
+    const res = await captureThreadComments(
+      {} as unknown as Electron.BrowserWindow,
+      {
+        caseId: 'case-a',
+        jobId: 'job-1',
+        channelId: 'target',
+        channelLabel: '@target',
+        rootPostId: '100',
+        rootPostUrl: 'https://x.com/target/status/100',
+        collect: { replies: false, reposts: false, comments: true },
+      },
+      {
+        navigate,
+        // The guard probes the loaded thread page and finds a challenge.
+        guard: async () => ({
+          blocked: true,
+          reason: 'X presented a verification challenge or temporary limit.',
+        }),
+        runCapture,
+        saveItems,
+        now: () => '2026-08-06T12:00:00.000Z',
+      },
+    );
+    // Navigation happened (it precedes the guard), but the challenge stopped
+    // everything downstream: no payload run, nothing persisted, blocked reported.
+    expect(navigate).toHaveBeenCalledTimes(1);
+    expect(res.blocked).toBe(true);
+    expect(runCapture).not.toHaveBeenCalled();
+    expect(saveItems).not.toHaveBeenCalled();
+    expect(res.items).toEqual([]);
+  });
+
   it('refuses to navigate an off-domain root URL (scheme/host guard)', async () => {
     const { captureThreadComments } = await import('../src/main/x-listening/ipc');
     const navigate = vi.fn(async () => {});

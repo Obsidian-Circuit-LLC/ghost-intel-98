@@ -410,8 +410,16 @@ export async function captureThreadComments(
     channelLabel: req.channelLabel
   };
 
+  // Navigate into the thread FIRST, THEN gate. The challenge-refusal probe must
+  // run against the LOADED thread page — navigating into a thread is exactly when
+  // X throws a rate-limit / verification interstitial. If the guard fronted the
+  // navigation (probing the pre-nav page) capture would run on the challenge page
+  // and report `blocked:false`, silently weakening the STOP-on-challenge honesty
+  // invariant. `safeUrl` is already scheme/host guarded (x.com/twitter.com https).
+  // Mirrors quarantine `main.cjs:481-482`: loadURL(rootPost.url) THEN
+  // assertSignedInPage(win).
+  await deps.navigate(win, safeUrl);
   const gated = await deps.guard(win, async () => {
-    await deps.navigate(win, safeUrl);
     const rawCollected = await deps.runCapture(win, X_POST_SCRIPT);
     const raws: RawPost[] = Array.isArray(rawCollected) ? (rawCollected as RawPost[]) : [];
     const comments = selectThreadComments(raws, req.channelId, req.rootPostId, collect);
