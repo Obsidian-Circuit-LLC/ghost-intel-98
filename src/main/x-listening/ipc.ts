@@ -1307,6 +1307,40 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
     });
   });
 
+  // X4: third-party comments under one of the target's root posts. Same trust boundary as
+  // `capture` — sender check, UUID-gated caseId, connectivity check — plus the collect toggles
+  // read MAIN-side (the `comments` gate is enforced inside `captureThreadComments`; the renderer
+  // never widens capture). The root URL is scheme/host guarded inside the module before any nav.
+  deps.handle(channels.xListening.captureThreadComments, async (e, reqArg) => {
+    assertTrustedSender(e);
+    const req = reqArg as Partial<ThreadCaptureRequest> | undefined;
+    if (
+      !req ||
+      typeof req.caseId !== 'string' ||
+      typeof req.channelId !== 'string' ||
+      typeof req.rootPostId !== 'string' ||
+      typeof req.rootPostUrl !== 'string'
+    ) {
+      throw new Error(
+        'Capturing thread comments requires a caseId, channelId, rootPostId and rootPostUrl.'
+      );
+    }
+    const caseId = ensureUuid(req.caseId, 'caseId');
+    if (!xWindow || xWindow.isDestroyed()) {
+      throw new Error('X is not connected. Open the connect window and sign in before capturing.');
+    }
+    const collect = await loadCollectSettings();
+    return captureThreadComments(xWindow, {
+      caseId,
+      jobId: typeof req.jobId === 'string' ? req.jobId : caseId,
+      channelId: req.channelId,
+      channelLabel: typeof req.channelLabel === 'string' ? req.channelLabel : `@${req.channelId}`,
+      rootPostId: req.rootPostId,
+      rootPostUrl: req.rootPostUrl,
+      collect
+    });
+  });
+
   const networkHandler =
     (kind: 'followers' | 'following') =>
     (e: Electron.IpcMainInvokeEvent, reqArg: unknown) => {
@@ -1380,5 +1414,61 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
       throw new Error('Export requires a format of json, csv, pdf or docx.');
     }
     return exportXItems(ensureUuid(req.caseId, 'caseId'), req.format);
+  });
+
+  // X7: low-rate archive cycles. Same trust boundary as `capture` (sender check, UUID-gated
+  // caseId, connectivity check). The `archiveCycles` enablement is read MAIN-side inside
+  // `runArchiveCycle`/`runArchiveCycles` (fail-closed OFF) and the collect toggles are read
+  // MAIN-side here — the renderer never widens what an archive cycle captures.
+  deps.handle(channels.xListening.runArchiveCycle, async (e, reqArg) => {
+    assertTrustedSender(e);
+    const req = reqArg as Partial<ArchiveCycleRequest> | undefined;
+    if (!req || typeof req.caseId !== 'string' || typeof req.channelId !== 'string') {
+      throw new Error('An archive cycle requires a caseId and a target channelId.');
+    }
+    const caseId = ensureUuid(req.caseId, 'caseId');
+    if (!xWindow || xWindow.isDestroyed()) {
+      throw new Error('X is not connected. Open the connect window and sign in before archiving.');
+    }
+    const collect = await loadCollectSettings();
+    return runArchiveCycle(xWindow, {
+      caseId,
+      jobId: typeof req.jobId === 'string' ? req.jobId : caseId,
+      channelId: req.channelId,
+      channelLabel: typeof req.channelLabel === 'string' ? req.channelLabel : `@${req.channelId}`,
+      collect
+    });
+  });
+
+  deps.handle(channels.xListening.runArchiveCycles, async (e, reqArg) => {
+    assertTrustedSender(e);
+    const req = reqArg as
+      | (Partial<ArchiveCycleRequest> & { maxCycles?: unknown; delayMs?: unknown })
+      | undefined;
+    if (!req || typeof req.caseId !== 'string' || typeof req.channelId !== 'string') {
+      throw new Error('An archive run requires a caseId and a target channelId.');
+    }
+    const caseId = ensureUuid(req.caseId, 'caseId');
+    if (!xWindow || xWindow.isDestroyed()) {
+      throw new Error('X is not connected. Open the connect window and sign in before archiving.');
+    }
+    const collect = await loadCollectSettings();
+    // maxCycles/delayMs are clamped inside runArchiveCycles ([0,1000] cycles, delayMs >= 0);
+    // default to a single cycle so a bare call never launches a long unattended run.
+    const maxCycles = Number(req.maxCycles);
+    return runArchiveCycles(
+      xWindow,
+      {
+        caseId,
+        jobId: typeof req.jobId === 'string' ? req.jobId : caseId,
+        channelId: req.channelId,
+        channelLabel: typeof req.channelLabel === 'string' ? req.channelLabel : `@${req.channelId}`,
+        collect
+      },
+      {
+        maxCycles: Number.isFinite(maxCycles) && maxCycles > 0 ? maxCycles : 1,
+        ...(typeof req.delayMs === 'number' ? { delayMs: req.delayMs } : {})
+      }
+    );
   });
 }

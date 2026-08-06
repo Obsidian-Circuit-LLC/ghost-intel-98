@@ -60,6 +60,11 @@ describe('X Listening Station — shell', () => {
         connect: vi.fn(async () => ({ opened: true })),
         status: vi.fn(async () => ({ connected: false })),
       },
+      // The full module reads collect/archive settings on mount; stub the surface it touches.
+      settings: {
+        read: vi.fn(async () => ({ xListening: { collect: { replies: false, reposts: false, comments: false }, archiveCycles: false } })),
+        update: vi.fn(async () => undefined),
+      },
     };
     container = document.createElement('div');
     document.body.appendChild(container);

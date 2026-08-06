@@ -704,6 +704,14 @@ const api = {
       channelId: string;
       channelLabel?: string;
     }) => ipcRenderer.invoke(channels.xListening.capture, req),
+    captureThreadComments: (req: {
+      caseId: string;
+      jobId?: string;
+      channelId: string;
+      channelLabel?: string;
+      rootPostId: string;
+      rootPostUrl: string;
+    }) => ipcRenderer.invoke(channels.xListening.captureThreadComments, req),
     captureFollowers: (req: { caseId: string; jobId?: string; target: string }) =>
       ipcRenderer.invoke(channels.xListening.captureFollowers, req),
     captureFollowing: (req: { caseId: string; jobId?: string; target: string }) =>
@@ -714,6 +722,20 @@ const api = {
       ipcRenderer.invoke(channels.xListening.saveNote, req),
     readNotes: (caseId: string) =>
       ipcRenderer.invoke(channels.xListening.readNotes, caseId),
+    runArchiveCycle: (req: {
+      caseId: string;
+      jobId?: string;
+      channelId: string;
+      channelLabel?: string;
+    }) => ipcRenderer.invoke(channels.xListening.runArchiveCycle, req),
+    runArchiveCycles: (req: {
+      caseId: string;
+      jobId?: string;
+      channelId: string;
+      channelLabel?: string;
+      maxCycles?: number;
+      delayMs?: number;
+    }) => ipcRenderer.invoke(channels.xListening.runArchiveCycles, req),
     exportItems: (req: { caseId: string; format: 'json' | 'csv' | 'pdf' | 'docx' }) =>
       ipcRenderer.invoke(channels.xListening.exportItems, req)
   },

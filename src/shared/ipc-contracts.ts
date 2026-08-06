@@ -529,6 +529,10 @@ export const channels = {
     status: 'xListening:status',
     /** Visible-DOM timeline capture → normalized HarvestedItems in the encrypted case store. */
     capture: 'xListening:capture',
+    /** Third-party comments under one of the target's root posts → encrypted case store (X4).
+     *  Gated MAIN-side on `AppSettings.xListening.collect.comments`; navigates only a
+     *  scheme/host-guarded x.com/twitter.com permalink. */
+    captureThreadComments: 'xListening:captureThreadComments',
     /** Visible follower `UserCell` extraction → encrypted `networks` artifact store (X5). */
     captureFollowers: 'xListening:captureFollowers',
     /** Visible following `UserCell` extraction → encrypted `networks` artifact store (X5). */
@@ -539,6 +543,13 @@ export const channels = {
     saveNote: 'xListening:saveNote',
     /** Read a case's analyst notes from the encrypted `notes` store (X6). */
     readNotes: 'xListening:readNotes',
+    /** Run ONE bounded, low-rate archive cycle over the target timeline (X7). Gated MAIN-side
+     *  on `AppSettings.xListening.archiveCycles` (fail-closed OFF); advances resumable state
+     *  only on a completed run. */
+    runArchiveCycle: 'xListening:runArchiveCycle',
+    /** Run a BOUNDED, cancellable sequence of low-rate archive cycles (X7). Stops the instant a
+     *  cycle does not complete (toggle off / challenge-blocked). */
+    runArchiveCycles: 'xListening:runArchiveCycles',
     /** Serialize a case's captured items to JSON/CSV/PDF/DOCX via the app's existing exporters (X8). */
     exportItems: 'xListening:exportItems'
   },

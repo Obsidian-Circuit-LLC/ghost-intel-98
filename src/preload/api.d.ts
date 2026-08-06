@@ -771,6 +771,27 @@ export interface GhostApi {
       items: HarvestedItem[];
     }>;
     /**
+     * Capture the THIRD-PARTY comments under one of the target's root posts → normalized,
+     * honesty-stamped HarvestedItems (`kind:'comment'`) in the encrypted case store. Gated
+     * MAIN-side on `AppSettings.xListening.collect.comments` (off ⇒ nothing captured, the
+     * window is never navigated). The root URL is scheme/host guarded before any navigation;
+     * refuses on a verification/rate-limit page (`blocked:true`).
+     */
+    captureThreadComments(req: {
+      caseId: string;
+      jobId?: string;
+      channelId: string;
+      channelLabel?: string;
+      rootPostId: string;
+      rootPostUrl: string;
+    }): Promise<{
+      blocked: boolean;
+      reason?: string;
+      added: number;
+      skipped: number;
+      items: HarvestedItem[];
+    }>;
+    /**
      * Capture the target's visible FOLLOWERS from the followers surface → the ACTUAL
      * visible accounts (never a scraped count-number) in the encrypted `networks`
      * artifact store. Refuses on a verification/rate-limit page (`blocked:true`).
@@ -818,6 +839,46 @@ export interface GhostApi {
       data: string;
       mime: string;
       suggestedName: string;
+    }>;
+    /**
+     * Run ONE bounded, low-rate archive cycle over the target's timeline. Gated MAIN-side on
+     * `AppSettings.xListening.archiveCycles` (fail-closed OFF ⇒ `ran:false`, no capture, state
+     * untouched). On a completed run the resumable state advances (cycle count + cursor +
+     * main-side clock); a challenge-blocked cycle does NOT advance state.
+     */
+    runArchiveCycle(req: {
+      caseId: string;
+      jobId?: string;
+      channelId: string;
+      channelLabel?: string;
+    }): Promise<{
+      ran: boolean;
+      blocked: boolean;
+      reason?: string;
+      added: number;
+      skipped: number;
+      items: HarvestedItem[];
+      state: { cursor: string | null; cycles: number; lastRunAt: string | null };
+    }>;
+    /**
+     * Run a BOUNDED, cancellable sequence of low-rate archive cycles. Stops the instant a cycle
+     * does not complete (toggle turned off / challenge-blocked). `maxCycles` is clamped to
+     * [0, 1000] main-side; a low-rate delay sits between cycles.
+     */
+    runArchiveCycles(req: {
+      caseId: string;
+      jobId?: string;
+      channelId: string;
+      channelLabel?: string;
+      maxCycles?: number;
+      delayMs?: number;
+    }): Promise<{
+      cyclesRun: number;
+      totalAdded: number;
+      blocked: boolean;
+      reason?: string;
+      cancelled: boolean;
+      state: { cursor: string | null; cycles: number; lastRunAt: string | null };
     }>;
   };
   /**

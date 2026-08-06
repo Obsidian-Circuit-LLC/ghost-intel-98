@@ -108,6 +108,35 @@ describe('seam A — the preload forwards the full payload the handler needs', (
     expect(payload.channelId).toBe('target'); // the field the v3.24.2-class bug would drop
   });
 
+  it('captureThreadComments() sends { caseId, channelId, rootPostId, rootPostUrl }', async () => {
+    await api().xListening.captureThreadComments({
+      caseId: 'c1',
+      channelId: 'target',
+      rootPostId: '123',
+      rootPostUrl: 'https://x.com/target/status/123',
+    });
+    const payload = rec.calls.find((c) => c.channel === channels.xListening.captureThreadComments)!
+      .args[0] as Record<string, unknown>;
+    expect(payload.caseId).toBe('c1');
+    expect(payload.channelId).toBe('target');
+    expect(payload.rootPostId).toBe('123');
+    expect(payload.rootPostUrl).toBe('https://x.com/target/status/123');
+  });
+
+  it('runArchiveCycle()/runArchiveCycles() send { caseId, channelId } (+ maxCycles)', async () => {
+    await api().xListening.runArchiveCycle({ caseId: 'c1', channelId: 'target' });
+    await api().xListening.runArchiveCycles({ caseId: 'c1', channelId: 'target', maxCycles: 3 });
+    const one = rec.calls.find((c) => c.channel === channels.xListening.runArchiveCycle)!
+      .args[0] as Record<string, unknown>;
+    expect(one.caseId).toBe('c1');
+    expect(one.channelId).toBe('target');
+    const many = rec.calls.find((c) => c.channel === channels.xListening.runArchiveCycles)!
+      .args[0] as Record<string, unknown>;
+    expect(many.caseId).toBe('c1');
+    expect(many.channelId).toBe('target');
+    expect(many.maxCycles).toBe(3);
+  });
+
   it('saveNote() sends { caseId, findingId, text }', async () => {
     await api().xListening.saveNote({ caseId: 'c1', findingId: 'f1', text: 'note' });
     const call = rec.calls.find((c) => c.channel === channels.xListening.saveNote)!;
@@ -166,6 +195,25 @@ describe('seam B — the real handler rejects a payload missing a required field
     await connectXSession(); // set the live window so validation (not the connectivity gate) is reached
     await expect(call(channels.xListening.capture, { caseId: 'c1' })).rejects.toThrow(/Capture requires a caseId and a target channelId/);
     await expect(call(channels.xListening.capture, { channelId: 'target' })).rejects.toThrow(/Capture requires a caseId and a target channelId/);
+  });
+
+  it('captureThreadComments requires caseId, channelId, rootPostId AND rootPostUrl', async () => {
+    register();
+    await connectXSession();
+    await expect(
+      call(channels.xListening.captureThreadComments, { caseId: 'c1', channelId: 'target', rootPostId: '123' })
+    ).rejects.toThrow(/requires a caseId, channelId, rootPostId and rootPostUrl/);
+    await expect(
+      call(channels.xListening.captureThreadComments, { channelId: 'target', rootPostId: '123', rootPostUrl: 'https://x.com/t/status/1' })
+    ).rejects.toThrow(/requires a caseId, channelId, rootPostId and rootPostUrl/);
+  });
+
+  it('runArchiveCycle / runArchiveCycles require a caseId and a target channelId', async () => {
+    register();
+    await connectXSession();
+    await expect(call(channels.xListening.runArchiveCycle, { caseId: 'c1' })).rejects.toThrow(/archive cycle requires a caseId and a target channelId/);
+    await expect(call(channels.xListening.runArchiveCycle, { channelId: 'target' })).rejects.toThrow(/archive cycle requires a caseId and a target channelId/);
+    await expect(call(channels.xListening.runArchiveCycles, { caseId: 'c1' })).rejects.toThrow(/archive run requires a caseId and a target channelId/);
   });
 
   it('saveNote requires caseId, findingId AND text', async () => {

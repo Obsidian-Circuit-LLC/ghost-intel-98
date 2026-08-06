@@ -132,3 +132,212 @@
   gap: 8px;
   margin-top: 10px;
 }
+
+/* ── Full UI (Tasks X3–X8) ───────────────────────────────────────────────── */
+.xls-session-spacer { flex: 1 1 auto; }
+
+.xls-tabs {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 6px 8px 0;
+  background: #12121f;
+  border-bottom: 1px solid #2a2a3c;
+}
+.xls-tab {
+  font-family: inherit;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  padding: 6px 12px;
+  background: #191926;
+  color: #9090a0;
+  border: 1px solid #2a2a3c;
+  border-bottom: none;
+  cursor: pointer;
+}
+.xls-tab:hover { color: #d8d8e0; }
+.xls-tab-active {
+  background: #23233a;
+  color: #e8e8f0;
+}
+
+.xls-notice {
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  font-size: 11px;
+  color: #b8b8c8;
+  background: #10101a;
+  border-bottom: 1px solid #22222f;
+}
+
+.xls-body {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 16px;
+}
+.xls-panel { max-width: 900px; }
+.xls-panel-title,
+.xls-subtitle {
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: #e8e8f0;
+  margin: 0 0 10px;
+}
+.xls-subtitle { margin-top: 16px; }
+.xls-panel-title-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.xls-count { font-size: 11px; color: #8a8aa0; }
+.xls-help { font-size: 11px; line-height: 1.5; color: #9090a0; margin: 8px 0; }
+
+.xls-input {
+  font-family: inherit;
+  font-size: 12px;
+  padding: 5px 8px;
+  background: #10101a;
+  color: #d8d8e0;
+  border: 1px solid #33334d;
+}
+.xls-add-source { display: flex; gap: 8px; margin-bottom: 12px; }
+.xls-add-source .xls-input { flex: 1 1 auto; }
+
+.xls-source-list { list-style: none; margin: 0; padding: 0; }
+.xls-source-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px;
+  background: #12121f;
+  border: 1px solid #2a2a3c;
+  margin-bottom: 6px;
+}
+.xls-source-selected { border-color: #4a4a70; }
+.xls-source-name {
+  font-family: inherit;
+  font-size: 13px;
+  color: #e8e8f0;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+.xls-source-actions { display: flex; gap: 6px; }
+.xls-btn-danger { border-color: #aa2020; color: #f0b0b0; }
+.xls-btn-danger:hover:not(:disabled) { background: #2a0808; }
+
+.xls-empty {
+  padding: 14px;
+  font-size: 12px;
+  color: #7a7a90;
+  text-align: center;
+}
+
+.xls-feed { display: flex; flex-direction: column; gap: 10px; }
+.xls-post-card {
+  padding: 12px;
+  background: #12121f;
+  border: 1px solid #2a2a3c;
+}
+.xls-post-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.xls-post-head strong { color: #e8e8f0; font-size: 13px; }
+.xls-kind {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: #8a8aa0;
+  border: 1px solid #33334d;
+  padding: 1px 5px;
+}
+.xls-post-head time { margin-left: auto; font-size: 11px; color: #7a7a90; }
+.xls-post-text { white-space: pre-wrap; font-size: 12px; line-height: 1.5; margin: 6px 0; }
+.xls-media-strip { display: flex; gap: 6px; margin: 6px 0; }
+.xls-media-strip img { max-width: 120px; max-height: 120px; border: 1px solid #2a2a3c; }
+.xls-metrics {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+  color: #9090a0;
+  margin-top: 6px;
+}
+.xls-metrics .xls-stamp { margin-left: auto; color: #6a6a80; }
+.xls-post-actions { display: flex; gap: 6px; margin-top: 8px; }
+
+.xls-network-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+  margin-bottom: 12px;
+}
+.xls-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  color: #8a8aa0;
+}
+.xls-network-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.xls-network-list { display: flex; flex-direction: column; gap: 8px; }
+.xls-account-card {
+  display: flex;
+  gap: 10px;
+  padding: 10px;
+  background: #12121f;
+  border: 1px solid #2a2a3c;
+}
+.xls-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex: 0 0 auto;
+}
+.xls-avatar-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #23233a;
+  color: #8a8aa0;
+}
+.xls-account-body strong { display: block; color: #e8e8f0; font-size: 13px; }
+.xls-account-body span { font-size: 11px; color: #8a8aa0; }
+.xls-account-body p { font-size: 11px; color: #b8b8c8; margin: 4px 0 0; }
+
+.xls-notes-layout { display: flex; gap: 12px; align-items: flex-start; }
+.xls-finding-list { list-style: none; margin: 0; padding: 0; flex: 0 0 260px; }
+.xls-finding {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px;
+  background: #12121f;
+  border: 1px solid #2a2a3c;
+  color: #d8d8e0;
+  cursor: pointer;
+  margin-bottom: 4px;
+}
+.xls-finding-active { border-color: #6a5aa0; }
+.xls-finding strong { display: block; font-size: 12px; }
+.xls-finding span { display: block; font-size: 11px; color: #8a8aa0; }
+.xls-notes-detail { flex: 1 1 auto; }
+
+.xls-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #c8c8d4;
+  margin: 6px 0;
+  cursor: pointer;
+}
+.xls-export-actions,
+.xls-settings { margin-top: 8px; }
+.xls-export-actions { display: flex; gap: 8px; flex-wrap: wrap; }
