@@ -1,8 +1,10 @@
 /**
  * X Listening Station — visible-post extraction + normalization (Plan A, Task X3).
  *
- * Two halves, both PURE and quarantine-clean (this module imports only `node:crypto`
- * and the shared `HarvestedItem` TYPE — no electron, no bgconn/Tor/socmint/telegram):
+ * PURE and quarantine-clean: this module imports only `node:crypto`, the shared
+ * `HarvestedItem` TYPE, the network artifact TYPES from `./store` (type-only, erased
+ * at runtime), and `csvCell` from the sibling `../capture/security` (itself
+ * node:path-only) — no electron, no bgconn/Tor/socmint/telegram:
  *
  *  1. `X_POST_SCRIPT` — the STATIC in-page payload the capture window runs via
  *     `executeJavaScript`. Ported verbatim-in-intent from quarantine
@@ -29,6 +31,8 @@
  */
 import { createHash } from 'node:crypto';
 import type { HarvestedItem } from '@shared/socmint/types';
+import { csvCell } from '../capture/security';
+import type { XNetworkAccount, XNetworkArtifact } from './store';
 
 // ---- captured-DOM raw shape --------------------------------------------
 
@@ -408,4 +412,151 @@ export function selectThreadComments(
     out.push(raw);
   }
   return out;
+}
+
+// ---- X5: follower / following network extraction ------------------------
+
+/**
+ * One raw `UserCell` as returned by `USER_CELL_SCRIPT`. `avatar` is the remote
+ * `profile_images` `src` at capture time; the orchestration resolves it to a
+ * `data:` thumbnail before normalization, and `normalizeUserCell` admits ONLY a
+ * `data:` avatar regardless (defense in depth — no remote media inlining).
+ */
+export interface RawUserCell {
+  /** The visible account handle (no leading `@`, or tolerated with one). */
+  username: string;
+  /** The visible display name. */
+  displayName: string;
+  /** The visible bio line(s), joined — may be ''. */
+  bio: string;
+  /** The visible profile permalink. */
+  url: string;
+  /** The avatar image `src` — resolved to a `data:` thumbnail before storage. */
+  avatar: string;
+}
+
+/** A visible X handle: 1–15 of `[A-Za-z0-9_]`. Anything else is not a real account. */
+const USERNAME_RE = /^[A-Za-z0-9_]{1,15}$/;
+
+/**
+ * STATIC in-page payload reading the visible follower/following `UserCell` rows.
+ * No interpolation — the ONLY inputs are literal selectors. Returns `RawUserCell[]`,
+ * filtered to cells that actually expose a handle and a profile link. Port of
+ * quarantine `readVisibleUserCells` (`electron/main.cjs:982-1011`).
+ */
+export const USER_CELL_SCRIPT = `
+  (() => {
+    const scope = document.querySelector('[data-testid="primaryColumn"]') || document.querySelector('main') || document;
+    return Array.from(scope.querySelectorAll('[data-testid="UserCell"]')).map((cell) => {
+      const rawText = cell.innerText || '';
+      const lines = rawText.split(/\\n+/).map((line) => line.trim()).filter(Boolean);
+      const links = Array.from(cell.querySelectorAll('a[href^="/"]'))
+        .map((link) => link.getAttribute('href') || '')
+        .filter(Boolean);
+      const profileHref = links.find((href) => /^\\/[A-Za-z0-9_]{1,15}$/.test(href)) || '';
+      const hrefMatch = profileHref.match(/^\\/([A-Za-z0-9_]{1,15})$/);
+      const textMatch = rawText.match(/(?:^|\\s)@([A-Za-z0-9_]{1,15})(?:\\b|$)/);
+      const username = (hrefMatch && hrefMatch[1]) || (textMatch && textMatch[1]) || '';
+      const displayName = lines.find((line) => !line.startsWith('@') && !/^(Follow|Following|Follows you|Verified)$/i.test(line)) || username;
+      const ignored = new Set([displayName, '@' + username, 'Follow', 'Following', 'Follows you', 'Verified']);
+      const bio = lines.filter((line) => !ignored.has(line)).join(' ').trim();
+      const avatar = (cell.querySelector('img[src*="profile_images"]') || {}).getAttribute
+        ? (cell.querySelector('img[src*="profile_images"]').getAttribute('src') || '')
+        : '';
+      return {
+        username: username,
+        displayName: displayName,
+        bio: bio,
+        url: profileHref ? new URL(profileHref, location.origin).href : '',
+        avatar: avatar
+      };
+    }).filter((item) => item.username && item.url);
+  })()
+`;
+
+/**
+ * Map one captured `UserCell` → an `XNetworkAccount`, or `null` when the handle is
+ * not a real X username (never fabricate a row). The avatar is admitted ONLY as a
+ * local `data:` thumbnail — a remote `profile_images` URL is DROPPED (no remote
+ * media inlining). An empty bio is omitted rather than stored as ''.
+ */
+export function normalizeUserCell(raw: RawUserCell): XNetworkAccount | null {
+  const username = String(raw?.username ?? '').replace(/^@+/, '');
+  if (!USERNAME_RE.test(username)) return null;
+  const account: XNetworkAccount = {
+    handle: `@${username}`,
+    displayName: String(raw?.displayName ?? '').trim() || username,
+  };
+  const bio = String(raw?.bio ?? '').trim();
+  if (bio) account.bio = bio;
+  const avatar = String(raw?.avatar ?? '');
+  if (avatar.startsWith('data:')) account.avatar = avatar;
+  return account;
+}
+
+/**
+ * Turn the captured `UserCell` rows into an `XNetworkArtifact`: the ACTUAL visible
+ * accounts, deduped case-insensitively by handle, invalid handles dropped. HONESTY:
+ * the artifact records the accounts the module SAW — it never carries a scraped
+ * follower/following count-number (the count is `accounts.length`, nothing more).
+ * `capturedAt` is the caller's injected clock. Port + honesty-fix of quarantine
+ * `ingestRelationships` (`electron/main.cjs:1013-1044`), which mutated shared
+ * app-state and sorted; here it is a pure function returning a fresh artifact.
+ */
+export function normalizeNetwork(
+  rows: readonly RawUserCell[] | undefined,
+  target: string,
+  kind: 'followers' | 'following',
+  capturedAt: string,
+): XNetworkArtifact {
+  const seen = new Set<string>();
+  const accounts: XNetworkAccount[] = [];
+  for (const raw of rows ?? []) {
+    const account = normalizeUserCell(raw);
+    if (!account) continue;
+    const key = account.handle.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    accounts.push(account);
+  }
+  const t = String(target ?? '').replace(/^@+/, '');
+  return { target: `@${t}`, kind, accounts, capturedAt };
+}
+
+/** CSV columns for a follower/following network export. */
+export const NETWORK_CSV_HEADER = [
+  'target',
+  'relationship',
+  'handle',
+  'display_name',
+  'bio',
+  'captured_at',
+] as const;
+
+/**
+ * Serialize captured network artifacts to a CSV string, one row per account, with
+ * EVERY cell routed through `csvCell` — so a scraped bio like `=HYPERLINK("http://evil")`
+ * is neutralized as literal text (the review's spreadsheet formula-injection finding).
+ * A leading BOM + CRLF line endings match the app's other CSV exports. Port of
+ * quarantine `exportRelationshipsCsv` (`electron/main.cjs:1146-1170`).
+ */
+export function networkToCsv(artifacts: readonly XNetworkArtifact[] | undefined): string {
+  const lines: string[] = [NETWORK_CSV_HEADER.map((h) => csvCell(h)).join(',')];
+  for (const art of artifacts ?? []) {
+    for (const account of art.accounts ?? []) {
+      lines.push(
+        [
+          art.target,
+          art.kind,
+          account.handle,
+          account.displayName,
+          account.bio ?? '',
+          art.capturedAt,
+        ]
+          .map((cellValue) => csvCell(String(cellValue ?? '')))
+          .join(','),
+      );
+    }
+  }
+  return `﻿${lines.join('\r\n')}`;
 }

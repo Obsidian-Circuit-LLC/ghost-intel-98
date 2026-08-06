@@ -112,6 +112,11 @@ export interface XStore {
   networks: {
     read(caseId: string): Promise<XNetworkArtifact[]>;
     write(caseId: string, networks: XNetworkArtifact[]): Promise<void>;
+    /**
+     * Upsert one captured network artifact, keyed by (target, kind) case-insensitively
+     * — a re-capture of the same target's followers replaces the prior snapshot rather
+     * than duplicating it. Returns the total artifact count for the case. */
+    save(caseId: string, artifact: XNetworkArtifact): Promise<number>;
   };
   archiveState: {
     /** Null before the first write. */
@@ -172,6 +177,19 @@ export function makeXStore(deps: XStoreDeps): XStore {
         return withLock(`x-listening:networks:${caseId}`, () =>
           writeJson(deps, deps.networksPath(caseId), networks),
         );
+      },
+      save(caseId, artifact) {
+        return withLock(`x-listening:networks:${caseId}`, async () => {
+          const existing = await readJsonArr<XNetworkArtifact>(deps, deps.networksPath(caseId));
+          const target = String(artifact.target ?? '').toLowerCase();
+          const idx = existing.findIndex(
+            (a) => String(a.target ?? '').toLowerCase() === target && a.kind === artifact.kind,
+          );
+          if (idx >= 0) existing[idx] = artifact;
+          else existing.push(artifact);
+          await writeJson(deps, deps.networksPath(caseId), existing);
+          return existing.length;
+        });
       },
     },
 

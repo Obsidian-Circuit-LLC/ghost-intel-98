@@ -839,6 +839,28 @@ export interface GhostApi {
       skipped: number;
       items: HarvestedItem[];
     }>;
+    /**
+     * Capture the target's visible FOLLOWERS from the followers surface → the ACTUAL
+     * visible accounts (never a scraped count-number) in the encrypted `networks`
+     * artifact store. Refuses on a verification/rate-limit page (`blocked:true`).
+     */
+    captureFollowers(req: { caseId: string; jobId?: string; target: string }): Promise<{
+      blocked: boolean;
+      reason?: string;
+      target: string;
+      kind: 'followers' | 'following';
+      accounts: Array<{ handle: string; displayName: string; avatar?: string; bio?: string }>;
+    }>;
+    /** Capture the accounts the target is FOLLOWING. Same honesty guarantees as `captureFollowers`. */
+    captureFollowing(req: { caseId: string; jobId?: string; target: string }): Promise<{
+      blocked: boolean;
+      reason?: string;
+      target: string;
+      kind: 'followers' | 'following';
+      accounts: Array<{ handle: string; displayName: string; avatar?: string; bio?: string }>;
+    }>;
+    /** Serialize the case's captured networks to a formula-guarded CSV string. */
+    exportNetwork(caseId: string): Promise<{ csv: string; count: number }>;
   };
   /**
    * GhostScrape — hidden-browser X timeline/profile scraper (clearnet quarantine module).

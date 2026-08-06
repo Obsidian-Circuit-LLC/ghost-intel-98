@@ -736,7 +736,13 @@ const api = {
       jobId?: string;
       channelId: string;
       channelLabel?: string;
-    }) => ipcRenderer.invoke(channels.xListening.capture, req)
+    }) => ipcRenderer.invoke(channels.xListening.capture, req),
+    captureFollowers: (req: { caseId: string; jobId?: string; target: string }) =>
+      ipcRenderer.invoke(channels.xListening.captureFollowers, req),
+    captureFollowing: (req: { caseId: string; jobId?: string; target: string }) =>
+      ipcRenderer.invoke(channels.xListening.captureFollowing, req),
+    exportNetwork: (caseId: string) =>
+      ipcRenderer.invoke(channels.xListening.exportNetwork, caseId)
   },
   // GhostScrape — hidden-browser X timeline/profile scraper (clearnet quarantine, GS-6).
   // Reuses the SAME two-flag gate + shared x.accounts.<id> session cookies as the x

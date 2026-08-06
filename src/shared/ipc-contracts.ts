@@ -596,7 +596,13 @@ export const channels = {
     /** Derive a `connected` boolean from the auth-cookie presence — never returns the token. */
     status: 'xListening:status',
     /** Visible-DOM timeline capture → normalized HarvestedItems in the encrypted case store. */
-    capture: 'xListening:capture'
+    capture: 'xListening:capture',
+    /** Visible follower `UserCell` extraction → encrypted `networks` artifact store (X5). */
+    captureFollowers: 'xListening:captureFollowers',
+    /** Visible following `UserCell` extraction → encrypted `networks` artifact store (X5). */
+    captureFollowing: 'xListening:captureFollowing',
+    /** Serialize a case's captured networks to a formula-guarded CSV string (X5). */
+    exportNetwork: 'xListening:exportNetwork'
   },
   // GhostScrape — hidden-browser X timeline/profile scraper (clearnet quarantine module, GS-6).
   // Reuses the SAME two-flag gate (x.networkEnabled && x.clearnetAcknowledged) and shared

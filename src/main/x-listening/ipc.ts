@@ -28,20 +28,25 @@ import {
 import { remoteMediaToDataUri, type MediaCapturePage } from '../capture/security';
 import {
   X_POST_SCRIPT,
+  USER_CELL_SCRIPT,
   normalizePost,
   normalizeReply,
   normalizeRepost,
   normalizeComment,
+  normalizeNetwork,
+  networkToCsv,
   selectTimelineCaptures,
   selectThreadComments,
   guardXPermalink,
   type RawPost,
+  type RawUserCell,
   type NormalizeContext,
   type XHarvestedItem,
   type XItemKind,
   type XCollectSettings
 } from './extract';
 import { prodXStore } from './store';
+import type { XNetworkAccount, XNetworkArtifact } from './store';
 
 /** Clearnet partition the authenticated X session lives on. Matches the X1 contract. */
 export const X_LISTENING_PARTITION = 'persist:x-listening';
@@ -457,6 +462,177 @@ async function loadCollectSettings(): Promise<XCollectSettings> {
   }
 }
 
+// ---- X5: follower / following network extraction ------------------------
+
+/** A follower/following extraction request for one target profile. */
+export interface NetworkCaptureRequest {
+  caseId: string;
+  jobId: string;
+  /** The profile whose followers/following to read (the @handle, with or without @). */
+  target: string;
+}
+
+/** The outcome of one network capture — the ACTUAL visible accounts, never a total. */
+export interface NetworkCaptureResult {
+  blocked: boolean;
+  reason?: string;
+  target: string;
+  kind: 'followers' | 'following';
+  /** The visible accounts captured this pass (honest — `accounts.length` is the count). */
+  accounts: XNetworkAccount[];
+}
+
+/** Injectable seams so the network orchestration is testable without electron/network. */
+export interface NetworkCaptureDeps {
+  /** Navigate the live capture window to a (already scheme/host-guarded) URL. */
+  navigate: (win: Electron.BrowserWindow, url: string) => Promise<void>;
+  /** Run the static UserCell payload in the capture page → RawUserCell[]. */
+  runCapture: (win: Electron.BrowserWindow, js: string) => Promise<unknown>;
+  /** Resolve a remote avatar URL to a local `data:` thumbnail, or null. */
+  resolveMedia: (win: MediaCapturePage, url: string) => Promise<string | null>;
+  /** The X2 challenge-refusal gate: runs `capture` only on a signed-in, unchallenged page. */
+  guard: <T>(
+    win: Electron.BrowserWindow,
+    capture: () => Promise<T>
+  ) => Promise<{ blocked: boolean; reason?: string; result?: T }>;
+  /** Persist the captured network artifact to the encrypted `networks` artifact store. */
+  saveNetwork: (caseId: string, artifact: XNetworkArtifact) => Promise<number>;
+  /** Injected clock — the ISO capture time stamped onto the artifact. */
+  now: () => string;
+}
+
+function defaultNetworkDeps(): NetworkCaptureDeps {
+  return {
+    navigate: async (win, url) => {
+      await win.webContents.loadURL(url);
+    },
+    runCapture,
+    resolveMedia: remoteMediaToDataUri,
+    guard: guardedCapture,
+    saveNetwork: async (caseId, artifact) => (await prodXStore()).networks.save(caseId, artifact),
+    now: () => new Date().toISOString()
+  };
+}
+
+/** A visible X handle: 1–15 of `[A-Za-z0-9_]`. Mirror of the extract-side guard. */
+const NETWORK_TARGET_RE = /^[A-Za-z0-9_]{1,15}$/;
+
+/**
+ * Resolve a captured cell's remote avatar to a local `data:` thumbnail, dropping it
+ * on failure. A remote URL is NEVER carried forward — combined with
+ * `normalizeUserCell`'s `data:`-only filter this guarantees no stored avatar can beacon.
+ */
+async function resolveCellAvatar(
+  win: Electron.BrowserWindow,
+  raw: RawUserCell,
+  resolveMedia: NetworkCaptureDeps['resolveMedia']
+): Promise<RawUserCell> {
+  const src = String(raw.avatar ?? '');
+  if (src.startsWith('data:')) return raw;
+  if (!src) return { ...raw, avatar: '' };
+  const dataUri = await resolveMedia(win, src);
+  return { ...raw, avatar: dataUri ?? '' };
+}
+
+/**
+ * Capture the visible follower/following accounts for one target profile (X5).
+ *
+ * Navigates the `x.com/<target>/(followers|following)` surface FIRST, THEN routes
+ * through the X2 challenge-refusal gate — a rate-limit / verification interstitial
+ * (which X throws exactly on these high-signal pages) is seen by the probe and stops
+ * the capture cleanly (`blocked:true`, nothing persisted). The URL is built from a
+ * validated `[A-Za-z0-9_]{1,15}` handle and scheme/host guarded before any
+ * navigation. The visible `UserCell` rows are normalized to the ACTUAL accounts —
+ * never a scraped count-number — each avatar resolved to a local `data:` thumbnail,
+ * and the artifact is upserted (keyed by target+kind) into the encrypted `networks`
+ * store. Port of quarantine `scrapeRelationshipRows`/`readVisibleUserCells`
+ * (`electron/main.cjs:982-1011`, `:1047-1082`), honesty-hardened.
+ */
+export async function captureNetwork(
+  win: Electron.BrowserWindow,
+  req: NetworkCaptureRequest,
+  kind: 'followers' | 'following',
+  overrides: Partial<NetworkCaptureDeps> = {}
+): Promise<NetworkCaptureResult> {
+  const username = String(req.target ?? '').replace(/^@+/, '');
+  if (!NETWORK_TARGET_RE.test(username)) {
+    return {
+      blocked: true,
+      reason: 'The target is not a valid X handle — refused to open a followers/following page for it.',
+      target: `@${username}`,
+      kind,
+      accounts: []
+    };
+  }
+
+  const safeUrl = guardXPermalink(`https://x.com/${username}/${kind}`);
+  if (!safeUrl) {
+    return {
+      blocked: true,
+      reason: 'The followers/following URL failed the x.com/twitter.com scheme-host guard.',
+      target: `@${username}`,
+      kind,
+      accounts: []
+    };
+  }
+
+  const deps = { ...defaultNetworkDeps(), ...overrides };
+
+  // Navigate into the followers/following surface FIRST, THEN gate. Same ordering
+  // invariant as the thread path: the challenge-refusal probe must run against the
+  // LOADED page — these relationship pages are exactly where X throws a rate-limit /
+  // verification interstitial. Gating before navigation would probe the pre-nav page
+  // and silently weaken the STOP-on-challenge honesty invariant.
+  await deps.navigate(win, safeUrl);
+  const gated = await deps.guard(win, async () => {
+    const rawCollected = await deps.runCapture(win, USER_CELL_SCRIPT);
+    const rows: RawUserCell[] = Array.isArray(rawCollected) ? (rawCollected as RawUserCell[]) : [];
+    const resolved: RawUserCell[] = [];
+    for (const row of rows) {
+      resolved.push(await resolveCellAvatar(win, row, deps.resolveMedia));
+    }
+    return normalizeNetwork(resolved, username, kind, deps.now());
+  });
+
+  if (gated.blocked) {
+    return { blocked: true, reason: gated.reason, target: `@${username}`, kind, accounts: [] };
+  }
+
+  const artifact = gated.result as XNetworkArtifact;
+  await deps.saveNetwork(req.caseId, artifact);
+  return { blocked: false, target: artifact.target, kind, accounts: artifact.accounts };
+}
+
+/** Capture the target's visible FOLLOWERS. See `captureNetwork`. */
+export function captureFollowers(
+  win: Electron.BrowserWindow,
+  req: NetworkCaptureRequest,
+  overrides: Partial<NetworkCaptureDeps> = {}
+): Promise<NetworkCaptureResult> {
+  return captureNetwork(win, req, 'followers', overrides);
+}
+
+/** Capture the accounts the target is FOLLOWING. See `captureNetwork`. */
+export function captureFollowing(
+  win: Electron.BrowserWindow,
+  req: NetworkCaptureRequest,
+  overrides: Partial<NetworkCaptureDeps> = {}
+): Promise<NetworkCaptureResult> {
+  return captureNetwork(win, req, 'following', overrides);
+}
+
+/**
+ * Read a case's captured networks and serialize them to a formula-guarded CSV string.
+ * The renderer hands the returned text to the app's existing file-save flow; every
+ * cell is neutralized by `csvCell` (via `networkToCsv`) so a scraped bio can never
+ * execute as a spreadsheet formula.
+ */
+export async function exportNetworkCsv(caseId: string): Promise<{ csv: string; count: number }> {
+  const artifacts = await (await prodXStore()).networks.read(caseId);
+  const count = artifacts.reduce((n, a) => n + (a.accounts?.length ?? 0), 0);
+  return { csv: networkToCsv(artifacts), count };
+}
+
 type HandleWithEvent = (
   channel: string,
   fn: (e: Electron.IpcMainInvokeEvent, ...args: unknown[]) => unknown
@@ -504,5 +680,37 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
       channelLabel: typeof req.channelLabel === 'string' ? req.channelLabel : `@${req.channelId}`,
       collect
     });
+  });
+
+  const networkHandler =
+    (kind: 'followers' | 'following') =>
+    (e: Electron.IpcMainInvokeEvent, reqArg: unknown) => {
+      assertTrustedSender(e);
+      if (!xWindow || xWindow.isDestroyed()) {
+        throw new Error('X is not connected. Open the connect window and sign in before capturing.');
+      }
+      const req = reqArg as Partial<NetworkCaptureRequest> | undefined;
+      if (!req || typeof req.caseId !== 'string' || typeof req.target !== 'string') {
+        throw new Error('A network capture requires a caseId and a target handle.');
+      }
+      return captureNetwork(
+        xWindow,
+        {
+          caseId: req.caseId,
+          jobId: typeof req.jobId === 'string' ? req.jobId : req.caseId,
+          target: req.target
+        },
+        kind
+      );
+    };
+  deps.handle(channels.xListening.captureFollowers, networkHandler('followers'));
+  deps.handle(channels.xListening.captureFollowing, networkHandler('following'));
+
+  deps.handle(channels.xListening.exportNetwork, (e, caseIdArg) => {
+    assertTrustedSender(e);
+    if (typeof caseIdArg !== 'string' || !caseIdArg) {
+      throw new Error('Network export requires a caseId.');
+    }
+    return exportNetworkCsv(caseIdArg);
   });
 }
