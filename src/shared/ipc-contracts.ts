@@ -602,7 +602,11 @@ export const channels = {
     /** Visible following `UserCell` extraction → encrypted `networks` artifact store (X5). */
     captureFollowing: 'xListening:captureFollowing',
     /** Serialize a case's captured networks to a formula-guarded CSV string (X5). */
-    exportNetwork: 'xListening:exportNetwork'
+    exportNetwork: 'xListening:exportNetwork',
+    /** Upsert one analyst note (keyed by findingId) into the encrypted `notes` store (X6). */
+    saveNote: 'xListening:saveNote',
+    /** Read a case's analyst notes from the encrypted `notes` store (X6). */
+    readNotes: 'xListening:readNotes'
   },
   // GhostScrape — hidden-browser X timeline/profile scraper (clearnet quarantine module, GS-6).
   // Reuses the SAME two-flag gate (x.networkEnabled && x.clearnetAcknowledged) and shared

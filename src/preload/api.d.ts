@@ -861,6 +861,18 @@ export interface GhostApi {
     }>;
     /** Serialize the case's captured networks to a formula-guarded CSV string. */
     exportNetwork(caseId: string): Promise<{ csv: string; count: number }>;
+    /**
+     * Upsert one analyst note against a finding (one note per finding — a re-save
+     * REPLACES it). Text is trimmed + validated (non-empty, ≤ 20 000 chars) and
+     * `savedAt` is stamped MAIN-side. Returns the fresh note list.
+     */
+    saveNote(req: { caseId: string; findingId: string; text: string }): Promise<{
+      notes: Array<{ findingId: string; text: string; savedAt: string }>;
+    }>;
+    /** Read the case's analyst notes from the encrypted `notes` store. */
+    readNotes(caseId: string): Promise<{
+      notes: Array<{ findingId: string; text: string; savedAt: string }>;
+    }>;
   };
   /**
    * GhostScrape — hidden-browser X timeline/profile scraper (clearnet quarantine module).

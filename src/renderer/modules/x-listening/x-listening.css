@@ -91,3 +91,44 @@
   border-color: #4a4a70;
 }
 .xls-btn-primary:hover:not(:disabled) { background: #40406e; }
+
+/* Analyst notes panel (X6) — one note per finding. */
+.xls-notes-panel {
+  margin-top: 14px;
+  padding: 12px;
+  background: #191926;
+  border: 1px solid #2a2a40;
+  border-left: 3px solid #6a5aa0;
+}
+.xls-notes-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.xls-notes-head strong { font-size: 12px; letter-spacing: 0.04em; }
+.xls-notes-saved { color: #8a8aa0; font-size: 11px; }
+.xls-notes-input {
+  width: 100%;
+  min-height: 90px;
+  resize: vertical;
+  box-sizing: border-box;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 8px;
+  background: #10101a;
+  color: #d8d8e0;
+  border: 1px solid #33334d;
+}
+.xls-notes-input:disabled { opacity: 0.55; }
+.xls-notes-error {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: #f0a0a0;
+}
+.xls-notes-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}

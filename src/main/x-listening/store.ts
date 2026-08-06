@@ -108,6 +108,13 @@ export interface XStore {
   notes: {
     read(caseId: string): Promise<XNote[]>;
     write(caseId: string, notes: XNote[]): Promise<void>;
+    /**
+     * Upsert ONE analyst note keyed by `findingId` — a re-save of the same finding
+     * REPLACES its note rather than appending a duplicate (an `XNote` carries no
+     * note-id; a finding has at most one note). `savedAt` is caller-supplied (the
+     * injected clock — determinism), never computed here. Returns the fresh note
+     * list so the caller can rerender without a second read. */
+    save(caseId: string, findingId: string, text: string, savedAt: string): Promise<XNote[]>;
   };
   networks: {
     read(caseId: string): Promise<XNetworkArtifact[]>;
@@ -164,6 +171,19 @@ export function makeXStore(deps: XStoreDeps): XStore {
         return withLock(`x-listening:notes:${caseId}`, () =>
           writeJson(deps, deps.notesPath(caseId), notes),
         );
+      },
+      save(caseId, findingId, text, savedAt) {
+        // Direct readJsonArr/writeJson (NOT notes.read/write) inside the lock:
+        // withLock is not reentrant, and read/write take the SAME key.
+        return withLock(`x-listening:notes:${caseId}`, async () => {
+          const existing = await readJsonArr<XNote>(deps, deps.notesPath(caseId));
+          const note: XNote = { findingId, text, savedAt };
+          const idx = existing.findIndex((n) => n.findingId === findingId);
+          if (idx >= 0) existing[idx] = note;
+          else existing.push(note);
+          await writeJson(deps, deps.notesPath(caseId), existing);
+          return existing;
+        });
       },
     },
 

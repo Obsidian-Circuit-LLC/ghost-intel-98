@@ -46,7 +46,7 @@ import {
   type XCollectSettings
 } from './extract';
 import { prodXStore } from './store';
-import type { XNetworkAccount, XNetworkArtifact } from './store';
+import type { XNetworkAccount, XNetworkArtifact, XNote } from './store';
 
 /** Clearnet partition the authenticated X session lives on. Matches the X1 contract. */
 export const X_LISTENING_PARTITION = 'persist:x-listening';
@@ -633,6 +633,73 @@ export async function exportNetworkCsv(caseId: string): Promise<{ csv: string; c
   return { csv: networkToCsv(artifacts), count };
 }
 
+// ---- X6: analyst notes --------------------------------------------------
+
+/** The longest note the store will accept — ported from quarantine `main.cjs:1310`. */
+export const NOTE_MAX_LENGTH = 20000;
+
+/** A note-save/read request from the renderer. `savedAt` is stamped MAIN-side. */
+export interface SaveNoteRequest {
+  caseId: string;
+  /** The finding the note is pinned to (one note per finding). */
+  findingId: string;
+  text: string;
+}
+
+/** Injectable seams so the notes orchestration is testable without electron/secure-fs. */
+export interface NotesDeps {
+  /** Upsert one note keyed by findingId → the fresh note list. */
+  saveNote: (caseId: string, findingId: string, text: string, savedAt: string) => Promise<XNote[]>;
+  /** Read the case's notes. */
+  readNotes: (caseId: string) => Promise<XNote[]>;
+  /** Injected clock — the ISO `savedAt` stamped onto the note (determinism). */
+  now: () => string;
+}
+
+function defaultNotesDeps(): NotesDeps {
+  return {
+    saveNote: async (caseId, findingId, text, savedAt) =>
+      (await prodXStore()).notes.save(caseId, findingId, text, savedAt),
+    readNotes: async (caseId) => (await prodXStore()).notes.read(caseId),
+    now: () => new Date().toISOString()
+  };
+}
+
+/**
+ * Save (upsert) an analyst note against a finding. The text is trimmed and validated
+ * (non-empty, ≤ NOTE_MAX_LENGTH) — ported from the quarantine `notes:add`/`notes:update`
+ * guards (`main.cjs:1308-1310`, `1321-1323`) — and `savedAt` is stamped MAIN-side from
+ * the injected clock, never accepted from the renderer. Returns the fresh note list.
+ */
+export async function saveNote(
+  req: SaveNoteRequest,
+  overrides: Partial<NotesDeps> = {}
+): Promise<{ notes: XNote[] }> {
+  const findingId = String(req?.findingId ?? '').trim();
+  if (!findingId) {
+    throw new Error('A note must be attached to a finding.');
+  }
+  const text = String(req?.text ?? '').trim();
+  if (!text) {
+    throw new Error('Note text is required.');
+  }
+  if (text.length > NOTE_MAX_LENGTH) {
+    throw new Error(`Note is too long. Maximum length is ${NOTE_MAX_LENGTH} characters.`);
+  }
+  const deps = { ...defaultNotesDeps(), ...overrides };
+  const notes = await deps.saveNote(req.caseId, findingId, text, deps.now());
+  return { notes };
+}
+
+/** Read a case's analyst notes (encrypted `notes` artifact store). */
+export async function readNotes(
+  caseId: string,
+  overrides: Partial<NotesDeps> = {}
+): Promise<{ notes: XNote[] }> {
+  const deps = { ...defaultNotesDeps(), ...overrides };
+  return { notes: await deps.readNotes(caseId) };
+}
+
 type HandleWithEvent = (
   channel: string,
   fn: (e: Electron.IpcMainInvokeEvent, ...args: unknown[]) => unknown
@@ -712,5 +779,29 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
       throw new Error('Network export requires a caseId.');
     }
     return exportNetworkCsv(caseIdArg);
+  });
+
+  // Notes are pure store ops (no capture window, no network) — they need no
+  // connectivity gate, only the sender check + arg validation. `savedAt` is stamped
+  // MAIN-side inside `saveNote`; the renderer supplies only caseId/findingId/text.
+  deps.handle(channels.xListening.saveNote, (e, reqArg) => {
+    assertTrustedSender(e);
+    const req = reqArg as Partial<SaveNoteRequest> | undefined;
+    if (
+      !req ||
+      typeof req.caseId !== 'string' ||
+      typeof req.findingId !== 'string' ||
+      typeof req.text !== 'string'
+    ) {
+      throw new Error('Saving a note requires a caseId, findingId and text.');
+    }
+    return saveNote({ caseId: req.caseId, findingId: req.findingId, text: req.text });
+  });
+  deps.handle(channels.xListening.readNotes, (e, caseIdArg) => {
+    assertTrustedSender(e);
+    if (typeof caseIdArg !== 'string' || !caseIdArg) {
+      throw new Error('Reading notes requires a caseId.');
+    }
+    return readNotes(caseIdArg);
   });
 }
