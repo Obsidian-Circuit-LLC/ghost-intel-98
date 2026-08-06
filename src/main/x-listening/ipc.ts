@@ -54,6 +54,7 @@ import {
 } from './extract';
 import { prodXStore } from './store';
 import type { XNetworkAccount, XNetworkArtifact, XNote, XArchiveState } from './store';
+import { ensureUuid } from '../security/validate';
 
 /** Clearnet partition the authenticated X session lives on. Matches the X1 contract. */
 export const X_LISTENING_PARTITION = 'persist:x-listening';
@@ -1181,7 +1182,7 @@ function sanitizeExportName(caseId: string, ext: string): string {
   const base =
     String(caseId ?? '')
       .replace(/[\\/:*?"<>|]/g, '')
-      .replace(/[ -]/g, '')
+      .replace(/[\x00-\x1f\x7f]/g, '')
       .replace(/\s+/g, ' ')
       .trim() || 'case';
   return `x-listening-${base}.${ext}`;
@@ -1283,19 +1284,23 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
   });
   deps.handle(channels.xListening.capture, async (e, reqArg) => {
     assertTrustedSender(e);
-    if (!xWindow || xWindow.isDestroyed()) {
-      throw new Error('X is not connected. Open the connect window and sign in before capturing.');
-    }
     const req = reqArg as Partial<CaptureRequest> | undefined;
     if (!req || typeof req.caseId !== 'string' || typeof req.channelId !== 'string') {
       throw new Error('Capture requires a caseId and a target channelId.');
+    }
+    // Reject a traversing caseId BEFORE any store path is built (same UUID gate
+    // every peer handler in register.ts applies). Runs ahead of the connectivity
+    // check so hostile input never reaches path construction.
+    const caseId = ensureUuid(req.caseId, 'caseId');
+    if (!xWindow || xWindow.isDestroyed()) {
+      throw new Error('X is not connected. Open the connect window and sign in before capturing.');
     }
     // The collect toggles are read MAIN-side from settings — the renderer never gets
     // to widen capture beyond what the operator opted into (X4 trust boundary).
     const collect = await loadCollectSettings();
     return captureVisibleTimeline(xWindow, {
-      caseId: req.caseId,
-      jobId: typeof req.jobId === 'string' ? req.jobId : req.caseId,
+      caseId,
+      jobId: typeof req.jobId === 'string' ? req.jobId : caseId,
       channelId: req.channelId,
       channelLabel: typeof req.channelLabel === 'string' ? req.channelLabel : `@${req.channelId}`,
       collect
@@ -1306,18 +1311,21 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
     (kind: 'followers' | 'following') =>
     (e: Electron.IpcMainInvokeEvent, reqArg: unknown) => {
       assertTrustedSender(e);
-      if (!xWindow || xWindow.isDestroyed()) {
-        throw new Error('X is not connected. Open the connect window and sign in before capturing.');
-      }
       const req = reqArg as Partial<NetworkCaptureRequest> | undefined;
       if (!req || typeof req.caseId !== 'string' || typeof req.target !== 'string') {
         throw new Error('A network capture requires a caseId and a target handle.');
       }
+      // Reject a traversing caseId BEFORE any store path is built, ahead of the
+      // connectivity check.
+      const caseId = ensureUuid(req.caseId, 'caseId');
+      if (!xWindow || xWindow.isDestroyed()) {
+        throw new Error('X is not connected. Open the connect window and sign in before capturing.');
+      }
       return captureNetwork(
         xWindow,
         {
-          caseId: req.caseId,
-          jobId: typeof req.jobId === 'string' ? req.jobId : req.caseId,
+          caseId,
+          jobId: typeof req.jobId === 'string' ? req.jobId : caseId,
           target: req.target
         },
         kind
@@ -1331,7 +1339,7 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
     if (typeof caseIdArg !== 'string' || !caseIdArg) {
       throw new Error('Network export requires a caseId.');
     }
-    return exportNetworkCsv(caseIdArg);
+    return exportNetworkCsv(ensureUuid(caseIdArg, 'caseId'));
   });
 
   // Notes are pure store ops (no capture window, no network) — they need no
@@ -1348,14 +1356,14 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
     ) {
       throw new Error('Saving a note requires a caseId, findingId and text.');
     }
-    return saveNote({ caseId: req.caseId, findingId: req.findingId, text: req.text });
+    return saveNote({ caseId: ensureUuid(req.caseId, 'caseId'), findingId: req.findingId, text: req.text });
   });
   deps.handle(channels.xListening.readNotes, (e, caseIdArg) => {
     assertTrustedSender(e);
     if (typeof caseIdArg !== 'string' || !caseIdArg) {
       throw new Error('Reading notes requires a caseId.');
     }
-    return readNotes(caseIdArg);
+    return readNotes(ensureUuid(caseIdArg, 'caseId'));
   });
 
   // Exports are pure store-reads + serialization (no capture window, no network) — they
@@ -1371,6 +1379,6 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
     if (!isXExportFormat(req.format)) {
       throw new Error('Export requires a format of json, csv, pdf or docx.');
     }
-    return exportXItems(req.caseId, req.format);
+    return exportXItems(ensureUuid(req.caseId, 'caseId'), req.format);
   });
 }

@@ -11,7 +11,9 @@
  *  2. No `shell.openExternal` (or an `electron` `shell` import) is reachable from
  *     the X module — a scraped URL must only ever reach the app's scheme-guarded
  *     `system.openExternal`, never a raw `shell.openExternal` (grep-in-test).
- *  3. `confineImportPath` rejects `../` traversal out of the case root.
+ *  3. Every store-backed IPC handler rejects a traversing caseId at its
+ *     `ensureUuid` boundary sink — the traversal never reaches a store path
+ *     (real-sink end-to-end regression, not a dead primitive).
  *  4. Every CSV export cell is formula-injection guarded (items + network CSV).
  *  5. No captured record field is a remote `http(s)` media URL (data: only — no beacon).
  *  6. A `<script>`-bearing scraped body renders ESCAPED in an exported document.
@@ -38,7 +40,8 @@ vi.mock('electron', () => ({
 }));
 
 import { assertTrustedSender } from '../src/main/capture/capture-window';
-import { confineImportPath, csvCell, escapeField } from '../src/main/capture/security';
+import { csvCell, escapeField } from '../src/main/capture/security';
+import { channels } from '../src/shared/ipc-contracts';
 import {
   normalizePost,
   parseMetricText,
@@ -54,6 +57,8 @@ import {
   captureVisibleTimeline,
   itemsToCsv,
   buildXItemsHtml,
+  registerXListeningIpc,
+  __resetXWindowForTests,
   type CaptureRequest,
   type TimelineCaptureDeps,
 } from '../src/main/x-listening/ipc';
@@ -136,18 +141,65 @@ describe('security: no raw shell.openExternal in the X module', () => {
   });
 });
 
-// ---- 3. confineImportPath rejects traversal ----------------------------
+// ---- 3. every store-backed IPC handler rejects a traversing caseId ------
+// The REAL sink: `ensureUuid(caseId, 'caseId')` at each IPC boundary, applied
+// BEFORE any store path is constructed (as every peer handler in register.ts
+// does). A traversing caseId ("../../x") must throw at the boundary — it must
+// never reach `scrapingCaseDir('x', caseId)` and write outside the case root.
+// This drives the actual registered handlers end-to-end (not a dead primitive).
 
-describe('security: confineImportPath', () => {
-  it('returns null for a `../` traversal out of the case root', () => {
-    expect(confineImportPath('/root/case', '../../etc/passwd')).toBeNull();
-    expect(confineImportPath('/root/case', '..')).toBeNull();
-    expect(confineImportPath('/root/case', '/etc/passwd')).toBeNull();
-  });
+describe('security: store-backed IPC handlers reject a traversing caseId', () => {
+  const TRUSTED = {
+    senderFrame: { url: 'file:///app/index.html' },
+  } as unknown as Electron.IpcMainInvokeEvent;
+  const TRAVERSAL = '../../x';
 
-  it('returns the confined absolute path for a real descendant', () => {
-    const p = confineImportPath('/root/case', 'media/a.jpg');
-    expect(p).toBe(join('/root/case', 'media/a.jpg'));
+  type Handler = (e: Electron.IpcMainInvokeEvent, ...a: unknown[]) => unknown;
+
+  function handlers(): Map<string, Handler> {
+    // No live capture window: a valid caseId would fall through to the
+    // connectivity gate, but a traversing one is rejected before it ever
+    // gets there — proving the guard fronts every other check.
+    __resetXWindowForTests();
+    const map = new Map<string, Handler>();
+    registerXListeningIpc({ handle: (channel, fn) => void map.set(channel, fn as Handler) });
+    return map;
+  }
+
+  // Each store-backed channel + a minimally well-formed payload carrying the
+  // traversing caseId. Every non-caseId field is valid so the shape check passes
+  // and control actually reaches the ensureUuid sink.
+  const cases: Array<[string, (h: Map<string, Handler>) => unknown]> = [
+    ['capture', (h) => h.get(channels.xListening.capture)!(TRUSTED, { caseId: TRAVERSAL, channelId: 'target' })],
+    ['captureFollowers', (h) => h.get(channels.xListening.captureFollowers)!(TRUSTED, { caseId: TRAVERSAL, target: 'target' })],
+    ['captureFollowing', (h) => h.get(channels.xListening.captureFollowing)!(TRUSTED, { caseId: TRAVERSAL, target: 'target' })],
+    ['exportNetwork', (h) => h.get(channels.xListening.exportNetwork)!(TRUSTED, TRAVERSAL)],
+    ['saveNote', (h) => h.get(channels.xListening.saveNote)!(TRUSTED, { caseId: TRAVERSAL, findingId: 'f1', text: 'note' })],
+    ['readNotes', (h) => h.get(channels.xListening.readNotes)!(TRUSTED, TRAVERSAL)],
+    ['exportItems', (h) => h.get(channels.xListening.exportItems)!(TRUSTED, { caseId: TRAVERSAL, format: 'json' })],
+  ];
+
+  it.each(cases)(
+    'the %s handler rejects "../../x" at the ensureUuid sink (nothing reaches a store path)',
+    async (_name, invoke) => {
+      const h = handlers();
+      // A sync throw or a rejected promise both surface as a rejection here.
+      await expect(Promise.resolve().then(() => invoke(h))).rejects.toThrow(/Invalid caseId/);
+    },
+  );
+
+  it('admits a valid UUID — the capture guard passes it through to the connectivity gate', async () => {
+    // Contrast case: the sink rejects TRAVERSAL specifically, not everything. A
+    // well-formed UUID clears ensureUuid and reaches the next check ("not
+    // connected", since no window is open) — proving the guard is a UUID gate,
+    // not a blanket denier.
+    const h = handlers();
+    const validUuid = '11111111-1111-4111-8111-111111111111';
+    await expect(
+      Promise.resolve().then(() =>
+        h.get(channels.xListening.capture)!(TRUSTED, { caseId: validUuid, channelId: 'target' }),
+      ),
+    ).rejects.toThrow(/not connected/);
   });
 });
 

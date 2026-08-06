@@ -4,7 +4,7 @@
  * These are the small, pure(-ish) guards the X Listening Station — and, in
  * Plan B, Telegram Hunter — lean on at every trust boundary between scraped,
  * attacker-controlled content and the app: outbound link opening, CSV/HTML
- * export emission, import-path confinement, and remote-media capture.
+ * export emission, and remote-media capture.
  *
  * CLEARNET-QUARANTINE NOTE: this module imports only `node:path`. It pulls in
  * NOTHING from `bgconn`/Tor/socks/`socmint`/`telegram`; the import-graph
@@ -16,8 +16,6 @@
  * `=HYPERLINK("http://evil")` free to execute when the CSV is opened in Excel
  * or Sheets. `escapeField` mirrors the quarantine `escapeHtml` at `main.cjs:896`.
  */
-
-import { resolve, sep } from 'node:path';
 
 /** Structural shape of a capture page we can run static JS in. Electron's
  *  `BrowserWindow` is assignable to this; tests supply a minimal fake. */
@@ -73,20 +71,6 @@ export function escapeField(v: string): string {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#039;');
-}
-
-/**
- * Resolve `rel` against `root` and return the absolute path iff it lands
- * strictly inside `root` (a real descendant, not `root` itself). Returns `null`
- * for any traversal (`../…`), absolute escape, or path equal to the root — the
- * confinement gate for an import that names a file to read under a case dir.
- */
-export function confineImportPath(root: string, rel: string): string | null {
-  const base = resolve(root);
-  const target = resolve(base, rel);
-  if (target === base) return null;
-  if (target.startsWith(base + sep)) return target;
-  return null;
 }
 
 /**

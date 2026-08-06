@@ -1,11 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
-import { resolve, sep } from 'node:path';
 
 import {
   guardExternalUrl,
   csvCell,
   escapeField,
-  confineImportPath,
   remoteMediaToDataUri
 } from '../src/main/capture/security';
 
@@ -76,30 +74,6 @@ describe('escapeField', () => {
 
   it('does not double-escape an ampersand it just introduced', () => {
     expect(escapeField('a < b')).toBe('a &lt; b');
-  });
-});
-
-describe('confineImportPath', () => {
-  it('rejects a parent-traversal path', () => {
-    expect(confineImportPath('/root', '../../etc/passwd')).toBeNull();
-  });
-
-  it('rejects an absolute escape', () => {
-    expect(confineImportPath('/root', '/etc/passwd')).toBeNull();
-  });
-
-  it('rejects the root itself (must be strictly inside)', () => {
-    expect(confineImportPath('/root', '.')).toBeNull();
-  });
-
-  it('returns the resolved absolute path for a path inside root', () => {
-    expect(confineImportPath('/root', 'media/a.jpg')).toBe(resolve('/root', 'media/a.jpg'));
-  });
-
-  it('resolved path is prefixed by root + sep', () => {
-    const p = confineImportPath('/root', 'media/a.jpg');
-    expect(p).not.toBeNull();
-    expect(p!.startsWith(resolve('/root') + sep)).toBe(true);
   });
 });
 
