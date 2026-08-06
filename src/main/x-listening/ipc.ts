@@ -46,7 +46,7 @@ import {
   type XCollectSettings
 } from './extract';
 import { prodXStore } from './store';
-import type { XNetworkAccount, XNetworkArtifact, XNote } from './store';
+import type { XNetworkAccount, XNetworkArtifact, XNote, XArchiveState } from './store';
 
 /** Clearnet partition the authenticated X session lives on. Matches the X1 contract. */
 export const X_LISTENING_PARTITION = 'persist:x-listening';
@@ -698,6 +698,230 @@ export async function readNotes(
 ): Promise<{ notes: XNote[] }> {
   const deps = { ...defaultNotesDeps(), ...overrides };
   return { notes: await deps.readNotes(caseId) };
+}
+
+// ---- X7: low-rate archive cycles ---------------------------------------
+
+/** A resumable archive state with no prior run — the pre-first-cycle baseline. */
+export const EMPTY_ARCHIVE_STATE: XArchiveState = {
+  cursor: null,
+  cycles: 0,
+  lastRunAt: null
+};
+
+/** One archive cycle observes the same profile timeline a manual capture does. */
+export interface ArchiveCycleRequest {
+  caseId: string;
+  jobId: string;
+  channelId: string;
+  channelLabel: string;
+  /** Which surrounding-thread kinds to include; sourced MAIN-side, defaults all-off. */
+  collect?: XCollectSettings;
+}
+
+/** The outcome of one archive cycle. `ran` is true only for a completed capture. */
+export interface ArchiveCycleResult {
+  /** True iff a capture actually executed AND completed (toggle on, not blocked). */
+  ran: boolean;
+  /** True iff the challenge-refusal gate stopped the cycle. */
+  blocked: boolean;
+  reason?: string;
+  added: number;
+  skipped: number;
+  items: XHarvestedItem[];
+  /** The archive state AFTER this cycle — advanced on a completed run, else unchanged. */
+  state: XArchiveState;
+}
+
+/** Injectable seams so a cycle is testable without electron/network/secure-fs. */
+export interface ArchiveCycleDeps {
+  /** Read `AppSettings.xListening.archiveCycles` MAIN-side (trusted). */
+  isEnabled: () => Promise<boolean>;
+  /** Run one visible-timeline capture (persists items itself); defaults to `captureVisibleTimeline`. */
+  capture: (win: Electron.BrowserWindow, req: CaptureRequest) => Promise<TimelineCaptureResult>;
+  /** Read the case's resumable archive state (null before the first cycle). */
+  readState: (caseId: string) => Promise<XArchiveState | null>;
+  /** Persist the advanced archive state. */
+  writeState: (caseId: string, state: XArchiveState) => Promise<void>;
+  /** Injected clock — the ISO `lastRunAt` stamped when a cycle completes (determinism). */
+  now: () => string;
+}
+
+/**
+ * Read the archive-cycles toggle MAIN-side. Lazy dynamic import (same pattern as
+ * `loadCollectSettings`) so this module never pulls the settings graph at import
+ * time. Falls back to OFF on any read error — the archive never silently RUNS on a
+ * settings failure (fail-closed, matching the collect-gate posture).
+ */
+async function loadArchiveEnabled(): Promise<boolean> {
+  try {
+    const { settingsStore } = await import('../storage/json-fs');
+    const settings = await settingsStore.read();
+    return settings.xListening?.archiveCycles === true;
+  } catch {
+    return false;
+  }
+}
+
+function defaultArchiveDeps(): ArchiveCycleDeps {
+  return {
+    isEnabled: loadArchiveEnabled,
+    capture: (win, req) => captureVisibleTimeline(win, req),
+    readState: async (caseId) => (await prodXStore()).archiveState.read(caseId),
+    writeState: async (caseId, state) => (await prodXStore()).archiveState.write(caseId, state),
+    now: () => new Date().toISOString()
+  };
+}
+
+/**
+ * Advance the opaque resume cursor. The last captured item's `messageId` is an
+ * honest "where we left off" marker; a cycle that captured nothing HOLDS the prior
+ * cursor rather than inventing a new one.
+ */
+function advanceCursor(prev: string | null, items: readonly XHarvestedItem[]): string | null {
+  const last = items.length ? String(items[items.length - 1].messageId ?? '') : '';
+  return last || prev;
+}
+
+/**
+ * Run ONE low-rate archive cycle. Gated on the `archiveCycles` toggle — when off,
+ * NO capture runs and archive state is left untouched (`ran:false`). Otherwise the
+ * X3/X4 timeline capture runs (challenge-refusal gate + encrypted persistence
+ * inside `captureVisibleTimeline`); on a completed run the resumable `XArchiveState`
+ * advances (cycle count + injected clock + cursor) and is persisted. A cycle the
+ * challenge gate BLOCKS does NOT advance state — an incomplete cycle must never
+ * look like a completed one. Port of quarantine `runArchiveCycle`
+ * (`electron/main.cjs:757-836`), reduced to the single-profile visible-capture path.
+ */
+export async function runArchiveCycle(
+  win: Electron.BrowserWindow,
+  req: ArchiveCycleRequest,
+  overrides: Partial<ArchiveCycleDeps> = {}
+): Promise<ArchiveCycleResult> {
+  const deps = { ...defaultArchiveDeps(), ...overrides };
+  const prev = (await deps.readState(req.caseId)) ?? EMPTY_ARCHIVE_STATE;
+
+  if (!(await deps.isEnabled())) {
+    return { ran: false, blocked: false, added: 0, skipped: 0, items: [], state: prev };
+  }
+
+  const captured = await deps.capture(win, {
+    caseId: req.caseId,
+    jobId: req.jobId,
+    channelId: req.channelId,
+    channelLabel: req.channelLabel,
+    collect: req.collect
+  });
+
+  if (captured.blocked) {
+    return {
+      ran: false,
+      blocked: true,
+      reason: captured.reason,
+      added: 0,
+      skipped: 0,
+      items: [],
+      state: prev
+    };
+  }
+
+  const next: XArchiveState = {
+    cursor: advanceCursor(prev.cursor, captured.items),
+    cycles: prev.cycles + 1,
+    lastRunAt: deps.now()
+  };
+  await deps.writeState(req.caseId, next);
+  return {
+    ran: true,
+    blocked: false,
+    added: captured.added,
+    skipped: captured.skipped,
+    items: captured.items,
+    state: next
+  };
+}
+
+/** Bound + cancellation + low-rate spacing for a run of archive cycles. */
+export interface ArchiveLoopOptions {
+  /** Hard upper bound on cycles this run — clamped to [0, 1000] (bounded). */
+  maxCycles: number;
+  /** Low-rate spacing between cycles, in ms. Applied via the injected/real `sleep`. */
+  delayMs?: number;
+  /** Cooperative cancellation — checked before each cycle and before each sleep. */
+  shouldCancel?: () => boolean;
+  /** Injected sleep (determinism/testing); defaults to a real `setTimeout` delay. */
+  sleep?: (ms: number) => Promise<void>;
+}
+
+/** The aggregate outcome of a bounded archive run. */
+export interface ArchiveLoopResult {
+  /** How many cycles actually completed. */
+  cyclesRun: number;
+  /** Total items added across the run. */
+  totalAdded: number;
+  /** True iff a cycle was challenge-blocked (which stops the loop). */
+  blocked: boolean;
+  reason?: string;
+  /** True iff `shouldCancel` halted the loop early. */
+  cancelled: boolean;
+  /** The latest archive state observed (advanced by the last completed cycle). */
+  state: XArchiveState;
+}
+
+const DEFAULT_ARCHIVE_DELAY_MS = 4 * 60 * 60 * 1000; // 4h — matches the quarantine default cadence.
+
+function realSleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)));
+}
+
+/**
+ * Run a BOUNDED, CANCELLABLE, low-rate sequence of archive cycles. Each cycle goes
+ * through `runArchiveCycle` (so the toggle gate, challenge refusal, and state
+ * advance all hold); the loop stops early the instant a cycle does not complete —
+ * toggle turned off, or the challenge gate blocked it — and on cooperative
+ * cancellation. A low-rate `sleep` sits BETWEEN cycles (never after the last), so a
+ * long archive run stays gentle on X. Scheduling is deterministic: `sleep` and the
+ * per-cycle clock are injectable, nothing here reads `Date.now()`. Port of the
+ * quarantine `restartArchiveTimer` cadence (`electron/main.cjs:839-847`) recast as
+ * an explicit bounded loop rather than a free-running `setInterval`.
+ */
+export async function runArchiveCycles(
+  win: Electron.BrowserWindow,
+  req: ArchiveCycleRequest,
+  options: ArchiveLoopOptions,
+  overrides: Partial<ArchiveCycleDeps> = {}
+): Promise<ArchiveLoopResult> {
+  const maxCycles = Math.max(0, Math.min(1000, Math.floor(Number(options.maxCycles) || 0)));
+  const delayMs = Math.max(0, Number(options.delayMs ?? DEFAULT_ARCHIVE_DELAY_MS));
+  const sleep = options.sleep ?? realSleep;
+  const shouldCancel = options.shouldCancel ?? (() => false);
+
+  let cyclesRun = 0;
+  let totalAdded = 0;
+  let state: XArchiveState =
+    (await (overrides.readState ?? defaultArchiveDeps().readState)(req.caseId)) ??
+    EMPTY_ARCHIVE_STATE;
+
+  for (let i = 0; i < maxCycles; i++) {
+    if (shouldCancel()) {
+      return { cyclesRun, totalAdded, blocked: false, cancelled: true, state };
+    }
+    const res = await runArchiveCycle(win, req, overrides);
+    state = res.state;
+    if (!res.ran) {
+      // Toggle off or challenge-blocked: an incomplete cycle stops the run.
+      return { cyclesRun, totalAdded, blocked: res.blocked, reason: res.reason, cancelled: false, state };
+    }
+    cyclesRun++;
+    totalAdded += res.added;
+    if (i < maxCycles - 1) {
+      if (shouldCancel()) {
+        return { cyclesRun, totalAdded, blocked: false, cancelled: true, state };
+      }
+      await sleep(delayMs);
+    }
+  }
+  return { cyclesRun, totalAdded, blocked: false, cancelled: false, state };
 }
 
 type HandleWithEvent = (
