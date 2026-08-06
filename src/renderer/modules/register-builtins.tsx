@@ -43,6 +43,7 @@ import { SearchlightModule } from './searchlight/SearchlightModule';
 import { SocmintModule } from './socmint/SocmintModule';
 import { XCollectorModule } from './x/XCollectorModule';
 import { GhostScrapeModule } from './ghostscrape/GhostScrapeModule';
+import { XListeningModule } from './x-listening/XListeningModule';
 import { OSINTToolkitModule } from './osint-toolkit/OSINTToolkitModule';
 import { MindsEyeModule } from './minds-eye/MindsEyeModule';
 import { InvestigationGraphModule } from './investigation-graph/InvestigationGraphModule';
@@ -216,6 +217,10 @@ function GhostScrapeAdapter({ spec: _spec }: { spec: WindowSpec }): JSX.Element 
   return <GhostScrapeModule />;
 }
 
+function XListeningAdapter({ spec }: { spec: WindowSpec }): JSX.Element {
+  return <XListeningModule caseId={spec.props?.['caseId'] as string | undefined} />;
+}
+
 function OSINTToolkitAdapter({ spec: _spec }: { spec: WindowSpec }): JSX.Element {
   return <OSINTToolkitModule />;
 }
@@ -288,6 +293,7 @@ export function registerBuiltins(): void {
   registerModule({ key: 'socmint', title: 'SOCMINT', glyph: '📡', component: SocmintAdapter, builtin: true, defaultWidth: 900, defaultHeight: 640, category: 'osint', subcategory: 'Social Media' });
   registerModule({ key: 'x', title: 'X / Twitter', glyph: '✖', component: XCollectorAdapter, builtin: true, defaultWidth: 900, defaultHeight: 640, category: 'osint', subcategory: 'Social Media' });
   registerModule({ key: 'ghostscrape', title: 'GhostScrape', glyph: '🐦', component: GhostScrapeAdapter, builtin: true, defaultWidth: 960, defaultHeight: 680, category: 'osint', subcategory: 'Social Media' });
+  registerModule({ key: 'x-listening-station', title: 'X Listening Station', glyph: '🎧', component: XListeningAdapter, builtin: true, defaultWidth: 1040, defaultHeight: 720, category: 'osint', subcategory: 'Social Media' });
   registerModule({ key: 'osint-toolkit', title: 'OSINT Toolkit', glyph: '🧰', component: OSINTToolkitAdapter, builtin: true, defaultWidth: 360, defaultHeight: 470 });
   registerModule({ key: 'minds-eye', title: "Mind's Eye", glyph: '👁', component: MindsEyeAdapter, builtin: true, defaultWidth: 760, defaultHeight: 560 });
   registerModule({ key: 'investigation-graph', title: 'Investigation Graph', glyph: '🕸', component: InvestigationGraphAdapter, builtin: true, defaultWidth: 900, defaultHeight: 640, category: 'osint', subcategory: 'Identity' });

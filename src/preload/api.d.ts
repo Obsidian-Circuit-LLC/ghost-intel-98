@@ -809,6 +809,21 @@ export interface GhostApi {
     testStoredSession(accountId: string): Promise<XSessionTestResult>;
   };
   /**
+   * X Listening Station (Plan A) — visible-DOM capture of an authenticated X session, run
+   * main-side in a hardened BrowserWindow on the clearnet-quarantined `persist:x-listening`
+   * partition (no Tor/socks — clearnet). Retires the `x` + `ghostscrape` namespaces (Task R1).
+   *
+   * X1 exposes the connect/status shell only; capture/notes/network/archive/export methods are
+   * added by Tasks X2–X8. No credential ever crosses this surface — status() derives a boolean
+   * from the auth-cookie presence and never returns, echoes, or logs the token.
+   */
+  xListening: {
+    /** Open (or reopen) the hardened X login window on the clearnet partition. */
+    connect(): Promise<{ opened: boolean }>;
+    /** Session connectivity as a derived boolean — never the auth token itself. */
+    status(): Promise<{ connected: boolean }>;
+  };
+  /**
    * GhostScrape — hidden-browser X timeline/profile scraper (clearnet quarantine module).
    * Reuses the SAME two-flag gate (x.networkEnabled && x.clearnetAcknowledged) and shared
    * x.accounts.<id>.{auth_token,ct0} session cookies as `x` above — no new settings

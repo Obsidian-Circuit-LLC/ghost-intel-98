@@ -585,6 +585,17 @@ export const channels = {
     testSession: 'x:testSession',
     testStoredSession: 'x:testStoredSession'
   },
+  // X Listening Station (Plan A) — visible-DOM capture of an authenticated X session in a
+  // main-side hardened BrowserWindow on the clearnet-quarantined `persist:x-listening`
+  // partition (NO Tor/socks — clearnet). Distinct from the `x`/`ghostscrape` namespaces above,
+  // which this module retires (Task R1). Every handler is safeHandle + assertTrustedSender.
+  // X1 seeds connect/status only; capture/notes/network/archive/export channels land in X2–X8.
+  xListening: {
+    /** Open (or reopen) the hardened X login window on the clearnet partition. */
+    connect: 'xListening:connect',
+    /** Derive a `connected` boolean from the auth-cookie presence — never returns the token. */
+    status: 'xListening:status'
+  },
   // GhostScrape — hidden-browser X timeline/profile scraper (clearnet quarantine module, GS-6).
   // Reuses the SAME two-flag gate (x.networkEnabled && x.clearnetAcknowledged) and shared
   // x.accounts.<id>.{auth_token,ct0} session cookies as the `x` namespace above — no new

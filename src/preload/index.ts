@@ -722,6 +722,16 @@ const api = {
     testStoredSession: (accountId: string) =>
       ipcRenderer.invoke(channels.x.testStoredSession, accountId)
   },
+  // X Listening Station (Plan A) — main-side hardened visible-DOM capture on the
+  // clearnet-quarantined `persist:x-listening` partition. X1 exposes connect/status only;
+  // capture/notes/network/archive/export follow in X2–X8. No credential value ever crosses
+  // this bridge — status() returns a derived boolean, never the auth token.
+  xListening: {
+    connect: (): Promise<{ opened: boolean }> =>
+      ipcRenderer.invoke(channels.xListening.connect),
+    status: (): Promise<{ connected: boolean }> =>
+      ipcRenderer.invoke(channels.xListening.status)
+  },
   // GhostScrape — hidden-browser X timeline/profile scraper (clearnet quarantine, GS-6).
   // Reuses the SAME two-flag gate + shared x.accounts.<id> session cookies as the x
   // namespace above — no new settings.ghostscrape namespace, no second cookie store.
