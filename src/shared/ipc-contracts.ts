@@ -606,7 +606,9 @@ export const channels = {
     /** Upsert one analyst note (keyed by findingId) into the encrypted `notes` store (X6). */
     saveNote: 'xListening:saveNote',
     /** Read a case's analyst notes from the encrypted `notes` store (X6). */
-    readNotes: 'xListening:readNotes'
+    readNotes: 'xListening:readNotes',
+    /** Serialize a case's captured items to JSON/CSV/PDF/DOCX via the app's existing exporters (X8). */
+    exportItems: 'xListening:exportItems'
   },
   // GhostScrape — hidden-browser X timeline/profile scraper (clearnet quarantine module, GS-6).
   // Reuses the SAME two-flag gate (x.networkEnabled && x.clearnetAcknowledged) and shared

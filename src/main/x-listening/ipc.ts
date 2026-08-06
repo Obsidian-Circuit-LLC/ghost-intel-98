@@ -25,7 +25,14 @@ import {
   runCapture,
   assertTrustedSender
 } from '../capture/capture-window';
-import { remoteMediaToDataUri, type MediaCapturePage } from '../capture/security';
+import {
+  remoteMediaToDataUri,
+  csvCell,
+  escapeField,
+  type MediaCapturePage
+} from '../capture/security';
+import type { HarvestedItem } from '@shared/socmint/types';
+import type { Report } from '@shared/reports-types';
 import {
   X_POST_SCRIPT,
   USER_CELL_SCRIPT,
@@ -924,6 +931,328 @@ export async function runArchiveCycles(
   return { cyclesRun, totalAdded, blocked: false, cancelled: false, state };
 }
 
+// ---- X8: exports (reuse the app's existing PDF/DOCX exporters) ----------
+
+/** The export formats the analyst can save a case's captured X items in. */
+export type XExportFormat = 'json' | 'csv' | 'pdf' | 'docx';
+
+/**
+ * CSV columns for an X items export. The four metric columns carry the VERBATIM
+ * rounded display token (e.g. `"1.2K"`) exactly as X rendered it — NEVER a
+ * false-precision expanded integer (the review's false-precision finding). `verified`
+ * is always `false` and `provenance` is always `visible-capture` (the honesty stamps).
+ */
+export const X_ITEMS_CSV_HEADER = [
+  'kind',
+  'handle',
+  'author_id',
+  'published_at',
+  'harvested_at',
+  'text',
+  'url',
+  'likes',
+  'reposts',
+  'replies',
+  'views',
+  'media_count',
+  'verified',
+  'provenance'
+] as const;
+
+/** A flat, export-facing view of a captured item. The store returns the base
+ *  `HarvestedItem` type; the X-specific `metrics`/`kind`/`media`/honesty fields ride
+ *  along at runtime (they were persisted by `normalizePost` et al.), read here
+ *  defensively so a legacy or partial record never throws mid-export. */
+interface XItemView {
+  kind: string;
+  handle: string;
+  authorId: string;
+  publishedAt: string;
+  harvestedAt: string;
+  text: string;
+  url: string;
+  likes: string;
+  reposts: string;
+  replies: string;
+  views: string;
+  mediaCount: number;
+  /** Local `data:` thumbnails only — a remote URL is dropped, never carried to an <img src>. */
+  media: string[];
+  verified: boolean;
+  provenance: string;
+}
+
+/** The runtime superset of a captured item — the X-specific fields the store round-trips. */
+type XItemRuntime = HarvestedItem & {
+  kind?: string;
+  media?: unknown;
+  verified?: unknown;
+  captureProvenance?: unknown;
+  metrics?: Record<string, { raw?: unknown } | undefined>;
+};
+
+/** The verbatim display token of one metric, or '' — never an expanded integer. */
+function metricRaw(item: XItemRuntime, name: string): string {
+  return String(item.metrics?.[name]?.raw ?? '');
+}
+
+/** Project a stored item to its flat export view. Remote media is filtered out here
+ *  too (defense in depth) — only `data:` thumbnails survive to any rendered document. */
+function viewItem(raw: HarvestedItem): XItemView {
+  const item = raw as XItemRuntime;
+  const media = Array.isArray(item.media)
+    ? item.media.map((m) => String(m ?? '')).filter((m) => m.startsWith('data:'))
+    : [];
+  return {
+    kind: String(item.kind ?? ''),
+    handle: String(item.authorHandle ?? ''),
+    authorId: String(item.authorId ?? ''),
+    publishedAt: String(item.publishedAt ?? ''),
+    harvestedAt: String(item.harvestedAt ?? ''),
+    text: String(item.text ?? ''),
+    url: String(item.url ?? ''),
+    likes: metricRaw(item, 'likes'),
+    reposts: metricRaw(item, 'reposts'),
+    replies: metricRaw(item, 'replies'),
+    views: metricRaw(item, 'views'),
+    mediaCount: media.length,
+    media,
+    // Honesty stamps are NOT trusted from the record — they are what this collector
+    // guarantees. A visible-DOM capture is never verified; the provenance is fixed.
+    verified: false,
+    provenance: 'visible-capture'
+  };
+}
+
+/** JSON export — a direct, round-trippable serialization of the captured items. */
+export function itemsToJson(items: readonly HarvestedItem[] | undefined): string {
+  return JSON.stringify(items ?? [], null, 2);
+}
+
+/**
+ * CSV export of the captured items, formula-injection safe. EVERY cell is routed
+ * through `csvCell` — so a scraped tweet body like `=cmd|calc` is neutralized as
+ * literal text (the review's spreadsheet formula-injection finding). Metrics are the
+ * verbatim rounded tokens (honesty). A leading BOM + CRLF line endings match the app's
+ * other CSV exports (mirrors `networkToCsv`).
+ */
+export function itemsToCsv(items: readonly HarvestedItem[] | undefined): string {
+  const lines: string[] = [X_ITEMS_CSV_HEADER.map((h) => csvCell(h)).join(',')];
+  for (const raw of items ?? []) {
+    const v = viewItem(raw);
+    lines.push(
+      [
+        v.kind,
+        v.handle,
+        v.authorId,
+        v.publishedAt,
+        v.harvestedAt,
+        v.text,
+        v.url,
+        v.likes,
+        v.reposts,
+        v.replies,
+        v.views,
+        String(v.mediaCount),
+        String(v.verified),
+        v.provenance
+      ]
+        .map((cell) => csvCell(String(cell ?? '')))
+        .join(',')
+    );
+  }
+  return `﻿${lines.join('\r\n')}`;
+}
+
+/**
+ * Build a self-contained HTML document of the captured items — the source the PDF
+ * exporter (`htmlToPdf`) renders. EVERY scraped field is `escapeField`-escaped, so a
+ * `<script>` tweet body appears as inert text, never live markup. Media is inlined
+ * ONLY as `data:` thumbnails (`viewItem` already dropped any remote URL) — a remote
+ * `src` must never reach an `<img>` and beacon the analyst's view (the review's media
+ * finding). No remote CSS/JS/fonts — fully offline, matching the app's other exports.
+ */
+export function buildXItemsHtml(caseId: string, items: readonly HarvestedItem[] | undefined): string {
+  const rows = (items ?? [])
+    .map((raw) => {
+      const v = viewItem(raw);
+      const imgs = v.media
+        .map((src) => `<img src="${escapeField(src)}" alt="captured media"/>`)
+        .join('');
+      const metrics = `likes ${escapeField(v.likes || '—')} · reposts ${escapeField(
+        v.reposts || '—'
+      )} · replies ${escapeField(v.replies || '—')} · views ${escapeField(v.views || '—')}`;
+      return (
+        `<article class="x-item">` +
+        `<header><span class="handle">${escapeField(v.handle)}</span> ` +
+        `<span class="kind">${escapeField(v.kind)}</span> ` +
+        `<time>${escapeField(v.publishedAt)}</time></header>` +
+        `<p class="text">${escapeField(v.text)}</p>` +
+        (imgs ? `<div class="media">${imgs}</div>` : '') +
+        `<footer class="metrics">${metrics}</footer>` +
+        (v.url ? `<footer class="url">${escapeField(v.url)}</footer>` : '') +
+        `<footer class="stamp">visible-capture · unverified</footer>` +
+        `</article>`
+      );
+    })
+    .join('');
+  return (
+    `<!doctype html><html><head><meta charset="utf-8"/>` +
+    `<title>X Listening Station export</title>` +
+    `<style>body{font-family:sans-serif;margin:24px;color:#111}` +
+    `.x-item{border:1px solid #ccc;border-radius:6px;padding:12px;margin:0 0 12px}` +
+    `.handle{font-weight:bold}.kind{color:#666}.text{white-space:pre-wrap}` +
+    `.media img{max-width:160px;max-height:160px;margin:4px}` +
+    `.metrics,.url,.stamp{color:#666;font-size:12px}</style></head>` +
+    `<body><h1>X Listening Station export — ${escapeField(caseId)}</h1>` +
+    `<p class="stamp">${(items ?? []).length} captured item(s) · visible-DOM capture · unverified</p>` +
+    rows +
+    `</body></html>`
+  );
+}
+
+/**
+ * Adapt the captured items into a `Report` for the app's EXISTING DOCX exporter
+ * (`renderReportDocx`) — no new `docx` dependency. Each cell is `escapeField`-escaped
+ * BEFORE it enters the report: `renderReportDocx`'s table tokenizer decodes entities
+ * then re-escapes exactly once (idempotent on entity-encoded input), so a `<script>`
+ * body lands in `document.xml` as `&lt;script&gt;`, never live markup or stripped.
+ */
+export function buildXItemsReport(caseId: string, items: readonly HarvestedItem[] | undefined): Report {
+  const header = ['Kind', 'Handle', 'Published', 'Text', 'URL', 'Likes', 'Reposts', 'Replies', 'Views'];
+  const cells: string[][] = [header.map((h) => escapeField(h))];
+  for (const raw of items ?? []) {
+    const v = viewItem(raw);
+    cells.push(
+      [v.kind, v.handle, v.publishedAt, v.text, v.url, v.likes, v.reposts, v.replies, v.views].map((c) =>
+        escapeField(String(c ?? ''))
+      )
+    );
+  }
+  return {
+    id: `x-export-${caseId}`,
+    // `title` is plain-text and `esc`-escaped by renderReportDocx.
+    title: `X Listening Station export — ${caseId}`,
+    createdAt: '',
+    updatedAt: '',
+    to: 'Case file',
+    classification: 'Visible-capture · unverified',
+    status: 'completed',
+    author: 'Ghost Intel 98',
+    blocks: [{ id: 'x-items', kind: 'table', cells }]
+  };
+}
+
+/** The uniform export result the IPC surface returns. `data` is utf8 for text formats
+ *  (json/csv) and base64 for binary formats (pdf/docx) so it round-trips through IPC
+ *  as a plain JSON string; the caller decodes + saves via the app's file-save flow. */
+export interface XExportResult {
+  format: XExportFormat;
+  count: number;
+  encoding: 'utf8' | 'base64';
+  data: string;
+  mime: string;
+  suggestedName: string;
+}
+
+/** Injectable seams so the export orchestration is testable without electron/secure-fs. */
+export interface XExportDeps {
+  /** Read the case's captured items from the encrypted store. */
+  readItems: (caseId: string) => Promise<HarvestedItem[]>;
+  /** Render a self-contained HTML document to a PDF Buffer (the app's existing exporter). */
+  htmlToPdf: (html: string) => Promise<Buffer>;
+  /** Render a Report to a DOCX Buffer (the app's existing exporter). */
+  renderDocx: (report: Report) => Promise<Buffer>;
+}
+
+function defaultExportDeps(): XExportDeps {
+  return {
+    readItems: async (caseId) => (await prodXStore()).readItems(caseId),
+    // Lazy dynamic import (same posture as prodXStore): the electron/adm-zip-backed
+    // exporters are pulled only when an export actually runs, never at module import.
+    htmlToPdf: async (html) => (await import('../services/export')).htmlToPdf(html),
+    renderDocx: async (report) =>
+      (await import('../reports/docx')).renderReportDocx(report, {}, null, null)
+  };
+}
+
+/** Strip path separators + illegal filename chars from an export basename. */
+function sanitizeExportName(caseId: string, ext: string): string {
+  const base =
+    String(caseId ?? '')
+      .replace(/[\\/:*?"<>|]/g, '')
+      .replace(/[ -]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim() || 'case';
+  return `x-listening-${base}.${ext}`;
+}
+
+/**
+ * Export a case's captured X items in `format`. Reads the items from the encrypted
+ * store, then serializes them — every scraped field escaped/formula-guarded — through
+ * the app's EXISTING exporters (no new `docx`/`pdfkit`). Text formats return utf8;
+ * pdf/docx return base64 of the rendered Buffer. `count` is the number of items in the
+ * export (honest — what the case actually holds).
+ */
+export async function exportXItems(
+  caseId: string,
+  format: XExportFormat,
+  overrides: Partial<XExportDeps> = {}
+): Promise<XExportResult> {
+  const deps = { ...defaultExportDeps(), ...overrides };
+  const items = await deps.readItems(caseId);
+  const count = items.length;
+
+  if (format === 'json') {
+    return {
+      format,
+      count,
+      encoding: 'utf8',
+      data: itemsToJson(items),
+      mime: 'application/json',
+      suggestedName: sanitizeExportName(caseId, 'json')
+    };
+  }
+  if (format === 'csv') {
+    return {
+      format,
+      count,
+      encoding: 'utf8',
+      data: itemsToCsv(items),
+      mime: 'text/csv',
+      suggestedName: sanitizeExportName(caseId, 'csv')
+    };
+  }
+  if (format === 'pdf') {
+    const pdf = await deps.htmlToPdf(buildXItemsHtml(caseId, items));
+    return {
+      format,
+      count,
+      encoding: 'base64',
+      data: pdf.toString('base64'),
+      mime: 'application/pdf',
+      suggestedName: sanitizeExportName(caseId, 'pdf')
+    };
+  }
+  // docx
+  const docx = await deps.renderDocx(buildXItemsReport(caseId, items));
+  return {
+    format,
+    count,
+    encoding: 'base64',
+    data: docx.toString('base64'),
+    mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    suggestedName: sanitizeExportName(caseId, 'docx')
+  };
+}
+
+/** The formats `exportXItems` accepts — validated at the IPC boundary. */
+const X_EXPORT_FORMATS: readonly XExportFormat[] = ['json', 'csv', 'pdf', 'docx'];
+
+function isXExportFormat(v: unknown): v is XExportFormat {
+  return typeof v === 'string' && (X_EXPORT_FORMATS as readonly string[]).includes(v);
+}
+
 type HandleWithEvent = (
   channel: string,
   fn: (e: Electron.IpcMainInvokeEvent, ...args: unknown[]) => unknown
@@ -1027,5 +1356,21 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
       throw new Error('Reading notes requires a caseId.');
     }
     return readNotes(caseIdArg);
+  });
+
+  // Exports are pure store-reads + serialization (no capture window, no network) — they
+  // need only the sender check + arg validation. The format is validated against the
+  // allowlist main-side; every scraped field is escaped / formula-guarded inside
+  // `exportXItems` via the app's existing exporters (no new docx/pdfkit dependency).
+  deps.handle(channels.xListening.exportItems, (e, reqArg) => {
+    assertTrustedSender(e);
+    const req = reqArg as { caseId?: unknown; format?: unknown } | undefined;
+    if (!req || typeof req.caseId !== 'string' || !req.caseId) {
+      throw new Error('Export requires a caseId.');
+    }
+    if (!isXExportFormat(req.format)) {
+      throw new Error('Export requires a format of json, csv, pdf or docx.');
+    }
+    return exportXItems(req.caseId, req.format);
   });
 }

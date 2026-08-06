@@ -873,6 +873,21 @@ export interface GhostApi {
     readNotes(caseId: string): Promise<{
       notes: Array<{ findingId: string; text: string; savedAt: string }>;
     }>;
+    /**
+     * Serialize the case's captured items to `json`/`csv`/`pdf`/`docx` via the app's
+     * EXISTING exporters (no new docx/pdfkit). Every scraped field is escaped /
+     * formula-guarded; rounded metrics are exported verbatim (never a false-precision
+     * integer); remote media URLs are never emitted. `data` is utf8 for json/csv and
+     * base64 for pdf/docx; the caller decodes + saves via the app's file-save flow.
+     */
+    exportItems(req: { caseId: string; format: 'json' | 'csv' | 'pdf' | 'docx' }): Promise<{
+      format: 'json' | 'csv' | 'pdf' | 'docx';
+      count: number;
+      encoding: 'utf8' | 'base64';
+      data: string;
+      mime: string;
+      suggestedName: string;
+    }>;
   };
   /**
    * GhostScrape — hidden-browser X timeline/profile scraper (clearnet quarantine module).

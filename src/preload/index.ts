@@ -746,7 +746,9 @@ const api = {
     saveNote: (req: { caseId: string; findingId: string; text: string }) =>
       ipcRenderer.invoke(channels.xListening.saveNote, req),
     readNotes: (caseId: string) =>
-      ipcRenderer.invoke(channels.xListening.readNotes, caseId)
+      ipcRenderer.invoke(channels.xListening.readNotes, caseId),
+    exportItems: (req: { caseId: string; format: 'json' | 'csv' | 'pdf' | 'docx' }) =>
+      ipcRenderer.invoke(channels.xListening.exportItems, req)
   },
   // GhostScrape — hidden-browser X timeline/profile scraper (clearnet quarantine, GS-6).
   // Reuses the SAME two-flag gate + shared x.accounts.<id> session cookies as the x
