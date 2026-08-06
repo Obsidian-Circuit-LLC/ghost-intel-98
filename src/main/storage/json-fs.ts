@@ -967,6 +967,14 @@ export function mergeSettings(base: AppSettings, patch: Partial<AppSettings>): A
     },
     socmint: { ...base.socmint, ...(patch.socmint ?? {}) },
     reports: { ...base.reports, ...(patch.reports ?? {}) },
+    // xListening is a fixed-shape block with a nested `collect` sub-block; deep-merge BOTH
+    // levels so a settings.json that predates a toggle heals to the default instead of
+    // dropping it (same class as searchlight.scorer / media.eq).
+    xListening: {
+      ...base.xListening,
+      ...(patch.xListening ?? {}),
+      collect: { ...base.xListening.collect, ...(patch.xListening?.collect ?? {}) },
+    },
     // Flat config objects: deep-merge so a sub-field added to defaults in a later build
     // survives an older persisted block that predates it (same class as the searchlight
     // scorer regression). plugins is a dynamic Record, so it is intentionally left to the
