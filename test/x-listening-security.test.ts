@@ -171,6 +171,9 @@ describe('security: store-backed IPC handlers reject a traversing caseId', () =>
   // and control actually reaches the ensureUuid sink.
   const cases: Array<[string, (h: Map<string, Handler>) => unknown]> = [
     ['capture', (h) => h.get(channels.xListening.capture)!(TRUSTED, { caseId: TRAVERSAL, channelId: 'target' })],
+    ['captureThreadComments', (h) => h.get(channels.xListening.captureThreadComments)!(TRUSTED, { caseId: TRAVERSAL, channelId: 'target', rootPostId: '1789000000000000001', rootPostUrl: 'https://x.com/target/status/1789000000000000001' })],
+    ['runArchiveCycle', (h) => h.get(channels.xListening.runArchiveCycle)!(TRUSTED, { caseId: TRAVERSAL, channelId: 'target' })],
+    ['runArchiveCycles', (h) => h.get(channels.xListening.runArchiveCycles)!(TRUSTED, { caseId: TRAVERSAL, channelId: 'target' })],
     ['captureFollowers', (h) => h.get(channels.xListening.captureFollowers)!(TRUSTED, { caseId: TRAVERSAL, target: 'target' })],
     ['captureFollowing', (h) => h.get(channels.xListening.captureFollowing)!(TRUSTED, { caseId: TRAVERSAL, target: 'target' })],
     ['exportNetwork', (h) => h.get(channels.xListening.exportNetwork)!(TRUSTED, TRAVERSAL)],
