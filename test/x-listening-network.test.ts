@@ -24,6 +24,8 @@
  *     the challenge appears after navigation), normalize, persist to the encrypted
  *     `networks` artifact store keyed by caseId + (target, kind).
  */
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, it, expect, vi } from 'vitest';
 
 import {
@@ -34,6 +36,20 @@ import {
   type RawUserCell,
 } from '../src/main/x-listening/extract';
 import type { XNetworkArtifact } from '../src/main/x-listening/store';
+
+/**
+ * The SOURCE body of a `` export const NAME = `…` `` static-script template literal,
+ * read off disk. This is what the "no `${}` interpolation" guard must inspect — the
+ * RUNTIME value of the constant can never contain `${…}` (a template literal resolves
+ * its substitutions at evaluation time), so asserting `SCRIPT.includes('${')` is
+ * vacuous and can never fail on a regression. Reading the un-evaluated source can.
+ */
+function scriptSourceBody(relPath: string, name: string): string {
+  const source = readFileSync(resolve(process.cwd(), relPath), 'utf8');
+  const m = source.match(new RegExp('const ' + name + '\\s*=\\s*`([\\s\\S]*?)`'));
+  if (!m) throw new Error(`static script ${name} not found in ${relPath}`);
+  return m[1];
+}
 
 const cell = (o: Partial<RawUserCell> = {}): RawUserCell => ({
   username: 'alice',
@@ -48,8 +64,15 @@ const cell = (o: Partial<RawUserCell> = {}): RawUserCell => ({
 
 describe('USER_CELL_SCRIPT', () => {
   it('is a static payload with no interpolation (nothing scraped is spliced into executed code)', () => {
-    expect(USER_CELL_SCRIPT.includes('${')).toBe(false);
-    expect(USER_CELL_SCRIPT).toContain('UserCell');
+    // Guard the un-evaluated SOURCE template literal — the only form in which a
+    // regression that splices `${scraped}` into the payload is actually detectable.
+    const body = scriptSourceBody('src/main/x-listening/extract.ts', 'USER_CELL_SCRIPT');
+    expect(body).not.toContain('${');
+    expect(body).toContain('UserCell');
+    // The runtime constant is the same static payload (a distinctive selector proves
+    // the scanned source template is the one actually exported).
+    expect(USER_CELL_SCRIPT).toContain('[data-testid="UserCell"]');
+    expect(body).toContain('[data-testid="UserCell"]');
   });
 });
 
@@ -80,6 +103,25 @@ describe('normalizeUserCell', () => {
     const acct = normalizeUserCell(cell({ username: '@bob', bio: '   ' }));
     expect(acct!.handle).toBe('@bob');
     expect(acct!.bio).toBeUndefined();
+  });
+
+  it('does NOT fall back to the @handle when no display name is visible (honest absence)', () => {
+    // A UserCell with a valid handle but NO visible display name (X sometimes renders
+    // only the @handle line). The display name must be recorded as absent — never
+    // silently backfilled from the handle, which would present an unobserved value
+    // as captured. The renderer surfaces the absent field as "Not visible".
+    const acct = normalizeUserCell(cell({ username: 'alice', displayName: '' }));
+    expect(acct).not.toBeNull();
+    expect(acct!.handle).toBe('@alice');
+    expect(acct!.displayName).toBeUndefined();
+    // Explicitly: it is neither the bare handle nor the @-prefixed handle.
+    expect(acct!.displayName).not.toBe('alice');
+    expect(acct!.displayName).not.toBe('@alice');
+  });
+
+  it('treats a whitespace-only display name as absent, not as a captured value', () => {
+    const acct = normalizeUserCell(cell({ username: 'alice', displayName: '   ' }));
+    expect(acct!.displayName).toBeUndefined();
   });
 });
 

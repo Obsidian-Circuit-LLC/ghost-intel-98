@@ -46,7 +46,8 @@ interface XFeedItem {
 
 interface XNetworkAccount {
   handle: string;
-  displayName: string;
+  /** Optional — absent when no display name was visible; rendered as "Not visible", never the @handle. */
+  displayName?: string;
   avatar?: string;
   bio?: string;
 }

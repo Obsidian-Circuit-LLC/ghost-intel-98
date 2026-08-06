@@ -33,10 +33,13 @@ export interface XNote {
 }
 
 /** A visible follower/following account row. `avatar`, when present, is a local `data:`
- *  thumbnail — a remote URL must never be stored here (no-remote-media-inlining). */
+ *  thumbnail — a remote URL must never be stored here (no-remote-media-inlining).
+ *  `displayName` is OPTIONAL and omitted when no display name was visible — it is never
+ *  backfilled from the @handle (honesty: an unobserved value is never presented as
+ *  captured; the renderer shows an absent display name as "Not visible"). */
 export interface XNetworkAccount {
   handle: string;
-  displayName: string;
+  displayName?: string;
   avatar?: string;
   bio?: string;
 }

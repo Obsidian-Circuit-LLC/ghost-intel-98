@@ -457,7 +457,10 @@ export const USER_CELL_SCRIPT = `
       const hrefMatch = profileHref.match(/^\\/([A-Za-z0-9_]{1,15})$/);
       const textMatch = rawText.match(/(?:^|\\s)@([A-Za-z0-9_]{1,15})(?:\\b|$)/);
       const username = (hrefMatch && hrefMatch[1]) || (textMatch && textMatch[1]) || '';
-      const displayName = lines.find((line) => !line.startsWith('@') && !/^(Follow|Following|Follows you|Verified)$/i.test(line)) || username;
+      // HONESTY: when NO display-name line is visible, leave it '' — never fall back to
+      // the @handle. An unobserved display name must be recorded as absent, not fabricated
+      // from the handle (which would present a value the module never actually saw).
+      const displayName = lines.find((line) => !line.startsWith('@') && !/^(Follow|Following|Follows you|Verified)$/i.test(line)) || '';
       const ignored = new Set([displayName, '@' + username, 'Follow', 'Following', 'Follows you', 'Verified']);
       const bio = lines.filter((line) => !ignored.has(line)).join(' ').trim();
       const avatar = (cell.querySelector('img[src*="profile_images"]') || {}).getAttribute
@@ -479,14 +482,20 @@ export const USER_CELL_SCRIPT = `
  * not a real X username (never fabricate a row). The avatar is admitted ONLY as a
  * local `data:` thumbnail — a remote `profile_images` URL is DROPPED (no remote
  * media inlining). An empty bio is omitted rather than stored as ''.
+ *
+ * HONESTY: a display name that was not visible is OMITTED — it is NEVER silently
+ * backfilled from the @handle. Presenting the handle as the display name would pass
+ * off an unobserved value as captured; the renderer surfaces the absent field as
+ * "Not visible" instead.
  */
 export function normalizeUserCell(raw: RawUserCell): XNetworkAccount | null {
   const username = String(raw?.username ?? '').replace(/^@+/, '');
   if (!USERNAME_RE.test(username)) return null;
   const account: XNetworkAccount = {
     handle: `@${username}`,
-    displayName: String(raw?.displayName ?? '').trim() || username,
   };
+  const displayName = String(raw?.displayName ?? '').trim();
+  if (displayName) account.displayName = displayName;
   const bio = String(raw?.bio ?? '').trim();
   if (bio) account.bio = bio;
   const avatar = String(raw?.avatar ?? '');

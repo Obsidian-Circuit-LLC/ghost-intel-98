@@ -22,6 +22,8 @@
  */
 import { describe, it, expect } from 'vitest';
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 import {
   X_POST_SCRIPT,
@@ -31,6 +33,20 @@ import {
   type NormalizeContext,
 } from '../src/main/x-listening/extract';
 import { escapeField } from '../src/main/capture/security';
+
+/**
+ * The SOURCE body of a `` export const NAME = `…` `` static-script template literal,
+ * read off disk. The RUNTIME value of the constant can never contain `${…}` (a
+ * template literal resolves substitutions at evaluation time), so `SCRIPT.includes('${')`
+ * is vacuous and can never fail on a regression that splices scraped content into the
+ * payload. Guarding the un-evaluated source can.
+ */
+function scriptSourceBody(relPath: string, name: string): string {
+  const source = readFileSync(resolve(process.cwd(), relPath), 'utf8');
+  const m = source.match(new RegExp('const ' + name + '\\s*=\\s*`([\\s\\S]*?)`'));
+  if (!m) throw new Error(`static script ${name} not found in ${relPath}`);
+  return m[1];
+}
 
 const CTX: NormalizeContext = {
   caseId: 'case-a',
@@ -64,7 +80,15 @@ describe('X_POST_SCRIPT: static, no interpolation', () => {
   });
 
   it('contains NO `${` interpolation (scraped content can never be spliced in)', () => {
-    expect(X_POST_SCRIPT.includes('${')).toBe(false);
+    // Inspect the un-evaluated SOURCE template literal — the only form in which a
+    // regression that splices `${scraped}` into the payload is actually detectable
+    // (the runtime constant has already resolved any substitution away).
+    const body = scriptSourceBody('src/main/x-listening/extract.ts', 'X_POST_SCRIPT');
+    expect(body).not.toContain('${');
+    // The runtime constant is the same static payload (a distinctive selector proves
+    // the scanned source template is the one actually exported).
+    expect(body).toContain('article[data-testid="tweet"]');
+    expect(X_POST_SCRIPT).toContain('article[data-testid="tweet"]');
   });
 
   it('reads only the visible tweet-article DOM', () => {
