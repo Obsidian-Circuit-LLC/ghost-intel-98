@@ -213,6 +213,7 @@ describe('captureVisibleTimeline: collect toggles gate the live path', () => {
       },
       {
         guard: async (_win, capture) => ({ blocked: false, result: await capture() }),
+        navigate: async () => {},
         runCapture: async () => [raw({ id: '9', isReply: true, url: 'https://x.com/target/status/9' })],
         resolveMedia: async () => 'data:image/jpeg;base64,ZZZ',
         saveItems,
@@ -236,6 +237,7 @@ describe('captureVisibleTimeline: collect toggles gate the live path', () => {
       },
       {
         guard: async (_win, capture) => ({ blocked: false, result: await capture() }),
+        navigate: async () => {},
         runCapture: async () => [raw({ id: '9', isReply: true, url: 'https://x.com/target/status/9' })],
         resolveMedia: async () => 'data:image/jpeg;base64,ZZZ',
         saveItems: async (_c, items) => ({ added: items.length, skipped: 0 }),

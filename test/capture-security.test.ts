@@ -99,6 +99,29 @@ describe('remoteMediaToDataUri', () => {
     expect(out).toBeNull();
   });
 
+  it('refuses an OFF-HOST media URL — no page fetch, returns null (deanon beacon guard)', async () => {
+    const exec = vi.fn(() => Promise.resolve('data:image/png;base64,AAAA'));
+    const win = { webContents: { executeJavaScript: exec } };
+    const out = await remoteMediaToDataUri(win, 'https://evil.example/profile_images/beacon.png');
+    expect(out).toBeNull();
+    expect(exec).not.toHaveBeenCalled();
+  });
+
+  it('allows the X media CDN hosts (pbs/abs.twimg.com, x.com, twitter.com)', async () => {
+    for (const url of [
+      'https://pbs.twimg.com/media/a.jpg',
+      'https://abs.twimg.com/b.png',
+      'https://x.com/c.png',
+      'https://twitter.com/d.png'
+    ]) {
+      const exec = vi.fn(() => Promise.resolve('data:image/png;base64,AAAA'));
+      const win = { webContents: { executeJavaScript: exec } };
+      const out = await remoteMediaToDataUri(win, url);
+      expect(out).toBe('data:image/png;base64,AAAA');
+      expect(exec).toHaveBeenCalledOnce();
+    }
+  });
+
   it('returns null and never runs page JS for a non-http(s) scheme', async () => {
     const exec = vi.fn(() => Promise.resolve('data:whatever'));
     const win = { webContents: { executeJavaScript: exec } };

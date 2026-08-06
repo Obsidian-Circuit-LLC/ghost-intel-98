@@ -398,6 +398,7 @@ describe('honesty: a verification/rate-limit challenge STOPS capture', () => {
     const saveItems = vi.fn(async () => ({ added: 0, skipped: 0 }));
     const deps: Partial<TimelineCaptureDeps> = {
       guard: async () => ({ blocked: true, reason: 'verification challenge' }),
+      navigate: async () => {},
       runCapture,
       resolveMedia: async () => null,
       saveItems,

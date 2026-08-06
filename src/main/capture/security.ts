@@ -44,6 +44,22 @@ export function guardExternalUrl(u: string): string | null {
   return null;
 }
 
+/**
+ * Hosts a captured media URL may be fetched from — X's own media/CDN + site
+ * hosts only. `guardExternalUrl` alone admits any http(s) host, so a hostile X
+ * DOM with `img[src*="profile_images"]` pointing at an arbitrary host would make
+ * the capture page fetch it and beacon the analyst's real IP to the observed
+ * account. This allowlist is enforced BEFORE any in-page fetch to close that
+ * deanon vector. A subdomain of an allowed host is also permitted.
+ */
+const MEDIA_HOST_ALLOWLIST = ['pbs.twimg.com', 'abs.twimg.com', 'x.com', 'twitter.com'];
+
+/** True iff `host` is an allowlisted media host exactly, or a subdomain of one. */
+function mediaHostAllowed(host: string): boolean {
+  const h = host.toLowerCase();
+  return MEDIA_HOST_ALLOWLIST.some((allowed) => h === allowed || h.endsWith(`.${allowed}`));
+}
+
 /** Lead chars a spreadsheet may interpret as the start of a formula. */
 const FORMULA_LEAD = /^[=+\-@\t\r]/;
 
@@ -87,6 +103,17 @@ export async function remoteMediaToDataUri(
 ): Promise<string | null> {
   const safe = guardExternalUrl(url);
   if (!safe) return null;
+
+  // Enforce the media HOST allowlist BEFORE any fetch — a scraped media URL
+  // pointing off X's own hosts is a real-IP deanon beacon and is refused here,
+  // before the capture page ever issues a request.
+  let host: string;
+  try {
+    host = new URL(safe).hostname;
+  } catch {
+    return null;
+  }
+  if (!mediaHostAllowed(host)) return null;
 
   // Static payload: the ONLY dynamic part is a JSON-encoded string literal, so
   // the scraped URL cannot break out of the string and inject code.

@@ -56,6 +56,7 @@ function deps(over: Partial<TimelineCaptureDeps> = {}): Partial<TimelineCaptureD
   return {
     // pass-through gate: signed-in, unchallenged
     guard: async (_win, capture) => ({ blocked: false, result: await capture() }),
+    navigate: async () => {},
     runCapture: async () => [raw()],
     resolveMedia: async () => 'data:image/jpeg;base64,ZZZ',
     saveItems: async () => ({ added: 1, skipped: 0 }),
@@ -65,6 +66,38 @@ function deps(over: Partial<TimelineCaptureDeps> = {}): Partial<TimelineCaptureD
 }
 
 describe('captureVisibleTimeline', () => {
+  it('navigates to the TARGET profile BEFORE scraping (core-feature: not x.com/home)', async () => {
+    const order: string[] = [];
+    const navigate = vi.fn(async (_w: unknown, url: string) => {
+      order.push(`nav:${url}`);
+    });
+    const runCapture = vi.fn(async () => {
+      order.push('scrape');
+      return [raw()];
+    });
+    await captureVisibleTimeline(
+      WIN,
+      { ...REQ, channelId: 'alice', channelLabel: '@alice' },
+      deps({ navigate, runCapture })
+    );
+    // navigated to alice's profile, and BEFORE the scrape ran
+    expect(navigate).toHaveBeenCalledWith(WIN, 'https://x.com/alice');
+    expect(order).toEqual(['nav:https://x.com/alice', 'scrape']);
+  });
+
+  it('refuses an invalid/off-domain target handle — no navigation, no scrape', async () => {
+    const navigate = vi.fn(async () => {});
+    const runCapture = vi.fn(async () => [raw()]);
+    const res = await captureVisibleTimeline(
+      WIN,
+      { ...REQ, channelId: '', channelLabel: '@' },
+      deps({ navigate, runCapture })
+    );
+    expect(res.blocked).toBe(true);
+    expect(navigate).not.toHaveBeenCalled();
+    expect(runCapture).not.toHaveBeenCalled();
+  });
+
   it('runs the STATIC timeline payload (never an interpolated string)', async () => {
     const runCapture = vi.fn(async () => [raw()]);
     await captureVisibleTimeline(WIN, REQ, deps({ runCapture }));

@@ -251,6 +251,9 @@ export interface TimelineCaptureResult {
 
 /** Injectable seams so the orchestration is testable without electron/network. */
 export interface TimelineCaptureDeps {
+  /** Navigate the live capture window to a (already scheme/host-guarded) URL —
+   *  the target profile timeline, loaded BEFORE the guarded scrape. */
+  navigate: (win: Electron.BrowserWindow, url: string) => Promise<void>;
   /** Run the static timeline payload in the capture page → RawPost[]. */
   runCapture: (win: Electron.BrowserWindow, js: string) => Promise<unknown>;
   /** Resolve a remote media URL to a local `data:` thumbnail, or null. */
@@ -271,6 +274,9 @@ export interface TimelineCaptureDeps {
 
 function defaultCaptureDeps(): TimelineCaptureDeps {
   return {
+    navigate: async (win, url) => {
+      await win.webContents.loadURL(url);
+    },
     runCapture,
     resolveMedia: remoteMediaToDataUri,
     saveItems: async (caseId, items) => (await prodXStore()).saveItems(caseId, items),
@@ -328,6 +334,29 @@ export async function captureVisibleTimeline(
   };
 
   const collect = req.collect ?? DEFAULT_COLLECT;
+
+  // Navigate to the TARGET profile FIRST, THEN gate + scrape. Without this the
+  // capture reads whatever page the connect window last sat on (x.com/home), not
+  // the target's timeline — the core-feature bug. The profile URL is built from
+  // the observed handle and scheme/host guarded (x.com/twitter.com https only)
+  // before any navigation; an off-domain / malformed handle is refused, never
+  // loaded. Same nav-first-then-gate ordering as the thread/network paths: the
+  // challenge-refusal probe must run against the LOADED profile page, which is
+  // exactly where X may throw a rate-limit / verification interstitial.
+  const handle = String(req.channelId ?? '').replace(/^@+/, '');
+  const targetUrl = handle ? guardXPermalink(`https://x.com/${handle}`) : '';
+  if (!targetUrl) {
+    return {
+      blocked: true,
+      reason:
+        'The target profile is not a valid x.com/twitter.com handle — refused to navigate to it.',
+      added: 0,
+      skipped: 0,
+      items: []
+    };
+  }
+  await deps.navigate(win, targetUrl);
+
   const gated = await deps.guard(win, async () => {
     const rawCollected = await deps.runCapture(win, X_POST_SCRIPT);
     const raws: RawPost[] = Array.isArray(rawCollected) ? (rawCollected as RawPost[]) : [];
@@ -368,19 +397,12 @@ export interface ThreadCaptureRequest {
   collect?: XCollectSettings;
 }
 
-/** Injectable seams for the thread-comment path — adds navigation to the timeline deps. */
-export interface ThreadCaptureDeps extends TimelineCaptureDeps {
-  /** Navigate the live capture window to a (already scheme-guarded) thread URL. */
-  navigate: (win: Electron.BrowserWindow, url: string) => Promise<void>;
-}
+/** Injectable seams for the thread-comment path. `navigate` (to the thread URL) is
+ *  inherited from `TimelineCaptureDeps` — the same seam the timeline path uses. */
+export type ThreadCaptureDeps = TimelineCaptureDeps;
 
 function defaultThreadDeps(): ThreadCaptureDeps {
-  return {
-    ...defaultCaptureDeps(),
-    navigate: async (win, url) => {
-      await win.webContents.loadURL(url);
-    }
-  };
+  return defaultCaptureDeps();
 }
 
 /**

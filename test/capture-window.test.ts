@@ -9,6 +9,7 @@ const rec = vi.hoisted(() => ({
   webPreferences: null as Record<string, unknown> | null,
   openHandler: null as ((d: { url: string }) => { action: string }) | null,
   willNavigate: null as ((e: { preventDefault: () => void }, url: string) => void) | null,
+  willRedirect: null as ((e: { preventDefault: () => void }, url: string) => void) | null,
   setProxyArgs: null as Record<string, unknown> | null,
   executeArgs: null as unknown[] | null,
   order: [] as string[]
@@ -31,6 +32,9 @@ vi.mock('electron', () => {
         on: (event, fn) => {
           if (event === 'will-navigate') {
             rec.willNavigate = fn as (e: { preventDefault: () => void }, url: string) => void;
+          }
+          if (event === 'will-redirect') {
+            rec.willRedirect = fn as (e: { preventDefault: () => void }, url: string) => void;
           }
         },
         executeJavaScript: (js: string, userGesture?: boolean) => {
@@ -73,6 +77,7 @@ beforeEach(() => {
   rec.webPreferences = null;
   rec.openHandler = null;
   rec.willNavigate = null;
+  rec.willRedirect = null;
   rec.setProxyArgs = null;
   rec.executeArgs = null;
   rec.order = [];
@@ -125,6 +130,30 @@ describe('createCaptureWindow — hardening', () => {
     const sub = { preventDefault: vi.fn() };
     rec.willNavigate!(sub, 'https://mobile.twitter.com/home');
     expect(sub.preventDefault).not.toHaveBeenCalled();
+  });
+
+  it('guards will-redirect with the same scheme/host check (server 3xx / meta-refresh)', async () => {
+    await createCaptureWindow({
+      partition: 'persist:x-listening',
+      url: 'https://x.com/home',
+      allowHosts: ['x.com', 'twitter.com']
+    });
+    expect(rec.willRedirect).toBeTypeOf('function');
+
+    // off-host redirect is blocked
+    const offHost = { preventDefault: vi.fn() };
+    rec.willRedirect!(offHost, 'https://evil.example/track');
+    expect(offHost.preventDefault).toHaveBeenCalled();
+
+    // non-http(s) scheme redirect is blocked
+    const badScheme = { preventDefault: vi.fn() };
+    rec.willRedirect!(badScheme, 'data:text/html,<script>1</script>');
+    expect(badScheme.preventDefault).toHaveBeenCalled();
+
+    // an in-allowlist redirect is permitted
+    const allowed = { preventDefault: vi.fn() };
+    rec.willRedirect!(allowed, 'https://x.com/i/redirect');
+    expect(allowed.preventDefault).not.toHaveBeenCalled();
   });
 
   it('applies the proxy to the partition session and awaits setProxy BEFORE loadURL', async () => {

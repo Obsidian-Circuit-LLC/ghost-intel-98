@@ -96,9 +96,13 @@ export async function createCaptureWindow(
   // Deny-by-default: the window may never spawn a new window/tab.
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 
-  // Refuse any in-place navigation to a non-HTTP(S) scheme or a host outside
-  // the allowlist — blocks main-process redirect tricks off the capture surface.
-  win.webContents.on('will-navigate', (e, navUrl) => {
+  // Refuse any in-place navigation to a non-HTTP(S) scheme or a host outside the
+  // allowlist. Applied to BOTH `will-navigate` and `will-redirect`: a will-navigate
+  // guard alone is bypassed by a server-side 3xx / meta-refresh that Electron surfaces
+  // as `will-redirect`, not `will-navigate` — so a hostile page could redirect the
+  // capture surface off-host and out from under the guard. The same scheme/host check
+  // on both closes that gap.
+  const guardNavigation = (e: Electron.Event, navUrl: string): void => {
     try {
       const u = new URL(navUrl);
       if (u.protocol !== 'http:' && u.protocol !== 'https:') {
@@ -111,7 +115,9 @@ export async function createCaptureWindow(
     } catch {
       e.preventDefault();
     }
-  });
+  };
+  win.webContents.on('will-navigate', guardNavigation);
+  win.webContents.on('will-redirect', guardNavigation);
 
   await win.loadURL(opts.url);
   return win;
