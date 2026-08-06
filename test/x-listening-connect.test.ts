@@ -190,19 +190,54 @@ describe('PAGE_STATE_SCRIPT — static, no interpolation', () => {
   });
 });
 
-describe('registerXListeningIpc — safeHandle + assertTrustedSender', () => {
-  it('registers connect/status and every handler asserts the sender first', async () => {
-    const handlers = new Map<string, (e: unknown, ...a: unknown[]) => unknown>();
-    registerXListeningIpc({ handle: (ch, fn) => handlers.set(ch, fn) });
-    expect(handlers.has('xListening:connect')).toBe(true);
-    expect(handlers.has('xListening:status')).toBe(true);
+describe('registerXListeningIpc — event-preserving safeHandle + assertTrustedSender', () => {
+  /**
+   * Model the app's REAL event-preserving wrapper (register.ts `safeHandleWithEvent`):
+   * `ipcMain.handle(channel, (_e, ...args) => fn(_e, ...args))`. The IpcMainInvokeEvent is
+   * supplied by Electron as the first callback parameter — NEVER by the renderer — and forwarded
+   * to `fn` ahead of the renderer args. The test then invokes the registered handler exactly as
+   * `ipcMain` would: `(electronEvent, ...rendererArgs)`. This is the calling convention the
+   * production wiring actually uses; a mock that fabricated the event as a renderer arg would hide
+   * the seam (the v3.24.2 collect-path failure class).
+   */
+  function fakeIpcMain() {
+    const registered = new Map<string, (e: unknown, ...a: unknown[]) => unknown>();
+    const handle = (channel: string, fn: (e: unknown, ...args: unknown[]) => unknown) => {
+      registered.set(channel, (e, ...args) => fn(e, ...args));
+    };
+    return { registered, handle };
+  }
 
+  it('registers connect/status and every handler asserts the Electron-supplied sender first', async () => {
+    const ipc = fakeIpcMain();
+    registerXListeningIpc({ handle: ipc.handle });
+    expect(ipc.registered.has('xListening:connect')).toBe(true);
+    expect(ipc.registered.has('xListening:status')).toBe(true);
+
+    // The event is what ipcMain hands the registered callback as its first parameter.
     const ev = { senderFrame: { url: 'file:///app/index.html' } };
-    await handlers.get('xListening:status')!(ev);
+    await ipc.registered.get('xListening:status')!(ev);
     expect(assertTrustedSender).toHaveBeenCalledWith(ev);
 
     vi.mocked(assertTrustedSender).mockClear();
-    await handlers.get('xListening:connect')!(ev);
+    await ipc.registered.get('xListening:connect')!(ev);
     expect(assertTrustedSender).toHaveBeenCalledWith(ev);
+  });
+
+  it('validates the Electron event, never a renderer-supplied argument (no fail-open)', async () => {
+    // Prove the sender check reads the ipcMain-supplied event, not renderer args: if a future
+    // channel carried a payload, that payload must never be mistaken for the sender frame. Here the
+    // renderer passes a spoofed event-shaped object as an arg AFTER the real event; assertTrustedSender
+    // must still receive ONLY the genuine first-parameter event.
+    const ipc = fakeIpcMain();
+    registerXListeningIpc({ handle: ipc.handle });
+
+    const realEvent = { senderFrame: { url: 'file:///app/index.html' } };
+    const spoofedArg = { senderFrame: { url: 'https://x.com/attacker' } };
+    await ipc.registered.get('xListening:status')!(realEvent, spoofedArg);
+
+    expect(assertTrustedSender).toHaveBeenCalledTimes(1);
+    expect(assertTrustedSender).toHaveBeenCalledWith(realEvent);
+    expect(assertTrustedSender).not.toHaveBeenCalledWith(spoofedArg);
   });
 });

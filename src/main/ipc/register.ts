@@ -162,6 +162,7 @@ import { createGhostScrapeHandlers } from '../x/ghostscrape/ipc';
 import { createScrapingCasesHandlers } from '../scraping-cases/ipc';
 import { prodScrapingCaseStore } from '../storage/scraping-cases';
 import { registerInvestigationGraphIpc, registerInvestigationRunIpc } from '../investigation/ipc';
+import { registerXListeningIpc } from '../x-listening/ipc';
 import { registerInvestigationReportIpc } from '../investigation/report-ipc';
 import { renderIntelReportPdf } from '../investigation/report-pdf';
 import { addManualNode, addManualEdge } from '../investigation/graph';
@@ -272,7 +273,18 @@ const GATE_EXEMPT = new Set<string>([
   ...BGCONN_LOCK_EXEMPT_CHANNELS
 ]);
 
-function safeHandle(channel: string, fn: Handler): void {
+/**
+ * Event-preserving IPC handler wrapper: the vault-lock gate + error sanitisation every channel
+ * shares, with the raw `IpcMainInvokeEvent` forwarded as `fn`'s FIRST argument (then the renderer
+ * args), exactly as Electron delivers them to `ipcMain.handle`. A handler that must authorise the
+ * sender frame — `assertTrustedSender` — needs the real event, and the event comes from Electron,
+ * never from the renderer-supplied args. This is the seam the X Listening Station wires (its capture
+ * window can host a hostile remote page, so its channels MUST sender-validate).
+ */
+function safeHandleWithEvent(
+  channel: string,
+  fn: (e: Electron.IpcMainInvokeEvent, ...args: unknown[]) => unknown
+): void {
   ipcMain.handle(channel, async (_e, ...args) => {
     try {
       if (!GATE_EXEMPT.has(channel) && vault.isEnabledCached() && !vault.isUnlocked()) {
@@ -281,7 +293,7 @@ function safeHandle(channel: string, fn: Handler): void {
         (locked as Error & { code?: string }).code = 'EVAULTLOCKED';
         throw locked;
       }
-      return await fn(...args);
+      return await fn(_e, ...args);
     } catch (err) {
       const original = err as Error & { code?: string };
       const sanitised = sanitiseMessage(original.message ?? String(err));
@@ -294,6 +306,15 @@ function safeHandle(channel: string, fn: Handler): void {
       throw wrapped;
     }
   });
+}
+
+/**
+ * The default handle: authorisation is the vault gate alone, so it DISCARDS the sender event and
+ * passes only the renderer args to `fn`. Handlers that must validate the sender frame use
+ * `safeHandleWithEvent` instead — the plain form cannot, because it never receives the event.
+ */
+function safeHandle(channel: string, fn: Handler): void {
+  safeHandleWithEvent(channel, (_e, ...args) => fn(...args));
 }
 
 /** Resume a crashed/partial enable: if the migrating marker is set and the DEK is now loaded,
@@ -1736,6 +1757,12 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.memory.bondList, () => createBonds().list());
   safeHandle(channels.memory.bondAdd, (...args) => createBonds().add(ensureNodeId(args[0]), ensureNodeId(args[1])));
   safeHandle(channels.memory.bondRemove, (...args) => createBonds().remove(ensureNodeId(args[0]), ensureNodeId(args[1])));
+
+  // ---- X Listening Station: authenticated connect/status seam (clearnet quarantine, Task X2) ----
+  // Wired via safeHandleWithEvent — NOT plain safeHandle — because the capture window can host a
+  // hostile remote page (x.com), so every handler must validate the sender frame first
+  // (assertTrustedSender inside the module). The plain safeHandle discards the event and cannot.
+  registerXListeningIpc({ handle: safeHandleWithEvent });
 
   // ---- SP-4 investigation graph: per-case scene fetch + live delta push (Task 5) ----
   registerInvestigationGraphIpc({

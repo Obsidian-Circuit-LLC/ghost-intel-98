@@ -180,9 +180,15 @@ type HandleWithEvent = (
  * Wire the connect/status channels. Every handler validates the sender frame
  * FIRST (`assertTrustedSender`) — a hardened capture window can host a hostile
  * remote page, so an IPC message from a non-app frame must never be honoured —
- * then runs under the injected `handle` (the app's `safeHandle`: vault gate +
- * error sanitisation). Mirrors `registerInvestigationGraphIpc`'s injected-`handle`
- * shape, but with the event preserved so the sender check can run.
+ * then runs under the injected `handle`.
+ *
+ * The injected `handle` MUST be an event-PRESERVING wrapper: register.ts supplies
+ * `safeHandleWithEvent` (vault gate + error sanitisation + the raw
+ * `IpcMainInvokeEvent` forwarded as the handler's first argument). This is NOT the
+ * plain `safeHandle` the investigation seams use — that one discards the event and
+ * passes only the renderer args, which would leave `assertTrustedSender` reading a
+ * renderer-controlled value (spoofable) or `undefined` (fails closed). The event
+ * this handler validates is delivered by Electron/`ipcMain`, never by the renderer.
  */
 export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
   deps.handle(channels.xListening.connect, (e) => {
