@@ -822,6 +822,23 @@ export interface GhostApi {
     connect(): Promise<{ opened: boolean }>;
     /** Session connectivity as a derived boolean — never the auth token itself. */
     status(): Promise<{ connected: boolean }>;
+    /**
+     * Capture the visible X timeline in the connect window → normalized, honesty-stamped
+     * HarvestedItems in the encrypted case store. Refuses on a verification/rate-limit page
+     * (`blocked:true`, nothing captured); `harvestedAt`/collector version are stamped main-side.
+     */
+    capture(req: {
+      caseId: string;
+      jobId?: string;
+      channelId: string;
+      channelLabel?: string;
+    }): Promise<{
+      blocked: boolean;
+      reason?: string;
+      added: number;
+      skipped: number;
+      items: HarvestedItem[];
+    }>;
   };
   /**
    * GhostScrape — hidden-browser X timeline/profile scraper (clearnet quarantine module).

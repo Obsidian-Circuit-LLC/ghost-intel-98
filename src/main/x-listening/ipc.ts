@@ -25,6 +25,15 @@ import {
   runCapture,
   assertTrustedSender
 } from '../capture/capture-window';
+import { remoteMediaToDataUri, type MediaCapturePage } from '../capture/security';
+import {
+  X_POST_SCRIPT,
+  normalizePost,
+  type RawPost,
+  type NormalizeContext,
+  type XHarvestedItem
+} from './extract';
+import { prodXStore } from './store';
 
 /** Clearnet partition the authenticated X session lives on. Matches the X1 contract. */
 export const X_LISTENING_PARTITION = 'persist:x-listening';
@@ -171,6 +180,130 @@ export async function guardedCapture<T>(
   return { blocked: false, result };
 }
 
+// ---- X3: visible-post capture → persisted HarvestedItems ----------------
+
+/** This collector's version, stamped into every item's provenance. */
+export const X_COLLECTOR_VERSION = 'x-listening/1.0.0';
+
+/**
+ * The renderer-supplied context for a capture: which case/job and which profile
+ * timeline is being observed. `harvestedAt` + `collectorVersion` are stamped
+ * MAIN-side (the trusted clock + version), never accepted from the renderer.
+ */
+export interface CaptureRequest {
+  caseId: string;
+  jobId: string;
+  /** The profile/timeline being observed (the HarvestedItem "channel"). */
+  channelId: string;
+  channelLabel: string;
+}
+
+export interface TimelineCaptureResult {
+  blocked: boolean;
+  reason?: string;
+  added: number;
+  skipped: number;
+  items: XHarvestedItem[];
+}
+
+/** Injectable seams so the orchestration is testable without electron/network. */
+export interface TimelineCaptureDeps {
+  /** Run the static timeline payload in the capture page → RawPost[]. */
+  runCapture: (win: Electron.BrowserWindow, js: string) => Promise<unknown>;
+  /** Resolve a remote media URL to a local `data:` thumbnail, or null. */
+  resolveMedia: (win: MediaCapturePage, url: string) => Promise<string | null>;
+  /** Persist normalized items to the encrypted case store. */
+  saveItems: (
+    caseId: string,
+    items: XHarvestedItem[]
+  ) => Promise<{ added: number; skipped: number }>;
+  /** The challenge-refusal gate (X2): runs `capture` only on a signed-in, unchallenged page. */
+  guard: <T>(
+    win: Electron.BrowserWindow,
+    capture: () => Promise<T>
+  ) => Promise<{ blocked: boolean; reason?: string; result?: T }>;
+  /** Injected clock — the ISO capture time stamped onto every item. */
+  now: () => string;
+}
+
+function defaultCaptureDeps(): TimelineCaptureDeps {
+  return {
+    runCapture,
+    resolveMedia: remoteMediaToDataUri,
+    saveItems: async (caseId, items) => (await prodXStore()).saveItems(caseId, items),
+    guard: guardedCapture,
+    now: () => new Date().toISOString()
+  };
+}
+
+/**
+ * Resolve every remote media URL on a raw post to a local `data:` thumbnail,
+ * dropping any that fail. A remote URL is NEVER carried forward — combined with
+ * `normalizePost`'s `data:`-only filter this guarantees no stored field can ever
+ * beacon (the review's media-inlining finding).
+ */
+async function resolveRawMedia(
+  win: Electron.BrowserWindow,
+  raw: RawPost,
+  resolveMedia: TimelineCaptureDeps['resolveMedia']
+): Promise<RawPost> {
+  const resolved: string[] = [];
+  for (const url of raw.media || []) {
+    const src = String(url ?? '');
+    if (src.startsWith('data:')) {
+      resolved.push(src);
+      continue;
+    }
+    const dataUri = await resolveMedia(win, src);
+    if (dataUri) resolved.push(dataUri);
+  }
+  return { ...raw, media: resolved };
+}
+
+/**
+ * Capture the visible X timeline in the live connect window and persist it.
+ *
+ * Routes through the X2 challenge-refusal gate FIRST — on a verification /
+ * rate-limit page nothing is captured and `{blocked:true}` is returned. Otherwise
+ * the STATIC `X_POST_SCRIPT` reads the visible tweet articles, each post's media
+ * is resolved to local `data:` thumbnails, `normalizePost` stamps the honesty
+ * markers, and the items land in the encrypted case store via `xStore.saveItems`.
+ */
+export async function captureVisibleTimeline(
+  win: Electron.BrowserWindow,
+  req: CaptureRequest,
+  overrides: Partial<TimelineCaptureDeps> = {}
+): Promise<TimelineCaptureResult> {
+  const deps = { ...defaultCaptureDeps(), ...overrides };
+  const ctx: NormalizeContext = {
+    caseId: req.caseId,
+    jobId: req.jobId,
+    collectorVersion: X_COLLECTOR_VERSION,
+    harvestedAt: deps.now(),
+    channelId: req.channelId,
+    channelLabel: req.channelLabel
+  };
+
+  const gated = await deps.guard(win, async () => {
+    const rawCollected = await deps.runCapture(win, X_POST_SCRIPT);
+    const raws: RawPost[] = Array.isArray(rawCollected) ? (rawCollected as RawPost[]) : [];
+    const items: XHarvestedItem[] = [];
+    for (const raw of raws) {
+      const withMedia = await resolveRawMedia(win, raw, deps.resolveMedia);
+      items.push(normalizePost(withMedia, ctx));
+    }
+    return items;
+  });
+
+  if (gated.blocked) {
+    return { blocked: true, reason: gated.reason, added: 0, skipped: 0, items: [] };
+  }
+
+  const items = gated.result ?? [];
+  const { added, skipped } = await deps.saveItems(req.caseId, items);
+  return { blocked: false, added, skipped, items };
+}
+
 type HandleWithEvent = (
   channel: string,
   fn: (e: Electron.IpcMainInvokeEvent, ...args: unknown[]) => unknown
@@ -198,5 +331,21 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
   deps.handle(channels.xListening.status, (e) => {
     assertTrustedSender(e);
     return xSessionStatus();
+  });
+  deps.handle(channels.xListening.capture, (e, reqArg) => {
+    assertTrustedSender(e);
+    if (!xWindow || xWindow.isDestroyed()) {
+      throw new Error('X is not connected. Open the connect window and sign in before capturing.');
+    }
+    const req = reqArg as Partial<CaptureRequest> | undefined;
+    if (!req || typeof req.caseId !== 'string' || typeof req.channelId !== 'string') {
+      throw new Error('Capture requires a caseId and a target channelId.');
+    }
+    return captureVisibleTimeline(xWindow, {
+      caseId: req.caseId,
+      jobId: typeof req.jobId === 'string' ? req.jobId : req.caseId,
+      channelId: req.channelId,
+      channelLabel: typeof req.channelLabel === 'string' ? req.channelLabel : `@${req.channelId}`
+    });
   });
 }

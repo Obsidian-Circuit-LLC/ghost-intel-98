@@ -730,7 +730,13 @@ const api = {
     connect: (): Promise<{ opened: boolean }> =>
       ipcRenderer.invoke(channels.xListening.connect),
     status: (): Promise<{ connected: boolean }> =>
-      ipcRenderer.invoke(channels.xListening.status)
+      ipcRenderer.invoke(channels.xListening.status),
+    capture: (req: {
+      caseId: string;
+      jobId?: string;
+      channelId: string;
+      channelLabel?: string;
+    }) => ipcRenderer.invoke(channels.xListening.capture, req)
   },
   // GhostScrape — hidden-browser X timeline/profile scraper (clearnet quarantine, GS-6).
   // Reuses the SAME two-flag gate + shared x.accounts.<id> session cookies as the x

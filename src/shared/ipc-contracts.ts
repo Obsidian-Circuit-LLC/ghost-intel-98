@@ -594,7 +594,9 @@ export const channels = {
     /** Open (or reopen) the hardened X login window on the clearnet partition. */
     connect: 'xListening:connect',
     /** Derive a `connected` boolean from the auth-cookie presence — never returns the token. */
-    status: 'xListening:status'
+    status: 'xListening:status',
+    /** Visible-DOM timeline capture → normalized HarvestedItems in the encrypted case store. */
+    capture: 'xListening:capture'
   },
   // GhostScrape — hidden-browser X timeline/profile scraper (clearnet quarantine module, GS-6).
   // Reuses the SAME two-flag gate (x.networkEnabled && x.clearnetAcknowledged) and shared
