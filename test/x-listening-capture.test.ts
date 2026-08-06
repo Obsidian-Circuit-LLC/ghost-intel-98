@@ -57,6 +57,8 @@ function deps(over: Partial<TimelineCaptureDeps> = {}): Partial<TimelineCaptureD
     // pass-through gate: signed-in, unchallenged
     guard: async (_win, capture) => ({ blocked: false, result: await capture() }),
     navigate: async () => {},
+    // Stub the post-navigation settle to a no-op so tests never incur the real wait.
+    settle: async () => {},
     runCapture: async () => [raw()],
     resolveMedia: async () => 'data:image/jpeg;base64,ZZZ',
     saveItems: async () => ({ added: 1, skipped: 0 }),
@@ -83,6 +85,47 @@ describe('captureVisibleTimeline', () => {
     // navigated to alice's profile, and BEFORE the scrape ran
     expect(navigate).toHaveBeenCalledWith(WIN, 'https://x.com/alice');
     expect(order).toEqual(['nav:https://x.com/alice', 'scrape']);
+  });
+
+  it('SETTLES after navigate and BEFORE the scrape (async-SPA under-capture race)', async () => {
+    // loadURL resolves on did-finish-load, before x.com's async XHR paints the tweet
+    // DOM — so the static scrape must wait for the visible set to render. Order must be
+    // navigate → settle → scrape; if settle ran after (or not at all) the scrape reads a
+    // not-yet-populated page and under-captures.
+    const order: string[] = [];
+    const navigate = vi.fn(async () => {
+      order.push('navigate');
+    });
+    const settle = vi.fn(async () => {
+      order.push('settle');
+    });
+    const runCapture = vi.fn(async () => {
+      order.push('scrape');
+      return [raw()];
+    });
+    await captureVisibleTimeline(
+      WIN,
+      { ...REQ, channelId: 'alice', channelLabel: '@alice' },
+      deps({ navigate, settle, runCapture })
+    );
+    expect(settle).toHaveBeenCalledWith(WIN);
+    expect(order).toEqual(['navigate', 'settle', 'scrape']);
+  });
+
+  it('refuses a non-handle channelId ("home") — no navigation, no scrape', async () => {
+    // guardXPermalink only checks scheme/host; "home" would navigate to the NON-profile
+    // x.com/home surface. The strict handle guard must refuse it (blocked), matching the
+    // network path — never navigate, never scrape.
+    const navigate = vi.fn(async () => {});
+    const runCapture = vi.fn(async () => [raw()]);
+    const res = await captureVisibleTimeline(
+      WIN,
+      { ...REQ, channelId: 'home', channelLabel: 'home' },
+      deps({ navigate, runCapture })
+    );
+    expect(res.blocked).toBe(true);
+    expect(navigate).not.toHaveBeenCalled();
+    expect(runCapture).not.toHaveBeenCalled();
   });
 
   it('refuses an invalid/off-domain target handle — no navigation, no scrape', async () => {

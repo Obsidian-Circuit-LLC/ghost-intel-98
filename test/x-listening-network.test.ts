@@ -211,6 +211,7 @@ describe('captureFollowers / captureFollowing', () => {
       { caseId: 'case-a', jobId: 'job-1', target: 'target' },
       {
         navigate,
+        settle: async () => {},
         guard: guard as never,
         runCapture: async () => rawRows(),
         resolveMedia: async () => 'data:image/png;base64,AV',
@@ -237,6 +238,7 @@ describe('captureFollowers / captureFollowing', () => {
       { caseId: 'case-a', jobId: 'job-1', target: '@target' },
       {
         navigate,
+        settle: async () => {},
         guard: async (_win, capture) => ({ blocked: false, result: await capture() }),
         runCapture: async () => rawRows(),
         resolveMedia: async () => null,
@@ -257,6 +259,7 @@ describe('captureFollowers / captureFollowing', () => {
       { caseId: 'case-a', jobId: 'job-1', target: 'target' },
       {
         navigate: async () => {},
+        settle: async () => {},
         guard: async () => ({ blocked: true, reason: 'verification challenge' }),
         runCapture,
         resolveMedia: async () => null,
@@ -276,7 +279,7 @@ describe('captureFollowers / captureFollowing', () => {
     const res = await captureFollowers(
       {} as unknown as Electron.BrowserWindow,
       { caseId: 'case-a', jobId: 'job-1', target: 'bad handle!' },
-      { navigate, guard: async (_w, c) => ({ blocked: false, result: await c() }) },
+      { navigate, settle: async () => {}, guard: async (_w, c) => ({ blocked: false, result: await c() }) },
     );
     expect(res.blocked).toBe(true);
     expect(navigate).not.toHaveBeenCalled();

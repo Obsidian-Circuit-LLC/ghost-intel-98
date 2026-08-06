@@ -254,6 +254,14 @@ export interface TimelineCaptureDeps {
   /** Navigate the live capture window to a (already scheme/host-guarded) URL —
    *  the target profile timeline, loaded BEFORE the guarded scrape. */
   navigate: (win: Electron.BrowserWindow, url: string) => Promise<void>;
+  /** Post-navigation SETTLE: a bounded wait so x.com's async XHR renders the visible
+   *  tweet/usercell DOM BEFORE the static scrape reads it. `loadURL` resolves on
+   *  did-finish-load — before the SPA's client-side fetch paints the timeline — so a
+   *  scrape fired immediately under-captures. Runs AFTER navigate, BEFORE the guarded
+   *  scrape. Injectable so tests stub it to a no-op (no real wait). The single-viewport
+   *  / no-scroll honesty posture is preserved: this waits for the VISIBLE set to render,
+   *  it does NOT scroll to load more. */
+  settle: (win: Electron.BrowserWindow) => Promise<void>;
   /** Run the static timeline payload in the capture page → RawPost[]. */
   runCapture: (win: Electron.BrowserWindow, js: string) => Promise<unknown>;
   /** Resolve a remote media URL to a local `data:` thumbnail, or null. */
@@ -272,11 +280,23 @@ export interface TimelineCaptureDeps {
   now: () => string;
 }
 
+/** Milliseconds the default post-navigation settle waits for x.com's async XHR to
+ *  paint the visible timeline/usercell DOM. Mirrors the quarantine's loadURL + sleep
+ *  cadence (`main.cjs` timeline path). Bounded + self-contained (no external dep). */
+const DEFAULT_SETTLE_MS = 2500;
+
+/** The real post-navigation settle: a self-contained bounded `setTimeout` Promise.
+ *  Injectable seams override this in tests so no case incurs the real wait. */
+function realSettle(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, DEFAULT_SETTLE_MS));
+}
+
 function defaultCaptureDeps(): TimelineCaptureDeps {
   return {
     navigate: async (win, url) => {
       await win.webContents.loadURL(url);
     },
+    settle: () => realSettle(),
     runCapture,
     resolveMedia: remoteMediaToDataUri,
     saveItems: async (caseId, items) => (await prodXStore()).saveItems(caseId, items),
@@ -344,7 +364,23 @@ export async function captureVisibleTimeline(
   // challenge-refusal probe must run against the LOADED profile page, which is
   // exactly where X may throw a rate-limit / verification interstitial.
   const handle = String(req.channelId ?? '').replace(/^@+/, '');
-  const targetUrl = handle ? guardXPermalink(`https://x.com/${handle}`) : '';
+  // STRICT handle guard (same shared `isValidXHandle` the network path uses).
+  // guardXPermalink only checks scheme/host, so a non-handle channelId like "home"
+  // / "messages" / "i/lists/123" would otherwise navigate to a NON-profile x.com
+  // surface. "i/lists/123" fails the `[A-Za-z0-9_]{1,15}` shape; "home"/"messages"
+  // match the shape but are reserved non-profile surfaces — both are refused here,
+  // matching captureNetwork, before any URL is built or navigated.
+  if (!isValidXHandle(handle)) {
+    return {
+      blocked: true,
+      reason:
+        'The target profile is not a valid x.com/twitter.com handle — refused to navigate to it.',
+      added: 0,
+      skipped: 0,
+      items: []
+    };
+  }
+  const targetUrl = guardXPermalink(`https://x.com/${handle}`);
   if (!targetUrl) {
     return {
       blocked: true,
@@ -356,6 +392,8 @@ export async function captureVisibleTimeline(
     };
   }
   await deps.navigate(win, targetUrl);
+  // Let the async SPA render the visible tweet DOM before the static scrape reads it.
+  await deps.settle(win);
 
   const gated = await deps.guard(win, async () => {
     const rawCollected = await deps.runCapture(win, X_POST_SCRIPT);
@@ -454,6 +492,8 @@ export async function captureThreadComments(
   // Mirrors quarantine `main.cjs:481-482`: loadURL(rootPost.url) THEN
   // assertSignedInPage(win).
   await deps.navigate(win, safeUrl);
+  // Let the async SPA render the visible thread DOM before the static scrape reads it.
+  await deps.settle(win);
   const gated = await deps.guard(win, async () => {
     const rawCollected = await deps.runCapture(win, X_POST_SCRIPT);
     const raws: RawPost[] = Array.isArray(rawCollected) ? (rawCollected as RawPost[]) : [];
@@ -516,6 +556,12 @@ export interface NetworkCaptureResult {
 export interface NetworkCaptureDeps {
   /** Navigate the live capture window to a (already scheme/host-guarded) URL. */
   navigate: (win: Electron.BrowserWindow, url: string) => Promise<void>;
+  /** Post-navigation SETTLE: a bounded wait so x.com's async XHR renders the visible
+   *  `UserCell` rows BEFORE the static scrape reads them. Runs AFTER navigate, BEFORE
+   *  the guarded scrape. Injectable so tests stub it to a no-op. Preserves the
+   *  single-viewport honesty posture: it waits for the visible set to render, it does
+   *  NOT scroll to load more accounts. */
+  settle: (win: Electron.BrowserWindow) => Promise<void>;
   /** Run the static UserCell payload in the capture page → RawUserCell[]. */
   runCapture: (win: Electron.BrowserWindow, js: string) => Promise<unknown>;
   /** Resolve a remote avatar URL to a local `data:` thumbnail, or null. */
@@ -536,6 +582,7 @@ function defaultNetworkDeps(): NetworkCaptureDeps {
     navigate: async (win, url) => {
       await win.webContents.loadURL(url);
     },
+    settle: () => realSettle(),
     runCapture,
     resolveMedia: remoteMediaToDataUri,
     guard: guardedCapture,
@@ -546,6 +593,39 @@ function defaultNetworkDeps(): NetworkCaptureDeps {
 
 /** A visible X handle: 1–15 of `[A-Za-z0-9_]`. Mirror of the extract-side guard. */
 const NETWORK_TARGET_RE = /^[A-Za-z0-9_]{1,15}$/;
+
+/**
+ * X top-level paths that MATCH the handle shape but resolve to a NON-profile surface
+ * (the home timeline, DMs, lists, notifications, …). `guardXPermalink` only checks
+ * scheme/host, and the handle regex accepts a bare word like `home`/`messages`, so a
+ * channelId/target set to one of these would navigate the capture window to a non-profile
+ * x.com page. They are refused so both capture paths only ever open a real @profile.
+ */
+const RESERVED_X_HANDLES = new Set([
+  'home',
+  'explore',
+  'notifications',
+  'messages',
+  'settings',
+  'i',
+  'compose',
+  'search',
+  'bookmarks',
+  'lists',
+  'login',
+  'logout',
+  'signup'
+]);
+
+/**
+ * True iff `handle` is a real X @handle: it matches the visible-handle shape
+ * (`[A-Za-z0-9_]{1,15}`) AND is not a reserved non-profile surface. Used by BOTH the
+ * timeline and network capture paths so a channelId/target like `home` or `messages`
+ * is refused identically — never navigated to as if it were a target's profile.
+ */
+function isValidXHandle(handle: string): boolean {
+  return NETWORK_TARGET_RE.test(handle) && !RESERVED_X_HANDLES.has(handle.toLowerCase());
+}
 
 /**
  * Resolve a captured cell's remote avatar to a local `data:` thumbnail, dropping it
@@ -585,7 +665,7 @@ export async function captureNetwork(
   overrides: Partial<NetworkCaptureDeps> = {}
 ): Promise<NetworkCaptureResult> {
   const username = String(req.target ?? '').replace(/^@+/, '');
-  if (!NETWORK_TARGET_RE.test(username)) {
+  if (!isValidXHandle(username)) {
     return {
       blocked: true,
       reason: 'The target is not a valid X handle — refused to open a followers/following page for it.',
@@ -614,6 +694,8 @@ export async function captureNetwork(
   // verification interstitial. Gating before navigation would probe the pre-nav page
   // and silently weaken the STOP-on-challenge honesty invariant.
   await deps.navigate(win, safeUrl);
+  // Let the async SPA render the visible UserCell rows before the static scrape reads them.
+  await deps.settle(win);
   const gated = await deps.guard(win, async () => {
     const rawCollected = await deps.runCapture(win, USER_CELL_SCRIPT);
     const rows: RawUserCell[] = Array.isArray(rawCollected) ? (rawCollected as RawUserCell[]) : [];

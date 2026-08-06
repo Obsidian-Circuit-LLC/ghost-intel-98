@@ -214,6 +214,7 @@ describe('captureVisibleTimeline: collect toggles gate the live path', () => {
       {
         guard: async (_win, capture) => ({ blocked: false, result: await capture() }),
         navigate: async () => {},
+        settle: async () => {},
         runCapture: async () => [raw({ id: '9', isReply: true, url: 'https://x.com/target/status/9' })],
         resolveMedia: async () => 'data:image/jpeg;base64,ZZZ',
         saveItems,
@@ -238,6 +239,7 @@ describe('captureVisibleTimeline: collect toggles gate the live path', () => {
       {
         guard: async (_win, capture) => ({ blocked: false, result: await capture() }),
         navigate: async () => {},
+        settle: async () => {},
         runCapture: async () => [raw({ id: '9', isReply: true, url: 'https://x.com/target/status/9' })],
         resolveMedia: async () => 'data:image/jpeg;base64,ZZZ',
         saveItems: async (_c, items) => ({ added: items.length, skipped: 0 }),
@@ -265,7 +267,7 @@ describe('captureThreadComments: comment gate end-to-end', () => {
         rootPostUrl: 'https://x.com/target/status/100',
         collect: { replies: false, reposts: false, comments: false },
       },
-      { navigate, runCapture, saveItems },
+      { navigate, settle: async () => {}, runCapture, saveItems },
     );
     expect(res.added).toBe(0);
     expect(res.items).toEqual([]);
@@ -291,6 +293,7 @@ describe('captureThreadComments: comment gate end-to-end', () => {
       },
       {
         navigate,
+        settle: async () => {},
         guard: async (_win, capture) => ({ blocked: false, result: await capture() }),
         runCapture: async () => [
           raw({ id: '100', username: 'target', url: 'https://x.com/target/status/100' }),
@@ -336,6 +339,7 @@ describe('captureThreadComments: comment gate end-to-end', () => {
       },
       {
         navigate,
+        settle: async () => {},
         guard: guard as never,
         runCapture: async () => [],
         resolveMedia: async () => 'data:image/jpeg;base64,ZZZ',
@@ -367,6 +371,7 @@ describe('captureThreadComments: comment gate end-to-end', () => {
       },
       {
         navigate,
+        settle: async () => {},
         // The guard probes the loaded thread page and finds a challenge.
         guard: async () => ({
           blocked: true,
@@ -400,7 +405,7 @@ describe('captureThreadComments: comment gate end-to-end', () => {
         rootPostUrl: 'https://evil.example/target/status/100',
         collect: { replies: false, reposts: false, comments: true },
       },
-      { navigate, guard: async (_win, capture) => ({ blocked: false, result: await capture() }) },
+      { navigate, settle: async () => {}, guard: async (_win, capture) => ({ blocked: false, result: await capture() }) },
     );
     expect(navigate).not.toHaveBeenCalled();
     expect(res.blocked).toBe(true);

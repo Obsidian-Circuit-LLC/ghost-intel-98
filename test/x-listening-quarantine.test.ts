@@ -197,7 +197,7 @@ describe('X module clearnet-quarantine import graph', () => {
     // Guard against a mis-pathed root silently making the whole test vacuous, and
     // against the transitive walk collapsing to just the seeds (a resolver regression).
     expect(seeds.length).toBeGreaterThan(0);
-    expect(graph.files.size).toBeGreaterThanOrEqual(seeds.length);
+    expect(graph.files.size).toBeGreaterThan(seeds.length);
   });
 
   it('imports NOTHING from bgconn / Tor / socks / telegram (no transport trust-domain crossing)', () => {

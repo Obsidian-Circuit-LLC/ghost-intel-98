@@ -399,6 +399,7 @@ describe('honesty: a verification/rate-limit challenge STOPS capture', () => {
     const deps: Partial<TimelineCaptureDeps> = {
       guard: async () => ({ blocked: true, reason: 'verification challenge' }),
       navigate: async () => {},
+      settle: async () => {},
       runCapture,
       resolveMedia: async () => null,
       saveItems,
