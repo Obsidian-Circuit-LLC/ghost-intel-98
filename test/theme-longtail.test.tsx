@@ -33,15 +33,11 @@ const read = (p: string): string => readFileSync(join(ROOT, p), 'utf8');
 const THEME_CSS = read('src/renderer/styles/theme.css');
 const OVERRIDES_CSS = read('src/renderer/styles/98.overrides.css');
 const SEARCHLIGHT_CSS = read('src/renderer/modules/searchlight/searchlight.css');
-const XC_CSS = read('src/renderer/modules/x/x-collector.css');
 const SM_CSS = read('src/renderer/modules/socmint/socmint.css');
 const OT_CSS = read('src/renderer/modules/osint-toolkit/osint-toolkit.css');
 
 const MARKUP =
   '<div class="ga98-window-shell"><div class="window"><div class="window-body">' +
-  // x-collector Win98 chrome (its .xc-root interior is already dark; the tab-strip + grey buttons are the islands)
-  '<div class="xc-tabs" id="xc-tabs"><button class="xc-tab" id="xc-tab">Feed</button></div>' +
-  '<button class="xc-btn" id="xc-btn">Harvest</button>' +
   // socmint Win98 chrome
   '<div class="sm-tabs" id="sm-tabs"><button class="sm-tab" id="sm-tab">Telegram</button></div>' +
   // searchlight sweep chrome
@@ -65,7 +61,7 @@ const MARKUP =
 
 const DOC =
   '<head><style>' + THEME_CSS + '</style><style>' + OVERRIDES_CSS + '</style>' +
-  '<style>' + SEARCHLIGHT_CSS + '</style><style>' + XC_CSS + '</style>' +
+  '<style>' + SEARCHLIGHT_CSS + '</style>' +
   '<style>' + SM_CSS + '</style><style>' + OT_CSS + '</style></head><body>' +
   MARKUP + '</body>';
 
@@ -110,12 +106,6 @@ async function colorOf(selector: string, prop: string): Promise<string> {
 describe('AMETHYST — long-tail Win98 chrome darkens with legible text', () => {
   beforeAll(async () => { await setTheme('amethyst'); });
 
-  it('x-collector tab-strip + grey button dark, tab text light', async () => {
-    expect(await lumOf('#xc-tabs', 'background-color'), 'xc tabs dark').toBeLessThan(0.25);
-    expect(await lumOf('#xc-btn', 'background-color'), 'xc button dark').toBeLessThan(0.25);
-    expect(await lumOf('#xc-tab', 'color'), 'xc tab text light').toBeGreaterThan(0.5);
-    expect(await lumOf('#xc-btn', 'color'), 'xc button text light').toBeGreaterThan(0.5);
-  });
   it('socmint tab-strip dark, tab text light', async () => {
     expect(await lumOf('#sm-tabs', 'background-color'), 'sm tabs dark').toBeLessThan(0.25);
     expect(await lumOf('#sm-tab', 'color'), 'sm tab text light').toBeGreaterThan(0.5);
@@ -143,11 +133,6 @@ describe('AMETHYST — long-tail Win98 chrome darkens with legible text', () => 
 describe('CLASSIC PARITY — the same long-tail chrome stays light Win98 under classic', () => {
   beforeAll(async () => { await setTheme(null); });
 
-  it('x-collector tab-strip + grey button light-silver, tab text dark', async () => {
-    expect(await lumOf('#xc-tabs', 'background-color'), 'classic xc tabs light').toBeGreaterThan(0.4);
-    expect(await lumOf('#xc-btn', 'background-color'), 'classic xc button silver').toBeGreaterThan(0.4);
-    expect(await lumOf('#xc-tab', 'color'), 'classic xc tab text dark').toBeLessThan(0.1);
-  });
   it('searchlight sweep input light, button silver', async () => {
     expect(await lumOf('#sl-input', 'background-color'), 'classic sweep input light').toBeGreaterThan(0.7);
     expect(await lumOf('#sl-btn', 'background-color'), 'classic sweep button silver').toBeGreaterThan(0.4);

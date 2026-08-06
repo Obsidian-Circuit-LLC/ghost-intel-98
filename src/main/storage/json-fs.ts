@@ -981,7 +981,6 @@ export function mergeSettings(base: AppSettings, patch: Partial<AppSettings>): A
     // wholesale `...patch` spread above — there is no fixed default to preserve.
     chat: { ...base.chat, ...(patch.chat ?? {}) },
     offensive: { ...base.offensive, ...(patch.offensive ?? {}) },
-    x: { ...base.x, ...(patch.x ?? {}) },
     searchlight: {
       ...base.searchlight,
       ...(patch.searchlight ?? {}),

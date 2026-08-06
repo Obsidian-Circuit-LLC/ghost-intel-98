@@ -5,7 +5,7 @@
 
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import { channels } from '../shared/ipc-contracts';
-import type { LocalAiStatus, LocalAiProgress, MemoryStatus, MemoryProgress, MemoryItem, RecallPreview, LibraryDoc, MemoryGraphShape, BondShape, GhostScrapeConfig, GhostScrapeResult, ScrapingCaseStoreId, PdfSignPlacement } from '../shared/ipc-contracts';
+import type { LocalAiStatus, LocalAiProgress, MemoryStatus, MemoryProgress, MemoryItem, RecallPreview, LibraryDoc, MemoryGraphShape, BondShape, ScrapingCaseStoreId, PdfSignPlacement } from '../shared/ipc-contracts';
 import type { InvestigationScene, SceneDelta } from '../shared/investigation-graph';
 import type { EntityType, AppSettings } from '../shared/types';
 import type { RunEvent } from '../shared/investigation-agent';
@@ -689,39 +689,6 @@ const api = {
       return () => ipcRenderer.removeListener(channels.socmint.monitorItem, l);
     }
   },
-  // X/Twitter collector — clearnet quarantine (X-6).
-  // Separate namespace from socmint; gate requires BOTH networkEnabled AND clearnetAcknowledged.
-  // Credentials are held main-side only; listAccounts returns IDs, hasAccount returns boolean.
-  x: {
-    addAccount: (accountId: string, creds: unknown) =>
-      ipcRenderer.invoke(channels.x.addAccount, accountId, creds),
-    removeAccount: (accountId: string) =>
-      ipcRenderer.invoke(channels.x.removeAccount, accountId),
-    listAccounts: () =>
-      ipcRenderer.invoke(channels.x.listAccounts),
-    hasAccount: (accountId: string) =>
-      ipcRenderer.invoke(channels.x.hasAccount, accountId),
-    collect: (req: unknown) =>
-      ipcRenderer.invoke(channels.x.collect, req),
-    listItems: (caseId: string) =>
-      ipcRenderer.invoke(channels.x.listItems, caseId),
-    rankItems: (caseId: string, keyword: string) =>
-      ipcRenderer.invoke(channels.x.rankItems, caseId, keyword),
-    // Session model — atomic auth_token+ct0 sessions. Secrets go main-side only; these calls
-    // return an accountId, session metadata, or a test result — never a cookie value.
-    addSession: (input: { label: string; username?: string; authToken: string; ct0: string }) =>
-      ipcRenderer.invoke(channels.x.addSession, input),
-    addSessionTested: (input: { label: string; username?: string; authToken: string; ct0: string }) =>
-      ipcRenderer.invoke(channels.x.addSessionTested, input),
-    removeSession: (accountId: string) =>
-      ipcRenderer.invoke(channels.x.removeSession, accountId),
-    listSessions: () =>
-      ipcRenderer.invoke(channels.x.listSessions),
-    testSession: (creds: { authToken: string; ct0: string }) =>
-      ipcRenderer.invoke(channels.x.testSession, creds),
-    testStoredSession: (accountId: string) =>
-      ipcRenderer.invoke(channels.x.testStoredSession, accountId)
-  },
   // X Listening Station (Plan A) — main-side hardened visible-DOM capture on the
   // clearnet-quarantined `persist:x-listening` partition. X1 exposes connect/status only;
   // capture/notes/network/archive/export follow in X2–X8. No credential value ever crosses
@@ -749,26 +716,6 @@ const api = {
       ipcRenderer.invoke(channels.xListening.readNotes, caseId),
     exportItems: (req: { caseId: string; format: 'json' | 'csv' | 'pdf' | 'docx' }) =>
       ipcRenderer.invoke(channels.xListening.exportItems, req)
-  },
-  // GhostScrape — hidden-browser X timeline/profile scraper (clearnet quarantine, GS-6).
-  // Reuses the SAME two-flag gate + shared x.accounts.<id> session cookies as the x
-  // namespace above — no new settings.ghostscrape namespace, no second cookie store.
-  // Account list uses window.api.x.listAccounts(); save-to-case uses window.api.files.*.
-  ghostscrape: {
-    start: (cfg: GhostScrapeConfig): Promise<{ jobId: string }> =>
-      ipcRenderer.invoke(channels.ghostscrape.start, cfg),
-    cancel: (jobId: string): Promise<void> =>
-      ipcRenderer.invoke(channels.ghostscrape.cancel, jobId),
-    onProgress: (cb: (p: { jobId: string; captured: number; scrollsDone: number }) => void): (() => void) => {
-      const listener = (_e: unknown, p: { jobId: string; captured: number; scrollsDone: number }): void => cb(p);
-      ipcRenderer.on(channels.ghostscrape.onProgress, listener);
-      return () => ipcRenderer.removeListener(channels.ghostscrape.onProgress, listener);
-    },
-    onDone: (cb: (d: { jobId: string; result?: GhostScrapeResult; error?: string }) => void): (() => void) => {
-      const listener = (_e: unknown, d: { jobId: string; result?: GhostScrapeResult; error?: string }): void => cb(d);
-      ipcRenderer.on(channels.ghostscrape.onDone, listener);
-      return () => ipcRenderer.removeListener(channels.ghostscrape.onDone, listener);
-    }
   },
   // Scraping cases (W4) — the isolated SOCMINT/X collection-run stores. Every call passes a
   // `store: 'socmint' | 'x'` discriminator that main validates against an allowlist and routes

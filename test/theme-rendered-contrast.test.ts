@@ -52,8 +52,6 @@ const CSS: string[] = [
   read('src/renderer/styles/98.overrides.css'),
   read('src/renderer/modules/searchlight/searchlight.css'),
   read('src/renderer/modules/socmint/socmint.css'),
-  read('src/renderer/modules/x/x-collector.css'),
-  read('src/renderer/modules/ghostscrape/ghostscrape.css'),
   read('src/renderer/modules/investigation-graph/investigation.css'),
   read('src/renderer/modules/osint-toolkit/osint-toolkit.css')
 ];
