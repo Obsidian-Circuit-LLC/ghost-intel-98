@@ -245,6 +245,9 @@ function deps(over: Partial<TgMessageCaptureDeps> = {}): Partial<TgMessageCaptur
     runCapture: async () => [rawMessage()],
     // avatar already a data: thumbnail; media resolver is a pass-through here
     resolveMedia: async (_win, url) => (url.startsWith('data:') ? url : null),
+    // Default the toggle ON here so the avatar-resolution assertions below actually exercise
+    // resolution; the OFF (dormant-no-op-guard) path has its own dedicated cases.
+    captureMedia: true,
     saveItems: async () => ({ added: 1, skipped: 0 }),
     now: () => '2026-08-07T12:00:00.000Z',
     ...over,
@@ -308,5 +311,45 @@ describe('captureVisibleMessages', () => {
     expect(res.items[0].harvestedAt).toBe('2026-08-07T12:00:00.000Z');
     expect(res.items[0].provenance.collectorVersion).toBe(TG_COLLECTOR_VERSION);
     expect(res.added).toBe(1);
+  });
+
+  // ---- captureMedia toggle is HONORED (not a dormant no-op) --------------
+
+  it('captureMedia:false → NO media resolution runs and NO avatar is stored, even a data: one', async () => {
+    const resolveMedia = vi.fn(async () => 'data:image/png;base64,ZZZZ');
+    const res = await captureVisibleMessages(
+      WIN,
+      REQ,
+      deps({
+        // an in-page data: avatar would normally be kept — with capture OFF it is dropped
+        runCapture: async () => [rawMessage({ avatar: 'data:image/png;base64,AAAA' })],
+        resolveMedia,
+        captureMedia: false,
+      }),
+    );
+    expect(res.blocked).toBe(false);
+    expect(res.items).toHaveLength(1);
+    // toggling OFF changes behavior: the resolver is never called (no media fetch)…
+    expect(resolveMedia).not.toHaveBeenCalled();
+    // …and nothing is stored — not even the in-page data: thumbnail.
+    expect(res.items[0].avatar).toBeUndefined();
+  });
+
+  it('captureMedia:true → a remote avatar IS resolved host-restricted to a data: thumbnail', async () => {
+    const resolveMedia = vi.fn(async (_win: unknown, url: string) =>
+      url.startsWith('https://web.telegram.org/') ? 'data:image/png;base64,RESOLVED' : null,
+    );
+    const res = await captureVisibleMessages(
+      WIN,
+      REQ,
+      deps({
+        runCapture: async () => [rawMessage({ avatar: 'https://web.telegram.org/a/x.jpg' })],
+        resolveMedia,
+        captureMedia: true,
+      }),
+    );
+    expect(resolveMedia).toHaveBeenCalledTimes(1);
+    expect(res.items[0].avatar).toBe('data:image/png;base64,RESOLVED');
+    expect(res.items[0].avatar ?? '').not.toMatch(/^https?:/);
   });
 });

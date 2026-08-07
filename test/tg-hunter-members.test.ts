@@ -148,6 +148,9 @@ function mdeps(over: Partial<TgMemberCaptureDeps> = {}): Partial<TgMemberCapture
     settle: async () => {},
     runCapture: async () => [rawMember(), rawMember({ username: '@bob_op', displayName: 'Bob', profileUrl: 'https://t.me/bob_op' })],
     resolveMedia: async (_win, url) => (url.startsWith('data:') ? url : null),
+    // Default the toggle ON so the avatar-resolution assertion exercises resolution; the
+    // OFF (dormant-no-op-guard) path has its own dedicated case.
+    captureMedia: true,
     saveMembers: async (_caseId, members) => ({ added: members.length, total: members.length }),
     now: () => CAP_AT,
     ...over,
@@ -206,6 +209,41 @@ describe('captureMembers', () => {
     expect(res.blocked).toBe(false);
     expect(res.members).toHaveLength(1);
     expect(res.members[0].avatar).toBeUndefined();
+    expect(res.members[0].avatar ?? '').not.toMatch(/^https?:/);
+  });
+
+  it('captureMedia:false → NO media resolution runs and NO member avatar is stored, even a data: one', async () => {
+    const resolveMedia = vi.fn(async () => 'data:image/png;base64,ZZZZ');
+    const res = await captureMembers(
+      WIN,
+      REQ,
+      mdeps({
+        runCapture: async () => [rawMember({ avatar: 'data:image/png;base64,BBBB' })],
+        resolveMedia,
+        captureMedia: false,
+      }),
+    );
+    expect(res.blocked).toBe(false);
+    expect(res.members).toHaveLength(1);
+    expect(resolveMedia).not.toHaveBeenCalled();
+    expect(res.members[0].avatar).toBeUndefined();
+  });
+
+  it('captureMedia:true → a remote member avatar IS resolved host-restricted to a data: thumbnail', async () => {
+    const resolveMedia = vi.fn(async (_win: unknown, url: string) =>
+      url.startsWith('https://web.telegram.org/') ? 'data:image/png;base64,RESOLVED' : null,
+    );
+    const res = await captureMembers(
+      WIN,
+      REQ,
+      mdeps({
+        runCapture: async () => [rawMember({ avatar: 'https://web.telegram.org/a/x.jpg' })],
+        resolveMedia,
+        captureMedia: true,
+      }),
+    );
+    expect(resolveMedia).toHaveBeenCalledTimes(1);
+    expect(res.members[0].avatar).toBe('data:image/png;base64,RESOLVED');
     expect(res.members[0].avatar ?? '').not.toMatch(/^https?:/);
   });
 

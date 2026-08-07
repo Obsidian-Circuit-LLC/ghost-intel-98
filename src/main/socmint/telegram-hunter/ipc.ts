@@ -49,6 +49,22 @@ export function __resetTelegramWindowForTests(): void {
 }
 
 /**
+ * Read `AppSettings.socmint.telegram.captureMedia` MAIN-side (trusted) — the renderer
+ * never widens capture beyond what the operator opted into. Lazy dynamic import so this
+ * module never pulls the settings/store graph at import time. Falls back to `false` on any
+ * read error — media capture never silently WIDENS on a settings failure (off by default).
+ */
+async function loadTelegramCaptureMedia(): Promise<boolean> {
+  try {
+    const { settingsStore } = await import('../../storage/json-fs');
+    const settings = await settingsStore.read();
+    return settings.socmint?.telegram?.captureMedia === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Open (or resurface) the Tor-fail-closed Telegram capture window. Returns
  * `{ blocked: true }` (creating no window) when Tor is not ready — never a clearnet
  * fallback. The operator signs into Telegram Web and opens the target chat themselves.
@@ -72,12 +88,18 @@ export async function captureTelegramMessages(reqArg: unknown): Promise<TgMessag
   }
   // UUID-gate the caseId BEFORE any store path is built (matches every peer handler).
   const caseId = ensureUuid(req.caseId, 'caseId');
-  return getCollector().captureMessages({
-    caseId,
-    jobId: typeof req.jobId === 'string' ? req.jobId : caseId,
-    channelId: req.channelId,
-    channelLabel: typeof req.channelLabel === 'string' ? req.channelLabel : req.channelId,
-  });
+  // The media toggle is read MAIN-side from settings — the renderer never gets to widen
+  // capture to media beyond what the operator opted into (off by default).
+  const captureMedia = await loadTelegramCaptureMedia();
+  return getCollector().captureMessages(
+    {
+      caseId,
+      jobId: typeof req.jobId === 'string' ? req.jobId : caseId,
+      channelId: req.channelId,
+      channelLabel: typeof req.channelLabel === 'string' ? req.channelLabel : req.channelId,
+    },
+    { captureMedia },
+  );
 }
 
 /**
@@ -91,7 +113,8 @@ export async function captureTelegramMembers(reqArg: unknown): Promise<TgMemberC
     throw new Error('Capturing Telegram members requires a caseId.');
   }
   const caseId = ensureUuid(req.caseId, 'caseId');
-  return getCollector().captureGroupMembers({ caseId });
+  const captureMedia = await loadTelegramCaptureMedia();
+  return getCollector().captureGroupMembers({ caseId }, { captureMedia });
 }
 
 export interface TgExportResult {

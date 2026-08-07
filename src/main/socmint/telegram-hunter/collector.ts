@@ -85,6 +85,12 @@ export interface TgMessageCaptureDeps {
   runCapture: (win: Electron.BrowserWindow, js: string) => Promise<unknown>;
   /** Resolve a remote media URL to a local `data:` thumbnail (host-restricted), or null. */
   resolveMedia: (win: MediaCapturePage, url: string) => Promise<string | null>;
+  /** Mirror of `AppSettings.socmint.telegram.captureMedia`, read MAIN-side (the renderer
+   *  never widens capture). When `false` (the default), avatar/media resolution is SKIPPED
+   *  entirely — no media fetch runs and NO avatar is stored, even an in-page `data:` one —
+   *  because the operator opts media capture in. When `true`, a remote SRC is resolved to a
+   *  host-restricted `data:` thumbnail and an in-page `data:` avatar is kept. */
+  captureMedia: boolean;
   /** The challenge/lock gate: runs `capture` ONLY on an unlocked, signed-in page. */
   guard: <T>(
     win: Electron.BrowserWindow,
@@ -137,6 +143,9 @@ function defaultDeps(): TgMessageCaptureDeps {
     // Host-restricted to Telegram media hosts — a scraped SRC off those hosts is a
     // deanon beacon and is refused inside `remoteMediaToDataUri` before any fetch.
     resolveMedia: (win, url) => remoteMediaToDataUri(win, url, TELEGRAM_MEDIA_HOSTS),
+    // OFF by default — capture never silently WIDENS to media. The ipc handler reads the
+    // real setting MAIN-side and passes it in; a settings-read failure falls back to false.
+    captureMedia: false,
     guard: defaultGuard,
     saveItems: async (caseId, items) => {
       const { upsertItems } = await import('../store');
@@ -150,12 +159,18 @@ function defaultDeps(): TgMessageCaptureDeps {
  * Resolve the avatar SRC on a raw message to a local `data:` thumbnail, dropping it on
  * any failure. A remote URL is NEVER carried forward — combined with
  * `normalizeMessage`'s `data:`-only filter this guarantees no stored field can beacon.
+ *
+ * When `captureMedia` is false the avatar is dropped WITHOUT any resolution — no media
+ * fetch is issued and not even an in-page `data:` avatar is kept — so the setting is
+ * honored, not a dormant no-op: media capture happens only when the operator opts in.
  */
 async function resolveAvatar(
   win: Electron.BrowserWindow,
   raw: RawMessage,
-  resolveMedia: TgMessageCaptureDeps['resolveMedia']
+  resolveMedia: TgMessageCaptureDeps['resolveMedia'],
+  captureMedia: boolean
 ): Promise<RawMessage> {
+  if (!captureMedia) return { ...raw, avatar: '' };
   const src = String(raw.avatar ?? '');
   if (!src || src.startsWith('data:')) return raw;
   const dataUri = await resolveMedia(win, src);
@@ -194,7 +209,7 @@ export async function captureVisibleMessages(
     const raws: RawMessage[] = Array.isArray(rawCollected) ? (rawCollected as RawMessage[]) : [];
     const items: TgHarvestedItem[] = [];
     for (const raw of raws) {
-      const withAvatar = await resolveAvatar(win, raw, deps.resolveMedia);
+      const withAvatar = await resolveAvatar(win, raw, deps.resolveMedia, deps.captureMedia);
       items.push(normalizeMessage(withAvatar, ctx));
     }
     return items;
@@ -399,6 +414,11 @@ export interface TgMemberCaptureDeps {
   runCapture: (win: Electron.BrowserWindow, js: string) => Promise<unknown>;
   /** Resolve a remote media URL to a local `data:` thumbnail (host-restricted), or null. */
   resolveMedia: (win: MediaCapturePage, url: string) => Promise<string | null>;
+  /** Mirror of `AppSettings.socmint.telegram.captureMedia`, read MAIN-side. When `false`
+   *  (the default) member avatar resolution is SKIPPED entirely (no media fetch, no avatar
+   *  stored — not even an in-page `data:` one); `true` resolves a remote SRC host-restricted
+   *  and keeps an in-page `data:` avatar. The operator opts media capture in. */
+  captureMedia: boolean;
   /** The challenge/lock gate: runs `capture` ONLY on an unlocked, signed-in page. */
   guard: <T>(
     win: Electron.BrowserWindow,
@@ -418,6 +438,8 @@ function defaultMemberDeps(): TgMemberCaptureDeps {
     settle: () => realSettle(),
     runCapture: defaultRunCapture,
     resolveMedia: (win, url) => remoteMediaToDataUri(win, url, TELEGRAM_MEDIA_HOSTS),
+    // OFF by default — member media capture happens only when the operator opts in.
+    captureMedia: false,
     guard: defaultGuard,
     saveMembers: async (caseId, members) => {
       const { prodTgHunterStore } = await import('./store');
@@ -436,8 +458,10 @@ function defaultMemberDeps(): TgMemberCaptureDeps {
 async function resolveMemberAvatar(
   win: Electron.BrowserWindow,
   raw: RawMember,
-  resolveMedia: TgMemberCaptureDeps['resolveMedia']
+  resolveMedia: TgMemberCaptureDeps['resolveMedia'],
+  captureMedia: boolean
 ): Promise<RawMember> {
+  if (!captureMedia) return { ...raw, avatar: '' };
   const src = String(raw.avatar ?? '');
   if (!src || src.startsWith('data:')) return raw;
   const dataUri = await resolveMedia(win, src);
@@ -471,7 +495,7 @@ export async function captureMembers(
     const raws: RawMember[] = Array.isArray(rawCollected) ? (rawCollected as RawMember[]) : [];
     const members: TgMember[] = [];
     for (const raw of raws) {
-      const withAvatar = await resolveMemberAvatar(win, raw, deps.resolveMedia);
+      const withAvatar = await resolveMemberAvatar(win, raw, deps.resolveMedia, deps.captureMedia);
       members.push(normalizeMember(withAvatar, { capturedAt }));
     }
     return members;
