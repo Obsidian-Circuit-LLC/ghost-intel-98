@@ -1678,6 +1678,28 @@ input.ga98-text, select.ga98-text {
   overflow: hidden;
 }
 
+/* Journal Jots — PIN unlock screen: form pinned top-left, book illustration fills the rest. */
+.ga98-journal-unlock {
+  display: flex;
+  height: 100%;
+  gap: 16px;
+  padding: 20px;
+  align-items: flex-start;
+}
+.ga98-journal-unlock-form { flex: 0 0 280px; }
+.ga98-journal-unlock-art {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+.ga98-journal-unlock-art img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
 /* Full-width module banner header (GhostExodus art batch) */
 .ga98-module-banner {
   display: block;

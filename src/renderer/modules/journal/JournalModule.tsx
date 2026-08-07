@@ -14,6 +14,7 @@ import type { JournalEntrySummary } from '@shared/types';
 import { toast } from '../../state/toasts';
 import { confirmDialog } from '../../state/dialogs';
 import journalBanner from '../../assets/journal-jots-banner.png';
+import journalBook from '../../assets/journal-jots-book.png';
 
 function uid(): string { return crypto.randomUUID(); }
 function fmtBytes(n: number): string { return n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} KB`; }
@@ -114,8 +115,8 @@ export function JournalModule(): JSX.Element {
     const setting = gate === 'set-pin';
     const submit = setting ? submitSetPin : submitUnlock;
     return (
-      <div className="ga98-pane" style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ width: 260 }}>
+      <div className="ga98-journal-unlock">
+        <div className="ga98-journal-unlock-form" style={{ width: 260 }}>
           <div style={{ fontWeight: 'bold', marginBottom: 8 }}>
             {setting ? 'Set a 4-digit journal PIN' : 'Enter your journal PIN'}
           </div>
@@ -150,6 +151,9 @@ export function JournalModule(): JSX.Element {
             {pinError && <div style={{ color: 'var(--ga98-neg-ink)', fontSize: 11, marginBottom: 6 }}>{pinError}</div>}
             <button type="submit" style={{ width: '100%' }}>{setting ? 'Set PIN & Open' : 'Unlock'}</button>
           </form>
+        </div>
+        <div className="ga98-journal-unlock-art">
+          <img src={journalBook} alt="Journal Jots" />
         </div>
       </div>
     );
