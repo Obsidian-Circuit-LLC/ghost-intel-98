@@ -1715,6 +1715,28 @@ input.ga98-text, select.ga98-text {
  * class itself stays unaffected for its other consumers. */
 .ga98-briefcase { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
 
+/* Shred — banner above a body row: existing list/actions on the left, the SHRED IT panel on
+ * the right. .ga98-stack is scoped under .ga98-shred-body so the shared class itself stays
+ * unaffected for its other consumers. */
+.ga98-shred-shell { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+.ga98-shred-body { display: flex; flex: 1 1 auto; min-height: 0; gap: 8px; }
+.ga98-shred-body > .ga98-stack { flex: 1 1 auto; min-width: 0; }
+.ga98-shred-it-panel {
+  flex: 0 0 240px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border-left: 2px solid var(--ga98-border-shadow, #808080);
+  background: var(--ga98-grey);
+  color: var(--ga98-text);
+  text-align: center;
+}
+.ga98-shred-it-panel img { max-width: 100%; }
+/* Theme-aware LOCKED status token — stays legible under Classic and QUIET AMETHYST. */
+.ga98-shred-warning { font-weight: bold; color: var(--ga98-status-error); }
+
 /* ---------------------------------------------------------------------------
  * Invoices module — two-pane host (saved list + editor/preview). Tables restate
  * their own background on a CLASS selector so the bundled 98.css element rule

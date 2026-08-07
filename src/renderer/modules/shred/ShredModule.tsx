@@ -5,6 +5,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { confirmDialog } from '../../state/dialogs';
 import { toast } from '../../state/toasts';
+import shredBanner from '../../assets/shred-banner.png';
+import shredBin from '../../assets/shred-ghost-bin.png';
 
 interface Entry {
   id: string;
@@ -59,23 +61,38 @@ export function ShredModule(): JSX.Element {
   }
 
   return (
-    <div className="ga98-stack">
-      <div className="ga98-toolbar" style={{ padding: 0 }}>
-        <button onClick={() => void refresh()}>Refresh</button>
-        <button onClick={() => void purgeAll()} disabled={list.length === 0}>Empty Shred</button>
+    <div className="ga98-shred-shell">
+      <img src={shredBanner} alt="Shred" className="ga98-module-banner" />
+      <div className="ga98-shred-body">
+        <div className="ga98-stack">
+          <div className="ga98-toolbar" style={{ padding: 0 }}>
+            <button onClick={() => void refresh()}>Refresh</button>
+            <button onClick={() => void purgeAll()} disabled={list.length === 0}>Empty Shred</button>
+          </div>
+          <ul className="ga98-list">
+            {list.length === 0 && <li style={{ color: 'var(--ga98-dim-soft)' }}>Shred is empty.</li>}
+            {list.map((e) => (
+              <li key={e.id}>
+                <span style={{ width: 90, fontSize: 11, opacity: 0.7 }}>[{e.kind}]</span>
+                <span style={{ flex: 1 }}>{e.label}</span>
+                <span style={{ fontSize: 11, opacity: 0.7 }}>{new Date(e.deletedAt).toLocaleString()}</span>
+                <button onClick={() => void restore(e.id)}>Restore</button>
+                <button onClick={() => void purge(e.id)}>Purge</button>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <aside className="ga98-shred-it-panel">
+          <img src={shredBin} alt="" aria-hidden="true" />
+          <h3>SHRED IT</h3>
+          <ul>
+            <li>Delete it</li>
+            <li>Forget it</li>
+            <li>It never existed</li>
+          </ul>
+          <p className="ga98-shred-warning">ONCE IT&apos;S SHREDDED, IT&apos;S GONE FOR GOOD</p>
+        </aside>
       </div>
-      <ul className="ga98-list">
-        {list.length === 0 && <li style={{ color: 'var(--ga98-dim-soft)' }}>Shred is empty.</li>}
-        {list.map((e) => (
-          <li key={e.id}>
-            <span style={{ width: 90, fontSize: 11, opacity: 0.7 }}>[{e.kind}]</span>
-            <span style={{ flex: 1 }}>{e.label}</span>
-            <span style={{ fontSize: 11, opacity: 0.7 }}>{new Date(e.deletedAt).toLocaleString()}</span>
-            <button onClick={() => void restore(e.id)}>Restore</button>
-            <button onClick={() => void purge(e.id)}>Purge</button>
-          </li>
-        ))}
-      </ul>
     </div>
   );
 }
