@@ -1055,11 +1055,16 @@ export function ensureBriefcaseNote(raw: unknown): BriefcaseNoteInput {
 
 const MAX_JOURNAL_TITLE = 200;
 const MAX_JOURNAL_BLOCKS = 500;
-const MAX_JOURNAL_BLOCK_HTML = 512 * 1024; // 512 KB per text block (well under the 2MB total bound)
+// A single text block's html. Sized ABOVE the legacy 2 MB raw-body cap because a pre-block-model
+// entry migrates into ONE text block whose html is that body HTML-escaped (&/</>/" expand) + <p>
+// line-wrapped — so it can exceed the raw size. 4 MB comfortably round-trips any realistic legacy
+// body (a degenerate multi-MB body of pure entity/newline chars is the only residual that won't).
+const MAX_JOURNAL_BLOCK_HTML = 4 * 1024 * 1024;
 const MAX_JOURNAL_CAPTION = 500;
-// Total serialized blocks JSON per entry — mirrors the legacy MAX_JOURNAL_BODY cap. Excludes asset
-// bytes, which live in the separate journal-assets store (only a short assetRef crosses this bound).
-const MAX_JOURNAL_BLOCKS_JSON = 2 * 1024 * 1024;
+// Total serialized blocks JSON per entry. Excludes asset bytes, which live in the separate
+// journal-assets store (only a short assetRef crosses this bound). Sized to hold a migrated legacy
+// text block (up to MAX_JOURNAL_BLOCK_HTML) plus JSON overhead and additional blocks.
+const MAX_JOURNAL_BLOCKS_JSON = 8 * 1024 * 1024;
 
 /** Validate + clamp a SINGLE renderer-supplied journal block. Unlike ensureReportBlock (which
  *  silently drops an unrecognized block so a corrupted report still opens), a journal block THROWS

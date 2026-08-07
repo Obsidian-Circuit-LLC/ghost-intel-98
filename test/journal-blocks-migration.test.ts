@@ -61,9 +61,29 @@ describe('journal blocks migration', () => {
     })).toThrow();
   });
 
-  it('ensureJournalEntry rejects an unknown block kind and over-large blocks JSON', () => {
+  it('ensureJournalEntry rejects an unknown block kind, an over-cap single block, and over-cap total', () => {
     expect(() => ensureJournalEntry({ id: 'x', title: 'T', blocks: [{ id: 'b', kind: 'script' } as any] })).toThrow();
-    const hugeHtml = 'x'.repeat(3 * 1024 * 1024); // 3 MB single block — over the 2 MB total bound
-    expect(() => ensureJournalEntry({ id: 'x', title: 'T', blocks: [{ id: 'b', kind: 'text', html: hugeHtml }] })).toThrow();
+    // single text block over the 4 MB per-block cap
+    const overBlock = 'x'.repeat(4 * 1024 * 1024 + 1);
+    expect(() => ensureJournalEntry({ id: 'x', title: 'T', blocks: [{ id: 'b', kind: 'text', html: overBlock }] })).toThrow();
+    // several blocks each under the per-block cap but summing over the 8 MB total-serialized cap
+    const bigBlocks = Array.from({ length: 3 }, (_, i) => ({ id: `b${i}`, kind: 'text', html: 'y'.repeat(3 * 1024 * 1024) }));
+    expect(() => ensureJournalEntry({ id: 'x', title: 'T', blocks: bigBlocks as any })).toThrow();
+  });
+
+  it('a legacy body larger than the old 512 KB per-block cap still round-trips (read → re-save)', async () => {
+    // Regression for the Pass-2 review finding: a legacy entry whose body sits between the old
+    // 512 KB per-block cap and the 2 MB body cap migrated into one oversized block that then failed
+    // validation on save — leaving the entry viewable but permanently unsavable. ~1.08 MB here.
+    const bigBody = 'lorem ipsum dolor sit amet\n'.repeat(40000);
+    const legacy = { id: 'big-legacy', title: 'Big', body: bigBody,
+      createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' };
+    await mkdir(join(DIR, 'GhostAccess98'), { recursive: true });
+    await writeFile(journalFile(), JSON.stringify([legacy]), 'utf8');
+
+    const e = await journal.read('big-legacy');
+    expect(e!.blocks).toHaveLength(1);
+    // the migrated block re-validates without throwing — the exact round-trip a no-op save performs
+    expect(() => ensureJournalEntry({ id: e!.id, title: e!.title, blocks: e!.blocks })).not.toThrow();
   });
 });

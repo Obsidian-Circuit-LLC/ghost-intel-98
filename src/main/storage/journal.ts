@@ -54,6 +54,34 @@ function withBlocks(e: JournalEntry): JournalEntry {
   return { ...e, blocks: [block] };
 }
 
+/** Flatten an entry to plain text for indexing/search consumers (the local-AI memory library, etc.).
+ *  Main has no DOM, so text blocks are tag-stripped + entity-decoded with a small regex pass (good
+ *  enough for fuzzy retrieval); block boundaries and closing block tags become newlines, image
+ *  captions are included. Falls back to a legacy `body` string for a record with no `blocks`. This
+ *  is the block-model replacement for the old `entry.body` reads. */
+export function entryPlainText(entry: JournalEntry): string {
+  const blocks = Array.isArray(entry.blocks) ? entry.blocks : null;
+  if (!blocks) return typeof entry.body === 'string' ? entry.body : '';
+  const parts: string[] = [];
+  for (const b of blocks) {
+    if (b.kind === 'text') {
+      const text = b.html
+        .replace(/<\s*br\s*\/?>/gi, '\n')
+        .replace(/<\/(p|div|li|h[1-6])\s*>/gi, '\n')
+        .replace(/<[^>]+>/g, '')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&amp;/g, '&');
+      if (text.trim()) parts.push(text);
+    } else if (b.kind === 'image' && typeof b.caption === 'string' && b.caption.trim()) {
+      parts.push(b.caption);
+    }
+  }
+  return parts.join('\n').trim();
+}
+
 const journalFile = (): string => join(dataRoot(), 'journal.json');
 const metaFile = (): string => join(dataRoot(), 'journal-meta.json');
 

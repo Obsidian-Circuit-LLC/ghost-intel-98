@@ -43,7 +43,11 @@ export async function librarySources(deps: LibrarySourcesDeps = {}): Promise<Sou
 
   for (const summary of await journalList()) {
     const entry = await journalRead(summary.id);
-    if (entry?.body?.trim()) sources.push({ key: `journal:${entry.id}`, kind: 'doc', ref: entry.title, text: entry.body });
+    if (!entry) continue;
+    // Journal entries store rich-text `blocks` (body is legacy/undefined post-migration); flatten
+    // to plain text so new entries still land in the library index. [Pass-2 block-model fix.]
+    const text = journal.entryPlainText(entry);
+    if (text.trim()) sources.push({ key: `journal:${entry.id}`, kind: 'doc', ref: entry.title, text });
   }
 
   return sources;

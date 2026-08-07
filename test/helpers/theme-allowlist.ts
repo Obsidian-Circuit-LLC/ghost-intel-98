@@ -546,6 +546,7 @@ export const PAPER_SURFACE_ALLOW: readonly PaperSurface[] = [
   { selector: '.ga98-invoice-preview', note: 'invoice document preview (white printed paper)' },
   { selector: '.ga98-docviewer-surface', note: 'document viewer paper (amethyst override present)' },
   { selector: '.ga98-report', note: 'Report module: classic-parity Win98 chrome, fully amethyst-overridden (theme.css Reports-amethyst block); content-paper .ga98-report-page/-doc-table stay white by design' },
+  { selector: '.ga98-journal-blocks', note: 'Journal Jots block-editor page — content-paper, intentionally white in BOTH themes like .ga98-report-page: it hosts the reused Reports TextBlock/ImageBlock which render print-oriented dark text, legible only on a light page (a dark surface would make the reused blocks dark-on-dark)' },
   // ── classic-parity chrome — each carries a [data-ga98-theme=amethyst] override ──────────────
   { selector: '.ga98-dropzone', note: 'amethyst override at theme.css .ga98-dropzone' },
   { selector: '.ga98-grid-calendar', note: 'amethyst override at theme.css .ga98-grid-calendar > div[…]' },
