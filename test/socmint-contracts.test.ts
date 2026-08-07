@@ -8,7 +8,7 @@ import {
 
 describe('socmint channels', () => {
   it('exposes the expected channel set, all namespaced under socmint:', () => {
-    const g = (channels as Record<string, Record<string, string>>).socmint;
+    const g = (channels as Record<string, Record<string, unknown>>).socmint;
     expect(g).toBeTruthy();
     const expected = [
       'addChannel', 'removeChannel', 'listChannels',
@@ -19,13 +19,34 @@ describe('socmint channels', () => {
       'monitorItem',
       // WA-T5: WhatsApp linking ceremony channels
       'setWhatsappBurnerPairingCode', 'hasWhatsappBurner', 'unlinkWhatsappBurner',
+      // TG5: Telegram Hunter capture-window engine (nested block)
+      'telegram',
     ];
     expect(Object.keys(g).sort()).toEqual([...expected].sort());
-    for (const v of Object.values(g)) expect(v.startsWith('socmint:')).toBe(true);
+    // Flat string channels are all namespaced under socmint:; telegram is a nested block.
+    for (const [k, v] of Object.entries(g)) {
+      if (k === 'telegram') continue;
+      expect(typeof v).toBe('string');
+      expect((v as string).startsWith('socmint:')).toBe(true);
+    }
+  });
+
+  it('TG5 Telegram Hunter channels are nested under socmint:telegram: with distinct values', () => {
+    const tg = (channels as Record<string, Record<string, Record<string, string>>>).socmint.telegram;
+    const expected = ['connect', 'capture', 'captureMembers', 'captureProfile', 'exportItems', 'importExport', 'keywordScan'];
+    expect(Object.keys(tg).sort()).toEqual([...expected].sort());
+    for (const v of Object.values(tg)) expect(v.startsWith('socmint:telegram:')).toBe(true);
+    expect(new Set(Object.values(tg)).size).toBe(expected.length);
   });
 
   it('channel values are globally unique', () => {
-    const all = Object.values(channels as Record<string, Record<string, string>>).flatMap((grp) => Object.values(grp));
+    // Flatten one level of nesting so nested blocks (e.g. socmint.telegram) contribute their
+    // string channel values, not the container object.
+    const flatten = (v: unknown): string[] =>
+      typeof v === 'string'
+        ? [v]
+        : Object.values(v as Record<string, unknown>).flatMap(flatten);
+    const all = Object.values(channels as Record<string, unknown>).flatMap(flatten);
     expect(new Set(all).size).toBe(all.length);
   });
 

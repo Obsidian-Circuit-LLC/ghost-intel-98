@@ -35,6 +35,17 @@ export interface CaptureWindowOpts {
   /** Optional SOCKS proxy applied to the partition session BEFORE the first load.
    *  Plan B (Telegram-over-Tor) only — the X caller never supplies this. */
   proxy?: { socks: string };
+  /** Optional WebRTC IP-handling policy applied to the window's webContents
+   *  BEFORE the guest navigates, and re-asserted on every later same-webContents
+   *  navigation. Plan B (Telegram-over-Tor) passes `'disable_non_proxied_udp'` so a
+   *  STUN/TURN path cannot leak the real IP around the SOCKS proxy during the very
+   *  first load; the factory awaits `loadURL`, so setting this AFTER the factory
+   *  returned would apply it too late. The X caller (clearnet) never supplies this. */
+  webRTCIPHandlingPolicy?:
+    | 'default'
+    | 'default_public_interface_only'
+    | 'default_public_and_private_interfaces'
+    | 'disable_non_proxied_udp';
 }
 
 /** Deny every permission request/check on the capture partition — a scrape
@@ -118,6 +129,19 @@ export async function createCaptureWindow(
   };
   win.webContents.on('will-navigate', guardNavigation);
   win.webContents.on('will-redirect', guardNavigation);
+
+  // Lock WebRTC IP handling BEFORE the guest navigates. This runs after window
+  // creation but BEFORE `loadURL`, so no STUN/TURN path can leak the real IP
+  // around a SOCKS proxy during the initial load. Re-assert on every later
+  // same-webContents navigation (e.g. an in-family deep-link) so the lock cannot
+  // be silently dropped by a subsequent navigation.
+  if (opts.webRTCIPHandlingPolicy) {
+    const policy = opts.webRTCIPHandlingPolicy;
+    win.webContents.setWebRTCIPHandlingPolicy(policy);
+    win.webContents.on('did-start-navigation', () => {
+      win.webContents.setWebRTCIPHandlingPolicy(policy);
+    });
+  }
 
   await win.loadURL(opts.url);
   return win;

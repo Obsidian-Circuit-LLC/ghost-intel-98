@@ -515,7 +515,26 @@ export const channels = {
     // WhatsApp linking ceremony (WA-T5 — stubs; WA-T6/T7 implement bodies)
     setWhatsappBurnerPairingCode: 'socmint:setWhatsappBurnerPairingCode',
     hasWhatsappBurner: 'socmint:hasWhatsappBurner',
-    unlinkWhatsappBurner: 'socmint:unlinkWhatsappBurner'
+    unlinkWhatsappBurner: 'socmint:unlinkWhatsappBurner',
+    // Telegram Hunter capture-window engine (TG5 — replaces the retired mtcute streaming
+    // engine). Pull-based visible-DOM capture inside a Tor-fail-closed hardened window;
+    // every handler is safeHandleWithEvent + assertTrustedSender.
+    telegram: {
+      /** Open (or resurface) the Tor-proxied Telegram capture window; blocked when Tor is down. */
+      connect: 'socmint:telegram:connect',
+      /** Capture the visible messages in the open chat → encrypted case store. */
+      capture: 'socmint:telegram:capture',
+      /** Capture the visible group/channel members → encrypted members store (no fabricated total). */
+      captureMembers: 'socmint:telegram:captureMembers',
+      /** Capture the visible user-profile panel → encrypted profiles store (no fabricated creation date). */
+      captureProfile: 'socmint:telegram:captureProfile',
+      /** Export a captured Telegram collection (messages/members/profiles) as JSON, formula-guarded CSV, or an HTML-escaped report. */
+      exportItems: 'socmint:telegram:exportItems',
+      /** Import a Telegram Desktop JSON export (operator-picked file); LFI-guarded parse → encrypted imports store. */
+      importExport: 'socmint:telegram:importExport',
+      /** Persist literal keyword-watch terms + scan the case's captured messages for matches (no RegExp on input). */
+      keywordScan: 'socmint:telegram:keywordScan'
+    }
   },
   // X Listening Station (Plan A) — visible-DOM capture of an authenticated X session in a
   // main-side hardened BrowserWindow on the clearnet-quarantined `persist:x-listening`

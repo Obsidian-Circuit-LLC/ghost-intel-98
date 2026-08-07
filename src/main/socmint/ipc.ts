@@ -7,7 +7,8 @@
  *   store.ts    (upsertItems / listItems / recordJob / listJobs)
  *   rank.ts     (rankByRelevance)
  *   labels.ts   (recordLabel / listLabels)
- *   collector.ts (SocmintCollector interface / makeMtcuteCollector)
+ *   collector.ts (SocmintCollector interface; the live Telegram engine is the
+ *                 Tor-fail-closed TelegramHunterCollector — the mtcute adapter is retired)
  *   secrets     (secretStore — burner credentials, never echoed to renderer)
  *
  * Egress gate:
@@ -333,7 +334,8 @@ export async function handleStartMonitor(
   try {
     await collector.connect();
 
-    // Join each monitored channel (sequentially — mtcute enforces per-account rate limits).
+    // Join each monitored channel sequentially (ordered, back-pressure-friendly resolution;
+    // join() maps @usernames / invite links to the numeric chat id subscribe() matches on).
     for (const channelId of channelIds) {
       const joined = await collector.join(channelId);
       joinedChannels.push(joined);

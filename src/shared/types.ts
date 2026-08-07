@@ -573,6 +573,18 @@ export interface AppSettings {
      *  IsolateSOCKSAuth circuit isolation. ALWAYS explicit — the app never silently
      *  switches/falls back between them; in 'tor' mode a down Tor REFUSES, not clearnet. */
     transport: 'direct' | 'tor';
+    /** Telegram engine config (Plan B). The mtcute client was replaced by the Tor-fail-closed
+     *  authenticated-Telegram-Web VISIBLE-CAPTURE engine. Fixed-shape nested block — MUST be
+     *  deep-merged in mergeSettings so an older persisted socmint block that predates it keeps
+     *  the key on upgrade (v3.24.0 dataloss class). WhatsApp settings are unaffected. */
+    telegram: {
+      /** The Telegram collection engine. 'capture' = the Tor-fail-closed authenticated
+       *  Telegram Web visible-capture engine (the only value today; supersedes mtcute). */
+      engine: 'capture';
+      /** Capture avatars/media to LOCAL `data:` thumbnails at collect time (never a remote
+       *  URL). Off by default — the operator opts media capture in. */
+      captureMedia: boolean;
+    };
   };
   /** Reports module: the default author seeded onto a newly created report. Nested
    *  fixed-shape block — MUST be deep-merged in mergeSettings so an older persisted
@@ -736,7 +748,7 @@ export const defaultSettings: AppSettings = {
   },
   chat: { networkEnabled: false },
   searchlight: { networkEnabled: false, torConcurrency: 8, clearnetConcurrency: 16, scorer: { foundThreshold: null, maybeFloor: null, lightweightMode: false, useMl: false } },
-  socmint: { networkEnabled: false, transport: 'direct' },
+  socmint: { networkEnabled: false, transport: 'direct', telegram: { engine: 'capture', captureMedia: false } },
   reports: { author: '' },
   xListening: {
     collect: { replies: false, reposts: false, comments: false },

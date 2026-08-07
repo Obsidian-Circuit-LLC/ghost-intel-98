@@ -352,6 +352,12 @@ function ChannelsPanel({
   // @g.us guard: for WhatsApp, group JIDs must end with @g.us.
   // The guard uses a hardcoded literal string check — never new RegExp() on user input.
   const isWhatsApp = platform === 'whatsapp';
+  // Telegram is PULL-only (visible-DOM capture in the Tor window) — there is no startMonitor
+  // and nothing consumes a monitored-channel list for it. The Add-Channel form + "Monitored
+  // Channels" list are a monitor-framed affordance that monitors nothing, so they are HIDDEN
+  // for Telegram; the Monitor section below still shows a pointer to the Capture tab. WhatsApp
+  // (and any future streaming platform) keeps the affordance unchanged.
+  const isTelegram = platform === 'telegram';
   const channelIdTrimmed = newChannelId.trim();
   const waJidInvalid = isWhatsApp && channelIdTrimmed.length > 0 &&
     !channelIdTrimmed.endsWith('@g.us');
@@ -367,7 +373,9 @@ function ChannelsPanel({
 
   return (
     <div className="sm-channels">
-      {/* Add channel form */}
+      {/* Add channel form — HIDDEN for Telegram (pull-only; nothing monitors channels). */}
+      {!isTelegram && (
+      <>
       <section className="sm-section">
         <h3 className="sm-section-title">Add Monitored{isWhatsApp ? ' Group' : ' Channel'}</h3>
         <div className="sm-form-row">
@@ -454,11 +462,25 @@ function ChannelsPanel({
           </ul>
         )}
       </section>
+      </>
+      )}
 
       {/* Monitor controls */}
       <section className="sm-section">
         <h3 className="sm-section-title">Monitor</h3>
-        {activeJobId !== null ? (
+        {/* Telegram capture is PULL-based (visible-DOM capture in the Tor window); there is
+            no background stream to start. Offering a "Start Monitor" that returns
+            started/active while nothing harvests is the fake-state honesty defect the
+            standing constraints bar — so Telegram shows a pointer to the Capture tab
+            instead of a monitor control. WhatsApp keeps its real streaming monitor. */}
+        {platform === 'telegram' ? (
+          <p className="sm-monitor-hint" role="note">
+            Telegram capture is pull-based — there is no background monitor. Open the{' '}
+            <strong>Capture</strong> tab to launch the Tor window and capture the visible
+            messages, members, or profile of the chat you have open. Nothing runs or
+            harvests in the background, so there is no &ldquo;monitoring active&rdquo; state.
+          </p>
+        ) : activeJobId !== null ? (
           <div className="sm-monitor-active">
             <span className="sm-monitor-status">
               {/* jobId is an internal identifier — render as text, not innerHTML */}
@@ -656,7 +678,192 @@ function ItemsPanel({
 // SocmintModule (root)
 // ---------------------------------------------------------------------------
 
-type ContentTab = 'channels' | 'items' | 'wa-setup';
+type ContentTab = 'channels' | 'items' | 'wa-setup' | 'capture';
+
+// ---------------------------------------------------------------------------
+// TelegramCapturePanel — drives the Telegram Hunter capture-window engine (TG5).
+//
+// The mtcute streaming collector is retired; Telegram capture is now pull-based inside
+// a Tor-fail-closed hardened window. The operator opens Telegram Web (Connect), signs in
+// and navigates to the target chat, then captures the visible messages/members. Every
+// action flows through window.api.socmint.telegram.* — the seam the Plan-A hollow-renderer
+// lesson requires be reachable and correctly-payloaded.
+// ---------------------------------------------------------------------------
+
+type TgExportFormat = 'json' | 'csv' | 'html';
+// All three collections are REAL: messages (shared case store), members and profiles
+// (per-tool encrypted artifact stores). Profiles is offered because profile capture is
+// now wired end-to-end (Capture Profile → captureProfile → profiles store), so the export
+// reflects genuinely persisted rows — never a hollow option that returns nothing.
+type TgExportCollection = 'messages' | 'members' | 'profiles';
+
+/** Deliver a utf8 export payload to disk as a Blob download (no egress, no remote fetch). */
+function downloadTgExport(res: { data: string; mime: string; format: TgExportFormat; collection: string }): void {
+  const ext = res.format === 'html' ? 'html' : res.format;
+  const blob = new Blob([res.data], { type: res.mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `telegram-${res.collection}.${ext}`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function TelegramCapturePanel({ caseId }: { caseId: string }): JSX.Element {
+  const [chatId, setChatId] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [exportFormat, setExportFormat] = useState<TgExportFormat>('json');
+  const [exportCollection, setExportCollection] = useState<TgExportCollection>('messages');
+  const [keywordInput, setKeywordInput] = useState('');
+
+  const run = useCallback(async (fn: () => Promise<string>) => {
+    setBusy(true);
+    setMessage(null);
+    try {
+      setMessage(await fn());
+    } catch (err) {
+      setMessage(String((err as Error).message ?? err));
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
+  const onConnect = useCallback(() => run(async () => {
+    const r = await window.api.socmint.telegram.connect();
+    return 'blocked' in r
+      ? r.reason
+      : 'Telegram capture window opened — sign in over Tor and open the target chat.';
+  }), [run]);
+
+  const onCapture = useCallback(() => {
+    const channelId = chatId.trim();
+    if (!channelId) { setMessage('Enter the chat @username or id you have open in the window.'); return; }
+    void run(async () => {
+      const r = await window.api.socmint.telegram.capture({ caseId, channelId, channelLabel: channelId });
+      return r.blocked ? (r.reason ?? 'Capture blocked.') : `Captured ${r.added} new message(s).`;
+    });
+  }, [run, caseId, chatId]);
+
+  const onMembers = useCallback(() => run(async () => {
+    const r = await window.api.socmint.telegram.captureMembers({ caseId });
+    return r.blocked ? (r.reason ?? 'Capture blocked.') : `Captured ${r.captured} visible member(s).`;
+  }), [run, caseId]);
+
+  const onProfile = useCallback(() => run(async () => {
+    const r = await window.api.socmint.telegram.captureProfile({ caseId });
+    if (r.blocked) return r.reason ?? 'Capture blocked.';
+    return r.captured === 0
+      ? 'No profile panel is open — open a user profile in the window, then capture.'
+      : `Captured ${r.captured} visible profile (${r.added} new).`;
+  }), [run, caseId]);
+
+  const onExport = useCallback(() => run(async () => {
+    const r = await window.api.socmint.telegram.exportItems({
+      caseId,
+      format: exportFormat,
+      collection: exportCollection,
+    });
+    downloadTgExport({ data: r.data, mime: r.mime, format: r.format, collection: r.collection });
+    return `Exported ${r.count} ${r.collection} item(s) as ${r.format.toUpperCase()}.`;
+  }), [run, caseId, exportFormat, exportCollection]);
+
+  const onImport = useCallback(() => run(async () => {
+    const r = await window.api.socmint.telegram.importExport({ caseId });
+    if (r.canceled) return 'Import canceled — no file selected.';
+    return `Imported ${r.itemCount ?? 0} message(s) from ${r.name ?? 'export'} (${r.setCount ?? 0} import set(s) total).`;
+  }), [run, caseId]);
+
+  const onKeywordScan = useCallback(() => run(async () => {
+    // Split on newline OR comma; the main side matches each term LITERALLY (no RegExp).
+    const terms = keywordInput.split(/[\n,]/).map((t) => t.trim()).filter(Boolean);
+    const r = await window.api.socmint.telegram.keywordScan({ caseId, terms });
+    const watched = r.rules.map((rule) => rule.term).join(', ') || '(none)';
+    return `Watching ${r.rules.length} term(s): ${watched}. Scanned ${r.scanned} message(s) — ${r.matched} matched.`;
+  }), [run, caseId, keywordInput]);
+
+  return (
+    <div className="sm-tg-capture">
+      <h3 className="sm-section-title">Telegram Capture (Tor · visible-only)</h3>
+      <p className="sm-hint">
+        Capture runs inside a Tor-proxied hardened window and blocks when Tor is not ready —
+        there is no clearnet fallback. Only what is visible on screen is recorded.
+      </p>
+      <div className="sm-form-row">
+        <button className="sm-btn sm-btn-primary" onClick={onConnect} disabled={busy}>
+          Connect (open Telegram)
+        </button>
+      </div>
+      <div className="sm-form-row">
+        <label htmlFor="sm-tg-chatid">Open chat @username / id</label>
+        <input
+          id="sm-tg-chatid"
+          className="sm-input"
+          value={chatId}
+          placeholder="@channelname or -100123456789"
+          onChange={(e) => setChatId(e.target.value)}
+        />
+      </div>
+      <div className="sm-form-row sm-tg-actions">
+        <button className="sm-btn" onClick={onCapture} disabled={busy}>Capture Messages</button>
+        <button className="sm-btn" onClick={onMembers} disabled={busy}>Capture Members</button>
+        <button className="sm-btn" onClick={onProfile} disabled={busy}>Capture Profile</button>
+      </div>
+      <div className="sm-form-row sm-tg-export">
+        <label htmlFor="sm-tg-export-collection">Export</label>
+        <select
+          id="sm-tg-export-collection"
+          className="sm-input"
+          aria-label="Export collection"
+          value={exportCollection}
+          onChange={(e) => setExportCollection(e.target.value as TgExportCollection)}
+        >
+          <option value="messages">Messages</option>
+          <option value="members">Members</option>
+          <option value="profiles">Profiles</option>
+        </select>
+        <select
+          id="sm-tg-export-format"
+          className="sm-input"
+          aria-label="Export format"
+          value={exportFormat}
+          onChange={(e) => setExportFormat(e.target.value as TgExportFormat)}
+        >
+          <option value="json">JSON</option>
+          <option value="csv">CSV</option>
+          <option value="html">HTML</option>
+        </select>
+        <button className="sm-btn" onClick={onExport} disabled={busy}>Export</button>
+      </div>
+      <div className="sm-form-row sm-tg-import">
+        <label>Import Telegram Desktop export</label>
+        <button className="sm-btn" onClick={onImport} disabled={busy}>Import JSON export…</button>
+      </div>
+      <div className="sm-tg-keyword">
+        <h4 className="sm-section-title">Keyword watch (literal match)</h4>
+        <p className="sm-hint">
+          Terms are matched literally against captured messages — no pattern/RegExp is compiled
+          from what you type. One per line or comma-separated.
+        </p>
+        <div className="sm-form-row">
+          <textarea
+            id="sm-tg-keywords"
+            className="sm-input"
+            aria-label="Keyword watch terms"
+            rows={3}
+            value={keywordInput}
+            placeholder={'e.g.\nwallet drainer\nseed phrase'}
+            onChange={(e) => setKeywordInput(e.target.value)}
+          />
+        </div>
+        <div className="sm-form-row">
+          <button className="sm-btn" onClick={onKeywordScan} disabled={busy}>Add &amp; Scan captured</button>
+        </div>
+      </div>
+      {message && <div className="sm-tg-status" role="status">{message}</div>}
+    </div>
+  );
+}
 
 export function SocmintModule({ caseId: propCaseId }: { caseId?: string }): JSX.Element {
   const settings = useSettings((s) => s.settings);
@@ -671,9 +878,13 @@ export function SocmintModule({ caseId: propCaseId }: { caseId?: string }): JSX.
   // Active tab: 'channels' / 'items' are shared; 'wa-setup' is WhatsApp-only.
   const [tab, setTab] = useState<ContentTab>('channels');
 
-  // When platform switches away from WhatsApp, drop the wa-setup tab if active.
+  // Keep the tab valid for the active platform: wa-setup is WhatsApp-only, the Telegram
+  // capture tab is Telegram-only.
   useEffect(() => {
     if (platform !== 'whatsapp' && tab === 'wa-setup') {
+      setTab('channels');
+    }
+    if (platform !== 'telegram' && tab === 'capture') {
       setTab('channels');
     }
   }, [platform, tab]);
@@ -1033,6 +1244,16 @@ export function SocmintModule({ caseId: propCaseId }: { caseId?: string }): JSX.
             >
               Harvested Items
             </button>
+            {platform === 'telegram' && (
+              <button
+                role="tab"
+                aria-selected={tab === 'capture'}
+                className={`sm-tab${tab === 'capture' ? ' sm-tab-active' : ''}`}
+                onClick={() => setTab('capture')}
+              >
+                Capture
+              </button>
+            )}
             {platform === 'whatsapp' && (
               <button
                 role="tab"
@@ -1079,6 +1300,9 @@ export function SocmintModule({ caseId: propCaseId }: { caseId?: string }): JSX.
                 onRefreshItems={loadItems}
                 onLabel={handleLabel}
               />
+            )}
+            {tab === 'capture' && platform === 'telegram' && (
+              <TelegramCapturePanel caseId={caseId} />
             )}
             {tab === 'wa-setup' && platform === 'whatsapp' && (
               <WhatsAppSetupPanel networkEnabled={networkEnabled} />

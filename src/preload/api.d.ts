@@ -738,6 +738,57 @@ export interface GhostApi {
     hasWhatsappBurner(burnerId: string): Promise<boolean>;
     /** Deletes secretStore entries for burnerId. User must separately unlink in WhatsApp. */
     unlinkWhatsappBurner(burnerId: string): Promise<void>;
+    /**
+     * Telegram Hunter capture-window engine (TG5) — replaces the retired mtcute streaming
+     * collector. Pull-based visible-DOM capture inside a Tor-fail-closed hardened window.
+     */
+    telegram: {
+      /** Open (or resurface) the Tor-proxied capture window; blocked when Tor is not ready. */
+      connect(): Promise<{ opened: true } | { blocked: true; reason: string }>;
+      /** Capture the visible messages in the open chat → encrypted case store. */
+      capture(req: { caseId: string; channelId: string; channelLabel?: string; jobId?: string }): Promise<{
+        blocked: boolean; reason?: string; added: number; skipped: number; items: HarvestedItem[];
+      }>;
+      /** Capture the visible group/channel members (no fabricated total). */
+      captureMembers(req: { caseId: string }): Promise<{
+        blocked: boolean; reason?: string; added: number; captured: number; members: unknown[];
+      }>;
+      /** Capture the visible user-profile panel (no fabricated account-creation date). */
+      captureProfile(req: { caseId: string }): Promise<{
+        blocked: boolean; reason?: string; added: number; captured: number; profiles: unknown[];
+      }>;
+      /** Export a captured Telegram collection (messages/members/profiles) as JSON,
+       *  formula-guarded CSV, or an HTML-escaped report. `collection` defaults to messages. */
+      exportItems(req: {
+        caseId: string;
+        format: 'json' | 'csv' | 'html';
+        collection?: 'messages' | 'members' | 'profiles';
+      }): Promise<{
+        format: 'json' | 'csv' | 'html';
+        collection: 'messages' | 'members' | 'profiles';
+        count: number;
+        encoding: 'utf8';
+        data: string;
+        mime: string;
+      }>;
+      /** Import an operator-picked Telegram Desktop JSON export (LFI-guarded parse) into the
+       *  encrypted per-case imports store. `canceled` when the file picker was dismissed. */
+      importExport(req: { caseId: string }): Promise<{
+        canceled: boolean;
+        name?: string;
+        itemCount?: number;
+        setCount?: number;
+      }>;
+      /** Persist literal keyword-watch terms (no RegExp on input) and scan the case's captured
+       *  Telegram messages for matches. Returns the full term set + scanned/matched counts + a
+       *  bounded, visible-fields-only preview. */
+      keywordScan(req: { caseId: string; terms?: string[] }): Promise<{
+        rules: Array<{ term: string; addedAt: string; caseSensitive?: boolean; exactPhrase?: boolean }>;
+        scanned: number;
+        matched: number;
+        matches: Array<{ text: string; authorHandle: string; channelLabel: string; terms: string[] }>;
+      }>;
+    };
   };
   /**
    * X Listening Station (Plan A) — visible-DOM capture of an authenticated X session, run

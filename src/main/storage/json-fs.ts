@@ -965,7 +965,14 @@ export function mergeSettings(base: AppSettings, patch: Partial<AppSettings>): A
       ...(patch.markets ?? {}),
       watchlist: { ...base.markets.watchlist, ...(patch.markets?.watchlist ?? {}) }
     },
-    socmint: { ...base.socmint, ...(patch.socmint ?? {}) },
+    // socmint carries a fixed-shape nested `telegram` engine block (Plan B); deep-merge it so a
+    // settings.json persisted by an earlier build (mtcute era, no telegram key) heals to the
+    // default engine block instead of dropping it (v3.24.0 dataloss class).
+    socmint: {
+      ...base.socmint,
+      ...(patch.socmint ?? {}),
+      telegram: { ...base.socmint.telegram, ...(patch.socmint?.telegram ?? {}) },
+    },
     reports: { ...base.reports, ...(patch.reports ?? {}) },
     // xListening is a fixed-shape block with a nested `collect` sub-block; deep-merge BOTH
     // levels so a settings.json that predates a toggle heals to the default instead of
