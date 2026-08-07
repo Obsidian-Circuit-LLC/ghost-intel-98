@@ -27,7 +27,6 @@ const CSS = [
   read('node_modules/98.css/dist/98.css'),
   read('src/renderer/styles/theme.css'),
   read('src/renderer/styles/98.overrides.css'),
-  read('src/renderer/modules/x/x-collector.css'),
   read('src/renderer/modules/socmint/socmint.css'),
   read('src/renderer/modules/searchlight/searchlight.css')
 ]
@@ -38,14 +37,6 @@ const CSS = [
 // is live in the cascade — the exact condition under which the collapse occurred.
 const MARKUP =
   '<div class="ga98-window-shell"><div class="window"><div class="window-body">' +
-  // X collector
-  '<div class="xc-root">' +
-  '<button class="xc-btn" id="xc-generic">Generic</button>' +
-  '<button class="xc-btn xc-btn-primary" id="xc-primary">Primary</button>' +
-  '<button class="xc-btn xc-btn-accept" id="xc-accept">Accept</button>' +
-  '<button class="xc-btn xc-btn-reject" id="xc-reject">Reject</button>' +
-  '<button class="xc-btn xc-btn-danger" id="xc-danger">Danger</button>' +
-  '</div>' +
   // SOCMINT
   '<div class="sm-root">' +
   '<button class="sm-btn" id="sm-generic">Generic</button>' +
@@ -131,16 +122,6 @@ describe('CLASSIC PARITY — variants render their exact classic colour under th
   beforeAll(async () => { await setTheme(null); });
 
   const CASES: Array<{ id: string; bg: string; fg: string }> = [
-    { id: 'xc-primary', bg: 'rgb(26, 42, 58)', fg: 'rgb(208, 232, 255)' },
-    { id: 'xc-accept', bg: 'rgb(26, 74, 26)', fg: 'rgb(216, 255, 216)' },
-    { id: 'xc-reject', bg: 'rgb(92, 26, 26)', fg: 'rgb(255, 216, 216)' },
-    // PRE-EXISTING CLASSIC QUIRK (out of scope for the amethyst fix, documented here so the byte
-    // value is not silently wrong): `.xc-btn-danger` is declared at line 137, BEFORE the `.xc-btn`
-    // base (line 181). Both are specificity (0,1,0), so on the composed `xc-btn xc-btn-danger`
-    // element the LATER base wins in classic → grey #c0c0c0 fill / black ink. The danger red is
-    // therefore already collapsed in classic today; we keep classic byte-for-byte (rules unchanged)
-    // and the amethyst rule below still restores the semantic red under the skin.
-    { id: 'xc-danger', bg: 'rgb(192, 192, 192)', fg: 'rgb(0, 0, 0)' },
     { id: 'sm-primary', bg: 'rgb(61, 26, 92)', fg: 'rgb(232, 216, 255)' },
     { id: 'sm-accept', bg: 'rgb(26, 74, 26)', fg: 'rgb(216, 255, 216)' },
     { id: 'sm-danger', bg: 'rgb(92, 26, 26)', fg: 'rgb(255, 216, 216)' },
@@ -163,7 +144,6 @@ describe('AMETHYST — variants restore a distinct, semantically-correct, legibl
 
   it('every variant fill is DISTINCT from the generic grey chrome (no collapse)', async () => {
     const groups: Array<[string, string[]]> = [
-      ['xc-generic', ['xc-primary', 'xc-accept', 'xc-reject', 'xc-danger']],
       ['sm-generic', ['sm-primary', 'sm-accept', 'sm-danger', 'sm-reject']],
       ['sl-generic', ['sl-primary', 'sl-danger']]
     ];
@@ -176,18 +156,16 @@ describe('AMETHYST — variants restore a distinct, semantically-correct, legibl
   });
 
   it('accept fills are green-dominant', async () => {
-    expect(greenLeads(await bg('xc-accept')), 'xc-accept green').toBe(true);
     expect(greenLeads(await bg('sm-accept')), 'sm-accept green').toBe(true);
   });
 
   it('reject / danger fills are red-dominant', async () => {
-    for (const id of ['xc-reject', 'xc-danger', 'sm-danger', 'sm-reject', 'sl-danger']) {
+    for (const id of ['sm-danger', 'sm-reject', 'sl-danger']) {
       expect(redLeads(await bg(id)), `${id} red`).toBe(true);
     }
   });
 
   it('primary fills are blue/accent (blue channel leads)', async () => {
-    expect(blueLeads(await bg('xc-primary')), 'xc-primary blue').toBe(true);
     expect(blueLeads(await bg('sl-primary')), 'sl-primary blue').toBe(true);
     // SOCMINT primary is the accent purple (#3d1a5c) — a violet primary reads as accent, not grey.
     const [r, , b] = rgbOf(await bg('sm-primary'));
@@ -196,7 +174,6 @@ describe('AMETHYST — variants restore a distinct, semantically-correct, legibl
 
   it('each variant carries legible ink on its fill (>= 4.5:1)', async () => {
     for (const id of [
-      'xc-primary', 'xc-accept', 'xc-reject', 'xc-danger',
       'sm-primary', 'sm-accept', 'sm-danger', 'sm-reject',
       'sl-primary', 'sl-danger'
     ]) {
@@ -205,9 +182,9 @@ describe('AMETHYST — variants restore a distinct, semantically-correct, legibl
   });
 
   it('the semantic families are mutually distinct (accept != reject != primary)', async () => {
-    const accept = await bg('xc-accept');
-    const reject = await bg('xc-reject');
-    const primary = await bg('xc-primary');
+    const accept = await bg('sm-accept');
+    const reject = await bg('sm-reject');
+    const primary = await bg('sm-primary');
     expect(accept).not.toBe(reject);
     expect(accept).not.toBe(primary);
     expect(reject).not.toBe(primary);

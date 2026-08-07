@@ -560,8 +560,6 @@ export const PAPER_SURFACE_ALLOW: readonly PaperSurface[] = [
   // ── module chrome — each carries a module-local [data-ga98-theme=amethyst] override ─────────
   { selector: '.sl-sweep-btn', note: 'Searchlight sweep button — amethyst override in searchlight.css' },
   { selector: '.sl-graph-toolbar', note: 'Searchlight graph toolbar — amethyst override in searchlight.css' },
-  { selector: '.xc-tabs', note: 'X-collector tabs — amethyst override in x-collector.css' },
-  { selector: '.xc-btn', note: 'X-collector button — amethyst override in x-collector.css' },
   { selector: '.sm-tabs', note: 'SOCMINT tabs — amethyst override in socmint.css' },
   { selector: '.sm-btn', note: 'SOCMINT button — amethyst override in socmint.css' },
   { selector: '.run-panel__feed', note: 'investigation run feed — amethyst override in investigation.css' },

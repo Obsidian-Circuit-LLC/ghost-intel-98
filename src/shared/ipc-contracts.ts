@@ -50,54 +50,6 @@ export interface LearningModelMeta {
 }
 import type { HarvestedItem, MonitoredChannel } from './socmint/types';
 
-/**
- * Status enum for the X/Twitter collector (mirrors XCollectorStatus in
- * src/main/x/sidecar-client.ts — kept here so the IPC contract type is
- * self-contained in the shared package without importing from main).
- */
-export type XCollectorStatus =
-  | 'idle'
-  | 'running'
-  | 'done'
-  | 'partial'
-  | 'error'
-  | 'sidecar-missing'
-  | 'breakage-detected';
-
-/**
- * IPC result shape for x:collect (mirrors XCollectResult in src/main/x/collector.ts).
- * Defined here so the shared ApiContracts entry is self-contained.
- */
-export interface XCollectResultShape {
-  status: XCollectorStatus;
-  itemsAdded: number;
-  itemsSkipped: number;
-  totalFromSidecar: number;
-  truncationReason?: string;
-  truncationMessage?: string;
-  errorCode?: string;
-  errorMessage?: string;
-  jobId: string;
-}
-
-/**
- * Renderer-facing X session metadata (mirrors SessionMeta in src/main/x/sessions-store.ts).
- * Holds NO secret — the auth_token/ct0 live write-only in secretStore and never cross this seam.
- */
-export interface XSessionMeta {
-  accountId: string;
-  label: string;
-  username?: string;
-  status: 'valid' | 'expired' | 'untested';
-  lastTestedAt?: string;
-  handle?: string;
-}
-
-/** Result of validating a cookie pair against X (mirrors SessionTestResult in session-test.ts). */
-export type XSessionTestResult =
-  | { valid: true; handle: string }
-  | { valid: false; reason: 'expired' | 'rate-limited' | 'network' };
-
 export interface EntityCreateInput { type: EntityType; value: string; notes?: string; aliases?: string[] }
 export interface EntityLinkOpts { relationship?: EntityRelationship; linkIds?: string[]; attachmentFileNames?: string[] }
 export interface BioAddInput { originalName: string; mime: ImageMime; width: number; height: number; originalBase64: string; thumbBase64: string }
@@ -565,37 +517,41 @@ export const channels = {
     hasWhatsappBurner: 'socmint:hasWhatsappBurner',
     unlinkWhatsappBurner: 'socmint:unlinkWhatsappBurner'
   },
-  // X/Twitter collector — clearnet quarantine module (X-5).
-  // Separate namespace from socmint; gate requires BOTH networkEnabled AND clearnetAcknowledged.
-  x: {
-    addAccount: 'x:addAccount',
-    removeAccount: 'x:removeAccount',
-    listAccounts: 'x:listAccounts',
-    hasAccount: 'x:hasAccount',
-    collect: 'x:collect',
-    listItems: 'x:listItems',
-    rankItems: 'x:rankItems',
-    // Session model (refinement) — atomic auth_token+ct0 sessions with non-secret metadata.
-    // These SUPERSEDE the account channels for the Settings UI; addAccount/listAccounts stay
-    // for GhostScrape back-compat. NO secret ever appears in a session channel's return.
-    addSession: 'x:addSession',
-    addSessionTested: 'x:addSessionTested',
-    removeSession: 'x:removeSession',
-    listSessions: 'x:listSessions',
-    testSession: 'x:testSession',
-    testStoredSession: 'x:testStoredSession'
-  },
-  // GhostScrape — hidden-browser X timeline/profile scraper (clearnet quarantine module, GS-6).
-  // Reuses the SAME two-flag gate (x.networkEnabled && x.clearnetAcknowledged) and shared
-  // x.accounts.<id>.{auth_token,ct0} session cookies as the `x` namespace above — no new
-  // settings.ghostscrape namespace, no second cookie store.
-  ghostscrape: {
-    start: 'ghostscrape:start',
-    cancel: 'ghostscrape:cancel',
-    /** Main→renderer push: scroll/capture progress for a running job. */
-    onProgress: 'ghostscrape:onProgress',
-    /** Main→renderer push: a job finished (result) or failed (error). */
-    onDone: 'ghostscrape:onDone'
+  // X Listening Station (Plan A) — visible-DOM capture of an authenticated X session in a
+  // main-side hardened BrowserWindow on the clearnet-quarantined `persist:x-listening`
+  // partition (NO Tor/socks — clearnet). Replaces the retired `x`/`ghostscrape` collector
+  // namespaces (Task R1). Every handler is safeHandle + assertTrustedSender.
+  // X1 seeds connect/status only; capture/notes/network/archive/export channels land in X2–X8.
+  xListening: {
+    /** Open (or reopen) the hardened X login window on the clearnet partition. */
+    connect: 'xListening:connect',
+    /** Derive a `connected` boolean from the auth-cookie presence — never returns the token. */
+    status: 'xListening:status',
+    /** Visible-DOM timeline capture → normalized HarvestedItems in the encrypted case store. */
+    capture: 'xListening:capture',
+    /** Third-party comments under one of the target's root posts → encrypted case store (X4).
+     *  Gated MAIN-side on `AppSettings.xListening.collect.comments`; navigates only a
+     *  scheme/host-guarded x.com/twitter.com permalink. */
+    captureThreadComments: 'xListening:captureThreadComments',
+    /** Visible follower `UserCell` extraction → encrypted `networks` artifact store (X5). */
+    captureFollowers: 'xListening:captureFollowers',
+    /** Visible following `UserCell` extraction → encrypted `networks` artifact store (X5). */
+    captureFollowing: 'xListening:captureFollowing',
+    /** Serialize a case's captured networks to a formula-guarded CSV string (X5). */
+    exportNetwork: 'xListening:exportNetwork',
+    /** Upsert one analyst note (keyed by findingId) into the encrypted `notes` store (X6). */
+    saveNote: 'xListening:saveNote',
+    /** Read a case's analyst notes from the encrypted `notes` store (X6). */
+    readNotes: 'xListening:readNotes',
+    /** Run ONE bounded, low-rate archive cycle over the target timeline (X7). Gated MAIN-side
+     *  on `AppSettings.xListening.archiveCycles` (fail-closed OFF); advances resumable state
+     *  only on a completed run. */
+    runArchiveCycle: 'xListening:runArchiveCycle',
+    /** Run a BOUNDED, cancellable sequence of low-rate archive cycles (X7). Stops the instant a
+     *  cycle does not complete (toggle off / challenge-blocked). */
+    runArchiveCycles: 'xListening:runArchiveCycles',
+    /** Serialize a case's captured items to JSON/CSV/PDF/DOCX via the app's existing exporters (X8). */
+    exportItems: 'xListening:exportItems'
   },
   // Scraping cases — the isolated per-namespace case stores for SOCMINT + X collection runs
   // (kept apart from the core investigation `cases` namespace). Every handler takes a
@@ -779,52 +735,6 @@ export interface MemoryGraphShape {
    *  fix" tray uses this to show a real detected pair instead of guessing from `conflict`-flagged
    *  node iteration order. */
   conflictPairs: [string, string][];
-}
-
-/**
- * GhostScrape scrape shapes — mirror src/main/x/ghostscrape/types.ts (Task 1). Defined here
- * (rather than imported from main) so preload/renderer stay self-contained in the shared
- * package, matching the XCollectResultShape / MemoryItem mirror pattern above. GhostScrape
- * reuses the SAME X clearnet quarantine as the `x` namespace — no new settings namespace.
- */
-export type ScrapeType = 'all' | 'tweets' | 'retweets' | 'bio';
-
-export interface ScrapedTweet {
-  id: string;
-  text: string;
-  createdAt: string;
-  isRetweet: boolean;
-  likeCount: number;
-  retweetCount: number;
-  replyCount: number;
-  url: string;
-}
-
-export interface ScrapedProfile {
-  handle: string;
-  displayName: string;
-  bio: string;
-  followers: number;
-  following: number;
-  joined: string;
-}
-
-export interface GhostScrapeConfig {
-  accountId: string;
-  username: string;
-  type: ScrapeType;
-  sinceAfter?: string;
-  before?: string;
-  scrolls: number;
-  max: number;
-  delayMs: number;
-}
-
-export interface GhostScrapeResult {
-  profile?: ScrapedProfile;
-  tweets: ScrapedTweet[];
-  partial: boolean;
-  captured: number;
 }
 
 export interface AuthStatus { enabled: boolean; unlocked: boolean }
@@ -1077,39 +987,6 @@ export interface ApiContracts {
   [channels.socmint.hasWhatsappBurner]: { args: [string]; returns: boolean };
   // Deletes secretStore entries for the given burnerId; does NOT server-side-unlink (user must).
   [channels.socmint.unlinkWhatsappBurner]: { args: [string]; returns: void };
-
-  // X/Twitter collector — clearnet quarantine module (X-5).
-  // Account management: creds stored in secretStore; never echoed to renderer.
-  [channels.x.addAccount]: { args: [string, unknown]; returns: void };
-  [channels.x.removeAccount]: { args: [string]; returns: void };
-  // Returns account IDs only — no credential values.
-  [channels.x.listAccounts]: { args: []; returns: string[] };
-  // Boolean only — never echoes the stored auth_token.
-  [channels.x.hasAccount]: { args: [string]; returns: boolean };
-  // Egress gate: throws XCollectorGatedError when networkEnabled or clearnetAcknowledged is false.
-  [channels.x.collect]: { args: [unknown]; returns: XCollectResultShape };
-  // X-platform items only (platform === 'x').
-  [channels.x.listItems]: { args: [string]; returns: HarvestedItem[] };
-  [channels.x.rankItems]: { args: [string, string]; returns: HarvestedItem[] };
-  // Session model — atomic auth_token+ct0 sessions. Returns carry NO secret value.
-  // addSession returns the opaque accountId only; secrets are written to secretStore main-side.
-  [channels.x.addSession]: { args: [{ label: string; username?: string; authToken: string; ct0: string }]; returns: { accountId: string } };
-  // Test + save in one gated main-side op; saves only on a valid result (status/handle stamped from that test).
-  [channels.x.addSessionTested]: { args: [{ label: string; username?: string; authToken: string; ct0: string }]; returns: { accountId?: string; result: XSessionTestResult } };
-  [channels.x.removeSession]: { args: [string]; returns: void };
-  [channels.x.listSessions]: { args: []; returns: XSessionMeta[] };
-  // Egress-gated (networkEnabled): validates a cookie pair; returns handle or a reason code.
-  [channels.x.testSession]: { args: [{ authToken: string; ct0: string }]; returns: XSessionTestResult };
-  // Egress-gated: reads the stored secrets main-side, tests, stamps metadata. Returns no secret.
-  [channels.x.testStoredSession]: { args: [string]; returns: XSessionTestResult };
-
-  // GhostScrape — reuses the X two-flag gate + shared session cookies (GS-6).
-  // Throws GhostScrapeGatedError when networkEnabled or clearnetAcknowledged is false
-  // (mirrors XCollectorGatedError above).
-  [channels.ghostscrape.start]: { args: [GhostScrapeConfig]; returns: { jobId: string } };
-  [channels.ghostscrape.cancel]: { args: [string]; returns: void };
-  [channels.ghostscrape.onProgress]: { args: [(p: { jobId: string; captured: number; scrollsDone: number }) => void]; returns: () => void };
-  [channels.ghostscrape.onDone]: { args: [(d: { jobId: string; result?: GhostScrapeResult; error?: string }) => void]; returns: () => void };
 
   // Scraping cases (W4 Task 3) — `store` is validated main-side against ['socmint','x'].
   [channels.scrapingCases.list]: { args: [ScrapingCaseStoreId]; returns: ScrapingCase[] };

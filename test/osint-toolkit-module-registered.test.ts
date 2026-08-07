@@ -50,12 +50,12 @@ describe('OSINT Toolkit module registration', () => {
     expect(m?.defaultHeight).toBe(470);
   });
 
-  it('groups the real registry with a Social Media group containing x, ghostscrape, socmint, and never lists itself', () => {
+  it('groups the real registry with a Social Media group containing x-listening-station, socmint, and never lists itself', () => {
     const groups = buildOsintDirectory(listModules());
     const socialMedia = groups.find((g) => g.subcategory === 'Social Media');
     expect(socialMedia).toBeTruthy();
     const keys = socialMedia?.tools.map((t) => t.key) ?? [];
-    expect(keys).toEqual(expect.arrayContaining(['x', 'ghostscrape', 'socmint']));
+    expect(keys).toEqual(expect.arrayContaining(['x-listening-station', 'socmint']));
 
     const allKeys = groups.flatMap((g) => g.tools.map((t) => t.key));
     expect(allKeys).not.toContain('osint-toolkit');
@@ -68,7 +68,7 @@ describe('OSINT Toolkit module registration', () => {
     // The full OSINT surface the toolkit must expose — a tool that exists but is untagged would
     // be unreachable from the launcher (the exact "hidden feature" class the pre-ship QA targets).
     for (const key of [
-      'x', 'ghostscrape', 'socmint',        // Social Media
+      'x-listening-station', 'socmint',     // Social Media
       'geoint', 'eyespy', 'camera-view',    // Geospatial
       'searchlight',                        // Identity
       'host-info', 'net-explorer', 'news-view' // Network / Recon

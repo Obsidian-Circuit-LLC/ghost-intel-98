@@ -56,8 +56,6 @@ describe('settings upgrade guard — a frozen pre-v3.23.0 settings.json heals th
     expect(s.chat.networkEnabled).toBe(defaultSettings.chat.networkEnabled);
     expect(s.offensive.confirmMode).toBe('per-session');                                  // kept
     expect(s.offensive.requireSignedAuthorization).toBe(defaultSettings.offensive.requireSignedAuthorization); // healed
-    expect(s.x.networkEnabled).toBe(false);                                               // kept
-    expect(s.x.clearnetAcknowledged).toBe(defaultSettings.x.clearnetAcknowledged);        // healed
   });
 });
 

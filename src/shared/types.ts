@@ -574,25 +574,20 @@ export interface AppSettings {
      *  switches/falls back between them; in 'tor' mode a down Tor REFUSES, not clearnet. */
     transport: 'direct' | 'tor';
   };
-  /**
-   * X/Twitter collector — clearnet quarantine module (separate from socmint).
-   * Both flags MUST be true before any sidecar path is entered (IPC boundary).
-   * clearnetAcknowledged is set by an explicit confirmation dialog, not the toggle alone —
-   * the dialog states that requests reach x.com over the public internet and cannot be
-   * routed through Tor. Off by default on both axes.
-   */
-  x: {
-    /** Master opt-in egress gate. When false (default) the sidecar is never spawned. */
-    networkEnabled: boolean;
-    /** Persistent confirmation that the operator understands this module uses clearnet
-     *  (no Tor option). Must be set via the confirm dialog before networkEnabled can
-     *  be toggled on. Default false. */
-    clearnetAcknowledged: boolean;
-  };
   /** Reports module: the default author seeded onto a newly created report. Nested
    *  fixed-shape block — MUST be deep-merged in mergeSettings so an older persisted
    *  settings block that predates it keeps the key on upgrade (v3.24.0 dataloss class). */
   reports?: { author?: string };
+  /** X Listening Station capture toggles. All OFF by default — capture is minimal until the
+   *  operator opts each kind in. Nested fixed-shape block (with a nested `collect` sub-block);
+   *  BOTH levels MUST be deep-merged in mergeSettings so a settings.json predating a sub-field
+   *  heals instead of dropping it (v3.24.0 dataloss class). */
+  xListening: {
+    /** Which surrounding-thread kinds to capture alongside a target's own posts. */
+    collect: { replies: boolean; reposts: boolean; comments: boolean };
+    /** Enable bounded, low-rate archive cycles (off by default). */
+    archiveCycles: boolean;
+  };
 }
 
 export const defaultShortcuts: AccessShortcut[] = [
@@ -742,8 +737,11 @@ export const defaultSettings: AppSettings = {
   chat: { networkEnabled: false },
   searchlight: { networkEnabled: false, torConcurrency: 8, clearnetConcurrency: 16, scorer: { foundThreshold: null, maybeFloor: null, lightweightMode: false, useMl: false } },
   socmint: { networkEnabled: false, transport: 'direct' },
-  x: { networkEnabled: false, clearnetAcknowledged: false },
   reports: { author: '' },
+  xListening: {
+    collect: { replies: false, reposts: false, comments: false },
+    archiveCycles: false
+  },
   plugins: {},
   offensive: { confirmMode: 'per-scan', rateLimitPerSec: 10, downstreamProxy: null, requireSignedAuthorization: false, issuerKeys: [] },
   bgconn: { idleTeardownAfterMinutes: 120, defaultRouting: 'tor', maxReconnects: 20, maxSessionAgeMinutes: 720 }

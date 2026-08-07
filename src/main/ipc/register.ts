@@ -17,7 +17,6 @@
 import { app, ipcMain, shell, dialog, BrowserWindow } from 'electron';
 import { writeFile, rename, lstat, rm, readFile, stat, realpath } from 'node:fs/promises';
 import { basename, dirname, join, sep } from 'node:path';
-import { randomUUID } from 'node:crypto';
 import { channels, BGCONN_LOCK_EXEMPT_CHANNELS } from '@shared/ipc-contracts';
 import type { MailAccount, MailSendInput, SshHostProfile, AiChatRequest, MediaTrack, AiConversation } from '@shared/post-mvp-types';
 import type { Report } from '@shared/reports-types';
@@ -150,18 +149,10 @@ import {
 } from '../socmint/ipc';
 import { makeMtcuteCollector } from '../socmint/collector';
 import { makeWhatsAppCollector } from '../socmint/whatsapp-collector';
-import {
-  handleXAddAccount, handleXRemoveAccount, handleXListAccounts, handleXHasAccount,
-  handleXCollect, handleXListItems, handleXRankItems,
-  handleXAddSession, handleXAddSessionTested, handleXRemoveSession, handleXListSessions,
-  handleXTestSession, handleXTestStoredSession,
-} from '../x/ipc';
-import { listSessions as listXSessions, putSessionMeta as putXSessionMeta, removeSessionMeta as removeXSessionMeta } from '../x/sessions-store';
-import { testSession as testXSession } from '../x/session-test';
-import { createGhostScrapeHandlers } from '../x/ghostscrape/ipc';
 import { createScrapingCasesHandlers } from '../scraping-cases/ipc';
 import { prodScrapingCaseStore } from '../storage/scraping-cases';
 import { registerInvestigationGraphIpc, registerInvestigationRunIpc } from '../investigation/ipc';
+import { registerXListeningIpc } from '../x-listening/ipc';
 import { registerInvestigationReportIpc } from '../investigation/report-ipc';
 import { renderIntelReportPdf } from '../investigation/report-pdf';
 import { addManualNode, addManualEdge } from '../investigation/graph';
@@ -272,7 +263,18 @@ const GATE_EXEMPT = new Set<string>([
   ...BGCONN_LOCK_EXEMPT_CHANNELS
 ]);
 
-function safeHandle(channel: string, fn: Handler): void {
+/**
+ * Event-preserving IPC handler wrapper: the vault-lock gate + error sanitisation every channel
+ * shares, with the raw `IpcMainInvokeEvent` forwarded as `fn`'s FIRST argument (then the renderer
+ * args), exactly as Electron delivers them to `ipcMain.handle`. A handler that must authorise the
+ * sender frame — `assertTrustedSender` — needs the real event, and the event comes from Electron,
+ * never from the renderer-supplied args. This is the seam the X Listening Station wires (its capture
+ * window can host a hostile remote page, so its channels MUST sender-validate).
+ */
+function safeHandleWithEvent(
+  channel: string,
+  fn: (e: Electron.IpcMainInvokeEvent, ...args: unknown[]) => unknown
+): void {
   ipcMain.handle(channel, async (_e, ...args) => {
     try {
       if (!GATE_EXEMPT.has(channel) && vault.isEnabledCached() && !vault.isUnlocked()) {
@@ -281,7 +283,7 @@ function safeHandle(channel: string, fn: Handler): void {
         (locked as Error & { code?: string }).code = 'EVAULTLOCKED';
         throw locked;
       }
-      return await fn(...args);
+      return await fn(_e, ...args);
     } catch (err) {
       const original = err as Error & { code?: string };
       const sanitised = sanitiseMessage(original.message ?? String(err));
@@ -294,6 +296,15 @@ function safeHandle(channel: string, fn: Handler): void {
       throw wrapped;
     }
   });
+}
+
+/**
+ * The default handle: authorisation is the vault gate alone, so it DISCARDS the sender event and
+ * passes only the renderer args to `fn`. Handlers that must validate the sender frame use
+ * `safeHandleWithEvent` instead — the plain form cannot, because it never receives the event.
+ */
+function safeHandle(channel: string, fn: Handler): void {
+  safeHandleWithEvent(channel, (_e, ...args) => fn(...args));
 }
 
 /** Resume a crashed/partial enable: if the migrating marker is set and the DEK is now loaded,
@@ -626,7 +637,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
       const { prodImportScrapingCaseToMainCase } = await import('../scraping-cases/import-to-case');
       return prodImportScrapingCaseToMainCase(ns, scrapingCaseId, mainCaseId);
     },
-    // Encrypt-at-rest artifact writer (e.g. GhostScrape "save to case"). The handler has
+    // Encrypt-at-rest artifact writer (e.g. an X Listening "save to case" export). The handler has
     // already validated ns/id/name; the writer only routes through secure-fs.
     saveArtifact: async (ns, scrapingCaseId, name, content) => {
       const { saveScrapingArtifact } = await import('../storage/scraping-cases');
@@ -1737,6 +1748,12 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.memory.bondAdd, (...args) => createBonds().add(ensureNodeId(args[0]), ensureNodeId(args[1])));
   safeHandle(channels.memory.bondRemove, (...args) => createBonds().remove(ensureNodeId(args[0]), ensureNodeId(args[1])));
 
+  // ---- X Listening Station: authenticated connect/status seam (clearnet quarantine, Task X2) ----
+  // Wired via safeHandleWithEvent — NOT plain safeHandle — because the capture window can host a
+  // hostile remote page (x.com), so every handler must validate the sender frame first
+  // (assertTrustedSender inside the module). The plain safeHandle discards the event and cannot.
+  registerXListeningIpc({ handle: safeHandleWithEvent });
+
   // ---- SP-4 investigation graph: per-case scene fetch + live delta push (Task 5) ----
   registerInvestigationGraphIpc({
     handle: safeHandle,
@@ -2291,84 +2308,6 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   // Deletes both .creds and .keys secretStore entries; no server-side unlink (analyst must do that).
   safeHandle(channels.socmint.unlinkWhatsappBurner, (...a) =>
     handleUnlinkWhatsappBurner(typeof a[0] === 'string' ? a[0] : ''));
-
-  // ---- X/Twitter collector (clearnet quarantine module; egress gated by BOTH flags) ----
-  // Account management: creds stored in secretStore, never echoed to renderer (boolean/IDs only).
-  // Collect: throws XCollectorGatedError when networkEnabled or clearnetAcknowledged is false.
-  safeHandle(channels.x.addAccount, (...a) =>
-    handleXAddAccount(typeof a[0] === 'string' ? a[0] : '', a[1], {
-      getSecret: (k) => secretStore.get(k),
-      setSecret: (k, v) => secretStore.set(k, v),
-      deleteSecret: (k) => secretStore.delete(k),
-    }));
-  safeHandle(channels.x.removeAccount, (...a) =>
-    handleXRemoveAccount(typeof a[0] === 'string' ? a[0] : '', {
-      getSecret: (k) => secretStore.get(k),
-      setSecret: (k, v) => secretStore.set(k, v),
-      deleteSecret: (k) => secretStore.delete(k),
-    }));
-  safeHandle(channels.x.listAccounts, () =>
-    handleXListAccounts({ getSecret: (k) => secretStore.get(k) }));
-  safeHandle(channels.x.hasAccount, (...a) =>
-    handleXHasAccount(typeof a[0] === 'string' ? a[0] : '', {
-      getSecret: (k) => secretStore.get(k),
-    }));
-  // Collect: EGRESS GATE — throws XCollectorGatedError when either flag is false.
-  // socmint/store is lazy-imported inside the dep closures (mirrors other handler patterns).
-  safeHandle(channels.x.collect, (...a) =>
-    handleXCollect(a[0], {
-      networkEnabled: async () => (await settingsStore.read()).x.networkEnabled,
-      clearnetAcknowledged: async () => (await settingsStore.read()).x.clearnetAcknowledged,
-      async upsertItems(caseId, items) {
-        // X Intel persists into the x scraping store (scrapingCaseDir('x', id)) — separate
-        // from the socmint store and the main investigation cases (W4 Task 5).
-        const { upsertXItems } = await import('../socmint/store');
-        return upsertXItems(caseId, items);
-      },
-      async recordJob(caseId, job) {
-        const { recordXJob } = await import('../socmint/store');
-        return recordXJob(caseId, job);
-      },
-      getSecret: (k) => secretStore.get(k),
-    }));
-  safeHandle(channels.x.listItems, (...a) =>
-    handleXListItems(ensureUuid(a[0], 'caseId')));
-  safeHandle(channels.x.rankItems, (...a) =>
-    handleXRankItems(ensureUuid(a[0], 'caseId'), typeof a[1] === 'string' ? a[1] : ''));
-
-  // Session model — atomic auth_token+ct0 sessions with non-secret metadata (refinement).
-  // Secrets stay in secretStore (write-only from the renderer); the metadata store holds none.
-  // Test/testStored are egress-gated behind x.networkEnabled (a real clearnet request).
-  const xSessionStoreDeps = {
-    getSecret: (k: string) => secretStore.get(k),
-    setSecret: (k: string, v: string) => secretStore.set(k, v),
-    deleteSecret: (k: string) => secretStore.delete(k),
-    listSessions: () => listXSessions(),
-    putSessionMeta: (m: Parameters<typeof putXSessionMeta>[0]) => putXSessionMeta(m),
-    removeSessionMeta: (id: string) => removeXSessionMeta(id),
-    testSession: testXSession,
-    networkEnabled: async () => (await settingsStore.read()).x.networkEnabled,
-    genId: () => randomUUID(),
-    now: () => new Date().toISOString(),
-  };
-  safeHandle(channels.x.addSession, (...a) => handleXAddSession(a[0] as Parameters<typeof handleXAddSession>[0], xSessionStoreDeps));
-  safeHandle(channels.x.addSessionTested, (...a) => handleXAddSessionTested(a[0] as Parameters<typeof handleXAddSessionTested>[0], xSessionStoreDeps));
-  safeHandle(channels.x.removeSession, (...a) => handleXRemoveSession(typeof a[0] === 'string' ? a[0] : '', xSessionStoreDeps));
-  safeHandle(channels.x.listSessions, () => handleXListSessions(xSessionStoreDeps));
-  safeHandle(channels.x.testSession, (...a) => handleXTestSession(a[0], xSessionStoreDeps));
-  safeHandle(channels.x.testStoredSession, (...a) => handleXTestStoredSession(typeof a[0] === 'string' ? a[0] : '', xSessionStoreDeps));
-
-  // ---- GhostScrape (hidden-browser X scraper; reuses the SAME two-flag gate + shared X
-  // session cookies as the x namespace above — no new settings namespace, no second cookie
-  // store). start()/cancel() are the only two handlers; progress/done are pushed events. ----
-  const ghostScrapeHandlers = createGhostScrapeHandlers({
-    getSecret: (k) => secretStore.get(k),
-    networkEnabled: async () => (await settingsStore.read()).x.networkEnabled,
-    clearnetAcknowledged: async () => (await settingsStore.read()).x.clearnetAcknowledged,
-    getWindow,
-  });
-  safeHandle(channels.ghostscrape.start, (...a) => ghostScrapeHandlers.start(a[0]));
-  safeHandle(channels.ghostscrape.cancel, (...a) => ghostScrapeHandlers.cancel(a[0]));
 
   // ---- PDF Signer (core module) — capped transient read of a picked PDF + pdf-lib overlay sign
   // + save dialog. The source PDF is read here only to composite the signature; it is never

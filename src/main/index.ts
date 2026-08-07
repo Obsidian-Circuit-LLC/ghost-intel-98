@@ -16,9 +16,6 @@ import { channels } from '@shared/ipc-contracts';
 import { ensureDataLayout } from './storage/paths';
 import { migrateUserDataIfNeeded } from './migrate-userdata';
 import { migrateScrapingDataIfNeeded } from './storage/scraping-migration';
-import { handleXMigrateLegacySessions } from './x/ipc';
-import { migrateLegacyAccounts as migrateLegacyXAccounts } from './x/sessions-store';
-import { secretStore } from './secrets/index';
 import { registerMediaProtocol } from './media/protocol';
 import { registerModelProtocol } from './voice/model-protocol';
 import { registerCctvProxy } from './geoint/cctv-proxy';
@@ -53,7 +50,6 @@ import * as localAi from './services/local-ai';
 import * as chat from './services/chat';
 import { stopAis } from './services/livefeeds/ais-stream';
 import { cancelAllSweeps } from './searchlight/sweep';
-import { killSidecar as killXSidecar } from './x/sidecar-client';
 import { disposeAllSchedules } from './plugins/schedule';
 import { clearAllBrains } from './investigation/brain-registry';
 
@@ -290,18 +286,6 @@ app.whenReady().then(async () => {
     console.error('[scraping-migration] startup pass failed; will retry next launch', err);
   }
 
-  // Non-destructive X-session migration (spec §5): synthesize untested metadata for any X account
-  // added the pre-refinement way (x.accounts.index) so it stays visible/usable in the refined
-  // Stored-Sessions list and the collector picker. Idempotent — only fills gaps, never overwrites.
-  try {
-    await handleXMigrateLegacySessions({
-      getSecret: (k) => secretStore.get(k),
-      migrateSessions: (ids) => migrateLegacyXAccounts(ids),
-    });
-  } catch (err) {
-    console.error('[x-session-migration] startup pass failed; will retry next launch', err);
-  }
-
   // Load plugins after the vault is refreshed so secure-fs reads work, and before
   // IPC is registered so plugin handlers are available when the renderer connects.
   const settings = await settingsStore.read();
@@ -437,7 +421,7 @@ app.on('before-quit', (event) => {
   });
 });
 
-app.on('will-quit', () => { localAi.stop(); getBgTor()?.killNow(); getPluginTor()?.killNow(); killXSidecar(); disposeAllSchedules(); clearAllBrains(); }); // sync backstops (idempotent)
+app.on('will-quit', () => { localAi.stop(); getBgTor()?.killNow(); getPluginTor()?.killNow(); disposeAllSchedules(); clearAllBrains(); }); // sync backstops (idempotent)
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();

@@ -2,10 +2,10 @@ import { describe, it, expect } from 'vitest';
 import { xLaunchSpec } from '../src/renderer/modules/socmint/x-launch-spec';
 
 describe('xLaunchSpec', () => {
-  it('targets the x module with a stable title', () => {
+  it('targets the x-listening-station module with a stable title', () => {
     const s = xLaunchSpec();
-    expect(s.module).toBe('x');
-    expect(s.title).toBe('X / Twitter');
+    expect(s.module).toBe('x-listening-station');
+    expect(s.title).toBe('X Listening Station');
     expect(s.props).toBeUndefined();
   });
   it('carries caseId when one is loaded', () => {

@@ -31,7 +31,7 @@ import type {
   WhiteboardNode,
   WhiteboardEdge
 } from '../shared/types';
-import type { EntityCreateInput, EntityLinkOpts, BioAddInput, AuthStatus, LocalAiStatus, LocalAiProgress, MemoryStatus, MemoryProgress, MemoryItem, RecallPreview, LibraryDoc, MemoryGraphShape, BondShape, XCollectResultShape, XSessionMeta, XSessionTestResult, LearningModelMeta, GhostScrapeConfig, GhostScrapeResult, ScrapingCaseStoreId, ScrapingImportResult, PdfSignPlacement } from '../shared/ipc-contracts';
+import type { EntityCreateInput, EntityLinkOpts, BioAddInput, AuthStatus, LocalAiStatus, LocalAiProgress, MemoryStatus, MemoryProgress, MemoryItem, RecallPreview, LibraryDoc, MemoryGraphShape, BondShape, LearningModelMeta, ScrapingCaseStoreId, ScrapingImportResult, PdfSignPlacement } from '../shared/ipc-contracts';
 import type { InvestigationScene, SceneDelta } from '../shared/investigation-graph';
 import type { RunEvent } from '../shared/investigation-agent';
 import type { RunBudget } from '../shared/investigation-types';
@@ -740,96 +740,155 @@ export interface GhostApi {
     unlinkWhatsappBurner(burnerId: string): Promise<void>;
   };
   /**
-   * X/Twitter collector — clearnet quarantine module (X-6).
-   * Separate IPC namespace from socmint; gate requires BOTH networkEnabled AND
-   * clearnetAcknowledged before any collection can proceed (spec §3.1).
+   * X Listening Station (Plan A) — visible-DOM capture of an authenticated X session, run
+   * main-side in a hardened BrowserWindow on the clearnet-quarantined `persist:x-listening`
+   * partition (no Tor/socks — clearnet). Retires the `x` + `ghostscrape` namespaces (Task R1).
    *
-   * Credential values are NEVER returned to the renderer:
-   *   - addAccount stores to secretStore; no return value.
-   *   - listAccounts returns account IDs only (no auth_token / ct0 / password).
-   *   - hasAccount returns a boolean only.
+   * X1 exposes the connect/status shell only; capture/notes/network/archive/export methods are
+   * added by Tasks X2–X8. No credential ever crosses this surface — status() derives a boolean
+   * from the auth-cookie presence and never returns, echoes, or logs the token.
    */
-  x: {
-    /** Store X account credentials in secretStore under the given accountId. */
-    addAccount(
-      accountId: string,
-      creds: { auth_token?: string; ct0?: string; username?: string },
-    ): Promise<void>;
-    /** Remove all credentials for the given accountId from secretStore. */
-    removeAccount(accountId: string): Promise<void>;
-    /** Returns stored account IDs only — no credential values. */
-    listAccounts(): Promise<string[]>;
+  xListening: {
+    /** Open (or reopen) the hardened X login window on the clearnet partition. */
+    connect(): Promise<{ opened: boolean }>;
+    /** Session connectivity as a derived boolean — never the auth token itself. */
+    status(): Promise<{ connected: boolean }>;
     /**
-     * Returns true when a non-empty auth_token is stored for the given accountId.
-     * Boolean only — never exposes the token value.
+     * Capture the visible X timeline in the connect window → normalized, honesty-stamped
+     * HarvestedItems in the encrypted case store. Refuses on a verification/rate-limit page
+     * (`blocked:true`, nothing captured); `harvestedAt`/collector version are stamped main-side.
      */
-    hasAccount(accountId: string): Promise<boolean>;
-    /**
-     * Run one X collection job (keyword search or user timeline).
-     * Throws XCollectorGatedError when networkEnabled or clearnetAcknowledged is false.
-     * FAIL-LOUD: partial/breakage-detected/error/sidecar-missing statuses are returned
-     * as explicit XCollectResultShape values, never silently mapped to empty arrays.
-     */
-    collect(req: {
+    capture(req: {
       caseId: string;
-      mode: 'search' | 'userTweets';
-      query?: string;
-      username?: string;
+      jobId?: string;
+      channelId: string;
       channelLabel?: string;
-      accountId?: string;
-      limit?: number;
-      since?: string;
-      until?: string;
-    }): Promise<XCollectResultShape>;
-    /** List all X-platform harvested items for the given case (platform === 'x' only). */
-    listItems(caseId: string): Promise<HarvestedItem[]>;
-    /** Rank X-platform items for the given case by keyword relevance (loopback-only AI). */
-    rankItems(caseId: string, keyword: string): Promise<HarvestedItem[]>;
+    }): Promise<{
+      blocked: boolean;
+      reason?: string;
+      added: number;
+      skipped: number;
+      items: HarvestedItem[];
+    }>;
     /**
-     * Create a session: writes the auth_token + ct0 (+ optional username) to secretStore
-     * main-side and records untested metadata. Returns the opaque accountId only — the
-     * cookies are never echoed back.
+     * Capture the THIRD-PARTY comments under one of the target's root posts → normalized,
+     * honesty-stamped HarvestedItems (`kind:'comment'`) in the encrypted case store. Gated
+     * MAIN-side on `AppSettings.xListening.collect.comments` (off ⇒ nothing captured, the
+     * window is never navigated). The root URL is scheme/host guarded before any navigation;
+     * refuses on a verification/rate-limit page (`blocked:true`).
      */
-    addSession(input: { label: string; username?: string; authToken: string; ct0: string }): Promise<{ accountId: string }>;
-    /** Test + save in one gated main-side op; saves only on a valid result (status/handle stamped from that test). */
-    addSessionTested(input: { label: string; username?: string; authToken: string; ct0: string }): Promise<{ accountId?: string; result: XSessionTestResult }>;
-    /** Remove a session: deletes its secrets and its metadata. */
-    removeSession(accountId: string): Promise<void>;
-    /** List non-secret session metadata for the Stored Sessions UI (no cookie values). */
-    listSessions(): Promise<XSessionMeta[]>;
+    captureThreadComments(req: {
+      caseId: string;
+      jobId?: string;
+      channelId: string;
+      channelLabel?: string;
+      rootPostId: string;
+      rootPostUrl: string;
+    }): Promise<{
+      blocked: boolean;
+      reason?: string;
+      added: number;
+      skipped: number;
+      items: HarvestedItem[];
+    }>;
     /**
-     * Validate a just-typed cookie pair against X. Egress-gated (networkEnabled) — throws when
-     * authenticated X collection is disabled. Returns the handle or a reason code, never a cookie.
+     * Capture the target's visible FOLLOWERS from the followers surface → the ACTUAL
+     * visible accounts (never a scraped count-number) in the encrypted `networks`
+     * artifact store. Refuses on a verification/rate-limit page (`blocked:true`).
      */
-    testSession(creds: { authToken: string; ct0: string }): Promise<XSessionTestResult>;
+    captureFollowers(req: { caseId: string; jobId?: string; target: string }): Promise<{
+      blocked: boolean;
+      reason?: string;
+      target: string;
+      kind: 'followers' | 'following';
+      accounts: Array<{ handle: string; displayName: string; avatar?: string; bio?: string }>;
+    }>;
+    /** Capture the accounts the target is FOLLOWING. Same honesty guarantees as `captureFollowers`. */
+    captureFollowing(req: { caseId: string; jobId?: string; target: string }): Promise<{
+      blocked: boolean;
+      reason?: string;
+      target: string;
+      kind: 'followers' | 'following';
+      accounts: Array<{ handle: string; displayName: string; avatar?: string; bio?: string }>;
+    }>;
+    /** Serialize the case's captured networks to a formula-guarded CSV string. */
+    exportNetwork(caseId: string): Promise<{ csv: string; count: number }>;
     /**
-     * Re-validate a stored session: reads its secrets main-side, tests, and stamps
-     * status/handle/lastTestedAt. Egress-gated. Returns the result only (no secrets).
+     * Upsert one analyst note against a finding (one note per finding — a re-save
+     * REPLACES it). Text is trimmed + validated (non-empty, ≤ 20 000 chars) and
+     * `savedAt` is stamped MAIN-side. Returns the fresh note list.
      */
-    testStoredSession(accountId: string): Promise<XSessionTestResult>;
+    saveNote(req: { caseId: string; findingId: string; text: string }): Promise<{
+      notes: Array<{ findingId: string; text: string; savedAt: string }>;
+    }>;
+    /** Read the case's analyst notes from the encrypted `notes` store. */
+    readNotes(caseId: string): Promise<{
+      notes: Array<{ findingId: string; text: string; savedAt: string }>;
+    }>;
+    /**
+     * Serialize the case's captured items to `json`/`csv`/`pdf`/`docx` via the app's
+     * EXISTING exporters (no new docx/pdfkit). Every scraped field is escaped /
+     * formula-guarded; rounded metrics are exported verbatim (never a false-precision
+     * integer); remote media URLs are never emitted. `data` is utf8 for json/csv and
+     * base64 for pdf/docx; the caller decodes + saves via the app's file-save flow.
+     */
+    exportItems(req: { caseId: string; format: 'json' | 'csv' | 'pdf' | 'docx' }): Promise<{
+      format: 'json' | 'csv' | 'pdf' | 'docx';
+      count: number;
+      encoding: 'utf8' | 'base64';
+      data: string;
+      mime: string;
+      suggestedName: string;
+    }>;
+    /**
+     * Run ONE bounded, low-rate archive cycle over the target's timeline. Gated MAIN-side on
+     * `AppSettings.xListening.archiveCycles` (fail-closed OFF ⇒ `ran:false`, no capture, state
+     * untouched). On a completed run the resumable state advances (cycle count + cursor +
+     * main-side clock); a challenge-blocked cycle does NOT advance state.
+     */
+    runArchiveCycle(req: {
+      caseId: string;
+      jobId?: string;
+      channelId: string;
+      channelLabel?: string;
+    }): Promise<{
+      ran: boolean;
+      blocked: boolean;
+      reason?: string;
+      added: number;
+      skipped: number;
+      items: HarvestedItem[];
+      state: { cursor: string | null; cycles: number; lastRunAt: string | null };
+    }>;
+    /**
+     * Run a BOUNDED, cancellable sequence of low-rate archive cycles. Stops the instant a cycle
+     * does not complete (toggle turned off / challenge-blocked). `maxCycles` is clamped to
+     * [0, 1000] main-side; a low-rate delay sits between cycles.
+     */
+    runArchiveCycles(req: {
+      caseId: string;
+      jobId?: string;
+      channelId: string;
+      channelLabel?: string;
+      maxCycles?: number;
+      delayMs?: number;
+    }): Promise<{
+      cyclesRun: number;
+      totalAdded: number;
+      blocked: boolean;
+      reason?: string;
+      cancelled: boolean;
+      /** Every completed cycle's captured records, in run order — surfaced in the LIVE FEED
+       *  just like a single RUN ONE CYCLE. */
+      items: HarvestedItem[];
+      state: { cursor: string | null; cycles: number; lastRunAt: string | null };
+    }>;
   };
-  /**
-   * GhostScrape — hidden-browser X timeline/profile scraper (clearnet quarantine module).
-   * Reuses the SAME two-flag gate (x.networkEnabled && x.clearnetAcknowledged) and shared
-   * x.accounts.<id>.{auth_token,ct0} session cookies as `x` above — no new settings
-   * namespace, no second cookie store. Account list comes from x.listAccounts(); save-to-case
-   * uses the existing files.* attachment API.
-   */
-  ghostscrape: {
-    /** Throws GhostScrapeGatedError when networkEnabled or clearnetAcknowledged is false. */
-    start(cfg: GhostScrapeConfig): Promise<{ jobId: string }>;
-    cancel(jobId: string): Promise<void>;
-    /** Returns an unsubscribe function, mirroring the onProgress pattern used elsewhere. */
-    onProgress(cb: (p: { jobId: string; captured: number; scrollsDone: number }) => void): () => void;
-    /** Returns an unsubscribe function. Exactly one of result/error is present per job. */
-    onDone(cb: (d: { jobId: string; result?: GhostScrapeResult; error?: string }) => void): () => void;
-  };
-
   /**
    * Scraping cases (W4) — the isolated per-namespace SOCMINT/X collection-run stores, kept
    * apart from `cases` (investigation cases). Every call passes a `store: 'socmint' | 'x'`
    * discriminator validated main-side against an allowlist. `saveArtifact` writes a saved
-   * export (e.g. GhostScrape JSON) into the scraping case, encrypted at rest.
+   * export (e.g. an X Listening JSON export) into the scraping case, encrypted at rest.
    */
   scrapingCases: {
     list(store: ScrapingCaseStoreId): Promise<ScrapingCase[]>;

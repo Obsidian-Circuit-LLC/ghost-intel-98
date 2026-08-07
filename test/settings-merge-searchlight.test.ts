@@ -47,12 +47,11 @@ describe('mergeSettings — searchlight.scorer survives an old on-disk searchlig
  * wholesale replace is its correct semantics.)
  */
 describe('mergeSettings — fixed-shape nested settings objects survive a stale persisted block', () => {
-  it('keeps a default sub-field that an old persisted block is missing, for chat/offensive/x', () => {
+  it('keeps a default sub-field that an old persisted block is missing, for chat/offensive', () => {
     // Each on-disk block carries only its oldest field; newer default sub-fields are absent.
     const onDisk = {
       chat: {} as unknown,
       offensive: { confirmMode: 'per-session' } as unknown,
-      x: { networkEnabled: true } as unknown,
     } as unknown as Partial<typeof defaultSettings>;
 
     const merged = mergeSettings(defaultSettings, onDisk);
@@ -63,8 +62,5 @@ describe('mergeSettings — fixed-shape nested settings objects survive a stale 
     expect(merged.offensive.confirmMode).toBe('per-session');
     expect(merged.offensive.rateLimitPerSec).toBe(defaultSettings.offensive.rateLimitPerSec);
     expect(merged.offensive.requireSignedAuthorization).toBe(defaultSettings.offensive.requireSignedAuthorization);
-    // x: user override kept, missing default sub-field restored.
-    expect(merged.x.networkEnabled).toBe(true);
-    expect(merged.x.clearnetAcknowledged).toBe(defaultSettings.x.clearnetAcknowledged);
   });
 });
