@@ -15,7 +15,17 @@
  * original as neutralizing interior quotes only, leaving a scraped bio like
  * `=HYPERLINK("http://evil")` free to execute when the CSV is opened in Excel
  * or Sheets. `escapeField` mirrors the quarantine `escapeHtml` at `main.cjs:896`.
+ *
+ * `confineImportPath` is the import-side counterpart: the Telegram Hunter source
+ * (`telegram-hunter/src/main.js` `parseJsonExport`) resolved every export media
+ * path with a bare `path.resolve(base, rel)` and handed the result straight to
+ * `fs.readFileSync` / an `<img src>`, so a hostile `result.json` carrying
+ * `file: "../../../../etc/passwd"` (or an absolute path) read an arbitrary file —
+ * an LFI into the UI/exports. This guard confines every resolved media path to the
+ * chosen export root and returns `null` for anything that escapes it.
  */
+
+import { resolve, sep } from 'node:path';
 
 /** Structural shape of a capture page we can run static JS in. Electron's
  *  `BrowserWindow` is assignable to this; tests supply a minimal fake. */
@@ -87,6 +97,26 @@ export function escapeField(v: string): string {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#039;');
+}
+
+/**
+ * Confine an import-relative media path to `root`. Resolves `rel` against `root`
+ * and returns the absolute path ONLY if it stays strictly INSIDE the root
+ * (`resolved.startsWith(root + sep)`); returns `null` for a traversal
+ * (`../../etc/passwd`), an absolute escape (`/etc/passwd`, resolved away from
+ * root), a NUL byte, the root directory itself, or a non-string input. Callers
+ * DROP the media on `null` — a Telegram export must never make the app read a
+ * file outside the folder the operator chose. Pure `node:path`; no fs touch here.
+ */
+export function confineImportPath(root: string, rel: string): string | null {
+  if (typeof root !== 'string' || typeof rel !== 'string') return null;
+  if (root.includes('\0') || rel.includes('\0')) return null;
+  const base = resolve(root);
+  const resolved = resolve(base, rel);
+  const withSep = base.endsWith(sep) ? base : base + sep;
+  // Strict containment: the root dir itself (resolved === base) is not a valid media file.
+  if (!resolved.startsWith(withSep)) return null;
+  return resolved;
 }
 
 /**
