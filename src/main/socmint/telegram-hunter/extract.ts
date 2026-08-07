@@ -316,10 +316,12 @@ export function normalizeMessage(raw: RawMessage, ctx: TgNormalizeContext): TgHa
     links: Array.isArray(raw.links) ? raw.links.map((l) => String(l ?? '')).filter(Boolean) : [],
   };
 
-  // HONESTY: the visible display name is stored ONLY when actually shown. It is NEVER
-  // backfilled from the @handle — an unobserved display name is absent, not fabricated.
+  // HONESTY: the visible display name is stored ONLY when actually shown AND not merely an
+  // echo of the @handle (with or without the leading @) — it is NEVER backfilled from the
+  // handle. Parity with normalizeProfile/normalizeMember; an unobserved (or echo) display
+  // name is absent, not fabricated.
   const display = String(raw.author ?? '').trim();
-  if (display) item.authorDisplay = display;
+  if (display && display !== handle && display !== authorId) item.authorDisplay = display;
 
   const profileUrl = guardTelegramUrl(String(raw.authorProfileUrl ?? ''));
   if (profileUrl) item.authorProfileUrl = profileUrl;
@@ -401,6 +403,21 @@ export const TG_MEMBER_SCRIPT = `
     const heads = all('h1,h2,h3,[class*="title"],[class*="Title"]').filter(vis).map(text).filter(Boolean);
     const chatTitle = heads.find((h) => h.length < 120 && !/Telegram Web|Search|Settings/i.test(h)) || document.title || 'Telegram chat';
 
+    // HONESTY: the phone is admitted ONLY from a dedicated phone field — a tel: link, a
+    // phone-classed element, or a line that is JUST a phone number. A +number embedded in
+    // bio/status prose is NOT a phone (the source scraped the whole row innerText, which
+    // mis-attributed any phone-shaped substring); we scope it so we never fabricate one.
+    const PHONE_RE = /\\+\\d[\\d ()-]{6,20}\\d/;
+    const STANDALONE_PHONE_RE = /^\\+[\\d ()-]{7,22}$/;
+    const phoneField = (rootEl, lns) => {
+      const el = rootEl && rootEl.querySelector('a[href^="tel:"],[class*="phone"],[class*="Phone"]');
+      if (el) { const m = text(el).match(PHONE_RE); if (m) return m[0]; }
+      for (const line of (lns || [])) {
+        if (STANDALONE_PHONE_RE.test(line)) { const m = line.match(PHONE_RE); if (m) return m[0]; }
+      }
+      return '';
+    };
+
     const memberRoots = all('[class*="members"],[class*="Members"],[class*="participants"],[class*="Participants"],[class*="subscribers"],[class*="Subscribers"],[role="dialog"],[class*="popup"],[class*="Popup"]')
       .filter(vis)
       .filter((e) => { const t = text(e), r = e.getBoundingClientRect(); return t.length > 0 && t.length < 12000 && r.width > 220; });
@@ -418,12 +435,12 @@ export const TG_MEMBER_SCRIPT = `
       const v = clean(multi);
       if (v.length < 2 || v.length > 260) continue;
       if (links(v).length > 3) continue;
+      const lines = multi.split(/\\n+/).map(clean).filter(Boolean);
       const username = (v.match(/@[a-zA-Z0-9_]{4,32}/) || [])[0] || '';
-      const phone = (v.match(/\\+\\d[\\d ()-]{6,20}\\d/) || [])[0] || '';
-      const status = (multi.split(/\\n+/).map(clean).filter(Boolean).slice(1).join(' · ')).slice(0, 180);
+      const phone = phoneField(e, lines);
+      const status = (lines.slice(1).join(' · ')).slice(0, 180);
       if (!(username || phone || /online|last seen|subscriber|member|bot|admin|owner/i.test(v))) continue;
       if (/someone just got access|new login|source:\\s*https?:\\/\\//i.test(v)) continue;
-      const lines = multi.split(/\\n+/).map(clean).filter(Boolean);
       const displayName = (lines.find((x) => x.length < 100 && !/^@/.test(x) && !/^online$|^last seen/i.test(x))) || '';
       const bare = username.replace(/^@/, '');
       const avatarEl = e.querySelector('img[class*="avatar"],img[class*="Avatar"],canvas,[class*="avatar"],[class*="Avatar"],[style*="background-image"]');
@@ -552,6 +569,21 @@ export const TG_PROFILE_SCRIPT = `
     const heads = all('h1,h2,h3,[class*="title"],[class*="Title"]').filter(vis).map(text).filter(Boolean);
     const chatTitle = heads.find((h) => h.length < 120 && !/Telegram Web|Search|Settings/i.test(h)) || '';
 
+    // HONESTY: the phone is admitted ONLY from a dedicated phone field — a tel: link, a
+    // phone-classed element, or a line that is JUST a phone number. A +number embedded in
+    // the bio prose is NOT a phone (the source scraped the whole panel innerText, which
+    // mis-attributed any phone-shaped substring); we scope it so we never fabricate one.
+    const PHONE_RE = /\\+\\d[\\d ()-]{6,20}\\d/;
+    const STANDALONE_PHONE_RE = /^\\+[\\d ()-]{7,22}$/;
+    const phoneField = (rootEl, lns) => {
+      const el = rootEl && rootEl.querySelector('a[href^="tel:"],[class*="phone"],[class*="Phone"]');
+      if (el) { const m = text(el).match(PHONE_RE); if (m) return m[0]; }
+      for (const line of (lns || [])) {
+        if (STANDALONE_PHONE_RE.test(line)) { const m = line.match(PHONE_RE); if (m) return m[0]; }
+      }
+      return '';
+    };
+
     const visiblePanels = all('[class*="profile"],[class*="Profile"],[class*="user-info"],[class*="UserInfo"],[class*="right-column"],[class*="RightColumn"],[class*="sidebar-right"],[class*="SidebarRight"],[role="dialog"]')
       .filter(vis)
       .filter((e) => { const t = text(e); const r = e.getBoundingClientRect(); return t.length > 2 && t.length < 4000 && r.width > 180 && r.width < 850; });
@@ -564,11 +596,11 @@ export const TG_PROFILE_SCRIPT = `
     if (!panel) return null;
 
     const pt = text(panel);
+    const panelLines = raw(panel).split(/\\n+/).map(clean).filter(Boolean);
     const panelUser = (pt.match(/@[a-zA-Z0-9_]{4,32}/) || [])[0] || '';
-    const panelPhone = (pt.match(/\\+\\d[\\d ()-]{6,20}\\d/) || [])[0] || '';
+    const panelPhone = phoneField(panel, panelLines);
     if (!(panelUser || panelPhone || /bio|username|phone|last seen|online/i.test(pt))) return null;
 
-    const panelLines = raw(panel).split(/\\n+/).map(clean).filter(Boolean);
     // HONESTY: display name = the first non-@handle panel line; NO heads[0] fallback.
     const displayName = panelLines.find((v) => v && v.length < 100 && !/^@/.test(v)) || '';
     const status = panelLines.find((v) => /online|last seen|bot|subscriber|member|admin|owner/i.test(v)) || '';

@@ -154,6 +154,23 @@ describe('normalizeMessage: captured DOM → HarvestedItem', () => {
     expect(anon.authorHandle).toBe('@jane_op');
   });
 
+  it('SUPPRESSES a display name that is merely an echo of the @handle (parity with member/profile)', () => {
+    // The visible "sender" is just the handle, with the @ — not a real name. Storing it as
+    // authorDisplay would fake a distinct display name. normalizeProfile/normalizeMember
+    // already drop this echo; normalizeMessage must too.
+    const echoAt = normalizeMessage(rawMessage({ author: '@jane_op' }), CTX);
+    expect(echoAt.authorDisplay).toBeUndefined();
+    expect(echoAt.authorHandle).toBe('@jane_op');
+
+    // …and the bare handle (no @) is equally an echo, not a display name.
+    const echoBare = normalizeMessage(rawMessage({ author: 'jane_op' }), CTX);
+    expect(echoBare.authorDisplay).toBeUndefined();
+
+    // A genuinely distinct name is still kept.
+    const real = normalizeMessage(rawMessage({ author: 'Jane Doe' }), CTX);
+    expect(real.authorDisplay).toBe('Jane Doe');
+  });
+
   it('scheme-guards the visible profile permalink to Telegram hosts', () => {
     const item = normalizeMessage(rawMessage({ authorProfileUrl: 'https://t.me/jane_op' }), CTX);
     expect(item.url).toBe('https://t.me/jane_op');

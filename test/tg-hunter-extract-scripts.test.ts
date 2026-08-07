@@ -235,6 +235,38 @@ describe('TG_MEMBER_SCRIPT against a captured member-list DOM', () => {
     expect(bob.handle).toBe('@bob_op');
     expect(bob.displayName).toBeUndefined(); // unobserved name omitted, not the @handle
   });
+
+  it('scopes the member phone to a dedicated phone field — a +number in a body/status line is NOT a phone', () => {
+    // Carol's row carries a phone-shaped string ("+1 234 5678") only inside her free-text
+    // status, with NO dedicated phone field. Scraping the whole row innerText would falsely
+    // attribute it as her phone. Dave's row has a real tel: phone field.
+    document.body.innerHTML = `
+      <h2 class="chat-title">Operators Group</h2>
+      <div class="members-list">
+        <div class="ListItem">
+          <div class="name">Carol Ops</div>
+          <div class="username">@carol_op</div>
+          <div class="status">back online, ping me re: +1 234 5678 later</div>
+        </div>
+        <div class="ListItem">
+          <div class="name">Dave Ops</div>
+          <div class="username">@dave_op</div>
+          <a class="phone" href="tel:+441234567890">+44 123 4567 890</a>
+          <div class="status">online</div>
+        </div>
+      </div>`;
+    const members = runInPage<RawMember[]>(TG_MEMBER_SCRIPT);
+
+    const carol = members.find((x) => x.username === '@carol_op')!;
+    expect(carol).toBeTruthy();
+    // The +number embedded in prose must NOT be captured as her phone.
+    expect(carol.phone).toBe('');
+
+    const dave = members.find((x) => x.username === '@dave_op')!;
+    expect(dave).toBeTruthy();
+    // A real, dedicated phone field IS captured.
+    expect(dave.phone).toBe('+44 123 4567 890');
+  });
 });
 
 // ---- TG_PROFILE_SCRIPT against a captured profile-panel DOM -----------
@@ -279,5 +311,38 @@ describe('TG_PROFILE_SCRIPT against a captured profile-panel DOM', () => {
     document.body.innerHTML = '<div class="profile-panel">Just some group settings text here</div>';
     const profile = runInPage<RawProfile | null>(TG_PROFILE_SCRIPT);
     expect(profile).toBeNull();
+  });
+
+  it('scopes the profile phone to a dedicated phone field — a +number in the bio is NOT a phone', () => {
+    // The bio prose carries a phone-shaped string ("+1 234 5678"); scraping the whole panel
+    // innerText would falsely attribute it as the account phone. There is NO real phone field.
+    document.body.innerHTML = `
+      <h2 class="chat-title">Operators Group</h2>
+      <div class="profile-panel">
+        <div class="name">Jane Doe</div>
+        <div class="username">@jane_op</div>
+        <div class="bio">Reach the desk on +1 234 5678 — opinions my own</div>
+        <div class="status">last seen recently</div>
+      </div>`;
+    const profile = runInPage<RawProfile>(TG_PROFILE_SCRIPT);
+    expect(profile).not.toBeNull();
+    expect(profile.username).toBe('@jane_op');
+    // The +number embedded in the bio must NOT be captured as the phone.
+    expect(profile.phone).toBe('');
+  });
+
+  it('captures the profile phone from a dedicated tel: phone field', () => {
+    document.body.innerHTML = `
+      <h2 class="chat-title">Operators Group</h2>
+      <div class="profile-panel">
+        <div class="name">Jane Doe</div>
+        <div class="username">@jane_op</div>
+        <a class="phone" href="tel:+441234567890">+44 123 4567 890</a>
+        <div class="bio">Threat intel — opinions my own</div>
+        <div class="status">last seen recently</div>
+      </div>`;
+    const profile = runInPage<RawProfile>(TG_PROFILE_SCRIPT);
+    expect(profile).not.toBeNull();
+    expect(profile.phone).toBe('+44 123 4567 890');
   });
 });
