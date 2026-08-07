@@ -17,6 +17,7 @@ import { confirmDialog } from '../../state/dialogs';
 import { TextBlock } from '../reports/blocks/TextBlock';
 import { ImageBlock } from '../reports/blocks/ImageBlock';
 import { sanitizeReportHtml } from '../reports/rich-text';
+import { useClearnetLinkOpener } from '../ai-assistant/useClearnetLinkOpener';
 import journalBanner from '../../assets/journal-jots-banner.png';
 import journalBook from '../../assets/journal-jots-book.png';
 
@@ -25,6 +26,15 @@ function fmtBytes(n: number): string { return n < 1024 ? `${n} B` : `${(n / 1024
 function isFourDigits(s: string): boolean { return /^[0-9]{4}$/.test(s); }
 
 const IMAGE_MIME = ['image/png', 'image/jpeg'];
+
+/** Defense-in-depth scheme guard for the delegated anchor-click handler below. sanitizeReportHtml
+ *  already strips any href that isn't http/https/mailto on write AND on the read-side pass this
+ *  module runs (sanitizeBlocksForDisplay), so a non-openable href should never actually reach a
+ *  rendered anchor — this check exists so a click can never route to openExternal with a scheme
+ *  sanitize didn't intend to allow. */
+function isOpenableHref(href: string): boolean {
+  return /^(https?:|mailto:)/i.test(href);
+}
 
 /** A fresh, empty entry starts with one empty text block, mirroring ReportEditor's "always a typable
  *  body" seed. */
@@ -43,6 +53,9 @@ type Gate = 'loading' | 'set-pin' | 'locked' | 'open';
 
 export function JournalModule(): JSX.Element {
   const [gate, setGate] = useState<Gate>('loading');
+  // The open policy for hyperlinks clicked inside a text block: scheme-guarded (main-side
+  // validateExternalUrl) + a one-time clearnet-IP-exposure acknowledgement, same as Q's replies.
+  const openLink = useClearnetLinkOpener();
 
   // PIN-screen state.
   const [pin, setPin] = useState('');
@@ -189,6 +202,23 @@ export function JournalModule(): JSX.Element {
     } catch (err) { toast.error(`Delete failed: ${(err as Error).message}`); }
   }
 
+  // Delegated anchor-click handler for the block editor. TextBlock's contentEditable body is raw
+  // DOM (dangerouslySetInnerHTML), so a link click is NOT a React-managed per-anchor onClick — this
+  // single listener on the block-list container catches every click inside every text block.
+  // preventDefault stops the Electron window from navigating to the href in-app; the click is then
+  // routed through the same scheme-guarded, clearnet-ack-gated opener used everywhere else in the
+  // app (openLink → window.api.system.openExternal, main-side validateExternalUrl re-checks).
+  function onBlocksClick(e: React.MouseEvent<HTMLDivElement>): void {
+    const target = e.target as HTMLElement;
+    const anchor = target.closest('a[href]') as HTMLAnchorElement | null;
+    if (!anchor) return;
+    e.preventDefault();
+    const href = anchor.getAttribute('href') || '';
+    // sanitizeReportHtml already stripped anything but http/https/mailto — this is defense-in-depth.
+    if (!isOpenableHref(href)) return;
+    openLink(href);
+  }
+
   // ---- render ----------------------------------------------------------------------------------
 
   if (gate === 'loading') {
@@ -287,7 +317,7 @@ export function JournalModule(): JSX.Element {
               />
             </label>
           </div>
-          <div className="ga98-journal-blocks">
+          <div className="ga98-journal-blocks" onClick={onBlocksClick}>
             {blocks.map((b) => (
               <div key={b.id} className="ga98-journal-block">
                 {b.kind === 'text' ? (
