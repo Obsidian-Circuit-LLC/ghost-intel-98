@@ -200,7 +200,9 @@ export const channels = {
     hasPin: 'journal:hasPin',
     setPin: 'journal:setPin',
     verifyPin: 'journal:verifyPin',
-    changePin: 'journal:changePin'
+    changePin: 'journal:changePin',
+    putAsset: 'journal:putAsset',
+    getAsset: 'journal:getAsset'
   },
   files: {
     importDropped: 'files:importDropped',
@@ -895,6 +897,8 @@ export interface ApiContracts {
   [channels.journal.setPin]: { args: [string]; returns: void };
   [channels.journal.verifyPin]: { args: [string]; returns: boolean };
   [channels.journal.changePin]: { args: [string, string]; returns: boolean };
+  [channels.journal.putAsset]: { args: [{ bytes: number[]; mime: string }]; returns: string };
+  [channels.journal.getAsset]: { args: [string]; returns: { mime: string; dataUrl: string } | null };
 
   [channels.reminders.listGlobal]: { args: []; returns: Reminder[] };
   [channels.reminders.upsertGlobal]: { args: [Reminder]; returns: Reminder };

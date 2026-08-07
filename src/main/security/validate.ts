@@ -1234,6 +1234,18 @@ export function ensureReportAssetInput(v: unknown): { bytes: Buffer; mime: strin
   return { bytes: Buffer.from(o.bytes as number[]), mime: o.mime };
 }
 
+const MAX_JOURNAL_ASSET = 25 * 1024 * 1024;
+/** Journal Jots photo upload: identical shape/cap to ensureReportAssetInput (png/jpeg, 25 MB) —
+ *  Journal photos are full-size phone photos same as report photos. */
+export function ensureJournalAssetInput(v: unknown): { bytes: Buffer; mime: string } {
+  if (!v || typeof v !== 'object') throw new ValidationError('asset must be an object');
+  const o = v as { bytes?: unknown; mime?: unknown };
+  if (o.mime !== 'image/png' && o.mime !== 'image/jpeg') throw new ValidationError('asset.mime must be image/png or image/jpeg');
+  if (!Array.isArray(o.bytes)) throw new ValidationError('asset.bytes must be a byte array');
+  if (o.bytes.length > MAX_JOURNAL_ASSET) throw new ValidationError('asset too large (max 25MB)');
+  return { bytes: Buffer.from(o.bytes as number[]), mime: o.mime };
+}
+
 // ---------- PDF signer ----------
 
 /** Ceiling on the raw bytes of a PDF crossing the IPC boundary — either the capped file read for

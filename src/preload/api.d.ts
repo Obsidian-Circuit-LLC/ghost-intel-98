@@ -316,6 +316,8 @@ export interface GhostApi {
     setPin(pin: string): Promise<void>;
     verifyPin(pin: string): Promise<boolean>;
     changePin(oldPin: string, newPin: string): Promise<boolean>;
+    putAsset(bytes: number[], mime: string): Promise<string>;
+    getAsset(ref: string): Promise<{ mime: string; dataUrl: string } | null>;
   };
   ssh: {
     listHosts(): Promise<SshHostProfile[]>;

@@ -239,7 +239,9 @@ const api = {
     hasPin: () => ipcRenderer.invoke(channels.journal.hasPin),
     setPin: (pin: string) => ipcRenderer.invoke(channels.journal.setPin, pin),
     verifyPin: (pin: string) => ipcRenderer.invoke(channels.journal.verifyPin, pin),
-    changePin: (oldPin: string, newPin: string) => ipcRenderer.invoke(channels.journal.changePin, oldPin, newPin)
+    changePin: (oldPin: string, newPin: string) => ipcRenderer.invoke(channels.journal.changePin, oldPin, newPin),
+    putAsset: (bytes: number[], mime: string) => ipcRenderer.invoke(channels.journal.putAsset, { bytes, mime }),
+    getAsset: (ref: string) => ipcRenderer.invoke(channels.journal.getAsset, ref)
   },
   ssh: {
     listHosts: () => ipcRenderer.invoke(channels.ssh.listHosts),

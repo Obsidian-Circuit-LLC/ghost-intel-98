@@ -68,8 +68,9 @@ import * as stickyNotesStore from '../storage/sticky-notes';
 import * as aiConvos from '../storage/ai-conversations';
 import * as briefcase from '../storage/briefcase';
 import * as journal from '../storage/journal';
+import * as journalAssets from '../storage/journal-assets';
 import * as voiceModel from '../voice/model-protocol';
-import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityType, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureShellProgram, ensureWhiteboard, ensureBoardFile, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon, ensureSaveToCaseOpts, ensureGeoItem, ensureThreatLayerId, ensureKeyedLayerId, ensureLayerKey, isKeyedLayerId, ensureBookmarkBoard, ensureMarketsSettings, ensureStickyNotes, ensureAiConversation, ensureBriefcaseNote, ensureJournalEntry, ensurePin, ensureUid, ensureMailFlag, stripProtectedSettings, ensureBounds, ensureDocRelPath, ensureDocName, ensureImportSourcePath, ensureNoteBody, ensureIdArray, ensureInvoice, ensureProfile, ensureAssetInput, ensureReport, ensureContact, ensureDescriptor, ensureIntroduction, ensureReportTemplate, ensureReportAssetInput, ensureConversationId, MAX_PDF_SIGN_BYTES, ensurePdfBytes, parseSignatureDataUrl, ensurePlacement } from '../security/validate';
+import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityType, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureShellProgram, ensureWhiteboard, ensureBoardFile, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon, ensureSaveToCaseOpts, ensureGeoItem, ensureThreatLayerId, ensureKeyedLayerId, ensureLayerKey, isKeyedLayerId, ensureBookmarkBoard, ensureMarketsSettings, ensureStickyNotes, ensureAiConversation, ensureBriefcaseNote, ensureJournalEntry, ensurePin, ensureUid, ensureMailFlag, stripProtectedSettings, ensureBounds, ensureDocRelPath, ensureDocName, ensureImportSourcePath, ensureNoteBody, ensureIdArray, ensureInvoice, ensureProfile, ensureAssetInput, ensureReport, ensureContact, ensureDescriptor, ensureIntroduction, ensureReportTemplate, ensureReportAssetInput, ensureJournalAssetInput, ensureConversationId, MAX_PDF_SIGN_BYTES, ensurePdfBytes, parseSignatureDataUrl, ensurePlacement } from '../security/validate';
 import { signPdf } from '../pdf-signer/sign';
 import * as entities from '../storage/entities';
 import * as bioStore from '../storage/bio-images';
@@ -1230,6 +1231,13 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   safeHandle(channels.journal.setPin, (...args) => journal.setPin(ensurePin(args[0])));
   safeHandle(channels.journal.verifyPin, (...args) => journal.verifyPin(ensurePin(args[0])));
   safeHandle(channels.journal.changePin, (...args) => journal.changePin(ensurePin(args[0], 'old PIN'), ensurePin(args[1], 'new PIN')));
+  // Journal photo asset store — mirrors reports.putAsset/getAsset. getAsset converts the stored
+  // bytes to a preview data URL for the renderer (the renderer never receives raw vault bytes).
+  safeHandle(channels.journal.putAsset, (...a) => { const { bytes, mime } = ensureJournalAssetInput(a[0]); return journalAssets.putAsset(bytes, mime); });
+  safeHandle(channels.journal.getAsset, async (...a) => {
+    const asset = await journalAssets.getAsset(ensureFileName(a[0], 'assetRef'));
+    return asset ? { mime: asset.mime, dataUrl: `data:${asset.mime};base64,${asset.bytes.toString('base64')}` } : null;
+  });
   safeHandle(channels.bookmarks.fetchFavicon, (...args) =>
     bookmarksBoard.fetchFavicon(validateExternalUrl(String(args[0] ?? ''))));
   safeHandle(channels.bookmarks.exportBoard, async () => {
