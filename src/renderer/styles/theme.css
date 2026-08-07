@@ -1662,6 +1662,17 @@ input.ga98-text, select.ga98-text {
 .ga98-sol-win { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 24500; pointer-events: none; }
 .ga98-sol-win .window { pointer-events: auto; }
 
+/* Full-width module banner header (GhostExodus art batch) */
+.ga98-module-banner {
+  display: block;
+  width: 100%;
+  height: clamp(120px, 16vw, 190px);
+  object-fit: cover;
+  object-position: center;
+  border-bottom: 2px solid var(--ga98-border-shadow, #808080);
+  flex: 0 0 auto;
+}
+
 /* ---------------------------------------------------------------------------
  * Invoices module — two-pane host (saved list + editor/preview). Tables restate
  * their own background on a CLASS selector so the bundled 98.css element rule

@@ -10,6 +10,7 @@ import { useSettings } from '../../state/store';
 import { toast } from '../../state/toasts';
 import { confirmDialog } from '../../state/dialogs';
 import { playMailNotifyDeduped } from '../../audio/synth';
+import mailBanner from '../../assets/mail-banner.png';
 
 type LeftView = 'inbox' | 'drafts';
 
@@ -230,6 +231,7 @@ export function MailModule(): JSX.Element {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <img src={mailBanner} alt="Mail" className="ga98-module-banner" />
       <div className="ga98-toolbar">
         <button onClick={() => openCompose()} disabled={!activeId} title="Ctrl/Cmd+N to compose">Compose</button>
         <button onClick={() => void refreshInbox()} disabled={!activeId}>Get mail</button>
