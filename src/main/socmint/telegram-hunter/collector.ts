@@ -203,6 +203,161 @@ export async function captureVisibleMessages(
 }
 
 // ======================================================================
+// TG4 — keyword watch + dedup (PURE, security-critical)
+// ======================================================================
+//
+// Two invariants live here, both pinnable without electron/network/disk:
+//
+//   * Keyword matching is LITERAL — a saved term is a `.includes()` substring, NEVER
+//     `new RegExp(untrustedTerm)`. A term of `(a+)+$` can therefore neither hang the
+//     app (ReDoS) nor over-match (`a.c` must not match `abc`). This is the standing
+//     "Keyword-watch is LITERAL match (no new RegExp(untrusted))" rule.
+//   * The highlight DOES build a `RegExp`, but ONLY from regex-ESCAPED literal terms
+//     (the source `highlightHtml` escape) — a flat literal alternation is ReDoS-free
+//     and highlights the literal term, not a regex interpretation. It returns plain
+//     text/marked SEGMENTS (main-side); wrapping them in `<mark>` is a render concern.
+//
+// Ported from quarantine `renderer.js` (`keywordMessageMatches`, `highlightHtml`) and
+// `main.js` (`dedupe`, the `allKeywordRecords` seen-set).
+
+/** A keyword rule as consumed by the matcher — the persisted `TgKeywordRule` (from the
+ *  encrypt-at-rest `keywordWatch` store) satisfies this shape. */
+export interface KeywordRule {
+  term: string;
+  /** Case-sensitive literal match when true; default (absent) is case-insensitive. */
+  caseSensitive?: boolean;
+  /** Exact-phrase (one `.includes`) when true/absent; all-words (each `.includes`) when false. */
+  exactPhrase?: boolean;
+}
+
+/** One record row scanned by the matcher. A `TgHarvestedItem` satisfies this shape; the
+ *  matcher reads only the visible searchable fields (never a fabricated one). */
+export type KeywordSearchable = Pick<TgHarvestedItem, 'text' | 'authorHandle' | 'channelLabel'> & {
+  authorDisplay?: string;
+  links?: string[];
+};
+
+/** One highlight segment: a run of text and whether it is a keyword hit. */
+export interface HighlightSegment {
+  text: string;
+  mark: boolean;
+}
+
+/** The visible searchable haystack for a record — text, the visible sender (display name
+ *  when shown, else the @handle), the chat/channel label, and any verbatim links. Ported
+ *  from the source `keywordMessageMatches` field set (`[m.text, m.author, m.chat, ...links]`). */
+function keywordHaystack(rec: KeywordSearchable): string {
+  return [rec.text, rec.authorDisplay || rec.authorHandle, rec.channelLabel, ...(rec.links ?? [])]
+    .filter(Boolean)
+    .join('\n');
+}
+
+/**
+ * Does `rec` match keyword `rule`? LITERAL — a `.includes()` substring test, NEVER a
+ * compiled `RegExp` on the untrusted term (ReDoS/injection guard). Exact-phrase matches
+ * the whole term as one substring; `exactPhrase:false` matches when every whitespace-
+ * split word appears (each literally). Case-insensitive unless `caseSensitive` is set.
+ * Port of quarantine `renderer.js` `keywordMessageMatches`.
+ */
+export function matchesKeyword(rec: KeywordSearchable, rule: KeywordRule): boolean {
+  const term = String(rule?.term ?? '');
+  if (!term) return false;
+  const fields = keywordHaystack(rec);
+  const hay = rule.caseSensitive ? fields : fields.toLowerCase();
+  const needle = rule.caseSensitive ? term : term.toLowerCase();
+  if (rule.exactPhrase !== false) return hay.includes(needle);
+  return needle
+    .split(/\s+/)
+    .filter(Boolean)
+    .every((w) => hay.includes(w));
+}
+
+/** Scan `records` against `rules`, returning each record paired with the subset of rules
+ *  it literally matched (records with no hits are omitted). */
+export function matchKeywords<T extends KeywordSearchable>(
+  records: readonly T[],
+  rules: readonly KeywordRule[],
+): Array<{ record: T; hits: KeywordRule[] }> {
+  const out: Array<{ record: T; hits: KeywordRule[] }> = [];
+  for (const record of records) {
+    const hits = rules.filter((r) => matchesKeyword(record, r));
+    if (hits.length) out.push({ record, hits });
+  }
+  return out;
+}
+
+/** Escape every regex metacharacter so a term is matched as a LITERAL inside a `RegExp`.
+ *  Port of the source `highlightHtml` escape (`/[.*+?^${}()|[\]\\]/g`). */
+export function escapeKeywordRegExp(term: string): string {
+  return String(term).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Split `value` into highlight SEGMENTS, marking each run that matches one of `terms`.
+ * The `RegExp` is built ONLY from regex-ESCAPED literal terms (a flat alternation), so it
+ * is ReDoS-free and marks the literal term — `a.c` marks `a.c`, never `abc`. Longer terms
+ * are tried first (source ordering) so an overlapping shorter term never pre-empts them.
+ * Reassembling the segments' `text` reproduces `value` verbatim (lossless — escaping to
+ * HTML is the caller's job). Port of quarantine `renderer.js` `highlightHtml`.
+ */
+export function highlightKeyword(
+  value: string,
+  hits: ReadonlyArray<Pick<KeywordRule, 'term' | 'caseSensitive'>>,
+): HighlightSegment[] {
+  const text = String(value ?? '');
+  const terms = [...new Set(hits.map((k) => String(k?.term ?? '')).filter(Boolean))].sort(
+    (a, b) => b.length - a.length,
+  );
+  if (!terms.length) return [{ text, mark: false }];
+  const flags = hits.some((k) => k.caseSensitive) ? 'g' : 'gi';
+  const pattern = terms.map(escapeKeywordRegExp).join('|');
+  const segs: HighlightSegment[] = [];
+  try {
+    const re = new RegExp(`(${pattern})`, flags);
+    let last = 0;
+    for (const m of text.matchAll(re)) {
+      const idx = m.index ?? 0;
+      if (idx > last) segs.push({ text: text.slice(last, idx), mark: false });
+      segs.push({ text: m[0], mark: true });
+      last = idx + m[0].length;
+    }
+    if (last < text.length) segs.push({ text: text.slice(last), mark: false });
+  } catch {
+    return [{ text, mark: false }];
+  }
+  return segs.length ? segs : [{ text, mark: false }];
+}
+
+/**
+ * The content-based dedup key for a captured record: chat · author · timestamp · text,
+ * lower-cased. Two visible rows carrying the same content collapse to one regardless of a
+ * differing surrogate id (cross-source dedup — a captured message and the same message in
+ * an imported export are one record). Port of the source message dedup key.
+ */
+export function dedupKeyForItem(
+  rec: Pick<TgHarvestedItem, 'channelId' | 'authorHandle' | 'publishedAt' | 'text'>,
+): string {
+  return [rec.channelId, rec.authorHandle, rec.publishedAt, rec.text]
+    .map((v) => String(v ?? ''))
+    .join('|')
+    .toLowerCase();
+}
+
+/** Stable, order-preserving dedup by a caller-supplied key (first occurrence wins). An
+ *  empty/falsy key is DROPPED (never coalesced). Port of quarantine `main.js` `dedupe`. */
+export function dedupItems<T>(items: readonly T[], keyFn: (x: T) => string): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const x of items) {
+    const k = keyFn(x);
+    if (!k || seen.has(k)) continue;
+    seen.add(k);
+    out.push(x);
+  }
+  return out;
+}
+
+// ======================================================================
 // TG2 — member intelligence capture orchestration
 // ======================================================================
 

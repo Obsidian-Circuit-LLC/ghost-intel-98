@@ -65,12 +65,21 @@ export interface TgMember {
 }
 
 /** One keyword-watch rule. `term` is matched LITERALLY at watch time (no `new RegExp` on
- *  untrusted input — ReDoS/injection); the store only persists the term. */
+ *  untrusted input — ReDoS/injection); the store persists the term plus its match options
+ *  so a saved watch matches the way it was defined (ported from the source rule shape). */
 export interface TgKeywordRule {
   term: string;
   /** ISO timestamp supplied by the caller (injected clock). */
   addedAt: string;
+  /** When true, the literal match is case-sensitive; default (absent) is case-insensitive. */
+  caseSensitive?: boolean;
+  /** When true or absent, the term matches as an exact phrase (one literal `.includes`);
+   *  when false, the term matches when ALL of its words appear (each literally). */
+  exactPhrase?: boolean;
 }
+
+/** The literal-match options for a keyword rule (everything but the persisted term/clock). */
+export type TgKeywordOptions = Pick<TgKeywordRule, 'caseSensitive' | 'exactPhrase'>;
 
 /** One media attachment inside an imported message. `path`, when present, is a CONFINED
  *  absolute path INSIDE the chosen export root (see `confineImportPath`); it is ABSENT when
@@ -238,8 +247,9 @@ export interface TgHunterStore {
   keywordWatch: {
     read(caseId: string): Promise<TgKeywordRule[]>;
     write(caseId: string, rules: TgKeywordRule[]): Promise<void>;
-    /** Add a literal keyword term, deduped case-insensitively. Returns the fresh rule list. */
-    add(caseId: string, term: string, addedAt: string): Promise<TgKeywordRule[]>;
+    /** Add a literal keyword term (with its match options), deduped by term
+     *  case-insensitively. Returns the fresh rule list. */
+    add(caseId: string, term: string, addedAt: string, opts?: TgKeywordOptions): Promise<TgKeywordRule[]>;
   };
   imports: {
     read(caseId: string): Promise<TgImportSet[]>;
@@ -314,11 +324,14 @@ export function makeTgHunterStore(deps: TgHunterStoreDeps): TgHunterStore {
           writeJson(deps, deps.keywordWatchPath(caseId), rules),
         );
       },
-      add(caseId, term, addedAt) {
+      add(caseId, term, addedAt, opts) {
         return withLock(`tg:keyword:${caseId}`, async () => {
           const existing = await readJsonArr<TgKeywordRule>(deps, deps.keywordWatchPath(caseId));
           if (!existing.some((r) => norm(r.term) === norm(term))) {
-            existing.push({ term, addedAt });
+            const rule: TgKeywordRule = { term, addedAt };
+            if (opts?.caseSensitive !== undefined) rule.caseSensitive = opts.caseSensitive;
+            if (opts?.exactPhrase !== undefined) rule.exactPhrase = opts.exactPhrase;
+            existing.push(rule);
             await writeJson(deps, deps.keywordWatchPath(caseId), existing);
           }
           return existing;
