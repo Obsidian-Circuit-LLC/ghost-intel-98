@@ -43,6 +43,7 @@ import { defaultSettings } from '@shared/types';
 import {
   captureTelegramMessages,
   captureTelegramMembers,
+  captureTelegramProfile,
 } from '../src/main/socmint/telegram-hunter/ipc';
 
 const CASE_ID = 'case-1';
@@ -54,6 +55,7 @@ let telegram: {
   connect: ReturnType<typeof vi.fn>;
   capture: ReturnType<typeof vi.fn>;
   captureMembers: ReturnType<typeof vi.fn>;
+  captureProfile: ReturnType<typeof vi.fn>;
   exportItems: ReturnType<typeof vi.fn>;
   importExport: ReturnType<typeof vi.fn>;
   keywordScan: ReturnType<typeof vi.fn>;
@@ -64,6 +66,7 @@ function installApi(): void {
     connect: vi.fn().mockResolvedValue({ opened: true }),
     capture: vi.fn().mockResolvedValue({ blocked: false, added: 0, skipped: 0, items: [] }),
     captureMembers: vi.fn().mockResolvedValue({ blocked: false, added: 0, captured: 0, members: [] }),
+    captureProfile: vi.fn().mockResolvedValue({ blocked: false, added: 1, captured: 1, profiles: [] }),
     // Echo the requested format/collection back so the seam test can prove the renderer
     // drives them (not a hardcoded json/messages) and the download path stays exercised.
     exportItems: vi.fn(async (req: { format: string; collection?: string }) => ({
@@ -229,12 +232,27 @@ describe('seam A/C — the SOCMINT Telegram tab drives the Telegram Hunter engin
     expect(payload.format).toBe('csv');
   });
 
-  it('the hollow Profiles export option is GONE — the tab offers only real collections', async () => {
+  it('Capture Profile flows to window.api.socmint.telegram.captureProfile({ caseId }) — captureProfile is reachable', async () => {
+    const panel = await openCaptureTab();
+    await click(buttonByText(panel, /capture profile/i));
+    expect(telegram.captureProfile).toHaveBeenCalledTimes(1);
+    const payload = telegram.captureProfile.mock.calls[0][0] as Record<string, unknown>;
+    expect(payload.caseId).toBe(CASE_ID);
+  });
+
+  it('the Profiles export option is now a REAL collection — export("profiles") is reachable', async () => {
     const panel = await openCaptureTab();
     const coll = panel.querySelector('#sm-tg-export-collection') as HTMLSelectElement;
     const values = Array.from(coll.querySelectorAll('option')).map((o) => o.value);
-    expect(values).toEqual(['messages', 'members']);
-    expect(values).not.toContain('profiles');
+    expect(values).toEqual(['messages', 'members', 'profiles']);
+
+    const fmt = panel.querySelector('#sm-tg-export-format') as HTMLSelectElement;
+    await selectOption(coll, 'profiles');
+    await selectOption(fmt, 'csv');
+    await click(buttonByText(panel, /^export$/i));
+    const payload = telegram.exportItems.mock.calls.at(-1)![0] as Record<string, unknown>;
+    expect(payload.collection).toBe('profiles');
+    expect(payload.format).toBe('csv');
   });
 
   it('Import flows to window.api.socmint.telegram.importExport({ caseId }) — parseTelegramExport is reachable', async () => {
@@ -257,6 +275,27 @@ describe('seam A/C — the SOCMINT Telegram tab drives the Telegram Hunter engin
   });
 });
 
+// ---- honesty: the fake Telegram "Start Monitor" is gone -----------------
+
+describe('honesty — the pull-only Telegram tab shows no fake background monitor', () => {
+  it('the Telegram Channels tab offers NO "Start Monitor" (it never harvests in the background)', async () => {
+    await act(async () => { root.render(<SocmintModule caseId={CASE_ID} />); });
+    await flush();
+    // Default platform is Telegram and the default tab is Channels — the monitor control lived here.
+    const startBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      /start monitor/i.test(b.textContent ?? ''),
+    );
+    expect(startBtn).toBeUndefined();
+    // and the honest pull-model pointer is shown instead of an active-job/stop-monitor state.
+    expect(container.textContent ?? '').toMatch(/pull-based/i);
+    expect(container.textContent ?? '').not.toMatch(/Active job:/i);
+    const stopBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      /stop monitor/i.test(b.textContent ?? ''),
+    );
+    expect(stopBtn).toBeUndefined();
+  });
+});
+
 // ---- B. the real handler rejects a payload missing a required field ----
 
 describe('seam B — the real Telegram Hunter handlers require their fields', () => {
@@ -267,5 +306,9 @@ describe('seam B — the real Telegram Hunter handlers require their fields', ()
 
   it('captureTelegramMembers requires a caseId', async () => {
     await expect(captureTelegramMembers({})).rejects.toThrow(/caseId/i);
+  });
+
+  it('captureTelegramProfile requires a caseId', async () => {
+    await expect(captureTelegramProfile({})).rejects.toThrow(/caseId/i);
   });
 });

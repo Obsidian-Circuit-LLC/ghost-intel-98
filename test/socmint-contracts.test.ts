@@ -33,7 +33,7 @@ describe('socmint channels', () => {
 
   it('TG5 Telegram Hunter channels are nested under socmint:telegram: with distinct values', () => {
     const tg = (channels as Record<string, Record<string, Record<string, string>>>).socmint.telegram;
-    const expected = ['connect', 'capture', 'captureMembers', 'exportItems', 'importExport', 'keywordScan'];
+    const expected = ['connect', 'capture', 'captureMembers', 'captureProfile', 'exportItems', 'importExport', 'keywordScan'];
     expect(Object.keys(tg).sort()).toEqual([...expected].sort());
     for (const v of Object.values(tg)) expect(v.startsWith('socmint:telegram:')).toBe(true);
     expect(new Set(Object.values(tg)).size).toBe(expected.length);

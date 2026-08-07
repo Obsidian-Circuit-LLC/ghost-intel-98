@@ -526,7 +526,9 @@ export const channels = {
       capture: 'socmint:telegram:capture',
       /** Capture the visible group/channel members → encrypted members store (no fabricated total). */
       captureMembers: 'socmint:telegram:captureMembers',
-      /** Export a captured Telegram collection (messages/members) as JSON, formula-guarded CSV, or an HTML-escaped report. */
+      /** Capture the visible user-profile panel → encrypted profiles store (no fabricated creation date). */
+      captureProfile: 'socmint:telegram:captureProfile',
+      /** Export a captured Telegram collection (messages/members/profiles) as JSON, formula-guarded CSV, or an HTML-escaped report. */
       exportItems: 'socmint:telegram:exportItems',
       /** Import a Telegram Desktop JSON export (operator-picked file); LFI-guarded parse → encrypted imports store. */
       importExport: 'socmint:telegram:importExport',

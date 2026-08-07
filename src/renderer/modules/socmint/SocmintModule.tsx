@@ -458,7 +458,19 @@ function ChannelsPanel({
       {/* Monitor controls */}
       <section className="sm-section">
         <h3 className="sm-section-title">Monitor</h3>
-        {activeJobId !== null ? (
+        {/* Telegram capture is PULL-based (visible-DOM capture in the Tor window); there is
+            no background stream to start. Offering a "Start Monitor" that returns
+            started/active while nothing harvests is the fake-state honesty defect the
+            standing constraints bar — so Telegram shows a pointer to the Capture tab
+            instead of a monitor control. WhatsApp keeps its real streaming monitor. */}
+        {platform === 'telegram' ? (
+          <p className="sm-monitor-hint" role="note">
+            Telegram capture is pull-based — there is no background monitor. Open the{' '}
+            <strong>Capture</strong> tab to launch the Tor window and capture the visible
+            messages, members, or profile of the chat you have open. Nothing runs or
+            harvests in the background, so there is no &ldquo;monitoring active&rdquo; state.
+          </p>
+        ) : activeJobId !== null ? (
           <div className="sm-monitor-active">
             <span className="sm-monitor-status">
               {/* jobId is an internal identifier — render as text, not innerHTML */}
@@ -669,10 +681,11 @@ type ContentTab = 'channels' | 'items' | 'wa-setup' | 'capture';
 // ---------------------------------------------------------------------------
 
 type TgExportFormat = 'json' | 'csv' | 'html';
-// Profiles is intentionally NOT offered: profile capture is an unwired, documented gap
-// (no collector orchestrator, no store), so an export would always be empty. Offering a
-// hollow option that returns nothing is the honesty defect the standing constraints bar.
-type TgExportCollection = 'messages' | 'members';
+// All three collections are REAL: messages (shared case store), members and profiles
+// (per-tool encrypted artifact stores). Profiles is offered because profile capture is
+// now wired end-to-end (Capture Profile → captureProfile → profiles store), so the export
+// reflects genuinely persisted rows — never a hollow option that returns nothing.
+type TgExportCollection = 'messages' | 'members' | 'profiles';
 
 /** Deliver a utf8 export payload to disk as a Blob download (no egress, no remote fetch). */
 function downloadTgExport(res: { data: string; mime: string; format: TgExportFormat; collection: string }): void {
@@ -727,6 +740,14 @@ function TelegramCapturePanel({ caseId }: { caseId: string }): JSX.Element {
     return r.blocked ? (r.reason ?? 'Capture blocked.') : `Captured ${r.captured} visible member(s).`;
   }), [run, caseId]);
 
+  const onProfile = useCallback(() => run(async () => {
+    const r = await window.api.socmint.telegram.captureProfile({ caseId });
+    if (r.blocked) return r.reason ?? 'Capture blocked.';
+    return r.captured === 0
+      ? 'No profile panel is open — open a user profile in the window, then capture.'
+      : `Captured ${r.captured} visible profile (${r.added} new).`;
+  }), [run, caseId]);
+
   const onExport = useCallback(() => run(async () => {
     const r = await window.api.socmint.telegram.exportItems({
       caseId,
@@ -776,6 +797,7 @@ function TelegramCapturePanel({ caseId }: { caseId: string }): JSX.Element {
       <div className="sm-form-row sm-tg-actions">
         <button className="sm-btn" onClick={onCapture} disabled={busy}>Capture Messages</button>
         <button className="sm-btn" onClick={onMembers} disabled={busy}>Capture Members</button>
+        <button className="sm-btn" onClick={onProfile} disabled={busy}>Capture Profile</button>
       </div>
       <div className="sm-form-row sm-tg-export">
         <label htmlFor="sm-tg-export-collection">Export</label>
@@ -788,6 +810,7 @@ function TelegramCapturePanel({ caseId }: { caseId: string }): JSX.Element {
         >
           <option value="messages">Messages</option>
           <option value="members">Members</option>
+          <option value="profiles">Profiles</option>
         </select>
         <select
           id="sm-tg-export-format"

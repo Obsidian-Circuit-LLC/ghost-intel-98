@@ -753,12 +753,16 @@ export interface GhostApi {
       captureMembers(req: { caseId: string }): Promise<{
         blocked: boolean; reason?: string; added: number; captured: number; members: unknown[];
       }>;
-      /** Export a captured Telegram collection (messages/members) as JSON, formula-guarded
-       *  CSV, or an HTML-escaped report. `collection` defaults to messages. */
+      /** Capture the visible user-profile panel (no fabricated account-creation date). */
+      captureProfile(req: { caseId: string }): Promise<{
+        blocked: boolean; reason?: string; added: number; captured: number; profiles: unknown[];
+      }>;
+      /** Export a captured Telegram collection (messages/members/profiles) as JSON,
+       *  formula-guarded CSV, or an HTML-escaped report. `collection` defaults to messages. */
       exportItems(req: {
         caseId: string;
         format: 'json' | 'csv' | 'html';
-        collection?: 'messages' | 'members';
+        collection?: 'messages' | 'members' | 'profiles';
       }): Promise<{
         format: 'json' | 'csv' | 'html';
         collection: 'messages' | 'members' | 'profiles';

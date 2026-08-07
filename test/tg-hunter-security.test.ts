@@ -52,6 +52,7 @@ import {
   connectTelegramCapture,
   captureTelegramMessages,
   captureTelegramMembers,
+  captureTelegramProfile,
   exportTelegramItems,
   __resetTelegramWindowForTests,
 } from '../src/main/socmint/telegram-hunter/ipc';
@@ -140,16 +141,17 @@ describe('TG-V IPC — every Telegram handler is reachable and frame-guarded', (
 // hides a channel-less feature.
 //
 // Reachable end-to-end (renderer seam proven separately in tg-hunter-seam.test.tsx):
-//   connect · capture messages · capture members · export · import · keyword-watch scan
-//   - import        — parseTelegramExport (store), carried by socmint:telegram:importExport;
-//                     the operator picks a local export, the LFI-guarded parser persists it.
-//   - keyword-watch — matchKeywords (collector) + the encrypt-at-rest keyword rules, carried
-//                     by socmint:telegram:keywordScan; the tab adds terms and scans captures.
-// Built + unit-tested but bound to NO channel and NO renderer control ⇒ UNREACHABLE from
-// the UI (the Plan-A/v3.24.2 hollow-feature class the standing constraints single out):
-//   • profile-capture — TG_PROFILE_SCRIPT + normalizeProfile exist, but there is NO
-//     collector orchestrator, NO store, and NO channel; the Profiles export option was
-//     dropped from the tab. Only the extraction half is built — the sole documented gap.
+//   connect · capture messages · capture members · capture profile · export · import ·
+//   keyword-watch scan
+//   - import         — parseTelegramExport (store), carried by socmint:telegram:importExport;
+//                      the operator picks a local export, the LFI-guarded parser persists it.
+//   - keyword-watch  — matchKeywords (collector) + the encrypt-at-rest keyword rules, carried
+//                      by socmint:telegram:keywordScan; the tab adds terms and scans captures.
+//   - profile-capture — TG_PROFILE_SCRIPT + normalizeProfile + the `captureUserProfile`
+//                      collector orchestrator + the encrypt-at-rest `profiles` store, carried
+//                      by socmint:telegram:captureProfile; the Profiles export reads that store.
+// There is NO remaining built-but-unreachable feature — the former profile-capture gap is
+// now wired end-to-end (channel + collector orchestrator + store + renderer control + seam).
 //
 // This block is a FORCING FUNCTION: wiring one of the gap features (adding its channel)
 // breaks the "wired set === reachable set" assertion until the inventory is updated to move
@@ -168,11 +170,11 @@ const TELEGRAM_FEATURE_REACHABILITY: Record<string, TgFeature> = {
   connect: { channel: 'connect', built: connectTelegramCapture },
   captureMessages: { channel: 'capture', built: captureTelegramMessages },
   captureMembers: { channel: 'captureMembers', built: captureTelegramMembers },
+  captureProfile: { channel: 'captureProfile', built: captureTelegramProfile },
   export: { channel: 'exportItems', built: exportTelegramItems },
   import: { channel: 'importExport', built: parseTelegramExport },
   keywordWatch: { channel: 'keywordScan', built: matchKeywords },
-  // --- BUILT but UNREACHABLE (no channel, no renderer control) — the documented gap ---
-  profileCapture: { channel: null, built: normalizeProfile },
+  // --- no remaining built-but-unreachable feature: the profile-capture gap is now wired ---
 };
 
 describe('TG-V reachability inventory — no silent hollow feature', () => {
@@ -200,33 +202,46 @@ describe('TG-V reachability inventory — no silent hollow feature', () => {
     expect([...registered].sort()).toEqual(reachableChannelStrings);
   });
 
-  it('the gap feature (profile-capture) carries NO channel — flagged, not hidden', () => {
-    expect(gap.map(([name]) => name).sort()).toEqual(['profileCapture']);
-    const channelStrings = new Set(Object.values(channels.socmint.telegram) as string[]);
-    for (const [name, f] of gap) {
-      expect(f.channel, `${name} is a KNOWN hollow feature: it must stay channel-less until wired + seam-tested`).toBeNull();
-      // and no channel string secretly references the gap feature by name.
-      expect([...channelStrings].some((c) => c.toLowerCase().includes(name.toLowerCase()))).toBe(false);
-    }
+  it('there is NO remaining channel-less feature — every built feature is now reachable', () => {
+    expect(gap.map(([name]) => name)).toEqual([]);
   });
 
-  it('profile-capture has no collector orchestrator (only the extraction half is built)', () => {
-    // messages + members each have a capture orchestrator on the collector; profile does not.
+  it('profile-capture now HAS a collector orchestrator (the extraction half is no longer orphaned)', () => {
+    // messages + members + profile each have a capture orchestrator on the collector.
     const proto = TelegramHunterCollector.prototype as Record<string, unknown>;
     expect(typeof proto.captureMessages).toBe('function');
     expect(typeof proto.captureGroupMembers).toBe('function');
-    expect(proto.captureProfile).toBeUndefined();
-    expect(proto.captureGroupProfiles).toBeUndefined();
-    // the extraction half exists (page script), which is exactly why the gap is easy to miss.
+    expect(typeof proto.captureUserProfile).toBe('function');
+    // the extraction half still exists and now feeds the orchestrator.
     expect(typeof TG_PROFILE_SCRIPT).toBe('string');
     expect(TG_PROFILE_SCRIPT.length).toBeGreaterThan(0);
   });
 
-  it('exportItems(profiles) is honestly EMPTY — profile capture never persisted a row', async () => {
-    const res = await exportTelegramItems(VALID_UUID, 'json', 'profiles');
-    expect(res.collection).toBe('profiles');
-    expect(res.count).toBe(0);
-    expect(res.data).toBe('[]');
+  it('exportItems(profiles) now reads the REAL profiles store — the honest gap is closed', async () => {
+    const storeMod = await import('../src/main/socmint/telegram-hunter/store');
+    const fixture: RawProfile = {
+      displayName: 'Zed Ops', username: '@zed_op', phone: '', bio: 'b', status: '',
+      links: [], context: 'grp', profileUrl: 'https://t.me/zed_op', avatar: '',
+    };
+    const persisted = [normalizeProfile(fixture, { capturedAt: '2026-08-07T00:00:00.000Z' })];
+    const spy = vi.spyOn(storeMod, 'prodTgHunterStore').mockResolvedValue({
+      profiles: {
+        read: async () => persisted,
+        write: async () => {},
+        saveMany: async () => ({ added: 0, total: persisted.length }),
+      },
+    } as unknown as Awaited<ReturnType<typeof storeMod.prodTgHunterStore>>);
+    try {
+      const res = await exportTelegramItems(VALID_UUID, 'json', 'profiles');
+      expect(res.collection).toBe('profiles');
+      // real: reflects the persisted row, not a hardcoded empty [] short-circuit.
+      expect(res.count).toBe(1);
+      expect(res.data).toContain('@zed_op');
+      // the honesty invariant travels through the export: creation date stays null.
+      expect(res.data).toContain('"accountCreationDate": null');
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
 

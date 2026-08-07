@@ -684,6 +684,8 @@ const api = {
       capture: (req: unknown) => ipcRenderer.invoke(channels.socmint.telegram.capture, req),
       captureMembers: (req: unknown) =>
         ipcRenderer.invoke(channels.socmint.telegram.captureMembers, req),
+      captureProfile: (req: unknown) =>
+        ipcRenderer.invoke(channels.socmint.telegram.captureProfile, req),
       exportItems: (req: unknown) => ipcRenderer.invoke(channels.socmint.telegram.exportItems, req),
       importExport: (req: unknown) => ipcRenderer.invoke(channels.socmint.telegram.importExport, req),
       keywordScan: (req: unknown) => ipcRenderer.invoke(channels.socmint.telegram.keywordScan, req)

@@ -29,12 +29,15 @@
 import {
   TG_MESSAGE_SCRIPT,
   TG_MEMBER_SCRIPT,
+  TG_PROFILE_SCRIPT,
   TG_PAGE_STATE_SCRIPT,
   classifyTelegramPageState,
   normalizeMessage,
   normalizeMember,
+  normalizeProfile,
   type RawMessage,
   type RawMember,
+  type RawProfile,
   type TelegramPageState,
   type TgHarvestedItem,
   type TgNormalizeContext,
@@ -511,6 +514,124 @@ export async function captureMembers(
 }
 
 // ======================================================================
+// TG3 — visible-profile capture (honesty-critical)
+// ======================================================================
+//
+// The operator opens a user's profile panel (right column / user-info dialog) in the
+// live capture window; this reads the CURRENTLY-VISIBLE panel via the STATIC
+// `TG_PROFILE_SCRIPT` and persists ONE honesty-stamped `TgProfile` (or none when no
+// panel is open). Mirrors member capture: settle → gate → scrape → host-restricted
+// avatar → normalize → encrypted `profiles` artifact store. `normalizeProfile` keeps
+// the account-creation date null (Telegram hides it) — never fabricated.
+
+export interface TgProfileCaptureRequest {
+  caseId: string;
+}
+
+/**
+ * The result of a profile scan. `captured` is 0 or 1 (a single visible panel);
+ * `added` is how many were genuinely new in the store. There is NO fabricated field —
+ * `normalizeProfile` leaves the account-creation date null with the fixed label.
+ */
+export interface TgProfileCaptureResult {
+  blocked: boolean;
+  reason?: string;
+  /** Profiles newly persisted this pass. */
+  added: number;
+  /** Visible profile panels scraped this pass (0 or 1 == `profiles.length`). */
+  captured: number;
+  profiles: TgProfile[];
+}
+
+/** Injectable seams so profile capture is testable without electron/network. */
+export interface TgProfileCaptureDeps {
+  settle: (win: Electron.BrowserWindow) => Promise<void>;
+  runCapture: (win: Electron.BrowserWindow, js: string) => Promise<unknown>;
+  resolveMedia: (win: MediaCapturePage, url: string) => Promise<string | null>;
+  /** Mirror of `AppSettings.socmint.telegram.captureMedia`, read MAIN-side. When `false`
+   *  (the default) avatar resolution is SKIPPED entirely (no media fetch, no avatar stored). */
+  captureMedia: boolean;
+  guard: <T>(
+    win: Electron.BrowserWindow,
+    capture: () => Promise<T>
+  ) => Promise<{ blocked: boolean; reason?: string; result?: T }>;
+  /** Persist visible profiles to the encrypted per-tool `profiles` artifact store. */
+  saveProfiles: (
+    caseId: string,
+    profiles: TgProfile[]
+  ) => Promise<{ added: number; total: number }>;
+  now: () => string;
+}
+
+function defaultProfileDeps(): TgProfileCaptureDeps {
+  return {
+    settle: () => realSettle(),
+    runCapture: defaultRunCapture,
+    resolveMedia: (win, url) => remoteMediaToDataUri(win, url, TELEGRAM_MEDIA_HOSTS),
+    captureMedia: false,
+    guard: defaultGuard,
+    saveProfiles: async (caseId, profiles) => {
+      const { prodTgHunterStore } = await import('./store');
+      const store = await prodTgHunterStore();
+      return store.profiles.saveMany(caseId, profiles);
+    },
+    now: () => new Date().toISOString(),
+  };
+}
+
+/**
+ * Resolve a profile's avatar SRC to a local `data:` thumbnail, dropping it on any
+ * failure. A remote URL is NEVER carried forward — combined with `normalizeProfile`'s
+ * `data:`-only filter no stored profile field can beacon.
+ */
+async function resolveProfileAvatar(
+  win: Electron.BrowserWindow,
+  raw: RawProfile,
+  resolveMedia: TgProfileCaptureDeps['resolveMedia'],
+  captureMedia: boolean
+): Promise<RawProfile> {
+  if (!captureMedia) return { ...raw, avatar: '' };
+  const src = String(raw.avatar ?? '');
+  if (!src || src.startsWith('data:')) return raw;
+  const dataUri = await resolveMedia(win, src);
+  return { ...raw, avatar: dataUri ?? '' };
+}
+
+/**
+ * Capture the visible Telegram user profile currently open in the capture window and
+ * persist it. SETTLES first (async-SPA render), routes through the challenge/lock gate
+ * (nothing is captured or persisted on a locked / signed-out page), runs the STATIC
+ * `TG_PROFILE_SCRIPT` (returns one `RawProfile` or null), resolves the avatar to a
+ * host-restricted `data:` thumbnail, stamps the honesty markers via `normalizeProfile`,
+ * and upserts into the encrypted `profiles` artifact store.
+ */
+export async function captureProfile(
+  win: Electron.BrowserWindow,
+  req: TgProfileCaptureRequest,
+  overrides: Partial<TgProfileCaptureDeps> = {}
+): Promise<TgProfileCaptureResult> {
+  const deps = { ...defaultProfileDeps(), ...overrides };
+  const capturedAt = deps.now();
+
+  await deps.settle(win);
+
+  const gated = await deps.guard(win, async () => {
+    const raw = (await deps.runCapture(win, TG_PROFILE_SCRIPT)) as RawProfile | null;
+    if (!raw || typeof raw !== 'object') return [] as TgProfile[];
+    const withAvatar = await resolveProfileAvatar(win, raw, deps.resolveMedia, deps.captureMedia);
+    return [normalizeProfile(withAvatar, { capturedAt })];
+  });
+
+  if (gated.blocked) {
+    return { blocked: true, reason: gated.reason, added: 0, captured: 0, profiles: [] };
+  }
+
+  const profiles = gated.result ?? [];
+  const { added } = await deps.saveProfiles(req.caseId, profiles);
+  return { blocked: false, added, captured: profiles.length, profiles };
+}
+
+// ======================================================================
 // TG5 — TelegramHunterCollector: the capture-window engine, wrapped so it
 //       satisfies the existing SocmintCollector interface (the mtcute swap).
 // ======================================================================
@@ -536,8 +657,8 @@ export async function captureMembers(
 //   - disconnect()→ close the capture window.
 //
 // The Telegram tab drives capture through the dedicated `open` / `captureMessages`
-// / `captureGroupMembers` methods (wired in `telegram-hunter/ipc.ts`); the
-// SocmintCollector methods keep the type contract intact.
+// / `captureGroupMembers` / `captureUserProfile` methods (wired in
+// `telegram-hunter/ipc.ts`); the SocmintCollector methods keep the type contract intact.
 
 /** The partition the Telegram capture window lives on. */
 export const SOCMINT_TELEGRAM_PARTITION = 'persist:socmint-telegram';
@@ -562,6 +683,12 @@ export interface TelegramHunterCollectorConfig {
     req: TgMemberCaptureRequest,
     overrides?: Partial<TgMemberCaptureDeps>,
   ) => Promise<TgMemberCaptureResult>;
+  /** Profile-capture orchestrator — defaults to `captureProfile`. */
+  captureProfileFn?: (
+    win: Electron.BrowserWindow,
+    req: TgProfileCaptureRequest,
+    overrides?: Partial<TgProfileCaptureDeps>,
+  ) => Promise<TgProfileCaptureResult>;
 }
 
 export class TelegramHunterCollector implements SocmintCollector {
@@ -571,6 +698,7 @@ export class TelegramHunterCollector implements SocmintCollector {
   private readonly openFn: (partition: string) => Promise<TelegramCaptureResult>;
   private readonly captureMessagesFn: NonNullable<TelegramHunterCollectorConfig['captureMessagesFn']>;
   private readonly captureMembersFn: NonNullable<TelegramHunterCollectorConfig['captureMembersFn']>;
+  private readonly captureProfileFn: NonNullable<TelegramHunterCollectorConfig['captureProfileFn']>;
 
   constructor(cfg: TelegramHunterCollectorConfig = {}) {
     this.partition = cfg.partition ?? SOCMINT_TELEGRAM_PARTITION;
@@ -584,6 +712,7 @@ export class TelegramHunterCollector implements SocmintCollector {
       });
     this.captureMessagesFn = cfg.captureMessagesFn ?? captureVisibleMessages;
     this.captureMembersFn = cfg.captureMembersFn ?? captureMembers;
+    this.captureProfileFn = cfg.captureProfileFn ?? captureProfile;
   }
 
   /** True while a live (non-destroyed) capture window is held. */
@@ -632,6 +761,15 @@ export class TelegramHunterCollector implements SocmintCollector {
     overrides: Partial<TgMemberCaptureDeps> = {},
   ): Promise<TgMemberCaptureResult> {
     return this.captureMembersFn(this.requireWindow(), req, overrides);
+  }
+
+  /** Capture the visible user profile currently open and persist it (no fabricated
+   *  account-creation date). */
+  async captureUserProfile(
+    req: TgProfileCaptureRequest,
+    overrides: Partial<TgProfileCaptureDeps> = {},
+  ): Promise<TgProfileCaptureResult> {
+    return this.captureProfileFn(this.requireWindow(), req, overrides);
   }
 
   // ---- SocmintCollector interface --------------------------------------

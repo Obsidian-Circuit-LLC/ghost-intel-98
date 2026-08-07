@@ -8,8 +8,10 @@
  *
  * A single module-level `TelegramHunterCollector` holds the live capture window (the
  * Tor-proxied, WebRTC-locked `session.ts` window). connect opens/resurfaces it, gated on
- * Tor bootstrap (fail-closed, no clearnet fallback); capture/members read the CURRENTLY
- * visible chat/members and persist honesty-stamped records into the encrypted case store.
+ * Tor bootstrap (fail-closed, no clearnet fallback); capture/members/profile read the
+ * CURRENTLY visible chat/members/profile panel and persist honesty-stamped records into
+ * the encrypted case store. Profile capture keeps the account-creation date null (Telegram
+ * hides it) — never fabricated.
  *
  * SECURITY: every handler validates the sender frame FIRST (`assertTrustedSender`) — the
  * capture window can host a hostile Telegram Web page, so an IPC message from a non-app
@@ -30,8 +32,10 @@ import {
   tableToHtml,
   type TgCaptureRequest,
   type TgMemberCaptureRequest,
+  type TgProfileCaptureRequest,
   type TgMessageCaptureResult,
   type TgMemberCaptureResult,
+  type TgProfileCaptureResult,
   type TgExportFormat,
   type TgExportCollection,
 } from './collector';
@@ -119,6 +123,21 @@ export async function captureTelegramMembers(reqArg: unknown): Promise<TgMemberC
   return getCollector().captureGroupMembers({ caseId }, { captureMedia });
 }
 
+/**
+ * Capture the visible user-profile panel currently open in the capture window into the
+ * encrypted `profiles` artifact store. Reports ONLY what was captured (0 or 1 panel) and
+ * NEVER a fabricated account-creation date (`normalizeProfile` keeps it null).
+ */
+export async function captureTelegramProfile(reqArg: unknown): Promise<TgProfileCaptureResult> {
+  const req = reqArg as Partial<TgProfileCaptureRequest> | undefined;
+  if (!req || typeof req.caseId !== 'string') {
+    throw new Error('Capturing a Telegram profile requires a caseId.');
+  }
+  const caseId = ensureUuid(req.caseId, 'caseId');
+  const captureMedia = await loadTelegramCaptureMedia();
+  return getCollector().captureUserProfile({ caseId }, { captureMedia });
+}
+
 export interface TgExportResult {
   format: TgExportFormat;
   /** Which collection was exported (messages / members / profiles). */
@@ -132,9 +151,9 @@ export interface TgExportResult {
 
 /**
  * Read the records for `collection` from the encrypted stores. Messages live in the shared
- * socmint case store (telegram-filtered); members live in the per-tool `members` artifact
- * store. Profiles have no persistence store yet (TG3 delivered only the pure normalizer), so
- * a profile export is honestly EMPTY until profile capture is wired — it never fabricates rows.
+ * socmint case store (telegram-filtered); members and profiles live in their per-tool
+ * artifact stores. A profile export reflects exactly what profile capture persisted — no
+ * fabricated rows, and the account-creation date stays null (Telegram hides it).
  */
 async function readExportRecords(id: string, collection: TgExportCollection): Promise<unknown[]> {
   if (collection === 'members') {
@@ -143,7 +162,9 @@ async function readExportRecords(id: string, collection: TgExportCollection): Pr
     return store.members.read(id);
   }
   if (collection === 'profiles') {
-    return [];
+    const { prodTgHunterStore } = await import('./store');
+    const store = await prodTgHunterStore();
+    return store.profiles.read(id);
   }
   const { listItems } = await import('../store');
   return (await listItems(id)).filter((it) => it.platform === 'telegram');
@@ -384,6 +405,10 @@ export function registerTelegramHunterIpc(deps: { handle: HandleWithEvent }): vo
   deps.handle(channels.socmint.telegram.captureMembers, (e, reqArg) => {
     assertTrustedSender(e);
     return captureTelegramMembers(reqArg);
+  });
+  deps.handle(channels.socmint.telegram.captureProfile, (e, reqArg) => {
+    assertTrustedSender(e);
+    return captureTelegramProfile(reqArg);
   });
   deps.handle(channels.socmint.telegram.exportItems, (e, reqArg) => {
     assertTrustedSender(e);

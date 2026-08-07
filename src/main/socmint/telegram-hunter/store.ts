@@ -4,10 +4,11 @@
  *
  * The Telegram capture engine (Plan B) normalizes visible messages/profiles into
  * the shared encrypted case store as `HarvestedItem`s (socmint namespace). This
- * module holds the FOUR Telegram-specific artifact stores the source kept in
+ * module holds the Telegram-specific artifact stores the source kept in
  * plaintext JSON, ported onto the app's encrypt-at-rest layer:
  *
  *   - members       — visible group/channel member intelligence (honest: no total)
+ *   - profiles      — captured visible user-profile panels (honest: no creation date)
  *   - keywordWatch  — literal keyword-watch terms (LITERAL match; no RegExp compiled)
  *   - imports       — imported Telegram Desktop export sets
  *   - dedup         — a dedup index of seen item keys
@@ -36,6 +37,7 @@
 
 import { confineImportPath } from '../../capture/security';
 import { withLock } from '../../util/mutex';
+import type { TgProfile } from './extract';
 
 // ---- artifact record shapes --------------------------------------------
 
@@ -121,6 +123,7 @@ export interface TgHunterStoreDeps {
   /** Atomic write (caller provides the JSON string). */
   writeFile(path: string, data: string): Promise<void>;
   membersPath(caseId: string): string;
+  profilesPath(caseId: string): string;
   keywordWatchPath(caseId: string): string;
   importsPath(caseId: string): string;
   dedupPath(caseId: string): string;
@@ -244,6 +247,15 @@ export interface TgHunterStore {
      *  collected, NOT a claimed group size (Telegram hides that; we never fabricate it). */
     saveMany(caseId: string, members: TgMember[]): Promise<{ added: number; total: number }>;
   };
+  profiles: {
+    read(caseId: string): Promise<TgProfile[]>;
+    write(caseId: string, profiles: TgProfile[]): Promise<void>;
+    /** Batch upsert (one read + one write), deduped by (handle, displayName, context)
+     *  case-insensitively. Returns `{ added, total }`: how many rows were genuinely NEW
+     *  and the total captured count afterward. `total` is what was actually captured —
+     *  the account-creation date remains null (Telegram hides it), never fabricated. */
+    saveMany(caseId: string, profiles: TgProfile[]): Promise<{ added: number; total: number }>;
+  };
   keywordWatch: {
     read(caseId: string): Promise<TgKeywordRule[]>;
     write(caseId: string, rules: TgKeywordRule[]): Promise<void>;
@@ -308,6 +320,40 @@ export function makeTgHunterStore(deps: TgHunterStoreDeps): TgHunterStore {
             }
           }
           await writeJson(deps, deps.membersPath(caseId), existing);
+          return { added, total: existing.length };
+        });
+      },
+    },
+
+    profiles: {
+      read(caseId) {
+        return withLock(`tg:profiles:${caseId}`, () =>
+          readJsonArr<TgProfile>(deps, deps.profilesPath(caseId)),
+        );
+      },
+      write(caseId, profiles) {
+        return withLock(`tg:profiles:${caseId}`, () =>
+          writeJson(deps, deps.profilesPath(caseId), profiles),
+        );
+      },
+      saveMany(caseId, profiles) {
+        return withLock(`tg:profiles:${caseId}`, async () => {
+          const existing = await readJsonArr<TgProfile>(deps, deps.profilesPath(caseId));
+          const key = (p: TgProfile) => `${norm(p.handle)}|${norm(p.displayName)}|${norm(p.context)}`;
+          const index = new Map(existing.map((p, i) => [key(p), i]));
+          let added = 0;
+          for (const profile of profiles) {
+            const k = key(profile);
+            const at = index.get(k);
+            if (at === undefined) {
+              index.set(k, existing.length);
+              existing.push(profile);
+              added += 1;
+            } else {
+              existing[at] = profile; // refresh the latest visible values
+            }
+          }
+          await writeJson(deps, deps.profilesPath(caseId), existing);
           return { added, total: existing.length };
         });
       },
@@ -411,6 +457,7 @@ export async function prodTgHunterStore(): Promise<TgHunterStore> {
     readFile: secureReadFile,
     writeFile: (p, d) => secureWriteFile(p, d),
     membersPath: (id) => artifact(id, 'tg-members.json'),
+    profilesPath: (id) => artifact(id, 'tg-profiles.json'),
     keywordWatchPath: (id) => artifact(id, 'tg-keyword-watch.json'),
     importsPath: (id) => artifact(id, 'tg-imports.json'),
     dedupPath: (id) => artifact(id, 'tg-dedup.json'),
