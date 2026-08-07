@@ -25,11 +25,34 @@ import { join } from 'node:path';
 import { randomUUID, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { dataRoot } from './paths';
 import { secureReadText, secureWriteFile } from './secure-fs';
-import type { JournalEntry, JournalEntrySummary, JournalEntryInput } from '@shared/types';
+import type { JournalEntry, JournalEntrySummary, JournalEntryInput, JournalBlock } from '@shared/types';
 
 const MAX_ENTRIES = 5000;
 const MAX_TITLE = 200;
-const MAX_BODY = 2 * 1024 * 1024;
+
+/** HTML-escape a legacy plain-text body before wrapping it in a synthesized text block — the text
+ *  is NEVER interpreted as HTML, only displayed as literal characters once rendered. One `<p>` per
+ *  source line preserves the body's line breaks instead of collapsing them into a single line. */
+function escapeLegacyBody(body: string): string {
+  const escaped = body
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+  return escaped.split(/\r\n|\r|\n/).map((line) => `<p>${line}</p>`).join('');
+}
+
+/** Ensure an entry read off disk has `blocks` populated. A record predating the block-editor model
+ *  has `body` (a plain string) but no `blocks` array at all — synthesize ONE escaped text block from
+ *  it. A record that already has a `blocks` array (even an empty one, e.g. the user cleared every
+ *  block) is left exactly as stored — re-deriving from a stale `body` would resurrect deleted
+ *  content. This is a pure read-time view; it is never written back to disk by this function. */
+function withBlocks(e: JournalEntry): JournalEntry {
+  if (Array.isArray(e.blocks)) return e;
+  const legacyBody = typeof e.body === 'string' ? e.body : '';
+  const block: JournalBlock = { id: randomUUID(), kind: 'text', html: escapeLegacyBody(legacyBody) };
+  return { ...e, blocks: [block] };
+}
 
 const journalFile = (): string => join(dataRoot(), 'journal.json');
 const metaFile = (): string => join(dataRoot(), 'journal-meta.json');
@@ -84,7 +107,7 @@ function serialize<T>(fn: () => Promise<T>): Promise<T> {
 async function readAll(): Promise<JournalEntry[]> {
   try {
     const parsed = JSON.parse(await secureReadText(journalFile())) as unknown;
-    return Array.isArray(parsed) ? (parsed as JournalEntry[]) : [];
+    return Array.isArray(parsed) ? (parsed as JournalEntry[]).map(withBlocks) : [];
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') return []; // never written yet
     // A non-ENOENT failure (corrupt JSON, decrypt error) must NOT be swallowed as "empty":
@@ -104,7 +127,7 @@ export async function list(): Promise<JournalEntrySummary[]> {
   return all
     .slice()
     .sort(byUpdatedDesc)
-    .map((e) => ({ id: e.id, title: e.title, updatedAt: e.updatedAt, bytes: Buffer.byteLength(e.body ?? '', 'utf8') }));
+    .map((e) => ({ id: e.id, title: e.title, updatedAt: e.updatedAt, bytes: Buffer.byteLength(JSON.stringify(e.blocks ?? []), 'utf8') }));
 }
 
 export async function read(id: string): Promise<JournalEntry | null> {
@@ -113,7 +136,10 @@ export async function read(id: string): Promise<JournalEntry | null> {
 }
 
 /** Upsert an entry. The store owns the id (minted on first save), createdAt (first save) and
- *  updatedAt (every save). Title/body are bounded defensively — the renderer is treated as hostile. */
+ *  updatedAt (every save). `blocks` has already been structurally validated (count/size/kind, every
+ *  image assetRef path-traversal-checked) by `ensureJournalEntry` at the IPC boundary — this only
+ *  guards a direct in-process caller (e.g. a test) with the same defensive fallback. `body` is never
+ *  written by save() — it is a legacy, read-only field populated only by the on-read migration. */
 export async function save(input: JournalEntryInput): Promise<JournalEntry> {
   return serialize(async () => {
     const all = await readAll();
@@ -123,7 +149,7 @@ export async function save(input: JournalEntryInput): Promise<JournalEntry> {
     const record: JournalEntry = {
       id,
       title: (typeof input.title === 'string' && input.title.trim() ? input.title : 'Untitled').slice(0, MAX_TITLE),
-      body: typeof input.body === 'string' ? input.body.slice(0, MAX_BODY) : '',
+      blocks: Array.isArray(input.blocks) ? input.blocks : [],
       createdAt: existing?.createdAt ?? nowIso,
       updatedAt: nowIso
     };

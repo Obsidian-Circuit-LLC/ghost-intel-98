@@ -25,52 +25,57 @@ beforeEach(async () => {
 
 afterAll(async () => { await rm(DIR, { recursive: true, force: true }); });
 
+// A single-text-block payload, mirroring what the block editor sends for a plain entry.
+function textBlocks(html: string): { id: string; kind: 'text'; html: string }[] {
+  return [{ id: 'b1', kind: 'text', html }];
+}
+
 describe('journal store — entries', () => {
   it('round-trips an entry: save → read → list', async () => {
-    const saved = await journal.save({ id: '', title: 'Day one', body: 'It begins.' });
+    const saved = await journal.save({ id: '', title: 'Day one', blocks: textBlocks('It begins.') });
     expect(saved.id.length).toBeGreaterThan(0);
     expect(saved.createdAt).toBeTruthy();
     expect(saved.updatedAt).toBeTruthy();
 
     const read = await journal.read(saved.id);
     expect(read?.title).toBe('Day one');
-    expect(read?.body).toBe('It begins.');
+    expect(read?.blocks).toEqual(textBlocks('It begins.'));
 
     const list = await journal.list();
     expect(list.find((e) => e.id === saved.id)?.title).toBe('Day one');
   });
 
   it('updates an existing entry in place, preserving createdAt', async () => {
-    const a = await journal.save({ id: '', title: 't', body: 'b1' });
+    const a = await journal.save({ id: '', title: 't', blocks: textBlocks('b1') });
     tick(5);
-    const b = await journal.save({ id: a.id, title: 't', body: 'b2' });
+    const b = await journal.save({ id: a.id, title: 't', blocks: textBlocks('b2') });
     expect(b.id).toBe(a.id);
     expect(b.createdAt).toBe(a.createdAt);
     const read = await journal.read(a.id);
-    expect(read?.body).toBe('b2');
+    expect(read?.blocks).toEqual(textBlocks('b2'));
     expect((await journal.list()).filter((e) => e.id === a.id)).toHaveLength(1);
   });
 
   it('removes an entry', async () => {
-    const a = await journal.save({ id: '', title: 'gone', body: 'x' });
+    const a = await journal.save({ id: '', title: 'gone', blocks: textBlocks('x') });
     await journal.remove(a.id);
     expect(await journal.read(a.id)).toBeNull();
     expect((await journal.list()).find((e) => e.id === a.id)).toBeUndefined();
   });
 
   it('refuses to overwrite when the on-disk journal is corrupt — no silent data loss', async () => {
-    await journal.save({ id: '', title: 'keep', body: 'precious' });
+    await journal.save({ id: '', title: 'keep', blocks: textBlocks('precious') });
     // Corrupt the file so readAll() hits a non-ENOENT parse failure.
     const file = join(DIR, 'GhostAccess98', 'journal.json');
     await writeFile(file, '{ not valid json', 'utf8');
     // save() must reject rather than read [] and clobber the unreadable corpus with just the new entry.
-    await expect(journal.save({ id: '', title: 'new', body: 'b' })).rejects.toThrow();
+    await expect(journal.save({ id: '', title: 'new', blocks: textBlocks('b') })).rejects.toThrow();
     // The corrupt file is left intact — not overwritten with a fresh single-entry array.
     expect(await readFile(file, 'utf8')).toBe('{ not valid json');
   });
 
   it('stores entries SEPARATELY from the briefcase — neither corpus bleeds into the other', async () => {
-    const j = await journal.save({ id: '', title: 'journal', body: 'private' });
+    const j = await journal.save({ id: '', title: 'journal', blocks: textBlocks('private') });
     await briefcase.save({ id: '11111111-1111-4111-8111-111111111111', name: 'bc', body: 'note' });
 
     // Journal entry is not visible to the briefcase, and vice versa.

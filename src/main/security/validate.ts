@@ -12,7 +12,7 @@ import { lookup as dnsLookup } from 'node:dns/promises';
 import { homedir } from 'node:os';
 import { isIP, isIPv6 } from 'node:net';
 import { randomUUID } from 'node:crypto';
-import { ENTITY_TYPES, ENTITY_RELATIONSHIPS, TIMELINE_KINDS, IMAGE_MIMES, type EntityType, type EntityRelationship, type TimelineKind, type TimelineEvent, type ImageMime, type Whiteboard, type WhiteboardNode, type WhiteboardEdge, type WhiteboardNodeType, type JournalEntryInput } from '@shared/types';
+import { ENTITY_TYPES, ENTITY_RELATIONSHIPS, TIMELINE_KINDS, IMAGE_MIMES, type EntityType, type EntityRelationship, type TimelineKind, type TimelineEvent, type ImageMime, type Whiteboard, type WhiteboardNode, type WhiteboardEdge, type WhiteboardNodeType, type JournalEntryInput, type JournalBlock } from '@shared/types';
 import type { Bounds } from '@shared/livefeeds/types';
 import type { GeoItem, BookmarkBoard, BookmarkCategory, BookmarkLink, StickyNote, StickyNotesState, AiChatMessage, AiConversationInput, BriefcaseNoteInput } from '@shared/post-mvp-types';
 
@@ -1054,17 +1054,62 @@ export function ensureBriefcaseNote(raw: unknown): BriefcaseNoteInput {
 // ---------- Journal Jots (PIN-gated personal journal) ----------
 
 const MAX_JOURNAL_TITLE = 200;
-const MAX_JOURNAL_BODY = 2 * 1024 * 1024; // 2 MB per entry
+const MAX_JOURNAL_BLOCKS = 500;
+const MAX_JOURNAL_BLOCK_HTML = 512 * 1024; // 512 KB per text block (well under the 2MB total bound)
+const MAX_JOURNAL_CAPTION = 500;
+// Total serialized blocks JSON per entry — mirrors the legacy MAX_JOURNAL_BODY cap. Excludes asset
+// bytes, which live in the separate journal-assets store (only a short assetRef crosses this bound).
+const MAX_JOURNAL_BLOCKS_JSON = 2 * 1024 * 1024;
 
-/** Clamp a renderer-supplied journal entry before persisting. Same posture as ensureBriefcaseNote:
- *  bound title/body; body is plain text (textarea, never HTML) so there's no injection surface.
+/** Validate + clamp a SINGLE renderer-supplied journal block. Unlike ensureReportBlock (which
+ *  silently drops an unrecognized block so a corrupted report still opens), a journal block THROWS
+ *  on any structural violation — an entry either saves whole or the save is rejected outright, so a
+ *  hostile/corrupted payload can never partially persist. Every image assetRef is routed through
+ *  ensureFileName (path-traversal gate) before it can ever reach the journal-assets store. */
+function ensureJournalBlock(raw: unknown): JournalBlock {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  const id = typeof o['id'] === 'string' && o['id'].length > 0 && o['id'].length <= 64 ? o['id'] : randomUUID();
+  if (o['kind'] === 'text') {
+    const html = typeof o['html'] === 'string' ? o['html'] : '';
+    if (html.length > MAX_JOURNAL_BLOCK_HTML) {
+      throw new ValidationError('journal text block html too large');
+    }
+    return { id, kind: 'text', html };
+  }
+  if (o['kind'] === 'image') {
+    const assetRef = ensureFileName(o['assetRef'], 'block.assetRef'); // throws on traversal/empty/oversize
+    const widthPctRaw = o['widthPct'];
+    const widthPct = typeof widthPctRaw === 'number' && Number.isFinite(widthPctRaw)
+      ? Math.max(10, Math.min(100, widthPctRaw))
+      : 60;
+    const caption = typeof o['caption'] === 'string' ? o['caption'].slice(0, MAX_JOURNAL_CAPTION) : '';
+    const align = o['align'] === 'left' || o['align'] === 'center' || o['align'] === 'right' ? o['align'] : undefined;
+    const img: JournalBlock = { id, kind: 'image', assetRef, widthPct, caption };
+    if (align) (img as { align?: 'left' | 'center' | 'right' }).align = align;
+    return img;
+  }
+  throw new ValidationError(`Invalid journal block kind: ${String(o['kind'])}`);
+}
+
+/** Clamp a renderer-supplied journal entry before persisting. `blocks` is validated structurally
+ *  (main has no DOM, so it cannot DOMPurify — rich-text sanitization is the renderer's job, on both
+ *  write and read); this only bounds counts/sizes, routes every image ref through ensureFileName,
+ *  and rejects (never silently drops) an unknown block kind or an oversize blocks payload — a
+ *  malformed/hostile save is refused outright rather than partially persisted.
  *  An id that isn't a UUIDv4 is replaced so a saved entry can always be opened/deleted by id. */
 export function ensureJournalEntry(raw: unknown): JournalEntryInput {
-  const o = (raw ?? {}) as { id?: unknown; title?: unknown; body?: unknown };
+  const o = (raw ?? {}) as { id?: unknown; title?: unknown; blocks?: unknown };
   const id = typeof o.id === 'string' && UUID_V4.test(o.id) ? o.id : randomUUID();
   const title = (typeof o.title === 'string' && o.title.trim() ? o.title : 'Untitled').slice(0, MAX_JOURNAL_TITLE);
-  const body = typeof o.body === 'string' ? o.body.slice(0, MAX_JOURNAL_BODY) : '';
-  return { id, title, body };
+  const blocksIn = Array.isArray(o.blocks) ? o.blocks : [];
+  if (blocksIn.length > MAX_JOURNAL_BLOCKS) {
+    throw new ValidationError('journal entry has too many blocks');
+  }
+  const blocks = blocksIn.map((b) => ensureJournalBlock(b));
+  if (Buffer.byteLength(JSON.stringify(blocks), 'utf8') > MAX_JOURNAL_BLOCKS_JSON) {
+    throw new ValidationError('journal entry blocks too large');
+  }
+  return { id, title, blocks };
 }
 
 /** A Journal PIN is exactly four ASCII digits — nothing else crosses the IPC boundary. The main

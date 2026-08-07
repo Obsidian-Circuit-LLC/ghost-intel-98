@@ -10,7 +10,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import type { JournalEntrySummary } from '@shared/types';
+import type { JournalEntrySummary, JournalBlock } from '@shared/types';
 import { toast } from '../../state/toasts';
 import { confirmDialog } from '../../state/dialogs';
 import journalBanner from '../../assets/journal-jots-banner.png';
@@ -19,6 +19,29 @@ import journalBook from '../../assets/journal-jots-book.png';
 function uid(): string { return crypto.randomUUID(); }
 function fmtBytes(n: number): string { return n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} KB`; }
 function isFourDigits(s: string): boolean { return /^[0-9]{4}$/.test(s); }
+
+// ---- plain-text <-> blocks compile-compat bridge -------------------------------------------------
+// The block editor (rich text via Reports' TextBlock, photos via ImageBlock) lands in the very next
+// task of this pass; until then this textarea keeps working against the new `blocks` model by
+// wrapping/unwrapping a single text block. Escapes on write (never interprets typed text as HTML,
+// same posture as the store's legacy-body migration); strips tags + decodes entities on read so
+// both freshly-typed and already-migrated legacy content still display as plain, readable text.
+function plainTextToBlock(text: string): JournalBlock {
+  const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const html = escaped.split(/\r\n|\r|\n/).map((line) => `<p>${line}</p>`).join('');
+  return { id: uid(), kind: 'text', html };
+}
+function blocksToPlainText(blocks: JournalBlock[]): string {
+  const html = blocks.filter((b) => b.kind === 'text').map((b) => (b as { html: string }).html).join('\n');
+  return html
+    .replace(/<\/p>\s*<p>/g, '\n')
+    .replace(/<\/?p>/g, '')
+    .replace(/<br\s*\/?>/g, '\n')
+    .replace(/&quot;/g, '"')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&');
+}
 
 type Gate = 'loading' | 'set-pin' | 'locked' | 'open';
 
@@ -76,7 +99,7 @@ export function JournalModule(): JSX.Element {
     try {
       const e = await window.api.journal.read(entryId);
       if (!e) return;
-      setId(e.id); setTitle(e.title); setBody(e.body); setCreatedAt(e.createdAt); setDirty(false);
+      setId(e.id); setTitle(e.title); setBody(blocksToPlainText(e.blocks ?? [])); setCreatedAt(e.createdAt); setDirty(false);
     } catch (err) { toast.error(`Open failed: ${(err as Error).message}`); }
   }, []);
 
@@ -87,7 +110,7 @@ export function JournalModule(): JSX.Element {
   async function save(): Promise<void> {
     const eid = id ?? uid();
     try {
-      const saved = await window.api.journal.save({ id: eid, title: title.trim() || 'Untitled', body });
+      const saved = await window.api.journal.save({ id: eid, title: title.trim() || 'Untitled', blocks: [plainTextToBlock(body)] });
       setId(saved.id); setCreatedAt(saved.createdAt); setDirty(false);
       await refresh();
       toast.success('Entry saved.');

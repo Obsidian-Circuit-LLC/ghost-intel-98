@@ -329,23 +329,33 @@ export interface AccessShortcut {
   icon?: string;
 }
 
+/** A Journal Jots block — structurally identical to Reports' text/image blocks (reused verbatim so
+ *  the Reports `TextBlock`/`ImageBlock` renderer components work against journal entries without
+ *  adapters). Journal omits the table block — Reports has no block-reorder either, matching scope. */
+export type JournalBlock = Extract<import('./reports-types').ReportBlock, { kind: 'text' | 'image' }>;
+
 /** A Journal Jots entry — a personal journal note consolidated INSIDE the Journal app. Persisted
  *  in the journal store (encrypted at rest when login is on); never written to a case or the
  *  Briefcase. The 4-digit PIN gating the UI is a rate-limited convenience boundary, NOT this
  *  data's encryption key (the vault DEK is). Zero network. */
 export interface JournalEntry {
   id: string;
+  /** Legacy plain-text body — present ONLY on records persisted before the block-editor model
+   *  shipped. Superseded by `blocks`; the store's read()/readAll() always populate `blocks`
+   *  (synthesizing a single HTML-ESCAPED text block from `body` when a record predates this
+   *  field — the legacy text is never interpreted as HTML). Read-only: save() never writes it. */
+  body?: string;
   title: string;
-  body: string;
+  blocks: JournalBlock[];
   createdAt: ISODate;
   updatedAt: ISODate;
 }
 
-/** Lightweight row for the Journal list — body fetched on open. */
+/** Lightweight row for the Journal list — blocks fetched on open. */
 export interface JournalEntrySummary { id: string; title: string; updatedAt: ISODate; bytes: number }
 
 /** What the renderer sends to persist a journal entry (id minted + timestamps managed by the store). */
-export interface JournalEntryInput { id: string; title: string; body: string }
+export interface JournalEntryInput { id: string; title: string; blocks: JournalBlock[] }
 
 /** Jukebox shade state: strip (deck only) → deck (+playlist) → full (+stations drawer). */
 export type JukeboxMode = 'strip' | 'deck' | 'full';
