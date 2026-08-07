@@ -38,9 +38,12 @@ import {
   type TelegramPageState,
   type TgHarvestedItem,
   type TgNormalizeContext,
+  type TgProfile,
 } from './extract';
 import {
   remoteMediaToDataUri,
+  csvCell,
+  escapeField,
   TELEGRAM_MEDIA_HOSTS,
   type MediaCapturePage,
 } from '../../capture/security';
@@ -652,4 +655,163 @@ export function makeTelegramHunterCollector(opts: {
   harvestedAt: () => string;
 }): SocmintCollector {
   return new TelegramHunterCollector({ now: opts.harvestedAt });
+}
+
+// ======================================================================
+// TG6 — case exports (reuse the shared export guards, CSV/HTML-safe)
+// ======================================================================
+//
+// The quarantine source (`telegram-hunter/src/main.js`) exported a case to JSON
+// and a per-collection CSV whose `csvEscape` only doubled interior quotes — a
+// scraped bio like `=HYPERLINK("http://evil")` stayed a LIVE spreadsheet formula,
+// and its PDF/DOCX reports interpolated visible fields with no HTML escape. This
+// port keeps the same three collections (messages / members / profiles) but routes
+// EVERY CSV cell through the shared `csvCell` (RFC-4180 + formula-injection guard)
+// and EVERY HTML-report field through the shared `escapeField` — the exact guards
+// the X Listening Station exporter uses. No new dependency: PDF/DOCX (which needed
+// pdfkit/docx in the source) become a dependency-free self-contained HTML report.
+//
+// These serializers are PURE (no electron/disk/network): `ipc.ts` reads the records
+// from the encrypted stores and hands them here. Everything a scraped field could
+// carry is neutralized at THIS boundary before it reaches a spreadsheet or a browser.
+
+/** Export container formats the Telegram tab offers. `json` is the raw honesty-stamped
+ *  records; `csv` is formula-guarded; `html` is a self-contained escaped report. */
+export type TgExportFormat = 'json' | 'csv' | 'html';
+
+/** Which captured collection is being exported. */
+export type TgExportCollection = 'messages' | 'members' | 'profiles';
+
+/** A flat, already-stringified export table: a title, column headers, and rows. The values
+ *  are plain strings — the CSV/HTML emitters own ALL escaping so no caller can bypass it. */
+export interface TgExportTable {
+  title: string;
+  headers: string[];
+  rows: string[][];
+}
+
+/** Message export columns (the visible `HarvestedItem` fields — never a fabricated one). */
+const MESSAGE_EXPORT_COLUMNS: ReadonlyArray<keyof HarvestedItem> = [
+  'platform',
+  'channelId',
+  'channelLabel',
+  'authorHandle',
+  'authorId',
+  'messageId',
+  'text',
+  'publishedAt',
+  'harvestedAt',
+  'url',
+];
+
+/** Coerce any field value to the export string form (nullish → empty; never `"undefined"`). */
+function cellText(v: unknown): string {
+  return v == null ? '' : String(v);
+}
+
+/** Build the messages export table from captured `HarvestedItem`s. */
+export function messagesTable(items: readonly HarvestedItem[]): TgExportTable {
+  return {
+    title: 'Telegram messages',
+    headers: MESSAGE_EXPORT_COLUMNS.map((c) => String(c)),
+    rows: items.map((it) =>
+      MESSAGE_EXPORT_COLUMNS.map((c) => cellText((it as unknown as Record<string, unknown>)[c])),
+    ),
+  };
+}
+
+/** Build the members export table (visible member intelligence — no fabricated total). */
+export function membersTable(members: readonly TgMember[]): TgExportTable {
+  const headers = ['handle', 'displayName', 'phone', 'status', 'context', 'profileUrl', 'capturedAt'];
+  return {
+    title: 'Telegram members',
+    headers,
+    rows: members.map((m) => [
+      cellText(m.handle),
+      cellText(m.displayName),
+      cellText(m.phone),
+      cellText(m.status),
+      cellText(m.context),
+      cellText(m.profileUrl),
+      cellText(m.capturedAt),
+    ]),
+  };
+}
+
+/** Build the profiles export table. The account-creation column carries the FIXED
+ *  unavailable LABEL — never a fabricated date (Telegram Web does not expose one). */
+export function profilesTable(profiles: readonly TgProfile[]): TgExportTable {
+  const headers = [
+    'handle',
+    'displayName',
+    'phone',
+    'bio',
+    'status',
+    'context',
+    'links',
+    'profileUrl',
+    'accountCreation',
+    'capturedAt',
+  ];
+  return {
+    title: 'Telegram profiles',
+    headers,
+    rows: profiles.map((p) => [
+      cellText(p.handle),
+      cellText(p.displayName),
+      cellText(p.phone),
+      cellText(p.bio),
+      cellText(p.status),
+      cellText(p.context),
+      (p.links ?? []).map((l) => cellText(l)).join('; '),
+      cellText(p.profileUrl),
+      // Honesty: the fixed unavailable label, NEVER an inferred creation date.
+      cellText(p.accountCreationLabel),
+      cellText(p.capturedAt),
+    ]),
+  };
+}
+
+/** Resolve the export table for a collection from its already-read records. */
+export function tableFor(collection: TgExportCollection, records: readonly unknown[]): TgExportTable {
+  switch (collection) {
+    case 'members':
+      return membersTable(records as readonly TgMember[]);
+    case 'profiles':
+      return profilesTable(records as readonly TgProfile[]);
+    case 'messages':
+    default:
+      return messagesTable(records as readonly HarvestedItem[]);
+  }
+}
+
+/**
+ * Serialize a table to RFC-4180 CSV with EVERY cell (header + body) routed through the
+ * shared `csvCell` — a scraped value whose first char could start a spreadsheet formula
+ * (`= + - @`, tab, CR) is prefixed with `'` so Excel/Sheets treat it as literal text.
+ */
+export function tableToCsv(table: TgExportTable): string {
+  const header = table.headers.map((h) => csvCell(h)).join(',');
+  const rows = table.rows.map((r) => r.map((c) => csvCell(c)).join(','));
+  return [header, ...rows].join('\r\n');
+}
+
+/**
+ * Serialize a table to a self-contained HTML report with EVERY field (title, header, cell)
+ * routed through the shared `escapeField` — a scraped `<script>` / `"` / `&` becomes an
+ * entity and can never break out of its cell into markup or an attribute. Dependency-free
+ * stand-in for the source's pdfkit/docx reports (no new dep is permitted).
+ */
+export function tableToHtml(table: TgExportTable): string {
+  const title = escapeField(table.title);
+  const head = table.headers.map((h) => `<th>${escapeField(h)}</th>`).join('');
+  const body = table.rows
+    .map((r) => `<tr>${r.map((c) => `<td>${escapeField(c)}</td>`).join('')}</tr>`)
+    .join('');
+  return (
+    '<!doctype html><html lang="en"><head><meta charset="utf-8">' +
+    `<title>${title}</title></head><body><h1>${title}</h1>` +
+    `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>` +
+    '</body></html>'
+  );
 }

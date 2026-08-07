@@ -21,16 +21,19 @@
 
 import { channels } from '@shared/ipc-contracts';
 import { assertTrustedSender } from '../../capture/capture-window';
-import { csvCell } from '../../capture/security';
 import { ensureUuid } from '../../security/validate';
 import {
   TelegramHunterCollector,
+  tableFor,
+  tableToCsv,
+  tableToHtml,
   type TgCaptureRequest,
   type TgMemberCaptureRequest,
   type TgMessageCaptureResult,
   type TgMemberCaptureResult,
+  type TgExportFormat,
+  type TgExportCollection,
 } from './collector';
-import type { HarvestedItem } from '@shared/socmint/types';
 
 /** The single live Telegram capture collector, reused across connect() calls. */
 let collector: TelegramHunterCollector | null = null;
@@ -91,67 +94,74 @@ export async function captureTelegramMembers(reqArg: unknown): Promise<TgMemberC
   return getCollector().captureGroupMembers({ caseId });
 }
 
-/** Export formats the Telegram tab offers (TG6 extends with pdf/docx + member/profile CSV). */
-export type TgExportFormat = 'json' | 'csv';
-
 export interface TgExportResult {
   format: TgExportFormat;
-  /** Number of items in the export — honest (what the case actually holds). */
+  /** Which collection was exported (messages / members / profiles). */
+  collection: TgExportCollection;
+  /** Number of records in the export — honest (what the case actually holds). */
   count: number;
   encoding: 'utf8';
   data: string;
   mime: string;
 }
 
-const TG_EXPORT_COLUMNS: ReadonlyArray<keyof HarvestedItem> = [
-  'platform',
-  'channelId',
-  'channelLabel',
-  'authorHandle',
-  'authorId',
-  'messageId',
-  'text',
-  'publishedAt',
-  'harvestedAt',
-  'url',
-];
-
-/** Serialize a case's captured items to a formula-guarded CSV (every cell via `csvCell`). */
-function itemsToCsv(items: readonly HarvestedItem[]): string {
-  const header = TG_EXPORT_COLUMNS.map((c) => csvCell(String(c))).join(',');
-  const rows = items.map((it) =>
-    TG_EXPORT_COLUMNS.map((c) => csvCell(String((it as unknown as Record<string, unknown>)[c] ?? ''))).join(','),
-  );
-  return [header, ...rows].join('\r\n');
+/**
+ * Read the records for `collection` from the encrypted stores. Messages live in the shared
+ * socmint case store (telegram-filtered); members live in the per-tool `members` artifact
+ * store. Profiles have no persistence store yet (TG3 delivered only the pure normalizer), so
+ * a profile export is honestly EMPTY until profile capture is wired — it never fabricates rows.
+ */
+async function readExportRecords(id: string, collection: TgExportCollection): Promise<unknown[]> {
+  if (collection === 'members') {
+    const { prodTgHunterStore } = await import('./store');
+    const store = await prodTgHunterStore();
+    return store.members.read(id);
+  }
+  if (collection === 'profiles') {
+    return [];
+  }
+  const { listItems } = await import('../store');
+  return (await listItems(id)).filter((it) => it.platform === 'telegram');
 }
 
 /**
- * Export a case's captured Telegram items in `format`. Reads the items from the encrypted
- * socmint store; CSV runs every scraped cell through the RFC-4180 + formula guard. JSON is
- * the raw stored records (already honesty-stamped). `count` is honest.
+ * Export a case's captured Telegram `collection` in `format`. Reads the records from the
+ * encrypted stores; CSV runs every scraped cell through the RFC-4180 + formula guard and HTML
+ * runs every field through the HTML-entity guard (via the pure `collector.ts` serializers).
+ * JSON is the raw stored records (already honesty-stamped). `count` is honest.
  */
 export async function exportTelegramItems(
   caseId: string,
   format: TgExportFormat,
+  collection: TgExportCollection = 'messages',
 ): Promise<TgExportResult> {
   const id = ensureUuid(caseId, 'caseId');
-  const { listItems } = await import('../store');
-  const items = (await listItems(id)).filter((it) => it.platform === 'telegram');
-  const count = items.length;
+  const records = await readExportRecords(id, collection);
+  const count = records.length;
   if (format === 'csv') {
-    return { format, count, encoding: 'utf8', data: itemsToCsv(items), mime: 'text/csv' };
+    const data = tableToCsv(tableFor(collection, records));
+    return { format, collection, count, encoding: 'utf8', data, mime: 'text/csv' };
+  }
+  if (format === 'html') {
+    const data = tableToHtml(tableFor(collection, records));
+    return { format, collection, count, encoding: 'utf8', data, mime: 'text/html' };
   }
   return {
     format: 'json',
+    collection,
     count,
     encoding: 'utf8',
-    data: JSON.stringify(items, null, 2),
+    data: JSON.stringify(records, null, 2),
     mime: 'application/json',
   };
 }
 
 function isTgExportFormat(v: unknown): v is TgExportFormat {
-  return v === 'json' || v === 'csv';
+  return v === 'json' || v === 'csv' || v === 'html';
+}
+
+function isTgExportCollection(v: unknown): v is TgExportCollection {
+  return v === 'messages' || v === 'members' || v === 'profiles';
 }
 
 type HandleWithEvent = (
@@ -179,13 +189,17 @@ export function registerTelegramHunterIpc(deps: { handle: HandleWithEvent }): vo
   });
   deps.handle(channels.socmint.telegram.exportItems, (e, reqArg) => {
     assertTrustedSender(e);
-    const req = reqArg as { caseId?: unknown; format?: unknown } | undefined;
+    const req = reqArg as { caseId?: unknown; format?: unknown; collection?: unknown } | undefined;
     if (!req || typeof req.caseId !== 'string') {
       throw new Error('Exporting Telegram items requires a caseId.');
     }
     if (!isTgExportFormat(req.format)) {
-      throw new Error("Exporting Telegram items requires a format ('json' or 'csv').");
+      throw new Error("Exporting Telegram items requires a format ('json', 'csv', or 'html').");
     }
-    return exportTelegramItems(req.caseId, req.format);
+    // Collection is optional and defaults to messages; reject only an explicit bad value.
+    if (req.collection !== undefined && !isTgExportCollection(req.collection)) {
+      throw new Error("Exporting Telegram items requires a collection ('messages', 'members', or 'profiles').");
+    }
+    return exportTelegramItems(req.caseId, req.format, req.collection ?? 'messages');
   });
 }
