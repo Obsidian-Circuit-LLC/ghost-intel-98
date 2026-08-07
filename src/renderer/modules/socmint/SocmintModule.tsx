@@ -656,7 +656,92 @@ function ItemsPanel({
 // SocmintModule (root)
 // ---------------------------------------------------------------------------
 
-type ContentTab = 'channels' | 'items' | 'wa-setup';
+type ContentTab = 'channels' | 'items' | 'wa-setup' | 'capture';
+
+// ---------------------------------------------------------------------------
+// TelegramCapturePanel — drives the Telegram Hunter capture-window engine (TG5).
+//
+// The mtcute streaming collector is retired; Telegram capture is now pull-based inside
+// a Tor-fail-closed hardened window. The operator opens Telegram Web (Connect), signs in
+// and navigates to the target chat, then captures the visible messages/members. Every
+// action flows through window.api.socmint.telegram.* — the seam the Plan-A hollow-renderer
+// lesson requires be reachable and correctly-payloaded.
+// ---------------------------------------------------------------------------
+
+function TelegramCapturePanel({ caseId }: { caseId: string }): JSX.Element {
+  const [chatId, setChatId] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const run = useCallback(async (fn: () => Promise<string>) => {
+    setBusy(true);
+    setMessage(null);
+    try {
+      setMessage(await fn());
+    } catch (err) {
+      setMessage(String((err as Error).message ?? err));
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
+  const onConnect = useCallback(() => run(async () => {
+    const r = await window.api.socmint.telegram.connect();
+    return 'blocked' in r
+      ? r.reason
+      : 'Telegram capture window opened — sign in over Tor and open the target chat.';
+  }), [run]);
+
+  const onCapture = useCallback(() => {
+    const channelId = chatId.trim();
+    if (!channelId) { setMessage('Enter the chat @username or id you have open in the window.'); return; }
+    void run(async () => {
+      const r = await window.api.socmint.telegram.capture({ caseId, channelId, channelLabel: channelId });
+      return r.blocked ? (r.reason ?? 'Capture blocked.') : `Captured ${r.added} new message(s).`;
+    });
+  }, [run, caseId, chatId]);
+
+  const onMembers = useCallback(() => run(async () => {
+    const r = await window.api.socmint.telegram.captureMembers({ caseId });
+    return r.blocked ? (r.reason ?? 'Capture blocked.') : `Captured ${r.captured} visible member(s).`;
+  }), [run, caseId]);
+
+  const onExport = useCallback(() => run(async () => {
+    const r = await window.api.socmint.telegram.exportItems({ caseId, format: 'json' });
+    return `Exported ${r.count} item(s) as ${r.format.toUpperCase()}.`;
+  }), [run, caseId]);
+
+  return (
+    <div className="sm-tg-capture">
+      <h3 className="sm-section-title">Telegram Capture (Tor · visible-only)</h3>
+      <p className="sm-hint">
+        Capture runs inside a Tor-proxied hardened window and blocks when Tor is not ready —
+        there is no clearnet fallback. Only what is visible on screen is recorded.
+      </p>
+      <div className="sm-form-row">
+        <button className="sm-btn sm-btn-primary" onClick={onConnect} disabled={busy}>
+          Connect (open Telegram)
+        </button>
+      </div>
+      <div className="sm-form-row">
+        <label htmlFor="sm-tg-chatid">Open chat @username / id</label>
+        <input
+          id="sm-tg-chatid"
+          className="sm-input"
+          value={chatId}
+          placeholder="@channelname or -100123456789"
+          onChange={(e) => setChatId(e.target.value)}
+        />
+      </div>
+      <div className="sm-form-row sm-tg-actions">
+        <button className="sm-btn" onClick={onCapture} disabled={busy}>Capture Messages</button>
+        <button className="sm-btn" onClick={onMembers} disabled={busy}>Capture Members</button>
+        <button className="sm-btn" onClick={onExport} disabled={busy}>Export</button>
+      </div>
+      {message && <div className="sm-tg-status" role="status">{message}</div>}
+    </div>
+  );
+}
 
 export function SocmintModule({ caseId: propCaseId }: { caseId?: string }): JSX.Element {
   const settings = useSettings((s) => s.settings);
@@ -671,9 +756,13 @@ export function SocmintModule({ caseId: propCaseId }: { caseId?: string }): JSX.
   // Active tab: 'channels' / 'items' are shared; 'wa-setup' is WhatsApp-only.
   const [tab, setTab] = useState<ContentTab>('channels');
 
-  // When platform switches away from WhatsApp, drop the wa-setup tab if active.
+  // Keep the tab valid for the active platform: wa-setup is WhatsApp-only, the Telegram
+  // capture tab is Telegram-only.
   useEffect(() => {
     if (platform !== 'whatsapp' && tab === 'wa-setup') {
+      setTab('channels');
+    }
+    if (platform !== 'telegram' && tab === 'capture') {
       setTab('channels');
     }
   }, [platform, tab]);
@@ -1033,6 +1122,16 @@ export function SocmintModule({ caseId: propCaseId }: { caseId?: string }): JSX.
             >
               Harvested Items
             </button>
+            {platform === 'telegram' && (
+              <button
+                role="tab"
+                aria-selected={tab === 'capture'}
+                className={`sm-tab${tab === 'capture' ? ' sm-tab-active' : ''}`}
+                onClick={() => setTab('capture')}
+              >
+                Capture
+              </button>
+            )}
             {platform === 'whatsapp' && (
               <button
                 role="tab"
@@ -1079,6 +1178,9 @@ export function SocmintModule({ caseId: propCaseId }: { caseId?: string }): JSX.
                 onRefreshItems={loadItems}
                 onLabel={handleLabel}
               />
+            )}
+            {tab === 'capture' && platform === 'telegram' && (
+              <TelegramCapturePanel caseId={caseId} />
             )}
             {tab === 'wa-setup' && platform === 'whatsapp' && (
               <WhatsAppSetupPanel networkEnabled={networkEnabled} />

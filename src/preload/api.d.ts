@@ -738,6 +738,26 @@ export interface GhostApi {
     hasWhatsappBurner(burnerId: string): Promise<boolean>;
     /** Deletes secretStore entries for burnerId. User must separately unlink in WhatsApp. */
     unlinkWhatsappBurner(burnerId: string): Promise<void>;
+    /**
+     * Telegram Hunter capture-window engine (TG5) — replaces the retired mtcute streaming
+     * collector. Pull-based visible-DOM capture inside a Tor-fail-closed hardened window.
+     */
+    telegram: {
+      /** Open (or resurface) the Tor-proxied capture window; blocked when Tor is not ready. */
+      connect(): Promise<{ opened: true } | { blocked: true; reason: string }>;
+      /** Capture the visible messages in the open chat → encrypted case store. */
+      capture(req: { caseId: string; channelId: string; channelLabel?: string; jobId?: string }): Promise<{
+        blocked: boolean; reason?: string; added: number; skipped: number; items: HarvestedItem[];
+      }>;
+      /** Capture the visible group/channel members (no fabricated total). */
+      captureMembers(req: { caseId: string }): Promise<{
+        blocked: boolean; reason?: string; added: number; captured: number; members: unknown[];
+      }>;
+      /** Export the case's captured Telegram items (json/csv, formula-guarded). */
+      exportItems(req: { caseId: string; format: 'json' | 'csv' }): Promise<{
+        format: 'json' | 'csv'; count: number; encoding: 'utf8'; data: string; mime: string;
+      }>;
+    };
   };
   /**
    * X Listening Station (Plan A) — visible-DOM capture of an authenticated X session, run

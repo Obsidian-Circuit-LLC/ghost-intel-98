@@ -677,6 +677,15 @@ const api = {
       ipcRenderer.invoke(channels.socmint.hasWhatsappBurner, burnerId),
     unlinkWhatsappBurner: (burnerId: string) =>
       ipcRenderer.invoke(channels.socmint.unlinkWhatsappBurner, burnerId),
+    // Telegram Hunter capture-window engine (TG5). The Telegram tab drives connect/capture/
+    // members/export through these; no credential ever crosses this bridge.
+    telegram: {
+      connect: () => ipcRenderer.invoke(channels.socmint.telegram.connect),
+      capture: (req: unknown) => ipcRenderer.invoke(channels.socmint.telegram.capture, req),
+      captureMembers: (req: unknown) =>
+        ipcRenderer.invoke(channels.socmint.telegram.captureMembers, req),
+      exportItems: (req: unknown) => ipcRenderer.invoke(channels.socmint.telegram.exportItems, req)
+    },
     /**
      * Subscribe to live harvested items streamed from an active monitor session.
      * Each call to the callback receives a single HarvestedItem pushed from main.

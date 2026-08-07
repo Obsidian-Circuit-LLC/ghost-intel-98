@@ -147,7 +147,8 @@ import {
   handleHasWhatsappBurner,
   handleUnlinkWhatsappBurner,
 } from '../socmint/ipc';
-import { makeMtcuteCollector } from '../socmint/collector';
+import { makeTelegramHunterCollector } from '../socmint/telegram-hunter/collector';
+import { registerTelegramHunterIpc } from '../socmint/telegram-hunter/ipc';
 import { makeWhatsAppCollector } from '../socmint/whatsapp-collector';
 import { createScrapingCasesHandlers } from '../scraping-cases/ipc';
 import { prodScrapingCaseStore } from '../storage/scraping-cases';
@@ -2275,7 +2276,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     handleStartMonitor(a[0], {
       networkEnabled: async () => (await settingsStore.read()).socmint.networkEnabled,
       transport: async () => (await settingsStore.read()).socmint.transport,
-      collectorFactory: makeMtcuteCollector,
+      collectorFactory: makeTelegramHunterCollector,
       // Platform-selected in handleStartMonitor: platform='whatsapp' → this factory.
       whatsappCollectorFactory: makeWhatsAppCollector,
       // Stream each harvested item to the renderer so the UI updates live.
@@ -2287,6 +2288,11 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     }));
   safeHandle(channels.socmint.stopMonitor, (...a) =>
     handleStopMonitor(typeof a[0] === 'string' ? a[0] : ''));
+
+  // Telegram Hunter capture-window engine (TG5). Wired via safeHandleWithEvent — NOT plain
+  // safeHandle — because the capture window can host a hostile Telegram Web page, so every
+  // handler must validate the sender frame (assertTrustedSender) before acting.
+  registerTelegramHunterIpc({ handle: safeHandleWithEvent });
 
   // WhatsApp linking ceremony (WA-T10 — after operator §5.5 smoke test pass).
   // Gate-closed → { disabled: true }; gate-open + sealed lib → sealed error, never crash/fallback.

@@ -515,7 +515,20 @@ export const channels = {
     // WhatsApp linking ceremony (WA-T5 — stubs; WA-T6/T7 implement bodies)
     setWhatsappBurnerPairingCode: 'socmint:setWhatsappBurnerPairingCode',
     hasWhatsappBurner: 'socmint:hasWhatsappBurner',
-    unlinkWhatsappBurner: 'socmint:unlinkWhatsappBurner'
+    unlinkWhatsappBurner: 'socmint:unlinkWhatsappBurner',
+    // Telegram Hunter capture-window engine (TG5 — replaces the retired mtcute streaming
+    // engine). Pull-based visible-DOM capture inside a Tor-fail-closed hardened window;
+    // every handler is safeHandleWithEvent + assertTrustedSender.
+    telegram: {
+      /** Open (or resurface) the Tor-proxied Telegram capture window; blocked when Tor is down. */
+      connect: 'socmint:telegram:connect',
+      /** Capture the visible messages in the open chat → encrypted case store. */
+      capture: 'socmint:telegram:capture',
+      /** Capture the visible group/channel members → encrypted members store (no fabricated total). */
+      captureMembers: 'socmint:telegram:captureMembers',
+      /** Export the case's captured Telegram items (json/csv, formula-guarded). */
+      exportItems: 'socmint:telegram:exportItems'
+    }
   },
   // X Listening Station (Plan A) — visible-DOM capture of an authenticated X session in a
   // main-side hardened BrowserWindow on the clearnet-quarantined `persist:x-listening`

@@ -45,6 +45,10 @@ import {
   type MediaCapturePage,
 } from '../../capture/security';
 import type { TgMember } from './store';
+import type { SocmintCollector } from '../collector';
+import type { SocmintTransport } from '../tor-identity';
+import type { HarvestedItem, MonitoredChannel } from '@shared/socmint/types';
+import type { TelegramCaptureResult } from './session';
 
 /** This collector's version, stamped into every item's provenance. */
 export const TG_COLLECTOR_VERSION = 'telegram-hunter/1.0.0';
@@ -477,4 +481,175 @@ export async function captureMembers(
   const members = gated.result ?? [];
   const { added } = await deps.saveMembers(req.caseId, members);
   return { blocked: false, added, captured: members.length, members };
+}
+
+// ======================================================================
+// TG5 — TelegramHunterCollector: the capture-window engine, wrapped so it
+//       satisfies the existing SocmintCollector interface (the mtcute swap).
+// ======================================================================
+//
+// SOCMINT's store/rank/filter/IPC seam is typed against `SocmintCollector`
+// (connect/join/backfill/subscribe/disconnect). Implementing it here lets the
+// Telegram Hunter capture-window engine drop in where `makeMtcuteCollector` used
+// to sit — WITHOUT re-deriving any of the streaming pipeline.
+//
+// The capture-window model is fundamentally pull-based (the operator opens the
+// target chat in the Tor-proxied window; a capture reads the CURRENTLY-VISIBLE
+// set), so the streaming methods map honestly:
+//   - connect()  → open the Tor-fail-closed capture window (`session.ts`). When Tor
+//                  is not ready the opener returns `blocked` and NO window is made;
+//                  connect() THROWS — there is never a clearnet fallback.
+//   - join()     → a no-op `MonitoredChannel` (there is no per-chat URL to navigate;
+//                  the operator opens the chat themselves).
+//   - backfill() → one visible-message capture of the open chat (single-viewport
+//                  honesty; `saveItems` overridden to a no-op so the caller owns
+//                  persistence and nothing is written twice).
+//   - subscribe()→ a no-op unsubscribe: a visible-DOM capture has no live push
+//                  stream, and this collector never fabricates one.
+//   - disconnect()→ close the capture window.
+//
+// The Telegram tab drives capture through the dedicated `open` / `captureMessages`
+// / `captureGroupMembers` methods (wired in `telegram-hunter/ipc.ts`); the
+// SocmintCollector methods keep the type contract intact.
+
+/** The partition the Telegram capture window lives on. */
+export const SOCMINT_TELEGRAM_PARTITION = 'persist:socmint-telegram';
+
+export interface TelegramHunterCollectorConfig {
+  /** Session partition (default `SOCMINT_TELEGRAM_PARTITION`). */
+  partition?: string;
+  /** Injected clock — the ISO capture time stamped onto backfilled items. */
+  now?: () => string;
+  /** The Tor-fail-closed window opener — defaults to a lazy `session.ts` import so
+   *  this module pulls no electron statically (keeps it quarantine-clean at load). */
+  openFn?: (partition: string) => Promise<TelegramCaptureResult>;
+  /** Message-capture orchestrator — defaults to `captureVisibleMessages`. */
+  captureMessagesFn?: (
+    win: Electron.BrowserWindow,
+    req: TgCaptureRequest,
+    overrides?: Partial<TgMessageCaptureDeps>,
+  ) => Promise<TgMessageCaptureResult>;
+  /** Member-capture orchestrator — defaults to `captureMembers`. */
+  captureMembersFn?: (
+    win: Electron.BrowserWindow,
+    req: TgMemberCaptureRequest,
+    overrides?: Partial<TgMemberCaptureDeps>,
+  ) => Promise<TgMemberCaptureResult>;
+}
+
+export class TelegramHunterCollector implements SocmintCollector {
+  private win: Electron.BrowserWindow | null = null;
+  private readonly partition: string;
+  private readonly now: () => string;
+  private readonly openFn: (partition: string) => Promise<TelegramCaptureResult>;
+  private readonly captureMessagesFn: NonNullable<TelegramHunterCollectorConfig['captureMessagesFn']>;
+  private readonly captureMembersFn: NonNullable<TelegramHunterCollectorConfig['captureMembersFn']>;
+
+  constructor(cfg: TelegramHunterCollectorConfig = {}) {
+    this.partition = cfg.partition ?? SOCMINT_TELEGRAM_PARTITION;
+    this.now = cfg.now ?? (() => new Date().toISOString());
+    this.openFn =
+      cfg.openFn ??
+      (async (partition) => {
+        // Lazy so importing this module never evaluates electron/session/Tor.
+        const { openTelegramCapture } = await import('./session');
+        return openTelegramCapture(partition);
+      });
+    this.captureMessagesFn = cfg.captureMessagesFn ?? captureVisibleMessages;
+    this.captureMembersFn = cfg.captureMembersFn ?? captureMembers;
+  }
+
+  /** True while a live (non-destroyed) capture window is held. */
+  isOpen(): boolean {
+    return !!this.win && !this.win.isDestroyed();
+  }
+
+  /**
+   * Open (or resurface) the Tor-proxied, WebRTC-locked Telegram capture window.
+   * Returns `{ blocked }` and creates NO window when Tor is not ready — never a
+   * clearnet fallback. A live window is surfaced rather than duplicated.
+   */
+  async open(): Promise<{ opened: true } | { blocked: true; reason: string }> {
+    if (this.isOpen()) {
+      const w = this.win as Electron.BrowserWindow & { show?: () => void; focus?: () => void };
+      w.show?.();
+      w.focus?.();
+      return { opened: true };
+    }
+    const res = await this.openFn(this.partition);
+    if ('blocked' in res) return { blocked: true, reason: res.reason };
+    this.win = res.win;
+    return { opened: true };
+  }
+
+  private requireWindow(): Electron.BrowserWindow {
+    if (!this.isOpen() || !this.win) {
+      throw new Error(
+        'Telegram is not connected. Open the Tor capture window and sign in before capturing.',
+      );
+    }
+    return this.win;
+  }
+
+  /** Capture the visible messages in the currently-open chat and persist them. */
+  async captureMessages(
+    req: TgCaptureRequest,
+    overrides: Partial<TgMessageCaptureDeps> = {},
+  ): Promise<TgMessageCaptureResult> {
+    return this.captureMessagesFn(this.requireWindow(), req, overrides);
+  }
+
+  /** Capture the visible group/channel members and persist them (no fabricated total). */
+  async captureGroupMembers(
+    req: TgMemberCaptureRequest,
+    overrides: Partial<TgMemberCaptureDeps> = {},
+  ): Promise<TgMemberCaptureResult> {
+    return this.captureMembersFn(this.requireWindow(), req, overrides);
+  }
+
+  // ---- SocmintCollector interface --------------------------------------
+
+  async connect(): Promise<void> {
+    const res = await this.open();
+    if ('blocked' in res) throw new Error(res.reason);
+  }
+
+  async join(channel: string): Promise<MonitoredChannel> {
+    // No per-chat navigation — the operator opens the target chat in the window.
+    return { channelId: channel, label: channel, keywords: [] };
+  }
+
+  async backfill(channelId: string, _limit: number): Promise<HarvestedItem[]> {
+    // One visible-viewport capture. `saveItems` is overridden to a no-op: backfill
+    // returns the items and the caller owns persistence (no double-write).
+    const result = await this.captureMessages(
+      { caseId: '', jobId: '', channelId, channelLabel: channelId },
+      { saveItems: async () => ({ added: 0, skipped: 0 }), now: this.now },
+    );
+    return result.items;
+  }
+
+  subscribe(_channelIds: string[], _onItem: (i: HarvestedItem) => void): () => void {
+    // A visible-DOM capture has no live push stream; return an inert unsubscribe.
+    return () => {};
+  }
+
+  async disconnect(): Promise<void> {
+    if (this.isOpen() && this.win) this.win.close();
+    this.win = null;
+  }
+}
+
+/**
+ * CollectorFactory-compatible builder so `register.ts` can swap the Telegram engine in
+ * where `makeMtcuteCollector` used to sit. The capture window self-gates on Tor
+ * (`session.ts`), so `burnerId`/`transport` are intentionally ignored — there is no
+ * MTProto burner and no per-collector dial; `harvestedAt` becomes the injected clock.
+ */
+export function makeTelegramHunterCollector(opts: {
+  burnerId: string;
+  transport: SocmintTransport;
+  harvestedAt: () => string;
+}): SocmintCollector {
+  return new TelegramHunterCollector({ now: opts.harvestedAt });
 }
