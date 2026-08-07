@@ -1673,6 +1673,10 @@ input.ga98-text, select.ga98-text {
   flex: 0 0 auto;
 }
 
+/* Briefcase module-specific column wrapper: banner above the shared .ga98-split so the split
+ * class itself stays unaffected for its other consumers. */
+.ga98-briefcase { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+
 /* ---------------------------------------------------------------------------
  * Invoices module — two-pane host (saved list + editor/preview). Tables restate
  * their own background on a CLASS selector so the bundled 98.css element rule

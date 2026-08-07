@@ -8,6 +8,7 @@ import { useCallback, useEffect, useState, type DragEvent } from 'react';
 import type { BriefcaseNoteSummary } from '@shared/post-mvp-types';
 import { toast } from '../../state/toasts';
 import { confirmDialog } from '../../state/dialogs';
+import briefcaseBanner from '../../assets/briefcase-banner.png';
 
 function uid(): string { return crypto.randomUUID(); }
 function fmtBytes(n: number): string { return n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} KB`; }
@@ -90,7 +91,9 @@ export function BriefcaseModule({ initialNoteId }: { initialNoteId?: string } = 
   }
 
   return (
-    <div className="ga98-split" style={{ height: '100%' }}>
+    <div className="ga98-briefcase">
+      <img src={briefcaseBanner} alt="Briefcase" className="ga98-module-banner" />
+      <div className="ga98-split" style={{ height: '100%' }}>
       <div className="ga98-pane" style={{ width: 200, flex: '0 0 auto', display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', gap: 4, padding: 4 }}>
           <button onClick={newNote} title="Start a new note">New</button>
@@ -128,6 +131,7 @@ export function BriefcaseModule({ initialNoteId }: { initialNoteId?: string } = 
           onChange={(e) => { setBody(e.target.value); setDirty(true); }}
           placeholder="A note that isn't tied to any case. Saved to your Briefcase."
         />
+      </div>
       </div>
     </div>
   );
