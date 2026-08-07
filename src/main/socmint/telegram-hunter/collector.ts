@@ -28,10 +28,13 @@
  */
 import {
   TG_MESSAGE_SCRIPT,
+  TG_MEMBER_SCRIPT,
   TG_PAGE_STATE_SCRIPT,
   classifyTelegramPageState,
   normalizeMessage,
+  normalizeMember,
   type RawMessage,
+  type RawMember,
   type TelegramPageState,
   type TgHarvestedItem,
   type TgNormalizeContext,
@@ -41,6 +44,7 @@ import {
   TELEGRAM_MEDIA_HOSTS,
   type MediaCapturePage,
 } from '../../capture/security';
+import type { TgMember } from './store';
 
 /** This collector's version, stamped into every item's provenance. */
 export const TG_COLLECTOR_VERSION = 'telegram-hunter/1.0.0';
@@ -196,4 +200,126 @@ export async function captureVisibleMessages(
   const items = gated.result ?? [];
   const { added, skipped } = await deps.saveItems(req.caseId, items);
   return { blocked: false, added, skipped, items };
+}
+
+// ======================================================================
+// TG2 — member intelligence capture orchestration
+// ======================================================================
+
+/** The renderer-supplied context for a member scan: which case is being collected.
+ *  The chat/group context is read from the visible page (the scraped chat title),
+ *  never accepted from the renderer; `capturedAt` is stamped MAIN-side. */
+export interface TgMemberCaptureRequest {
+  caseId: string;
+}
+
+/**
+ * The result of a member scan. `captured` is the count of visible member rows scraped
+ * THIS pass; `added` is how many were genuinely new in the store. There is deliberately
+ * NO group-total field — Telegram hides the real member/subscriber count and this
+ * collector never fabricates one (honesty).
+ */
+export interface TgMemberCaptureResult {
+  blocked: boolean;
+  reason?: string;
+  /** Members newly persisted this pass. */
+  added: number;
+  /** Visible member rows scraped this pass (== `members.length`). */
+  captured: number;
+  members: TgMember[];
+}
+
+/** Injectable seams so member capture is testable without electron/network. */
+export interface TgMemberCaptureDeps {
+  /** Post-navigation SETTLE — runs BEFORE the gate/scrape (async-SPA render wait). */
+  settle: (win: Electron.BrowserWindow) => Promise<void>;
+  /** Run a static payload in the capture page → its result. */
+  runCapture: (win: Electron.BrowserWindow, js: string) => Promise<unknown>;
+  /** Resolve a remote media URL to a local `data:` thumbnail (host-restricted), or null. */
+  resolveMedia: (win: MediaCapturePage, url: string) => Promise<string | null>;
+  /** The challenge/lock gate: runs `capture` ONLY on an unlocked, signed-in page. */
+  guard: <T>(
+    win: Electron.BrowserWindow,
+    capture: () => Promise<T>
+  ) => Promise<{ blocked: boolean; reason?: string; result?: T }>;
+  /** Persist visible members to the encrypted per-tool `members` artifact store. */
+  saveMembers: (
+    caseId: string,
+    members: TgMember[]
+  ) => Promise<{ added: number; total: number }>;
+  /** Injected clock — the ISO capture time stamped onto every member. */
+  now: () => string;
+}
+
+function defaultMemberDeps(): TgMemberCaptureDeps {
+  return {
+    settle: () => realSettle(),
+    runCapture: defaultRunCapture,
+    resolveMedia: (win, url) => remoteMediaToDataUri(win, url, TELEGRAM_MEDIA_HOSTS),
+    guard: defaultGuard,
+    saveMembers: async (caseId, members) => {
+      const { prodTgHunterStore } = await import('./store');
+      const store = await prodTgHunterStore();
+      return store.members.saveMany(caseId, members);
+    },
+    now: () => new Date().toISOString(),
+  };
+}
+
+/**
+ * Resolve a member's avatar SRC to a local `data:` thumbnail, dropping it on any
+ * failure. A remote URL is NEVER carried forward — combined with `normalizeMember`'s
+ * `data:`-only filter this guarantees no stored member field can beacon.
+ */
+async function resolveMemberAvatar(
+  win: Electron.BrowserWindow,
+  raw: RawMember,
+  resolveMedia: TgMemberCaptureDeps['resolveMedia']
+): Promise<RawMember> {
+  const src = String(raw.avatar ?? '');
+  if (!src || src.startsWith('data:')) return raw;
+  const dataUri = await resolveMedia(win, src);
+  return { ...raw, avatar: dataUri ?? '' };
+}
+
+/**
+ * Capture the visible Telegram group/channel members in the live capture window and
+ * persist them.
+ *
+ * SETTLES first (async-SPA render), routes through the challenge/lock gate (nothing is
+ * captured or persisted on a locked / signed-out page), runs the STATIC
+ * `TG_MEMBER_SCRIPT`, resolves each avatar to a host-restricted `data:` thumbnail,
+ * stamps the honesty markers via `normalizeMember`, and batch-upserts into the encrypted
+ * `members` artifact store. Reports ONLY the members actually collected — it NEVER
+ * fabricates a group total (Telegram hides the real member/subscriber count).
+ */
+export async function captureMembers(
+  win: Electron.BrowserWindow,
+  req: TgMemberCaptureRequest,
+  overrides: Partial<TgMemberCaptureDeps> = {}
+): Promise<TgMemberCaptureResult> {
+  const deps = { ...defaultMemberDeps(), ...overrides };
+  const capturedAt = deps.now();
+
+  // Let the async SPA render the visible member DOM BEFORE the static scrape reads it.
+  await deps.settle(win);
+
+  const gated = await deps.guard(win, async () => {
+    const rawCollected = await deps.runCapture(win, TG_MEMBER_SCRIPT);
+    const raws: RawMember[] = Array.isArray(rawCollected) ? (rawCollected as RawMember[]) : [];
+    const members: TgMember[] = [];
+    for (const raw of raws) {
+      const withAvatar = await resolveMemberAvatar(win, raw, deps.resolveMedia);
+      members.push(normalizeMember(withAvatar, { capturedAt }));
+    }
+    return members;
+  });
+
+  if (gated.blocked) {
+    return { blocked: true, reason: gated.reason, added: 0, captured: 0, members: [] };
+  }
+
+  const members = gated.result ?? [];
+  const { added } = await deps.saveMembers(req.caseId, members);
+  return { blocked: false, added, captured: members.length, members };
 }

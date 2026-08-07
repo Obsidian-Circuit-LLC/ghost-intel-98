@@ -39,13 +39,25 @@ import { withLock } from '../../util/mutex';
 
 // ---- artifact record shapes --------------------------------------------
 
-/** One visible group/channel member. `displayName` is OPTIONAL and omitted when no
- *  display name was visible — it is NEVER backfilled from the @handle (honesty). `avatar`,
- *  when present, is a local `data:` thumbnail — a remote URL must never be stored here. */
+/** One visible group/channel member. Every field beyond `handle`/`capturedAt` is
+ *  OPTIONAL and present ONLY when the value was actually visible (honesty):
+ *   - `displayName` is omitted when no display name was shown — NEVER backfilled from the @handle;
+ *   - `phone` is stored ONLY when the logged-in account could see it;
+ *   - `avatar`, when present, is a local `data:` thumbnail — a remote URL must never be stored here;
+ *   - `profileUrl`, when present, is a Telegram-host-guarded permalink.
+ *  There is NO member-total field: Telegram hides the real subscriber/member count, and this
+ *  store never fabricates one — only the members actually collected are persisted. */
 export interface TgMember {
   handle: string;
   displayName?: string;
+  /** Visible phone — present ONLY when shown to this account; never inferred. */
+  phone?: string;
+  /** Visible status/role line (e.g. "admin · online", "last seen recently"). */
+  status?: string;
+  /** Local `data:` avatar thumbnail — data: only, never a remote URL. */
   avatar?: string;
+  /** Telegram-host-guarded profile permalink, when visible. */
+  profileUrl?: string;
   /** Where the member was seen (group/channel label) — visible context, optional. */
   context?: string;
   /** ISO timestamp supplied by the caller (injected clock) — never computed here. */
@@ -217,6 +229,11 @@ export interface TgHunterStore {
     /** Upsert one member, deduped by (handle, displayName, context) case-insensitively.
      *  Returns the total member count for the case. */
     save(caseId: string, member: TgMember): Promise<number>;
+    /** Batch upsert (one read + one write), deduped by (handle, displayName, context)
+     *  case-insensitively. Returns `{ added, total }`: how many rows were genuinely NEW
+     *  and the total collected count afterward — `total` is the count of members actually
+     *  collected, NOT a claimed group size (Telegram hides that; we never fabricate it). */
+    saveMany(caseId: string, members: TgMember[]): Promise<{ added: number; total: number }>;
   };
   keywordWatch: {
     read(caseId: string): Promise<TgKeywordRule[]>;
@@ -261,6 +278,27 @@ export function makeTgHunterStore(deps: TgHunterStoreDeps): TgHunterStore {
           else existing.push(member);
           await writeJson(deps, deps.membersPath(caseId), existing);
           return existing.length;
+        });
+      },
+      saveMany(caseId, members) {
+        return withLock(`tg:members:${caseId}`, async () => {
+          const existing = await readJsonArr<TgMember>(deps, deps.membersPath(caseId));
+          const key = (m: TgMember) => `${norm(m.handle)}|${norm(m.displayName)}|${norm(m.context)}`;
+          const index = new Map(existing.map((m, i) => [key(m), i]));
+          let added = 0;
+          for (const member of members) {
+            const k = key(member);
+            const at = index.get(k);
+            if (at === undefined) {
+              index.set(k, existing.length);
+              existing.push(member);
+              added += 1;
+            } else {
+              existing[at] = member; // refresh the latest visible values
+            }
+          }
+          await writeJson(deps, deps.membersPath(caseId), existing);
+          return { added, total: existing.length };
         });
       },
     },

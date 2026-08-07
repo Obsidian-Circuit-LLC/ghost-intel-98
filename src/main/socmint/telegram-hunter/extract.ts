@@ -32,6 +32,10 @@
  */
 import { createHash } from 'node:crypto';
 import type { HarvestedItem } from '@shared/socmint/types';
+// TYPE-ONLY (erased at runtime): the member normalizer emits the store's canonical
+// `TgMember` record. This is a type import, so it pulls NO runtime code from store.ts
+// and keeps extract.ts pure / quarantine-clean.
+import type { TgMember } from './store';
 
 // ---- captured-DOM raw shape --------------------------------------------
 
@@ -326,4 +330,152 @@ export function normalizeMessage(raw: RawMessage, ctx: TgNormalizeContext): TgHa
   if (String(raw.eventType ?? '') === 'SERVICE EVENT') item.eventType = 'SERVICE EVENT';
 
   return item;
+}
+
+// ======================================================================
+// TG2 — member intelligence (visible group/channel members)
+// ======================================================================
+
+/**
+ * One raw member row as returned by `TG_MEMBER_SCRIPT` (a visible member UserCell).
+ * `avatar` is the image SRC (or an in-page `canvas.toDataURL()`); the collector resolves
+ * a remote SRC to a local `data:` thumbnail host-restricted to Telegram hosts before
+ * normalization, and `normalizeMember` admits ONLY a `data:` avatar regardless.
+ * `displayName` is the visible display name — '' when none was shown (NEVER the @handle).
+ */
+export interface RawMember {
+  /** The visible sender handle as `@handle`, or '' when none was visible. */
+  username: string;
+  /** The visible display name — '' when none was shown (NEVER the @handle). */
+  displayName: string;
+  /** The visible phone — '' when not shown to this account (never inferred). */
+  phone: string;
+  /** The visible status / role line (e.g. "admin · online"), '' when none. */
+  status: string;
+  /** URLs found verbatim in the visible row text. */
+  links: string[];
+  /** The chat/group title the member was seen under. */
+  context: string;
+  /** The visible profile link (`https://t.me/<handle>`) — scheme-guarded on normalize. */
+  profileUrl: string;
+  /** The avatar SRC (or an in-page `data:`), resolved to a `data:` thumbnail before storage. */
+  avatar: string;
+}
+
+/**
+ * STATIC payload run in the capture page to read the visible member list (a group's
+ * participant/subscriber panel or a member popup). No interpolation — the ONLY inputs
+ * are literal selectors — and NO in-page media fetch (the source fetched avatar blobs
+ * unrestricted; this returns the avatar SRC for host-restricted resolution in the
+ * collector). Returns `RawMember[]` for the CURRENTLY-VISIBLE rows only. It NEVER emits
+ * a group total (Telegram hides the real member/subscriber count — we do not fabricate
+ * one). Ported from quarantine `telegram-hunter/src/renderer.js` `extractionScript`
+ * member loop, with the source's `displayName = … || username || 'Telegram member'`
+ * fallback REMOVED (an unobserved display name is left '' — honesty).
+ */
+export const TG_MEMBER_SCRIPT = `
+  (() => {
+    const clean = (v) => (v || '').replace(/\\s+/g, ' ').trim();
+    const raw = (e) => ((e && (e.innerText || e.textContent)) || '').trim();
+    const text = (e) => clean(raw(e));
+    const all = (s) => Array.from(document.querySelectorAll(s));
+    const vis = (e) => !!(e && (e.offsetWidth || e.offsetHeight || e.getClientRects().length));
+    const links = (v) => Array.from(new Set(
+      Array.from(String(v).matchAll(/(?:https?:\\/\\/|t\\.me\\/)[^\\s<>]+/gi))
+        .map((m) => m[0].replace(/[),.;]+$/, ''))
+    ));
+    const avatarSrc = (el) => {
+      if (!el) return '';
+      try {
+        if (el.tagName === 'CANVAS') return el.toDataURL('image/png');
+      } catch (_e) { return ''; }
+      let s = el.currentSrc || el.src || '';
+      if (!s) {
+        const bg = (getComputedStyle(el).backgroundImage) || '';
+        const m = bg.match(/url\\(["']?(.*?)["']?\\)/);
+        s = (m && m[1]) || '';
+      }
+      return s || '';
+    };
+
+    const heads = all('h1,h2,h3,[class*="title"],[class*="Title"]').filter(vis).map(text).filter(Boolean);
+    const chatTitle = heads.find((h) => h.length < 120 && !/Telegram Web|Search|Settings/i.test(h)) || document.title || 'Telegram chat';
+
+    const memberRoots = all('[class*="members"],[class*="Members"],[class*="participants"],[class*="Participants"],[class*="subscribers"],[class*="Subscribers"],[role="dialog"],[class*="popup"],[class*="Popup"]')
+      .filter(vis)
+      .filter((e) => { const t = text(e), r = e.getBoundingClientRect(); return t.length > 0 && t.length < 12000 && r.width > 220; });
+
+    const rowSet = new Set();
+    for (const root of memberRoots) {
+      for (const e of root.querySelectorAll('[class*="ListItem"],[class*="list-item"],[role="listitem"],[class*="participant"],[class*="Participant"],[class*="member"],[class*="Member"]')) {
+        if (vis(e)) rowSet.add(e);
+      }
+    }
+
+    const members = [];
+    for (const e of rowSet) {
+      const multi = raw(e);
+      const v = clean(multi);
+      if (v.length < 2 || v.length > 260) continue;
+      if (links(v).length > 3) continue;
+      const username = (v.match(/@[a-zA-Z0-9_]{4,32}/) || [])[0] || '';
+      const phone = (v.match(/\\+\\d[\\d ()-]{6,20}\\d/) || [])[0] || '';
+      const status = (multi.split(/\\n+/).map(clean).filter(Boolean).slice(1).join(' · ')).slice(0, 180);
+      if (!(username || phone || /online|last seen|subscriber|member|bot|admin|owner/i.test(v))) continue;
+      if (/someone just got access|new login|source:\\s*https?:\\/\\//i.test(v)) continue;
+      const lines = multi.split(/\\n+/).map(clean).filter(Boolean);
+      const displayName = (lines.find((x) => x.length < 100 && !/^@/.test(x) && !/^online$|^last seen/i.test(x))) || '';
+      const bare = username.replace(/^@/, '');
+      const avatarEl = e.querySelector('img[class*="avatar"],img[class*="Avatar"],canvas,[class*="avatar"],[class*="Avatar"],[style*="background-image"]');
+      members.push({
+        username: username,
+        displayName: displayName,
+        phone: phone,
+        status: status,
+        links: links(v).slice(0, 10),
+        context: chatTitle,
+        profileUrl: bare ? ('https://t.me/' + bare) : '',
+        avatar: avatarSrc(avatarEl)
+      });
+    }
+    return members;
+  })()
+`;
+
+/**
+ * Map one captured raw member → a `TgMember`, honesty-stamped and free of any remote
+ * media URL. Pure: the only clock is the injected `ctx.capturedAt`.
+ *
+ *  - the visible display name is stored ONLY when shown AND not a mere echo of the
+ *    @handle — it is NEVER backfilled from the handle (the source's fallback, refused);
+ *  - the phone is stored ONLY when it was visible to the logged-in account;
+ *  - the avatar is admitted ONLY as a local `data:` thumbnail (a remote URL is dropped);
+ *  - the profile permalink is scheme-guarded to Telegram hosts.
+ */
+export function normalizeMember(raw: RawMember, ctx: { capturedAt: string }): TgMember {
+  const handle = String(raw.username ?? '').trim(); // already '@handle' or ''
+  const member: TgMember = { handle, capturedAt: ctx.capturedAt };
+
+  // HONESTY: display name stored ONLY when shown AND not merely an echo of the @handle.
+  const display = String(raw.displayName ?? '').trim();
+  const bareHandle = handle.replace(/^@+/, '');
+  if (display && display !== handle && display !== bareHandle) member.displayName = display;
+
+  const phone = String(raw.phone ?? '').trim();
+  if (phone) member.phone = phone;
+
+  const status = String(raw.status ?? '').trim();
+  if (status) member.status = status;
+
+  const context = String(raw.context ?? '').trim();
+  if (context) member.context = context;
+
+  // Avatar admitted ONLY as a local data: thumbnail — a remote URL is DROPPED (beacon guard).
+  const avatar = String(raw.avatar ?? '');
+  if (avatar.startsWith('data:')) member.avatar = avatar;
+
+  const profileUrl = guardTelegramUrl(String(raw.profileUrl ?? ''));
+  if (profileUrl) member.profileUrl = profileUrl;
+
+  return member;
 }
