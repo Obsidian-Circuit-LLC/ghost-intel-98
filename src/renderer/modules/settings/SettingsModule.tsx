@@ -15,6 +15,7 @@ import { useAuth, useSettings } from '../../state/store';
 import { LocalAiPane } from './LocalAiPane';
 import { playMailNotify, clearMailChimeCache } from '../../audio/synth';
 import logoUrl from '../../assets/logo.png';
+import settingsBanner from '../../assets/settings-banner.png';
 import { THEMES } from '../../styles/themes';
 
 type SectionKey = 'about' | 'sound' | 'theme' | 'cases' | 'shortcuts' | 'ai' | 'browser' | 'terminal' | 'mail' | 'backup' | 'security' | 'searchlight' | 'geoint' | 'socmint';
@@ -95,35 +96,38 @@ export function SettingsModule(): JSX.Element {
   if (!s) return <div className="ga98-stack">Loading…</div>;
 
   return (
-    <div className="ga98-settings-shell">
-      <nav className="ga98-settings-rail" aria-label="Settings sections">
-        {SECTIONS.map((sec) => (
-          <button
-            key={sec.key}
-            className="ga98-settings-rail-item"
-            data-active={section === sec.key}
-            onClick={() => setSection(sec.key)}
-          >
-            <span style={{ display: 'inline-block', width: 18, textAlign: 'center' }} aria-hidden="true">{sec.glyph}</span>
-            <span>{sec.label}</span>
-          </button>
-        ))}
-      </nav>
-      <div className="ga98-settings-pane">
-        {section === 'about' && <AboutPane info={info} />}
-        {section === 'sound' && <SoundPane s={s} patch={patch} />}
-        {section === 'theme' && <ThemePane s={s} patch={patch} />}
-        {section === 'cases' && <CaseFolderPane s={s} patch={patch} />}
-        {section === 'shortcuts' && <ShortcutsPane s={s} setS={setS} latest={latest} patch={patch} />}
-        {section === 'ai' && <AiPane s={s} patch={patch} />}
-        {section === 'browser' && <BrowserPane s={s} patch={patch} />}
-        {section === 'terminal' && <TerminalPane s={s} reload={load} />}
-        {section === 'mail' && <MailPane s={s} patch={patch} />}
-        {section === 'backup' && <BackupPane />}
-        {section === 'security' && <SecurityPane />}
-        {section === 'searchlight' && <SearchlightPane s={s} patch={patch} />}
-        {section === 'geoint' && <GeoINTPane s={s} patch={patch} />}
-        {section === 'socmint' && <SocmintPane s={s} patch={patch} />}
+    <div className="ga98-settings-with-banner">
+      <img src={settingsBanner} alt="Settings" className="ga98-module-banner" />
+      <div className="ga98-settings-shell">
+        <nav className="ga98-settings-rail" aria-label="Settings sections">
+          {SECTIONS.map((sec) => (
+            <button
+              key={sec.key}
+              className="ga98-settings-rail-item"
+              data-active={section === sec.key}
+              onClick={() => setSection(sec.key)}
+            >
+              <span style={{ display: 'inline-block', width: 18, textAlign: 'center' }} aria-hidden="true">{sec.glyph}</span>
+              <span>{sec.label}</span>
+            </button>
+          ))}
+        </nav>
+        <div className="ga98-settings-pane">
+          {section === 'about' && <AboutPane info={info} />}
+          {section === 'sound' && <SoundPane s={s} patch={patch} />}
+          {section === 'theme' && <ThemePane s={s} patch={patch} />}
+          {section === 'cases' && <CaseFolderPane s={s} patch={patch} />}
+          {section === 'shortcuts' && <ShortcutsPane s={s} setS={setS} latest={latest} patch={patch} />}
+          {section === 'ai' && <AiPane s={s} patch={patch} />}
+          {section === 'browser' && <BrowserPane s={s} patch={patch} />}
+          {section === 'terminal' && <TerminalPane s={s} reload={load} />}
+          {section === 'mail' && <MailPane s={s} patch={patch} />}
+          {section === 'backup' && <BackupPane />}
+          {section === 'security' && <SecurityPane />}
+          {section === 'searchlight' && <SearchlightPane s={s} patch={patch} />}
+          {section === 'geoint' && <GeoINTPane s={s} patch={patch} />}
+          {section === 'socmint' && <SocmintPane s={s} patch={patch} />}
+        </div>
       </div>
     </div>
   );

@@ -918,11 +918,19 @@ input.ga98-text, select.ga98-text {
   to   { transform: translateY(0); opacity: 1; }
 }
 
-/* Settings left-rail layout */
+/* Settings banner + left-rail layout */
+.ga98-settings-with-banner {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
 .ga98-settings-shell {
   display: grid;
   grid-template-columns: 168px 1fr;
-  height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .ga98-settings-rail {
