@@ -13,6 +13,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { JournalEntrySummary } from '@shared/types';
 import { toast } from '../../state/toasts';
 import { confirmDialog } from '../../state/dialogs';
+import journalBanner from '../../assets/journal-jots-banner.png';
 
 function uid(): string { return crypto.randomUUID(); }
 function fmtBytes(n: number): string { return n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} KB`; }
@@ -160,37 +161,40 @@ export function JournalModule(): JSX.Element {
   }) : new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
   return (
-    <div className="ga98-split" style={{ height: '100%' }}>
-      <div className="ga98-pane" style={{ width: 200, flex: '0 0 auto', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ display: 'flex', gap: 4, padding: 4 }}>
-          <button onClick={newEntry} title="Start a new entry">New</button>
+    <div className="ga98-journal">
+      <img src={journalBanner} alt="Journal Jots" className="ga98-module-banner" />
+      <div className="ga98-split" style={{ height: '100%' }}>
+        <div className="ga98-pane" style={{ width: 200, flex: '0 0 auto', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', gap: 4, padding: 4 }}>
+            <button onClick={newEntry} title="Start a new entry">New</button>
+          </div>
+          <ul className="ga98-list" style={{ flex: 1, overflow: 'auto', margin: 0 }}>
+            {entries.length === 0 && <li style={{ color: 'var(--ga98-dim-soft)', fontSize: 11 }}>Empty. Click New, write, then Save.</li>}
+            {entries.map((e) => (
+              <li key={e.id} data-selected={e.id === id} title={`${fmtBytes(e.bytes)} · ${new Date(e.updatedAt).toLocaleString()}`}>
+                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }} onClick={() => void openEntry(e.id)}>{e.title}</span>
+                <button onClick={() => void del(e.id)} style={{ minWidth: 0, padding: '0 5px' }} title="Delete">×</button>
+              </li>
+            ))}
+          </ul>
         </div>
-        <ul className="ga98-list" style={{ flex: 1, overflow: 'auto', margin: 0 }}>
-          {entries.length === 0 && <li style={{ color: 'var(--ga98-dim-soft)', fontSize: 11 }}>Empty. Click New, write, then Save.</li>}
-          {entries.map((e) => (
-            <li key={e.id} data-selected={e.id === id} title={`${fmtBytes(e.bytes)} · ${new Date(e.updatedAt).toLocaleString()}`}>
-              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }} onClick={() => void openEntry(e.id)}>{e.title}</span>
-              <button onClick={() => void del(e.id)} style={{ minWidth: 0, padding: '0 5px' }} title="Delete">×</button>
-            </li>
-          ))}
-        </ul>
-      </div>
-      <div className="ga98-pane" style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-        <div className="ga98-toolbar">
-          <input className="ga98-text" value={title} onChange={(e) => { setTitle(e.target.value); setDirty(true); }} placeholder="entry title" style={{ flex: 1 }} />
-          <button onClick={() => void save()}>{dirty ? 'Save *' : 'Save'}</button>
-          {id && <button onClick={() => void del(id)} title="Delete this entry">Delete</button>}
+        <div className="ga98-pane" style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+          <div className="ga98-toolbar">
+            <input className="ga98-text" value={title} onChange={(e) => { setTitle(e.target.value); setDirty(true); }} placeholder="entry title" style={{ flex: 1 }} />
+            <button onClick={() => void save()}>{dirty ? 'Save *' : 'Save'}</button>
+            {id && <button onClick={() => void del(id)} title="Delete this entry">Delete</button>}
+          </div>
+          <div style={{ padding: '4px 6px', fontSize: 11, color: 'var(--ga98-dim-deep)', borderBottom: '1px solid #808080', fontStyle: 'italic' }}>
+            {headerDate}
+          </div>
+          <textarea
+            className="ga98-text"
+            style={{ flex: 1, resize: 'none', fontFamily: 'Courier New, monospace', fontSize: 12 }}
+            value={body}
+            onChange={(e) => { setBody(e.target.value); setDirty(true); }}
+            placeholder="Dear journal…"
+          />
         </div>
-        <div style={{ padding: '4px 6px', fontSize: 11, color: 'var(--ga98-dim-deep)', borderBottom: '1px solid #808080', fontStyle: 'italic' }}>
-          {headerDate}
-        </div>
-        <textarea
-          className="ga98-text"
-          style={{ flex: 1, resize: 'none', fontFamily: 'Courier New, monospace', fontSize: 12 }}
-          value={body}
-          onChange={(e) => { setBody(e.target.value); setDirty(true); }}
-          placeholder="Dear journal…"
-        />
       </div>
     </div>
   );

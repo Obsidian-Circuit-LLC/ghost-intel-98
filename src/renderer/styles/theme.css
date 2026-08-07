@@ -1670,6 +1670,14 @@ input.ga98-text, select.ga98-text {
 .ga98-sol-win { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 24500; pointer-events: none; }
 .ga98-sol-win .window { pointer-events: auto; }
 
+/* Journal Jots — banner above the entry list/editor split */
+.ga98-journal {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
 /* Full-width module banner header (GhostExodus art batch) */
 .ga98-module-banner {
   display: block;
