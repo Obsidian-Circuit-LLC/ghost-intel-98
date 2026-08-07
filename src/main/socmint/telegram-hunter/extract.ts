@@ -442,6 +442,205 @@ export const TG_MEMBER_SCRIPT = `
   })()
 `;
 
+// ======================================================================
+// TG3 — visible profile fields (honesty-critical)
+// ======================================================================
+
+/**
+ * One raw profile panel as returned by `TG_PROFILE_SCRIPT` (a right-column / user-info
+ * panel or a profile dialog). `avatar` is the image SRC (or an in-page
+ * `canvas.toDataURL()`); the collector resolves a remote SRC to a local `data:`
+ * thumbnail host-restricted to Telegram hosts before normalization, and
+ * `normalizeProfile` admits ONLY a `data:` avatar regardless. `displayName` is the
+ * visible display name — '' when none was shown (NEVER the @handle, and NEVER a page
+ * heading: the source's `||heads[0]` fallback is dropped in the port).
+ */
+export interface RawProfile {
+  /** The visible display name — '' when none was shown (NEVER the @handle). */
+  displayName: string;
+  /** The visible handle as `@handle`, or '' when none was visible. */
+  username: string;
+  /** The visible phone — '' when not shown to this account (never inferred). */
+  phone: string;
+  /** The visible bio / panel text (verbatim, bounded). */
+  bio: string;
+  /** The visible status line (e.g. "last seen recently", "online"), '' when none. */
+  status: string;
+  /** URLs found verbatim in the visible panel text. */
+  links: string[];
+  /** The chat/section title the panel was seen under. */
+  context: string;
+  /** The visible profile link (`https://t.me/<handle>`) — scheme-guarded on normalize. */
+  profileUrl: string;
+  /** The avatar SRC (or an in-page `data:`), resolved to a `data:` thumbnail before storage. */
+  avatar: string;
+}
+
+/**
+ * A captured Telegram profile, honest by construction:
+ *
+ *  - `displayName` is stored ONLY when shown AND not a mere echo of the @handle — it is
+ *    NEVER backfilled from the handle or a page heading (an unobserved name is absent);
+ *  - `phone` is stored ONLY when it was visible to the logged-in account;
+ *  - `accountCreationDate` is ALWAYS `null` and `accountCreationLabel` is a FIXED
+ *    unavailable string — Telegram Web does not expose a reliable creation date and this
+ *    module NEVER infers one (from a first-message timestamp, an id, or anything else);
+ *  - `avatar`, when present, is a local `data:` thumbnail — never a remote URL;
+ *  - `profileUrl`, when present, is a Telegram-host-guarded permalink.
+ * A missing bio/status/context is OMITTED here — the "Not visible" label is a render-time
+ * concern, never fabricated into storage.
+ */
+export interface TgProfile {
+  handle: string;
+  displayName?: string;
+  phone?: string;
+  bio?: string;
+  status?: string;
+  context?: string;
+  links: string[];
+  avatar?: string;
+  profileUrl?: string;
+  /** ALWAYS null — Telegram Web does not expose a reliable account creation date. */
+  accountCreationDate: null;
+  /** The fixed honesty label shown wherever a creation date would appear. */
+  accountCreationLabel: string;
+  /** ISO timestamp supplied by the caller (injected clock) — never computed here. */
+  capturedAt: string;
+}
+
+/**
+ * The FIXED label recorded in place of an account-creation date. Telegram Web does not
+ * expose one; it is never inferred. This constant is the single source of that truth.
+ */
+export const TG_ACCOUNT_CREATION_LABEL = 'Unavailable — Telegram does not expose it';
+
+/**
+ * STATIC payload run in the capture page to read the visible profile panel (a
+ * right-column / user-info panel or a profile dialog). No interpolation — the ONLY
+ * inputs are literal selectors — and NO in-page media fetch (the source fetched the
+ * avatar blob unrestricted; this returns the avatar SRC for host-restricted resolution
+ * in the collector). Returns a single `RawProfile` or `null` when no user panel is
+ * visible. Ported from quarantine `telegram-hunter/src/renderer.js` `extractionScript`
+ * profile block, with the source's `displayName = … || heads[0] || ''` heading fallback
+ * REMOVED (an unobserved display name is left '' — honesty).
+ */
+export const TG_PROFILE_SCRIPT = `
+  (() => {
+    const clean = (v) => (v || '').replace(/\\s+/g, ' ').trim();
+    const raw = (e) => ((e && (e.innerText || e.textContent)) || '').trim();
+    const text = (e) => clean(raw(e));
+    const all = (s) => Array.from(document.querySelectorAll(s));
+    const vis = (e) => !!(e && (e.offsetWidth || e.offsetHeight || e.getClientRects().length));
+    const links = (v) => Array.from(new Set(
+      Array.from(String(v).matchAll(/(?:https?:\\/\\/|t\\.me\\/)[^\\s<>]+/gi))
+        .map((m) => m[0].replace(/[),.;]+$/, ''))
+    ));
+    const avatarSrc = (el) => {
+      if (!el) return '';
+      try {
+        if (el.tagName === 'CANVAS') return el.toDataURL('image/png');
+      } catch (_e) { return ''; }
+      let s = el.currentSrc || el.src || '';
+      if (!s) {
+        const bg = (getComputedStyle(el).backgroundImage) || '';
+        const m = bg.match(/url\\(["']?(.*?)["']?\\)/);
+        s = (m && m[1]) || '';
+      }
+      return s || '';
+    };
+
+    const heads = all('h1,h2,h3,[class*="title"],[class*="Title"]').filter(vis).map(text).filter(Boolean);
+    const chatTitle = heads.find((h) => h.length < 120 && !/Telegram Web|Search|Settings/i.test(h)) || '';
+
+    const visiblePanels = all('[class*="profile"],[class*="Profile"],[class*="user-info"],[class*="UserInfo"],[class*="right-column"],[class*="RightColumn"],[class*="sidebar-right"],[class*="SidebarRight"],[role="dialog"]')
+      .filter(vis)
+      .filter((e) => { const t = text(e); const r = e.getBoundingClientRect(); return t.length > 2 && t.length < 4000 && r.width > 180 && r.width < 850; });
+
+    const panel = visiblePanels.sort((a, b) => {
+      const au = /@\\w{4,32}/.test(text(a)) ? 2 : 0;
+      const bu = /@\\w{4,32}/.test(text(b)) ? 2 : 0;
+      return (bu + Math.min(text(b).length, 800) / 800) - (au + Math.min(text(a).length, 800) / 800);
+    })[0] || null;
+    if (!panel) return null;
+
+    const pt = text(panel);
+    const panelUser = (pt.match(/@[a-zA-Z0-9_]{4,32}/) || [])[0] || '';
+    const panelPhone = (pt.match(/\\+\\d[\\d ()-]{6,20}\\d/) || [])[0] || '';
+    if (!(panelUser || panelPhone || /bio|username|phone|last seen|online/i.test(pt))) return null;
+
+    const panelLines = raw(panel).split(/\\n+/).map(clean).filter(Boolean);
+    // HONESTY: display name = the first non-@handle panel line; NO heads[0] fallback.
+    const displayName = panelLines.find((v) => v && v.length < 100 && !/^@/.test(v)) || '';
+    const status = panelLines.find((v) => /online|last seen|bot|subscriber|member|admin|owner/i.test(v)) || '';
+    const panelImg = panel.querySelector('img[class*="avatar"],img[class*="Avatar"],canvas,[class*="avatar"],[class*="Avatar"],[style*="background-image"]');
+
+    return {
+      displayName: displayName,
+      username: panelUser,
+      phone: panelPhone,
+      bio: pt.slice(0, 1200),
+      status: status,
+      links: links(pt).slice(0, 20),
+      context: chatTitle,
+      profileUrl: panelUser ? ('https://t.me/' + panelUser.replace(/^@/, '')) : '',
+      avatar: avatarSrc(panelImg)
+    };
+  })()
+`;
+
+/**
+ * Map one captured raw profile panel → a `TgProfile`, honesty-stamped and free of any
+ * remote media URL. Pure: the only clock is the injected `ctx.capturedAt`.
+ *
+ *  - the visible display name is stored ONLY when shown AND not a mere echo of the
+ *    @handle — it is NEVER backfilled (the source's heading/handle fallbacks, refused);
+ *  - the phone is stored ONLY when it was visible to the logged-in account;
+ *  - the account-creation date is ALWAYS `null` with a FIXED unavailable label — never inferred;
+ *  - the avatar is admitted ONLY as a local `data:` thumbnail (a remote URL is dropped);
+ *  - the profile permalink is scheme-guarded to Telegram hosts;
+ *  - a missing bio/status/context is OMITTED ("Not visible" is a render concern).
+ */
+export function normalizeProfile(raw: RawProfile, ctx: { capturedAt: string }): TgProfile {
+  const handle = String(raw.username ?? '').trim(); // already '@handle' or ''
+
+  const profile: TgProfile = {
+    handle,
+    links: Array.isArray(raw.links) ? raw.links.map((l) => String(l ?? '')).filter(Boolean) : [],
+    // HONESTY: Telegram Web does not expose a reliable account creation date. It is
+    // recorded as null with a FIXED label and is NEVER inferred from a first-message
+    // timestamp, a numeric id, or any scraped hint.
+    accountCreationDate: null,
+    accountCreationLabel: TG_ACCOUNT_CREATION_LABEL,
+    capturedAt: ctx.capturedAt,
+  };
+
+  // HONESTY: display name stored ONLY when shown AND not merely an echo of the @handle.
+  const display = String(raw.displayName ?? '').trim();
+  const bareHandle = handle.replace(/^@+/, '');
+  if (display && display !== handle && display !== bareHandle) profile.displayName = display;
+
+  const phone = String(raw.phone ?? '').trim();
+  if (phone) profile.phone = phone;
+
+  const bio = String(raw.bio ?? '').trim();
+  if (bio) profile.bio = bio;
+
+  const status = String(raw.status ?? '').trim();
+  if (status) profile.status = status;
+
+  const context = String(raw.context ?? '').trim();
+  if (context) profile.context = context;
+
+  // Avatar admitted ONLY as a local data: thumbnail — a remote URL is DROPPED (beacon guard).
+  const avatar = String(raw.avatar ?? '');
+  if (avatar.startsWith('data:')) profile.avatar = avatar;
+
+  const profileUrl = guardTelegramUrl(String(raw.profileUrl ?? ''));
+  if (profileUrl) profile.profileUrl = profileUrl;
+
+  return profile;
+}
+
 /**
  * Map one captured raw member → a `TgMember`, honesty-stamped and free of any remote
  * media URL. Pure: the only clock is the injected `ctx.capturedAt`.
