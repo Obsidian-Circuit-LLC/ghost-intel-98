@@ -668,10 +668,27 @@ type ContentTab = 'channels' | 'items' | 'wa-setup' | 'capture';
 // lesson requires be reachable and correctly-payloaded.
 // ---------------------------------------------------------------------------
 
+type TgExportFormat = 'json' | 'csv' | 'html';
+type TgExportCollection = 'messages' | 'members' | 'profiles';
+
+/** Deliver a utf8 export payload to disk as a Blob download (no egress, no remote fetch). */
+function downloadTgExport(res: { data: string; mime: string; format: TgExportFormat; collection: TgExportCollection }): void {
+  const ext = res.format === 'html' ? 'html' : res.format;
+  const blob = new Blob([res.data], { type: res.mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `telegram-${res.collection}.${ext}`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function TelegramCapturePanel({ caseId }: { caseId: string }): JSX.Element {
   const [chatId, setChatId] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [exportFormat, setExportFormat] = useState<TgExportFormat>('json');
+  const [exportCollection, setExportCollection] = useState<TgExportCollection>('messages');
 
   const run = useCallback(async (fn: () => Promise<string>) => {
     setBusy(true);
@@ -707,9 +724,14 @@ function TelegramCapturePanel({ caseId }: { caseId: string }): JSX.Element {
   }), [run, caseId]);
 
   const onExport = useCallback(() => run(async () => {
-    const r = await window.api.socmint.telegram.exportItems({ caseId, format: 'json' });
-    return `Exported ${r.count} item(s) as ${r.format.toUpperCase()}.`;
-  }), [run, caseId]);
+    const r = await window.api.socmint.telegram.exportItems({
+      caseId,
+      format: exportFormat,
+      collection: exportCollection,
+    });
+    downloadTgExport({ data: r.data, mime: r.mime, format: r.format, collection: r.collection });
+    return `Exported ${r.count} ${r.collection} item(s) as ${r.format.toUpperCase()}.`;
+  }), [run, caseId, exportFormat, exportCollection]);
 
   return (
     <div className="sm-tg-capture">
@@ -736,6 +758,31 @@ function TelegramCapturePanel({ caseId }: { caseId: string }): JSX.Element {
       <div className="sm-form-row sm-tg-actions">
         <button className="sm-btn" onClick={onCapture} disabled={busy}>Capture Messages</button>
         <button className="sm-btn" onClick={onMembers} disabled={busy}>Capture Members</button>
+      </div>
+      <div className="sm-form-row sm-tg-export">
+        <label htmlFor="sm-tg-export-collection">Export</label>
+        <select
+          id="sm-tg-export-collection"
+          className="sm-input"
+          aria-label="Export collection"
+          value={exportCollection}
+          onChange={(e) => setExportCollection(e.target.value as TgExportCollection)}
+        >
+          <option value="messages">Messages</option>
+          <option value="members">Members</option>
+          <option value="profiles">Profiles</option>
+        </select>
+        <select
+          id="sm-tg-export-format"
+          className="sm-input"
+          aria-label="Export format"
+          value={exportFormat}
+          onChange={(e) => setExportFormat(e.target.value as TgExportFormat)}
+        >
+          <option value="json">JSON</option>
+          <option value="csv">CSV</option>
+          <option value="html">HTML</option>
+        </select>
         <button className="sm-btn" onClick={onExport} disabled={busy}>Export</button>
       </div>
       {message && <div className="sm-tg-status" role="status">{message}</div>}

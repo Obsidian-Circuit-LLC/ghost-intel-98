@@ -62,7 +62,16 @@ function installApi(): void {
     connect: vi.fn().mockResolvedValue({ opened: true }),
     capture: vi.fn().mockResolvedValue({ blocked: false, added: 0, skipped: 0, items: [] }),
     captureMembers: vi.fn().mockResolvedValue({ blocked: false, added: 0, captured: 0, members: [] }),
-    exportItems: vi.fn().mockResolvedValue({ format: 'json', count: 0, encoding: 'utf8', data: '[]' }),
+    // Echo the requested format/collection back so the seam test can prove the renderer
+    // drives them (not a hardcoded json/messages) and the download path stays exercised.
+    exportItems: vi.fn(async (req: { format: string; collection?: string }) => ({
+      format: req.format,
+      collection: req.collection ?? 'messages',
+      count: 0,
+      encoding: 'utf8',
+      data: req.format === 'json' ? '[]' : '',
+      mime: req.format === 'csv' ? 'text/csv' : req.format === 'html' ? 'text/html' : 'application/json',
+    })),
   };
   (globalThis as unknown as { window: { api: unknown } }).window.api = {
     scrapingCases: { list: vi.fn().mockResolvedValue([]), create: vi.fn(), remove: vi.fn() },
@@ -96,6 +105,14 @@ function typeInto(input: HTMLInputElement, value: string): void {
   input.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
+function selectOption(sel: HTMLSelectElement, value: string): Promise<void> {
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value')!.set!;
+  return act(async () => {
+    setter.call(sel, value);
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+}
+
 async function openCaptureTab(): Promise<HTMLElement> {
   await act(async () => { root.render(<SocmintModule caseId={CASE_ID} />); });
   await flush();
@@ -114,6 +131,11 @@ beforeEach(() => {
   useSettings.setState({ settings: { ...defaultSettings } });
   vi.spyOn(console, 'error').mockImplementation(() => {});
   vi.spyOn(console, 'warn').mockImplementation(() => {});
+  // jsdom lacks the Blob-download primitives the export path uses; stub them so the
+  // click reaches window.api and the download never navigates the test document.
+  (URL as unknown as { createObjectURL: unknown }).createObjectURL = vi.fn(() => 'blob:tg');
+  (URL as unknown as { revokeObjectURL: unknown }).revokeObjectURL = vi.fn();
+  vi.spyOn(window.HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
 });
 
 afterEach(() => {
@@ -150,13 +172,53 @@ describe('seam A/C — the SOCMINT Telegram tab drives the Telegram Hunter engin
     expect(payload.caseId).toBe(CASE_ID);
   });
 
-  it('Export sends { caseId, format }', async () => {
+  it('Export defaults to { caseId, format: json, collection: messages }', async () => {
     const panel = await openCaptureTab();
-    await click(buttonByText(panel, /export/i));
+    await click(buttonByText(panel, /^export$/i));
     expect(telegram.exportItems).toHaveBeenCalledTimes(1);
     const payload = telegram.exportItems.mock.calls[0][0] as Record<string, unknown>;
     expect(payload.caseId).toBe(CASE_ID);
     expect(payload.format).toBe('json');
+    expect(payload.collection).toBe('messages');
+  });
+
+  it('the format selector drives CSV — the formula-guarded export is reachable', async () => {
+    const panel = await openCaptureTab();
+    const fmt = panel.querySelector('#sm-tg-export-format') as HTMLSelectElement;
+    await selectOption(fmt, 'csv');
+    await click(buttonByText(panel, /^export$/i));
+    const payload = telegram.exportItems.mock.calls[0][0] as Record<string, unknown>;
+    expect(payload.format).toBe('csv');
+    expect(payload.collection).toBe('messages');
+  });
+
+  it('the format selector drives HTML — the escaped report is reachable', async () => {
+    const panel = await openCaptureTab();
+    const fmt = panel.querySelector('#sm-tg-export-format') as HTMLSelectElement;
+    await selectOption(fmt, 'html');
+    await click(buttonByText(panel, /^export$/i));
+    const payload = telegram.exportItems.mock.calls[0][0] as Record<string, unknown>;
+    expect(payload.format).toBe('html');
+  });
+
+  it('the collection selector drives members and profiles — not only messages', async () => {
+    const panel = await openCaptureTab();
+    const coll = panel.querySelector('#sm-tg-export-collection') as HTMLSelectElement;
+    const fmt = panel.querySelector('#sm-tg-export-format') as HTMLSelectElement;
+
+    await selectOption(coll, 'members');
+    await selectOption(fmt, 'csv');
+    await click(buttonByText(panel, /^export$/i));
+    let payload = telegram.exportItems.mock.calls.at(-1)![0] as Record<string, unknown>;
+    expect(payload.collection).toBe('members');
+    expect(payload.format).toBe('csv');
+
+    await selectOption(coll, 'profiles');
+    await selectOption(fmt, 'html');
+    await click(buttonByText(panel, /^export$/i));
+    payload = telegram.exportItems.mock.calls.at(-1)![0] as Record<string, unknown>;
+    expect(payload.collection).toBe('profiles');
+    expect(payload.format).toBe('html');
   });
 });
 
