@@ -64,10 +64,16 @@ export function guardExternalUrl(u: string): string | null {
  */
 const MEDIA_HOST_ALLOWLIST = ['pbs.twimg.com', 'abs.twimg.com', 'x.com', 'twitter.com'];
 
+/** Telegram media hosts — the ONLY hosts a Telegram capture may fetch media from. A
+ *  scraped avatar SRC pointing anywhere else is a real-IP deanon beacon and is refused
+ *  before any in-page fetch. Passed by Telegram Hunter as `remoteMediaToDataUri`'s
+ *  `allowedHosts` argument; the X path keeps the default X allowlist. */
+export const TELEGRAM_MEDIA_HOSTS = ['web.telegram.org', 't.me', 'telegram.org'] as const;
+
 /** True iff `host` is an allowlisted media host exactly, or a subdomain of one. */
-function mediaHostAllowed(host: string): boolean {
+function mediaHostAllowed(host: string, allowlist: readonly string[]): boolean {
   const h = host.toLowerCase();
-  return MEDIA_HOST_ALLOWLIST.some((allowed) => h === allowed || h.endsWith(`.${allowed}`));
+  return allowlist.some((allowed) => h === allowed || h.endsWith(`.${allowed}`));
 }
 
 /** Lead chars a spreadsheet may interpret as the start of a formula. */
@@ -129,21 +135,23 @@ export function confineImportPath(root: string, rel: string): string | null {
  */
 export async function remoteMediaToDataUri(
   win: MediaCapturePage,
-  url: string
+  url: string,
+  allowedHosts: readonly string[] = MEDIA_HOST_ALLOWLIST
 ): Promise<string | null> {
   const safe = guardExternalUrl(url);
   if (!safe) return null;
 
   // Enforce the media HOST allowlist BEFORE any fetch — a scraped media URL
-  // pointing off X's own hosts is a real-IP deanon beacon and is refused here,
-  // before the capture page ever issues a request.
+  // pointing off the allowed hosts is a real-IP deanon beacon and is refused here,
+  // before the capture page ever issues a request. Callers pass the surface-specific
+  // allowlist (X CDN by default; `TELEGRAM_MEDIA_HOSTS` for Telegram Hunter).
   let host: string;
   try {
     host = new URL(safe).hostname;
   } catch {
     return null;
   }
-  if (!mediaHostAllowed(host)) return null;
+  if (!mediaHostAllowed(host, allowedHosts)) return null;
 
   // Static payload: the ONLY dynamic part is a JSON-encoded string literal, so
   // the scraped URL cannot break out of the string and inject code.
