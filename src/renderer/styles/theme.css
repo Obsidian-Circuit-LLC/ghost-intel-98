@@ -1678,6 +1678,11 @@ input.ga98-text, select.ga98-text {
   overflow: hidden;
 }
 
+/* Journal Jots — block editor pane (reuses Reports' TextBlock/ImageBlock components; the wrapper
+ * below just gives the scroll region + per-block spacing, mirroring .ga98-report-body/.ga98-report-block). */
+.ga98-journal-blocks { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 8px; background: #fff; }
+.ga98-journal-block { margin: 0 0 10px 0; }
+
 /* Journal Jots — PIN unlock screen: form pinned top-left, book illustration fills the rest. */
 .ga98-journal-unlock {
   display: flex;

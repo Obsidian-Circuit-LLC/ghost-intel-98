@@ -11,8 +11,12 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import type { JournalEntrySummary, JournalBlock } from '@shared/types';
+import type { ReportBlock } from '@shared/reports-types';
 import { toast } from '../../state/toasts';
 import { confirmDialog } from '../../state/dialogs';
+import { TextBlock } from '../reports/blocks/TextBlock';
+import { ImageBlock } from '../reports/blocks/ImageBlock';
+import { sanitizeReportHtml } from '../reports/rich-text';
 import journalBanner from '../../assets/journal-jots-banner.png';
 import journalBook from '../../assets/journal-jots-book.png';
 
@@ -20,27 +24,19 @@ function uid(): string { return crypto.randomUUID(); }
 function fmtBytes(n: number): string { return n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} KB`; }
 function isFourDigits(s: string): boolean { return /^[0-9]{4}$/.test(s); }
 
-// ---- plain-text <-> blocks compile-compat bridge -------------------------------------------------
-// The block editor (rich text via Reports' TextBlock, photos via ImageBlock) lands in the very next
-// task of this pass; until then this textarea keeps working against the new `blocks` model by
-// wrapping/unwrapping a single text block. Escapes on write (never interprets typed text as HTML,
-// same posture as the store's legacy-body migration); strips tags + decodes entities on read so
-// both freshly-typed and already-migrated legacy content still display as plain, readable text.
-function plainTextToBlock(text: string): JournalBlock {
-  const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  const html = escaped.split(/\r\n|\r|\n/).map((line) => `<p>${line}</p>`).join('');
-  return { id: uid(), kind: 'text', html };
-}
-function blocksToPlainText(blocks: JournalBlock[]): string {
-  const html = blocks.filter((b) => b.kind === 'text').map((b) => (b as { html: string }).html).join('\n');
-  return html
-    .replace(/<\/p>\s*<p>/g, '\n')
-    .replace(/<\/?p>/g, '')
-    .replace(/<br\s*\/?>/g, '\n')
-    .replace(/&quot;/g, '"')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&amp;/g, '&');
+const IMAGE_MIME = ['image/png', 'image/jpeg'];
+
+/** A fresh, empty entry starts with one empty text block, mirroring ReportEditor's "always a typable
+ *  body" seed. */
+function emptyBlocks(): JournalBlock[] { return [{ id: uid(), kind: 'text', html: '' }]; }
+
+// Read-side sanitize (defense-in-depth): every stored text block's html is re-run through
+// sanitizeReportHtml before it is seeded into the editor for display, so a tampered journal.json
+// can't smuggle a live onerror/javascript: href past main (main has no DOM to sanitize with) into
+// the renderer's contentEditable. TextBlock ALSO sanitizes on every edit — this covers the read path
+// TextBlock's own write-side sanitize doesn't touch.
+function sanitizeBlocksForDisplay(blocks: JournalBlock[]): JournalBlock[] {
+  return blocks.map((b) => (b.kind === 'text' ? { ...b, html: sanitizeReportHtml(b.html) } : b));
 }
 
 type Gate = 'loading' | 'set-pin' | 'locked' | 'open';
@@ -57,9 +53,11 @@ export function JournalModule(): JSX.Element {
   const [entries, setEntries] = useState<JournalEntrySummary[]>([]);
   const [id, setId] = useState<string | null>(null);
   const [title, setTitle] = useState('Untitled');
-  const [body, setBody] = useState('');
+  const [blocks, setBlocks] = useState<JournalBlock[]>(emptyBlocks());
   const [createdAt, setCreatedAt] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
+  // ref → data URL cache for image blocks, resolved from the encrypted journal-assets store.
+  const [assets, setAssets] = useState<Record<string, string>>({});
 
   useEffect(() => {
     void window.api.journal.hasPin().then((has) => setGate(has ? 'locked' : 'set-pin'));
@@ -95,26 +93,89 @@ export function JournalModule(): JSX.Element {
 
   // ---- entry flows -----------------------------------------------------------------------------
 
+  // Resolve every image block's assetRef into the local data-URL cache — mirrors ReportsModule's
+  // loadAssetsFor exactly (main has no DOM; the renderer is where a ref becomes a displayable src).
+  const loadAssetsFor = useCallback(async (bs: JournalBlock[]): Promise<Record<string, string>> => {
+    const refs = new Set<string>();
+    for (const b of bs) if (b.kind === 'image') refs.add(b.assetRef);
+    const map: Record<string, string> = {};
+    for (const ref of refs) {
+      const a = await window.api.journal.getAsset(ref);
+      if (a) map[ref] = a.dataUrl;
+    }
+    return map;
+  }, []);
+
   const openEntry = useCallback(async (entryId: string) => {
     try {
       const e = await window.api.journal.read(entryId);
       if (!e) return;
-      setId(e.id); setTitle(e.title); setBody(blocksToPlainText(e.blocks ?? [])); setCreatedAt(e.createdAt); setDirty(false);
+      const displayBlocks = sanitizeBlocksForDisplay(e.blocks ?? emptyBlocks());
+      setId(e.id); setTitle(e.title); setBlocks(displayBlocks); setCreatedAt(e.createdAt); setDirty(false);
+      setAssets(await loadAssetsFor(displayBlocks));
     } catch (err) { toast.error(`Open failed: ${(err as Error).message}`); }
-  }, []);
+  }, [loadAssetsFor]);
 
   function newEntry(): void {
-    setId(null); setTitle('Untitled'); setBody(''); setCreatedAt(null); setDirty(false);
+    setId(null); setTitle('Untitled'); setBlocks(emptyBlocks()); setCreatedAt(null); setDirty(false); setAssets({});
   }
 
   async function save(): Promise<void> {
     const eid = id ?? uid();
     try {
-      const saved = await window.api.journal.save({ id: eid, title: title.trim() || 'Untitled', blocks: [plainTextToBlock(body)] });
+      const saved = await window.api.journal.save({ id: eid, title: title.trim() || 'Untitled', blocks });
       setId(saved.id); setCreatedAt(saved.createdAt); setDirty(false);
       await refresh();
       toast.success('Entry saved.');
     } catch (err) { toast.error(`Save failed: ${(err as Error).message}`); }
+  }
+
+  // ---- block mutators ----------------------------------------------------------------------------
+
+  function addTextBlock(): void {
+    setBlocks((prev) => [...prev, { id: uid(), kind: 'text', html: '' }]);
+    setDirty(true);
+  }
+
+  function updateTextBlock(blockId: string, html: string): void {
+    setBlocks((prev) => prev.map((b) => (b.id === blockId && b.kind === 'text' ? { ...b, html } : b)));
+    setDirty(true);
+  }
+
+  function updateImageBlock(blockId: string, p: Partial<Extract<ReportBlock, { kind: 'image' }>>): void {
+    setBlocks((prev) => prev.map((b) => (b.id === blockId && b.kind === 'image' ? { ...b, ...p } : b)));
+    setDirty(true);
+  }
+
+  function removeBlock(blockId: string): void {
+    setBlocks((prev) => prev.filter((b) => b.id !== blockId));
+    setDirty(true);
+  }
+
+  // Encrypt one image's bytes into the journal-assets store, cache its preview URL, and append a
+  // photo block — mirrors ReportsModule's addPhotoBytes (bytes never sit in journal.json, only the
+  // assetRef does).
+  const addPhotoBytes = useCallback(async (bytes: number[], mime: string): Promise<void> => {
+    const ref = await window.api.journal.putAsset(bytes, mime);
+    const a = await window.api.journal.getAsset(ref);
+    if (a) setAssets((prev) => ({ ...prev, [ref]: a.dataUrl }));
+    const block: JournalBlock = { id: uid(), kind: 'image', assetRef: ref, widthPct: 60, caption: '' };
+    setBlocks((prev) => [...prev, block]);
+    setDirty(true);
+  }, []);
+
+  async function addPhoto(file: File): Promise<void> {
+    if (!IMAGE_MIME.includes(file.type)) {
+      toast.error('Could not add photo — only PNG/JPEG images are supported.');
+      return;
+    }
+    try {
+      const bytes = Array.from(new Uint8Array(await file.arrayBuffer()));
+      const mime = file.type === 'image/jpeg' ? 'image/jpeg' : 'image/png';
+      await addPhotoBytes(bytes, mime);
+    } catch {
+      toast.error('Could not add photo — image must be a PNG/JPEG under 25 MB.');
+    }
   }
 
   async function del(entryId: string): Promise<void> {
@@ -214,13 +275,34 @@ export function JournalModule(): JSX.Element {
           <div style={{ padding: '4px 6px', fontSize: 11, color: 'var(--ga98-dim-deep)', borderBottom: '1px solid #808080', fontStyle: 'italic' }}>
             {headerDate}
           </div>
-          <textarea
-            className="ga98-text"
-            style={{ flex: 1, resize: 'none', fontFamily: 'Courier New, monospace', fontSize: 12 }}
-            value={body}
-            onChange={(e) => { setBody(e.target.value); setDirty(true); }}
-            placeholder="Dear journal…"
-          />
+          <div className="ga98-toolbar ga98-report-toolbar">
+            <button type="button" onClick={addTextBlock}>+ Text</button>
+            <label className="ga98-report-addphoto">
+              <span>+ Photo</span>
+              <input
+                aria-label="Add photo"
+                type="file"
+                accept="image/png,image/jpeg"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) void addPhoto(f); e.target.value = ''; }}
+              />
+            </label>
+          </div>
+          <div className="ga98-journal-blocks">
+            {blocks.map((b) => (
+              <div key={b.id} className="ga98-journal-block">
+                {b.kind === 'text' ? (
+                  <TextBlock block={b} onChange={(html) => updateTextBlock(b.id, html)} />
+                ) : (
+                  <ImageBlock
+                    block={b}
+                    src={assets[b.assetRef]}
+                    onChange={(p) => updateImageBlock(b.id, p)}
+                    onRemove={() => removeBlock(b.id)}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>
