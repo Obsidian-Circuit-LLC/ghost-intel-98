@@ -1707,13 +1707,17 @@ input.ga98-text, select.ga98-text {
   height: clamp(120px, 16vw, 190px);
   object-fit: cover;
   object-position: center;
-  border-bottom: 2px solid var(--ga98-border-shadow, #808080);
+  border-bottom: 2px solid var(--ga98-shadow-dark);
   flex: 0 0 auto;
 }
 
 /* Briefcase module-specific column wrapper: banner above the shared .ga98-split so the split
  * class itself stays unaffected for its other consumers. */
 .ga98-briefcase { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+/* The shared .ga98-split is height:100%; as a flex child under a banner it would overflow the
+ * column and get clipped. Make it fill the remaining space instead (same fix as .ga98-shred-body). */
+.ga98-briefcase > .ga98-split,
+.ga98-journal > .ga98-split { flex: 1 1 auto; min-height: 0; height: auto; }
 
 /* Shred — banner above a body row: existing list/actions on the left, the SHRED IT panel on
  * the right. .ga98-stack is scoped under .ga98-shred-body so the shared class itself stays
@@ -1728,7 +1732,7 @@ input.ga98-text, select.ga98-text {
   align-items: center;
   gap: 8px;
   padding: 12px;
-  border-left: 2px solid var(--ga98-border-shadow, #808080);
+  border-left: 2px solid var(--ga98-shadow-dark);
   background: var(--ga98-grey);
   color: var(--ga98-text);
   text-align: center;
