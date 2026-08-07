@@ -83,6 +83,17 @@ describe('openTelegramCapture — Tor fail-closed', () => {
     expect(rec.webrtcCalls).toEqual(['disable_non_proxied_udp']);
   });
 
+  it('asks the factory to lock WebRTC BEFORE load via the webRTCIPHandlingPolicy option', async () => {
+    // The primary anonymity fix: the policy is threaded to createCaptureWindow so it
+    // is applied BEFORE loadURL (the post-return call above is a belt-and-braces
+    // re-assert; on its own it would run after navigation because the factory awaits
+    // loadURL). capture-window.test.ts owns the before-load ordering proof.
+    rec.bootstrapped = true;
+    await openTelegramCapture('persist:tg-hunter-default');
+    const opts = rec.createCalls[0]!;
+    expect(opts.webRTCIPHandlingPolicy).toBe('disable_non_proxied_udp');
+  });
+
   it('routes a dead/zero SOCKS port only to the SOCKS rule (no direct)', async () => {
     rec.bootstrapped = true;
     rec.socksPort = 0;

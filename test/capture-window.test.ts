@@ -10,7 +10,9 @@ const rec = vi.hoisted(() => ({
   openHandler: null as ((d: { url: string }) => { action: string }) | null,
   willNavigate: null as ((e: { preventDefault: () => void }, url: string) => void) | null,
   willRedirect: null as ((e: { preventDefault: () => void }, url: string) => void) | null,
+  didStartNav: null as ((...a: unknown[]) => void) | null,
   setProxyArgs: null as Record<string, unknown> | null,
+  webrtcPolicy: null as string | null,
   executeArgs: null as unknown[] | null,
   order: [] as string[]
 }));
@@ -20,6 +22,7 @@ vi.mock('electron', () => {
     webContents: {
       setWindowOpenHandler: (fn: (d: { url: string }) => { action: string }) => void;
       on: (event: string, fn: (...a: unknown[]) => void) => void;
+      setWebRTCIPHandlingPolicy: (policy: string) => void;
       executeJavaScript: (js: string, userGesture?: boolean) => Promise<unknown>;
       loadURL: (u: string) => Promise<void>;
     };
@@ -36,6 +39,13 @@ vi.mock('electron', () => {
           if (event === 'will-redirect') {
             rec.willRedirect = fn as (e: { preventDefault: () => void }, url: string) => void;
           }
+          if (event === 'did-start-navigation') {
+            rec.didStartNav = fn as (...a: unknown[]) => void;
+          }
+        },
+        setWebRTCIPHandlingPolicy: (policy: string) => {
+          rec.webrtcPolicy = policy;
+          rec.order.push('setWebRTC');
         },
         executeJavaScript: (js: string, userGesture?: boolean) => {
           rec.executeArgs = [js, userGesture];
@@ -78,7 +88,9 @@ beforeEach(() => {
   rec.openHandler = null;
   rec.willNavigate = null;
   rec.willRedirect = null;
+  rec.didStartNav = null;
   rec.setProxyArgs = null;
+  rec.webrtcPolicy = null;
   rec.executeArgs = null;
   rec.order = [];
 });
@@ -176,6 +188,50 @@ describe('createCaptureWindow — hardening', () => {
       allowHosts: ['x.com']
     });
     expect(rec.setProxyArgs).toBeNull();
+    expect(rec.order).toEqual(['loadURL']);
+  });
+
+  it('sets the WebRTC IP-handling policy BEFORE loadURL when one is given (anonymity)', async () => {
+    // The Telegram surface must lock WebRTC before the guest navigates, or a
+    // STUN/TURN path can leak the real IP around the SOCKS proxy during the very
+    // first load. Because the factory awaits loadURL, a caller that set the policy
+    // AFTER createCaptureWindow returned would apply it post-navigation — too late.
+    await createCaptureWindow({
+      partition: 'persist:tg',
+      url: 'https://web.telegram.org/k/',
+      allowHosts: ['web.telegram.org'],
+      proxy: { socks: '127.0.0.1:9050' },
+      webRTCIPHandlingPolicy: 'disable_non_proxied_udp'
+    });
+    expect(rec.webrtcPolicy).toBe('disable_non_proxied_udp');
+    // Ordering, the load-bearing assertion: proxy first, WebRTC lock next, THEN load.
+    expect(rec.order).toEqual(['setProxy', 'setWebRTC', 'loadURL']);
+    expect(rec.order.indexOf('setWebRTC')).toBeLessThan(rec.order.indexOf('loadURL'));
+  });
+
+  it('re-asserts the WebRTC policy on later same-webContents navigations', async () => {
+    await createCaptureWindow({
+      partition: 'persist:tg',
+      url: 'https://web.telegram.org/k/',
+      allowHosts: ['web.telegram.org'],
+      webRTCIPHandlingPolicy: 'disable_non_proxied_udp'
+    });
+    expect(rec.didStartNav).toBeTypeOf('function');
+    // A later in-place navigation (e.g. analyst opens a t.me profile) must not
+    // silently drop the lock — the factory re-applies it.
+    rec.webrtcPolicy = null;
+    rec.didStartNav!();
+    expect(rec.webrtcPolicy).toBe('disable_non_proxied_udp');
+  });
+
+  it('does NOT touch WebRTC policy when none is given (X clearnet path unaffected)', async () => {
+    await createCaptureWindow({
+      partition: 'persist:x-listening',
+      url: 'https://x.com/home',
+      allowHosts: ['x.com']
+    });
+    expect(rec.webrtcPolicy).toBeNull();
+    expect(rec.didStartNav).toBeNull();
     expect(rec.order).toEqual(['loadURL']);
   });
 });

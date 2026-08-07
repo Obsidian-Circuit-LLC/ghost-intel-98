@@ -55,13 +55,20 @@ export async function openTelegramCapture(partition: string): Promise<TelegramCa
   // never a direct clearnet request.
   const socks = `127.0.0.1:${tor.socksPort()}`;
 
+  // The WebRTC lock is threaded THROUGH the factory (`webRTCIPHandlingPolicy`) so it
+  // is applied BEFORE the guest navigates — `createCaptureWindow` awaits `loadURL`, so
+  // a policy set only after it returned would land post-navigation and a STUN/TURN path
+  // could leak the real IP around the SOCKS proxy during the first load. The factory also
+  // re-asserts the policy on every later same-webContents navigation.
   const win = await createCaptureWindow({
     partition,
     url: TELEGRAM_URL,
     allowHosts: TELEGRAM_HOSTS,
-    proxy: { socks }
+    proxy: { socks },
+    webRTCIPHandlingPolicy: 'disable_non_proxied_udp'
   });
 
+  // Belt-and-braces re-assert on the returned webContents (idempotent).
   win.webContents.setWebRTCIPHandlingPolicy('disable_non_proxied_udp');
   return { win };
 }
