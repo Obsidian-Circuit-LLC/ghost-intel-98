@@ -49,6 +49,7 @@ import { assertTrustedSender } from '../src/main/capture/capture-window';
 import { channels } from '../src/shared/ipc-contracts';
 import {
   registerTelegramHunterIpc,
+  connectTelegramCapture,
   captureTelegramMessages,
   captureTelegramMembers,
   exportTelegramItems,
@@ -60,6 +61,7 @@ import {
   normalizeMember,
   normalizeProfile,
   TG_ACCOUNT_CREATION_LABEL,
+  TG_PROFILE_SCRIPT,
   type RawMessage,
   type RawMember,
   type RawProfile,
@@ -68,6 +70,8 @@ import {
   tableFor,
   tableToCsv,
   tableToHtml,
+  matchKeywords,
+  TelegramHunterCollector,
 } from '../src/main/socmint/telegram-hunter/collector';
 import {
   TELEGRAM_MEDIA_HOSTS,
@@ -93,7 +97,13 @@ describe('TG-V IPC — every Telegram handler is reachable and frame-guarded', (
     return registered;
   }
 
-  it('registers a handler for EVERY socmint.telegram channel (no dead feature)', () => {
+  // NOTE: this proves only that every DECLARED channel has a handler — it derives its
+  // expectation from the same channel set the handlers register against, so it is CIRCULAR
+  // w.r.t. hollow features: a feature that never got a channel can never make it fail. It is
+  // NOT a reachability proof. The "reachability inventory" describe below is what actually
+  // catches the Plan-A/v3.24.2 hollow-feature class (a feature built + unit-tested but bound
+  // to no channel and no renderer control).
+  it('registers a handler for EVERY declared socmint.telegram channel', () => {
     const registered = registerCaptured();
     const expected = Object.values(channels.socmint.telegram).sort();
     expect([...registered.keys()].sort()).toEqual(expected);
@@ -116,6 +126,105 @@ describe('TG-V IPC — every Telegram handler is reachable and frame-guarded', (
         `${channel} must call assertTrustedSender`,
       ).toHaveBeenCalledTimes(1);
     }
+  });
+});
+
+// ---- 1b. Reachability inventory: NAME the hollow features, don't pass over them ----
+//
+// The TG-V seam bullet requires proving the SOCMINT Telegram tab reaches EVERY built
+// feature. It does not — and the "declared channel" check above is circular, so it can
+// never notice. This inventory is the HAND-AUDITED truth of the whole built feature
+// surface (the seam bullet's list) mapped to the one fact that decides reachability: does
+// an IPC channel carry it from the Telegram tab into main? It is deliberately NOT derived
+// from `channels.socmint.telegram` — deriving it would reintroduce the circularity that
+// hides a channel-less feature.
+//
+// Reachable end-to-end (renderer seam proven separately in tg-hunter-seam.test.tsx):
+//   connect · capture messages · capture members · export
+// Built + unit-tested but bound to NO channel and NO renderer control ⇒ UNREACHABLE from
+// the UI (the Plan-A/v3.24.2 hollow-feature class the standing constraints single out):
+//   • import        — parseTelegramExport (store): zero production callers, no channel.
+//   • keyword-watch — matchKeywords (collector) + the store keyword rules: no channel.
+//   • profile-capture — TG_PROFILE_SCRIPT + normalizeProfile exist, but there is NO
+//     collector orchestrator, NO store, and NO channel; exportItems('profiles') is
+//     honestly empty. Only the extraction half is built.
+//
+// This block is a FORCING FUNCTION: wiring one of the gap features (adding its channel)
+// breaks the "wired set === reachable set" assertion until the inventory is updated to move
+// it into `reachable` — which then also demands a real seam test in tg-hunter-seam.test.tsx.
+// Dropping a reachable channel breaks it symmetrically.
+
+interface TgFeature {
+  /** Contract key under channels.socmint.telegram, or null when no channel carries it. */
+  channel: keyof typeof channels.socmint.telegram | null;
+  /** A built symbol proving the feature's code genuinely exists (not a typo'd ghost). */
+  built: unknown;
+}
+
+const TELEGRAM_FEATURE_REACHABILITY: Record<string, TgFeature> = {
+  // --- reachable from the Telegram tab (channel-carried) ---
+  connect: { channel: 'connect', built: connectTelegramCapture },
+  captureMessages: { channel: 'capture', built: captureTelegramMessages },
+  captureMembers: { channel: 'captureMembers', built: captureTelegramMembers },
+  export: { channel: 'exportItems', built: exportTelegramItems },
+  // --- BUILT but UNREACHABLE (no channel, no renderer control) — the documented gap ---
+  import: { channel: null, built: parseTelegramExport },
+  keywordWatch: { channel: null, built: matchKeywords },
+  profileCapture: { channel: null, built: normalizeProfile },
+};
+
+describe('TG-V reachability inventory — no silent hollow feature', () => {
+  const entries = Object.entries(TELEGRAM_FEATURE_REACHABILITY);
+  const reachable = entries.filter(([, f]) => f.channel !== null);
+  const gap = entries.filter(([, f]) => f.channel === null);
+
+  it('every inventoried feature is real code (the inventory names no ghosts)', () => {
+    for (const [name, f] of entries) {
+      expect(typeof f.built, `${name} must be built code`).toBe('function');
+    }
+  });
+
+  it('the WIRED channel set is EXACTLY the reachable features — no unbacked channel, no channel-less reachable claim', () => {
+    const registered = new Set<string>();
+    registerTelegramHunterIpc({ handle: (channel) => registered.add(channel) });
+
+    const wiredChannelStrings = Object.values(channels.socmint.telegram).sort();
+    const reachableChannelStrings = reachable
+      .map(([, f]) => channels.socmint.telegram[f.channel as keyof typeof channels.socmint.telegram])
+      .sort();
+
+    // hand-audited reachable set === declared channels === actually-registered handlers.
+    expect(reachableChannelStrings).toEqual(wiredChannelStrings);
+    expect([...registered].sort()).toEqual(reachableChannelStrings);
+  });
+
+  it('the gap features (import · keyword-watch · profile-capture) carry NO channel — flagged, not hidden', () => {
+    expect(gap.map(([name]) => name).sort()).toEqual(['import', 'keywordWatch', 'profileCapture']);
+    const channelStrings = new Set(Object.values(channels.socmint.telegram) as string[]);
+    for (const [name, f] of gap) {
+      expect(f.channel, `${name} is a KNOWN hollow feature: it must stay channel-less until wired + seam-tested`).toBeNull();
+      // and no channel string secretly references the gap feature by name.
+      expect([...channelStrings].some((c) => c.toLowerCase().includes(name.toLowerCase()))).toBe(false);
+    }
+  });
+
+  it('profile-capture has no collector orchestrator (only the extraction half is built)', () => {
+    // messages + members each have a capture orchestrator on the collector; profile does not.
+    const proto = TelegramHunterCollector.prototype as Record<string, unknown>;
+    expect(typeof proto.captureMessages).toBe('function');
+    expect(typeof proto.captureGroupMembers).toBe('function');
+    expect(proto.captureProfile).toBeUndefined();
+    expect(proto.captureGroupProfiles).toBeUndefined();
+    // the extraction half exists (page script), which is exactly why the gap is easy to miss.
+    expect(typeof TG_PROFILE_SCRIPT).toBe('string');
+    expect(TG_PROFILE_SCRIPT.length).toBeGreaterThan(0);
+  });
+
+  it('exportItems(profiles) is honestly EMPTY — profile capture never persisted a row', async () => {
+    const res = await exportTelegramItems(VALID_UUID, 'json', 'profiles');
+    expect(res.collection).toBe('profiles');
+    expect(res.count).toBe(0);
+    expect(res.data).toBe('[]');
   });
 });
 
