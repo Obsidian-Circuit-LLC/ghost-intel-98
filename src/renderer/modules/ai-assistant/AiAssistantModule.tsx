@@ -29,6 +29,7 @@ import { stripMarkdown } from './markdown';
 import { groupItemsByScope, formatRecallProvenance, labelForScope } from './memory-view';
 import { appendRecalled } from './recall-inject';
 import { describeSkippedFiles } from './file-notice';
+import qBanner from '../../assets/q-banner.png';
 
 interface DisplayMessage extends AiChatMessage {
   id: string;
@@ -614,7 +615,9 @@ export function AiAssistantModule(): JSX.Element {
   const summaryOnlyScopes = summaryScopes.filter(({ scope }) => !profileGroups.some((g) => g.scope === scope));
 
   return (
-    <div style={{ display: 'flex', height: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <img src={qBanner} alt="Q" className="ga98-module-banner" />
+      <div style={{ display: 'flex', flex: '1 1 auto', minHeight: 0 }}>
       {/* Conversation memory sidebar (ChatGPT-style): new chat, the saved list, delete. */}
       <div className="ga98-pane" style={{ width: 170, flex: '0 0 auto', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <button onClick={newChat} style={{ margin: 4 }} title="Start a new conversation (the current one is saved)">+ New chat</button>
@@ -991,6 +994,7 @@ export function AiAssistantModule(): JSX.Element {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }
