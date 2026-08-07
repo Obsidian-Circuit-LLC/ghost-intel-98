@@ -352,6 +352,12 @@ function ChannelsPanel({
   // @g.us guard: for WhatsApp, group JIDs must end with @g.us.
   // The guard uses a hardcoded literal string check — never new RegExp() on user input.
   const isWhatsApp = platform === 'whatsapp';
+  // Telegram is PULL-only (visible-DOM capture in the Tor window) — there is no startMonitor
+  // and nothing consumes a monitored-channel list for it. The Add-Channel form + "Monitored
+  // Channels" list are a monitor-framed affordance that monitors nothing, so they are HIDDEN
+  // for Telegram; the Monitor section below still shows a pointer to the Capture tab. WhatsApp
+  // (and any future streaming platform) keeps the affordance unchanged.
+  const isTelegram = platform === 'telegram';
   const channelIdTrimmed = newChannelId.trim();
   const waJidInvalid = isWhatsApp && channelIdTrimmed.length > 0 &&
     !channelIdTrimmed.endsWith('@g.us');
@@ -367,7 +373,9 @@ function ChannelsPanel({
 
   return (
     <div className="sm-channels">
-      {/* Add channel form */}
+      {/* Add channel form — HIDDEN for Telegram (pull-only; nothing monitors channels). */}
+      {!isTelegram && (
+      <>
       <section className="sm-section">
         <h3 className="sm-section-title">Add Monitored{isWhatsApp ? ' Group' : ' Channel'}</h3>
         <div className="sm-form-row">
@@ -454,6 +462,8 @@ function ChannelsPanel({
           </ul>
         )}
       </section>
+      </>
+      )}
 
       {/* Monitor controls */}
       <section className="sm-section">

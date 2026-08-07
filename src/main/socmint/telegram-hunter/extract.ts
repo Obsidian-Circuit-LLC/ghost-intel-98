@@ -320,8 +320,13 @@ export function normalizeMessage(raw: RawMessage, ctx: TgNormalizeContext): TgHa
   // echo of the @handle (with or without the leading @) — it is NEVER backfilled from the
   // handle. Parity with normalizeProfile/normalizeMember; an unobserved (or echo) display
   // name is absent, not fabricated.
+  // Case-FOLDED compare: Telegram handles are case-insensitive, so "johndoe" vs "@JohnDoe"
+  // is the SAME identity echoed — a case-sensitive compare would store it as a fabricated
+  // display name. Fold both sides.
   const display = String(raw.author ?? '').trim();
-  if (display && display !== handle && display !== authorId) item.authorDisplay = display;
+  const displayFold = display.toLowerCase();
+  if (display && displayFold !== handle.toLowerCase() && displayFold !== authorId.toLowerCase())
+    item.authorDisplay = display;
 
   const profileUrl = guardTelegramUrl(String(raw.authorProfileUrl ?? ''));
   if (profileUrl) item.authorProfileUrl = profileUrl;
@@ -647,9 +652,12 @@ export function normalizeProfile(raw: RawProfile, ctx: { capturedAt: string }): 
   };
 
   // HONESTY: display name stored ONLY when shown AND not merely an echo of the @handle.
+  // Case-FOLDED: handles are case-insensitive, so "alice" vs "@Alice" is the same echo.
   const display = String(raw.displayName ?? '').trim();
   const bareHandle = handle.replace(/^@+/, '');
-  if (display && display !== handle && display !== bareHandle) profile.displayName = display;
+  const displayFold = display.toLowerCase();
+  if (display && displayFold !== handle.toLowerCase() && displayFold !== bareHandle.toLowerCase())
+    profile.displayName = display;
 
   const phone = String(raw.phone ?? '').trim();
   if (phone) profile.phone = phone;
@@ -688,9 +696,12 @@ export function normalizeMember(raw: RawMember, ctx: { capturedAt: string }): Tg
   const member: TgMember = { handle, capturedAt: ctx.capturedAt };
 
   // HONESTY: display name stored ONLY when shown AND not merely an echo of the @handle.
+  // Case-FOLDED: handles are case-insensitive, so "alice" vs "@Alice" is the same echo.
   const display = String(raw.displayName ?? '').trim();
   const bareHandle = handle.replace(/^@+/, '');
-  if (display && display !== handle && display !== bareHandle) member.displayName = display;
+  const displayFold = display.toLowerCase();
+  if (display && displayFold !== handle.toLowerCase() && displayFold !== bareHandle.toLowerCase())
+    member.displayName = display;
 
   const phone = String(raw.phone ?? '').trim();
   if (phone) member.phone = phone;

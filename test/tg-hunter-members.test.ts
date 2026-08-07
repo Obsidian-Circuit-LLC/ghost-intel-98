@@ -102,6 +102,14 @@ describe('normalizeMember: captured UserCell → TgMember', () => {
     // a displayName that IS just the handle is NOT stored (the source's fallback, refused)
     const echoed = normalizeMember(rawMember({ displayName: '@alice_op' }), { capturedAt: CAP_AT });
     expect(echoed.displayName).toBeUndefined();
+
+    // Case-MISMATCHED echo: handles are case-insensitive, so "ALICE_OP" / "@Alice_OP" against
+    // "@alice_op" is the SAME identity echoed — a case-sensitive guard would fabricate a
+    // display name. The compare must be case-folded.
+    const echoCIbare = normalizeMember(rawMember({ displayName: 'ALICE_OP' }), { capturedAt: CAP_AT });
+    expect(echoCIbare.displayName).toBeUndefined();
+    const echoCIat = normalizeMember(rawMember({ displayName: '@Alice_OP' }), { capturedAt: CAP_AT });
+    expect(echoCIat.displayName).toBeUndefined();
   });
 
   it('admits an avatar ONLY as a local data: thumbnail — a remote URL is dropped', () => {

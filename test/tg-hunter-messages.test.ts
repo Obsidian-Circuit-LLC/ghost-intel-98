@@ -171,6 +171,17 @@ describe('normalizeMessage: captured DOM → HarvestedItem', () => {
     expect(real.authorDisplay).toBe('Jane Doe');
   });
 
+  it('SUPPRESSES a CASE-MISMATCHED echo of the @handle (handles are case-insensitive)', () => {
+    // Telegram handles are case-insensitive: a visible sender "JANE_OP" against handle
+    // "@jane_op" is the SAME identity echoed, not a distinct display name. A case-SENSITIVE
+    // guard would store it as a fabricated echo — the compare must be case-folded.
+    const echoBareCI = normalizeMessage(rawMessage({ author: 'JANE_OP' }), CTX);
+    expect(echoBareCI.authorDisplay).toBeUndefined();
+
+    const echoAtCI = normalizeMessage(rawMessage({ author: '@Jane_OP' }), CTX);
+    expect(echoAtCI.authorDisplay).toBeUndefined();
+  });
+
   it('scheme-guards the visible profile permalink to Telegram hosts', () => {
     const item = normalizeMessage(rawMessage({ authorProfileUrl: 'https://t.me/jane_op' }), CTX);
     expect(item.url).toBe('https://t.me/jane_op');

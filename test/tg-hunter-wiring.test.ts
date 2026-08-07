@@ -76,6 +76,11 @@ describe('TG-V wiring — importTelegramExport (parseTelegramExport is reachable
       readTextFile: async () => JSON.stringify(EXPORT),
       now: () => '2026-02-02T00:00:00.000Z',
       store: async () => store,
+      // The shared-store seams (imported messages reach Harvested Items) are exercised in
+      // tg-hunter-import-shared-store.test.ts; here they are inert so these audit-set
+      // assertions stay focused on the per-tool import record.
+      listTelegramItems: async () => [],
+      upsertItems: async () => ({ added: 0, skipped: 0 }),
     };
   }
 

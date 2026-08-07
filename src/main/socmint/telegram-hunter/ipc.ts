@@ -30,6 +30,9 @@ import {
   tableFor,
   tableToCsv,
   tableToHtml,
+  dedupItems,
+  dedupKeyForItem,
+  TG_COLLECTOR_VERSION,
   type TgCaptureRequest,
   type TgMemberCaptureRequest,
   type TgProfileCaptureRequest,
@@ -39,7 +42,8 @@ import {
   type TgExportFormat,
   type TgExportCollection,
 } from './collector';
-import type { TgHunterStore, TgKeywordRule } from './store';
+import { normalizeMessage, type RawMessage } from './extract';
+import type { TgHunterStore, TgKeywordRule, ImportedItem } from './store';
 
 /** The single live Telegram capture collector, reused across connect() calls. */
 let collector: TelegramHunterCollector | null = null;
@@ -237,6 +241,12 @@ export interface TgImportDeps {
   now(): string;
   /** The encrypt-at-rest imports store (injected so tests never touch electron/secure-fs). */
   store(): Promise<TgHunterStore>;
+  /** The case's existing Telegram items in the SHARED socmint store (telegram-filtered) —
+   *  read for content-based cross-source dedup (captured ⟷ imported become one record). */
+  listTelegramItems(caseId: string): Promise<HarvestedItem[]>;
+  /** Upsert normalized imported messages into the SHARED socmint case store (the same store
+   *  live capture writes) — id-deduped, so imported messages reach Harvested Items/exports/scans. */
+  upsertItems(caseId: string, items: HarvestedItem[]): Promise<{ added: number; skipped: number }>;
 }
 
 async function defaultPickExportFile(): Promise<string | null> {
@@ -262,7 +272,37 @@ const prodImportDeps: TgImportDeps = {
     const { prodTgHunterStore } = await import('./store');
     return prodTgHunterStore();
   },
+  listTelegramItems: async (caseId) => {
+    const { listItems } = await import('../store');
+    return (await listItems(caseId)).filter((it) => it.platform === 'telegram');
+  },
+  upsertItems: async (caseId, items) => {
+    const { upsertItems } = await import('../store');
+    return upsertItems(caseId, items);
+  },
 };
+
+/**
+ * Adapt one parsed `ImportedItem` (Telegram Desktop export) into the `RawMessage` shape the
+ * shared honesty normalizer consumes. A Desktop export carries a display name (`from`) but no
+ * @handle and no avatar — so `authorUsername`/`authorProfileUrl`/`avatar` are '' (honest: no
+ * fabricated handle/permalink), and `normalizeMessage` derives a DETERMINISTIC content-keyed
+ * id, keeping the visible display name only when it is not a mere echo of an (absent) handle.
+ */
+function importedToRaw(item: ImportedItem): RawMessage {
+  return {
+    chat: item.chatName,
+    author: item.author,
+    authorUsername: '',
+    authorProfileUrl: '',
+    timestamp: item.timestamp,
+    text: item.text,
+    links: Array.isArray(item.links) ? item.links : [],
+    avatar: '',
+    eventType: '',
+    messageId: item.messageId,
+  };
+}
 
 /**
  * Import an operator-picked Telegram Desktop `result.json` export into the encrypted per-case
@@ -297,6 +337,7 @@ export async function importTelegramExport(
   // never a clock-derived id): the store dedups by (sourceFile, id).
   const name = basename(file);
   const store = await deps.store();
+  // Keep the import SET as an audit record (which file, which messages, when)…
   const setCount = await store.imports.add(caseId, {
     id: name,
     name,
@@ -304,6 +345,39 @@ export async function importTelegramExport(
     items,
     importedAt: deps.now(),
   });
+
+  // …but the messages themselves MUST reach the SHARED socmint case store — the same store
+  // live capture writes (collector.ts) — so imported messages show up in Harvested Items,
+  // exports, and keyword scans. Normalize each ImportedItem into an honesty-stamped
+  // HarvestedItem (platform telegram, visible-capture, verified:false), collapse duplicates
+  // WITHIN the batch by content key (`dedupItems`/`dedupKeyForItem`), then drop any whose
+  // content already exists in the case (a live-captured message OR a previously imported one)
+  // so a captured message and the same imported message become ONE record — the persistent
+  // `store.dedup` index records the seen content keys for the cross-source guarantee.
+  const harvestedAt = deps.now();
+  const normalized = items.map((it) =>
+    normalizeMessage(importedToRaw(it), {
+      caseId,
+      jobId: name,
+      collectorVersion: TG_COLLECTOR_VERSION,
+      harvestedAt,
+      channelId: it.chatId,
+      channelLabel: it.chatName,
+    }),
+  );
+  const batch = dedupItems(normalized, dedupKeyForItem);
+  const seen = new Set<string>((await deps.listTelegramItems(caseId)).map((it) => dedupKeyForItem(it)));
+  for (const k of await store.dedup.read(caseId)) seen.add(k);
+  const fresh: HarvestedItem[] = [];
+  for (const h of batch) {
+    const k = dedupKeyForItem(h);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    await store.dedup.add(caseId, k);
+    fresh.push(h);
+  }
+  if (fresh.length > 0) await deps.upsertItems(caseId, fresh);
+
   return { canceled: false, name, itemCount: items.length, setCount };
 }
 

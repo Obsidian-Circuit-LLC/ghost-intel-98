@@ -96,6 +96,14 @@ describe('normalizeProfile: captured panel → TgProfile', () => {
     expect(echoedAt.displayName).toBeUndefined();
     const echoedBare = normalizeProfile(rawProfile({ displayName: 'alice_op' }), { capturedAt: CAP_AT });
     expect(echoedBare.displayName).toBeUndefined();
+
+    // Case-MISMATCHED echo: Telegram handles are case-insensitive, so "ALICE_OP" / "@Alice_OP"
+    // against "@alice_op" is the SAME identity — a case-sensitive guard would store it as a
+    // fabricated display name. The compare must be case-folded.
+    const echoCIbare = normalizeProfile(rawProfile({ displayName: 'ALICE_OP' }), { capturedAt: CAP_AT });
+    expect(echoCIbare.displayName).toBeUndefined();
+    const echoCIat = normalizeProfile(rawProfile({ displayName: '@Alice_OP' }), { capturedAt: CAP_AT });
+    expect(echoCIat.displayName).toBeUndefined();
   });
 
   it('records account-creation as null with a fixed unavailable label — NEVER inferred', () => {
