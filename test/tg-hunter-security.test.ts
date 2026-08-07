@@ -140,14 +140,16 @@ describe('TG-V IPC — every Telegram handler is reachable and frame-guarded', (
 // hides a channel-less feature.
 //
 // Reachable end-to-end (renderer seam proven separately in tg-hunter-seam.test.tsx):
-//   connect · capture messages · capture members · export
+//   connect · capture messages · capture members · export · import · keyword-watch scan
+//   - import        — parseTelegramExport (store), carried by socmint:telegram:importExport;
+//                     the operator picks a local export, the LFI-guarded parser persists it.
+//   - keyword-watch — matchKeywords (collector) + the encrypt-at-rest keyword rules, carried
+//                     by socmint:telegram:keywordScan; the tab adds terms and scans captures.
 // Built + unit-tested but bound to NO channel and NO renderer control ⇒ UNREACHABLE from
 // the UI (the Plan-A/v3.24.2 hollow-feature class the standing constraints single out):
-//   • import        — parseTelegramExport (store): zero production callers, no channel.
-//   • keyword-watch — matchKeywords (collector) + the store keyword rules: no channel.
 //   • profile-capture — TG_PROFILE_SCRIPT + normalizeProfile exist, but there is NO
-//     collector orchestrator, NO store, and NO channel; exportItems('profiles') is
-//     honestly empty. Only the extraction half is built.
+//     collector orchestrator, NO store, and NO channel; the Profiles export option was
+//     dropped from the tab. Only the extraction half is built — the sole documented gap.
 //
 // This block is a FORCING FUNCTION: wiring one of the gap features (adding its channel)
 // breaks the "wired set === reachable set" assertion until the inventory is updated to move
@@ -167,9 +169,9 @@ const TELEGRAM_FEATURE_REACHABILITY: Record<string, TgFeature> = {
   captureMessages: { channel: 'capture', built: captureTelegramMessages },
   captureMembers: { channel: 'captureMembers', built: captureTelegramMembers },
   export: { channel: 'exportItems', built: exportTelegramItems },
+  import: { channel: 'importExport', built: parseTelegramExport },
+  keywordWatch: { channel: 'keywordScan', built: matchKeywords },
   // --- BUILT but UNREACHABLE (no channel, no renderer control) — the documented gap ---
-  import: { channel: null, built: parseTelegramExport },
-  keywordWatch: { channel: null, built: matchKeywords },
   profileCapture: { channel: null, built: normalizeProfile },
 };
 
@@ -198,8 +200,8 @@ describe('TG-V reachability inventory — no silent hollow feature', () => {
     expect([...registered].sort()).toEqual(reachableChannelStrings);
   });
 
-  it('the gap features (import · keyword-watch · profile-capture) carry NO channel — flagged, not hidden', () => {
-    expect(gap.map(([name]) => name).sort()).toEqual(['import', 'keywordWatch', 'profileCapture']);
+  it('the gap feature (profile-capture) carries NO channel — flagged, not hidden', () => {
+    expect(gap.map(([name]) => name).sort()).toEqual(['profileCapture']);
     const channelStrings = new Set(Object.values(channels.socmint.telegram) as string[]);
     for (const [name, f] of gap) {
       expect(f.channel, `${name} is a KNOWN hollow feature: it must stay channel-less until wired + seam-tested`).toBeNull();

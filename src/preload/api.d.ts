@@ -753,12 +753,12 @@ export interface GhostApi {
       captureMembers(req: { caseId: string }): Promise<{
         blocked: boolean; reason?: string; added: number; captured: number; members: unknown[];
       }>;
-      /** Export a captured Telegram collection (messages/members/profiles) as JSON, formula-guarded
+      /** Export a captured Telegram collection (messages/members) as JSON, formula-guarded
        *  CSV, or an HTML-escaped report. `collection` defaults to messages. */
       exportItems(req: {
         caseId: string;
         format: 'json' | 'csv' | 'html';
-        collection?: 'messages' | 'members' | 'profiles';
+        collection?: 'messages' | 'members';
       }): Promise<{
         format: 'json' | 'csv' | 'html';
         collection: 'messages' | 'members' | 'profiles';
@@ -766,6 +766,23 @@ export interface GhostApi {
         encoding: 'utf8';
         data: string;
         mime: string;
+      }>;
+      /** Import an operator-picked Telegram Desktop JSON export (LFI-guarded parse) into the
+       *  encrypted per-case imports store. `canceled` when the file picker was dismissed. */
+      importExport(req: { caseId: string }): Promise<{
+        canceled: boolean;
+        name?: string;
+        itemCount?: number;
+        setCount?: number;
+      }>;
+      /** Persist literal keyword-watch terms (no RegExp on input) and scan the case's captured
+       *  Telegram messages for matches. Returns the full term set + scanned/matched counts + a
+       *  bounded, visible-fields-only preview. */
+      keywordScan(req: { caseId: string; terms?: string[] }): Promise<{
+        rules: Array<{ term: string; addedAt: string; caseSensitive?: boolean; exactPhrase?: boolean }>;
+        scanned: number;
+        matched: number;
+        matches: Array<{ text: string; authorHandle: string; channelLabel: string; terms: string[] }>;
       }>;
     };
   };

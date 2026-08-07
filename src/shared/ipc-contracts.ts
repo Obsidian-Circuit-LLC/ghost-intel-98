@@ -526,8 +526,12 @@ export const channels = {
       capture: 'socmint:telegram:capture',
       /** Capture the visible group/channel members → encrypted members store (no fabricated total). */
       captureMembers: 'socmint:telegram:captureMembers',
-      /** Export a captured Telegram collection (messages/members/profiles) as JSON, formula-guarded CSV, or an HTML-escaped report. */
-      exportItems: 'socmint:telegram:exportItems'
+      /** Export a captured Telegram collection (messages/members) as JSON, formula-guarded CSV, or an HTML-escaped report. */
+      exportItems: 'socmint:telegram:exportItems',
+      /** Import a Telegram Desktop JSON export (operator-picked file); LFI-guarded parse → encrypted imports store. */
+      importExport: 'socmint:telegram:importExport',
+      /** Persist literal keyword-watch terms + scan the case's captured messages for matches (no RegExp on input). */
+      keywordScan: 'socmint:telegram:keywordScan'
     }
   },
   // X Listening Station (Plan A) — visible-DOM capture of an authenticated X session in a

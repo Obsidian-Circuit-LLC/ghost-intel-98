@@ -684,7 +684,9 @@ const api = {
       capture: (req: unknown) => ipcRenderer.invoke(channels.socmint.telegram.capture, req),
       captureMembers: (req: unknown) =>
         ipcRenderer.invoke(channels.socmint.telegram.captureMembers, req),
-      exportItems: (req: unknown) => ipcRenderer.invoke(channels.socmint.telegram.exportItems, req)
+      exportItems: (req: unknown) => ipcRenderer.invoke(channels.socmint.telegram.exportItems, req),
+      importExport: (req: unknown) => ipcRenderer.invoke(channels.socmint.telegram.importExport, req),
+      keywordScan: (req: unknown) => ipcRenderer.invoke(channels.socmint.telegram.keywordScan, req)
     },
     /**
      * Subscribe to live harvested items streamed from an active monitor session.

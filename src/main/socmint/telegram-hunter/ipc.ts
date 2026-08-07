@@ -20,6 +20,7 @@
  */
 
 import { channels } from '@shared/ipc-contracts';
+import type { HarvestedItem } from '@shared/socmint/types';
 import { assertTrustedSender } from '../../capture/capture-window';
 import { ensureUuid } from '../../security/validate';
 import {
@@ -34,6 +35,7 @@ import {
   type TgExportFormat,
   type TgExportCollection,
 } from './collector';
+import type { TgHunterStore, TgKeywordRule } from './store';
 
 /** The single live Telegram capture collector, reused across connect() calls. */
 let collector: TelegramHunterCollector | null = null;
@@ -187,6 +189,179 @@ function isTgExportCollection(v: unknown): v is TgExportCollection {
   return v === 'messages' || v === 'members' || v === 'profiles';
 }
 
+// ---- import (Telegram Desktop JSON export → encrypted imports store) -----
+
+export interface TgImportResult {
+  /** True when the operator dismissed the file picker — nothing was imported (honest, not an error). */
+  canceled: boolean;
+  /** Source filename (basename), present only on a completed import. */
+  name?: string;
+  /** How many messages the LFI-guarded parser actually extracted from the export. */
+  itemCount?: number;
+  /** Total import sets held by the case after this one (deduped by source file). */
+  setCount?: number;
+}
+
+/**
+ * Seam the import handler needs so tests never open a real dialog / touch the filesystem.
+ * Production wiring (`prodImportDeps`) lazily imports electron/node so importing this module
+ * never evaluates them.
+ */
+export interface TgImportDeps {
+  /** Show the native open-file picker; resolves to an absolute path or null when canceled. */
+  pickExportFile(): Promise<string | null>;
+  /** Read the picked file as utf8 text. */
+  readTextFile(path: string): Promise<string>;
+  /** ISO clock for `importedAt` — injected so tests are deterministic. */
+  now(): string;
+  /** The encrypt-at-rest imports store (injected so tests never touch electron/secure-fs). */
+  store(): Promise<TgHunterStore>;
+}
+
+async function defaultPickExportFile(): Promise<string | null> {
+  const { dialog, BrowserWindow } = await import('electron');
+  const opts = {
+    properties: ['openFile'] as Array<'openFile'>,
+    filters: [{ name: 'Telegram Desktop export', extensions: ['json'] }],
+  };
+  const win = BrowserWindow.getFocusedWindow();
+  const res = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
+  if (res.canceled || res.filePaths.length === 0) return null;
+  return res.filePaths[0];
+}
+
+const prodImportDeps: TgImportDeps = {
+  pickExportFile: defaultPickExportFile,
+  readTextFile: async (p) => {
+    const { readFile } = await import('node:fs/promises');
+    return (await readFile(p)).toString('utf8');
+  },
+  now: () => new Date().toISOString(),
+  store: async () => {
+    const { prodTgHunterStore } = await import('./store');
+    return prodTgHunterStore();
+  },
+};
+
+/**
+ * Import an operator-picked Telegram Desktop `result.json` export into the encrypted per-case
+ * imports store. The parse is the LFI-hardened `parseTelegramExport` — media that escapes the
+ * chosen export root (the file's own directory) is DROPPED, never dereferenced. No egress: the
+ * operator picks a LOCAL file; nothing is fetched. `itemCount`/`setCount` are honest counts.
+ */
+export async function importTelegramExport(
+  reqArg: unknown,
+  deps: TgImportDeps = prodImportDeps,
+): Promise<TgImportResult> {
+  const req = reqArg as { caseId?: unknown } | undefined;
+  if (!req || typeof req.caseId !== 'string') {
+    throw new Error('Importing a Telegram export requires a caseId.');
+  }
+  // UUID-gate the caseId BEFORE any store path is built (matches every peer handler).
+  const caseId = ensureUuid(req.caseId, 'caseId');
+  const file = await deps.pickExportFile();
+  if (!file) return { canceled: true };
+  const { dirname, basename } = await import('node:path');
+  const root = dirname(file);
+  const raw = await deps.readTextFile(file);
+  let json: unknown;
+  try {
+    json = JSON.parse(raw);
+  } catch {
+    throw new Error('The selected file is not a valid Telegram Desktop JSON export.');
+  }
+  const { parseTelegramExport } = await import('./store');
+  const items = parseTelegramExport(root, json);
+  // id === sourceFile basename so re-importing the same export UPSERTS (deterministic key,
+  // never a clock-derived id): the store dedups by (sourceFile, id).
+  const name = basename(file);
+  const store = await deps.store();
+  const setCount = await store.imports.add(caseId, {
+    id: name,
+    name,
+    sourceFile: file,
+    items,
+    importedAt: deps.now(),
+  });
+  return { canceled: false, name, itemCount: items.length, setCount };
+}
+
+// ---- keyword-watch (persist literal terms + scan captured messages) ------
+
+export interface TgKeywordMatch {
+  text: string;
+  authorHandle: string;
+  channelLabel: string;
+  /** Which watch terms this record literally matched. */
+  terms: string[];
+}
+
+export interface TgKeywordScanResult {
+  /** The full persisted watch-term set after this call (each matched LITERALLY, no RegExp). */
+  rules: TgKeywordRule[];
+  /** How many captured Telegram messages were scanned. */
+  scanned: number;
+  /** How many of them matched at least one term. */
+  matched: number;
+  /** A bounded preview of the matches (visible fields only). */
+  matches: TgKeywordMatch[];
+}
+
+/** Seam so the scan handler can be unit-tested without the electron/store graph. */
+export interface TgKeywordScanDeps {
+  now(): string;
+  /** The case's captured Telegram messages (already telegram-filtered). */
+  listTelegramItems(caseId: string): Promise<HarvestedItem[]>;
+  store(): Promise<TgHunterStore>;
+}
+
+const prodKeywordScanDeps: TgKeywordScanDeps = {
+  now: () => new Date().toISOString(),
+  listTelegramItems: async (caseId) => {
+    const { listItems } = await import('../store');
+    return (await listItems(caseId)).filter((it) => it.platform === 'telegram');
+  },
+  store: async () => {
+    const { prodTgHunterStore } = await import('./store');
+    return prodTgHunterStore();
+  },
+};
+
+/**
+ * Persist any new literal keyword-watch terms, then scan the case's captured Telegram messages
+ * against the FULL persisted term set. Matching is `matchKeywords` — a literal `.includes`, never
+ * `new RegExp` on operator input (ReDoS/injection). Reports only what was scanned/matched; the
+ * preview carries visible fields only. Never fabricates a match or a count.
+ */
+export async function scanTelegramKeywords(
+  reqArg: unknown,
+  deps: TgKeywordScanDeps = prodKeywordScanDeps,
+): Promise<TgKeywordScanResult> {
+  const req = reqArg as { caseId?: unknown; terms?: unknown } | undefined;
+  if (!req || typeof req.caseId !== 'string') {
+    throw new Error('Scanning Telegram keywords requires a caseId.');
+  }
+  const caseId = ensureUuid(req.caseId, 'caseId');
+  const store = await deps.store();
+  const addedAt = deps.now();
+  const terms = Array.isArray(req.terms) ? req.terms : [];
+  for (const t of terms) {
+    const term = typeof t === 'string' ? t.trim() : '';
+    if (term) await store.keywordWatch.add(caseId, term, addedAt);
+  }
+  const rules = await store.keywordWatch.read(caseId);
+  const items = await deps.listTelegramItems(caseId);
+  const { matchKeywords } = await import('./collector');
+  const hits = matchKeywords(items, rules);
+  const matches: TgKeywordMatch[] = hits.slice(0, 200).map(({ record, hits: rhits }) => ({
+    text: record.text,
+    authorHandle: record.authorHandle,
+    channelLabel: record.channelLabel,
+    terms: rhits.map((r) => r.term),
+  }));
+  return { rules, scanned: items.length, matched: hits.length, matches };
+}
+
 type HandleWithEvent = (
   channel: string,
   fn: (e: Electron.IpcMainInvokeEvent, ...args: unknown[]) => unknown,
@@ -224,5 +399,13 @@ export function registerTelegramHunterIpc(deps: { handle: HandleWithEvent }): vo
       throw new Error("Exporting Telegram items requires a collection ('messages', 'members', or 'profiles').");
     }
     return exportTelegramItems(req.caseId, req.format, req.collection ?? 'messages');
+  });
+  deps.handle(channels.socmint.telegram.importExport, (e, reqArg) => {
+    assertTrustedSender(e);
+    return importTelegramExport(reqArg);
+  });
+  deps.handle(channels.socmint.telegram.keywordScan, (e, reqArg) => {
+    assertTrustedSender(e);
+    return scanTelegramKeywords(reqArg);
   });
 }

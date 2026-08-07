@@ -669,10 +669,13 @@ type ContentTab = 'channels' | 'items' | 'wa-setup' | 'capture';
 // ---------------------------------------------------------------------------
 
 type TgExportFormat = 'json' | 'csv' | 'html';
-type TgExportCollection = 'messages' | 'members' | 'profiles';
+// Profiles is intentionally NOT offered: profile capture is an unwired, documented gap
+// (no collector orchestrator, no store), so an export would always be empty. Offering a
+// hollow option that returns nothing is the honesty defect the standing constraints bar.
+type TgExportCollection = 'messages' | 'members';
 
 /** Deliver a utf8 export payload to disk as a Blob download (no egress, no remote fetch). */
-function downloadTgExport(res: { data: string; mime: string; format: TgExportFormat; collection: TgExportCollection }): void {
+function downloadTgExport(res: { data: string; mime: string; format: TgExportFormat; collection: string }): void {
   const ext = res.format === 'html' ? 'html' : res.format;
   const blob = new Blob([res.data], { type: res.mime });
   const url = URL.createObjectURL(blob);
@@ -689,6 +692,7 @@ function TelegramCapturePanel({ caseId }: { caseId: string }): JSX.Element {
   const [message, setMessage] = useState<string | null>(null);
   const [exportFormat, setExportFormat] = useState<TgExportFormat>('json');
   const [exportCollection, setExportCollection] = useState<TgExportCollection>('messages');
+  const [keywordInput, setKeywordInput] = useState('');
 
   const run = useCallback(async (fn: () => Promise<string>) => {
     setBusy(true);
@@ -733,6 +737,20 @@ function TelegramCapturePanel({ caseId }: { caseId: string }): JSX.Element {
     return `Exported ${r.count} ${r.collection} item(s) as ${r.format.toUpperCase()}.`;
   }), [run, caseId, exportFormat, exportCollection]);
 
+  const onImport = useCallback(() => run(async () => {
+    const r = await window.api.socmint.telegram.importExport({ caseId });
+    if (r.canceled) return 'Import canceled — no file selected.';
+    return `Imported ${r.itemCount ?? 0} message(s) from ${r.name ?? 'export'} (${r.setCount ?? 0} import set(s) total).`;
+  }), [run, caseId]);
+
+  const onKeywordScan = useCallback(() => run(async () => {
+    // Split on newline OR comma; the main side matches each term LITERALLY (no RegExp).
+    const terms = keywordInput.split(/[\n,]/).map((t) => t.trim()).filter(Boolean);
+    const r = await window.api.socmint.telegram.keywordScan({ caseId, terms });
+    const watched = r.rules.map((rule) => rule.term).join(', ') || '(none)';
+    return `Watching ${r.rules.length} term(s): ${watched}. Scanned ${r.scanned} message(s) — ${r.matched} matched.`;
+  }), [run, caseId, keywordInput]);
+
   return (
     <div className="sm-tg-capture">
       <h3 className="sm-section-title">Telegram Capture (Tor · visible-only)</h3>
@@ -770,7 +788,6 @@ function TelegramCapturePanel({ caseId }: { caseId: string }): JSX.Element {
         >
           <option value="messages">Messages</option>
           <option value="members">Members</option>
-          <option value="profiles">Profiles</option>
         </select>
         <select
           id="sm-tg-export-format"
@@ -784,6 +801,31 @@ function TelegramCapturePanel({ caseId }: { caseId: string }): JSX.Element {
           <option value="html">HTML</option>
         </select>
         <button className="sm-btn" onClick={onExport} disabled={busy}>Export</button>
+      </div>
+      <div className="sm-form-row sm-tg-import">
+        <label>Import Telegram Desktop export</label>
+        <button className="sm-btn" onClick={onImport} disabled={busy}>Import JSON export…</button>
+      </div>
+      <div className="sm-tg-keyword">
+        <h4 className="sm-section-title">Keyword watch (literal match)</h4>
+        <p className="sm-hint">
+          Terms are matched literally against captured messages — no pattern/RegExp is compiled
+          from what you type. One per line or comma-separated.
+        </p>
+        <div className="sm-form-row">
+          <textarea
+            id="sm-tg-keywords"
+            className="sm-input"
+            aria-label="Keyword watch terms"
+            rows={3}
+            value={keywordInput}
+            placeholder={'e.g.\nwallet drainer\nseed phrase'}
+            onChange={(e) => setKeywordInput(e.target.value)}
+          />
+        </div>
+        <div className="sm-form-row">
+          <button className="sm-btn" onClick={onKeywordScan} disabled={busy}>Add &amp; Scan captured</button>
+        </div>
       </div>
       {message && <div className="sm-tg-status" role="status">{message}</div>}
     </div>

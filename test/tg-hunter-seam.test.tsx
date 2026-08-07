@@ -55,6 +55,8 @@ let telegram: {
   capture: ReturnType<typeof vi.fn>;
   captureMembers: ReturnType<typeof vi.fn>;
   exportItems: ReturnType<typeof vi.fn>;
+  importExport: ReturnType<typeof vi.fn>;
+  keywordScan: ReturnType<typeof vi.fn>;
 };
 
 function installApi(): void {
@@ -72,6 +74,13 @@ function installApi(): void {
       data: req.format === 'json' ? '[]' : '',
       mime: req.format === 'csv' ? 'text/csv' : req.format === 'html' ? 'text/html' : 'application/json',
     })),
+    importExport: vi.fn().mockResolvedValue({ canceled: false, name: 'result.json', itemCount: 3, setCount: 1 }),
+    keywordScan: vi.fn().mockResolvedValue({
+      rules: [{ term: 'wallet', addedAt: '2026-01-01T00:00:00.000Z' }],
+      scanned: 5,
+      matched: 2,
+      matches: [],
+    }),
   };
   (globalThis as unknown as { window: { api: unknown } }).window.api = {
     scrapingCases: { list: vi.fn().mockResolvedValue([]), create: vi.fn(), remove: vi.fn() },
@@ -103,6 +112,12 @@ function typeInto(input: HTMLInputElement, value: string): void {
   const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
   setter.call(input, value);
   input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function typeIntoTextarea(ta: HTMLTextAreaElement, value: string): void {
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!;
+  setter.call(ta, value);
+  ta.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
 function selectOption(sel: HTMLSelectElement, value: string): Promise<void> {
@@ -201,7 +216,7 @@ describe('seam A/C — the SOCMINT Telegram tab drives the Telegram Hunter engin
     expect(payload.format).toBe('html');
   });
 
-  it('the collection selector drives members and profiles — not only messages', async () => {
+  it('the collection selector drives members — not only messages', async () => {
     const panel = await openCaptureTab();
     const coll = panel.querySelector('#sm-tg-export-collection') as HTMLSelectElement;
     const fmt = panel.querySelector('#sm-tg-export-format') as HTMLSelectElement;
@@ -209,16 +224,36 @@ describe('seam A/C — the SOCMINT Telegram tab drives the Telegram Hunter engin
     await selectOption(coll, 'members');
     await selectOption(fmt, 'csv');
     await click(buttonByText(panel, /^export$/i));
-    let payload = telegram.exportItems.mock.calls.at(-1)![0] as Record<string, unknown>;
+    const payload = telegram.exportItems.mock.calls.at(-1)![0] as Record<string, unknown>;
     expect(payload.collection).toBe('members');
     expect(payload.format).toBe('csv');
+  });
 
-    await selectOption(coll, 'profiles');
-    await selectOption(fmt, 'html');
-    await click(buttonByText(panel, /^export$/i));
-    payload = telegram.exportItems.mock.calls.at(-1)![0] as Record<string, unknown>;
-    expect(payload.collection).toBe('profiles');
-    expect(payload.format).toBe('html');
+  it('the hollow Profiles export option is GONE — the tab offers only real collections', async () => {
+    const panel = await openCaptureTab();
+    const coll = panel.querySelector('#sm-tg-export-collection') as HTMLSelectElement;
+    const values = Array.from(coll.querySelectorAll('option')).map((o) => o.value);
+    expect(values).toEqual(['messages', 'members']);
+    expect(values).not.toContain('profiles');
+  });
+
+  it('Import flows to window.api.socmint.telegram.importExport({ caseId }) — parseTelegramExport is reachable', async () => {
+    const panel = await openCaptureTab();
+    await click(buttonByText(panel, /import json export/i));
+    expect(telegram.importExport).toHaveBeenCalledTimes(1);
+    const payload = telegram.importExport.mock.calls[0][0] as Record<string, unknown>;
+    expect(payload.caseId).toBe(CASE_ID);
+  });
+
+  it('Keyword scan sends { caseId, terms } (split on newline/comma) — matchKeywords is reachable', async () => {
+    const panel = await openCaptureTab();
+    const ta = panel.querySelector('#sm-tg-keywords') as HTMLTextAreaElement;
+    typeIntoTextarea(ta, 'wallet drainer\nseed phrase, mixer');
+    await click(buttonByText(panel, /add & scan|add &amp; scan|scan captured/i));
+    expect(telegram.keywordScan).toHaveBeenCalledTimes(1);
+    const payload = telegram.keywordScan.mock.calls[0][0] as { caseId: string; terms: string[] };
+    expect(payload.caseId).toBe(CASE_ID);
+    expect(payload.terms).toEqual(['wallet drainer', 'seed phrase', 'mixer']);
   });
 });
 
