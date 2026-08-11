@@ -61,8 +61,11 @@ export function guardExternalUrl(u: string): string | null {
  * the capture page fetch it and beacon the analyst's real IP to the observed
  * account. This allowlist is enforced BEFORE any in-page fetch to close that
  * deanon vector. A subdomain of an allowed host is also permitted.
- */
-const MEDIA_HOST_ALLOWLIST = ['pbs.twimg.com', 'abs.twimg.com', 'x.com', 'twitter.com'];
+ *
+ * Exported (Task 9, `x-listening/media.ts`) so the media-caching seam passes it
+ * explicitly into `remoteMediaToDataUri` rather than relying on the default
+ * parameter — the allowlist stays a named, auditable value at both call sites. */
+export const MEDIA_HOST_ALLOWLIST = ['pbs.twimg.com', 'abs.twimg.com', 'x.com', 'twitter.com'];
 
 /** Telegram media hosts — the ONLY hosts a Telegram capture may fetch media from. A
  *  scraped avatar SRC pointing anywhere else is a real-IP deanon beacon and is refused
