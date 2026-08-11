@@ -16,6 +16,7 @@ import { LocalAiPane } from './LocalAiPane';
 import { playMailNotify, clearMailChimeCache } from '../../audio/synth';
 import logoUrl from '../../assets/logo.png';
 import settingsBanner from '../../assets/settings-banner.png';
+import settingsBannerBlur from '../../assets/settings-banner-blur.jpg';
 import { THEMES } from '../../styles/themes';
 
 type SectionKey = 'about' | 'sound' | 'theme' | 'cases' | 'shortcuts' | 'ai' | 'browser' | 'terminal' | 'mail' | 'backup' | 'security' | 'searchlight' | 'geoint' | 'socmint';
@@ -97,7 +98,7 @@ export function SettingsModule(): JSX.Element {
 
   return (
     <div className="ga98-settings-with-banner">
-      <img src={settingsBanner} alt="Settings" className="ga98-module-banner ga98-banner-settings" />
+      <img src={settingsBanner} alt="Settings" className="ga98-module-banner ga98-banner-settings" style={{ backgroundImage: `url(${settingsBannerBlur})` }} />
       <div className="ga98-settings-shell">
         <nav className="ga98-settings-rail" aria-label="Settings sections">
           {SECTIONS.map((sec) => (

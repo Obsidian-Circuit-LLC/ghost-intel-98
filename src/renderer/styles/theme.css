@@ -1719,7 +1719,13 @@ input.ga98-text, select.ga98-text {
   height: clamp(120px, 16vw, 190px);
   object-fit: contain;
   object-position: center;
-  background: var(--ga98-banner-bg, var(--ga98-grey));
+  /* Ambient edge-bleed: a blurred, zoomed copy of the banner (set per-module inline as
+   * background-image) fills the letterbox behind the crisp contain-fit art, so the sides bleed the
+   * image's own colours smoothly instead of showing a flat band. --ga98-banner-bg is the fallback. */
+  background-color: var(--ga98-banner-bg, var(--ga98-grey));
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
   border-bottom: 2px solid var(--ga98-shadow-dark);
   flex: 0 0 auto;
 }

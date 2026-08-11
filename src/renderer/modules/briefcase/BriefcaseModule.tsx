@@ -9,6 +9,7 @@ import type { BriefcaseNoteSummary } from '@shared/post-mvp-types';
 import { toast } from '../../state/toasts';
 import { confirmDialog } from '../../state/dialogs';
 import briefcaseBanner from '../../assets/briefcase-banner.png';
+import briefcaseBannerBlur from '../../assets/briefcase-banner-blur.jpg';
 
 function uid(): string { return crypto.randomUUID(); }
 function fmtBytes(n: number): string { return n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} KB`; }
@@ -92,7 +93,7 @@ export function BriefcaseModule({ initialNoteId }: { initialNoteId?: string } = 
 
   return (
     <div className="ga98-briefcase">
-      <img src={briefcaseBanner} alt="Briefcase" className="ga98-module-banner ga98-banner-briefcase" />
+      <img src={briefcaseBanner} alt="Briefcase" className="ga98-module-banner ga98-banner-briefcase" style={{ backgroundImage: `url(${briefcaseBannerBlur})` }} />
       <div className="ga98-split" style={{ height: '100%' }}>
       <div className="ga98-pane" style={{ width: 200, flex: '0 0 auto', display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', gap: 4, padding: 4 }}>
