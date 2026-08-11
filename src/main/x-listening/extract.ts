@@ -3,8 +3,9 @@
  *
  * PURE and quarantine-clean: this module imports only `node:crypto`, the shared
  * `HarvestedItem` TYPE, the network artifact TYPES from `./store` (type-only, erased
- * at runtime), and `csvCell` from the sibling `../capture/security` (itself
- * node:path-only) — no electron, no bgconn/Tor/socmint/telegram:
+ * at runtime), `csvCell` from the sibling `../capture/security` (itself node:path-only),
+ * and `relationshipEvidenceHash` from the sibling `./evidence` (itself `node:crypto`-only)
+ * — no electron, no bgconn/Tor/socmint/telegram:
  *
  *  1. `X_POST_SCRIPT` — the STATIC in-page payload the capture window runs via
  *     `executeJavaScript`. Ported verbatim-in-intent from quarantine
@@ -33,6 +34,7 @@ import { createHash } from 'node:crypto';
 import type { HarvestedItem } from '@shared/socmint/types';
 import { csvCell } from '../capture/security';
 import type { XNetworkAccount, XNetworkArtifact } from './store';
+import { relationshipEvidenceHash } from './evidence';
 
 // ---- captured-DOM raw shape --------------------------------------------
 
@@ -511,14 +513,27 @@ export function normalizeUserCell(raw: RawUserCell): XNetworkAccount | null {
  * `capturedAt` is the caller's injected clock. Port + honesty-fix of quarantine
  * `ingestRelationships` (`electron/main.cjs:1013-1044`), which mutated shared
  * app-state and sorted; here it is a pure function returning a fresh artifact.
+ *
+ * Task 7: every account is stamped with an `evidenceHash` (sha256 of
+ * `canonicalRelationshipEvidence`, evidence.ts — changes if the target/kind/handle/
+ * displayName/bio change) and `firstObservedAt`/`lastObservedAt` both set to this scan's
+ * `capturedAt` — a fresh, single-scan observation. The PERSISTENCE layer
+ * (`store.ts`'s `networks.save`) is what turns a sequence of these into an accumulator:
+ * it preserves an existing account's original `firstObservedAt` across re-observations
+ * and — conservatively — never drops an account absent from a later scan. `opts.synthetic`
+ * (Task 12) stamps every account `synthetic: true` for demo/seeded data; omitted (the
+ * default) for a real capture, so `synthetic` never appears on a real observation.
  */
 export function normalizeNetwork(
   rows: readonly RawUserCell[] | undefined,
   target: string,
   kind: 'followers' | 'following',
   capturedAt: string,
+  opts: { synthetic?: boolean } = {},
 ): XNetworkArtifact {
   const seen = new Set<string>();
+  const t = String(target ?? '').replace(/^@+/, '');
+  const fullTarget = `@${t}`;
   const accounts: XNetworkAccount[] = [];
   for (const raw of rows ?? []) {
     const account = normalizeUserCell(raw);
@@ -526,10 +541,22 @@ export function normalizeNetwork(
     const key = account.handle.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
-    accounts.push(account);
+    const evidenceHash = relationshipEvidenceHash({
+      target: fullTarget,
+      kind,
+      handle: account.handle,
+      displayName: account.displayName,
+      bio: account.bio,
+    });
+    accounts.push({
+      ...account,
+      evidenceHash,
+      firstObservedAt: capturedAt,
+      lastObservedAt: capturedAt,
+      ...(opts.synthetic ? { synthetic: true as const } : {}),
+    });
   }
-  const t = String(target ?? '').replace(/^@+/, '');
-  return { target: `@${t}`, kind, accounts, capturedAt };
+  return { target: fullTarget, kind, accounts, capturedAt };
 }
 
 /** CSV columns for a follower/following network export. */

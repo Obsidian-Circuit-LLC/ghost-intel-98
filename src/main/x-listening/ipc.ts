@@ -88,6 +88,7 @@ import {
   computeNetworkAnalysis,
   deriveCollectionHealth,
   extractEntities,
+  flattenNetworkArtifacts,
   type AnalysisProfile,
   type AnalysisRelationship
 } from './analysis';
@@ -1435,36 +1436,17 @@ async function loadClearnetEnabled(): Promise<boolean> {
 }
 
 /**
- * Flatten a case's captured `networks` artifacts (store.ts) into the `AnalysisProfile[]` /
- * `AnalysisRelationship[]` shape `computeNetworkAnalysis` (analysis.ts, Task 2) consumes. One
- * `XNetworkArtifact` per (target, kind) becomes one tracked profile (keyed by `target`) plus
- * one relationship row per captured account. Until Task 7 lands network capture this is
- * honestly empty for every case — the channel is wired now so the renderer's Network tab is
- * real end-to-end wiring, not a hollow placeholder.
+ * Read a case's captured `networks` artifacts (store.ts, accumulated by Task 7's
+ * `networks.save`) and flatten them into the `AnalysisProfile[]` / `AnalysisRelationship[]`
+ * shape `computeNetworkAnalysis` (analysis.ts, Task 2) consumes — the actual flattening is
+ * the pure `flattenNetworkArtifacts` (analysis.ts, Task 7); this is just the store read.
  */
 async function buildNetworkAnalysisInputs(
   caseId: string
 ): Promise<{ profiles: AnalysisProfile[]; relationships: AnalysisRelationship[] }> {
   const store = await prodXStore();
   const artifacts = await store.networks.read(caseId);
-  const profiles = new Map<string, AnalysisProfile>();
-  const relationships: AnalysisRelationship[] = [];
-  for (const artifact of artifacts) {
-    const id = String(artifact.target ?? '');
-    if (!id) continue;
-    if (!profiles.has(id)) profiles.set(id, { id, username: artifact.target });
-    for (const account of artifact.accounts ?? []) {
-      relationships.push({
-        profileId: id,
-        relationship: artifact.kind === 'followers' ? 'follower' : 'following',
-        username: account.handle,
-        displayName: account.displayName,
-        bio: account.bio,
-        avatar: account.avatar
-      });
-    }
-  }
-  return { profiles: [...profiles.values()], relationships };
+  return flattenNetworkArtifacts(artifacts);
 }
 
 /**

@@ -37,12 +37,30 @@ export interface XNote {
  *  thumbnail — a remote URL must never be stored here (no-remote-media-inlining).
  *  `displayName` is OPTIONAL and omitted when no display name was visible — it is never
  *  backfilled from the @handle (honesty: an unobserved value is never presented as
- *  captured; the renderer shows an absent display name as "Not visible"). */
+ *  captured; the renderer shows an absent display name as "Not visible").
+ *
+ *  Task 7 fields (optional so pre-Task-7 literals in older tests/fixtures stay valid —
+ *  every account produced by `extract.ts`'s `normalizeNetwork` sets all three):
+ *   - `evidenceHash`: sha256 of `canonicalRelationshipEvidence({target,kind,handle,
+ *     displayName,bio})` (evidence.ts) — changes if any of those visible fields change.
+ *   - `firstObservedAt`/`lastObservedAt`: the accumulator's conservative bookkeeping
+ *     (`networks.save`, below). `firstObservedAt` is stamped once, on the scan that first
+ *     saw this handle for this (target,kind), and never rewritten by a later scan.
+ *     `lastObservedAt` advances only on a scan that actually RE-observes the handle. An
+ *     account absent from a later scan keeps both fields exactly as they were — its record
+ *     is never dropped, edited, or labelled "unfollowed"/"removed" (conservative,
+ *     not-fabricating inference; see NETWORK-COLLECTION.md "Interpreting network deltas").
+ *   - `synthetic`: true for a demo/seeded row (Task 12) — enforced-excluded from
+ *     `computeNetworkAnalysis`/exports/evidence hashing by the callers that consume it. */
 export interface XNetworkAccount {
   handle: string;
   displayName?: string;
   avatar?: string;
   bio?: string;
+  evidenceHash?: string;
+  firstObservedAt?: string;
+  lastObservedAt?: string;
+  synthetic?: boolean;
 }
 
 /** A captured follower/following list for one target — the ACTUAL visible accounts, never a
@@ -167,6 +185,41 @@ function isEnoent(e: unknown): boolean {
   return (e as NodeJS.ErrnoException)?.code === 'ENOENT';
 }
 
+/**
+ * Merge a freshly captured account list into the PERSISTED account list for the same
+ * (target, kind) artifact — the Task 7 accumulator. Dedup key is the lowercased @handle
+ * (i.e. the (target, kind, handle) triple, target+kind already fixed by the artifact this
+ * runs within — mirrors "dedup by (profileId, relationship, username)").
+ *
+ * CONSERVATIVE (no auto-unfollow inference): an account present in `existing` but absent
+ * from `incoming` — not re-observed on this scan — is carried into the result UNCHANGED.
+ * It is never dropped, never edited, and nothing here computes or stamps any
+ * "unfollowed"/"removed" status; its absence just means the scan didn't happen to (re-)see
+ * it, which is not evidence of anything (NETWORK-COLLECTION.md "Interpreting network
+ * deltas"). An account re-observed this scan keeps its ORIGINAL `firstObservedAt` but takes
+ * every other field — including `lastObservedAt` — from the fresh capture (the caller,
+ * `normalizeNetwork`, stamps `firstObservedAt`/`lastObservedAt` to the same `capturedAt` on
+ * every freshly normalized account, so a genuinely new account's first/last are both "now").
+ */
+function mergeNetworkAccounts(
+  existing: readonly XNetworkAccount[],
+  incoming: readonly XNetworkAccount[],
+): XNetworkAccount[] {
+  const priorByHandle = new Map(existing.map((a) => [a.handle.toLowerCase(), a]));
+  const seenThisScan = new Set<string>();
+  const merged: XNetworkAccount[] = [];
+  for (const acct of incoming) {
+    const key = acct.handle.toLowerCase();
+    seenThisScan.add(key);
+    const prior = priorByHandle.get(key);
+    merged.push(prior?.firstObservedAt ? { ...acct, firstObservedAt: prior.firstObservedAt } : acct);
+  }
+  for (const prior of existing) {
+    if (!seenThisScan.has(prior.handle.toLowerCase())) merged.push(prior);
+  }
+  return merged;
+}
+
 async function readJsonArr<T>(deps: Pick<XStoreDeps, 'readFile'>, path: string): Promise<T[]> {
   try {
     const buf = await deps.readFile(path);
@@ -203,9 +256,13 @@ export interface XStore {
     read(caseId: string): Promise<XNetworkArtifact[]>;
     write(caseId: string, networks: XNetworkArtifact[]): Promise<void>;
     /**
-     * Upsert one captured network artifact, keyed by (target, kind) case-insensitively
-     * — a re-capture of the same target's followers replaces the prior snapshot rather
-     * than duplicating it. Returns the total artifact count for the case. */
+     * Upsert one captured network artifact, keyed by (target, kind) case-insensitively —
+     * a re-capture of the same target's followers/following ACCUMULATES into the prior
+     * snapshot (Task 7 `mergeNetworkAccounts`, module-private) rather than replacing it:
+     * accounts re-observed this scan are refreshed (keeping their original
+     * `firstObservedAt`), accounts newly seen are added, and accounts from a prior scan
+     * NOT seen this time are carried over unchanged — conservative, no auto-unfollow
+     * inference. Returns the total artifact count for the case. */
     save(caseId: string, artifact: XNetworkArtifact): Promise<number>;
   };
   archiveState: {
@@ -307,8 +364,14 @@ export function makeXStore(deps: XStoreDeps): XStore {
           const idx = existing.findIndex(
             (a) => String(a.target ?? '').toLowerCase() === target && a.kind === artifact.kind,
           );
-          if (idx >= 0) existing[idx] = artifact;
-          else existing.push(artifact);
+          if (idx >= 0) {
+            existing[idx] = {
+              ...artifact,
+              accounts: mergeNetworkAccounts(existing[idx].accounts ?? [], artifact.accounts ?? []),
+            };
+          } else {
+            existing.push(artifact);
+          }
           await writeJson(deps, deps.networksPath(caseId), existing);
           return existing.length;
         });

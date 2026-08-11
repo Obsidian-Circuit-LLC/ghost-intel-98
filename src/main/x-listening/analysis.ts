@@ -18,6 +18,7 @@
  * `synthetic` profiles/relationships out itself, defense-in-depth, so a caller that forgets
  * to pre-filter still can't taint the analysis.
  */
+import type { XNetworkArtifact } from './store';
 
 // ---- entity extraction ----------------------------------------------------
 
@@ -189,6 +190,46 @@ interface IdentityAccumulator {
   profileIds: Set<string>;
   firstObservedAt: string | null;
   lastObservedAt: string | null;
+}
+
+/**
+ * Flatten a case's captured `networks` artifacts (store.ts `XNetworkArtifact[]`, as
+ * accumulated by `store.ts`'s `networks.save`) into the `AnalysisProfile[]` /
+ * `AnalysisRelationship[]` shape `computeNetworkAnalysis` consumes (Task 7). One artifact
+ * — one (target, kind) pair — contributes one tracked profile (keyed by `target`) plus one
+ * relationship row per captured account, `kind:'followers'`→`relationship:'follower'` /
+ * `'following'`→`'following'`. Every account field that exists on the Task 7 accumulator
+ * (`evidenceHash` is intentionally NOT carried — `computeNetworkAnalysis` never consumes
+ * it, and `AnalysisRelationship` has no such field) is propagated: `firstObservedAt` /
+ * `lastObservedAt` feed the identity roll-up's own first/last-seen columns, and `synthetic`
+ * is propagated so a demo/seeded account (Task 12) is excluded by
+ * `computeNetworkAnalysis`'s own `synthetic` filter even if a caller forgets to pre-filter.
+ * PURE — no store I/O; the caller does the read.
+ */
+export function flattenNetworkArtifacts(
+  artifacts: readonly XNetworkArtifact[],
+): { profiles: AnalysisProfile[]; relationships: AnalysisRelationship[] } {
+  const profiles = new Map<string, AnalysisProfile>();
+  const relationships: AnalysisRelationship[] = [];
+  for (const artifact of artifacts) {
+    const id = String(artifact.target ?? '');
+    if (!id) continue;
+    if (!profiles.has(id)) profiles.set(id, { id, username: artifact.target });
+    for (const account of artifact.accounts ?? []) {
+      relationships.push({
+        profileId: id,
+        relationship: artifact.kind === 'followers' ? 'follower' : 'following',
+        username: account.handle,
+        displayName: account.displayName,
+        bio: account.bio,
+        avatar: account.avatar,
+        firstObservedAt: account.firstObservedAt ?? null,
+        lastObservedAt: account.lastObservedAt ?? null,
+        ...(account.synthetic ? { synthetic: true as const } : {}),
+      });
+    }
+  }
+  return { profiles: [...profiles.values()], relationships };
 }
 
 /**

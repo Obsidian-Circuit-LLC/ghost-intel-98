@@ -151,6 +151,47 @@ describe('normalizeNetwork', () => {
   });
 });
 
+// ---- Task 7: evidenceHash + first/lastObservedAt + synthetic -----------
+
+describe('normalizeNetwork — evidence hash + accumulator stamps (Task 7)', () => {
+  const rows = [cell({ username: 'alice', displayName: 'Alice', bio: 'analyst' })];
+
+  it('stamps every account with an evidenceHash and first/lastObservedAt == capturedAt', () => {
+    const art = normalizeNetwork(rows, 'target', 'followers', '2026-08-11T12:00:00.000Z');
+    const [alice] = art.accounts;
+    expect(alice.evidenceHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(alice.firstObservedAt).toBe('2026-08-11T12:00:00.000Z');
+    expect(alice.lastObservedAt).toBe('2026-08-11T12:00:00.000Z');
+  });
+
+  it('evidenceHash is a pure function of (target, kind, handle, displayName, bio) — changes when the visible bio changes', () => {
+    const a = normalizeNetwork(rows, 'target', 'followers', 't1').accounts[0];
+    const changedBio = normalizeNetwork(
+      [cell({ username: 'alice', displayName: 'Alice', bio: 'DIFFERENT bio' })],
+      'target', 'followers', 't1',
+    ).accounts[0];
+    expect(changedBio.evidenceHash).not.toBe(a.evidenceHash);
+    // ...but is identical across two capture RUNS that saw the exact same visible fields
+    // (evidenceHash must not depend on capturedAt, or a re-scan of an unchanged account
+    // would spuriously invalidate its own evidence trail).
+    const rescan = normalizeNetwork(rows, 'target', 'followers', 't2-much-later').accounts[0];
+    expect(rescan.evidenceHash).toBe(a.evidenceHash);
+  });
+
+  it('evidenceHash differs between followers and following for the same target/handle (kind is evidentiary)', () => {
+    const followers = normalizeNetwork(rows, 'target', 'followers', 't1').accounts[0];
+    const following = normalizeNetwork(rows, 'target', 'following', 't1').accounts[0];
+    expect(followers.evidenceHash).not.toBe(following.evidenceHash);
+  });
+
+  it('opts.synthetic stamps every account synthetic:true; a real capture never sets it', () => {
+    const real = normalizeNetwork(rows, 'target', 'followers', 't1').accounts[0];
+    expect(real.synthetic).toBeUndefined();
+    const demo = normalizeNetwork(rows, 'target', 'followers', 't1', { synthetic: true }).accounts[0];
+    expect(demo.synthetic).toBe(true);
+  });
+});
+
 // ---- 3. CSV export: every cell formula-guarded -------------------------
 
 describe('networkToCsv', () => {

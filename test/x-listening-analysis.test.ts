@@ -22,10 +22,12 @@ import {
   extractEntities,
   computeNetworkAnalysis,
   deriveCollectionHealth,
+  flattenNetworkArtifacts,
   type AnalysisProfile,
   type AnalysisRelationship,
   type XCollectionRun,
 } from '../src/main/x-listening/analysis';
+import type { XNetworkArtifact } from '../src/main/x-listening/store';
 
 describe('extractEntities', () => {
   it('extracts a mention', () => {
@@ -280,5 +282,63 @@ describe('deriveCollectionHealth', () => {
 
   it('returns [] for no runs', () => {
     expect(deriveCollectionHealth([])).toEqual([]);
+  });
+});
+
+// ---- Task 7: flattenNetworkArtifacts ------------------------------------
+
+describe('flattenNetworkArtifacts', () => {
+  const artifacts: XNetworkArtifact[] = [
+    {
+      target: '@target',
+      kind: 'followers',
+      capturedAt: '2026-08-11T00:00:00.000Z',
+      accounts: [
+        {
+          handle: '@alice',
+          displayName: 'Alice',
+          bio: 'analyst',
+          evidenceHash: 'ev-1',
+          firstObservedAt: '2026-08-10T00:00:00.000Z',
+          lastObservedAt: '2026-08-11T00:00:00.000Z',
+        },
+      ],
+    },
+    {
+      target: '@target',
+      kind: 'following',
+      capturedAt: '2026-08-11T00:00:00.000Z',
+      accounts: [
+        { handle: '@carol', evidenceHash: 'ev-2', firstObservedAt: 't1', lastObservedAt: 't1' },
+        { handle: '@demoacct', evidenceHash: 'ev-3', firstObservedAt: 't1', lastObservedAt: 't1', synthetic: true },
+      ],
+    },
+  ];
+
+  it('produces one profile per target and maps kind followers/following -> relationship follower/following', () => {
+    const { profiles, relationships } = flattenNetworkArtifacts(artifacts);
+    expect(profiles).toEqual([{ id: '@target', username: '@target' }]);
+    expect(relationships.find((r) => r.username === '@alice')!.relationship).toBe('follower');
+    expect(relationships.find((r) => r.username === '@carol')!.relationship).toBe('following');
+  });
+
+  it('propagates firstObservedAt/lastObservedAt onto each relationship row', () => {
+    const { relationships } = flattenNetworkArtifacts(artifacts);
+    const alice = relationships.find((r) => r.username === '@alice')!;
+    expect(alice.firstObservedAt).toBe('2026-08-10T00:00:00.000Z');
+    expect(alice.lastObservedAt).toBe('2026-08-11T00:00:00.000Z');
+  });
+
+  it('propagates synthetic so a demo account is excluded by computeNetworkAnalysis even without pre-filtering', () => {
+    const { profiles, relationships } = flattenNetworkArtifacts(artifacts);
+    const demo = relationships.find((r) => r.username === '@demoacct')!;
+    expect(demo.synthetic).toBe(true);
+    const out = computeNetworkAnalysis(profiles, relationships, '2026-08-11T00:00:00.000Z');
+    expect(out.identities.map((i) => i.username)).not.toContain('@demoacct');
+    expect(out.identities.map((i) => i.username).sort()).toEqual(['@alice', '@carol']);
+  });
+
+  it('returns empty profiles/relationships for no artifacts (honest, not hollow)', () => {
+    expect(flattenNetworkArtifacts([])).toEqual({ profiles: [], relationships: [] });
   });
 });

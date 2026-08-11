@@ -22,6 +22,7 @@ import {
   type XStoreDeps,
   type XNote,
   type XNetworkArtifact,
+  type XNetworkAccount,
   type XArchiveState,
   type XPostArtifact,
   type XPreset,
@@ -178,6 +179,98 @@ describe('makeXStore: artifact stores', () => {
     await xStore.networks.write('case-a', nets);
     expect(await xStore.networks.read('case-a')).toEqual(nets);
     expect(await xStore.networks.read('case-b')).toEqual([]);
+  });
+
+  // ---- Task 7: networks.save accumulator (conservative, no auto-unfollow) -----------
+
+  const acct = (
+    handle: string,
+    firstObservedAt: string,
+    lastObservedAt: string,
+    overrides: Partial<XNetworkAccount> = {},
+  ): XNetworkAccount => ({ handle, firstObservedAt, lastObservedAt, evidenceHash: `ev-${handle}`, ...overrides });
+
+  it('save() stores every account of a first-ever capture as-is (first == last observed)', async () => {
+    const t = '2026-08-11T00:00:00.000Z';
+    await xStore.networks.save('case-a', {
+      target: '@target', kind: 'followers', capturedAt: t,
+      accounts: [acct('@alice', t, t), acct('@bob', t, t)],
+    });
+    const [art] = await xStore.networks.read('case-a');
+    expect(art.accounts.map((a) => a.handle)).toEqual(['@alice', '@bob']);
+    expect(art.accounts.every((a) => a.firstObservedAt === t && a.lastObservedAt === t)).toBe(true);
+  });
+
+  it('a re-scan that re-observes an account updates lastObservedAt but PRESERVES firstObservedAt', async () => {
+    const t1 = '2026-08-11T00:00:00.000Z';
+    const t2 = '2026-08-12T00:00:00.000Z';
+    await xStore.networks.save('case-a', {
+      target: '@target', kind: 'followers', capturedAt: t1,
+      accounts: [acct('@alice', t1, t1, { bio: 'old bio', evidenceHash: 'ev-1' })],
+    });
+    await xStore.networks.save('case-a', {
+      target: '@target', kind: 'followers', capturedAt: t2,
+      accounts: [acct('@alice', t2, t2, { bio: 'new bio', evidenceHash: 'ev-2' })],
+    });
+    const [art] = await xStore.networks.read('case-a');
+    const alice = art.accounts.find((a) => a.handle === '@alice')!;
+    expect(alice.firstObservedAt).toBe(t1); // original first-seen preserved
+    expect(alice.lastObservedAt).toBe(t2); // last-seen advances
+    expect(alice.bio).toBe('new bio'); // freshest visible fields win
+    expect(alice.evidenceHash).toBe('ev-2');
+  });
+
+  it('CONSERVATIVE: an account absent from a later scan is carried over UNCHANGED — never dropped, never relabelled', async () => {
+    const t1 = '2026-08-11T00:00:00.000Z';
+    const t2 = '2026-08-12T00:00:00.000Z';
+    await xStore.networks.save('case-a', {
+      target: '@target', kind: 'followers', capturedAt: t1,
+      accounts: [acct('@alice', t1, t1), acct('@bob', t1, t1)],
+    });
+    // Second scan only re-observes @alice — @bob's DOM row didn't render this pass.
+    await xStore.networks.save('case-a', {
+      target: '@target', kind: 'followers', capturedAt: t2,
+      accounts: [acct('@alice', t2, t2)],
+    });
+    const [art] = await xStore.networks.read('case-a');
+    expect(art.accounts.map((a) => a.handle).sort()).toEqual(['@alice', '@bob']);
+    const bob = art.accounts.find((a) => a.handle === '@bob')!;
+    // @bob's record is IDENTICAL to the first scan — not dropped, not stamped "unfollowed"/
+    // "removed", lastObservedAt not silently bumped as if it had been re-seen.
+    expect(bob.firstObservedAt).toBe(t1);
+    expect(bob.lastObservedAt).toBe(t1);
+    expect('unfollowed' in bob).toBe(false);
+    expect('removed' in bob).toBe(false);
+    expect('status' in bob).toBe(false);
+  });
+
+  it('dedups the persisted list by (target, kind, handle) case-insensitively across scans', async () => {
+    const t1 = '2026-08-11T00:00:00.000Z';
+    const t2 = '2026-08-12T00:00:00.000Z';
+    await xStore.networks.save('case-a', {
+      target: '@target', kind: 'followers', capturedAt: t1,
+      accounts: [acct('@Alice', t1, t1)],
+    });
+    await xStore.networks.save('case-a', {
+      target: '@target', kind: 'followers', capturedAt: t2,
+      accounts: [acct('@alice', t2, t2)], // same person, different case
+    });
+    const [art] = await xStore.networks.read('case-a');
+    expect(art.accounts).toHaveLength(1);
+  });
+
+  it('followers and following are independent accumulators for the same target', async () => {
+    const t = '2026-08-11T00:00:00.000Z';
+    await xStore.networks.save('case-a', {
+      target: '@target', kind: 'followers', capturedAt: t, accounts: [acct('@alice', t, t)],
+    });
+    await xStore.networks.save('case-a', {
+      target: '@target', kind: 'following', capturedAt: t, accounts: [acct('@carol', t, t)],
+    });
+    const nets = await xStore.networks.read('case-a');
+    expect(nets).toHaveLength(2);
+    expect(nets.find((n) => n.kind === 'followers')!.accounts.map((a) => a.handle)).toEqual(['@alice']);
+    expect(nets.find((n) => n.kind === 'following')!.accounts.map((a) => a.handle)).toEqual(['@carol']);
   });
 
   it('archiveState round-trips and is null before first write', async () => {
