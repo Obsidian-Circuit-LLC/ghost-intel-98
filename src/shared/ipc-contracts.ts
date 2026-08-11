@@ -572,7 +572,56 @@ export const channels = {
      *  cycle does not complete (toggle off / challenge-blocked). */
     runArchiveCycles: 'xListening:runArchiveCycles',
     /** Serialize a case's captured items to JSON/CSV/PDF/DOCX via the app's existing exporters (X8). */
-    exportItems: 'xListening:exportItems'
+    exportItems: 'xListening:exportItems',
+
+    // ---- Phase-1 Enterprise-port surface (plan Task 6) ---------------------------------
+    // The channels above (`connect`/`status`/`capture`/…) are the retiring X1-X8 clearnet-only
+    // surface (Task 16 removes it once the renderer no longer needs it). Everything below is
+    // the NEW Tor-default, campaign-scoped surface wired to session.ts/capture.ts/campaigns.ts/
+    // analysis.ts/evidence.ts (Tasks 1-5) — a DIFFERENT trust/network model (caseId-scoped
+    // sessions, Tor by default, self-managed x-namespace campaigns), so it gets its own channel
+    // names rather than reusing `connect`/`status`/`capture` above.
+    /** Open (or reuse) the Tor-default capture window for one campaign (session.ts). Fails
+     *  closed (`blocked:true`) when background Tor isn't bootstrapped and
+     *  `AppSettings.xListening.clearnet` isn't opted in — never a silent clearnet fallback. */
+    openSession: 'xListening:openSession',
+    /** Derived `{connected, windowOpen}` for one campaign (session.ts) — `connected` is the
+     *  auth-cookie presence on the shared partition; `windowOpen` is per-campaign. */
+    sessionStatus: 'xListening:sessionStatus',
+    /** Close (not log out of) one campaign's live capture window (session.ts). */
+    closeSession: 'xListening:closeSession',
+    /** Capture the ALREADY-VISIBLE X profile timeline in a campaign's open capture window
+     *  (capture.ts) — the analyst navigates the visible window to the target manually; this
+     *  channel captures whatever page is currently loaded, folds metrics/metricsRaw into an
+     *  evidence-hashed `XPostArtifact`, and persists to both the plain-item and richer sidecars. */
+    captureTimeline: 'xListening:captureTimeline',
+    /** List every self-managed X campaign (x-namespace scraping case; campaigns.ts) — no core
+     *  investigation case need be bound. */
+    campaignsList: 'xListening:campaigns:list',
+    /** Create a new campaign. */
+    campaignsCreate: 'xListening:campaigns:create',
+    /** Look up (and thereby validate) an existing campaign by id. */
+    campaignsSwitch: 'xListening:campaigns:switch',
+    /** Rename a campaign. */
+    campaignsUpdate: 'xListening:campaigns:update',
+    /** Delete a campaign — removes its entire on-disk directory recursively. */
+    campaignsDelete: 'xListening:campaigns:delete',
+    /** Derived, on-read common-connection network analysis over a case's captured `networks`
+     *  artifacts (analysis.ts `computeNetworkAnalysis`) — not persisted; synthetic/demo rows
+     *  are excluded (honesty). */
+    analysis: 'xListening:analysis',
+    /** Derived collection-health rollup (analysis.ts `deriveCollectionHealth`). No collection-run
+     *  log is persisted yet (a later archive/network-capture task adds one), so this currently
+     *  always derives an honest empty roster rather than a fabricated one — wired now so the
+     *  renderer's Health tab is real end-to-end, not a hollow placeholder. */
+    health: 'xListening:health',
+    /** Derived entity rollup (analysis.ts `extractEntities`) over a case's captured posts —
+     *  recomputed on every call, never persisted; synthetic/demo posts are excluded (honesty). */
+    entities: 'xListening:entities',
+    /** Read a case's saved highlight presets. */
+    presetsRead: 'xListening:presets:read',
+    /** Upsert one highlight preset (keyed by id); `updatedAt` is stamped MAIN-side. */
+    presetsSave: 'xListening:presets:save'
   },
   // Scraping cases — the isolated per-namespace case stores for SOCMINT + X collection runs
   // (kept apart from the core investigation `cases` namespace). Every handler takes a

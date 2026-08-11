@@ -150,6 +150,19 @@ export async function getXStatus(caseId: string): Promise<XSessionStatus> {
 }
 
 /**
+ * The live capture window for `caseId`, if one is open and not yet destroyed — `undefined`
+ * otherwise. Used by the Task 6 IPC layer (`ipc.ts`'s `captureTimeline` handler) to hand the
+ * already-open, already-Tor-routed window to `capture.ts`'s `captureTimeline` without
+ * re-deriving session state; it does NOT open a window itself — the caller must have already
+ * gone through `connectXSession`.
+ */
+export function getXWindow(caseId: string): BrowserWindow | undefined {
+  const id = ensureUuid(caseId, 'caseId');
+  const win = xWindows.get(id);
+  return win && !win.isDestroyed() ? win : undefined;
+}
+
+/**
  * Close and forget the capture window for `caseId`, if one is open. This clears ONLY the
  * window/connection state for that case — it does NOT log the operator out of X (the auth
  * cookie lives on the shared partition and survives; a later `connectXSession` for any case

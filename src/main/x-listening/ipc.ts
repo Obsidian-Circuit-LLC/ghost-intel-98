@@ -53,8 +53,43 @@ import {
   type XCollectSettings
 } from './extract';
 import { prodXStore } from './store';
-import type { XNetworkAccount, XNetworkArtifact, XNote, XArchiveState } from './store';
+import type {
+  XNetworkAccount,
+  XNetworkArtifact,
+  XNote,
+  XArchiveState,
+  XPostArtifact,
+  XPreset,
+  XEntityCacheEntry
+} from './store';
 import { ensureUuid } from '../security/validate';
+
+// ---- Phase-1 Enterprise-port surface (Task 6) ----------------------------
+// Aliased on import: session.ts/capture.ts declare their OWN `connectXSession`/
+// `X_LISTENING_PARTITION`/`X_COLLECTOR_VERSION`/`DEFAULT_COLLECT`/etc — names this
+// (retiring, Task 16) file already binds locally above. The alias keeps both surfaces
+// live side-by-side until the old one is deleted.
+import {
+  connectXSession as openXSession,
+  getXStatus as getXSessionStatus,
+  clearXSession as closeXSession,
+  getXWindow
+} from './session';
+import { captureTimeline, type XTimelineCaptureRequest } from './capture';
+import {
+  listCampaigns,
+  createCampaign,
+  switchCampaign,
+  updateCampaign,
+  deleteCampaign
+} from './campaigns';
+import {
+  computeNetworkAnalysis,
+  deriveCollectionHealth,
+  extractEntities,
+  type AnalysisProfile,
+  type AnalysisRelationship
+} from './analysis';
 
 /** Clearnet partition the authenticated X session lives on. Matches the X1 contract. */
 export const X_LISTENING_PARTITION = 'persist:x-listening';
@@ -1370,6 +1405,104 @@ type HandleWithEvent = (
   fn: (e: Electron.IpcMainInvokeEvent, ...args: unknown[]) => unknown
 ) => void;
 
+// ---- Phase-1 helpers (Task 6) --------------------------------------------
+
+/**
+ * Read the Tor-default posture opt-out MAIN-side and trusted, mirroring
+ * `loadCollectSettings`/`loadArchiveEnabled` above: a lazy dynamic import (this module never
+ * pulls the settings graph at import time) and a fail-CLOSED catch — any settings-read error
+ * yields `false` (Tor mode), never a silent widen to clearnet.
+ */
+async function loadClearnetEnabled(): Promise<boolean> {
+  try {
+    const { settingsStore } = await import('../storage/json-fs');
+    const settings = await settingsStore.read();
+    return settings.xListening?.clearnet === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Flatten a case's captured `networks` artifacts (store.ts) into the `AnalysisProfile[]` /
+ * `AnalysisRelationship[]` shape `computeNetworkAnalysis` (analysis.ts, Task 2) consumes. One
+ * `XNetworkArtifact` per (target, kind) becomes one tracked profile (keyed by `target`) plus
+ * one relationship row per captured account. Until Task 7 lands network capture this is
+ * honestly empty for every case — the channel is wired now so the renderer's Network tab is
+ * real end-to-end wiring, not a hollow placeholder.
+ */
+async function buildNetworkAnalysisInputs(
+  caseId: string
+): Promise<{ profiles: AnalysisProfile[]; relationships: AnalysisRelationship[] }> {
+  const store = await prodXStore();
+  const artifacts = await store.networks.read(caseId);
+  const profiles = new Map<string, AnalysisProfile>();
+  const relationships: AnalysisRelationship[] = [];
+  for (const artifact of artifacts) {
+    const id = String(artifact.target ?? '');
+    if (!id) continue;
+    if (!profiles.has(id)) profiles.set(id, { id, username: artifact.target });
+    for (const account of artifact.accounts ?? []) {
+      relationships.push({
+        profileId: id,
+        relationship: artifact.kind === 'followers' ? 'follower' : 'following',
+        username: account.handle,
+        displayName: account.displayName,
+        bio: account.bio,
+        avatar: account.avatar
+      });
+    }
+  }
+  return { profiles: [...profiles.values()], relationships };
+}
+
+/**
+ * Derive an entity rollup over a case's captured post artifacts (store.ts `posts`,
+ * populated by capture.ts's `captureTimeline`) via `extractEntities` (analysis.ts, Task 2).
+ * Computed fresh on every call — nothing here is persisted to the `entitiesCache` sidecar
+ * (design doc: "derived-on-read"). Honesty: a `synthetic` (demo/seeded) post is excluded, same
+ * as `computeNetworkAnalysis`'s synthetic-profile/relationship exclusion — a demo record must
+ * never inflate real entity intel.
+ */
+function aggregateEntities(posts: readonly XPostArtifact[]): XEntityCacheEntry[] {
+  const byKey = new Map<string, XEntityCacheEntry>();
+  for (const post of posts) {
+    if (post.synthetic) continue;
+    for (const found of extractEntities(post.text)) {
+      const key = `${found.type}:${found.normalizedValue}`;
+      let entry = byKey.get(key);
+      if (!entry) {
+        entry = {
+          id: key,
+          type: found.type,
+          value: found.value,
+          normalizedValue: found.normalizedValue,
+          postIds: [],
+          sourceUsernames: [],
+          firstObservedAt: post.publishedAt,
+          lastObservedAt: post.publishedAt,
+          count: 0
+        };
+        byKey.set(key, entry);
+      }
+      if (post.id && !entry.postIds.includes(post.id)) entry.postIds.push(post.id);
+      if (post.authorHandle && !entry.sourceUsernames.includes(post.authorHandle)) {
+        entry.sourceUsernames.push(post.authorHandle);
+      }
+      entry.count += 1;
+      if (post.publishedAt) {
+        if (!entry.firstObservedAt || post.publishedAt < entry.firstObservedAt) {
+          entry.firstObservedAt = post.publishedAt;
+        }
+        if (!entry.lastObservedAt || post.publishedAt > entry.lastObservedAt) {
+          entry.lastObservedAt = post.publishedAt;
+        }
+      }
+    }
+  }
+  return [...byKey.values()];
+}
+
 /**
  * Wire the connect/status channels. Every handler validates the sender frame
  * FIRST (`assertTrustedSender`) — a hardened capture window can host a hostile
@@ -1581,5 +1714,177 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
         ...(typeof req.delayMs === 'number' ? { delayMs: req.delayMs } : {})
       }
     );
+  });
+
+  // ---- Phase-1 Enterprise-port surface (Task 6) --------------------------
+  // Session: caseId-scoped, Tor-default (session.ts). `clearnetEnabled` is read MAIN-side and
+  // trusted — the renderer never widens the network posture; it only ever flips the persisted
+  // setting through the (Task 13) one-time real-IP-acknowledged settings flow.
+  deps.handle(channels.xListening.openSession, async (e, caseIdArg) => {
+    assertTrustedSender(e);
+    if (typeof caseIdArg !== 'string' || !caseIdArg) {
+      throw new Error('Opening an X session requires a caseId.');
+    }
+    const caseId = ensureUuid(caseIdArg, 'caseId');
+    const clearnetEnabled = await loadClearnetEnabled();
+    return openXSession(caseId, clearnetEnabled);
+  });
+
+  deps.handle(channels.xListening.sessionStatus, async (e, caseIdArg) => {
+    assertTrustedSender(e);
+    if (typeof caseIdArg !== 'string' || !caseIdArg) {
+      throw new Error('Session status requires a caseId.');
+    }
+    return getXSessionStatus(ensureUuid(caseIdArg, 'caseId'));
+  });
+
+  deps.handle(channels.xListening.closeSession, (e, caseIdArg) => {
+    assertTrustedSender(e);
+    if (typeof caseIdArg !== 'string' || !caseIdArg) {
+      throw new Error('Closing an X session requires a caseId.');
+    }
+    return closeXSession(ensureUuid(caseIdArg, 'caseId'));
+  });
+
+  // Timeline capture (capture.ts): the analyst navigates the campaign's VISIBLE capture window
+  // to the target profile manually (via openSession); this channel captures whatever page is
+  // currently loaded there. The collect toggles are read MAIN-side (same trust boundary as the
+  // retiring `capture`/`captureThreadComments` handlers above) — the renderer never widens
+  // capture beyond what the operator opted into.
+  deps.handle(channels.xListening.captureTimeline, async (e, reqArg) => {
+    assertTrustedSender(e);
+    const req = reqArg as Partial<XTimelineCaptureRequest> | undefined;
+    if (
+      !req ||
+      typeof req.caseId !== 'string' ||
+      typeof req.channelId !== 'string' ||
+      typeof req.targetUsername !== 'string'
+    ) {
+      throw new Error('Capturing a timeline requires a caseId, channelId and targetUsername.');
+    }
+    const caseId = ensureUuid(req.caseId, 'caseId');
+    const win = getXWindow(caseId);
+    if (!win) {
+      throw new Error(
+        'X is not connected for this campaign. Open the session and sign in before capturing.'
+      );
+    }
+    const collect = await loadCollectSettings();
+    return captureTimeline(win, {
+      caseId,
+      jobId: typeof req.jobId === 'string' ? req.jobId : caseId,
+      channelId: req.channelId,
+      channelLabel: typeof req.channelLabel === 'string' ? req.channelLabel : `@${req.channelId}`,
+      targetUsername: req.targetUsername,
+      collect
+    });
+  });
+
+  // Campaigns (campaigns.ts): self-managed x-namespace scraping cases — no core investigation
+  // case need be bound. `switch`/`update`/`delete` UUID-gate their id the same way every other
+  // store-backed handler in this file does, ahead of any store path being built.
+  deps.handle(channels.xListening.campaignsList, (e) => {
+    assertTrustedSender(e);
+    return listCampaigns();
+  });
+
+  deps.handle(channels.xListening.campaignsCreate, (e, nameArg) => {
+    assertTrustedSender(e);
+    if (typeof nameArg !== 'string') {
+      throw new Error('Creating a campaign requires a name.');
+    }
+    return createCampaign(nameArg);
+  });
+
+  deps.handle(channels.xListening.campaignsSwitch, (e, idArg) => {
+    assertTrustedSender(e);
+    if (typeof idArg !== 'string' || !idArg) {
+      throw new Error('Switching campaigns requires an id.');
+    }
+    return switchCampaign(ensureUuid(idArg, 'campaignId'));
+  });
+
+  deps.handle(channels.xListening.campaignsUpdate, (e, reqArg) => {
+    assertTrustedSender(e);
+    const req = reqArg as { id?: unknown; name?: unknown } | undefined;
+    if (!req || typeof req.id !== 'string' || typeof req.name !== 'string') {
+      throw new Error('Updating a campaign requires an id and a name.');
+    }
+    return updateCampaign(ensureUuid(req.id, 'campaignId'), req.name);
+  });
+
+  deps.handle(channels.xListening.campaignsDelete, (e, idArg) => {
+    assertTrustedSender(e);
+    if (typeof idArg !== 'string' || !idArg) {
+      throw new Error('Deleting a campaign requires an id.');
+    }
+    return deleteCampaign(ensureUuid(idArg, 'campaignId'));
+  });
+
+  // Derived reads (analysis.ts, Task 2) — no capture window, no network; sender check + arg
+  // validation only.
+  deps.handle(channels.xListening.analysis, async (e, caseIdArg) => {
+    assertTrustedSender(e);
+    if (typeof caseIdArg !== 'string' || !caseIdArg) {
+      throw new Error('Analysis requires a caseId.');
+    }
+    const caseId = ensureUuid(caseIdArg, 'caseId');
+    const { profiles, relationships } = await buildNetworkAnalysisInputs(caseId);
+    return computeNetworkAnalysis(profiles, relationships, new Date().toISOString());
+  });
+
+  deps.handle(channels.xListening.health, (e) => {
+    assertTrustedSender(e);
+    // No collection-run log is persisted yet (a later task adds one) — an honest empty roster
+    // beats a fabricated one. See the channel doc in ipc-contracts.ts.
+    return deriveCollectionHealth([]);
+  });
+
+  deps.handle(channels.xListening.entities, async (e, caseIdArg) => {
+    assertTrustedSender(e);
+    if (typeof caseIdArg !== 'string' || !caseIdArg) {
+      throw new Error('Entities requires a caseId.');
+    }
+    const caseId = ensureUuid(caseIdArg, 'caseId');
+    const store = await prodXStore();
+    const posts = await store.posts.read(caseId);
+    return aggregateEntities(posts);
+  });
+
+  // Presets: pure store CRUD (extend XStore, Task 1) — no capture window, no network.
+  deps.handle(channels.xListening.presetsRead, async (e, caseIdArg) => {
+    assertTrustedSender(e);
+    if (typeof caseIdArg !== 'string' || !caseIdArg) {
+      throw new Error('Reading presets requires a caseId.');
+    }
+    const store = await prodXStore();
+    return { presets: await store.presets.read(ensureUuid(caseIdArg, 'caseId')) };
+  });
+
+  deps.handle(channels.xListening.presetsSave, async (e, reqArg) => {
+    assertTrustedSender(e);
+    const req = reqArg as (Partial<XPreset> & { caseId?: unknown }) | undefined;
+    if (
+      !req ||
+      typeof req.caseId !== 'string' ||
+      typeof req.id !== 'string' ||
+      typeof req.name !== 'string' ||
+      !Array.isArray(req.keywords)
+    ) {
+      throw new Error('Saving a preset requires a caseId, id, name and keywords.');
+    }
+    const caseId = ensureUuid(req.caseId, 'caseId');
+    const preset: XPreset = {
+      id: req.id,
+      name: req.name,
+      keywords: req.keywords.map((k) => String(k)),
+      mode: req.mode === 'all' ? 'all' : 'any',
+      caseSensitive: req.caseSensitive === true,
+      profileIds: Array.isArray(req.profileIds) ? req.profileIds.map((p) => String(p)) : [],
+      enabled: req.enabled !== false,
+      updatedAt: new Date().toISOString()
+    };
+    const store = await prodXStore();
+    return { presets: await store.presets.save(caseId, preset) };
   });
 }

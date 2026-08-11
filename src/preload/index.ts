@@ -752,7 +752,42 @@ const api = {
       delayMs?: number;
     }) => ipcRenderer.invoke(channels.xListening.runArchiveCycles, req),
     exportItems: (req: { caseId: string; format: 'json' | 'csv' | 'pdf' | 'docx' }) =>
-      ipcRenderer.invoke(channels.xListening.exportItems, req)
+      ipcRenderer.invoke(channels.xListening.exportItems, req),
+
+    // ---- Phase-1 Enterprise-port surface (plan Task 6) --------------------------------
+    openSession: (caseId: string) => ipcRenderer.invoke(channels.xListening.openSession, caseId),
+    sessionStatus: (caseId: string) =>
+      ipcRenderer.invoke(channels.xListening.sessionStatus, caseId),
+    closeSession: (caseId: string) =>
+      ipcRenderer.invoke(channels.xListening.closeSession, caseId),
+    captureTimeline: (req: {
+      caseId: string;
+      jobId?: string;
+      channelId: string;
+      channelLabel?: string;
+      targetUsername: string;
+    }) => ipcRenderer.invoke(channels.xListening.captureTimeline, req),
+    campaignsList: () => ipcRenderer.invoke(channels.xListening.campaignsList),
+    campaignsCreate: (name: string) =>
+      ipcRenderer.invoke(channels.xListening.campaignsCreate, name),
+    campaignsSwitch: (id: string) => ipcRenderer.invoke(channels.xListening.campaignsSwitch, id),
+    campaignsUpdate: (req: { id: string; name: string }) =>
+      ipcRenderer.invoke(channels.xListening.campaignsUpdate, req),
+    campaignsDelete: (id: string) => ipcRenderer.invoke(channels.xListening.campaignsDelete, id),
+    analysis: (caseId: string) => ipcRenderer.invoke(channels.xListening.analysis, caseId),
+    health: (caseId: string) => ipcRenderer.invoke(channels.xListening.health, caseId),
+    entities: (caseId: string) => ipcRenderer.invoke(channels.xListening.entities, caseId),
+    presetsRead: (caseId: string) => ipcRenderer.invoke(channels.xListening.presetsRead, caseId),
+    presetsSave: (req: {
+      caseId: string;
+      id: string;
+      name: string;
+      keywords: string[];
+      mode?: 'any' | 'all';
+      caseSensitive?: boolean;
+      profileIds?: string[];
+      enabled?: boolean;
+    }) => ipcRenderer.invoke(channels.xListening.presetsSave, req)
   },
   // Scraping cases (W4) — the isolated SOCMINT/X collection-run stores. Every call passes a
   // `store: 'socmint' | 'x'` discriminator that main validates against an allowlist and routes

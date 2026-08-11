@@ -936,6 +936,91 @@ export interface GhostApi {
       items: HarvestedItem[];
       state: { cursor: string | null; cycles: number; lastRunAt: string | null };
     }>;
+
+    // ---- Phase-1 Enterprise-port surface (plan Task 6) --------------------------------
+    // A DIFFERENT trust/network model than `connect`/`status`/`capture` above (caseId-scoped
+    // sessions, Tor by default, self-managed x-namespace campaigns) — see ipc-contracts.ts.
+    /** Open (or reuse) the Tor-default capture window for one campaign. Fails closed
+     *  (`blocked:true`) when Tor isn't bootstrapped and clearnet isn't opted in. */
+    openSession(caseId: string): Promise<{ blocked: boolean; reason?: string }>;
+    /** Derived session/window state for one campaign — `connected` is the shared partition's
+     *  auth-cookie presence; `windowOpen` is whether THIS campaign has a live capture window. */
+    sessionStatus(caseId: string): Promise<{ connected: boolean; windowOpen: boolean }>;
+    /** Close (not log out of) one campaign's live capture window. */
+    closeSession(caseId: string): Promise<{ cleared: boolean }>;
+    /**
+     * Capture the ALREADY-VISIBLE X profile timeline in a campaign's open capture window — the
+     * analyst navigates the visible window to the target manually; this captures whatever page
+     * is currently loaded. `metrics` AND the verbatim `metricsRaw` are both kept and folded into
+     * each post's `evidenceHash` (the honesty fix over Enterprise, which omits metrics).
+     */
+    captureTimeline(req: {
+      caseId: string;
+      jobId?: string;
+      channelId: string;
+      channelLabel?: string;
+      targetUsername: string;
+    }): Promise<{
+      blocked: boolean;
+      reason?: string;
+      added: number;
+      skipped: number;
+      posts: Array<Record<string, unknown>>;
+    }>;
+    /** List every self-managed X campaign (x-namespace scraping case) — no core investigation
+     *  case need be bound. */
+    campaignsList(): Promise<ScrapingCase[]>;
+    /** Create a new campaign. */
+    campaignsCreate(name: string): Promise<ScrapingCase>;
+    /** Look up (and thereby validate) an existing campaign by id. */
+    campaignsSwitch(id: string): Promise<ScrapingCase>;
+    /** Rename a campaign. */
+    campaignsUpdate(req: { id: string; name: string }): Promise<ScrapingCase>;
+    /** Delete a campaign — removes its entire on-disk directory recursively. */
+    campaignsDelete(id: string): Promise<void>;
+    /** Derived, on-read common-connection network analysis over a case's captured `networks`
+     *  artifacts — not persisted; synthetic/demo rows excluded. */
+    analysis(caseId: string): Promise<Record<string, unknown>>;
+    /** Derived collection-health rollup — currently always empty (no run-log persisted yet). */
+    health(caseId: string): Promise<Array<Record<string, unknown>>>;
+    /** Derived entity rollup (mention/hashtag/email/url/domain/crypto/phone/org) over a case's
+     *  captured posts — recomputed on every call; synthetic/demo posts excluded. */
+    entities(caseId: string): Promise<Array<Record<string, unknown>>>;
+    /** Read a case's saved highlight presets. */
+    presetsRead(caseId: string): Promise<{
+      presets: Array<{
+        id: string;
+        name: string;
+        keywords: string[];
+        mode: 'any' | 'all';
+        caseSensitive: boolean;
+        profileIds: string[];
+        enabled: boolean;
+        updatedAt: string;
+      }>;
+    }>;
+    /** Upsert one highlight preset (keyed by id); `updatedAt` is stamped MAIN-side. */
+    presetsSave(req: {
+      caseId: string;
+      id: string;
+      name: string;
+      keywords: string[];
+      mode?: 'any' | 'all';
+      caseSensitive?: boolean;
+      profileIds?: string[];
+      enabled?: boolean;
+    }): Promise<{
+      presets: Array<{
+        id: string;
+        name: string;
+        keywords: string[];
+        mode: 'any' | 'all';
+        caseSensitive: boolean;
+        profileIds: string[];
+        enabled: boolean;
+        updatedAt: string;
+      }>;
+    }>;
   };
   /**
    * Scraping cases (W4) — the isolated per-namespace SOCMINT/X collection-run stores, kept
