@@ -788,8 +788,14 @@ export function captureFollowing(
  */
 export async function exportNetworkCsv(caseId: string): Promise<{ csv: string; count: number }> {
   const artifacts = await (await prodXStore()).networks.read(caseId);
-  const count = artifacts.reduce((n, a) => n + (a.accounts?.length ?? 0), 0);
-  return { csv: networkToCsv(artifacts), count };
+  // Honesty (charter): demo/seeded accounts (synthetic:true) must NEVER be exported as real
+  // intel — strip them from every artifact before serialising, and count only the real rows.
+  const real = artifacts.map((a) => ({
+    ...a,
+    accounts: (a.accounts ?? []).filter((acc) => !acc.synthetic)
+  }));
+  const count = real.reduce((n, a) => n + a.accounts.length, 0);
+  return { csv: networkToCsv(real), count };
 }
 
 // ---- X6: analyst notes --------------------------------------------------

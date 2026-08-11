@@ -358,6 +358,29 @@ describe('runArchiveSteps: bounded + cancellable loop', () => {
     expect(res.cyclesRun).toBe(4);
   });
 
+  it('maxCycles clamps to at most 1000 — an oversized request runs EXACTLY 1000 cycles, never more', async () => {
+    const { runArchiveSteps } = await import('../src/main/x-listening/archive');
+    const store = memState();
+    const capture = vi.fn(async () => ({ blocked: false, added: 1, skipped: 0, posts: [post('1')] }));
+    const res = await runArchiveSteps(
+      {} as unknown as Electron.BrowserWindow,
+      REQ,
+      // No shouldCancel: the 1000 upper clamp is the ONLY thing that can stop the loop, so this
+      // asserts the clamp actually caps an oversized request (the negative case above only proved
+      // the 0-floor direction).
+      { maxCycles: 5000, delayMs: 0, sleep: async () => {} },
+      {
+        isEnabled: async () => true,
+        capture,
+        readState: store.readState,
+        writeState: store.writeState,
+        now: () => '2026-08-11T12:00:00.000Z',
+      },
+    );
+    expect(res.cyclesRun).toBe(1000);
+    expect(capture).toHaveBeenCalledTimes(1000);
+  });
+
   it('delayMs clamps to >= 0 (rate bound) — a negative delay never produces a negative sleep', async () => {
     const { runArchiveSteps } = await import('../src/main/x-listening/archive');
     const store = memState();
