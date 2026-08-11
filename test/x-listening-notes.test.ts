@@ -170,6 +170,62 @@ describe('saveNote / readNotes (IPC orchestration)', () => {
   });
 });
 
+// ---- 2b. Task 10: removeNote --------------------------------------------
+
+describe('removeNote (IPC orchestration)', () => {
+  it('removes the note for the given findingId and returns the remaining notes', async () => {
+    const { removeNote } = await import('../src/main/x-listening/ipc');
+    const existing: XNote[] = [
+      { findingId: 'f1', text: 'one', savedAt: 't1' },
+      { findingId: 'f2', text: 'two', savedAt: 't2' },
+    ];
+    let written: XNote[] | null = null;
+    const res = await removeNote('case-a', 'f1', {
+      readNotes: async () => existing,
+      writeNotes: async (_caseId, notes) => { written = notes; },
+    });
+    expect(res.notes).toEqual([{ findingId: 'f2', text: 'two', savedAt: 't2' }]);
+    expect(written).toEqual(res.notes);
+  });
+
+  it('removing a findingId with no note is a harmless no-op (list unchanged, write still runs)', async () => {
+    const { removeNote } = await import('../src/main/x-listening/ipc');
+    const existing: XNote[] = [{ findingId: 'f1', text: 'one', savedAt: 't1' }];
+    const write = vi.fn(async () => {});
+    const res = await removeNote('case-a', 'does-not-exist', {
+      readNotes: async () => existing,
+      writeNotes: write,
+    });
+    expect(res.notes).toEqual(existing);
+    expect(write).toHaveBeenCalledWith('case-a', existing);
+  });
+
+  it('rejects a blank findingId (never reads/writes the store)', async () => {
+    const { removeNote } = await import('../src/main/x-listening/ipc');
+    const readNotes = vi.fn(async () => []);
+    const writeNotes = vi.fn(async () => {});
+    await expect(removeNote('case-a', '   ', { readNotes, writeNotes })).rejects.toThrow(/finding/i);
+    expect(readNotes).not.toHaveBeenCalled();
+    expect(writeNotes).not.toHaveBeenCalled();
+  });
+
+  it('end-to-end through the real pure store: save, remove, verify gone', async () => {
+    const { makeXStore } = await import('../src/main/x-listening/store');
+    const { removeNote } = await import('../src/main/x-listening/ipc');
+    const xStore = makeXStore(memDeps());
+    await xStore.notes.save('case-a', 'f1', 'note text', '2026-08-06T00:00:00.000Z');
+    await xStore.notes.save('case-a', 'f2', 'other note', '2026-08-06T00:00:01.000Z');
+
+    const res = await removeNote('case-a', 'f1', {
+      readNotes: (caseId) => xStore.notes.read(caseId),
+      writeNotes: (caseId, notes) => xStore.notes.write(caseId, notes),
+    });
+
+    expect(res.notes).toEqual([{ findingId: 'f2', text: 'other note', savedAt: '2026-08-06T00:00:01.000Z' }]);
+    expect(await xStore.notes.read('case-a')).toEqual(res.notes);
+  });
+});
+
 // ---- 3. production wiring: ciphertext at rest --------------------------
 
 describe('prodXStore: notes encrypt-at-rest', () => {

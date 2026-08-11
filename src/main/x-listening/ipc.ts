@@ -859,6 +859,43 @@ export async function readNotes(
   return { notes: await deps.readNotes(caseId) };
 }
 
+/** Injectable seams for `removeNote` — read+filter+write over the `notes` sidecar. The
+ *  store (Task 1) has no dedicated `notes.remove`; a delete is a read-filter-write, same
+ *  primitive the store's own `write` already exposes. */
+export interface RemoveNoteDeps {
+  readNotes: (caseId: string) => Promise<XNote[]>;
+  writeNotes: (caseId: string, notes: XNote[]) => Promise<void>;
+}
+
+function defaultRemoveNoteDeps(): RemoveNoteDeps {
+  return {
+    readNotes: async (caseId) => (await prodXStore()).notes.read(caseId),
+    writeNotes: async (caseId, notes) => (await prodXStore()).notes.write(caseId, notes)
+  };
+}
+
+/**
+ * Delete the note attached to `findingId`, if any (Task 10). A findingId with no note is a
+ * harmless no-op — the store is still re-written with the unchanged list so this always
+ * returns the CURRENT fresh list (the same "returns the fresh list" contract as `saveNote`).
+ * Rejects a blank `findingId` before touching the store, mirroring `saveNote`'s guard.
+ */
+export async function removeNote(
+  caseId: string,
+  findingId: string,
+  overrides: Partial<RemoveNoteDeps> = {}
+): Promise<{ notes: XNote[] }> {
+  const id = String(findingId ?? '').trim();
+  if (!id) {
+    throw new Error('A note must be attached to a finding.');
+  }
+  const deps = { ...defaultRemoveNoteDeps(), ...overrides };
+  const existing = await deps.readNotes(caseId);
+  const notes = existing.filter((note) => note.findingId !== id);
+  await deps.writeNotes(caseId, notes);
+  return { notes };
+}
+
 // ---- X7: low-rate archive cycles ---------------------------------------
 
 /** A resumable archive state with no prior run — the pre-first-cycle baseline. */
@@ -1496,6 +1533,115 @@ function aggregateEntities(posts: readonly XPostArtifact[]): XEntityCacheEntry[]
   return [...byKey.values()];
 }
 
+// ---- Task 10: highlight presets — local search + remove ------------------
+// `presets.read`/`presets.write`/`presets.save` (pure upsert-by-id) shipped with Task 1;
+// `presetsRead`/`presetsSave` IPC shipped with Task 6. This adds the missing delete and the
+// actual local-search matcher/runner, ported from quarantine `evaluatePreset`/
+// `rebuildMatchesForPosts` (`main.cjs:1731-1768`).
+
+/** One highlight-preset match: a post whose text satisfied the preset's keywords/mode/
+ *  profile filter, and the specific keywords that matched (for renderer highlighting). */
+export interface XPresetMatch {
+  postId: string;
+  matchedKeywords: string[];
+}
+
+/**
+ * Evaluate ONE preset against ONE post → the keywords that matched (`[]` for no match).
+ * Pure port of quarantine `evaluatePreset` (`main.cjs:1731-1747`):
+ *  - `profileIds`, when non-empty, restricts matching to posts from those targets. Enterprise
+ *    keyed this off a numeric `post.profileId`; this port's equivalent "which target was this
+ *    captured from" field is `post.channelId` (the monitored timeline — `extract.ts`
+ *    `NormalizeContext.channelId`).
+ *  - keyword/text comparison respects `caseSensitive` (default false).
+ *  - `mode:'all'` requires EVERY keyword to match, else `[]`; `mode:'any'` (default) returns
+ *    whichever keywords matched.
+ */
+export function evaluatePreset(preset: XPreset, post: XPostArtifact): string[] {
+  if (preset.profileIds.length && !preset.profileIds.includes(post.channelId)) {
+    return [];
+  }
+  const source = preset.caseSensitive ? post.text : post.text.toLowerCase();
+  const keywords = preset.keywords.map((k) => String(k).trim()).filter(Boolean);
+  const matched = keywords.filter((keyword) => {
+    const needle = preset.caseSensitive ? keyword : keyword.toLowerCase();
+    return source.includes(needle);
+  });
+  if (preset.mode === 'all') {
+    return matched.length === keywords.length ? matched : [];
+  }
+  return matched;
+}
+
+/** Injectable seams for `runPreset` — pure store reads, no capture window, no network. */
+export interface PresetRunDeps {
+  readPresets: (caseId: string) => Promise<XPreset[]>;
+  readPosts: (caseId: string) => Promise<XPostArtifact[]>;
+}
+
+function defaultPresetRunDeps(): PresetRunDeps {
+  return {
+    readPresets: async (caseId) => (await prodXStore()).presets.read(caseId),
+    readPosts: async (caseId) => (await prodXStore()).posts.read(caseId)
+  };
+}
+
+/**
+ * Run one saved preset (by id) over a case's captured posts → the matches, for local
+ * highlight-search / renderer highlighting. Derived-on-read, never persisted — same
+ * discipline as `computeNetworkAnalysis`/`aggregateEntities` (a `matches` sidecar would go
+ * stale the moment a post is edited or removed). Honesty: a `synthetic` (demo/seeded) post
+ * is excluded, defense-in-depth alongside `aggregateEntities`'s same filter — a demo record
+ * must never surface as a "real" search hit.
+ */
+export async function runPreset(
+  caseId: string,
+  presetId: string,
+  overrides: Partial<PresetRunDeps> = {}
+): Promise<{ matches: XPresetMatch[] }> {
+  const deps = { ...defaultPresetRunDeps(), ...overrides };
+  const [presets, posts] = await Promise.all([deps.readPresets(caseId), deps.readPosts(caseId)]);
+  const preset = presets.find((p) => p.id === presetId);
+  if (!preset) {
+    throw new Error('Preset not found in this campaign.');
+  }
+  const matches: XPresetMatch[] = [];
+  for (const post of posts) {
+    if (post.synthetic) continue;
+    const matchedKeywords = evaluatePreset(preset, post);
+    if (matchedKeywords.length) matches.push({ postId: post.id, matchedKeywords });
+  }
+  return { matches };
+}
+
+/** Injectable seams for `removePreset` — read+filter+write over the `presets` sidecar,
+ *  mirroring `removeNote`'s shape (the store has no dedicated `presets.remove`). */
+export interface RemovePresetDeps {
+  readPresets: (caseId: string) => Promise<XPreset[]>;
+  writePresets: (caseId: string, presets: XPreset[]) => Promise<void>;
+}
+
+function defaultRemovePresetDeps(): RemovePresetDeps {
+  return {
+    readPresets: async (caseId) => (await prodXStore()).presets.read(caseId),
+    writePresets: async (caseId, presets) => (await prodXStore()).presets.write(caseId, presets)
+  };
+}
+
+/** Delete the preset with the given id, if any (Task 10). An id with no preset is a
+ *  harmless no-op that still returns the current fresh list, mirroring `removeNote`. */
+export async function removePreset(
+  caseId: string,
+  presetId: string,
+  overrides: Partial<RemovePresetDeps> = {}
+): Promise<{ presets: XPreset[] }> {
+  const deps = { ...defaultRemovePresetDeps(), ...overrides };
+  const existing = await deps.readPresets(caseId);
+  const presets = existing.filter((p) => p.id !== presetId);
+  await deps.writePresets(caseId, presets);
+  return { presets };
+}
+
 /**
  * Wire the connect/status channels. Every handler validates the sender frame
  * FIRST (`assertTrustedSender`) — a hardened capture window can host a hostile
@@ -1636,6 +1782,14 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
       throw new Error('Reading notes requires a caseId.');
     }
     return readNotes(ensureUuid(caseIdArg, 'caseId'));
+  });
+  deps.handle(channels.xListening.removeNote, (e, reqArg) => {
+    assertTrustedSender(e);
+    const req = reqArg as { caseId?: unknown; findingId?: unknown } | undefined;
+    if (!req || typeof req.caseId !== 'string' || typeof req.findingId !== 'string') {
+      throw new Error('Removing a note requires a caseId and findingId.');
+    }
+    return removeNote(ensureUuid(req.caseId, 'caseId'), req.findingId);
   });
 
   // Exports are pure store-reads + serialization (no capture window, no network) — they
@@ -1880,5 +2034,23 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
     };
     const store = await prodXStore();
     return { presets: await store.presets.save(caseId, preset) };
+  });
+
+  deps.handle(channels.xListening.presetsRemove, (e, reqArg) => {
+    assertTrustedSender(e);
+    const req = reqArg as { caseId?: unknown; id?: unknown } | undefined;
+    if (!req || typeof req.caseId !== 'string' || typeof req.id !== 'string') {
+      throw new Error('Removing a preset requires a caseId and id.');
+    }
+    return removePreset(ensureUuid(req.caseId, 'caseId'), req.id);
+  });
+
+  deps.handle(channels.xListening.presetsRun, (e, reqArg) => {
+    assertTrustedSender(e);
+    const req = reqArg as { caseId?: unknown; id?: unknown } | undefined;
+    if (!req || typeof req.caseId !== 'string' || typeof req.id !== 'string') {
+      throw new Error('Running a preset requires a caseId and id.');
+    }
+    return runPreset(ensureUuid(req.caseId, 'caseId'), req.id);
   });
 }

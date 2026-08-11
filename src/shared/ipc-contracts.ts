@@ -564,6 +564,9 @@ export const channels = {
     saveNote: 'xListening:saveNote',
     /** Read a case's analyst notes from the encrypted `notes` store (X6). */
     readNotes: 'xListening:readNotes',
+    /** Delete the note attached to one finding, if any (Task 10). A no-op when the finding
+     *  has no note. */
+    removeNote: 'xListening:removeNote',
     /** Run ONE bounded, low-rate archive cycle over the target timeline (X7). Gated MAIN-side
      *  on `AppSettings.xListening.archiveCycles` (fail-closed OFF); advances resumable state
      *  only on a completed run. */
@@ -621,7 +624,13 @@ export const channels = {
     /** Read a case's saved highlight presets. */
     presetsRead: 'xListening:presets:read',
     /** Upsert one highlight preset (keyed by id); `updatedAt` is stamped MAIN-side. */
-    presetsSave: 'xListening:presets:save'
+    presetsSave: 'xListening:presets:save',
+    /** Delete one highlight preset by id (Task 10). A no-op when the id has no preset. */
+    presetsRemove: 'xListening:presets:remove',
+    /** Run one saved preset over the case's captured posts → the matches, for local
+     *  highlight-search / renderer highlighting (Task 10). Derived-on-read, never persisted;
+     *  synthetic/demo posts are excluded (honesty). */
+    presetsRun: 'xListening:presets:run'
   },
   // Scraping cases — the isolated per-namespace case stores for SOCMINT + X collection runs
   // (kept apart from the core investigation `cases` namespace). Every handler takes a

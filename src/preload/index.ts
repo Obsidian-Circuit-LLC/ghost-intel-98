@@ -737,6 +737,8 @@ const api = {
       ipcRenderer.invoke(channels.xListening.saveNote, req),
     readNotes: (caseId: string) =>
       ipcRenderer.invoke(channels.xListening.readNotes, caseId),
+    removeNote: (req: { caseId: string; findingId: string }) =>
+      ipcRenderer.invoke(channels.xListening.removeNote, req),
     runArchiveCycle: (req: {
       caseId: string;
       jobId?: string;
@@ -787,7 +789,11 @@ const api = {
       caseSensitive?: boolean;
       profileIds?: string[];
       enabled?: boolean;
-    }) => ipcRenderer.invoke(channels.xListening.presetsSave, req)
+    }) => ipcRenderer.invoke(channels.xListening.presetsSave, req),
+    presetsRemove: (req: { caseId: string; id: string }) =>
+      ipcRenderer.invoke(channels.xListening.presetsRemove, req),
+    presetsRun: (req: { caseId: string; id: string }) =>
+      ipcRenderer.invoke(channels.xListening.presetsRun, req)
   },
   // Scraping cases (W4) — the isolated SOCMINT/X collection-run stores. Every call passes a
   // `store: 'socmint' | 'x'` discriminator that main validates against an allowlist and routes

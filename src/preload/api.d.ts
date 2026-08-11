@@ -878,6 +878,11 @@ export interface GhostApi {
     readNotes(caseId: string): Promise<{
       notes: Array<{ findingId: string; text: string; savedAt: string }>;
     }>;
+    /** Delete the note attached to one finding, if any — a no-op when the finding has no
+     *  note. Returns the fresh note list. */
+    removeNote(req: { caseId: string; findingId: string }): Promise<{
+      notes: Array<{ findingId: string; text: string; savedAt: string }>;
+    }>;
     /**
      * Serialize the case's captured items to `json`/`csv`/`pdf`/`docx` via the app's
      * EXISTING exporters (no new docx/pdfkit). Every scraped field is escaped /
@@ -1020,6 +1025,26 @@ export interface GhostApi {
         enabled: boolean;
         updatedAt: string;
       }>;
+    }>;
+    /** Delete one highlight preset by id — a no-op when the id has no preset. Returns the
+     *  fresh preset list. */
+    presetsRemove(req: { caseId: string; id: string }): Promise<{
+      presets: Array<{
+        id: string;
+        name: string;
+        keywords: string[];
+        mode: 'any' | 'all';
+        caseSensitive: boolean;
+        profileIds: string[];
+        enabled: boolean;
+        updatedAt: string;
+      }>;
+    }>;
+    /** Run one saved preset over the case's captured posts → the matches, for local
+     *  highlight-search / renderer highlighting. Derived-on-read, never persisted;
+     *  synthetic/demo posts are excluded. */
+    presetsRun(req: { caseId: string; id: string }): Promise<{
+      matches: Array<{ postId: string; matchedKeywords: string[] }>;
     }>;
   };
   /**

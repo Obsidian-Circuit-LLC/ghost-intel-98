@@ -92,7 +92,11 @@ const NEW_CHANNELS: Array<{ key: keyof typeof channels.xListening; args: unknown
   {
     key: 'presetsSave',
     args: [{ caseId, id: 'preset-1', name: 'Preset', keywords: ['foo'] }]
-  }
+  },
+  // Task 10 — notes remove, preset remove/run (local search).
+  { key: 'removeNote', args: [{ caseId, findingId: 'f1' }] },
+  { key: 'presetsRemove', args: [{ caseId, id: 'preset-1' }] },
+  { key: 'presetsRun', args: [{ caseId, id: 'preset-1' }] }
 ];
 
 describe('ipc-contracts.ts — Phase-1 xListening channel constants exist', () => {
