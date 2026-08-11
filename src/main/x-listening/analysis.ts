@@ -204,6 +204,21 @@ interface IdentityAccumulator {
  * `lastObservedAt` feed the identity roll-up's own first/last-seen columns, and `synthetic`
  * is propagated so a demo/seeded account (Task 12) is excluded by
  * `computeNetworkAnalysis`'s own `synthetic` filter even if a caller forgets to pre-filter.
+ *
+ * Task 12 addition: a TARGET (profile) every one of whose captured accounts — across every
+ * artifact contributing to it — is synthetic is itself a wholly demo/seeded target (the exact
+ * shape `demo.ts` produces: a freshly demo-loaded campaign has no real network data at all).
+ * Such a profile is marked `synthetic: true` too, not just its relationship rows, so
+ * `computeNetworkAnalysis`'s own `liveProfiles = profiles.filter(p => !p.synthetic)` excludes
+ * the fabricated target from `targetCount`/graph target nodes entirely — otherwise a demo
+ * target would still surface as an isolated phantom node with zero real connections, a smaller
+ * but real leak of fabricated data into "real" analysis output. A target with AT LEAST ONE real
+ * (non-synthetic) account — e.g. demo data loaded into an already-monitored target — keeps its
+ * profile live: it has genuine relationship data worth showing, and its demo rows are already
+ * excluded at the relationship level above. A target with NO accounts observed at all (an
+ * honest empty real capture, e.g. a followers page nobody follows) is left alone — never marked
+ * synthetic — so an empty-but-real capture is never mistaken for a demo one.
+ *
  * PURE — no store I/O; the caller does the read.
  */
 export function flattenNetworkArtifacts(
@@ -211,11 +226,15 @@ export function flattenNetworkArtifacts(
 ): { profiles: AnalysisProfile[]; relationships: AnalysisRelationship[] } {
   const profiles = new Map<string, AnalysisProfile>();
   const relationships: AnalysisRelationship[] = [];
+  const hasAnyAccount = new Map<string, boolean>();
+  const hasRealAccount = new Map<string, boolean>();
   for (const artifact of artifacts) {
     const id = String(artifact.target ?? '');
     if (!id) continue;
     if (!profiles.has(id)) profiles.set(id, { id, username: artifact.target });
     for (const account of artifact.accounts ?? []) {
+      hasAnyAccount.set(id, true);
+      if (!account.synthetic) hasRealAccount.set(id, true);
       relationships.push({
         profileId: id,
         relationship: artifact.kind === 'followers' ? 'follower' : 'following',
@@ -227,6 +246,11 @@ export function flattenNetworkArtifacts(
         lastObservedAt: account.lastObservedAt ?? null,
         ...(account.synthetic ? { synthetic: true as const } : {}),
       });
+    }
+  }
+  for (const [id, profile] of profiles) {
+    if (hasAnyAccount.get(id) === true && hasRealAccount.get(id) !== true) {
+      profile.synthetic = true;
     }
   }
   return { profiles: [...profiles.values()], relationships };
