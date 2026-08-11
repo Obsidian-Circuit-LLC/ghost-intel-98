@@ -67,6 +67,36 @@ export function __resetXSessionsForTests(): void {
   xWindows.clear();
 }
 
+/** The resolved network posture for an X capture window. */
+export type XTorGate =
+  | { blocked: true; reason: string }
+  | { blocked: false; proxy?: { socks: string } };
+
+/**
+ * Resolve the Tor posture for an X capture window from the already-acknowledged `clearnetEnabled`
+ * flag. Shared by this module's per-case `connectXSession` AND the legacy `ipc.ts` connect path,
+ * so NO X capture surface can open a proxy-less clearnet window while clearnet mode is off:
+ *   - clearnet off + Tor not bootstrapped → `{ blocked }` (fail-closed, no clearnet fallback);
+ *   - clearnet off + Tor ready → route over the Tor SOCKS proxy;
+ *   - clearnet on → no proxy (the operator's own IP, behind the renderer's one-time ack).
+ * The caller still applies `webRTCIPHandlingPolicy:'disable_non_proxied_udp'` regardless.
+ */
+export function resolveXTorGate(clearnetEnabled: boolean): XTorGate {
+  if (clearnetEnabled) return { blocked: false };
+  const tor = getBgTor();
+  if (!tor?.isBootstrapped()) {
+    return {
+      blocked: true,
+      reason:
+        'Tor is not ready — X capture is blocked (no clearnet fallback). Enable clearnet mode ' +
+        'in Settings to bypass Tor; your real IP will be exposed to X.'
+    };
+  }
+  // Bare host:port; createCaptureWindow prepends `socks5://`. A dead/zero port still yields a
+  // SOCKS rule with an empty bypass — connection-refused, never a direct clearnet request.
+  return { blocked: false, proxy: { socks: `127.0.0.1:${tor.socksPort()}` } };
+}
+
 /**
  * Open (or reuse) the hardened X capture window for `caseId`.
  *
@@ -94,21 +124,9 @@ export async function connectXSession(caseId: string, clearnetEnabled: boolean):
     return { blocked: false };
   }
 
-  let proxy: { socks: string } | undefined;
-  if (!clearnetEnabled) {
-    const tor = getBgTor();
-    if (!tor?.isBootstrapped()) {
-      return {
-        blocked: true,
-        reason:
-          'Tor is not ready — X capture is blocked (no clearnet fallback). Enable clearnet mode ' +
-          'in Settings to bypass Tor; your real IP will be exposed to X.'
-      };
-    }
-    // Bare host:port; createCaptureWindow prepends `socks5://`. A dead/zero port still yields a
-    // SOCKS rule with an empty bypass — connection-refused, never a direct clearnet request.
-    proxy = { socks: `127.0.0.1:${tor.socksPort()}` };
-  }
+  const gate = resolveXTorGate(clearnetEnabled);
+  if (gate.blocked) return { blocked: true, reason: gate.reason };
+  const proxy = gate.proxy;
 
   const win = await createCaptureWindow({
     partition: X_LISTENING_PARTITION,

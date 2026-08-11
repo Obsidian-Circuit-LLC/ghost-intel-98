@@ -12,7 +12,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const rec = vi.hoisted(() => ({
   createArgs: null as Record<string, unknown> | null,
-  win: null as { show: () => void; focus: () => void; isDestroyed: () => boolean } | null,
+  win: null as {
+    show: () => void;
+    focus: () => void;
+    isDestroyed: () => boolean;
+    webContents: { setWebRTCIPHandlingPolicy: (p: string) => void };
+  } | null,
   runCalls: [] as string[],
   cookieQuery: null as Record<string, unknown> | null,
   cookies: [] as Array<{ name: string; value: string; domain: string }>,
@@ -27,7 +32,8 @@ vi.mock('../src/main/capture/capture-window', () => ({
     rec.win = {
       show: vi.fn(),
       focus: vi.fn(),
-      isDestroyed: () => false
+      isDestroyed: () => false,
+      webContents: { setWebRTCIPHandlingPolicy: vi.fn() }
     };
     return rec.win;
   }),
@@ -49,6 +55,13 @@ vi.mock('electron', () => ({
       }
     }))
   }
+}));
+
+// Leak fix: the legacy connect path is now Tor-gated (resolveXTorGate) exactly like session.ts.
+// Mock the bg Tor engine as bootstrapped so connect opens over the Tor SOCKS proxy (the fail-closed
+// / clearnet-blocked cases are covered authoritatively in test/x-listening-tor.test.ts).
+vi.mock('../src/main/bgconn/tor-singleton', () => ({
+  getBgTor: () => ({ isBootstrapped: () => true, socksPort: () => 19050 })
 }));
 
 import {
@@ -76,16 +89,18 @@ beforeEach(() => {
   __resetXWindowForTests();
 });
 
-describe('connectXSession — clearnet, persist:x-listening, no proxy', () => {
-  it('opens a hardened window on persist:x-listening at x.com/home with NO proxy', async () => {
+describe('connectXSession — Tor-default, persist:x-listening', () => {
+  it('opens a hardened window on persist:x-listening at x.com/home over the Tor SOCKS proxy', async () => {
     const r = await connectXSession();
     expect(r).toEqual({ opened: true });
     expect(rec.createArgs!.partition).toBe('persist:x-listening');
     expect(rec.createArgs!.partition).toBe(X_LISTENING_PARTITION);
     expect(rec.createArgs!.url).toBe('https://x.com/home');
     expect(rec.createArgs!.url).toBe(X_HOME_URL);
-    // clearnet-quarantine: the X caller NEVER supplies a SOCKS proxy.
-    expect(rec.createArgs!.proxy).toBeUndefined();
+    // Leak fix: the legacy connect is Tor-gated — it routes over the bg Tor proxy, never a
+    // proxy-less clearnet window while clearnet mode is off.
+    expect(rec.createArgs!.proxy).toEqual({ socks: '127.0.0.1:19050' });
+    expect(rec.createArgs!.webRTCIPHandlingPolicy).toBe('disable_non_proxied_udp');
     expect(rec.createArgs!.allowHosts).toContain('x.com');
     expect(rec.createArgs!.allowHosts).toContain('twitter.com');
   });

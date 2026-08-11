@@ -73,7 +73,8 @@ import {
   connectXSession as openXSession,
   getXStatus as getXSessionStatus,
   clearXSession as closeXSession,
-  getXWindow
+  getXWindow,
+  resolveXTorGate
 } from './session';
 import { captureTimeline, type XTimelineCaptureRequest } from './capture';
 import {
@@ -111,18 +112,28 @@ export function __resetXWindowForTests(): void {
  * is ever supplied — X is a clearnet-quarantine trust domain. If a live window
  * already exists it is surfaced rather than duplicated.
  */
-export async function connectXSession(): Promise<{ opened: boolean }> {
+export async function connectXSession(
+  clearnetEnabled = false
+): Promise<{ opened: boolean; blocked?: boolean; reason?: string }> {
   if (xWindow && !xWindow.isDestroyed()) {
     xWindow.show();
     xWindow.focus();
     return { opened: true };
   }
+  // Same Tor-default fail-closed + acked-clearnet gate as session.ts. The legacy connect/capture/
+  // thread/follower channels all share this ONE window, so gating it here closes the clearnet-
+  // capture path across every legacy channel (until Task 16 retires this module). A proxy-less
+  // window is NEVER opened while clearnet mode is off.
+  const gate = resolveXTorGate(clearnetEnabled);
+  if (gate.blocked) return { opened: false, blocked: true, reason: gate.reason };
   const win = await createCaptureWindow({
     partition: X_LISTENING_PARTITION,
     url: X_HOME_URL,
-    allowHosts: X_ALLOW_HOSTS
-    // NO `proxy`: clearnet quarantine — the operator's own IP + cookies.
+    allowHosts: X_ALLOW_HOSTS,
+    ...(gate.proxy ? { proxy: gate.proxy } : {}),
+    webRTCIPHandlingPolicy: 'disable_non_proxied_udp'
   });
+  win.webContents.setWebRTCIPHandlingPolicy('disable_non_proxied_udp');
   xWindow = win;
   win.show();
   win.focus();
@@ -1518,9 +1529,10 @@ function aggregateEntities(posts: readonly XPostArtifact[]): XEntityCacheEntry[]
  * this handler validates is delivered by Electron/`ipcMain`, never by the renderer.
  */
 export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
-  deps.handle(channels.xListening.connect, (e) => {
+  deps.handle(channels.xListening.connect, async (e) => {
     assertTrustedSender(e);
-    return connectXSession();
+    const clearnetEnabled = await loadClearnetEnabled();
+    return connectXSession(clearnetEnabled);
   });
   deps.handle(channels.xListening.status, (e) => {
     assertTrustedSender(e);

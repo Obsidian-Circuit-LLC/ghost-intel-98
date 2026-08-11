@@ -154,9 +154,11 @@ describe('registerXListeningIpc — every Phase-1 channel is invokable for a tru
       const ipc = fakeIpcMain();
       registerXListeningIpc({ handle: ipc.handle });
       const r = await callHandler(ipc, channels.xListening[key], TRUSTED_EVENT, ...args);
-      if (!r.ok) {
-        expect(r.error.message).not.toBe(SENDER_ERROR);
-      }
+      // Always assert (a bare `if (!r.ok)` guard asserts nothing on success — a hollow pass): a
+      // trusted sender must reach PAST assertTrustedSender, so the result is NEVER a sender-boundary
+      // rejection. It may still legitimately fail later for other reasons in this mocked env.
+      const blockedAtTrustBoundary = r.ok === false && r.error.message === SENDER_ERROR;
+      expect(blockedAtTrustBoundary).toBe(false);
     }
   );
 });

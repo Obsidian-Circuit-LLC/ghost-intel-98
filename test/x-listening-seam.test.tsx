@@ -62,10 +62,23 @@ vi.mock('electron', () => ({
 vi.mock('../src/main/capture/capture-window', () => ({
   createCaptureWindow: vi.fn(async () => {
     rec.createCaptureWindowCalls += 1;
-    return { show: vi.fn(), focus: vi.fn(), isDestroyed: () => false };
+    return { show: vi.fn(), focus: vi.fn(), isDestroyed: () => false, webContents: { setWebRTCIPHandlingPolicy: vi.fn() } };
   }),
   runCapture: vi.fn(async () => []),
   assertTrustedSender: vi.fn(), // no-op; origin rejection is covered in the security suite
+}));
+
+// Leak fix: the legacy connect path is now Tor-gated. Mock the bg Tor engine bootstrapped so the
+// connect handler opens the window over Tor (fail-closed behaviour is proven in x-listening-tor).
+vi.mock('../src/main/bgconn/tor-singleton', () => ({
+  getBgTor: () => ({ isBootstrapped: () => true, socksPort: () => 19050 })
+}));
+
+// The connect handler reads the clearnet setting via loadClearnetEnabled (a dynamic import of
+// json-fs + a secure-fs settings read). Stub the store so that resolves immediately/deterministically
+// to Tor mode (clearnet:false) — without a real userData path the timing is otherwise flaky.
+vi.mock('../src/main/storage/json-fs', () => ({
+  settingsStore: { read: vi.fn(async () => ({ xListening: { clearnet: false } })) }
 }));
 
 import { channels } from '../src/shared/ipc-contracts';
@@ -270,6 +283,9 @@ describe('seam C — XListeningModule → preload → connect handler', () => {
     expect(btn).toBeTruthy();
 
     await act(async () => { (btn as HTMLButtonElement).click(); });
+    // The connect handler now reads the clearnet setting via a dynamic import (loadClearnetEnabled)
+    // before opening the window — flush that extra async hop so createCaptureWindow has been called.
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
 
     // renderer → preload capture() forwarded to the connect channel → connectXSession → createCaptureWindow
     expect(rec.calls.some((c) => c.channel === channels.xListening.connect)).toBe(true);
