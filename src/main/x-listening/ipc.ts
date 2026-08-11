@@ -92,6 +92,15 @@ import {
   type AnalysisProfile,
   type AnalysisRelationship
 } from './analysis';
+import { runArchiveSteps } from './archive';
+import { loadDemoData } from './demo';
+import { readCachedMedia } from './media';
+import {
+  exportXPostsToFile,
+  writeChecksumSidecar,
+  type XExportFileFormat,
+  type XExportWriteResult
+} from './exports';
 
 /** Clearnet partition the authenticated X session lives on. Matches the X1 contract. */
 export const X_LISTENING_PARTITION = 'persist:x-listening';
@@ -733,6 +742,16 @@ export async function captureNetwork(
     };
   }
 
+  // Task 15(c) note: avatars are DELIBERATELY left on the `remoteMediaToDataUri` (inline
+  // `data:`) path here rather than switched to media.ts's ref-based `cacheRemoteMedia`
+  // (Task 9). `normalizeUserCell` (extract.ts) admits an avatar ONLY when it is `data:`-
+  // prefixed (the honesty filter pinned by `x-listening-network.test.ts`'s
+  // "drops a remote avatar URL" case) — a `x-media/<hash>` LOCAL REF would fail that exact
+  // filter and be silently dropped as if resolution had failed, a regression, not a fix.
+  // The invariant this task cares about — a remote media URL is NEVER stored on an artifact —
+  // is already fully closed here: `remoteMediaToDataUri` returns a `data:` URI or null, never
+  // a fetchable remote URL. Re-plumbing avatars onto ref-based storage would need a coordinated
+  // `extract.ts` filter change and is out of this task's blast radius.
   const deps = { ...defaultNetworkDeps(), ...overrides };
 
   // Navigate into the followers/following surface FIRST, THEN gate. Same ordering
@@ -1648,6 +1667,131 @@ export async function removePreset(
   return { presets };
 }
 
+// ---- Task 15: interactive (native-save-dialog-gated) file exports --------
+// Closes the `exportXPostsToFile`/network-CSV arbitrary-write finding: `exports.ts`'s
+// `exportXPostsToFile` trusts its `filePath` argument verbatim, so a channel that took a
+// renderer-supplied path would let a compromised/malicious renderer write anywhere the app
+// process can write. These wrap the SAME synthetic-excluding serializers behind a NATIVE
+// `dialog.showSaveDialog` — the operator, not the renderer, always picks the destination.
+
+/** The file-export formats offered through the interactive (save-dialog) path — mirrors
+ *  `exports.ts`'s `XExportFileFormat` (json/csv/pdf; docx stays on the base64 `exportXItems`
+ *  surface above, which is a renderer-side-saved blob, not a main-side file write). */
+const X_EXPORT_FILE_FORMATS: readonly XExportFileFormat[] = ['json', 'csv', 'pdf'];
+
+function isXExportFileFormat(v: unknown): v is XExportFileFormat {
+  return typeof v === 'string' && (X_EXPORT_FILE_FORMATS as readonly string[]).includes(v);
+}
+
+interface SaveDialogFilter {
+  name: string;
+  extensions: string[];
+}
+interface SaveDialogOutcome {
+  canceled: boolean;
+  filePath?: string;
+}
+
+const EXPORT_FILE_FILTERS: Record<XExportFileFormat, SaveDialogFilter[]> = {
+  json: [{ name: 'JSON', extensions: ['json'] }],
+  csv: [{ name: 'CSV', extensions: ['csv'] }],
+  pdf: [{ name: 'PDF', extensions: ['pdf'] }]
+};
+
+/** Injectable seams for the interactive export orchestration — production defaults resolve
+ *  electron / node:fs LAZILY (dynamic import), so importing this module — or calling these
+ *  functions with full test overrides — never touches either. */
+export interface InteractiveExportDeps {
+  /** Show a native save dialog; production default is a parentless `dialog.showSaveDialog`
+   *  (matches `bookmarksBoard.exportBoard`'s `register.ts` convention). */
+  showSaveDialog: (defaultPath: string, filters: SaveDialogFilter[]) => Promise<SaveDialogOutcome>;
+  /** Refuse to write through a symlink — mirrors `register.ts`'s inline `lstat` guard applied
+   *  to every other save-dialog export in the app. */
+  assertNotSymlink: (filePath: string) => Promise<void>;
+  writeFile: (filePath: string, data: Buffer | string) => Promise<void>;
+  /** Forwarded to `exportXPostsToFile`'s own `readPosts` seam (tests only — production omits
+   *  this so `exportXPostsToFile` uses ITS OWN default, the real encrypted `posts` store). */
+  readPosts?: (caseId: string) => Promise<import('./store').XPostArtifact[]>;
+  /** Forwarded in place of the module-level `exportNetworkCsv` (tests only — production omits
+   *  this so the real, already-synthetic-filtered `exportNetworkCsv` runs). */
+  readNetworkCsv?: (caseId: string) => Promise<{ csv: string; count: number }>;
+}
+
+async function defaultAssertNotSymlink(filePath: string): Promise<void> {
+  const { lstat } = await import('node:fs/promises');
+  try {
+    const st = await lstat(filePath);
+    if (st.isSymbolicLink()) throw new Error('Refusing to write to a symbolic link.');
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException)?.code !== 'ENOENT') throw e;
+  }
+}
+
+function defaultInteractiveExportDeps(): InteractiveExportDeps {
+  return {
+    showSaveDialog: async (defaultPath, filters) => {
+      const { dialog } = await import('electron');
+      return dialog.showSaveDialog({ defaultPath, filters });
+    },
+    assertNotSymlink: defaultAssertNotSymlink,
+    writeFile: async (filePath, data) => {
+      const { writeFile } = await import('node:fs/promises');
+      await writeFile(filePath, data);
+    }
+  };
+}
+
+export type InteractiveExportResult = ({ canceled: false } & XExportWriteResult) | { canceled: true };
+
+/**
+ * Export a campaign's captured posts through a NATIVE save dialog — the operator picks the
+ * destination; the renderer never supplies a filesystem path. Delegates the actual
+ * read/filter/serialize/write/checksum to `exports.ts`'s `exportXPostsToFile` — synthetic/demo
+ * posts are excluded THERE, not here (single source of truth for that honesty rule).
+ */
+export async function exportPostsInteractive(
+  caseId: string,
+  format: XExportFileFormat,
+  overrides: Partial<InteractiveExportDeps> = {}
+): Promise<InteractiveExportResult> {
+  const deps: InteractiveExportDeps = { ...defaultInteractiveExportDeps(), ...overrides };
+  const res = await deps.showSaveDialog(sanitizeExportName(caseId, format), EXPORT_FILE_FILTERS[format]);
+  if (res.canceled || !res.filePath) return { canceled: true };
+  await deps.assertNotSymlink(res.filePath);
+  const written = await exportXPostsToFile(caseId, format, res.filePath, {
+    writeFile: deps.writeFile,
+    ...(deps.readPosts ? { readPosts: deps.readPosts } : {})
+  });
+  return { canceled: false, ...written };
+}
+
+export type InteractiveNetworkExportResult =
+  | ({ canceled: false; filePath: string; count: number } & { sha256: string; checksumPath: string })
+  | { canceled: true };
+
+/**
+ * Export a campaign's captured networks (synthetic-excluded via `exportNetworkCsv`) as CSV
+ * through the SAME native-save-dialog discipline as `exportPostsInteractive`, plus a SHA-256
+ * checksum sidecar (`writeChecksumSidecar`, exports.ts) — parity with the post export's
+ * evidentiary guarantee even though network CSV isn't a per-post `XPostArtifact` export.
+ */
+export async function exportNetworkInteractive(
+  caseId: string,
+  overrides: Partial<InteractiveExportDeps> = {}
+): Promise<InteractiveNetworkExportResult> {
+  const deps: InteractiveExportDeps = { ...defaultInteractiveExportDeps(), ...overrides };
+  const res = await deps.showSaveDialog(sanitizeExportName(caseId, 'csv'), [
+    { name: 'CSV', extensions: ['csv'] }
+  ]);
+  if (res.canceled || !res.filePath) return { canceled: true };
+  await deps.assertNotSymlink(res.filePath);
+  const readNetworkCsv = deps.readNetworkCsv ?? exportNetworkCsv;
+  const { csv, count } = await readNetworkCsv(caseId);
+  await deps.writeFile(res.filePath, csv);
+  const checksum = await writeChecksumSidecar({ writeFile: deps.writeFile }, res.filePath, csv);
+  return { canceled: false, filePath: res.filePath, count, ...checksum };
+}
+
 /**
  * Wire the connect/status channels. Every handler validates the sender frame
  * FIRST (`assertTrustedSender`) — a hardened capture window can host a hostile
@@ -2071,5 +2215,106 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
       throw new Error('Running a preset requires a caseId and id.');
     }
     return runPreset(ensureUuid(req.caseId, 'caseId'), req.id);
+  });
+
+  // ---- Task 15: Changes tab (raw networks read) ----------------------------
+  deps.handle(channels.xListening.networksList, async (e, caseIdArg) => {
+    assertTrustedSender(e);
+    if (typeof caseIdArg !== 'string' || !caseIdArg) {
+      throw new Error('Listing networks requires a caseId.');
+    }
+    const store = await prodXStore();
+    return store.networks.read(ensureUuid(caseIdArg, 'caseId'));
+  });
+
+  // ---- Task 15(d): archive status + a run driven off the Tor-default campaign window ----
+  deps.handle(channels.xListening.archiveStatus, async (e, caseIdArg) => {
+    assertTrustedSender(e);
+    if (typeof caseIdArg !== 'string' || !caseIdArg) {
+      throw new Error('Archive status requires a caseId.');
+    }
+    const store = await prodXStore();
+    return store.archiveState.read(ensureUuid(caseIdArg, 'caseId'));
+  });
+
+  deps.handle(channels.xListening.archiveRun, async (e, reqArg) => {
+    assertTrustedSender(e);
+    const req = reqArg as
+      | Partial<{
+          caseId: string;
+          channelId: string;
+          channelLabel: string;
+          targetUsername: string;
+          maxCycles: number;
+        }>
+      | undefined;
+    if (
+      !req ||
+      typeof req.caseId !== 'string' ||
+      typeof req.channelId !== 'string' ||
+      typeof req.targetUsername !== 'string'
+    ) {
+      throw new Error('Running an archive step requires a caseId, channelId and targetUsername.');
+    }
+    const caseId = ensureUuid(req.caseId, 'caseId');
+    const win = getXWindow(caseId);
+    if (!win) {
+      throw new Error(
+        'X is not connected for this campaign. Open the session and sign in before archiving.'
+      );
+    }
+    const maxCycles = Number(req.maxCycles);
+    return runArchiveSteps(
+      win,
+      {
+        caseId,
+        jobId: caseId,
+        channelId: req.channelId,
+        channelLabel: typeof req.channelLabel === 'string' ? req.channelLabel : `@${req.channelId}`,
+        targetUsername: req.targetUsername
+      },
+      { maxCycles: Number.isFinite(maxCycles) && maxCycles > 0 ? maxCycles : 1 }
+    );
+  });
+
+  // ---- Task 15(a): demo data (demo.ts, Task 12) ----------------------------
+  deps.handle(channels.xListening.loadDemoData, (e, caseIdArg) => {
+    assertTrustedSender(e);
+    if (typeof caseIdArg !== 'string' || !caseIdArg) {
+      throw new Error('Loading demo data requires a caseId.');
+    }
+    const caseId = ensureUuid(caseIdArg, 'caseId');
+    return loadDemoData(caseId, caseId);
+  });
+
+  // ---- Task 15(b): interactive (save-dialog-gated) exports -----------------
+  deps.handle(channels.xListening.exportPostsToFile, (e, reqArg) => {
+    assertTrustedSender(e);
+    const req = reqArg as { caseId?: unknown; format?: unknown } | undefined;
+    if (!req || typeof req.caseId !== 'string' || !req.caseId) {
+      throw new Error('Export requires a caseId.');
+    }
+    if (!isXExportFileFormat(req.format)) {
+      throw new Error('Export requires a format of json, csv or pdf.');
+    }
+    return exportPostsInteractive(ensureUuid(req.caseId, 'caseId'), req.format);
+  });
+
+  deps.handle(channels.xListening.exportNetworkToFile, (e, caseIdArg) => {
+    assertTrustedSender(e);
+    if (typeof caseIdArg !== 'string' || !caseIdArg) {
+      throw new Error('Network export requires a caseId.');
+    }
+    return exportNetworkInteractive(ensureUuid(caseIdArg, 'caseId'));
+  });
+
+  // ---- Task 15(a)/(c): read a cached local media ref back as a data: URI ---
+  deps.handle(channels.xListening.mediaRead, (e, reqArg) => {
+    assertTrustedSender(e);
+    const req = reqArg as { caseId?: unknown; ref?: unknown } | undefined;
+    if (!req || typeof req.caseId !== 'string' || typeof req.ref !== 'string') {
+      throw new Error('Reading cached media requires a caseId and ref.');
+    }
+    return readCachedMedia(ensureUuid(req.caseId, 'caseId'), req.ref);
   });
 }

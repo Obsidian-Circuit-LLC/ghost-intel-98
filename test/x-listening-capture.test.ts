@@ -292,3 +292,103 @@ describe('captureTimeline', () => {
     expect(res.added).toBe(0);
   });
 });
+
+// ---- 5. Task 15(c): post-media resolved via resolveMedia -> mediaRefs -----
+
+describe('captureTimeline: post-media resolution (Task 15 gap closure)', () => {
+  it('resolves each raw.media URL via resolveMedia and folds the LOCAL refs onto the artifact', async () => {
+    const resolveMedia = vi.fn(async (_win: unknown, url: string, caseId: string) =>
+      `x-media/${caseId}-${url.split('/').pop()}`,
+    );
+    const res = await captureTimeline(
+      WIN,
+      REQ,
+      deps({
+        runCapture: async () => [raw({ media: ['https://pbs.twimg.com/media/a.jpg', 'https://pbs.twimg.com/media/b.jpg'] })],
+        resolveMedia,
+      }),
+    );
+    expect(resolveMedia).toHaveBeenCalledWith(WIN, 'https://pbs.twimg.com/media/a.jpg', 'case-a');
+    expect(resolveMedia).toHaveBeenCalledWith(WIN, 'https://pbs.twimg.com/media/b.jpg', 'case-a');
+    expect(res.posts[0]!.mediaRefs).toEqual(['x-media/case-a-a.jpg', 'x-media/case-a-b.jpg']);
+    // never a remote http(s) URL on the stored artifact
+    expect(res.posts[0]!.mediaRefs!.every((r) => !r.startsWith('http'))).toBe(true);
+  });
+
+  it('a failed media resolution (null) is dropped, never leaves a remote URL or a hole', async () => {
+    const res = await captureTimeline(
+      WIN,
+      REQ,
+      deps({
+        runCapture: async () => [raw({ media: ['https://pbs.twimg.com/media/a.jpg'] })],
+        resolveMedia: async () => null,
+      }),
+    );
+    expect(res.posts[0]!.mediaRefs).toBeUndefined();
+  });
+
+  it('no media on the raw post -> mediaRefs stays undefined (never an empty array on the wire)', async () => {
+    const res = await captureTimeline(WIN, REQ, deps({ runCapture: async () => [raw({ media: [] })] }));
+    expect(res.posts[0]!.mediaRefs).toBeUndefined();
+  });
+
+  it('an already-local data: media entry is passed through without calling resolveMedia', async () => {
+    const resolveMedia = vi.fn();
+    const res = await captureTimeline(
+      WIN,
+      REQ,
+      deps({
+        runCapture: async () => [raw({ media: ['data:image/png;base64,AAAA'] })],
+        resolveMedia,
+      }),
+    );
+    expect(resolveMedia).not.toHaveBeenCalled();
+    expect(res.posts[0]!.mediaRefs).toEqual(['data:image/png;base64,AAAA']);
+  });
+
+  it('mediaRefs are folded into the evidence hash — a changed set of refs changes evidenceHash', async () => {
+    const a = await captureTimeline(
+      WIN,
+      REQ,
+      deps({
+        runCapture: async () => [raw({ media: ['https://pbs.twimg.com/media/a.jpg'] })],
+        resolveMedia: async () => 'x-media/hash-a',
+      }),
+    );
+    const b = await captureTimeline(
+      WIN,
+      REQ,
+      deps({
+        runCapture: async () => [raw({ media: ['https://pbs.twimg.com/media/a.jpg'] })],
+        resolveMedia: async () => 'x-media/hash-b',
+      }),
+    );
+    expect(a.posts[0]!.evidenceHash).not.toBe(b.posts[0]!.evidenceHash);
+  });
+
+  it('the DEFAULT resolveMedia (no override) routes through media.ts cacheRemoteMedia, scoped to req.caseId', async () => {
+    vi.resetModules();
+    vi.doMock('../src/main/x-listening/media', () => ({
+      cacheRemoteMedia: vi.fn(async (_win: unknown, url: string, caseId: string) => ({
+        ref: `x-media/${caseId}:${url}`,
+        sha256: 'deadbeef',
+      })),
+    }));
+    const { captureTimeline: captureTimelineFresh } = await import('../src/main/x-listening/capture');
+    const res = await captureTimelineFresh(
+      WIN,
+      REQ,
+      // Deliberately omit resolveMedia — exercise the production default.
+      {
+        guard: async (_win, capture) => ({ blocked: false, result: await capture() }),
+        runCapture: async () => [raw({ media: ['https://pbs.twimg.com/media/a.jpg'] })],
+        savePosts: async () => ({ added: 1, skipped: 0 }),
+        saveItems: async () => ({ added: 1, skipped: 0 }),
+        now: () => '2026-08-11T12:00:00.000Z',
+      },
+    );
+    expect(res.posts[0]!.mediaRefs).toEqual(['x-media/case-a:https://pbs.twimg.com/media/a.jpg']);
+    vi.doUnmock('../src/main/x-listening/media');
+    vi.resetModules();
+  });
+});

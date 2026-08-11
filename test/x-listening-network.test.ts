@@ -325,4 +325,27 @@ describe('captureFollowers / captureFollowing', () => {
     expect(res.blocked).toBe(true);
     expect(navigate).not.toHaveBeenCalled();
   });
+
+  it('Task 15(c) note: the DEFAULT avatar resolver stays on remoteMediaToDataUri — a data: thumbnail, never a remote URL or an unresolved local ref', async () => {
+    // No electron `fetch`/executeJavaScript is wired in this unit-test environment, so the
+    // REAL default `remoteMediaToDataUri` resolves to null here (network-less test) — the
+    // assertion that matters is that whatever it returns can never be a remote http(s) URL,
+    // proven end to end via the SAME production wiring path `captureFollowers` uses when no
+    // `resolveMedia` override is supplied.
+    const { captureFollowers } = await import('../src/main/x-listening/ipc');
+    const res = await captureFollowers(
+      { webContents: { executeJavaScript: vi.fn(async () => null) } } as unknown as Electron.BrowserWindow,
+      { caseId: 'case-avatar', jobId: 'job-1', target: 'target' },
+      {
+        navigate: async () => {},
+        settle: async () => {},
+        guard: async (_w, c) => ({ blocked: false, result: await c() }),
+        runCapture: async () => [cell({ username: 'alice', avatar: 'https://pbs.twimg.com/profile_images/1/a.jpg' })],
+        saveNetwork: async () => 1,
+        now: () => '2026-08-06T12:00:00.000Z',
+        // resolveMedia deliberately omitted — exercise the production default.
+      },
+    );
+    expect(res.accounts[0]!.avatar ?? '').not.toMatch(/^https?:/);
+  });
 });

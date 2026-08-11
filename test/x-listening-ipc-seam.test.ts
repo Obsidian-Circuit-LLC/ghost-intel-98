@@ -97,7 +97,15 @@ const NEW_CHANNELS: Array<{ key: keyof typeof channels.xListening; args: unknown
   // Task 10 — notes remove, preset remove/run (local search).
   { key: 'removeNote', args: [{ caseId, findingId: 'f1' }] },
   { key: 'presetsRemove', args: [{ caseId, id: 'preset-1' }] },
-  { key: 'presetsRun', args: [{ caseId, id: 'preset-1' }] }
+  { key: 'presetsRun', args: [{ caseId, id: 'preset-1' }] },
+  // Task 15 — remaining tab wiring + Phase-2 gap closure (archive/demo/exports/media).
+  { key: 'networksList', args: [caseId] },
+  { key: 'archiveStatus', args: [caseId] },
+  { key: 'archiveRun', args: [{ caseId, channelId: 'target', targetUsername: 'target' }] },
+  { key: 'loadDemoData', args: [caseId] },
+  { key: 'exportPostsToFile', args: [{ caseId, format: 'json' }] },
+  { key: 'exportNetworkToFile', args: [caseId] },
+  { key: 'mediaRead', args: [{ caseId, ref: `x-media/${'a'.repeat(64)}` }] }
 ];
 
 describe('ipc-contracts.ts — Phase-1 xListening channel constants exist', () => {

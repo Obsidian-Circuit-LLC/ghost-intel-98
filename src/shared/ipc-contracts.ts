@@ -640,7 +640,41 @@ export const channels = {
     /** Run one saved preset over the case's captured posts → the matches, for local
      *  highlight-search / renderer highlighting (Task 10). Derived-on-read, never persisted;
      *  synthetic/demo posts are excluded (honesty). */
-    presetsRun: 'xListening:presets:run'
+    presetsRun: 'xListening:presets:run',
+
+    // ---- Task 15: remaining tab wiring + Phase-2 gap closure ---------------------------
+    /** List every captured follower/following artifact for a campaign (store.ts `networks.read`)
+     *  — the raw per-account rows (including `firstObservedAt`/`lastObservedAt`) the Changes tab
+     *  needs to show newly-observed vs long-standing accounts. `analysis` derives aggregate stats
+     *  from the same data but does not surface individual observation timestamps. Synthetic/demo
+     *  accounts are returned AS-IS (same "exclusion happens downstream" posture as `postsList`). */
+    networksList: 'xListening:networks:list',
+    /** Read a campaign's resumable archive cursor/cycle-count (store.ts `archiveState.read`) —
+     *  null before the first step ever ran. */
+    archiveStatus: 'xListening:archive:status',
+    /** Run a bounded, low-rate sequence of archive steps (archive.ts `runArchiveSteps`, Task 8) in
+     *  a campaign's Tor-default capture window — NOT the retiring `runArchiveCycle(s)` above,
+     *  which drive the clearnet-only legacy `captureVisibleTimeline`. Gated MAIN-side on
+     *  `AppSettings.xListening.archiveCycles` (fail-closed OFF); `maxCycles` clamped to [0,1000]. */
+    archiveRun: 'xListening:archive:run',
+    /** Load the deterministic seeded demo data set (demo.ts, Task 12) into a campaign — every
+     *  record carries `synthetic:true`, enforced-excluded from analysis/entities/exports/hashing. */
+    loadDemoData: 'xListening:demo:load',
+    /** Export a campaign's REAL (synthetic-excluded) captured posts to an operator-chosen path via
+     *  a native save dialog (exports.ts `exportXPostsToFile`, Task 11) — the renderer NEVER
+     *  supplies a filesystem path itself (closes the arbitrary-write finding). Writes a SHA-256
+     *  checksum sidecar alongside the export. */
+    exportPostsToFile: 'xListening:export:postsToFile',
+    /** Export a campaign's REAL (synthetic-excluded) captured networks as CSV to an
+     *  operator-chosen path via a native save dialog (`exportNetworkCsv`, Task 7) — same
+     *  save-dialog-only discipline as `exportPostsToFile`, plus a SHA-256 checksum sidecar. */
+    exportNetworkToFile: 'xListening:export:networkToFile',
+    /** Read back one previously-cached local media ref (media.ts `cacheRemoteMedia`, Task 9) as a
+     *  `data:` URI for renderer display. `ref` is validated against the exact
+     *  `x-media/<64-hex sha256>` shape `cacheRemoteMedia` produces BEFORE any path is built —
+     *  closes path traversal from a crafted ref. Returns null (never throws) on a malformed ref
+     *  or a read failure — a display miss, not a fault. */
+    mediaRead: 'xListening:media:read'
   },
   // Scraping cases — the isolated per-namespace case stores for SOCMINT + X collection runs
   // (kept apart from the core investigation `cases` namespace). Every handler takes a

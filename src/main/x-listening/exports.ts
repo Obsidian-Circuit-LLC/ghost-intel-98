@@ -118,8 +118,13 @@ function basename(filePath: string): string {
  * (behaviorally) from the quarantined `writeChecksumSidecar` (`electron/main.cjs:2094-2101`).
  * The sidecar line format (`<hex digest>  <basename>\n`) matches the standard `sha256sum`
  * output line, so it verifies with `sha256sum -c` unmodified.
+ *
+ * Exported (Task 15) so the interactive save-dialog export orchestration below — and the
+ * network-CSV export, which is not a per-post `XPostArtifact` export and so never goes
+ * through `exportXPostsToFile` — can both get the identical checksum-sidecar guarantee
+ * without duplicating the digest/basename logic.
  */
-async function writeChecksumSidecar(
+export async function writeChecksumSidecar(
   deps: Pick<XExportDeps, 'writeFile'>,
   filePath: string,
   data: Buffer | string

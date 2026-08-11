@@ -126,3 +126,84 @@ export async function cacheRemoteMedia(
 
   return { ref, sha256 };
 }
+
+// ---- read-back: cached ref -> data: URI for renderer display (Task 15) ---
+
+/** The EXACT shape `cacheRemoteMedia` ever produces: `x-media/<64-hex sha256>`. Validated
+ *  BEFORE any path is built from a caller-supplied `ref` — this is the ONLY thing standing
+ *  between a renderer-controlled string and a `join()` call, so it must reject anything that
+ *  isn't precisely this shape (no `..`, no absolute path, no alternate subdir) rather than a
+ *  looser "no traversal characters" denylist. */
+const MEDIA_REF_RE = /^x-media\/[0-9a-f]{64}$/;
+
+/** Sniff a small, fixed set of image magic-byte signatures. `cacheRemoteMedia` only ever
+ *  caches bytes `remoteMediaToDataUri` already confirmed were `image/*` at fetch time, but the
+ *  MIME itself is not persisted alongside the byte-hash-named file (content-addressed, no
+ *  sidecar) — sniffing on read-back avoids adding one just to remember a MIME string. Falls
+ *  back to a generic binary type, which browsers still render fine inside an `<img>` for the
+ *  four formats X actually serves. */
+function sniffImageMime(bytes: Buffer): string {
+  if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) {
+    return 'image/png';
+  }
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return 'image/jpeg';
+  }
+  if (bytes.length >= 6 && bytes.subarray(0, 3).toString('latin1') === 'GIF') {
+    return 'image/gif';
+  }
+  if (
+    bytes.length >= 12 &&
+    bytes.subarray(0, 4).toString('latin1') === 'RIFF' &&
+    bytes.subarray(8, 12).toString('latin1') === 'WEBP'
+  ) {
+    return 'image/webp';
+  }
+  return 'application/octet-stream';
+}
+
+/** Injectable seam for `readCachedMedia` — production default resolves secure-fs LAZILY,
+ *  mirroring every other production default in this module. */
+export interface ReadCachedMediaDeps {
+  readBytes: (caseId: string, ref: string) => Promise<Buffer>;
+}
+
+function defaultReadDeps(): ReadCachedMediaDeps {
+  return {
+    readBytes: async (caseId, ref) => {
+      const [{ join }, paths, { secureReadFile }] = await Promise.all([
+        import('node:path'),
+        import('../storage/paths'),
+        import('../storage/secure-fs'),
+      ]);
+      const path = join(paths.scrapingCaseDir('x', caseId), ...ref.split('/'));
+      return secureReadFile(path);
+    },
+  };
+}
+
+/**
+ * Read back a previously-cached media ref (from `cacheRemoteMedia`) as a `data:` URI for
+ * renderer display — the renderer never gets raw vault bytes or a direct filesystem path, the
+ * same "convert to a display data: URI main-side" posture as `bio-images.ts`'s `thumbDataUri`.
+ *
+ * `ref` MUST match `MEDIA_REF_RE` exactly, checked BEFORE any path is built — a compromised or
+ * malicious renderer handing back a crafted `ref` (`../../../etc/passwd`, an absolute path, a
+ * different subdir) is refused here rather than ever reaching `join()`/`secureReadFile`. A
+ * malformed ref or any read failure (missing file, locked vault) returns null rather than
+ * throwing — a display miss, not a fault, for a regenerable display artifact.
+ */
+export async function readCachedMedia(
+  caseId: string,
+  ref: string,
+  overrides: Partial<ReadCachedMediaDeps> = {},
+): Promise<string | null> {
+  if (!MEDIA_REF_RE.test(ref)) return null;
+  const deps: ReadCachedMediaDeps = { ...defaultReadDeps(), ...overrides };
+  try {
+    const bytes = await deps.readBytes(caseId, ref);
+    return `data:${sniffImageMime(bytes)};base64,${bytes.toString('base64')}`;
+  } catch {
+    return null;
+  }
+}

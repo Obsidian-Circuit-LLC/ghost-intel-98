@@ -95,6 +95,13 @@ export interface XCaptureDeps {
   savePosts: (caseId: string, posts: XPostArtifact[]) => Promise<{ added: number; skipped: number }>;
   /** Persist the plain `HarvestedItem`s to the cross-module dashboard sidecar. */
   saveItems: (caseId: string, items: HarvestedItem[]) => Promise<{ added: number; skipped: number }>;
+  /** Resolve + cache one remote post-media URL (host-anchored) into a LOCAL secure-fs ref, or
+   *  null on any failure (off-allowlist host, non-image, fetch error). Production default is
+   *  media.ts's `cacheRemoteMedia`, scoped to `req.caseId` (Task 15 — closes the gap where
+   *  `X_POST_SCRIPT`'s scraped `pbs.twimg.com` image URLs were resolved by NOTHING: they are
+   *  remote, so `normalizePost`'s `data:`-only filter dropped every one, silently losing the
+   *  post's media entirely rather than leaking a remote URL). */
+  resolveMedia: (win: Electron.BrowserWindow, url: string, caseId: string) => Promise<string | null>;
   /** Injected clock — the ISO capture time stamped onto every item. */
   now: () => string;
 }
@@ -141,8 +148,39 @@ function defaultDeps(): XCaptureDeps {
       const store = await prodXStore();
       return store.saveItems(caseId, items);
     },
+    resolveMedia: async (win, url, caseId) => {
+      const { cacheRemoteMedia } = await import('./media');
+      const cached = await cacheRemoteMedia(win, url, caseId);
+      return cached ? cached.ref : null;
+    },
     now: () => new Date().toISOString(),
   };
+}
+
+/**
+ * Resolve every remote media URL on one raw post to a LOCAL secure-fs ref (Task 15), dropping
+ * any that fail. An already-local `data:` entry (none exist in practice today — `X_POST_SCRIPT`
+ * only ever scrapes remote `pbs.twimg.com` `<img src>`s — but tolerated defensively) is passed
+ * through as-is rather than re-cached. A remote URL is never carried forward past this step.
+ */
+async function resolvePostMediaRefs(
+  win: Electron.BrowserWindow,
+  raw: RawPost,
+  caseId: string,
+  resolveMedia: XCaptureDeps['resolveMedia'],
+): Promise<string[]> {
+  const refs: string[] = [];
+  for (const url of raw.media ?? []) {
+    const src = String(url ?? '');
+    if (!src) continue;
+    if (src.startsWith('data:')) {
+      refs.push(src);
+      continue;
+    }
+    const ref = await resolveMedia(win, src, caseId);
+    if (ref) refs.push(ref);
+  }
+  return refs;
 }
 
 /**
@@ -152,7 +190,7 @@ function defaultDeps(): XCaptureDeps {
  * `evidenceHash` via `postEvidenceHash` — the Task 2 honesty fix over Enterprise, which
  * omits metrics from its evidence hash entirely.
  */
-export function toPostArtifact(item: XHarvestedItem): XPostArtifact {
+export function toPostArtifact(item: XHarvestedItem, mediaRefs?: readonly string[]): XPostArtifact {
   const metrics: XPostMetrics = {
     replies: item.metrics.replies.value,
     reposts: item.metrics.reposts.value,
@@ -186,6 +224,7 @@ export function toPostArtifact(item: XHarvestedItem): XPostArtifact {
     parentPostId,
     metrics,
     metricsRaw,
+    mediaRefs: mediaRefs && mediaRefs.length ? [...mediaRefs] : undefined,
     evidenceHash: '',
   };
   post.evidenceHash = postEvidenceHash(post);
@@ -222,20 +261,27 @@ export async function captureTimeline(
     const rawCollected = await deps.runCapture(win, X_POST_SCRIPT);
     const raws: RawPost[] = Array.isArray(rawCollected) ? (rawCollected as RawPost[]) : [];
     const selections = selectTimelineCaptures(raws, req.targetUsername, collect);
-    const items: XHarvestedItem[] = selections.map(({ raw, kind }) => {
-      if (kind === 'reply') return normalizeReply(raw, ctx);
-      if (kind === 'repost') return normalizeRepost(raw, ctx);
-      return normalizePost(raw, ctx);
-    });
-    return items;
+    const results: { item: XHarvestedItem; mediaRefs: string[] }[] = [];
+    for (const { raw, kind } of selections) {
+      const item =
+        kind === 'reply' ? normalizeReply(raw, ctx) : kind === 'repost' ? normalizeRepost(raw, ctx) : normalizePost(raw, ctx);
+      // Resolve THIS post's media while still inside the guarded/signed-in page — same page
+      // the timeline scrape itself ran against, so the media fetch below shares its cookies/
+      // session state, mirroring how the scrape and the media fetch always ran against the
+      // same live window in the legacy (pre-Task-15) capture path.
+      const mediaRefs = await resolvePostMediaRefs(win, raw, req.caseId, deps.resolveMedia);
+      results.push({ item, mediaRefs });
+    }
+    return results;
   });
 
   if (gated.blocked) {
     return { blocked: true, reason: gated.reason, added: 0, skipped: 0, posts: [] };
   }
 
-  const items: XHarvestedItem[] = gated.result ?? [];
-  const posts: XPostArtifact[] = items.map(toPostArtifact);
+  const results = gated.result ?? [];
+  const items: XHarvestedItem[] = results.map((r) => r.item);
+  const posts: XPostArtifact[] = results.map((r) => toPostArtifact(r.item, r.mediaRefs));
 
   const [postsResult] = await Promise.all([
     deps.savePosts(req.caseId, posts),
