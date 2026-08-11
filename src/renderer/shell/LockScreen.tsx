@@ -6,7 +6,7 @@
  */
 import { useState, useEffect } from 'react';
 import type { FormEvent } from 'react';
-import { useAuth } from '../state/store';
+import { useAuth, useSettings } from '../state/store';
 import splash from '../assets/boot-splash.jpg';
 
 /** A live background-connection summary, as returned by the lock-exempt bgconn:status channel. */
@@ -35,6 +35,7 @@ export function lockScreenBgconnLabel(
 
 export function LockScreen(): JSX.Element {
   const refresh = useAuth((st) => st.refresh);
+  const settings = useSettings((st) => st.settings);
   const [mode, setMode] = useState<'password' | 'recovery'>('password');
   const [value, setValue] = useState('');
   const [busy, setBusy] = useState(false);
@@ -99,7 +100,7 @@ export function LockScreen(): JSX.Element {
   return (
     <div
       className="ga98-lock-overlay"
-      style={{ background: `var(--ga98-shadow-deep) url(${JSON.stringify(splash)}) center / cover no-repeat` }}
+      style={{ background: `var(--ga98-shadow-deep) url(${JSON.stringify(settings?.bootSplashImage || splash)}) center / cover no-repeat` }}
     >
       <div className="window ga98-lock-window">
         <div className="title-bar">

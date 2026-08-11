@@ -262,6 +262,15 @@ export function ThemePane({ s, patch }: { s: AppSettings; patch: (p: Partial<App
         {s.wallpaperImage && <button onClick={() => void patch({ wallpaperImage: null })}>Clear</button>}
         <span style={{ fontSize: 11, opacity: 0.7 }}>{s.wallpaperImage ? 'image set' : 'none'}</span>
       </div>
+      <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <label>Boot screen image:</label>
+        <button onClick={async () => {
+          try { const uri = await window.api.settings.pickBootSplash(); if (uri) await patch({ bootSplashImage: uri }); }
+          catch (err) { toast.error(`Could not load image: ${(err as Error).message}`); }
+        }}>Choose…</button>
+        {s.bootSplashImage && <button onClick={() => void patch({ bootSplashImage: null })}>Clear</button>}
+        <span style={{ fontSize: 11, opacity: 0.7 }}>{s.bootSplashImage ? 'image set' : 'none'}</span>
+      </div>
     </fieldset>
   );
 }
