@@ -73,6 +73,15 @@ Function cleanPrevDataPageLeave
   ${NSD_GetState} $CleanPrevDataCheckbox $CleanPrevData
 FunctionEnd
 
+; Force-close a running Ghost Intel 98 before the install writes files. Without this, an
+; over-install onto an app that's still open leaves the old renderer/main locked, so the update
+; can "succeed" while the previously-running old build stays on disk — exactly the "installed but
+; still shows the old engine" symptom. Belt-and-braces on top of electron-builder's own check.
+!macro customInit
+  nsExec::Exec 'taskkill /F /IM "Ghost Intel 98.exe" /T'
+  Pop $0 ; discard exit code — a not-running app (code 128) is a harmless no-op
+!macroend
+
 !macro customInstall
   ${If} $CleanPrevData == 1
     ; Scoped strictly to the three %APPDATA% app dirs. Existence-guarded; never $INSTDIR.

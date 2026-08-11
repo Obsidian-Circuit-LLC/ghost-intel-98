@@ -1,6 +1,6 @@
 {
   "name": "dcs98",
-  "version": "3.70.0",
+  "version": "3.70.1",
   "private": true,
   "description": "Ghost Intel 98 — Windows 98–inspired OSINT/case-management desktop app. Electron + React + TypeScript.",
   "author": {
@@ -181,7 +181,7 @@
       "include": "installer.nsh",
       "oneClick": false,
       "perMachine": false,
-      "allowToChangeInstallationDirectory": true,
+      "allowToChangeInstallationDirectory": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Ghost Intel 98",
