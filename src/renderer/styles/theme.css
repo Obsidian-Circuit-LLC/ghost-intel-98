@@ -1686,14 +1686,16 @@ input.ga98-text, select.ga98-text {
 /* Journal Jots — PIN unlock screen: form pinned top-left, book illustration fills the rest. */
 .ga98-journal-unlock {
   display: flex;
+  box-sizing: border-box;   /* height:100% + padding was overflowing the window body -> scrollbar */
   height: 100%;
   gap: 16px;
   padding: 20px;
-  align-items: flex-start;
+  align-items: center;      /* form + book share a vertical band so they read "in line" */
+  justify-content: center;
 }
 .ga98-journal-unlock-form { flex: 0 0 280px; }
 .ga98-journal-unlock-art {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1701,20 +1703,33 @@ input.ga98-text, select.ga98-text {
 }
 .ga98-journal-unlock-art img {
   max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
+  max-height: 320px;        /* cap so the book sits beside the compact PIN form, not floor-to-ceiling */
+  object-fit: contain;      /* never stretch the illustration */
 }
 
-/* Full-width module banner header (GhostExodus art batch) */
+/* Full-width module banner header (GhostExodus art batch). object-fit:contain so the WHOLE art is
+ * always shown — never stretched, never upscaled past native (no pixelation), never cropped, at any
+ * window width incl. maximized. The letterbox on wide windows is painted with each banner's OWN edge
+ * colour (--ga98-banner-bg, theme-agnostic — it matches the art, not the skin) so the gaps read as an
+ * intentional field rather than empty margins. The <img> stays width:100%, so the blend spans full
+ * width with the art centred on it. */
 .ga98-module-banner {
   display: block;
   width: 100%;
   height: clamp(120px, 16vw, 190px);
-  object-fit: cover;
+  object-fit: contain;
   object-position: center;
+  background: var(--ga98-banner-bg, var(--ga98-grey));
   border-bottom: 2px solid var(--ga98-shadow-dark);
   flex: 0 0 auto;
 }
+/* Per-banner letterbox blend — sampled from each art's own left/right edge (theme-agnostic). */
+.ga98-banner-q         { --ga98-banner-bg: #141a1b; }
+.ga98-banner-briefcase { --ga98-banner-bg: #0e0e14; }
+.ga98-banner-mail      { --ga98-banner-bg: #061060; }
+.ga98-banner-settings  { --ga98-banner-bg: #1a4a6d; }
+.ga98-banner-shred     { --ga98-banner-bg: #1a2342; }
+.ga98-banner-journal   { --ga98-banner-bg: #acaeb6; }
 
 /* Briefcase module-specific column wrapper: banner above the shared .ga98-split so the split
  * class itself stays unaffected for its other consumers. */

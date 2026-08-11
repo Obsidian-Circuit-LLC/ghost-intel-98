@@ -499,6 +499,14 @@ export const THEME_COLOR_ALLOWLIST: readonly string[] = [
   '#ffffff80',  // desktop-card placeholder glyph (translucent white; decorative)
   '#ffffffcc',  // jukebox WMP-shell inset bevel (translucent white top edge)
   'navy',  // jukebox/stations active-row selection fill (navy = classic --ga98-blue)
+  // ── module-banner letterbox blends: sampled from each banner art's own edge, theme-agnostic
+  //    (they match the art, not the skin), so the contain-fit gaps blend seamlessly in both themes ──
+  '#141a1b',  // .ga98-banner-q letterbox (Q banner charcoal edge)
+  '#0e0e14',  // .ga98-banner-briefcase letterbox (Briefcase banner near-black navy edge)
+  '#061060',  // .ga98-banner-mail letterbox (Mail banner deep-blue edge)
+  '#1a4a6d',  // .ga98-banner-settings letterbox (Settings banner blue-teal edge)
+  '#1a2342',  // .ga98-banner-shred letterbox (Shred banner dark-blue edge)
+  '#acaeb6',  // .ga98-banner-journal letterbox (Journal banner grey edge, matches Win98 chrome)
 ];
 
 // ── Paper-background SELECTOR SCOPE (closes the value-only guard blind spot) ───────────────────

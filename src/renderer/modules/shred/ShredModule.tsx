@@ -62,7 +62,7 @@ export function ShredModule(): JSX.Element {
 
   return (
     <div className="ga98-shred-shell">
-      <img src={shredBanner} alt="Shred" className="ga98-module-banner" />
+      <img src={shredBanner} alt="Shred" className="ga98-module-banner ga98-banner-shred" />
       <div className="ga98-shred-body">
         <div className="ga98-stack">
           <div className="ga98-toolbar" style={{ padding: 0 }}>

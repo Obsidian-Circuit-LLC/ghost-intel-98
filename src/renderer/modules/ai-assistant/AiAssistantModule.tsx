@@ -616,7 +616,7 @@ export function AiAssistantModule(): JSX.Element {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <img src={qBanner} alt="Q" className="ga98-module-banner" />
+      <img src={qBanner} alt="Q" className="ga98-module-banner ga98-banner-q" />
       <div style={{ display: 'flex', flex: '1 1 auto', minHeight: 0 }}>
       {/* Conversation memory sidebar (ChatGPT-style): new chat, the saved list, delete. */}
       <div className="ga98-pane" style={{ width: 170, flex: '0 0 auto', display: 'flex', flexDirection: 'column', minWidth: 0 }}>

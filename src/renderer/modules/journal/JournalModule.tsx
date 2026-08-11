@@ -280,7 +280,7 @@ export function JournalModule(): JSX.Element {
 
   return (
     <div className="ga98-journal">
-      <img src={journalBanner} alt="Journal Jots" className="ga98-module-banner" />
+      <img src={journalBanner} alt="Journal Jots" className="ga98-module-banner ga98-banner-journal" />
       <div className="ga98-split" style={{ height: '100%' }}>
         <div className="ga98-pane" style={{ width: 200, flex: '0 0 auto', display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', gap: 4, padding: 4 }}>

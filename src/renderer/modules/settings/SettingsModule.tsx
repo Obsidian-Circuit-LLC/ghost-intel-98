@@ -97,7 +97,7 @@ export function SettingsModule(): JSX.Element {
 
   return (
     <div className="ga98-settings-with-banner">
-      <img src={settingsBanner} alt="Settings" className="ga98-module-banner" />
+      <img src={settingsBanner} alt="Settings" className="ga98-module-banner ga98-banner-settings" />
       <div className="ga98-settings-shell">
         <nav className="ga98-settings-rail" aria-label="Settings sections">
           {SECTIONS.map((sec) => (
