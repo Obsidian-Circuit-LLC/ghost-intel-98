@@ -1707,27 +1707,36 @@ input.ga98-text, select.ga98-text {
   object-fit: contain;      /* never stretch the illustration */
 }
 
-/* Full-width module banner header (GhostExodus art batch). object-fit:contain so the WHOLE art is
- * always shown — never stretched, never upscaled past native (no pixelation), never cropped, at any
- * window width incl. maximized. The letterbox on wide windows is painted with each banner's OWN edge
- * colour (--ga98-banner-bg, theme-agnostic — it matches the art, not the skin) so the gaps read as an
- * intentional field rather than empty margins. The <img> stays width:100%, so the blend spans full
- * width with the art centred on it. */
-.ga98-module-banner {
-  display: block;
+/* Layered module banner header (components/ModuleBanner.tsx): ambient blur base + colour-matched
+ * Matrix code-rain canvas + crisp art with mask-feathered edges that dissolve seamlessly into the
+ * rain (no hard rectangle). Holds form at any width — the crisp art is contain-fit, never stretched,
+ * never upscaled past native, never cropped. */
+.ga98-module-banner-wrap {
+  position: relative;
   width: 100%;
   height: clamp(120px, 16vw, 190px);
-  object-fit: contain;
-  object-position: center;
-  /* Ambient edge-bleed: a blurred, zoomed copy of the banner (set per-module inline as
-   * background-image) fills the letterbox behind the crisp contain-fit art, so the sides bleed the
-   * image's own colours smoothly instead of showing a flat band. --ga98-banner-bg is the fallback. */
-  background-color: var(--ga98-banner-bg, var(--ga98-grey));
-  background-size: cover;
+  overflow: hidden;
+  flex: 0 0 auto;
+  background-color: var(--ga98-banner-bg, var(--ga98-grey)); /* fallback beneath the blur + rain */
+  background-size: cover;                                     /* the ambient blur (inline background-image) */
   background-position: center;
   background-repeat: no-repeat;
   border-bottom: 2px solid var(--ga98-shadow-dark);
-  flex: 0 0 auto;
+}
+.ga98-module-banner-rain { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; display: block; }
+.ga98-module-banner {
+  position: relative;
+  z-index: 1;
+  display: block;
+  height: 100%;
+  width: auto;
+  max-width: 100%;
+  margin: 0 auto;                 /* centre the crisp art at its natural size */
+  object-fit: contain;
+  object-position: center;
+  /* Feather left/right to transparent so the art dissolves into the rain — a seamless edge bleed. */
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 11%, #000 89%, transparent 100%);
+          mask-image: linear-gradient(to right, transparent 0, #000 11%, #000 89%, transparent 100%);
 }
 /* Per-banner letterbox blend — sampled from each art's own left/right edge (theme-agnostic). */
 .ga98-banner-q         { --ga98-banner-bg: #141a1b; }

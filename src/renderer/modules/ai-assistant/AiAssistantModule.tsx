@@ -31,6 +31,7 @@ import { appendRecalled } from './recall-inject';
 import { describeSkippedFiles } from './file-notice';
 import qBanner from '../../assets/q-banner.png';
 import qBannerBlur from '../../assets/q-banner-blur.jpg';
+import { ModuleBanner } from '../../components/ModuleBanner';
 
 interface DisplayMessage extends AiChatMessage {
   id: string;
@@ -617,7 +618,7 @@ export function AiAssistantModule(): JSX.Element {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <img src={qBanner} alt="Q" className="ga98-module-banner ga98-banner-q" style={{ backgroundImage: `url(${qBannerBlur})` }} />
+      <ModuleBanner variant="q" src={qBanner} blurSrc={qBannerBlur} alt="Q" />
       <div style={{ display: 'flex', flex: '1 1 auto', minHeight: 0 }}>
       {/* Conversation memory sidebar (ChatGPT-style): new chat, the saved list, delete. */}
       <div className="ga98-pane" style={{ width: 170, flex: '0 0 auto', display: 'flex', flexDirection: 'column', minWidth: 0 }}>

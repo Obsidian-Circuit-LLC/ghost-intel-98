@@ -7,6 +7,7 @@ import { confirmDialog } from '../../state/dialogs';
 import { toast } from '../../state/toasts';
 import shredBanner from '../../assets/shred-banner.png';
 import shredBannerBlur from '../../assets/shred-banner-blur.jpg';
+import { ModuleBanner } from '../../components/ModuleBanner';
 import shredBin from '../../assets/shred-ghost-bin.png';
 
 interface Entry {
@@ -63,7 +64,7 @@ export function ShredModule(): JSX.Element {
 
   return (
     <div className="ga98-shred-shell">
-      <img src={shredBanner} alt="Shred" className="ga98-module-banner ga98-banner-shred" style={{ backgroundImage: `url(${shredBannerBlur})` }} />
+      <ModuleBanner variant="shred" src={shredBanner} blurSrc={shredBannerBlur} alt="Shred" />
       <div className="ga98-shred-body">
         <div className="ga98-stack">
           <div className="ga98-toolbar" style={{ padding: 0 }}>
