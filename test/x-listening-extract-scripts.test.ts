@@ -2,30 +2,30 @@
 /**
  * X — behavioral coverage of the STATIC in-page extraction scripts.
  *
- * `X_POST_SCRIPT`, `USER_CELL_SCRIPT` (extract.ts) and `PAGE_STATE_SCRIPT` (ipc.ts)
- * are the strings the hardened capture window runs via `executeJavaScript` against a
- * live x.com DOM. Every other X test exercises the pure NORMALIZERS on synthetic
- * `RawPost`/`RawUserCell` input — the scripts themselves (their selectors, regexes,
- * URL building, filtering, and the display-name honesty rule) had ZERO behavioral
- * coverage. Here each script is `eval`'d against a REAL captured-DOM fixture (a saved
- * x.com post / UserCell / timeline HTML snippet) inside jsdom, and the extracted
- * fields are asserted — so a selector/regex regression in the actual scraped code is
- * caught, not just a normalizer change.
+ * `X_POST_SCRIPT`, `USER_CELL_SCRIPT`, `X_PAGE_STATE_SCRIPT` (extract.ts) are the strings
+ * the hardened capture window runs via `executeJavaScript` against a live x.com DOM. Every
+ * other X test exercises the pure NORMALIZERS on synthetic `RawPost`/`RawUserCell` input —
+ * the scripts themselves (their selectors, regexes, URL building, filtering, and the
+ * display-name honesty rule) had ZERO behavioral coverage. Here each script is `eval`'d
+ * against a REAL captured-DOM fixture (a saved x.com post / UserCell / timeline HTML
+ * snippet) inside jsdom, and the extracted fields are asserted — so a selector/regex
+ * regression in the actual scraped code is caught, not just a normalizer change.
  *
  * jsdom does not implement `innerText` (the scripts read it for the tweet body and the
  * UserCell line-split). A block-aware `innerText` shim over `textContent` is installed
  * so the fixtures line-break the way a browser renders them; it is a test-harness
  * approximation, not production code.
  */
-import { vi, describe, it, expect, beforeEach, beforeAll } from 'vitest';
+import { describe, it, expect, beforeEach, beforeAll } from 'vitest';
 
-// PAGE_STATE_SCRIPT lives in ipc.ts, which imports `session` from electron at module
-// top — mock it so importing the constant never pulls the real electron runtime.
-vi.mock('electron', () => ({ session: { fromPartition: () => ({ cookies: { get: async () => [] } }) } }));
-
-import { X_POST_SCRIPT, USER_CELL_SCRIPT, normalizePost, normalizeUserCell } from '../src/main/x-listening/extract';
+import {
+  X_POST_SCRIPT,
+  USER_CELL_SCRIPT,
+  X_PAGE_STATE_SCRIPT,
+  normalizePost,
+  normalizeUserCell,
+} from '../src/main/x-listening/extract';
 import type { RawPost, RawUserCell, NormalizeContext } from '../src/main/x-listening/extract';
-import { PAGE_STATE_SCRIPT } from '../src/main/x-listening/ipc';
 
 // ---- innerText shim (block-aware, over textContent) --------------------
 
@@ -238,12 +238,12 @@ describe('USER_CELL_SCRIPT against a captured UserCell DOM', () => {
   });
 });
 
-// ---- PAGE_STATE_SCRIPT against a rendered page -------------------------
+// ---- X_PAGE_STATE_SCRIPT against a rendered page ------------------------
 
-describe('PAGE_STATE_SCRIPT against a rendered page', () => {
+describe('X_PAGE_STATE_SCRIPT against a rendered page', () => {
   it('reports the visible article count and a bounded slice of body text', () => {
     document.body.innerHTML = POST_HTML;
-    const state = runInPage<{ url: string; text: string; articles: number }>(PAGE_STATE_SCRIPT);
+    const state = runInPage<{ url: string; text: string; articles: number }>(X_PAGE_STATE_SCRIPT);
     expect(state.articles).toBe(2); // both tweet articles counted (pre-filter)
     expect(typeof state.url).toBe('string');
     expect(state.text.length).toBeLessThanOrEqual(5000);
@@ -252,7 +252,7 @@ describe('PAGE_STATE_SCRIPT against a rendered page', () => {
 
   it('reports zero articles on a page with no tweets', () => {
     document.body.innerHTML = '<div>Sign in to X</div>';
-    const state = runInPage<{ text: string; articles: number }>(PAGE_STATE_SCRIPT);
+    const state = runInPage<{ text: string; articles: number }>(X_PAGE_STATE_SCRIPT);
     expect(state.articles).toBe(0);
     expect(state.text).toContain('Sign in to X');
   });

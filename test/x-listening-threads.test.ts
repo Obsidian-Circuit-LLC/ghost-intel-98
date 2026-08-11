@@ -1,10 +1,8 @@
 /**
- * X4 — Replies / reposts / third-party comments (kinds + collect gate).
+ * X4 — Replies / reposts / third-party comments (kinds + collect gate, pure pieces).
  *
  * Ported from the quarantine `scrapeProfile` / `scrapeCommentsForPosts` logic
- * (`electron/main.cjs:504-574`, `:472-500`), split into PURE pieces plus the
- * orchestration seam so both the honesty stamps AND the collect-toggle gate are
- * tested without electron or the network:
+ * (`electron/main.cjs:504-574`, `:472-500`):
  *
  *  1. `normalizeReply` / `normalizeRepost` / `normalizeComment` map a captured-DOM
  *     item → an `XHarvestedItem` tagged by `kind`, carrying the SAME honesty
@@ -22,14 +20,15 @@
  *     `collect.comments`; excludes the root post itself and the target's own replies
  *     (those are the target's speech, captured on the timeline — not "comments").
  *
- *  4. The orchestration seams (`captureVisibleTimeline`, `captureThreadComments`)
- *     honour the toggles end-to-end: a kind whose toggle is OFF is neither
- *     normalized nor persisted (the v3.24.2 collect-path seam class).
- *
- * The pure block imports extract.ts WITHOUT mocking electron — proving the
- * kind/gate logic stays quarantine-clean (no electron/main-process edge).
+ * The orchestration seams that used to honour these toggles end-to-end against a live
+ * capture window (`captureVisibleTimeline`/`captureThreadComments`, `ipc.ts`) were the
+ * clearnet-only legacy surface retired wholesale at Task 16 — the equivalent end-to-end
+ * collect-toggle coverage for the Tor-safe `captureTimeline` surface now lives in
+ * `test/x-listening-capture.test.ts` (Task 4). This file imports extract.ts WITHOUT
+ * mocking electron — proving the kind/gate logic stays quarantine-clean (no
+ * electron/main-process edge).
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 
 import {
   normalizeReply,
@@ -189,225 +188,5 @@ describe('selectThreadComments: third-party comment gate', () => {
     expect(comments.map((c) => c.id)).toEqual(['102', '103']);
     // none of them is the target's own speech
     expect(comments.some((c) => c.username.toLowerCase() === 'target')).toBe(false);
-  });
-});
-
-// ---- 4. orchestration seams honour the toggles end-to-end --------------
-
-vi.mock('electron', () => ({
-  session: { fromPartition: () => ({ cookies: { get: async () => [] } }) },
-}));
-
-describe('captureVisibleTimeline: collect toggles gate the live path', () => {
-  it('a reply is neither normalized nor persisted when collect.replies is off', async () => {
-    const { captureVisibleTimeline } = await import('../src/main/x-listening/ipc');
-    const saveItems = vi.fn(async (_c: string, items: unknown[]) => ({ added: items.length, skipped: 0 }));
-    const res = await captureVisibleTimeline(
-      { } as unknown as Electron.BrowserWindow,
-      {
-        caseId: 'case-a',
-        jobId: 'job-1',
-        channelId: 'target',
-        channelLabel: '@target',
-        collect: { replies: false, reposts: false, comments: false },
-      },
-      {
-        guard: async (_win, capture) => ({ blocked: false, result: await capture() }),
-        navigate: async () => {},
-        settle: async () => {},
-        runCapture: async () => [raw({ id: '9', isReply: true, url: 'https://x.com/target/status/9' })],
-        resolveMedia: async () => 'data:image/jpeg;base64,ZZZ',
-        saveItems,
-        now: () => '2026-08-06T12:00:00.000Z',
-      },
-    );
-    expect(res.items).toEqual([]);
-    expect(saveItems).toHaveBeenCalledWith('case-a', []);
-  });
-
-  it('captures a reply as kind:"reply" when collect.replies is on', async () => {
-    const { captureVisibleTimeline } = await import('../src/main/x-listening/ipc');
-    const res = await captureVisibleTimeline(
-      {} as unknown as Electron.BrowserWindow,
-      {
-        caseId: 'case-a',
-        jobId: 'job-1',
-        channelId: 'target',
-        channelLabel: '@target',
-        collect: { replies: true, reposts: false, comments: false },
-      },
-      {
-        guard: async (_win, capture) => ({ blocked: false, result: await capture() }),
-        navigate: async () => {},
-        settle: async () => {},
-        runCapture: async () => [raw({ id: '9', isReply: true, url: 'https://x.com/target/status/9' })],
-        resolveMedia: async () => 'data:image/jpeg;base64,ZZZ',
-        saveItems: async (_c, items) => ({ added: items.length, skipped: 0 }),
-        now: () => '2026-08-06T12:00:00.000Z',
-      },
-    );
-    expect(res.items.map((i) => i.kind)).toEqual(['reply']);
-  });
-});
-
-describe('captureThreadComments: comment gate end-to-end', () => {
-  it('captures nothing (and never navigates or runs the payload) when collect.comments is off', async () => {
-    const { captureThreadComments } = await import('../src/main/x-listening/ipc');
-    const navigate = vi.fn(async () => {});
-    const runCapture = vi.fn(async () => []);
-    const saveItems = vi.fn(async () => ({ added: 0, skipped: 0 }));
-    const res = await captureThreadComments(
-      {} as unknown as Electron.BrowserWindow,
-      {
-        caseId: 'case-a',
-        jobId: 'job-1',
-        channelId: 'target',
-        channelLabel: '@target',
-        rootPostId: '100',
-        rootPostUrl: 'https://x.com/target/status/100',
-        collect: { replies: false, reposts: false, comments: false },
-      },
-      { navigate, settle: async () => {}, runCapture, saveItems },
-    );
-    expect(res.added).toBe(0);
-    expect(res.items).toEqual([]);
-    expect(navigate).not.toHaveBeenCalled();
-    expect(runCapture).not.toHaveBeenCalled();
-    expect(saveItems).not.toHaveBeenCalled();
-  });
-
-  it('navigates the thread and persists ONLY third-party comments when collect.comments is on', async () => {
-    const { captureThreadComments } = await import('../src/main/x-listening/ipc');
-    const navigate = vi.fn(async () => {});
-    let saved: { kind: string; parentId?: string }[] = [];
-    const res = await captureThreadComments(
-      {} as unknown as Electron.BrowserWindow,
-      {
-        caseId: 'case-a',
-        jobId: 'job-1',
-        channelId: 'target',
-        channelLabel: '@target',
-        rootPostId: '100',
-        rootPostUrl: 'https://x.com/target/status/100',
-        collect: { replies: false, reposts: false, comments: true },
-      },
-      {
-        navigate,
-        settle: async () => {},
-        guard: async (_win, capture) => ({ blocked: false, result: await capture() }),
-        runCapture: async () => [
-          raw({ id: '100', username: 'target', url: 'https://x.com/target/status/100' }),
-          raw({ id: '101', username: 'target', isReply: true, url: 'https://x.com/target/status/101' }),
-          raw({ id: '102', username: 'stranger', isReply: true, url: 'https://x.com/stranger/status/102' }),
-        ],
-        resolveMedia: async () => 'data:image/jpeg;base64,ZZZ',
-        saveItems: async (_c, items) => {
-          saved = items.map((i) => ({ kind: i.kind, parentId: i.parentId }));
-          return { added: items.length, skipped: 0 };
-        },
-        now: () => '2026-08-06T12:00:00.000Z',
-      },
-    );
-    expect(navigate).toHaveBeenCalledTimes(1);
-    expect(saved).toEqual([{ kind: 'comment', parentId: '100' }]);
-    expect(res.added).toBe(1);
-  });
-
-  it('navigates the thread BEFORE the challenge-refusal guard probes it', async () => {
-    // Regression: the guard must probe the LOADED thread page, not the pre-nav
-    // page. Navigating into a thread is exactly when X throws a challenge; the
-    // probe has to see it. We record call order — navigate must precede guard.
-    const { captureThreadComments } = await import('../src/main/x-listening/ipc');
-    const order: string[] = [];
-    const navigate = vi.fn(async () => {
-      order.push('navigate');
-    });
-    const guard = vi.fn(async (_win: unknown, capture: () => Promise<unknown>) => {
-      order.push('guard');
-      return { blocked: false, result: await capture() };
-    });
-    await captureThreadComments(
-      {} as unknown as Electron.BrowserWindow,
-      {
-        caseId: 'case-a',
-        jobId: 'job-1',
-        channelId: 'target',
-        channelLabel: '@target',
-        rootPostId: '100',
-        rootPostUrl: 'https://x.com/target/status/100',
-        collect: { replies: false, reposts: false, comments: true },
-      },
-      {
-        navigate,
-        settle: async () => {},
-        guard: guard as never,
-        runCapture: async () => [],
-        resolveMedia: async () => 'data:image/jpeg;base64,ZZZ',
-        saveItems: async (_c, items) => ({ added: items.length, skipped: 0 }),
-        now: () => '2026-08-06T12:00:00.000Z',
-      },
-    );
-    expect(order).toEqual(['navigate', 'guard']);
-  });
-
-  it('STOPS on a challenge presented by the LOADED thread page — no capture, no persist', async () => {
-    // With navigation moved ahead of the guard, a rate-limit / verification
-    // interstitial thrown by the thread navigation is seen by the probe: the
-    // guard returns blocked and the payload never runs. Honesty invariant intact.
-    const { captureThreadComments } = await import('../src/main/x-listening/ipc');
-    const navigate = vi.fn(async () => {});
-    const runCapture = vi.fn(async () => []);
-    const saveItems = vi.fn(async () => ({ added: 0, skipped: 0 }));
-    const res = await captureThreadComments(
-      {} as unknown as Electron.BrowserWindow,
-      {
-        caseId: 'case-a',
-        jobId: 'job-1',
-        channelId: 'target',
-        channelLabel: '@target',
-        rootPostId: '100',
-        rootPostUrl: 'https://x.com/target/status/100',
-        collect: { replies: false, reposts: false, comments: true },
-      },
-      {
-        navigate,
-        settle: async () => {},
-        // The guard probes the loaded thread page and finds a challenge.
-        guard: async () => ({
-          blocked: true,
-          reason: 'X presented a verification challenge or temporary limit.',
-        }),
-        runCapture,
-        saveItems,
-        now: () => '2026-08-06T12:00:00.000Z',
-      },
-    );
-    // Navigation happened (it precedes the guard), but the challenge stopped
-    // everything downstream: no payload run, nothing persisted, blocked reported.
-    expect(navigate).toHaveBeenCalledTimes(1);
-    expect(res.blocked).toBe(true);
-    expect(runCapture).not.toHaveBeenCalled();
-    expect(saveItems).not.toHaveBeenCalled();
-    expect(res.items).toEqual([]);
-  });
-
-  it('refuses to navigate an off-domain root URL (scheme/host guard)', async () => {
-    const { captureThreadComments } = await import('../src/main/x-listening/ipc');
-    const navigate = vi.fn(async () => {});
-    const res = await captureThreadComments(
-      {} as unknown as Electron.BrowserWindow,
-      {
-        caseId: 'case-a',
-        jobId: 'job-1',
-        channelId: 'target',
-        channelLabel: '@target',
-        rootPostId: '100',
-        rootPostUrl: 'https://evil.example/target/status/100',
-        collect: { replies: false, reposts: false, comments: true },
-      },
-      { navigate, settle: async () => {}, guard: async (_win, capture) => ({ blocked: false, result: await capture() }) },
-    );
-    expect(navigate).not.toHaveBeenCalled();
-    expect(res.blocked).toBe(true);
   });
 });

@@ -538,52 +538,22 @@ export const channels = {
       keywordScan: 'socmint:telegram:keywordScan'
     }
   },
-  // X Listening Station (Plan A) — visible-DOM capture of an authenticated X session in a
-  // main-side hardened BrowserWindow on the clearnet-quarantined `persist:x-listening`
-  // partition (NO Tor/socks — clearnet). Replaces the retired `x`/`ghostscrape` collector
-  // namespaces (Task R1). Every handler is safeHandle + assertTrustedSender.
-  // X1 seeds connect/status only; capture/notes/network/archive/export channels land in X2–X8.
+  // X Listening Station — Tor-default (by default), campaign-scoped visible-DOM capture,
+  // wired to session.ts/capture.ts/campaigns.ts/analysis.ts/evidence.ts (Enterprise-port
+  // Tasks 1-5). The prior clearnet-only X1-X8 surface (`connect`/`status`/`capture`/
+  // `captureThreadComments`/`captureFollowers`/`captureFollowing`/`exportNetwork`/
+  // `runArchiveCycle(s)`/`exportItems`) was retired wholesale at Task 16 — every surviving
+  // capture channel below is Tor-safe. Every handler is safeHandle + assertTrustedSender.
   xListening: {
-    /** Open (or reopen) the hardened X login window on the clearnet partition. */
-    connect: 'xListening:connect',
-    /** Derive a `connected` boolean from the auth-cookie presence — never returns the token. */
-    status: 'xListening:status',
-    /** Visible-DOM timeline capture → normalized HarvestedItems in the encrypted case store. */
-    capture: 'xListening:capture',
-    /** Third-party comments under one of the target's root posts → encrypted case store (X4).
-     *  Gated MAIN-side on `AppSettings.xListening.collect.comments`; navigates only a
-     *  scheme/host-guarded x.com/twitter.com permalink. */
-    captureThreadComments: 'xListening:captureThreadComments',
-    /** Visible follower `UserCell` extraction → encrypted `networks` artifact store (X5). */
-    captureFollowers: 'xListening:captureFollowers',
-    /** Visible following `UserCell` extraction → encrypted `networks` artifact store (X5). */
-    captureFollowing: 'xListening:captureFollowing',
-    /** Serialize a case's captured networks to a formula-guarded CSV string (X5). */
-    exportNetwork: 'xListening:exportNetwork',
-    /** Upsert one analyst note (keyed by findingId) into the encrypted `notes` store (X6). */
+    /** Upsert one analyst note (keyed by findingId) into the encrypted `notes` store. */
     saveNote: 'xListening:saveNote',
-    /** Read a case's analyst notes from the encrypted `notes` store (X6). */
+    /** Read a case's analyst notes from the encrypted `notes` store. */
     readNotes: 'xListening:readNotes',
     /** Delete the note attached to one finding, if any (Task 10). A no-op when the finding
      *  has no note. */
     removeNote: 'xListening:removeNote',
-    /** Run ONE bounded, low-rate archive cycle over the target timeline (X7). Gated MAIN-side
-     *  on `AppSettings.xListening.archiveCycles` (fail-closed OFF); advances resumable state
-     *  only on a completed run. */
-    runArchiveCycle: 'xListening:runArchiveCycle',
-    /** Run a BOUNDED, cancellable sequence of low-rate archive cycles (X7). Stops the instant a
-     *  cycle does not complete (toggle off / challenge-blocked). */
-    runArchiveCycles: 'xListening:runArchiveCycles',
-    /** Serialize a case's captured items to JSON/CSV/PDF/DOCX via the app's existing exporters (X8). */
-    exportItems: 'xListening:exportItems',
 
     // ---- Phase-1 Enterprise-port surface (plan Task 6) ---------------------------------
-    // The channels above (`connect`/`status`/`capture`/…) are the retiring X1-X8 clearnet-only
-    // surface (Task 16 removes it once the renderer no longer needs it). Everything below is
-    // the NEW Tor-default, campaign-scoped surface wired to session.ts/capture.ts/campaigns.ts/
-    // analysis.ts/evidence.ts (Tasks 1-5) — a DIFFERENT trust/network model (caseId-scoped
-    // sessions, Tor by default, self-managed x-namespace campaigns), so it gets its own channel
-    // names rather than reusing `connect`/`status`/`capture` above.
     /** Open (or reuse) the Tor-default capture window for one campaign (session.ts). Fails
      *  closed (`blocked:true`) when background Tor isn't bootstrapped and
      *  `AppSettings.xListening.clearnet` isn't opted in — never a silent clearnet fallback. */
@@ -653,8 +623,7 @@ export const channels = {
      *  null before the first step ever ran. */
     archiveStatus: 'xListening:archive:status',
     /** Run a bounded, low-rate sequence of archive steps (archive.ts `runArchiveSteps`, Task 8) in
-     *  a campaign's Tor-default capture window — NOT the retiring `runArchiveCycle(s)` above,
-     *  which drive the clearnet-only legacy `captureVisibleTimeline`. Gated MAIN-side on
+     *  a campaign's Tor-default capture window. Gated MAIN-side on
      *  `AppSettings.xListening.archiveCycles` (fail-closed OFF); `maxCycles` clamped to [0,1000]. */
     archiveRun: 'xListening:archive:run',
     /** Load the deterministic seeded demo data set (demo.ts, Task 12) into a campaign — every

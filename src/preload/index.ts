@@ -704,57 +704,17 @@ const api = {
       return () => ipcRenderer.removeListener(channels.socmint.monitorItem, l);
     }
   },
-  // X Listening Station (Plan A) — main-side hardened visible-DOM capture on the
-  // clearnet-quarantined `persist:x-listening` partition. X1 exposes connect/status only;
-  // capture/notes/network/archive/export follow in X2–X8. No credential value ever crosses
-  // this bridge — status() returns a derived boolean, never the auth token.
+  // X Listening Station — Tor-default (by default), campaign-scoped visible-DOM capture (see
+  // ipc-contracts.ts). The prior clearnet-only connect/capture/thread/followers/following/
+  // archive-cycle surface was retired at Task 16 — every surviving capture method below is
+  // Tor-safe. No credential value ever crosses this bridge.
   xListening: {
-    connect: (): Promise<{ opened: boolean }> =>
-      ipcRenderer.invoke(channels.xListening.connect),
-    status: (): Promise<{ connected: boolean }> =>
-      ipcRenderer.invoke(channels.xListening.status),
-    capture: (req: {
-      caseId: string;
-      jobId?: string;
-      channelId: string;
-      channelLabel?: string;
-    }) => ipcRenderer.invoke(channels.xListening.capture, req),
-    captureThreadComments: (req: {
-      caseId: string;
-      jobId?: string;
-      channelId: string;
-      channelLabel?: string;
-      rootPostId: string;
-      rootPostUrl: string;
-    }) => ipcRenderer.invoke(channels.xListening.captureThreadComments, req),
-    captureFollowers: (req: { caseId: string; jobId?: string; target: string }) =>
-      ipcRenderer.invoke(channels.xListening.captureFollowers, req),
-    captureFollowing: (req: { caseId: string; jobId?: string; target: string }) =>
-      ipcRenderer.invoke(channels.xListening.captureFollowing, req),
-    exportNetwork: (caseId: string) =>
-      ipcRenderer.invoke(channels.xListening.exportNetwork, caseId),
     saveNote: (req: { caseId: string; findingId: string; text: string }) =>
       ipcRenderer.invoke(channels.xListening.saveNote, req),
     readNotes: (caseId: string) =>
       ipcRenderer.invoke(channels.xListening.readNotes, caseId),
     removeNote: (req: { caseId: string; findingId: string }) =>
       ipcRenderer.invoke(channels.xListening.removeNote, req),
-    runArchiveCycle: (req: {
-      caseId: string;
-      jobId?: string;
-      channelId: string;
-      channelLabel?: string;
-    }) => ipcRenderer.invoke(channels.xListening.runArchiveCycle, req),
-    runArchiveCycles: (req: {
-      caseId: string;
-      jobId?: string;
-      channelId: string;
-      channelLabel?: string;
-      maxCycles?: number;
-      delayMs?: number;
-    }) => ipcRenderer.invoke(channels.xListening.runArchiveCycles, req),
-    exportItems: (req: { caseId: string; format: 'json' | 'csv' | 'pdf' | 'docx' }) =>
-      ipcRenderer.invoke(channels.xListening.exportItems, req),
 
     // ---- Phase-1 Enterprise-port surface (plan Task 6) --------------------------------
     openSession: (caseId: string) => ipcRenderer.invoke(channels.xListening.openSession, caseId),

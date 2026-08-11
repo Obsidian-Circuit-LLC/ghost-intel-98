@@ -51,8 +51,10 @@ import { createHash } from 'node:crypto';
 import { itemsToJson, itemsToCsv, buildXItemsHtml } from './ipc';
 import type { XPostArtifact } from './store';
 
-/** The file formats this module can produce. (DOCX stays on the existing `exportXItems`
- *  surface in `ipc.ts` — Task 11's scope, per the design doc's export bullet, is JSON/PDF/CSV.) */
+/** The file formats this module can produce — Task 11's scope, per the design doc's export
+ *  bullet, is JSON/PDF/CSV (the DOCX/base64 `exportXItems` surface these builders used to
+ *  additionally feed was retired at Task 16 along with the rest of the clearnet-only X8 IPC
+ *  surface; `itemsToJson`/`itemsToCsv`/`buildXItemsHtml` themselves survive in `ipc.ts`). */
 export type XExportFileFormat = 'json' | 'csv' | 'pdf';
 
 export interface XExportWriteResult {

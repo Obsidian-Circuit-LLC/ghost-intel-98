@@ -793,79 +793,13 @@ export interface GhostApi {
     };
   };
   /**
-   * X Listening Station (Plan A) — visible-DOM capture of an authenticated X session, run
-   * main-side in a hardened BrowserWindow on the clearnet-quarantined `persist:x-listening`
-   * partition (no Tor/socks — clearnet). Retires the `x` + `ghostscrape` namespaces (Task R1).
-   *
-   * X1 exposes the connect/status shell only; capture/notes/network/archive/export methods are
-   * added by Tasks X2–X8. No credential ever crosses this surface — status() derives a boolean
-   * from the auth-cookie presence and never returns, echoes, or logs the token.
+   * X Listening Station — Tor-default (by default), campaign-scoped visible-DOM capture (see
+   * ipc-contracts.ts). The prior clearnet-only connect/status/capture/captureThreadComments/
+   * captureFollowers/captureFollowing/exportNetwork/runArchiveCycle(s)/exportItems surface was
+   * retired at Task 16 — every surviving capture method below is Tor-safe. No credential ever
+   * crosses this surface.
    */
   xListening: {
-    /** Open (or reopen) the hardened X login window on the clearnet partition. */
-    connect(): Promise<{ opened: boolean }>;
-    /** Session connectivity as a derived boolean — never the auth token itself. */
-    status(): Promise<{ connected: boolean }>;
-    /**
-     * Capture the visible X timeline in the connect window → normalized, honesty-stamped
-     * HarvestedItems in the encrypted case store. Refuses on a verification/rate-limit page
-     * (`blocked:true`, nothing captured); `harvestedAt`/collector version are stamped main-side.
-     */
-    capture(req: {
-      caseId: string;
-      jobId?: string;
-      channelId: string;
-      channelLabel?: string;
-    }): Promise<{
-      blocked: boolean;
-      reason?: string;
-      added: number;
-      skipped: number;
-      items: HarvestedItem[];
-    }>;
-    /**
-     * Capture the THIRD-PARTY comments under one of the target's root posts → normalized,
-     * honesty-stamped HarvestedItems (`kind:'comment'`) in the encrypted case store. Gated
-     * MAIN-side on `AppSettings.xListening.collect.comments` (off ⇒ nothing captured, the
-     * window is never navigated). The root URL is scheme/host guarded before any navigation;
-     * refuses on a verification/rate-limit page (`blocked:true`).
-     */
-    captureThreadComments(req: {
-      caseId: string;
-      jobId?: string;
-      channelId: string;
-      channelLabel?: string;
-      rootPostId: string;
-      rootPostUrl: string;
-    }): Promise<{
-      blocked: boolean;
-      reason?: string;
-      added: number;
-      skipped: number;
-      items: HarvestedItem[];
-    }>;
-    /**
-     * Capture the target's visible FOLLOWERS from the followers surface → the ACTUAL
-     * visible accounts (never a scraped count-number) in the encrypted `networks`
-     * artifact store. Refuses on a verification/rate-limit page (`blocked:true`).
-     */
-    captureFollowers(req: { caseId: string; jobId?: string; target: string }): Promise<{
-      blocked: boolean;
-      reason?: string;
-      target: string;
-      kind: 'followers' | 'following';
-      accounts: Array<{ handle: string; displayName: string; avatar?: string; bio?: string }>;
-    }>;
-    /** Capture the accounts the target is FOLLOWING. Same honesty guarantees as `captureFollowers`. */
-    captureFollowing(req: { caseId: string; jobId?: string; target: string }): Promise<{
-      blocked: boolean;
-      reason?: string;
-      target: string;
-      kind: 'followers' | 'following';
-      accounts: Array<{ handle: string; displayName: string; avatar?: string; bio?: string }>;
-    }>;
-    /** Serialize the case's captured networks to a formula-guarded CSV string. */
-    exportNetwork(caseId: string): Promise<{ csv: string; count: number }>;
     /**
      * Upsert one analyst note against a finding (one note per finding — a re-save
      * REPLACES it). Text is trimmed + validated (non-empty, ≤ 20 000 chars) and
@@ -882,64 +816,6 @@ export interface GhostApi {
      *  note. Returns the fresh note list. */
     removeNote(req: { caseId: string; findingId: string }): Promise<{
       notes: Array<{ findingId: string; text: string; savedAt: string }>;
-    }>;
-    /**
-     * Serialize the case's captured items to `json`/`csv`/`pdf`/`docx` via the app's
-     * EXISTING exporters (no new docx/pdfkit). Every scraped field is escaped /
-     * formula-guarded; rounded metrics are exported verbatim (never a false-precision
-     * integer); remote media URLs are never emitted. `data` is utf8 for json/csv and
-     * base64 for pdf/docx; the caller decodes + saves via the app's file-save flow.
-     */
-    exportItems(req: { caseId: string; format: 'json' | 'csv' | 'pdf' | 'docx' }): Promise<{
-      format: 'json' | 'csv' | 'pdf' | 'docx';
-      count: number;
-      encoding: 'utf8' | 'base64';
-      data: string;
-      mime: string;
-      suggestedName: string;
-    }>;
-    /**
-     * Run ONE bounded, low-rate archive cycle over the target's timeline. Gated MAIN-side on
-     * `AppSettings.xListening.archiveCycles` (fail-closed OFF ⇒ `ran:false`, no capture, state
-     * untouched). On a completed run the resumable state advances (cycle count + cursor +
-     * main-side clock); a challenge-blocked cycle does NOT advance state.
-     */
-    runArchiveCycle(req: {
-      caseId: string;
-      jobId?: string;
-      channelId: string;
-      channelLabel?: string;
-    }): Promise<{
-      ran: boolean;
-      blocked: boolean;
-      reason?: string;
-      added: number;
-      skipped: number;
-      items: HarvestedItem[];
-      state: { cursor: string | null; cycles: number; lastRunAt: string | null };
-    }>;
-    /**
-     * Run a BOUNDED, cancellable sequence of low-rate archive cycles. Stops the instant a cycle
-     * does not complete (toggle turned off / challenge-blocked). `maxCycles` is clamped to
-     * [0, 1000] main-side; a low-rate delay sits between cycles.
-     */
-    runArchiveCycles(req: {
-      caseId: string;
-      jobId?: string;
-      channelId: string;
-      channelLabel?: string;
-      maxCycles?: number;
-      delayMs?: number;
-    }): Promise<{
-      cyclesRun: number;
-      totalAdded: number;
-      blocked: boolean;
-      reason?: string;
-      cancelled: boolean;
-      /** Every completed cycle's captured records, in run order — surfaced in the LIVE FEED
-       *  just like a single RUN ONE CYCLE. */
-      items: HarvestedItem[];
-      state: { cursor: string | null; cycles: number; lastRunAt: string | null };
     }>;
 
     // ---- Phase-1 Enterprise-port surface (plan Task 6) --------------------------------

@@ -1,33 +1,26 @@
 /**
- * X8 — Exports (reuse the app's existing PDF/DOCX exporters).
+ * X8 — Export serializers (`itemsToJson`/`itemsToCsv`/`buildXItemsHtml`, `ipc.ts`).
  *
- * The case's captured X items are serialized to JSON / CSV / PDF / DOCX for the
- * analyst. This suite proves the three security/honesty invariants the review
- * cares about, WITHOUT electron or the network:
+ * The case's captured X items are serialized to JSON / CSV / HTML for the analyst —
+ * `exports.ts` (Task 11) and the interactive save-dialog-gated exports reuse these same
+ * three builders (the base for the Enterprise-port's JSON/PDF/CSV export surface; the
+ * DOCX/base64 `exportXItems` orchestration these builders used to feed was retired at
+ * Task 16 along with the rest of the clearnet-only X1-X8 IPC surface — `test/
+ * x-listening-exports.test.ts` proves the checksum/synthetic-exclusion behavior the
+ * surviving `exportXPostsToFile` orchestration adds on top). This suite proves the two
+ * security/honesty invariants the review cares about, WITHOUT electron or the network:
  *
- *  1. JSON export round-trips the captured items (the case's intel is actually
- *     in the file).
+ *  1. JSON round-trips the captured items (the case's intel is actually in the file).
  *  2. CSV is formula-injection safe — a scraped tweet body like `=cmd|calc` or
  *     `+cmd` is neutralized (apostrophe-prefixed, quoted) via `csvCell`, so it
  *     can never execute when the CSV is opened in Excel/Sheets. Rounded metrics
  *     are exported VERBATIM (`"1.2K"`), never a false-precision integer.
- *  3. The DOCX / PDF documents escape every scraped field — a `<script>` tweet
- *     body appears escaped (`&lt;script&gt;`), never as live markup, and a remote
- *     media URL is never emitted into an `<img src>` (data: thumbnails only).
- *
- * The DOCX path REUSES the app's existing `renderReportDocx` (no new `docx`
- * dependency); the PDF path REUSES `htmlToPdf` (no new `pdfkit`) — injected here
- * so the orchestration is exercised without a real BrowserWindow.
+ *  3. The HTML document escapes every scraped field — a `<script>` tweet body
+ *     appears escaped (`&lt;script&gt;`), never as live markup, and a remote media
+ *     URL is never emitted into an `<img src>` (data: thumbnails only).
  */
-import { describe, it, expect, vi } from 'vitest';
-import AdmZip from 'adm-zip';
+import { describe, it, expect } from 'vitest';
 import type { HarvestedItem } from '../src/shared/socmint/types';
-
-// capture-window (pulled transitively via ipc.ts) imports electron; export paths
-// never touch it, so a minimal stub is enough to let the module import.
-vi.mock('electron', () => ({
-  session: { fromPartition: () => ({ cookies: { get: async () => [] } }) },
-}));
 
 /** Build a captured X item (typed as the base HarvestedItem the store returns; the
  *  X-specific metrics/kind/media fields ride along at runtime, exactly as persisted). */
@@ -110,51 +103,3 @@ describe('X8 export — pure builders', () => {
   });
 });
 
-describe('X8 export — orchestration over the encrypted store', () => {
-  it('exportXItems(json) reads the case items and reports the count', async () => {
-    const { exportXItems } = await import('../src/main/x-listening/ipc');
-    const readItems = vi.fn(async () => [xItem({ text: 'from store' })]);
-    const res = await exportXItems('case-a', 'json', { readItems });
-    expect(readItems).toHaveBeenCalledWith('case-a');
-    expect(res.format).toBe('json');
-    expect(res.count).toBe(1);
-    expect(res.encoding).toBe('utf8');
-    expect(JSON.parse(res.data)[0].text).toBe('from store');
-    expect(res.suggestedName.endsWith('.json')).toBe(true);
-  });
-
-  it('exportXItems(csv) formula-guards a scraped body pulled from the store', async () => {
-    const { exportXItems } = await import('../src/main/x-listening/ipc');
-    const readItems = vi.fn(async () => [xItem({ text: '=HYPERLINK("http://evil")' })]);
-    const res = await exportXItems('case-a', 'csv', { readItems });
-    expect(res.encoding).toBe('utf8');
-    expect(res.data).toContain('"\'=HYPERLINK(""http://evil"")"');
-    expect(res.suggestedName.endsWith('.csv')).toBe(true);
-  });
-
-  it('exportXItems(docx) REUSES renderReportDocx and escapes a scripted body in document.xml', async () => {
-    const { exportXItems } = await import('../src/main/x-listening/ipc');
-    const readItems = vi.fn(async () => [xItem({ text: '<script>bad()</script>' })]);
-    const res = await exportXItems('case-a', 'docx', { readItems });
-    expect(res.encoding).toBe('base64');
-    expect(res.mime).toContain('wordprocessingml');
-    const zip = new AdmZip(Buffer.from(res.data, 'base64'));
-    const doc = zip.getEntry('word/document.xml')!.getData().toString('utf8');
-    // the tweet body is escaped, never live markup
-    expect(doc).toContain('&lt;script&gt;bad()&lt;/script&gt;');
-    expect(doc).not.toContain('<script>bad()');
-  });
-
-  it('exportXItems(pdf) REUSES the injected htmlToPdf on the escaped document', async () => {
-    const { exportXItems } = await import('../src/main/x-listening/ipc');
-    const readItems = vi.fn(async () => [xItem({ text: '<script>x()</script>' })]);
-    const htmlToPdf = vi.fn(async (html: string) => Buffer.from(html, 'utf8'));
-    const res = await exportXItems('case-a', 'pdf', { readItems, htmlToPdf });
-    expect(htmlToPdf).toHaveBeenCalledTimes(1);
-    expect(res.encoding).toBe('base64');
-    expect(res.mime).toBe('application/pdf');
-    const rendered = Buffer.from(res.data, 'base64').toString('utf8');
-    expect(rendered).toContain('&lt;script&gt;x()&lt;/script&gt;');
-    expect(rendered).not.toContain('<script>x()');
-  });
-});

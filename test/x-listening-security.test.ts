@@ -1,19 +1,20 @@
 /**
- * V1 — X Listening Station security-regression + honesty suite.
+ * X Listening Station security-regression + honesty suite.
  *
  * A lock-in suite: one assertion per Global-Constraint / review-finding the X
  * Listening Station must never regress. It consumes the interfaces the F1/F2/F3 +
- * X3/X5/X8 tasks already shipped and pins their security/honesty guarantees so a
- * future edit that reopens one of them turns this file red.
+ * X3/X5/X8/Enterprise-port tasks already shipped and pins their security/honesty
+ * guarantees so a future edit that reopens one of them turns this file red.
  *
  * SECURITY REGRESSION (one per checklist item):
  *  1. `assertTrustedSender` rejects an IPC frame that is not the app's own origin.
  *  2. No `shell.openExternal` (or an `electron` `shell` import) is reachable from
  *     the X module — a scraped URL must only ever reach the app's scheme-guarded
  *     `system.openExternal`, never a raw `shell.openExternal` (grep-in-test).
- *  3. Every store-backed IPC handler rejects a traversing caseId at its
- *     `ensureUuid` boundary sink — the traversal never reaches a store path
- *     (real-sink end-to-end regression, not a dead primitive).
+ *  3. Every store-backed IPC handler on the SURVIVING (Tor-safe, Task 16) surface
+ *     rejects a traversing caseId at its `ensureUuid` boundary sink — the traversal
+ *     never reaches a store path (real-sink end-to-end regression, not a dead
+ *     primitive).
  *  4. Every CSV export cell is formula-injection guarded (items + network CSV).
  *  5. No captured record field is a remote `http(s)` media URL (data: only — no beacon).
  *  6. A `<script>`-bearing scraped body renders ESCAPED in an exported document.
@@ -22,14 +23,16 @@
  * HONESTY:
  *  H1. A rounded `"1.2K"` metric is stored verbatim with `approx:true`, never a
  *      false-precision `1200`.
- *  H2. A verification/rate-limit challenge fixture BLOCKS capture (nothing persisted).
+ *  H2. A verification/rate-limit challenge fixture is classified BLOCKED (the
+ *      capture-side "nothing persisted" behavior itself is pinned end-to-end for the
+ *      surviving `captureTimeline` surface in `test/x-listening-capture.test.ts`).
  *  H3. A field X did not render is recorded as honest absence (empty/omitted), never
  *      a fabricated guess.
  *
- * electron is mocked only because ipc.ts imports `session` at module load; every
- * assertion here is exercised through pure functions or injected deps (no network,
- * no BrowserWindow). `assertTrustedSender` is the REAL implementation from the
- * shared capture-window harness — not a mock.
+ * electron is mocked only because `registerXListeningIpc`'s import graph (session.ts)
+ * imports `session` at module load; every assertion here is exercised through pure
+ * functions or injected deps (no network, no BrowserWindow). `assertTrustedSender` is
+ * the REAL implementation from the shared capture-window harness — not a mock.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -48,20 +51,12 @@ import {
   normalizeUserCell,
   networkToCsv,
   guardXPermalink,
+  classifyXPageState,
   type RawPost,
   type NormalizeContext,
   type XNetworkArtifact,
 } from '../src/main/x-listening/extract';
-import {
-  classifyPageState,
-  captureVisibleTimeline,
-  itemsToCsv,
-  buildXItemsHtml,
-  registerXListeningIpc,
-  __resetXWindowForTests,
-  type CaptureRequest,
-  type TimelineCaptureDeps,
-} from '../src/main/x-listening/ipc';
+import { itemsToCsv, buildXItemsHtml, registerXListeningIpc } from '../src/main/x-listening/ipc';
 import { makeXStore, type XStoreDeps } from '../src/main/x-listening/store';
 import type { HarvestedItem } from '../src/shared/socmint/types';
 
@@ -141,11 +136,13 @@ describe('security: no raw shell.openExternal in the X module', () => {
 });
 
 // ---- 3. every store-backed IPC handler rejects a traversing caseId ------
-// The REAL sink: `ensureUuid(caseId, 'caseId')` at each IPC boundary, applied
-// BEFORE any store path is constructed (as every peer handler in register.ts
-// does). A traversing caseId ("../../x") must throw at the boundary — it must
-// never reach `scrapingCaseDir('x', caseId)` and write outside the case root.
-// This drives the actual registered handlers end-to-end (not a dead primitive).
+// The REAL sink: `ensureUuid(id, context)` at each IPC boundary, applied BEFORE any
+// store path is constructed (as every peer handler in register.ts does). A traversing
+// id ("../../x") must throw at the boundary — it must never reach
+// `scrapingCaseDir('x', caseId)` and write outside the case root. This drives the
+// actual registered handlers end-to-end (not a dead primitive), scoped to the
+// SURVIVING Tor-safe surface (the clearnet-only X1-X8 handlers this used to cover were
+// retired at Task 16).
 
 describe('security: store-backed IPC handlers reject a traversing caseId', () => {
   const TRUSTED = {
@@ -156,29 +153,25 @@ describe('security: store-backed IPC handlers reject a traversing caseId', () =>
   type Handler = (e: Electron.IpcMainInvokeEvent, ...a: unknown[]) => unknown;
 
   function handlers(): Map<string, Handler> {
-    // No live capture window: a valid caseId would fall through to the
-    // connectivity gate, but a traversing one is rejected before it ever
-    // gets there — proving the guard fronts every other check.
-    __resetXWindowForTests();
     const map = new Map<string, Handler>();
     registerXListeningIpc({ handle: (channel, fn) => void map.set(channel, fn as Handler) });
     return map;
   }
 
   // Each store-backed channel + a minimally well-formed payload carrying the
-  // traversing caseId. Every non-caseId field is valid so the shape check passes
-  // and control actually reaches the ensureUuid sink.
+  // traversing id in the caseId/campaignId slot. Every other field is valid so the
+  // shape check passes and control actually reaches the ensureUuid sink.
   const cases: Array<[string, (h: Map<string, Handler>) => unknown]> = [
-    ['capture', (h) => h.get(channels.xListening.capture)!(TRUSTED, { caseId: TRAVERSAL, channelId: 'target' })],
-    ['captureThreadComments', (h) => h.get(channels.xListening.captureThreadComments)!(TRUSTED, { caseId: TRAVERSAL, channelId: 'target', rootPostId: '1789000000000000001', rootPostUrl: 'https://x.com/target/status/1789000000000000001' })],
-    ['runArchiveCycle', (h) => h.get(channels.xListening.runArchiveCycle)!(TRUSTED, { caseId: TRAVERSAL, channelId: 'target' })],
-    ['runArchiveCycles', (h) => h.get(channels.xListening.runArchiveCycles)!(TRUSTED, { caseId: TRAVERSAL, channelId: 'target' })],
-    ['captureFollowers', (h) => h.get(channels.xListening.captureFollowers)!(TRUSTED, { caseId: TRAVERSAL, target: 'target' })],
-    ['captureFollowing', (h) => h.get(channels.xListening.captureFollowing)!(TRUSTED, { caseId: TRAVERSAL, target: 'target' })],
-    ['exportNetwork', (h) => h.get(channels.xListening.exportNetwork)!(TRUSTED, TRAVERSAL)],
+    ['openSession', (h) => h.get(channels.xListening.openSession)!(TRUSTED, TRAVERSAL)],
+    ['captureTimeline', (h) => h.get(channels.xListening.captureTimeline)!(TRUSTED, { caseId: TRAVERSAL, channelId: 'target', targetUsername: 'target' })],
+    ['campaignsSwitch', (h) => h.get(channels.xListening.campaignsSwitch)!(TRUSTED, TRAVERSAL)],
+    ['presetsSave', (h) => h.get(channels.xListening.presetsSave)!(TRUSTED, { caseId: TRAVERSAL, id: 'p1', name: 'n', keywords: ['k'] })],
+    ['archiveRun', (h) => h.get(channels.xListening.archiveRun)!(TRUSTED, { caseId: TRAVERSAL, channelId: 'target', targetUsername: 'target' })],
+    ['exportPostsToFile', (h) => h.get(channels.xListening.exportPostsToFile)!(TRUSTED, { caseId: TRAVERSAL, format: 'json' })],
+    ['mediaRead', (h) => h.get(channels.xListening.mediaRead)!(TRUSTED, { caseId: TRAVERSAL, ref: `x-media/${'a'.repeat(64)}` })],
     ['saveNote', (h) => h.get(channels.xListening.saveNote)!(TRUSTED, { caseId: TRAVERSAL, findingId: 'f1', text: 'note' })],
     ['readNotes', (h) => h.get(channels.xListening.readNotes)!(TRUSTED, TRAVERSAL)],
-    ['exportItems', (h) => h.get(channels.xListening.exportItems)!(TRUSTED, { caseId: TRAVERSAL, format: 'json' })],
+    ['removeNote', (h) => h.get(channels.xListening.removeNote)!(TRUSTED, { caseId: TRAVERSAL, findingId: 'f1' })],
   ];
 
   it.each(cases)(
@@ -186,20 +179,24 @@ describe('security: store-backed IPC handlers reject a traversing caseId', () =>
     async (_name, invoke) => {
       const h = handlers();
       // A sync throw or a rejected promise both surface as a rejection here.
-      await expect(Promise.resolve().then(() => invoke(h))).rejects.toThrow(/Invalid caseId/);
+      await expect(Promise.resolve().then(() => invoke(h))).rejects.toThrow(/expected a UUID/);
     },
   );
 
-  it('admits a valid UUID — the capture guard passes it through to the connectivity gate', async () => {
+  it('admits a valid UUID — the guard passes it through to the next (non-shape) check', async () => {
     // Contrast case: the sink rejects TRAVERSAL specifically, not everything. A
-    // well-formed UUID clears ensureUuid and reaches the next check ("not
-    // connected", since no window is open) — proving the guard is a UUID gate,
-    // not a blanket denier.
+    // well-formed UUID clears ensureUuid and reaches the next check ("not connected
+    // for this campaign", since no window is open) — proving the guard is a UUID
+    // gate, not a blanket denier.
     const h = handlers();
     const validUuid = '11111111-1111-4111-8111-111111111111';
     await expect(
       Promise.resolve().then(() =>
-        h.get(channels.xListening.capture)!(TRUSTED, { caseId: validUuid, channelId: 'target' }),
+        h.get(channels.xListening.captureTimeline)!(TRUSTED, {
+          caseId: validUuid,
+          channelId: 'target',
+          targetUsername: 'target',
+        }),
       ),
     ).rejects.toThrow(/not connected/);
   });
@@ -381,39 +378,17 @@ describe('honesty: rounded metrics are approximate, never false-precision', () =
 // ---- H2. a challenge fixture blocks capture ---------------------------
 
 describe('honesty: a verification/rate-limit challenge STOPS capture', () => {
-  it('classifyPageState flags a challenge page as blocked', () => {
+  it('classifyXPageState flags a challenge page as blocked', () => {
     for (const text of [
       'Verify your identity to continue',
       'Rate limit exceeded, try again later',
       'Please complete this security check (arkose)',
     ]) {
-      expect(classifyPageState({ url: 'https://x.com/home', text, articles: 0 }).blocked).toBe(true);
+      expect(classifyXPageState({ url: 'https://x.com/home', text, articles: 0 }).blocked).toBe(true);
     }
   });
-
-  it('captureVisibleTimeline persists NOTHING when the gate reports blocked', async () => {
-    const WIN = {} as unknown as Electron.BrowserWindow;
-    const runCapture = vi.fn(async () => [rawPost()]);
-    const saveItems = vi.fn(async () => ({ added: 0, skipped: 0 }));
-    const deps: Partial<TimelineCaptureDeps> = {
-      guard: async () => ({ blocked: true, reason: 'verification challenge' }),
-      navigate: async () => {},
-      settle: async () => {},
-      runCapture,
-      resolveMedia: async () => null,
-      saveItems,
-      now: () => '2026-08-06T12:00:00.000Z',
-    };
-    const res = await captureVisibleTimeline(
-      WIN,
-      { caseId: 'case-a', jobId: 'job-1', channelId: 'target', channelLabel: '@target' } as CaptureRequest,
-      deps,
-    );
-    expect(res.blocked).toBe(true);
-    expect(res.items).toEqual([]);
-    expect(runCapture).not.toHaveBeenCalled();
-    expect(saveItems).not.toHaveBeenCalled();
-  });
+  // The end-to-end "nothing persisted when blocked" behavior for the surviving
+  // `captureTimeline` surface (capture.ts) is pinned in test/x-listening-capture.test.ts.
 });
 
 // ---- H3. a missing field is honest absence, never a guess -------------
