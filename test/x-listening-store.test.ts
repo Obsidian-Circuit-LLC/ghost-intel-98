@@ -463,6 +463,7 @@ describe('mergeSettings: xListening block heals from a stale on-disk file', () =
       collect: { replies: false, reposts: false, comments: false },
       archiveCycles: false,
       clearnet: false,
+      clearnetAck: false,
     });
   });
 

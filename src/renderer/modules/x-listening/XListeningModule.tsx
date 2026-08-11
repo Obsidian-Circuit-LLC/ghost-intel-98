@@ -1,856 +1,377 @@
 /**
- * X Listening Station — renderer UI (Tasks X1–X8, full wiring).
+ * X Listening Station — renderer SHELL (Enterprise v3.4.1 port, Task 13).
  *
- * Clearnet-quarantine module. Every capture runs MAIN-side in a hardened BrowserWindow on the
- * named clearnet partition (see src/main/capture/capture-window.ts); this renderer never touches
- * the network, never sees the auth token, and drives the main process ONLY through the
- * sender-validated `window.api.xListening` IPC group. Nothing here imports bgconn/Tor/socmint/
- * telegram code — the import-graph sentinel must stay green.
+ * Wholesale rebuild onto the Phase-1/Phase-2 Tor-default surface (session.ts/capture.ts/
+ * campaigns.ts/analysis.ts, `channels.xListening.{openSession,sessionStatus,closeSession,
+ * campaigns*,captureTimeline,analysis,health,entities,presets*}`) — NOT the retiring X1-X8
+ * clearnet-only surface (`connect`/`status`/`capture`/…, still registered by
+ * `registerXListeningIpc` until Task 16 deletes it, but no longer called from here).
  *
- * Ported and re-shaped from the quarantine renderer (`src/main.tsx`) onto the real, honesty-
- * hardened IPC surface: target-source management, visible-post CAPTURE (with the collect toggles
- * sourced from AppSettings.xListening.collect — read/written via window.api.settings, enforced
- * MAIN-side), third-party comment capture, follower/following capture + CSV export, analyst NOTES
- * (the NotesPanel), low-rate ARCHIVE cycles, and JSON/CSV/PDF/DOCX export.
+ * This file is the SHELL only (plan Task 13): the header — campaign dock, X-session box, Tor/
+ * clearnet posture control, and the persistent CLEARNET/DEMO markers. The tab body (dashboard/
+ * live/sources/network/entities/changes/search/notes/exports/campaigns/system) lands in
+ * Tasks 14-15; until then `xls-body` shows a placeholder.
  *
- * Honesty (carried from the quarantine exemplar): the connect flow opens a real hardened login
- * window and the operator signs in directly to X — no cookie copying, and the auth token is never
- * read, echoed, or logged here (status is a derived boolean). Displayed fields are visible-only:
- * a missing display name is shown as "Not visible", NEVER as a fallback to the @handle; metrics
- * are the rounded tokens X rendered (approximate, never a false-precision integer); remote media
- * is never inlined (only local `data:` thumbnails are rendered).
+ * Case-scoped-but-not-case-required: `caseId` (from `spec.props`) is kept ONLY as an optional
+ * display label for a core investigation case this window happened to be opened from — it is
+ * NEVER required and NEVER threaded into any xListening IPC call. Every X capture/collection
+ * concept here is a self-managed **campaign** — an `x`-namespace scraping-case id
+ * (`campaigns.ts`) the module creates/switches/renames/deletes on its own. This is what removes
+ * the old "open from a case to capture" requirement (contrast the retiring module's
+ * `requireCase()` gate, which this shell has no equivalent of).
+ *
+ * Tor posture: default is Tor-routed (`AppSettings.xListening.clearnet === false`); `openSession`
+ * fails closed (`{blocked:true, reason}`) when background Tor isn't bootstrapped — no silent
+ * clearnet fallback (session.ts). Flipping to clearnet is gated by a ONE-TIME real-IP
+ * acknowledgement (`AppSettings.xListening.clearnetAck`), mirroring
+ * `ai-assistant/useClearnetLinkOpener` (`ai.linkClearnetAcknowledged`) and the Host-Info clearnet
+ * toggle (`geoint.cctvResolveClearnetAck` in SettingsModule) — the confirm dialog is shown only
+ * on the first false→true flip while unacknowledged; once acknowledged, clearnet can be toggled
+ * on/off freely without re-prompting. The FULL fixed-shape `xListening` block is always sent on
+ * patch (never a bare `{ clearnet }`) so a sibling toggle (`collect`/`archiveCycles`) can never be
+ * dropped by a shallow merge (the v3.24.0 dataloss class).
+ *
+ * Markers: the CLEARNET/TOR badge is driven directly by the persisted `clearnet` setting (real,
+ * shared state — not a fabricated indicator). The DEMO DATA LOADED marker is driven by
+ * `hasSyntheticRecords` over this shell's local `posts` cache — empty today (Task 14 populates it
+ * via `captureTimeline`; a future "Load Demo Data" action populates it with `synthetic:true`
+ * records, store.ts/demo.ts) — so the marker is honestly silent until a campaign actually holds
+ * demo/seeded data, never asserted speculatively.
+ *
+ * No hollow UI (the v3.24.2 lesson): every button below invokes a REAL `window.api.xListening.*`
+ * channel — campaign create/switch/rename/delete all round-trip through `campaigns.ts`; the
+ * session box drives `openSession`/`sessionStatus`/`closeSession`.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { NotesPanel } from './panels/NotesPanel';
+import { useCallback, useEffect, useState } from 'react';
+import type { ScrapingCase } from '@shared/types';
+import { useSettings } from '../../state/store';
+import { confirmDialog, promptDialog } from '../../state/dialogs';
 import './x-listening.css';
 
-type XMetric = { raw?: string; value?: number; approx?: boolean };
-type XFeedMetrics = { replies?: XMetric; reposts?: XMetric; likes?: XMetric; views?: XMetric };
+/** A campaign IS an x-namespace scraping-case id (campaigns.ts) — no separate shape. */
+export type XCampaign = ScrapingCase;
 
-/** A captured item as it rides through IPC — the base HarvestedItem plus the X-specific
- *  runtime fields (`kind`/`metrics`/`media`). Read defensively so a partial record never throws. */
-interface XFeedItem {
+/** Minimal local view of a captured X post record — just enough to detect demo/seeded data.
+ *  Deliberately NOT the main-process-only `XPostArtifact` (store.ts): this renderer must never
+ *  import from `src/main/**` (quarantine-clean boundary — capture-window.ts's own header makes
+ *  the same point about the harness staying import-graph-clean of the modules that use it). */
+export interface XPostRecord {
   id: string;
-  messageId?: string;
-  channelId?: string;
-  channelLabel?: string;
-  authorHandle?: string;
-  text?: string;
-  url?: string;
-  publishedAt?: string;
-  kind?: string;
-  media?: string[];
-  metrics?: XFeedMetrics;
+  synthetic?: boolean;
 }
 
-interface XNetworkAccount {
-  handle: string;
-  /** Optional — absent when no display name was visible; rendered as "Not visible", never the @handle. */
-  displayName?: string;
-  avatar?: string;
-  bio?: string;
-}
-interface XNetworkResult {
-  target: string;
-  kind: 'followers' | 'following';
-  accounts: XNetworkAccount[];
+/** True iff any record carries the demo/seeded honesty flag (Task 12's `synthetic:true`) — the
+ *  DEMO DATA LOADED marker's pure predicate. Exported so later tabs (Task 14+) can reuse the
+ *  exact same rule rather than re-deriving it. */
+export function hasSyntheticRecords(records: readonly XPostRecord[]): boolean {
+  return records.some((r) => r.synthetic === true);
 }
 
-interface CollectSettings {
-  replies: boolean;
-  reposts: boolean;
-  comments: boolean;
-}
-
-type Tab = 'sources' | 'feed' | 'network' | 'notes' | 'archive' | 'exports' | 'system';
-
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'sources', label: 'TARGET SOURCES' },
-  { id: 'feed', label: 'LIVE FEED' },
-  { id: 'network', label: 'FOLLOWER NETWORK' },
-  { id: 'notes', label: 'ANALYST NOTES' },
-  { id: 'archive', label: 'ARCHIVE' },
-  { id: 'exports', label: 'EXPORTS' },
-  { id: 'system', label: 'SYSTEM' }
-];
-
-const KIND_LABELS: Record<string, string> = {
-  post: 'POST',
-  reply: 'REPLY',
-  repost: 'REPOST',
-  comment: '3RD-PARTY COMMENT'
-};
-
-/** A visible X handle: 1–15 of [A-Za-z0-9_]. Mirrors the main-side guard so we never send a
- *  target the handler will reject. */
-const HANDLE_RE = /^[A-Za-z0-9_]{1,15}$/;
-
-function normalizeHandle(input: string): string {
-  return String(input || '').trim().replace(/^@+/, '');
-}
-
-/** Decode an export result to bytes + trigger a browser download (mirrors SweepPanel). No remote
- *  fetch — the data came from the main-side exporter over IPC. */
-function downloadExport(res: {
-  data: string;
-  encoding: 'utf8' | 'base64';
-  mime: string;
-  suggestedName: string;
-}): void {
-  let blob: Blob;
-  if (res.encoding === 'base64') {
-    const bin = atob(res.data);
-    const bytes = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    blob = new Blob([bytes], { type: res.mime });
-  } else {
-    blob = new Blob([res.data], { type: res.mime });
-  }
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = res.suggestedName;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-/** Render one metric token verbatim (approximate) or an em-dash when not visible. */
-function metricToken(m: XMetric | undefined): string {
-  const raw = String(m?.raw ?? '').trim();
-  return raw || '—';
-}
+const CLEARNET_WARNING_TEXT =
+  'Routing X capture over CLEARNET exposes your real IP directly to X instead of Tor. ' +
+  'This is remembered — you will not be asked again unless you clear it in Settings. Enable clearnet?';
 
 export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
-  const [tab, setTab] = useState<Tab>('sources');
-  const [connected, setConnected] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState('Station ready.');
+  const settings = useSettings((s) => s.settings);
+  const patchSettings = useSettings((s) => s.patch);
 
-  const [targets, setTargets] = useState<string[]>([]);
-  const [newTarget, setNewTarget] = useState('');
-  const [selectedTarget, setSelectedTarget] = useState('');
+  const [campaigns, setCampaigns] = useState<XCampaign[]>([]);
+  const [activeCampaignId, setActiveCampaignId] = useState('');
+  const [campaignBusy, setCampaignBusy] = useState(false);
 
-  const [items, setItems] = useState<XFeedItem[]>([]);
-  const [network, setNetwork] = useState<XNetworkResult | null>(null);
-  const [selectedFindingId, setSelectedFindingId] = useState<string | null>(null);
+  const [sessionConnected, setSessionConnected] = useState(false);
+  const [sessionWindowOpen, setSessionWindowOpen] = useState(false);
+  const [sessionBusy, setSessionBusy] = useState(false);
 
-  const [collect, setCollect] = useState<CollectSettings>({
-    replies: false,
-    reposts: false,
-    comments: false
-  });
-  const [archiveCycles, setArchiveCycles] = useState(false);
-  const [archiveMaxCycles, setArchiveMaxCycles] = useState(3);
-  // Tor-default network posture (Task 3: AppSettings.xListening.clearnet, default false). The
-  // clearnet TOGGLE UI (one-time real-IP acknowledgement, CLEARNET marker) is Task 13's job —
-  // this local mirror exists now purely so the collect/archive patches below round-trip the
-  // full fixed-shape xListening block and never drop this sibling field (v3.24.0 dataloss class).
-  const [clearnet, setClearnet] = useState(false);
+  // Task 14 populates this via captureTimeline/loadDemoData results; empty (and therefore no
+  // DEMO marker) until a tab actually captures or seeds something into the active campaign.
+  const [posts] = useState<XPostRecord[]>([]);
 
-  // ── settings + status bootstrap ──────────────────────────────────────────
-  const refreshSettings = useCallback(async () => {
+  const [notice, setNotice] = useState('X Listening Station ready.');
+
+  const xListeningSettings = settings?.xListening;
+  const clearnet = xListeningSettings?.clearnet === true;
+  const clearnetAck = xListeningSettings?.clearnetAck === true;
+  const demoActive = hasSyntheticRecords(posts);
+
+  const activeCampaign = campaigns.find((c) => c.id === activeCampaignId);
+
+  // ── campaign list (self-managed — no core case need be bound) ────────────
+  const loadCampaigns = useCallback(async (preferId?: string) => {
     try {
-      const s = (await window.api.settings.read()) as {
-        xListening?: { collect?: Partial<CollectSettings>; archiveCycles?: boolean; clearnet?: boolean };
-      };
-      const c = s.xListening?.collect ?? {};
-      setCollect({
-        replies: c.replies === true,
-        reposts: c.reposts === true,
-        comments: c.comments === true
+      const list = await window.api.xListening.campaignsList();
+      setCampaigns(list);
+      setActiveCampaignId((cur) => {
+        if (preferId && list.some((c) => c.id === preferId)) return preferId;
+        if (cur && list.some((c) => c.id === cur)) return cur;
+        return list[0]?.id ?? '';
       });
-      setArchiveCycles(s.xListening?.archiveCycles === true);
-      setClearnet(s.xListening?.clearnet === true);
     } catch (err) {
-      console.warn('[XListening] settings.read:', err);
+      console.warn('[XListening] campaignsList:', err);
     }
   }, []);
 
   useEffect(() => {
-    let active = true;
-    void (async () => {
-      try {
-        const s = await window.api.xListening.status();
-        if (active) setConnected(s.connected);
-      } catch (err) {
-        console.warn('[XListening] status:', err);
-      }
-    })();
-    void refreshSettings();
-    return () => {
-      active = false;
-    };
-  }, [refreshSettings]);
+    void loadCampaigns();
+    // Mount-only: campaign list is refreshed explicitly after every create/rename/delete below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  /** Wrap an async job with busy + notice + a session-status refresh. */
-  const run = useCallback(async (job: () => Promise<void>, ok: string) => {
-    setBusy(true);
+  // ── session status for the active campaign ────────────────────────────────
+  const refreshSession = useCallback(async (id: string) => {
+    if (!id) {
+      setSessionConnected(false);
+      setSessionWindowOpen(false);
+      return;
+    }
     try {
-      await job();
-      setNotice(ok);
+      const s = await window.api.xListening.sessionStatus(id);
+      setSessionConnected(s.connected);
+      setSessionWindowOpen(s.windowOpen);
+    } catch (err) {
+      console.warn('[XListening] sessionStatus:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshSession(activeCampaignId);
+  }, [activeCampaignId, refreshSession]);
+
+  // ── campaign dock actions ──────────────────────────────────────────────────
+  const handleNewCampaign = useCallback(async () => {
+    const name = await promptDialog(
+      'Name this campaign (a self-managed X collection case — no core investigation case is required):',
+      '',
+      'New campaign',
+    );
+    if (!name || !name.trim()) return;
+    setCampaignBusy(true);
+    try {
+      const created = await window.api.xListening.campaignsCreate(name.trim());
+      await loadCampaigns(created.id);
+      setNotice(`Campaign "${created.name}" created.`);
     } catch (err) {
       setNotice(err instanceof Error ? err.message : String(err));
     } finally {
-      setBusy(false);
-      try {
-        const s = await window.api.xListening.status();
-        setConnected(s.connected);
-      } catch {
-        /* keep last known state */
-      }
+      setCampaignBusy(false);
     }
-  }, []);
+  }, [loadCampaigns]);
 
-  const handleConnect = useCallback(() => {
-    void run(async () => {
-      await window.api.xListening.connect();
-    }, 'X login window opened.');
-  }, [run]);
-
-  // ── target management (renderer-local; the app has no profile store) ──────
-  const addTarget = useCallback(() => {
-    const handle = normalizeHandle(newTarget);
-    if (!HANDLE_RE.test(handle)) {
-      setNotice('Enter a valid X handle (letters, numbers, underscore; up to 15 chars).');
-      return;
-    }
-    setTargets((cur) => (cur.includes(handle) ? cur : [...cur, handle]));
-    setSelectedTarget((cur) => cur || handle);
-    setNewTarget('');
-    setNotice(`Added @${handle}.`);
-  }, [newTarget]);
-
-  const removeTarget = useCallback((handle: string) => {
-    setTargets((cur) => cur.filter((t) => t !== handle));
-    setSelectedTarget((cur) => (cur === handle ? '' : cur));
-  }, []);
-
-  /** Merge new items into the feed, dedup by id, preserving order. */
-  const mergeItems = useCallback((incoming: XFeedItem[]) => {
-    setItems((cur) => {
-      const seen = new Set(cur.map((i) => i.id));
-      const next = [...cur];
-      for (const it of incoming) {
-        if (it && it.id && !seen.has(it.id)) {
-          seen.add(it.id);
-          next.push(it);
-        }
-      }
-      return next;
-    });
-  }, []);
-
-  const requireCase = useCallback((): string | null => {
-    if (!caseId) {
-      setNotice('Open the X Listening Station from a case to capture — no case is bound.');
-      return null;
-    }
-    return caseId;
-  }, [caseId]);
-
-  // ── capture: visible timeline ────────────────────────────────────────────
-  const captureTimeline = useCallback(
-    (handle: string) => {
-      const cid = requireCase();
-      if (!cid || !handle) return;
-      void run(async () => {
-        const res = await window.api.xListening.capture({
-          caseId: cid,
-          channelId: handle,
-          channelLabel: `@${handle}`
-        });
-        if (res.blocked) {
-          setNotice(res.reason ?? 'Capture stopped — X presented a challenge.');
-          return;
-        }
-        mergeItems((res.items ?? []) as unknown as XFeedItem[]);
-        setNotice(`Captured @${handle}: ${res.added} new, ${res.skipped} already stored.`);
-      }, `Capture complete for @${handle}.`);
-    },
-    [requireCase, run, mergeItems]
-  );
-
-  // ── capture: third-party comments under one of the target's posts ─────────
-  const captureComments = useCallback(
-    (item: XFeedItem) => {
-      const cid = requireCase();
-      if (!cid) return;
-      const channelId = item.channelId || selectedTarget;
-      const rootPostId = item.messageId || '';
-      const rootPostUrl = item.url || '';
-      if (!channelId || !rootPostId || !rootPostUrl) {
-        setNotice('This finding is missing the fields needed to open its thread.');
+  const handleSwitchCampaign = useCallback(
+    async (id: string) => {
+      if (!id) {
+        setActiveCampaignId('');
         return;
       }
-      void run(async () => {
-        const res = await window.api.xListening.captureThreadComments({
-          caseId: cid,
-          channelId,
-          channelLabel: `@${channelId}`,
-          rootPostId,
-          rootPostUrl
-        });
-        if (res.blocked) {
-          setNotice(res.reason ?? 'Comment capture stopped — X presented a challenge.');
-          return;
-        }
-        mergeItems((res.items ?? []) as unknown as XFeedItem[]);
-        setNotice(
-          collect.comments
-            ? `Captured comments under ${rootPostId}: ${res.added} new.`
-            : 'Comment collection is off — enable it in System settings first.'
-        );
-      }, 'Comment capture complete.');
+      setCampaignBusy(true);
+      try {
+        // Look up (and thereby validate) the campaign still exists via the real channel — a
+        // stale local list entry (deleted from another window) must never be silently treated
+        // as active.
+        const fresh = await window.api.xListening.campaignsSwitch(id);
+        setCampaigns((cur) => cur.map((c) => (c.id === fresh.id ? fresh : c)));
+        setActiveCampaignId(fresh.id);
+      } catch (err) {
+        setNotice(err instanceof Error ? err.message : String(err));
+      } finally {
+        setCampaignBusy(false);
+      }
     },
-    [requireCase, run, mergeItems, selectedTarget, collect.comments]
+    [],
   );
 
-  // ── follower / following capture ─────────────────────────────────────────
-  const captureNetwork = useCallback(
-    (handle: string, kind: 'followers' | 'following') => {
-      const cid = requireCase();
-      if (!cid || !handle) return;
-      void run(async () => {
-        const res =
-          kind === 'followers'
-            ? await window.api.xListening.captureFollowers({ caseId: cid, target: handle })
-            : await window.api.xListening.captureFollowing({ caseId: cid, target: handle });
-        if (res.blocked) {
-          setNotice(res.reason ?? 'Network capture stopped — X presented a challenge.');
-          return;
-        }
-        setNetwork({ target: res.target, kind: res.kind, accounts: res.accounts ?? [] });
-        setNotice(`Captured ${res.accounts?.length ?? 0} visible ${kind} for ${res.target}.`);
-      }, `${kind} capture complete for @${handle}.`);
-    },
-    [requireCase, run]
-  );
-
-  const exportNetworkCsv = useCallback(() => {
-    const cid = requireCase();
-    if (!cid) return;
-    void run(async () => {
-      const res = await window.api.xListening.exportNetwork(cid);
-      downloadExport({
-        data: res.csv,
-        encoding: 'utf8',
-        mime: 'text/csv',
-        suggestedName: `x-listening-networks-${cid}.csv`
-      });
-      setNotice(`Exported ${res.count} network account(s) to CSV.`);
-    }, 'Network CSV export complete.');
-  }, [requireCase, run]);
-
-  // ── collect toggles (persist to AppSettings; capture reads them main-side) ─
-  const setCollectKey = useCallback(
-    (key: keyof CollectSettings, value: boolean) => {
-      const next = { ...collect, [key]: value };
-      setCollect(next);
-      void run(async () => {
-        // Send the FULL fixed-shape block so a shallow settings-merge can never drop a sibling
-        // key (the v3.24.0 dataloss class); the archive toggle rides along unchanged.
-        await window.api.settings.update({ xListening: { collect: next, archiveCycles, clearnet } });
-        await refreshSettings();
-      }, 'Collection settings saved.');
-    },
-    [collect, archiveCycles, clearnet, run, refreshSettings]
-  );
-
-  const setArchiveEnabled = useCallback(
-    (value: boolean) => {
-      setArchiveCycles(value);
-      void run(async () => {
-        await window.api.settings.update({ xListening: { collect, archiveCycles: value, clearnet } });
-        await refreshSettings();
-      }, value ? 'Low-rate archive cycles enabled.' : 'Low-rate archive cycles disabled.');
-    },
-    [collect, clearnet, run, refreshSettings]
-  );
-
-  // ── archive cycles ───────────────────────────────────────────────────────
-  const runOneArchiveCycle = useCallback(
-    (handle: string) => {
-      const cid = requireCase();
-      if (!cid || !handle) return;
-      void run(async () => {
-        const res = await window.api.xListening.runArchiveCycle({
-          caseId: cid,
-          channelId: handle,
-          channelLabel: `@${handle}`
-        });
-        if (res.blocked) {
-          setNotice(res.reason ?? 'Archive cycle stopped — X presented a challenge.');
-          return;
-        }
-        if (!res.ran) {
-          setNotice('Archive cycles are disabled — enable them before running a cycle.');
-          return;
-        }
-        mergeItems((res.items ?? []) as unknown as XFeedItem[]);
-        setNotice(`Archive cycle ${res.state.cycles}: ${res.added} new record(s).`);
-      }, `Archive cycle complete for @${handle}.`);
-    },
-    [requireCase, run, mergeItems]
-  );
-
-  const runArchiveRun = useCallback(
-    (handle: string) => {
-      const cid = requireCase();
-      if (!cid || !handle) return;
-      const maxCycles = Math.max(1, Math.min(1000, Math.floor(archiveMaxCycles || 1)));
-      void run(async () => {
-        const res = await window.api.xListening.runArchiveCycles({
-          caseId: cid,
-          channelId: handle,
-          channelLabel: `@${handle}`,
-          maxCycles,
-          // Deterministic, low but non-blocking spacing for an interactive run.
-          delayMs: 0
-        });
-        if (res.blocked) {
-          setNotice(res.reason ?? 'Archive run stopped — X presented a challenge.');
-          return;
-        }
-        // Surface the run's captured records in the LIVE FEED, exactly like RUN ONE CYCLE.
-        mergeItems((res.items ?? []) as unknown as XFeedItem[]);
-        setNotice(
-          res.cyclesRun > 0
-            ? `Ran ${res.cyclesRun} archive cycle(s); ${res.totalAdded} new record(s).`
-            : 'No archive cycles ran — enable archive cycles first.'
-        );
-      }, `Archive run complete for @${handle}.`);
-    },
-    [requireCase, run, mergeItems, archiveMaxCycles]
-  );
-
-  // ── item export ──────────────────────────────────────────────────────────
-  const exportItems = useCallback(
-    (format: 'json' | 'csv' | 'pdf' | 'docx') => {
-      const cid = requireCase();
-      if (!cid) return;
-      void run(async () => {
-        const res = await window.api.xListening.exportItems({ caseId: cid, format });
-        downloadExport(res);
-        setNotice(`Exported ${res.count} item(s) to ${format.toUpperCase()}.`);
-      }, `${format.toUpperCase()} export complete.`);
-    },
-    [requireCase, run]
-  );
-
-  const kindCounts = useMemo(() => {
-    const counts: Record<string, number> = { post: 0, reply: 0, repost: 0, comment: 0 };
-    for (const it of items) {
-      const k = String(it.kind ?? 'post');
-      counts[k] = (counts[k] ?? 0) + 1;
+  const handleRenameCampaign = useCallback(async () => {
+    if (!activeCampaign) return;
+    const name = await promptDialog('Rename this campaign:', activeCampaign.name, 'Rename campaign');
+    if (!name || !name.trim()) return;
+    setCampaignBusy(true);
+    try {
+      await window.api.xListening.campaignsUpdate({ id: activeCampaign.id, name: name.trim() });
+      await loadCampaigns(activeCampaign.id);
+      setNotice('Campaign renamed.');
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCampaignBusy(false);
     }
-    return counts;
-  }, [items]);
+  }, [activeCampaign, loadCampaigns]);
+
+  const handleDeleteCampaign = useCallback(async () => {
+    if (!activeCampaign) return;
+    const ok = await confirmDialog(
+      `Delete campaign "${activeCampaign.name}"? This permanently removes every post, network, ` +
+        'note, preset and archive cursor it holds.',
+      'Delete campaign',
+    );
+    if (!ok) return;
+    setCampaignBusy(true);
+    try {
+      await window.api.xListening.campaignsDelete(activeCampaign.id);
+      setActiveCampaignId('');
+      await loadCampaigns();
+      setNotice('Campaign deleted.');
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCampaignBusy(false);
+    }
+  }, [activeCampaign, loadCampaigns]);
+
+  // ── session actions ────────────────────────────────────────────────────────
+  const handleOpenSession = useCallback(async () => {
+    if (!activeCampaignId) {
+      setNotice('Create or select a campaign before opening a session.');
+      return;
+    }
+    setSessionBusy(true);
+    try {
+      const res = await window.api.xListening.openSession(activeCampaignId);
+      setNotice(res.blocked ? (res.reason ?? 'Session blocked.') : 'X session window opened.');
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSessionBusy(false);
+      await refreshSession(activeCampaignId);
+    }
+  }, [activeCampaignId, refreshSession]);
+
+  const handleCloseSession = useCallback(async () => {
+    if (!activeCampaignId) return;
+    setSessionBusy(true);
+    try {
+      await window.api.xListening.closeSession(activeCampaignId);
+      setNotice('Session window closed.');
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSessionBusy(false);
+      await refreshSession(activeCampaignId);
+    }
+  }, [activeCampaignId, refreshSession]);
+
+  // ── Tor / clearnet posture ─────────────────────────────────────────────────
+  const setClearnet = useCallback(
+    async (next: boolean) => {
+      const x = xListeningSettings;
+      if (!x) return;
+      if (next && !clearnetAck) {
+        const ok = await confirmDialog(CLEARNET_WARNING_TEXT, 'Enable clearnet capture');
+        if (!ok) return;
+        await patchSettings({ xListening: { ...x, clearnet: true, clearnetAck: true } });
+        return;
+      }
+      await patchSettings({ xListening: { ...x, clearnet: next } });
+    },
+    [xListeningSettings, clearnetAck, patchSettings],
+  );
 
   return (
     <div className="xls-root">
-      <header className="xls-session-bar">
-        <span className={`xls-status-dot${connected ? ' xls-online' : ''}`} aria-hidden="true" />
-        <div className="xls-session-label">
-          <strong>{connected ? 'X SESSION ONLINE' : 'X SESSION OFFLINE'}</strong>
-          <small>Visible-DOM capture only · clearnet-quarantined</small>
+      <header className="xls-dock">
+        <div className="xls-dock-row">
+          <span className="xls-dock-label">CAMPAIGN</span>
+          <select
+            className="xls-input xls-dock-select"
+            aria-label="Active campaign"
+            value={activeCampaignId}
+            onChange={(e) => void handleSwitchCampaign(e.target.value)}
+            disabled={campaignBusy || campaigns.length === 0}
+          >
+            {campaigns.length === 0 && <option value="">No campaigns yet</option>}
+            {campaigns.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          <button
+            className="xls-btn xls-btn-primary"
+            onClick={() => void handleNewCampaign()}
+            disabled={campaignBusy}
+          >
+            New Campaign
+          </button>
+          <button
+            className="xls-btn"
+            onClick={() => void handleRenameCampaign()}
+            disabled={campaignBusy || !activeCampaign}
+          >
+            Rename
+          </button>
+          <button
+            className="xls-btn xls-btn-danger"
+            onClick={() => void handleDeleteCampaign()}
+            disabled={campaignBusy || !activeCampaign}
+          >
+            Delete
+          </button>
         </div>
-        <div className="xls-session-spacer" />
-        <button
-          className="xls-btn xls-btn-primary"
-          onClick={handleConnect}
-          disabled={busy}
-        >
-          {busy ? 'Working…' : connected ? 'Reopen X' : 'Connect X'}
-        </button>
+        {caseId && (
+          <div className="xls-dock-note">
+            Opened from investigation case {caseId} (label only — this campaign is self-managed
+            and works with no case bound).
+          </div>
+        )}
       </header>
 
-      <nav className="xls-tabs" aria-label="X Listening sections">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            className={`xls-tab${tab === t.id ? ' xls-tab-active' : ''}`}
-            onClick={() => setTab(t.id)}
-          >
-            {t.label}
-          </button>
-        ))}
-      </nav>
+      <div className="xls-session-bar">
+        <span className={`xls-status-dot${sessionConnected ? ' xls-online' : ''}`} aria-hidden="true" />
+        <div className="xls-session-label">
+          <strong>{sessionConnected ? 'X SESSION ONLINE' : 'X SESSION OFFLINE'}</strong>
+          <small>
+            {sessionWindowOpen ? 'Capture window open' : 'No capture window open'} for this campaign
+          </small>
+        </div>
+        <div className="xls-session-spacer" />
+        <div className="xls-markers">
+          <span className={`xls-marker${clearnet ? ' xls-marker-clearnet' : ' xls-marker-tor'}`}>
+            {clearnet ? 'CLEARNET' : 'TOR'}
+          </span>
+          {demoActive && <span className="xls-marker xls-marker-demo">DEMO DATA LOADED</span>}
+        </div>
+        <button
+          className="xls-btn"
+          onClick={() => void handleCloseSession()}
+          disabled={sessionBusy || !sessionWindowOpen}
+        >
+          Close Session
+        </button>
+        <button
+          className="xls-btn xls-btn-primary"
+          onClick={() => void handleOpenSession()}
+          disabled={sessionBusy || !activeCampaignId}
+        >
+          {sessionBusy ? 'Working…' : 'Open Session'}
+        </button>
+      </div>
 
-      <div className="xls-notice" role="status">{notice}</div>
+      <div className="xls-network-posture">
+        <label className="xls-check">
+          <input
+            type="checkbox"
+            checked={clearnet}
+            onChange={(e) => void setClearnet(e.target.checked)}
+            disabled={!xListeningSettings}
+          />
+          Route over CLEARNET instead of Tor (exposes your real IP to X)
+        </label>
+        <p className="xls-help">
+          {clearnet
+            ? 'Clearnet mode is ON — capture uses your real IP, not Tor.'
+            : 'Tor mode (default) — capture fails closed when background Tor is not bootstrapped; there is no clearnet fallback.'}
+        </p>
+      </div>
+
+      <div className="xls-notice" role="status">
+        {notice}
+      </div>
 
       <main className="xls-body">
-        {tab === 'sources' && (
-          <section className="xls-panel">
-            <h2 className="xls-panel-title">TARGET SOURCES</h2>
-            <div className="xls-add-source">
-              <input
-                className="xls-input"
-                value={newTarget}
-                placeholder="X handle (e.g. username)"
-                aria-label="Add X target handle"
-                onChange={(e) => setNewTarget(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') addTarget(); }}
-              />
-              <button className="xls-btn xls-btn-primary" onClick={addTarget} disabled={busy}>
-                ADD SOURCE
-              </button>
-            </div>
-            <ul className="xls-source-list">
-              {targets.map((handle) => (
-                <li
-                  key={handle}
-                  className={`xls-source-row${selectedTarget === handle ? ' xls-source-selected' : ''}`}
-                >
-                  <button
-                    className="xls-source-name"
-                    onClick={() => setSelectedTarget(handle)}
-                    aria-label={`Select @${handle}`}
-                  >
-                    @{handle}
-                  </button>
-                  <div className="xls-source-actions">
-                    <button
-                      className="xls-btn"
-                      onClick={() => captureTimeline(handle)}
-                      disabled={busy}
-                    >
-                      CAPTURE POSTS
-                    </button>
-                    <button
-                      className="xls-btn"
-                      onClick={() => { setSelectedTarget(handle); setTab('network'); }}
-                      disabled={busy}
-                    >
-                      NETWORK
-                    </button>
-                    <button
-                      className="xls-btn xls-btn-danger"
-                      onClick={() => removeTarget(handle)}
-                      disabled={busy}
-                    >
-                      REMOVE
-                    </button>
-                  </div>
-                </li>
-              ))}
-              {targets.length === 0 && (
-                <li className="xls-empty">No target sources yet. Add an X handle to begin.</li>
-              )}
-            </ul>
-          </section>
-        )}
-
-        {tab === 'feed' && (
-          <section className="xls-panel">
-            <div className="xls-panel-title-row">
-              <h2 className="xls-panel-title">LIVE FEED</h2>
-              <span className="xls-count">
-                {items.length} record(s) · {kindCounts.reply} replies · {kindCounts.repost} reposts ·{' '}
-                {kindCounts.comment} comments
-              </span>
-            </div>
-            <div className="xls-feed">
-              {items.map((it) => (
-                <article className="xls-post-card" key={it.id}>
-                  <header className="xls-post-head">
-                    <strong>{it.authorHandle || 'Not visible'}</strong>
-                    <span className="xls-kind">{KIND_LABELS[String(it.kind ?? 'post')] ?? 'POST'}</span>
-                    <time>{it.publishedAt || 'Not visible'}</time>
-                  </header>
-                  <p className="xls-post-text">{it.text || ''}</p>
-                  {Array.isArray(it.media) && it.media.some((m) => String(m).startsWith('data:')) && (
-                    <div className="xls-media-strip">
-                      {it.media
-                        .filter((m) => String(m).startsWith('data:'))
-                        .slice(0, 3)
-                        .map((src, i) => (
-                          <img key={i} src={src} alt="captured media" />
-                        ))}
-                    </div>
-                  )}
-                  <footer className="xls-metrics">
-                    <span>↩ {metricToken(it.metrics?.replies)}</span>
-                    <span>⟳ {metricToken(it.metrics?.reposts)}</span>
-                    <span>♥ {metricToken(it.metrics?.likes)}</span>
-                    <span>◉ {metricToken(it.metrics?.views)}</span>
-                    <span className="xls-stamp">visible-capture · unverified</span>
-                  </footer>
-                  <div className="xls-post-actions">
-                    <button
-                      className="xls-btn"
-                      onClick={() => captureComments(it)}
-                      disabled={busy}
-                      title={collect.comments ? '' : 'Enable comment collection in System settings'}
-                    >
-                      CAPTURE REPLIES
-                    </button>
-                    <button
-                      className="xls-btn"
-                      onClick={() => { setSelectedFindingId(it.id); setTab('notes'); }}
-                      disabled={busy}
-                    >
-                      ANALYST NOTE
-                    </button>
-                  </div>
-                </article>
-              ))}
-              {items.length === 0 && (
-                <div className="xls-empty">No records captured yet. Capture a target's posts from TARGET SOURCES.</div>
-              )}
-            </div>
-          </section>
-        )}
-
-        {tab === 'network' && (
-          <section className="xls-panel">
-            <h2 className="xls-panel-title">FOLLOWER NETWORK</h2>
-            <div className="xls-network-controls">
-              <label className="xls-field">
-                TARGET SOURCE
-                <select
-                  className="xls-input"
-                  value={selectedTarget}
-                  onChange={(e) => setSelectedTarget(e.target.value)}
-                >
-                  <option value="">SELECT A SOURCE</option>
-                  {targets.map((h) => (
-                    <option value={h} key={h}>@{h}</option>
-                  ))}
-                </select>
-              </label>
-              <div className="xls-network-actions">
-                <button
-                  className="xls-btn"
-                  onClick={() => captureNetwork(selectedTarget, 'followers')}
-                  disabled={busy || !selectedTarget}
-                >
-                  CAPTURE FOLLOWERS
-                </button>
-                <button
-                  className="xls-btn"
-                  onClick={() => captureNetwork(selectedTarget, 'following')}
-                  disabled={busy || !selectedTarget}
-                >
-                  CAPTURE FOLLOWING
-                </button>
-                <button className="xls-btn" onClick={exportNetworkCsv} disabled={busy}>
-                  EXPORT CSV
-                </button>
-              </div>
-            </div>
-            <div className="xls-network-list">
-              {network?.accounts.map((acc, i) => (
-                <article className="xls-account-card" key={`${acc.handle}-${i}`}>
-                  {acc.avatar && String(acc.avatar).startsWith('data:') ? (
-                    <img className="xls-avatar" src={acc.avatar} alt="" />
-                  ) : (
-                    <span className="xls-avatar xls-avatar-empty">@</span>
-                  )}
-                  <div className="xls-account-body">
-                    <strong>{acc.displayName || 'Not visible'}</strong>
-                    <span>@{String(acc.handle).replace(/^@+/, '')}</span>
-                    <p>{acc.bio || 'No visible bio captured.'}</p>
-                  </div>
-                </article>
-              ))}
-              {network && network.accounts.length === 0 && (
-                <div className="xls-empty">
-                  No {network.kind} were visible on the loaded page for {network.target}.
-                </div>
-              )}
-              {!network && (
-                <div className="xls-empty">
-                  Select a source and capture followers or following. Only accounts X actually
-                  rendered on the page are captured — never a claimed total.
-                </div>
-              )}
-            </div>
-          </section>
-        )}
-
-        {tab === 'notes' && (
-          <section className="xls-panel">
-            <h2 className="xls-panel-title">ANALYST NOTES</h2>
-            {!caseId && (
-              <div className="xls-empty">Open from a case to attach analyst notes.</div>
-            )}
-            {caseId && (
-              <div className="xls-notes-layout">
-                <ul className="xls-finding-list">
-                  {items.map((it) => (
-                    <li key={it.id}>
-                      <button
-                        className={`xls-finding${selectedFindingId === it.id ? ' xls-finding-active' : ''}`}
-                        onClick={() => setSelectedFindingId(it.id)}
-                      >
-                        <strong>{it.authorHandle || 'Not visible'}</strong>
-                        <span>{(it.text || '').slice(0, 80) || '(no visible text)'}</span>
-                      </button>
-                    </li>
-                  ))}
-                  {items.length === 0 && (
-                    <li className="xls-empty">Capture posts first, then pin a note to a finding.</li>
-                  )}
-                </ul>
-                <div className="xls-notes-detail">
-                  {selectedFindingId ? (
-                    <NotesPanel
-                      caseId={caseId}
-                      findingId={selectedFindingId}
-                      findingLabel={
-                        items.find((i) => i.id === selectedFindingId)?.authorHandle ?? undefined
-                      }
-                    />
-                  ) : (
-                    <div className="xls-empty">Select a finding to attach an analyst note.</div>
-                  )}
-                </div>
-              </div>
-            )}
-          </section>
-        )}
-
-        {tab === 'archive' && (
-          <section className="xls-panel">
-            <h2 className="xls-panel-title">INCREMENTAL ARCHIVE</h2>
-            <label className="xls-check">
-              <input
-                type="checkbox"
-                checked={archiveCycles}
-                onChange={(e) => setArchiveEnabled(e.target.checked)}
-                disabled={busy}
-              />
-              ENABLE LOW-RATE ARCHIVE CYCLES
-            </label>
-            <p className="xls-help">
-              Each cycle re-reads the selected target's visible timeline and deduplicates into the
-              encrypted case store. Cycles stop on login challenges or temporary limits rather than
-              attempting to bypass them. Nothing runs while this toggle is off.
-            </p>
-            <div className="xls-network-controls">
-              <label className="xls-field">
-                TARGET SOURCE
-                <select
-                  className="xls-input"
-                  value={selectedTarget}
-                  onChange={(e) => setSelectedTarget(e.target.value)}
-                >
-                  <option value="">SELECT A SOURCE</option>
-                  {targets.map((h) => (
-                    <option value={h} key={h}>@{h}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="xls-field">
-                MAX CYCLES
-                <input
-                  className="xls-input"
-                  type="number"
-                  min={1}
-                  max={1000}
-                  value={archiveMaxCycles}
-                  onChange={(e) => setArchiveMaxCycles(Number(e.target.value))}
-                />
-              </label>
-            </div>
-            <div className="xls-network-actions">
-              <button
-                className="xls-btn"
-                onClick={() => runOneArchiveCycle(selectedTarget)}
-                disabled={busy || !selectedTarget}
-              >
-                RUN ONE CYCLE
-              </button>
-              <button
-                className="xls-btn"
-                onClick={() => runArchiveRun(selectedTarget)}
-                disabled={busy || !selectedTarget}
-              >
-                RUN CYCLES
-              </button>
-            </div>
-          </section>
-        )}
-
-        {tab === 'exports' && (
-          <section className="xls-panel">
-            <h2 className="xls-panel-title">EXPORTS</h2>
-            <p className="xls-help">
-              Serialize the case's captured items through the app's existing exporters. Every
-              scraped field is escaped / formula-guarded, rounded metrics are exported verbatim, and
-              remote media is never emitted.
-            </p>
-            <div className="xls-export-actions">
-              <button className="xls-btn" onClick={() => exportItems('json')} disabled={busy}>
-                EXPORT JSON
-              </button>
-              <button className="xls-btn" onClick={() => exportItems('csv')} disabled={busy}>
-                EXPORT CSV
-              </button>
-              <button className="xls-btn" onClick={() => exportItems('pdf')} disabled={busy}>
-                EXPORT PDF
-              </button>
-              <button className="xls-btn" onClick={() => exportItems('docx')} disabled={busy}>
-                EXPORT DOCX
-              </button>
-            </div>
-          </section>
-        )}
-
-        {tab === 'system' && (
-          <section className="xls-panel">
-            <h2 className="xls-panel-title">SYSTEM</h2>
-            <div className="xls-connect-card">
-              <div className={`xls-connection-banner${connected ? ' xls-connected' : ''}`}>
-                {connected ? 'CONNECTED' : 'NOT CONNECTED'}
-              </div>
-              <p className="xls-connect-help">
-                Opens a dedicated hardened login window. Sign in directly to X — no cookie copying
-                is required, and your auth token is never read or logged by this module.
-              </p>
-              <div className="xls-card-actions">
-                <button className="xls-btn xls-btn-primary" onClick={handleConnect} disabled={busy}>
-                  {busy ? 'Working…' : connected ? 'Reopen X' : 'Connect X'}
-                </button>
-              </div>
-            </div>
-            <div className="xls-settings">
-              <h3 className="xls-subtitle">COLLECTION SETTINGS</h3>
-              <p className="xls-help">
-                These toggles are read main-side at capture time — the renderer can never widen
-                capture beyond what you opt into here.
-              </p>
-              <label className="xls-check">
-                <input
-                  type="checkbox"
-                  checked={collect.replies}
-                  onChange={(e) => setCollectKey('replies', e.target.checked)}
-                  disabled={busy}
-                />
-                COLLECT REPLIES MADE BY THE TARGET
-              </label>
-              <label className="xls-check">
-                <input
-                  type="checkbox"
-                  checked={collect.reposts}
-                  onChange={(e) => setCollectKey('reposts', e.target.checked)}
-                  disabled={busy}
-                />
-                COLLECT REPOSTS MADE BY THE TARGET
-              </label>
-              <label className="xls-check">
-                <input
-                  type="checkbox"
-                  checked={collect.comments}
-                  onChange={(e) => setCollectKey('comments', e.target.checked)}
-                  disabled={busy}
-                />
-                COLLECT THIRD-PARTY COMMENTS UNDER THE TARGET'S POSTS
-              </label>
-            </div>
-          </section>
-        )}
+        <div className="xls-empty">
+          Dashboard / live / sources / network / entities / changes / search / notes / exports /
+          campaigns / system tabs land in the next build pass.
+        </div>
       </main>
     </div>
   );

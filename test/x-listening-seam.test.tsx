@@ -256,39 +256,60 @@ describe('seam B — the real handler rejects a payload missing a required field
   });
 });
 
-// ---- C. end-to-end: the module drives the real connect handler --------
+// ---- C. end-to-end: the module drives the real openSession handler ----
+//
+// The Task-13 shell no longer has a bare "Connect" button — connecting is per-CAMPAIGN
+// (`openSession(campaignId)`, the Phase-1 Tor-default surface), not the retiring clearnet-only
+// `connect()`/`status()` pair section A/B above still pin. This proves the shell's Open Session
+// button flows through the REAL `openSession` handler end-to-end (renderer → preload →
+// registerXListeningIpc → session.ts's `connectXSession` → createCaptureWindow), over Tor.
 
-describe('seam C — XListeningModule → preload → connect handler', () => {
+vi.mock('../src/renderer/state/dialogs', () => ({
+  confirmDialog: vi.fn(),
+  promptDialog: vi.fn(),
+}));
+
+describe('seam C — XListeningModule → preload → openSession handler', () => {
   let container: HTMLDivElement;
   let root: Root;
 
   beforeEach(() => {
     registerXListeningIpc({ handle: (ch, fn) => rec.handlers.set(ch, fn as never) });
     (globalThis as any).window.api = api();
+  });
+
+  it('renders and opens a hardened session for a self-managed campaign — no core case bound', async () => {
+    // campaignsList/campaignsSwitch route through the real campaigns.ts → scraping-cases store;
+    // stub just that one seam so this stays a controlled, fs-free unit test while everything
+    // else (openSession → connectXSession → createCaptureWindow) runs for real.
+    const campaign = { id: 'a1b2c3d4-0000-4000-8000-000000000001', name: 'Seam campaign', createdAt: 1, updatedAt: 1 };
+    (rec.exposed.api as any).xListening.campaignsList = async () => [campaign];
+    (rec.exposed.api as any).xListening.campaignsSwitch = async () => campaign;
+
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
+
+    await act(async () => { root.render(<XListeningModule />); });
+    await act(async () => { await Promise.resolve(); });
+    await act(async () => { await Promise.resolve(); });
+
+    // No caseId prop — proves the module works with NO core investigation case bound.
+    const btn = Array.from(container.querySelectorAll('button')).find((b) => /open session/i.test(b.textContent || ''));
+    expect(btn).toBeTruthy();
+    expect((btn as HTMLButtonElement).disabled).toBe(false);
+
+    await act(async () => { (btn as HTMLButtonElement).click(); });
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+
+    expect(rec.calls.some((c) => c.channel === channels.xListening.openSession)).toBe(true);
+    expect(rec.createCaptureWindowCalls).toBeGreaterThan(0);
+
+    act(() => root.unmount());
+    container.remove();
   });
 
   afterEach(() => {
-    act(() => root.unmount());
-    container.remove();
     delete (globalThis as any).window.api;
-  });
-
-  it('clicking Connect flows through to the real connectXSession (opens a hardened window)', async () => {
-    await act(async () => { root.render(<XListeningModule />); });
-
-    const btn = Array.from(container.querySelectorAll('button')).find((b) => /connect/i.test(b.textContent || ''));
-    expect(btn).toBeTruthy();
-
-    await act(async () => { (btn as HTMLButtonElement).click(); });
-    // The connect handler now reads the clearnet setting via a dynamic import (loadClearnetEnabled)
-    // before opening the window — flush that extra async hop so createCaptureWindow has been called.
-    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
-
-    // renderer → preload capture() forwarded to the connect channel → connectXSession → createCaptureWindow
-    expect(rec.calls.some((c) => c.channel === channels.xListening.connect)).toBe(true);
-    expect(rec.createCaptureWindowCalls).toBeGreaterThan(0);
   });
 });

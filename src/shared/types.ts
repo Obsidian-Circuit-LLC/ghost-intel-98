@@ -618,6 +618,12 @@ export interface AppSettings {
      *  inside the already-deep-merged `xListening` block, so an old settings.json that predates
      *  this field heals to `false` on upgrade with no extra mergeSettings work. */
     clearnet: boolean;
+    /** One-time real-IP acknowledgement gate for `clearnet` (Task 13), mirroring
+     *  `geoint.cctvResolveClearnetAck`: the renderer shows the warning confirm dialog only on
+     *  the FIRST false→true flip while this is false, then persists it true so re-toggling
+     *  clearnet on/off later in the same or a future session never re-prompts. Same top-level-
+     *  scalar healing as `clearnet` — no extra mergeSettings work needed. */
+    clearnetAck: boolean;
   };
 }
 
@@ -772,7 +778,8 @@ export const defaultSettings: AppSettings = {
   xListening: {
     collect: { replies: false, reposts: false, comments: false },
     archiveCycles: false,
-    clearnet: false
+    clearnet: false,
+    clearnetAck: false
   },
   plugins: {},
   offensive: { confirmMode: 'per-scan', rateLimitPerSec: 10, downstreamProxy: null, requireSignedAuthorization: false, issuerKeys: [] },

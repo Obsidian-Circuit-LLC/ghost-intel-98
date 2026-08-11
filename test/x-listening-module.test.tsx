@@ -1,12 +1,14 @@
 // @vitest-environment jsdom
 /**
- * Task X1: X Listening Station — module registry entry + renderer shell.
+ * X Listening Station — module registry entry + renderer SHELL (Task 13 rebuild).
  *
  * Two concerns, one file:
  *  1. registerBuiltins() seeds the module under key `x-listening-station`, titled
  *     "X Listening Station", filed in the OSINT Toolkit under Social Media.
- *  2. The shell renders a connect affordance (createRoot + act, no @testing-library —
- *     Global Constraint: no new dependency), driven by a stubbed window.api.xListening.
+ *  2. The shell renders (createRoot + act, no @testing-library — Global Constraint: no new
+ *     dependency), driven by a stubbed window.api.xListening Phase-1 surface
+ *     (campaigns list/create/switch, openSession, sessionStatus) — NOT the retiring X1-X8
+ *     clearnet-only channels (connect/status/capture/…), which this shell no longer calls.
  *
  * The registry half mirrors test/x-module-registered.test.ts's heavy-module stubs so
  * importing register-builtins (which pulls in every built-in) doesn't touch pdfjs/mammoth.
@@ -30,12 +32,19 @@ vi.mock('maplibre-gl', () => {
   return { default: api, ...api };
 });
 
+vi.mock('../src/renderer/state/dialogs', () => ({
+  confirmDialog: vi.fn(),
+  promptDialog: vi.fn(),
+}));
+
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { registerBuiltins } from '../src/renderer/modules/register-builtins';
 import { getModule } from '../src/renderer/state/registry';
 import { XListeningModule } from '../src/renderer/modules/x-listening/XListeningModule';
+import { useSettings } from '../src/renderer/state/store';
+import { defaultSettings } from '@shared/types';
 
 describe('X Listening Station — module registration', () => {
   beforeAll(() => { registerBuiltins(); });
@@ -53,19 +62,23 @@ describe('X Listening Station — module registration', () => {
 describe('X Listening Station — shell', () => {
   let container: HTMLDivElement;
   let root: Root;
+  let campaignsList: ReturnType<typeof vi.fn>;
+  let sessionStatus: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
+    campaignsList = vi.fn(async () => []);
+    sessionStatus = vi.fn(async () => ({ connected: false, windowOpen: false }));
     (globalThis as any).window.api = {
       xListening: {
-        connect: vi.fn(async () => ({ opened: true })),
-        status: vi.fn(async () => ({ connected: false })),
-      },
-      // The full module reads collect/archive settings on mount; stub the surface it touches.
-      settings: {
-        read: vi.fn(async () => ({ xListening: { collect: { replies: false, reposts: false, comments: false }, archiveCycles: false } })),
-        update: vi.fn(async () => undefined),
+        campaignsList,
+        campaignsCreate: vi.fn(async (name: string) => ({ id: 'camp-1', name, createdAt: 1, updatedAt: 1 })),
+        campaignsSwitch: vi.fn(async (id: string) => ({ id, name: 'x', createdAt: 1, updatedAt: 1 })),
+        sessionStatus,
+        openSession: vi.fn(async () => ({ blocked: false })),
+        closeSession: vi.fn(async () => ({ cleared: true })),
       },
     };
+    useSettings.setState({ settings: defaultSettings });
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -75,16 +88,38 @@ describe('X Listening Station — shell', () => {
     act(() => root.unmount());
     container.remove();
     delete (globalThis as any).window.api;
+    useSettings.setState({ settings: null });
   });
 
-  it('shows a connect affordance wired to window.api.xListening.connect', async () => {
+  it('renders the campaign dock, session box and network posture control with no campaigns', async () => {
     await act(async () => { root.render(<XListeningModule />); });
+    await act(async () => { await Promise.resolve(); });
 
-    const connectBtn = Array.from(container.querySelectorAll('button'))
-      .find((b) => /connect/i.test(b.textContent || ''));
-    expect(connectBtn).toBeTruthy();
+    expect(campaignsList).toHaveBeenCalled();
+    expect(container.querySelector('[aria-label="Active campaign"]')).toBeTruthy();
+    expect((container.textContent || '')).toMatch(/X SESSION OFFLINE/);
+    expect((container.textContent || '')).toMatch(/TOR/);
 
-    await act(async () => { (connectBtn as HTMLButtonElement).click(); });
-    expect((globalThis as any).window.api.xListening.connect).toHaveBeenCalled();
+    const openBtn = Array.from(container.querySelectorAll('button')).find((b) => /open session/i.test(b.textContent || ''));
+    expect(openBtn).toBeTruthy();
+    // No active campaign yet → disabled, never a hollow no-op click.
+    expect((openBtn as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('auto-selects the first campaign returned by campaignsList and loads its session status', async () => {
+    campaignsList.mockResolvedValue([
+      { id: 'camp-a', name: 'Alpha', createdAt: 1, updatedAt: 1 },
+      { id: 'camp-b', name: 'Beta', createdAt: 2, updatedAt: 2 },
+    ]);
+    sessionStatus.mockResolvedValue({ connected: true, windowOpen: true });
+
+    await act(async () => { root.render(<XListeningModule />); });
+    await act(async () => { await Promise.resolve(); });
+    await act(async () => { await Promise.resolve(); });
+
+    expect(sessionStatus).toHaveBeenCalledWith('camp-a');
+    const select = container.querySelector('[aria-label="Active campaign"]') as HTMLSelectElement;
+    expect(select.value).toBe('camp-a');
+    expect((container.textContent || '')).toMatch(/X SESSION ONLINE/);
   });
 });

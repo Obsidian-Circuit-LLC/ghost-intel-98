@@ -15,6 +15,62 @@
   position: relative;
 }
 
+/* ── Campaign dock (Task 13 — self-managed x-namespace campaigns) ───────────── */
+.xls-dock {
+  flex: 0 0 auto;
+  padding: 8px 12px;
+  background: var(--ga98-grey);
+  border-bottom: 1px solid var(--ga98-shadow-dark);
+}
+.xls-dock-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.xls-dock-label {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--ga98-text-dim);
+}
+.xls-dock-select { min-width: 180px; }
+.xls-dock-note {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--ga98-text-dim);
+}
+
+/* ── Network posture markers (Task 13 — persistent CLEARNET / DEMO badges) ── */
+.xls-markers { display: flex; align-items: center; gap: 6px; }
+.xls-marker {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  padding: 2px 8px;
+  border: 1px solid var(--ga98-shadow-dark);
+  white-space: nowrap;
+}
+.xls-marker-tor {
+  background: var(--ga98-ok-surface);
+  color: var(--ga98-ok-ink);
+  border-color: var(--ga98-ok-dot);
+}
+.xls-marker-clearnet {
+  background: var(--ga98-error-surface);
+  color: var(--ga98-danger-ink);
+  border-color: var(--ga98-error-border);
+}
+.xls-marker-demo {
+  background: var(--ga98-error-surface);
+  color: var(--ga98-danger-ink);
+  border-color: var(--ga98-error-border);
+}
+.xls-network-posture {
+  flex: 0 0 auto;
+  padding: 8px 12px;
+  background: var(--ga98-grey);
+  border-bottom: 1px solid var(--ga98-shadow-dark);
+}
+
 /* ── Session status bar ──────────────────────────────────────────────────── */
 .xls-session-bar {
   flex: 0 0 auto;
