@@ -794,7 +794,25 @@ const api = {
     presetsRemove: (req: { caseId: string; id: string }) =>
       ipcRenderer.invoke(channels.xListening.presetsRemove, req),
     presetsRun: (req: { caseId: string; id: string }) =>
-      ipcRenderer.invoke(channels.xListening.presetsRun, req)
+      ipcRenderer.invoke(channels.xListening.presetsRun, req),
+
+    // ---- Task 15: remaining tab wiring + Phase-2 gap closure -----------------------
+    networksList: (caseId: string) => ipcRenderer.invoke(channels.xListening.networksList, caseId),
+    archiveStatus: (caseId: string) => ipcRenderer.invoke(channels.xListening.archiveStatus, caseId),
+    archiveRun: (req: {
+      caseId: string;
+      channelId: string;
+      channelLabel?: string;
+      targetUsername: string;
+      maxCycles?: number;
+    }) => ipcRenderer.invoke(channels.xListening.archiveRun, req),
+    loadDemoData: (caseId: string) => ipcRenderer.invoke(channels.xListening.loadDemoData, caseId),
+    exportPostsToFile: (req: { caseId: string; format: 'json' | 'csv' | 'pdf' }) =>
+      ipcRenderer.invoke(channels.xListening.exportPostsToFile, req),
+    exportNetworkToFile: (caseId: string) =>
+      ipcRenderer.invoke(channels.xListening.exportNetworkToFile, caseId),
+    mediaRead: (req: { caseId: string; ref: string }) =>
+      ipcRenderer.invoke(channels.xListening.mediaRead, req)
   },
   // Scraping cases (W4) — the isolated SOCMINT/X collection-run stores. Every call passes a
   // `store: 'socmint' | 'x'` discriminator that main validates against an allowlist and routes

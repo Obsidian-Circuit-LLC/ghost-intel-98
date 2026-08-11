@@ -76,12 +76,16 @@ describe('X Listening Station — shell', () => {
         sessionStatus,
         openSession: vi.fn(async () => ({ blocked: false })),
         closeSession: vi.fn(async () => ({ cleared: true })),
-        // Task 14 — insight loaders fired for any active campaign on mount; stubbed so this
+        // Task 14/15 — insight loaders fired for any active campaign on mount; stubbed so this
         // registration/shell suite stays focused on what it tests.
         postsList: vi.fn(async () => []),
         analysis: vi.fn(async () => ({})),
         health: vi.fn(async () => []),
         entities: vi.fn(async () => []),
+        networksList: vi.fn(async () => []),
+        readNotes: vi.fn(async () => ({ notes: [] })),
+        archiveStatus: vi.fn(async () => null),
+        presetsRead: vi.fn(async () => ({ presets: [] })),
       },
     };
     useSettings.setState({ settings: defaultSettings });

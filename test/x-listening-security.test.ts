@@ -98,7 +98,6 @@ const X_SOURCE_FILES = [
   'src/main/capture/capture-window.ts',
   'src/main/capture/security.ts',
   'src/renderer/modules/x-listening/XListeningModule.tsx',
-  'src/renderer/modules/x-listening/panels/NotesPanel.tsx',
 ];
 
 function readSource(rel: string): string {

@@ -64,6 +64,17 @@
   color: var(--ga98-danger-ink);
   border-color: var(--ga98-error-border);
 }
+/* ── Task 15: Changes/Campaigns tab markers ─────────────────────────────── */
+.xls-marker-new {
+  background: var(--ga98-ok-surface);
+  color: var(--ga98-ok-ink);
+  border-color: var(--ga98-ok-dot);
+}
+.xls-marker-active {
+  background: var(--ga98-grey);
+  color: var(--ga98-text-dim);
+  border-color: var(--ga98-shadow-dark);
+}
 .xls-network-posture {
   flex: 0 0 auto;
   padding: 8px 12px;
@@ -427,3 +438,13 @@
 .xls-stat strong { font-size: 20px; color: var(--ga98-text); }
 .xls-tab-panel .xls-panel { margin-bottom: 16px; }
 .xls-tab-panel .xls-panel:last-child { margin-bottom: 0; }
+
+/* ── Task 15: Notes tab ──────────────────────────────────────────────────── */
+.xls-note-text {
+  display: block;
+  width: 100%;
+  min-height: 72px;
+  resize: vertical;
+  margin-bottom: 8px;
+  font-family: inherit;
+}

@@ -1051,6 +1051,59 @@ export interface GhostApi {
     presetsRun(req: { caseId: string; id: string }): Promise<{
       matches: Array<{ postId: string; matchedKeywords: string[] }>;
     }>;
+
+    // ---- Task 15: remaining tab wiring + Phase-2 gap closure ---------------------------
+    /** List every captured follower/following artifact for a campaign, including the raw
+     *  per-account `firstObservedAt`/`lastObservedAt` rows the Changes tab needs. */
+    networksList(caseId: string): Promise<Array<Record<string, unknown>>>;
+    /** A campaign's resumable archive cursor/cycle-count — null before the first step ran. */
+    archiveStatus(caseId: string): Promise<{ cursor: string | null; cycles: number; lastRunAt: string | null } | null>;
+    /**
+     * Run a bounded, low-rate sequence of archive steps in a campaign's Tor-default capture
+     * window. Gated MAIN-side on `AppSettings.xListening.archiveCycles` (fail-closed OFF);
+     * `maxCycles` clamped to [0,1000] MAIN-side.
+     */
+    archiveRun(req: {
+      caseId: string;
+      channelId: string;
+      channelLabel?: string;
+      targetUsername: string;
+      maxCycles?: number;
+    }): Promise<{
+      cyclesRun: number;
+      totalAdded: number;
+      blocked: boolean;
+      reason?: string;
+      cancelled: boolean;
+      posts: Array<Record<string, unknown>>;
+      state: { cursor: string | null; cycles: number; lastRunAt: string | null };
+    }>;
+    /** Load the deterministic seeded demo data set into a campaign — every record carries
+     *  `synthetic:true`, enforced-excluded from analysis/entities/exports/hashing. */
+    loadDemoData(caseId: string): Promise<{
+      added: number;
+      skipped: number;
+      posts: Array<Record<string, unknown>>;
+      networks: Array<Record<string, unknown>>;
+    }>;
+    /**
+     * Export a campaign's REAL (synthetic-excluded) captured posts to an operator-chosen path
+     * via a native save dialog — the renderer never supplies a filesystem path. Returns
+     * `{canceled:true}` if the operator dismisses the dialog.
+     */
+    exportPostsToFile(req: { caseId: string; format: 'json' | 'csv' | 'pdf' }): Promise<
+      | { canceled: true }
+      | { canceled: false; filePath: string; count: number; sha256: string; checksumPath: string }
+    >;
+    /** Export a campaign's REAL (synthetic-excluded) captured networks as CSV to an
+     *  operator-chosen path via a native save dialog, plus a SHA-256 checksum sidecar. */
+    exportNetworkToFile(caseId: string): Promise<
+      | { canceled: true }
+      | { canceled: false; filePath: string; count: number; sha256: string; checksumPath: string }
+    >;
+    /** Read back one previously-cached local media ref as a `data:` URI for display. Returns
+     *  null (never throws) for a malformed ref or a read failure. */
+    mediaRead(req: { caseId: string; ref: string }): Promise<string | null>;
   };
   /**
    * Scraping cases (W4) — the isolated per-namespace SOCMINT/X collection-run stores, kept
