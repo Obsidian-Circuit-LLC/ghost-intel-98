@@ -43,7 +43,7 @@
  * session box drives `openSession`/`sessionStatus`/`closeSession`.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ScrapingCase } from '@shared/types';
 import { useSettings } from '../../state/store';
 import { confirmDialog, promptDialog } from '../../state/dialogs';
@@ -68,6 +68,122 @@ export function hasSyntheticRecords(records: readonly XPostRecord[]): boolean {
   return records.some((r) => r.synthetic === true);
 }
 
+// ── Task 14: dashboard / live / sources / network / entities tabs ──────────────────────────
+//
+// Every field below is a LOOSE, renderer-owned view over what the `Record<string, unknown>`-
+// typed IPC boundary (`postsList`/`analysis`/`health`/`entities` — see ipc-contracts.ts) actually
+// returns; the preload contract deliberately doesn't leak `src/main`-only types (`XPostArtifact`,
+// `NetworkAnalysis`, …) across the boundary, so this file defines its own narrow shapes and casts
+// through `unknown` at the one call site each is read. `XPostRow` is a structural superset of
+// `XPostRecord` above (same `id`/`synthetic?`), so `hasSyntheticRecords` keeps working unchanged.
+
+export type XTab = 'dashboard' | 'live' | 'sources' | 'network' | 'entities';
+
+const XLS_TABS: readonly XTab[] = ['dashboard', 'live', 'sources', 'network', 'entities'];
+
+export interface XPostMetricsView {
+  replies: number;
+  reposts: number;
+  likes: number;
+  views: number;
+}
+
+export interface XPostRow {
+  id: string;
+  channelId: string;
+  channelLabel: string;
+  authorHandle: string;
+  text: string;
+  publishedAt: string;
+  url: string;
+  kind: 'post' | 'reply' | 'repost' | 'comment';
+  metrics?: XPostMetricsView;
+  evidenceHash?: string;
+  synthetic?: boolean;
+}
+
+export interface XAnalysisPair {
+  profileAId: string;
+  profileA: string;
+  profileBId: string;
+  profileB: string;
+  commonFollowerCount: number;
+  commonFollowingCount: number;
+  commonAnyCount: number;
+}
+
+export interface XAnalysisIdentity {
+  username: string;
+  connectedTargets: number;
+  overlapScore: number;
+}
+
+export interface XAnalysisGraphNode {
+  id: string;
+  type: 'target' | 'identity';
+  label: string;
+}
+
+export interface XAnalysisGraphEdge {
+  id: string;
+  source: string;
+  target: string;
+  relationship: 'follower' | 'following';
+}
+
+export interface XAnalysisView {
+  targetCount: number;
+  relationshipCount: number;
+  uniqueIdentityCount: number;
+  commonIdentityCount: number;
+  highOverlapCount: number;
+  pairs: XAnalysisPair[];
+  identities: XAnalysisIdentity[];
+  graph: { nodes: XAnalysisGraphNode[]; edges: XAnalysisGraphEdge[] };
+}
+
+const EMPTY_ANALYSIS: XAnalysisView = {
+  targetCount: 0,
+  relationshipCount: 0,
+  uniqueIdentityCount: 0,
+  commonIdentityCount: 0,
+  highOverlapCount: 0,
+  pairs: [],
+  identities: [],
+  graph: { nodes: [], edges: [] },
+};
+
+export interface XHealthRow {
+  profileId: string;
+  username: string;
+  status: string;
+}
+
+export interface XEntityRow {
+  id: string;
+  type: string;
+  value: string;
+  count: number;
+}
+
+const POST_KIND_LABEL: Record<XPostRow['kind'], string> = {
+  post: 'POST',
+  reply: 'REPLY',
+  repost: 'REPOST',
+  comment: 'COMMENT',
+};
+
+function formatMetric(n: number | undefined): string {
+  if (n === undefined) return '—';
+  return new Intl.NumberFormat(undefined, { notation: 'compact' }).format(n);
+}
+
+function formatWhen(iso: string | undefined): string {
+  if (!iso) return 'Unknown time';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
+}
+
 const CLEARNET_WARNING_TEXT =
   'Routing X capture over CLEARNET exposes your real IP directly to X instead of Tor. ' +
   'This is remembered — you will not be asked again unless you clear it in Settings. Enable clearnet?';
@@ -84,9 +200,21 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
   const [sessionWindowOpen, setSessionWindowOpen] = useState(false);
   const [sessionBusy, setSessionBusy] = useState(false);
 
-  // Task 14 populates this via captureTimeline/loadDemoData results; empty (and therefore no
-  // DEMO marker) until a tab actually captures or seeds something into the active campaign.
-  const [posts] = useState<XPostRecord[]>([]);
+  const [tab, setTab] = useState<XTab>('dashboard');
+  // The PERSISTED source of truth for the active campaign (`postsList` — Task 14), never a
+  // renderer-only accumulation of capture results: switching tabs, remounting, or reopening the
+  // module must never make previously-captured (but still on-disk) data disappear from view, and
+  // must never keep showing a stale batch after another window/session captured more.
+  const [posts, setPosts] = useState<XPostRow[]>([]);
+  const [analysis, setAnalysis] = useState<XAnalysisView>(EMPTY_ANALYSIS);
+  const [health, setHealth] = useState<XHealthRow[]>([]);
+  const [entities, setEntities] = useState<XEntityRow[]>([]);
+  const [insightsBusy, setInsightsBusy] = useState(false);
+
+  const [targetUsername, setTargetUsername] = useState('');
+  const [captureBusy, setCaptureBusy] = useState(false);
+  const [liveKindFilter, setLiveKindFilter] = useState<'all' | XPostRow['kind']>('all');
+  const [entityTypeFilter, setEntityTypeFilter] = useState('all');
 
   const [notice, setNotice] = useState('X Listening Station ready.');
 
@@ -137,6 +265,142 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
   useEffect(() => {
     void refreshSession(activeCampaignId);
   }, [activeCampaignId, refreshSession]);
+
+  // ── Task 14: dashboard/live/sources/network/entities data — real IPC, no hollow panels ────
+  // A campaign with no id (none created/selected yet) fetches NOTHING — an honest empty state,
+  // never a call with a garbage/empty caseId that the main handlers would reject anyway.
+  const loadInsights = useCallback(async (id: string) => {
+    if (!id) {
+      setPosts([]);
+      setAnalysis(EMPTY_ANALYSIS);
+      setHealth([]);
+      setEntities([]);
+      return;
+    }
+    setInsightsBusy(true);
+    try {
+      const [postsRes, analysisRes, healthRes, entitiesRes] = await Promise.all([
+        window.api.xListening.postsList(id),
+        window.api.xListening.analysis(id),
+        window.api.xListening.health(id),
+        window.api.xListening.entities(id),
+      ]);
+      setPosts((postsRes as unknown as XPostRow[]) ?? []);
+      setAnalysis((analysisRes as unknown as XAnalysisView) ?? EMPTY_ANALYSIS);
+      setHealth((healthRes as unknown as XHealthRow[]) ?? []);
+      setEntities((entitiesRes as unknown as XEntityRow[]) ?? []);
+    } catch (err) {
+      console.warn('[XListening] loadInsights:', err);
+    } finally {
+      setInsightsBusy(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadInsights(activeCampaignId);
+  }, [activeCampaignId, loadInsights]);
+
+  // Shared by the Live and Sources tabs: the analyst navigates the campaign's open capture
+  // window to a target profile manually (Open Session above), then this drives the REAL
+  // `captureTimeline` channel for whatever page is currently loaded there. On success the
+  // PERSISTED list is re-read (`loadInsights`) rather than trusting the returned batch alone —
+  // `captureTimeline` only reports what THIS call captured, not the campaign's full history.
+  const handleCaptureTimeline = useCallback(async () => {
+    if (!activeCampaignId) {
+      setNotice('Create or select a campaign before capturing.');
+      return;
+    }
+    const username = targetUsername.trim().replace(/^@+/, '');
+    if (!username) {
+      setNotice('Enter a target username to capture.');
+      return;
+    }
+    setCaptureBusy(true);
+    try {
+      const res = await window.api.xListening.captureTimeline({
+        caseId: activeCampaignId,
+        channelId: username,
+        channelLabel: `@${username}`,
+        targetUsername: username,
+      });
+      if (res.blocked) {
+        setNotice(res.reason ?? 'Capture blocked.');
+      } else {
+        setNotice(
+          `Captured ${res.added} new post(s) (${res.skipped} already known) from @${username}.`,
+        );
+        await loadInsights(activeCampaignId);
+      }
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCaptureBusy(false);
+    }
+  }, [activeCampaignId, targetUsername, loadInsights]);
+
+  // Sources: the distinct targets observed across captured posts, derived client-side over the
+  // real fetched `posts` list — not a separate "profiles" concept this data model doesn't have.
+  const sourceGroups = useMemo(() => {
+    const map = new Map<
+      string,
+      { channelId: string; channelLabel: string; count: number; lastPublishedAt: string }
+    >();
+    for (const p of posts) {
+      const key = p.channelId || p.authorHandle;
+      const existing = map.get(key);
+      if (existing) {
+        existing.count += 1;
+        if (p.publishedAt > existing.lastPublishedAt) existing.lastPublishedAt = p.publishedAt;
+      } else {
+        map.set(key, {
+          channelId: key,
+          channelLabel: p.channelLabel || `@${p.authorHandle}`,
+          count: 1,
+          lastPublishedAt: p.publishedAt,
+        });
+      }
+    }
+    return [...map.values()].sort((a, b) => b.count - a.count);
+  }, [posts]);
+
+  const livePosts = useMemo(
+    () => posts.filter((p) => liveKindFilter === 'all' || p.kind === liveKindFilter),
+    [posts, liveKindFilter],
+  );
+
+  const entityTypes = useMemo(() => [...new Set(entities.map((e) => e.type))].sort(), [entities]);
+  const filteredEntities = useMemo(
+    () => (entityTypeFilter === 'all' ? entities : entities.filter((e) => e.type === entityTypeFilter)),
+    [entities, entityTypeFilter],
+  );
+
+  const healthyCount = useMemo(() => health.filter((h) => h.status === 'HEALTHY').length, [health]);
+
+  const renderPost = useCallback(
+    (post: XPostRow) => (
+      <article className="xls-post-card" key={post.id}>
+        <div className="xls-post-head">
+          <strong>@{post.authorHandle}</strong>
+          <span className="xls-kind">{POST_KIND_LABEL[post.kind] ?? post.kind.toUpperCase()}</span>
+          {post.synthetic && <span className="xls-marker xls-marker-demo">DEMO</span>}
+          <time>{formatWhen(post.publishedAt)}</time>
+        </div>
+        <p className="xls-post-text">{post.text}</p>
+        {post.metrics && (
+          <div className="xls-metrics">
+            <span>↩ {formatMetric(post.metrics.replies)}</span>
+            <span>⟳ {formatMetric(post.metrics.reposts)}</span>
+            <span>♥ {formatMetric(post.metrics.likes)}</span>
+            <span>◉ {formatMetric(post.metrics.views)}</span>
+            <span className="xls-stamp" title={post.evidenceHash}>
+              SHA-256 {post.evidenceHash ? `${post.evidenceHash.slice(0, 10)}…` : '—'}
+            </span>
+          </div>
+        )}
+      </article>
+    ),
+    [],
+  );
 
   // ── campaign dock actions ──────────────────────────────────────────────────
   const handleNewCampaign = useCallback(async () => {
@@ -367,11 +631,292 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
         {notice}
       </div>
 
+      <nav className="xls-tabs">
+        {XLS_TABS.map((t) => (
+          <button
+            key={t}
+            className={`xls-tab${tab === t ? ' xls-tab-active' : ''}`}
+            onClick={() => setTab(t)}
+          >
+            {t.toUpperCase()}
+          </button>
+        ))}
+      </nav>
+
       <main className="xls-body">
-        <div className="xls-empty">
-          Dashboard / live / sources / network / entities / changes / search / notes / exports /
-          campaigns / system tabs land in the next build pass.
-        </div>
+        {tab === 'dashboard' && (
+          <section className="xls-tab-panel xls-dashboard">
+            <div className="xls-stat-grid">
+              <article className="xls-stat">
+                <span>CAPTURED POSTS</span>
+                <strong>{posts.length}</strong>
+              </article>
+              <article className="xls-stat">
+                <span>TARGETS OBSERVED</span>
+                <strong>{sourceGroups.length}</strong>
+              </article>
+              <article className="xls-stat">
+                <span>NETWORK IDENTITIES</span>
+                <strong>{analysis.uniqueIdentityCount}</strong>
+              </article>
+              <article className="xls-stat">
+                <span>COMMON IDENTITIES</span>
+                <strong>{analysis.commonIdentityCount}</strong>
+              </article>
+              <article className="xls-stat">
+                <span>HIGH OVERLAP</span>
+                <strong>{analysis.highOverlapCount}</strong>
+              </article>
+              <article className="xls-stat">
+                <span>EXTRACTED ENTITIES</span>
+                <strong>{entities.length}</strong>
+              </article>
+            </div>
+
+            <div className="xls-panel">
+              <div className="xls-panel-title-row">
+                <h3 className="xls-panel-title">COLLECTION HEALTH</h3>
+                <span className="xls-count">
+                  {healthyCount}/{health.length} HEALTHY
+                </span>
+              </div>
+              {health.length === 0 ? (
+                <div className="xls-empty">No collection-run log recorded for this campaign yet.</div>
+              ) : (
+                <ul className="xls-source-list">
+                  {health.map((h) => (
+                    <li className="xls-source-row" key={h.profileId}>
+                      <span>@{h.username}</span>
+                      <span>{h.status}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div className="xls-panel">
+              <h3 className="xls-panel-title">RECENT CAPTURES</h3>
+              <div className="xls-feed">
+                {posts.slice(0, 5).map(renderPost)}
+                {posts.length === 0 && (
+                  <div className="xls-empty">No posts captured in this campaign yet.</div>
+                )}
+              </div>
+            </div>
+          </section>
+        )}
+
+        {tab === 'live' && (
+          <section className="xls-tab-panel xls-live">
+            <div className="xls-add-source">
+              <input
+                className="xls-input xls-live-target"
+                aria-label="Target username to capture"
+                placeholder="username or @username"
+                value={targetUsername}
+                onChange={(e) => setTargetUsername(e.target.value)}
+              />
+              <button
+                className="xls-btn xls-btn-primary"
+                onClick={() => void handleCaptureTimeline()}
+                disabled={captureBusy || !activeCampaignId}
+              >
+                {captureBusy ? 'Capturing…' : 'Capture Timeline'}
+              </button>
+            </div>
+            <div className="xls-network-controls">
+              <label className="xls-field">
+                KIND
+                <select
+                  className="xls-input"
+                  value={liveKindFilter}
+                  onChange={(e) => setLiveKindFilter(e.target.value as 'all' | XPostRow['kind'])}
+                >
+                  <option value="all">ALL</option>
+                  <option value="post">POST</option>
+                  <option value="reply">REPLY</option>
+                  <option value="repost">REPOST</option>
+                  <option value="comment">COMMENT</option>
+                </select>
+              </label>
+              <span className="xls-count">{livePosts.length} displayed</span>
+              {insightsBusy && <span className="xls-count">Loading…</span>}
+            </div>
+            <div className="xls-feed">
+              {livePosts.map(renderPost)}
+              {livePosts.length === 0 && (
+                <div className="xls-empty">No records match these feed filters.</div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {tab === 'sources' && (
+          <section className="xls-tab-panel xls-sources">
+            <div className="xls-add-source">
+              <input
+                className="xls-input xls-source-target"
+                aria-label="Target username to monitor"
+                placeholder="username or @username"
+                value={targetUsername}
+                onChange={(e) => setTargetUsername(e.target.value)}
+              />
+              <button
+                className="xls-btn xls-btn-primary"
+                onClick={() => void handleCaptureTimeline()}
+                disabled={captureBusy || !activeCampaignId}
+              >
+                {captureBusy ? 'Capturing…' : 'Capture Timeline'}
+              </button>
+            </div>
+            {sourceGroups.length === 0 ? (
+              <div className="xls-empty">No source targets captured in this campaign yet.</div>
+            ) : (
+              <ul className="xls-source-list">
+                {sourceGroups.map((g) => (
+                  <li className="xls-source-row" key={g.channelId}>
+                    <span className="xls-source-name">{g.channelLabel}</span>
+                    <span className="xls-count">
+                      {g.count} captured · last {formatWhen(g.lastPublishedAt)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )}
+
+        {tab === 'network' && (
+          <section className="xls-tab-panel xls-network">
+            <div className="xls-stat-grid">
+              <article className="xls-stat">
+                <span>TARGETS</span>
+                <strong>{analysis.targetCount}</strong>
+              </article>
+              <article className="xls-stat">
+                <span>RELATIONSHIPS</span>
+                <strong>{analysis.relationshipCount}</strong>
+              </article>
+              <article className="xls-stat">
+                <span>UNIQUE IDENTITIES</span>
+                <strong>{analysis.uniqueIdentityCount}</strong>
+              </article>
+              <article className="xls-stat">
+                <span>COMMON IDENTITIES</span>
+                <strong>{analysis.commonIdentityCount}</strong>
+              </article>
+              <article className="xls-stat">
+                <span>HIGH OVERLAP</span>
+                <strong>{analysis.highOverlapCount}</strong>
+              </article>
+            </div>
+
+            <div className="xls-panel">
+              <h3 className="xls-panel-title">COMMON FOLLOWER / FOLLOWING PAIRS</h3>
+              {analysis.pairs.length === 0 ? (
+                <div className="xls-empty">
+                  At least two captured target networks are required.
+                </div>
+              ) : (
+                <ul className="xls-source-list">
+                  {analysis.pairs.map((p) => (
+                    <li className="xls-source-row" key={`${p.profileAId}:${p.profileBId}`}>
+                      <span>
+                        @{p.profileA} ↔ @{p.profileB}
+                      </span>
+                      <span className="xls-count">
+                        {p.commonFollowerCount} followers · {p.commonFollowingCount} following ·{' '}
+                        {p.commonAnyCount} total
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div className="xls-panel">
+              <h3 className="xls-panel-title">MULTI-TARGET OVERLAP</h3>
+              {analysis.identities.length === 0 ? (
+                <div className="xls-empty">No identities meet the overlap threshold.</div>
+              ) : (
+                <ul className="xls-source-list">
+                  {analysis.identities.map((i) => (
+                    <li className="xls-source-row" key={i.username}>
+                      <span>@{i.username}</span>
+                      <span className="xls-count">
+                        {i.connectedTargets}/{analysis.targetCount} targets · score{' '}
+                        {i.overlapScore}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div className="xls-panel">
+              <div className="xls-panel-title-row">
+                <h3 className="xls-panel-title">RELATIONSHIP GRAPH</h3>
+                <span className="xls-count">
+                  {analysis.graph.nodes.length} nodes · {analysis.graph.edges.length} edges
+                </span>
+              </div>
+              {analysis.graph.edges.length === 0 ? (
+                <div className="xls-empty">
+                  No relationship edges yet — capture follower/following data to populate this
+                  graph.
+                </div>
+              ) : (
+                <ul className="xls-source-list">
+                  {analysis.graph.edges.map((edge) => (
+                    <li className="xls-source-row" key={edge.id}>
+                      <span>
+                        {edge.source} → {edge.target}
+                      </span>
+                      <span className="xls-count">{edge.relationship.toUpperCase()}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </section>
+        )}
+
+        {tab === 'entities' && (
+          <section className="xls-tab-panel xls-entities">
+            <div className="xls-network-controls">
+              <label className="xls-field">
+                TYPE
+                <select
+                  className="xls-input"
+                  value={entityTypeFilter}
+                  onChange={(e) => setEntityTypeFilter(e.target.value)}
+                >
+                  <option value="all">ALL TYPES</option>
+                  {entityTypes.map((t) => (
+                    <option key={t} value={t}>
+                      {t.toUpperCase()}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <span className="xls-count">{filteredEntities.length} entities</span>
+            </div>
+            {filteredEntities.length === 0 ? (
+              <div className="xls-empty">No extracted entities match.</div>
+            ) : (
+              <ul className="xls-source-list">
+                {filteredEntities.map((e) => (
+                  <li className="xls-source-row" key={e.id}>
+                    <span>{e.value}</span>
+                    <span className="xls-count">
+                      {e.type.toUpperCase()} · {e.count} findings
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )}
       </main>
     </div>
   );

@@ -403,3 +403,27 @@
 .xls-export-actions,
 .xls-settings { margin-top: 8px; }
 .xls-export-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ── Tabs body (Task 14 — dashboard/live/sources/network/entities) ──────────── */
+.xls-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.xls-stat {
+  padding: 10px 12px;
+  background: var(--ga98-grey);
+  border: 1px solid var(--ga98-shadow-dark);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.xls-stat span {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--ga98-text-dim);
+}
+.xls-stat strong { font-size: 20px; color: var(--ga98-text); }
+.xls-tab-panel .xls-panel { margin-bottom: 16px; }
+.xls-tab-panel .xls-panel:last-child { margin-bottom: 0; }

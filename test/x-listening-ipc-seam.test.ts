@@ -80,6 +80,7 @@ const NEW_CHANNELS: Array<{ key: keyof typeof channels.xListening; args: unknown
     key: 'captureTimeline',
     args: [{ caseId, channelId: 'target', channelLabel: '@target', targetUsername: 'target' }]
   },
+  { key: 'postsList', args: [caseId] },
   { key: 'campaignsList', args: [] },
   { key: 'campaignsCreate', args: ['Test Campaign'] },
   { key: 'campaignsSwitch', args: [caseId] },

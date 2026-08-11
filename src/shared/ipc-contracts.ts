@@ -598,6 +598,16 @@ export const channels = {
      *  channel captures whatever page is currently loaded, folds metrics/metricsRaw into an
      *  evidence-hashed `XPostArtifact`, and persists to both the plain-item and richer sidecars. */
     captureTimeline: 'xListening:captureTimeline',
+    /** List every captured post artifact for a campaign (store.ts `posts.read`) — the
+     *  PERSISTED source of truth for the Dashboard/Live/Sources tabs (Task 14). `captureTimeline`
+     *  above returns only the freshly captured batch from ONE call; a tab that must show
+     *  everything already stored for the campaign (including posts captured in a prior session)
+     *  reads this channel instead — a renderer-only cache of one call's results would silently
+     *  go stale and under-represent what secure-fs actually holds. Derived passthrough, nothing
+     *  computed; synthetic/demo posts are returned AS-IS (the DEMO DATA LOADED marker's predicate
+     *  needs to see them) — exclusion from real intel happens downstream at `analysis`/`entities`/
+     *  exports/hashing, not here. */
+    postsList: 'xListening:posts:list',
     /** List every self-managed X campaign (x-namespace scraping case; campaigns.ts) — no core
      *  investigation case need be bound. */
     campaignsList: 'xListening:campaigns:list',

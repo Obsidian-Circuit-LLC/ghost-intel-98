@@ -769,6 +769,7 @@ const api = {
       channelLabel?: string;
       targetUsername: string;
     }) => ipcRenderer.invoke(channels.xListening.captureTimeline, req),
+    postsList: (caseId: string) => ipcRenderer.invoke(channels.xListening.postsList, caseId),
     campaignsList: () => ipcRenderer.invoke(channels.xListening.campaignsList),
     campaignsCreate: (name: string) =>
       ipcRenderer.invoke(channels.xListening.campaignsCreate, name),

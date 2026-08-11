@@ -1934,6 +1934,19 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
     });
   });
 
+  // Task 14: list every captured post artifact for a campaign — the persisted source of truth
+  // (`captureTimeline` above returns only the freshly captured batch from one call). No capture
+  // window, no network; sender check + arg validation only, same shape as `entities` below.
+  deps.handle(channels.xListening.postsList, async (e, caseIdArg) => {
+    assertTrustedSender(e);
+    if (typeof caseIdArg !== 'string' || !caseIdArg) {
+      throw new Error('Listing posts requires a caseId.');
+    }
+    const caseId = ensureUuid(caseIdArg, 'caseId');
+    const store = await prodXStore();
+    return store.posts.read(caseId);
+  });
+
   // Campaigns (campaigns.ts): self-managed x-namespace scraping cases — no core investigation
   // case need be bound. `switch`/`update`/`delete` UUID-gate their id the same way every other
   // store-backed handler in this file does, ahead of any store path being built.

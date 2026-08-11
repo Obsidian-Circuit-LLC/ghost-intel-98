@@ -44,6 +44,12 @@ function makeApi() {
       sessionStatus: vi.fn(async () => ({ connected: false, windowOpen: false })),
       openSession: vi.fn(async () => ({ blocked: false })),
       closeSession: vi.fn(async () => ({ cleared: true })),
+      // Task 14 — insight loaders fired for any active campaign on mount; stubbed so this
+      // Task-13 shell suite stays focused on the dock/session/posture assertions it tests.
+      postsList: vi.fn(async () => []),
+      analysis: vi.fn(async () => ({})),
+      health: vi.fn(async () => []),
+      entities: vi.fn(async () => []),
     },
   };
 }

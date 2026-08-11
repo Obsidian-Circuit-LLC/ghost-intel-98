@@ -972,6 +972,11 @@ export interface GhostApi {
       skipped: number;
       posts: Array<Record<string, unknown>>;
     }>;
+    /** List every captured post artifact for a campaign (Task 14) — the persisted source of
+     *  truth (`captureTimeline` above returns only the freshly captured batch from one call).
+     *  Synthetic/demo posts are included as-is; exclusion from real intel happens downstream
+     *  at `analysis`/`entities`/exports, not here. */
+    postsList(caseId: string): Promise<Array<Record<string, unknown>>>;
     /** List every self-managed X campaign (x-namespace scraping case) — no core investigation
      *  case need be bound. */
     campaignsList(): Promise<ScrapingCase[]>;
