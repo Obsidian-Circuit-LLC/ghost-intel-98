@@ -1,12 +1,18 @@
 /**
- * X — CLEARNET-QUARANTINE import-graph guard.
+ * X — transport trust-domain import-graph guard.
  *
- * The load-bearing trust-domain invariant of the X Listening Station: the X module
- * is a CLEARNET-only quarantine surface. It talks to x.com/twitter.com over the
- * operator's own IP + cookies and must NEVER pull in any Tor / bgconn / socks
- * transport, nor the socmint collector graph, nor telegram — importing any of them
- * would cross a trust boundary (route clearnet X traffic through Tor, or entangle X
- * capture with a different collection domain).
+ * UPDATED (2026-08-11, X Listening Station Enterprise port design, Task 3): the operator
+ * superseded the prior v3.68.0 "X = clearnet quarantine" default with Tor-BY-DEFAULT capture,
+ * routed through the app's single background Tor engine (mirrors
+ * `telegram-hunter/session.ts`'s fail-closed discipline). `session.ts` is now the ONE
+ * sanctioned seam into that trust domain — see `SANCTIONED_TRANSPORT_EDGES` below — and ONLY
+ * for the read-only `getBgTor()` accessor (`../bgconn/tor-singleton`), never a raw socks/tor
+ * transport module. The invariant this guard still enforces: every OTHER X file, and every
+ * OTHER transport module (telegram, socks, torrc, or a direct tor.ts/tor.exe reach-around),
+ * remains off-limits — a hostile x.com page can drive this module's capture surface, so the
+ * blast radius of anything that DOES cross into Tor/socks stays pinned to the one reviewed
+ * seam, and the socmint/telegram collector graph stays fully quarantined (X is not a Telegram
+ * or generic-SOCMINT collector).
  *
  * This is a STATIC import-graph scan. It is intentionally source-text based (not a
  * runtime import) so it holds even for lazy/dynamic `import(...)` calls and type-only
@@ -187,7 +193,14 @@ function isForbiddenSocmint(ref: ImportRef): boolean {
   return !/socmint\/types$/.test(ref.spec);
 }
 
-describe('X module clearnet-quarantine import graph', () => {
+/** The ONLY transport edges this guard tolerates — see the file header's "UPDATED" note.
+ *  Keyed as `<file relative to repo root> → <raw import specifier>` so the exemption is
+ *  pinned to one exact file + one exact spec, not a pattern that could quietly widen. */
+const SANCTIONED_TRANSPORT_EDGES = new Set<string>([
+  'src/main/x-listening/session.ts → ../bgconn/tor-singleton',
+]);
+
+describe('X module transport trust-domain import graph', () => {
   const seeds = ROOTS.flatMap((r) => collectSources(resolve(process.cwd(), r)));
   const graph = buildGraph(seeds);
   const allRefs = graph.edges;
@@ -200,11 +213,31 @@ describe('X module clearnet-quarantine import graph', () => {
     expect(graph.files.size).toBeGreaterThan(seeds.length);
   });
 
-  it('imports NOTHING from bgconn / Tor / socks / telegram (no transport trust-domain crossing)', () => {
+  it('imports NOTHING from bgconn / Tor / socks / telegram, except the ONE sanctioned Task-3 Tor seam', () => {
     const violations = allRefs
       .filter((r) => isForbiddenTransport(r.spec))
+      .filter((r) => !SANCTIONED_TRANSPORT_EDGES.has(`${rel(r.file)} → ${r.spec}`))
       .map((r) => `${rel(r.file)} → ${r.spec}`);
     expect(violations).toEqual([]);
+  });
+
+  it('the sanctioned Tor seam is exactly ONE edge, from session.ts, to the read-only accessor', () => {
+    // A positive control on the exemption itself: prove it fires on the real edge (so the
+    // "no violations" result above means the guard works, not that the edge went missing —
+    // e.g. because session.ts stopped importing getBgTor entirely) and that it is singular.
+    const sanctionedHits = allRefs
+      .filter((r) => isForbiddenTransport(r.spec))
+      .filter((r) => SANCTIONED_TRANSPORT_EDGES.has(`${rel(r.file)} → ${r.spec}`));
+    expect(sanctionedHits).toHaveLength(1);
+    expect(rel(sanctionedHits[0]!.file)).toBe('src/main/x-listening/session.ts');
+    expect(sanctionedHits[0]!.spec).toBe('../bgconn/tor-singleton');
+    expect(sanctionedHits[0]!.typeOnly).toBe(false); // a real runtime call to getBgTor(), not type-only
+
+    // No OTHER X file reaches ANY transport module — the exemption does not spread.
+    const otherFileViolations = allRefs
+      .filter((r) => isForbiddenTransport(r.spec))
+      .filter((r) => rel(r.file) !== 'src/main/x-listening/session.ts');
+    expect(otherFileViolations).toEqual([]);
   });
 
   it('imports NO runtime socmint module (only the type-only @shared/socmint/types is tolerated)', () => {

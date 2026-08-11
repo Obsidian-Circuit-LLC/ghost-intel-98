@@ -226,7 +226,7 @@ describe('XListeningModule — UI seam (the UI actually invokes each channel)', 
     await act(async () => { checks[0].click(); });
     await act(async () => { await Promise.resolve(); });
     expect(settings.update).toHaveBeenCalledWith({
-      xListening: { collect: expect.objectContaining({ replies: true }), archiveCycles: false },
+      xListening: { collect: expect.objectContaining({ replies: true }), archiveCycles: false, clearnet: false },
     });
   });
 });

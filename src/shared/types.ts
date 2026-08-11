@@ -609,6 +609,15 @@ export interface AppSettings {
     collect: { replies: boolean; reposts: boolean; comments: boolean };
     /** Enable bounded, low-rate archive cycles (off by default). */
     archiveCycles: boolean;
+    /** Tor-default network posture opt-out. False (default) ⇒ capture is Tor-routed and FAILS
+     *  CLOSED when background Tor is not bootstrapped (no clearnet fallback — session.ts).
+     *  True ⇒ capture drops to clearnet (the operator's own IP, no proxy); the renderer gates
+     *  the FIRST flip to true behind a one-time real-IP acknowledgement (Task 13, mirrors
+     *  `ai.linkClearnetAcknowledged` / `geoint.cctvResolveClearnetAck`) before persisting it —
+     *  this flag itself is trusted by session.ts as already-acknowledged. A top-level scalar
+     *  inside the already-deep-merged `xListening` block, so an old settings.json that predates
+     *  this field heals to `false` on upgrade with no extra mergeSettings work. */
+    clearnet: boolean;
   };
 }
 
@@ -762,7 +771,8 @@ export const defaultSettings: AppSettings = {
   reports: { author: '' },
   xListening: {
     collect: { replies: false, reposts: false, comments: false },
-    archiveCycles: false
+    archiveCycles: false,
+    clearnet: false
   },
   plugins: {},
   offensive: { confirmMode: 'per-scan', rateLimitPerSec: 10, downstreamProxy: null, requireSignedAuthorization: false, issuerKeys: [] },

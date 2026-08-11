@@ -142,12 +142,17 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
   });
   const [archiveCycles, setArchiveCycles] = useState(false);
   const [archiveMaxCycles, setArchiveMaxCycles] = useState(3);
+  // Tor-default network posture (Task 3: AppSettings.xListening.clearnet, default false). The
+  // clearnet TOGGLE UI (one-time real-IP acknowledgement, CLEARNET marker) is Task 13's job —
+  // this local mirror exists now purely so the collect/archive patches below round-trip the
+  // full fixed-shape xListening block and never drop this sibling field (v3.24.0 dataloss class).
+  const [clearnet, setClearnet] = useState(false);
 
   // ── settings + status bootstrap ──────────────────────────────────────────
   const refreshSettings = useCallback(async () => {
     try {
       const s = (await window.api.settings.read()) as {
-        xListening?: { collect?: Partial<CollectSettings>; archiveCycles?: boolean };
+        xListening?: { collect?: Partial<CollectSettings>; archiveCycles?: boolean; clearnet?: boolean };
       };
       const c = s.xListening?.collect ?? {};
       setCollect({
@@ -156,6 +161,7 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
         comments: c.comments === true
       });
       setArchiveCycles(s.xListening?.archiveCycles === true);
+      setClearnet(s.xListening?.clearnet === true);
     } catch (err) {
       console.warn('[XListening] settings.read:', err);
     }
@@ -344,22 +350,22 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
       void run(async () => {
         // Send the FULL fixed-shape block so a shallow settings-merge can never drop a sibling
         // key (the v3.24.0 dataloss class); the archive toggle rides along unchanged.
-        await window.api.settings.update({ xListening: { collect: next, archiveCycles } });
+        await window.api.settings.update({ xListening: { collect: next, archiveCycles, clearnet } });
         await refreshSettings();
       }, 'Collection settings saved.');
     },
-    [collect, archiveCycles, run, refreshSettings]
+    [collect, archiveCycles, clearnet, run, refreshSettings]
   );
 
   const setArchiveEnabled = useCallback(
     (value: boolean) => {
       setArchiveCycles(value);
       void run(async () => {
-        await window.api.settings.update({ xListening: { collect, archiveCycles: value } });
+        await window.api.settings.update({ xListening: { collect, archiveCycles: value, clearnet } });
         await refreshSettings();
       }, value ? 'Low-rate archive cycles enabled.' : 'Low-rate archive cycles disabled.');
     },
-    [collect, run, refreshSettings]
+    [collect, clearnet, run, refreshSettings]
   );
 
   // ── archive cycles ───────────────────────────────────────────────────────

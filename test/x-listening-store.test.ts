@@ -369,6 +369,7 @@ describe('mergeSettings: xListening block heals from a stale on-disk file', () =
     expect(merged.xListening).toEqual({
       collect: { replies: false, reposts: false, comments: false },
       archiveCycles: false,
+      clearnet: false,
     });
   });
 
