@@ -1,210 +1,294 @@
 /**
- * X3 — capture orchestration seam (`captureVisibleTimeline`).
+ * X Listening Station Enterprise port — Task 4: timeline capture → HarvestedItem +
+ * XPostArtifact.
  *
- * The pure normalizer is covered in x-listening-extract.test.ts; this pins the
- * wiring that ties it to the live window, the challenge-refusal gate, media
- * resolution, and the encrypted store — the seam class the v3.24.2 collect-path
- * bug taught us to test directly:
+ * Supersedes the prior Plan-A `test/x-listening-capture.test.ts` (which pinned the OLD
+ * clearnet-only `ipc.ts` `captureVisibleTimeline` seam — that module is superseded per-task
+ * across this port, per `session.ts`'s own migration note, and is fully retired at Task 16).
+ * This file pins the NEW `src/main/x-listening/capture.ts` orchestration:
  *
- *  - challenge/blocked page → NOTHING captured, NOTHING persisted;
- *  - remote media resolved to `data:`, an unresolved remote URL DROPPED (no beacon);
- *  - normalized items handed to `saveItems`, its `{added,skipped}` propagated;
- *  - `harvestedAt` comes from the INJECTED clock, never a raw Date read.
+ *  1. `X_PAGE_STATE_SCRIPT` (extract.ts) is a STATIC probe (adapted from Enterprise
+ *     `assertSignedInPage`'s in-page read) — no `${…}` interpolation.
+ *  2. `classifyXPageState` (extract.ts, pure) refuses a challenge/rate-limit interstitial
+ *     or a signed-out page — capture STOPS, never solves.
+ *  3. `captureTimeline` (capture.ts) ties the STATIC `X_POST_SCRIPT` scrape to the
+ *     challenge gate, the collect-toggle gate (`selectTimelineCaptures`), and BOTH
+ *     persistence sidecars: the plain `HarvestedItem` store (`saveItems`) and the richer
+ *     `XPostArtifact` sidecar (`store.posts.save`) — metrics AND metricsRaw kept, kind,
+ *     parentPostId, evidenceHash (Task 2 fold-in).
+ *  4. `toPostArtifact` (capture.ts, pure) maps one normalized item → an `XPostArtifact`
+ *     with a deterministic `evidenceHash`.
  *
- * electron is mocked only because ipc.ts imports `session` at module load; the
- * orchestration itself is exercised through injected deps (no network, no window).
+ * capture.ts/extract.ts are quarantine-clean (no electron value import — `win` is an
+ * injected structural type; the store persistence deps are lazy dynamic imports), so this
+ * file needs NO `vi.mock('electron', …)`.
  */
 import { describe, it, expect, vi } from 'vitest';
 
-vi.mock('electron', () => ({
-  session: { fromPartition: () => ({ cookies: { get: async () => [] } }) }
-}));
-
 import {
-  captureVisibleTimeline,
+  X_POST_SCRIPT,
+  X_PAGE_STATE_SCRIPT,
+  classifyXPageState,
+  type RawPost,
+  type XPageState,
+} from '../src/main/x-listening/extract';
+import {
+  captureTimeline,
+  toPostArtifact,
   X_COLLECTOR_VERSION,
-  type CaptureRequest,
-  type TimelineCaptureDeps
-} from '../src/main/x-listening/ipc';
-import { X_POST_SCRIPT, type RawPost, type XHarvestedItem } from '../src/main/x-listening/extract';
+  DEFAULT_COLLECT,
+  type XTimelineCaptureRequest,
+  type XCaptureDeps,
+} from '../src/main/x-listening/capture';
+import { postEvidenceHash } from '../src/main/x-listening/evidence';
 
-const REQ: CaptureRequest = {
-  caseId: 'case-a',
-  jobId: 'job-1',
-  channelId: 'target',
-  channelLabel: '@target timeline'
-};
+function scriptSourceBody(relPath: string, name: string): string {
+  const { readFileSync } = require('node:fs') as typeof import('node:fs');
+  const { resolve } = require('node:path') as typeof import('node:path');
+  const source = readFileSync(resolve(process.cwd(), relPath), 'utf8');
+  const m = source.match(new RegExp('const ' + name + '\\s*=\\s*`([\\s\\S]*?)`'));
+  if (!m) throw new Error(`static script ${name} not found in ${relPath}`);
+  return m[1];
+}
+
+const WIN = { webContents: { executeJavaScript: vi.fn() } } as unknown as Electron.BrowserWindow;
 
 const raw = (o: Partial<RawPost> = {}): RawPost => ({
   id: '100',
   username: 'target',
   url: 'https://x.com/target/status/100',
-  text: 'body',
+  text: 'body text',
   createdAt: '2026-08-06T11:00:00.000Z',
   isReply: false,
   isRepost: false,
   socialContext: '',
   metricsRaw: { replies: '1', reposts: '0', likes: '1.2K', views: '3K' },
   media: ['https://pbs.twimg.com/media/a.jpg'],
-  ...o
+  ...o,
 });
 
-// A window stand-in — deps are injected, so no real BrowserWindow is touched.
-const WIN = {} as unknown as Electron.BrowserWindow;
+const REQ: XTimelineCaptureRequest = {
+  caseId: 'case-a',
+  jobId: 'job-1',
+  channelId: 'target',
+  channelLabel: '@target timeline',
+  targetUsername: 'target',
+};
 
-function deps(over: Partial<TimelineCaptureDeps> = {}): Partial<TimelineCaptureDeps> {
+function deps(over: Partial<XCaptureDeps> = {}): Partial<XCaptureDeps> {
   return {
-    // pass-through gate: signed-in, unchallenged
     guard: async (_win, capture) => ({ blocked: false, result: await capture() }),
-    navigate: async () => {},
-    // Stub the post-navigation settle to a no-op so tests never incur the real wait.
-    settle: async () => {},
     runCapture: async () => [raw()],
-    resolveMedia: async () => 'data:image/jpeg;base64,ZZZ',
+    savePosts: async () => ({ added: 1, skipped: 0 }),
     saveItems: async () => ({ added: 1, skipped: 0 }),
-    now: () => '2026-08-06T12:00:00.000Z',
-    ...over
+    now: () => '2026-08-11T12:00:00.000Z',
+    ...over,
   };
 }
 
-describe('captureVisibleTimeline', () => {
-  it('navigates to the TARGET profile BEFORE scraping (core-feature: not x.com/home)', async () => {
-    const order: string[] = [];
-    const navigate = vi.fn(async (_w: unknown, url: string) => {
-      order.push(`nav:${url}`);
-    });
-    const runCapture = vi.fn(async () => {
-      order.push('scrape');
-      return [raw()];
-    });
-    await captureVisibleTimeline(
-      WIN,
-      { ...REQ, channelId: 'alice', channelLabel: '@alice' },
-      deps({ navigate, runCapture })
-    );
-    // navigated to alice's profile, and BEFORE the scrape ran
-    expect(navigate).toHaveBeenCalledWith(WIN, 'https://x.com/alice');
-    expect(order).toEqual(['nav:https://x.com/alice', 'scrape']);
+// ---- 1. X_PAGE_STATE_SCRIPT: static, no interpolation ---------------------
+
+describe('X_PAGE_STATE_SCRIPT: static, no interpolation', () => {
+  it('is a non-empty string with no ${ interpolation in its source', () => {
+    expect(typeof X_PAGE_STATE_SCRIPT).toBe('string');
+    expect(X_PAGE_STATE_SCRIPT.length).toBeGreaterThan(0);
+    const body = scriptSourceBody('src/main/x-listening/extract.ts', 'X_PAGE_STATE_SCRIPT');
+    expect(body).not.toContain('${');
+    expect(body).toContain('articles');
+  });
+});
+
+// ---- 2. classifyXPageState (pure challenge/lock gate) ----------------------
+
+describe('classifyXPageState', () => {
+  const page = (o: Partial<XPageState> = {}): XPageState => ({
+    url: 'https://x.com/target',
+    text: 'some ordinary timeline text',
+    articles: 3,
+    ...o,
   });
 
-  it('SETTLES after navigate and BEFORE the scrape (async-SPA under-capture race)', async () => {
-    // loadURL resolves on did-finish-load, before x.com's async XHR paints the tweet
-    // DOM — so the static scrape must wait for the visible set to render. Order must be
-    // navigate → settle → scrape; if settle ran after (or not at all) the scrape reads a
-    // not-yet-populated page and under-captures.
-    const order: string[] = [];
-    const navigate = vi.fn(async () => {
-      order.push('navigate');
-    });
-    const settle = vi.fn(async () => {
-      order.push('settle');
-    });
-    const runCapture = vi.fn(async () => {
-      order.push('scrape');
-      return [raw()];
-    });
-    await captureVisibleTimeline(
-      WIN,
-      { ...REQ, channelId: 'alice', channelLabel: '@alice' },
-      deps({ navigate, settle, runCapture })
-    );
-    expect(settle).toHaveBeenCalledWith(WIN);
-    expect(order).toEqual(['navigate', 'settle', 'scrape']);
+  it('signed-in, unchallenged page → not blocked', () => {
+    expect(classifyXPageState(page())).toEqual({ signedIn: true, blocked: false });
   });
 
-  it('refuses a non-handle channelId ("home") — no navigation, no scrape', async () => {
-    // guardXPermalink only checks scheme/host; "home" would navigate to the NON-profile
-    // x.com/home surface. The strict handle guard must refuse it (blocked), matching the
-    // network path — never navigate, never scrape.
-    const navigate = vi.fn(async () => {});
-    const runCapture = vi.fn(async () => [raw()]);
-    const res = await captureVisibleTimeline(
-      WIN,
-      { ...REQ, channelId: 'home', channelLabel: 'home' },
-      deps({ navigate, runCapture })
-    );
+  it('a verification/rate-limit challenge → blocked, never attempts to solve', () => {
+    const res = classifyXPageState(page({ text: 'We need to verify your identity before continuing.' }));
     expect(res.blocked).toBe(true);
-    expect(navigate).not.toHaveBeenCalled();
-    expect(runCapture).not.toHaveBeenCalled();
+    expect(res.signedIn).toBe(true);
+    expect(res.reason).toMatch(/challenge|limit/i);
   });
 
-  it('refuses an invalid/off-domain target handle — no navigation, no scrape', async () => {
-    const navigate = vi.fn(async () => {});
-    const runCapture = vi.fn(async () => [raw()]);
-    const res = await captureVisibleTimeline(
-      WIN,
-      { ...REQ, channelId: '', channelLabel: '@' },
-      deps({ navigate, runCapture })
-    );
-    expect(res.blocked).toBe(true);
-    expect(navigate).not.toHaveBeenCalled();
-    expect(runCapture).not.toHaveBeenCalled();
+  it('the login flow URL → signed out, not itself "blocked" (caller gates on !signedIn)', () => {
+    const res = classifyXPageState(page({ url: 'https://x.com/i/flow/login', text: 'Sign in to X' }));
+    expect(res.signedIn).toBe(false);
   });
+});
 
-  it('runs the STATIC timeline payload (never an interpolated string)', async () => {
-    const runCapture = vi.fn(async () => [raw()]);
-    await captureVisibleTimeline(WIN, REQ, deps({ runCapture }));
-    expect(runCapture).toHaveBeenCalledWith(WIN, X_POST_SCRIPT);
-    expect(String(runCapture.mock.calls[0][1]).includes('${')).toBe(false);
-  });
+// ---- 3. toPostArtifact: normalized item → richer evidence-hashed artifact --
 
-  it('normalizes + persists captured posts, propagating the store tally', async () => {
-    const saveItems = vi.fn(async () => ({ added: 1, skipped: 0 }));
-    const res = await captureVisibleTimeline(WIN, REQ, deps({ saveItems }));
-
+describe('toPostArtifact', () => {
+  it('folds metrics (value) AND metricsRaw (verbatim string) into the artifact', async () => {
+    const res = await captureTimeline(WIN, REQ, deps());
     expect(res.blocked).toBe(false);
-    expect(res.added).toBe(1);
-    const [caseId, items] = saveItems.mock.calls[0] as [string, XHarvestedItem[]];
-    expect(caseId).toBe('case-a');
-    expect(items).toHaveLength(1);
-    const item = items[0];
-    expect(item.verified).toBe(false);
-    expect(item.captureProvenance).toBe('visible-capture');
-    expect(item.metrics.likes.approx).toBe(true);
-    expect(item.harvestedAt).toBe('2026-08-06T12:00:00.000Z'); // injected clock
-    expect(item.provenance.collectorVersion).toBe(X_COLLECTOR_VERSION);
+    const post = res.posts[0]!;
+    expect(post.metrics).toEqual({ replies: 1, reposts: 0, likes: 1200, views: 3000 });
+    expect(post.metricsRaw).toEqual({ replies: '1', reposts: '0', likes: '1.2K', views: '3K' });
   });
 
-  it('resolves remote media to data: and DROPS anything unresolved (no beacon)', async () => {
-    let saved: XHarvestedItem[] = [];
-    // first post media resolves; second post media fails to resolve → dropped
-    const runCapture = async () => [
-      raw({ id: '1', url: 'https://x.com/target/status/1', media: ['https://pbs.twimg.com/media/a.jpg'] }),
-      raw({ id: '2', url: 'https://x.com/target/status/2', media: ['https://pbs.twimg.com/media/b.jpg'] })
-    ];
-    const resolveMedia = vi.fn(async (_w: unknown, url: string) =>
-      url.endsWith('a.jpg') ? 'data:image/jpeg;base64,AAA' : null
+  it('sets a deterministic evidenceHash equal to postEvidenceHash(post)', async () => {
+    const res = await captureTimeline(WIN, REQ, deps());
+    const post = res.posts[0]!;
+    expect(post.evidenceHash).toBe(postEvidenceHash(post));
+    expect(post.evidenceHash).toHaveLength(64);
+  });
+
+  it('a changed metric changes the evidence hash (honesty: counts cannot be edited post-collection undetected)', async () => {
+    const a = await captureTimeline(WIN, REQ, deps());
+    const b = await captureTimeline(
+      WIN,
+      REQ,
+      deps({ runCapture: async () => [raw({ metricsRaw: { replies: '9', reposts: '0', likes: '1.2K', views: '3K' } })] }),
     );
-    const saveItems = async (_c: string, items: XHarvestedItem[]) => {
-      saved = items;
-      return { added: items.length, skipped: 0 };
-    };
-    await captureVisibleTimeline(WIN, REQ, deps({ runCapture, resolveMedia, saveItems }));
-
-    expect(saved[0].media).toEqual(['data:image/jpeg;base64,AAA']);
-    expect(saved[1].media).toEqual([]); // unresolved remote URL dropped, not stored
-    for (const it of saved) {
-      expect(it.media.some((m) => m.startsWith('http'))).toBe(false);
-    }
+    expect(a.posts[0]!.evidenceHash).not.toBe(b.posts[0]!.evidenceHash);
   });
 
-  it('refuses on a challenge/blocked page — nothing captured or persisted', async () => {
-    const runCapture = vi.fn(async () => [raw()]);
-    const saveItems = vi.fn(async () => ({ added: 0, skipped: 0 }));
-    const res = await captureVisibleTimeline(
+  it('kind:"post" carries parentPostId: null (no fabricated lineage)', async () => {
+    const res = await captureTimeline(WIN, REQ, deps());
+    expect(res.posts[0]!.kind).toBe('post');
+    expect(res.posts[0]!.parentPostId).toBeNull();
+  });
+
+  it('a reply (collect.replies on) is tagged kind:"reply"', async () => {
+    const res = await captureTimeline(
+      WIN,
+      { ...REQ, collect: { replies: true, reposts: false, comments: false } },
+      deps({ runCapture: async () => [raw({ isReply: true })] }),
+    );
+    expect(res.posts).toHaveLength(1);
+    expect(res.posts[0]!.kind).toBe('reply');
+  });
+
+  it('a repost (a DIFFERENT author, collect.reposts on) is tagged kind:"repost", author recorded honestly', async () => {
+    const res = await captureTimeline(
+      WIN,
+      { ...REQ, collect: { replies: false, reposts: true, comments: false } },
+      deps({ runCapture: async () => [raw({ username: 'someoneElse', isRepost: true })] }),
+    );
+    expect(res.posts).toHaveLength(1);
+    expect(res.posts[0]!.kind).toBe('repost');
+    expect(res.posts[0]!.authorHandle).toBe('@someoneElse');
+  });
+
+  it('the DEFAULT_COLLECT gate (all off) captures the target\'s own top-level posts only', async () => {
+    const res = await captureTimeline(
       WIN,
       REQ,
       deps({
-        guard: async () => ({ blocked: true, reason: 'verification challenge' }),
-        runCapture,
-        saveItems
-      })
+        runCapture: async () => [
+          raw({ id: '1', isReply: false, isRepost: false }),
+          raw({ id: '2', isReply: true }),
+          raw({ id: '3', username: 'someoneElse', isRepost: true }),
+        ],
+      }),
     );
+    expect(DEFAULT_COLLECT).toEqual({ replies: false, reposts: false, comments: false });
+    expect(res.posts).toHaveLength(1);
+    expect(res.posts[0]!.messageId).toBe('1');
+  });
+});
 
+// ---- 4. captureTimeline: challenge gate + dual persistence + provenance ---
+
+describe('captureTimeline', () => {
+  it('a challenge/blocked page → NOTHING captured, NOTHING persisted', async () => {
+    const runCapture = vi.fn(async () => [raw()]);
+    const savePosts = vi.fn(async () => ({ added: 0, skipped: 0 }));
+    const saveItems = vi.fn(async () => ({ added: 0, skipped: 0 }));
+    const res = await captureTimeline(
+      WIN,
+      REQ,
+      deps({
+        guard: async () => ({ blocked: true, reason: 'X presented a verification challenge.' }),
+        runCapture,
+        savePosts,
+        saveItems,
+      }),
+    );
     expect(res.blocked).toBe(true);
-    expect(res.reason).toContain('verification');
-    expect(res.items).toEqual([]);
+    expect(res.reason).toBe('X presented a verification challenge.');
+    expect(res.posts).toEqual([]);
     expect(runCapture).not.toHaveBeenCalled();
+    expect(savePosts).not.toHaveBeenCalled();
     expect(saveItems).not.toHaveBeenCalled();
+  });
+
+  it('persists to BOTH sidecars: the plain HarvestedItem store AND the richer XPostArtifact store', async () => {
+    const savePosts = vi.fn(async (_caseId: string, posts: unknown[]) => ({ added: posts.length, skipped: 0 }));
+    const saveItems = vi.fn(async (_caseId: string, items: unknown[]) => ({ added: items.length, skipped: 0 }));
+    const res = await captureTimeline(WIN, REQ, deps({ savePosts, saveItems }));
+    expect(savePosts).toHaveBeenCalledTimes(1);
+    expect(saveItems).toHaveBeenCalledTimes(1);
+    expect(savePosts.mock.calls[0]![0]).toBe('case-a');
+    expect(saveItems.mock.calls[0]![0]).toBe('case-a');
+    expect(res.added).toBe(1);
+    expect(res.skipped).toBe(0);
+  });
+
+  it('re-capturing the SAME visible post dedupes (store-level dedup by id) — save reports skipped, not a duplicate row', async () => {
+    let stored: Array<{ id: string }> = [];
+    const savePosts = vi.fn(async (_c: string, posts: Array<{ id: string }>) => {
+      let added = 0;
+      let skipped = 0;
+      for (const p of posts) {
+        if (stored.some((s) => s.id === p.id)) skipped++;
+        else {
+          stored.push(p);
+          added++;
+        }
+      }
+      return { added, skipped };
+    });
+    const first = await captureTimeline(WIN, REQ, deps({ savePosts }));
+    const second = await captureTimeline(WIN, REQ, deps({ savePosts }));
+    expect(first.added).toBe(1);
+    expect(first.skipped).toBe(0);
+    expect(second.added).toBe(0);
+    expect(second.skipped).toBe(1);
+    expect(stored).toHaveLength(1);
+  });
+
+  it('stamps harvestedAt from the INJECTED clock and provenance from the collector version', async () => {
+    const res = await captureTimeline(WIN, REQ, deps());
+    expect(res.posts[0]!.harvestedAt).toBe('2026-08-11T12:00:00.000Z');
+    expect(res.posts[0]!.provenance).toEqual({
+      collectorVersion: X_COLLECTOR_VERSION,
+      jobId: 'job-1',
+      caseId: 'case-a',
+    });
+  });
+
+  it('runs the STATIC X_POST_SCRIPT (no other payload) against the capture window', async () => {
+    const runCapture = vi.fn(async (_win: unknown, js: string) => {
+      expect(js).toBe(X_POST_SCRIPT);
+      return [raw()];
+    });
+    await captureTimeline(WIN, REQ, deps({ runCapture }));
+    expect(runCapture).toHaveBeenCalledTimes(1);
+  });
+
+  it('an ill-typed/empty capture result never throws — treated as zero posts', async () => {
+    const res = await captureTimeline(
+      WIN,
+      REQ,
+      deps({
+        runCapture: async () => undefined,
+        savePosts: async (_c, posts) => ({ added: posts.length, skipped: 0 }),
+        saveItems: async (_c, items) => ({ added: items.length, skipped: 0 }),
+      }),
+    );
+    expect(res.blocked).toBe(false);
+    expect(res.posts).toEqual([]);
+    expect(res.added).toBe(0);
   });
 });

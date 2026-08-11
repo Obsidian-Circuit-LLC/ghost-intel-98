@@ -569,3 +569,62 @@ export function networkToCsv(artifacts: readonly XNetworkArtifact[] | undefined)
   }
   return `﻿${lines.join('\r\n')}`;
 }
+
+// ---- page-state challenge/lock gate (Task 4; adapt of Enterprise `assertSignedInPage`) ---
+
+/** Shape returned by `X_PAGE_STATE_SCRIPT` — a visible-DOM-only probe. */
+export interface XPageState {
+  url: string;
+  text: string;
+  articles: number;
+}
+
+/**
+ * STATIC page-state probe. No interpolation — the harness never builds a payload from
+ * scraped input. Reads only the current URL, a bounded slice of visible body text, and
+ * the count of rendered tweet articles. Adapted from Enterprise `assertSignedInPage`'s
+ * in-page read (quarantine `electron/main.cjs:427-432`) into the new capture.ts orchestration
+ * (Task 6 deletes the equivalent duplicate that lived in the legacy clearnet-only `ipc.ts`).
+ */
+export const X_PAGE_STATE_SCRIPT = `(() => ({
+  url: location.href,
+  text: (document.body && document.body.innerText || '').slice(0, 5000),
+  articles: document.querySelectorAll('article[data-testid="tweet"]').length
+}))()`;
+
+const X_LOGIN_URL_RE = /\/i\/flow\/login/i;
+const X_LOGIN_TEXT_RE = /sign in to x/i;
+const X_CHALLENGE_RE =
+  /verify your identity|unusual activity|temporarily limited|rate limit exceeded|try again later|security check|arkose/i;
+
+/**
+ * Classify a captured page state (pure). `blocked` marks an X verification / rate-limit /
+ * arkose interstitial the analyst must resolve manually — capture must STOP, never solve.
+ * `signedIn` is false on the login/flow page (session expired) — the CALLER (capture.ts's
+ * guard) additionally refuses on `!signedIn`, mirroring the legacy `assertSignedInPage`'s two
+ * branches (quarantine `electron/main.cjs:436-442`).
+ */
+export function classifyXPageState(page: XPageState): {
+  signedIn: boolean;
+  blocked: boolean;
+  reason?: string;
+} {
+  const url = String(page?.url ?? '');
+  const text = String(page?.text ?? '');
+  if (X_CHALLENGE_RE.test(text)) {
+    return {
+      signedIn: true,
+      blocked: true,
+      reason:
+        'X presented a verification challenge or temporary limit. Collection stopped without attempting to bypass it — resolve the prompt in the X session before continuing.',
+    };
+  }
+  if (X_LOGIN_URL_RE.test(url) || X_LOGIN_TEXT_RE.test(text)) {
+    return {
+      signedIn: false,
+      blocked: false,
+      reason: 'The saved X session is no longer signed in. Reconnect it before continuing.',
+    };
+  }
+  return { signedIn: true, blocked: false };
+}
