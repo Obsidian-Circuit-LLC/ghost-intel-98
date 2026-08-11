@@ -23,6 +23,9 @@ import {
   type XNote,
   type XNetworkArtifact,
   type XArchiveState,
+  type XPostArtifact,
+  type XPreset,
+  type XEntityCacheEntry,
 } from '../src/main/x-listening/store';
 import type { HarvestedItem } from '../src/shared/socmint/types';
 
@@ -64,6 +67,9 @@ function memDeps(): XStoreDeps {
     notesPath: (caseId) => `x/${caseId}/x-notes.json`,
     networksPath: (caseId) => `x/${caseId}/x-networks.json`,
     archiveStatePath: (caseId) => `x/${caseId}/x-archive-state.json`,
+    postsPath: (caseId) => `x/${caseId}/x-posts.json`,
+    presetsPath: (caseId) => `x/${caseId}/x-presets.json`,
+    entitiesCachePath: (caseId) => `x/${caseId}/x-entities-cache.json`,
   };
 }
 
@@ -84,6 +90,41 @@ const mkItem = (messageId: string, overrides: Partial<HarvestedItem> = {}): Harv
   harvestedAt: '2026-08-06T10:00:01.000Z',
   url: 'https://x.com/target/status/1',
   provenance: { collectorVersion: '1.0.0', jobId: 'job-1', caseId: 'case-a' },
+  ...overrides,
+});
+
+const mkPost = (messageId: string, overrides: Partial<XPostArtifact> = {}): XPostArtifact => ({
+  ...mkItem(messageId),
+  kind: 'post',
+  parentPostId: null,
+  metrics: { replies: 0, reposts: 0, likes: 0, views: 0 },
+  metricsRaw: {},
+  evidenceHash: `evhash-${messageId}`,
+  ...overrides,
+});
+
+const mkPreset = (id: string, overrides: Partial<XPreset> = {}): XPreset => ({
+  id,
+  name: `Preset ${id}`,
+  keywords: ['keyword'],
+  mode: 'any',
+  caseSensitive: false,
+  profileIds: [],
+  enabled: true,
+  updatedAt: '2026-08-11T00:00:00.000Z',
+  ...overrides,
+});
+
+const mkEntity = (id: string, overrides: Partial<XEntityCacheEntry> = {}): XEntityCacheEntry => ({
+  id,
+  type: 'hashtag',
+  value: '#opsec',
+  normalizedValue: 'opsec',
+  postIds: ['sha256-1'],
+  sourceUsernames: ['@target'],
+  firstObservedAt: '2026-08-11T00:00:00.000Z',
+  lastObservedAt: '2026-08-11T00:00:00.000Z',
+  count: 1,
   ...overrides,
 });
 
@@ -147,6 +188,98 @@ describe('makeXStore: artifact stores', () => {
   });
 });
 
+describe('makeXStore: posts artifact (HarvestedItem-superset sidecar)', () => {
+  let xStore: ReturnType<typeof makeXStore>;
+  beforeEach(() => { xStore = makeXStore(memDeps()); });
+
+  it('round-trips post artifacts through save/read in append order, case-scoped', async () => {
+    await xStore.posts.save('case-a', [mkPost('1'), mkPost('2')]);
+    await xStore.posts.save('case-b', [mkPost('9')]);
+    const a = await xStore.posts.read('case-a');
+    expect(a.map((p) => p.id)).toEqual(['sha256-1', 'sha256-2']);
+    expect(await xStore.posts.read('case-b')).toHaveLength(1);
+  });
+
+  it('preserves the richer fields (metrics, metricsRaw, kind, parentPostId, evidenceHash)', async () => {
+    const reply = mkPost('2', {
+      kind: 'reply',
+      parentPostId: 'sha256-1',
+      metrics: { replies: 1, reposts: 4, likes: 12, views: 900 },
+      metricsRaw: { replies: '1', reposts: '4', likes: '12', views: '900' },
+      evidenceHash: 'evhash-2',
+    });
+    await xStore.posts.save('case-a', [reply]);
+    const [back] = await xStore.posts.read('case-a');
+    expect(back.kind).toBe('reply');
+    expect(back.parentPostId).toBe('sha256-1');
+    expect(back.metrics).toEqual({ replies: 1, reposts: 4, likes: 12, views: 900 });
+    expect(back.metricsRaw).toEqual({ replies: '1', reposts: '4', likes: '12', views: '900' });
+    expect(back.evidenceHash).toBe('evhash-2');
+  });
+
+  it('dedups posts by id (idempotent re-save)', async () => {
+    await xStore.posts.save('case-a', [mkPost('1'), mkPost('2')]);
+    const second = await xStore.posts.save('case-a', [mkPost('1'), mkPost('2')]);
+    expect(second).toEqual({ added: 0, skipped: 2 });
+    expect(await xStore.posts.read('case-a')).toHaveLength(2);
+  });
+
+  it('write() replaces the full list wholesale (for callers that already merged)', async () => {
+    await xStore.posts.save('case-a', [mkPost('1')]);
+    await xStore.posts.write('case-a', [mkPost('1'), mkPost('2'), mkPost('3')]);
+    expect(await xStore.posts.read('case-a')).toHaveLength(3);
+  });
+
+  it('read() is empty for an unknown case', async () => {
+    expect(await xStore.posts.read('nope')).toEqual([]);
+  });
+});
+
+describe('makeXStore: presets artifact', () => {
+  let xStore: ReturnType<typeof makeXStore>;
+  beforeEach(() => { xStore = makeXStore(memDeps()); });
+
+  it('round-trips presets and is case-scoped', async () => {
+    const presets: XPreset[] = [mkPreset('p1')];
+    await xStore.presets.write('case-a', presets);
+    expect(await xStore.presets.read('case-a')).toEqual(presets);
+    expect(await xStore.presets.read('case-b')).toEqual([]);
+  });
+
+  it('save() upserts one preset keyed by id — re-save replaces rather than duplicates', async () => {
+    await xStore.presets.save('case-a', mkPreset('p1', { name: 'First' }));
+    const after = await xStore.presets.save('case-a', mkPreset('p1', { name: 'Renamed' }));
+    expect(after).toHaveLength(1);
+    expect(after[0].name).toBe('Renamed');
+  });
+
+  it('save() appends a distinct id alongside an existing preset', async () => {
+    await xStore.presets.save('case-a', mkPreset('p1'));
+    const after = await xStore.presets.save('case-a', mkPreset('p2'));
+    expect(after.map((p) => p.id)).toEqual(['p1', 'p2']);
+  });
+});
+
+describe('makeXStore: entitiesCache artifact', () => {
+  let xStore: ReturnType<typeof makeXStore>;
+  beforeEach(() => { xStore = makeXStore(memDeps()); });
+
+  it('round-trips the entity rollup cache and is case-scoped', async () => {
+    const entities: XEntityCacheEntry[] = [mkEntity('e1')];
+    await xStore.entitiesCache.write('case-a', entities);
+    expect(await xStore.entitiesCache.read('case-a')).toEqual(entities);
+    expect(await xStore.entitiesCache.read('case-b')).toEqual([]);
+  });
+});
+
+describe('store.ts encrypt-at-rest structural invariant', () => {
+  it('never imports node:fs directly — every IO path goes through the injected/secure-fs deps', async () => {
+    const src = await readFile(join(process.cwd(), 'src/main/x-listening/store.ts'), 'utf8');
+    expect(src).not.toMatch(/from ['"]node:fs/);
+    expect(src).not.toMatch(/require\(\s*['"]fs['"]\s*\)/);
+  });
+});
+
 // ---- 2. production wiring: ciphertext at rest --------------------------
 
 describe('prodXStore: encrypt-at-rest', () => {
@@ -184,6 +317,43 @@ describe('prodXStore: encrypt-at-rest', () => {
     await expect(readFile(join(path, 'x-items.json'))).resolves.toBeInstanceOf(Buffer);
     // sanity: not written under the investigation case tree
     await expect(readFile(join(caseDir('case-loc'), 'x-items.json'))).rejects.toThrow();
+  });
+
+  it('writes the posts sidecar as ciphertext (raw bytes lack the plaintext body) but reads back plaintext', async () => {
+    const { prodXStore } = await import('../src/main/x-listening/store');
+    const { scrapingCaseDir } = await import('../src/main/storage/paths');
+
+    const s = await prodXStore();
+    await s.posts.save('case-enc', [mkPost('1')]);
+
+    const path = join(scrapingCaseDir('x', 'case-enc'), 'x-posts.json');
+    const onDisk = await readFile(path);
+    expect(onDisk.subarray(0, 4).toString()).toBe('ENCX');
+    expect(onDisk.includes(Buffer.from(SECRET_TEXT))).toBe(false);
+
+    const back = await s.posts.read('case-enc');
+    expect(back[0].text).toContain(SECRET_TEXT);
+    expect(back[0].evidenceHash).toBe('evhash-1');
+  });
+
+  it('writes the presets and entitiesCache sidecars as ciphertext', async () => {
+    const { prodXStore } = await import('../src/main/x-listening/store');
+    const { scrapingCaseDir } = await import('../src/main/storage/paths');
+
+    const s = await prodXStore();
+    await s.presets.save('case-enc', mkPreset('p1', { keywords: [SECRET_TEXT] }));
+    await s.entitiesCache.write('case-enc', [mkEntity('e1', { value: SECRET_TEXT })]);
+
+    const dir = scrapingCaseDir('x', 'case-enc');
+    const presetsOnDisk = await readFile(join(dir, 'x-presets.json'));
+    const entitiesOnDisk = await readFile(join(dir, 'x-entities-cache.json'));
+    for (const onDisk of [presetsOnDisk, entitiesOnDisk]) {
+      expect(onDisk.subarray(0, 4).toString()).toBe('ENCX');
+      expect(onDisk.includes(Buffer.from(SECRET_TEXT))).toBe(false);
+    }
+
+    expect((await s.presets.read('case-enc'))[0].keywords).toContain(SECRET_TEXT);
+    expect((await s.entitiesCache.read('case-enc'))[0].value).toBe(SECRET_TEXT);
   });
 });
 

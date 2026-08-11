@@ -2,9 +2,10 @@
  * X Listening Station encrypt-at-rest data layer.
  *
  * Captured visible-DOM posts normalise into `HarvestedItem`s and land in the encrypted
- * scraping-case store under the clearnet-quarantined `x` namespace; three X-specific
- * artifact stores (analyst notes, follower/following networks, low-rate archive state)
- * sit alongside them, one JSON sidecar each, all routed through secure-fs.
+ * scraping-case store under the `x` namespace; X-specific artifact sidecars (richer post
+ * artifacts, analyst notes, follower/following networks, low-rate archive state, highlight
+ * presets, an entity-rollup cache) sit alongside them, one JSON sidecar each, all routed
+ * through secure-fs.
  *
  * Public API:
  *   makeXStore(deps)  — pure factory over an injected fs seam; use directly in tests.
@@ -64,6 +65,79 @@ export interface XArchiveState {
   lastRunAt: string | null;
 }
 
+/** Parsed integer metrics for a captured post — the derived numbers used for display/sort/
+ *  analysis. Kept alongside `metricsRaw` (below) so no precision is silently fabricated: a
+ *  platform label like "1.2K" becomes 1200 here, but the source string survives for audit. */
+export interface XPostMetrics {
+  replies: number;
+  reposts: number;
+  likes: number;
+  views: number;
+}
+
+/** The RAW platform-rendered metric strings ("1.2K", "3,401", "") as captured, before a
+ *  parser derives an integer. Honesty fix over Enterprise (which discards the raw string
+ *  once parsed): kept here so a reviewer can audit the parse, and folded into
+ *  canonicalPostEvidence (evidence.ts) so altering a displayed count post-collection
+ *  invalidates the evidence hash instead of going unnoticed. */
+export interface XPostMetricsRaw {
+  replies?: string;
+  reposts?: string;
+  likes?: string;
+  views?: string;
+}
+
+/** A captured post/reply/repost/comment — a `HarvestedItem` superset carrying the richer
+ *  fields (from Enterprise) that don't fit the cross-platform `HarvestedItem` shape. Stored
+ *  in the `x-posts.json` sidecar, separate from the plain `HarvestedItem` list in
+ *  `x-items.json` (the cross-module dashboard's source of truth) — this is the module's own
+ *  richer record.
+ *  `mediaRefs`, when present, are LOCAL secure-fs references only (byte-hash-named files
+ *  under the case dir) — a remote media URL must never be stored here, same no-remote-media
+ *  discipline as `XNetworkAccount.avatar`.
+ *  `synthetic`, when true, marks a demo/seeded record — callers MUST exclude synthetic posts
+ *  from `computeNetworkAnalysis`, exports, and evidence hashing (Global Constraints honesty
+ *  rule; enforced by later tasks, not by the store itself). */
+export interface XPostArtifact extends HarvestedItem {
+  kind: 'post' | 'reply' | 'repost' | 'comment';
+  parentPostId: string | null;
+  metrics: XPostMetrics;
+  metricsRaw: XPostMetricsRaw;
+  evidenceHash: string;
+  synthetic?: boolean;
+  mediaRefs?: string[];
+}
+
+/** A saved keyword/phrase highlight preset, evaluated locally over captured posts
+ *  (Enterprise `presets:save`/`presets:run`) — matching happens in-app, never server-side. */
+export interface XPreset {
+  id: string;
+  name: string;
+  keywords: string[];
+  mode: 'any' | 'all';
+  caseSensitive: boolean;
+  profileIds: string[];
+  enabled: boolean;
+  /** ISO timestamp supplied by the caller (injected clock) — never computed here. */
+  updatedAt: string;
+}
+
+/** One cached extracted-entity rollup for a case (mention/hashtag/email/url/domain/crypto/
+ *  phone/organization) — a cumulative index over `extractEntities(post.text)` so entity
+ *  search/browse doesn't re-scan every post's text on every read. Purely derived data: safe
+ *  to rebuild from `posts` at any time; this cache exists only to avoid re-scanning. */
+export interface XEntityCacheEntry {
+  id: string;
+  type: string;
+  value: string;
+  normalizedValue: string;
+  postIds: string[];
+  sourceUsernames: string[];
+  firstObservedAt: string;
+  lastObservedAt: string;
+  count: number;
+}
+
 // ---- injectable fs seam (for tests) ------------------------------------
 
 export interface XStoreDeps {
@@ -79,6 +153,12 @@ export interface XStoreDeps {
   networksPath(caseId: string): string;
   /** Resolve the archive-state artifact path for a case. */
   archiveStatePath(caseId: string): string;
+  /** Resolve the post-artifacts sidecar path for a case. */
+  postsPath(caseId: string): string;
+  /** Resolve the presets artifact path for a case. */
+  presetsPath(caseId: string): string;
+  /** Resolve the entity-cache artifact path for a case. */
+  entitiesCachePath(caseId: string): string;
 }
 
 // ---- helpers -----------------------------------------------------------
@@ -132,6 +212,25 @@ export interface XStore {
     /** Null before the first write. */
     read(caseId: string): Promise<XArchiveState | null>;
     write(caseId: string, state: XArchiveState): Promise<void>;
+  };
+  posts: {
+    /** All captured post artifacts for a case, in append order. */
+    read(caseId: string): Promise<XPostArtifact[]>;
+    /** Replace the full list wholesale (for a caller that already merged/updated in memory). */
+    write(caseId: string, posts: XPostArtifact[]): Promise<void>;
+    /** Upsert post artifacts (dedup by `id`, append order preserved) — mirrors `saveItems`. */
+    save(caseId: string, posts: XPostArtifact[]): Promise<{ added: number; skipped: number }>;
+  };
+  presets: {
+    read(caseId: string): Promise<XPreset[]>;
+    write(caseId: string, presets: XPreset[]): Promise<void>;
+    /** Upsert one preset keyed by `id` — a re-save of the same id REPLACES it rather than
+     *  appending a duplicate. Returns the fresh preset list. */
+    save(caseId: string, preset: XPreset): Promise<XPreset[]>;
+  };
+  entitiesCache: {
+    read(caseId: string): Promise<XEntityCacheEntry[]>;
+    write(caseId: string, entities: XEntityCacheEntry[]): Promise<void>;
   };
 }
 
@@ -234,14 +333,85 @@ export function makeXStore(deps: XStoreDeps): XStore {
         );
       },
     },
+
+    posts: {
+      read(caseId) {
+        return withLock(`x-listening:posts:${caseId}`, () =>
+          readJsonArr<XPostArtifact>(deps, deps.postsPath(caseId)),
+        );
+      },
+      write(caseId, posts) {
+        return withLock(`x-listening:posts:${caseId}`, () =>
+          writeJson(deps, deps.postsPath(caseId), posts),
+        );
+      },
+      save(caseId, posts) {
+        return withLock(`x-listening:posts:${caseId}`, async () => {
+          const p = deps.postsPath(caseId);
+          const existing = await readJsonArr<XPostArtifact>(deps, p);
+          const seen = new Set(existing.map((i) => i.id));
+          let added = 0;
+          let skipped = 0;
+          for (const post of posts) {
+            if (seen.has(post.id)) {
+              skipped++;
+            } else {
+              existing.push(post);
+              seen.add(post.id);
+              added++;
+            }
+          }
+          if (added > 0) await writeJson(deps, p, existing);
+          return { added, skipped };
+        });
+      },
+    },
+
+    presets: {
+      read(caseId) {
+        return withLock(`x-listening:presets:${caseId}`, () =>
+          readJsonArr<XPreset>(deps, deps.presetsPath(caseId)),
+        );
+      },
+      write(caseId, presets) {
+        return withLock(`x-listening:presets:${caseId}`, () =>
+          writeJson(deps, deps.presetsPath(caseId), presets),
+        );
+      },
+      save(caseId, preset) {
+        // Direct readJsonArr/writeJson (NOT presets.read/write) inside the lock: withLock is
+        // not reentrant, and read/write take the SAME key.
+        return withLock(`x-listening:presets:${caseId}`, async () => {
+          const existing = await readJsonArr<XPreset>(deps, deps.presetsPath(caseId));
+          const idx = existing.findIndex((p) => p.id === preset.id);
+          if (idx >= 0) existing[idx] = preset;
+          else existing.push(preset);
+          await writeJson(deps, deps.presetsPath(caseId), existing);
+          return existing;
+        });
+      },
+    },
+
+    entitiesCache: {
+      read(caseId) {
+        return withLock(`x-listening:entities:${caseId}`, () =>
+          readJsonArr<XEntityCacheEntry>(deps, deps.entitiesCachePath(caseId)),
+        );
+      },
+      write(caseId, entities) {
+        return withLock(`x-listening:entities:${caseId}`, () =>
+          writeJson(deps, deps.entitiesCachePath(caseId), entities),
+        );
+      },
+    },
   };
 }
 
 // ---- production-wired singleton ----------------------------------------
 // Lazy: electron/paths/secure-fs are resolved only on first call, so importing this module
 // in tests that inject their own deps never evaluates electron. The item sidecar reuses the
-// canonical scrapingCaseItemsFile('x', …) path (single source of truth); the three artifacts
-// are per-case JSON sidecars alongside it under scrapingCaseDir('x', id).
+// canonical scrapingCaseItemsFile('x', …) path (single source of truth); the artifact
+// sidecars are per-case JSON files alongside it under scrapingCaseDir('x', id).
 
 let _prod: XStore | null = null;
 
@@ -260,6 +430,9 @@ export async function prodXStore(): Promise<XStore> {
     notesPath: (id) => artifact(id, 'x-notes.json'),
     networksPath: (id) => artifact(id, 'x-networks.json'),
     archiveStatePath: (id) => artifact(id, 'x-archive-state.json'),
+    postsPath: (id) => artifact(id, 'x-posts.json'),
+    presetsPath: (id) => artifact(id, 'x-presets.json'),
+    entitiesCachePath: (id) => artifact(id, 'x-entities-cache.json'),
   });
   return _prod;
 }
