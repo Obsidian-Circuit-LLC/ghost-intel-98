@@ -368,6 +368,9 @@ export interface AppSettings {
   wallpaperColor: string;
   /** Optional desktop background image as a data: URI (covers the colour when set). */
   wallpaperImage: string | null;
+  /** Optional custom boot-splash / lock-screen image as a data: URI; falls back to the bundled
+   *  boot-splash.jpg when null. Top-level scalar — mergeSettings' base-spread heals it on its own. */
+  bootSplashImage: string | null;
   startupSoundEnabled: boolean;
   /** Opt-in "Legacy sound pack": when true, the startup chime and DialTerm dial-up use bundled
    *  AI-reworked recordings of the classic Windows jingle + dial-up handshake instead of the
@@ -709,6 +712,7 @@ export const defaultSettings: AppSettings = {
   themeName: 'classic',
   wallpaperColor: '#008080',
   wallpaperImage: null,
+  bootSplashImage: null,
   startupSoundEnabled: true,
   legacySounds: false,
   caseFolderOverride: null,

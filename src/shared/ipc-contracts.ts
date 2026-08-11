@@ -86,6 +86,7 @@ export const channels = {
     read: 'settings:read',
     update: 'settings:update',
     pickWallpaper: 'settings:pickWallpaper',
+    pickBootSplash: 'settings:pickBootSplash',
     changed: 'settings:changed'
   },
   reminders: {

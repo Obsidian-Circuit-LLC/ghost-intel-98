@@ -81,6 +81,7 @@ const api = {
     read: () => ipcRenderer.invoke(channels.settings.read),
     update: (patch: unknown) => ipcRenderer.invoke(channels.settings.update, patch),
     pickWallpaper: () => ipcRenderer.invoke(channels.settings.pickWallpaper),
+    pickBootSplash: () => ipcRenderer.invoke(channels.settings.pickBootSplash),
     onChanged: (cb: (s: AppSettings) => void) => {
       const listener = (_e: unknown, s: AppSettings) => cb(s);
       ipcRenderer.on(channels.settings.changed, listener);

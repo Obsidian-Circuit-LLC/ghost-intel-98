@@ -201,6 +201,7 @@ export interface GhostApi {
     read(): Promise<AppSettings>;
     update(patch: Partial<AppSettings>): Promise<AppSettings>;
     pickWallpaper(): Promise<string | null>;
+    pickBootSplash(): Promise<string | null>;
     onChanged(cb: (s: AppSettings) => void): () => void;
   };
   reminders: {

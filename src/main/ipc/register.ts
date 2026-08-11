@@ -190,6 +190,28 @@ async function saveBufferWithDialog(win: BrowserWindow | null, defaultName: stri
   return basename(result.filePath);
 }
 
+const PICKABLE_IMAGE_MIME: Record<string, string> = {
+  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif'
+};
+
+/** Shared file-picker → 8 MB-capped `data:` URI body for an image setting. Used by both the
+ *  desktop-wallpaper picker and the boot-splash picker; `label` only customises the
+ *  too-large error message (e.g. "wallpaper" vs "boot screen image"). */
+async function pickImageDataUri(win: BrowserWindow | null, label: string): Promise<string | null> {
+  const result = win
+    ? await dialog.showOpenDialog(win, { properties: ['openFile'], filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'] }] })
+    : await dialog.showOpenDialog({ properties: ['openFile'] });
+  if (result.canceled || result.filePaths.length === 0) return null;
+  const p = result.filePaths[0];
+  const ext = (p.split('.').pop() ?? '').toLowerCase();
+  const mime = PICKABLE_IMAGE_MIME[ext];
+  if (!mime) throw new Error('Unsupported image type (PNG, JPG, WEBP, GIF).');
+  const st = await stat(p);
+  if (st.size > 8 * 1024 * 1024) throw new Error(`Image too large — max 8 MB for a ${label}.`);
+  const buf = await readFile(p);
+  return `data:${mime};base64,${buf.toString('base64')}`;
+}
+
 // ---- whiteboard export/import helpers ----
 // The board snapshot is a renderer-produced PNG/JPEG data URL. Constrain it to a strict base64 data
 // URL so it is safe to interpolate into the PDF's `<img src="…">` (no quote/angle-bracket break-out)
@@ -587,21 +609,8 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     notifySettingsChanged(next);
     return next;
   });
-  safeHandle(channels.settings.pickWallpaper, async () => {
-    const win = getWindow();
-    const result = win
-      ? await dialog.showOpenDialog(win, { properties: ['openFile'], filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'] }] })
-      : await dialog.showOpenDialog({ properties: ['openFile'] });
-    if (result.canceled || result.filePaths.length === 0) return null;
-    const p = result.filePaths[0];
-    const ext = (p.split('.').pop() ?? '').toLowerCase();
-    const mime = ({ png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif' } as Record<string, string>)[ext];
-    if (!mime) throw new Error('Unsupported image type (PNG, JPG, WEBP, GIF).');
-    const st = await stat(p);
-    if (st.size > 8 * 1024 * 1024) throw new Error('Image too large — max 8 MB for a wallpaper.');
-    const buf = await readFile(p);
-    return `data:${mime};base64,${buf.toString('base64')}`;
-  });
+  safeHandle(channels.settings.pickWallpaper, () => pickImageDataUri(getWindow(), 'wallpaper'));
+  safeHandle(channels.settings.pickBootSplash, () => pickImageDataUri(getWindow(), 'boot screen image'));
 
   // ---- cases ----
   safeHandle(channels.cases.list, () => caseStore.list());
