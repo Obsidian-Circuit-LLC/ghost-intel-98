@@ -63,6 +63,7 @@ import type { XScheduleStatus } from '@shared/x-listening-schedule';
 import { useSettings } from '../../state/store';
 import { confirmDialog, promptDialog } from '../../state/dialogs';
 import { NetworkGraph } from './NetworkGraph';
+import { PostCard } from './PostCard';
 import './x-listening.css';
 
 /** A campaign IS an x-namespace scraping-case id (campaigns.ts) — no separate shape. */
@@ -127,6 +128,16 @@ export interface XPostMetricsView {
   views: number;
 }
 
+/** RAW platform-rendered metric strings ("1.2K", "3,401") as captured, kept alongside the parsed
+ *  integers so the PostCard can show the exact platform label without fabricating precision
+ *  (store.ts `XPostMetricsRaw`; the boundary widens it to this renderer-owned view). */
+export interface XPostMetricsRawView {
+  replies?: string;
+  reposts?: string;
+  likes?: string;
+  views?: string;
+}
+
 export interface XPostRow {
   id: string;
   channelId: string;
@@ -137,11 +148,25 @@ export interface XPostRow {
   url: string;
   kind: 'post' | 'reply' | 'repost' | 'comment';
   metrics?: XPostMetricsView;
+  /** RAW captured metric strings (Task I1 — shown verbatim on the card where present). */
+  metricsRaw?: XPostMetricsRawView;
   evidenceHash?: string;
   synthetic?: boolean;
   /** LOCAL secure-fs refs (media.ts `cacheRemoteMedia`, Task 15) — never a remote URL. Resolved
    *  to a displayable `data:` URI on demand via `mediaRead`. */
   mediaRefs?: string[];
+  /** LOCAL avatar `data:` URI or absent (a remote avatar URL is never stored) — Task I1 card. */
+  avatar?: string;
+  /** The post author's display name, when the capture observed one (Task I1 card). */
+  displayName?: string;
+  /** The monitored source through which this post was observed, when it differs from the author
+   *  ("VIA @source"). Falls back to `channelId` on the card when absent (Task I1). */
+  sourceUsername?: string;
+  /** Provenance bookkeeping (Task I1 card). Fall back to `publishedAt` when the boundary omits them. */
+  firstObservedAt?: string;
+  lastObservedAt?: string;
+  /** ISO time the record was harvested (HarvestedItem) — the card's LAST-observed fallback. */
+  harvestedAt?: string;
   /** Live-verification state (Task A1, VERIFY LIVE) — absent until the post is verified. */
   availability?: 'available' | 'unavailable';
   /** ISO time of the last live verification (Task A1). */
@@ -302,18 +327,8 @@ export interface XPresetRow {
   updatedAt: string;
 }
 
-const POST_KIND_LABEL: Record<XPostRow['kind'], string> = {
-  post: 'POST',
-  reply: 'REPLY',
-  repost: 'REPOST',
-  comment: 'COMMENT',
-};
-
-function formatMetric(n: number | undefined): string {
-  if (n === undefined) return '—';
-  return new Intl.NumberFormat(undefined, { notation: 'compact' }).format(n);
-}
-
+// Post kind labels + compact metric formatting now live in the extracted PostCard (Task I1); the
+// module keeps only `formatWhen`, still used by the network / changes / sources / notes tabs.
 function formatWhen(iso: string | undefined): string {
   if (!iso) return 'Unknown time';
   const d = new Date(iso);
@@ -323,32 +338,6 @@ function formatWhen(iso: string | undefined): string {
 const CLEARNET_WARNING_TEXT =
   'Routing X capture over CLEARNET exposes your real IP directly to X instead of Tor. ' +
   'This is remembered — you will not be asked again unless you clear it in Settings. Enable clearnet?';
-
-/**
- * Resolve ONE cached local media ref (media.ts `cacheRemoteMedia`, Task 15) to a displayable
- * `data:` URI on demand via the real `mediaRead` channel — the renderer never gets raw vault
- * bytes, only what this channel hands back. Renders nothing while pending/on a miss (a
- * malformed ref, a locked vault, a not-yet-cached file) rather than a broken-image icon.
- */
-function XMediaThumb({ caseId, mediaRef }: { caseId: string; mediaRef: string }): JSX.Element | null {
-  const [src, setSrc] = useState<string | null>(null);
-  useEffect(() => {
-    let active = true;
-    void (async () => {
-      try {
-        const dataUri = await window.api.xListening.mediaRead({ caseId, ref: mediaRef });
-        if (active) setSrc(dataUri);
-      } catch (err) {
-        if (active) console.warn('[XListening] mediaRead:', err);
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, [caseId, mediaRef]);
-  if (!src) return null;
-  return <img src={src} alt="captured media" />;
-}
 
 export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
   const settings = useSettings((s) => s.settings);
@@ -647,54 +636,9 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
     [activeCampaignId, loadInsights],
   );
 
-  const renderPost = useCallback(
-    (post: XPostRow) => (
-      <article className="xls-post-card" key={post.id}>
-        <div className="xls-post-head">
-          <strong>@{post.authorHandle}</strong>
-          <span className="xls-kind">{POST_KIND_LABEL[post.kind] ?? post.kind.toUpperCase()}</span>
-          {post.synthetic && <span className="xls-marker xls-marker-demo">DEMO</span>}
-          {post.availability === 'unavailable' && (
-            <span className="xls-marker xls-marker-unavailable">UNAVAILABLE</span>
-          )}
-          <time>{formatWhen(post.publishedAt)}</time>
-        </div>
-        <p className="xls-post-text">{post.text}</p>
-        {activeCampaignId && post.mediaRefs && post.mediaRefs.length > 0 && (
-          <div className="xls-media-strip">
-            {post.mediaRefs.map((ref) => (
-              <XMediaThumb key={ref} caseId={activeCampaignId} mediaRef={ref} />
-            ))}
-          </div>
-        )}
-        {post.metrics && (
-          <div className="xls-metrics">
-            <span>↩ {formatMetric(post.metrics.replies)}</span>
-            <span>⟳ {formatMetric(post.metrics.reposts)}</span>
-            <span>♥ {formatMetric(post.metrics.likes)}</span>
-            <span>◉ {formatMetric(post.metrics.views)}</span>
-            <span className="xls-stamp" title={post.evidenceHash}>
-              SHA-256 {post.evidenceHash ? `${post.evidenceHash.slice(0, 10)}…` : '—'}
-            </span>
-          </div>
-        )}
-        {!post.synthetic && (
-          <div className="xls-post-actions">
-            <button
-              type="button"
-              className="xls-btn"
-              disabled={verifyingPostId === post.id}
-              onClick={() => void handleVerifyPost(post.id)}
-              title="Open this post's real X URL over Tor and check whether it still exists or was edited."
-            >
-              {verifyingPostId === post.id ? 'VERIFYING…' : 'VERIFY LIVE'}
-            </button>
-          </div>
-        )}
-      </article>
-    ),
-    [activeCampaignId, handleVerifyPost, verifyingPostId],
-  );
+  // `renderPost` (the shared PostCard binding used by Dashboard / Live / Search) is defined lower,
+  // after the analyst-note handlers it depends on (handleSaveNoteFor / handleRemoveNote), so its
+  // dependency array never references a still-in-TDZ const.
 
   // ── campaign dock actions ──────────────────────────────────────────────────
   const handleNewCampaign = useCallback(async () => {
@@ -868,6 +812,26 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
         setNotice(err instanceof Error ? err.message : String(err));
       } finally {
         setNotesBusy(false);
+      }
+    },
+    [activeCampaignId],
+  );
+
+  // Task I1: upsert an analyst note straight from a PostCard's inline notes panel (findingId = the
+  // post id) through the SAME real `saveNote` upsert the Notes tab uses — a re-save of the same
+  // finding REPLACES its note (edit), so add + edit share one path. On success the persisted note
+  // list is re-seated from the returned record so every card + the Notes tab agree.
+  const handleSaveNoteFor = useCallback(
+    async (findingId: string, text: string) => {
+      if (!activeCampaignId) return;
+      const clean = text.trim();
+      if (!findingId || !clean) return;
+      try {
+        const res = await window.api.xListening.saveNote({ caseId: activeCampaignId, findingId, text: clean });
+        setNotes(res.notes as unknown as XNoteRow[]);
+        setNotice('Analyst note saved.');
+      } catch (err) {
+        setNotice(err instanceof Error ? err.message : String(err));
       }
     },
     [activeCampaignId],
@@ -1489,6 +1453,40 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
     [networks],
   );
 
+  // ── Task I1: the shared rich PostCard binding (Dashboard / Live / Search) ────────────────────
+  // One extracted card, wired to the hardened seams: OPEN REAL THREAD → E1's Tor-gated
+  // openInX('thread', post.url); VERIFY LIVE → A1's verifyPost (hidden for synthetic inside the
+  // card); inline ANALYST NOTES → the existing saveNote/removeNote IPC. Per-post notes are the
+  // findingId-keyed slice of the campaign's notes. Defined here (after every handler it depends on)
+  // so its dependency array never touches a still-in-TDZ const. `opts.highlightTerms` lets Search
+  // pass its live query for in-text highlighting; other call sites pass the card plain.
+  const renderPost = useCallback(
+    (post: XPostRow, opts?: { highlightTerms?: string[]; presetNames?: string[] }) => (
+      <PostCard
+        key={post.id}
+        post={post}
+        caseId={activeCampaignId}
+        notes={notes.filter((n) => n.findingId === post.id)}
+        verifying={verifyingPostId === post.id}
+        onOpenThread={(p) => void handleOpenInX('thread', p.url)}
+        onVerify={(id) => void handleVerifyPost(id)}
+        onSaveNote={handleSaveNoteFor}
+        onDeleteNote={handleRemoveNote}
+        highlightTerms={opts?.highlightTerms}
+        presetNames={opts?.presetNames}
+      />
+    ),
+    [
+      activeCampaignId,
+      notes,
+      verifyingPostId,
+      handleOpenInX,
+      handleVerifyPost,
+      handleSaveNoteFor,
+      handleRemoveNote,
+    ],
+  );
+
   return (
     <div className="xls-root">
       <header className="xls-dock">
@@ -1656,7 +1654,7 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
             <div className="xls-panel">
               <h3 className="xls-panel-title">RECENT CAPTURES</h3>
               <div className="xls-feed">
-                {posts.slice(0, 5).map(renderPost)}
+                {posts.slice(0, 5).map((p) => renderPost(p))}
                 {posts.length === 0 && (
                   <div className="xls-empty">No posts captured in this campaign yet.</div>
                 )}
@@ -1702,7 +1700,7 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
               {insightsBusy && <span className="xls-count">Loading…</span>}
             </div>
             <div className="xls-feed">
-              {livePosts.map(renderPost)}
+              {livePosts.map((p) => renderPost(p))}
               {livePosts.length === 0 && (
                 <div className="xls-empty">No records match these feed filters.</div>
               )}
@@ -2331,7 +2329,7 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
               ) : searchResults.length === 0 ? (
                 <div className="xls-empty">No captured post matches "{searchQuery}".</div>
               ) : (
-                searchResults.map(renderPost)
+                searchResults.map((p) => renderPost(p, { highlightTerms: [searchQuery.trim()] }))
               )}
             </div>
 

@@ -400,12 +400,39 @@
   background: var(--ga98-grey);
   border: 1px solid var(--ga98-shadow-dark);
 }
+
+/* ── Task I1: rich PostCard head (avatar · identity · time) ─────────────────── */
 .xls-post-head {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
+  align-items: flex-start;
+  gap: 10px;
   margin-bottom: 6px;
 }
+.xls-post-avatar {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ga98-row-hover);
+  border: 1px solid var(--ga98-shadow-dark);
+  color: var(--ga98-text-dim);
+  font-size: 15px;
+  font-weight: 700;
+}
+.xls-post-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.xls-post-identity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  min-width: 0;
+}
+.xls-post-displayname { color: var(--ga98-text); font-size: 13px; }
+.xls-post-username { color: var(--ga98-text-dim); font-size: 11px; }
 .xls-post-head strong { color: var(--ga98-text); font-size: 13px; }
 .xls-kind {
   font-size: 10px;
@@ -414,10 +441,47 @@
   border: 1px solid var(--ga98-shadow-dark);
   padding: 1px 5px;
 }
+.xls-via {
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  color: var(--ga98-accent);
+  border: 1px solid var(--ga98-accent);
+  padding: 1px 5px;
+}
+.xls-post-time { margin-left: auto; font-size: 11px; color: var(--ga98-text-dim); flex: 0 0 auto; }
 .xls-post-head time { margin-left: auto; font-size: 11px; color: var(--ga98-text-dim); }
+
+/* Preset MATCH rows (a highlight preset matched this post). */
+.xls-preset-match-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 6px; }
+.xls-preset-match {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  padding: 1px 6px;
+  background: var(--ga98-ok-surface);
+  color: var(--ga98-ok-ink);
+  border: 1px solid var(--ga98-ok-dot);
+}
+
 .xls-post-text { white-space: pre-wrap; font-size: 12px; line-height: 1.5; margin: 6px 0; }
-.xls-media-strip { display: flex; gap: 6px; margin: 6px 0; }
-.xls-media-strip img { max-width: 120px; max-height: 120px; border: 1px solid var(--ga98-shadow-dark); }
+.xls-hl { background: var(--ga98-accent); color: var(--ga98-titlebar-text); padding: 0 1px; }
+
+.xls-media-strip { display: flex; gap: 6px; margin: 6px 0; flex-wrap: wrap; }
+.xls-media-strip img,
+.xls-media-thumb { max-width: 120px; max-height: 120px; border: 1px solid var(--ga98-shadow-dark); }
+.xls-media-missing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 120px;
+  height: 68px;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-align: center;
+  color: var(--ga98-text-dim);
+  background: var(--ga98-recessed-bg, #f4f4f4);
+  border: 1px dashed var(--ga98-shadow-dark);
+}
+
 .xls-metrics {
   display: flex;
   gap: 12px;
@@ -426,7 +490,103 @@
   margin-top: 6px;
 }
 .xls-metrics .xls-stamp { margin-left: auto; color: var(--ga98-text-dim); }
-.xls-post-actions { display: flex; gap: 6px; margin-top: 8px; }
+
+/* Provenance row: first/last observed · availability badge · short SHA-256. */
+.xls-provenance-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  align-items: center;
+  margin-top: 6px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--ga98-text-dim);
+}
+.xls-provenance-row .xls-stamp { margin-left: auto; }
+.xls-availability {
+  padding: 1px 6px;
+  border: 1px solid var(--ga98-shadow-dark);
+  color: var(--ga98-text-dim);
+}
+.xls-availability-available {
+  background: var(--ga98-ok-surface);
+  color: var(--ga98-ok-ink);
+  border-color: var(--ga98-ok-dot);
+}
+.xls-availability-unavailable {
+  background: var(--ga98-error-surface);
+  color: var(--ga98-danger-ink);
+  border-color: var(--ga98-error-border);
+}
+
+/* Actions: OPEN REAL THREAD · VERIFY LIVE · ANALYST NOTES toggle + permalink. */
+.xls-post-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin-top: 8px;
+}
+.xls-post-buttons { display: flex; gap: 6px; flex-wrap: wrap; }
+.xls-post-permalink {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--ga98-text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.xls-text-button {
+  font-family: inherit;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  padding: 4px 8px;
+  background: none;
+  color: var(--ga98-accent);
+  border: none;
+  cursor: pointer;
+}
+.xls-text-button:hover:not(:disabled) { text-decoration: underline; }
+.xls-text-button:disabled { opacity: 0.55; cursor: default; }
+.xls-danger-text { color: var(--ga98-danger-ink); }
+
+/* Inline ANALYST NOTES panel (add / edit / delete). */
+.xls-notes-inline {
+  margin-top: 10px;
+  padding: 10px;
+  background: var(--ga98-grey);
+  border: 1px solid var(--ga98-shadow-dark);
+  border-left: 3px solid var(--ga98-accent);
+}
+.xls-note-list { display: flex; flex-direction: column; gap: 8px; }
+.xls-note-entry {
+  padding: 8px;
+  background: var(--ga98-recessed-bg, #f4f4f4);
+  border: 1px solid var(--ga98-shadow-dark);
+}
+.xls-note-body { font-size: 12px; line-height: 1.5; margin: 0 0 6px; color: var(--ga98-text); }
+.xls-note-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.xls-note-actions { display: flex; gap: 6px; }
+.xls-note-entry textarea,
+.xls-note-compose textarea {
+  display: block;
+  width: 100%;
+  min-height: 64px;
+  resize: vertical;
+  box-sizing: border-box;
+  margin-bottom: 8px;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.xls-note-compose { margin-top: 10px; }
 
 .xls-network-controls {
   display: flex;
