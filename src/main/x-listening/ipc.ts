@@ -1044,6 +1044,18 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
     return exportNetworkInteractive(ensureUuid(caseIdArg, 'caseId'));
   });
 
+  // ---- Task A2: historical change events (store.ts listChangeEvents) --------
+  // Derived read (no capture window, no network) — newest-first, capped ~500. Sender check +
+  // arg validation only, same shape as `networksList`/`postsList`.
+  deps.handle(channels.xListening.changeEvents, async (e, caseIdArg) => {
+    assertTrustedSender(e);
+    if (typeof caseIdArg !== 'string' || !caseIdArg) {
+      throw new Error('Listing change events requires a caseId.');
+    }
+    const store = await prodXStore();
+    return store.listChangeEvents(ensureUuid(caseIdArg, 'caseId'));
+  });
+
   // ---- Task 15(a)/(c): read a cached local media ref back as a data: URI ---
   deps.handle(channels.xListening.mediaRead, (e, reqArg) => {
     assertTrustedSender(e);

@@ -212,6 +212,18 @@ export interface XNoteRow {
   savedAt: string;
 }
 
+/** One historical change event — the Change Intel tab's HISTORICAL CHANGE EVENTS stream
+ *  (store.ts `XChangeEvent`, Task A2). Rendered newest-first alongside the network deltas. */
+export interface XChangeEventRow {
+  id: string;
+  kind: 'post_changed' | 'profile_change' | 'post_unavailable';
+  at: string;
+  summary: string;
+  postId?: string;
+  profileId?: string;
+  sourceUsername?: string;
+}
+
 export interface XArchiveStateView {
   cursor: string | null;
   cycles: number;
@@ -311,6 +323,7 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
 
   // ── Task 15 tabs: real state, real IPC — no hollow panels ──────────────────
   const [networks, setNetworks] = useState<XNetworkAccountRow[]>([]);
+  const [changeEvents, setChangeEvents] = useState<XChangeEventRow[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [notes, setNotes] = useState<XNoteRow[]>([]);
   const [noteDraftFindingId, setNoteDraftFindingId] = useState('');
@@ -382,6 +395,7 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
       setHealth([]);
       setEntities([]);
       setNetworks([]);
+      setChangeEvents([]);
       setNotes([]);
       setArchiveState(EMPTY_ARCHIVE_STATE);
       setPresets([]);
@@ -389,7 +403,7 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
     }
     setInsightsBusy(true);
     try {
-      const [postsRes, analysisRes, healthRes, entitiesRes, networksRes, notesRes, archiveRes, presetsRes] =
+      const [postsRes, analysisRes, healthRes, entitiesRes, networksRes, notesRes, archiveRes, presetsRes, changeEventsRes] =
         await Promise.all([
           window.api.xListening.postsList(id),
           window.api.xListening.analysis(id),
@@ -399,6 +413,7 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
           window.api.xListening.readNotes(id),
           window.api.xListening.archiveStatus(id),
           window.api.xListening.presetsRead(id),
+          window.api.xListening.changeEvents(id),
         ]);
       setPosts((postsRes as unknown as XPostRow[]) ?? []);
       setAnalysis((analysisRes as unknown as XAnalysisView) ?? EMPTY_ANALYSIS);
@@ -419,6 +434,7 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
       setNotes(((notesRes as unknown as { notes: XNoteRow[] })?.notes) ?? []);
       setArchiveState((archiveRes as unknown as XArchiveStateView | null) ?? EMPTY_ARCHIVE_STATE);
       setPresets(((presetsRes as unknown as { presets: XPresetRow[] })?.presets) ?? []);
+      setChangeEvents((changeEventsRes as unknown as XChangeEventRow[]) ?? []);
     } catch (err) {
       console.warn('[XListening] loadInsights:', err);
     } finally {
@@ -1299,6 +1315,29 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
 
         {tab === 'changes' && (
           <section className="xls-tab-panel xls-changes">
+            <div className="xls-panel">
+              <h3 className="xls-panel-title">HISTORICAL CHANGE EVENTS</h3>
+              <span className="xls-count">{changeEvents.length} change event(s)</span>
+              {changeEvents.length === 0 ? (
+                <div className="xls-empty">
+                  No post edits or profile-metadata changes observed in this campaign yet.
+                </div>
+              ) : (
+                <ul className="xls-source-list">
+                  {changeEvents.map((ev) => (
+                    <li className="xls-source-row" key={ev.id}>
+                      <span>
+                        <span className={`xls-marker xls-marker-${ev.kind}`}>
+                          {ev.kind.replace(/_/g, ' ').toUpperCase()}
+                        </span>{' '}
+                        {ev.summary}
+                      </span>
+                      <span className="xls-count">{formatWhen(ev.at)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
             <div className="xls-network-controls">
               <span className="xls-count">{sortedNetworkChanges.length} observed accounts</span>
             </div>

@@ -105,7 +105,9 @@ const NEW_CHANNELS: Array<{ key: keyof typeof channels.xListening; args: unknown
   { key: 'loadDemoData', args: [caseId] },
   { key: 'exportPostsToFile', args: [{ caseId, format: 'json' }] },
   { key: 'exportNetworkToFile', args: [caseId] },
-  { key: 'mediaRead', args: [{ caseId, ref: `x-media/${'a'.repeat(64)}` }] }
+  { key: 'mediaRead', args: [{ caseId, ref: `x-media/${'a'.repeat(64)}` }] },
+  // Task A2 — historical change events (derived read, newest-first capped).
+  { key: 'changeEvents', args: [caseId] }
 ];
 
 describe('ipc-contracts.ts — Phase-1 xListening channel constants exist', () => {

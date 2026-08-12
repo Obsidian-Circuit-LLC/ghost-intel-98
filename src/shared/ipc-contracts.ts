@@ -644,7 +644,12 @@ export const channels = {
      *  `x-media/<64-hex sha256>` shape `cacheRemoteMedia` produces BEFORE any path is built —
      *  closes path traversal from a crafted ref. Returns null (never throws) on a malformed ref
      *  or a read failure — a display miss, not a fault. */
-    mediaRead: 'xListening:media:read'
+    mediaRead: 'xListening:media:read',
+    /** List a campaign's historical change events (store.ts `listChangeEvents`, Task A2) —
+     *  newest-first, capped ~500. The Change Intel tab's HISTORICAL CHANGE EVENTS stream
+     *  (post_changed / profile_change / post_unavailable). Derived read; no capture window,
+     *  no network. */
+    changeEvents: 'xListening:changeEvents'
   },
   // Scraping cases — the isolated per-namespace case stores for SOCMINT + X collection runs
   // (kept apart from the core investigation `cases` namespace). Every handler takes a

@@ -118,6 +118,7 @@ function makeApi() {
       captureTimeline: vi.fn(async () => ({ blocked: false, added: 1, skipped: 0, posts: [POST_A] })),
       // Task 15: loadInsights also fetches these alongside posts/analysis/health/entities.
       networksList: vi.fn(async () => []),
+      changeEvents: vi.fn(async () => []),
       readNotes: vi.fn(async () => ({ notes: [] })),
       archiveStatus: vi.fn(async () => null),
       presetsRead: vi.fn(async () => ({ presets: [] })),

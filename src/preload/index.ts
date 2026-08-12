@@ -773,7 +773,8 @@ const api = {
     exportNetworkToFile: (caseId: string) =>
       ipcRenderer.invoke(channels.xListening.exportNetworkToFile, caseId),
     mediaRead: (req: { caseId: string; ref: string }) =>
-      ipcRenderer.invoke(channels.xListening.mediaRead, req)
+      ipcRenderer.invoke(channels.xListening.mediaRead, req),
+    changeEvents: (caseId: string) => ipcRenderer.invoke(channels.xListening.changeEvents, caseId)
   },
   // Scraping cases (W4) — the isolated SOCMINT/X collection-run stores. Every call passes a
   // `store: 'socmint' | 'x'` discriminator that main validates against an allowlist and routes

@@ -139,9 +139,14 @@ function defaultDeps(): XCaptureDeps {
     runCapture: defaultRunCapture,
     guard: defaultGuard,
     savePosts: async (caseId, posts) => {
-      const { prodXStore } = await import('./store');
-      const store = await prodXStore();
-      return store.posts.save(caseId, posts);
+      // Route production capture persistence through the version-aware ingest (Task A2): a
+      // re-capture of a post whose text/media changed archives the prior version onto
+      // `versionHistory` and emits a `post_changed` event, rather than the plain id-dedup of
+      // `posts.save`. `added`/`skipped` keep the same meaning the caller reads. Tests inject
+      // their own `savePosts`, so this production default is exercised only end-to-end.
+      const { ingestPostsWithHistory } = await import('./changes');
+      const res = await ingestPostsWithHistory(caseId, posts, { now: new Date().toISOString() });
+      return { added: res.added, skipped: res.skipped };
     },
     saveItems: async (caseId, items) => {
       const { prodXStore } = await import('./store');

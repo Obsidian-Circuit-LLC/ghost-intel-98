@@ -981,6 +981,20 @@ export interface GhostApi {
     /** Read back one previously-cached local media ref as a `data:` URI for display. Returns
      *  null (never throws) for a malformed ref or a read failure. */
     mediaRead(req: { caseId: string; ref: string }): Promise<string | null>;
+    /** List a campaign's historical change events (Task A2) — newest-first, capped ~500. Each
+     *  event is `{ id, kind: 'post_changed'|'profile_change'|'post_unavailable', at, summary,
+     *  postId?, profileId?, sourceUsername? }`. Derived read; no capture window, no network. */
+    changeEvents(caseId: string): Promise<
+      Array<{
+        id: string;
+        kind: 'post_changed' | 'profile_change' | 'post_unavailable';
+        at: string;
+        summary: string;
+        postId?: string;
+        profileId?: string;
+        sourceUsername?: string;
+      }>
+    >;
   };
   /**
    * Scraping cases (W4) — the isolated per-namespace SOCMINT/X collection-run stores, kept
