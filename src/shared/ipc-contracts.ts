@@ -649,7 +649,14 @@ export const channels = {
      *  newest-first, capped ~500. The Change Intel tab's HISTORICAL CHANGE EVENTS stream
      *  (post_changed / profile_change / post_unavailable). Derived read; no capture window,
      *  no network. */
-    changeEvents: 'xListening:changeEvents'
+    changeEvents: 'xListening:changeEvents',
+    /** Re-verify ONE captured post against its live X URL (capture.ts `verifyPost`, Task A1 —
+     *  VERIFY LIVE). Opens the post's real URL in a Tor-gated capture window (FAIL CLOSED — no
+     *  clearnet fallback unless the acked clearnet toggle is on), detects an unavailable/deleted/
+     *  removed post (→ `post_unavailable` + availability update) or a live text edit (→ prior
+     *  version archived + `post_changed`, via A2). Reuses the openPostThread scheme/host/path
+     *  guards + the `^[A-Za-z0-9_]{1,15}$` username validator. */
+    verifyPost: 'xListening:verifyPost'
   },
   // Scraping cases — the isolated per-namespace case stores for SOCMINT + X collection runs
   // (kept apart from the core investigation `cases` namespace). Every handler takes a

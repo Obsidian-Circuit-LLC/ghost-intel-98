@@ -126,6 +126,47 @@ export async function ingestPostsWithHistory(
   return { added, skipped, changed, events };
 }
 
+// ---- post_unavailable (Task A1, VERIFY LIVE) ------------------------------
+
+export interface MarkPostUnavailableInput {
+  postId: string;
+  sourceUsername?: string;
+  /** Optional override for the event summary (defaults to the Enterprise wording). */
+  summary?: string;
+}
+
+/**
+ * Emit a `post_unavailable` change event for a post whose live URL no longer resolves (A1's
+ * VERIFY LIVE, ported from Enterprise `verifyPostLive`'s `addChangeEvent(profile,
+ * 'post_unavailable', …)`, `main.cjs:2648`). Centralised here (the A2 module owns change-event
+ * construction) so the deterministic content-derived `id` and the encrypted `changeEvents`
+ * sidecar append stay in one place. The CALLER (`verifyPost`) is responsible for the availability
+ * transition gate — it emits only when the post was not ALREADY unavailable, matching Enterprise's
+ * `previousAvailability !== 'unavailable'` guard — so this function always appends when called.
+ */
+export async function markPostUnavailable(
+  caseId: string,
+  input: MarkPostUnavailableInput,
+  opts: { now: string },
+  store?: XStore,
+): Promise<{ event: XChangeEvent }> {
+  const s = await resolveStore(store);
+  const at = opts.now;
+  const postId = String(input.postId ?? '');
+  const sourceUsername = input.sourceUsername ? String(input.sourceUsername) : undefined;
+  const summary = input.summary ?? `Post ${postId} is no longer available at its original URL.`;
+  const event: XChangeEvent = {
+    id: changeEventId('post_unavailable', postId, at, summary),
+    kind: 'post_unavailable',
+    postId,
+    summary,
+    ...(sourceUsername ? { sourceUsername } : {}),
+    at,
+  };
+  await s.changeEvents.append(caseId, event);
+  return { event };
+}
+
 // ---- profile snapshots + profile_change -----------------------------------
 
 export interface ProfileSnapshotInput {

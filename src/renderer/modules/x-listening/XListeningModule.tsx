@@ -126,6 +126,10 @@ export interface XPostRow {
   /** LOCAL secure-fs refs (media.ts `cacheRemoteMedia`, Task 15) — never a remote URL. Resolved
    *  to a displayable `data:` URI on demand via `mediaRead`. */
   mediaRefs?: string[];
+  /** Live-verification state (Task A1, VERIFY LIVE) — absent until the post is verified. */
+  availability?: 'available' | 'unavailable';
+  /** ISO time of the last live verification (Task A1). */
+  verifiedAt?: string;
 }
 
 export interface XAnalysisPair {
@@ -324,6 +328,8 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
   // ── Task 15 tabs: real state, real IPC — no hollow panels ──────────────────
   const [networks, setNetworks] = useState<XNetworkAccountRow[]>([]);
   const [changeEvents, setChangeEvents] = useState<XChangeEventRow[]>([]);
+  /** The post id currently being live-verified (VERIFY LIVE, Task A1) — disables its button. */
+  const [verifyingPostId, setVerifyingPostId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [notes, setNotes] = useState<XNoteRow[]>([]);
   const [noteDraftFindingId, setNoteDraftFindingId] = useState('');
@@ -522,6 +528,35 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
 
   const healthyCount = useMemo(() => health.filter((h) => h.status === 'HEALTHY').length, [health]);
 
+  // ── Task A1: live post verification (VERIFY LIVE) ───────────────────────────
+  // Re-verify a captured post against its live X URL through the real `verifyPost` channel — a
+  // Tor-gated capture window opens MAIN-side (fail-closed, no clearnet fallback). On success the
+  // PERSISTED list is re-read (`loadInsights`) so an edited post's new text / a removed post's
+  // availability lands in the visible feed rather than trusting the returned value alone. Declared
+  // BEFORE `renderPost` so it can sit in that callback's dependency list without a TDZ error.
+  const handleVerifyPost = useCallback(
+    async (postId: string) => {
+      if (!activeCampaignId) return;
+      setVerifyingPostId(postId);
+      try {
+        const res = await window.api.xListening.verifyPost({ caseId: activeCampaignId, postId });
+        setNotice(
+          res.availability === 'unavailable'
+            ? 'Live verification: post is no longer available at its original URL.'
+            : res.changed
+              ? 'Live verification: post text changed — a prior version was archived.'
+              : 'Live verification: post is available and unchanged.',
+        );
+        await loadInsights(activeCampaignId);
+      } catch (err) {
+        setNotice(err instanceof Error ? err.message : String(err));
+      } finally {
+        setVerifyingPostId(null);
+      }
+    },
+    [activeCampaignId, loadInsights],
+  );
+
   const renderPost = useCallback(
     (post: XPostRow) => (
       <article className="xls-post-card" key={post.id}>
@@ -529,6 +564,9 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
           <strong>@{post.authorHandle}</strong>
           <span className="xls-kind">{POST_KIND_LABEL[post.kind] ?? post.kind.toUpperCase()}</span>
           {post.synthetic && <span className="xls-marker xls-marker-demo">DEMO</span>}
+          {post.availability === 'unavailable' && (
+            <span className="xls-marker xls-marker-unavailable">UNAVAILABLE</span>
+          )}
           <time>{formatWhen(post.publishedAt)}</time>
         </div>
         <p className="xls-post-text">{post.text}</p>
@@ -550,9 +588,22 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
             </span>
           </div>
         )}
+        {!post.synthetic && (
+          <div className="xls-post-actions">
+            <button
+              type="button"
+              className="xls-btn"
+              disabled={verifyingPostId === post.id}
+              onClick={() => void handleVerifyPost(post.id)}
+              title="Open this post's real X URL over Tor and check whether it still exists or was edited."
+            >
+              {verifyingPostId === post.id ? 'VERIFYING…' : 'VERIFY LIVE'}
+            </button>
+          </div>
+        )}
       </article>
     ),
-    [activeCampaignId],
+    [activeCampaignId, handleVerifyPost, verifyingPostId],
   );
 
   // ── campaign dock actions ──────────────────────────────────────────────────

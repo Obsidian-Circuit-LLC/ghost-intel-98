@@ -128,6 +128,14 @@ export interface XPostArtifact extends HarvestedItem {
    *  ported from Enterprise `ingestPosts`/`verifyPostLive`). Capped at `X_MAX_POST_VERSIONS`
    *  (oldest dropped). Absent until the first change is observed. */
   versionHistory?: XPostVersion[];
+  /** Live-verification state (Task A1, VERIFY LIVE — ported from Enterprise `verifyPostLive`).
+   *  Absent until the post is verified against its live URL. `'available'` = still reachable;
+   *  `'unavailable'` = deleted/removed/gone at its original URL. Not part of the evidence hash
+   *  (it is a re-observation timestamped by `verifiedAt`, not the captured content itself). */
+  availability?: 'available' | 'unavailable';
+  /** Caller-supplied ISO time of the last live verification (injected clock — never computed in
+   *  a hash path). Absent until the first `verifyPost`. */
+  verifiedAt?: string;
 }
 
 /** One archived prior version of a post — the text/media as they stood BEFORE a re-ingest that

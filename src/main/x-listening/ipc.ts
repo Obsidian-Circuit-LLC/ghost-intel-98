@@ -32,7 +32,7 @@ import {
   clearXSession as closeXSession,
   getXWindow
 } from './session';
-import { captureTimeline, type XTimelineCaptureRequest } from './capture';
+import { captureTimeline, verifyPost, type XTimelineCaptureRequest } from './capture';
 import {
   listCampaigns,
   createCampaign,
@@ -1054,6 +1054,21 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
     }
     const store = await prodXStore();
     return store.listChangeEvents(ensureUuid(caseIdArg, 'caseId'));
+  });
+
+  // ---- Task A1: live post verification (VERIFY LIVE) -----------------------
+  // Opens the stored post's real URL in a Tor-gated capture window (capture.ts `verifyPost` reads
+  // the acked clearnet flag + `resolveXTorGate` itself, MAIN-side — fail-closed, no clearnet
+  // fallback). Sender check + arg validation only here; the network posture + URL guards live in
+  // `verifyPost`. `caseId` is UUID-gated; `postId` is passed through and validated against the
+  // stored post's URL inside `verifyPost` (a postId with no stored post throws downstream).
+  deps.handle(channels.xListening.verifyPost, (e, reqArg) => {
+    assertTrustedSender(e);
+    const req = reqArg as { caseId?: unknown; postId?: unknown } | undefined;
+    if (!req || typeof req.caseId !== 'string' || typeof req.postId !== 'string' || !req.postId) {
+      throw new Error('Verifying a post requires a caseId and postId.');
+    }
+    return verifyPost(ensureUuid(req.caseId, 'caseId'), req.postId);
   });
 
   // ---- Task 15(a)/(c): read a cached local media ref back as a data: URI ---

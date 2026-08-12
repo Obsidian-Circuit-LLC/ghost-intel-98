@@ -995,6 +995,16 @@ export interface GhostApi {
         sourceUsername?: string;
       }>
     >;
+    /** Re-verify ONE captured post against its live X URL (Task A1, VERIFY LIVE). Opens the post's
+     *  real URL in a Tor-gated capture window (fails closed — no clearnet fallback unless the acked
+     *  clearnet toggle is on), and either marks it unavailable (+ emits `post_unavailable`) or, on a
+     *  live text edit, archives the prior version + emits `post_changed`. Rejects a malformed/off-host
+     *  post URL. */
+    verifyPost(req: { caseId: string; postId: string }): Promise<{
+      availability: 'available' | 'unavailable';
+      verifiedAt: string;
+      changed: boolean;
+    }>;
   };
   /**
    * Scraping cases (W4) — the isolated per-namespace SOCMINT/X collection-run stores, kept

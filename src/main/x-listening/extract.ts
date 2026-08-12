@@ -624,6 +624,60 @@ const X_LOGIN_TEXT_RE = /sign in to x/i;
 const X_CHALLENGE_RE =
   /verify your identity|unusual activity|temporarily limited|rate limit exceeded|try again later|security check|arkose/i;
 
+// ---- live post verification (Task A1; adapt of Enterprise `verifyPostLive`) ----
+
+/**
+ * Body-text patterns X renders when a post is gone. Ported from Enterprise `verifyPostLive`'s
+ * `unavailable` matcher (`main.cjs:2641`: "this post is unavailable / post deleted / page doesn't
+ * exist / nothing to see here"), EXTENDED per the A1 task to also catch the plain "this post was
+ * deleted / has been removed" copy and a suspended/protected account (a post whose author account
+ * is gone is likewise unreachable at its URL). Every alternative is anchored on the word "post"
+ * (or a whole-page interstitial) so an ordinary tweet body merely mentioning "deleted"/"removed"
+ * is NOT misclassified as an unavailable post (conservative, not-fabricating).
+ */
+export const X_POST_UNAVAILABLE_RE =
+  /this post is unavailable|this post was deleted|post deleted|this post (?:has|have) been (?:deleted|removed)|post removed|page doesn.t exist|nothing to see here|account.{0,24}suspended|these posts are protected/i;
+
+/**
+ * True iff the visible page body reads as an unavailable/deleted/removed post (pure — the
+ * caller pairs this with "no live tweet article matched the target status id" before declaring
+ * a post unavailable, mirroring Enterprise's `unavailable && !live` gate).
+ */
+export function isPostUnavailableText(bodyText: string): boolean {
+  return X_POST_UNAVAILABLE_RE.test(String(bodyText ?? ''));
+}
+
+/** One rendered tweet article the verify probe read back — its status id + visible text. */
+export interface XVerifyPageItem {
+  id: string;
+  text: string;
+}
+
+/** Shape returned by `X_VERIFY_POST_SCRIPT` — a bounded body slice + the rendered tweet articles. */
+export interface XVerifyPage {
+  body: string;
+  items: XVerifyPageItem[];
+}
+
+/**
+ * STATIC live-verification probe. No interpolation — the harness never builds a payload from
+ * scraped input (asserted by the extract-scripts test's `${` scan). Reads a bounded slice of the
+ * visible body (for the unavailable-language classifier) and every rendered tweet article's status
+ * id + text (to locate the target post and detect a text edit). Adapted from Enterprise
+ * `verifyPostLive`'s in-page read (`main.cjs:2629-2640`).
+ */
+export const X_VERIFY_POST_SCRIPT = `(() => ({
+  body: (document.body && document.body.innerText || '').slice(0, 12000),
+  items: Array.from(document.querySelectorAll('article[data-testid="tweet"]')).map((article) => {
+    const time = article.querySelector('time');
+    const link = (time && time.closest('a[href*="/status/"]')) || article.querySelector('a[href*="/status/"]');
+    const href = (link && link.getAttribute('href')) || '';
+    const m = href.match(/\\/status\\/(\\d+)/);
+    const textEl = article.querySelector('[data-testid="tweetText"]');
+    return { id: (m && m[1]) || '', text: (textEl && textEl.innerText ? textEl.innerText.trim() : '') };
+  })
+}))()`;
+
 /**
  * Classify a captured page state (pure). `blocked` marks an X verification / rate-limit /
  * arkose interstitial the analyst must resolve manually — capture must STOP, never solve.
