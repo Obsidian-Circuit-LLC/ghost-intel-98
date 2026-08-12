@@ -37,6 +37,7 @@
  */
 import { normalizeXSourceKey } from '@shared/x-listening-source';
 import { MEDIA_HOST_ALLOWLIST } from '../capture/security';
+import { requireAckedClearnet } from './capture';
 import type { XTorGate } from './session';
 
 /** Per-campaign avatar-cache sidecar filename (alongside x-image-policy.json / x-posts.json). */
@@ -143,8 +144,8 @@ function defaultDeps(): XAvatarRepairDeps {
         const { settingsStore } = await import('../storage/json-fs');
         const settings = await settingsStore.read();
         // Stricter than the manual paths: an unattended startup pass only leaves Tor when clearnet is
-        // BOTH enabled AND acknowledged — matching `captureProfileTimeline`'s background posture.
-        return settings.xListening?.clearnet === true && settings.xListening?.clearnetAck === true;
+        // BOTH enabled AND acknowledged — the shared `requireAckedClearnet`, matching the scheduler.
+        return requireAckedClearnet(settings);
       } catch {
         return false;
       }

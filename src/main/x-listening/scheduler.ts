@@ -138,7 +138,7 @@ function clampMinutes(value: number, min: number, max: number, def: number): num
   return Math.max(min, Math.min(max, base));
 }
 
-function defaultSchedulerDeps(): XSchedulerDeps {
+export function defaultSchedulerDeps(): XSchedulerDeps {
   return {
     loadSettings: async (caseId) => {
       const { getCollectionSettings } = await import('./collection-settings');
@@ -159,14 +159,20 @@ function defaultSchedulerDeps(): XSchedulerDeps {
       const posts = await store.posts.read(caseId);
       const seen = new Map<string, XSweepSource>();
       for (const p of posts) {
+        // `raw` is the MONITORED channel (channelId), falling back to authorHandle only for a
+        // self-post source that has no channelId. The sweep target MUST come from this, NOT from
+        // p.authorHandle: for a reply/comment row extract.ts stores channelId=the monitored target
+        // but authorHandle=the third-party author, so keying the sweep on authorHandle would sweep a
+        // commenter's timeline and file it under the target's channel (evidence contamination), and
+        // would look up F1's per-source image override under the wrong key.
         const raw = String(p.channelId || p.authorHandle || '');
         const key = normalizeXSourceKey(raw);
         if (!key || seen.has(key)) continue;
-        const handle = String(p.authorHandle || raw).replace(/^@+/, '') || key;
+        const target = raw.replace(/^@+/, '') || key;
         seen.set(key, {
           channelId: p.channelId || key,
           channelLabel: p.channelLabel || `@${key}`,
-          targetUsername: handle,
+          targetUsername: target,
         });
       }
       return [...seen.values()];
@@ -363,15 +369,40 @@ export function stopAllSchedules(overrides: Partial<XSchedulerDeps> = {}): void 
   for (const caseId of [...schedules.keys()]) stopSchedule(caseId, overrides);
 }
 
+/** Per-case restart serialization. `restartSchedule` is called fire-and-forget from multiple sites
+ *  (session connect, settings save); because the rebuild has an `await loadSettings` gap between
+ *  clearing the old timers and arming the new ones, two overlapping restarts could interleave so one
+ *  restart's `stopSchedule` runs before the other's `set`, orphaning an armed `setInterval` (leaked
+ *  timer → doubled cadence). Chaining per caseId forces restarts to run one-at-a-time. */
+const restartChains = new Map<string, Promise<XScheduleStatus>>();
+
 /**
  * (Re)build the campaign's sweep + archive timers from its per-campaign COLLECTION SETTINGS (Task G1).
- * Clears any existing timers first, then — SOURCE-EXACT (Enterprise `restartAutoSweep`/
+ * Serialized per caseId (see `restartChains`) so concurrent fire-and-forget restarts cannot orphan a
+ * timer. Clears any existing timers first, then — SOURCE-EXACT (Enterprise `restartAutoSweep`/
  * `restartArchiveTimer`) — arms a free-running `setInterval` at the (clamped) sweep interval when
  * `automaticSweeps` is on, and at the archive interval when `archiveEnabled` is on. The Tor gate lives
  * inside each tick's capture (fail-closed) — the timer itself never touches egress. Returns the fresh
  * `scheduleStatus`. Idempotent: safe to call on every settings save / session connect.
  */
-export async function restartSchedule(
+export function restartSchedule(
+  caseId: string,
+  overrides: Partial<XSchedulerDeps> = {},
+): Promise<XScheduleStatus> {
+  const prev = restartChains.get(caseId) ?? Promise.resolve<XScheduleStatus | undefined>(undefined);
+  const next = prev
+    .catch(() => undefined)
+    .then(() => doRestartSchedule(caseId, overrides));
+  restartChains.set(caseId, next);
+  // Drop the chain slot once this link settles (unless a newer restart already replaced it), so the
+  // map doesn't grow unbounded across a long-lived campaign.
+  void next.catch(() => undefined).finally(() => {
+    if (restartChains.get(caseId) === next) restartChains.delete(caseId);
+  });
+  return next;
+}
+
+async function doRestartSchedule(
   caseId: string,
   overrides: Partial<XSchedulerDeps> = {},
 ): Promise<XScheduleStatus> {

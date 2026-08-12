@@ -68,6 +68,17 @@ import { normalizeXSourceKey } from '@shared/x-listening-source';
 /** This collector's version, stamped into every item's provenance. */
 export const X_COLLECTOR_VERSION = 'x-listening/1.0.0';
 
+/** The UNATTENDED clearnet gate: a background auto-sweep or startup avatar-repair pass leaves Tor
+ *  ONLY when clearnet is BOTH enabled AND acknowledged — stricter than the interactive paths (which
+ *  trust the one-time-acked toggle). A `clearnet:true` that somehow predates its ack fails closed to
+ *  Tor. This is the single composition both unattended paths call, so a regression to `||` or the
+ *  wrong field is caught by one unit test rather than shipping a clearnet-without-ack window. */
+export function requireAckedClearnet(
+  settings: { xListening?: { clearnet?: boolean; clearnetAck?: boolean } } | null | undefined,
+): boolean {
+  return settings?.xListening?.clearnet === true && settings?.xListening?.clearnetAck === true;
+}
+
 /** All-off collect gate — a target's own top-level posts only. The trusted default; the
  *  renderer never widens capture — the caller (Task 6 IPC handler) reads the real setting
  *  MAIN-side from `AppSettings.xListening.collect` and passes it in. */
@@ -1153,8 +1164,8 @@ function defaultProfileTimelineDeps(): XProfileTimelineDeps {
         const { settingsStore } = await import('../storage/json-fs');
         const settings = await settingsStore.read();
         // Stricter than the manual paths: an unattended sweep only leaves Tor when clearnet is BOTH
-        // enabled AND acknowledged. A `clearnet:true` that somehow predates its ack fails closed to Tor.
-        return settings.xListening?.clearnet === true && settings.xListening?.clearnetAck === true;
+        // enabled AND acknowledged (shared `requireAckedClearnet`).
+        return requireAckedClearnet(settings);
       } catch {
         return false;
       }
