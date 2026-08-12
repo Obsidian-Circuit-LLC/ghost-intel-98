@@ -140,12 +140,23 @@ export interface XAnalysisPair {
   commonFollowerCount: number;
   commonFollowingCount: number;
   commonAnyCount: number;
+  // Task C2a: the actual overlapping @handles (the full `NetworkAnalysis` carries these across
+  // the boundary; the narrow view widens to render them as chip lists). Optional + `?? []`-guarded
+  // so a mock/older payload that omits them still renders defensively.
+  commonFollowers?: string[];
+  commonFollowing?: string[];
+  commonAny?: string[];
 }
 
 export interface XAnalysisIdentity {
   username: string;
   connectedTargets: number;
   overlapScore: number;
+  // Task C2a: the MULTI-TARGET OVERLAP table's follows / followed-by columns + the record avatar.
+  displayName?: string;
+  avatar?: string;
+  followerOf?: string[];
+  followingFrom?: string[];
 }
 
 export interface XAnalysisGraphNode {
@@ -205,6 +216,10 @@ export interface XNetworkAccountRow {
   kind: 'followers' | 'following';
   handle: string;
   displayName?: string;
+  // Task C2a: EXTRACTED NETWORK RECORDS renders these. `avatar` is a LOCAL `data:` URI or absent
+  // (remote avatars are dropped by the capture normalizer — C1) — never a remote URL fetched here.
+  avatar?: string;
+  bio?: string;
   firstObservedAt?: string;
   lastObservedAt?: string;
   synthetic?: boolean;
@@ -355,6 +370,9 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
   const [networkView, setNetworkView] = useState<'both' | 'followers' | 'following'>('both');
   const [networkBusy, setNetworkBusy] = useState(false);
   const [networkProgress, setNetworkProgress] = useState('');
+  // Task C2a: MULTI-TARGET OVERLAP "MINIMUM CONNECTED TARGETS" threshold (source parity: default 2,
+  // floored at 2 — an identity must connect to at least two targets to be "common").
+  const [networkMinTargets, setNetworkMinTargets] = useState(2);
 
   const [notice, setNotice] = useState('X Listening Station ready.');
 
@@ -955,6 +973,85 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
     return edges.filter((e) => e.relationship === want);
   }, [analysis.graph, networkView]);
 
+  // ── Task C2a: Network tab derived views (source: main.tsx FOLLOWER NETWORK) ───────────────
+  // The TARGET SOURCE selector ('all' or one captured source username = channelId) scopes the
+  // SELECTED counts + EXTRACTED NETWORK RECORDS. `@`-insensitive, case-insensitive match against
+  // the captured account's `target`. `null` key = ALL SOURCES (no scoping).
+  const networkTargetKey = useMemo(
+    () => (networkTargetId === 'all' ? null : String(networkTargetId).replace(/^@+/, '').toLowerCase()),
+    [networkTargetId],
+  );
+  const matchesSelectedTarget = useCallback(
+    (target: string): boolean =>
+      networkTargetKey === null ||
+      String(target ?? '').replace(/^@+/, '').toLowerCase() === networkTargetKey,
+    [networkTargetKey],
+  );
+
+  // SELECTED FOLLOWERS / SELECTED FOLLOWING stat-card counts — locally observed rows for the
+  // selected target (or every target when ALL). Sourced from the captured `networks` accumulator,
+  // never fabricated.
+  const selectedFollowerCount = useMemo(
+    () => networks.filter((a) => a.kind === 'followers' && matchesSelectedTarget(a.target)).length,
+    [networks, matchesSelectedTarget],
+  );
+  const selectedFollowingCount = useMemo(
+    () => networks.filter((a) => a.kind === 'following' && matchesSelectedTarget(a.target)).length,
+    [networks, matchesSelectedTarget],
+  );
+
+  // MULTI-TARGET OVERLAP rows — identities connected to >= max(2, MINIMUM CONNECTED TARGETS),
+  // capped at 500 (source parity, main.tsx:285). Defensive on a payload that omits `identities`.
+  const overlapIdentities = useMemo(
+    () =>
+      (analysis.identities ?? [])
+        .filter((i) => (i.connectedTargets ?? 0) >= Math.max(2, networkMinTargets))
+        .slice(0, 500),
+    [analysis.identities, networkMinTargets],
+  );
+
+  // EXTRACTED NETWORK RECORDS — the captured accounts scoped by TARGET SOURCE + VIEW, capped at
+  // 3000 (source parity). Synthetic rows never reach here (excluded upstream by the store/analysis
+  // pipeline; captured records are never stamped synthetic).
+  const networkRecordRows = useMemo(
+    () =>
+      networks
+        .filter(
+          (a) =>
+            matchesSelectedTarget(a.target) &&
+            (networkView === 'both' || a.kind === networkView),
+        )
+        .slice(0, 3000),
+    [networks, matchesSelectedTarget, networkView],
+  );
+
+  // RECENT NETWORK DELTAS — CONSERVATIVE, derived honestly from the accounts' own first/last-seen
+  // bookkeeping (the hardened core keeps no separate network-event log). Per (target, kind) group
+  // the latest scan is the max `lastObservedAt`; an account first seen in that latest scan is
+  // NEWLY OBSERVED, and an account whose `lastObservedAt` predates its group's latest scan was NOT
+  // SEEN in the latest comparable scan — a review candidate, never asserted as an unfollow (X can
+  // truncate/reorder lists). Newest-first, capped 100 (source parity, main.tsx:289).
+  const recentNetworkDeltas = useMemo(() => {
+    const latestByGroup = new Map<string, string>();
+    for (const a of networks) {
+      const g = `${a.target}::${a.kind}`;
+      const last = a.lastObservedAt ?? '';
+      if (last > (latestByGroup.get(g) ?? '')) latestByGroup.set(g, last);
+    }
+    return networks
+      .map((a) => {
+        const latest = latestByGroup.get(`${a.target}::${a.kind}`) ?? '';
+        const first = a.firstObservedAt ?? '';
+        const last = a.lastObservedAt ?? '';
+        const newlyObserved = !!first && first === last && last === latest;
+        const notSeen = !!last && !!latest && last < latest;
+        return { account: a, newlyObserved, notSeen, at: last };
+      })
+      .filter((r) => r.newlyObserved || r.notSeen)
+      .sort((x, y) => y.at.localeCompare(x.at))
+      .slice(0, 100);
+  }, [networks]);
+
   // ── Task 15(d): archive step, driven off the campaign's OWN Tor-default session ─────────
   const handleRunArchive = useCallback(async () => {
     if (!activeCampaignId) return;
@@ -1447,74 +1544,160 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
 
             <div className="xls-stat-grid">
               <article className="xls-stat">
-                <span>TARGETS</span>
-                <strong>{analysis.targetCount}</strong>
+                <span>SELECTED FOLLOWERS</span>
+                <strong>{selectedFollowerCount}</strong>
+                <small>
+                  {networkTargetKey === null
+                    ? 'all targets'
+                    : `@${networkTargetKey}`}
+                </small>
               </article>
               <article className="xls-stat">
-                <span>RELATIONSHIPS</span>
-                <strong>{analysis.relationshipCount}</strong>
-              </article>
-              <article className="xls-stat">
-                <span>UNIQUE IDENTITIES</span>
-                <strong>{analysis.uniqueIdentityCount}</strong>
+                <span>SELECTED FOLLOWING</span>
+                <strong>{selectedFollowingCount}</strong>
+                <small>locally observed</small>
               </article>
               <article className="xls-stat">
                 <span>COMMON IDENTITIES</span>
                 <strong>{analysis.commonIdentityCount}</strong>
+                <small>connected to ≥2 targets</small>
               </article>
               <article className="xls-stat">
                 <span>HIGH OVERLAP</span>
                 <strong>{analysis.highOverlapCount}</strong>
+                <small>priority review candidates</small>
               </article>
             </div>
 
             <div className="xls-panel">
-              <h3 className="xls-panel-title">COMMON FOLLOWER / FOLLOWING PAIRS</h3>
+              <div className="xls-panel-title-row">
+                <h3 className="xls-panel-title">COMMON FOLLOWERS / FOLLOWING</h3>
+                <span className="xls-count">{analysis.pairs.length} pair(s)</span>
+              </div>
               {analysis.pairs.length === 0 ? (
                 <div className="xls-empty">
-                  At least two captured target networks are required.
+                  At least two extracted target networks are required.
                 </div>
               ) : (
-                <ul className="xls-source-list">
+                <div className="xls-pair-grid">
                   {analysis.pairs.map((p) => (
-                    <li className="xls-source-row" key={`${p.profileAId}:${p.profileBId}`}>
-                      <span>
-                        @{p.profileA} ↔ @{p.profileB}
-                      </span>
-                      <span className="xls-count">
-                        {p.commonFollowerCount} followers · {p.commonFollowingCount} following ·{' '}
-                        {p.commonAnyCount} total
-                      </span>
-                    </li>
+                    <details className="xls-pair-card" key={`${p.profileAId}:${p.profileBId}`}>
+                      <summary>
+                        <strong>
+                          @{p.profileA} ↔ @{p.profileB}
+                        </strong>
+                        <span className="xls-count">
+                          {p.commonFollowerCount} followers · {p.commonFollowingCount} following ·{' '}
+                          {p.commonAnyCount} total
+                        </span>
+                      </summary>
+                      <div className="xls-common-groups">
+                        <div>
+                          <h4 className="xls-common-heading">COMMON FOLLOWERS</h4>
+                          <div className="xls-identity-chips">
+                            {(p.commonFollowers ?? []).slice(0, 100).map((u) => (
+                              <button
+                                type="button"
+                                className="xls-identity-chip"
+                                key={`cf-${p.profileAId}-${p.profileBId}-${u}`}
+                                title="Open this identity's X profile in a Tor-gated in-app window"
+                                onClick={() => void handleOpenInX('identity', u)}
+                              >
+                                @{u}
+                              </button>
+                            ))}
+                            {(p.commonFollowers ?? []).length === 0 && (
+                              <span className="xls-count">None observed.</span>
+                            )}
+                          </div>
+                        </div>
+                        <div>
+                          <h4 className="xls-common-heading">COMMON FOLLOWING</h4>
+                          <div className="xls-identity-chips">
+                            {(p.commonFollowing ?? []).slice(0, 100).map((u) => (
+                              <button
+                                type="button"
+                                className="xls-identity-chip"
+                                key={`cg-${p.profileAId}-${p.profileBId}-${u}`}
+                                title="Open this identity's X profile in a Tor-gated in-app window"
+                                onClick={() => void handleOpenInX('identity', u)}
+                              >
+                                @{u}
+                              </button>
+                            ))}
+                            {(p.commonFollowing ?? []).length === 0 && (
+                              <span className="xls-count">None observed.</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </details>
                   ))}
-                </ul>
+                </div>
               )}
             </div>
 
             <div className="xls-panel">
-              <h3 className="xls-panel-title">MULTI-TARGET OVERLAP</h3>
-              {analysis.identities.length === 0 ? (
-                <div className="xls-empty">No identities meet the overlap threshold.</div>
+              <div className="xls-panel-title-row">
+                <h3 className="xls-panel-title">MULTI-TARGET OVERLAP</h3>
+                <span className="xls-count">{overlapIdentities.length} identity(ies)</span>
+              </div>
+              <label className="xls-field xls-min-targets">
+                MINIMUM CONNECTED TARGETS
+                <input
+                  type="number"
+                  className="xls-input"
+                  aria-label="Minimum connected targets"
+                  min={2}
+                  max={Math.max(2, analysis.targetCount)}
+                  value={networkMinTargets}
+                  onChange={(e) => {
+                    const n = Number(e.target.value);
+                    setNetworkMinTargets(Number.isFinite(n) ? Math.max(2, Math.floor(n)) : 2);
+                  }}
+                />
+              </label>
+              {overlapIdentities.length === 0 ? (
+                <div className="xls-empty">No identities meet this overlap threshold.</div>
               ) : (
-                <ul className="xls-source-list">
-                  {analysis.identities.map((i) => (
-                    <li className="xls-source-row" key={i.username}>
-                      <span>@{i.username}</span>
+                <div className="xls-overlap-table">
+                  {overlapIdentities.map((i) => (
+                    <div className="xls-overlap-row" key={i.username}>
+                      <button
+                        type="button"
+                        className="xls-identity-main"
+                        title="Open this identity's X profile in a Tor-gated in-app window"
+                        onClick={() => void handleOpenInX('identity', i.username)}
+                      >
+                        @{i.username}
+                      </button>
                       <span className="xls-count">
-                        {i.connectedTargets}/{analysis.targetCount} targets · score{' '}
-                        {i.overlapScore}
-                        <button
-                          type="button"
-                          className="xls-btn"
-                          title="Open this identity's X profile in a Tor-gated in-app window"
-                          onClick={() => void handleOpenInX('identity', i.username)}
-                        >
-                          VIEW ON X
-                        </button>
+                        {i.connectedTargets}/{analysis.targetCount} targets
                       </span>
-                    </li>
+                      <strong className="xls-overlap-score">{i.overlapScore}</strong>
+                      <span className="xls-overlap-connections">
+                        <em>follows:</em>{' '}
+                        {(i.followerOf ?? []).length
+                          ? (i.followerOf ?? []).map((x) => (
+                              <span className="xls-inline-identity" key={`follows-${i.username}-${x}`}>
+                                @{x}
+                              </span>
+                            ))
+                          : '—'}
+                      </span>
+                      <span className="xls-overlap-connections">
+                        <em>followed by targets:</em>{' '}
+                        {(i.followingFrom ?? []).length
+                          ? (i.followingFrom ?? []).map((x) => (
+                              <span className="xls-inline-identity" key={`followed-${i.username}-${x}`}>
+                                @{x}
+                              </span>
+                            ))
+                          : '—'}
+                      </span>
+                    </div>
                   ))}
-                </ul>
+                </div>
               )}
             </div>
 
@@ -1541,6 +1724,109 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
                     </li>
                   ))}
                 </ul>
+              )}
+            </div>
+
+            <div className="xls-panel">
+              <div className="xls-panel-title-row">
+                <h3 className="xls-panel-title">RECENT NETWORK DELTAS</h3>
+                <span className="xls-count">{recentNetworkDeltas.length} delta(s)</span>
+              </div>
+              <p className="xls-help">
+                &ldquo;Not seen in latest scan&rdquo; is a review candidate, not proof of an
+                unfollow. X can truncate or reorder lists, so a missing account may simply not have
+                loaded this pass.
+              </p>
+              {recentNetworkDeltas.length === 0 ? (
+                <div className="xls-empty">No network deltas recorded yet.</div>
+              ) : (
+                <ul className="xls-source-list">
+                  {recentNetworkDeltas.map((d, i) => (
+                    <li
+                      className="xls-source-row xls-delta-row"
+                      key={`${d.account.target}:${d.account.kind}:${d.account.handle}:${i}`}
+                    >
+                      <span>
+                        <button
+                          type="button"
+                          className="xls-identity-main"
+                          title="Open this identity's X profile in a Tor-gated in-app window"
+                          onClick={() => void handleOpenInX('identity', d.account.handle)}
+                        >
+                          @{d.account.handle.replace(/^@+/, '')}
+                        </button>
+                        <span
+                          className={`xls-marker ${
+                            d.newlyObserved ? 'xls-marker-new' : 'xls-marker-unavailable'
+                          }`}
+                        >
+                          {d.newlyObserved ? 'NEWLY OBSERVED' : 'NOT SEEN IN LATEST COMPARABLE SCAN'}
+                        </span>{' '}
+                        {d.account.kind.toUpperCase()} of @{d.account.target.replace(/^@+/, '')}
+                      </span>
+                      <span className="xls-count">{formatWhen(d.at)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div className="xls-panel">
+              <div className="xls-panel-title-row">
+                <h3 className="xls-panel-title">EXTRACTED NETWORK RECORDS</h3>
+                <span className="xls-count">{networkRecordRows.length} record(s)</span>
+              </div>
+              <div className="xls-add-source">
+                <button
+                  type="button"
+                  className="xls-btn xls-btn-primary"
+                  disabled={exportBusy || !activeCampaignId}
+                  title="Export the captured follower/following accounts as formula-guarded CSV (synthetic excluded, SHA-256 sidecar)."
+                  onClick={() => void handleExportNetwork()}
+                >
+                  EXPORT CSV
+                </button>
+              </div>
+              {networkRecordRows.length === 0 ? (
+                <div className="xls-empty">No network records match this source / view.</div>
+              ) : (
+                <div className="xls-network-records">
+                  {networkRecordRows.map((r, i) => (
+                    <article
+                      className="xls-network-record"
+                      key={`${r.target}:${r.kind}:${r.handle}:${i}`}
+                    >
+                      <div className="xls-network-record-avatar" aria-hidden="true">
+                        {r.avatar && r.avatar.startsWith('data:') ? (
+                          <img src={r.avatar} alt="" />
+                        ) : (
+                          <span>{(r.handle || '?').charAt(0).toUpperCase()}</span>
+                        )}
+                      </div>
+                      <div className="xls-network-record-id">
+                        <strong>{r.displayName || `@${r.handle.replace(/^@+/, '')}`}</strong>
+                        <span>@{r.handle.replace(/^@+/, '')}</span>
+                        {r.bio && <small>{r.bio}</small>}
+                      </div>
+                      <span className={`xls-marker xls-relationship-tag xls-relationship-${r.kind}`}>
+                        {r.kind === 'followers' ? 'FOLLOWER' : 'FOLLOWING'}
+                      </span>
+                      <span className="xls-count xls-observed">
+                        first {formatWhen(r.firstObservedAt)}
+                        <br />
+                        last {formatWhen(r.lastObservedAt)}
+                      </span>
+                      <button
+                        type="button"
+                        className="xls-btn"
+                        title="Open this account's X profile in a Tor-gated in-app window"
+                        onClick={() => void handleOpenInX('profile', r.handle)}
+                      >
+                        OPEN PROFILE
+                      </button>
+                    </article>
+                  ))}
+                </div>
               )}
             </div>
           </section>

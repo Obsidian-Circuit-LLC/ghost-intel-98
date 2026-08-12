@@ -555,4 +555,129 @@
 }
 .xls-btn-primary:hover:not(:disabled) { background: var(--ga98-accent); filter: brightness(1.12); }
 
+/* ── Task C2a: Network tab non-graph panels (token-only) ─────────────────── */
+.xls-pair-grid { display: flex; flex-direction: column; gap: 8px; }
+.xls-pair-card {
+  border: 1px solid var(--ga98-shadow-dark);
+  background: var(--ga98-grey);
+  padding: 8px;
+}
+.xls-pair-card > summary {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ga98-text);
+}
+.xls-pair-card > summary strong { color: var(--ga98-text); }
+.xls-common-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-top: 10px;
+}
+.xls-common-heading {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--ga98-text-dim);
+  margin: 0 0 6px;
+}
+.xls-identity-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.xls-identity-chip {
+  font-family: inherit;
+  font-size: 11px;
+  padding: 2px 8px;
+  background: var(--ga98-grey);
+  color: var(--ga98-accent);
+  border: 1px solid var(--ga98-shadow-dark);
+  cursor: pointer;
+}
+.xls-identity-chip:hover { background: var(--ga98-row-hover); }
+
+.xls-min-targets { max-width: 320px; margin-bottom: 12px; }
+.xls-min-targets .xls-input { width: 88px; }
+.xls-overlap-table { display: flex; flex-direction: column; gap: 6px; }
+.xls-overlap-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) auto auto;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 8px;
+  background: var(--ga98-grey);
+  border: 1px solid var(--ga98-shadow-dark);
+}
+.xls-identity-main {
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--ga98-accent);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+.xls-identity-main:hover { text-decoration: underline; }
+.xls-overlap-score { font-size: 14px; color: var(--ga98-text); }
+.xls-overlap-connections {
+  grid-column: 1 / -1;
+  font-size: 11px;
+  color: var(--ga98-text-dim);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.xls-overlap-connections em { color: var(--ga98-text-dim); font-style: normal; letter-spacing: 0.06em; }
+.xls-inline-identity { color: var(--ga98-text); }
+
+.xls-relationship-tag { letter-spacing: 0.06em; }
+.xls-relationship-followers {
+  background: var(--ga98-ok-surface);
+  color: var(--ga98-ok-ink);
+  border-color: var(--ga98-ok-dot);
+}
+.xls-relationship-following {
+  background: var(--ga98-grey);
+  color: var(--ga98-text-dim);
+  border-color: var(--ga98-shadow-dark);
+}
+
+.xls-network-records { display: flex; flex-direction: column; gap: 6px; }
+.xls-network-record {
+  display: grid;
+  grid-template-columns: auto minmax(140px, 1fr) auto auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  background: var(--ga98-grey);
+  border: 1px solid var(--ga98-shadow-dark);
+}
+.xls-network-record-avatar {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ga98-row-hover);
+  border: 1px solid var(--ga98-shadow-dark);
+  color: var(--ga98-text-dim);
+  font-size: 15px;
+  overflow: hidden;
+}
+.xls-network-record-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.xls-network-record-id { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.xls-network-record-id strong { font-size: 12px; color: var(--ga98-text); }
+.xls-network-record-id span { font-size: 11px; color: var(--ga98-text-dim); }
+.xls-network-record-id small {
+  font-size: 10px;
+  color: var(--ga98-text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.xls-observed { text-align: right; line-height: 1.4; }
+.xls-delta-row .xls-identity-main { margin-right: 6px; }
+
 .xls-panel { max-width: 1000px; }
