@@ -92,6 +92,23 @@
   color: var(--ga98-danger-ink);
   border-color: var(--ga98-error-border);
 }
+/* ── Task B1: CHANGE INTEL — colour-code the three historical change-event kinds so an analyst
+ *    can tell them apart at a glance (Enterprise parity). Token-only → classic + amethyst. ── */
+.xls-marker-post_changed {
+  background: var(--ga98-grey);
+  color: var(--ga98-accent);
+  border-color: var(--ga98-accent);
+}
+.xls-marker-profile_change {
+  background: var(--ga98-grey);
+  color: var(--ga98-text-dim);
+  border-color: var(--ga98-shadow-dark);
+}
+.xls-marker-post_unavailable {
+  background: var(--ga98-error-surface);
+  color: var(--ga98-danger-ink);
+  border-color: var(--ga98-error-border);
+}
 .xls-network-posture {
   flex: 0 0 auto;
   padding: 8px 12px;

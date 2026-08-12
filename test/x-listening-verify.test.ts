@@ -51,6 +51,7 @@ function memStore(): XStore {
     entitiesCachePath: (id) => `x/${id}/x-entities-cache.json`,
     changeEventsPath: (id) => `x/${id}/x-change-events.json`,
     profileSnapshotsPath: (id) => `x/${id}/x-profile-snapshots.json`,
+    runLogPath: (id) => `x/${id}/x-run-log.json`,
   };
   return makeXStore(deps);
 }

@@ -540,11 +540,19 @@ export async function verifyPost(
       String(post.channelLabel || post.authorHandle || '') || undefined;
 
     if (isPostUnavailableText(body) && !live) {
-      const previousAvailability = post.availability ?? 'unknown';
-      const next = posts.map((p) =>
-        p.id === post.id ? { ...p, availability: 'unavailable' as const, verifiedAt: at } : p,
-      );
-      await s.posts.write(caseId, next);
+      // ATOMIC: re-read fresh + update the one post inside the posts lock (the `posts` snapshot
+      // above predates the multi-second network call — writing it back would clobber any posts a
+      // concurrent capture added meanwhile). Report the prior availability for the transition gate;
+      // if the post was concurrently removed, report 'unavailable' so no spurious event is emitted.
+      const previousAvailability = await s.posts.transform(caseId, (existing) => {
+        const prev = existing.find((p) => p.id === post.id);
+        if (!prev) return { next: existing, write: false, result: 'unavailable' as const };
+        const prevAvail = prev.availability ?? 'unknown';
+        const next = existing.map((p) =>
+          p.id === post.id ? { ...p, availability: 'unavailable' as const, verifiedAt: at } : p,
+        );
+        return { next, write: true, result: prevAvail };
+      });
       // Enterprise's `previousAvailability !== 'unavailable'` gate: emit only on a transition.
       if (previousAvailability !== 'unavailable') {
         await markPostUnavailable(caseId, { postId: post.id, sourceUsername }, { now: at }, s);
@@ -569,11 +577,14 @@ export async function verifyPost(
       return { availability: 'available', verifiedAt: at, changed: true };
     }
 
-    // Available + unchanged: stamp availability/verifiedAt only (no version, no event).
-    const next = posts.map((p) =>
-      p.id === post.id ? { ...p, availability: 'available' as const, verifiedAt: at } : p,
-    );
-    await s.posts.write(caseId, next);
+    // Available + unchanged: stamp availability/verifiedAt only (no version, no event). ATOMIC
+    // re-read inside the posts lock — the `posts` snapshot above predates the network call.
+    await s.posts.transform(caseId, (existing) => {
+      const next = existing.map((p) =>
+        p.id === post.id ? { ...p, availability: 'available' as const, verifiedAt: at } : p,
+      );
+      return { next, write: existing.some((p) => p.id === post.id), result: undefined };
+    });
     return { availability: 'available', verifiedAt: at, changed: false };
   } finally {
     const w = win as unknown as { isDestroyed?: () => boolean; destroy?: () => void };

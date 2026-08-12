@@ -68,59 +68,70 @@ export async function ingestPostsWithHistory(
 ): Promise<IngestHistoryResult> {
   const s = await resolveStore(store);
   const at = opts.now;
-  const existing = await s.posts.read(caseId);
-  const next = [...existing];
-  const idxById = new Map<string, number>();
-  next.forEach((p, i) => idxById.set(p.id, i));
 
-  const events: XChangeEvent[] = [];
-  let added = 0;
-  let skipped = 0;
-  let changed = 0;
+  // ATOMIC read-modify-write: compute the merged list + version diffs INSIDE the single posts
+  // lock (via `posts.transform`), so a concurrent capture/verify cannot clobber captured evidence
+  // with a stale snapshot. The diff computation is pure; change-event persistence (a separate
+  // sidecar/lock) happens after the transform returns.
+  const { added, skipped, changed, events } = await s.posts.transform(caseId, (existing) => {
+    const next = [...existing];
+    const idxById = new Map<string, number>();
+    next.forEach((p, i) => idxById.set(p.id, i));
 
-  for (const post of incoming) {
-    const idx = idxById.get(post.id);
-    if (idx === undefined) {
-      next.push(post);
-      idxById.set(post.id, next.length - 1);
-      added++;
-      continue;
+    const evs: XChangeEvent[] = [];
+    let added = 0;
+    let skipped = 0;
+    let changed = 0;
+
+    for (const post of incoming) {
+      const idx = idxById.get(post.id);
+      if (idx === undefined) {
+        next.push(post);
+        idxById.set(post.id, next.length - 1);
+        added++;
+        continue;
+      }
+      skipped++;
+      const prev = next[idx]!;
+      const prevText = String(prev.text ?? '');
+      const nextText = String(post.text ?? '');
+      const prevMedia = JSON.stringify(prev.mediaRefs ?? []);
+      const nextMedia = JSON.stringify(post.mediaRefs ?? []);
+      if (prevText === nextText && prevMedia === nextMedia) continue; // unchanged — leave as stored
+
+      const priorHash = prev.evidenceHash || postEvidenceHash(prev);
+      const history = Array.isArray(prev.versionHistory) ? [...prev.versionHistory] : [];
+      history.push({
+        text: prevText,
+        media: Array.isArray(prev.mediaRefs) ? [...prev.mediaRefs] : [],
+        capturedAt: at,
+        sha256: priorHash,
+      });
+      const capped =
+        history.length > X_MAX_POST_VERSIONS ? history.slice(-X_MAX_POST_VERSIONS) : history;
+      next[idx] = { ...post, versionHistory: capped };
+      changed++;
+
+      const sourceUsername =
+        String(post.channelLabel || prev.channelLabel || post.authorHandle || '') || undefined;
+      const summary = `Previously captured post ${post.id} changed.`;
+      evs.push({
+        id: changeEventId('post_changed', String(post.id), at, summary),
+        kind: 'post_changed',
+        postId: post.id,
+        summary,
+        ...(sourceUsername ? { sourceUsername } : {}),
+        at,
+      });
     }
-    skipped++;
-    const prev = next[idx]!;
-    const prevText = String(prev.text ?? '');
-    const nextText = String(post.text ?? '');
-    const prevMedia = JSON.stringify(prev.mediaRefs ?? []);
-    const nextMedia = JSON.stringify(post.mediaRefs ?? []);
-    if (prevText === nextText && prevMedia === nextMedia) continue; // unchanged — leave as stored
 
-    const priorHash = prev.evidenceHash || postEvidenceHash(prev);
-    const history = Array.isArray(prev.versionHistory) ? [...prev.versionHistory] : [];
-    history.push({
-      text: prevText,
-      media: Array.isArray(prev.mediaRefs) ? [...prev.mediaRefs] : [],
-      capturedAt: at,
-      sha256: priorHash,
-    });
-    const capped =
-      history.length > X_MAX_POST_VERSIONS ? history.slice(-X_MAX_POST_VERSIONS) : history;
-    next[idx] = { ...post, versionHistory: capped };
-    changed++;
+    return {
+      next,
+      write: added > 0 || changed > 0,
+      result: { added, skipped, changed, events: evs },
+    };
+  });
 
-    const sourceUsername =
-      String(post.channelLabel || prev.channelLabel || post.authorHandle || '') || undefined;
-    const summary = `Previously captured post ${post.id} changed.`;
-    events.push({
-      id: changeEventId('post_changed', String(post.id), at, summary),
-      kind: 'post_changed',
-      postId: post.id,
-      summary,
-      ...(sourceUsername ? { sourceUsername } : {}),
-      at,
-    });
-  }
-
-  if (added > 0 || changed > 0) await s.posts.write(caseId, next);
   for (const event of events) await s.changeEvents.append(caseId, event);
 
   return { added, skipped, changed, events };

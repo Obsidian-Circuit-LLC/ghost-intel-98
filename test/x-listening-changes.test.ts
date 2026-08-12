@@ -53,6 +53,7 @@ function memStore(): XStore {
     entitiesCachePath: (id) => `x/${id}/x-entities-cache.json`,
     changeEventsPath: (id) => `x/${id}/x-change-events.json`,
     profileSnapshotsPath: (id) => `x/${id}/x-profile-snapshots.json`,
+    runLogPath: (id) => `x/${id}/x-run-log.json`,
   };
   return makeXStore(deps);
 }
@@ -239,5 +240,29 @@ describe('A2 — change-event log is capped newest-first', () => {
     expect(listed[0]!.summary).toBe(`event ${X_MAX_CHANGE_EVENTS + 9}`);
     // The oldest events were dropped.
     expect(listed.some((e) => e.summary === 'event 0')).toBe(false);
+  });
+});
+
+describe('A2 — atomicity: concurrent ingests must not clobber captured evidence', () => {
+  it('serializes read-modify-write via posts.transform so every concurrently-ingested post survives', async () => {
+    // Regression for the Phase-1 whole-branch finding: the first cut read+wrote the posts file in
+    // SEPARATE lock acquisitions, so two concurrent ingests each read the same base and the second
+    // write clobbered the first (last-writer-wins), silently dropping captured posts. The atomic
+    // `posts.transform` does read+merge+write in ONE lock, so all concurrent appends survive.
+    const store = memStore();
+    await store.posts.write(CASE, [post({ id: 'seed', text: 'seed' })]);
+    const ids = ['a', 'b', 'c', 'd', 'e'];
+    await Promise.all(
+      ids.map((id, i) =>
+        ingestPostsWithHistory(
+          CASE,
+          [post({ id, text: `t-${id}` })],
+          { now: `2026-08-12T00:00:0${i}.000Z` },
+          store,
+        ),
+      ),
+    );
+    const finalIds = (await store.posts.read(CASE)).map((p) => p.id).sort();
+    expect(finalIds).toEqual(['a', 'b', 'c', 'd', 'e', 'seed']);
   });
 });

@@ -391,6 +391,14 @@ export interface XStore {
     write(caseId: string, posts: XPostArtifact[]): Promise<void>;
     /** Upsert post artifacts (dedup by `id`, append order preserved) — mirrors `saveItems`. */
     save(caseId: string, posts: XPostArtifact[]): Promise<{ added: number; skipped: number }>;
+    /** Atomic read-modify-write inside the SINGLE posts lock: `fn` receives the current list and
+     *  returns the next list, whether to persist it, and a caller result. The read + merge + write
+     *  happen in ONE lock acquisition, so a concurrent capture/verify cannot clobber captured
+     *  evidence with a stale snapshot the way a separate `read()` … `write()` pair can. */
+    transform<R>(
+      caseId: string,
+      fn: (existing: XPostArtifact[]) => { next: XPostArtifact[]; write: boolean; result: R },
+    ): Promise<R>;
   };
   presets: {
     read(caseId: string): Promise<XPreset[]>;
@@ -568,6 +576,15 @@ export function makeXStore(deps: XStoreDeps): XStore {
           }
           if (added > 0) await writeJson(deps, p, existing);
           return { added, skipped };
+        });
+      },
+      transform(caseId, fn) {
+        return withLock(`x-listening:posts:${caseId}`, async () => {
+          const p = deps.postsPath(caseId);
+          const existing = await readJsonArr<XPostArtifact>(deps, p);
+          const { next, write, result } = fn(existing);
+          if (write) await writeJson(deps, p, next);
+          return result;
         });
       },
     },
