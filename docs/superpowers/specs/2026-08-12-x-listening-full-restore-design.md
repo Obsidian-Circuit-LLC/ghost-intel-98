@@ -63,7 +63,11 @@ Each item: **source behaviour → target seam → hardening constraint → accep
 
 ### J. Campaigns / misc parity
 - **J1 ◐** Confirm Campaign **Duplicate** (present, verify parity: clones profiles+presets with new IDs, resets counts). Campaign editor modal fields to parity.
-- **J2 Enterprise look (GI98-themed) — IN scope (operator decision 2026-08-12).** Reproduce the Enterprise shell feel: left sidebar (brand block, campaign dock, nav menu with **live count badges**, Tor box, session box), masthead banner, topbar (eyebrow + active-campaign line + action buttons). Re-skinned entirely with `--ga98-*` tokens so it renders in classic + QUIET AMETHYST; token-only, no hardcoded colours, no-straggler guard green. Visual parity with GhostExodus's Enterprise app — replaces the bare Win98 module chrome. (Confirm exact look against the demo video once uploaded.)
+- **J2 Enterprise look (GI98-themed) — IN scope (operator decision 2026-08-12; look confirmed from the demo video 2026-08-12).** Reproduce the Enterprise **dark neon command-console** aesthetic and layout, verified from GhostExodus's 2560×1520 demo:
+  - **Layout:** left sidebar (~310px) = brand block ("CD" seal + "CYBERVS DOMINATVS / X LISTENING STATION / ENTERPRISE // by GhostExodus") → ACTIVE CAMPAIGN dock (dropdown + purpose line + +NEW/EDIT/MANAGE) → nav menu with **live count badges** (LIVE FEED 460, TARGET SOURCES 3, FOLLOWER NETWORK 9, ENTITY INDEX 142, CHANGE INTEL 338, SEARCH 3, ANALYST NOTES 1, …) → Tor box (state colour + CONNECT OVER TOR) → session box (green X SESSION ONLINE). Right column = masthead lightning banner + topbar (eyebrow "…ENTERPRISE v3.4.1" + tab title + ACTIVE CAMPAIGN line + IMAGES/SESSION/RUN SWEEP buttons) + a notice bar + the tab body.
+  - **Palette (map onto GI98 tokens):** deep navy/near-black surfaces, neon-cyan section headings, green data/positive accents, **yellow/amber primary action buttons**, red Tor-disconnected state. Map to `--ga98-*`: **QUIET AMETHYST is the primary target** (dark console; violet stands in for the neon-cyan/green accents) and classic is the light-theme variant. Token-only, no hardcoded colours, no-straggler guard green.
+  - **Banner/branding (default, confirm):** keep GhostExodus's "CYBERVS DOMINATVS" banner + "by GhostExodus" credit (restoring *his* tool faithfully includes his branding); reuse the source `assets/cybervs-dominatvs-banner.webp`. If operator prefers GI98-branding instead, swap the banner only — layout/aesthetic unchanged.
+  - Replaces the bare Win98 module chrome shipped in v3.70.x.
 
 ## UI reskin
 
