@@ -849,6 +849,24 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
     }
   }, [activeCampaignId]);
 
+  // ── Task E1: Tor-gated "open in X" affordance (openInX) ─────────────────────────────────
+  // Opens the real X surface (a thread / a @profile / a network identity) in an in-app,
+  // Tor-gated capture window. The URL is validated + constructed MAIN-side BEFORE any window
+  // opens (fail-closed under Tor); this only forwards the {kind, ref} and surfaces any refusal.
+  // Consumed here by the network overlap rows; C2b (graph inspector) + D1 ("View X") reuse it.
+  const handleOpenInX = useCallback(
+    async (kind: 'thread' | 'profile' | 'identity', ref: string) => {
+      const cleaned = String(ref ?? '').trim();
+      if (!cleaned) return;
+      try {
+        await window.api.xListening.openInX({ kind, ref: cleaned });
+      } catch (err) {
+        setNotice(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [],
+  );
+
   // ── Task 15(d): archive step, driven off the campaign's OWN Tor-default session ─────────
   const handleRunArchive = useCallback(async () => {
     if (!activeCampaignId) return;
@@ -1320,6 +1338,14 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
                       <span className="xls-count">
                         {i.connectedTargets}/{analysis.targetCount} targets · score{' '}
                         {i.overlapScore}
+                        <button
+                          type="button"
+                          className="xls-btn"
+                          title="Open this identity's X profile in a Tor-gated in-app window"
+                          onClick={() => void handleOpenInX('identity', i.username)}
+                        >
+                          VIEW ON X
+                        </button>
                       </span>
                     </li>
                   ))}

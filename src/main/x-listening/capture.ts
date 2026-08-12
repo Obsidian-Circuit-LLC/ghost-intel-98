@@ -593,3 +593,120 @@ export async function verifyPost(
     }
   }
 }
+
+// ---- Tor-gated "open in X" affordances ("View X" / Open Real Thread / Open X Profile, Task E1) --
+//
+// Foundational rebuild of Enterprise `openPostThread`/`openProfileFeed`/`openRelationshipProfile`
+// (`feed:open-thread`/`feed:open-profile`/`identity:open-profile`/`relationships:open-profile`,
+// `main.cjs:1160-1225`) as ONE hardened helper onto OUR seams. Consumed by C2b (the network graph
+// inspector) and D1 (the per-source "View X" action).
+//
+// Unlike `verifyPost` (a HIDDEN window, run one static probe, destroyed in `finally`), this opens a
+// VISIBLE window the analyst browses (Enterprise's `createRemoteWindow({ show:true })`), on the same
+// authenticated X partition + the same Tor-gated posture (FAIL CLOSED — no clearnet fallback unless
+// the acked clearnet toggle is on). Quarantine discipline is preserved: no static electron/Tor import
+// — the production defaults lazy-import `./session` (the ONE sanctioned Tor seam) + the window factory.
+
+/** Which X surface an `openInX` affordance targets. */
+export type XOpenKind = 'thread' | 'profile' | 'identity';
+
+/** The result of opening an in-app X window — the canonical https URL the window was pointed at. */
+export interface XOpenInXResult {
+  opened: true;
+  url: string;
+}
+
+/** Injectable seams so `openInX` is testable without electron/network. Production defaults are lazy
+ *  dynamic imports of the sanctioned Tor seam (`./session`) + the hardened window factory. */
+export interface XOpenInXDeps {
+  /** Read the acked clearnet opt-out MAIN-side, fail-closed (any error → false = Tor mode). */
+  loadClearnetEnabled: () => Promise<boolean>;
+  /** Resolve the Tor posture from the acked clearnet flag (`session.ts` `resolveXTorGate`). */
+  resolveGate: (clearnetEnabled: boolean) => XTorGate | Promise<XTorGate>;
+  /** Open a hardened, VISIBLE capture window at `url` over the resolved posture (proxy iff Tor). */
+  openWindow: (url: string, proxy?: { socks: string }) => Promise<Electron.BrowserWindow>;
+}
+
+/**
+ * Validate `ref` and construct the exact canonical X URL for `kind`, or throw — the ONLY URL any
+ * `openInX` window is ever pointed at, and always built BEFORE a window opens. Pure (no network):
+ *  - `'thread'`: reuse the Phase-1 `assertValidPostUrl` guards by wrapping the ref as a minimal post
+ *    — a non-X host, a path lacking `/status/<digits>`, or a non-URL ref throws; https is forced.
+ *  - `'profile'` / `'identity'`: strip a leading `@`, enforce `^[A-Za-z0-9_]{1,15}$`, and build
+ *    `https://x.com/<user>` EXACTLY (bare profile, no `/with_replies` or any other path injection).
+ */
+export function buildXOpenUrl(kind: XOpenKind, ref: string): URL {
+  if (kind === 'thread') {
+    // The ref is a post/thread URL — reuse the exact openPostThread scheme/host/path validation.
+    return assertValidPostUrl({ url: String(ref ?? '') } as XPostArtifact);
+  }
+  const username = String(ref ?? '').replace(/^@/, '').trim();
+  if (!X_USERNAME_RE.test(username)) {
+    throw new Error('The selected record does not contain a valid X username.');
+  }
+  return new URL(`https://x.com/${encodeURIComponent(username)}`);
+}
+
+function defaultOpenInXDeps(): XOpenInXDeps {
+  return {
+    loadClearnetEnabled: async () => {
+      try {
+        const { settingsStore } = await import('../storage/json-fs');
+        const settings = await settingsStore.read();
+        return settings.xListening?.clearnet === true;
+      } catch {
+        return false;
+      }
+    },
+    resolveGate: async (clearnetEnabled) => {
+      const { resolveXTorGate } = await import('./session');
+      return resolveXTorGate(clearnetEnabled);
+    },
+    openWindow: async (url, proxy) => {
+      const [{ createCaptureWindow }, sess] = await Promise.all([
+        import('../capture/capture-window'),
+        import('./session'),
+      ]);
+      const win = await createCaptureWindow({
+        partition: sess.X_LISTENING_PARTITION,
+        url,
+        allowHosts: sess.X_ALLOW_HOSTS,
+        ...(proxy ? { proxy } : {}),
+        webRTCIPHandlingPolicy: 'disable_non_proxied_udp',
+      });
+      // Belt-and-braces re-assert on the returned webContents (idempotent) — same discipline as
+      // session.ts's connectXSession / verifyPost's openWindow.
+      win.webContents.setWebRTCIPHandlingPolicy('disable_non_proxied_udp');
+      return win;
+    },
+  };
+}
+
+/**
+ * Open one in-app X window for `kind`/`ref` (Task E1). Validates + constructs the URL FIRST
+ * (`buildXOpenUrl` — a malformed ref throws, opening NO window and never touching the gate/network),
+ * then resolves the Tor posture and refuses (opening no window) when it is blocked — FAIL CLOSED, no
+ * clearnet fallback unless the acked clearnet toggle is on. The window is shown/focused (a visible
+ * affordance, unlike the hidden verify window). Returns the canonical https URL it was pointed at.
+ */
+export async function openInX(
+  kind: XOpenKind,
+  ref: string,
+  overrides: Partial<XOpenInXDeps> = {},
+): Promise<XOpenInXResult> {
+  // Validate BEFORE touching the gate or network — a malformed/off-host ref opens nothing.
+  const target = buildXOpenUrl(kind, ref);
+
+  const deps: XOpenInXDeps = { ...defaultOpenInXDeps(), ...overrides };
+
+  // FAIL CLOSED: resolve the Tor posture and refuse (opening no window) when it is blocked.
+  const clearnetEnabled = await deps.loadClearnetEnabled();
+  const gate = await deps.resolveGate(clearnetEnabled);
+  if (gate.blocked) throw new Error(gate.reason);
+
+  const win = await deps.openWindow(target.toString(), gate.proxy);
+  const w = win as unknown as { show?: () => void; focus?: () => void };
+  w.show?.();
+  w.focus?.();
+  return { opened: true, url: target.toString() };
+}

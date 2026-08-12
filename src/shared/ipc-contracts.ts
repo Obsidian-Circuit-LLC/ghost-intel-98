@@ -662,7 +662,15 @@ export const channels = {
      *  (`{ profileId, username, operation, observed, added, duplicates, requestedPasses,
      *  completedPasses, reachedEnd, stopReason, status, startedAt, endedAt }`) emitted by the
      *  capture/archive paths. Derived read; no capture window, no network. */
-    runLog: 'xListening:runLog'
+    runLog: 'xListening:runLog',
+    /** Open one in-app X window (capture.ts `openInX`, Task E1) for a `{ kind, ref }` affordance —
+     *  `kind:'thread'` (ref = a `/<user>/status/<id>` URL), `kind:'profile'`/`'identity'` (ref = a
+     *  `@username` handle). The URL is validated + constructed with strict guards (reuse the
+     *  openPostThread scheme/host/path guards + `^[A-Za-z0-9_]{1,15}$`) BEFORE any window opens —
+     *  a malformed ref throws, opening nothing. Tor-gated (FAIL CLOSED — no clearnet fallback
+     *  unless the acked clearnet toggle is on). Consumed by the Network graph inspector (C2b) and
+     *  the per-source "View X" action (D1). Opens IN-APP only, never via an OS shell hand-off. */
+    openInX: 'xListening:openInX'
   },
   // Scraping cases — the isolated per-namespace case stores for SOCMINT + X collection runs
   // (kept apart from the core investigation `cases` namespace). Every handler takes a

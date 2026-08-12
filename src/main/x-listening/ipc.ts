@@ -32,7 +32,7 @@ import {
   clearXSession as closeXSession,
   getXWindow
 } from './session';
-import { captureTimeline, verifyPost, type XTimelineCaptureRequest } from './capture';
+import { captureTimeline, verifyPost, openInX, type XTimelineCaptureRequest, type XOpenKind } from './capture';
 import {
   listCampaigns,
   createCampaign,
@@ -1082,6 +1082,29 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
       throw new Error('Verifying a post requires a caseId and postId.');
     }
     return verifyPost(ensureUuid(req.caseId, 'caseId'), req.postId);
+  });
+
+  // ---- Task E1: Tor-gated "open in X" affordances (openInX) ----------------
+  // Opens an in-app X window for a `{ kind, ref }` affordance (capture.ts `openInX` reads the acked
+  // clearnet flag + `resolveXTorGate` itself, MAIN-side — fail-closed, no clearnet fallback). The
+  // URL is validated + constructed BEFORE any window opens (reuses the openPostThread guards +
+  // `^[A-Za-z0-9_]{1,15}$`); a malformed ref throws inside `openInX`, opening nothing. Sender check +
+  // arg-shape validation only here; `kind` is allowlisted to the three valid surfaces so a bogus
+  // value can never reach the helper. The window opens IN-APP (hardened capture window), never via
+  // an OS shell open-external hand-off. Consumed by C2b (graph inspector) + D1 ("View X").
+  deps.handle(channels.xListening.openInX, (e, reqArg) => {
+    assertTrustedSender(e);
+    const req = reqArg as { kind?: unknown; ref?: unknown } | undefined;
+    const kind = req?.kind;
+    if (
+      !req ||
+      (kind !== 'thread' && kind !== 'profile' && kind !== 'identity') ||
+      typeof req.ref !== 'string' ||
+      !req.ref
+    ) {
+      throw new Error('Opening X requires a kind of thread, profile or identity and a ref.');
+    }
+    return openInX(kind as XOpenKind, req.ref);
   });
 
   // ---- Task 15(a)/(c): read a cached local media ref back as a data: URI ---

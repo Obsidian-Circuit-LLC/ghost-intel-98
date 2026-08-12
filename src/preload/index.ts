@@ -777,7 +777,9 @@ const api = {
     changeEvents: (caseId: string) => ipcRenderer.invoke(channels.xListening.changeEvents, caseId),
     verifyPost: (req: { caseId: string; postId: string }) =>
       ipcRenderer.invoke(channels.xListening.verifyPost, req),
-    runLog: (caseId: string) => ipcRenderer.invoke(channels.xListening.runLog, caseId)
+    runLog: (caseId: string) => ipcRenderer.invoke(channels.xListening.runLog, caseId),
+    openInX: (req: { kind: 'thread' | 'profile' | 'identity'; ref: string }) =>
+      ipcRenderer.invoke(channels.xListening.openInX, req)
   },
   // Scraping cases (W4) — the isolated SOCMINT/X collection-run stores. Every call passes a
   // `store: 'socmint' | 'x'` discriminator that main validates against an allowlist and routes

@@ -1031,6 +1031,18 @@ export interface GhostApi {
         endedAt: string;
       }>
     >;
+    /**
+     * Open one in-app X window for a `{ kind, ref }` affordance (Task E1) — `kind:'thread'`
+     * (ref = a `/<user>/status/<id>` URL), `kind:'profile'`/`'identity'` (ref = a `@username`
+     * handle). The URL is validated + constructed with strict guards BEFORE any window opens; a
+     * malformed ref rejects, opening nothing. Tor-gated (FAIL CLOSED — no clearnet fallback unless
+     * the acked clearnet toggle is on). Opens IN-APP only, never via an OS shell hand-off.
+     * Resolves the canonical https URL the window was pointed at.
+     */
+    openInX(req: { kind: 'thread' | 'profile' | 'identity'; ref: string }): Promise<{
+      opened: true;
+      url: string;
+    }>;
   };
   /**
    * Scraping cases (W4) — the isolated per-namespace SOCMINT/X collection-run stores, kept
