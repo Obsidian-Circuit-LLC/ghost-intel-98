@@ -448,3 +448,67 @@
   margin-bottom: 8px;
   font-family: inherit;
 }
+
+/* ═══ RE-SKIN — "intelligence workstation" polish ════════════════════════════
+   Lifts the flat base into an accented, layered look. Every colour is a
+   --ga98-* token (or an allowlisted translucent black), so it re-skins BOTH the
+   default (classic, "A") and dark (QUIET AMETHYST, "B") themes automatically —
+   accent = blue in classic, violet in amethyst. */
+
+/* The header stack (dock ▸ session ▸ posture ▸ tabs) reads as one command bar,
+   seated by an accent seam under the campaign dock. */
+.xls-dock { box-shadow: inset 0 3px 0 var(--ga98-accent); }
+
+/* Dashboard stat tiles: an accent top-rule, a big tabular accent figure, and a
+   soft drop so they read as an intelligence readout, not flat boxes. */
+.xls-stat {
+  padding-top: 13px;
+  box-shadow: inset 0 3px 0 var(--ga98-accent), 1px 1px 3px rgba(0,0,0,0.3);
+}
+.xls-stat span { font-size: 10px; letter-spacing: 0.09em; color: var(--ga98-text-dim); }
+.xls-stat strong {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--ga98-accent);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Active tab: an accent underline + weight instead of a flat colour swap. */
+.xls-tab-active {
+  box-shadow: inset 0 -3px 0 var(--ga98-accent);
+  font-weight: 700;
+  color: var(--ga98-text);
+}
+
+/* Content cards get soft depth + an accent left-rule on hover. */
+.xls-post-card,
+.xls-account-card,
+.xls-source-row {
+  box-shadow: 1px 1px 3px rgba(0,0,0,0.3);
+  transition: box-shadow 0.1s ease;
+}
+.xls-post-card:hover,
+.xls-account-card:hover,
+.xls-source-row:hover {
+  box-shadow: 1px 1px 3px rgba(0,0,0,0.35), inset 3px 0 0 var(--ga98-accent);
+}
+
+/* Section titles get an accent tick + workstation caps. */
+.xls-panel-title,
+.xls-subtitle {
+  padding-left: 10px;
+  border-left: 3px solid var(--ga98-accent);
+  text-transform: uppercase;
+}
+
+/* The primary action reads as the accent, not just another grey button. */
+.xls-btn-primary {
+  background: var(--ga98-accent);
+  color: var(--ga98-titlebar-text);
+  border-color: var(--ga98-accent);
+  font-weight: 700;
+}
+.xls-btn-primary:hover:not(:disabled) { background: var(--ga98-accent); filter: brightness(1.12); }
+
+.xls-panel { max-width: 1000px; }
