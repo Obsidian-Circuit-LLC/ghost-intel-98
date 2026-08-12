@@ -17,6 +17,7 @@
  */
 
 import { channels } from '@shared/ipc-contracts';
+import { normalizeXSourceKey } from '@shared/x-listening-source';
 import { assertTrustedSender } from '../capture/capture-window';
 import { csvCell, escapeField } from '../capture/security';
 import type { HarvestedItem } from '@shared/socmint/types';
@@ -613,11 +614,10 @@ function defaultRemoveSourceDeps(): RemoveSourceDeps {
   };
 }
 
-/** Canonicalize a handle/source-key for comparison: strip leading `@`, trim, lowercase. Matches
- *  the renderer's `sourceGroups` key derivation (`channelId || authorHandle`) case-insensitively. */
-function normalizeSourceKey(value: unknown): string {
-  return String(value ?? '').trim().replace(/^@+/, '').trim().toLowerCase();
-}
+/** Canonicalize a handle/source-key for comparison. The SHARED canonicalizer the renderer's
+ *  `sourceGroups` key derivation also uses, so a source card and its cascade-delete agree exactly
+ *  (else two casings render as two cards but removing one deletes both — evidence loss). */
+const normalizeSourceKey = normalizeXSourceKey;
 
 /**
  * Cascade-remove a derived source from a campaign (Task D1): delete every captured post whose

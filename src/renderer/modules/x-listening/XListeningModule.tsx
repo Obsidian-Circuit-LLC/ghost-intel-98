@@ -45,6 +45,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ScrapingCase } from '@shared/types';
+import { normalizeXSourceKey } from '@shared/x-listening-source';
 import { useSettings } from '../../state/store';
 import { confirmDialog, promptDialog } from '../../state/dialogs';
 import { NetworkGraph } from './NetworkGraph';
@@ -557,14 +558,18 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
       { channelId: string; channelLabel: string; count: number; lastPublishedAt: string }
     >();
     for (const p of posts) {
-      const key = p.channelId || p.authorHandle;
+      const raw = p.channelId || p.authorHandle;
+      // Key by the SHARED canonicalization removeSource uses, so two casings of one handle collapse
+      // to a single card (else removing one card would cascade-delete the other's evidence). Keep the
+      // first-seen RAW handle as the card's channelId for display + as the removeSource/capture target.
+      const key = normalizeXSourceKey(raw);
       const existing = map.get(key);
       if (existing) {
         existing.count += 1;
         if (p.publishedAt > existing.lastPublishedAt) existing.lastPublishedAt = p.publishedAt;
       } else {
         map.set(key, {
-          channelId: key,
+          channelId: raw,
           channelLabel: p.channelLabel || `@${p.authorHandle}`,
           count: 1,
           lastPublishedAt: p.publishedAt,
@@ -916,11 +921,22 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
         networkTargetId === 'all'
           ? sourceGroups.map((g) => g.channelId)
           : [networkTargetId];
-      const targets = candidates
-        .map((c) => String(c ?? '').replace(/^@+/, '').trim())
-        .filter((u) => usernameRe.test(u));
+      const targets: string[] = [];
+      const skipped: string[] = [];
+      for (const c of candidates) {
+        const u = String(c ?? '').replace(/^@+/, '').trim();
+        if (usernameRe.test(u)) targets.push(u);
+        else if (u) skipped.push(u);
+      }
+      // Plain-language feedback about which sources were skipped (ADHD-friendliness: never drop
+      // silently). Appended to the final notice on success; shown on its own if nothing is valid.
+      const skipNote = skipped.length
+        ? ` Skipped ${skipped.length} source(s) with an unusable X handle: ${skipped.slice(0, 5).join(', ')}${skipped.length > 5 ? '…' : ''}.`
+        : '';
       if (targets.length === 0) {
-        setNotice('No valid target source to extract. Capture a timeline first, then pick a source.');
+        setNotice(
+          `No valid target source to extract. Capture a timeline first, then pick a source.${skipNote}`,
+        );
         return;
       }
       const kinds: Array<'followers' | 'following'> =
@@ -957,7 +973,8 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
           setNotice(
             `Extracted ${observedTotal} account(s) across ${ran} pass(es)` +
               (lastBlockedReason ? ` (some passes were blocked: ${lastBlockedReason})` : '') +
-              '.',
+              '.' +
+              skipNote,
           );
           await loadInsights(activeCampaignId);
         }
