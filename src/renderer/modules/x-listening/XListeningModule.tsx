@@ -990,13 +990,22 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
 
   // SELECTED FOLLOWERS / SELECTED FOLLOWING stat-card counts — locally observed rows for the
   // selected target (or every target when ALL). Sourced from the captured `networks` accumulator,
-  // never fabricated.
+  // never fabricated. `networksList` returns the store's rows UNFILTERED, so demo/seeded accounts
+  // (`synthetic:true`, demo.ts) must be dropped here — mirroring `computeNetworkAnalysis` and
+  // `exportNetworkCsv`, which already exclude synthetic — or these cards would inflate against the
+  // adjacent analysis cards / CSV whenever demo data is loaded (Global Constraints honesty rule).
   const selectedFollowerCount = useMemo(
-    () => networks.filter((a) => a.kind === 'followers' && matchesSelectedTarget(a.target)).length,
+    () =>
+      networks.filter(
+        (a) => a.kind === 'followers' && !a.synthetic && matchesSelectedTarget(a.target),
+      ).length,
     [networks, matchesSelectedTarget],
   );
   const selectedFollowingCount = useMemo(
-    () => networks.filter((a) => a.kind === 'following' && matchesSelectedTarget(a.target)).length,
+    () =>
+      networks.filter(
+        (a) => a.kind === 'following' && !a.synthetic && matchesSelectedTarget(a.target),
+      ).length,
     [networks, matchesSelectedTarget],
   );
 
@@ -1011,13 +1020,15 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
   );
 
   // EXTRACTED NETWORK RECORDS — the captured accounts scoped by TARGET SOURCE + VIEW, capped at
-  // 3000 (source parity). Synthetic rows never reach here (excluded upstream by the store/analysis
-  // pipeline; captured records are never stamped synthetic).
+  // 3000 (source parity). `networksList` is UNFILTERED, so demo/seeded rows (`synthetic:true`,
+  // demo.ts) are dropped here — this list sits directly above an EXPORT CSV whose count already
+  // excludes synthetic, so an unfiltered list would show demo accounts the export omits.
   const networkRecordRows = useMemo(
     () =>
       networks
         .filter(
           (a) =>
+            !a.synthetic &&
             matchesSelectedTarget(a.target) &&
             (networkView === 'both' || a.kind === networkView),
         )
@@ -1032,13 +1043,17 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
   // SEEN in the latest comparable scan — a review candidate, never asserted as an unfollow (X can
   // truncate/reorder lists). Newest-first, capped 100 (source parity, main.tsx:289).
   const recentNetworkDeltas = useMemo(() => {
+    // `networksList` is UNFILTERED — drop demo/seeded rows (`synthetic:true`, demo.ts) before both
+    // the per-group latest-scan reduction and the delta roll-up, so a demo account never surfaces
+    // as a NEWLY OBSERVED / NOT SEEN candidate (Global Constraints honesty rule).
+    const realNetworks = networks.filter((a) => !a.synthetic);
     const latestByGroup = new Map<string, string>();
-    for (const a of networks) {
+    for (const a of realNetworks) {
       const g = `${a.target}::${a.kind}`;
       const last = a.lastObservedAt ?? '';
       if (last > (latestByGroup.get(g) ?? '')) latestByGroup.set(g, last);
     }
-    return networks
+    return realNetworks
       .map((a) => {
         const latest = latestByGroup.get(`${a.target}::${a.kind}`) ?? '';
         const first = a.firstObservedAt ?? '';

@@ -213,6 +213,32 @@ describe('X Listening Station — Network tab non-graph panels (Task C2a)', () =
     );
   });
 
+  it('excludes synthetic/demo network rows from the SELECTED counts and the records list', async () => {
+    // Seed one demo/seeded follower (synthetic:true, as demo.ts stamps) alongside the real rows.
+    // It must NOT inflate SELECTED FOLLOWERS (stays 4, matching the analysis/CSV surfaces) and must
+    // NOT appear as an EXTRACTED NETWORK RECORD.
+    const withSynthetic = [
+      {
+        target: 'alice', kind: 'followers', capturedAt: '2026-08-03T00:00:00.000Z',
+        accounts: [
+          ...NETWORKS[0].accounts,
+          { handle: 'mallory', displayName: 'Mallory', bio: 'demo', firstObservedAt: '2026-08-03T00:00:00.000Z', lastObservedAt: '2026-08-03T00:00:00.000Z', synthetic: true },
+        ],
+      },
+      NETWORKS[1],
+    ];
+    api.xListening.networksList = vi.fn(async () => withSynthetic);
+    await mount();
+    await clickTab(/network/i);
+    // Still 4 — the synthetic mallory row is dropped, matching COMMON IDENTITIES / HIGH OVERLAP / CSV.
+    expect(statCardValue(/SELECTED FOLLOWERS/i)).toBe('4');
+    // No EXTRACTED NETWORK RECORD carries the demo handle.
+    const recordsText = Array.from(container.querySelectorAll('.xls-network-record'))
+      .map((r) => r.textContent || '')
+      .join(' ');
+    expect(/mallory/i.test(recordsText)).toBe(false);
+  });
+
   it('renders the RECENT NETWORK DELTAS panel with the conservative caveat', async () => {
     await mount();
     await clickTab(/network/i);
