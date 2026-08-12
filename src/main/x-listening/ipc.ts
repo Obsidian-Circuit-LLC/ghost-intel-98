@@ -24,6 +24,8 @@ import type { HarvestedItem } from '@shared/socmint/types';
 import { networkToCsv } from './extract';
 import { collectGateFromSettings, type XCollectionSettings } from '@shared/x-listening-collection-settings';
 import { getCollectionSettings, saveCollectionSettings } from './collection-settings';
+import { normalizeImageMode, type XImageMode } from '@shared/x-listening-image-policy';
+import { getImagePolicy, setProfileImageMode, resolveEffectiveImageCollection } from './image-policy';
 import { prodXStore } from './store';
 import type { XNote, XPostArtifact, XNetworkArtifact, XPreset, XEntityCacheEntry } from './store';
 import { ensureUuid } from '../security/validate';
@@ -853,6 +855,37 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
     );
   });
 
+  // ---- Task F1: per-profile IMAGE-COLLECTION policy ------------------------
+  // A derived read of the encrypted per-campaign policy map + F2's campaign `retrieveImages`, and a
+  // MAIN-side-validated write. No capture window, no network egress. `getImagePolicy` heals a
+  // partial/absent map to a clean canonical one; `setProfileImageMode` rejects any mode that is not
+  // 'on'|'off'|'inherit' (the renderer is never trusted with the mode string) and canonicalizes the
+  // source key before persisting. The capture path (`captureTimeline`) consults the SAME policy: an
+  // 'off' source has no post media fetched/cached.
+  deps.handle(channels.xListening.getImagePolicy, (e, caseIdArg) => {
+    assertTrustedSender(e);
+    if (typeof caseIdArg !== 'string' || !caseIdArg) {
+      throw new Error('Reading the image policy requires a caseId.');
+    }
+    return getImagePolicy(ensureUuid(caseIdArg, 'caseId'));
+  });
+
+  deps.handle(channels.xListening.setProfileImageMode, (e, reqArg) => {
+    assertTrustedSender(e);
+    const req = reqArg as { caseId?: unknown; sourceKey?: unknown; mode?: unknown } | undefined;
+    if (
+      !req ||
+      typeof req.caseId !== 'string' || !req.caseId ||
+      typeof req.sourceKey !== 'string' || !req.sourceKey ||
+      (req.mode !== 'on' && req.mode !== 'off' && req.mode !== 'inherit')
+    ) {
+      throw new Error("Setting an image mode requires a caseId, sourceKey and a mode of 'on', 'off' or 'inherit'.");
+    }
+    // Belt-and-braces: normalize the mode here too (setProfileImageMode also validates MAIN-side).
+    const mode: XImageMode = normalizeImageMode(req.mode);
+    return setProfileImageMode(ensureUuid(req.caseId, 'caseId'), req.sourceKey, mode);
+  });
+
   // ---- Phase-1 Enterprise-port surface (Task 6) --------------------------
   // Session: caseId-scoped, Tor-default (session.ts). `clearnetEnabled` is read MAIN-side and
   // trusted — the renderer never widens the network posture; it only ever flips the persisted
@@ -911,14 +944,24 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
     // `getCollectionSettings` is fail-safe (heals to minimal-capture defaults on any read error).
     const collectionSettings = await getCollectionSettings(caseId);
     const collect = collectGateFromSettings(collectionSettings);
-    return captureTimeline(win, {
-      caseId,
-      jobId: typeof req.jobId === 'string' ? req.jobId : caseId,
-      channelId: req.channelId,
-      channelLabel: typeof req.channelLabel === 'string' ? req.channelLabel : `@${req.channelId}`,
-      targetUsername: req.targetUsername,
-      collect
+    // F1: resolve this source's EFFECTIVE image policy MAIN-side, reusing the campaign settings just
+    // read (no second read) — the per-profile override resolved against `retrieveImages`. Injected so
+    // `captureTimeline` skips media caching for an 'off' source (no pbs.twimg fetch at all).
+    const imagesEnabled = await resolveEffectiveImageCollection(caseId, req.targetUsername, {
+      loadRetrieveImages: async () => collectionSettings.retrieveImages,
     });
+    return captureTimeline(
+      win,
+      {
+        caseId,
+        jobId: typeof req.jobId === 'string' ? req.jobId : caseId,
+        channelId: req.channelId,
+        channelLabel: typeof req.channelLabel === 'string' ? req.channelLabel : `@${req.channelId}`,
+        targetUsername: req.targetUsername,
+        collect
+      },
+      { imagesEnabledForSource: async () => imagesEnabled },
+    );
   });
 
   // Task 14: list every captured post artifact for a campaign — the persisted source of truth

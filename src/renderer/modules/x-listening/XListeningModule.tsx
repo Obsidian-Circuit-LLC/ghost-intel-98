@@ -53,6 +53,12 @@ import {
   type XCollectionSettings,
   type CollectionSettingNumericField,
 } from '@shared/x-listening-collection-settings';
+import {
+  effectiveImageCollection,
+  IMAGE_MODES,
+  DEFAULT_IMAGE_MODE,
+  type XImageMode,
+} from '@shared/x-listening-image-policy';
 import { useSettings } from '../../state/store';
 import { confirmDialog, promptDialog } from '../../state/dialogs';
 import { NetworkGraph } from './NetworkGraph';
@@ -408,6 +414,10 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
   const [collectionSettings, setCollectionSettings] =
     useState<XCollectionSettings>(DEFAULT_COLLECTION_SETTINGS);
   const [collectionSettingsBusy, setCollectionSettingsBusy] = useState(false);
+  // F1: per-profile image-collection policy — the `{ canonicalSourceKey → mode }` override map + the
+  // campaign-wide `retrieveImages` toggle, so each Sources card shows + drives its own Images control.
+  const [imagePolicy, setImagePolicy] =
+    useState<{ modes: Record<string, XImageMode>; retrieveImages: boolean }>({ modes: {}, retrieveImages: true });
   const [presets, setPresets] = useState<XPresetRow[]>([]);
   const [presetNameDraft, setPresetNameDraft] = useState('');
   const [presetsBusy, setPresetsBusy] = useState(false);
@@ -1238,6 +1248,57 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
     };
   }, [activeCampaignId]);
 
+  // F1: load this campaign's per-profile image policy (override map + campaign toggle) on switch.
+  // Guarded so a minimal harness lacking the channel keeps the inherit-everything defaults.
+  useEffect(() => {
+    if (!activeCampaignId) {
+      setImagePolicy({ modes: {}, retrieveImages: true });
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await window.api.xListening.getImagePolicy(activeCampaignId);
+        if (!cancelled && res) {
+          setImagePolicy({
+            modes: res.modes && typeof res.modes === 'object' ? res.modes : {},
+            retrieveImages: res.retrieveImages !== false,
+          });
+        }
+      } catch {
+        if (!cancelled) setImagePolicy({ modes: {}, retrieveImages: true });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeCampaignId]);
+
+  // F1: set one source's image mode. MAIN-side validates the mode + canonicalizes the key and returns
+  // the stored record; we re-seat the local map from it so the control shows exactly what main enforces.
+  const handleSetImageMode = useCallback(
+    async (sourceKey: string, mode: XImageMode) => {
+      if (!activeCampaignId) return;
+      const key = normalizeXSourceKey(sourceKey);
+      try {
+        const res = await window.api.xListening.setProfileImageMode({
+          caseId: activeCampaignId,
+          sourceKey,
+          mode,
+        });
+        setImagePolicy((prev) => {
+          const modes = { ...prev.modes };
+          if (res.imageMode === DEFAULT_IMAGE_MODE) delete modes[res.sourceKey || key];
+          else modes[res.sourceKey || key] = res.imageMode;
+          return { ...prev, modes };
+        });
+      } catch (err) {
+        setNotice(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [activeCampaignId],
+  );
+
   // Local draft edits — booleans flip immediately, numbers are re-clamped MAIN-side on SAVE (the
   // input min/max come from the shared ranges, so the UI can't offer an out-of-band value anyway).
   const setCollectionBool = useCallback((key: keyof XCollectionSettings, next: boolean) => {
@@ -1618,12 +1679,47 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
               <div className="xls-source-cards">
                 {sourceGroups.map((g) => {
                   const busy = sourceBusyId === g.channelId;
+                  // F1: this source's override mode (inherit when unset) + the effective decision it
+                  // yields against the campaign toggle — shown in plain language on the control.
+                  const sourceKey = normalizeXSourceKey(g.channelId);
+                  const imageMode = imagePolicy.modes[sourceKey] ?? DEFAULT_IMAGE_MODE;
+                  const imagesEffective = effectiveImageCollection(imageMode, imagePolicy.retrieveImages);
                   return (
                     <article className="xls-source-card" data-source={g.channelId} key={g.channelId}>
                       <div className="xls-source-card-head">
                         <span className="xls-source-name">{g.channelLabel}</span>
                         <span className="xls-count">
                           {g.count} captured · last {formatWhen(g.lastPublishedAt)}
+                        </span>
+                      </div>
+                      <div className="xls-source-images">
+                        <label className="xls-source-images-label" htmlFor={`xls-img-${sourceKey}`}>
+                          Images
+                        </label>
+                        <select
+                          id={`xls-img-${sourceKey}`}
+                          className="xls-input xls-source-images-select"
+                          aria-label={`Image collection for ${g.channelLabel}`}
+                          value={imageMode}
+                          disabled={!activeCampaignId}
+                          onChange={(e) => void handleSetImageMode(g.channelId, e.target.value as XImageMode)}
+                        >
+                          {IMAGE_MODES.map((m) => (
+                            <option key={m} value={m}>
+                              {m === 'on' ? 'On' : m === 'off' ? 'Off' : 'Inherit'}
+                            </option>
+                          ))}
+                        </select>
+                        <span
+                          className="xls-source-images-effective"
+                          data-effective={imagesEffective ? 'on' : 'off'}
+                          title={
+                            imageMode === 'inherit'
+                              ? `Following the campaign images toggle (currently ${imagePolicy.retrieveImages ? 'on' : 'off'}).`
+                              : `This source overrides the campaign toggle.`
+                          }
+                        >
+                          {imagesEffective ? 'collecting images' : 'no images'}
                         </span>
                       </div>
                       <div className="xls-source-actions">

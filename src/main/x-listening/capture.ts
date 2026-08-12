@@ -63,6 +63,7 @@ import type {
 import type { XTorGate } from './session';
 import type { HarvestedItem } from '@shared/socmint/types';
 import type { XCollectionSettings } from '@shared/x-listening-collection-settings';
+import { normalizeXSourceKey } from '@shared/x-listening-source';
 
 /** This collector's version, stamped into every item's provenance. */
 export const X_COLLECTOR_VERSION = 'x-listening/1.0.0';
@@ -125,6 +126,13 @@ export interface XCaptureDeps {
    *  remote, so `normalizePost`'s `data:`-only filter dropped every one, silently losing the
    *  post's media entirely rather than leaking a remote URL). */
   resolveMedia: (win: Electron.BrowserWindow, url: string, caseId: string) => Promise<string | null>;
+  /** F1: resolve THIS source's EFFECTIVE image-collection policy — the per-profile `imageMode`
+   *  override ('on'/'off'/'inherit') resolved against F2's per-campaign `retrieveImages` toggle.
+   *  When it returns false, the timeline capture skips media caching for EVERY post of this source:
+   *  `resolveMedia` is never called, so no `pbs.twimg.com` fetch is issued at all — the source's
+   *  post media is simply not retrieved. Production default is image-policy.ts's
+   *  `resolveEffectiveImageCollection`, fail-safe to TRUE (the pre-F1 behaviour) on any read hiccup. */
+  imagesEnabledForSource: (caseId: string, sourceKey: string) => Promise<boolean>;
   /** Append one collection-run record for this capture (Task A3). Production default routes to the
    *  encrypted `runLog` sidecar via run-log.ts. A run-log write is OPERATIONAL telemetry, NOT
    *  evidence — a failure here MUST NOT break the capture or drop captured posts, so
@@ -185,6 +193,18 @@ function defaultDeps(): XCaptureDeps {
       const { cacheRemoteMedia } = await import('./media');
       const cached = await cacheRemoteMedia(win, url, caseId);
       return cached ? cached.ref : null;
+    },
+    imagesEnabledForSource: async (caseId, sourceKey) => {
+      // Fail-safe TRUE: a policy read hiccup must never silently STOP collecting media (a functional
+      // regression); an explicit 'off' takes effect only when the sidecar reads cleanly. The media
+      // fetch this gates is host-anchored + Tor-gated regardless, so 'off' is data-minimization, not
+      // a security boundary — degrading to the campaign-inherit behaviour is the safe direction.
+      try {
+        const { resolveEffectiveImageCollection } = await import('./image-policy');
+        return resolveEffectiveImageCollection(caseId, sourceKey);
+      } catch {
+        return true;
+      }
     },
     recordRun: async (caseId, record) => {
       await recordCollectionRun(caseId, record);
@@ -302,6 +322,13 @@ export async function captureTimeline(
   const collect = req.collect ?? DEFAULT_COLLECT;
   const operation: XRunOperation = req.operation ?? 'posts';
   const startedAt = deps.now();
+  // F1: resolve THIS source's effective image policy ONCE, before the capture, keyed by the SAME
+  // canonical source key the Sources cards + `removeSource` use. When false, no post media is
+  // fetched/cached for this source (see the media gate in the capture loop below).
+  const imagesEnabled = await deps.imagesEnabledForSource(
+    req.caseId,
+    normalizeXSourceKey(req.targetUsername),
+  );
   const ctx: NormalizeContext = {
     caseId: req.caseId,
     jobId: req.jobId,
@@ -322,8 +349,12 @@ export async function captureTimeline(
       // Resolve THIS post's media while still inside the guarded/signed-in page — same page
       // the timeline scrape itself ran against, so the media fetch below shares its cookies/
       // session state, mirroring how the scrape and the media fetch always ran against the
-      // same live window in the legacy (pre-Task-15) capture path.
-      const mediaRefs = await resolvePostMediaRefs(win, raw, req.caseId, deps.resolveMedia);
+      // same live window in the legacy (pre-Task-15) capture path. F1: when the source's
+      // effective image policy is OFF, skip media entirely — `resolveMedia` (and thus any
+      // `pbs.twimg.com` fetch) is never called for this source's posts.
+      const mediaRefs = imagesEnabled
+        ? await resolvePostMediaRefs(win, raw, req.caseId, deps.resolveMedia)
+        : [];
       results.push({ item, mediaRefs });
     }
     return results;

@@ -4,6 +4,7 @@
 
 import type { VerifiedPluginInfo, PluginStatus, PluginBridgeApi } from '../shared/plugin-types';
 import type { XCollectionSettings } from '../shared/x-listening-collection-settings';
+import type { XImageMode } from '../shared/x-listening-image-policy';
 import type {
   AppSettings,
   AttachmentBytesResult,
@@ -1078,6 +1079,19 @@ export interface GhostApi {
      *  `saveCollectionSettings`, F2). Every numeric field is bounded to its Enterprise band before
      *  it is stored/consulted; returns the exact clamped record. Local secure-fs only. */
     saveCollectionSettings(req: { caseId: string; settings: Partial<XCollectionSettings> }): Promise<XCollectionSettings>;
+    /** Read a campaign's per-profile IMAGE-COLLECTION policy (image-policy.ts `getImagePolicy`, F1):
+     *  the `{ canonicalSourceKey → mode }` override map + F2's campaign `retrieveImages` toggle, so the
+     *  Sources cards can show each source's Images control AND its effective state. Local secure-fs only. */
+    getImagePolicy(caseId: string): Promise<{ modes: Record<string, XImageMode>; retrieveImages: boolean }>;
+    /** Set one source's per-profile image mode (image-policy.ts `setProfileImageMode`, F1). The mode is
+     *  validated MAIN-side ('on'|'off'|'inherit') and the source key canonicalized before the encrypted
+     *  per-campaign map is updated; returns the stored record + the EFFECTIVE decision (resolved against
+     *  `retrieveImages`). The capture path consults the same policy — an 'off' source fetches no media. */
+    setProfileImageMode(req: { caseId: string; sourceKey: string; mode: XImageMode }): Promise<{
+      sourceKey: string;
+      imageMode: XImageMode;
+      effective: boolean;
+    }>;
   };
   /**
    * Scraping cases (W4) — the isolated per-namespace SOCMINT/X collection-run stores, kept

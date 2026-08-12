@@ -12,6 +12,7 @@ import type { RunEvent } from '../shared/investigation-agent';
 import type { RunBudget } from '../shared/investigation-types';
 import type { IntelReport } from '../shared/investigation-report';
 import type { XCollectionSettings } from '../shared/x-listening-collection-settings';
+import type { XImageMode } from '../shared/x-listening-image-policy';
 
 const api = {
   cases: {
@@ -792,7 +793,13 @@ const api = {
     getCollectionSettings: (caseId: string): Promise<XCollectionSettings> =>
       ipcRenderer.invoke(channels.xListening.getCollectionSettings, caseId),
     saveCollectionSettings: (req: { caseId: string; settings: Partial<XCollectionSettings> }): Promise<XCollectionSettings> =>
-      ipcRenderer.invoke(channels.xListening.saveCollectionSettings, req)
+      ipcRenderer.invoke(channels.xListening.saveCollectionSettings, req),
+    getImagePolicy: (caseId: string): Promise<{ modes: Record<string, XImageMode>; retrieveImages: boolean }> =>
+      ipcRenderer.invoke(channels.xListening.getImagePolicy, caseId),
+    setProfileImageMode: (
+      req: { caseId: string; sourceKey: string; mode: XImageMode },
+    ): Promise<{ sourceKey: string; imageMode: XImageMode; effective: boolean }> =>
+      ipcRenderer.invoke(channels.xListening.setProfileImageMode, req)
   },
   // Scraping cases (W4) — the isolated SOCMINT/X collection-run stores. Every call passes a
   // `store: 'socmint' | 'x'` discriminator that main validates against an allowlist and routes

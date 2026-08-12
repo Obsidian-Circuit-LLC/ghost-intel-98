@@ -332,6 +332,12 @@
   cursor: pointer;
 }
 .xls-source-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+/* F1 — per-profile Images control (On / Off / Inherit) + plain-language effective state. */
+.xls-source-images { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 6px 0; }
+.xls-source-images-label { font-size: 12px; color: var(--ga98-text-dim); }
+.xls-source-images-select { min-width: 90px; }
+.xls-source-images-effective { font-size: 11px; color: var(--ga98-text-dim); }
+.xls-source-images-effective[data-effective='on'] { color: var(--ga98-ok-ink); }
 .xls-btn-danger { border-color: var(--ga98-error-border); color: var(--ga98-danger-ink); }
 .xls-btn-danger:hover:not(:disabled) { background: var(--ga98-error-surface); }
 

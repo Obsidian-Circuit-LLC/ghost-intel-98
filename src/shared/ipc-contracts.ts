@@ -699,7 +699,18 @@ export const channels = {
      *  Enterprise band before it is stored or consulted; returns the exact clamped record. Local
      *  secure-fs only — no capture window, no network egress. Consulted by the capture path
      *  (`captureTimeline` collect gate + `captureNetwork` base passes). */
-    saveCollectionSettings: 'xListening:collectionSettings:save'
+    saveCollectionSettings: 'xListening:collectionSettings:save',
+    /** Read a campaign's per-profile IMAGE-COLLECTION policy (image-policy.ts `getImagePolicy`, F1):
+     *  the `{ canonicalSourceKey → 'on'|'off'|'inherit' }` override map + F2's campaign `retrieveImages`
+     *  toggle, so the renderer can render each source's Images control AND its EFFECTIVE state. Local
+     *  secure-fs only — no capture window, no network egress. */
+    getImagePolicy: 'xListening:imagePolicy:get',
+    /** Set one source's per-profile image mode (image-policy.ts `setProfileImageMode`, F1). The mode
+     *  is validated MAIN-side (must be 'on'|'off'|'inherit' — the renderer is never trusted) and the
+     *  source key canonicalized before the encrypted per-campaign map is updated; returns the stored
+     *  record + the EFFECTIVE decision (resolved against `retrieveImages`). The capture path consults
+     *  the same policy: an 'off' source has NO post media fetched/cached. Local secure-fs only. */
+    setProfileImageMode: 'xListening:imagePolicy:set'
   },
   // Scraping cases — the isolated per-namespace case stores for SOCMINT + X collection runs
   // (kept apart from the core investigation `cases` namespace). Every handler takes a
