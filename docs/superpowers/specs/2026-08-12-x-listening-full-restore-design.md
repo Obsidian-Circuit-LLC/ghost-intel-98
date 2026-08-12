@@ -11,7 +11,7 @@ The X Listening Station shipped in v3.70.0–v3.70.2 is a *feature-reduced* rebu
 ## Resolved decision (operator, 2026-08-12)
 
 - **Target = all features + keep hardening.** Every restored capability is *functionality* rebuilt onto the existing hardened seams. Nothing user-visible is lost; the only differences from source remain invisible (AES-GCM at rest vs plaintext; Tor-default egress vs clearnet-default; anchored host match vs substring). Reverting those would breach the charter and is explicitly NOT in scope.
-- **UI = reskin only.** The Win98/GI98 module shell + QUIET-AMETHYST-compatible theming replaces the Enterprise sidebar/branding. Feature surface must reach parity; chrome does not.
+- **UI = reskin only, and the reskin REPRODUCES the Enterprise look** (operator decision 2026-08-12). The Enterprise shell feel — left sidebar, brand block, campaign dock, nav menu with live count badges, Tor box, session box, masthead banner, topbar — is reproduced in GI98 theme tokens (classic + QUIET AMETHYST), not replaced by bare Win98 module chrome. Feature surface AND look reach parity; only the underlying theming system differs. See J2.
 
 ## Global Constraints (bind every task)
 
@@ -53,7 +53,7 @@ Each item: **source behaviour → target seam → hardening constraint → accep
 - **F2 ◐ Full COLLECTION SETTINGS form (System tab).** Source knobs: automatic-sweeps toggle; RECORD TYPES (collect replies/reposts/third-party comments/retrieve+archive images, comment threads per source, comment scroll passes); TIMING+HEALTH (sweep interval, profile scroll passes, follower/following base passes, network stagnation limit, snapshots retained, delay per pass, retention limit); INCREMENTAL ARCHIVE (enable, interval, post/network depth added per cycle, max depths, archive followers/following). Each clamped min/max, persisted **per-campaign**, restarts timers. → Target: render the full form in the System tab; persist per-campaign settings via secure-fs; clamp every field. → Accept: every knob present, clamped, persisted per-campaign, and actually consulted by the capture/archive paths.
 
 ### G. Automatic scheduling (✗ — bounded redesign)
-- **G1 ✗ Automatic sweeps + auto archive cycles.** Source: free-running `setInterval` auto-sweep on `intervalMinutes` + auto archive on `archiveIntervalMinutes`. **Operator wants this restored; I flagged the opsec/rate-limit risk of unattended authenticated scraping.** → Target: a **bounded, explicit, fail-closed scheduler** — opt-in toggle (default off), only runs while the session is connected AND Tor is verified (fail-closed: a dropped Tor exit pauses the schedule, never falls back to clearnet), honours a jittered interval floor to avoid a fixed fingerprint, and surfaces a visible "next sweep" + a one-click pause. Capability parity with source (it sweeps on a timer); safety added around it. → Accept: enabling the schedule runs sweeps at the interval only under a verified Tor session; disabling/Tor-loss halts it; a test asserts no sweep fires without a verified gate.
+- **G1 ✗ Automatic sweeps + auto archive cycles — source-exact timer (operator decision 2026-08-12).** Source: free-running `setInterval` auto-sweep on `intervalMinutes` + auto archive on `archiveIntervalMinutes`. → Target: restore the **source-exact free-running timer** (fixed cadence, sweeps on schedule regardless of UI state — no automatic pause, no jitter-bounding). **Egress safety is user-controlled, not automatic:** each sweep's actual capture still routes through the existing egress gate (`resolveXTorGate`) — Tor-default **fails closed** (no capture, no silent clearnet leak) unless the user has enabled the **clearnet toggle with the appropriate warnings** (`AppSettings.xListening.clearnet`/`clearnetAck`: one-time real-IP acknowledgement + explicit warning copy on the toggle). So the timer matches the source exactly; the user consciously chooses Tor (fail-closed) or warned-clearnet. → Accept: enabling the schedule sweeps at the fixed interval; in Tor-mode a dropped exit makes the sweep capture fail closed (no clearnet fallback); the clearnet toggle renders a clear real-IP warning and requires the ack; a test asserts no sweep capture egresses over clearnet unless `clearnetAck` is set.
 
 ### H. Avatar/media polish (◐)
 - **H1 ◐ Avatar-repair-on-startup.** Source: `scheduleAvatarRepair`/`repairExistingProfileAvatars` re-fetch missing avatars on launch. → Target: a bounded startup pass over the active campaign's profiles, Tor-gated, anchored fetch. → Accept: a profile with a missing cached avatar re-fetches on next launch (under Tor).
@@ -63,7 +63,7 @@ Each item: **source behaviour → target seam → hardening constraint → accep
 
 ### J. Campaigns / misc parity
 - **J1 ◐** Confirm Campaign **Duplicate** (present, verify parity: clones profiles+presets with new IDs, resets counts). Campaign editor modal fields to parity.
-- **J2 (cosmetic, optional)** Enterprise sidebar/branding/banner + per-nav count badges — OUT of scope unless operator opts in; feature parity does not require it.
+- **J2 Enterprise look (GI98-themed) — IN scope (operator decision 2026-08-12).** Reproduce the Enterprise shell feel: left sidebar (brand block, campaign dock, nav menu with **live count badges**, Tor box, session box), masthead banner, topbar (eyebrow + active-campaign line + action buttons). Re-skinned entirely with `--ga98-*` tokens so it renders in classic + QUIET AMETHYST; token-only, no hardcoded colours, no-straggler guard green. Visual parity with GhostExodus's Enterprise app — replaces the bare Win98 module chrome. (Confirm exact look against the demo video once uploaded.)
 
 ## UI reskin
 
@@ -78,9 +78,8 @@ The restored surface uses the existing `x-listening.css` token system + the v3.7
 
 ## Out of scope
 
-- Any security-invariant regression (plaintext at rest, clearnet-default, substring host match) — explicitly excluded per operator decision.
-- Enterprise cosmetic shell (J2) unless opted in.
-- The SDR/SIGINT tool (separate workstream, gated behind its charter/legal review).
+- Any security-invariant regression (plaintext at rest, clearnet-default, substring host match) — explicitly excluded per operator decision. (Note: the free-running auto-sweep timer is source-exact per G1, but its egress still honours the Tor-default/acked-clearnet gate — the timer cadence is source-exact, the leak posture is not regressed.)
+- The WebSDR viewer (separate workstream/branch, gated behind its Phase-0 feasibility spike).
 
 ## Decomposition (for the plan)
 
@@ -88,6 +87,6 @@ Staged like the original port, each phase ending green + adversarially reviewed:
 - **Phase 1 — evidence integrity:** A1, A2, A3, B1.
 - **Phase 2 — network parity:** C1, C2, D1, E1.
 - **Phase 3 — settings + policy + scheduling:** F1, F2, G1, H1.
-- **Phase 4 — PostCard + reskin + campaign parity:** I1, J1, reskin pass, whole-branch review.
+- **Phase 4 — PostCard + Enterprise-look shell + campaign parity:** I1, J1, **J2 (Enterprise-look shell reskinned in GI98 tokens)**, whole-branch review.
 
 Each phase: TDD implementers (sequential, shared tree) + per-task review, then a parallel adversarial whole-branch review (refute-by-default) before merge — the pattern that caught a real critical in every phase of the original port.
