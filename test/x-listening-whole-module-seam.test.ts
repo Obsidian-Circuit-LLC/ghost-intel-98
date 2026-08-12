@@ -59,6 +59,7 @@ const REACHABLE_CHANNELS: ReadonlyArray<keyof typeof channels.xListening> = [
   'runLog',
   'openInX',
   'captureNetwork',
+  'removeSource',
   'saveNote',
   'readNotes',
   'removeNote',

@@ -681,7 +681,14 @@ export const channels = {
      *  a malformed ref throws, opening nothing. Tor-gated (FAIL CLOSED — no clearnet fallback
      *  unless the acked clearnet toggle is on). Consumed by the Network graph inspector (C2b) and
      *  the per-source "View X" action (D1). Opens IN-APP only, never via an OS shell hand-off. */
-    openInX: 'xListening:openInX'
+    openInX: 'xListening:openInX',
+    /** Cascade-remove a DERIVED source from a campaign (ipc.ts `removeSource`, Task D1 — Target
+     *  Sources REMOVE). A source is not a persisted record — it is derived from the captured posts —
+     *  so removal is a read-filter-write over the `posts` + `networks` sidecars: every post whose
+     *  `channelId`/`authorHandle` matches `sourceKey` and every network artifact whose `target`
+     *  matches are dropped (case-insensitive, `@`-insensitive). Local secure-fs only — no window,
+     *  no network egress. Returns the counts removed. Consumed by the per-source REMOVE action. */
+    removeSource: 'xListening:removeSource'
   },
   // Scraping cases — the isolated per-namespace case stores for SOCMINT + X collection runs
   // (kept apart from the core investigation `cases` namespace). Every handler takes a

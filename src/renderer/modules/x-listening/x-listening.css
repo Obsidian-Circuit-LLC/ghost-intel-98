@@ -331,9 +331,27 @@
   border: none;
   cursor: pointer;
 }
-.xls-source-actions { display: flex; gap: 6px; }
+.xls-source-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .xls-btn-danger { border-color: var(--ga98-error-border); color: var(--ga98-danger-ink); }
 .xls-btn-danger:hover:not(:disabled) { background: var(--ga98-error-surface); }
+
+/* Task D1 — Target Sources per-source action cards (REFRESH / VIEW X / NETWORK / REMOVE). */
+.xls-source-cards { display: flex; flex-direction: column; gap: 8px; }
+.xls-source-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background: var(--ga98-grey);
+  border: 1px solid var(--ga98-shadow-dark);
+}
+.xls-source-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
 
 .xls-empty {
   padding: 14px;

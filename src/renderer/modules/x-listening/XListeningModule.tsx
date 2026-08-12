@@ -360,6 +360,9 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
 
   const [targetUsername, setTargetUsername] = useState('');
   const [captureBusy, setCaptureBusy] = useState(false);
+  // Task D1: which source card is mid-action (REFRESH/REMOVE) — drives per-card busy state so the
+  // analyst gets immediate one-click feedback on the exact row acted on (ADHD-friendly).
+  const [sourceBusyId, setSourceBusyId] = useState<string | null>(null);
   const [liveKindFilter, setLiveKindFilter] = useState<'all' | XPostRow['kind']>('all');
   const [entityTypeFilter, setEntityTypeFilter] = useState('all');
 
@@ -966,6 +969,87 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
     [activeCampaignId, networkTargetId, sourceGroups, loadInsights],
   );
 
+  // ── Task D1: Target Sources per-source card actions (source: main.tsx TARGET SOURCES) ────────
+  // Each captured source gets REFRESH / VIEW X / NETWORK / REMOVE (per-profile IMAGES is Phase-3 F1,
+  // intentionally omitted here). A "source" is derived client-side from posts, so these operate on
+  // the source's username (`channelId`), never a persisted profile record.
+
+  // REFRESH — a single-source timeline capture. Reuses the SAME real `captureTimeline` channel the
+  // Live/Sources capture uses (Tor-gated MAIN-side, fail-closed), scoped to this one source. On
+  // success the PERSISTED list is re-read so the new posts land in every view. Immediate per-card
+  // feedback via `sourceBusyId`.
+  const handleRefreshSource = useCallback(
+    async (sourceKey: string) => {
+      if (!activeCampaignId) {
+        setNotice('Create or select a campaign before refreshing a source.');
+        return;
+      }
+      const username = String(sourceKey ?? '').replace(/^@+/, '').trim();
+      if (!username) return;
+      setSourceBusyId(sourceKey);
+      try {
+        const res = await window.api.xListening.captureTimeline({
+          caseId: activeCampaignId,
+          channelId: username,
+          channelLabel: `@${username}`,
+          targetUsername: username,
+        });
+        if (res?.blocked) {
+          setNotice(res.reason ?? 'Capture blocked.');
+        } else {
+          setNotice(
+            `Refreshed @${username}: ${res?.added ?? 0} new post(s) (${res?.skipped ?? 0} already known).`,
+          );
+          await loadInsights(activeCampaignId);
+        }
+      } catch (err) {
+        setNotice(err instanceof Error ? err.message : String(err));
+      } finally {
+        setSourceBusyId(null);
+      }
+    },
+    [activeCampaignId, loadInsights],
+  );
+
+  // NETWORK — jump to the Network tab with this source pre-selected as the extraction TARGET SOURCE
+  // (C1's `networkTargetId`, keyed by `channelId`). No IPC — a pure in-app navigation + preselect.
+  const handleSourceNetwork = useCallback((sourceKey: string) => {
+    setNetworkTargetId(sourceKey);
+    setTab('network');
+  }, []);
+
+  // REMOVE — cascade-delete this source's evidence (posts + follower/following network artifacts)
+  // through the real `removeSource` channel, behind a confirm gate (destructive). On success the
+  // PERSISTED insights are re-read so the source (derived from posts) disappears from every view.
+  const handleRemoveSource = useCallback(
+    async (source: { channelId: string; channelLabel: string }) => {
+      if (!activeCampaignId) return;
+      const ok = await confirmDialog(
+        `Remove ${source.channelLabel} from this campaign? This permanently deletes its captured ` +
+          'posts and any follower/following network records it holds.',
+        'Remove source',
+      );
+      if (!ok) return;
+      setSourceBusyId(source.channelId);
+      try {
+        const res = await window.api.xListening.removeSource({
+          caseId: activeCampaignId,
+          sourceKey: source.channelId,
+        });
+        setNotice(
+          `Removed ${source.channelLabel}: ${res?.removedPosts ?? 0} post(s) and ` +
+            `${res?.removedNetworks ?? 0} network record(s) deleted.`,
+        );
+        await loadInsights(activeCampaignId);
+      } catch (err) {
+        setNotice(err instanceof Error ? err.message : String(err));
+      } finally {
+        setSourceBusyId(null);
+      }
+    },
+    [activeCampaignId, loadInsights],
+  );
+
   // ── Task C2a: Network tab derived views (source: main.tsx FOLLOWER NETWORK) ───────────────
   // The TARGET SOURCE selector ('all' or one captured source username = channelId) scopes the
   // SELECTED counts + EXTRACTED NETWORK RECORDS. `@`-insensitive, case-insensitive match against
@@ -1457,16 +1541,57 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
             {sourceGroups.length === 0 ? (
               <div className="xls-empty">No source targets captured in this campaign yet.</div>
             ) : (
-              <ul className="xls-source-list">
-                {sourceGroups.map((g) => (
-                  <li className="xls-source-row" key={g.channelId}>
-                    <span className="xls-source-name">{g.channelLabel}</span>
-                    <span className="xls-count">
-                      {g.count} captured · last {formatWhen(g.lastPublishedAt)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+              <div className="xls-source-cards">
+                {sourceGroups.map((g) => {
+                  const busy = sourceBusyId === g.channelId;
+                  return (
+                    <article className="xls-source-card" data-source={g.channelId} key={g.channelId}>
+                      <div className="xls-source-card-head">
+                        <span className="xls-source-name">{g.channelLabel}</span>
+                        <span className="xls-count">
+                          {g.count} captured · last {formatWhen(g.lastPublishedAt)}
+                        </span>
+                      </div>
+                      <div className="xls-source-actions">
+                        <button
+                          type="button"
+                          className="xls-btn"
+                          disabled={busy || !activeCampaignId}
+                          title={`Capture the latest timeline for ${g.channelLabel}.`}
+                          onClick={() => void handleRefreshSource(g.channelId)}
+                        >
+                          {busy ? 'Working…' : 'Refresh'}
+                        </button>
+                        <button
+                          type="button"
+                          className="xls-btn"
+                          title={`Open ${g.channelLabel} on X in a hardened Tor-gated window.`}
+                          onClick={() => void handleOpenInX('profile', g.channelId)}
+                        >
+                          View X
+                        </button>
+                        <button
+                          type="button"
+                          className="xls-btn"
+                          title={`Jump to the Follower Network tab with ${g.channelLabel} pre-selected.`}
+                          onClick={() => handleSourceNetwork(g.channelId)}
+                        >
+                          Network
+                        </button>
+                        <button
+                          type="button"
+                          className="xls-btn xls-btn-danger"
+                          disabled={busy || !activeCampaignId}
+                          title={`Remove ${g.channelLabel} and delete its captured evidence.`}
+                          onClick={() => void handleRemoveSource(g)}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
             )}
           </section>
         )}

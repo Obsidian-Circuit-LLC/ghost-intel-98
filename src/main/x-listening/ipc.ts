@@ -22,7 +22,7 @@ import { csvCell, escapeField } from '../capture/security';
 import type { HarvestedItem } from '@shared/socmint/types';
 import { networkToCsv, type XCollectSettings } from './extract';
 import { prodXStore } from './store';
-import type { XNote, XPostArtifact, XPreset, XEntityCacheEntry } from './store';
+import type { XNote, XPostArtifact, XNetworkArtifact, XPreset, XEntityCacheEntry } from './store';
 import { ensureUuid } from '../security/validate';
 
 // ---- Phase-1 Enterprise-port surface (Task 6) ----------------------------
@@ -586,6 +586,74 @@ export async function removePreset(
   return { presets };
 }
 
+// ---- Task D1: per-source cascade removal (Target Sources REMOVE) ----------
+// A "source" is not a first-class persisted record in the hardened core — it is DERIVED
+// client-side from the captured posts (Enterprise's `state.profiles` was retired). So removing a
+// source = deleting the evidence keyed to that username: its captured posts AND any follower/
+// following network artifacts extracted FOR it. This is a read-filter-write over the `posts` and
+// `networks` sidecars — the same primitive `removeNote`/`removePreset` already use (the store
+// exposes no dedicated per-source delete). Pure filter (no `Date.now()`/RNG, no hash recompute —
+// each surviving artifact is written back byte-for-byte, so evidence hashes are untouched).
+
+/** Injectable seams for `removeSource` — read+filter+write over the `posts` and `networks`
+ *  sidecars, mirroring `removeNote`/`removePreset`'s shape. */
+export interface RemoveSourceDeps {
+  readPosts: (caseId: string) => Promise<XPostArtifact[]>;
+  writePosts: (caseId: string, posts: XPostArtifact[]) => Promise<void>;
+  readNetworks: (caseId: string) => Promise<XNetworkArtifact[]>;
+  writeNetworks: (caseId: string, networks: XNetworkArtifact[]) => Promise<void>;
+}
+
+function defaultRemoveSourceDeps(): RemoveSourceDeps {
+  return {
+    readPosts: async (caseId) => (await prodXStore()).posts.read(caseId),
+    writePosts: async (caseId, posts) => (await prodXStore()).posts.write(caseId, posts),
+    readNetworks: async (caseId) => (await prodXStore()).networks.read(caseId),
+    writeNetworks: async (caseId, networks) => (await prodXStore()).networks.write(caseId, networks)
+  };
+}
+
+/** Canonicalize a handle/source-key for comparison: strip leading `@`, trim, lowercase. Matches
+ *  the renderer's `sourceGroups` key derivation (`channelId || authorHandle`) case-insensitively. */
+function normalizeSourceKey(value: unknown): string {
+  return String(value ?? '').trim().replace(/^@+/, '').trim().toLowerCase();
+}
+
+/**
+ * Cascade-remove a derived source from a campaign (Task D1): delete every captured post whose
+ * `channelId`/`authorHandle` matches `sourceKey`, and every network artifact whose `target`
+ * matches. A key that matches nothing is a harmless no-op that still rewrites the (unchanged)
+ * lists, mirroring `removeNote`/`removePreset`. Rejects a blank `sourceKey` before touching the
+ * store. Returns the counts removed. Synthetic/demo rows are removed too when they match — a demo
+ * source the analyst chose to delete should not linger (they are still excluded from analysis/
+ * exports/hashing everywhere else; this is a straight user-initiated delete, not an analysis path).
+ */
+export async function removeSource(
+  caseId: string,
+  sourceKey: string,
+  overrides: Partial<RemoveSourceDeps> = {}
+): Promise<{ removedPosts: number; removedNetworks: number }> {
+  const key = normalizeSourceKey(sourceKey);
+  if (!key) {
+    throw new Error('Removing a source requires a source key.');
+  }
+  const deps = { ...defaultRemoveSourceDeps(), ...overrides };
+
+  const posts = await deps.readPosts(caseId);
+  const keptPosts = posts.filter(
+    (p) => normalizeSourceKey(p.channelId || p.authorHandle) !== key
+  );
+  const removedPosts = posts.length - keptPosts.length;
+  await deps.writePosts(caseId, keptPosts);
+
+  const networks = await deps.readNetworks(caseId);
+  const keptNetworks = networks.filter((n) => normalizeSourceKey(n.target) !== key);
+  const removedNetworks = networks.length - keptNetworks.length;
+  await deps.writeNetworks(caseId, keptNetworks);
+
+  return { removedPosts, removedNetworks };
+}
+
 // ---- Task 15: interactive (native-save-dialog-gated) file exports --------
 // Closes the `exportXPostsToFile`/network-CSV arbitrary-write finding: `exports.ts`'s
 // `exportXPostsToFile` trusts its `filePath` argument verbatim, so a channel that took a
@@ -756,6 +824,18 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
       throw new Error('Removing a note requires a caseId and findingId.');
     }
     return removeNote(ensureUuid(req.caseId, 'caseId'), req.findingId);
+  });
+  // Task D1 — per-source cascade removal. `assertTrustedSender` FIRST; then require a caseId +
+  // a non-empty `sourceKey` string before delegating. UUID-gates the caseId; the sourceKey is
+  // canonicalized + matched inside `removeSource` (no window opens, no network egress — a local
+  // secure-fs read-filter-write only).
+  deps.handle(channels.xListening.removeSource, (e, reqArg) => {
+    assertTrustedSender(e);
+    const req = reqArg as { caseId?: unknown; sourceKey?: unknown } | undefined;
+    if (!req || typeof req.caseId !== 'string' || typeof req.sourceKey !== 'string' || !req.sourceKey) {
+      throw new Error('Removing a source requires a caseId and sourceKey.');
+    }
+    return removeSource(ensureUuid(req.caseId, 'caseId'), req.sourceKey);
   });
 
   // ---- Phase-1 Enterprise-port surface (Task 6) --------------------------

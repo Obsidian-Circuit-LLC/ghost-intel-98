@@ -1062,6 +1062,14 @@ export interface GhostApi {
       completedPasses: number;
       reachedEnd: boolean;
     }>;
+    /** Cascade-remove a derived source from a campaign (ipc.ts `removeSource`, Task D1). Deletes
+     *  every captured post + follower/following network artifact keyed to `sourceKey`
+     *  (case-insensitive, `@`-insensitive). Local secure-fs read-filter-write only — no window,
+     *  no network egress. Returns the counts removed. */
+    removeSource(req: { caseId: string; sourceKey: string }): Promise<{
+      removedPosts: number;
+      removedNetworks: number;
+    }>;
   };
   /**
    * Scraping cases (W4) — the isolated per-namespace SOCMINT/X collection-run stores, kept

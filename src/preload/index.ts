@@ -785,7 +785,9 @@ const api = {
       channelId: string;
       targetUsername: string;
       kind: 'followers' | 'following';
-    }) => ipcRenderer.invoke(channels.xListening.captureNetwork, req)
+    }) => ipcRenderer.invoke(channels.xListening.captureNetwork, req),
+    removeSource: (req: { caseId: string; sourceKey: string }) =>
+      ipcRenderer.invoke(channels.xListening.removeSource, req)
   },
   // Scraping cases (W4) — the isolated SOCMINT/X collection-run stores. Every call passes a
   // `store: 'socmint' | 'x'` discriminator that main validates against an allowlist and routes
