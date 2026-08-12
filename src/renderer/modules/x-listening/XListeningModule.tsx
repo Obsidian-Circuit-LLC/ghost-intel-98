@@ -47,6 +47,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ScrapingCase } from '@shared/types';
 import { useSettings } from '../../state/store';
 import { confirmDialog, promptDialog } from '../../state/dialogs';
+import { NetworkGraph } from './NetworkGraph';
 import './x-listening.css';
 
 /** A campaign IS an x-namespace scraping-case id (campaigns.ts) — no separate shape. */
@@ -965,14 +966,6 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
     [activeCampaignId, networkTargetId, sourceGroups, loadInsights],
   );
 
-  // The relationship-graph edges filtered by the VIEW selector (followers+following / one).
-  const visibleNetworkEdges = useMemo(() => {
-    const edges = analysis.graph?.edges ?? [];
-    if (networkView === 'both') return edges;
-    const want = networkView === 'followers' ? 'follower' : 'following';
-    return edges.filter((e) => e.relationship === want);
-  }, [analysis.graph, networkView]);
-
   // ── Task C2a: Network tab derived views (source: main.tsx FOLLOWER NETWORK) ───────────────
   // The TARGET SOURCE selector ('all' or one captured source username = channelId) scopes the
   // SELECTED counts + EXTRACTED NETWORK RECORDS. `@`-insensitive, case-insensitive match against
@@ -1718,28 +1711,16 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
 
             <div className="xls-panel">
               <div className="xls-panel-title-row">
-                <h3 className="xls-panel-title">RELATIONSHIP GRAPH</h3>
+                <h3 className="xls-panel-title">COMMON NETWORK MIND MAP</h3>
                 <span className="xls-count">
-                  {analysis.graph.nodes.length} nodes · {visibleNetworkEdges.length} edges
+                  {analysis.graph?.nodes?.length ?? 0} nodes · {analysis.graph?.edges?.length ?? 0}{' '}
+                  edges
                 </span>
               </div>
-              {visibleNetworkEdges.length === 0 ? (
-                <div className="xls-empty">
-                  No relationship edges for this view — use EXTRACT FOLLOWERS / FOLLOWING above to
-                  populate this graph.
-                </div>
-              ) : (
-                <ul className="xls-source-list">
-                  {visibleNetworkEdges.map((edge) => (
-                    <li className="xls-source-row" key={edge.id}>
-                      <span>
-                        {edge.source} → {edge.target}
-                      </span>
-                      <span className="xls-count">{edge.relationship.toUpperCase()}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <NetworkGraph
+                graph={analysis.graph ?? { nodes: [], edges: [] }}
+                onOpenIdentity={(u) => void handleOpenInX('identity', u)}
+              />
             </div>
 
             <div className="xls-panel">

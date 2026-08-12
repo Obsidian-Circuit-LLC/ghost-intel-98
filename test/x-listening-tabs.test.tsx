@@ -83,7 +83,17 @@ const ANALYSIS = {
     },
   ],
   graph: {
-    nodes: [{ id: 't:alice', type: 'target', label: '@alice', username: 'alice' }],
+    nodes: [
+      { id: 't:alice', type: 'target', label: '@alice', username: 'alice' },
+      {
+        id: 'i:shared1',
+        type: 'identity',
+        label: '@shared1',
+        username: 'shared1',
+        score: 80,
+        connectedTargets: 2,
+      },
+    ],
     edges: [{ id: 'e1', source: 't:alice', target: 'i:shared1', relationship: 'follower' }],
   },
 };
@@ -304,7 +314,11 @@ describe('X Listening Station tabs (Task 14)', () => {
     const text = container.textContent || '';
     expect(text).toMatch(/shared1/);
     expect(text).toMatch(/COMMON FOLLOWER/i);
-    expect(text).toMatch(/t:alice.*i:shared1|i:shared1|t:alice/);
+    // The COMMON NETWORK MIND MAP (Task C2b) renders the analysis graph as an interactive SVG:
+    // the @alice target + @shared1 identity node labels are drawn, and the panel title is present.
+    expect(text).toMatch(/COMMON NETWORK MIND MAP/i);
+    expect(container.querySelector('svg.xls-network-graph')).toBeTruthy();
+    expect(text).toMatch(/@shared1/);
   });
 
   it('entities tab lists the real entity rollup from the entities channel', async () => {

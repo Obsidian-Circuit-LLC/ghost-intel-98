@@ -129,6 +129,27 @@
   --ga98-toast-success-fill: #006400; /* Toaster "Success" title bar — classic literal */
   --ga98-toast-warn-fill: #8a5a00;    /* Toaster "Warning" title bar — classic literal */
   --ga98-toast-error-fill: #900000;   /* Toaster "Error" title bar — classic literal */
+  /* ── Network mind-map (X Listening COMMON NETWORK graph) — decorative cluster palette ────────
+     The mind-map canvas is an intentionally DARK console surface in BOTH themes (the Enterprise
+     look reproduced), so the neon cluster hues are shared and only the canvas/panel/ring backdrop
+     shifts per theme (amethyst violet-tints it below). Every graph stroke/fill/text colour resolves
+     through one of these tokens, so the map themes classic + amethyst with no literal in the
+     component CSS. NOT locked (decorative skinnable palette, excluded from LOCKED_TOKENS). */
+  --ga98-graph-bg: #0a0e1a;        /* dark mind-map canvas */
+  --ga98-graph-panel: #111726;     /* legend/inspector strip on the canvas */
+  --ga98-graph-ring: #24304d;      /* orbital ring stroke */
+  --ga98-graph-ink: #e6e9f5;       /* hub + inspector/legend text on the dark canvas */
+  --ga98-graph-ink-dim: #9aa4c6;   /* secondary caption text on the dark canvas */
+  --ga98-graph-badge-ink: #0a0e1a; /* dark ink for node initials + score badges over bright hues */
+  --ga98-graph-hub: #16406a;       /* central COMMON NETWORK hub fill */
+  --ga98-graph-hue-0: #ff4d6d;     /* neon cluster palette (reads on the dark canvas in both themes) */
+  --ga98-graph-hue-1: #39ff14;
+  --ga98-graph-hue-2: #ff2bd6;
+  --ga98-graph-hue-3: #ff8c1a;
+  --ga98-graph-hue-4: #ffe600;
+  --ga98-graph-hue-5: #29b6ff;
+  --ga98-graph-hue-6: #b26bff;
+  --ga98-graph-hue-7: #1de9b6;
 }
 
 html, body, #root {
@@ -272,6 +293,12 @@ input, textarea, [contenteditable="true"], .ga98-selectable {
   --ga98-toast-success-fill: #0a5c30;
   --ga98-toast-warn-fill: #7a4f00;
   --ga98-toast-error-fill: #a01722;
+  /* Network mind-map — amethyst backdrop (the neon cluster hues + ink are shared from base :root;
+     only the canvas/panel/ring/hub backdrop shifts to a violet-tinted near-black). */
+  --ga98-graph-bg: #0c0a16;
+  --ga98-graph-panel: #171128;
+  --ga98-graph-ring: #322550;
+  --ga98-graph-hub: #3a2168;
 }
 
 /* ── QUIET AMETHYST — Task 8 long-tail utility classes ──────────────────────────────────────────

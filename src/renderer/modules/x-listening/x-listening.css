@@ -681,3 +681,164 @@
 .xls-delta-row .xls-identity-main { margin-right: 6px; }
 
 .xls-panel { max-width: 1000px; }
+
+/* ── Task C2b: COMMON NETWORK MIND MAP (interactive SVG graph) ───────────────────────────────────
+   Token-only: every stroke/fill/text colour resolves through a --ga98-graph-* token so the map
+   themes in classic + QUIET AMETHYST (the no-straggler guard stays green — no literal here). Each
+   node/edge carries an .xls-graph-hue-N class that binds --xls-hue to one of the 8 shared neon
+   cluster tokens; the structural rules below consume var(--xls-hue). */
+.xls-graph-hue-0 { --xls-hue: var(--ga98-graph-hue-0); }
+.xls-graph-hue-1 { --xls-hue: var(--ga98-graph-hue-1); }
+.xls-graph-hue-2 { --xls-hue: var(--ga98-graph-hue-2); }
+.xls-graph-hue-3 { --xls-hue: var(--ga98-graph-hue-3); }
+.xls-graph-hue-4 { --xls-hue: var(--ga98-graph-hue-4); }
+.xls-graph-hue-5 { --xls-hue: var(--ga98-graph-hue-5); }
+.xls-graph-hue-6 { --xls-hue: var(--ga98-graph-hue-6); }
+.xls-graph-hue-7 { --xls-hue: var(--ga98-graph-hue-7); }
+
+.xls-graph-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.xls-graph-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.xls-graph-mode {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.xls-graph-mode-btn.active {
+  border-color: var(--ga98-accent);
+  box-shadow: inset 0 0 0 1px var(--ga98-accent);
+  font-weight: bold;
+}
+.xls-graph-visible {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.xls-graph-canvas {
+  background: var(--ga98-graph-bg);
+  border: 1px solid var(--ga98-shadow-dark);
+  padding: 6px;
+}
+.xls-network-graph {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 70vh;
+}
+.xls-mind-ring {
+  fill: none;
+  stroke: var(--ga98-graph-ring);
+  stroke-width: 1;
+}
+.xls-mind-ring-outer { stroke-dasharray: 3 6; opacity: 0.7; }
+.xls-mind-center circle {
+  fill: var(--ga98-graph-hub);
+  stroke: var(--ga98-graph-ink);
+  stroke-width: 1;
+}
+.xls-mind-center text {
+  fill: var(--ga98-graph-ink);
+  font-size: 10px;
+  font-weight: bold;
+  letter-spacing: 0.5px;
+}
+.xls-mind-edge {
+  fill: none;
+  stroke: var(--xls-hue);
+  stroke-width: 1.5;
+  opacity: 0.85;
+}
+.xls-mind-edge.following { stroke-dasharray: 4 4; }
+.xls-mind-edge.muted { opacity: 0.12; }
+.xls-mind-node { cursor: pointer; }
+.xls-mind-node.click-node { cursor: pointer; }
+.xls-mind-node .xls-node-fill {
+  fill: var(--xls-hue);
+  stroke: var(--ga98-graph-bg);
+  stroke-width: 1.5;
+  transition: opacity 120ms ease;
+}
+.xls-mind-node .xls-node-initial {
+  fill: var(--ga98-graph-badge-ink);
+  font-size: 11px;
+  font-weight: bold;
+  pointer-events: none;
+}
+.xls-mind-node .xls-node-label {
+  fill: var(--xls-hue);
+  font-size: 11px;
+  pointer-events: none;
+}
+.xls-mind-node .xls-score-badge {
+  fill: var(--xls-hue);
+  stroke: var(--ga98-graph-bg);
+  stroke-width: 1;
+}
+.xls-mind-node .xls-score-label {
+  fill: var(--ga98-graph-badge-ink);
+  font-size: 7px;
+  font-weight: bold;
+  pointer-events: none;
+}
+.xls-mind-node.dimmed { opacity: 0.18; }
+.xls-mind-node.selected .xls-node-fill { stroke: var(--ga98-graph-ink); stroke-width: 2.5; }
+.xls-mind-node:focus-visible .xls-node-fill { stroke: var(--ga98-graph-ink); stroke-width: 2.5; }
+.xls-graph-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 6px;
+  color: var(--ga98-graph-ink-dim);
+  font-size: 11px;
+}
+.xls-graph-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.xls-legend-swatch {
+  display: inline-block;
+  width: 20px;
+  height: 8px;
+  border-radius: 2px;
+}
+.xls-legend-rainbow {
+  background: linear-gradient(
+    90deg,
+    var(--ga98-graph-hue-0),
+    var(--ga98-graph-hue-2),
+    var(--ga98-graph-hue-3),
+    var(--ga98-graph-hue-4),
+    var(--ga98-graph-hue-1),
+    var(--ga98-graph-hue-5),
+    var(--ga98-graph-hue-6),
+    var(--ga98-graph-hue-7)
+  );
+}
+.xls-legend-line {
+  height: 0;
+  border-top: 2px solid var(--ga98-graph-ink-dim);
+  border-radius: 0;
+}
+.xls-legend-line.following { border-top-style: dashed; }
+.xls-graph-inspector {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 6px 8px;
+  background: var(--ga98-graph-panel);
+  border: 1px solid var(--ga98-shadow-dark);
+  color: var(--ga98-graph-ink);
+}
+.xls-graph-inspector strong { display: block; }
+.xls-graph-inspector span,
+.xls-graph-inspector small { color: var(--ga98-graph-ink-dim); }
+
+@media (prefers-reduced-motion: reduce) {
+  .xls-mind-node .xls-node-fill { transition: none; }
+}
