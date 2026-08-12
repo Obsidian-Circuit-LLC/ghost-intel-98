@@ -59,6 +59,7 @@ import {
   DEFAULT_IMAGE_MODE,
   type XImageMode,
 } from '@shared/x-listening-image-policy';
+import type { XScheduleStatus } from '@shared/x-listening-schedule';
 import { useSettings } from '../../state/store';
 import { confirmDialog, promptDialog } from '../../state/dialogs';
 import { NetworkGraph } from './NetworkGraph';
@@ -414,6 +415,9 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
   const [collectionSettings, setCollectionSettings] =
     useState<XCollectionSettings>(DEFAULT_COLLECTION_SETTINGS);
   const [collectionSettingsBusy, setCollectionSettingsBusy] = useState(false);
+  // G1: the main-side automatic-sweep/archive SCHEDULE status (armed cadence + next-fire times) —
+  // drives the next-sweep indicator + one-click Pause. Polled from the scheduler registry.
+  const [schedule, setSchedule] = useState<XScheduleStatus | null>(null);
   // F1: per-profile image-collection policy — the `{ canonicalSourceKey → mode }` override map + the
   // campaign-wide `retrieveImages` toggle, so each Sources card shows + drives its own Images control.
   const [imagePolicy, setImagePolicy] =
@@ -1323,12 +1327,63 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
       // Re-seat from the MAIN-side clamped record so the UI shows exactly what will be consulted.
       setCollectionSettings(clampCollectionSettings(saved));
       setNotice('Collection settings saved for this campaign.');
+      // The save re-armed the main-side timers (Enterprise `settings:save` → restart) — re-read the
+      // fresh schedule so the next-sweep indicator reflects the new cadence immediately.
+      void refreshScheduleStatus(activeCampaignId);
     } catch (err) {
       setNotice(err instanceof Error ? err.message : String(err));
     } finally {
       setCollectionSettingsBusy(false);
     }
+    // refreshScheduleStatus is stable (defined below with an empty dep set).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeCampaignId, collectionSettings]);
+
+  // ── G1: automatic-sweep schedule status (next-sweep indicator + one-click Pause) ────────────
+  // Read the main-side scheduler registry. Guarded so a minimal test harness (api mock without the
+  // method) never throws — the seam test only requires the literal call to exist below.
+  const refreshScheduleStatus = useCallback(async (id: string) => {
+    if (!id || typeof window.api?.xListening?.scheduleStatus !== 'function') {
+      setSchedule(null);
+      return;
+    }
+    try {
+      const st = await window.api.xListening.scheduleStatus(id);
+      setSchedule(st ?? null);
+    } catch (err) {
+      console.warn('[XListening] scheduleStatus:', err);
+    }
+  }, []);
+
+  // Re-read the schedule whenever the campaign or session-connect state changes (connect arms the
+  // timers main-side; disconnect halts them), and poll gently so the next-sweep time stays current.
+  useEffect(() => {
+    void refreshScheduleStatus(activeCampaignId);
+    if (!activeCampaignId) return;
+    const handle = window.setInterval(() => void refreshScheduleStatus(activeCampaignId), 20000);
+    return () => window.clearInterval(handle);
+  }, [activeCampaignId, sessionConnected, refreshScheduleStatus]);
+
+  // One-click Pause (ADHD-friendly): flip automaticSweeps OFF and persist immediately — no need to
+  // hunt for the checkbox + Save. Main clamps + re-arms (to nothing) on the save.
+  const handlePauseSweeps = useCallback(async () => {
+    if (!activeCampaignId) return;
+    setCollectionSettingsBusy(true);
+    try {
+      const next = { ...collectionSettings, automaticSweeps: false };
+      const saved = await window.api.xListening.saveCollectionSettings({
+        caseId: activeCampaignId,
+        settings: next,
+      });
+      setCollectionSettings(clampCollectionSettings(saved));
+      setNotice('Automatic sweeps paused for this campaign.');
+      void refreshScheduleStatus(activeCampaignId);
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCollectionSettingsBusy(false);
+    }
+  }, [activeCampaignId, collectionSettings, refreshScheduleStatus]);
 
   // ── Task 15(a): demo data (honesty-marked, never mistaken for real intel) ───────────────
   const handleLoadDemoData = useCallback(async () => {
@@ -2529,6 +2584,40 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
                   the Tor gate. Tor mode fails closed (no capture, no silent clearnet) unless you have
                   enabled the clearnet toggle with its real-IP acknowledgement.
                 </p>
+                <div className="xls-schedule-status" role="status">
+                  {schedule?.sweepEnabled ? (
+                    <>
+                      <span className="xls-schedule-dot xls-schedule-on" aria-hidden="true" />
+                      <span className="xls-schedule-text">
+                        Auto-sweep ON · every {schedule.sweepIntervalMinutes} min ·{' '}
+                        {sessionConnected
+                          ? `next sweep ${schedule.nextSweepAt ? formatWhen(schedule.nextSweepAt) : 'soon'}`
+                          : 'paused until an X session is connected'}
+                      </span>
+                      <button
+                        type="button"
+                        className="xls-btn"
+                        onClick={() => void handlePauseSweeps()}
+                        disabled={collectionSettingsBusy || !activeCampaignId}
+                      >
+                        Pause sweeps
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="xls-schedule-dot" aria-hidden="true" />
+                      <span className="xls-schedule-text">
+                        Auto-sweep is OFF — enable it above and Save to start the timer.
+                      </span>
+                    </>
+                  )}
+                </div>
+                {schedule?.archiveEnabled && (
+                  <p className="xls-help">
+                    Incremental archive ON · every {schedule.archiveIntervalMinutes} min ·{' '}
+                    {schedule.nextArchiveAt ? `next cycle ${formatWhen(schedule.nextArchiveAt)}` : 'soon'}.
+                  </p>
+                )}
               </div>
 
               <div className="xls-settings-group">

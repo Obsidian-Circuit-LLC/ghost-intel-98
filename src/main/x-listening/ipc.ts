@@ -26,6 +26,7 @@ import { collectGateFromSettings, type XCollectionSettings } from '@shared/x-lis
 import { getCollectionSettings, saveCollectionSettings } from './collection-settings';
 import { normalizeImageMode, type XImageMode } from '@shared/x-listening-image-policy';
 import { getImagePolicy, setProfileImageMode, resolveEffectiveImageCollection } from './image-policy';
+import { restartSchedule, stopSchedule, scheduleStatus } from './scheduler';
 import { prodXStore } from './store';
 import type { XNote, XPostArtifact, XNetworkArtifact, XPreset, XEntityCacheEntry } from './store';
 import { ensureUuid } from '../security/validate';
@@ -843,16 +844,20 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
     return getCollectionSettings(ensureUuid(caseIdArg, 'caseId'));
   });
 
-  deps.handle(channels.xListening.saveCollectionSettings, (e, reqArg) => {
+  deps.handle(channels.xListening.saveCollectionSettings, async (e, reqArg) => {
     assertTrustedSender(e);
     const req = reqArg as { caseId?: unknown; settings?: unknown } | undefined;
     if (!req || typeof req.caseId !== 'string' || !req.caseId || typeof req.settings !== 'object' || !req.settings) {
       throw new Error('Saving collection settings requires a caseId and a settings object.');
     }
-    return saveCollectionSettings(
-      ensureUuid(req.caseId, 'caseId'),
-      req.settings as Partial<XCollectionSettings>,
-    );
+    const caseId = ensureUuid(req.caseId, 'caseId');
+    const saved = await saveCollectionSettings(caseId, req.settings as Partial<XCollectionSettings>);
+    // G1: a changed automaticSweeps / sweepInterval / archiveEnabled / archiveInterval must re-arm the
+    // free-running timers (Enterprise `settings:save` → `restartAutoSweep()`/`restartArchiveTimer()`).
+    // Fire-and-forget: a scheduling hiccup must never fail the settings save. `restartSchedule` reads
+    // the just-persisted record itself, so it always sees the clamped values.
+    void restartSchedule(caseId).catch((err) => console.warn('[XListening] restartSchedule (save):', err));
+    return saved;
   });
 
   // ---- Task F1: per-profile IMAGE-COLLECTION policy ------------------------
@@ -897,7 +902,15 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
     }
     const caseId = ensureUuid(caseIdArg, 'caseId');
     const clearnetEnabled = await loadClearnetEnabled();
-    return openXSession(caseId, clearnetEnabled);
+    const result = await openXSession(caseId, clearnetEnabled);
+    // G1: (re)arm this campaign's automatic sweep/archive timers on a successful connect. The timer
+    // is source-exact (free-running), but each scheduled sweep's capture still routes the Tor gate
+    // (fail-closed) — no clearnet egress unless clearnet+clearnetAck. A blocked connect arms nothing.
+    // Fire-and-forget: a scheduling hiccup must never fail the connect itself.
+    if (!result.blocked) {
+      void restartSchedule(caseId).catch((err) => console.warn('[XListening] restartSchedule (open):', err));
+    }
+    return result;
   });
 
   deps.handle(channels.xListening.sessionStatus, async (e, caseIdArg) => {
@@ -913,7 +926,22 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
     if (typeof caseIdArg !== 'string' || !caseIdArg) {
       throw new Error('Closing an X session requires a caseId.');
     }
-    return closeXSession(ensureUuid(caseIdArg, 'caseId'));
+    const caseId = ensureUuid(caseIdArg, 'caseId');
+    // G1: disconnecting the session HALTS the campaign's sweep/archive timers — an unattended sweep
+    // must never run against a session the operator closed.
+    stopSchedule(caseId);
+    return closeXSession(caseId);
+  });
+
+  // G1: read the campaign's automatic-sweep/archive SCHEDULE status (scheduler.ts) — the armed
+  // cadence + next-fire times for the renderer's next-sweep indicator + Pause. Pure in-memory read of
+  // the scheduler registry; no capture window, no network egress. Sender check + arg validation only.
+  deps.handle(channels.xListening.scheduleStatus, (e, caseIdArg) => {
+    assertTrustedSender(e);
+    if (typeof caseIdArg !== 'string' || !caseIdArg) {
+      throw new Error('Reading the schedule status requires a caseId.');
+    }
+    return scheduleStatus(ensureUuid(caseIdArg, 'caseId'));
   });
 
   // Timeline capture (capture.ts): the analyst navigates the campaign's VISIBLE capture window

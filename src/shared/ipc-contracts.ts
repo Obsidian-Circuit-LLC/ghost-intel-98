@@ -710,7 +710,14 @@ export const channels = {
      *  source key canonicalized before the encrypted per-campaign map is updated; returns the stored
      *  record + the EFFECTIVE decision (resolved against `retrieveImages`). The capture path consults
      *  the same policy: an 'off' source has NO post media fetched/cached. Local secure-fs only. */
-    setProfileImageMode: 'xListening:imagePolicy:set'
+    setProfileImageMode: 'xListening:imagePolicy:set',
+    /** Read a campaign's automatic-sweep/archive SCHEDULE status (scheduler.ts `scheduleStatus`, G1):
+     *  whether the free-running sweep/archive timers are armed, their interval, and the next-fire
+     *  times — drives the renderer's next-sweep indicator + one-click Pause. Pure in-memory read of
+     *  the scheduler registry; no capture window, no network egress. The timers themselves are armed
+     *  MAIN-side on session connect / settings save; each scheduled sweep's capture routes the SAME
+     *  Tor gate as a manual capture (fail-closed, no clearnet unless clearnet+clearnetAck). */
+    scheduleStatus: 'xListening:schedule:status'
   },
   // Scraping cases — the isolated per-namespace case stores for SOCMINT + X collection runs
   // (kept apart from the core investigation `cases` namespace). Every handler takes a

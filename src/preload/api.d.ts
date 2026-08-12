@@ -5,6 +5,7 @@
 import type { VerifiedPluginInfo, PluginStatus, PluginBridgeApi } from '../shared/plugin-types';
 import type { XCollectionSettings } from '../shared/x-listening-collection-settings';
 import type { XImageMode } from '../shared/x-listening-image-policy';
+import type { XScheduleStatus } from '../shared/x-listening-schedule';
 import type {
   AppSettings,
   AttachmentBytesResult,
@@ -1092,6 +1093,11 @@ export interface GhostApi {
       imageMode: XImageMode;
       effective: boolean;
     }>;
+    /** Read a campaign's automatic-sweep/archive SCHEDULE status (scheduler.ts `scheduleStatus`, G1):
+     *  whether the free-running sweep/archive timers are armed, their interval, and the next-fire
+     *  times — drives the renderer's next-sweep indicator + one-click Pause. Pure in-memory read of the
+     *  scheduler registry; no capture window, no network egress. */
+    scheduleStatus(caseId: string): Promise<XScheduleStatus>;
   };
   /**
    * Scraping cases (W4) — the isolated per-namespace SOCMINT/X collection-run stores, kept

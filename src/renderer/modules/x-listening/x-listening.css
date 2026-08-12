@@ -138,6 +138,34 @@
   background: var(--ga98-ok-dot);
   box-shadow: 0 0 6px var(--ga98-ok-dot);
 }
+
+/* G1: automatic-sweep schedule indicator (next-sweep + Pause). Token-only. */
+.xls-schedule-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--ga98-shadow-dark);
+  background: var(--ga98-grey);
+  color: var(--ga98-text);
+}
+.xls-schedule-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--ga98-text-dim);
+  flex: 0 0 auto;
+}
+.xls-schedule-dot.xls-schedule-on {
+  background: var(--ga98-ok-dot);
+  box-shadow: 0 0 6px var(--ga98-ok-dot);
+}
+.xls-schedule-text {
+  flex: 1 1 auto;
+  color: var(--ga98-text);
+}
 .xls-session-label strong {
   display: block;
   font-size: 12px;

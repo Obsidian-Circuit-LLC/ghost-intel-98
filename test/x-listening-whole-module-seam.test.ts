@@ -67,6 +67,7 @@ const REACHABLE_CHANNELS: ReadonlyArray<keyof typeof channels.xListening> = [
   'saveCollectionSettings',
   'getImagePolicy',
   'setProfileImageMode',
+  'scheduleStatus',
 ];
 
 describe('whole-module seam — every xListening channel is reachable from a real control', () => {

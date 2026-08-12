@@ -13,6 +13,7 @@ import type { RunBudget } from '../shared/investigation-types';
 import type { IntelReport } from '../shared/investigation-report';
 import type { XCollectionSettings } from '../shared/x-listening-collection-settings';
 import type { XImageMode } from '../shared/x-listening-image-policy';
+import type { XScheduleStatus } from '../shared/x-listening-schedule';
 
 const api = {
   cases: {
@@ -799,7 +800,9 @@ const api = {
     setProfileImageMode: (
       req: { caseId: string; sourceKey: string; mode: XImageMode },
     ): Promise<{ sourceKey: string; imageMode: XImageMode; effective: boolean }> =>
-      ipcRenderer.invoke(channels.xListening.setProfileImageMode, req)
+      ipcRenderer.invoke(channels.xListening.setProfileImageMode, req),
+    scheduleStatus: (caseId: string): Promise<XScheduleStatus> =>
+      ipcRenderer.invoke(channels.xListening.scheduleStatus, caseId)
   },
   // Scraping cases (W4) — the isolated SOCMINT/X collection-run stores. Every call passes a
   // `store: 'socmint' | 'x'` discriminator that main validates against an allowlist and routes

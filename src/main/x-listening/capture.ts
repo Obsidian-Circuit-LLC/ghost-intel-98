@@ -1096,6 +1096,143 @@ export async function captureNetwork(
   }
 }
 
+// ---- self-contained Tor-gated single-profile timeline capture (automatic sweep primitive, G1) ---
+//
+// The manual `captureTimeline` above captures whatever page an analyst already navigated the shared
+// visible window to. An AUTOMATIC sweep (G1) has no analyst driving the window, so it needs a
+// self-contained primitive that — exactly like `captureNetwork`/`verifyPost`/`openInX` — resolves the
+// Tor posture ITSELF (FAIL CLOSED, no clearnet fallback unless the acked clearnet toggle is on), opens
+// its OWN hidden window navigated to the target profile, runs `captureTimeline` against it, and
+// destroys the window in a `finally`. This is where the sweep's Tor gate lives: a scheduled sweep can
+// never open a proxy-less clearnet window while clearnet mode is off, and it opens NO window at all
+// when Tor is down. It does NOT touch the operator's shared visible capture window.
+//
+// The gate default (`loadClearnetEnabled`) is STRICTER than the manual paths: it requires BOTH
+// `AppSettings.xListening.clearnet` AND `clearnetAck` before it will report clearnet — so an
+// unattended background sweep only ever leaves Tor when the operator has explicitly acknowledged the
+// real-IP exposure. Quarantine discipline preserved: no static electron/Tor import — the production
+// defaults lazy-import `./session` (the ONE sanctioned Tor seam) + the hardened window factory.
+
+/** The context for one automatic-sweep single-profile capture. `collect`/`imagesEnabled` are resolved
+ *  by the caller (the scheduler, from the per-campaign COLLECTION SETTINGS + per-profile image policy)
+ *  and threaded straight into `captureTimeline`. */
+export interface XProfileTimelineRequest {
+  caseId: string;
+  channelId: string;
+  channelLabel: string;
+  targetUsername: string;
+  /** Surrounding-thread collect gate (F2 RECORD TYPES); defaults all-off inside `captureTimeline`. */
+  collect?: XCollectSettings;
+  /** This source's EFFECTIVE image policy (F1); when false `captureTimeline` fetches no media. */
+  imagesEnabled?: boolean;
+}
+
+/** Injectable seams so the sweep primitive is testable without electron/network. Production defaults
+ *  are lazy dynamic imports of the sanctioned Tor seam (`./session`) + the hardened window factory;
+ *  `capture` defaults to `captureTimeline`. */
+export interface XProfileTimelineDeps {
+  /** Read the acked clearnet opt-out MAIN-side, fail-closed. Default requires clearnet AND clearnetAck
+   *  (stricter than the manual paths) — an unattended sweep leaves Tor only on an explicit ack. */
+  loadClearnetEnabled: () => Promise<boolean>;
+  /** Resolve the Tor posture from the acked clearnet flag (`session.ts` `resolveXTorGate`). */
+  resolveGate: (clearnetEnabled: boolean) => XTorGate | Promise<XTorGate>;
+  /** Open a hardened, hidden capture window at `url` over the resolved posture (proxy iff Tor mode). */
+  openWindow: (url: string, proxy?: { socks: string }) => Promise<Electron.BrowserWindow>;
+  /** Run the timeline capture against the opened window; defaults to `captureTimeline`. */
+  capture: (
+    win: Electron.BrowserWindow,
+    req: XTimelineCaptureRequest,
+    overrides?: Partial<XCaptureDeps>,
+  ) => Promise<XTimelineCaptureResult>;
+}
+
+function defaultProfileTimelineDeps(): XProfileTimelineDeps {
+  return {
+    loadClearnetEnabled: async () => {
+      try {
+        const { settingsStore } = await import('../storage/json-fs');
+        const settings = await settingsStore.read();
+        // Stricter than the manual paths: an unattended sweep only leaves Tor when clearnet is BOTH
+        // enabled AND acknowledged. A `clearnet:true` that somehow predates its ack fails closed to Tor.
+        return settings.xListening?.clearnet === true && settings.xListening?.clearnetAck === true;
+      } catch {
+        return false;
+      }
+    },
+    resolveGate: async (clearnetEnabled) => {
+      const { resolveXTorGate } = await import('./session');
+      return resolveXTorGate(clearnetEnabled);
+    },
+    openWindow: async (url, proxy) => {
+      const [{ createCaptureWindow }, sess] = await Promise.all([
+        import('../capture/capture-window'),
+        import('./session'),
+      ]);
+      const win = await createCaptureWindow({
+        partition: sess.X_LISTENING_PARTITION,
+        url,
+        allowHosts: sess.X_ALLOW_HOSTS,
+        ...(proxy ? { proxy } : {}),
+        webRTCIPHandlingPolicy: 'disable_non_proxied_udp',
+      });
+      win.webContents.setWebRTCIPHandlingPolicy('disable_non_proxied_udp');
+      return win;
+    },
+    capture: (win, req, overrides) => captureTimeline(win, req, overrides),
+  };
+}
+
+/**
+ * Capture ONE profile's timeline in a self-opened, Tor-gated hidden window (G1 automatic-sweep
+ * primitive). Validates + builds the `https://x.com/<user>` URL FIRST (a malformed handle throws,
+ * opening NO window and never touching the gate/network), resolves the Tor posture and refuses
+ * (opening no window, capturing nothing) when it is blocked — FAIL CLOSED, no clearnet fallback unless
+ * the acked clearnet toggle is on — then runs `captureTimeline` against the window with the caller's
+ * collect gate + image policy, and ALWAYS destroys the window in a `finally`. Returns the same shape
+ * as `captureTimeline` (with `blocked:true` when the gate refused).
+ */
+export async function captureProfileTimeline(
+  req: XProfileTimelineRequest,
+  overrides: Partial<XProfileTimelineDeps> = {},
+): Promise<XTimelineCaptureResult> {
+  // Validate BEFORE touching the gate or network — a malformed handle opens nothing. Reuse the
+  // exact `openInX('profile')` username guard + canonical `https://x.com/<user>` construction.
+  const url = buildXOpenUrl('profile', req.targetUsername);
+
+  const deps: XProfileTimelineDeps = { ...defaultProfileTimelineDeps(), ...overrides };
+
+  // FAIL CLOSED: resolve the Tor posture and refuse (opening no window) when it is blocked.
+  const clearnetEnabled = await deps.loadClearnetEnabled();
+  const gate = await deps.resolveGate(clearnetEnabled);
+  if (gate.blocked) {
+    return { blocked: true, reason: gate.reason, added: 0, skipped: 0, posts: [] };
+  }
+
+  const win = await deps.openWindow(url.toString(), gate.proxy);
+  try {
+    return await deps.capture(
+      win,
+      {
+        caseId: req.caseId,
+        jobId: req.caseId,
+        channelId: req.channelId,
+        channelLabel: req.channelLabel,
+        targetUsername: req.targetUsername,
+        collect: req.collect,
+        operation: 'posts',
+      },
+      req.imagesEnabled !== undefined
+        ? { imagesEnabledForSource: async () => req.imagesEnabled as boolean }
+        : {},
+    );
+  } finally {
+    const w = win as unknown as { isDestroyed?: () => boolean; destroy?: () => void };
+    if (typeof w.destroy === 'function' && !(w.isDestroyed && w.isDestroyed())) {
+      w.destroy();
+    }
+  }
+}
+
 /** Append one network run record best-effort (Task A3). Telemetry, NOT evidence — a run-log write
  *  failure must never break an extraction or drop captured accounts, so any error is swallowed with
  *  a warn (mirrors `emitRun`). */
