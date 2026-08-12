@@ -27,6 +27,7 @@ import { getCollectionSettings, saveCollectionSettings } from './collection-sett
 import { normalizeImageMode, type XImageMode } from '@shared/x-listening-image-policy';
 import { getImagePolicy, setProfileImageMode, resolveEffectiveImageCollection } from './image-policy';
 import { restartSchedule, stopSchedule, scheduleStatus } from './scheduler';
+import { repairAvatars } from './avatar-repair';
 import { prodXStore } from './store';
 import type { XNote, XPostArtifact, XNetworkArtifact, XPreset, XEntityCacheEntry } from './store';
 import { ensureUuid } from '../security/validate';
@@ -909,6 +910,12 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
     // Fire-and-forget: a scheduling hiccup must never fail the connect itself.
     if (!result.blocked) {
       void restartSchedule(caseId).catch((err) => console.warn('[XListening] restartSchedule (open):', err));
+      // H1: run the bounded, Tor-gated, idempotent avatar-repair startup pass for the active campaign
+      // — Enterprise armed `scheduleAvatarRepair` exactly when the X session first reported connected
+      // (`main.cjs:1104-1106`). Fire-and-forget: a repair hiccup must never fail the connect, and the
+      // pass FAILS CLOSED itself (no window, no egress) if Tor is down. Idempotent, so repeated
+      // connects don't re-fetch already-cached avatars.
+      void repairAvatars(caseId).catch((err) => console.warn('[XListening] repairAvatars (open):', err));
     }
     return result;
   });
