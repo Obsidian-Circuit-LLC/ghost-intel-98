@@ -119,6 +119,7 @@ function makeApi() {
       // Task 15: loadInsights also fetches these alongside posts/analysis/health/entities.
       networksList: vi.fn(async () => []),
       changeEvents: vi.fn(async () => []),
+      runLog: vi.fn(async () => []),
       readNotes: vi.fn(async () => ({ notes: [] })),
       archiveStatus: vi.fn(async () => null),
       presetsRead: vi.fn(async () => ({ presets: [] })),

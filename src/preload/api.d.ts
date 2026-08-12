@@ -1005,6 +1005,32 @@ export interface GhostApi {
       verifiedAt: string;
       changed: boolean;
     }>;
+    /** List a campaign's collection-run log (Task A3) — newest-first, capped ~100. Each record is
+     *  one per-operation collection run emitted by the capture/archive paths. Derived read; no
+     *  capture window, no network. */
+    runLog(caseId: string): Promise<
+      Array<{
+        profileId: string;
+        username: string;
+        operation:
+          | 'posts'
+          | 'followers'
+          | 'following'
+          | 'archive_posts'
+          | 'archive_followers'
+          | 'archive_following';
+        observed: number;
+        added: number;
+        duplicates: number;
+        requestedPasses: number;
+        completedPasses: number;
+        reachedEnd: boolean;
+        stopReason: string;
+        status: string;
+        startedAt: string;
+        endedAt: string;
+      }>
+    >;
   };
   /**
    * Scraping cases (W4) — the isolated per-namespace SOCMINT/X collection-run stores, kept

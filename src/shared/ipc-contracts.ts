@@ -656,7 +656,13 @@ export const channels = {
      *  removed post (→ `post_unavailable` + availability update) or a live text edit (→ prior
      *  version archived + `post_changed`, via A2). Reuses the openPostThread scheme/host/path
      *  guards + the `^[A-Za-z0-9_]{1,15}$` username validator. */
-    verifyPost: 'xListening:verifyPost'
+    verifyPost: 'xListening:verifyPost',
+    /** List a campaign's collection-run log (store.ts `listRunLog`, Task A3) — newest-first,
+     *  capped ~100. The Change Intel tab's COLLECTION RUN LOG: one per-operation record
+     *  (`{ profileId, username, operation, observed, added, duplicates, requestedPasses,
+     *  completedPasses, reachedEnd, stopReason, status, startedAt, endedAt }`) emitted by the
+     *  capture/archive paths. Derived read; no capture window, no network. */
+    runLog: 'xListening:runLog'
   },
   // Scraping cases — the isolated per-namespace case stores for SOCMINT + X collection runs
   // (kept apart from the core investigation `cases` namespace). Every handler takes a

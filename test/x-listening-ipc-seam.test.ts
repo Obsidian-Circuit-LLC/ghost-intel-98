@@ -109,7 +109,9 @@ const NEW_CHANNELS: Array<{ key: keyof typeof channels.xListening; args: unknown
   // Task A2 — historical change events (derived read, newest-first capped).
   { key: 'changeEvents', args: [caseId] },
   // Task A1 — live post verification (VERIFY LIVE).
-  { key: 'verifyPost', args: [{ caseId, postId: '100' }] }
+  { key: 'verifyPost', args: [{ caseId, postId: '100' }] },
+  // Task A3 — collection run log (derived read, newest-first capped).
+  { key: 'runLog', args: [caseId] }
 ];
 
 describe('ipc-contracts.ts — Phase-1 xListening channel constants exist', () => {

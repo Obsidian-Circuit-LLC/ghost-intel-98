@@ -46,7 +46,8 @@ import {
 } from './extract';
 import { postEvidenceHash } from './evidence';
 import { ingestPostsWithHistory, markPostUnavailable } from './changes';
-import type { XPostArtifact, XPostMetrics, XPostMetricsRaw, XStore } from './store';
+import { buildRunRecord, recordCollectionRun, type RunRecordInput } from './run-log';
+import type { XPostArtifact, XPostMetrics, XPostMetricsRaw, XRunLogRecord, XRunOperation, XStore } from './store';
 import type { XTorGate } from './session';
 import type { HarvestedItem } from '@shared/socmint/types';
 
@@ -77,6 +78,10 @@ export interface XTimelineCaptureRequest {
   targetUsername: string;
   /** Which surrounding-thread kinds to capture. Defaults to `DEFAULT_COLLECT` (all off). */
   collect?: XCollectSettings;
+  /** Which collection operation this capture is (Task A3 run-log stamping). Defaults to `'posts'`
+   *  (a manual/live timeline capture); the archive path passes `'archive_posts'` so its run record
+   *  is logged as an incremental-archive cycle, not a manual capture. */
+  operation?: XRunOperation;
 }
 
 export interface XTimelineCaptureResult {
@@ -107,6 +112,11 @@ export interface XCaptureDeps {
    *  remote, so `normalizePost`'s `data:`-only filter dropped every one, silently losing the
    *  post's media entirely rather than leaking a remote URL). */
   resolveMedia: (win: Electron.BrowserWindow, url: string, caseId: string) => Promise<string | null>;
+  /** Append one collection-run record for this capture (Task A3). Production default routes to the
+   *  encrypted `runLog` sidecar via run-log.ts. A run-log write is OPERATIONAL telemetry, NOT
+   *  evidence — a failure here MUST NOT break the capture or drop captured posts, so
+   *  `captureTimeline` calls this best-effort (see `emitRun`). */
+  recordRun: (caseId: string, record: XRunLogRecord) => Promise<void>;
   /** Injected clock — the ISO capture time stamped onto every item. */
   now: () => string;
 }
@@ -163,8 +173,27 @@ function defaultDeps(): XCaptureDeps {
       const cached = await cacheRemoteMedia(win, url, caseId);
       return cached ? cached.ref : null;
     },
+    recordRun: async (caseId, record) => {
+      await recordCollectionRun(caseId, record);
+    },
     now: () => new Date().toISOString(),
   };
+}
+
+/**
+ * Append one run record best-effort (Task A3). Telemetry, NOT evidence: a run-log write failure
+ * must never break a capture or drop captured posts, so any error is swallowed with a warn.
+ */
+async function emitRun(
+  deps: XCaptureDeps,
+  caseId: string,
+  input: RunRecordInput,
+): Promise<void> {
+  try {
+    await deps.recordRun(caseId, buildRunRecord(input));
+  } catch (err) {
+    console.warn('[XListening] recordRun:', err);
+  }
 }
 
 /**
@@ -258,11 +287,13 @@ export async function captureTimeline(
 ): Promise<XTimelineCaptureResult> {
   const deps: XCaptureDeps = { ...defaultDeps(), ...overrides };
   const collect = req.collect ?? DEFAULT_COLLECT;
+  const operation: XRunOperation = req.operation ?? 'posts';
+  const startedAt = deps.now();
   const ctx: NormalizeContext = {
     caseId: req.caseId,
     jobId: req.jobId,
     collectorVersion: X_COLLECTOR_VERSION,
-    harvestedAt: deps.now(),
+    harvestedAt: startedAt,
     channelId: req.channelId,
     channelLabel: req.channelLabel,
   };
@@ -286,6 +317,22 @@ export async function captureTimeline(
   });
 
   if (gated.blocked) {
+    // A blocked/signed-out page captured nothing — record an ERROR run (Task A3) so the Change
+    // Intel COLLECTION RUN LOG reflects the failed attempt honestly, then return unchanged.
+    await emitRun(deps, req.caseId, {
+      profileId: req.channelId,
+      username: req.targetUsername,
+      operation,
+      observed: 0,
+      added: 0,
+      requestedPasses: 1,
+      completedPasses: 0,
+      reachedEnd: false,
+      stopReason: gated.reason ?? 'blocked',
+      status: 'error',
+      startedAt,
+      endedAt: deps.now(),
+    });
     return { blocked: true, reason: gated.reason, added: 0, skipped: 0, posts: [] };
   }
 
@@ -297,6 +344,25 @@ export async function captureTimeline(
     deps.savePosts(req.caseId, posts),
     deps.saveItems(req.caseId, items),
   ]);
+
+  // Record the completed run (Task A3). `observed` = posts this capture saw; `added` = newly
+  // persisted; `duplicates` (= observed - added) is derived in `buildRunRecord`. This port's
+  // capture is a single visible-DOM scrape, so requested/completed passes are 1 and the visible
+  // page is treated as reachedEnd.
+  await emitRun(deps, req.caseId, {
+    profileId: req.channelId,
+    username: req.targetUsername,
+    operation,
+    observed: posts.length,
+    added: postsResult.added,
+    requestedPasses: 1,
+    completedPasses: 1,
+    reachedEnd: true,
+    stopReason: 'complete',
+    status: 'complete',
+    startedAt,
+    endedAt: deps.now(),
+  });
 
   return { blocked: false, added: postsResult.added, skipped: postsResult.skipped, posts };
 }

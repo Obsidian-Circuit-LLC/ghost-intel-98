@@ -1056,6 +1056,19 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
     return store.listChangeEvents(ensureUuid(caseIdArg, 'caseId'));
   });
 
+  // ---- Task A3: collection run log (store.ts listRunLog) -------------------
+  // Derived read (no capture window, no network) — newest-first, capped ~100. Sender check + arg
+  // validation only, same shape as `changeEvents`/`networksList`. The records are emitted by the
+  // capture/archive paths (capture.ts `captureTimeline` → run-log.ts).
+  deps.handle(channels.xListening.runLog, async (e, caseIdArg) => {
+    assertTrustedSender(e);
+    if (typeof caseIdArg !== 'string' || !caseIdArg) {
+      throw new Error('Listing the run log requires a caseId.');
+    }
+    const store = await prodXStore();
+    return store.listRunLog(ensureUuid(caseIdArg, 'caseId'));
+  });
+
   // ---- Task A1: live post verification (VERIFY LIVE) -----------------------
   // Opens the stored post's real URL in a Tor-gated capture window (capture.ts `verifyPost` reads
   // the acked clearnet flag + `resolveXTorGate` itself, MAIN-side — fail-closed, no clearnet

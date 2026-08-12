@@ -81,6 +81,7 @@ function deps(over: Partial<XCaptureDeps> = {}): Partial<XCaptureDeps> {
     runCapture: async () => [raw()],
     savePosts: async () => ({ added: 1, skipped: 0 }),
     saveItems: async () => ({ added: 1, skipped: 0 }),
+    recordRun: async () => {},
     now: () => '2026-08-11T12:00:00.000Z',
     ...over,
   };

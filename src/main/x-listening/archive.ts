@@ -28,7 +28,7 @@
  * dynamic imports (`defaultDeps()`), mirroring `capture.ts`'s own convention.
  */
 import { captureTimeline, type XCaptureDeps, type XTimelineCaptureResult } from './capture';
-import type { XArchiveState, XPostArtifact } from './store';
+import type { XArchiveState, XPostArtifact, XRunOperation } from './store';
 import type { XCollectSettings } from './extract';
 
 /** A resumable archive state with no prior run — the pre-first-step baseline. */
@@ -78,6 +78,7 @@ export interface ArchiveStepDeps {
       channelLabel: string;
       targetUsername: string;
       collect?: XCollectSettings;
+      operation?: XRunOperation;
     },
     overrides?: Partial<XCaptureDeps>,
   ) => Promise<XTimelineCaptureResult>;
@@ -164,6 +165,9 @@ export async function runArchiveStep(
     channelLabel: req.channelLabel,
     targetUsername: req.targetUsername,
     collect: req.collect,
+    // Stamp the run-log record (Task A3) as an incremental-archive cycle, not a manual capture —
+    // `captureTimeline` reads this and emits an `archive_posts` run record.
+    operation: 'archive_posts',
   });
 
   if (captured.blocked) {

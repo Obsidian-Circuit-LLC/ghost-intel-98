@@ -178,6 +178,47 @@ export interface XChangeEvent {
   sourceUsername?: string;
 }
 
+/** Newest collection-run records a case retains (and the cap `listRunLog` returns). Enterprise
+ *  kept 1000-2000 app-wide (`main.cjs:401`); this port keeps a tighter, single per-case 100-cap
+ *  (design A3) — the Change Intel COLLECTION RUN LOG is a recent-activity view, not an archive. */
+export const X_MAX_RUN_LOG = 100;
+
+/** The collection operations a run record can describe — a manual/live capture (`posts`,
+ *  `followers`, `following`) or an incremental-archive cycle (`archive_*`). Structurally identical
+ *  to analysis.ts `CollectionOperation`, kept independent so store.ts stays the LOWER layer
+ *  (analysis.ts imports FROM store.ts, never the reverse). */
+export type XRunOperation =
+  | 'posts'
+  | 'followers'
+  | 'following'
+  | 'archive_posts'
+  | 'archive_followers'
+  | 'archive_following';
+
+/** One per-operation collection-run record — ported from Enterprise `startCollectionRun`/
+ *  `finishCollectionRun` (`main.cjs:420-457`), the COLLECTION RUN LOG the Change Intel tab (B1)
+ *  renders. Purely OPERATIONAL telemetry: it carries no captured content and feeds NO evidence
+ *  hash, so it holds no `id`/RNG — a record is keyed by (profileId, operation, startedAt) at the
+ *  render layer. `startedAt`/`endedAt` are caller-supplied injected-clock ISO strings
+ *  (determinism — never computed here). `duplicates = max(0, observed - added)` mirrors Enterprise
+ *  (`main.cjs:453`). `status` is `'complete'` on a finished run, `'error'` on a blocked/failed one
+ *  (the union stays open to a future stopReason-derived status without a store migration). */
+export interface XRunLogRecord {
+  profileId: string;
+  username: string;
+  operation: XRunOperation;
+  observed: number;
+  added: number;
+  duplicates: number;
+  requestedPasses: number;
+  completedPasses: number;
+  reachedEnd: boolean;
+  stopReason: string;
+  status: 'complete' | 'error' | string;
+  startedAt: string;
+  endedAt: string;
+}
+
 /** One captured profile-metadata snapshot. `signature` is the deterministic sha256 of the
  *  canonical `{bio,avatar,location,website}` (evidence.ts `profileMetadataSignature`) — the gate
  *  that decides whether a re-capture is a no-op or a `profile_change`. `capturedAt` is the
@@ -248,6 +289,8 @@ export interface XStoreDeps {
   changeEventsPath(caseId: string): string;
   /** Resolve the profile-snapshots sidecar path for a case (Task A2). */
   profileSnapshotsPath(caseId: string): string;
+  /** Resolve the collection-run-log sidecar path for a case (Task A3). */
+  runLogPath(caseId: string): string;
 }
 
 // ---- helpers -----------------------------------------------------------
@@ -378,6 +421,16 @@ export interface XStore {
   /** Newest-first, `X_MAX_CHANGE_EVENTS`-capped view of a case's change events — the Change
    *  Intel tab's read (Task A2; consumed via `channels.xListening.changeEvents`). */
   listChangeEvents(caseId: string): Promise<XChangeEvent[]>;
+  runLog: {
+    /** All collection-run records for a case, in APPEND (oldest-first) order. */
+    read(caseId: string): Promise<XRunLogRecord[]>;
+    /** Append one record; the persisted list is capped to the newest `X_MAX_RUN_LOG`
+     *  (oldest dropped). Returns the fresh (append-order) list. */
+    append(caseId: string, record: XRunLogRecord): Promise<XRunLogRecord[]>;
+  };
+  /** Newest-first, `X_MAX_RUN_LOG`-capped view of a case's collection runs — the Change Intel
+   *  tab's COLLECTION RUN LOG read (Task A3; consumed via `channels.xListening.runLog`). */
+  listRunLog(caseId: string): Promise<XRunLogRecord[]>;
 }
 
 export function makeXStore(deps: XStoreDeps): XStore {
@@ -619,6 +672,36 @@ export function makeXStore(deps: XStoreDeps): XStore {
       const bounded = events.length > X_MAX_CHANGE_EVENTS ? events.slice(-X_MAX_CHANGE_EVENTS) : events;
       return bounded.reverse();
     },
+
+    runLog: {
+      read(caseId) {
+        return withLock(`x-listening:runLog:${caseId}`, () =>
+          readJsonArr<XRunLogRecord>(deps, deps.runLogPath(caseId)),
+        );
+      },
+      append(caseId, record) {
+        // Direct readJsonArr/writeJson (NOT runLog.read) inside the lock: withLock is not reentrant,
+        // and read/append take the SAME key.
+        return withLock(`x-listening:runLog:${caseId}`, async () => {
+          const existing = await readJsonArr<XRunLogRecord>(deps, deps.runLogPath(caseId));
+          existing.push(record);
+          // Cap to the newest X_MAX_RUN_LOG (drop oldest) so the log never grows unbounded.
+          const capped = existing.length > X_MAX_RUN_LOG ? existing.slice(-X_MAX_RUN_LOG) : existing;
+          await writeJson(deps, deps.runLogPath(caseId), capped);
+          return capped;
+        });
+      },
+    },
+
+    async listRunLog(caseId) {
+      const records = await withLock(`x-listening:runLog:${caseId}`, () =>
+        readJsonArr<XRunLogRecord>(deps, deps.runLogPath(caseId)),
+      );
+      // Newest-first for the renderer; the persisted list is already capped, so reverse a bounded
+      // tail (defensive re-cap in case a legacy file exceeded the cap).
+      const bounded = records.length > X_MAX_RUN_LOG ? records.slice(-X_MAX_RUN_LOG) : records;
+      return bounded.reverse();
+    },
   };
 }
 
@@ -650,6 +733,7 @@ export async function prodXStore(): Promise<XStore> {
     entitiesCachePath: (id) => artifact(id, 'x-entities-cache.json'),
     changeEventsPath: (id) => artifact(id, 'x-change-events.json'),
     profileSnapshotsPath: (id) => artifact(id, 'x-profile-snapshots.json'),
+    runLogPath: (id) => artifact(id, 'x-run-log.json'),
   });
   return _prod;
 }

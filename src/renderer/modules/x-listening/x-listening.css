@@ -81,6 +81,17 @@
   color: var(--ga98-text-dim);
   border-color: var(--ga98-shadow-dark);
 }
+/* ── Task A3: COLLECTION RUN LOG — per-operation run status ──────────────── */
+.xls-marker-run-complete {
+  background: var(--ga98-ok-surface);
+  color: var(--ga98-ok-ink);
+  border-color: var(--ga98-ok-dot);
+}
+.xls-marker-run-error {
+  background: var(--ga98-error-surface);
+  color: var(--ga98-danger-ink);
+  border-color: var(--ga98-error-border);
+}
 .xls-network-posture {
   flex: 0 0 auto;
   padding: 8px 12px;

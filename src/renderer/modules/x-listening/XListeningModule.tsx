@@ -228,6 +228,30 @@ export interface XChangeEventRow {
   sourceUsername?: string;
 }
 
+/** One collection-run record — the Change Intel tab's COLLECTION RUN LOG stream (store.ts
+ *  `XRunLogRecord`, Task A3). Emitted by the capture/archive paths, rendered newest-first. */
+export interface XRunLogRow {
+  profileId: string;
+  username: string;
+  operation:
+    | 'posts'
+    | 'followers'
+    | 'following'
+    | 'archive_posts'
+    | 'archive_followers'
+    | 'archive_following';
+  observed: number;
+  added: number;
+  duplicates: number;
+  requestedPasses: number;
+  completedPasses: number;
+  reachedEnd: boolean;
+  stopReason: string;
+  status: string;
+  startedAt: string;
+  endedAt: string;
+}
+
 export interface XArchiveStateView {
   cursor: string | null;
   cycles: number;
@@ -328,6 +352,7 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
   // ── Task 15 tabs: real state, real IPC — no hollow panels ──────────────────
   const [networks, setNetworks] = useState<XNetworkAccountRow[]>([]);
   const [changeEvents, setChangeEvents] = useState<XChangeEventRow[]>([]);
+  const [runLog, setRunLog] = useState<XRunLogRow[]>([]);
   /** The post id currently being live-verified (VERIFY LIVE, Task A1) — disables its button. */
   const [verifyingPostId, setVerifyingPostId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -402,6 +427,7 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
       setEntities([]);
       setNetworks([]);
       setChangeEvents([]);
+      setRunLog([]);
       setNotes([]);
       setArchiveState(EMPTY_ARCHIVE_STATE);
       setPresets([]);
@@ -409,7 +435,7 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
     }
     setInsightsBusy(true);
     try {
-      const [postsRes, analysisRes, healthRes, entitiesRes, networksRes, notesRes, archiveRes, presetsRes, changeEventsRes] =
+      const [postsRes, analysisRes, healthRes, entitiesRes, networksRes, notesRes, archiveRes, presetsRes, changeEventsRes, runLogRes] =
         await Promise.all([
           window.api.xListening.postsList(id),
           window.api.xListening.analysis(id),
@@ -420,6 +446,7 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
           window.api.xListening.archiveStatus(id),
           window.api.xListening.presetsRead(id),
           window.api.xListening.changeEvents(id),
+          window.api.xListening.runLog(id),
         ]);
       setPosts((postsRes as unknown as XPostRow[]) ?? []);
       setAnalysis((analysisRes as unknown as XAnalysisView) ?? EMPTY_ANALYSIS);
@@ -441,6 +468,7 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
       setArchiveState((archiveRes as unknown as XArchiveStateView | null) ?? EMPTY_ARCHIVE_STATE);
       setPresets(((presetsRes as unknown as { presets: XPresetRow[] })?.presets) ?? []);
       setChangeEvents((changeEventsRes as unknown as XChangeEventRow[]) ?? []);
+      setRunLog((runLogRes as unknown as XRunLogRow[]) ?? []);
     } catch (err) {
       console.warn('[XListening] loadInsights:', err);
     } finally {
@@ -1384,6 +1412,31 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
                         {ev.summary}
                       </span>
                       <span className="xls-count">{formatWhen(ev.at)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div className="xls-panel">
+              <h3 className="xls-panel-title">COLLECTION RUN LOG</h3>
+              <span className="xls-count">{runLog.length} collection run(s)</span>
+              {runLog.length === 0 ? (
+                <div className="xls-empty">
+                  No collection runs recorded in this campaign yet. Run a sweep or archive cycle to
+                  populate the log.
+                </div>
+              ) : (
+                <ul className="xls-source-list">
+                  {runLog.map((run, i) => (
+                    <li className="xls-source-row" key={`${run.profileId}:${run.operation}:${run.startedAt}:${i}`}>
+                      <span>
+                        <span className={`xls-marker xls-marker-run-${run.status}`}>
+                          {run.operation.replace(/_/g, ' ').toUpperCase()}
+                        </span>{' '}
+                        @{run.username.replace(/^@/, '')} · {run.added} added / {run.observed} observed ·{' '}
+                        {run.duplicates} dup · {run.status.toUpperCase()}
+                      </span>
+                      <span className="xls-count">{formatWhen(run.startedAt)}</span>
                     </li>
                   ))}
                 </ul>
