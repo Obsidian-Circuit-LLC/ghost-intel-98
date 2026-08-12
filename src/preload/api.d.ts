@@ -3,6 +3,7 @@
  */
 
 import type { VerifiedPluginInfo, PluginStatus, PluginBridgeApi } from '../shared/plugin-types';
+import type { XCollectionSettings } from '../shared/x-listening-collection-settings';
 import type {
   AppSettings,
   AttachmentBytesResult,
@@ -1070,6 +1071,13 @@ export interface GhostApi {
       removedPosts: number;
       removedNetworks: number;
     }>;
+    /** Read a campaign's per-campaign COLLECTION SETTINGS (collection-settings.ts
+     *  `getCollectionSettings`, F2). Healed to a full clamped record; no window, no network. */
+    getCollectionSettings(caseId: string): Promise<XCollectionSettings>;
+    /** Clamp (MAIN-side) + persist a campaign's COLLECTION SETTINGS (collection-settings.ts
+     *  `saveCollectionSettings`, F2). Every numeric field is bounded to its Enterprise band before
+     *  it is stored/consulted; returns the exact clamped record. Local secure-fs only. */
+    saveCollectionSettings(req: { caseId: string; settings: Partial<XCollectionSettings> }): Promise<XCollectionSettings>;
   };
   /**
    * Scraping cases (W4) — the isolated per-namespace SOCMINT/X collection-run stores, kept

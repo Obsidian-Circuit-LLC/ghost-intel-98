@@ -62,6 +62,7 @@ import type {
 } from './store';
 import type { XTorGate } from './session';
 import type { HarvestedItem } from '@shared/socmint/types';
+import type { XCollectionSettings } from '@shared/x-listening-collection-settings';
 
 /** This collector's version, stamped into every item's provenance. */
 export const X_COLLECTOR_VERSION = 'x-listening/1.0.0';
@@ -799,6 +800,11 @@ export interface XNetworkCaptureDeps {
   saveNetwork: (caseId: string, artifact: XNetworkArtifact) => Promise<number>;
   /** Append one collection-run record best-effort (telemetry, not evidence — see `emitRun`). */
   recordRun: (caseId: string, record: XRunLogRecord) => Promise<void>;
+  /** Read this campaign's per-campaign collection settings (F2) — the source of the default
+   *  scroll-pass budget when `req.passes` is unset. Production default is the encrypted
+   *  `getCollectionSettings` (fail-safe to `DEFAULT_COLLECTION_SETTINGS`); a unit harness injects
+   *  its own so the network loop can be bound deterministically. */
+  loadCollectionSettings: (caseId: string) => Promise<XCollectionSettings> | XCollectionSettings;
   /** Injected clock — the ISO capture time (determinism; feeds `capturedAt`/`firstObservedAt`). */
   now: () => string;
 }
@@ -892,6 +898,10 @@ function defaultNetworkCaptureDeps(): XNetworkCaptureDeps {
     recordRun: async (caseId, record) => {
       await recordCollectionRun(caseId, record);
     },
+    loadCollectionSettings: async (caseId) => {
+      const { getCollectionSettings } = await import('./collection-settings');
+      return getCollectionSettings(caseId);
+    },
     now: () => new Date().toISOString(),
   };
 }
@@ -953,7 +963,14 @@ export async function captureNetwork(
   const url = buildNetworkUrl(req.targetUsername, kind);
 
   const deps: XNetworkCaptureDeps = { ...defaultNetworkCaptureDeps(), ...overrides };
-  const passes = Math.max(1, Math.min(60, Math.floor(Number(req.passes) || DEFAULT_NETWORK_PASSES)));
+  // F2: the scroll-pass budget defaults to the per-campaign follower/following base passes (Enterprise
+  // `relationshipScrollPasses`, split per direction). An explicit `req.passes` still overrides. The
+  // settings read is fail-safe (`getCollectionSettings` heals to defaults), so this never blocks a
+  // capture; the value is re-clamped to [1,60] here regardless of source (defence-in-depth over the
+  // already-clamped stored value).
+  const settings = await deps.loadCollectionSettings(req.caseId);
+  const basePasses = kind === 'following' ? settings.followingBasePasses : settings.followerBasePasses;
+  const passes = Math.max(1, Math.min(60, Math.floor(Number(req.passes ?? basePasses)) || basePasses));
   const startedAt = deps.now();
   const username = String(req.targetUsername ?? '').replace(/^@+/, '').trim();
   const fullTarget = `@${username}`;

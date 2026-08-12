@@ -467,6 +467,27 @@
 .xls-settings { margin-top: 8px; }
 .xls-export-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
+/* ── F2: per-campaign COLLECTION SETTINGS form ──────────────────────────────── */
+.xls-collection-settings .xls-settings-group {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--ga98-shadow-dark);
+}
+.xls-settings-group-title {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--ga98-accent);
+  margin: 0 0 8px;
+}
+.xls-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px 12px;
+  margin-top: 8px;
+}
+.xls-settings-grid .xls-field { font-size: 10px; }
+.xls-settings-grid .xls-input { width: 100%; }
+
 /* ── Tabs body (Task 14 — dashboard/live/sources/network/entities) ──────────── */
 .xls-stat-grid {
   display: grid;

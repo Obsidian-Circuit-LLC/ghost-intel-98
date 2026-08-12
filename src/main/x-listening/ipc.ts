@@ -21,7 +21,9 @@ import { normalizeXSourceKey } from '@shared/x-listening-source';
 import { assertTrustedSender } from '../capture/capture-window';
 import { csvCell, escapeField } from '../capture/security';
 import type { HarvestedItem } from '@shared/socmint/types';
-import { networkToCsv, type XCollectSettings } from './extract';
+import { networkToCsv } from './extract';
+import { collectGateFromSettings, type XCollectionSettings } from '@shared/x-listening-collection-settings';
+import { getCollectionSettings, saveCollectionSettings } from './collection-settings';
 import { prodXStore } from './store';
 import type { XNote, XPostArtifact, XNetworkArtifact, XPreset, XEntityCacheEntry } from './store';
 import { ensureUuid } from '../security/validate';
@@ -399,21 +401,6 @@ async function loadClearnetEnabled(): Promise<boolean> {
     return settings.xListening?.clearnet === true;
   } catch {
     return false;
-  }
-}
-
-/**
- * Read the collect toggles (replies/reposts/comments) MAIN-side and trusted, same
- * lazy-import + fail-closed discipline as `loadClearnetEnabled` — a settings-read error
- * yields the all-off default, never a silent widen of what a capture pulls in.
- */
-async function loadCollectSettings(): Promise<XCollectSettings> {
-  try {
-    const { settingsStore } = await import('../storage/json-fs');
-    const settings = await settingsStore.read();
-    return settings.xListening?.collect ?? { replies: false, reposts: false, comments: false };
-  } catch {
-    return { replies: false, reposts: false, comments: false };
   }
 }
 
@@ -838,6 +825,34 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
     return removeSource(ensureUuid(req.caseId, 'caseId'), req.sourceKey);
   });
 
+  // ---- Task F2: per-campaign COLLECTION SETTINGS (System-tab form) ----------
+  // Derived read + a clamped write over the encrypted per-campaign sidecar. No capture window, no
+  // network egress. `getCollectionSettings` heals a partial/absent record to a full clamped one;
+  // `saveCollectionSettings` clamps EVERY numeric field MAIN-side before persisting (the renderer is
+  // never trusted with a raw number — Enterprise `settings:save` discipline). Both UUID-gate the
+  // caseId ahead of any store path being built. G1 (scheduling) + F1 (image policy) read the record
+  // produced here; the capture path (captureTimeline collect gate + captureNetwork base passes)
+  // consults it directly.
+  deps.handle(channels.xListening.getCollectionSettings, (e, caseIdArg) => {
+    assertTrustedSender(e);
+    if (typeof caseIdArg !== 'string' || !caseIdArg) {
+      throw new Error('Reading collection settings requires a caseId.');
+    }
+    return getCollectionSettings(ensureUuid(caseIdArg, 'caseId'));
+  });
+
+  deps.handle(channels.xListening.saveCollectionSettings, (e, reqArg) => {
+    assertTrustedSender(e);
+    const req = reqArg as { caseId?: unknown; settings?: unknown } | undefined;
+    if (!req || typeof req.caseId !== 'string' || !req.caseId || typeof req.settings !== 'object' || !req.settings) {
+      throw new Error('Saving collection settings requires a caseId and a settings object.');
+    }
+    return saveCollectionSettings(
+      ensureUuid(req.caseId, 'caseId'),
+      req.settings as Partial<XCollectionSettings>,
+    );
+  });
+
   // ---- Phase-1 Enterprise-port surface (Task 6) --------------------------
   // Session: caseId-scoped, Tor-default (session.ts). `clearnetEnabled` is read MAIN-side and
   // trusted — the renderer never widens the network posture; it only ever flips the persisted
@@ -890,7 +905,12 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
         'X is not connected for this campaign. Open the session and sign in before capturing.'
       );
     }
-    const collect = await loadCollectSettings();
+    // F2: the surrounding-thread collect gate is derived from THIS campaign's per-campaign
+    // COLLECTION SETTINGS (RECORD TYPES), MAIN-side — the renderer never widens capture; it only
+    // ever edits the persisted per-campaign record through `saveCollectionSettings` (clamped there).
+    // `getCollectionSettings` is fail-safe (heals to minimal-capture defaults on any read error).
+    const collectionSettings = await getCollectionSettings(caseId);
+    const collect = collectGateFromSettings(collectionSettings);
     return captureTimeline(win, {
       caseId,
       jobId: typeof req.jobId === 'string' ? req.jobId : caseId,

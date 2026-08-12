@@ -11,6 +11,7 @@ import type { EntityType, AppSettings } from '../shared/types';
 import type { RunEvent } from '../shared/investigation-agent';
 import type { RunBudget } from '../shared/investigation-types';
 import type { IntelReport } from '../shared/investigation-report';
+import type { XCollectionSettings } from '../shared/x-listening-collection-settings';
 
 const api = {
   cases: {
@@ -787,7 +788,11 @@ const api = {
       kind: 'followers' | 'following';
     }) => ipcRenderer.invoke(channels.xListening.captureNetwork, req),
     removeSource: (req: { caseId: string; sourceKey: string }) =>
-      ipcRenderer.invoke(channels.xListening.removeSource, req)
+      ipcRenderer.invoke(channels.xListening.removeSource, req),
+    getCollectionSettings: (caseId: string): Promise<XCollectionSettings> =>
+      ipcRenderer.invoke(channels.xListening.getCollectionSettings, caseId),
+    saveCollectionSettings: (req: { caseId: string; settings: Partial<XCollectionSettings> }): Promise<XCollectionSettings> =>
+      ipcRenderer.invoke(channels.xListening.saveCollectionSettings, req)
   },
   // Scraping cases (W4) — the isolated SOCMINT/X collection-run stores. Every call passes a
   // `store: 'socmint' | 'x'` discriminator that main validates against an allowlist and routes

@@ -63,6 +63,8 @@ const REACHABLE_CHANNELS: ReadonlyArray<keyof typeof channels.xListening> = [
   'saveNote',
   'readNotes',
   'removeNote',
+  'getCollectionSettings',
+  'saveCollectionSettings',
 ];
 
 describe('whole-module seam — every xListening channel is reachable from a real control', () => {

@@ -46,6 +46,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ScrapingCase } from '@shared/types';
 import { normalizeXSourceKey } from '@shared/x-listening-source';
+import {
+  DEFAULT_COLLECTION_SETTINGS,
+  COLLECTION_SETTINGS_RANGES,
+  clampCollectionSettings,
+  type XCollectionSettings,
+  type CollectionSettingNumericField,
+} from '@shared/x-listening-collection-settings';
 import { useSettings } from '../../state/store';
 import { confirmDialog, promptDialog } from '../../state/dialogs';
 import { NetworkGraph } from './NetworkGraph';
@@ -396,6 +403,11 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
   const [archiveState, setArchiveState] = useState<XArchiveStateView>(EMPTY_ARCHIVE_STATE);
   const [archiveBusy, setArchiveBusy] = useState(false);
   const [demoBusy, setDemoBusy] = useState(false);
+  // F2: the per-campaign COLLECTION SETTINGS editable draft (loaded from the encrypted per-campaign
+  // sidecar on campaign switch; SAVE clamps MAIN-side and returns the stored record).
+  const [collectionSettings, setCollectionSettings] =
+    useState<XCollectionSettings>(DEFAULT_COLLECTION_SETTINGS);
+  const [collectionSettingsBusy, setCollectionSettingsBusy] = useState(false);
   const [presets, setPresets] = useState<XPresetRow[]>([]);
   const [presetNameDraft, setPresetNameDraft] = useState('');
   const [presetsBusy, setPresetsBusy] = useState(false);
@@ -1203,14 +1215,59 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
     [xListeningSettings, patchSettings],
   );
 
-  const handleToggleCollect = useCallback(
-    async (key: 'replies' | 'reposts' | 'comments', next: boolean) => {
-      const x = xListeningSettings;
-      if (!x) return;
-      await patchSettings({ xListening: { ...x, collect: { ...x.collect, [key]: next } } });
-    },
-    [xListeningSettings, patchSettings],
-  );
+  // ── F2: per-campaign COLLECTION SETTINGS (System-tab form) ──────────────────
+  // Load THIS campaign's persisted collection settings on switch — a per-campaign record, so
+  // switching campaigns loads that campaign's settings (never the last one's). Guarded try/catch so
+  // a minimal harness lacking the channel keeps the defaults instead of crashing the module.
+  useEffect(() => {
+    if (!activeCampaignId) {
+      setCollectionSettings(DEFAULT_COLLECTION_SETTINGS);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await window.api.xListening.getCollectionSettings(activeCampaignId);
+        if (!cancelled && res) setCollectionSettings(clampCollectionSettings(res));
+      } catch {
+        if (!cancelled) setCollectionSettings(DEFAULT_COLLECTION_SETTINGS);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeCampaignId]);
+
+  // Local draft edits — booleans flip immediately, numbers are re-clamped MAIN-side on SAVE (the
+  // input min/max come from the shared ranges, so the UI can't offer an out-of-band value anyway).
+  const setCollectionBool = useCallback((key: keyof XCollectionSettings, next: boolean) => {
+    setCollectionSettings((prev) => ({ ...prev, [key]: next }));
+  }, []);
+  const setCollectionNumber = useCallback((key: CollectionSettingNumericField, raw: string) => {
+    // Keep the raw numeric parse local; the authoritative clamp is main-side on SAVE. An empty/NaN
+    // input holds the field's default so the form never carries a NaN into the save payload.
+    const parsed = Number(raw);
+    const next = Number.isFinite(parsed) ? parsed : COLLECTION_SETTINGS_RANGES[key].def;
+    setCollectionSettings((prev) => ({ ...prev, [key]: next }));
+  }, []);
+
+  const handleSaveCollectionSettings = useCallback(async () => {
+    if (!activeCampaignId) return;
+    setCollectionSettingsBusy(true);
+    try {
+      const saved = await window.api.xListening.saveCollectionSettings({
+        caseId: activeCampaignId,
+        settings: collectionSettings,
+      });
+      // Re-seat from the MAIN-side clamped record so the UI shows exactly what will be consulted.
+      setCollectionSettings(clampCollectionSettings(saved));
+      setNotice('Collection settings saved for this campaign.');
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCollectionSettingsBusy(false);
+    }
+  }, [activeCampaignId, collectionSettings]);
 
   // ── Task 15(a): demo data (honesty-marked, never mistaken for real intel) ───────────────
   const handleLoadDemoData = useCallback(async () => {
@@ -2341,23 +2398,176 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
 
         {tab === 'system' && (
           <section className="xls-tab-panel xls-system">
-            <div className="xls-panel">
-              <h3 className="xls-panel-title">SURROUNDING-THREAD COLLECTION</h3>
+            <div className="xls-panel xls-collection-settings">
+              <div className="xls-panel-title-row">
+                <h3 className="xls-panel-title">COLLECTION SETTINGS</h3>
+                <button
+                  type="button"
+                  className="xls-btn xls-btn-primary"
+                  onClick={() => void handleSaveCollectionSettings()}
+                  disabled={collectionSettingsBusy || !activeCampaignId}
+                >
+                  {collectionSettingsBusy ? 'Saving…' : 'Save Settings'}
+                </button>
+              </div>
               <p className="xls-help">
-                A target's own top-level posts are always captured. These extend collection to
-                the surrounding thread — read MAIN-side, never widened by this UI alone.
+                Per-campaign collection knobs. A target's own top-level posts are always captured;
+                these govern the surrounding thread, scroll budgets and the incremental archive.
+                Every number is re-clamped MAIN-side on save — this form can only offer values inside
+                the allowed band.
               </p>
-              {(['replies', 'reposts', 'comments'] as const).map((key) => (
-                <label className="xls-check" key={key}>
+
+              <div className="xls-settings-group">
+                <h4 className="xls-settings-group-title">AUTOMATIC SWEEPS</h4>
+                <label className="xls-check">
                   <input
                     type="checkbox"
-                    checked={xListeningSettings?.collect?.[key] === true}
-                    onChange={(e) => void handleToggleCollect(key, e.target.checked)}
-                    disabled={!xListeningSettings}
+                    checked={collectionSettings.automaticSweeps === true}
+                    disabled={!activeCampaignId}
+                    onChange={(e) => setCollectionBool('automaticSweeps', e.target.checked)}
                   />
-                  Capture {key}
+                  Enable automatic sweeps on the interval below
                 </label>
-              ))}
+                <p className="xls-help">
+                  The sweep timer runs at a fixed cadence, but each sweep&apos;s capture still routes
+                  the Tor gate. Tor mode fails closed (no capture, no silent clearnet) unless you have
+                  enabled the clearnet toggle with its real-IP acknowledgement.
+                </p>
+              </div>
+
+              <div className="xls-settings-group">
+                <h4 className="xls-settings-group-title">RECORD TYPES</h4>
+                {([
+                  ['collectReplies', 'Capture replies'],
+                  ['collectReposts', 'Capture reposts'],
+                  ['collectComments', 'Capture third-party comments'],
+                  ['retrieveImages', 'Retrieve + archive images'],
+                ] as ReadonlyArray<readonly [keyof XCollectionSettings, string]>).map(([key, label]) => (
+                  <label className="xls-check" key={key}>
+                    <input
+                      type="checkbox"
+                      checked={collectionSettings[key] === true}
+                      disabled={!activeCampaignId}
+                      onChange={(e) => setCollectionBool(key, e.target.checked)}
+                    />
+                    {label}
+                  </label>
+                ))}
+                <div className="xls-settings-grid">
+                  {([
+                    ['commentThreadsPerSource', 'Comment threads / source'],
+                    ['commentScrollPasses', 'Comment scroll passes'],
+                  ] as ReadonlyArray<readonly [CollectionSettingNumericField, string]>).map(
+                    ([key, label]) => (
+                      <label className="xls-field" key={key}>
+                        {label} ({COLLECTION_SETTINGS_RANGES[key].min}–{COLLECTION_SETTINGS_RANGES[key].max})
+                        <input
+                          type="number"
+                          className="xls-input"
+                          min={COLLECTION_SETTINGS_RANGES[key].min}
+                          max={COLLECTION_SETTINGS_RANGES[key].max}
+                          value={collectionSettings[key]}
+                          disabled={!activeCampaignId}
+                          onChange={(e) => setCollectionNumber(key, e.target.value)}
+                        />
+                      </label>
+                    ),
+                  )}
+                </div>
+              </div>
+
+              <div className="xls-settings-group">
+                <h4 className="xls-settings-group-title">TIMING &amp; HEALTH</h4>
+                <div className="xls-settings-grid">
+                  {([
+                    ['sweepIntervalMinutes', 'Sweep interval (min)'],
+                    ['profileScrollPasses', 'Profile scroll passes'],
+                    ['followerBasePasses', 'Follower base passes'],
+                    ['followingBasePasses', 'Following base passes'],
+                    ['networkStagnationLimit', 'Network stagnation limit'],
+                    ['networkSnapshotsRetained', 'Network snapshots kept'],
+                    ['delayPerPassMs', 'Delay / pass (ms)'],
+                    ['retentionLimit', 'Retention limit'],
+                  ] as ReadonlyArray<readonly [CollectionSettingNumericField, string]>).map(
+                    ([key, label]) => (
+                      <label className="xls-field" key={key}>
+                        {label} ({COLLECTION_SETTINGS_RANGES[key].min}–{COLLECTION_SETTINGS_RANGES[key].max})
+                        <input
+                          type="number"
+                          className="xls-input"
+                          min={COLLECTION_SETTINGS_RANGES[key].min}
+                          max={COLLECTION_SETTINGS_RANGES[key].max}
+                          value={collectionSettings[key]}
+                          disabled={!activeCampaignId}
+                          onChange={(e) => setCollectionNumber(key, e.target.value)}
+                        />
+                      </label>
+                    ),
+                  )}
+                </div>
+              </div>
+
+              <div className="xls-settings-group">
+                <h4 className="xls-settings-group-title">INCREMENTAL ARCHIVE</h4>
+                <label className="xls-check">
+                  <input
+                    type="checkbox"
+                    checked={collectionSettings.archiveEnabled === true}
+                    disabled={!activeCampaignId}
+                    onChange={(e) => setCollectionBool('archiveEnabled', e.target.checked)}
+                  />
+                  Enable the incremental archive
+                </label>
+                {([
+                  ['archiveFollowers', 'Archive followers'],
+                  ['archiveFollowing', 'Archive following'],
+                ] as ReadonlyArray<readonly [keyof XCollectionSettings, string]>).map(([key, label]) => (
+                  <label className="xls-check" key={key}>
+                    <input
+                      type="checkbox"
+                      checked={collectionSettings[key] === true}
+                      disabled={!activeCampaignId}
+                      onChange={(e) => setCollectionBool(key, e.target.checked)}
+                    />
+                    {label}
+                  </label>
+                ))}
+                <div className="xls-settings-grid">
+                  {([
+                    ['archiveIntervalMinutes', 'Archive interval (min)'],
+                    ['postDepthPerCycle', 'Post depth / cycle'],
+                    ['maxPostDepth', 'Max post depth'],
+                    ['networkDepthPerCycle', 'Network depth / cycle'],
+                    ['maxNetworkDepth', 'Max network depth'],
+                  ] as ReadonlyArray<readonly [CollectionSettingNumericField, string]>).map(
+                    ([key, label]) => (
+                      <label className="xls-field" key={key}>
+                        {label} ({COLLECTION_SETTINGS_RANGES[key].min}–{COLLECTION_SETTINGS_RANGES[key].max})
+                        <input
+                          type="number"
+                          className="xls-input"
+                          min={COLLECTION_SETTINGS_RANGES[key].min}
+                          max={COLLECTION_SETTINGS_RANGES[key].max}
+                          value={collectionSettings[key]}
+                          disabled={!activeCampaignId}
+                          onChange={(e) => setCollectionNumber(key, e.target.value)}
+                        />
+                      </label>
+                    ),
+                  )}
+                </div>
+              </div>
+
+              <div className="xls-settings">
+                <button
+                  type="button"
+                  className="xls-btn xls-btn-primary"
+                  onClick={() => void handleSaveCollectionSettings()}
+                  disabled={collectionSettingsBusy || !activeCampaignId}
+                >
+                  {collectionSettingsBusy ? 'Saving…' : 'Save Settings'}
+                </button>
+              </div>
             </div>
 
             <div className="xls-panel">

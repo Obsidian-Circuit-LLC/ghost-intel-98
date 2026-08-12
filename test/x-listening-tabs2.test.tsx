@@ -24,6 +24,11 @@ import { XListeningModule } from '../src/renderer/modules/x-listening/XListening
 import { useSettings } from '../src/renderer/state/store';
 import { confirmDialog } from '../src/renderer/state/dialogs';
 import { defaultSettings, type AppSettings } from '@shared/types';
+import {
+  DEFAULT_COLLECTION_SETTINGS,
+  clampCollectionSettings,
+  type XCollectionSettings,
+} from '@shared/x-listening-collection-settings';
 
 const confirmDialogMock = vi.mocked(confirmDialog);
 
@@ -119,6 +124,10 @@ function makeApi() {
       })),
       presetsRun: vi.fn(async () => ({ matches: [{ postId: 'post-a', matchedKeywords: ['osint'] }] })),
       presetsRemove: vi.fn(async () => ({ presets: [] })),
+      getCollectionSettings: vi.fn(async () => DEFAULT_COLLECTION_SETTINGS),
+      saveCollectionSettings: vi.fn(async (req: { caseId: string; settings: Partial<XCollectionSettings> }) =>
+        clampCollectionSettings(req.settings),
+      ),
     },
   };
 }
@@ -404,21 +413,30 @@ describe('X Listening Station tabs (Task 15)', () => {
   });
 
   // ── system ─────────────────────────────────────────────────────────────────
-  it('system tab collect toggles patch the FULL xListening settings block (no sibling dataloss)', async () => {
-    const settingsUpdate = withSettingsUpdate(api);
+  it('system tab COLLECTION SETTINGS loads per-campaign then SAVE clamps + persists the edited record', async () => {
     await mount();
     await clickTab(/^system$/i);
-    const repliesCheckbox = Array.from(container.querySelectorAll('.xls-system input[type="checkbox"]')).find(
-      (el) => (el.closest('label')?.textContent || '').match(/capture replies/i),
+    // The per-campaign settings are loaded for the active campaign on mount/switch.
+    expect(api.xListening.getCollectionSettings).toHaveBeenCalledWith('camp-a');
+
+    // Toggle a RECORD TYPE that defaults OFF (reposts) so the edit is observable in the save payload.
+    const repostsCheckbox = Array.from(container.querySelectorAll('.xls-system input[type="checkbox"]')).find(
+      (el) => (el.closest('label')?.textContent || '').match(/capture reposts/i),
     ) as HTMLInputElement;
-    await act(async () => { repliesCheckbox.click(); });
+    expect(repostsCheckbox.checked).toBe(false); // Enterprise default
+    await act(async () => { repostsCheckbox.click(); });
     await act(async () => { await Promise.resolve(); });
 
-    expect(settingsUpdate).toHaveBeenCalledWith({
-      xListening: expect.objectContaining({ collect: expect.objectContaining({ replies: true }) }),
-    });
-    const sent = settingsUpdate.mock.calls[0][0] as Partial<AppSettings>;
-    expect(sent.xListening).toEqual(expect.objectContaining({ clearnet: defaultSettings.xListening.clearnet }));
+    // SAVE drives the real per-campaign channel with the edited draft (main-side clamps it there).
+    await act(async () => { findButton(container, /save settings/i).click(); });
+    await act(async () => { await Promise.resolve(); });
+
+    expect(api.xListening.saveCollectionSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        caseId: 'camp-a',
+        settings: expect.objectContaining({ collectReposts: true }),
+      }),
+    );
   });
 
   it('system tab archiveCycles toggle patches settings and Run Archive Step drives archiveRun + refreshes archiveStatus', async () => {

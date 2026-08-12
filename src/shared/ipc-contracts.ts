@@ -688,7 +688,18 @@ export const channels = {
      *  `channelId`/`authorHandle` matches `sourceKey` and every network artifact whose `target`
      *  matches are dropped (case-insensitive, `@`-insensitive). Local secure-fs only — no window,
      *  no network egress. Returns the counts removed. Consumed by the per-source REMOVE action. */
-    removeSource: 'xListening:removeSource'
+    removeSource: 'xListening:removeSource',
+    /** Read a campaign's per-campaign COLLECTION SETTINGS (collection-settings.ts `getCollectionSettings`,
+     *  F2 — the System-tab form). Derived read of the encrypted `x-collection-settings.json` sidecar,
+     *  healed to a full clamped record; no capture window, no network. G1 (scheduling) + F1 (image
+     *  policy) read the same record. */
+    getCollectionSettings: 'xListening:collectionSettings:get',
+    /** Clamp (MAIN-side, never trusting the renderer) + persist a campaign's COLLECTION SETTINGS
+     *  (collection-settings.ts `saveCollectionSettings`, F2). Every numeric field is bounded to its
+     *  Enterprise band before it is stored or consulted; returns the exact clamped record. Local
+     *  secure-fs only — no capture window, no network egress. Consulted by the capture path
+     *  (`captureTimeline` collect gate + `captureNetwork` base passes). */
+    saveCollectionSettings: 'xListening:collectionSettings:save'
   },
   // Scraping cases — the isolated per-namespace case stores for SOCMINT + X collection runs
   // (kept apart from the core investigation `cases` namespace). Every handler takes a
