@@ -29,10 +29,15 @@ export interface TextBlockProps {
   /** The report's reusable-introduction library, insertable from the same right-click menu. Optional
    *  for the same backward-compat reason as `descriptors`. */
   introductions?: Descriptor[];
+  /** Whether the right-click descriptor/introduction insert menu is available. Defaults to true (the
+   *  Reports use case). Consumers that reuse TextBlock outside Reports — e.g. Journal Jots, which has
+   *  no descriptor/introduction library — pass `false` so right-click falls back to the native menu
+   *  instead of surfacing an always-empty "No descriptors or introductions yet." popover. */
+  descriptorMenu?: boolean;
 }
 
 export function TextBlock(props: TextBlockProps): JSX.Element {
-  const { block, onChange, descriptors = [], introductions = [] } = props;
+  const { block, onChange, descriptors = [], introductions = [], descriptorMenu = true } = props;
   const ref = useRef<HTMLDivElement | null>(null);
   // FROZEN initial HTML — the fix for "typed text comes out backwards". The editable div is truly
   // UNCONTROLLED: React must set its innerHTML exactly once (on mount) and NEVER re-apply it. Feeding
@@ -344,7 +349,7 @@ export function TextBlock(props: TextBlockProps): JSX.Element {
         dangerouslySetInnerHTML={{ __html: initialHtml }}
         onInput={commit}
         onBlur={commit}
-        onContextMenu={openDescriptorMenu}
+        onContextMenu={descriptorMenu ? openDescriptorMenu : undefined}
       />
       {/* Portaled to document.body — `.ga98-report-page` (the report editor's page ancestor) carries
        *  `transform: scale(...)` for zoom, and a CSS transform on an ancestor becomes the containing

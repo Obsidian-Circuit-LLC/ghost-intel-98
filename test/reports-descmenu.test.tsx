@@ -112,4 +112,20 @@ describe('TextBlock descriptor menu — no double menu, portaled out of the scal
     });
     expect(document.querySelector('.ga98-report-descmenu')).toBeNull();
   });
+
+  it('descriptorMenu={false} (e.g. Journal Jots, which has no descriptor library) suppresses the right-click menu', async () => {
+    // GhostExodus feedback: right-clicking a Journal Jots text block surfaced an always-empty
+    // "No descriptors or introductions yet." popover (the Reports-only descriptor menu leaking into
+    // a consumer that reuses TextBlock). With descriptorMenu={false}, contextmenu is not wired, so
+    // no descriptor popover opens and right-click falls back to the native browser menu.
+    const block: TextBlockData = { id: 'b4', kind: 'text', html: '' };
+    await act(async () => {
+      root.render(<TextBlock block={block} onChange={vi.fn()} descriptorMenu={false} />);
+    });
+    const body = container.querySelector('.ga98-report-textblock-body') as HTMLDivElement;
+    await act(async () => {
+      body.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 }));
+    });
+    expect(document.querySelector('.ga98-report-descmenu')).toBeNull();
+  });
 });

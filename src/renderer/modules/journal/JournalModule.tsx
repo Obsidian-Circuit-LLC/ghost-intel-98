@@ -323,7 +323,7 @@ export function JournalModule(): JSX.Element {
             {blocks.map((b) => (
               <div key={b.id} className="ga98-journal-block">
                 {b.kind === 'text' ? (
-                  <TextBlock block={b} onChange={(html) => updateTextBlock(b.id, html)} />
+                  <TextBlock block={b} onChange={(html) => updateTextBlock(b.id, html)} descriptorMenu={false} />
                 ) : (
                   <ImageBlock
                     block={b}
