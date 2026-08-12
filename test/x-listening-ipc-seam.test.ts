@@ -113,7 +113,9 @@ const NEW_CHANNELS: Array<{ key: keyof typeof channels.xListening; args: unknown
   // Task A3 — collection run log (derived read, newest-first capped).
   { key: 'runLog', args: [caseId] },
   // Task E1 — Tor-gated "open in X" affordance.
-  { key: 'openInX', args: [{ kind: 'profile', ref: 'target' }] }
+  { key: 'openInX', args: [{ kind: 'profile', ref: 'target' }] },
+  // Task C1 — live follower/following network extraction.
+  { key: 'captureNetwork', args: [{ caseId, channelId: 'target', targetUsername: 'target', kind: 'followers' }] }
 ];
 
 describe('ipc-contracts.ts — Phase-1 xListening channel constants exist', () => {

@@ -31,13 +31,16 @@ import {
   X_POST_SCRIPT,
   X_PAGE_STATE_SCRIPT,
   X_VERIFY_POST_SCRIPT,
+  USER_CELL_SCRIPT,
   classifyXPageState,
   isPostUnavailableText,
   normalizePost,
   normalizeReply,
   normalizeRepost,
+  normalizeNetwork,
   selectTimelineCaptures,
   type RawPost,
+  type RawUserCell,
   type NormalizeContext,
   type XHarvestedItem,
   type XCollectSettings,
@@ -47,7 +50,16 @@ import {
 import { postEvidenceHash } from './evidence';
 import { ingestPostsWithHistory, markPostUnavailable } from './changes';
 import { buildRunRecord, recordCollectionRun, type RunRecordInput } from './run-log';
-import type { XPostArtifact, XPostMetrics, XPostMetricsRaw, XRunLogRecord, XRunOperation, XStore } from './store';
+import type {
+  XNetworkAccount,
+  XNetworkArtifact,
+  XPostArtifact,
+  XPostMetrics,
+  XPostMetricsRaw,
+  XRunLogRecord,
+  XRunOperation,
+  XStore,
+} from './store';
 import type { XTorGate } from './session';
 import type { HarvestedItem } from '@shared/socmint/types';
 
@@ -709,4 +721,344 @@ export async function openInX(
   w.show?.();
   w.focus?.();
   return { opened: true, url: target.toString() };
+}
+
+// ---- live follower/following network extraction (EXTRACT FOLLOWERS/FOLLOWING, Task C1) ----------
+//
+// Rebuild of Enterprise `extractRelationships`/`scrapeRelationshipRows` (`relationships:extract`,
+// `main.cjs:2347-2455`) onto OUR hardened seams. The old clearnet-only `captureFollowers`/
+// `captureFollowing` were retired at Task 16, leaving only the PURE normalizer (`normalizeNetwork`,
+// extract.ts Task 7) + the persistence accumulator (`store.networks.save`) with NOTHING driving a
+// live scroll-capture — this closes that gap.
+//
+// Structured like `verifyPost`/`openInX` (self-contained + FAIL CLOSED), not `captureTimeline`
+// (which captures whatever an analyst already navigated to): it OPENS its own Tor-gated window on
+// the shared authenticated X partition, navigates it to `https://x.com/<user>/{followers|following}`
+// (URL validated + built BEFORE the gate/network are ever touched), gates the page (signed-in),
+// scroll-scrapes the visible `UserCell` rows with the STATIC `USER_CELL_SCRIPT` (no interpolation),
+// accumulates unique handles across bounded passes (stagnation-stop), normalizes + persists via the
+// same accumulator a re-scan uses, emits a run-log record, and ALWAYS destroys the window in a
+// `finally`. Remote avatars are dropped by `normalizeUserCell` (no remote-media inlining) — avatar
+// enrichment is out of scope here (per-profile image policy is F1).
+
+/** The renderer-supplied context for one network extraction. `channelId` is the source profile id
+ *  the run-log record is keyed on (defaults to `targetUsername` at the caller); `targetUsername` is
+ *  whose followers/following to extract; `passes` bounds the scroll loop. */
+export interface XNetworkCaptureRequest {
+  caseId: string;
+  channelId: string;
+  targetUsername: string;
+  kind: 'followers' | 'following';
+  /** Scroll passes — clamped to [1, 60]. Defaults to `DEFAULT_NETWORK_PASSES`. */
+  passes?: number;
+}
+
+export interface XNetworkCaptureResult {
+  blocked: boolean;
+  reason?: string;
+  kind: 'followers' | 'following';
+  /** The canonical `@handle` the extraction targeted. */
+  target: string;
+  /** Accounts observed on this scan (`= accounts.length`). */
+  observed: number;
+  /** Accounts newly persisted vs the prior accumulator for this (target, kind). */
+  added: number;
+  /** How many scroll passes actually ran. */
+  completedPasses: number;
+  /** True iff the loop stopped on stagnation (a stable end) rather than the pass ceiling. */
+  reachedEnd: boolean;
+}
+
+/** Injectable seams so extraction is testable without electron/network/secure-fs. Production
+ *  defaults are lazy dynamic imports of the sanctioned Tor seam (`./session`) + the hardened window
+ *  factory + the encrypted store / run-log — this module statically imports NONE of them. */
+export interface XNetworkCaptureDeps {
+  /** Read the acked clearnet opt-out MAIN-side, fail-closed (any error → false = Tor mode). */
+  loadClearnetEnabled: () => Promise<boolean>;
+  /** Resolve the Tor posture from the acked clearnet flag (`session.ts` `resolveXTorGate`). */
+  resolveGate: (clearnetEnabled: boolean) => XTorGate | Promise<XTorGate>;
+  /** Open a hardened capture window at `url` over the resolved posture (proxy iff Tor mode). */
+  openWindow: (url: string, proxy?: { socks: string }) => Promise<Electron.BrowserWindow>;
+  /** Run a static payload in the capture page → its result. */
+  runCapture: (win: Electron.BrowserWindow, js: string) => Promise<unknown>;
+  /** The challenge/lock gate: runs `capture` ONLY on an unblocked, signed-in page. */
+  guard: <T>(
+    win: Electron.BrowserWindow,
+    capture: () => Promise<T>,
+  ) => Promise<{ blocked: boolean; reason?: string; result?: T }>;
+  /** Scroll the capture page one step (a static in-page payload, no interpolation). */
+  scroll: (win: Electron.BrowserWindow) => Promise<void>;
+  /** Read the ALREADY-persisted accounts for one (target, kind) — used only to report an honest
+   *  `added` delta against the accumulator, never to gate the scan. */
+  readNetwork: (
+    caseId: string,
+    target: string,
+    kind: 'followers' | 'following',
+  ) => Promise<XNetworkAccount[]>;
+  /** Persist the freshly captured artifact (store.ts `networks.save`, the Task 7 accumulator). */
+  saveNetwork: (caseId: string, artifact: XNetworkArtifact) => Promise<number>;
+  /** Append one collection-run record best-effort (telemetry, not evidence — see `emitRun`). */
+  recordRun: (caseId: string, record: XRunLogRecord) => Promise<void>;
+  /** Injected clock — the ISO capture time (determinism; feeds `capturedAt`/`firstObservedAt`). */
+  now: () => string;
+}
+
+/** Default scroll passes when the caller doesn't specify — matches Enterprise's
+ *  `relationshipScrollPasses` default (`main.cjs:2354`). */
+export const DEFAULT_NETWORK_PASSES = 8;
+/** Consecutive no-growth passes that end the loop early (a stable end). */
+const NETWORK_STAGNATION_LIMIT = 3;
+
+/** STATIC scroll payload — the ONLY inputs are literal numbers; no scraped data is interpolated.
+ *  Jumps ~90% of the viewport (min 650px), matching Enterprise's `scrapeRelationshipRows` scroll. */
+const X_NETWORK_SCROLL_SCRIPT = `
+  (() => {
+    const s = document.scrollingElement || document.documentElement;
+    const jump = Math.max(innerHeight * 0.9, 650);
+    s.scrollTo({ top: Math.min(s.scrollHeight, (s.scrollTop || 0) + jump), behavior: 'auto' });
+    return true;
+  })()
+`;
+
+/**
+ * Validate `target` and construct the exact canonical `/followers` or `/following` URL, or throw —
+ * the ONLY URL a `captureNetwork` window is ever pointed at, and always built BEFORE a window opens.
+ * Pure (no network): strip a leading `@`, enforce `^[A-Za-z0-9_]{1,15}$` (the same guard
+ * `openPostThread`/`openRelationshipProfile` used), and build `https://x.com/<user>/<kind>` EXACTLY
+ * (no path injection). `kind` is the fixed literal `'followers'`/`'following'`, never interpolated
+ * from untrusted input.
+ */
+export function buildNetworkUrl(target: string, kind: 'followers' | 'following'): URL {
+  const username = String(target ?? '').replace(/^@/, '').trim();
+  if (!X_USERNAME_RE.test(username)) {
+    throw new Error('The selected target does not contain a valid X username.');
+  }
+  const path = kind === 'following' ? 'following' : 'followers';
+  return new URL(`https://x.com/${encodeURIComponent(username)}/${path}`);
+}
+
+function defaultNetworkCaptureDeps(): XNetworkCaptureDeps {
+  return {
+    loadClearnetEnabled: async () => {
+      try {
+        const { settingsStore } = await import('../storage/json-fs');
+        const settings = await settingsStore.read();
+        return settings.xListening?.clearnet === true;
+      } catch {
+        return false;
+      }
+    },
+    resolveGate: async (clearnetEnabled) => {
+      const { resolveXTorGate } = await import('./session');
+      return resolveXTorGate(clearnetEnabled);
+    },
+    openWindow: async (url, proxy) => {
+      const [{ createCaptureWindow }, sess] = await Promise.all([
+        import('../capture/capture-window'),
+        import('./session'),
+      ]);
+      const win = await createCaptureWindow({
+        partition: sess.X_LISTENING_PARTITION,
+        url,
+        allowHosts: sess.X_ALLOW_HOSTS,
+        ...(proxy ? { proxy } : {}),
+        webRTCIPHandlingPolicy: 'disable_non_proxied_udp',
+      });
+      // Belt-and-braces re-assert on the returned webContents (idempotent) — same discipline as
+      // verifyPost's openWindow.
+      win.webContents.setWebRTCIPHandlingPolicy('disable_non_proxied_udp');
+      return win;
+    },
+    runCapture: defaultRunCapture,
+    guard: defaultGuard,
+    scroll: async (win) => {
+      await defaultRunCapture(win, X_NETWORK_SCROLL_SCRIPT);
+    },
+    readNetwork: async (caseId, target, kind) => {
+      const { prodXStore } = await import('./store');
+      const store = await prodXStore();
+      const artifacts = await store.networks.read(caseId);
+      const t = target.toLowerCase();
+      const hit = artifacts.find(
+        (a) => String(a.target ?? '').toLowerCase() === t && a.kind === kind,
+      );
+      return hit?.accounts ?? [];
+    },
+    saveNetwork: async (caseId, artifact) => {
+      const { prodXStore } = await import('./store');
+      const store = await prodXStore();
+      return store.networks.save(caseId, artifact);
+    },
+    recordRun: async (caseId, record) => {
+      await recordCollectionRun(caseId, record);
+    },
+    now: () => new Date().toISOString(),
+  };
+}
+
+/**
+ * Scroll-scrape the visible follower/following `UserCell` rows, accumulating unique handles across
+ * bounded passes. Runs the STATIC `USER_CELL_SCRIPT` each pass, dedups case-insensitively by handle
+ * (the same key `normalizeNetwork`/`store.networks.save` use), and stops early once
+ * `NETWORK_STAGNATION_LIMIT` consecutive passes add nothing new (a stable end). Never runs the
+ * scroll after the final pass (gentle on X). Returns the accumulated raw cells + the loop telemetry.
+ */
+async function scrapeNetworkRows(
+  win: Electron.BrowserWindow,
+  passes: number,
+  deps: XNetworkCaptureDeps,
+): Promise<{ rows: RawUserCell[]; completedPasses: number; reachedEnd: boolean }> {
+  const seen = new Map<string, RawUserCell>();
+  let completedPasses = 0;
+  let stagnant = 0;
+  let reachedEnd = false;
+  for (let i = 0; i < passes; i += 1) {
+    completedPasses = i + 1;
+    const raw = await deps.runCapture(win, USER_CELL_SCRIPT);
+    const rows: RawUserCell[] = Array.isArray(raw) ? (raw as RawUserCell[]) : [];
+    const before = seen.size;
+    for (const row of rows) {
+      const handle = String(row?.username ?? '').replace(/^@+/, '');
+      const key = handle.toLowerCase();
+      if (handle && !seen.has(key)) seen.set(key, row);
+    }
+    if (seen.size === before) stagnant += 1;
+    else stagnant = 0;
+    if (i >= passes - 1) break;
+    if (stagnant >= NETWORK_STAGNATION_LIMIT) {
+      reachedEnd = true;
+      break;
+    }
+    await deps.scroll(win);
+  }
+  return { rows: [...seen.values()], completedPasses, reachedEnd };
+}
+
+/**
+ * Extract one target's followers or following (Task C1). Validates the target + builds the URL FIRST
+ * (a malformed handle throws, opening NO window and never touching the gate/network), then resolves
+ * the Tor posture and refuses (opening no window, persisting nothing) when it is blocked — FAIL
+ * CLOSED, no clearnet fallback unless the acked clearnet toggle is on. Opens a hidden Tor-gated
+ * window on the shared authenticated X partition, gates the page (signed-in), scroll-scrapes the
+ * visible `UserCell` rows, normalizes them (`normalizeNetwork` — evidence-hashed, remote avatars
+ * dropped), persists via the accumulator, and emits a run-log record. The window is ALWAYS destroyed
+ * in a `finally` (mirrors Enterprise's `finally { win.destroy() }`).
+ */
+export async function captureNetwork(
+  req: XNetworkCaptureRequest,
+  overrides: Partial<XNetworkCaptureDeps> = {},
+): Promise<XNetworkCaptureResult> {
+  const kind: 'followers' | 'following' = req.kind === 'following' ? 'following' : 'followers';
+  // Validate BEFORE touching the gate or network — a malformed target opens nothing.
+  const url = buildNetworkUrl(req.targetUsername, kind);
+
+  const deps: XNetworkCaptureDeps = { ...defaultNetworkCaptureDeps(), ...overrides };
+  const passes = Math.max(1, Math.min(60, Math.floor(Number(req.passes) || DEFAULT_NETWORK_PASSES)));
+  const startedAt = deps.now();
+  const username = String(req.targetUsername ?? '').replace(/^@+/, '').trim();
+  const fullTarget = `@${username}`;
+  const profileId = String(req.channelId ?? '') || username;
+
+  // FAIL CLOSED: resolve the Tor posture and refuse (opening no window) when it is blocked.
+  const clearnetEnabled = await deps.loadClearnetEnabled();
+  const gate = await deps.resolveGate(clearnetEnabled);
+  if (gate.blocked) {
+    await emitNetworkRun(deps, req.caseId, {
+      profileId,
+      username,
+      operation: kind,
+      observed: 0,
+      added: 0,
+      requestedPasses: passes,
+      completedPasses: 0,
+      reachedEnd: false,
+      stopReason: gate.reason ?? 'blocked',
+      status: 'error',
+      startedAt,
+      endedAt: deps.now(),
+    });
+    return { blocked: true, reason: gate.reason, kind, target: fullTarget, observed: 0, added: 0, completedPasses: 0, reachedEnd: false };
+  }
+
+  const win = await deps.openWindow(url.toString(), gate.proxy);
+  try {
+    const gated = await deps.guard(win, () => scrapeNetworkRows(win, passes, deps));
+    if (gated.blocked) {
+      await emitNetworkRun(deps, req.caseId, {
+        profileId,
+        username,
+        operation: kind,
+        observed: 0,
+        added: 0,
+        requestedPasses: passes,
+        completedPasses: 0,
+        reachedEnd: false,
+        stopReason: gated.reason ?? 'blocked',
+        status: 'error',
+        startedAt,
+        endedAt: deps.now(),
+      });
+      return { blocked: true, reason: gated.reason, kind, target: fullTarget, observed: 0, added: 0, completedPasses: 0, reachedEnd: false };
+    }
+
+    const { rows, completedPasses, reachedEnd } = gated.result ?? {
+      rows: [],
+      completedPasses: 0,
+      reachedEnd: false,
+    };
+    const capturedAt = deps.now();
+    const artifact = normalizeNetwork(rows, username, kind, capturedAt);
+
+    // Honest `added` delta: how many of this scan's accounts weren't already in the accumulator.
+    const prior = await deps.readNetwork(req.caseId, fullTarget, kind);
+    const priorHandles = new Set(prior.map((a) => a.handle.toLowerCase()));
+    const added = artifact.accounts.filter((a) => !priorHandles.has(a.handle.toLowerCase())).length;
+
+    await deps.saveNetwork(req.caseId, artifact);
+
+    await emitNetworkRun(deps, req.caseId, {
+      profileId,
+      username,
+      operation: kind,
+      observed: artifact.accounts.length,
+      added,
+      requestedPasses: passes,
+      completedPasses,
+      reachedEnd,
+      stopReason: reachedEnd ? 'stable_end' : 'pass_limit',
+      status: 'complete',
+      startedAt,
+      endedAt: deps.now(),
+    });
+
+    return {
+      blocked: false,
+      kind,
+      target: fullTarget,
+      observed: artifact.accounts.length,
+      added,
+      completedPasses,
+      reachedEnd,
+    };
+  } finally {
+    const w = win as unknown as { isDestroyed?: () => boolean; destroy?: () => void };
+    if (typeof w.destroy === 'function' && !(w.isDestroyed && w.isDestroyed())) {
+      w.destroy();
+    }
+  }
+}
+
+/** Append one network run record best-effort (Task A3). Telemetry, NOT evidence — a run-log write
+ *  failure must never break an extraction or drop captured accounts, so any error is swallowed with
+ *  a warn (mirrors `emitRun`). */
+async function emitNetworkRun(
+  deps: XNetworkCaptureDeps,
+  caseId: string,
+  input: RunRecordInput,
+): Promise<void> {
+  try {
+    await deps.recordRun(caseId, buildRunRecord(input));
+  } catch (err) {
+    console.warn('[XListening] recordRun (network):', err);
+  }
 }

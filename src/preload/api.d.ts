@@ -1043,6 +1043,25 @@ export interface GhostApi {
       opened: true;
       url: string;
     }>;
+    /** Extract one target's followers or following into the campaign's `networks` accumulator
+     *  (capture.ts `captureNetwork`, Task C1). Tor-gated (FAIL CLOSED); the target URL is validated
+     *  + built BEFORE any window opens. Returns the observed/added counts for the scan; `blocked`
+     *  carries the fail-closed / signed-out reason. */
+    captureNetwork(req: {
+      caseId: string;
+      channelId: string;
+      targetUsername: string;
+      kind: 'followers' | 'following';
+    }): Promise<{
+      blocked: boolean;
+      reason?: string;
+      kind: 'followers' | 'following';
+      target: string;
+      observed: number;
+      added: number;
+      completedPasses: number;
+      reachedEnd: boolean;
+    }>;
   };
   /**
    * Scraping cases (W4) — the isolated per-namespace SOCMINT/X collection-run stores, kept

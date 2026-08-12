@@ -347,6 +347,15 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
   const [liveKindFilter, setLiveKindFilter] = useState<'all' | XPostRow['kind']>('all');
   const [entityTypeFilter, setEntityTypeFilter] = useState('all');
 
+  // ── Task C1: Network tab extraction controls ───────────────────────────────
+  // TARGET SOURCE selector ('all' or one captured source's username) + VIEW selector
+  // (both/followers/following, filters the displayed relationship graph) + the three EXTRACT
+  // actions. `networkBusy`/`networkProgress` give immediate one-click feedback (ADHD-friendly).
+  const [networkTargetId, setNetworkTargetId] = useState('all');
+  const [networkView, setNetworkView] = useState<'both' | 'followers' | 'following'>('both');
+  const [networkBusy, setNetworkBusy] = useState(false);
+  const [networkProgress, setNetworkProgress] = useState('');
+
   const [notice, setNotice] = useState('X Listening Station ready.');
 
   // ── Task 15 tabs: real state, real IPC — no hollow panels ──────────────────
@@ -867,6 +876,85 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
     [],
   );
 
+  // ── Task C1: EXTRACT FOLLOWERS / FOLLOWING / BOTH ──────────────────────────
+  // Drives the REAL `captureNetwork` channel (Tor-gated MAIN-side, fail-closed) for the selected
+  // TARGET SOURCE — 'all' fans out across every captured source, otherwise the one picked. EXTRACT
+  // BOTH runs followers THEN following per target. On success the PERSISTED network accumulator is
+  // re-read (`loadInsights`) so the graph/overlap panels reflect the fresh accounts, never a stale
+  // batch. A target with no valid X username (nothing to open) is skipped rather than firing a
+  // doomed capture. Immediate one-click feedback via `networkProgress`/`notice` (ADHD-friendly).
+  const handleExtractNetwork = useCallback(
+    async (mode: 'followers' | 'following' | 'both') => {
+      if (!activeCampaignId) {
+        setNotice('Create or select a campaign before extracting a network.');
+        return;
+      }
+      const usernameRe = /^[A-Za-z0-9_]{1,15}$/;
+      const candidates =
+        networkTargetId === 'all'
+          ? sourceGroups.map((g) => g.channelId)
+          : [networkTargetId];
+      const targets = candidates
+        .map((c) => String(c ?? '').replace(/^@+/, '').trim())
+        .filter((u) => usernameRe.test(u));
+      if (targets.length === 0) {
+        setNotice('No valid target source to extract. Capture a timeline first, then pick a source.');
+        return;
+      }
+      const kinds: Array<'followers' | 'following'> =
+        mode === 'both' ? ['followers', 'following'] : [mode];
+      setNetworkBusy(true);
+      let observedTotal = 0;
+      let ran = 0;
+      let lastBlockedReason: string | undefined;
+      try {
+        for (const username of targets) {
+          for (const kind of kinds) {
+            setNetworkProgress(`Extracting ${kind} for @${username}…`);
+            try {
+              const res = await window.api.xListening.captureNetwork({
+                caseId: activeCampaignId,
+                channelId: username,
+                targetUsername: username,
+                kind,
+              });
+              if (res?.blocked) {
+                lastBlockedReason = res.reason;
+                continue;
+              }
+              observedTotal += res?.observed ?? 0;
+              ran += 1;
+            } catch (err) {
+              lastBlockedReason = err instanceof Error ? err.message : String(err);
+            }
+          }
+        }
+        if (ran === 0) {
+          setNotice(lastBlockedReason ?? 'Network extraction blocked — nothing captured.');
+        } else {
+          setNotice(
+            `Extracted ${observedTotal} account(s) across ${ran} pass(es)` +
+              (lastBlockedReason ? ` (some passes were blocked: ${lastBlockedReason})` : '') +
+              '.',
+          );
+          await loadInsights(activeCampaignId);
+        }
+      } finally {
+        setNetworkBusy(false);
+        setNetworkProgress('');
+      }
+    },
+    [activeCampaignId, networkTargetId, sourceGroups, loadInsights],
+  );
+
+  // The relationship-graph edges filtered by the VIEW selector (followers+following / one).
+  const visibleNetworkEdges = useMemo(() => {
+    const edges = analysis.graph?.edges ?? [];
+    if (networkView === 'both') return edges;
+    const want = networkView === 'followers' ? 'follower' : 'following';
+    return edges.filter((e) => e.relationship === want);
+  }, [analysis.graph, networkView]);
+
   // ── Task 15(d): archive step, driven off the campaign's OWN Tor-default session ─────────
   const handleRunArchive = useCallback(async () => {
     if (!activeCampaignId) return;
@@ -1280,6 +1368,83 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
 
         {tab === 'network' && (
           <section className="xls-tab-panel xls-network">
+            <div className="xls-panel">
+              <h3 className="xls-panel-title">EXTRACT FOLLOWER / FOLLOWING NETWORK</h3>
+              <div className="xls-network-controls">
+                <label className="xls-field">
+                  TARGET SOURCE
+                  <select
+                    className="xls-input"
+                    aria-label="Network extraction target source"
+                    value={networkTargetId}
+                    onChange={(e) => setNetworkTargetId(e.target.value)}
+                  >
+                    <option value="all">ALL SOURCES</option>
+                    {sourceGroups.map((g) => (
+                      <option key={g.channelId} value={g.channelId}>
+                        {g.channelLabel}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="xls-field">
+                  VIEW
+                  <select
+                    className="xls-input"
+                    aria-label="Network view filter"
+                    value={networkView}
+                    onChange={(e) =>
+                      setNetworkView(e.target.value as 'both' | 'followers' | 'following')
+                    }
+                  >
+                    <option value="both">FOLLOWERS + FOLLOWING</option>
+                    <option value="followers">FOLLOWERS</option>
+                    <option value="following">FOLLOWING</option>
+                  </select>
+                </label>
+              </div>
+              <div className="xls-add-source">
+                <button
+                  type="button"
+                  className="xls-btn xls-btn-primary"
+                  disabled={networkBusy || !activeCampaignId}
+                  title="Open each target's followers page over Tor and extract the visible accounts."
+                  onClick={() => void handleExtractNetwork('followers')}
+                >
+                  {networkBusy ? 'Extracting…' : 'EXTRACT FOLLOWERS'}
+                </button>
+                <button
+                  type="button"
+                  className="xls-btn xls-btn-primary"
+                  disabled={networkBusy || !activeCampaignId}
+                  title="Open each target's following page over Tor and extract the visible accounts."
+                  onClick={() => void handleExtractNetwork('following')}
+                >
+                  {networkBusy ? 'Extracting…' : 'EXTRACT FOLLOWING'}
+                </button>
+                <button
+                  type="button"
+                  className="xls-btn"
+                  disabled={networkBusy || !activeCampaignId}
+                  title="Extract BOTH the followers and following networks for each target over Tor."
+                  onClick={() => void handleExtractNetwork('both')}
+                >
+                  {networkBusy ? 'Extracting…' : 'EXTRACT BOTH'}
+                </button>
+              </div>
+              {networkProgress ? (
+                <div className="xls-notice" role="status">
+                  {networkProgress}
+                </div>
+              ) : (
+                <div className="xls-empty">
+                  Extraction opens each target&apos;s follower/following page over Tor (fail-closed)
+                  and records the visible accounts. Capture a timeline first to populate the source
+                  list.
+                </div>
+              )}
+            </div>
+
             <div className="xls-stat-grid">
               <article className="xls-stat">
                 <span>TARGETS</span>
@@ -1357,17 +1522,17 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
               <div className="xls-panel-title-row">
                 <h3 className="xls-panel-title">RELATIONSHIP GRAPH</h3>
                 <span className="xls-count">
-                  {analysis.graph.nodes.length} nodes · {analysis.graph.edges.length} edges
+                  {analysis.graph.nodes.length} nodes · {visibleNetworkEdges.length} edges
                 </span>
               </div>
-              {analysis.graph.edges.length === 0 ? (
+              {visibleNetworkEdges.length === 0 ? (
                 <div className="xls-empty">
-                  No relationship edges yet — capture follower/following data to populate this
-                  graph.
+                  No relationship edges for this view — use EXTRACT FOLLOWERS / FOLLOWING above to
+                  populate this graph.
                 </div>
               ) : (
                 <ul className="xls-source-list">
-                  {analysis.graph.edges.map((edge) => (
+                  {visibleNetworkEdges.map((edge) => (
                     <li className="xls-source-row" key={edge.id}>
                       <span>
                         {edge.source} → {edge.target}

@@ -663,6 +663,17 @@ export const channels = {
      *  completedPasses, reachedEnd, stopReason, status, startedAt, endedAt }`) emitted by the
      *  capture/archive paths. Derived read; no capture window, no network. */
     runLog: 'xListening:runLog',
+    /** Extract one target's followers or following into the campaign's `networks` accumulator
+     *  (capture.ts `captureNetwork`, Task C1 — EXTRACT FOLLOWERS/FOLLOWING/BOTH). Opens a Tor-gated
+     *  hidden capture window on the shared authenticated X partition, navigated to
+     *  `https://x.com/<user>/{followers|following}` (URL validated + built with `^[A-Za-z0-9_]{1,15}$`
+     *  BEFORE any window opens), gates the page (signed-in), scroll-scrapes the visible `UserCell`
+     *  rows with the STATIC `USER_CELL_SCRIPT`, normalizes (`normalizeNetwork` — evidence-hashed,
+     *  remote avatars dropped) + persists via the same accumulator a re-scan uses, and emits a
+     *  collection-run record. Tor-gated (FAIL CLOSED — no clearnet fallback unless the acked clearnet
+     *  toggle is on); the window is always destroyed in a `finally`. The renderer's EXTRACT BOTH
+     *  drives this twice (followers then following). */
+    captureNetwork: 'xListening:captureNetwork',
     /** Open one in-app X window (capture.ts `openInX`, Task E1) for a `{ kind, ref }` affordance —
      *  `kind:'thread'` (ref = a `/<user>/status/<id>` URL), `kind:'profile'`/`'identity'` (ref = a
      *  `@username` handle). The URL is validated + constructed with strict guards (reuse the

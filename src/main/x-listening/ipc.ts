@@ -32,7 +32,14 @@ import {
   clearXSession as closeXSession,
   getXWindow
 } from './session';
-import { captureTimeline, verifyPost, openInX, type XTimelineCaptureRequest, type XOpenKind } from './capture';
+import {
+  captureTimeline,
+  captureNetwork,
+  verifyPost,
+  openInX,
+  type XTimelineCaptureRequest,
+  type XOpenKind
+} from './capture';
 import {
   listCampaigns,
   createCampaign,
@@ -1082,6 +1089,41 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
       throw new Error('Verifying a post requires a caseId and postId.');
     }
     return verifyPost(ensureUuid(req.caseId, 'caseId'), req.postId);
+  });
+
+  // ---- Task C1: live follower/following network extraction (captureNetwork) ----------------
+  // Opens a Tor-gated hidden capture window (capture.ts `captureNetwork` reads the acked clearnet
+  // flag + `resolveXTorGate` itself, MAIN-side — fail-closed, no clearnet fallback), navigated to
+  // the target's /followers or /following page. The target URL is validated + built BEFORE any
+  // window opens (reuses the `^[A-Za-z0-9_]{1,15}$` username guard); a malformed target throws
+  // inside `captureNetwork`, opening nothing. Sender check + arg-shape validation only here; `kind`
+  // is allowlisted to the two valid relationship surfaces so a bogus value can never reach the
+  // helper. Consumed by the Network tab's EXTRACT FOLLOWERS/FOLLOWING/BOTH actions.
+  deps.handle(channels.xListening.captureNetwork, (e, reqArg) => {
+    assertTrustedSender(e);
+    const req = reqArg as
+      | { caseId?: unknown; channelId?: unknown; targetUsername?: unknown; kind?: unknown }
+      | undefined;
+    const kind = req?.kind;
+    if (
+      !req ||
+      typeof req.caseId !== 'string' ||
+      typeof req.targetUsername !== 'string' ||
+      !req.targetUsername ||
+      (kind !== 'followers' && kind !== 'following')
+    ) {
+      throw new Error(
+        'Extracting a network requires a caseId, targetUsername and a kind of followers or following.'
+      );
+    }
+    const targetUsername = req.targetUsername;
+    const channelId = typeof req.channelId === 'string' && req.channelId ? req.channelId : targetUsername;
+    return captureNetwork({
+      caseId: ensureUuid(req.caseId, 'caseId'),
+      channelId,
+      targetUsername,
+      kind: kind as 'followers' | 'following'
+    });
   });
 
   // ---- Task E1: Tor-gated "open in X" affordances (openInX) ----------------
