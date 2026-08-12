@@ -1394,53 +1394,71 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
 
         {tab === 'changes' && (
           <section className="xls-tab-panel xls-changes">
-            <div className="xls-panel">
-              <h3 className="xls-panel-title">HISTORICAL CHANGE EVENTS</h3>
-              <span className="xls-count">{changeEvents.length} change event(s)</span>
-              {changeEvents.length === 0 ? (
-                <div className="xls-empty">
-                  No post edits or profile-metadata changes observed in this campaign yet.
-                </div>
-              ) : (
-                <ul className="xls-source-list">
-                  {changeEvents.map((ev) => (
-                    <li className="xls-source-row" key={ev.id}>
-                      <span>
-                        <span className={`xls-marker xls-marker-${ev.kind}`}>
-                          {ev.kind.replace(/_/g, ' ').toUpperCase()}
-                        </span>{' '}
-                        {ev.summary}
-                      </span>
-                      <span className="xls-count">{formatWhen(ev.at)}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-            <div className="xls-panel">
-              <h3 className="xls-panel-title">COLLECTION RUN LOG</h3>
-              <span className="xls-count">{runLog.length} collection run(s)</span>
-              {runLog.length === 0 ? (
-                <div className="xls-empty">
-                  No collection runs recorded in this campaign yet. Run a sweep or archive cycle to
-                  populate the log.
-                </div>
-              ) : (
-                <ul className="xls-source-list">
-                  {runLog.map((run, i) => (
-                    <li className="xls-source-row" key={`${run.profileId}:${run.operation}:${run.startedAt}:${i}`}>
-                      <span>
-                        <span className={`xls-marker xls-marker-run-${run.status}`}>
-                          {run.operation.replace(/_/g, ' ').toUpperCase()}
-                        </span>{' '}
-                        @{run.username.replace(/^@/, '')} · {run.added} added / {run.observed} observed ·{' '}
-                        {run.duplicates} dup · {run.status.toUpperCase()}
-                      </span>
-                      <span className="xls-count">{formatWhen(run.startedAt)}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
+            <div className="xls-changes-grid">
+              <div className="xls-panel">
+                <h3 className="xls-panel-title">HISTORICAL CHANGE EVENTS</h3>
+                <span className="xls-count">{changeEvents.length} change event(s)</span>
+                {changeEvents.length === 0 ? (
+                  <div className="xls-empty">
+                    No post edits or profile-metadata changes observed in this campaign yet.
+                  </div>
+                ) : (
+                  <ul className="xls-source-list">
+                    {changeEvents.map((ev) => (
+                      <li className="xls-source-row" key={ev.id}>
+                        <span>
+                          <span className={`xls-marker xls-marker-${ev.kind}`}>
+                            {ev.kind.replace(/_/g, ' ').toUpperCase()}
+                          </span>{' '}
+                          {ev.summary}
+                          {ev.sourceUsername && (
+                            <span className="xls-event-source">
+                              {' '}
+                              @{ev.sourceUsername.replace(/^@/, '')}
+                            </span>
+                          )}
+                        </span>
+                        <span className="xls-count">{formatWhen(ev.at)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <div className="xls-panel">
+                <h3 className="xls-panel-title">COLLECTION RUN LOG</h3>
+                <span className="xls-count">{runLog.length} collection run(s)</span>
+                {runLog.length === 0 ? (
+                  <div className="xls-empty">
+                    No collection runs recorded in this campaign yet. Run a sweep or archive cycle
+                    to populate the log.
+                  </div>
+                ) : (
+                  <ul className="xls-source-list">
+                    {runLog.map((run, i) => {
+                      const statusLabel =
+                        run.status === 'error'
+                          ? 'ERROR'
+                          : (run.stopReason || run.status || 'complete').toUpperCase();
+                      return (
+                        <li
+                          className="xls-source-row"
+                          key={`${run.profileId}:${run.operation}:${run.startedAt}:${i}`}
+                        >
+                          <span>
+                            <span className={`xls-marker xls-marker-run-${run.status}`}>
+                              @{run.username.replace(/^@/, '')} ·{' '}
+                              {run.operation.replace(/_/g, ' ').toUpperCase()}
+                            </span>{' '}
+                            {run.observed} observed / {run.added} new / {run.duplicates} duplicate ·{' '}
+                            {run.completedPasses}/{run.requestedPasses || '—'} passes · {statusLabel}
+                          </span>
+                          <span className="xls-count">{formatWhen(run.startedAt)}</span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
             </div>
             <div className="xls-network-controls">
               <span className="xls-count">{sortedNetworkChanges.length} observed accounts</span>

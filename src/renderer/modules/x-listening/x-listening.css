@@ -456,6 +456,16 @@
 .xls-tab-panel .xls-panel { margin-bottom: 16px; }
 .xls-tab-panel .xls-panel:last-child { margin-bottom: 0; }
 
+/* ── Task B1: Change Intel two-column layout (Enterprise CHANGE INTEL parity) ── */
+.xls-changes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.xls-changes-grid .xls-panel { max-width: none; margin-bottom: 0; }
+.xls-event-source { font-size: 11px; color: var(--ga98-text-dim); }
+
 /* ── Task 15: Notes tab ──────────────────────────────────────────────────── */
 .xls-note-text {
   display: block;
