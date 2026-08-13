@@ -393,7 +393,7 @@ describe('X Listening Station tabs (Task 15)', () => {
     const betaRow = Array.from(container.querySelectorAll('.xls-campaigns .xls-source-row')).find((r) =>
       (r.textContent || '').includes('Beta Watch'),
     )!;
-    await act(async () => { findButton(betaRow, /switch/i).click(); });
+    await act(async () => { findButton(betaRow, /activate/i).click(); });
     await act(async () => { await Promise.resolve(); });
     expect(api.xListening.campaignsSwitch).toHaveBeenCalledWith('camp-b');
   });

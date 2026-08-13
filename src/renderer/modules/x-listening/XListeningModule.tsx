@@ -64,7 +64,15 @@ import { useSettings } from '../../state/store';
 import { confirmDialog, promptDialog } from '../../state/dialogs';
 import { NetworkGraph } from './NetworkGraph';
 import { PostCard } from './PostCard';
+import { CampaignEditorDialog, type CampaignEditorValue } from './CampaignEditorDialog';
 import './x-listening.css';
+
+/** Per-campaign editor meta (purpose/description) — the renderer mirror of main-side `campaign-meta.ts`. */
+export interface XCampaignMeta {
+  purpose: string;
+  description: string;
+}
+const EMPTY_CAMPAIGN_META: XCampaignMeta = { purpose: '', description: '' };
 
 /** A campaign IS an x-namespace scraping-case id (campaigns.ts) — no separate shape. */
 export type XCampaign = ScrapingCase;
@@ -346,6 +354,11 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
   const [campaigns, setCampaigns] = useState<XCampaign[]>([]);
   const [activeCampaignId, setActiveCampaignId] = useState('');
   const [campaignBusy, setCampaignBusy] = useState(false);
+  // J1: per-campaign editor meta (purpose/description), loaded alongside the campaign list; drives
+  // the CAMPAIGN cards + prefills the EDIT modal. Absent/failed reads degrade to empty (honest blank).
+  const [campaignMeta, setCampaignMeta] = useState<Record<string, XCampaignMeta>>({});
+  // J1: the campaign editor modal — null when closed; `target` is the campaign being edited.
+  const [campaignEditor, setCampaignEditor] = useState<{ mode: 'create' | 'edit'; target?: XCampaign } | null>(null);
 
   const [sessionConnected, setSessionConnected] = useState(false);
   const [sessionWindowOpen, setSessionWindowOpen] = useState(false);
@@ -432,6 +445,17 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
         if (cur && list.some((c) => c.id === cur)) return cur;
         return list[0]?.id ?? '';
       });
+      // J1: editor meta rides alongside the list. A typeof guard tolerates an older preload / a test
+      // mock without the channel (yields no meta, every card falls back to an honest blank) while
+      // still making the literal `campaignsMeta(...)` call the whole-module-seam invariant checks for.
+      try {
+        if (typeof window.api.xListening.campaignsMeta === 'function') {
+          const meta = await window.api.xListening.campaignsMeta();
+          setCampaignMeta(meta ?? {});
+        }
+      } catch (metaErr) {
+        console.warn('[XListening] campaignsMeta:', metaErr);
+      }
     } catch (err) {
       console.warn('[XListening] campaignsList:', err);
     }
@@ -724,6 +748,68 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
       }
     },
     [activeCampaign, activeCampaignId, loadCampaigns],
+  );
+
+  // ── J1: campaign editor modal (CREATE / EDIT) + DUPLICATE SETUP ────────────
+  const handleOpenCreateEditor = useCallback(() => {
+    setCampaignEditor({ mode: 'create' });
+  }, []);
+
+  const handleOpenEditEditor = useCallback((target: XCampaign) => {
+    setCampaignEditor({ mode: 'edit', target });
+  }, []);
+
+  const handleSubmitEditor = useCallback(
+    async (value: CampaignEditorValue) => {
+      const editor = campaignEditor;
+      if (!editor) return;
+      setCampaignBusy(true);
+      try {
+        if (editor.mode === 'create') {
+          // CREATE + ACTIVATE: make the campaign, persist its editor meta, then switch to it.
+          const created = await window.api.xListening.campaignsCreate(value.name);
+          await window.api.xListening.campaignsUpdate({
+            id: created.id,
+            name: created.name,
+            purpose: value.purpose,
+            description: value.description,
+          });
+          await loadCampaigns(created.id);
+          setNotice(`Campaign "${created.name}" created.`);
+        } else if (editor.target) {
+          await window.api.xListening.campaignsUpdate({
+            id: editor.target.id,
+            name: value.name,
+            purpose: value.purpose,
+            description: value.description,
+          });
+          await loadCampaigns(editor.target.id);
+          setNotice('Campaign saved.');
+        }
+        setCampaignEditor(null);
+      } catch (err) {
+        setNotice(err instanceof Error ? err.message : String(err));
+      } finally {
+        setCampaignBusy(false);
+      }
+    },
+    [campaignEditor, loadCampaigns],
+  );
+
+  const handleDuplicateCampaign = useCallback(
+    async (source: XCampaign) => {
+      setCampaignBusy(true);
+      try {
+        const copy = await window.api.xListening.campaignsDuplicate(source.id);
+        await loadCampaigns(copy.id);
+        setNotice(`Duplicated "${source.name}" setup into "${copy.name}".`);
+      } catch (err) {
+        setNotice(err instanceof Error ? err.message : String(err));
+      } finally {
+        setCampaignBusy(false);
+      }
+    },
+    [loadCampaigns],
   );
 
   // ── session actions ────────────────────────────────────────────────────────
@@ -2506,40 +2592,78 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
               <h3 className="xls-panel-title">ALL CAMPAIGNS</h3>
               <button
                 className="xls-btn xls-btn-primary"
-                onClick={() => void handleNewCampaign()}
+                onClick={handleOpenCreateEditor}
                 disabled={campaignBusy}
               >
                 New Campaign
               </button>
             </div>
+            <p className="xls-help">
+              Each campaign keeps its own sources, collected findings, follower network, presets,
+              analyst notes, and archive settings. DUPLICATE SETUP starts a fresh investigation with
+              the same presets and collection settings but zero collected counts.
+            </p>
             {campaigns.length === 0 ? (
               <div className="xls-empty">No campaigns yet — create one to start collecting.</div>
             ) : (
-              <ul className="xls-source-list">
-                {campaigns.map((c) => (
-                  <li className="xls-source-row" key={c.id}>
-                    <span>
-                      {c.name}
-                      {c.id === activeCampaignId && <span className="xls-marker xls-marker-active"> ACTIVE</span>}
-                    </span>
-                    <span className="xls-source-actions">
-                      <button
-                        className="xls-btn"
-                        onClick={() => void handleSwitchCampaign(c.id)}
-                        disabled={campaignBusy || c.id === activeCampaignId}
-                      >
-                        Switch
-                      </button>
-                      <button
-                        className="xls-btn xls-btn-danger"
-                        onClick={() => void handleDeleteCampaign(c)}
-                        disabled={campaignBusy}
-                      >
-                        Delete
-                      </button>
-                    </span>
-                  </li>
-                ))}
+              <ul className="xls-source-list xls-campaign-list">
+                {campaigns.map((c) => {
+                  const meta = campaignMeta[c.id] ?? EMPTY_CAMPAIGN_META;
+                  const isActive = c.id === activeCampaignId;
+                  return (
+                    <li className="xls-source-row xls-campaign-card" key={c.id}>
+                      <div className="xls-campaign-info">
+                        <span className="xls-campaign-name">
+                          {c.name}
+                          {isActive && (
+                            <span className="xls-marker xls-marker-active"> ACTIVE</span>
+                          )}
+                        </span>
+                        <span className="xls-campaign-purpose">
+                          {meta.purpose || 'No purpose defined'}
+                        </span>
+                        {meta.description && (
+                          <span className="xls-campaign-description">{meta.description}</span>
+                        )}
+                      </div>
+                      <span className="xls-source-actions">
+                        <button
+                          className="xls-btn"
+                          onClick={() => void handleSwitchCampaign(c.id)}
+                          disabled={campaignBusy || isActive}
+                        >
+                          Activate
+                        </button>
+                        <button
+                          className="xls-btn"
+                          onClick={() => handleOpenEditEditor(c)}
+                          disabled={campaignBusy}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          className="xls-btn"
+                          onClick={() => void handleDuplicateCampaign(c)}
+                          disabled={campaignBusy}
+                        >
+                          Duplicate Setup
+                        </button>
+                        <button
+                          className="xls-btn xls-btn-danger"
+                          onClick={() => void handleDeleteCampaign(c)}
+                          disabled={campaignBusy || campaigns.length <= 1}
+                          title={
+                            campaigns.length <= 1
+                              ? 'At least one campaign must remain.'
+                              : undefined
+                          }
+                        >
+                          Delete
+                        </button>
+                      </span>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </section>
@@ -2794,6 +2918,23 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
           </section>
         )}
       </main>
+      {campaignEditor && (
+        <CampaignEditorDialog
+          mode={campaignEditor.mode}
+          busy={campaignBusy}
+          initial={
+            campaignEditor.mode === 'edit' && campaignEditor.target
+              ? {
+                  name: campaignEditor.target.name,
+                  purpose: (campaignMeta[campaignEditor.target.id] ?? EMPTY_CAMPAIGN_META).purpose,
+                  description: (campaignMeta[campaignEditor.target.id] ?? EMPTY_CAMPAIGN_META).description,
+                }
+              : { name: '', purpose: '', description: '' }
+          }
+          onSubmit={(v) => void handleSubmitEditor(v)}
+          onCancel={() => setCampaignEditor(null)}
+        />
+      )}
     </div>
   );
 }

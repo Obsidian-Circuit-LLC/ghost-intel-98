@@ -738,9 +738,12 @@ const api = {
     campaignsCreate: (name: string) =>
       ipcRenderer.invoke(channels.xListening.campaignsCreate, name),
     campaignsSwitch: (id: string) => ipcRenderer.invoke(channels.xListening.campaignsSwitch, id),
-    campaignsUpdate: (req: { id: string; name: string }) =>
+    campaignsUpdate: (req: { id: string; name: string; purpose?: string; description?: string }) =>
       ipcRenderer.invoke(channels.xListening.campaignsUpdate, req),
     campaignsDelete: (id: string) => ipcRenderer.invoke(channels.xListening.campaignsDelete, id),
+    campaignsDuplicate: (id: string) =>
+      ipcRenderer.invoke(channels.xListening.campaignsDuplicate, id),
+    campaignsMeta: () => ipcRenderer.invoke(channels.xListening.campaignsMeta),
     analysis: (caseId: string) => ipcRenderer.invoke(channels.xListening.analysis, caseId),
     health: (caseId: string) => ipcRenderer.invoke(channels.xListening.health, caseId),
     entities: (caseId: string) => ipcRenderer.invoke(channels.xListening.entities, caseId),

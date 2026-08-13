@@ -864,10 +864,15 @@ export interface GhostApi {
     campaignsCreate(name: string): Promise<ScrapingCase>;
     /** Look up (and thereby validate) an existing campaign by id. */
     campaignsSwitch(id: string): Promise<ScrapingCase>;
-    /** Rename a campaign. */
-    campaignsUpdate(req: { id: string; name: string }): Promise<ScrapingCase>;
+    /** Rename a campaign; `purpose`/`description` (when present) persist to the per-campaign editor
+     *  meta sidecar in the same round-trip (Task J1). */
+    campaignsUpdate(req: { id: string; name: string; purpose?: string; description?: string }): Promise<ScrapingCase>;
     /** Delete a campaign — removes its entire on-disk directory recursively. */
     campaignsDelete(id: string): Promise<void>;
+    /** Duplicate a campaign's SETUP into a fresh investigation with zero collected counts (Task J1). */
+    campaignsDuplicate(id: string): Promise<ScrapingCase>;
+    /** Read every campaign's editor meta (purpose/description) as a `{ [id]: meta }` map (Task J1). */
+    campaignsMeta(): Promise<Record<string, { purpose: string; description: string }>>;
     /** Derived, on-read common-connection network analysis over a case's captured `networks`
      *  artifacts — not persisted; synthetic/demo rows excluded. */
     analysis(caseId: string): Promise<Record<string, unknown>>;

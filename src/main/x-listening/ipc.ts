@@ -52,8 +52,11 @@ import {
   createCampaign,
   switchCampaign,
   updateCampaign,
-  deleteCampaign
+  deleteCampaign,
+  duplicateCampaign
 } from './campaigns';
+import { getCampaignMeta, setCampaignMeta } from './campaign-meta';
+import type { XCampaignMeta } from './campaign-meta';
 import {
   computeNetworkAnalysis,
   deriveCollectionHealth,
@@ -1036,13 +1039,26 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
     return switchCampaign(ensureUuid(idArg, 'campaignId'));
   });
 
-  deps.handle(channels.xListening.campaignsUpdate, (e, reqArg) => {
+  deps.handle(channels.xListening.campaignsUpdate, async (e, reqArg) => {
     assertTrustedSender(e);
-    const req = reqArg as { id?: unknown; name?: unknown } | undefined;
+    const req = reqArg as
+      | { id?: unknown; name?: unknown; purpose?: unknown; description?: unknown }
+      | undefined;
     if (!req || typeof req.id !== 'string' || typeof req.name !== 'string') {
       throw new Error('Updating a campaign requires an id and a name.');
     }
-    return updateCampaign(ensureUuid(req.id, 'campaignId'), req.name);
+    const campaignId = ensureUuid(req.id, 'campaignId');
+    const updated = await updateCampaign(campaignId, req.name);
+    // Editor meta (purpose/description) rides on the same SAVE. Only persisted when at least one of
+    // the two X-specific fields is present, so a plain rename (Phase-13 dock) is unaffected. The
+    // renderer's raw strings are normalized MAIN-side by setCampaignMeta (coerced + length-capped).
+    if (typeof req.purpose === 'string' || typeof req.description === 'string') {
+      await setCampaignMeta(campaignId, {
+        purpose: typeof req.purpose === 'string' ? req.purpose : '',
+        description: typeof req.description === 'string' ? req.description : '',
+      });
+    }
+    return updated;
   });
 
   deps.handle(channels.xListening.campaignsDelete, (e, idArg) => {
@@ -1051,6 +1067,30 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
       throw new Error('Deleting a campaign requires an id.');
     }
     return deleteCampaign(ensureUuid(idArg, 'campaignId'));
+  });
+
+  // Task J1 — duplicate a campaign's SETUP (presets/settings/image-policy/editor-meta) into a fresh
+  // investigation with zero collected counts. UUID-gates the id ahead of any store path, same as the
+  // other campaign handlers.
+  deps.handle(channels.xListening.campaignsDuplicate, (e, idArg) => {
+    assertTrustedSender(e);
+    if (typeof idArg !== 'string' || !idArg) {
+      throw new Error('Duplicating a campaign requires an id.');
+    }
+    return duplicateCampaign(ensureUuid(idArg, 'campaignId'));
+  });
+
+  // Task J1 — read every campaign's editor meta as a `{ [id]: {purpose, description} }` map so the
+  // renderer can populate each CAMPAIGN card + the EDIT modal in one round-trip. No capture window,
+  // no network; sender check only. getCampaignMeta is itself fail-safe (empty default on any hiccup).
+  deps.handle(channels.xListening.campaignsMeta, async (e) => {
+    assertTrustedSender(e);
+    const list = await listCampaigns();
+    const out: Record<string, XCampaignMeta> = {};
+    for (const c of list) {
+      out[c.id] = await getCampaignMeta(c.id);
+    }
+    return out;
   });
 
   // Derived reads (analysis.ts, Task 2) — no capture window, no network; sender check + arg

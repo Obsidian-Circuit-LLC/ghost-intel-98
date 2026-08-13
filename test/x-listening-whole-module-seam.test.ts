@@ -46,6 +46,8 @@ const REACHABLE_CHANNELS: ReadonlyArray<keyof typeof channels.xListening> = [
   'campaignsSwitch',
   'campaignsUpdate',
   'campaignsDelete',
+  'campaignsDuplicate',
+  'campaignsMeta',
   'analysis',
   'health',
   'entities',

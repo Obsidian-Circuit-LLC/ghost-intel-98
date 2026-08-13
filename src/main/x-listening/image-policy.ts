@@ -109,6 +109,29 @@ async function readPolicyMap(caseId: string, deps: XImagePolicyDeps): Promise<XI
   }
 }
 
+/** The whole per-campaign override map, healed + canonicalized (empty when unset). Used by the
+ *  campaign DUPLICATE-SETUP clone (campaigns.ts J1) to read the source campaign's per-source image
+ *  configuration wholesale. Fail-safe to an empty map, same discipline as `readPolicyMap`. */
+export async function readImagePolicyMap(
+  caseId: string,
+  overrides: Partial<XImagePolicyDeps> = {},
+): Promise<XImagePolicyMap> {
+  const deps: XImagePolicyDeps = { ...defaultDeps(), ...overrides };
+  return readPolicyMap(caseId, deps);
+}
+
+/** Persist a whole per-campaign override map (normalized + minimized) — the write side of the
+ *  DUPLICATE-SETUP clone. Every value is healed to a valid mode and `inherit`/junk entries collapse
+ *  away, so the stored map stays canonical exactly like `setProfileImageMode`'s per-key path. */
+export async function writeImagePolicyMap(
+  caseId: string,
+  map: XImagePolicyMap | Record<string, unknown>,
+  overrides: Partial<XImagePolicyDeps> = {},
+): Promise<void> {
+  const deps: XImagePolicyDeps = { ...defaultDeps(), ...overrides };
+  await deps.write(caseId, normalizePolicyMap(map));
+}
+
 /** The override mode for one source in a campaign (`inherit` when unset). Read-only, no fallback. */
 export async function getProfileImageMode(
   caseId: string,

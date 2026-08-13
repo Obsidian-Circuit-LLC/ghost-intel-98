@@ -1075,3 +1075,45 @@
 @media (prefers-reduced-motion: reduce) {
   .xls-mind-node .xls-node-fill { transition: none; }
 }
+
+/* ── J1: Campaigns tab cards + campaign editor modal (token-only, both themes) ─────────── */
+.xls-campaign-list { gap: 8px; }
+.xls-campaign-card { align-items: flex-start; }
+.xls-campaign-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.xls-campaign-name { font-weight: bold; color: var(--ga98-text); }
+.xls-campaign-purpose { font-size: 11px; color: var(--ga98-accent); }
+.xls-campaign-description {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--ga98-text-dim);
+}
+
+.xls-campaign-editor { width: min(440px, 92vw); }
+.xls-campaign-editor-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+}
+.xls-field-label {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--ga98-text-dim);
+}
+.xls-textarea {
+  resize: vertical;
+  min-height: 56px;
+  font: inherit;
+}
+.xls-campaign-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}

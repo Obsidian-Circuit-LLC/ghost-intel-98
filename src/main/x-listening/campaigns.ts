@@ -25,6 +25,10 @@
  * its own deps never evaluates electron.
  */
 import type { ScrapingCase } from '@shared/types';
+import type { XPreset } from './store';
+import type { XImagePolicyMap } from './image-policy';
+import type { XCampaignMeta } from './campaign-meta';
+import type { XCollectionSettings } from '@shared/x-listening-collection-settings';
 
 export type XCampaign = ScrapingCase;
 
@@ -113,4 +117,114 @@ export async function deleteCampaign(
 ): Promise<void> {
   const deps: XCampaignDeps = { ...defaultDeps(), ...overrides };
   return deps.remove(id);
+}
+
+/**
+ * Injectable seam for `duplicateCampaign` (Task J1). Enterprise's `campaigns:duplicate` cloned the
+ * campaign's PROFILES + PRESETS with fresh ids and reset the collected counts. GI98 has no
+ * first-class profile record (sources are DERIVED from posts), so the per-campaign SETUP that
+ * survives a count-reset is: the highlight PRESETS (new ids), the F2 COLLECTION SETTINGS, the F1
+ * per-source IMAGE POLICY map, and the editor META (purpose/description). None of the CAPTURED data
+ * (posts/networks/notes/entities/snapshots/run-log/archive) is reachable from this deps interface —
+ * so "duplicate is setup only, counts reset" is enforced structurally, not by omission.
+ */
+export interface XCampaignDuplicateDeps {
+  /** Validate the source exists (rejects ENOENT on an unknown id). */
+  read(id: string): Promise<XCampaign>;
+  /** Create the copy (a brand-new campaign id). */
+  create(name: string): Promise<XCampaign>;
+  readPresets(id: string): Promise<XPreset[]>;
+  writePresets(id: string, presets: XPreset[]): Promise<void>;
+  readImagePolicy(id: string): Promise<XImagePolicyMap>;
+  writeImagePolicy(id: string, map: XImagePolicyMap): Promise<void>;
+  readCollectionSettings(id: string): Promise<XCollectionSettings>;
+  writeCollectionSettings(id: string, settings: XCollectionSettings): Promise<void>;
+  readMeta(id: string): Promise<XCampaignMeta>;
+  writeMeta(id: string, meta: XCampaignMeta): Promise<void>;
+  /** Fresh id for each cloned preset (injected for deterministic tests). */
+  newId(): string;
+  /** ISO clock for cloned-preset `updatedAt` (injected — never computed here). */
+  now(): string;
+}
+
+function defaultDuplicateDeps(): XCampaignDuplicateDeps {
+  return {
+    read: async (id) => {
+      const { prodScrapingCaseStore } = await import('../storage/scraping-cases');
+      return (await prodScrapingCaseStore('x')).read(id);
+    },
+    create: async (name) => {
+      const { prodScrapingCaseStore } = await import('../storage/scraping-cases');
+      return (await prodScrapingCaseStore('x')).create(name);
+    },
+    readPresets: async (id) => {
+      const { prodXStore } = await import('./store');
+      return (await prodXStore()).presets.read(id);
+    },
+    writePresets: async (id, presets) => {
+      const { prodXStore } = await import('./store');
+      await (await prodXStore()).presets.write(id, presets);
+    },
+    readImagePolicy: async (id) => {
+      const { readImagePolicyMap } = await import('./image-policy');
+      return readImagePolicyMap(id);
+    },
+    writeImagePolicy: async (id, map) => {
+      const { writeImagePolicyMap } = await import('./image-policy');
+      await writeImagePolicyMap(id, map);
+    },
+    readCollectionSettings: async (id) => {
+      const { getCollectionSettings } = await import('./collection-settings');
+      return getCollectionSettings(id);
+    },
+    writeCollectionSettings: async (id, settings) => {
+      const { saveCollectionSettings } = await import('./collection-settings');
+      await saveCollectionSettings(id, settings);
+    },
+    readMeta: async (id) => {
+      const { getCampaignMeta } = await import('./campaign-meta');
+      return getCampaignMeta(id);
+    },
+    writeMeta: async (id, meta) => {
+      const { setCampaignMeta } = await import('./campaign-meta');
+      await setCampaignMeta(id, meta);
+    },
+    // Web-Crypto global (Node ≥18 / Electron main) — sync, no import, no electron.
+    newId: () => globalThis.crypto.randomUUID(),
+    now: () => new Date().toISOString(),
+  };
+}
+
+/**
+ * Duplicate a campaign's SETUP into a fresh investigation (Task J1 — Enterprise `campaigns:duplicate`
+ * parity). Creates a `"<name> Copy"` campaign, then clones the source's presets (each with a NEW id,
+ * `profileIds` preserved verbatim — GI98 `profileIds` are source-key strings that stay meaningful once
+ * the same sources are re-captured), collection settings, per-source image policy, and editor meta.
+ * NOTHING captured is copied, so the copy starts with zero collected counts. Returns the new campaign.
+ */
+export async function duplicateCampaign(
+  id: string,
+  overrides: Partial<XCampaignDuplicateDeps> = {},
+): Promise<XCampaign> {
+  const deps: XCampaignDuplicateDeps = { ...defaultDuplicateDeps(), ...overrides };
+
+  const source = await deps.read(id); // rejects ENOENT on an unknown id
+  const copy = await deps.create(`${source.name} Copy`);
+
+  const presets = await deps.readPresets(id);
+  if (presets.length) {
+    const cloned = presets.map((p) => ({ ...p, id: deps.newId(), updatedAt: deps.now() }));
+    await deps.writePresets(copy.id, cloned);
+  }
+
+  await deps.writeCollectionSettings(copy.id, await deps.readCollectionSettings(id));
+
+  const policy = await deps.readImagePolicy(id);
+  if (Object.keys(policy).length) {
+    await deps.writeImagePolicy(copy.id, policy);
+  }
+
+  await deps.writeMeta(copy.id, await deps.readMeta(id));
+
+  return copy;
 }

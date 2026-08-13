@@ -86,6 +86,9 @@ const NEW_CHANNELS: Array<{ key: keyof typeof channels.xListening; args: unknown
   { key: 'campaignsSwitch', args: [caseId] },
   { key: 'campaignsUpdate', args: [{ id: caseId, name: 'Renamed' }] },
   { key: 'campaignsDelete', args: [otherId] },
+  // Task J1 — duplicate a campaign's setup + read all campaigns' editor meta.
+  { key: 'campaignsDuplicate', args: [caseId] },
+  { key: 'campaignsMeta', args: [] },
   { key: 'analysis', args: [caseId] },
   { key: 'health', args: [caseId] },
   { key: 'entities', args: [caseId] },

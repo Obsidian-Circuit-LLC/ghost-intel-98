@@ -590,6 +590,11 @@ export const channels = {
     campaignsUpdate: 'xListening:campaigns:update',
     /** Delete a campaign — removes its entire on-disk directory recursively. */
     campaignsDelete: 'xListening:campaigns:delete',
+    /** Duplicate a campaign's SETUP (presets/settings/image-policy/editor-meta) into a fresh
+     *  investigation with zero collected counts (Task J1). */
+    campaignsDuplicate: 'xListening:campaigns:duplicate',
+    /** Read every campaign's editor meta (purpose/description) as a `{ [id]: meta }` map (Task J1). */
+    campaignsMeta: 'xListening:campaigns:meta',
     /** Derived, on-read common-connection network analysis over a case's captured `networks`
      *  artifacts (analysis.ts `computeNetworkAnalysis`) — not persisted; synthetic/demo rows
      *  are excluded (honesty). */
