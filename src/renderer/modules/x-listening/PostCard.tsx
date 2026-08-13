@@ -243,14 +243,20 @@ export function PostCard({
 
       <div className="xls-post-actions">
         <div className="xls-post-buttons">
-          <button
-            type="button"
-            className="xls-btn"
-            title="Open this post's real X thread in a hardened Tor-gated in-app window."
-            onClick={() => onOpenThread(post)}
-          >
-            OPEN REAL THREAD
-          </button>
+          {/* Synthetic/demo records expose NO network-window action (spec Global Constraint: "no
+              network window for demo"). Both OPEN REAL THREAD and VERIFY LIVE — the two actions that
+              reach x.com over Tor — are gated on !synthetic; the demo-URL format is only a
+              defence-in-depth backstop, never the primary gate. Local-only actions (notes) stay. */}
+          {!post.synthetic && (
+            <button
+              type="button"
+              className="xls-btn"
+              title="Open this post's real X thread in a hardened Tor-gated in-app window."
+              onClick={() => onOpenThread(post)}
+            >
+              OPEN REAL THREAD
+            </button>
+          )}
           {!post.synthetic && (
             <button
               type="button"

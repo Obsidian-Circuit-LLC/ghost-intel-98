@@ -61,7 +61,7 @@ import {
 } from '@shared/x-listening-image-policy';
 import type { XScheduleStatus } from '@shared/x-listening-schedule';
 import { useSettings } from '../../state/store';
-import { confirmDialog, promptDialog } from '../../state/dialogs';
+import { confirmDialog } from '../../state/dialogs';
 import { NetworkGraph } from './NetworkGraph';
 import { PostCard } from './PostCard';
 import { CampaignEditorDialog, type CampaignEditorValue } from './CampaignEditorDialog';
@@ -686,25 +686,6 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
   // dependency array never references a still-in-TDZ const.
 
   // ── campaign dock actions ──────────────────────────────────────────────────
-  const handleNewCampaign = useCallback(async () => {
-    const name = await promptDialog(
-      'Name this campaign (a self-managed X collection case — no core investigation case is required):',
-      '',
-      'New campaign',
-    );
-    if (!name || !name.trim()) return;
-    setCampaignBusy(true);
-    try {
-      const created = await window.api.xListening.campaignsCreate(name.trim());
-      await loadCampaigns(created.id);
-      setNotice(`Campaign "${created.name}" created.`);
-    } catch (err) {
-      setNotice(err instanceof Error ? err.message : String(err));
-    } finally {
-      setCampaignBusy(false);
-    }
-  }, [loadCampaigns]);
-
   const handleSwitchCampaign = useCallback(
     async (id: string) => {
       if (!id) {
@@ -727,22 +708,6 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
     },
     [],
   );
-
-  const handleRenameCampaign = useCallback(async () => {
-    if (!activeCampaign) return;
-    const name = await promptDialog('Rename this campaign:', activeCampaign.name, 'Rename campaign');
-    if (!name || !name.trim()) return;
-    setCampaignBusy(true);
-    try {
-      await window.api.xListening.campaignsUpdate({ id: activeCampaign.id, name: name.trim() });
-      await loadCampaigns(activeCampaign.id);
-      setNotice('Campaign renamed.');
-    } catch (err) {
-      setNotice(err instanceof Error ? err.message : String(err));
-    } finally {
-      setCampaignBusy(false);
-    }
-  }, [activeCampaign, loadCampaigns]);
 
   // Accepts an explicit `target` (Task 15's Campaigns tab, deleting a NON-active row without
   // first switching to it) — defaults to the active campaign (the header dock's button).
@@ -1647,14 +1612,14 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
           <div className="xls-dock-actions">
             <button
               className="xls-btn xls-btn-primary"
-              onClick={() => void handleNewCampaign()}
+              onClick={handleOpenCreateEditor}
               disabled={campaignBusy}
             >
               + NEW
             </button>
             <button
               className="xls-btn"
-              onClick={() => void handleRenameCampaign()}
+              onClick={() => activeCampaign && handleOpenEditEditor(activeCampaign)}
               disabled={campaignBusy || !activeCampaign}
             >
               EDIT

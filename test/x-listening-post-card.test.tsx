@@ -156,10 +156,13 @@ describe('X Listening Station — rich PostCard (Task I1)', () => {
     expect(strip!.querySelector('img')).toBeFalsy();
   });
 
-  it('hides VERIFY LIVE for a synthetic post but keeps OPEN REAL THREAD + ANALYST NOTES', async () => {
+  it('hides BOTH network-window actions (VERIFY LIVE + OPEN REAL THREAD) for a synthetic post, keeps local ANALYST NOTES', async () => {
+    // Spec Global Constraint "no network window for demo": a synthetic/demo record must expose NO
+    // action that reaches x.com over Tor — neither VERIFY LIVE nor OPEN REAL THREAD. Only the
+    // local-only ANALYST NOTES toggle remains.
     await renderCard({ post: { ...RICH_POST, synthetic: true } });
     expect(maybeButton(/VERIFY LIVE/)).toBeFalsy();
-    expect(maybeButton(/OPEN REAL THREAD/)).toBeTruthy();
+    expect(maybeButton(/OPEN REAL THREAD/)).toBeFalsy();
     expect(maybeButton(/ANALYST NOTES/)).toBeTruthy();
   });
 
