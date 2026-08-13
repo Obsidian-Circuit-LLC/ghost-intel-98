@@ -65,6 +65,9 @@ import { confirmDialog, promptDialog } from '../../state/dialogs';
 import { NetworkGraph } from './NetworkGraph';
 import { PostCard } from './PostCard';
 import { CampaignEditorDialog, type CampaignEditorValue } from './CampaignEditorDialog';
+import { ModuleBanner } from '../../components/ModuleBanner';
+import xlsBanner from '../../assets/x-listening-banner.jpg';
+import xlsBannerBlur from '../../assets/x-listening-banner-blur.jpg';
 import './x-listening.css';
 
 /** Per-campaign editor meta (purpose/description) — the renderer mirror of main-side `campaign-meta.ts`. */
@@ -128,6 +131,24 @@ const XLS_TABS: readonly XTab[] = [
   'campaigns',
   'system'
 ];
+
+/** Enterprise v3.4.1 nav labels (J2 reskin) — the sidebar reads GhostExodus's console wording
+ *  ("COMMAND BOARD", "LIVE FEED", "FOLLOWER NETWORK", …) while the underlying tab id (used by the
+ *  data-tab hook the tab-switch tests key on) stays the stable GI98 XTab. The topbar title reuses
+ *  the same label. */
+const XLS_NAV_LABEL: Record<XTab, string> = {
+  dashboard: 'COMMAND BOARD',
+  live: 'LIVE FEED',
+  sources: 'TARGET SOURCES',
+  network: 'FOLLOWER NETWORK',
+  entities: 'ENTITY INDEX',
+  changes: 'CHANGE INTEL',
+  search: 'SEARCH',
+  notes: 'ANALYST NOTES',
+  exports: 'EXPORTS',
+  campaigns: 'CAMPAIGNS',
+  system: 'SYSTEM',
+};
 
 export interface XPostMetricsView {
   replies: number;
@@ -1573,11 +1594,41 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
     ],
   );
 
+  // ── J2 Enterprise shell derivations ──────────────────────────────────────
+  // Live count badges for the sidebar nav (Enterprise parity). Each is a REAL
+  // count off this shell's loaded state — never a fabricated figure. Tabs with
+  // no meaningful count (dashboard/exports/system) carry no badge.
+  const navBadge = (t: XTab): number | undefined => {
+    switch (t) {
+      case 'live': return posts.length;
+      case 'sources': return sourceGroups.length;
+      case 'network': return analysis.commonIdentityCount;
+      case 'entities': return entities.length;
+      case 'changes': return changeEvents.length;
+      case 'search': return presets.length;
+      case 'notes': return notes.length;
+      case 'campaigns': return campaigns.length;
+      default: return undefined;
+    }
+  };
+  const activeCampaignPurpose =
+    (campaignMeta[activeCampaignId]?.purpose || '').trim() || 'No purpose defined.';
+  const imagesOn = imagePolicy.retrieveImages !== false;
+
   return (
     <div className="xls-root">
-      <header className="xls-dock">
-        <div className="xls-dock-row">
-          <span className="xls-dock-label">CAMPAIGN</span>
+      <aside className="xls-sidebar">
+        <div className="xls-brand">
+          <div className="xls-seal" aria-hidden="true">CD</div>
+          <div className="xls-brand-text">
+            <strong>CYBERVS DOMINATVS</strong>
+            <span>X LISTENING STATION</span>
+            <small>ENTERPRISE // by GhostExodus</small>
+          </div>
+        </div>
+
+        <div className="xls-campaign-dock">
+          <span className="xls-dock-eyebrow">ACTIVE CAMPAIGN</span>
           <select
             className="xls-input xls-dock-select"
             aria-label="Active campaign"
@@ -1592,99 +1643,160 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
               </option>
             ))}
           </select>
-          <button
-            className="xls-btn xls-btn-primary"
-            onClick={() => void handleNewCampaign()}
-            disabled={campaignBusy}
-          >
-            New Campaign
-          </button>
-          <button
-            className="xls-btn"
-            onClick={() => void handleRenameCampaign()}
-            disabled={campaignBusy || !activeCampaign}
-          >
-            Rename
-          </button>
-          <button
-            className="xls-btn xls-btn-danger"
-            onClick={() => void handleDeleteCampaign()}
-            disabled={campaignBusy || !activeCampaign}
-          >
-            Delete
-          </button>
-        </div>
-        {caseId && (
-          <div className="xls-dock-note">
-            Opened from investigation case {caseId} (label only — this campaign is self-managed
-            and works with no case bound).
+          <small className="xls-dock-purpose">{activeCampaignPurpose}</small>
+          <div className="xls-dock-actions">
+            <button
+              className="xls-btn xls-btn-primary"
+              onClick={() => void handleNewCampaign()}
+              disabled={campaignBusy}
+            >
+              + NEW
+            </button>
+            <button
+              className="xls-btn"
+              onClick={() => void handleRenameCampaign()}
+              disabled={campaignBusy || !activeCampaign}
+            >
+              EDIT
+            </button>
+            <button className="xls-btn" onClick={() => setTab('campaigns')}>
+              MANAGE
+            </button>
           </div>
-        )}
-      </header>
-
-      <div className="xls-session-bar">
-        <span className={`xls-status-dot${sessionConnected ? ' xls-online' : ''}`} aria-hidden="true" />
-        <div className="xls-session-label">
-          <strong>{sessionConnected ? 'X SESSION ONLINE' : 'X SESSION OFFLINE'}</strong>
-          <small>
-            {sessionWindowOpen ? 'Capture window open' : 'No capture window open'} for this campaign
-          </small>
+          {caseId && (
+            <div className="xls-dock-note">
+              Opened from investigation case {caseId} (label only — this campaign is self-managed
+              and works with no case bound).
+            </div>
+          )}
         </div>
-        <div className="xls-session-spacer" />
-        <div className="xls-markers">
-          <span className={`xls-marker${clearnet ? ' xls-marker-clearnet' : ' xls-marker-tor'}`}>
-            {clearnet ? 'CLEARNET' : 'TOR'}
-          </span>
-          {demoActive && <span className="xls-marker xls-marker-demo">DEMO DATA LOADED</span>}
-        </div>
-        <button
-          className="xls-btn"
-          onClick={() => void handleCloseSession()}
-          disabled={sessionBusy || !sessionWindowOpen}
-        >
-          Close Session
-        </button>
-        <button
-          className="xls-btn xls-btn-primary"
-          onClick={() => void handleOpenSession()}
-          disabled={sessionBusy || !activeCampaignId}
-        >
-          {sessionBusy ? 'Working…' : 'Open Session'}
-        </button>
-      </div>
 
-      <div className="xls-network-posture">
-        <label className="xls-check">
-          <input
-            type="checkbox"
-            checked={clearnet}
-            onChange={(e) => void setClearnet(e.target.checked)}
-            disabled={!xListeningSettings}
+        <nav className="xls-nav">
+          {XLS_TABS.map((t) => {
+            const badge = navBadge(t);
+            return (
+              <button
+                key={t}
+                data-tab={t}
+                className={`xls-tab${tab === t ? ' xls-tab-active' : ''}`}
+                onClick={() => setTab(t)}
+              >
+                <span className="xls-nav-label">{XLS_NAV_LABEL[t]}</span>
+                {badge !== undefined && <b className="xls-nav-badge">{badge}</b>}
+              </button>
+            );
+          })}
+        </nav>
+
+        <div className={`xls-tor-box${clearnet ? ' xls-tor-bad' : ' xls-tor-ok'}`}>
+          <div className="xls-tor-head">
+            <span
+              className={`xls-status-dot${clearnet ? '' : ' xls-online'}`}
+              aria-hidden="true"
+            />
+            <div className="xls-tor-label">
+              <strong>{clearnet ? 'CLEARNET — REAL IP' : 'TOR MODE'}</strong>
+              <small>
+                {clearnet
+                  ? 'Capture uses your real IP, not Tor.'
+                  : 'Fails closed when background Tor is down — no clearnet fallback.'}
+              </small>
+            </div>
+          </div>
+          <label className="xls-check xls-tor-toggle">
+            <input
+              type="checkbox"
+              checked={clearnet}
+              onChange={(e) => void setClearnet(e.target.checked)}
+              disabled={!xListeningSettings}
+            />
+            Route over CLEARNET instead of Tor (exposes your real IP to X)
+          </label>
+          <div className="xls-markers">
+            <span
+              className={`xls-marker${clearnet ? ' xls-marker-clearnet' : ' xls-marker-tor'}`}
+            >
+              {clearnet ? 'CLEARNET' : 'TOR'}
+            </span>
+            {demoActive && <span className="xls-marker xls-marker-demo">DEMO DATA LOADED</span>}
+          </div>
+        </div>
+
+        <div className="xls-session-box">
+          <span
+            className={`xls-status-dot${sessionConnected ? ' xls-online' : ''}`}
+            aria-hidden="true"
           />
-          Route over CLEARNET instead of Tor (exposes your real IP to X)
-        </label>
-        <p className="xls-help">
-          {clearnet
-            ? 'Clearnet mode is ON — capture uses your real IP, not Tor.'
-            : 'Tor mode (default) — capture fails closed when background Tor is not bootstrapped; there is no clearnet fallback.'}
-        </p>
-      </div>
+          <div className="xls-session-label">
+            <strong>{sessionConnected ? 'X SESSION ONLINE' : 'X SESSION OFFLINE'}</strong>
+            <small>CAMPAIGN: {activeCampaign?.name || '—'}</small>
+          </div>
+          <div className="xls-session-box-actions">
+            <button
+              className="xls-btn"
+              onClick={() => void handleCloseSession()}
+              disabled={sessionBusy || !sessionWindowOpen}
+            >
+              Close Session
+            </button>
+            <button
+              className="xls-btn xls-btn-primary"
+              onClick={() => void handleOpenSession()}
+              disabled={sessionBusy || !activeCampaignId}
+            >
+              {sessionBusy ? 'Working…' : 'Open Session'}
+            </button>
+          </div>
+        </div>
+      </aside>
 
-      <div className="xls-notice" role="status">
-        {notice}
-      </div>
+      <div className="xls-main">
+        <ModuleBanner
+          variant="xls"
+          src={xlsBanner}
+          blurSrc={xlsBannerBlur}
+          alt="CYBERVS DOMINATVS"
+        />
 
-      <nav className="xls-tabs">
-        {XLS_TABS.map((t) => (
-          <button
-            key={t}
-            className={`xls-tab${tab === t ? ' xls-tab-active' : ''}`}
-            onClick={() => setTab(t)}
-          >
-            {t.toUpperCase()}
-          </button>
-        ))}
-      </nav>
+        <header className="xls-topbar">
+          <div className="xls-topbar-titles">
+            <span className="xls-eyebrow">
+              CYBERVS DOMINATVS X LISTENING STATION // ENTERPRISE v3.4.1
+            </span>
+            <h1 className="xls-topbar-title">{XLS_NAV_LABEL[tab]}</h1>
+            <small className="xls-topbar-context">
+              ACTIVE CAMPAIGN: {activeCampaign?.name || 'Unknown'} · {activeCampaignPurpose}
+            </small>
+          </div>
+          <div className="xls-topbar-actions">
+            <button
+              className={`xls-btn xls-image-toggle${imagesOn ? ' xls-image-on' : ' xls-image-off'}`}
+              onClick={() => setTab('system')}
+              title="Image collection is configured per campaign in SYSTEM"
+            >
+              IMAGES: {imagesOn ? 'ON' : 'OFF'}
+            </button>
+            <button
+              className="xls-btn"
+              onClick={() => setTab('system')}
+              title="X capture session — manage in SYSTEM"
+            >
+              {sessionConnected ? 'SESSION CONNECTED' : 'CONNECT X'}
+            </button>
+            <button
+              className="xls-btn xls-btn-primary"
+              onClick={() => setTab('live')}
+              disabled={!activeCampaignId}
+              title="Open the LIVE FEED to run a capture sweep"
+            >
+              RUN SWEEP
+            </button>
+          </div>
+        </header>
+
+        <div className="xls-notice" role="status">
+          {notice}
+        </div>
 
       <main className="xls-body">
         {tab === 'dashboard' && (
@@ -2918,6 +3030,7 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
           </section>
         )}
       </main>
+      </div>
       {campaignEditor && (
         <CampaignEditorDialog
           mode={campaignEditor.mode}

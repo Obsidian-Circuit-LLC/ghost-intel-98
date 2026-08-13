@@ -8,7 +8,7 @@
  * emitted into themed source (keeps the quiet-amethyst no-straggler guard clean). Decoration only. */
 import { useEffect, useRef } from 'react';
 
-export type BannerVariant = 'q' | 'briefcase' | 'mail' | 'settings' | 'shred' | 'journal';
+export type BannerVariant = 'q' | 'briefcase' | 'mail' | 'settings' | 'shred' | 'journal' | 'xls';
 
 // glyph = accent that matches each banner; fade = trailing-fill (also tints the field toward the
 // banner's own base colour). Higher fade alpha ⇒ faster trails + more base tint.
@@ -19,6 +19,10 @@ const RAIN: Record<BannerVariant, { glyph: [number, number, number]; fade: [numb
   settings:  { glyph: [90, 215, 205],  fade: [26, 74, 109, 0.36] },
   shred:     { glyph: [130, 150, 245], fade: [26, 35, 66, 0.40] },
   journal:   { glyph: [60, 80, 160],   fade: [172, 174, 182, 0.42] },
+  // X Listening Station — the CYBERVS DOMINATVS lightning banner is blue in BOTH themes (it is an
+  // image, not skinned), so the rain colour-matches its electric-blue field / deep-navy ground for
+  // a seamless edge bleed regardless of classic vs amethyst.
+  xls:       { glyph: [96, 186, 236],  fade: [4, 12, 22, 0.42] },
 };
 
 const GLYPHS = '01<>{}[]#$%&*/\\=+ﾊﾋﾐ日ﾎ'.split('');

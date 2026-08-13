@@ -119,7 +119,7 @@ describe('X Listening Station — Target Sources per-source actions (Task D1)', 
     for (let i = 0; i < 4; i++) await act(async () => { await Promise.resolve(); });
   }
   function findTab(matcher: RegExp): HTMLButtonElement {
-    const hit = Array.from(container.querySelectorAll('.xls-tab')).find((b) => matcher.test(b.textContent || ''));
+    const hit = Array.from(container.querySelectorAll('.xls-tab')).find((b) => matcher.test(b.getAttribute('data-tab') || b.textContent || ''));
     if (!hit) throw new Error(`tab not found: ${matcher}`);
     return hit as HTMLButtonElement;
   }
@@ -135,7 +135,7 @@ describe('X Listening Station — Target Sources per-source actions (Task D1)', 
     return hit as HTMLElement;
   }
   function cardButton(sourceKey: string, matcher: RegExp): HTMLButtonElement {
-    const hit = Array.from(card(sourceKey).querySelectorAll('button')).find((b) => matcher.test(b.textContent || ''));
+    const hit = Array.from(card(sourceKey).querySelectorAll('button')).find((b) => matcher.test(b.getAttribute('data-tab') || b.textContent || ''));
     if (!hit) throw new Error(`card button not found: ${sourceKey} / ${matcher}`);
     return hit as HTMLButtonElement;
   }

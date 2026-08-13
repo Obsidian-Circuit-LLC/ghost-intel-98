@@ -116,7 +116,7 @@ describe('X Listening Station shell (Task 13)', () => {
     api.xListening.campaignsList.mockResolvedValueOnce([CAMP_A, CAMP_B]).mockResolvedValueOnce([CAMP_A, CAMP_B, created]);
     await mount();
 
-    await click(/new campaign/i);
+    await click(/new/i);
 
     expect(promptDialogMock).toHaveBeenCalled();
     expect(api.xListening.campaignsCreate).toHaveBeenCalledWith('Gamma Watch');
@@ -129,7 +129,7 @@ describe('X Listening Station shell (Task 13)', () => {
   it('a blank/cancelled prompt creates nothing', async () => {
     promptDialogMock.mockResolvedValue(null);
     await mount();
-    await click(/new campaign/i);
+    await click(/new/i);
     expect(api.xListening.campaignsCreate).not.toHaveBeenCalled();
   });
 
@@ -149,19 +149,24 @@ describe('X Listening Station shell (Task 13)', () => {
     expect(select.value).toBe('camp-b');
   });
 
-  it('Rename → promptDialog prefilled with the current name → campaignsUpdate', async () => {
+  // J2 reskin: the sidebar dock carries +NEW / EDIT / MANAGE (Enterprise parity).
+  // EDIT drives the same promptDialog→campaignsUpdate rename path the dock always had.
+  it('EDIT → promptDialog prefilled with the current name → campaignsUpdate', async () => {
     promptDialogMock.mockResolvedValue('Alpha Watch Renamed');
     await mount();
 
-    await click(/^rename$/i);
+    await click(/^edit$/i);
 
     expect(promptDialogMock).toHaveBeenCalledWith(expect.any(String), 'Alpha Watch', expect.any(String));
     expect(api.xListening.campaignsUpdate).toHaveBeenCalledWith({ id: 'camp-a', name: 'Alpha Watch Renamed' });
   });
 
-  it('Delete → confirmDialog → campaignsDelete; a cancelled confirm deletes nothing', async () => {
+  // J2 reskin: MANAGE opens the Campaigns tab, where per-card DELETE lives (Enterprise parity —
+  // the dock no longer deletes inline). The confirmDialog→campaignsDelete wiring is unchanged.
+  it('MANAGE → Campaigns tab DELETE → confirmDialog → campaignsDelete; a cancelled confirm deletes nothing', async () => {
     confirmDialogMock.mockResolvedValueOnce(false);
     await mount();
+    await click(/^manage$/i);
     await click(/^delete$/i);
     expect(api.xListening.campaignsDelete).not.toHaveBeenCalled();
 
@@ -170,11 +175,10 @@ describe('X Listening Station shell (Task 13)', () => {
     expect(api.xListening.campaignsDelete).toHaveBeenCalledWith('camp-a');
   });
 
-  it('Rename/Delete are disabled with no active campaign', async () => {
+  it('EDIT is disabled with no active campaign', async () => {
     api.xListening.campaignsList.mockResolvedValue([]);
     await mount();
-    expect(findButton(/^rename$/i).disabled).toBe(true);
-    expect(findButton(/^delete$/i).disabled).toBe(true);
+    expect(findButton(/^edit$/i).disabled).toBe(true);
   });
 
   // ── X-session box ────────────────────────────────────────────────────────

@@ -7,12 +7,13 @@
    only) so an input reads as a white Win98 field under the default theme. */
 .xls-root {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   height: 100%;
-  background: var(--ga98-grey);
+  background: var(--ga98-xls-main-bg);
   color: var(--ga98-text);
   font-family: inherit;
   position: relative;
+  overflow: hidden;
 }
 
 /* ── Campaign dock (Task 13 — self-managed x-namespace campaigns) ───────────── */
@@ -1116,4 +1117,290 @@
   justify-content: flex-end;
   gap: 8px;
   margin-top: 4px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   J2 — ENTERPRISE "dark command-console" shell (GhostExodus CYBERVS DOMINATVS)
+   Reproduces the source's left sidebar + masthead + topbar layout in GI98
+   tokens. QUIET AMETHYST is the primary target (dark console, violet accents);
+   classic is the lighter variant. Token-only — every colour routes through a
+   --ga98-* custom property (defined in theme.css for BOTH themes).
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Left sidebar rail ─────────────────────────────────────────────────────── */
+.xls-sidebar {
+  flex: 0 0 310px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 13px;
+  background: var(--ga98-xls-sidebar-bg);
+  border-right: 1px solid var(--ga98-xls-console-border);
+  color: var(--ga98-xls-sidebar-ink);
+}
+
+/* Brand block: "CD" seal + wordmark + GhostExodus credit. */
+.xls-brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 4px 4px 18px;
+  border-bottom: 1px solid var(--ga98-xls-console-border);
+}
+.xls-seal {
+  flex: 0 0 46px;
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border: 1px solid var(--ga98-xls-seal-border);
+  border-radius: 50%;
+  background: var(--ga98-xls-seal-bg);
+  color: var(--ga98-xls-seal-ink);
+  font-family: Consolas, 'Courier New', monospace;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+.xls-brand-text strong {
+  display: block;
+  color: var(--ga98-text);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  line-height: 1.3;
+}
+.xls-brand-text span {
+  display: block;
+  margin-top: 3px;
+  color: var(--ga98-accent);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+.xls-brand-text small {
+  display: block;
+  margin-top: 4px;
+  color: var(--ga98-text-dim);
+  font-size: 9px;
+  letter-spacing: 0.05em;
+}
+
+/* Active-campaign dock: select + purpose line + +NEW / EDIT / MANAGE. */
+.xls-campaign-dock {
+  display: grid;
+  gap: 7px;
+  margin: 14px 0;
+  padding: 11px;
+  border: 1px solid var(--ga98-xls-console-border);
+  border-left: 3px solid var(--ga98-xls-action-bg);
+  background: var(--ga98-xls-nav-active-bg);
+}
+.xls-dock-eyebrow {
+  color: var(--ga98-text-dim);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+}
+.xls-campaign-dock .xls-dock-select { width: 100%; min-width: 0; box-sizing: border-box; }
+.xls-dock-purpose {
+  min-height: 22px;
+  color: var(--ga98-text-dim);
+  font-size: 10px;
+  line-height: 1.4;
+}
+.xls-dock-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 5px;
+}
+.xls-dock-actions .xls-btn { min-width: 0; padding: 6px 4px; font-size: 10px; }
+.xls-dock-note {
+  margin-top: 4px;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--ga98-text-dim);
+}
+
+/* Nav menu with live count badges. Keeps the .xls-tab / .xls-tab-active hooks
+   the tab-switch tests key on (now selected via data-tab). */
+.xls-nav {
+  display: grid;
+  gap: 4px;
+  padding: 6px 0;
+}
+.xls-nav .xls-tab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--ga98-xls-sidebar-ink);
+  font-family: inherit;
+  font-size: 11px;
+  letter-spacing: 0.07em;
+  text-align: left;
+  cursor: pointer;
+}
+.xls-nav .xls-tab:hover {
+  color: var(--ga98-text);
+  background: var(--ga98-xls-nav-active-bg);
+  border-color: var(--ga98-xls-console-border);
+}
+.xls-nav .xls-tab-active {
+  color: var(--ga98-text);
+  background: var(--ga98-xls-nav-active-bg);
+  border-color: var(--ga98-xls-console-border);
+  box-shadow: inset 3px 0 0 var(--ga98-xls-action-bg);
+  font-weight: 700;
+}
+.xls-nav-label { flex: 1 1 auto; }
+.xls-nav-badge {
+  min-width: 22px;
+  padding: 2px 6px;
+  border-radius: 9px;
+  background: var(--ga98-xls-badge-bg);
+  color: var(--ga98-xls-badge-ink);
+  font-size: 9px;
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Tor / egress-posture box — carries the GI98 clearnet hardening control (the
+   source's on-demand Tor button; here the real egress control is the acked
+   clearnet toggle). Red when clearnet, green when Tor. */
+.xls-tor-box {
+  margin: 8px 0;
+  padding: 10px;
+  border: 1px solid var(--ga98-xls-tor-ok-border);
+  border-left: 3px solid var(--ga98-xls-tor-ok-border);
+  background: var(--ga98-xls-tor-ok-bg);
+}
+.xls-tor-box.xls-tor-bad {
+  border-color: var(--ga98-xls-tor-bad-border);
+  border-left-color: var(--ga98-xls-tor-bad-border);
+  background: var(--ga98-xls-tor-bad-bg);
+}
+.xls-tor-head { display: grid; grid-template-columns: 10px 1fr; gap: 8px; }
+.xls-tor-label strong {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--ga98-xls-tor-ok-ink);
+}
+.xls-tor-box.xls-tor-bad .xls-tor-label strong { color: var(--ga98-xls-tor-bad-ink); }
+.xls-tor-label small {
+  display: block;
+  margin-top: 3px;
+  font-size: 9px;
+  line-height: 1.35;
+  color: var(--ga98-text-dim);
+}
+.xls-tor-toggle {
+  display: flex;
+  gap: 6px;
+  margin-top: 9px;
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--ga98-text);
+}
+.xls-tor-toggle input { flex: 0 0 auto; margin-top: 1px; }
+.xls-tor-box .xls-markers { margin-top: 9px; }
+
+/* Session box: pinned to the rail foot. */
+.xls-session-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-top: auto;
+  padding: 12px;
+  border: 1px solid var(--ga98-xls-console-border);
+  border-radius: 3px;
+  background: var(--ga98-xls-nav-active-bg);
+}
+.xls-session-box .xls-status-dot { margin-top: 2px; background: var(--ga98-xls-dot-off); }
+.xls-session-box .xls-status-dot.xls-online { background: var(--ga98-ok-dot); }
+.xls-session-box .xls-session-label { flex: 1 1 auto; }
+.xls-session-box-actions { display: flex; flex-direction: column; gap: 5px; }
+.xls-session-box-actions .xls-btn { padding: 5px 8px; font-size: 10px; }
+
+/* ── Right column: masthead + topbar + notice + body ───────────────────────── */
+.xls-main {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--ga98-xls-main-bg);
+}
+/* Masthead banner (reuses the shared ModuleBanner ambient-bleed treatment). */
+.xls-main .ga98-module-banner-wrap {
+  flex: 0 0 auto;
+  margin: 14px 16px 0;
+  border: 1px solid var(--ga98-xls-seal-border);
+  border-radius: 4px;
+  background: var(--ga98-xls-masthead-bg);
+}
+
+.xls-topbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--ga98-xls-console-border);
+}
+.xls-topbar-titles { min-width: 0; }
+.xls-eyebrow {
+  display: block;
+  color: var(--ga98-xls-eyebrow);
+  font-size: 10px;
+  letter-spacing: 0.13em;
+}
+.xls-topbar-title {
+  margin: 4px 0 3px;
+  color: var(--ga98-accent);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.xls-topbar-context {
+  display: block;
+  color: var(--ga98-text-dim);
+  font-size: 11px;
+}
+.xls-topbar-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.xls-image-toggle.xls-image-on {
+  border-color: var(--ga98-xls-tor-ok-border);
+  color: var(--ga98-xls-tor-ok-ink);
+}
+.xls-image-toggle.xls-image-off {
+  border-color: var(--ga98-xls-tor-bad-border);
+  color: var(--ga98-xls-tor-bad-ink);
+}
+
+/* The body scrolls independently of the pinned masthead/topbar. */
+.xls-main .xls-body { flex: 1 1 auto; min-height: 0; }
+.xls-main .xls-notice { flex: 0 0 auto; }
+
+/* Amber PRIMARY action (Enterprise's yellow CTA) — the dock +NEW, the topbar
+   RUN SWEEP, and every in-tab primary button read as the amber action colour. */
+.xls-btn-primary {
+  background: var(--ga98-xls-action-bg);
+  color: var(--ga98-xls-action-ink);
+  border-color: var(--ga98-xls-action-border);
+  font-weight: 700;
+}
+.xls-btn-primary:hover:not(:disabled) {
+  background: var(--ga98-xls-action-bg);
+  filter: brightness(1.08);
+}
+
+@media (max-width: 720px) {
+  .xls-sidebar { flex-basis: 240px; }
 }

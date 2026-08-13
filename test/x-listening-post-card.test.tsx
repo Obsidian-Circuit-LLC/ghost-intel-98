@@ -289,7 +289,7 @@ describe('X Listening Station — PostCard feed wiring (Task I1)', () => {
 
   it('OPEN REAL THREAD in the Live feed calls openInX with kind "thread" and the post URL', async () => {
     await mount();
-    const liveTab = Array.from(container.querySelectorAll('.xls-tab')).find((b) => /^live$/i.test(b.textContent || '')) as HTMLButtonElement;
+    const liveTab = Array.from(container.querySelectorAll('.xls-tab')).find((b) => /^live$/i.test(b.getAttribute('data-tab') || b.textContent || '')) as HTMLButtonElement;
     await act(async () => { liveTab.click(); });
     for (let i = 0; i < 3; i++) await act(async () => { await Promise.resolve(); });
     const openBtn = Array.from(container.querySelectorAll('button')).find((b) => /OPEN REAL THREAD/.test(b.textContent || '')) as HTMLButtonElement;

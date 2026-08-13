@@ -169,7 +169,7 @@ describe('X Listening Station tabs (Task 14)', () => {
   }
   function findTab(matcher: RegExp): HTMLButtonElement {
     const hit = Array.from(container.querySelectorAll('.xls-tab')).find((b) =>
-      matcher.test(b.textContent || ''),
+      matcher.test(b.getAttribute('data-tab') || b.textContent || ''),
     );
     if (!hit) throw new Error(`tab not found: ${matcher}`);
     return hit as HTMLButtonElement;
@@ -182,7 +182,7 @@ describe('X Listening Station tabs (Task 14)', () => {
   }
   function findButton(matcher: RegExp): HTMLButtonElement {
     const hit = Array.from(container.querySelectorAll('button')).find((b) =>
-      matcher.test(b.textContent || ''),
+      matcher.test(b.getAttribute('data-tab') || b.textContent || ''),
     );
     if (!hit) throw new Error(`button not found: ${matcher}`);
     return hit as HTMLButtonElement;

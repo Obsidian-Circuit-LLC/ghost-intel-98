@@ -111,7 +111,7 @@ describe('X Listening Station — Network tab EXTRACT actions (Task C1)', () => 
     for (let i = 0; i < 4; i++) await act(async () => { await Promise.resolve(); });
   }
   function findTab(matcher: RegExp): HTMLButtonElement {
-    const hit = Array.from(container.querySelectorAll('.xls-tab')).find((b) => matcher.test(b.textContent || ''));
+    const hit = Array.from(container.querySelectorAll('.xls-tab')).find((b) => matcher.test(b.getAttribute('data-tab') || b.textContent || ''));
     if (!hit) throw new Error(`tab not found: ${matcher}`);
     return hit as HTMLButtonElement;
   }
@@ -120,7 +120,7 @@ describe('X Listening Station — Network tab EXTRACT actions (Task C1)', () => 
     for (let i = 0; i < 3; i++) await act(async () => { await Promise.resolve(); });
   }
   function findButton(matcher: RegExp): HTMLButtonElement {
-    const hit = Array.from(container.querySelectorAll('button')).find((b) => matcher.test(b.textContent || ''));
+    const hit = Array.from(container.querySelectorAll('button')).find((b) => matcher.test(b.getAttribute('data-tab') || b.textContent || ''));
     if (!hit) throw new Error(`button not found: ${matcher}`);
     return hit as HTMLButtonElement;
   }
