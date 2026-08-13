@@ -11,6 +11,9 @@ import type { EntityType, AppSettings } from '../shared/types';
 import type { RunEvent } from '../shared/investigation-agent';
 import type { RunBudget } from '../shared/investigation-types';
 import type { IntelReport } from '../shared/investigation-report';
+import type { XCollectionSettings } from '../shared/x-listening-collection-settings';
+import type { XImageMode } from '../shared/x-listening-image-policy';
+import type { XScheduleStatus } from '../shared/x-listening-schedule';
 
 const api = {
   cases: {
@@ -735,9 +738,12 @@ const api = {
     campaignsCreate: (name: string) =>
       ipcRenderer.invoke(channels.xListening.campaignsCreate, name),
     campaignsSwitch: (id: string) => ipcRenderer.invoke(channels.xListening.campaignsSwitch, id),
-    campaignsUpdate: (req: { id: string; name: string }) =>
+    campaignsUpdate: (req: { id: string; name: string; purpose?: string; description?: string }) =>
       ipcRenderer.invoke(channels.xListening.campaignsUpdate, req),
     campaignsDelete: (id: string) => ipcRenderer.invoke(channels.xListening.campaignsDelete, id),
+    campaignsDuplicate: (id: string) =>
+      ipcRenderer.invoke(channels.xListening.campaignsDuplicate, id),
+    campaignsMeta: () => ipcRenderer.invoke(channels.xListening.campaignsMeta),
     analysis: (caseId: string) => ipcRenderer.invoke(channels.xListening.analysis, caseId),
     health: (caseId: string) => ipcRenderer.invoke(channels.xListening.health, caseId),
     entities: (caseId: string) => ipcRenderer.invoke(channels.xListening.entities, caseId),
@@ -773,7 +779,33 @@ const api = {
     exportNetworkToFile: (caseId: string) =>
       ipcRenderer.invoke(channels.xListening.exportNetworkToFile, caseId),
     mediaRead: (req: { caseId: string; ref: string }) =>
-      ipcRenderer.invoke(channels.xListening.mediaRead, req)
+      ipcRenderer.invoke(channels.xListening.mediaRead, req),
+    changeEvents: (caseId: string) => ipcRenderer.invoke(channels.xListening.changeEvents, caseId),
+    verifyPost: (req: { caseId: string; postId: string }) =>
+      ipcRenderer.invoke(channels.xListening.verifyPost, req),
+    runLog: (caseId: string) => ipcRenderer.invoke(channels.xListening.runLog, caseId),
+    openInX: (req: { kind: 'thread' | 'profile' | 'identity'; ref: string }) =>
+      ipcRenderer.invoke(channels.xListening.openInX, req),
+    captureNetwork: (req: {
+      caseId: string;
+      channelId: string;
+      targetUsername: string;
+      kind: 'followers' | 'following';
+    }) => ipcRenderer.invoke(channels.xListening.captureNetwork, req),
+    removeSource: (req: { caseId: string; sourceKey: string }) =>
+      ipcRenderer.invoke(channels.xListening.removeSource, req),
+    getCollectionSettings: (caseId: string): Promise<XCollectionSettings> =>
+      ipcRenderer.invoke(channels.xListening.getCollectionSettings, caseId),
+    saveCollectionSettings: (req: { caseId: string; settings: Partial<XCollectionSettings> }): Promise<XCollectionSettings> =>
+      ipcRenderer.invoke(channels.xListening.saveCollectionSettings, req),
+    getImagePolicy: (caseId: string): Promise<{ modes: Record<string, XImageMode>; retrieveImages: boolean }> =>
+      ipcRenderer.invoke(channels.xListening.getImagePolicy, caseId),
+    setProfileImageMode: (
+      req: { caseId: string; sourceKey: string; mode: XImageMode },
+    ): Promise<{ sourceKey: string; imageMode: XImageMode; effective: boolean }> =>
+      ipcRenderer.invoke(channels.xListening.setProfileImageMode, req),
+    scheduleStatus: (caseId: string): Promise<XScheduleStatus> =>
+      ipcRenderer.invoke(channels.xListening.scheduleStatus, caseId)
   },
   // Scraping cases (W4) — the isolated SOCMINT/X collection-run stores. Every call passes a
   // `store: 'socmint' | 'x'` discriminator that main validates against an allowlist and routes

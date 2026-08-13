@@ -7,12 +7,13 @@
    only) so an input reads as a white Win98 field under the default theme. */
 .xls-root {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   height: 100%;
-  background: var(--ga98-grey);
+  background: var(--ga98-xls-main-bg);
   color: var(--ga98-text);
   font-family: inherit;
   position: relative;
+  overflow: hidden;
 }
 
 /* ── Campaign dock (Task 13 — self-managed x-namespace campaigns) ───────────── */
@@ -64,6 +65,12 @@
   color: var(--ga98-danger-ink);
   border-color: var(--ga98-error-border);
 }
+/* ── Task A1: VERIFY LIVE — a post that is gone at its original URL ──────── */
+.xls-marker-unavailable {
+  background: var(--ga98-error-surface);
+  color: var(--ga98-danger-ink);
+  border-color: var(--ga98-error-border);
+}
 /* ── Task 15: Changes/Campaigns tab markers ─────────────────────────────── */
 .xls-marker-new {
   background: var(--ga98-ok-surface);
@@ -74,6 +81,34 @@
   background: var(--ga98-grey);
   color: var(--ga98-text-dim);
   border-color: var(--ga98-shadow-dark);
+}
+/* ── Task A3: COLLECTION RUN LOG — per-operation run status ──────────────── */
+.xls-marker-run-complete {
+  background: var(--ga98-ok-surface);
+  color: var(--ga98-ok-ink);
+  border-color: var(--ga98-ok-dot);
+}
+.xls-marker-run-error {
+  background: var(--ga98-error-surface);
+  color: var(--ga98-danger-ink);
+  border-color: var(--ga98-error-border);
+}
+/* ── Task B1: CHANGE INTEL — colour-code the three historical change-event kinds so an analyst
+ *    can tell them apart at a glance (Enterprise parity). Token-only → classic + amethyst. ── */
+.xls-marker-post_changed {
+  background: var(--ga98-grey);
+  color: var(--ga98-accent);
+  border-color: var(--ga98-accent);
+}
+.xls-marker-profile_change {
+  background: var(--ga98-grey);
+  color: var(--ga98-text-dim);
+  border-color: var(--ga98-shadow-dark);
+}
+.xls-marker-post_unavailable {
+  background: var(--ga98-error-surface);
+  color: var(--ga98-danger-ink);
+  border-color: var(--ga98-error-border);
 }
 .xls-network-posture {
   flex: 0 0 auto;
@@ -103,6 +138,34 @@
 .xls-status-dot.xls-online {
   background: var(--ga98-ok-dot);
   box-shadow: 0 0 6px var(--ga98-ok-dot);
+}
+
+/* G1: automatic-sweep schedule indicator (next-sweep + Pause). Token-only. */
+.xls-schedule-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--ga98-shadow-dark);
+  background: var(--ga98-grey);
+  color: var(--ga98-text);
+}
+.xls-schedule-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--ga98-text-dim);
+  flex: 0 0 auto;
+}
+.xls-schedule-dot.xls-schedule-on {
+  background: var(--ga98-ok-dot);
+  box-shadow: 0 0 6px var(--ga98-ok-dot);
+}
+.xls-schedule-text {
+  flex: 1 1 auto;
+  color: var(--ga98-text);
 }
 .xls-session-label strong {
   display: block;
@@ -297,9 +360,33 @@
   border: none;
   cursor: pointer;
 }
-.xls-source-actions { display: flex; gap: 6px; }
+.xls-source-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+/* F1 — per-profile Images control (On / Off / Inherit) + plain-language effective state. */
+.xls-source-images { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 6px 0; }
+.xls-source-images-label { font-size: 12px; color: var(--ga98-text-dim); }
+.xls-source-images-select { min-width: 90px; }
+.xls-source-images-effective { font-size: 11px; color: var(--ga98-text-dim); }
+.xls-source-images-effective[data-effective='on'] { color: var(--ga98-ok-ink); }
 .xls-btn-danger { border-color: var(--ga98-error-border); color: var(--ga98-danger-ink); }
 .xls-btn-danger:hover:not(:disabled) { background: var(--ga98-error-surface); }
+
+/* Task D1 — Target Sources per-source action cards (REFRESH / VIEW X / NETWORK / REMOVE). */
+.xls-source-cards { display: flex; flex-direction: column; gap: 8px; }
+.xls-source-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background: var(--ga98-grey);
+  border: 1px solid var(--ga98-shadow-dark);
+}
+.xls-source-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
 
 .xls-empty {
   padding: 14px;
@@ -314,12 +401,39 @@
   background: var(--ga98-grey);
   border: 1px solid var(--ga98-shadow-dark);
 }
+
+/* ── Task I1: rich PostCard head (avatar · identity · time) ─────────────────── */
 .xls-post-head {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
+  align-items: flex-start;
+  gap: 10px;
   margin-bottom: 6px;
 }
+.xls-post-avatar {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ga98-row-hover);
+  border: 1px solid var(--ga98-shadow-dark);
+  color: var(--ga98-text-dim);
+  font-size: 15px;
+  font-weight: 700;
+}
+.xls-post-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.xls-post-identity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  min-width: 0;
+}
+.xls-post-displayname { color: var(--ga98-text); font-size: 13px; }
+.xls-post-username { color: var(--ga98-text-dim); font-size: 11px; }
 .xls-post-head strong { color: var(--ga98-text); font-size: 13px; }
 .xls-kind {
   font-size: 10px;
@@ -328,10 +442,47 @@
   border: 1px solid var(--ga98-shadow-dark);
   padding: 1px 5px;
 }
+.xls-via {
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  color: var(--ga98-accent);
+  border: 1px solid var(--ga98-accent);
+  padding: 1px 5px;
+}
+.xls-post-time { margin-left: auto; font-size: 11px; color: var(--ga98-text-dim); flex: 0 0 auto; }
 .xls-post-head time { margin-left: auto; font-size: 11px; color: var(--ga98-text-dim); }
+
+/* Preset MATCH rows (a highlight preset matched this post). */
+.xls-preset-match-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 6px; }
+.xls-preset-match {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  padding: 1px 6px;
+  background: var(--ga98-ok-surface);
+  color: var(--ga98-ok-ink);
+  border: 1px solid var(--ga98-ok-dot);
+}
+
 .xls-post-text { white-space: pre-wrap; font-size: 12px; line-height: 1.5; margin: 6px 0; }
-.xls-media-strip { display: flex; gap: 6px; margin: 6px 0; }
-.xls-media-strip img { max-width: 120px; max-height: 120px; border: 1px solid var(--ga98-shadow-dark); }
+.xls-hl { background: var(--ga98-accent); color: var(--ga98-titlebar-text); padding: 0 1px; }
+
+.xls-media-strip { display: flex; gap: 6px; margin: 6px 0; flex-wrap: wrap; }
+.xls-media-strip img,
+.xls-media-thumb { max-width: 120px; max-height: 120px; border: 1px solid var(--ga98-shadow-dark); }
+.xls-media-missing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 120px;
+  height: 68px;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-align: center;
+  color: var(--ga98-text-dim);
+  background: var(--ga98-recessed-bg, #f4f4f4);
+  border: 1px dashed var(--ga98-shadow-dark);
+}
+
 .xls-metrics {
   display: flex;
   gap: 12px;
@@ -340,7 +491,103 @@
   margin-top: 6px;
 }
 .xls-metrics .xls-stamp { margin-left: auto; color: var(--ga98-text-dim); }
-.xls-post-actions { display: flex; gap: 6px; margin-top: 8px; }
+
+/* Provenance row: first/last observed · availability badge · short SHA-256. */
+.xls-provenance-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  align-items: center;
+  margin-top: 6px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--ga98-text-dim);
+}
+.xls-provenance-row .xls-stamp { margin-left: auto; }
+.xls-availability {
+  padding: 1px 6px;
+  border: 1px solid var(--ga98-shadow-dark);
+  color: var(--ga98-text-dim);
+}
+.xls-availability-available {
+  background: var(--ga98-ok-surface);
+  color: var(--ga98-ok-ink);
+  border-color: var(--ga98-ok-dot);
+}
+.xls-availability-unavailable {
+  background: var(--ga98-error-surface);
+  color: var(--ga98-danger-ink);
+  border-color: var(--ga98-error-border);
+}
+
+/* Actions: OPEN REAL THREAD · VERIFY LIVE · ANALYST NOTES toggle + permalink. */
+.xls-post-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin-top: 8px;
+}
+.xls-post-buttons { display: flex; gap: 6px; flex-wrap: wrap; }
+.xls-post-permalink {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--ga98-text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.xls-text-button {
+  font-family: inherit;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  padding: 4px 8px;
+  background: none;
+  color: var(--ga98-accent);
+  border: none;
+  cursor: pointer;
+}
+.xls-text-button:hover:not(:disabled) { text-decoration: underline; }
+.xls-text-button:disabled { opacity: 0.55; cursor: default; }
+.xls-danger-text { color: var(--ga98-danger-ink); }
+
+/* Inline ANALYST NOTES panel (add / edit / delete). */
+.xls-notes-inline {
+  margin-top: 10px;
+  padding: 10px;
+  background: var(--ga98-grey);
+  border: 1px solid var(--ga98-shadow-dark);
+  border-left: 3px solid var(--ga98-accent);
+}
+.xls-note-list { display: flex; flex-direction: column; gap: 8px; }
+.xls-note-entry {
+  padding: 8px;
+  background: var(--ga98-recessed-bg, #f4f4f4);
+  border: 1px solid var(--ga98-shadow-dark);
+}
+.xls-note-body { font-size: 12px; line-height: 1.5; margin: 0 0 6px; color: var(--ga98-text); }
+.xls-note-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.xls-note-actions { display: flex; gap: 6px; }
+.xls-note-entry textarea,
+.xls-note-compose textarea {
+  display: block;
+  width: 100%;
+  min-height: 64px;
+  resize: vertical;
+  box-sizing: border-box;
+  margin-bottom: 8px;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.xls-note-compose { margin-top: 10px; }
 
 .xls-network-controls {
   display: flex;
@@ -415,6 +662,27 @@
 .xls-settings { margin-top: 8px; }
 .xls-export-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
+/* ── F2: per-campaign COLLECTION SETTINGS form ──────────────────────────────── */
+.xls-collection-settings .xls-settings-group {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--ga98-shadow-dark);
+}
+.xls-settings-group-title {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--ga98-accent);
+  margin: 0 0 8px;
+}
+.xls-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px 12px;
+  margin-top: 8px;
+}
+.xls-settings-grid .xls-field { font-size: 10px; }
+.xls-settings-grid .xls-input { width: 100%; }
+
 /* ── Tabs body (Task 14 — dashboard/live/sources/network/entities) ──────────── */
 .xls-stat-grid {
   display: grid;
@@ -438,6 +706,16 @@
 .xls-stat strong { font-size: 20px; color: var(--ga98-text); }
 .xls-tab-panel .xls-panel { margin-bottom: 16px; }
 .xls-tab-panel .xls-panel:last-child { margin-bottom: 0; }
+
+/* ── Task B1: Change Intel two-column layout (Enterprise CHANGE INTEL parity) ── */
+.xls-changes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.xls-changes-grid .xls-panel { max-width: none; margin-bottom: 0; }
+.xls-event-source { font-size: 11px; color: var(--ga98-text-dim); }
 
 /* ── Task 15: Notes tab ──────────────────────────────────────────────────── */
 .xls-note-text {
@@ -511,4 +789,618 @@
 }
 .xls-btn-primary:hover:not(:disabled) { background: var(--ga98-accent); filter: brightness(1.12); }
 
+/* ── Task C2a: Network tab non-graph panels (token-only) ─────────────────── */
+.xls-pair-grid { display: flex; flex-direction: column; gap: 8px; }
+.xls-pair-card {
+  border: 1px solid var(--ga98-shadow-dark);
+  background: var(--ga98-grey);
+  padding: 8px;
+}
+.xls-pair-card > summary {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ga98-text);
+}
+.xls-pair-card > summary strong { color: var(--ga98-text); }
+.xls-common-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-top: 10px;
+}
+.xls-common-heading {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--ga98-text-dim);
+  margin: 0 0 6px;
+}
+.xls-identity-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.xls-identity-chip {
+  font-family: inherit;
+  font-size: 11px;
+  padding: 2px 8px;
+  background: var(--ga98-grey);
+  color: var(--ga98-accent);
+  border: 1px solid var(--ga98-shadow-dark);
+  cursor: pointer;
+}
+.xls-identity-chip:hover { background: var(--ga98-row-hover); }
+
+.xls-min-targets { max-width: 320px; margin-bottom: 12px; }
+.xls-min-targets .xls-input { width: 88px; }
+.xls-overlap-table { display: flex; flex-direction: column; gap: 6px; }
+.xls-overlap-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) auto auto;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 8px;
+  background: var(--ga98-grey);
+  border: 1px solid var(--ga98-shadow-dark);
+}
+.xls-identity-main {
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--ga98-accent);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+.xls-identity-main:hover { text-decoration: underline; }
+.xls-overlap-score { font-size: 14px; color: var(--ga98-text); }
+.xls-overlap-connections {
+  grid-column: 1 / -1;
+  font-size: 11px;
+  color: var(--ga98-text-dim);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.xls-overlap-connections em { color: var(--ga98-text-dim); font-style: normal; letter-spacing: 0.06em; }
+.xls-inline-identity { color: var(--ga98-text); }
+
+.xls-relationship-tag { letter-spacing: 0.06em; }
+.xls-relationship-followers {
+  background: var(--ga98-ok-surface);
+  color: var(--ga98-ok-ink);
+  border-color: var(--ga98-ok-dot);
+}
+.xls-relationship-following {
+  background: var(--ga98-grey);
+  color: var(--ga98-text-dim);
+  border-color: var(--ga98-shadow-dark);
+}
+
+.xls-network-records { display: flex; flex-direction: column; gap: 6px; }
+.xls-network-record {
+  display: grid;
+  grid-template-columns: auto minmax(140px, 1fr) auto auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  background: var(--ga98-grey);
+  border: 1px solid var(--ga98-shadow-dark);
+}
+.xls-network-record-avatar {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ga98-row-hover);
+  border: 1px solid var(--ga98-shadow-dark);
+  color: var(--ga98-text-dim);
+  font-size: 15px;
+  overflow: hidden;
+}
+.xls-network-record-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.xls-network-record-id { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.xls-network-record-id strong { font-size: 12px; color: var(--ga98-text); }
+.xls-network-record-id span { font-size: 11px; color: var(--ga98-text-dim); }
+.xls-network-record-id small {
+  font-size: 10px;
+  color: var(--ga98-text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.xls-observed { text-align: right; line-height: 1.4; }
+.xls-delta-row .xls-identity-main { margin-right: 6px; }
+
 .xls-panel { max-width: 1000px; }
+
+/* ── Task C2b: COMMON NETWORK MIND MAP (interactive SVG graph) ───────────────────────────────────
+   Token-only: every stroke/fill/text colour resolves through a --ga98-graph-* token so the map
+   themes in classic + QUIET AMETHYST (the no-straggler guard stays green — no literal here). Each
+   node/edge carries an .xls-graph-hue-N class that binds --xls-hue to one of the 8 shared neon
+   cluster tokens; the structural rules below consume var(--xls-hue). */
+.xls-graph-hue-0 { --xls-hue: var(--ga98-graph-hue-0); }
+.xls-graph-hue-1 { --xls-hue: var(--ga98-graph-hue-1); }
+.xls-graph-hue-2 { --xls-hue: var(--ga98-graph-hue-2); }
+.xls-graph-hue-3 { --xls-hue: var(--ga98-graph-hue-3); }
+.xls-graph-hue-4 { --xls-hue: var(--ga98-graph-hue-4); }
+.xls-graph-hue-5 { --xls-hue: var(--ga98-graph-hue-5); }
+.xls-graph-hue-6 { --xls-hue: var(--ga98-graph-hue-6); }
+.xls-graph-hue-7 { --xls-hue: var(--ga98-graph-hue-7); }
+
+.xls-graph-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.xls-graph-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.xls-graph-mode {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.xls-graph-mode-btn.active {
+  border-color: var(--ga98-accent);
+  box-shadow: inset 0 0 0 1px var(--ga98-accent);
+  font-weight: bold;
+}
+.xls-graph-visible {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.xls-graph-canvas {
+  background: var(--ga98-graph-bg);
+  border: 1px solid var(--ga98-shadow-dark);
+  padding: 6px;
+}
+.xls-network-graph {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 70vh;
+}
+.xls-mind-ring {
+  fill: none;
+  stroke: var(--ga98-graph-ring);
+  stroke-width: 1;
+}
+.xls-mind-ring-outer { stroke-dasharray: 3 6; opacity: 0.7; }
+.xls-mind-center circle {
+  fill: var(--ga98-graph-hub);
+  stroke: var(--ga98-graph-ink);
+  stroke-width: 1;
+}
+.xls-mind-center text {
+  fill: var(--ga98-graph-ink);
+  font-size: 10px;
+  font-weight: bold;
+  letter-spacing: 0.5px;
+}
+.xls-mind-edge {
+  fill: none;
+  stroke: var(--xls-hue);
+  stroke-width: 1.5;
+  opacity: 0.85;
+}
+.xls-mind-edge.following { stroke-dasharray: 4 4; }
+.xls-mind-edge.muted { opacity: 0.12; }
+.xls-mind-node { cursor: pointer; }
+.xls-mind-node.click-node { cursor: pointer; }
+.xls-mind-node .xls-node-fill {
+  fill: var(--xls-hue);
+  stroke: var(--ga98-graph-bg);
+  stroke-width: 1.5;
+  transition: opacity 120ms ease;
+}
+.xls-mind-node .xls-node-initial {
+  fill: var(--ga98-graph-badge-ink);
+  font-size: 11px;
+  font-weight: bold;
+  pointer-events: none;
+}
+.xls-mind-node .xls-node-label {
+  fill: var(--xls-hue);
+  font-size: 11px;
+  pointer-events: none;
+}
+.xls-mind-node .xls-score-badge {
+  fill: var(--xls-hue);
+  stroke: var(--ga98-graph-bg);
+  stroke-width: 1;
+}
+.xls-mind-node .xls-score-label {
+  fill: var(--ga98-graph-badge-ink);
+  font-size: 7px;
+  font-weight: bold;
+  pointer-events: none;
+}
+.xls-mind-node.dimmed { opacity: 0.18; }
+.xls-mind-node.selected .xls-node-fill { stroke: var(--ga98-graph-ink); stroke-width: 2.5; }
+.xls-mind-node:focus-visible .xls-node-fill { stroke: var(--ga98-graph-ink); stroke-width: 2.5; }
+.xls-graph-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 6px;
+  color: var(--ga98-graph-ink-dim);
+  font-size: 11px;
+}
+.xls-graph-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.xls-legend-swatch {
+  display: inline-block;
+  width: 20px;
+  height: 8px;
+  border-radius: 2px;
+}
+.xls-legend-rainbow {
+  background: linear-gradient(
+    90deg,
+    var(--ga98-graph-hue-0),
+    var(--ga98-graph-hue-2),
+    var(--ga98-graph-hue-3),
+    var(--ga98-graph-hue-4),
+    var(--ga98-graph-hue-1),
+    var(--ga98-graph-hue-5),
+    var(--ga98-graph-hue-6),
+    var(--ga98-graph-hue-7)
+  );
+}
+.xls-legend-line {
+  height: 0;
+  border-top: 2px solid var(--ga98-graph-ink-dim);
+  border-radius: 0;
+}
+.xls-legend-line.following { border-top-style: dashed; }
+.xls-graph-inspector {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 6px 8px;
+  background: var(--ga98-graph-panel);
+  border: 1px solid var(--ga98-shadow-dark);
+  color: var(--ga98-graph-ink);
+}
+.xls-graph-inspector strong { display: block; }
+.xls-graph-inspector span,
+.xls-graph-inspector small { color: var(--ga98-graph-ink-dim); }
+
+@media (prefers-reduced-motion: reduce) {
+  .xls-mind-node .xls-node-fill { transition: none; }
+}
+
+/* ── J1: Campaigns tab cards + campaign editor modal (token-only, both themes) ─────────── */
+.xls-campaign-list { gap: 8px; }
+.xls-campaign-card { align-items: flex-start; }
+.xls-campaign-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.xls-campaign-name { font-weight: bold; color: var(--ga98-text); }
+.xls-campaign-purpose { font-size: 11px; color: var(--ga98-accent); }
+.xls-campaign-description {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--ga98-text-dim);
+}
+
+.xls-campaign-editor { width: min(440px, 92vw); }
+.xls-campaign-editor-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+}
+.xls-field-label {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--ga98-text-dim);
+}
+.xls-textarea {
+  resize: vertical;
+  min-height: 56px;
+  font: inherit;
+}
+.xls-campaign-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   J2 — ENTERPRISE "dark command-console" shell (GhostExodus CYBERVS DOMINATVS)
+   Reproduces the source's left sidebar + masthead + topbar layout in GI98
+   tokens. QUIET AMETHYST is the primary target (dark console, violet accents);
+   classic is the lighter variant. Token-only — every colour routes through a
+   --ga98-* custom property (defined in theme.css for BOTH themes).
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Left sidebar rail ─────────────────────────────────────────────────────── */
+.xls-sidebar {
+  flex: 0 0 310px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 13px;
+  background: var(--ga98-xls-sidebar-bg);
+  border-right: 1px solid var(--ga98-xls-console-border);
+  color: var(--ga98-xls-sidebar-ink);
+}
+
+/* Brand block: "CD" seal + wordmark + GhostExodus credit. */
+.xls-brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 4px 4px 18px;
+  border-bottom: 1px solid var(--ga98-xls-console-border);
+}
+.xls-seal {
+  flex: 0 0 46px;
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border: 1px solid var(--ga98-xls-seal-border);
+  border-radius: 50%;
+  background: var(--ga98-xls-seal-bg);
+  color: var(--ga98-xls-seal-ink);
+  font-family: Consolas, 'Courier New', monospace;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+.xls-brand-text strong {
+  display: block;
+  color: var(--ga98-text);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  line-height: 1.3;
+}
+.xls-brand-text span {
+  display: block;
+  margin-top: 3px;
+  color: var(--ga98-accent);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+.xls-brand-text small {
+  display: block;
+  margin-top: 4px;
+  color: var(--ga98-text-dim);
+  font-size: 9px;
+  letter-spacing: 0.05em;
+}
+
+/* Active-campaign dock: select + purpose line + +NEW / EDIT / MANAGE. */
+.xls-campaign-dock {
+  display: grid;
+  gap: 7px;
+  margin: 14px 0;
+  padding: 11px;
+  border: 1px solid var(--ga98-xls-console-border);
+  border-left: 3px solid var(--ga98-xls-action-bg);
+  background: var(--ga98-xls-nav-active-bg);
+}
+.xls-dock-eyebrow {
+  color: var(--ga98-text-dim);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+}
+.xls-campaign-dock .xls-dock-select { width: 100%; min-width: 0; box-sizing: border-box; }
+.xls-dock-purpose {
+  min-height: 22px;
+  color: var(--ga98-text-dim);
+  font-size: 10px;
+  line-height: 1.4;
+}
+.xls-dock-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 5px;
+}
+.xls-dock-actions .xls-btn { min-width: 0; padding: 6px 4px; font-size: 10px; }
+.xls-dock-note {
+  margin-top: 4px;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--ga98-text-dim);
+}
+
+/* Nav menu with live count badges. Keeps the .xls-tab / .xls-tab-active hooks
+   the tab-switch tests key on (now selected via data-tab). */
+.xls-nav {
+  display: grid;
+  gap: 4px;
+  padding: 6px 0;
+}
+.xls-nav .xls-tab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--ga98-xls-sidebar-ink);
+  font-family: inherit;
+  font-size: 11px;
+  letter-spacing: 0.07em;
+  text-align: left;
+  cursor: pointer;
+}
+.xls-nav .xls-tab:hover {
+  color: var(--ga98-text);
+  background: var(--ga98-xls-nav-active-bg);
+  border-color: var(--ga98-xls-console-border);
+}
+.xls-nav .xls-tab-active {
+  color: var(--ga98-text);
+  background: var(--ga98-xls-nav-active-bg);
+  border-color: var(--ga98-xls-console-border);
+  box-shadow: inset 3px 0 0 var(--ga98-xls-action-bg);
+  font-weight: 700;
+}
+.xls-nav-label { flex: 1 1 auto; }
+.xls-nav-badge {
+  min-width: 22px;
+  padding: 2px 6px;
+  border-radius: 9px;
+  background: var(--ga98-xls-badge-bg);
+  color: var(--ga98-xls-badge-ink);
+  font-size: 9px;
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Tor / egress-posture box — carries the GI98 clearnet hardening control (the
+   source's on-demand Tor button; here the real egress control is the acked
+   clearnet toggle). Red when clearnet, green when Tor. */
+.xls-tor-box {
+  margin: 8px 0;
+  padding: 10px;
+  border: 1px solid var(--ga98-xls-tor-ok-border);
+  border-left: 3px solid var(--ga98-xls-tor-ok-border);
+  background: var(--ga98-xls-tor-ok-bg);
+}
+.xls-tor-box.xls-tor-bad {
+  border-color: var(--ga98-xls-tor-bad-border);
+  border-left-color: var(--ga98-xls-tor-bad-border);
+  background: var(--ga98-xls-tor-bad-bg);
+}
+.xls-tor-head { display: grid; grid-template-columns: 10px 1fr; gap: 8px; }
+.xls-tor-label strong {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--ga98-xls-tor-ok-ink);
+}
+.xls-tor-box.xls-tor-bad .xls-tor-label strong { color: var(--ga98-xls-tor-bad-ink); }
+.xls-tor-label small {
+  display: block;
+  margin-top: 3px;
+  font-size: 9px;
+  line-height: 1.35;
+  color: var(--ga98-text-dim);
+}
+.xls-tor-toggle {
+  display: flex;
+  gap: 6px;
+  margin-top: 9px;
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--ga98-text);
+}
+.xls-tor-toggle input { flex: 0 0 auto; margin-top: 1px; }
+.xls-tor-box .xls-markers { margin-top: 9px; }
+
+/* Session box: pinned to the rail foot. */
+.xls-session-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-top: auto;
+  padding: 12px;
+  border: 1px solid var(--ga98-xls-console-border);
+  border-radius: 3px;
+  background: var(--ga98-xls-nav-active-bg);
+}
+.xls-session-box .xls-status-dot { margin-top: 2px; background: var(--ga98-xls-dot-off); }
+.xls-session-box .xls-status-dot.xls-online { background: var(--ga98-ok-dot); }
+.xls-session-box .xls-session-label { flex: 1 1 auto; }
+.xls-session-box-actions { display: flex; flex-direction: column; gap: 5px; }
+.xls-session-box-actions .xls-btn { padding: 5px 8px; font-size: 10px; }
+
+/* ── Right column: masthead + topbar + notice + body ───────────────────────── */
+.xls-main {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--ga98-xls-main-bg);
+}
+/* Masthead banner (reuses the shared ModuleBanner ambient-bleed treatment). */
+.xls-main .ga98-module-banner-wrap {
+  flex: 0 0 auto;
+  margin: 14px 16px 0;
+  border: 1px solid var(--ga98-xls-seal-border);
+  border-radius: 4px;
+  background: var(--ga98-xls-masthead-bg);
+}
+
+.xls-topbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--ga98-xls-console-border);
+}
+.xls-topbar-titles { min-width: 0; }
+.xls-eyebrow {
+  display: block;
+  color: var(--ga98-xls-eyebrow);
+  font-size: 10px;
+  letter-spacing: 0.13em;
+}
+.xls-topbar-title {
+  margin: 4px 0 3px;
+  color: var(--ga98-accent);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.xls-topbar-context {
+  display: block;
+  color: var(--ga98-text-dim);
+  font-size: 11px;
+}
+.xls-topbar-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.xls-image-toggle.xls-image-on {
+  border-color: var(--ga98-xls-tor-ok-border);
+  color: var(--ga98-xls-tor-ok-ink);
+}
+.xls-image-toggle.xls-image-off {
+  border-color: var(--ga98-xls-tor-bad-border);
+  color: var(--ga98-xls-tor-bad-ink);
+}
+
+/* The body scrolls independently of the pinned masthead/topbar. */
+.xls-main .xls-body { flex: 1 1 auto; min-height: 0; }
+.xls-main .xls-notice { flex: 0 0 auto; }
+
+/* Amber PRIMARY action (Enterprise's yellow CTA) — the dock +NEW, the topbar
+   RUN SWEEP, and every in-tab primary button read as the amber action colour. */
+.xls-btn-primary {
+  background: var(--ga98-xls-action-bg);
+  color: var(--ga98-xls-action-ink);
+  border-color: var(--ga98-xls-action-border);
+  font-weight: 700;
+}
+.xls-btn-primary:hover:not(:disabled) {
+  background: var(--ga98-xls-action-bg);
+  filter: brightness(1.08);
+}
+
+@media (max-width: 720px) {
+  .xls-sidebar { flex-basis: 240px; }
+}

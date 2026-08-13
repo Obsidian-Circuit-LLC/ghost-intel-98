@@ -124,6 +124,114 @@ export interface XPostArtifact extends HarvestedItem {
   evidenceHash: string;
   synthetic?: boolean;
   mediaRefs?: string[];
+  /** Prior captured versions of THIS post, appended on a text/media re-ingest diff (Task A2,
+   *  ported from Enterprise `ingestPosts`/`verifyPostLive`). Capped at `X_MAX_POST_VERSIONS`
+   *  (oldest dropped). Absent until the first change is observed. */
+  versionHistory?: XPostVersion[];
+  /** Live-verification state (Task A1, VERIFY LIVE — ported from Enterprise `verifyPostLive`).
+   *  Absent until the post is verified against its live URL. `'available'` = still reachable;
+   *  `'unavailable'` = deleted/removed/gone at its original URL. Not part of the evidence hash
+   *  (it is a re-observation timestamped by `verifiedAt`, not the captured content itself). */
+  availability?: 'available' | 'unavailable';
+  /** Caller-supplied ISO time of the last live verification (injected clock — never computed in
+   *  a hash path). Absent until the first `verifyPost`. */
+  verifiedAt?: string;
+}
+
+/** One archived prior version of a post — the text/media as they stood BEFORE a re-ingest that
+ *  observed a change. `sha256` is the prior version's evidence hash (reused from evidence.ts,
+ *  deterministic); `capturedAt` is the caller-supplied ISO time the change was observed (injected
+ *  clock — never computed here). `media`, when present, is the prior LOCAL `mediaRefs` array (no
+ *  remote URL is ever stored, same discipline as `XPostArtifact.mediaRefs`). */
+export interface XPostVersion {
+  text: string;
+  media?: unknown;
+  capturedAt: string;
+  sha256: string;
+}
+
+/** Longest `versionHistory` a post retains before the oldest entry is dropped (Enterprise
+ *  `main.cjs:1793` — `slice(-20)`). */
+export const X_MAX_POST_VERSIONS = 20;
+
+/** Newest `changeEvents` a case retains (and the cap `listChangeEvents` returns). Enterprise
+ *  stored 5000 and returned 2000; this port keeps a tighter, single 500-cap (design A2). */
+export const X_MAX_CHANGE_EVENTS = 500;
+
+/** One historical change event for a case — the union the Change Intel tab (B1) renders.
+ *  `at` is the caller-supplied ISO observation time (injected clock). `id` is a deterministic
+ *  content-derived digest (no unseeded RNG). Kind-specific fields are optional so all three
+ *  shapes share one persisted list:
+ *   - `post_changed`  → `{ postId, summary, sourceUsername, at }` (text/media re-ingest diff)
+ *   - `profile_change`→ `{ profileId, summary, at }` (metadata-signature diff vs last snapshot)
+ *   - `post_unavailable` → `{ postId, summary, at }` (a live post no longer reachable — reserved
+ *     for A1's VERIFY LIVE; the shape is supported here so the log/renderer need no later change). */
+export type XChangeEventKind = 'post_changed' | 'profile_change' | 'post_unavailable';
+
+export interface XChangeEvent {
+  id: string;
+  kind: XChangeEventKind;
+  at: string;
+  summary: string;
+  postId?: string;
+  profileId?: string;
+  sourceUsername?: string;
+}
+
+/** Newest collection-run records a case retains (and the cap `listRunLog` returns). Enterprise
+ *  kept 1000-2000 app-wide (`main.cjs:401`); this port keeps a tighter, single per-case 100-cap
+ *  (design A3) — the Change Intel COLLECTION RUN LOG is a recent-activity view, not an archive. */
+export const X_MAX_RUN_LOG = 100;
+
+/** The collection operations a run record can describe — a manual/live capture (`posts`,
+ *  `followers`, `following`) or an incremental-archive cycle (`archive_*`). Structurally identical
+ *  to analysis.ts `CollectionOperation`, kept independent so store.ts stays the LOWER layer
+ *  (analysis.ts imports FROM store.ts, never the reverse). */
+export type XRunOperation =
+  | 'posts'
+  | 'followers'
+  | 'following'
+  | 'archive_posts'
+  | 'archive_followers'
+  | 'archive_following';
+
+/** One per-operation collection-run record — ported from Enterprise `startCollectionRun`/
+ *  `finishCollectionRun` (`main.cjs:420-457`), the COLLECTION RUN LOG the Change Intel tab (B1)
+ *  renders. Purely OPERATIONAL telemetry: it carries no captured content and feeds NO evidence
+ *  hash, so it holds no `id`/RNG — a record is keyed by (profileId, operation, startedAt) at the
+ *  render layer. `startedAt`/`endedAt` are caller-supplied injected-clock ISO strings
+ *  (determinism — never computed here). `duplicates = max(0, observed - added)` mirrors Enterprise
+ *  (`main.cjs:453`). `status` is `'complete'` on a finished run, `'error'` on a blocked/failed one
+ *  (the union stays open to a future stopReason-derived status without a store migration). */
+export interface XRunLogRecord {
+  profileId: string;
+  username: string;
+  operation: XRunOperation;
+  observed: number;
+  added: number;
+  duplicates: number;
+  requestedPasses: number;
+  completedPasses: number;
+  reachedEnd: boolean;
+  stopReason: string;
+  status: 'complete' | 'error' | string;
+  startedAt: string;
+  endedAt: string;
+}
+
+/** One captured profile-metadata snapshot. `signature` is the deterministic sha256 of the
+ *  canonical `{bio,avatar,location,website}` (evidence.ts `profileMetadataSignature`) — the gate
+ *  that decides whether a re-capture is a no-op or a `profile_change`. `capturedAt` is the
+ *  caller-supplied ISO time (injected clock). Fields are the trimmed canonical values. */
+export interface XProfileSnapshot {
+  profileId: string;
+  sourceUsername?: string;
+  bio: string;
+  avatar: string;
+  location: string;
+  website: string;
+  capturedAt: string;
+  signature: string;
 }
 
 /** A saved keyword/phrase highlight preset, evaluated locally over captured posts
@@ -177,6 +285,12 @@ export interface XStoreDeps {
   presetsPath(caseId: string): string;
   /** Resolve the entity-cache artifact path for a case. */
   entitiesCachePath(caseId: string): string;
+  /** Resolve the historical change-events sidecar path for a case (Task A2). */
+  changeEventsPath(caseId: string): string;
+  /** Resolve the profile-snapshots sidecar path for a case (Task A2). */
+  profileSnapshotsPath(caseId: string): string;
+  /** Resolve the collection-run-log sidecar path for a case (Task A3). */
+  runLogPath(caseId: string): string;
 }
 
 // ---- helpers -----------------------------------------------------------
@@ -277,6 +391,14 @@ export interface XStore {
     write(caseId: string, posts: XPostArtifact[]): Promise<void>;
     /** Upsert post artifacts (dedup by `id`, append order preserved) — mirrors `saveItems`. */
     save(caseId: string, posts: XPostArtifact[]): Promise<{ added: number; skipped: number }>;
+    /** Atomic read-modify-write inside the SINGLE posts lock: `fn` receives the current list and
+     *  returns the next list, whether to persist it, and a caller result. The read + merge + write
+     *  happen in ONE lock acquisition, so a concurrent capture/verify cannot clobber captured
+     *  evidence with a stale snapshot the way a separate `read()` … `write()` pair can. */
+    transform<R>(
+      caseId: string,
+      fn: (existing: XPostArtifact[]) => { next: XPostArtifact[]; write: boolean; result: R },
+    ): Promise<R>;
   };
   presets: {
     read(caseId: string): Promise<XPreset[]>;
@@ -289,6 +411,34 @@ export interface XStore {
     read(caseId: string): Promise<XEntityCacheEntry[]>;
     write(caseId: string, entities: XEntityCacheEntry[]): Promise<void>;
   };
+  changeEvents: {
+    /** All change events for a case, in APPEND (oldest-first) order. */
+    read(caseId: string): Promise<XChangeEvent[]>;
+    /** Append one event; the persisted list is capped to the newest `X_MAX_CHANGE_EVENTS`
+     *  (oldest dropped). Returns the fresh (append-order) list. */
+    append(caseId: string, event: XChangeEvent): Promise<XChangeEvent[]>;
+  };
+  profileSnapshots: {
+    read(caseId: string): Promise<XProfileSnapshot[]>;
+    write(caseId: string, snapshots: XProfileSnapshot[]): Promise<void>;
+    /** Append one snapshot (append order = capture order). Returns the fresh list. */
+    append(caseId: string, snapshot: XProfileSnapshot): Promise<XProfileSnapshot[]>;
+    /** The most-recently-appended snapshot for a profile in this case, or null if none. */
+    latest(caseId: string, profileId: string): Promise<XProfileSnapshot | null>;
+  };
+  /** Newest-first, `X_MAX_CHANGE_EVENTS`-capped view of a case's change events — the Change
+   *  Intel tab's read (Task A2; consumed via `channels.xListening.changeEvents`). */
+  listChangeEvents(caseId: string): Promise<XChangeEvent[]>;
+  runLog: {
+    /** All collection-run records for a case, in APPEND (oldest-first) order. */
+    read(caseId: string): Promise<XRunLogRecord[]>;
+    /** Append one record; the persisted list is capped to the newest `X_MAX_RUN_LOG`
+     *  (oldest dropped). Returns the fresh (append-order) list. */
+    append(caseId: string, record: XRunLogRecord): Promise<XRunLogRecord[]>;
+  };
+  /** Newest-first, `X_MAX_RUN_LOG`-capped view of a case's collection runs — the Change Intel
+   *  tab's COLLECTION RUN LOG read (Task A3; consumed via `channels.xListening.runLog`). */
+  listRunLog(caseId: string): Promise<XRunLogRecord[]>;
 }
 
 export function makeXStore(deps: XStoreDeps): XStore {
@@ -428,6 +578,15 @@ export function makeXStore(deps: XStoreDeps): XStore {
           return { added, skipped };
         });
       },
+      transform(caseId, fn) {
+        return withLock(`x-listening:posts:${caseId}`, async () => {
+          const p = deps.postsPath(caseId);
+          const existing = await readJsonArr<XPostArtifact>(deps, p);
+          const { next, write, result } = fn(existing);
+          if (write) await writeJson(deps, p, next);
+          return result;
+        });
+      },
     },
 
     presets: {
@@ -467,6 +626,99 @@ export function makeXStore(deps: XStoreDeps): XStore {
         );
       },
     },
+
+    changeEvents: {
+      read(caseId) {
+        return withLock(`x-listening:changeEvents:${caseId}`, () =>
+          readJsonArr<XChangeEvent>(deps, deps.changeEventsPath(caseId)),
+        );
+      },
+      append(caseId, event) {
+        // Direct readJsonArr/writeJson (NOT changeEvents.read) inside the lock: withLock is not
+        // reentrant, and read/append take the SAME key.
+        return withLock(`x-listening:changeEvents:${caseId}`, async () => {
+          const existing = await readJsonArr<XChangeEvent>(deps, deps.changeEventsPath(caseId));
+          existing.push(event);
+          // Cap to the newest X_MAX_CHANGE_EVENTS (drop oldest) so the log never grows unbounded.
+          const capped =
+            existing.length > X_MAX_CHANGE_EVENTS ? existing.slice(-X_MAX_CHANGE_EVENTS) : existing;
+          await writeJson(deps, deps.changeEventsPath(caseId), capped);
+          return capped;
+        });
+      },
+    },
+
+    profileSnapshots: {
+      read(caseId) {
+        return withLock(`x-listening:profileSnapshots:${caseId}`, () =>
+          readJsonArr<XProfileSnapshot>(deps, deps.profileSnapshotsPath(caseId)),
+        );
+      },
+      write(caseId, snapshots) {
+        return withLock(`x-listening:profileSnapshots:${caseId}`, () =>
+          writeJson(deps, deps.profileSnapshotsPath(caseId), snapshots),
+        );
+      },
+      append(caseId, snapshot) {
+        return withLock(`x-listening:profileSnapshots:${caseId}`, async () => {
+          const existing = await readJsonArr<XProfileSnapshot>(deps, deps.profileSnapshotsPath(caseId));
+          existing.push(snapshot);
+          await writeJson(deps, deps.profileSnapshotsPath(caseId), existing);
+          return existing;
+        });
+      },
+      async latest(caseId, profileId) {
+        return withLock(`x-listening:profileSnapshots:${caseId}`, async () => {
+          const existing = await readJsonArr<XProfileSnapshot>(deps, deps.profileSnapshotsPath(caseId));
+          // Append order IS capture order (deterministic — never readdir/clock ordered), so the
+          // last matching entry is the most recent snapshot for this profile.
+          for (let i = existing.length - 1; i >= 0; i--) {
+            if (existing[i]!.profileId === profileId) return existing[i]!;
+          }
+          return null;
+        });
+      },
+    },
+
+    async listChangeEvents(caseId) {
+      const events = await withLock(`x-listening:changeEvents:${caseId}`, () =>
+        readJsonArr<XChangeEvent>(deps, deps.changeEventsPath(caseId)),
+      );
+      // Newest-first for the renderer; the persisted list is already capped, so reverse a bounded
+      // tail (defensive re-cap in case a legacy file exceeded the cap).
+      const bounded = events.length > X_MAX_CHANGE_EVENTS ? events.slice(-X_MAX_CHANGE_EVENTS) : events;
+      return bounded.reverse();
+    },
+
+    runLog: {
+      read(caseId) {
+        return withLock(`x-listening:runLog:${caseId}`, () =>
+          readJsonArr<XRunLogRecord>(deps, deps.runLogPath(caseId)),
+        );
+      },
+      append(caseId, record) {
+        // Direct readJsonArr/writeJson (NOT runLog.read) inside the lock: withLock is not reentrant,
+        // and read/append take the SAME key.
+        return withLock(`x-listening:runLog:${caseId}`, async () => {
+          const existing = await readJsonArr<XRunLogRecord>(deps, deps.runLogPath(caseId));
+          existing.push(record);
+          // Cap to the newest X_MAX_RUN_LOG (drop oldest) so the log never grows unbounded.
+          const capped = existing.length > X_MAX_RUN_LOG ? existing.slice(-X_MAX_RUN_LOG) : existing;
+          await writeJson(deps, deps.runLogPath(caseId), capped);
+          return capped;
+        });
+      },
+    },
+
+    async listRunLog(caseId) {
+      const records = await withLock(`x-listening:runLog:${caseId}`, () =>
+        readJsonArr<XRunLogRecord>(deps, deps.runLogPath(caseId)),
+      );
+      // Newest-first for the renderer; the persisted list is already capped, so reverse a bounded
+      // tail (defensive re-cap in case a legacy file exceeded the cap).
+      const bounded = records.length > X_MAX_RUN_LOG ? records.slice(-X_MAX_RUN_LOG) : records;
+      return bounded.reverse();
+    },
   };
 }
 
@@ -496,6 +748,9 @@ export async function prodXStore(): Promise<XStore> {
     postsPath: (id) => artifact(id, 'x-posts.json'),
     presetsPath: (id) => artifact(id, 'x-presets.json'),
     entitiesCachePath: (id) => artifact(id, 'x-entities-cache.json'),
+    changeEventsPath: (id) => artifact(id, 'x-change-events.json'),
+    profileSnapshotsPath: (id) => artifact(id, 'x-profile-snapshots.json'),
+    runLogPath: (id) => artifact(id, 'x-run-log.json'),
   });
   return _prod;
 }

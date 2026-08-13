@@ -590,6 +590,11 @@ export const channels = {
     campaignsUpdate: 'xListening:campaigns:update',
     /** Delete a campaign — removes its entire on-disk directory recursively. */
     campaignsDelete: 'xListening:campaigns:delete',
+    /** Duplicate a campaign's SETUP (presets/settings/image-policy/editor-meta) into a fresh
+     *  investigation with zero collected counts (Task J1). */
+    campaignsDuplicate: 'xListening:campaigns:duplicate',
+    /** Read every campaign's editor meta (purpose/description) as a `{ [id]: meta }` map (Task J1). */
+    campaignsMeta: 'xListening:campaigns:meta',
     /** Derived, on-read common-connection network analysis over a case's captured `networks`
      *  artifacts (analysis.ts `computeNetworkAnalysis`) — not persisted; synthetic/demo rows
      *  are excluded (honesty). */
@@ -644,7 +649,80 @@ export const channels = {
      *  `x-media/<64-hex sha256>` shape `cacheRemoteMedia` produces BEFORE any path is built —
      *  closes path traversal from a crafted ref. Returns null (never throws) on a malformed ref
      *  or a read failure — a display miss, not a fault. */
-    mediaRead: 'xListening:media:read'
+    mediaRead: 'xListening:media:read',
+    /** List a campaign's historical change events (store.ts `listChangeEvents`, Task A2) —
+     *  newest-first, capped ~500. The Change Intel tab's HISTORICAL CHANGE EVENTS stream
+     *  (post_changed / profile_change / post_unavailable). Derived read; no capture window,
+     *  no network. */
+    changeEvents: 'xListening:changeEvents',
+    /** Re-verify ONE captured post against its live X URL (capture.ts `verifyPost`, Task A1 —
+     *  VERIFY LIVE). Opens the post's real URL in a Tor-gated capture window (FAIL CLOSED — no
+     *  clearnet fallback unless the acked clearnet toggle is on), detects an unavailable/deleted/
+     *  removed post (→ `post_unavailable` + availability update) or a live text edit (→ prior
+     *  version archived + `post_changed`, via A2). Reuses the openPostThread scheme/host/path
+     *  guards + the `^[A-Za-z0-9_]{1,15}$` username validator. */
+    verifyPost: 'xListening:verifyPost',
+    /** List a campaign's collection-run log (store.ts `listRunLog`, Task A3) — newest-first,
+     *  capped ~100. The Change Intel tab's COLLECTION RUN LOG: one per-operation record
+     *  (`{ profileId, username, operation, observed, added, duplicates, requestedPasses,
+     *  completedPasses, reachedEnd, stopReason, status, startedAt, endedAt }`) emitted by the
+     *  capture/archive paths. Derived read; no capture window, no network. */
+    runLog: 'xListening:runLog',
+    /** Extract one target's followers or following into the campaign's `networks` accumulator
+     *  (capture.ts `captureNetwork`, Task C1 — EXTRACT FOLLOWERS/FOLLOWING/BOTH). Opens a Tor-gated
+     *  hidden capture window on the shared authenticated X partition, navigated to
+     *  `https://x.com/<user>/{followers|following}` (URL validated + built with `^[A-Za-z0-9_]{1,15}$`
+     *  BEFORE any window opens), gates the page (signed-in), scroll-scrapes the visible `UserCell`
+     *  rows with the STATIC `USER_CELL_SCRIPT`, normalizes (`normalizeNetwork` — evidence-hashed,
+     *  remote avatars dropped) + persists via the same accumulator a re-scan uses, and emits a
+     *  collection-run record. Tor-gated (FAIL CLOSED — no clearnet fallback unless the acked clearnet
+     *  toggle is on); the window is always destroyed in a `finally`. The renderer's EXTRACT BOTH
+     *  drives this twice (followers then following). */
+    captureNetwork: 'xListening:captureNetwork',
+    /** Open one in-app X window (capture.ts `openInX`, Task E1) for a `{ kind, ref }` affordance —
+     *  `kind:'thread'` (ref = a `/<user>/status/<id>` URL), `kind:'profile'`/`'identity'` (ref = a
+     *  `@username` handle). The URL is validated + constructed with strict guards (reuse the
+     *  openPostThread scheme/host/path guards + `^[A-Za-z0-9_]{1,15}$`) BEFORE any window opens —
+     *  a malformed ref throws, opening nothing. Tor-gated (FAIL CLOSED — no clearnet fallback
+     *  unless the acked clearnet toggle is on). Consumed by the Network graph inspector (C2b) and
+     *  the per-source "View X" action (D1). Opens IN-APP only, never via an OS shell hand-off. */
+    openInX: 'xListening:openInX',
+    /** Cascade-remove a DERIVED source from a campaign (ipc.ts `removeSource`, Task D1 — Target
+     *  Sources REMOVE). A source is not a persisted record — it is derived from the captured posts —
+     *  so removal is a read-filter-write over the `posts` + `networks` sidecars: every post whose
+     *  `channelId`/`authorHandle` matches `sourceKey` and every network artifact whose `target`
+     *  matches are dropped (case-insensitive, `@`-insensitive). Local secure-fs only — no window,
+     *  no network egress. Returns the counts removed. Consumed by the per-source REMOVE action. */
+    removeSource: 'xListening:removeSource',
+    /** Read a campaign's per-campaign COLLECTION SETTINGS (collection-settings.ts `getCollectionSettings`,
+     *  F2 — the System-tab form). Derived read of the encrypted `x-collection-settings.json` sidecar,
+     *  healed to a full clamped record; no capture window, no network. G1 (scheduling) + F1 (image
+     *  policy) read the same record. */
+    getCollectionSettings: 'xListening:collectionSettings:get',
+    /** Clamp (MAIN-side, never trusting the renderer) + persist a campaign's COLLECTION SETTINGS
+     *  (collection-settings.ts `saveCollectionSettings`, F2). Every numeric field is bounded to its
+     *  Enterprise band before it is stored or consulted; returns the exact clamped record. Local
+     *  secure-fs only — no capture window, no network egress. Consulted by the capture path
+     *  (`captureTimeline` collect gate + `captureNetwork` base passes). */
+    saveCollectionSettings: 'xListening:collectionSettings:save',
+    /** Read a campaign's per-profile IMAGE-COLLECTION policy (image-policy.ts `getImagePolicy`, F1):
+     *  the `{ canonicalSourceKey → 'on'|'off'|'inherit' }` override map + F2's campaign `retrieveImages`
+     *  toggle, so the renderer can render each source's Images control AND its EFFECTIVE state. Local
+     *  secure-fs only — no capture window, no network egress. */
+    getImagePolicy: 'xListening:imagePolicy:get',
+    /** Set one source's per-profile image mode (image-policy.ts `setProfileImageMode`, F1). The mode
+     *  is validated MAIN-side (must be 'on'|'off'|'inherit' — the renderer is never trusted) and the
+     *  source key canonicalized before the encrypted per-campaign map is updated; returns the stored
+     *  record + the EFFECTIVE decision (resolved against `retrieveImages`). The capture path consults
+     *  the same policy: an 'off' source has NO post media fetched/cached. Local secure-fs only. */
+    setProfileImageMode: 'xListening:imagePolicy:set',
+    /** Read a campaign's automatic-sweep/archive SCHEDULE status (scheduler.ts `scheduleStatus`, G1):
+     *  whether the free-running sweep/archive timers are armed, their interval, and the next-fire
+     *  times — drives the renderer's next-sweep indicator + one-click Pause. Pure in-memory read of
+     *  the scheduler registry; no capture window, no network egress. The timers themselves are armed
+     *  MAIN-side on session connect / settings save; each scheduled sweep's capture routes the SAME
+     *  Tor gate as a manual capture (fail-closed, no clearnet unless clearnet+clearnetAck). */
+    scheduleStatus: 'xListening:schedule:status'
   },
   // Scraping cases — the isolated per-namespace case stores for SOCMINT + X collection runs
   // (kept apart from the core investigation `cases` namespace). Every handler takes a

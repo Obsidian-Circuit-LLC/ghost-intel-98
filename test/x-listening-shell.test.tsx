@@ -51,6 +51,8 @@ function makeApi() {
       health: vi.fn(async () => []),
       entities: vi.fn(async () => []),
       networksList: vi.fn(async () => []),
+      changeEvents: vi.fn(async () => []),
+      runLog: vi.fn(async () => []),
       readNotes: vi.fn(async () => ({ notes: [] })),
       archiveStatus: vi.fn(async () => null),
       presetsRead: vi.fn(async () => ({ presets: [] })),
@@ -106,28 +108,25 @@ describe('X Listening Station shell (Task 13)', () => {
   }
 
   // ── campaign dock ────────────────────────────────────────────────────────
-  it('New Campaign → promptDialog → campaignsCreate → list refreshed and the new campaign becomes active', async () => {
-    promptDialogMock.mockResolvedValue('Gamma Watch');
-    const created = { id: 'camp-new', name: 'Gamma Watch', createdAt: 3, updatedAt: 3 };
-    api.xListening.campaignsCreate.mockResolvedValue(created);
-    // The post-create refresh must see the newly created campaign in the list.
-    api.xListening.campaignsList.mockResolvedValueOnce([CAMP_A, CAMP_B]).mockResolvedValueOnce([CAMP_A, CAMP_B, created]);
+  // J2/J1 review: the sidebar dock +NEW opens the SAME rich CampaignEditorDialog the Campaigns tab
+  // uses (name + purpose + description), not the old name-only promptDialog.
+  it('the dock + NEW button opens the campaign editor in create mode (not the old rename prompt)', async () => {
     await mount();
-
-    await click(/new campaign/i);
-
-    expect(promptDialogMock).toHaveBeenCalled();
-    expect(api.xListening.campaignsCreate).toHaveBeenCalledWith('Gamma Watch');
-    // campaignsList was called again to refresh (mount + post-create refresh).
-    expect(api.xListening.campaignsList).toHaveBeenCalledTimes(2);
-    const select = container.querySelector('[aria-label="Active campaign"]') as HTMLSelectElement;
-    expect(select.value).toBe('camp-new');
+    await click(/new/i);
+    expect(promptDialogMock).not.toHaveBeenCalled();
+    const dialog = container.querySelector('.xls-campaign-editor');
+    expect(dialog).toBeTruthy();
+    const name = dialog!.querySelector('[aria-label="Campaign name"]') as HTMLInputElement;
+    expect(name.value).toBe(''); // create → empty fields
+    expect(dialog!.textContent).toMatch(/CREATE \+ ACTIVATE/);
   });
 
-  it('a blank/cancelled prompt creates nothing', async () => {
-    promptDialogMock.mockResolvedValue(null);
+  it('cancelling the create editor creates nothing', async () => {
     await mount();
-    await click(/new campaign/i);
+    await click(/new/i);
+    expect(container.querySelector('.xls-campaign-editor')).toBeTruthy();
+    await click(/^cancel$/i);
+    expect(container.querySelector('.xls-campaign-editor')).toBeFalsy();
     expect(api.xListening.campaignsCreate).not.toHaveBeenCalled();
   });
 
@@ -147,19 +146,28 @@ describe('X Listening Station shell (Task 13)', () => {
     expect(select.value).toBe('camp-b');
   });
 
-  it('Rename → promptDialog prefilled with the current name → campaignsUpdate', async () => {
-    promptDialogMock.mockResolvedValue('Alpha Watch Renamed');
+  // J2 reskin: the sidebar dock carries +NEW / EDIT / MANAGE (Enterprise parity). EDIT opens the
+  // FULL editor (name/purpose/description) prefilled with the active campaign — not a name-only
+  // rename prompt (the review's Minor 1: the dock and the Campaigns tab now share one editor).
+  it('the dock EDIT button opens the editor prefilled with the active campaign (full edit, not a rename prompt)', async () => {
     await mount();
 
-    await click(/^rename$/i);
+    await click(/^edit$/i);
 
-    expect(promptDialogMock).toHaveBeenCalledWith(expect.any(String), 'Alpha Watch', expect.any(String));
-    expect(api.xListening.campaignsUpdate).toHaveBeenCalledWith({ id: 'camp-a', name: 'Alpha Watch Renamed' });
+    expect(promptDialogMock).not.toHaveBeenCalled();
+    const dialog = container.querySelector('.xls-campaign-editor');
+    expect(dialog).toBeTruthy();
+    const name = dialog!.querySelector('[aria-label="Campaign name"]') as HTMLInputElement;
+    expect(name.value).toBe('Alpha Watch'); // CAMP_A, prefilled
+    expect(dialog!.textContent).toMatch(/SAVE CAMPAIGN/);
   });
 
-  it('Delete → confirmDialog → campaignsDelete; a cancelled confirm deletes nothing', async () => {
+  // J2 reskin: MANAGE opens the Campaigns tab, where per-card DELETE lives (Enterprise parity —
+  // the dock no longer deletes inline). The confirmDialog→campaignsDelete wiring is unchanged.
+  it('MANAGE → Campaigns tab DELETE → confirmDialog → campaignsDelete; a cancelled confirm deletes nothing', async () => {
     confirmDialogMock.mockResolvedValueOnce(false);
     await mount();
+    await click(/^manage$/i);
     await click(/^delete$/i);
     expect(api.xListening.campaignsDelete).not.toHaveBeenCalled();
 
@@ -168,11 +176,10 @@ describe('X Listening Station shell (Task 13)', () => {
     expect(api.xListening.campaignsDelete).toHaveBeenCalledWith('camp-a');
   });
 
-  it('Rename/Delete are disabled with no active campaign', async () => {
+  it('EDIT is disabled with no active campaign', async () => {
     api.xListening.campaignsList.mockResolvedValue([]);
     await mount();
-    expect(findButton(/^rename$/i).disabled).toBe(true);
-    expect(findButton(/^delete$/i).disabled).toBe(true);
+    expect(findButton(/^edit$/i).disabled).toBe(true);
   });
 
   // ── X-session box ────────────────────────────────────────────────────────

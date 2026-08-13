@@ -18,14 +18,20 @@
  * carve-out to track: every key that exists must be reachable.
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { channels } from '../src/shared/ipc-contracts';
 
-const MODULE_SOURCE = readFileSync(
-  resolve(process.cwd(), 'src/renderer/modules/x-listening/XListeningModule.tsx'),
-  'utf8',
-);
+// The renderer "module" is the whole co-located surface under x-listening/ — the shell
+// (XListeningModule.tsx) plus its extracted sub-components (PostCard.tsx renders the rich card and
+// owns the `mediaRead` call, NetworkGraph.tsx the mind-map). A channel is reachable if ANY of these
+// wires a control to it; scanning only the shell would falsely flag a channel that legitimately
+// moved into a co-located component (Task I1 moved `mediaRead` into PostCard.tsx).
+const MODULE_DIR = resolve(process.cwd(), 'src/renderer/modules/x-listening');
+const MODULE_SOURCE = readdirSync(MODULE_DIR)
+  .filter((f) => f.endsWith('.tsx'))
+  .map((f) => readFileSync(resolve(MODULE_DIR, f), 'utf8'))
+  .join('\n');
 
 /** Every channel key that MUST be reachable from a control in XListeningModule.tsx, mapped to
  *  the exact `window.api.xListening.<method>` call the renderer makes for it. */
@@ -40,6 +46,8 @@ const REACHABLE_CHANNELS: ReadonlyArray<keyof typeof channels.xListening> = [
   'campaignsSwitch',
   'campaignsUpdate',
   'campaignsDelete',
+  'campaignsDuplicate',
+  'campaignsMeta',
   'analysis',
   'health',
   'entities',
@@ -54,9 +62,20 @@ const REACHABLE_CHANNELS: ReadonlyArray<keyof typeof channels.xListening> = [
   'exportPostsToFile',
   'exportNetworkToFile',
   'mediaRead',
+  'changeEvents',
+  'verifyPost',
+  'runLog',
+  'openInX',
+  'captureNetwork',
+  'removeSource',
   'saveNote',
   'readNotes',
   'removeNote',
+  'getCollectionSettings',
+  'saveCollectionSettings',
+  'getImagePolicy',
+  'setProfileImageMode',
+  'scheduleStatus',
 ];
 
 describe('whole-module seam — every xListening channel is reachable from a real control', () => {

@@ -86,6 +86,9 @@ const NEW_CHANNELS: Array<{ key: keyof typeof channels.xListening; args: unknown
   { key: 'campaignsSwitch', args: [caseId] },
   { key: 'campaignsUpdate', args: [{ id: caseId, name: 'Renamed' }] },
   { key: 'campaignsDelete', args: [otherId] },
+  // Task J1 — duplicate a campaign's setup + read all campaigns' editor meta.
+  { key: 'campaignsDuplicate', args: [caseId] },
+  { key: 'campaignsMeta', args: [] },
   { key: 'analysis', args: [caseId] },
   { key: 'health', args: [caseId] },
   { key: 'entities', args: [caseId] },
@@ -105,7 +108,19 @@ const NEW_CHANNELS: Array<{ key: keyof typeof channels.xListening; args: unknown
   { key: 'loadDemoData', args: [caseId] },
   { key: 'exportPostsToFile', args: [{ caseId, format: 'json' }] },
   { key: 'exportNetworkToFile', args: [caseId] },
-  { key: 'mediaRead', args: [{ caseId, ref: `x-media/${'a'.repeat(64)}` }] }
+  { key: 'mediaRead', args: [{ caseId, ref: `x-media/${'a'.repeat(64)}` }] },
+  // Task A2 — historical change events (derived read, newest-first capped).
+  { key: 'changeEvents', args: [caseId] },
+  // Task A1 — live post verification (VERIFY LIVE).
+  { key: 'verifyPost', args: [{ caseId, postId: '100' }] },
+  // Task A3 — collection run log (derived read, newest-first capped).
+  { key: 'runLog', args: [caseId] },
+  // Task E1 — Tor-gated "open in X" affordance.
+  { key: 'openInX', args: [{ kind: 'profile', ref: 'target' }] },
+  // Task C1 — live follower/following network extraction.
+  { key: 'captureNetwork', args: [{ caseId, channelId: 'target', targetUsername: 'target', kind: 'followers' }] },
+  // Task D1 — per-source cascade removal.
+  { key: 'removeSource', args: [{ caseId, sourceKey: 'target' }] }
 ];
 
 describe('ipc-contracts.ts — Phase-1 xListening channel constants exist', () => {

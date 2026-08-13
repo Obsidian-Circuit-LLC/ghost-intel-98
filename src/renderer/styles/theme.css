@@ -129,6 +129,56 @@
   --ga98-toast-success-fill: #006400; /* Toaster "Success" title bar — classic literal */
   --ga98-toast-warn-fill: #8a5a00;    /* Toaster "Warning" title bar — classic literal */
   --ga98-toast-error-fill: #900000;   /* Toaster "Error" title bar — classic literal */
+  /* ── Network mind-map (X Listening COMMON NETWORK graph) — decorative cluster palette ────────
+     The mind-map canvas is an intentionally DARK console surface in BOTH themes (the Enterprise
+     look reproduced), so the neon cluster hues are shared and only the canvas/panel/ring backdrop
+     shifts per theme (amethyst violet-tints it below). Every graph stroke/fill/text colour resolves
+     through one of these tokens, so the map themes classic + amethyst with no literal in the
+     component CSS. NOT locked (decorative skinnable palette, excluded from LOCKED_TOKENS). */
+  --ga98-graph-bg: #0a0e1a;        /* dark mind-map canvas */
+  --ga98-graph-panel: #111726;     /* legend/inspector strip on the canvas */
+  --ga98-graph-ring: #24304d;      /* orbital ring stroke */
+  --ga98-graph-ink: #e6e9f5;       /* hub + inspector/legend text on the dark canvas */
+  --ga98-graph-ink-dim: #9aa4c6;   /* secondary caption text on the dark canvas */
+  --ga98-graph-badge-ink: #0a0e1a; /* dark ink for node initials + score badges over bright hues */
+  --ga98-graph-hub: #16406a;       /* central COMMON NETWORK hub fill */
+  --ga98-graph-hue-0: #ff4d6d;     /* neon cluster palette (reads on the dark canvas in both themes) */
+  --ga98-graph-hue-1: #39ff14;
+  --ga98-graph-hue-2: #ff2bd6;
+  --ga98-graph-hue-3: #ff8c1a;
+  --ga98-graph-hue-4: #ffe600;
+  --ga98-graph-hue-5: #29b6ff;
+  --ga98-graph-hue-6: #b26bff;
+  --ga98-graph-hue-7: #1de9b6;
+
+  /* ── X Listening Station — Enterprise "dark command-console" reskin (Task J2) ──
+     Reproduces GhostExodus's CYBERVS DOMINATVS console look in GI98 tokens. QUIET
+     AMETHYST is the PRIMARY target (values in the amethyst block below); these base
+     :root values are the CLASSIC (light) variant — a paler console that stays legible
+     on the default Win98 skin. Section headings route through --ga98-accent (blue
+     classic / violet amethyst); the amber action + red/green Tor states are here. */
+  --ga98-xls-sidebar-bg: #e2e5ea;        /* left console rail — light steel on classic */
+  --ga98-xls-sidebar-ink: #2a2f38;       /* nav/dim ink on the light rail */
+  --ga98-xls-console-border: #9aa4b2;    /* console seams */
+  --ga98-xls-main-bg: #eef0f3;           /* right column ground */
+  --ga98-xls-seal-bg: #d3dded;           /* brand seal fill */
+  --ga98-xls-seal-ink: #12508a;          /* brand seal "CD" ink */
+  --ga98-xls-seal-border: #2387c5;       /* brand seal ring */
+  --ga98-xls-nav-active-bg: #d0d9e6;      /* selected nav row fill */
+  --ga98-xls-badge-bg: #33404f;          /* count-badge pill fill */
+  --ga98-xls-badge-ink: #f4d78a;         /* count-badge amber ink (>=4.5:1 on the pill) */
+  --ga98-xls-action-bg: #e0a92e;         /* amber/yellow PRIMARY action button */
+  --ga98-xls-action-ink: #1a1206;        /* near-black ink on amber */
+  --ga98-xls-action-border: #b8871f;
+  --ga98-xls-eyebrow: #4a5a74;           /* topbar eyebrow caption */
+  --ga98-xls-masthead-bg: #0a1622;       /* masthead frame (the banner art is dark either way) */
+  --ga98-xls-tor-bad-bg: #f6dede;        /* Tor-off / clearnet danger box */
+  --ga98-xls-tor-bad-ink: #8a1f27;
+  --ga98-xls-tor-bad-border: #c0444c;
+  --ga98-xls-tor-ok-bg: #dcefe2;         /* Tor-on safe box */
+  --ga98-xls-tor-ok-ink: #1c6742;
+  --ga98-xls-tor-ok-border: #4aa06e;
+  --ga98-xls-dot-off: #b23b3b;           /* offline status dot */
 }
 
 html, body, #root {
@@ -272,6 +322,39 @@ input, textarea, [contenteditable="true"], .ga98-selectable {
   --ga98-toast-success-fill: #0a5c30;
   --ga98-toast-warn-fill: #7a4f00;
   --ga98-toast-error-fill: #a01722;
+  /* Network mind-map — amethyst backdrop (the neon cluster hues + ink are shared from base :root;
+     only the canvas/panel/ring/hub backdrop shifts to a violet-tinted near-black). */
+  --ga98-graph-bg: #0c0a16;
+  --ga98-graph-panel: #171128;
+  --ga98-graph-ring: #322550;
+  --ga98-graph-hub: #3a2168;
+
+  /* ── X Listening Station — Enterprise console reskin, AMETHYST (primary) ──
+     The dark neon command console: near-black violet-tinted surfaces, accent
+     (violet) headings, amber action buttons, red Tor-disconnected / green Tor-on.
+     Every value clears >=4.5:1 for its ink/ground pair on the near-black skin. */
+  --ga98-xls-sidebar-bg: #0a0912;        /* left console rail — deep near-black */
+  --ga98-xls-sidebar-ink: #9891ac;       /* dim nav ink on the rail */
+  --ga98-xls-console-border: #2a2440;    /* violet-tinted console seams */
+  --ga98-xls-main-bg: #0d0b16;           /* right column ground */
+  --ga98-xls-seal-bg: #1c1633;           /* brand seal fill */
+  --ga98-xls-seal-ink: #cbb8ff;          /* brand seal "CD" ink (violet, bright on dark) */
+  --ga98-xls-seal-border: #6f5bb0;       /* brand seal ring */
+  --ga98-xls-nav-active-bg: #1a1430;      /* selected nav row fill */
+  --ga98-xls-badge-bg: #201a36;          /* count-badge pill fill */
+  --ga98-xls-badge-ink: #f0c65e;         /* amber count ink, legible on the dark pill */
+  --ga98-xls-action-bg: #e5b742;         /* amber/yellow PRIMARY action button */
+  --ga98-xls-action-ink: #1a1206;        /* near-black ink on amber */
+  --ga98-xls-action-border: #caa23a;
+  --ga98-xls-eyebrow: #8b86a4;           /* topbar eyebrow caption, dim on dark */
+  --ga98-xls-masthead-bg: #05060c;       /* masthead frame */
+  --ga98-xls-tor-bad-bg: #24121a;        /* Tor-off / clearnet danger box */
+  --ga98-xls-tor-bad-ink: #f08c95;
+  --ga98-xls-tor-bad-border: #7a2e37;
+  --ga98-xls-tor-ok-bg: #0d2018;         /* Tor-on safe box */
+  --ga98-xls-tor-ok-ink: #6fdc9a;
+  --ga98-xls-tor-ok-border: #2c6347;
+  --ga98-xls-dot-off: #d1585f;           /* offline status dot */
 }
 
 /* ── QUIET AMETHYST — Task 8 long-tail utility classes ──────────────────────────────────────────

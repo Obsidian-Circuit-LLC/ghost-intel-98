@@ -3,6 +3,9 @@
  */
 
 import type { VerifiedPluginInfo, PluginStatus, PluginBridgeApi } from '../shared/plugin-types';
+import type { XCollectionSettings } from '../shared/x-listening-collection-settings';
+import type { XImageMode } from '../shared/x-listening-image-policy';
+import type { XScheduleStatus } from '../shared/x-listening-schedule';
 import type {
   AppSettings,
   AttachmentBytesResult,
@@ -861,10 +864,15 @@ export interface GhostApi {
     campaignsCreate(name: string): Promise<ScrapingCase>;
     /** Look up (and thereby validate) an existing campaign by id. */
     campaignsSwitch(id: string): Promise<ScrapingCase>;
-    /** Rename a campaign. */
-    campaignsUpdate(req: { id: string; name: string }): Promise<ScrapingCase>;
+    /** Rename a campaign; `purpose`/`description` (when present) persist to the per-campaign editor
+     *  meta sidecar in the same round-trip (Task J1). */
+    campaignsUpdate(req: { id: string; name: string; purpose?: string; description?: string }): Promise<ScrapingCase>;
     /** Delete a campaign — removes its entire on-disk directory recursively. */
     campaignsDelete(id: string): Promise<void>;
+    /** Duplicate a campaign's SETUP into a fresh investigation with zero collected counts (Task J1). */
+    campaignsDuplicate(id: string): Promise<ScrapingCase>;
+    /** Read every campaign's editor meta (purpose/description) as a `{ [id]: meta }` map (Task J1). */
+    campaignsMeta(): Promise<Record<string, { purpose: string; description: string }>>;
     /** Derived, on-read common-connection network analysis over a case's captured `networks`
      *  artifacts — not persisted; synthetic/demo rows excluded. */
     analysis(caseId: string): Promise<Record<string, unknown>>;
@@ -981,6 +989,120 @@ export interface GhostApi {
     /** Read back one previously-cached local media ref as a `data:` URI for display. Returns
      *  null (never throws) for a malformed ref or a read failure. */
     mediaRead(req: { caseId: string; ref: string }): Promise<string | null>;
+    /** List a campaign's historical change events (Task A2) — newest-first, capped ~500. Each
+     *  event is `{ id, kind: 'post_changed'|'profile_change'|'post_unavailable', at, summary,
+     *  postId?, profileId?, sourceUsername? }`. Derived read; no capture window, no network. */
+    changeEvents(caseId: string): Promise<
+      Array<{
+        id: string;
+        kind: 'post_changed' | 'profile_change' | 'post_unavailable';
+        at: string;
+        summary: string;
+        postId?: string;
+        profileId?: string;
+        sourceUsername?: string;
+      }>
+    >;
+    /** Re-verify ONE captured post against its live X URL (Task A1, VERIFY LIVE). Opens the post's
+     *  real URL in a Tor-gated capture window (fails closed — no clearnet fallback unless the acked
+     *  clearnet toggle is on), and either marks it unavailable (+ emits `post_unavailable`) or, on a
+     *  live text edit, archives the prior version + emits `post_changed`. Rejects a malformed/off-host
+     *  post URL. */
+    verifyPost(req: { caseId: string; postId: string }): Promise<{
+      availability: 'available' | 'unavailable';
+      verifiedAt: string;
+      changed: boolean;
+    }>;
+    /** List a campaign's collection-run log (Task A3) — newest-first, capped ~100. Each record is
+     *  one per-operation collection run emitted by the capture/archive paths. Derived read; no
+     *  capture window, no network. */
+    runLog(caseId: string): Promise<
+      Array<{
+        profileId: string;
+        username: string;
+        operation:
+          | 'posts'
+          | 'followers'
+          | 'following'
+          | 'archive_posts'
+          | 'archive_followers'
+          | 'archive_following';
+        observed: number;
+        added: number;
+        duplicates: number;
+        requestedPasses: number;
+        completedPasses: number;
+        reachedEnd: boolean;
+        stopReason: string;
+        status: string;
+        startedAt: string;
+        endedAt: string;
+      }>
+    >;
+    /**
+     * Open one in-app X window for a `{ kind, ref }` affordance (Task E1) — `kind:'thread'`
+     * (ref = a `/<user>/status/<id>` URL), `kind:'profile'`/`'identity'` (ref = a `@username`
+     * handle). The URL is validated + constructed with strict guards BEFORE any window opens; a
+     * malformed ref rejects, opening nothing. Tor-gated (FAIL CLOSED — no clearnet fallback unless
+     * the acked clearnet toggle is on). Opens IN-APP only, never via an OS shell hand-off.
+     * Resolves the canonical https URL the window was pointed at.
+     */
+    openInX(req: { kind: 'thread' | 'profile' | 'identity'; ref: string }): Promise<{
+      opened: true;
+      url: string;
+    }>;
+    /** Extract one target's followers or following into the campaign's `networks` accumulator
+     *  (capture.ts `captureNetwork`, Task C1). Tor-gated (FAIL CLOSED); the target URL is validated
+     *  + built BEFORE any window opens. Returns the observed/added counts for the scan; `blocked`
+     *  carries the fail-closed / signed-out reason. */
+    captureNetwork(req: {
+      caseId: string;
+      channelId: string;
+      targetUsername: string;
+      kind: 'followers' | 'following';
+    }): Promise<{
+      blocked: boolean;
+      reason?: string;
+      kind: 'followers' | 'following';
+      target: string;
+      observed: number;
+      added: number;
+      completedPasses: number;
+      reachedEnd: boolean;
+    }>;
+    /** Cascade-remove a derived source from a campaign (ipc.ts `removeSource`, Task D1). Deletes
+     *  every captured post + follower/following network artifact keyed to `sourceKey`
+     *  (case-insensitive, `@`-insensitive). Local secure-fs read-filter-write only — no window,
+     *  no network egress. Returns the counts removed. */
+    removeSource(req: { caseId: string; sourceKey: string }): Promise<{
+      removedPosts: number;
+      removedNetworks: number;
+    }>;
+    /** Read a campaign's per-campaign COLLECTION SETTINGS (collection-settings.ts
+     *  `getCollectionSettings`, F2). Healed to a full clamped record; no window, no network. */
+    getCollectionSettings(caseId: string): Promise<XCollectionSettings>;
+    /** Clamp (MAIN-side) + persist a campaign's COLLECTION SETTINGS (collection-settings.ts
+     *  `saveCollectionSettings`, F2). Every numeric field is bounded to its Enterprise band before
+     *  it is stored/consulted; returns the exact clamped record. Local secure-fs only. */
+    saveCollectionSettings(req: { caseId: string; settings: Partial<XCollectionSettings> }): Promise<XCollectionSettings>;
+    /** Read a campaign's per-profile IMAGE-COLLECTION policy (image-policy.ts `getImagePolicy`, F1):
+     *  the `{ canonicalSourceKey → mode }` override map + F2's campaign `retrieveImages` toggle, so the
+     *  Sources cards can show each source's Images control AND its effective state. Local secure-fs only. */
+    getImagePolicy(caseId: string): Promise<{ modes: Record<string, XImageMode>; retrieveImages: boolean }>;
+    /** Set one source's per-profile image mode (image-policy.ts `setProfileImageMode`, F1). The mode is
+     *  validated MAIN-side ('on'|'off'|'inherit') and the source key canonicalized before the encrypted
+     *  per-campaign map is updated; returns the stored record + the EFFECTIVE decision (resolved against
+     *  `retrieveImages`). The capture path consults the same policy — an 'off' source fetches no media. */
+    setProfileImageMode(req: { caseId: string; sourceKey: string; mode: XImageMode }): Promise<{
+      sourceKey: string;
+      imageMode: XImageMode;
+      effective: boolean;
+    }>;
+    /** Read a campaign's automatic-sweep/archive SCHEDULE status (scheduler.ts `scheduleStatus`, G1):
+     *  whether the free-running sweep/archive timers are armed, their interval, and the next-fire
+     *  times — drives the renderer's next-sweep indicator + one-click Pause. Pure in-memory read of the
+     *  scheduler registry; no capture window, no network egress. */
+    scheduleStatus(caseId: string): Promise<XScheduleStatus>;
   };
   /**
    * Scraping cases (W4) — the isolated per-namespace SOCMINT/X collection-run stores, kept
