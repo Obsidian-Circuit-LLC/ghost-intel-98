@@ -70,6 +70,16 @@ import xlsBanner from '../../assets/x-listening-banner.jpg';
 import xlsBannerBlur from '../../assets/x-listening-banner-blur.jpg';
 import './x-listening.css';
 
+/** Accept a bare handle, `@handle`, or a full x.com / twitter.com profile URL and return the bare
+ *  username. The capture channel wants a username, not a URL — GhostExodus pasted a full profile URL
+ *  ("https://x.com/ExodusGhost") into the target field, which must resolve to "ExodusGhost". */
+export function extractXUsername(input: string): string {
+  const s = String(input ?? '').trim();
+  const m = s.match(/(?:x|twitter)\.com\/@?([A-Za-z0-9_]{1,15})/i);
+  if (m) return m[1];
+  return s.replace(/^@+/, '').trim();
+}
+
 /** Per-campaign editor meta (purpose/description) — the renderer mirror of main-side `campaign-meta.ts`. */
 export interface XCampaignMeta {
   purpose: string;
@@ -582,9 +592,9 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
       setNotice('Create or select a campaign before capturing.');
       return;
     }
-    const username = targetUsername.trim().replace(/^@+/, '');
+    const username = extractXUsername(targetUsername);
     if (!username) {
-      setNotice('Enter a target username to capture.');
+      setNotice('Enter a target username (or paste their x.com profile URL) to capture.');
       return;
     }
     setCaptureBusy(true);

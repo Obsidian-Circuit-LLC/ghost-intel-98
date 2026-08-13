@@ -37,7 +37,8 @@ import {
   connectXSession as openXSession,
   getXStatus as getXSessionStatus,
   clearXSession as closeXSession,
-  getXWindow
+  getXWindow,
+  navigateXToProfile
 } from './session';
 import {
   captureTimeline,
@@ -970,11 +971,34 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
       throw new Error('Capturing a timeline requires a caseId, channelId and targetUsername.');
     }
     const caseId = ensureUuid(req.caseId, 'caseId');
-    const win = getXWindow(caseId);
+    // One-click capture (fix for the "X is not connected" trap): the auth cookie is case-independent
+    // and persisted, so the renderer can read "signed in" while THIS campaign has no live capture
+    // window (e.g. after an app restart, or before Open Session was ever clicked). Rather than
+    // erroring, ENSURE a window — opened Tor-gated + FAIL CLOSED (no clearnet unless clearnet+ack) —
+    // then navigate it to the target profile and wait for the timeline before scraping.
+    let win = getXWindow(caseId);
     if (!win) {
-      throw new Error(
-        'X is not connected for this campaign. Open the session and sign in before capturing.'
-      );
+      const opened = await openXSession(caseId, await loadClearnetEnabled());
+      if (opened.blocked) {
+        return {
+          blocked: true,
+          reason: opened.reason ?? 'Tor is not ready — cannot open a capture window. Wait for Tor, or enable the clearnet opt-in.',
+          added: 0,
+          skipped: 0,
+          posts: [],
+        };
+      }
+      win = getXWindow(caseId);
+    }
+    if (!win) {
+      return { blocked: true, reason: 'Could not open a capture window for this campaign.', added: 0, skipped: 0, posts: [] };
+    }
+    // Drive the window to the target profile so the analyst does not have to hand-navigate it first
+    // (the "Capture Timeline" field says "capture THIS username"). A blocked/signed-out page returns
+    // its reason; a render timeout is non-fatal (the capture below then reports 0 honestly).
+    const nav = await navigateXToProfile(caseId, req.targetUsername);
+    if (nav.blocked) {
+      return { blocked: true, reason: nav.reason, added: 0, skipped: 0, posts: [] };
     }
     // F2: the surrounding-thread collect gate is derived from THIS campaign's per-campaign
     // COLLECTION SETTINGS (RECORD TYPES), MAIN-side — the renderer never widens capture; it only

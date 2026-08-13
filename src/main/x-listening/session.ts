@@ -29,6 +29,7 @@ import { session as electronSession } from 'electron';
 import { createCaptureWindow } from '../capture/capture-window';
 import { getBgTor } from '../bgconn/tor-singleton';
 import { ensureUuid } from '../security/validate';
+import { X_PAGE_STATE_SCRIPT, classifyXPageState, type XPageState } from './extract';
 
 /** Session partition the authenticated X capture windows run on — ONE shared login (the
  *  operator's own X account) across every campaign, so multiple per-case windows below still
@@ -178,6 +179,80 @@ export function getXWindow(caseId: string): BrowserWindow | undefined {
   const id = ensureUuid(caseId, 'caseId');
   const win = xWindows.get(id);
   return win && !win.isDestroyed() ? win : undefined;
+}
+
+const X_PROFILE_USERNAME_RE = /^[A-Za-z0-9_]{1,15}$/;
+
+/** Injectable seams for `navigateXToProfile` (testable without electron/network). */
+export interface XNavigateDeps {
+  /** Resolve the case's live capture window (defaults to `getXWindow`). */
+  resolveWindow: (caseId: string) => BrowserWindow | undefined;
+  loadUrl: (win: BrowserWindow, url: string) => Promise<void>;
+  runScript: (win: BrowserWindow, js: string) => Promise<unknown>;
+  delay: (ms: number) => Promise<void>;
+  /** Max readiness probes before giving up (soft). */
+  maxAttempts: number;
+  /** Delay before each probe — also lets the SPA settle before the first one. */
+  intervalMs: number;
+}
+
+function defaultNavigateDeps(): XNavigateDeps {
+  return {
+    resolveWindow: getXWindow,
+    loadUrl: (win, url) => win.loadURL(url),
+    runScript: (win, js) => win.webContents.executeJavaScript(js, true),
+    delay: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    maxAttempts: 24,
+    intervalMs: 500,
+  };
+}
+
+/**
+ * One-click-capture support: navigate this case's capture window to a target profile timeline and
+ * wait (bounded) for the X SPA to actually render posts, so the subsequent scrape doesn't hit an
+ * empty pre-render page.
+ *
+ * The username is RE-VALIDATED here (defence-in-depth) BEFORE it is interpolated into the URL — the
+ * capture window only ever loads `https://x.com/<validated-handle>` (no path/scheme injection), on
+ * the same host-allowlisted partition every capture uses.
+ *
+ * Returns `{ blocked:true, reason }` on a decisive challenge / rate-limit / signed-out page (the
+ * caller surfaces the reason and captures nothing); `{ ready:true }` once posts are visible; or
+ * `{ ready:false, blocked:false }` on a render timeout — NOT fatal: the caller still runs the
+ * capture, which then reports honestly (0 captured) instead of the old hard "not connected" error.
+ * `classifyXPageState` keeps a still-loading (articles:0) profile page as signedIn, so the poll waits
+ * through the render rather than mis-flagging it signed-out.
+ */
+export async function navigateXToProfile(
+  caseId: string,
+  username: string,
+  overrides: Partial<XNavigateDeps> = {},
+): Promise<{ ready: boolean; blocked: boolean; reason?: string }> {
+  const handle = String(username ?? '').replace(/^@+/, '').trim();
+  if (!X_PROFILE_USERNAME_RE.test(handle)) {
+    throw new Error(`"${username}" is not a valid X username (letters, digits, underscore; up to 15 characters).`);
+  }
+  const deps: XNavigateDeps = { ...defaultNavigateDeps(), ...overrides };
+  const win = deps.resolveWindow(caseId);
+  if (!win) throw new Error('No capture window is open for this campaign.');
+
+  await deps.loadUrl(win, `https://x.com/${handle}`);
+
+  for (let attempt = 0; attempt < deps.maxAttempts; attempt++) {
+    await deps.delay(deps.intervalMs);
+    const probe = (await deps.runScript(win, X_PAGE_STATE_SCRIPT)) as Partial<XPageState>;
+    const state = classifyXPageState({
+      url: String(probe?.url ?? ''),
+      text: String(probe?.text ?? ''),
+      articles: Number(probe?.articles ?? 0),
+    });
+    if (state.blocked) return { ready: false, blocked: true, reason: state.reason };
+    if (!state.signedIn) {
+      return { ready: false, blocked: true, reason: state.reason ?? 'The saved X session is no longer signed in.' };
+    }
+    if (Number(probe?.articles ?? 0) > 0) return { ready: true, blocked: false };
+  }
+  return { ready: false, blocked: false };
 }
 
 /**

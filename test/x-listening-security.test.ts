@@ -184,21 +184,32 @@ describe('security: store-backed IPC handlers reject a traversing caseId', () =>
   );
 
   it('admits a valid UUID — the guard passes it through to the next (non-shape) check', async () => {
-    // Contrast case: the sink rejects TRAVERSAL specifically, not everything. A
-    // well-formed UUID clears ensureUuid and reaches the next check ("not connected
-    // for this campaign", since no window is open) — proving the guard is a UUID
-    // gate, not a blanket denier.
+    // Contrast case: the sink rejects TRAVERSAL specifically, not everything. A well-formed UUID
+    // clears ensureUuid and reaches the capture logic. Since v3.71.1's one-click fix, no open
+    // window is no longer a hard error — the handler tries to open a Tor-gated capture window and,
+    // with no Tor in this harness, FAILS CLOSED to a { blocked: true } result (or errors somewhere
+    // downstream). Either way it must NOT be the ensureUuid shape rejection — proving the guard is a
+    // UUID gate, not a blanket denier.
     const h = handlers();
     const validUuid = '11111111-1111-4111-8111-111111111111';
-    await expect(
-      Promise.resolve().then(() =>
+    let threw: unknown;
+    const result = await Promise.resolve()
+      .then(() =>
         h.get(channels.xListening.captureTimeline)!(TRUSTED, {
           caseId: validUuid,
           channelId: 'target',
           targetUsername: 'target',
         }),
-      ),
-    ).rejects.toThrow(/not connected/);
+      )
+      .catch((e) => {
+        threw = e;
+        return undefined;
+      });
+    if (threw !== undefined) {
+      expect(String((threw as Error).message)).not.toMatch(/expected a UUID/);
+    } else {
+      expect(result).toMatchObject({ blocked: true });
+    }
   });
 });
 
