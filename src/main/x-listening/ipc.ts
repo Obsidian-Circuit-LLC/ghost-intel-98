@@ -71,6 +71,7 @@ import {
   type XHealthRelationship
 } from './analysis';
 import { runArchiveSteps } from './archive';
+import { withCollectionLock } from './collection-lock';
 import { loadDemoData } from './demo';
 import { readCachedMedia } from './media';
 import {
@@ -1204,40 +1205,55 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
     // Resolved BEFORE navigation so the collect gate can steer the route (audit HIGH #4 below).
     const collectionSettings = await getCollectionSettings(caseId);
     const collect = collectGateFromSettings(collectionSettings);
-    // Drive the window to the target profile so the analyst does not have to hand-navigate it first
-    // (the "Capture Timeline" field says "capture THIS username"). A blocked/signed-out page returns
-    // its reason; a render timeout is non-fatal (the capture below then reports 0 honestly).
-    // Audit HIGH #4: with REPLIES on, navigate to `/with_replies` (His `scrapeProfile` route) so the
-    // target's own replies surface — the handle is re-validated + host-anchored inside navigateXToProfile.
-    const nav = await navigateXToProfile(caseId, req.targetUsername, {}, { collectReplies: collect.replies });
-    if (nav.blocked) {
-      return { blocked: true, reason: nav.reason, added: 0, skipped: 0, posts: [] };
-    }
-    // F1: resolve this source's EFFECTIVE image policy MAIN-side, reusing the campaign settings just
-    // read (no second read) — the per-profile override resolved against `retrieveImages`. Injected so
-    // `captureTimeline` skips media caching for an 'off' source (no pbs.twimg fetch at all).
-    const imagesEnabled = await resolveEffectiveImageCollection(caseId, req.targetUsername, {
-      loadRetrieveImages: async () => collectionSettings.retrieveImages,
+    // Hoist the (already-validated) request fields into locals BEFORE the lock closure — TS drops the
+    // `req.X` string-narrowing across a closure boundary, and capturing them here keeps the exact
+    // shape unchanged.
+    const targetUsername = req.targetUsername;
+    const channelId = req.channelId;
+    const jobId = typeof req.jobId === 'string' ? req.jobId : caseId;
+    const channelLabel = typeof req.channelLabel === 'string' ? req.channelLabel : `@${req.channelId}`;
+    // M5: this manual capture is a collection op — acquire the single app-wide collection lock so it
+    // never egresses concurrently with a background sweep / archive tick / another manual op
+    // (Enterprise's global `sweepRunning`, `main.cjs:56,1836`). Contention THROWS "Another collection
+    // operation is already running." (his manual-entrypoint behaviour) rather than opening a second
+    // capture window. The lock spans the profile navigation + the scroll-and-accumulate scrape (the
+    // egressing work) and releases in `finally`.
+    return withCollectionLock(async () => {
+      // Drive the window to the target profile so the analyst does not have to hand-navigate it first
+      // (the "Capture Timeline" field says "capture THIS username"). A blocked/signed-out page returns
+      // its reason; a render timeout is non-fatal (the capture below then reports 0 honestly).
+      // Audit HIGH #4: with REPLIES on, navigate to `/with_replies` (His `scrapeProfile` route) so the
+      // target's own replies surface — the handle is re-validated + host-anchored inside navigateXToProfile.
+      const nav = await navigateXToProfile(caseId, targetUsername, {}, { collectReplies: collect.replies });
+      if (nav.blocked) {
+        return { blocked: true, reason: nav.reason, added: 0, skipped: 0, posts: [] };
+      }
+      // F1: resolve this source's EFFECTIVE image policy MAIN-side, reusing the campaign settings just
+      // read (no second read) — the per-profile override resolved against `retrieveImages`. Injected so
+      // `captureTimeline` skips media caching for an 'off' source (no pbs.twimg fetch at all).
+      const imagesEnabled = await resolveEffectiveImageCollection(caseId, targetUsername, {
+        loadRetrieveImages: async () => collectionSettings.retrieveImages,
+      });
+      return captureTimeline(
+        win,
+        {
+          caseId,
+          jobId,
+          channelId,
+          channelLabel,
+          targetUsername,
+          collect
+        },
+        {
+          imagesEnabledForSource: async () => imagesEnabled,
+          // FA1: reuse the per-campaign COLLECTION SETTINGS already read above — the capture's
+          // scroll-and-accumulate loop reads `profileScrollPasses`/`delayPerPassMs` from these, so a
+          // manual "Capture Timeline" now scrolls to this campaign's configured depth instead of the
+          // first viewport. Injecting the value avoids a second secure-fs decrypt of the same record.
+          loadCollectionSettings: () => collectionSettings,
+        },
+      );
     });
-    return captureTimeline(
-      win,
-      {
-        caseId,
-        jobId: typeof req.jobId === 'string' ? req.jobId : caseId,
-        channelId: req.channelId,
-        channelLabel: typeof req.channelLabel === 'string' ? req.channelLabel : `@${req.channelId}`,
-        targetUsername: req.targetUsername,
-        collect
-      },
-      {
-        imagesEnabledForSource: async () => imagesEnabled,
-        // FA1: reuse the per-campaign COLLECTION SETTINGS already read above — the capture's
-        // scroll-and-accumulate loop reads `profileScrollPasses`/`delayPerPassMs` from these, so a
-        // manual "Capture Timeline" now scrolls to this campaign's configured depth instead of the
-        // first viewport. Injecting the value avoids a second secure-fs decrypt of the same record.
-        loadCollectionSettings: () => collectionSettings,
-      },
-    );
   });
 
   // Task 14: list every captured post artifact for a campaign — the persisted source of truth
@@ -1480,16 +1496,25 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
       );
     }
     const maxCycles = Number(req.maxCycles);
-    return runArchiveSteps(
-      win,
-      {
-        caseId,
-        jobId: caseId,
-        channelId: req.channelId,
-        channelLabel: typeof req.channelLabel === 'string' ? req.channelLabel : `@${req.channelId}`,
-        targetUsername: req.targetUsername
-      },
-      { maxCycles: Number.isFinite(maxCycles) && maxCycles > 0 ? maxCycles : 1 }
+    // Hoist the validated request fields before the lock closure (TS drops `req.X` narrowing across it).
+    const channelId = req.channelId;
+    const channelLabel = typeof req.channelLabel === 'string' ? req.channelLabel : `@${req.channelId}`;
+    const targetUsername = req.targetUsername;
+    // M5: a manual archive is a collection op — hold the single app-wide collection lock across the
+    // whole (possibly multi-cycle) run so it never egresses concurrently with a sweep / another op
+    // (Enterprise `runArchiveCycle`'s `sweepRunning`, `main.cjs:1962`). Contention throws.
+    return withCollectionLock(() =>
+      runArchiveSteps(
+        win,
+        {
+          caseId,
+          jobId: caseId,
+          channelId,
+          channelLabel,
+          targetUsername
+        },
+        { maxCycles: Number.isFinite(maxCycles) && maxCycles > 0 ? maxCycles : 1 }
+      )
     );
   });
 
@@ -1571,7 +1596,10 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
     if (!req || typeof req.caseId !== 'string' || typeof req.postId !== 'string' || !req.postId) {
       throw new Error('Verifying a post requires a caseId and postId.');
     }
-    return verifyPost(ensureUuid(req.caseId, 'caseId'), req.postId);
+    // M5: a live verify opens a Tor-gated capture window (Enterprise `verifyPostLive` runs under the
+    // global `sweepRunning`, `main.cjs:2425-2427`) — hold the app-wide collection lock so it never
+    // races a sweep/archive/manual capture. Contention throws.
+    return withCollectionLock(() => verifyPost(ensureUuid(req.caseId as string, 'caseId'), req.postId as string));
   });
 
   // ---- Task C1: live follower/following network extraction (captureNetwork) ----------------
@@ -1601,12 +1629,17 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
     }
     const targetUsername = req.targetUsername;
     const channelId = typeof req.channelId === 'string' && req.channelId ? req.channelId : targetUsername;
-    return captureNetwork({
-      caseId: ensureUuid(req.caseId, 'caseId'),
-      channelId,
-      targetUsername,
-      kind: kind as 'followers' | 'following'
-    });
+    // M5: live follower/following extraction opens a Tor-gated capture window (Enterprise's
+    // relationship capture runs under the global `sweepRunning`, `main.cjs:2427`) — hold the app-wide
+    // collection lock so it never egresses concurrently with a sweep/archive/manual capture.
+    return withCollectionLock(() =>
+      captureNetwork({
+        caseId: ensureUuid(req.caseId as string, 'caseId'),
+        channelId,
+        targetUsername,
+        kind: kind as 'followers' | 'following'
+      })
+    );
   });
 
   // ---- Task E1: Tor-gated "open in X" affordances (openInX) ----------------
