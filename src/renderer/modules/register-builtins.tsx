@@ -212,8 +212,8 @@ function XListeningAdapter({ spec }: { spec: WindowSpec }): JSX.Element {
   return <XListeningModule caseId={spec.props?.['caseId'] as string | undefined} />;
 }
 
-function WebSdrAdapter({ spec: _spec }: { spec: WindowSpec }): JSX.Element {
-  return <WebSdrModule />;
+function WebSdrAdapter({ spec }: { spec: WindowSpec }): JSX.Element {
+  return <WebSdrModule windowId={spec.id} />;
 }
 
 function OSINTToolkitAdapter({ spec: _spec }: { spec: WindowSpec }): JSX.Element {

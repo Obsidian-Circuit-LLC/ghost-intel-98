@@ -24,6 +24,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { WebSdrModule } from '../src/renderer/modules/websdr/WebSdrModule';
+import { useWindows } from '../src/renderer/state/store';
 import { defaultWebSdrMenu, type WebSdrReceiver } from '@shared/websdr/types';
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -377,5 +378,55 @@ describe('WebSDR renderer module', () => {
     });
     expect(api.receiverCaptureSource).toHaveBeenCalled();
     expect(container.querySelector('.sdr-rec-indicator')).not.toBeNull();
+  });
+});
+
+// The native WebContentsView overlay composites ABOVE all DOM, so it must be torn down / hidden the
+// instant this window is no longer the active surface — else it floats over the desktop and every
+// other GI98 window (the two confirmed criticals + the minimize gap from the whole-branch review).
+describe('WebSDR overlay lifecycle — the native view never leaks', () => {
+  function setWindows(focusStack: string[], windows: Array<{ id: string; minimized?: boolean }>): void {
+    act(() => useWindows.setState({ focusStack, windows } as never));
+  }
+  async function mountFocusedWithReceiver(api: Record<string, any>): Promise<void> {
+    setApi(api);
+    useWindows.setState({ windows: [{ id: 'w1' }], focusStack: ['w1'] } as never);
+    await act(async () => { root.render(<WebSdrModule windowId="w1" />); });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    // Select a receiver so the overlay is presented (visible:true) before we test hide paths.
+    await act(async () => {
+      (container.querySelector('.sdr-receiver-main') as HTMLButtonElement).dispatchEvent(
+        new MouseEvent('click', { bubbles: true }),
+      );
+    });
+  }
+  afterEach(() => {
+    useWindows.setState({ windows: [], focusStack: [] } as never);
+  });
+
+  it('closing the window (unmount) tears the overlay down via receiverHide', async () => {
+    const api = mkApi();
+    await mountFocusedWithReceiver(api);
+    api.receiverHide.mockClear();
+    act(() => root.unmount());
+    expect(api.receiverHide).toHaveBeenCalled();
+  });
+
+  it('losing focus (another window on top) hides the overlay', async () => {
+    const api = mkApi();
+    await mountFocusedWithReceiver(api);
+    api.receiverPresent.mockClear();
+    setWindows(['w1', 'w2'], [{ id: 'w1' }, { id: 'w2' }]);
+    await act(async () => { await Promise.resolve(); });
+    expect(api.receiverPresent.mock.calls.at(-1)![0]).toEqual({ visible: false });
+  });
+
+  it('minimizing the window hides the overlay', async () => {
+    const api = mkApi();
+    await mountFocusedWithReceiver(api);
+    api.receiverPresent.mockClear();
+    setWindows(['w1'], [{ id: 'w1', minimized: true }]);
+    await act(async () => { await Promise.resolve(); });
+    expect(api.receiverPresent.mock.calls.at(-1)![0]).toEqual({ visible: false });
   });
 });

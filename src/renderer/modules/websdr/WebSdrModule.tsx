@@ -29,6 +29,8 @@ import './websdr.css';
 import bannerImage from '../../assets/websdr-banner.png';
 // window.prompt is a no-op in Electron's renderer (returns null) — use in-app dialogs instead.
 import { PromptDialog } from '../../components/CaseDialogs';
+import { useWindows } from '../../state/store';
+import { confirmDialog } from '../../state/dialogs';
 import type {
   WebSdrReceiver,
   WebSdrPreset,
@@ -121,8 +123,17 @@ function hostname(url: string): string {
   }
 }
 
-export function WebSdrModule(): JSX.Element {
+export function WebSdrModule({ windowId }: { windowId?: string } = {}): JSX.Element {
   const api = (globalThis as unknown as { window: { api?: { websdr?: GhostWebSdrApi } } }).window?.api?.websdr;
+
+  // The native receiver overlay (a WebContentsView) composites ABOVE all DOM, so it must be shown ONLY
+  // when THIS is the focused, non-minimized GI98 window — otherwise it paints over whatever window is
+  // now in front. No windowId (e.g. tests) ⇒ treat as active.
+  const windowActive = useWindows((s) => {
+    if (!windowId) return true;
+    if (s.focusStack[s.focusStack.length - 1] !== windowId) return false;
+    return !s.windows.find((w) => w.id === windowId)?.minimized;
+  });
 
   const [bootError, setBootError] = useState('');
   const [receivers, setReceivers] = useState<WebSdrReceiver[]>([]);
@@ -169,8 +180,10 @@ export function WebSdrModule(): JSX.Element {
   // Refs mirror state for the resize/observer callbacks (which capture a stale closure otherwise).
   const selectedRef = useRef<WebSdrReceiver | null>(null);
   const panelRef = useRef<Panel>('feeds');
+  const windowActiveRef = useRef(windowActive);
   selectedRef.current = selected;
   panelRef.current = panel;
+  windowActiveRef.current = windowActive;
 
   // ---- init -------------------------------------------------------------
   useEffect(() => {
@@ -200,8 +213,15 @@ export function WebSdrModule(): JSX.Element {
 
   // ---- receiver overlay bounds / visibility -----------------------------
   function syncBounds(): void {
-    if (!host.current || !selectedRef.current || panelRef.current === 'recordings' || !api) return;
-    const r = host.current.getBoundingClientRect();
+    if (!api) return;
+    // Single source of truth for overlay visibility: show only when this window is active, a receiver
+    // is loaded, and we're not on the recordings panel; otherwise HIDE (never leave it floating).
+    const show = !!host.current && !!selectedRef.current && panelRef.current !== 'recordings' && windowActiveRef.current;
+    if (!show) {
+      void api.receiverPresent({ visible: false });
+      return;
+    }
+    const r = host.current!.getBoundingClientRect();
     void api.receiverPresent({ visible: true, bounds: { x: r.left, y: r.top, width: r.width, height: r.height } });
   }
 
@@ -211,17 +231,24 @@ export function WebSdrModule(): JSX.Element {
     void api.receiverModal(Boolean(editing) || customizing || Boolean(presetDialog) || shortcutDialog);
   }, [api, editing, customizing, presetDialog, shortcutDialog]);
 
-  // Show/hide + reposition the overlay as selection/panel change.
+  // Show/hide + reposition the overlay as selection / panel / window focus+minimize change. syncBounds
+  // itself decides visibility, so a blur, cover, or minimize (windowActive → false) hides the overlay.
   useEffect(() => {
-    if (!api || !selected) return;
-    if (panel === 'recordings') {
-      void api.receiverPresent({ visible: false });
-    } else if (!editing && !customizing) {
-      const t = setTimeout(syncBounds, 20);
-      return () => clearTimeout(t);
-    }
+    if (!api) return;
+    // While a GI98 modal is open the receiverModal effect already detached the overlay; don't fight it.
+    if (editing || customizing) return;
+    const t = setTimeout(syncBounds, 20);
+    return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected, panel]);
+  }, [selected, panel, windowActive]);
+
+  // Tear the native overlay DOWN when the module unmounts (window closed). Without this the
+  // WebContentsView stays attached to contentView, visible, audio playing, over the whole desktop
+  // until app quit (its controlling component is gone).
+  useEffect(() => {
+    return () => { void api?.receiverHide(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Track host resizes so the native overlay follows the window/host geometry.
   useEffect(() => {
@@ -235,7 +262,7 @@ export function WebSdrModule(): JSX.Element {
       ob?.disconnect();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected, panel]);
+  }, [selected, panel, windowActive]);
 
   // Revoke the previous object URL when playback changes / on unmount (no dangling blob).
   useEffect(() => {
@@ -423,6 +450,10 @@ export function WebSdrModule(): JSX.Element {
       };
       rec.onstop = async () => {
         try {
+          // His Save/Discard gate (electron/main.ts recordings:save dialog): don't silently archive a
+          // fat-fingered capture — confirm before persisting an encrypted blob the user must else hunt down.
+          const keep = await confirmDialog('Save this recording?', 'SDR recording');
+          if (!keep) { setMessage('Recording discarded.'); return; }
           const endedAt = new Date().toISOString();
           const blob = new Blob(chunks.current, { type: rec.mimeType || 'video/webm' });
           const data = await blob.arrayBuffer();
