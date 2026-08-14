@@ -997,19 +997,22 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
     if (!win) {
       return { blocked: true, reason: 'Could not open a capture window for this campaign.', added: 0, skipped: 0, posts: [] };
     }
-    // Drive the window to the target profile so the analyst does not have to hand-navigate it first
-    // (the "Capture Timeline" field says "capture THIS username"). A blocked/signed-out page returns
-    // its reason; a render timeout is non-fatal (the capture below then reports 0 honestly).
-    const nav = await navigateXToProfile(caseId, req.targetUsername);
-    if (nav.blocked) {
-      return { blocked: true, reason: nav.reason, added: 0, skipped: 0, posts: [] };
-    }
     // F2: the surrounding-thread collect gate is derived from THIS campaign's per-campaign
     // COLLECTION SETTINGS (RECORD TYPES), MAIN-side — the renderer never widens capture; it only
     // ever edits the persisted per-campaign record through `saveCollectionSettings` (clamped there).
     // `getCollectionSettings` is fail-safe (heals to minimal-capture defaults on any read error).
+    // Resolved BEFORE navigation so the collect gate can steer the route (audit HIGH #4 below).
     const collectionSettings = await getCollectionSettings(caseId);
     const collect = collectGateFromSettings(collectionSettings);
+    // Drive the window to the target profile so the analyst does not have to hand-navigate it first
+    // (the "Capture Timeline" field says "capture THIS username"). A blocked/signed-out page returns
+    // its reason; a render timeout is non-fatal (the capture below then reports 0 honestly).
+    // Audit HIGH #4: with REPLIES on, navigate to `/with_replies` (His `scrapeProfile` route) so the
+    // target's own replies surface — the handle is re-validated + host-anchored inside navigateXToProfile.
+    const nav = await navigateXToProfile(caseId, req.targetUsername, {}, { collectReplies: collect.replies });
+    if (nav.blocked) {
+      return { blocked: true, reason: nav.reason, added: 0, skipped: 0, posts: [] };
+    }
     // F1: resolve this source's EFFECTIVE image policy MAIN-side, reusing the campaign settings just
     // read (no second read) — the per-profile override resolved against `retrieveImages`. Injected so
     // `captureTimeline` skips media caching for an 'off' source (no pbs.twimg fetch at all).

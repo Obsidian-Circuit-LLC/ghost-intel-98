@@ -254,11 +254,18 @@ function defaultNavigateDeps(): XNavigateDeps {
  * capture, which then reports honestly (0 captured) instead of the old hard "not connected" error.
  * `classifyXPageState` keeps a still-loading (articles:0) profile page as signedIn, so the poll waits
  * through the render rather than mis-flagging it signed-out.
+ *
+ * `options.collectReplies` (audit HIGH #4): when the campaign's collect gate has REPLIES on, load the
+ * `/with_replies` tab (`https://x.com/<handle>/with_replies`) — the route His `scrapeProfile` uses to
+ * surface the target's own replies (main.cjs:1647-1648) — instead of the bare profile. The `handle` is
+ * already validated (`^[A-Za-z0-9_]{1,15}$`) above and `/with_replies` is a fixed literal, so no path
+ * or scheme injection is possible; the host stays x.com on the same allowlisted partition.
  */
 export async function navigateXToProfile(
   caseId: string,
   username: string,
   overrides: Partial<XNavigateDeps> = {},
+  options: { collectReplies?: boolean } = {},
 ): Promise<{ ready: boolean; blocked: boolean; reason?: string }> {
   const handle = String(username ?? '').replace(/^@+/, '').trim();
   if (!X_PROFILE_USERNAME_RE.test(handle)) {
@@ -268,7 +275,8 @@ export async function navigateXToProfile(
   const win = deps.resolveWindow(caseId);
   if (!win) throw new Error('No capture window is open for this campaign.');
 
-  await deps.loadUrl(win, `https://x.com/${handle}`);
+  const route = options.collectReplies ? '/with_replies' : '';
+  await deps.loadUrl(win, `https://x.com/${handle}${route}`);
 
   for (let attempt = 0; attempt < deps.maxAttempts; attempt++) {
     await deps.delay(deps.intervalMs);

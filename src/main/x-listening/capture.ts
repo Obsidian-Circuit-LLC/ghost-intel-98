@@ -1401,6 +1401,13 @@ export async function captureProfileTimeline(
   // Validate BEFORE touching the gate or network — a malformed handle opens nothing. Reuse the
   // exact `openInX('profile')` username guard + canonical `https://x.com/<user>` construction.
   const url = buildXOpenUrl('profile', req.targetUsername);
+  // Audit HIGH #4: when this campaign's collect gate has REPLIES on, load the `/with_replies` tab
+  // (His `scrapeProfile` route, main.cjs:1647-1648) so the target's own replies actually surface.
+  // The username inside `url` was validated by `buildXOpenUrl` (`^[A-Za-z0-9_]{1,15}$`); `/with_replies`
+  // is a fixed literal appended to the path — host stays x.com, no injection.
+  if (req.collect?.replies) {
+    url.pathname = `${url.pathname}/with_replies`;
+  }
 
   const deps: XProfileTimelineDeps = { ...defaultProfileTimelineDeps(), ...overrides };
 
