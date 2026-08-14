@@ -153,6 +153,7 @@ function growingNetworkDeps(settings: XCollectionSettings): XNetworkCaptureDeps 
     runCapture: async () => [cell(`user${call++}`)], // a new handle each pass ⇒ never stagnant
     guard: async (_w, capture) => ({ blocked: false, result: await capture() }),
     scroll: async () => undefined,
+    assertSignedIn: async () => ({ blocked: false }),
     readNetwork: async () => [],
     saveNetwork: async () => 1,
     recordRun: async () => undefined,

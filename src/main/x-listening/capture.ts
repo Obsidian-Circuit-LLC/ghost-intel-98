@@ -509,8 +509,12 @@ export async function captureTimeline(
         if (!id) continue;
         byKey.set(`${id}:${r?.isRepost ? 'repost' : 'tweet'}`, r);
       }
-      if (byKey.size === previousSize) stagnant += 1;
-      else stagnant = 0;
+      // FA-A review (Minor): don't let a slow-rendering SPA's LEADING empty reads trip the stable-end
+      // early-stop before any post has appeared (the sweep/archive path has no article>0 pre-wait
+      // that navigateXToProfile gives the manual path). Only count no-growth passes toward stagnation
+      // once at least one post has been seen; leading all-empty reads just wait for the render.
+      if (byKey.size !== previousSize) stagnant = 0;
+      else if (byKey.size > 0) stagnant += 1;
       previousSize = byKey.size;
       if (stagnant >= TIMELINE_STAGNATION_LIMIT) break; // stable end reached
       if (i >= passes) break; // final pass — never scroll past the last read
@@ -1161,6 +1165,11 @@ export interface XNetworkCaptureDeps {
   ) => Promise<{ blocked: boolean; reason?: string; result?: T }>;
   /** Scroll the capture page one step (a static in-page payload, no interpolation). */
   scroll: (win: Electron.BrowserWindow) => Promise<void>;
+  /** Mid-scroll signed-in/challenge re-check. The network scroll loop runs up to `MAX_NETWORK_PASSES`
+   *  (240); a rate-limit or challenge surfacing PARTWAY through must DISCARD the truncated list and
+   *  flag it, never persist it as `complete` — the same fail-closed honesty the timeline + comment
+   *  loops already apply. Production default = `probeSignedInState`; a unit harness injects its own. */
+  assertSignedIn: (win: Electron.BrowserWindow) => Promise<{ blocked: boolean; reason?: string }>;
   /** Read the ALREADY-persisted accounts for one (target, kind) — used only to report an honest
    *  `added` delta against the accumulator, never to gate the scan. */
   readNetwork: (
@@ -1260,6 +1269,7 @@ function defaultNetworkCaptureDeps(): XNetworkCaptureDeps {
     scroll: async (win) => {
       await defaultRunCapture(win, X_NETWORK_SCROLL_SCRIPT);
     },
+    assertSignedIn: (win) => probeSignedInState(win),
     readNetwork: async (caseId, target, kind) => {
       const { prodXStore } = await import('./store');
       const store = await prodXStore();
@@ -1298,7 +1308,7 @@ async function scrapeNetworkRows(
   passes: number,
   stagnationLimit: number,
   deps: XNetworkCaptureDeps,
-): Promise<{ rows: RawUserCell[]; completedPasses: number; reachedEnd: boolean }> {
+): Promise<{ rows: RawUserCell[]; completedPasses: number; reachedEnd: boolean; challenged?: boolean; challengeReason?: string }> {
   const seen = new Map<string, RawUserCell>();
   let completedPasses = 0;
   let stagnant = 0;
@@ -1321,6 +1331,15 @@ async function scrapeNetworkRows(
       break;
     }
     await deps.scroll(win);
+    // FA-A review (Important): re-assert signed-in/challenge MID-SCROLL — mirrors the timeline +
+    // comment loops. Over up to MAX_NETWORK_PASSES (240), a rate-limit/challenge interstitial can
+    // surface partway through; without this the loop would keep scrolling the flagged page and the
+    // caller would persist a TRUNCATED follower list logged as 'complete'. On a block we DISCARD the
+    // partial (rows:[]) and flag it so the caller records an error run, never a false stable end.
+    const mid = await deps.assertSignedIn(win);
+    if (mid.blocked) {
+      return { rows: [], completedPasses, reachedEnd: false, challenged: true, challengeReason: mid.reason };
+    }
   }
   return { rows: [...seen.values()], completedPasses, reachedEnd };
 }
@@ -1409,11 +1428,30 @@ export async function captureNetwork(
       return { blocked: true, reason: gated.reason, kind, target: fullTarget, observed: 0, added: 0, completedPasses: 0, reachedEnd: false };
     }
 
-    const { rows, completedPasses, reachedEnd } = gated.result ?? {
+    const { rows, completedPasses, reachedEnd, challenged, challengeReason } = gated.result ?? {
       rows: [],
       completedPasses: 0,
       reachedEnd: false,
     };
+    if (challenged) {
+      // Mid-scroll challenge (FA-A review): DISCARD the truncated list and record an honest ERROR
+      // run — never persist a partial follower list logged as complete.
+      await emitNetworkRun(deps, req.caseId, {
+        profileId,
+        username,
+        operation: kind,
+        observed: 0,
+        added: 0,
+        requestedPasses: passes,
+        completedPasses,
+        reachedEnd: false,
+        stopReason: challengeReason ?? 'challenge',
+        status: 'error',
+        startedAt,
+        endedAt: deps.now(),
+      });
+      return { blocked: true, reason: challengeReason, kind, target: fullTarget, observed: 0, added: 0, completedPasses, reachedEnd: false };
+    }
     const capturedAt = deps.now();
     const artifact = normalizeNetwork(rows, username, kind, capturedAt);
 

@@ -71,6 +71,7 @@ function baseDeps(rows: ReturnType<typeof cell>[]): {
     runCapture: async () => rows,
     guard: async (_w, capture) => ({ blocked: false, result: await capture() }),
     scroll,
+    assertSignedIn: async () => ({ blocked: false }),
     readNetwork: async () => [],
     saveNetwork: saved,
     recordRun: runs,
@@ -154,6 +155,28 @@ describe('captureNetwork — happy path', () => {
     expect(rec.username).toBe('alice');
     expect(rec.status).toBe('complete');
     expect(rec.observed).toBe(1);
+  });
+});
+
+describe('captureNetwork — mid-scroll challenge (FA-A review: no truncated list logged as complete)', () => {
+  it('DISCARDS the partial list and records an ERROR run when a challenge surfaces mid-scroll', async () => {
+    const { deps, saved, runs } = baseDeps([]);
+    // One NEW cell per pass so the loop never stagnates; block the signed-in re-check after the
+    // first scroll — the raised 240-pass ceiling must not keep scrolling a flagged page.
+    let pass = 0;
+    deps.runCapture = async () => [cell(`u${pass++}`)];
+    deps.assertSignedIn = async () => ({ blocked: true, reason: 'rate limit interstitial' });
+    const res = await captureNetwork(
+      { caseId: 'case-1', channelId: 'alice', targetUsername: 'alice', kind: 'followers', passes: 20 },
+      deps,
+    );
+    expect(res.blocked).toBe(true);
+    // The truncated follower list is DISCARDED — nothing persisted.
+    expect(saved).not.toHaveBeenCalled();
+    // An honest ERROR run is recorded — never 'complete'.
+    const rec = runs.mock.calls.at(-1)![1];
+    expect(rec.status).toBe('error');
+    expect(rec.stopReason).toMatch(/rate limit|challenge/i);
   });
 });
 
