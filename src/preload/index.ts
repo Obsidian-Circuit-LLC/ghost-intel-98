@@ -837,7 +837,19 @@ const api = {
     getMenu: () => ipcRenderer.invoke(channels.websdr.menuGet),
     saveMenu: (menu: unknown) => ipcRenderer.invoke(channels.websdr.menuSave, menu),
     getEgress: () => ipcRenderer.invoke(channels.websdr.egressGet),
-    setEgress: (mode: unknown) => ipcRenderer.invoke(channels.websdr.egressSet, mode)
+    setEgress: (mode: unknown) => ipcRenderer.invoke(channels.websdr.egressSet, mode),
+    // Phase 2 — hardened receiver-view overlay. Every channel is sender-validated + arg-checked
+    // main-side; every receiver URL is validated http/https-only there.
+    receiverLoad: (url: string) => ipcRenderer.invoke(channels.websdr.receiverLoad, url),
+    receiverHide: () => ipcRenderer.invoke(channels.websdr.receiverHide),
+    receiverPresent: (input: unknown) => ipcRenderer.invoke(channels.websdr.receiverPresent, input),
+    receiverModal: (open: boolean) => ipcRenderer.invoke(channels.websdr.receiverModal, open),
+    receiverStatus: (url: string) => ipcRenderer.invoke(channels.websdr.receiverStatus, url),
+    receiverMute: (muted: boolean) => ipcRenderer.invoke(channels.websdr.receiverMute, muted),
+    receiverExternalOpen: (url: string) =>
+      ipcRenderer.invoke(channels.websdr.receiverExternalOpen, url),
+    receiverEgressApply: (mode: unknown) =>
+      ipcRenderer.invoke(channels.websdr.receiverEgressApply, mode)
   }
 } as const;
 

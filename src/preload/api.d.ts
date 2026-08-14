@@ -1149,6 +1149,20 @@ export interface GhostApi {
     saveMenu(menu: WebSdrStationMenu): Promise<WebSdrStationMenu>;
     getEgress(): Promise<WebSdrEgressState>;
     setEgress(mode: WebSdrEgressMode): Promise<WebSdrEgressState>;
+    /** Phase 2 — hardened receiver-view overlay (persist:websdr). */
+    receiverLoad(url: string): Promise<void>;
+    receiverHide(): Promise<void>;
+    receiverPresent(input: {
+      visible: boolean;
+      bounds?: { x: number; y: number; width: number; height: number };
+    }): Promise<void>;
+    receiverModal(open: boolean): Promise<void>;
+    receiverStatus(url: string): Promise<{ online: boolean; status?: number; error?: string }>;
+    receiverMute(muted: boolean): Promise<void>;
+    receiverExternalOpen(url: string): Promise<void>;
+    receiverEgressApply(
+      mode: WebSdrEgressMode,
+    ): Promise<{ mode: WebSdrEgressMode; showWarning: boolean }>;
   };
 }
 

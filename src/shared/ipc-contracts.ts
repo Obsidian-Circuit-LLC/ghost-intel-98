@@ -825,7 +825,19 @@ export const channels = {
     menuGet: 'websdr:menu:get',
     menuSave: 'websdr:menu:save',
     egressGet: 'websdr:egress:get',
-    egressSet: 'websdr:egress:set'
+    egressSet: 'websdr:egress:set',
+    // Phase 2 — the hardened receiver-view overlay (persist:websdr). load/hide/present/modal drive
+    // the WebContents< z-order on the multi-window desktop; status runs over the active egress
+    // path; external-open + egress-apply are the guarded egress/navigation seams. Every handler
+    // sender-validates first (the overlay hosts a hostile remote SDR page).
+    receiverLoad: 'websdr:receiver:load',
+    receiverHide: 'websdr:receiver:hide',
+    receiverPresent: 'websdr:receiver:present',
+    receiverModal: 'websdr:receiver:modal',
+    receiverStatus: 'websdr:receiver:status',
+    receiverMute: 'websdr:receiver:mute',
+    receiverExternalOpen: 'websdr:receiver:external-open',
+    receiverEgressApply: 'websdr:receiver:egress-apply'
   }
 } as const;
 

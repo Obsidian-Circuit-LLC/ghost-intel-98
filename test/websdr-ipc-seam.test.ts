@@ -166,7 +166,11 @@ describe('registerWebSdrIpc: every channel is wired + sender-checks FIRST', () =
     expect(() => assertTrustedSender(UNTRUSTED_EVENT as never)).toThrow(SENDER_ERROR);
   });
 
-  const CHANNELS = Object.values(channels.websdr);
+  // Phase-1 channels only: the `websdr:receiver:*` channels are wired by registerWebSdrReceiverIpc
+  // (Phase 2) and are covered by its own seam test — registerWebSdrIpc does not own them.
+  const CHANNELS = Object.values(channels.websdr).filter(
+    (c) => !c.startsWith('websdr:receiver:'),
+  );
 
   it('registers a handler for every declared websdr channel', () => {
     const ipc = fakeIpcMain();
