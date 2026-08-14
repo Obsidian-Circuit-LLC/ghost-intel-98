@@ -200,4 +200,82 @@ describe('exportXPostsToFile', () => {
     const kept = excludeSynthetic([post({ id: 'a' }), post({ id: 'b', synthetic: false })]);
     expect(kept.map((p) => p.id)).toEqual(['a', 'b']);
   });
+
+  // ---- M10: CSV metric columns read from the flat `metricsRaw` shape -----
+  it('csv export populates the replies/reposts/likes/views columns from metricsRaw (M10)', async () => {
+    const { exportXPostsToFile } = await import('../src/main/x-listening/exports');
+    const { X_ITEMS_CSV_HEADER } = await import('../src/main/x-listening/ipc');
+    // The store shape: flat number `metrics` + raw platform strings on `metricsRaw`.
+    const readPosts = vi.fn(async () => [post()]);
+    const written = new Map<string, Buffer | string>();
+    const writeFile = vi.fn(async (p: string, data: Buffer | string) => {
+      written.set(p, data);
+    });
+
+    await exportXPostsToFile('case-a', 'csv', '/exports/out.csv', { readPosts, writeFile });
+
+    const csv = String(written.get('/exports/out.csv'));
+    const lines = csv.replace('﻿', '').split('\r\n');
+    const unquote = (line: string) => line.split(',').map((c) => c.replace(/^"|"$/g, ''));
+    const header = [...X_ITEMS_CSV_HEADER];
+    const row = unquote(lines[1]);
+    const col = (name: string) => row[header.indexOf(name)];
+    // Before the fix these columns rendered '' (the nested `metrics?.[name]?.raw` read a number).
+    expect(col('replies')).toBe('12');
+    expect(col('reposts')).toBe('3');
+    expect(col('likes')).toBe('1.2K');
+    expect(col('views')).toBe('45K');
+  });
+
+  // ---- M9: PDF restores the dropped evidence fields ---------------------
+  it('pdf export restores analyst notes, per-post SHA-256, first/last observed, and Monitored via @source (M9)', async () => {
+    const { exportXPostsToFile } = await import('../src/main/x-listening/exports');
+    const readPosts = vi.fn(async () => [
+      post({ id: 'p1', evidenceHash: 'abc123ev', harvestedAt: '2026-08-06T12:00:00.000Z' }),
+    ]);
+    const readNotes = vi.fn(async () => [
+      { findingId: 'p1', text: 'suspicious phrasing here', savedAt: '2026-08-07T09:00:00.000Z' },
+    ]);
+    let capturedHtml = '';
+    const htmlToPdf = vi.fn(async (html: string) => {
+      capturedHtml = html;
+      return Buffer.from(html, 'utf8');
+    });
+    const writeFile = vi.fn(async () => {});
+
+    await exportXPostsToFile('case-a', 'pdf', '/exports/out.pdf', {
+      readPosts,
+      readNotes,
+      writeFile,
+      htmlToPdf,
+    });
+
+    // analyst note (text + a notes heading)
+    expect(capturedHtml).toContain('suspicious phrasing here');
+    expect(capturedHtml).toMatch(/Analyst notes/i);
+    // per-post SHA-256 evidence hash
+    expect(capturedHtml).toContain('abc123ev');
+    // first/last observed (fall back to harvestedAt when the post carries no observed range)
+    expect(capturedHtml).toContain('First observed 2026-08-06T12:00:00.000Z');
+    expect(capturedHtml).toContain('Last observed 2026-08-06T12:00:00.000Z');
+    // "Monitored via @source" — falls back to the post's own handle when no source is stored
+    expect(capturedHtml).toContain('Monitored via @alice');
+    // hardening we already added must survive: metrics line stays present
+    expect(capturedHtml).toContain('1.2K');
+  });
+
+  it('pdf export without a readNotes seam still exports (notes default to none)', async () => {
+    const { exportXPostsToFile } = await import('../src/main/x-listening/exports');
+    const readPosts = vi.fn(async () => [post({ id: 'p1' })]);
+    let capturedHtml = '';
+    const htmlToPdf = vi.fn(async (html: string) => {
+      capturedHtml = html;
+      return Buffer.from(html, 'utf8');
+    });
+    const writeFile = vi.fn(async () => {});
+    await exportXPostsToFile('case-a', 'pdf', '/exports/out.pdf', { readPosts, writeFile, htmlToPdf });
+    // evidence footer still renders from the artifact; no analyst-notes section without notes
+    expect(capturedHtml).toContain('Monitored via @alice');
+    expect(capturedHtml).not.toMatch(/Analyst notes/i);
+  });
 });

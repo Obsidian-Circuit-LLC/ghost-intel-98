@@ -616,14 +616,21 @@ export function normalizeNetwork(
   return { target: fullTarget, kind, accounts, capturedAt };
 }
 
-/** CSV columns for a follower/following network export. */
+/** CSV columns for a follower/following network export — the full 10-column shape his
+ *  `exportRelationshipsCsv` wrote (`main.cjs:2505`), restored (M4). `url` is derived
+ *  host-anchored from the handle; `observed_count`/`evidence_sha256` + the SEPARATE
+ *  `first_observed_at`/`last_observed_at` are the columns our thinned 6-column CSV had dropped. */
 export const NETWORK_CSV_HEADER = [
-  'target',
+  'source_username',
   'relationship',
-  'handle',
+  'username',
   'display_name',
   'bio',
-  'captured_at',
+  'url',
+  'first_observed_at',
+  'last_observed_at',
+  'observed_count',
+  'evidence_sha256',
 ] as const;
 
 /**
@@ -631,20 +638,33 @@ export const NETWORK_CSV_HEADER = [
  * EVERY cell routed through `csvCell` — so a scraped bio like `=HYPERLINK("http://evil")`
  * is neutralized as literal text (the review's spreadsheet formula-injection finding).
  * A leading BOM + CRLF line endings match the app's other CSV exports. Port of
- * quarantine `exportRelationshipsCsv` (`electron/main.cjs:1146-1170`).
+ * quarantine `exportRelationshipsCsv` (`electron/main.cjs:2497-2517`).
+ *
+ * M4: the full 10 columns are restored. `url` is derived host-anchored (`https://x.com/<handle>`)
+ * — the XNetworkAccount never stores a scraped remote URL (no-remote-media discipline), and the
+ * canonical profile URL is deterministic from the bare handle. `first/last_observed_at` fall back
+ * to the artifact's `capturedAt` when the account carries no observed range (his `|| collectedAt`);
+ * `observed_count` defaults to 1 (his `|| 1`; the counter itself is PC4's `mergeNetworkAccounts`
+ * change); `evidence_sha256` is the account's `evidenceHash` or ''.
  */
 export function networkToCsv(artifacts: readonly XNetworkArtifact[] | undefined): string {
   const lines: string[] = [NETWORK_CSV_HEADER.map((h) => csvCell(h)).join(',')];
   for (const art of artifacts ?? []) {
     for (const account of art.accounts ?? []) {
+      const bareHandle = String(account.handle ?? '').replace(/^@+/, '');
+      const url = bareHandle ? `https://x.com/${bareHandle}` : '';
       lines.push(
         [
           art.target,
           art.kind,
           account.handle,
-          account.displayName,
+          account.displayName ?? '',
           account.bio ?? '',
-          art.capturedAt,
+          url,
+          account.firstObservedAt || art.capturedAt,
+          account.lastObservedAt || art.capturedAt,
+          String(account.observedCount ?? 1),
+          account.evidenceHash ?? '',
         ]
           .map((cellValue) => csvCell(String(cellValue ?? '')))
           .join(','),

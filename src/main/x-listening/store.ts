@@ -60,6 +60,10 @@ export interface XNetworkAccount {
   evidenceHash?: string;
   firstObservedAt?: string;
   lastObservedAt?: string;
+  /** How many scans have RE-observed this handle for this (target,kind) — his `observedCount`,
+   *  surfaced in the network CSV (M4). Populated by `mergeNetworkAccounts` (PC4); absent on a
+   *  record written before that lands ⇒ the CSV emits the honest default of 1. */
+  observedCount?: number;
   synthetic?: boolean;
 }
 

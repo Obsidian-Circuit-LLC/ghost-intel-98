@@ -244,6 +244,7 @@ export const X_ITEMS_CSV_HEADER = [
  *  along at runtime (they were persisted by `normalizePost` et al.), read here
  *  defensively so a legacy or partial record never throws mid-export. */
 interface XItemView {
+  id: string;
   kind: string;
   handle: string;
   authorId: string;
@@ -260,20 +261,45 @@ interface XItemView {
   media: string[];
   verified: boolean;
   provenance: string;
+  /** M9 evidence fields restored to the PDF footer (his `main.cjs:2159-2172`). */
+  evidenceHash: string;
+  /** The monitored profile this post was surfaced through — his `sourceUsername || username`. */
+  sourceUsername: string;
+  firstObserved: string;
+  lastObserved: string;
 }
 
-/** The runtime superset of a captured item — the X-specific fields the store round-trips. */
+/** The runtime superset of a captured item — the X-specific fields the store round-trips.
+ *  Two metric shapes flow through here: `XPostArtifact` (x-posts.json — the store this module's
+ *  file exports read) keeps a FLAT number map on `metrics` with the raw platform strings on a
+ *  separate `metricsRaw`; the older `XHarvestedItem` (x-items.json) keeps a NESTED `{raw}` per
+ *  metric. `metricRaw` reads either (M10). */
 type XItemRuntime = HarvestedItem & {
   kind?: string;
   media?: unknown;
   verified?: unknown;
   captureProvenance?: unknown;
-  metrics?: Record<string, { raw?: unknown } | undefined>;
+  metrics?: Record<string, { raw?: unknown } | number | undefined>;
+  metricsRaw?: Record<string, unknown>;
+  evidenceHash?: unknown;
+  sourceUsername?: unknown;
+  firstObservedAt?: unknown;
+  lastObservedAt?: unknown;
 };
 
-/** The verbatim display token of one metric, or '' — never an expanded integer. */
+/** The verbatim display token of one metric, or '' — never an expanded integer.
+ *  M10 fix: an `XPostArtifact` carries the raw platform string on the flat `metricsRaw` map
+ *  (its `metrics[name]` is a plain number, so the old `metrics?.[name]?.raw` read `undefined`
+ *  and every metric column rendered ''). Prefer `metricsRaw[name]`; fall back to the nested
+ *  `metrics[name].raw` shape so the legacy `x-items.json` records still serialize. */
 function metricRaw(item: XItemRuntime, name: string): string {
-  return String(item.metrics?.[name]?.raw ?? '');
+  const flat = item.metricsRaw?.[name];
+  if (flat != null) return String(flat);
+  const nested = item.metrics?.[name];
+  if (nested && typeof nested === 'object' && 'raw' in nested) {
+    return String((nested as { raw?: unknown }).raw ?? '');
+  }
+  return '';
 }
 
 /** Project a stored item to its flat export view. Remote media is filtered out here
@@ -283,12 +309,18 @@ function viewItem(raw: HarvestedItem): XItemView {
   const media = Array.isArray(item.media)
     ? item.media.map((m) => String(m ?? '')).filter((m) => m.startsWith('data:'))
     : [];
+  const handle = String(item.authorHandle ?? '');
+  const harvestedAt = String(item.harvestedAt ?? '');
+  // "Monitored via @source" — his `sourceUsername || username` (main.cjs:2172); the post's own
+  // handle is the honest fallback when no monitored-source was stored on the artifact.
+  const source = String(item.sourceUsername ?? '') || handle;
   return {
+    id: String(item.id ?? ''),
     kind: String(item.kind ?? ''),
-    handle: String(item.authorHandle ?? ''),
+    handle,
     authorId: String(item.authorId ?? ''),
     publishedAt: String(item.publishedAt ?? ''),
-    harvestedAt: String(item.harvestedAt ?? ''),
+    harvestedAt,
     text: String(item.text ?? ''),
     url: String(item.url ?? ''),
     likes: metricRaw(item, 'likes'),
@@ -300,7 +332,13 @@ function viewItem(raw: HarvestedItem): XItemView {
     // Honesty stamps are NOT trusted from the record — they are what this collector
     // guarantees. A visible-DOM capture is never verified; the provenance is fixed.
     verified: false,
-    provenance: 'visible-capture'
+    provenance: 'visible-capture',
+    // M9 evidence fields — first/last observed fall back to the capture time when the post
+    // carries no observed range (his `firstObservedAt || collectedAt`).
+    evidenceHash: String(item.evidenceHash ?? ''),
+    sourceUsername: source.replace(/^@+/, ''),
+    firstObserved: String(item.firstObservedAt ?? '') || harvestedAt,
+    lastObserved: String(item.lastObservedAt ?? '') || harvestedAt
   };
 }
 
@@ -352,7 +390,11 @@ export function itemsToCsv(items: readonly HarvestedItem[] | undefined): string 
  * `src` must never reach an `<img>` and beacon the analyst's view (the review's media
  * finding). No remote CSS/JS/fonts — fully offline, matching the app's other exports.
  */
-export function buildXItemsHtml(caseId: string, items: readonly HarvestedItem[] | undefined): string {
+export function buildXItemsHtml(
+  caseId: string,
+  items: readonly HarvestedItem[] | undefined,
+  notesByPost?: ReadonlyMap<string, readonly XNote[]>
+): string {
   const rows = (items ?? [])
     .map((raw) => {
       const v = viewItem(raw);
@@ -362,6 +404,25 @@ export function buildXItemsHtml(caseId: string, items: readonly HarvestedItem[] 
       const metrics = `likes ${escapeField(v.likes || '—')} · reposts ${escapeField(
         v.reposts || '—'
       )} · replies ${escapeField(v.replies || '—')} · views ${escapeField(v.views || '—')}`;
+      // M9: analyst-notes section (his `main.cjs:2159-2166`) — every note escaped, newlines
+      // rendered as <br>. Absent when the post has no notes (matches his conditional section).
+      const notes = notesByPost?.get(v.id) ?? [];
+      const notesHtml = notes.length
+        ? `<section class="analyst-notes"><h3>Analyst notes</h3>${notes
+            .map(
+              (n) =>
+                `<div class="analyst-note"><p>${escapeField(n.text).replace(/\n/g, '<br>')}</p>` +
+                `<small>Updated ${escapeField(n.savedAt)}</small></div>`
+            )
+            .join('')}</section>`
+        : '';
+      // M9: the evidence footer — KIND · Monitored via @source · First/Last observed · SHA-256
+      // (his `main.cjs:2172`). Keeps our added metrics/media footers above it.
+      const evidence =
+        `${escapeField(v.kind.toUpperCase())} · Monitored via @${escapeField(v.sourceUsername)} ` +
+        `· First observed ${escapeField(v.firstObserved)} · Last observed ${escapeField(
+          v.lastObserved
+        )} · SHA-256 ${escapeField(v.evidenceHash)}`;
       return (
         `<article class="x-item">` +
         `<header><span class="handle">${escapeField(v.handle)}</span> ` +
@@ -369,7 +430,9 @@ export function buildXItemsHtml(caseId: string, items: readonly HarvestedItem[] 
         `<time>${escapeField(v.publishedAt)}</time></header>` +
         `<p class="text">${escapeField(v.text)}</p>` +
         (imgs ? `<div class="media">${imgs}</div>` : '') +
+        notesHtml +
         `<footer class="metrics">${metrics}</footer>` +
+        `<footer class="evidence">${evidence}</footer>` +
         (v.url ? `<footer class="url">${escapeField(v.url)}</footer>` : '') +
         `<footer class="stamp">visible-capture · unverified</footer>` +
         `</article>`
@@ -383,7 +446,11 @@ export function buildXItemsHtml(caseId: string, items: readonly HarvestedItem[] 
     `.x-item{border:1px solid #ccc;border-radius:6px;padding:12px;margin:0 0 12px}` +
     `.handle{font-weight:bold}.kind{color:#666}.text{white-space:pre-wrap}` +
     `.media img{max-width:160px;max-height:160px;margin:4px}` +
-    `.metrics,.url,.stamp{color:#666;font-size:12px}</style></head>` +
+    `.metrics,.url,.stamp,.evidence{color:#666;font-size:12px}` +
+    `.analyst-notes{margin:9px 0;padding:8px 10px;border-left:3px solid #8a6a17;background:#f6f1e4}` +
+    `.analyst-notes h3{margin:0 0 6px;font-size:13px}` +
+    `.analyst-note{margin-top:7px;padding-top:7px;border-top:1px solid #d8ccb0}` +
+    `.analyst-note p{margin:0 0 3px}.analyst-note small{color:#666}</style></head>` +
     `<body><h1>X Listening Station export — ${escapeField(caseId)}</h1>` +
     `<p class="stamp">${(items ?? []).length} captured item(s) · visible-DOM capture · unverified</p>` +
     rows +
@@ -779,6 +846,9 @@ export interface InteractiveExportDeps {
    *  `manifestHash`). Production default (`productionNetworkEnvelope`) reads the case's networks;
    *  tests inject a prebuilt envelope. */
   readNetworkEnvelope?: (caseId: string) => Promise<XNetworkExportEnvelope>;
+  /** M9: read the case's analyst notes for the PDF evidence export. Forwarded to
+   *  `exportXPostsToFile`; production default reads the encrypted `notes` store. */
+  readNotes?: (caseId: string) => Promise<XNote[]>;
 }
 
 async function defaultAssertNotSymlink(filePath: string): Promise<void> {
@@ -803,7 +873,8 @@ function defaultInteractiveExportDeps(): InteractiveExportDeps {
       await writeFile(filePath, data);
     },
     serializeJson: productionPostsEnvelopeJson,
-    readNetworkEnvelope: productionNetworkEnvelope
+    readNetworkEnvelope: productionNetworkEnvelope,
+    readNotes: async (caseId) => (await prodXStore()).notes.read(caseId)
   };
 }
 
@@ -828,7 +899,9 @@ export async function exportPostsInteractive(
     writeFile: deps.writeFile,
     ...(deps.readPosts ? { readPosts: deps.readPosts } : {}),
     // FB4: a `json` export is serialized as the self-describing manifest envelope; csv/pdf ignore it.
-    ...(deps.serializeJson ? { serializeJson: deps.serializeJson } : {})
+    ...(deps.serializeJson ? { serializeJson: deps.serializeJson } : {}),
+    // M9: a `pdf` export threads the case's analyst notes into the per-post evidence section.
+    ...(deps.readNotes ? { readNotes: deps.readNotes } : {})
   });
   return { canceled: false, ...written };
 }

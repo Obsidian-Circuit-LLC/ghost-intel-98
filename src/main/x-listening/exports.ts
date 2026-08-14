@@ -85,6 +85,11 @@ export interface XExportDeps {
    *  envelope is assembled one layer up (`ipc.ts`'s interactive export), which has the case-scoped
    *  store reads the envelope needs. */
   serializeJson?: (caseId: string, posts: XPostArtifact[]) => Promise<string> | string;
+  /** Read the case's analyst notes so the PDF export can restore the per-post analyst-notes
+   *  section (M9, audit medium — his `main.cjs:2159-2166`). OMITTED here so the low-level
+   *  exporter needs no store; production wires the case-scoped read one layer up (`ipc.ts`'s
+   *  interactive export), mirroring `serializeJson`. Absent ⇒ the PDF renders no notes section. */
+  readNotes?: (caseId: string) => Promise<XNote[]>;
 }
 
 function defaultDeps(): XExportDeps {
@@ -172,7 +177,17 @@ export async function exportXPostsToFile(
   } else if (format === 'csv') {
     data = itemsToCsv(posts);
   } else {
-    data = await deps.htmlToPdf(buildXItemsHtml(caseId, posts));
+    // M9: thread the case's analyst notes into the PDF so the per-post notes section renders.
+    // `readNotes` is optional (mirrors `serializeJson`); absent ⇒ no notes, footer evidence
+    // fields still render from each artifact.
+    const notes = deps.readNotes ? await deps.readNotes(caseId) : [];
+    const notesByPost = new Map<string, XNote[]>();
+    for (const note of notes) {
+      const list = notesByPost.get(note.findingId);
+      if (list) list.push(note);
+      else notesByPost.set(note.findingId, [note]);
+    }
+    data = await deps.htmlToPdf(buildXItemsHtml(caseId, posts, notesByPost));
   }
 
   await deps.writeFile(filePath, data);
