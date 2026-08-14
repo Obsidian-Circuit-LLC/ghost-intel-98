@@ -1121,7 +1121,8 @@ export interface XNetworkCaptureRequest {
   channelId: string;
   targetUsername: string;
   kind: 'followers' | 'following';
-  /** Scroll passes — clamped to [1, 60]. Defaults to `DEFAULT_NETWORK_PASSES`. */
+  /** Scroll passes — clamped to [1, 240] (Enterprise `scrapeRelationshipRows`, `main.cjs:2356`).
+   *  Defaults to `DEFAULT_NETWORK_PASSES`. */
   passes?: number;
 }
 
@@ -1183,8 +1184,16 @@ export interface XNetworkCaptureDeps {
 /** Default scroll passes when the caller doesn't specify — matches Enterprise's
  *  `relationshipScrollPasses` default (`main.cjs:2354`). */
 export const DEFAULT_NETWORK_PASSES = 8;
-/** Consecutive no-growth passes that end the loop early (a stable end). */
-const NETWORK_STAGNATION_LIMIT = 3;
+/** Hard ceiling on the network scroll budget — Enterprise `scrapeRelationshipRows`'s
+ *  `Math.min(240, requestedPasses)` (`main.cjs:2356`). Lets the FA4 archive relationship stepping
+ *  actually deepen toward `maxNetworkDepth` (up to 240) instead of being re-capped at 60. */
+const MAX_NETWORK_PASSES = 240;
+/** Fallback consecutive-no-growth early-stop when settings can't supply one — Enterprise's
+ *  `networkStagnationLimit` default (`main.cjs:2358`). The live limit is read per-campaign and
+ *  re-clamped to [`MIN`,`MAX`] MAIN-side (defence-in-depth over the already-clamped setting). */
+const DEFAULT_NETWORK_STAGNATION_LIMIT = 7;
+const MIN_NETWORK_STAGNATION_LIMIT = 4;
+const MAX_NETWORK_STAGNATION_LIMIT = 20;
 
 /** STATIC scroll payload — the ONLY inputs are literal numbers; no scraped data is interpolated.
  *  Jumps ~90% of the viewport (min 650px), matching Enterprise's `scrapeRelationshipRows` scroll. */
@@ -1280,13 +1289,14 @@ function defaultNetworkCaptureDeps(): XNetworkCaptureDeps {
 /**
  * Scroll-scrape the visible follower/following `UserCell` rows, accumulating unique handles across
  * bounded passes. Runs the STATIC `USER_CELL_SCRIPT` each pass, dedups case-insensitively by handle
- * (the same key `normalizeNetwork`/`store.networks.save` use), and stops early once
- * `NETWORK_STAGNATION_LIMIT` consecutive passes add nothing new (a stable end). Never runs the
- * scroll after the final pass (gentle on X). Returns the accumulated raw cells + the loop telemetry.
+ * (the same key `normalizeNetwork`/`store.networks.save` use), and stops early once `stagnationLimit`
+ * consecutive passes add nothing new (a stable end). Never runs the scroll after the final pass
+ * (gentle on X). Returns the accumulated raw cells + the loop telemetry.
  */
 async function scrapeNetworkRows(
   win: Electron.BrowserWindow,
   passes: number,
+  stagnationLimit: number,
   deps: XNetworkCaptureDeps,
 ): Promise<{ rows: RawUserCell[]; completedPasses: number; reachedEnd: boolean }> {
   const seen = new Map<string, RawUserCell>();
@@ -1306,7 +1316,7 @@ async function scrapeNetworkRows(
     if (seen.size === before) stagnant += 1;
     else stagnant = 0;
     if (i >= passes - 1) break;
-    if (stagnant >= NETWORK_STAGNATION_LIMIT) {
+    if (stagnant >= stagnationLimit) {
       reachedEnd = true;
       break;
     }
@@ -1337,11 +1347,21 @@ export async function captureNetwork(
   // F2: the scroll-pass budget defaults to the per-campaign follower/following base passes (Enterprise
   // `relationshipScrollPasses`, split per direction). An explicit `req.passes` still overrides. The
   // settings read is fail-safe (`getCollectionSettings` heals to defaults), so this never blocks a
-  // capture; the value is re-clamped to [1,60] here regardless of source (defence-in-depth over the
-  // already-clamped stored value).
+  // capture; the value is re-clamped to [1,240] here (Enterprise's ceiling) regardless of source
+  // (defence-in-depth over the already-clamped stored value). The 240 ceiling also lets the FA4
+  // archive relationship stepping actually reach `maxNetworkDepth` instead of being re-capped at 60.
   const settings = await deps.loadCollectionSettings(req.caseId);
   const basePasses = kind === 'following' ? settings.followingBasePasses : settings.followerBasePasses;
-  const passes = Math.max(1, Math.min(60, Math.floor(Number(req.passes ?? basePasses)) || basePasses));
+  const passes = Math.max(1, Math.min(MAX_NETWORK_PASSES, Math.floor(Number(req.passes ?? basePasses)) || basePasses));
+  // Early-stop limit from the campaign's `networkStagnationLimit` (Enterprise `main.cjs:2358`),
+  // re-clamped to [4,20] MAIN-side (defence-in-depth over the already-clamped setting).
+  const stagnationLimit = Math.max(
+    MIN_NETWORK_STAGNATION_LIMIT,
+    Math.min(
+      MAX_NETWORK_STAGNATION_LIMIT,
+      Math.floor(Number(settings.networkStagnationLimit)) || DEFAULT_NETWORK_STAGNATION_LIMIT,
+    ),
+  );
   const startedAt = deps.now();
   const username = String(req.targetUsername ?? '').replace(/^@+/, '').trim();
   const fullTarget = `@${username}`;
@@ -1370,7 +1390,7 @@ export async function captureNetwork(
 
   const win = await deps.openWindow(url.toString(), gate.proxy);
   try {
-    const gated = await deps.guard(win, () => scrapeNetworkRows(win, passes, deps));
+    const gated = await deps.guard(win, () => scrapeNetworkRows(win, passes, stagnationLimit, deps));
     if (gated.blocked) {
       await emitNetworkRun(deps, req.caseId, {
         profileId,

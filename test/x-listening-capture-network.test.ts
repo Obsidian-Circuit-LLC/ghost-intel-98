@@ -20,6 +20,7 @@ import {
   captureNetwork,
   type XNetworkCaptureDeps,
 } from '../src/main/x-listening/capture';
+import { DEFAULT_COLLECTION_SETTINGS } from '../src/shared/x-listening-collection-settings';
 
 /** A fake capture window that records destroy() — enough to prove the `finally` cleanup. */
 function fakeWindow() {
@@ -214,5 +215,104 @@ describe('captureNetwork — scroll loop', () => {
     // Stopped well before the 30-pass ceiling once accounts stopped growing.
     expect(scroll.mock.calls.length).toBeLessThan(10);
     expect(saved.mock.calls[0][1].accounts).toHaveLength(2);
+  });
+});
+
+// ---- FA5: configurable stagnation limit + 240-pass ceiling (audit medium) --------------------
+//
+// His `scrapeRelationshipRows` (main.cjs:2354-2358) clamps the network scroll budget to [1,240] and
+// derives the early-stop stagnation limit from `settings.networkStagnationLimit` clamped [4,20]
+// (default 7). Ours previously hard-capped the ceiling at 60 and used a FIXED stagnation of 3 — so a
+// large follower list stopped ~2x too shallow and bailed after only 3 no-growth passes. These pin the
+// raised ceiling and the settings-driven, clamped stagnation limit onto OUR injectable seams.
+
+/** A never-stagnating page source: pass N returns N+1 cumulative unique cells, so `seen` grows every
+ *  pass and the loop only ever stops at the pass ceiling. */
+function growingRows(): () => Promise<ReturnType<typeof cell>[]> {
+  let call = 0;
+  return async () => {
+    const n = (call += 1);
+    return Array.from({ length: n }, (_, k) => cell(`u${k}`));
+  };
+}
+
+describe('captureNetwork — configurable stagnation limit (settings-driven)', () => {
+  // pages: grow for two passes (a, then a+b), then a constant [a,b] forever ⇒ stagnation begins pass 3.
+  function twoGrowThenStagnant(): () => Promise<ReturnType<typeof cell>[]> {
+    const pages = [[cell('a')], [cell('a'), cell('b')], [cell('a'), cell('b')]];
+    let call = 0;
+    return async () => pages[Math.min(call++, pages.length - 1)];
+  }
+
+  it('honors networkStagnationLimit=5 from campaign settings (breaks on the 5th stagnant pass)', async () => {
+    const { deps, scroll } = baseDeps([]);
+    deps.loadCollectionSettings = async () => ({ ...DEFAULT_COLLECTION_SETTINGS, networkStagnationLimit: 5 });
+    deps.runCapture = twoGrowThenStagnant();
+    const res = await captureNetwork(
+      { caseId: 'case-1', channelId: 'alice', targetUsername: 'alice', kind: 'followers', passes: 100 },
+      deps,
+    );
+    expect(res.observed).toBe(2);
+    // 2 growth scrolls + 4 stagnant scrolls, then the 5th stagnant pass breaks before scrolling.
+    expect(scroll).toHaveBeenCalledTimes(6);
+    expect(res.reachedEnd).toBe(true);
+  });
+
+  it('a lower networkStagnationLimit=4 stops one pass sooner', async () => {
+    const { deps, scroll } = baseDeps([]);
+    deps.loadCollectionSettings = async () => ({ ...DEFAULT_COLLECTION_SETTINGS, networkStagnationLimit: 4 });
+    deps.runCapture = twoGrowThenStagnant();
+    await captureNetwork(
+      { caseId: 'case-1', channelId: 'alice', targetUsername: 'alice', kind: 'followers', passes: 100 },
+      deps,
+    );
+    expect(scroll).toHaveBeenCalledTimes(5);
+  });
+
+  it('re-clamps a below-band configured limit up to 4 MAIN-side (defence in depth)', async () => {
+    const { deps, scroll } = baseDeps([]);
+    // A raw 1 (below His [4,20] band) must NOT stop after a single stagnant pass — it clamps to 4.
+    deps.loadCollectionSettings = async () => ({ ...DEFAULT_COLLECTION_SETTINGS, networkStagnationLimit: 1 });
+    deps.runCapture = twoGrowThenStagnant();
+    await captureNetwork(
+      { caseId: 'case-1', channelId: 'alice', targetUsername: 'alice', kind: 'followers', passes: 100 },
+      deps,
+    );
+    // Behaves as limit 4 (5 scrolls), not limit 1 (which would be 2 scrolls).
+    expect(scroll).toHaveBeenCalledTimes(5);
+  });
+});
+
+describe('captureNetwork — raised 240-pass ceiling', () => {
+  it('scrolls up to 240 passes (His ceiling), not the old 60 cap', async () => {
+    const { deps, scroll } = baseDeps([]);
+    deps.loadCollectionSettings = async () => ({ ...DEFAULT_COLLECTION_SETTINGS, networkStagnationLimit: 20 });
+    deps.runCapture = growingRows();
+    const res = await captureNetwork(
+      // A request above the ceiling clamps to 240 (never 300, never the old 60).
+      { caseId: 'case-1', channelId: 'alice', targetUsername: 'alice', kind: 'followers', passes: 300 },
+      deps,
+    );
+    expect(res.completedPasses).toBe(240);
+    // 240 reads ⇒ 239 scrolls (never scroll past the final pass).
+    expect(scroll).toHaveBeenCalledTimes(239);
+    expect(res.observed).toBe(240);
+  });
+
+  it('an ordinary capture still uses the base pass budget (8), not the raised ceiling', async () => {
+    const { deps, scroll } = baseDeps([]);
+    deps.loadCollectionSettings = async () => ({
+      ...DEFAULT_COLLECTION_SETTINGS,
+      followerBasePasses: 8,
+      networkStagnationLimit: 20,
+    });
+    deps.runCapture = growingRows();
+    const res = await captureNetwork(
+      // No explicit passes ⇒ defaults to the per-direction base budget (8), unchanged by the raise.
+      { caseId: 'case-1', channelId: 'alice', targetUsername: 'alice', kind: 'followers' },
+      deps,
+    );
+    expect(res.completedPasses).toBe(8);
+    expect(scroll).toHaveBeenCalledTimes(7);
   });
 });
