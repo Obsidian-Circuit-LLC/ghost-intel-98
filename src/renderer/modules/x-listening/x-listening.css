@@ -350,6 +350,7 @@
   justify-content: space-between;
 }
 .xls-count { font-size: 11px; color: var(--ga98-text-dim); }
+.xls-health-counts { font-size: 11px; color: var(--ga98-text-dim); margin-left: auto; }
 .xls-help { font-size: 11px; line-height: 1.5; color: var(--ga98-text-dim); margin: 8px 0; }
 
 .xls-input {

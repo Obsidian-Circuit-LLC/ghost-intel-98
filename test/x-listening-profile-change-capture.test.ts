@@ -28,6 +28,24 @@ import {
   type XStoreDeps,
 } from '../src/main/x-listening/store';
 import type { RawPost, RawProfileMeta } from '../src/main/x-listening/extract';
+import { hostAnchoredAvatar } from '../src/main/x-listening/capture';
+
+describe('hostAnchoredAvatar — the profile-snapshot avatar is HOST-ANCHORED, not substring-matched', () => {
+  it('passes a real pbs.twimg.com avatar verbatim (used only as a fingerprint, never fetched)', () => {
+    const real = 'https://pbs.twimg.com/profile_images/1/abc.jpg';
+    expect(hostAnchoredAvatar(real)).toBe(real);
+  });
+  it('DROPS an off-allowlist decoy host to "" even with pbs.twimg.com in the query string', () => {
+    expect(hostAnchoredAvatar('https://evil.example/?x=pbs.twimg.com')).toBe('');
+  });
+  it('DROPS a subdomain-decoy (pbs.twimg.com.evil.example) — exact host / true-subdomain only', () => {
+    expect(hostAnchoredAvatar('https://pbs.twimg.com.evil.example/a.jpg')).toBe('');
+  });
+  it('drops garbage / empty input to ""', () => {
+    expect(hostAnchoredAvatar('not a url')).toBe('');
+    expect(hostAnchoredAvatar('')).toBe('');
+  });
+});
 import { DEFAULT_COLLECTION_SETTINGS } from '@shared/x-listening-collection-settings';
 
 const WIN = { webContents: { executeJavaScript: vi.fn() } } as unknown as Electron.BrowserWindow;

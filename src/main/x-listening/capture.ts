@@ -721,19 +721,26 @@ export async function captureTimeline(
   const profileMeta = gatedResult.profileMeta;
   if (profileMeta && (profileMeta.displayName || profileMeta.bio || profileMeta.avatar || profileMeta.location || profileMeta.website)) {
     const sourceUsername = String(req.targetUsername || req.channelLabel || '') || undefined;
-    await deps.snapshotProfile(
-      req.caseId,
-      {
-        profileId: req.channelId,
-        ...(sourceUsername ? { sourceUsername } : {}),
-        displayName: profileMeta.displayName,
-        bio: profileMeta.bio,
-        avatar: profileMeta.avatar,
-        location: profileMeta.location,
-        website: profileMeta.website,
-      },
-      { now: startedAt },
-    );
+    // BEST-EFFORT (review): profile-change tracking is derived intel, like the run-log below — a
+    // snapshot-store hiccup must NOT reject an otherwise-successful capture or suppress the run-log
+    // write. Swallow + warn, mirroring emitRun's telemetry-never-breaks-capture posture.
+    try {
+      await deps.snapshotProfile(
+        req.caseId,
+        {
+          profileId: req.channelId,
+          ...(sourceUsername ? { sourceUsername } : {}),
+          displayName: profileMeta.displayName,
+          bio: profileMeta.bio,
+          avatar: profileMeta.avatar,
+          location: profileMeta.location,
+          website: profileMeta.website,
+        },
+        { now: startedAt },
+      );
+    } catch (err) {
+      console.warn('[XListening] snapshotProfile (best-effort):', err);
+    }
   }
 
   // Record the completed run (Task A3). `observed` = unique posts this capture accumulated across all

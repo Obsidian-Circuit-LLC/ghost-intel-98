@@ -278,6 +278,12 @@ export interface XHealthRow {
   profileId: string;
   username: string;
   status: string;
+  // Enterprise COLLECTION HEALTH columns (enterprise.cjs:221-224) — computed main-side +
+  // carried over IPC; optional so a partial/legacy payload never crashes the row.
+  postCount?: number;
+  followerCount?: number;
+  followingCount?: number;
+  oldestPostAt?: string | null;
 }
 
 export interface XEntityRow {
@@ -1964,6 +1970,10 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
                     <li className="xls-source-row" key={h.profileId}>
                       <span>@{h.username}</span>
                       <span>{h.status}</span>
+                      <span className="xls-health-counts">
+                        {h.postCount ?? 0} posts · {h.followerCount ?? 0} followers · {h.followingCount ?? 0} following
+                        {h.oldestPostAt ? ` · oldest ${h.oldestPostAt.slice(0, 10)}` : ''}
+                      </span>
                     </li>
                   ))}
                 </ul>

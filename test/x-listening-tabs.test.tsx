@@ -227,6 +227,23 @@ describe('X Listening Station tabs (Task 14)', () => {
     expect(grid?.textContent).toContain('3'); // analysis.uniqueIdentityCount
   });
 
+  it('COLLECTION HEALTH renders the restored per-target counts + oldest-post + IDLE status (not just @user/status)', async () => {
+    // FB1 review: the postCount/followerCount/followingCount/oldestPostAt columns cross the IPC
+    // boundary but were dropped by the renderer's XHealthRow. Feed a NON-EMPTY health payload (a
+    // real target + a never-collected IDLE one) and assert the columns actually render.
+    api.xListening.health = vi.fn(async () => [
+      { profileId: 'p1', username: 'bob', status: 'HEALTHY', postCount: 42, followerCount: 7, followingCount: 3, oldestPostAt: '2026-08-01T12:00:00.000Z' },
+      { profileId: 'p2', username: 'never', status: 'IDLE', postCount: 0, followerCount: 0, followingCount: 0, oldestPostAt: null },
+    ]) as typeof api.xListening.health;
+    await mount();
+    const text = container.textContent || '';
+    expect(text).toMatch(/42 posts/);
+    expect(text).toMatch(/7 followers/);
+    expect(text).toMatch(/3 following/);
+    expect(text).toMatch(/oldest 2026-08-01/);
+    expect(text).toMatch(/IDLE/);
+  });
+
   it('live tab lists the persisted captured posts from postsList (not hollow)', async () => {
     await mount();
     await clickTab(/^live$/i);
