@@ -27,6 +27,8 @@
 import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import './websdr.css';
 import bannerImage from '../../assets/websdr-banner.png';
+// window.prompt is a no-op in Electron's renderer (returns null) — use in-app dialogs instead.
+import { PromptDialog } from '../../components/CaseDialogs';
 import type {
   WebSdrReceiver,
   WebSdrPreset,
@@ -134,6 +136,12 @@ export function WebSdrModule(): JSX.Element {
   const [selected, setSelected] = useState<WebSdrReceiver | null>(null);
   const [editing, setEditing] = useState<WebSdrReceiver | null>(null);
   const [customizing, setCustomizing] = useState(false);
+  // In-app entry dialogs replacing his window.prompt() calls (which return null in Electron's
+  // renderer, making the preset + shortcut creators dead buttons in the shipped app). The preset
+  // dialog snapshots the freq/mode/receiver at the moment the save action is taken, matching his
+  // synchronous prompt semantics even though the GI98 dialog resolves asynchronously.
+  const [presetDialog, setPresetDialog] = useState<{ frequencyHz: number; mode: string; receiverId?: string } | null>(null);
+  const [shortcutDialog, setShortcutDialog] = useState(false);
   const [panel, setPanel] = useState<Panel>('feeds');
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState<Record<string, string>>({});
@@ -200,8 +208,8 @@ export function WebSdrModule(): JSX.Element {
   // Detach the overlay while any GI98 modal is open (his v0.1.6 fix) so it never paints over it.
   useEffect(() => {
     if (!api) return;
-    void api.receiverModal(Boolean(editing) || customizing);
-  }, [api, editing, customizing]);
+    void api.receiverModal(Boolean(editing) || customizing || Boolean(presetDialog) || shortcutDialog);
+  }, [api, editing, customizing, presetDialog, shortcutDialog]);
 
   // Show/hide + reposition the overlay as selection/panel change.
   useEffect(() => {
@@ -321,10 +329,15 @@ export function WebSdrModule(): JSX.Element {
   }
 
   // ---- presets ----------------------------------------------------------
-  async function savePreset(): Promise<void> {
+  function savePreset(): void {
     if (!api) return;
-    const name = window.prompt('Preset name?');
-    if (name) setPresets(await api.savePreset({ id: '', name, frequencyHz: hz, mode, receiverId: selected?.id, notes: '' }));
+    setPresetDialog({ frequencyHz: hz, mode, receiverId: selected?.id });
+  }
+  async function confirmPreset(name: string): Promise<void> {
+    const snap = presetDialog;
+    setPresetDialog(null);
+    if (!api || !snap) return;
+    setPresets(await api.savePreset({ id: '', name, frequencyHz: snap.frequencyHz, mode: snap.mode, receiverId: snap.receiverId, notes: '' }));
   }
   async function deletePreset(p: WebSdrPreset): Promise<void> {
     if (!api) return;
@@ -541,8 +554,10 @@ export function WebSdrModule(): JSX.Element {
       window.alert('Add an SDR feed first.');
       return;
     }
-    const name = window.prompt('Enter the exact receiver name to create a shortcut for:');
-    if (!name) return;
+    setShortcutDialog(true);
+  }
+  function confirmShortcut(name: string): void {
+    setShortcutDialog(false);
     const r = receivers.find((x) => x.name.toLowerCase() === name.trim().toLowerCase());
     if (!r) {
       window.alert('No receiver matched that name.');
@@ -884,6 +899,28 @@ export function WebSdrModule(): JSX.Element {
               </div>
             </div>
           </div>
+        )}
+
+        {presetDialog && (
+          <PromptDialog
+            title="Save frequency preset"
+            label="Preset name"
+            placeholder={`${formatHz(presetDialog.frequencyHz)} · ${presetDialog.mode}`}
+            submitLabel="Save"
+            onSubmit={(n) => void confirmPreset(n)}
+            onClose={() => setPresetDialog(null)}
+          />
+        )}
+
+        {shortcutDialog && (
+          <PromptDialog
+            title="Add receiver shortcut"
+            label="Receiver name"
+            placeholder="Exact receiver name"
+            submitLabel="Add"
+            onSubmit={confirmShortcut}
+            onClose={() => setShortcutDialog(false)}
+          />
         )}
       </div>
     </div>

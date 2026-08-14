@@ -249,6 +249,93 @@ describe('WebSDR renderer module', () => {
     }
   });
 
+  it('savePreset creates a preset through the in-app dialog (not window.prompt)', async () => {
+    const api = mkApi();
+    setApi(api);
+    // Guard the regression directly: if the code ever falls back to window.prompt, this rejects it.
+    (window as any).prompt = () => {
+      throw new Error('window.prompt must not be used — it is a no-op in Electron.');
+    };
+    await mount();
+
+    // Go to the presets panel via its station-menu button.
+    await act(async () => {
+      byText('Presets')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    // The panel's save-preset button is the only button in its section title; click it.
+    const section = Array.from(container.querySelectorAll('.sdr-section-title')).find(
+      (s) => (s.textContent ?? '').includes('FREQUENCY PRESETS'),
+    )!;
+    await act(async () => {
+      (section.querySelector('button') as HTMLButtonElement).dispatchEvent(
+        new MouseEvent('click', { bubbles: true }),
+      );
+    });
+
+    // The in-app PromptDialog is now open (NOT a browser prompt). Enter a name and submit.
+    const dialog = container.querySelector('[role="dialog"]') as HTMLElement | null;
+    expect(dialog, 'in-app preset dialog opened').not.toBeNull();
+    const input = dialog!.querySelector('input') as HTMLInputElement;
+    await act(async () => {
+      setInputValue(input, 'Ham net 40m');
+    });
+    const save = Array.from(dialog!.querySelectorAll('button')).find(
+      (b) => (b.textContent ?? '').trim() === 'Save',
+    ) as HTMLButtonElement;
+    await act(async () => {
+      save.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(api.savePreset).toHaveBeenCalledTimes(1);
+    const arg = api.savePreset.mock.calls[0][0];
+    expect(arg.name).toBe('Ham net 40m');
+    expect(typeof arg.frequencyHz).toBe('number');
+    expect(typeof arg.mode).toBe('string');
+    // Dialog closes after submit.
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it('Customize > Add receiver shortcut appends a shortcut through the in-app dialog', async () => {
+    const api = mkApi();
+    setApi(api);
+    (window as any).prompt = () => {
+      throw new Error('window.prompt must not be used — it is a no-op in Electron.');
+    };
+    await mount();
+
+    // Open the Customize editor.
+    await act(async () => {
+      byText('Customize')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    // Click "Add receiver shortcut".
+    await act(async () => {
+      byText('Add receiver shortcut')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    const dialog = container.querySelector('[role="dialog"]') as HTMLElement | null;
+    expect(dialog, 'in-app shortcut dialog opened').not.toBeNull();
+    const input = dialog!.querySelector('input') as HTMLInputElement;
+    // Enter an EXACT receiver name (case-insensitive match on RX[0]).
+    await act(async () => {
+      setInputValue(input, 'alpha twente websdr');
+    });
+    const add = Array.from(dialog!.querySelectorAll('button')).find(
+      (b) => (b.textContent ?? '').trim() === 'Add',
+    ) as HTMLButtonElement;
+    await act(async () => {
+      add.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    // A new custom shortcut row (labeled with the receiver's name) is now in the menu editor.
+    const rowInputs = Array.from(
+      container.querySelectorAll('.sdr-menu-edit-row input'),
+    ) as HTMLInputElement[];
+    expect(rowInputs.some((i) => i.value === RX[0].name), 'shortcut row added').toBe(true);
+  });
+
   it('record indicator turns on when a capture starts', async () => {
     const api = mkApi();
     setApi(api);
