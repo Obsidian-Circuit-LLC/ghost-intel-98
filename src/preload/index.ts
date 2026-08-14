@@ -716,9 +716,11 @@ const api = {
   xListening: {
     saveNote: (req: { caseId: string; findingId: string; text: string }) =>
       ipcRenderer.invoke(channels.xListening.saveNote, req),
+    updateNote: (req: { caseId: string; noteId: string; text: string }) =>
+      ipcRenderer.invoke(channels.xListening.updateNote, req),
     readNotes: (caseId: string) =>
       ipcRenderer.invoke(channels.xListening.readNotes, caseId),
-    removeNote: (req: { caseId: string; findingId: string }) =>
+    removeNote: (req: { caseId: string; noteId: string }) =>
       ipcRenderer.invoke(channels.xListening.removeNote, req),
 
     // ---- Phase-1 Enterprise-port surface (plan Task 6) --------------------------------
@@ -776,8 +778,11 @@ const api = {
       maxCycles?: number;
     }) => ipcRenderer.invoke(channels.xListening.archiveRun, req),
     loadDemoData: (caseId: string) => ipcRenderer.invoke(channels.xListening.loadDemoData, caseId),
-    exportPostsToFile: (req: { caseId: string; format: 'json' | 'csv' | 'pdf' }) =>
-      ipcRenderer.invoke(channels.xListening.exportPostsToFile, req),
+    exportPostsToFile: (req: {
+      caseId: string;
+      format: 'json' | 'csv' | 'pdf';
+      filters?: { source?: string; kind?: string; query?: string };
+    }) => ipcRenderer.invoke(channels.xListening.exportPostsToFile, req),
     exportNetworkToFile: (caseId: string) =>
       ipcRenderer.invoke(channels.xListening.exportNetworkToFile, caseId),
     exportNetworkJsonToFile: (caseId: string) =>

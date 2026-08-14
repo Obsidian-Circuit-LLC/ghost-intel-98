@@ -547,12 +547,14 @@ export const channels = {
   // `runArchiveCycle(s)`/`exportItems`) was retired wholesale at Task 16 — every surviving
   // capture channel below is Tor-safe. Every handler is safeHandle + assertTrustedSender.
   xListening: {
-    /** Upsert one analyst note (keyed by findingId) into the encrypted `notes` store. */
+    /** APPEND one analyst note to a finding (M11 — his multi-note model) into the encrypted
+     *  `notes` store. A finding may carry many notes; each gets a unique id. */
     saveNote: 'xListening:saveNote',
+    /** Edit one analyst note in place, by note id (M11). */
+    updateNote: 'xListening:updateNote',
     /** Read a case's analyst notes from the encrypted `notes` store. */
     readNotes: 'xListening:readNotes',
-    /** Delete the note attached to one finding, if any (Task 10). A no-op when the finding
-     *  has no note. */
+    /** Delete one analyst note by id (M11). A no-op when no note matches. */
     removeNote: 'xListening:removeNote',
 
     // ---- Phase-1 Enterprise-port surface (plan Task 6) ---------------------------------

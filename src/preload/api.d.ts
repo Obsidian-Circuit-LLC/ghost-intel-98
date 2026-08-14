@@ -806,21 +806,24 @@ export interface GhostApi {
    */
   xListening: {
     /**
-     * Upsert one analyst note against a finding (one note per finding — a re-save
-     * REPLACES it). Text is trimmed + validated (non-empty, ≤ 20 000 chars) and
-     * `savedAt` is stamped MAIN-side. Returns the fresh note list.
+     * APPEND one analyst note to a finding (M11 — his multi-note-per-post model; a finding may
+     * carry many notes, each with a unique `id`). Text is trimmed + validated (non-empty,
+     * ≤ 20 000 chars); `savedAt` + the note `id` are stamped MAIN-side. Returns the fresh list.
      */
     saveNote(req: { caseId: string; findingId: string; text: string }): Promise<{
-      notes: Array<{ findingId: string; text: string; savedAt: string }>;
+      notes: Array<{ id?: string; findingId: string; text: string; savedAt: string }>;
+    }>;
+    /** Edit one analyst note in place, by note id (M11). Same guards as `saveNote`. */
+    updateNote(req: { caseId: string; noteId: string; text: string }): Promise<{
+      notes: Array<{ id?: string; findingId: string; text: string; savedAt: string }>;
     }>;
     /** Read the case's analyst notes from the encrypted `notes` store. */
     readNotes(caseId: string): Promise<{
-      notes: Array<{ findingId: string; text: string; savedAt: string }>;
+      notes: Array<{ id?: string; findingId: string; text: string; savedAt: string }>;
     }>;
-    /** Delete the note attached to one finding, if any — a no-op when the finding has no
-     *  note. Returns the fresh note list. */
-    removeNote(req: { caseId: string; findingId: string }): Promise<{
-      notes: Array<{ findingId: string; text: string; savedAt: string }>;
+    /** Delete one analyst note by id (M11) — a no-op when no note matches. Returns the fresh list. */
+    removeNote(req: { caseId: string; noteId: string }): Promise<{
+      notes: Array<{ id?: string; findingId: string; text: string; savedAt: string }>;
     }>;
 
     // ---- Phase-1 Enterprise-port surface (plan Task 6) --------------------------------
@@ -983,7 +986,13 @@ export interface GhostApi {
      * via a native save dialog — the renderer never supplies a filesystem path. Returns
      * `{canceled:true}` if the operator dismisses the dialog.
      */
-    exportPostsToFile(req: { caseId: string; format: 'json' | 'csv' | 'pdf' }): Promise<
+    exportPostsToFile(req: {
+      caseId: string;
+      format: 'json' | 'csv' | 'pdf';
+      /** M15: per-export SOURCE (normalized source key) / TYPE (post kind) / QUERY (substring)
+       *  filters. Applied MAIN-side after synthetic-exclusion; omitted ⇒ the full campaign. */
+      filters?: { source?: string; kind?: string; query?: string };
+    }): Promise<
       | { canceled: true }
       | { canceled: false; filePath: string; count: number; sha256: string; checksumPath: string }
     >;

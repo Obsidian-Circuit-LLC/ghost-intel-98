@@ -44,6 +44,51 @@ function post(over: Partial<XPostArtifact> = {}): XPostArtifact {
   };
 }
 
+// ── M15: per-export SOURCE / TYPE / QUERY filters ─────────────────────────────
+describe('applyExportFilters (M15)', () => {
+  it('filters by SOURCE (normalized key), TYPE (kind) and QUERY (text/handle substring)', async () => {
+    const { applyExportFilters } = await import('../src/main/x-listening/exports');
+    const posts = [
+      post({ id: 'a', channelId: 'alice', authorHandle: '@alice', kind: 'post', text: 'ransomware alert' }),
+      post({ id: 'b', channelId: 'Alice', authorHandle: '@alice', kind: 'reply', text: 'a reply' }),
+      post({ id: 'c', channelId: 'bob', authorHandle: '@bob', kind: 'post', text: 'unrelated' }),
+    ];
+    // SOURCE 'alice' is case-insensitive on the source key → a + b, never c
+    expect(applyExportFilters(posts, { source: 'alice' }).map((p) => p.id)).toEqual(['a', 'b']);
+    // TYPE 'post' → a + c
+    expect(applyExportFilters(posts, { kind: 'post' }).map((p) => p.id)).toEqual(['a', 'c']);
+    // QUERY matches post text OR @handle, case-insensitive
+    expect(applyExportFilters(posts, { query: 'RANSOMWARE' }).map((p) => p.id)).toEqual(['a']);
+    expect(applyExportFilters(posts, { query: '@bob' }).map((p) => p.id)).toEqual(['c']);
+    // combined AND
+    expect(applyExportFilters(posts, { source: 'alice', kind: 'post' }).map((p) => p.id)).toEqual(['a']);
+  });
+
+  it("treats 'all' / '' / undefined as no filter (full pass-through)", async () => {
+    const { applyExportFilters } = await import('../src/main/x-listening/exports');
+    const posts = [post({ id: 'a', kind: 'post' }), post({ id: 'b', kind: 'reply' })];
+    expect(applyExportFilters(posts, { source: 'all', kind: 'all', query: '' }).map((p) => p.id)).toEqual(['a', 'b']);
+    expect(applyExportFilters(posts, undefined).map((p) => p.id)).toEqual(['a', 'b']);
+  });
+
+  it('exportXPostsToFile applies the filters AFTER synthetic-exclusion (a filter never surfaces a demo record)', async () => {
+    const { exportXPostsToFile } = await import('../src/main/x-listening/exports');
+    const readPosts = vi.fn(async () => [
+      post({ id: 'real', channelId: 'alice', authorHandle: '@alice', kind: 'post', text: 'genuine' }),
+      // a synthetic record whose fields WOULD match the filter — must still be excluded
+      post({ id: 'demo', channelId: 'alice', authorHandle: '@alice', kind: 'post', text: 'genuine', synthetic: true } as never),
+      post({ id: 'other', channelId: 'bob', authorHandle: '@bob', kind: 'post', text: 'genuine' }),
+    ]);
+    const written = new Map<string, Buffer | string>();
+    const writeFile = vi.fn(async (p: string, data: Buffer | string) => { written.set(p, data); });
+    const res = await exportXPostsToFile('case-a', 'json', '/exports/f.json', { readPosts, writeFile }, { source: 'alice' });
+    // only the REAL alice post survives (demo excluded, bob filtered out)
+    expect(res.count).toBe(1);
+    const parsed = JSON.parse(String(written.get('/exports/f.json')));
+    expect(parsed.map((p: { id: string }) => p.id)).toEqual(['real']);
+  });
+});
+
 describe('exportXPostsToFile', () => {
   it('json export round-trips the real posts and writes a matching SHA-256 sidecar', async () => {
     const { exportXPostsToFile } = await import('../src/main/x-listening/exports');

@@ -71,6 +71,7 @@ const REACHABLE_CHANNELS: ReadonlyArray<keyof typeof channels.xListening> = [
   'captureNetwork',
   'removeSource',
   'saveNote',
+  'updateNote',
   'readNotes',
   'removeNote',
   'getCollectionSettings',

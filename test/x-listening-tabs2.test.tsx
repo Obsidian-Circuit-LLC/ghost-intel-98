@@ -101,7 +101,10 @@ function makeApi() {
       runLog: vi.fn(async () => []),
       readNotes: vi.fn(async () => ({ notes: [{ findingId: 'post-a', text: 'existing note', savedAt: '2026-08-01T00:00:00.000Z' }] })),
       saveNote: vi.fn(async (req: { findingId: string; text: string }) => ({
-        notes: [{ findingId: req.findingId, text: req.text, savedAt: '2026-08-05T00:00:00.000Z' }],
+        notes: [{ id: 'note-1', findingId: req.findingId, text: req.text, savedAt: '2026-08-05T00:00:00.000Z' }],
+      })),
+      updateNote: vi.fn(async (req: { noteId: string; text: string }) => ({
+        notes: [{ id: req.noteId, findingId: 'post-a', text: req.text, savedAt: '2026-08-06T00:00:00.000Z' }],
       })),
       removeNote: vi.fn(async () => ({ notes: [] })),
       archiveStatus: vi.fn(async () => ({ cursor: 'cursor-123', cycles: 3, lastRunAt: '2026-08-04T00:00:00.000Z' })),
@@ -351,7 +354,8 @@ describe('X Listening Station tabs (Task 15)', () => {
     await clickTab(/^notes$/i);
     await act(async () => { findButton(container, /remove/i).click(); });
     await act(async () => { await Promise.resolve(); });
-    expect(api.xListening.removeNote).toHaveBeenCalledWith({ caseId: 'camp-a', findingId: 'post-a' });
+    // M11: notes are deleted by note id; the legacy fixture has no id, so it keys on its findingId.
+    expect(api.xListening.removeNote).toHaveBeenCalledWith({ caseId: 'camp-a', noteId: 'post-a' });
   });
 
   // ── exports ────────────────────────────────────────────────────────────────

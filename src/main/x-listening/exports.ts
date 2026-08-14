@@ -48,6 +48,7 @@
  * user explicitly asked to export.
  */
 import { createHash } from 'node:crypto';
+import { normalizeXSourceKey } from '@shared/x-listening-source';
 import { itemsToJson, itemsToCsv, buildXItemsHtml } from './ipc';
 import type { XPostArtifact, XNote, XEntityCacheEntry, XProfileSnapshot } from './store';
 import type { AnalysisRelationship, NetworkAnalysis } from './analysis';
@@ -84,7 +85,7 @@ export interface XExportDeps {
    *  low-level exporter's own default stays the plain round-trippable array (`itemsToJson`) — the
    *  envelope is assembled one layer up (`ipc.ts`'s interactive export), which has the case-scoped
    *  store reads the envelope needs. */
-  serializeJson?: (caseId: string, posts: XPostArtifact[]) => Promise<string> | string;
+  serializeJson?: (caseId: string, posts: XPostArtifact[], filters?: XExportFilters) => Promise<string> | string;
   /** Read the case's analyst notes so the PDF export can restore the per-post analyst-notes
    *  section (M9, audit medium — his `main.cjs:2159-2166`). OMITTED here so the low-level
    *  exporter needs no store; production wires the case-scoped read one layer up (`ipc.ts`'s
@@ -104,6 +105,46 @@ function defaultDeps(): XExportDeps {
       await writeFile(path, data);
     }
   };
+}
+
+/**
+ * M15: per-export SOURCE / TYPE / QUERY filters (his `exportData` filters, main.cjs export path;
+ * renderer controls at main.tsx:349). `source` is a normalized source key ('all'/'' = no filter),
+ * `kind` a post kind ('all'/'' = no filter), `query` a case-insensitive substring over post text +
+ * @handle. Applied AFTER synthetic-exclusion so a demo record can never be surfaced by a filter.
+ */
+export interface XExportFilters {
+  source?: string;
+  kind?: string;
+  query?: string;
+}
+
+/** Apply the M15 export filters to an already-synthetic-excluded post list (pure, deterministic). */
+export function applyExportFilters(
+  posts: readonly XPostArtifact[],
+  filters: XExportFilters | undefined,
+): XPostArtifact[] {
+  const source = (filters?.source ?? '').trim();
+  const kind = (filters?.kind ?? '').trim();
+  const q = (filters?.query ?? '').trim().toLowerCase();
+  const hasSource = !!source && source !== 'all';
+  const hasKind = !!kind && kind !== 'all';
+  return posts.filter((p) => {
+    if (hasSource) {
+      const key = normalizeXSourceKey(
+        (p as { channelId?: unknown }).channelId != null
+          ? String((p as { channelId?: unknown }).channelId)
+          : String(p.authorHandle ?? ''),
+      );
+      if (key !== source) return false;
+    }
+    if (hasKind && String((p as { kind?: unknown }).kind ?? '') !== kind) return false;
+    if (q) {
+      const hay = `${String(p.text ?? '')} ${String(p.authorHandle ?? '')}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
 }
 
 /**
@@ -163,17 +204,21 @@ export async function exportXPostsToFile(
   caseId: string,
   format: XExportFileFormat,
   filePath: string,
-  overrides: Partial<XExportDeps> = {}
+  overrides: Partial<XExportDeps> = {},
+  filters?: XExportFilters
 ): Promise<XExportWriteResult> {
   const deps: XExportDeps = { ...defaultDeps(), ...overrides };
   const allPosts = await deps.readPosts(caseId);
-  const posts = excludeSynthetic(allPosts);
+  // M15: synthetic-exclusion FIRST (honesty rule — a filter must never surface a demo record),
+  // THEN the per-export SOURCE / TYPE / QUERY filters. count/csv/pdf/json all see the same set.
+  const posts = applyExportFilters(excludeSynthetic(allPosts), filters);
 
   let data: Buffer | string;
   if (format === 'json') {
     // FB4 (audit HIGH #10): production wires `serializeJson` to the self-describing manifest
-    // envelope; absent it, the low-level default is the plain round-trippable array.
-    data = deps.serializeJson ? await deps.serializeJson(caseId, posts) : itemsToJson(posts);
+    // envelope (M15: the applied filters ride into the envelope's `filters` metadata); absent it,
+    // the low-level default is the plain round-trippable array.
+    data = deps.serializeJson ? await deps.serializeJson(caseId, posts, filters) : itemsToJson(posts);
   } else if (format === 'csv') {
     data = itemsToCsv(posts);
   } else {

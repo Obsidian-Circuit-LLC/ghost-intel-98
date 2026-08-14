@@ -28,7 +28,7 @@ import { normalizeImageMode, type XImageMode } from '@shared/x-listening-image-p
 import { getImagePolicy, setProfileImageMode, resolveEffectiveImageCollection } from './image-policy';
 import { restartSchedule, stopSchedule, scheduleStatus } from './scheduler';
 import { repairAvatars, buildAvatarLookup } from './avatar-repair';
-import { prodXStore } from './store';
+import { prodXStore, xNoteKey } from './store';
 import type { XNote, XPostArtifact, XNetworkArtifact, XPreset, XEntityCacheEntry } from './store';
 import { ensureUuid } from '../security/validate';
 
@@ -83,6 +83,7 @@ import {
   type XExportFileFormat,
   type XExportWriteResult,
   type XExportPresetMatch,
+  type XExportFilters,
   type XPostsExportEnvelope,
   type XNetworkExportEnvelope
 } from './exports';
@@ -122,30 +123,36 @@ export interface SaveNoteRequest {
   text: string;
 }
 
-/** Injectable seams so the notes orchestration is testable without electron/secure-fs. */
+/** Injectable seams so the notes orchestration is testable without electron/secure-fs.
+ *  M11: `saveNote` now APPENDS a note (his multi-note model) — it generates a unique id via
+ *  `newId` and delegates to the store's `add`, never coalescing onto a prior note. */
 export interface NotesDeps {
-  /** Upsert one note keyed by findingId → the fresh note list. */
-  saveNote: (caseId: string, findingId: string, text: string, savedAt: string) => Promise<XNote[]>;
+  /** APPEND one note (M11) → the fresh note list. `id` is the caller-generated note id. */
+  addNote: (caseId: string, id: string, findingId: string, text: string, savedAt: string) => Promise<XNote[]>;
   /** Read the case's notes. */
   readNotes: (caseId: string) => Promise<XNote[]>;
   /** Injected clock — the ISO `savedAt` stamped onto the note (determinism). */
   now: () => string;
+  /** Injected id seam — the unique note id (determinism; never `randomUUID()` in a test). */
+  newId: () => string;
 }
 
 function defaultNotesDeps(): NotesDeps {
   return {
-    saveNote: async (caseId, findingId, text, savedAt) =>
-      (await prodXStore()).notes.save(caseId, findingId, text, savedAt),
+    addNote: async (caseId, id, findingId, text, savedAt) =>
+      (await prodXStore()).notes.add(caseId, id, findingId, text, savedAt),
     readNotes: async (caseId) => (await prodXStore()).notes.read(caseId),
-    now: () => new Date().toISOString()
+    now: () => new Date().toISOString(),
+    newId: () => globalThis.crypto.randomUUID()
   };
 }
 
 /**
- * Save (upsert) an analyst note against a finding. The text is trimmed and validated
- * (non-empty, ≤ NOTE_MAX_LENGTH) — ported from the quarantine `notes:add`/`notes:update`
- * guards (`main.cjs:1308-1310`, `1321-1323`) — and `savedAt` is stamped MAIN-side from
- * the injected clock, never accepted from the renderer. Returns the fresh note list.
+ * Save (APPEND) an analyst note against a finding (M11 — his multi-note-per-post model; a
+ * finding may carry many notes). The text is trimmed and validated (non-empty,
+ * ≤ NOTE_MAX_LENGTH) — ported from the quarantine `notes:add` guard (`main.cjs:1308-1310`) —
+ * `savedAt` is stamped MAIN-side from the injected clock and the note `id` from the injected id
+ * seam, never accepted from the renderer. Returns the fresh note list.
  */
 export async function saveNote(
   req: SaveNoteRequest,
@@ -163,7 +170,54 @@ export async function saveNote(
     throw new Error(`Note is too long. Maximum length is ${NOTE_MAX_LENGTH} characters.`);
   }
   const deps = { ...defaultNotesDeps(), ...overrides };
-  const notes = await deps.saveNote(req.caseId, findingId, text, deps.now());
+  const notes = await deps.addNote(req.caseId, deps.newId(), findingId, text, deps.now());
+  return { notes };
+}
+
+/** An edit-note request from the renderer (M11). `savedAt` is re-stamped MAIN-side. */
+export interface UpdateNoteRequest {
+  caseId: string;
+  /** The note to edit, matched by `xNoteKey` (its own id, or a legacy note's findingId). */
+  noteId: string;
+  text: string;
+}
+
+/** Injectable seams for `updateNote` (M11) — edit one note in place by id. */
+export interface UpdateNoteDeps {
+  updateNote: (caseId: string, id: string, text: string, savedAt: string) => Promise<XNote[]>;
+  now: () => string;
+}
+
+function defaultUpdateNoteDeps(): UpdateNoteDeps {
+  return {
+    updateNote: async (caseId, id, text, savedAt) =>
+      (await prodXStore()).notes.update(caseId, id, text, savedAt),
+    now: () => new Date().toISOString()
+  };
+}
+
+/**
+ * Edit (M11) one analyst note in place, matched by note id. Same text guards as `saveNote`
+ * (trim, non-empty, ≤ NOTE_MAX_LENGTH) and the same injected-clock `savedAt`. Returns the fresh
+ * note list. A `noteId` matching nothing is a harmless no-op (the store returns the list unchanged).
+ */
+export async function updateNote(
+  req: UpdateNoteRequest,
+  overrides: Partial<UpdateNoteDeps> = {}
+): Promise<{ notes: XNote[] }> {
+  const noteId = String(req?.noteId ?? '').trim();
+  if (!noteId) {
+    throw new Error('Editing a note requires a note id.');
+  }
+  const text = String(req?.text ?? '').trim();
+  if (!text) {
+    throw new Error('Note text is required.');
+  }
+  if (text.length > NOTE_MAX_LENGTH) {
+    throw new Error(`Note is too long. Maximum length is ${NOTE_MAX_LENGTH} characters.`);
+  }
+  const deps = { ...defaultUpdateNoteDeps(), ...overrides };
+  const notes = await deps.updateNote(req.caseId, noteId, text, deps.now());
   return { notes };
 }
 
@@ -192,23 +246,25 @@ function defaultRemoveNoteDeps(): RemoveNoteDeps {
 }
 
 /**
- * Delete the note attached to `findingId`, if any (Task 10). A findingId with no note is a
- * harmless no-op — the store is still re-written with the unchanged list so this always
- * returns the CURRENT fresh list (the same "returns the fresh list" contract as `saveNote`).
- * Rejects a blank `findingId` before touching the store, mirroring `saveNote`'s guard.
+ * Delete ONE analyst note, matched by `xNoteKey` (its own id, or a legacy note's `findingId`).
+ * M11: notes are now unbounded per finding, so a delete targets a single note by id rather than
+ * wiping the finding's (formerly sole) note — but a legacy note without an id still deletes when
+ * its `findingId` is passed, so the pre-M11 remove-by-finding path is preserved. An id matching
+ * nothing is a harmless no-op — the store is still re-written with the unchanged list so this
+ * always returns the CURRENT fresh list. Rejects a blank id before touching the store.
  */
 export async function removeNote(
   caseId: string,
-  findingId: string,
+  noteId: string,
   overrides: Partial<RemoveNoteDeps> = {}
 ): Promise<{ notes: XNote[] }> {
-  const id = String(findingId ?? '').trim();
+  const id = String(noteId ?? '').trim();
   if (!id) {
     throw new Error('A note must be attached to a finding.');
   }
   const deps = { ...defaultRemoveNoteDeps(), ...overrides };
   const existing = await deps.readNotes(caseId);
-  const notes = existing.filter((note) => note.findingId !== id);
+  const notes = existing.filter((note) => xNoteKey(note) !== id);
   await deps.writeNotes(caseId, notes);
   return { notes };
 }
@@ -898,7 +954,8 @@ export type InteractiveExportResult = ({ canceled: false } & XExportWriteResult)
 export async function exportPostsInteractive(
   caseId: string,
   format: XExportFileFormat,
-  overrides: Partial<InteractiveExportDeps> = {}
+  overrides: Partial<InteractiveExportDeps> = {},
+  filters?: XExportFilters
 ): Promise<InteractiveExportResult> {
   const deps: InteractiveExportDeps = { ...defaultInteractiveExportDeps(), ...overrides };
   const res = await deps.showSaveDialog(sanitizeExportName(caseId, format), EXPORT_FILE_FILTERS[format]);
@@ -911,7 +968,7 @@ export async function exportPostsInteractive(
     ...(deps.serializeJson ? { serializeJson: deps.serializeJson } : {}),
     // M9: a `pdf` export threads the case's analyst notes into the per-post evidence section.
     ...(deps.readNotes ? { readNotes: deps.readNotes } : {})
-  });
+  }, filters); // M15: per-export SOURCE / TYPE / QUERY filters
   return { canceled: false, ...written };
 }
 
@@ -1013,9 +1070,16 @@ export async function assemblePostsExportEnvelope(
   });
 }
 
-/** Production `serializeJson` seam for `exportPostsInteractive`: the full manifest envelope. */
-async function productionPostsEnvelopeJson(caseId: string, posts: XPostArtifact[]): Promise<string> {
-  return serializeExportEnvelope(await assemblePostsExportEnvelope(caseId, posts));
+/** Production `serializeJson` seam for `exportPostsInteractive`: the full manifest envelope.
+ *  M15: the applied filters ride into the envelope's `filters` metadata block. */
+async function productionPostsEnvelopeJson(
+  caseId: string,
+  posts: XPostArtifact[],
+  filters?: XExportFilters
+): Promise<string> {
+  return serializeExportEnvelope(
+    await assemblePostsExportEnvelope(caseId, posts, (filters ?? {}) as Record<string, unknown>)
+  );
 }
 
 /**
@@ -1095,13 +1159,30 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
     }
     return readNotes(ensureUuid(caseIdArg, 'caseId'));
   });
+  // M11: the note is targeted by `noteId` (its unique id). A legacy caller passing `findingId`
+  // still works — a pre-M11 note keys on its findingId — so accept either key here.
   deps.handle(channels.xListening.removeNote, (e, reqArg) => {
     assertTrustedSender(e);
-    const req = reqArg as { caseId?: unknown; findingId?: unknown } | undefined;
-    if (!req || typeof req.caseId !== 'string' || typeof req.findingId !== 'string') {
-      throw new Error('Removing a note requires a caseId and findingId.');
+    const req = reqArg as { caseId?: unknown; noteId?: unknown; findingId?: unknown } | undefined;
+    const key = typeof req?.noteId === 'string' ? req.noteId : req?.findingId;
+    if (!req || typeof req.caseId !== 'string' || typeof key !== 'string') {
+      throw new Error('Removing a note requires a caseId and note id.');
     }
-    return removeNote(ensureUuid(req.caseId, 'caseId'), req.findingId);
+    return removeNote(ensureUuid(req.caseId, 'caseId'), key);
+  });
+  // M11: edit one note in place, targeted by note id. Same pure-store posture as saveNote.
+  deps.handle(channels.xListening.updateNote, (e, reqArg) => {
+    assertTrustedSender(e);
+    const req = reqArg as Partial<UpdateNoteRequest> | undefined;
+    if (
+      !req ||
+      typeof req.caseId !== 'string' ||
+      typeof req.noteId !== 'string' ||
+      typeof req.text !== 'string'
+    ) {
+      throw new Error('Editing a note requires a caseId, noteId and text.');
+    }
+    return updateNote({ caseId: ensureUuid(req.caseId, 'caseId'), noteId: req.noteId, text: req.text });
   });
   // Task D1 — per-source cascade removal. `assertTrustedSender` FIRST; then require a caseId +
   // a non-empty `sourceKey` string before delegating. UUID-gates the caseId; the sourceKey is
@@ -1613,14 +1694,22 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
   // ---- Task 15(b): interactive (save-dialog-gated) exports -----------------
   deps.handle(channels.xListening.exportPostsToFile, (e, reqArg) => {
     assertTrustedSender(e);
-    const req = reqArg as { caseId?: unknown; format?: unknown } | undefined;
+    const req = reqArg as { caseId?: unknown; format?: unknown; filters?: unknown } | undefined;
     if (!req || typeof req.caseId !== 'string' || !req.caseId) {
       throw new Error('Export requires a caseId.');
     }
     if (!isXExportFileFormat(req.format)) {
       throw new Error('Export requires a format of json, csv or pdf.');
     }
-    return exportPostsInteractive(ensureUuid(req.caseId, 'caseId'), req.format);
+    // M15: coerce the renderer-supplied per-export filters to a safe string shape — an unexpected
+    // field type is dropped rather than trusted (the filter only narrows an already-safe post list).
+    const rawFilters = (req.filters ?? {}) as Record<string, unknown>;
+    const filters: XExportFilters = {
+      source: typeof rawFilters.source === 'string' ? rawFilters.source : undefined,
+      kind: typeof rawFilters.kind === 'string' ? rawFilters.kind : undefined,
+      query: typeof rawFilters.query === 'string' ? rawFilters.query : undefined,
+    };
+    return exportPostsInteractive(ensureUuid(req.caseId, 'caseId'), req.format, {}, filters);
   });
 
   deps.handle(channels.xListening.exportNetworkToFile, (e, caseIdArg) => {
