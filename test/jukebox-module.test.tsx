@@ -14,6 +14,8 @@ import { createRoot, type Root } from 'react-dom/client';
 import { shadeHeight } from '../src/renderer/modules/media/shade';
 import { MediaPlayerModule } from '../src/renderer/modules/media/MediaPlayerModule';
 import { useSettings, useWindows, type WindowSpec } from '../src/renderer/state/store';
+import { confirmDialog } from '../src/renderer/state/dialogs';
+vi.mock('../src/renderer/state/dialogs', () => ({ confirmDialog: vi.fn(), promptDialog: vi.fn() }));
 import { defaultSettings } from '../src/shared/types';
 
 describe('jukebox integration invariants', () => {
@@ -29,6 +31,7 @@ const mediaApi = {
   addRoot: vi.fn(),
   removeRoot: vi.fn(),
   refresh: vi.fn(),
+  clearLibrary: vi.fn().mockResolvedValue(emptySnapshot),
   openFiles: vi.fn(),
   loadPlaylist: vi.fn(),
   savePlaylist: vi.fn(),
@@ -80,6 +83,35 @@ describe('MediaPlayerModule rounded shell', () => {
     // Five classic transport buttons still present in the deck.
     expect(container.querySelector('[aria-label="Play"]')).toBeTruthy();
     expect(container.querySelector('[aria-label="Stop"]')).toBeTruthy();
+  });
+
+  const findPurge = () =>
+    [...container.querySelectorAll('button')].find((b) => /purge/i.test(b.textContent ?? '')) as
+      | HTMLButtonElement
+      | undefined;
+
+  it('Purge… prompts to confirm, then erases the whole library when confirmed', async () => {
+    useSettings.setState({ settings: { ...defaultSettings, media: { ...defaultSettings.media, jukeboxMode: 'full' } } });
+    vi.mocked(confirmDialog).mockResolvedValue(true);
+    await act(async () => { root.render(<MediaPlayerModule spec={spec} />); });
+    await flush();
+    const purge = findPurge();
+    expect(purge).toBeTruthy();
+    await act(async () => { purge!.click(); });
+    await flush();
+    expect(confirmDialog).toHaveBeenCalled();
+    expect(mediaApi.clearLibrary).toHaveBeenCalledTimes(1);
+  });
+
+  it('Purge… erases nothing when the confirm is declined', async () => {
+    useSettings.setState({ settings: { ...defaultSettings, media: { ...defaultSettings.media, jukeboxMode: 'full' } } });
+    vi.mocked(confirmDialog).mockResolvedValue(false);
+    await act(async () => { root.render(<MediaPlayerModule spec={spec} />); });
+    await flush();
+    await act(async () => { findPurge()!.click(); });
+    await flush();
+    expect(confirmDialog).toHaveBeenCalled();
+    expect(mediaApi.clearLibrary).not.toHaveBeenCalled();
   });
 
   it('default strip mode sizes the window to the strip shade height; Playlist opens the deck', async () => {

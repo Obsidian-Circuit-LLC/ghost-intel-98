@@ -1453,6 +1453,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     await writeFile(r.filePath, toM3u(queue), 'utf8');
     return basename(r.filePath);
   });
+  safeHandle(channels.media.clearLibrary, () => mediaLib.clearLibrary());
   safeHandle(channels.media.upsertStation, (...args) => mediaLib.upsertStation(ensureStationInput(args[0])));
   safeHandle(channels.media.deleteStation, (...args) => mediaLib.deleteStation(args[0] as string));
   safeHandle(channels.media.reorderStations, (...args) => mediaLib.reorderStations(ensureIdArray(args[0])));

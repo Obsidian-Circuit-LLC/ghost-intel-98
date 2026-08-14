@@ -315,6 +315,7 @@ const api = {
     addRoot: () => ipcRenderer.invoke(channels.media.addRoot),
     removeRoot: (root: string) => ipcRenderer.invoke(channels.media.removeRoot, root),
     refresh: () => ipcRenderer.invoke(channels.media.refresh),
+    clearLibrary: () => ipcRenderer.invoke(channels.media.clearLibrary),
     openFiles: () => ipcRenderer.invoke(channels.media.openFiles),
     loadPlaylist: () => ipcRenderer.invoke(channels.media.loadPlaylist),
     savePlaylist: (queue: unknown) => ipcRenderer.invoke(channels.media.savePlaylist, queue),

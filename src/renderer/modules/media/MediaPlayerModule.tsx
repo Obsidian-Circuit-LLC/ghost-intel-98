@@ -19,6 +19,7 @@ import type { MediaLibrarySnapshot, MediaStation, MediaTrack } from '@shared/pos
 import type { AppSettings, JukeboxMode } from '@shared/types';
 import { useSettings, useWindows, type WindowSpec } from '../../state/store';
 import { toast } from '../../state/toasts';
+import { confirmDialog } from '../../state/dialogs';
 import { resolveSource, isHlsUrl } from './resolveSource';
 import { Visualizer } from './Visualizer';
 import { JukeboxGraph } from './audio-graph';
@@ -318,6 +319,24 @@ export function MediaPlayerModule({ spec }: { spec: WindowSpec }): JSX.Element {
     catch (err) { toast.error((err as Error).message); }
     finally { setBusy(false); }
   }
+  // Purge: erase the ENTIRE library (tracks + remembered folders + radio stations) behind a confirm
+  // prompt (destructive, not undoable). Stops playback first (the current track may be purged) and
+  // reloads the now-empty snapshot so the queue clears.
+  async function purgeLibrary(): Promise<void> {
+    const ok = await confirmDialog(
+      'Erase the ENTIRE Jukebox library — every imported track, remembered music folder, and saved radio station? This cannot be undone.',
+      'Purge Jukebox library',
+    );
+    if (!ok) return;
+    setBusy(true);
+    try {
+      stop();
+      setSnap(await window.api.media.clearLibrary());
+      await loadSnapshot();
+      toast.info('Jukebox library purged.');
+    } catch (err) { toast.error((err as Error).message); }
+    finally { setBusy(false); }
+  }
   async function openFiles(): Promise<void> {
     try {
       const tracks = await window.api.media.openFiles();
@@ -439,6 +458,7 @@ export function MediaPlayerModule({ spec }: { spec: WindowSpec }): JSX.Element {
             <button onClick={() => void loadPlaylist()} disabled={busy}>Load playlist…</button>
             <button onClick={() => void saveQueue()} disabled={busy}>Save queue…</button>
             <button onClick={() => void refresh()} disabled={busy}>{busy ? 'Working…' : 'Refresh'}</button>
+            <button onClick={() => void purgeLibrary()} disabled={busy} title="Erase all tracks, folders, and radio stations">Purge…</button>
           </div>
 
           {showEq ? (

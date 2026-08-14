@@ -51,6 +51,18 @@ export async function removeRoot(root: string): Promise<MediaLibrarySnapshot> {
   return s;
 }
 
+/**
+ * Purge the ENTIRE jukebox library — every remembered root, indexed track, AND saved radio station
+ * — resetting the encrypted store to empty. Returns the empty snapshot. Gated behind a renderer
+ * confirm prompt (destructive, not undoable); the current play queue, derived from `tracks`, empties
+ * when the renderer reloads the snapshot.
+ */
+export async function clearLibrary(): Promise<MediaLibrarySnapshot> {
+  const empty: MediaLibrarySnapshot = { roots: [], tracks: [], stations: [] };
+  await write(empty);
+  return empty;
+}
+
 export async function upsertStation(input: { id?: string; label: string; url: string }): Promise<MediaStation> {
   const s = await read();
   const station: MediaStation = { id: input.id ?? randomUUID(), label: input.label, url: input.url };

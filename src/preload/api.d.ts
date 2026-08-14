@@ -386,6 +386,7 @@ export interface GhostApi {
     addRoot(): Promise<MediaLibrarySnapshot>;
     removeRoot(root: string): Promise<MediaLibrarySnapshot>;
     refresh(): Promise<MediaLibrarySnapshot>;
+    clearLibrary(): Promise<MediaLibrarySnapshot>;
     openFiles(): Promise<MediaTrack[]>;
     loadPlaylist(): Promise<{ title: string; path?: string; url?: string }[]>;
     savePlaylist(queue: { title: string; path?: string; url?: string }[]): Promise<string | null>;

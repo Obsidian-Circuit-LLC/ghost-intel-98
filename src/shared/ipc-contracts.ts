@@ -291,6 +291,7 @@ export const channels = {
     openFiles: 'media:openFiles',
     loadPlaylist: 'media:loadPlaylist',
     savePlaylist: 'media:savePlaylist',
+    clearLibrary: 'media:clearLibrary',
     upsertStation: 'media:upsertStation',
     deleteStation: 'media:deleteStation',
     reorderStations: 'media:reorderStations',
@@ -1010,6 +1011,7 @@ export interface ApiContracts {
   [channels.media.openFiles]: { args: []; returns: MediaTrack[] };
   [channels.media.loadPlaylist]: { args: []; returns: { title: string; path?: string; url?: string }[] };
   [channels.media.savePlaylist]: { args: [{ title: string; path?: string; url?: string }[]]; returns: string | null };
+  [channels.media.clearLibrary]: { args: []; returns: MediaLibrarySnapshot };
   [channels.media.upsertStation]: { args: [{ id?: string; label: string; url: string }]; returns: MediaStation };
   [channels.media.deleteStation]: { args: [string]; returns: void };
   [channels.media.reorderStations]: { args: [string[]]; returns: MediaLibrarySnapshot };

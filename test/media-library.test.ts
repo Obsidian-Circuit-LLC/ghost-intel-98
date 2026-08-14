@@ -52,6 +52,26 @@ describe('media library store', () => {
     expect(snap.tracks).toHaveLength(0);
   });
 
+  it('clearLibrary purges the ENTIRE library — roots, tracks AND stations', async () => {
+    const music = mkdtempSync(join(tmpdir(), 'ga98-music-'));
+    writeFileSync(join(music, 'a.mp3'), 'x');
+    await lib.addRoot(music);
+    await lib.refresh();
+    await lib.upsertStation({ label: 'SomaFM', url: 'http://ice.somafm.com/groovesalad' });
+    let snap = await lib.getSnapshot();
+    expect(snap.roots.length).toBeGreaterThan(0);
+    expect(snap.tracks.length).toBeGreaterThan(0);
+    expect(snap.stations.length).toBeGreaterThan(0);
+
+    const returned = await lib.clearLibrary();
+    expect(returned).toEqual({ roots: [], tracks: [], stations: [] });
+    // persisted empty (survives a re-read, not just the returned value)
+    snap = await lib.getSnapshot();
+    expect(snap.roots).toEqual([]);
+    expect(snap.tracks).toEqual([]);
+    expect(snap.stations).toEqual([]);
+  });
+
   it('reuses unchanged entries on re-index (mtime+size match)', async () => {
     const music = mkdtempSync(join(tmpdir(), 'ga98-music-'));
     const f = join(music, 'a.mp3');
