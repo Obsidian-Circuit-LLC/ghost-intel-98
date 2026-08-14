@@ -89,6 +89,8 @@ function deps(over: Partial<XCaptureDeps> = {}): Partial<XCaptureDeps> {
     // no-op scroll/delay keeps the loop instant and network-free.
     loadCollectionSettings: () => ({ ...DEFAULT_COLLECTION_SETTINGS, profileScrollPasses: 1, delayPerPassMs: 0 }),
     scroll: async () => {},
+    // FA1 finding 1: the mid-scroll signed-in re-assertion (always signed-in for these tests).
+    assertSignedIn: async () => ({ blocked: false }),
     delay: async () => {},
     now: () => '2026-08-11T12:00:00.000Z',
     ...over,
@@ -283,7 +285,10 @@ describe('captureTimeline', () => {
       return [raw()];
     });
     await captureTimeline(WIN, REQ, deps({ runCapture }));
-    expect(runCapture).toHaveBeenCalledTimes(1);
+    // FA1 finding 2: Enterprise `scrapeProfile` loops `index=0..passes` ⇒ profileScrollPasses=1 is
+    // TWO reads (the minimal capture is 2 viewports, never 1); `runCapture` runs ONLY X_POST_SCRIPT
+    // (the scroll + mid-scroll assert use their own injected seams, not `runCapture`).
+    expect(runCapture).toHaveBeenCalledTimes(2);
   });
 
   it('an ill-typed/empty capture result never throws — treated as zero posts', async () => {

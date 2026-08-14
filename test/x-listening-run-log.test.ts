@@ -102,6 +102,8 @@ function deps(store: XStore, over: Partial<XCaptureDeps> = {}): Partial<XCapture
     // are exact; the multi-pass telemetry is covered in x-listening-capture-scroll.test.ts.
     loadCollectionSettings: () => ({ ...DEFAULT_COLLECTION_SETTINGS, profileScrollPasses: 1, delayPerPassMs: 0 }),
     scroll: async () => {},
+    // FA1 finding 1: the mid-scroll signed-in re-assertion (always signed-in for these tests).
+    assertSignedIn: async () => ({ blocked: false }),
     delay: async () => {},
     now: () => '2026-08-11T12:00:00.000Z',
     ...over,
@@ -123,12 +125,13 @@ describe('A3 — captureTimeline emits a collection-run record', () => {
     expect(rec.added).toBe(1);
     expect(rec.duplicates).toBe(0);
     expect(rec.status).toBe('complete');
-    // FA1: a single-pass capture that still saw new content on its one-and-only pass has NOT
-    // confirmed a stable end (there may be more below the first viewport) — reachedEnd is now the
-    // REAL loop telemetry (stagnant>0), not the old hardcoded `true`.
-    expect(rec.reachedEnd).toBe(false);
+    // FA1 finding 2: profileScrollPasses=1 is TWO reads (Enterprise loops `index=0..passes`). The same
+    // single post is visible on both reads, so the 2nd read added nothing new → the loop reached a
+    // stable end (reachedEnd true, REAL loop telemetry, not the old hardcoded `true`). completedPasses
+    // honors the +1 (2), while requestedPasses is the clamped budget (1).
+    expect(rec.reachedEnd).toBe(true);
     expect(rec.requestedPasses).toBe(1);
-    expect(rec.completedPasses).toBe(1);
+    expect(rec.completedPasses).toBe(2);
     expect(rec.startedAt).toBe('2026-08-11T12:00:00.000Z');
     expect(rec.endedAt).toBe('2026-08-11T12:00:00.000Z');
   });

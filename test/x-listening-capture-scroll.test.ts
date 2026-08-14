@@ -63,6 +63,9 @@ function deps(over: Partial<XCaptureDeps> = {}): Partial<XCaptureDeps> {
     recordRun: async () => {},
     loadCollectionSettings: () => ({ ...DEFAULT_COLLECTION_SETTINGS, profileScrollPasses: 1, delayPerPassMs: 0 }),
     scroll: async () => {},
+    // FA1 finding 1: the mid-scroll signed-in re-assertion. Baseline stays signed-in; the challenge
+    // test overrides this to flip to blocked on a chosen pass.
+    assertSignedIn: async () => ({ blocked: false }),
     delay: async () => {},
     now: () => '2026-08-11T12:00:00.000Z',
     ...over,
@@ -70,9 +73,11 @@ function deps(over: Partial<XCaptureDeps> = {}): Partial<XCaptureDeps> {
 }
 
 describe('FA1 — scroll-and-accumulate timeline capture', () => {
-  it('scrollPasses=3 runs X_POST_SCRIPT 3 times and ACCUMULATES the union of all passes', async () => {
+  it('scrollPasses=3 runs X_POST_SCRIPT passes+1 (4) times and ACCUMULATES the union of all passes', async () => {
     // Each pass reveals a DIFFERENT post (as a real scroll would lazy-load new items). The captured
-    // set must be the UNION across passes, not just the first viewport.
+    // set must be the UNION across passes, not just the first viewport. FA1 finding 2: Enterprise
+    // `scrapeProfile` loops `index=0..passes` ⇒ passes+1 reads / passes scrolls, so profileScrollPasses=3
+    // is FOUR reads (the 4th sees an empty page here) and THREE scrolls.
     const pages = [
       [raw({ id: '100', url: 'https://x.com/target/status/100' })],
       [raw({ id: '101', url: 'https://x.com/target/status/101' })],
@@ -93,11 +98,11 @@ describe('FA1 — scroll-and-accumulate timeline capture', () => {
       }),
     );
 
-    expect(runCapture).toHaveBeenCalledTimes(3);
+    expect(runCapture).toHaveBeenCalledTimes(4);
     expect(res.posts.map((p) => p.messageId).sort()).toEqual(['100', '101', '102']);
-    // scroll + delay run BETWEEN passes only — 3 passes ⇒ 2 gaps, never after the final read.
-    expect(scroll).toHaveBeenCalledTimes(2);
-    expect(delay).toHaveBeenCalledTimes(2);
+    // scroll + delay run BETWEEN passes only — passes+1 (4) reads ⇒ 3 gaps, never after the final read.
+    expect(scroll).toHaveBeenCalledTimes(3);
+    expect(delay).toHaveBeenCalledTimes(3);
   });
 
   it('accumulates by the ${id}:${repost|tweet} key — re-seeing the same post across passes dedupes to one', async () => {
@@ -110,8 +115,8 @@ describe('FA1 — scroll-and-accumulate timeline capture', () => {
         runCapture,
       }),
     );
-    // Same two posts visible on every one of the 3 passes → union is still exactly two.
-    expect(runCapture).toHaveBeenCalledTimes(3);
+    // Same two posts visible on every one of the passes+1 (4) reads → union is still exactly two.
+    expect(runCapture).toHaveBeenCalledTimes(4);
     expect(res.posts.map((p) => p.messageId).sort()).toEqual(['100', '101']);
   });
 
@@ -126,7 +131,8 @@ describe('FA1 — scroll-and-accumulate timeline capture', () => {
         delay,
       }),
     );
-    expect(delay).toHaveBeenCalledTimes(1);
+    // profileScrollPasses=2 ⇒ passes+1 (3) reads ⇒ 2 inter-pass gaps (FA1 finding 2).
+    expect(delay).toHaveBeenCalledTimes(2);
     expect(delay).toHaveBeenCalledWith(1500);
   });
 
@@ -177,11 +183,12 @@ describe('FA1 — scroll-and-accumulate timeline capture', () => {
       }),
     );
 
-    expect(runCapture).toHaveBeenCalledTimes(4);
+    // FA1 finding 2: profileScrollPasses=4 ⇒ passes+1 (5) reads; completedPasses honors the +1.
+    expect(runCapture).toHaveBeenCalledTimes(5);
     expect(record?.operation).toBe('posts');
     expect(record?.requestedPasses).toBe(4);
-    expect(record?.completedPasses).toBe(4);
-    expect(record?.observed).toBe(4);
+    expect(record?.completedPasses).toBe(5);
+    expect(record?.observed).toBe(5);
     expect(record?.reachedEnd).toBe(false);
     expect(record?.stopReason).toBe('pass_limit');
   });
@@ -197,7 +204,8 @@ describe('FA1 — scroll-and-accumulate timeline capture', () => {
         runCapture,
       }),
     );
-    expect(runCapture).toHaveBeenCalledTimes(2);
+    // req.passes=2 overrides the persisted 10 ⇒ passes+1 (3) reads (FA1 finding 2).
+    expect(runCapture).toHaveBeenCalledTimes(3);
   });
 
   it('the scroll-and-accumulate loop stays INSIDE the guard — a challenge captures & scrolls NOTHING', async () => {
@@ -235,5 +243,59 @@ describe('FA1 — scroll-and-accumulate timeline capture', () => {
     expect(record?.requestedPasses).toBe(7);
     expect(record?.completedPasses).toBe(0);
     expect(record?.reachedEnd).toBe(false);
+  });
+
+  it('a challenge surfacing MID-SCROLL stops the loop and logs an ERROR run, not a clean stable end', async () => {
+    // FA1 finding 1: the up-front guard passes (initial page is signed in), but the session drops / a
+    // verification challenge appears after pass 3's scroll. Enterprise `scrapeProfile` re-checks
+    // `assertSignedInPage` after every scroll (`main.cjs:1690`); ours must too — stop scraping the
+    // flagged page and record the sweep HONESTLY as an error, never as complete/stable_end. Distinct
+    // posts each read so, absent the challenge, the loop would run the full 10-pass budget.
+    let n = 500;
+    const runCapture = vi.fn(async () => [raw({ id: `${n++}` })]);
+    const scroll = vi.fn(async () => {});
+    // assertSignedIn is called after each scroll+delay. Block on the 3rd mid-scroll check.
+    let assertCalls = 0;
+    const assertSignedIn = vi.fn(async () => {
+      assertCalls += 1;
+      return assertCalls >= 3
+        ? { blocked: true, reason: 'X presented a verification challenge.' }
+        : { blocked: false };
+    });
+    let record: XRunLogRecord | undefined;
+
+    const res = await captureTimeline(
+      WIN,
+      REQ,
+      deps({
+        loadCollectionSettings: () => ({ ...DEFAULT_COLLECTION_SETTINGS, profileScrollPasses: 10, delayPerPassMs: 0 }),
+        runCapture,
+        scroll,
+        assertSignedIn,
+        savePosts: vi.fn(async () => ({ added: 0, skipped: 0 })),
+        saveItems: vi.fn(async () => ({ added: 0, skipped: 0 })),
+        recordRun: async (_c, r) => {
+          record = r;
+        },
+      }),
+    );
+
+    // The capture is surfaced as blocked and NOTHING is persisted (partial discarded).
+    expect(res.blocked).toBe(true);
+    expect(res.posts).toEqual([]);
+    expect(res.added).toBe(0);
+    // reads: passes 0,1,2 (3 reads); each is followed by a scroll then a mid-scroll assert, and the
+    // 3rd assert (after pass 2's scroll) blocks — so pass 3's read never happens.
+    expect(runCapture).toHaveBeenCalledTimes(3);
+    // The loop did NOT keep scrolling the flagged page for the remaining budget (would be 10 scrolls).
+    expect(scroll).toHaveBeenCalledTimes(3);
+    // The run is logged as an ERROR with the challenge stop reason — NOT complete/stable_end.
+    expect(record?.status).toBe('error');
+    expect(record?.stopReason).toBe('challenge');
+    expect(record?.reachedEnd).toBe(false);
+    expect(record?.observed).toBe(0);
+    expect(record?.added).toBe(0);
+    expect(record?.requestedPasses).toBe(10);
+    expect(record?.completedPasses).toBe(3);
   });
 });

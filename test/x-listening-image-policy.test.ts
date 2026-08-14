@@ -179,6 +179,8 @@ function captureDeps(over: Partial<XCaptureDeps> = {}): Partial<XCaptureDeps> {
     // settings read + real inter-pass timers.
     loadCollectionSettings: () => ({ ...DEFAULT_COLLECTION_SETTINGS, profileScrollPasses: 1, delayPerPassMs: 0 }),
     scroll: async () => {},
+    // FA1 finding 1: the mid-scroll signed-in re-assertion (always signed-in for these tests).
+    assertSignedIn: async () => ({ blocked: false }),
     delay: async () => {},
     now: () => '2026-08-13T12:00:00.000Z',
     ...over,

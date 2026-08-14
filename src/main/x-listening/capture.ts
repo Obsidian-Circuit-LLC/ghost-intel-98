@@ -201,6 +201,14 @@ export interface XCaptureDeps {
    *  loop is exercisable without a live window; the production default runs
    *  `X_TIMELINE_SCROLL_SCRIPT`. Never called after the final pass (gentle on X). */
   scroll: (win: Electron.BrowserWindow) => Promise<void>;
+  /** FA1 (finding 1): re-probe the page's signed-in/challenge state MID-SCROLL — Enterprise
+   *  `scrapeProfile` calls `assertSignedInPage(win)` after EVERY scroll (`main.cjs:1690`) so a session
+   *  drop or a verification challenge that surfaces AFTER a scroll stops the capture immediately. The
+   *  accumulate loop calls this after each scroll+delay and, on `{ blocked: true }`, BREAKS and records
+   *  the run as an ERROR (stopReason `'challenge'`) rather than scrolling+scraping a flagged page for
+   *  more passes and then dishonestly logging a clean stable end. Production default reuses the same
+   *  static `X_PAGE_STATE_SCRIPT` probe `guard` uses; a unit harness injects its own. */
+  assertSignedIn: (win: Electron.BrowserWindow) => Promise<{ blocked: boolean; reason?: string }>;
   /** FA1: await `ms` between scroll passes (Enterprise `scrollDelayMs`, ~1100ms) so the SPA has time
    *  to render the newly-scrolled-in posts before the next scrape. Injected (no-op) in unit harnesses
    *  so the loop runs instantly; the production default is a real `setTimeout`-backed sleep. Wall-clock
@@ -217,14 +225,14 @@ function defaultRunCapture(win: Electron.BrowserWindow, js: string): Promise<unk
 }
 
 /**
- * The production challenge/lock gate: probe the visible page and refuse on a challenge OR
- * a signed-out page (the two `assertSignedInPage` branches); otherwise run the capture.
- * Uses `defaultRunCapture` for the probe.
+ * FA1 (finding 1): probe the capture page's signed-in/challenge state via the STATIC
+ * `X_PAGE_STATE_SCRIPT` and classify it (the two `assertSignedInPage` branches: a challenge OR a
+ * signed-out page → `{ blocked: true }`). Shared by the up-front `defaultGuard` AND the MID-SCROLL
+ * re-assertion (`defaultDeps().assertSignedIn`) so both apply identical fail-closed semantics.
  */
-async function defaultGuard<T>(
+async function probeSignedInState(
   win: Electron.BrowserWindow,
-  capture: () => Promise<T>,
-): Promise<{ blocked: boolean; reason?: string; result?: T }> {
+): Promise<{ blocked: boolean; reason?: string }> {
   const probe = (await defaultRunCapture(win, X_PAGE_STATE_SCRIPT)) as XPageState;
   const state = classifyXPageState({
     url: String(probe?.url ?? ''),
@@ -235,6 +243,20 @@ async function defaultGuard<T>(
   if (!state.signedIn) {
     return { blocked: true, reason: state.reason ?? 'The saved X session is no longer signed in.' };
   }
+  return { blocked: false };
+}
+
+/**
+ * The production challenge/lock gate: probe the visible page and refuse on a challenge OR
+ * a signed-out page (the two `assertSignedInPage` branches); otherwise run the capture.
+ * Uses `probeSignedInState` (which uses `defaultRunCapture`) for the up-front probe.
+ */
+async function defaultGuard<T>(
+  win: Electron.BrowserWindow,
+  capture: () => Promise<T>,
+): Promise<{ blocked: boolean; reason?: string; result?: T }> {
+  const state = await probeSignedInState(win);
+  if (state.blocked) return { blocked: true, reason: state.reason };
   return { blocked: false, result: await capture() };
 }
 
@@ -284,6 +306,7 @@ function defaultDeps(): XCaptureDeps {
     scroll: async (win) => {
       await defaultRunCapture(win, X_TIMELINE_SCROLL_SCRIPT);
     },
+    assertSignedIn: (win) => probeSignedInState(win),
     delay: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     now: () => new Date().toISOString(),
   };
@@ -432,13 +455,26 @@ export async function captureTimeline(
     // Enterprise's `${id}:${repost|tweet}` key so a repost and the original tweet of the same status id
     // never collapse. Between passes scroll to the bottom + await `delayMs` so the SPA lazy-loads the
     // next batch; stop early after `TIMELINE_STAGNATION_LIMIT` consecutive no-growth passes (a stable
-    // end), and never scroll after the final pass. The whole loop stays INSIDE the signed-in guard, so
-    // a challenge surfacing mid-scroll still fails closed (the guard captured nothing → blocked).
+    // end), and never scroll after the final pass.
+    //
+    // FA1 finding 2 — iteration count matches Enterprise `scrapeProfile` EXACTLY: `for (index = 0;
+    // index <= passes; index++)` (`main.cjs:1665`) ⇒ `passes + 1` reads and `passes` scrolls. The
+    // previous `i < passes` loop read one viewport too few on every sweep (a systematic ~1-pass-
+    // shallower capture, worst on a still-arriving prolific timeline).
+    //
+    // FA1 finding 1 — a challenge is re-checked MID-SCROLL: `deps.assertSignedIn(win)` runs after each
+    // scroll+delay (Enterprise's `assertSignedInPage` at `main.cjs:1690`). The up-front `guard` only
+    // covers the INITIAL page state; without this a session drop / verification challenge surfacing
+    // after pass N would let us keep scrolling+scraping a flagged page for the rest of the budget and
+    // then log the sweep as a clean stable end. On a mid-scroll block we stop and surface it so the
+    // caller records an ERROR run (stopReason `'challenge'`), discarding the partial capture.
     const byKey = new Map<string, RawPost>();
     let stagnant = 0;
     let previousSize = 0;
     let completedPasses = 0;
-    for (let i = 0; i < passes; i += 1) {
+    let challenged = false;
+    let challengeReason: string | undefined;
+    for (let i = 0; i <= passes; i += 1) {
       completedPasses = i + 1;
       const rawCollected = await deps.runCapture(win, X_POST_SCRIPT);
       const raws: RawPost[] = Array.isArray(rawCollected) ? (rawCollected as RawPost[]) : [];
@@ -450,15 +486,28 @@ export async function captureTimeline(
       if (byKey.size === previousSize) stagnant += 1;
       else stagnant = 0;
       previousSize = byKey.size;
-      if (i >= passes - 1) break; // final pass — never scroll past the last read
       if (stagnant >= TIMELINE_STAGNATION_LIMIT) break; // stable end reached
+      if (i >= passes) break; // final pass — never scroll past the last read
       await deps.scroll(win);
       await deps.delay(delayMs);
+      const midState = await deps.assertSignedIn(win);
+      if (midState.blocked) {
+        challenged = true;
+        challengeReason = midState.reason;
+        break;
+      }
     }
-    // Reached a stable end iff the most recent pass produced no new content — covers both the
-    // stagnation early-stop AND a budget that ran out exactly as the timeline did. `false` means the
-    // pass ceiling was hit while posts were still arriving (there may be more, honestly reported).
-    const reachedEnd = stagnant > 0;
+    // Reached a stable end iff the most recent pass produced no new content AND no challenge cut the
+    // loop short — covers both the stagnation early-stop AND a budget that ran out exactly as the
+    // timeline did. `false` means the pass ceiling was hit while posts were still arriving (there may
+    // be more, honestly reported).
+    const reachedEnd = !challenged && stagnant > 0;
+
+    if (challenged) {
+      // A mid-scroll challenge: DISCARD the partial capture (Enterprise's `assertSignedInPage` throws,
+      // so its `scrapeProfile` ingests nothing) and surface the block — the caller logs an ERROR run.
+      return { results: [], completedPasses, reachedEnd: false, challenged: true, challengeReason };
+    }
 
     const union = [...byKey.values()];
     const selections = selectTimelineCaptures(union, req.targetUsername, collect);
@@ -477,7 +526,7 @@ export async function captureTimeline(
         : [];
       results.push({ item, mediaRefs });
     }
-    return { results, completedPasses, reachedEnd };
+    return { results, completedPasses, reachedEnd, challenged: false, challengeReason: undefined };
   });
 
   if (gated.blocked) {
@@ -500,7 +549,41 @@ export async function captureTimeline(
     return { blocked: true, reason: gated.reason, added: 0, skipped: 0, posts: [] };
   }
 
-  const gatedResult = gated.result ?? { results: [], completedPasses: 0, reachedEnd: false };
+  const gatedResult = gated.result ?? {
+    results: [],
+    completedPasses: 0,
+    reachedEnd: false,
+    challenged: false,
+    challengeReason: undefined as string | undefined,
+  };
+
+  // FA1 finding 1: a challenge that surfaced MID-SCROLL — the loop stopped and captured nothing usable.
+  // Record an ERROR run (stopReason `'challenge'`) so the RUN LOG reflects the interrupted sweep
+  // HONESTLY, not as a clean 'complete'/'stable_end', and return blocked (no partial persistence).
+  if (gatedResult.challenged) {
+    await emitRun(deps, req.caseId, {
+      profileId: req.channelId,
+      username: req.targetUsername,
+      operation,
+      observed: 0,
+      added: 0,
+      requestedPasses: passes,
+      completedPasses: gatedResult.completedPasses,
+      reachedEnd: false,
+      stopReason: 'challenge',
+      status: 'error',
+      startedAt,
+      endedAt: deps.now(),
+    });
+    return {
+      blocked: true,
+      reason: gatedResult.challengeReason ?? 'X presented a verification challenge mid-capture.',
+      added: 0,
+      skipped: 0,
+      posts: [],
+    };
+  }
+
   const items: XHarvestedItem[] = gatedResult.results.map((r) => r.item);
   const posts: XPostArtifact[] = gatedResult.results.map((r) => toPostArtifact(r.item, r.mediaRefs));
 
