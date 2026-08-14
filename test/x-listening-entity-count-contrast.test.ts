@@ -29,19 +29,24 @@ const CSS =
   '\n' +
   read('src/renderer/modules/x-listening/x-listening.css');
 
-// The real entity-card fragment: card ground carries the count; strong is the sibling that already
-// pairs correctly with --ga98-text, used here only as structural context.
+// The real entity-card fragment, mounted under `.xls-root` — its true DOM ancestor in the shipped
+// module. `.xls-root` carries the FIXED dark-console token remap (generic --ga98-* → his --ga98-xls-*
+// dark palette), so the card ground is the dark #081419 surface in BOTH themes and the count is his
+// amber #e0b74d, exactly as it renders. (The harness MUST include this ancestor, per the standing
+// window-shell lesson — omitting it would measure the count on the wrong, global ground.)
 const DOC =
   '<head><style>' +
   CSS +
   '</style></head><body>' +
   '<div class="ga98-window-shell"><div class="window"><div class="window-body">' +
+  '<div class="xls-root">' +
   '<article class="xls-entity-card" id="card">' +
   '<div class="xls-entity-heading"><div class="xls-entity-headtext">' +
   '<span class="xls-entity-type">mention</span><strong>@target</strong>' +
   '</div></div>' +
   '<b class="xls-entity-count" id="count">42 FINDINGS</b>' +
   '</article>' +
+  '</div>' +
   '</div></div></div>' +
   '</body>';
 
