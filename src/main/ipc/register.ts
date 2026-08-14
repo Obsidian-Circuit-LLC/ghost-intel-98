@@ -155,6 +155,7 @@ import { createScrapingCasesHandlers } from '../scraping-cases/ipc';
 import { prodScrapingCaseStore } from '../storage/scraping-cases';
 import { registerInvestigationGraphIpc, registerInvestigationRunIpc } from '../investigation/ipc';
 import { registerXListeningIpc } from '../x-listening/ipc';
+import { registerWebSdrIpc } from '../websdr/ipc';
 import { registerInvestigationReportIpc } from '../investigation/report-ipc';
 import { renderIntelReportPdf } from '../investigation/report-pdf';
 import { addManualNode, addManualEdge } from '../investigation/graph';
@@ -1772,6 +1773,11 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   // hostile remote page (x.com), so every handler must validate the sender frame first
   // (assertTrustedSender inside the module). The plain safeHandle discards the event and cannot.
   registerXListeningIpc({ handle: safeHandleWithEvent });
+
+  // WebSDR Viewer (Phase 1) — the receiver overlay (Phase 2) will host a hostile remote SDR page,
+  // so every channel sender-validates first (assertTrustedSender inside the module), exactly like
+  // X Listening. safeHandleWithEvent forwards the raw IpcMainInvokeEvent the check needs.
+  registerWebSdrIpc({ handle: safeHandleWithEvent });
 
   // ---- SP-4 investigation graph: per-case scene fetch + live delta push (Task 5) ----
   registerInvestigationGraphIpc({

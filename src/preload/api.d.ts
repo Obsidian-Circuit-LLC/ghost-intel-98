@@ -7,6 +7,14 @@ import type { XCollectionSettings } from '../shared/x-listening-collection-setti
 import type { XImageMode } from '../shared/x-listening-image-policy';
 import type { XScheduleStatus } from '../shared/x-listening-schedule';
 import type {
+  WebSdrReceiver,
+  WebSdrPreset,
+  WebSdrNote,
+  WebSdrStationMenu,
+  WebSdrEgressState,
+  WebSdrEgressMode,
+} from '../shared/websdr/types';
+import type {
   AppSettings,
   AttachmentBytesResult,
   MediaUrlResult,
@@ -1118,6 +1126,29 @@ export interface GhostApi {
     remove(store: ScrapingCaseStoreId, id: string): Promise<void>;
     importToCase(store: ScrapingCaseStoreId, scrapingCaseId: string, mainCaseId: string): Promise<ScrapingImportResult>;
     saveArtifact(store: ScrapingCaseStoreId, scrapingCaseId: string, name: string, content: string): Promise<string>;
+  };
+  /**
+   * WebSDR Viewer (core module) — a hardened manager + embedded browser for PUBLIC SDR websites.
+   * Phase 1 exposes the encrypt-at-rest stores: the seeded receiver directory, frequency presets,
+   * listening notes, the customizable Station Menu, and the receiver-session egress toggle
+   * (clearnet default / warned Tor opt-in). Every save is normalized + bounded MAIN-side; a
+   * receiver URL is validated http/https-only at the boundary. Receiver-view + recording calls
+   * arrive in Phase 2/3.
+   */
+  websdr: {
+    listReceivers(): Promise<WebSdrReceiver[]>;
+    saveReceiver(receiver: Partial<WebSdrReceiver>): Promise<WebSdrReceiver[]>;
+    deleteReceiver(id: string): Promise<WebSdrReceiver[]>;
+    listPresets(): Promise<WebSdrPreset[]>;
+    savePreset(preset: Partial<WebSdrPreset>): Promise<WebSdrPreset[]>;
+    deletePreset(id: string): Promise<WebSdrPreset[]>;
+    listNotes(): Promise<WebSdrNote[]>;
+    saveNote(note: Partial<WebSdrNote>): Promise<WebSdrNote[]>;
+    deleteNote(id: string): Promise<WebSdrNote[]>;
+    getMenu(): Promise<WebSdrStationMenu>;
+    saveMenu(menu: WebSdrStationMenu): Promise<WebSdrStationMenu>;
+    getEgress(): Promise<WebSdrEgressState>;
+    setEgress(mode: WebSdrEgressMode): Promise<WebSdrEgressState>;
   };
 }
 

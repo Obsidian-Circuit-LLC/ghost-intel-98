@@ -101,6 +101,55 @@ export function scrapingBackupDir(): string {
   return join(scrapingCasesRoot(), 'backup-pre-v3.27.0');
 }
 
+/** WebSDR Viewer module data root. Its stores (directory/presets/notes/menu/egress/recordings)
+ *  are module-global, not case-scoped — the viewer is a standalone built-in, not a scraping case.
+ *  Everything under here routes through secure-fs (AES-GCM at rest), never plaintext beside the exe. */
+export function websdrDir(): string {
+  return join(dataRoot(), 'websdr');
+}
+
+/** The seeded receiver directory sidecar (`{ receivers, directorySeedVersion }`). */
+export function websdrDirectoryFile(): string {
+  return join(websdrDir(), 'directory.json');
+}
+
+/** Saved frequency presets sidecar. */
+export function websdrPresetsFile(): string {
+  return join(websdrDir(), 'presets.json');
+}
+
+/** Listening notes sidecar. */
+export function websdrNotesFile(): string {
+  return join(websdrDir(), 'notes.json');
+}
+
+/** Station Menu configuration sidecar. */
+export function websdrMenuFile(): string {
+  return join(websdrDir(), 'menu.json');
+}
+
+/** Egress-toggle state sidecar (clearnet/tor for the receiver session). */
+export function websdrEgressFile(): string {
+  return join(websdrDir(), 'egress.json');
+}
+
+/** Recording metadata sidecar (the archive index — the captured bytes live in `websdrRecordingsDir`). */
+export function websdrRecordingsFile(): string {
+  return join(websdrDir(), 'recordings.json');
+}
+
+/** Directory holding the encrypted captured-recording blobs (one per recording id). The actual
+ *  capture/write lands in Phase 3; the path is the single source of truth for that seam. */
+export function websdrRecordingsDir(): string {
+  return join(websdrDir(), 'recordings');
+}
+
+/** One encrypted recording blob path, keyed by recording id. `id` must already be a validated
+ *  WebSDR id (no separators/traversal — see the IPC boundary). */
+export function websdrRecordingBlobFile(id: string): string {
+  return join(websdrRecordingsDir(), `${id}.webm`);
+}
+
 export function settingsFile(): string {
   return join(dataRoot(), 'settings.json');
 }

@@ -804,6 +804,28 @@ export const channels = {
   pdfsign: {
     read: 'pdfsign:read',
     sign: 'pdfsign:sign'
+  },
+  // WebSDR Viewer (core module) — a hardened manager + embedded browser for PUBLIC SDR websites
+  // (WebSDR/KiwiSDR/OpenWebRX). Phase 1 wires the encrypt-at-rest stores only: the receiver
+  // directory (seeded with 851 public KiwiSDR receivers), frequency presets, listening notes, the
+  // customizable Station Menu, and the receiver-session egress toggle (clearnet default / warned
+  // Tor opt-in — the app's ONE narrow clearnet-default exception). Every handler validates the
+  // sender frame + argument shape; every receiver URL passes normalizeWebSdrUrl (http/https-only)
+  // at the boundary. The receiver-view/recording channels arrive in Phase 2/3.
+  websdr: {
+    directoryList: 'websdr:directory:list',
+    directorySave: 'websdr:directory:save',
+    directoryDelete: 'websdr:directory:delete',
+    presetsList: 'websdr:presets:list',
+    presetsSave: 'websdr:presets:save',
+    presetsDelete: 'websdr:presets:delete',
+    notesList: 'websdr:notes:list',
+    notesSave: 'websdr:notes:save',
+    notesDelete: 'websdr:notes:delete',
+    menuGet: 'websdr:menu:get',
+    menuSave: 'websdr:menu:save',
+    egressGet: 'websdr:egress:get',
+    egressSet: 'websdr:egress:set'
   }
 } as const;
 

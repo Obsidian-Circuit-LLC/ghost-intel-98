@@ -820,6 +820,24 @@ const api = {
       ipcRenderer.invoke(channels.scrapingCases.importToCase, store, scrapingCaseId, mainCaseId),
     saveArtifact: (store: ScrapingCaseStoreId, scrapingCaseId: string, name: string, content: string) =>
       ipcRenderer.invoke(channels.scrapingCases.saveArtifact, store, scrapingCaseId, name, content)
+  },
+  // WebSDR Viewer (core module) — hardened manager + embedded browser for PUBLIC SDR websites.
+  // Phase 1: the encrypt-at-rest directory/presets/notes/menu/egress stores. Every channel is
+  // sender-validated + arg-checked main-side; a receiver URL is validated http/https-only there.
+  websdr: {
+    listReceivers: () => ipcRenderer.invoke(channels.websdr.directoryList),
+    saveReceiver: (receiver: unknown) => ipcRenderer.invoke(channels.websdr.directorySave, receiver),
+    deleteReceiver: (id: string) => ipcRenderer.invoke(channels.websdr.directoryDelete, id),
+    listPresets: () => ipcRenderer.invoke(channels.websdr.presetsList),
+    savePreset: (preset: unknown) => ipcRenderer.invoke(channels.websdr.presetsSave, preset),
+    deletePreset: (id: string) => ipcRenderer.invoke(channels.websdr.presetsDelete, id),
+    listNotes: () => ipcRenderer.invoke(channels.websdr.notesList),
+    saveNote: (note: unknown) => ipcRenderer.invoke(channels.websdr.notesSave, note),
+    deleteNote: (id: string) => ipcRenderer.invoke(channels.websdr.notesDelete, id),
+    getMenu: () => ipcRenderer.invoke(channels.websdr.menuGet),
+    saveMenu: (menu: unknown) => ipcRenderer.invoke(channels.websdr.menuSave, menu),
+    getEgress: () => ipcRenderer.invoke(channels.websdr.egressGet),
+    setEgress: (mode: unknown) => ipcRenderer.invoke(channels.websdr.egressSet, mode)
   }
 } as const;
 
