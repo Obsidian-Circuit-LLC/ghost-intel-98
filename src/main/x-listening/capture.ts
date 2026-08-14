@@ -37,8 +37,10 @@ import {
   normalizePost,
   normalizeReply,
   normalizeRepost,
+  normalizeComment,
   normalizeNetwork,
   selectTimelineCaptures,
+  selectThreadComments,
   type RawPost,
   type RawUserCell,
   type NormalizeContext,
@@ -98,6 +100,19 @@ const MAX_PASS_DELAY_MS = 5000;
 /** Consecutive no-growth passes that end the scroll loop early (a stable end — the timeline gave
  *  nothing new). Enterprise `scrapeProfile` stops after 5 stagnant passes (`main.cjs:1681,1691`). */
 const TIMELINE_STAGNATION_LIMIT = 5;
+
+/** FA3 comment-thread clamps — Enterprise `scrapeCommentsForPosts`'s bounds (`main.cjs:1606-1608`),
+ *  re-clamped MAIN-side (defence-in-depth) even though the shared reducer already bounds the persisted
+ *  `commentThreadsPerSource` / `commentScrollPasses`. `MAX_COMMENT_SCROLL_PASSES` follows OUR shared
+ *  clamp band (`[1,12]`), the ceiling the settings reducer already enforces. */
+const MIN_COMMENT_THREADS = 1;
+const MAX_COMMENT_THREADS = 20;
+const MIN_COMMENT_SCROLL_PASSES = 1;
+const MAX_COMMENT_SCROLL_PASSES = 12;
+/** Fixed post-navigation SPA-render settle before a thread's comments are read — Enterprise
+ *  `scrapeCommentsForPosts` sleeps 2500ms after `loadURL` and before `assertSignedInPage`
+ *  (`main.cjs:1613-1614`). Wall-clock pacing only; feeds NO evidence/hash path. */
+const COMMENT_THREAD_SETTLE_MS = 2500;
 
 /** STATIC scroll payload — no interpolation, no scraped data. Scrolls the timeline to the bottom so
  *  the SPA lazy-loads the next batch of posts before the next `X_POST_SCRIPT` scrape, exactly as
@@ -201,6 +216,14 @@ export interface XCaptureDeps {
    *  loop is exercisable without a live window; the production default runs
    *  `X_TIMELINE_SCROLL_SCRIPT`. Never called after the final pass (gentle on X). */
   scroll: (win: Electron.BrowserWindow) => Promise<void>;
+  /** FA3 (audit HIGH #3): navigate the capture window to a NEW url — the comment-thread scraping path
+   *  loads each captured root post's thread URL into the SAME hidden, Tor-gated window (Enterprise
+   *  `scrapeCommentsForPosts` calls `win.loadURL(rootPost.url)`, `main.cjs:1612`). The URL passed here
+   *  is ALWAYS the canonical `https://x.com/<user>/status/<id>` returned by `assertValidPostUrl` —
+   *  host-anchored + username-validated + `/status/<digits>`-checked BEFORE this seam is ever called,
+   *  so an off-host / malformed post URL is never loaded. Injected so the comment path is exercisable
+   *  without a live window; the production default is `win.loadURL(url)`. */
+  navigate: (win: Electron.BrowserWindow, url: string) => Promise<void>;
   /** FA1 (finding 1): re-probe the page's signed-in/challenge state MID-SCROLL — Enterprise
    *  `scrapeProfile` calls `assertSignedInPage(win)` after EVERY scroll (`main.cjs:1690`) so a session
    *  drop or a verification challenge that surfaces AFTER a scroll stops the capture immediately. The
@@ -305,6 +328,9 @@ function defaultDeps(): XCaptureDeps {
     },
     scroll: async (win) => {
       await defaultRunCapture(win, X_TIMELINE_SCROLL_SCRIPT);
+    },
+    navigate: async (win, url) => {
+      await win.loadURL(url);
     },
     assertSignedIn: (win) => probeSignedInState(win),
     delay: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
@@ -587,6 +613,22 @@ export async function captureTimeline(
   const items: XHarvestedItem[] = gatedResult.results.map((r) => r.item);
   const posts: XPostArtifact[] = gatedResult.results.map((r) => toPostArtifact(r.item, r.mediaRefs));
 
+  // Audit HIGH #3 (FA3): comment-thread scraping. When THIS campaign's collect gate has COMMENTS on,
+  // navigate the same headless, Tor-gated, still-signed-in capture window to each captured ROOT post's
+  // thread (up to `commentThreadsPerSource`), scroll `commentScrollPasses` passes, and record the
+  // THIRD-PARTY replies as `kind:'comment'` linked to their root post via `parentPostId` — Enterprise
+  // `scrapeCommentsForPosts` (`main.cjs:1603-1632`), previously a dead toggle here (the normalizer +
+  // gate existed but were never called). The captured root posts (FA1) are the ONLY input; each thread
+  // URL is host-anchored + validated by `assertValidPostUrl` BEFORE any navigation. Persisted ALONGSIDE
+  // the timeline posts in the same `savePosts`/`saveItems` upsert below (each dedups by id).
+  if (collect.comments && posts.length) {
+    const commentPairs = await captureThreadComments(win, deps, req, ctx, collect, delayMs, settings, imagesEnabled, posts);
+    for (const { item, mediaRefs } of commentPairs) {
+      items.push(item);
+      posts.push(toPostArtifact(item, mediaRefs));
+    }
+  }
+
   const [postsResult] = await Promise.all([
     deps.savePosts(req.caseId, posts),
     deps.saveItems(req.caseId, items),
@@ -612,6 +654,101 @@ export async function captureTimeline(
   });
 
   return { blocked: false, added: postsResult.added, skipped: postsResult.skipped, posts };
+}
+
+/**
+ * FA3 (audit HIGH #3) — scrape the third-party comment threads under a source's captured root posts.
+ *
+ * A faithful rebuild of Enterprise `scrapeCommentsForPosts` (`main.cjs:1603-1632`) onto OUR hardened,
+ * injectable seams. For up to `commentThreadsPerSource` of the just-captured ROOT posts (`kind:'post'`,
+ * FA1's timeline output — the ONLY input), it:
+ *
+ *   1. VALIDATES the post's live URL with `assertValidPostUrl` — the same `openPostThread` guards the
+ *      "VERIFY LIVE"/"Open Real Thread" paths use (host ∈ x/twitter apex, `/status/<digits>`, username
+ *      `^[A-Za-z0-9_]{1,15}$`, forced https). An off-host / malformed URL is SKIPPED (never navigated
+ *      to) — validation happens BEFORE `deps.navigate` is ever called;
+ *   2. navigates the SAME hidden, Tor-gated, signed-in capture window to that canonical thread URL,
+ *      settles for the SPA render (`COMMENT_THREAD_SETTLE_MS`), then re-asserts signed-in — a blocked
+ *      page STOPS the comment phase (fail closed; a flagged page is never scraped further);
+ *   3. scrolls `commentScrollPasses` passes accumulating the visible items, then admits the THIRD-PARTY
+ *      replies via `selectThreadComments` (root post + the target's own replies excluded), normalizing
+ *      each with `normalizeComment(raw, ctx, rootStatusId)` so it carries `kind:'comment'` + the root's
+ *      bare status id as its parent.
+ *
+ * Media for a comment is resolved (host-anchored → local ref) only when the source's image policy is on,
+ * exactly as the timeline path. Returns the `{item, mediaRefs}` pairs; the caller folds them into the
+ * same evidence-hashed persistence as the timeline posts. `X_POST_SCRIPT` remains the ONLY payload run
+ * against the page (the scroll uses the static `X_TIMELINE_SCROLL_SCRIPT` via `deps.scroll`).
+ */
+async function captureThreadComments(
+  win: Electron.BrowserWindow,
+  deps: XCaptureDeps,
+  req: XTimelineCaptureRequest,
+  ctx: NormalizeContext,
+  collect: XCollectSettings,
+  delayMs: number,
+  settings: XCollectionSettings,
+  imagesEnabled: boolean,
+  timelinePosts: readonly XPostArtifact[],
+): Promise<Array<{ item: XHarvestedItem; mediaRefs: string[] }>> {
+  const maxThreads = Math.max(
+    MIN_COMMENT_THREADS,
+    Math.min(MAX_COMMENT_THREADS, Math.floor(Number(settings.commentThreadsPerSource)) || MIN_COMMENT_THREADS),
+  );
+  const passes = Math.max(
+    MIN_COMMENT_SCROLL_PASSES,
+    Math.min(MAX_COMMENT_SCROLL_PASSES, Math.floor(Number(settings.commentScrollPasses)) || MIN_COMMENT_SCROLL_PASSES),
+  );
+  // ONLY the target's own top-level posts have a comment thread worth reading (Enterprise filters
+  // `profileRecords` to `kind === 'post'` before calling this, `main.cjs:1713`).
+  const rootPosts = timelinePosts.filter((p) => p.kind === 'post').slice(0, maxThreads);
+
+  const out: Array<{ item: XHarvestedItem; mediaRefs: string[] }> = [];
+  for (const rootPost of rootPosts) {
+    // VALIDATE BEFORE NAVIGATION: a malformed / off-host post URL is never loaded. `assertValidPostUrl`
+    // canonicalizes to `https://x.com/<user>/status/<id>` (or throws) — so `deps.navigate` only ever
+    // receives a host-anchored, username-validated thread URL. A throw skips just THIS thread.
+    let target: URL;
+    try {
+      target = assertValidPostUrl(rootPost);
+    } catch (err) {
+      console.warn('[XListening] skipping comment thread — invalid post URL:', err);
+      continue;
+    }
+
+    await deps.navigate(win, target.toString());
+    await deps.delay(COMMENT_THREAD_SETTLE_MS);
+    const state = await deps.assertSignedIn(win);
+    if (state.blocked) break; // fail closed — stop the comment phase on a challenge / session drop
+
+    // Accumulate the thread's visible items by bare status id (Enterprise keys the comment map on
+    // `String(item.id)`, `main.cjs:1618`). `passes + 1` reads / `passes` scrolls (matches Enterprise's
+    // `for (index = 0; index <= passes; index++)` comment loop, `main.cjs:1616`).
+    const byKey = new Map<string, RawPost>();
+    for (let i = 0; i <= passes; i += 1) {
+      const rawCollected = await deps.runCapture(win, X_POST_SCRIPT);
+      const raws: RawPost[] = Array.isArray(rawCollected) ? (rawCollected as RawPost[]) : [];
+      for (const r of raws) {
+        const id = String(r?.id ?? '');
+        if (!id) continue;
+        byKey.set(id, r);
+      }
+      if (i >= passes) break; // final read — never scroll past the last
+      await deps.scroll(win);
+      await deps.delay(delayMs);
+    }
+
+    const rootStatusId = String(rootPost.messageId || rootPost.id || '');
+    const commentRaws = selectThreadComments([...byKey.values()], req.targetUsername, rootStatusId, collect);
+    for (const raw of commentRaws) {
+      const item = normalizeComment(raw, ctx, rootStatusId);
+      const mediaRefs = imagesEnabled
+        ? await resolvePostMediaRefs(win, raw, req.caseId, deps.resolveMedia)
+        : [];
+      out.push({ item, mediaRefs });
+    }
+  }
+  return out;
 }
 
 // ---- live post verification ("VERIFY LIVE", Task A1) ----------------------
