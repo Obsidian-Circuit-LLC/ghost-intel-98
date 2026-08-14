@@ -41,7 +41,9 @@ import {
   normalizeNetwork,
   selectTimelineCaptures,
   selectThreadComments,
+  X_PROFILE_META_SCRIPT,
   type RawPost,
+  type RawProfileMeta,
   type RawUserCell,
   type NormalizeContext,
   type XHarvestedItem,
@@ -50,7 +52,14 @@ import {
   type XVerifyPage,
 } from './extract';
 import { postEvidenceHash } from './evidence';
-import { ingestPostsWithHistory, markPostUnavailable } from './changes';
+import {
+  ingestPostsWithHistory,
+  markPostUnavailable,
+  snapshotProfile,
+  type ProfileSnapshotInput,
+  type ProfileSnapshotResult,
+} from './changes';
+import { MEDIA_HOST_ALLOWLIST } from '../capture/security';
 import { buildRunRecord, recordCollectionRun, type RunRecordInput } from './run-log';
 import type {
   XNetworkAccount,
@@ -237,6 +246,22 @@ export interface XCaptureDeps {
    *  so the loop runs instantly; the production default is a real `setTimeout`-backed sleep. Wall-clock
    *  pacing only — it feeds NO evidence/hash path. */
   delay: (ms: number) => Promise<void>;
+  /** FB2 (audit HIGH #7): read the target profile HEADER's visible metadata (display name / bio /
+   *  location / website / avatar) from the SIGNED-IN capture page via the STATIC `X_PROFILE_META_SCRIPT`,
+   *  host-anchoring the avatar. Returns `null` when the header could not be read (Enterprise
+   *  `readProfileMetadata` swallows its own errors to `null`). Used to feed `snapshotProfile` so a
+   *  bio/avatar/location/website/DISPLAY-NAME change over time emits a `profile_change`. Injected so
+   *  the profile-change path is exercisable without a live window. */
+  readProfileMeta: (win: Electron.BrowserWindow) => Promise<RawProfileMeta | null>;
+  /** FB2: snapshot the captured profile's metadata + emit a `profile_change` on a metadata-signature
+   *  diff vs the last snapshot (the first snapshot is a baseline, no event). Production default routes
+   *  to changes.ts `snapshotProfile` over the encrypted `profileSnapshots` / `changeEvents` sidecars;
+   *  a unit harness injects one bound to an in-memory store. */
+  snapshotProfile: (
+    caseId: string,
+    input: ProfileSnapshotInput,
+    opts: { now: string },
+  ) => Promise<ProfileSnapshotResult>;
   /** Injected clock — the ISO capture time stamped onto every item. */
   now: () => string;
 }
@@ -334,7 +359,50 @@ function defaultDeps(): XCaptureDeps {
     },
     assertSignedIn: (win) => probeSignedInState(win),
     delay: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    readProfileMeta: async (win) => {
+      try {
+        const raw = await defaultRunCapture(win, X_PROFILE_META_SCRIPT);
+        return normalizeProfileMeta(raw);
+      } catch {
+        // Enterprise `readProfileMetadata` swallows any scrape error to `null` — a header that
+        // could not be read simply skips the snapshot, never breaks the capture.
+        return null;
+      }
+    },
+    snapshotProfile: (caseId, input, opts) => snapshotProfile(caseId, input, opts),
     now: () => new Date().toISOString(),
+  };
+}
+
+/** Host-anchor a scraped profile-header avatar `src` (FB2): return it VERBATIM only when its host is
+ *  the X image CDN (exact host or a subdomain of a `MEDIA_HOST_ALLOWLIST` entry — the same named,
+ *  auditable allowlist the media-fetch path enforces), else ''. Anchored on `new URL(...).hostname`,
+ *  NOT a substring, so an off-allowlist decoy (`https://evil.example/?x=pbs.twimg.com`) is dropped.
+ *  The URL is never fetched or inlined here — it is used ONLY as a change fingerprint in the snapshot
+ *  signature, so an avatar swap flips the signature and emits a `profile_change`. */
+export function hostAnchoredAvatar(rawUrl: string): string {
+  const url = String(rawUrl ?? '').trim();
+  if (!url) return '';
+  let host: string;
+  try {
+    host = new URL(url).hostname.toLowerCase();
+  } catch {
+    return '';
+  }
+  const allowed = MEDIA_HOST_ALLOWLIST.some((a) => host === a || host.endsWith(`.${a}`));
+  return allowed ? url : '';
+}
+
+/** Coerce a raw profile-header scrape into a `RawProfileMeta`, trimming every text field and
+ *  host-anchoring the avatar. Pure (no fetch); `null`/malformed input → all-empty. */
+export function normalizeProfileMeta(raw: unknown): RawProfileMeta {
+  const r = (raw ?? {}) as Partial<RawProfileMeta>;
+  return {
+    displayName: String(r.displayName ?? '').trim(),
+    bio: String(r.bio ?? '').trim(),
+    location: String(r.location ?? '').trim(),
+    website: String(r.website ?? '').trim(),
+    avatar: hostAnchoredAvatar(String(r.avatar ?? '')),
   };
 }
 
@@ -494,6 +562,11 @@ export async function captureTimeline(
     // after pass N would let us keep scrolling+scraping a flagged page for the rest of the budget and
     // then log the sweep as a clean stable end. On a mid-scroll block we stop and surface it so the
     // caller records an ERROR run (stopReason `'challenge'`), discarding the partial capture.
+    // FB2 (audit HIGH #7): read the target profile HEADER's metadata FIRST — on the initial, still-
+    // signed-in page, BEFORE the scroll loop (Enterprise `scrapeProfile` calls `readProfileMetadata`
+    // before its post loop, `main.cjs:1652`). Carried out of the guard so the snapshot/`profile_change`
+    // persistence happens alongside `savePosts` (never inside the scrape callback). `null` ⇒ no header.
+    const profileMeta = await deps.readProfileMeta(win);
     const byKey = new Map<string, RawPost>();
     let stagnant = 0;
     let previousSize = 0;
@@ -536,7 +609,7 @@ export async function captureTimeline(
     if (challenged) {
       // A mid-scroll challenge: DISCARD the partial capture (Enterprise's `assertSignedInPage` throws,
       // so its `scrapeProfile` ingests nothing) and surface the block — the caller logs an ERROR run.
-      return { results: [], completedPasses, reachedEnd: false, challenged: true, challengeReason };
+      return { results: [], completedPasses, reachedEnd: false, challenged: true, challengeReason, profileMeta };
     }
 
     const union = [...byKey.values()];
@@ -556,7 +629,7 @@ export async function captureTimeline(
         : [];
       results.push({ item, mediaRefs });
     }
-    return { results, completedPasses, reachedEnd, challenged: false, challengeReason: undefined };
+    return { results, completedPasses, reachedEnd, challenged: false, challengeReason: undefined, profileMeta };
   });
 
   if (gated.blocked) {
@@ -585,6 +658,7 @@ export async function captureTimeline(
     reachedEnd: false,
     challenged: false,
     challengeReason: undefined as string | undefined,
+    profileMeta: null as RawProfileMeta | null,
   };
 
   // FA1 finding 1: a challenge that surfaced MID-SCROLL — the loop stopped and captured nothing usable.
@@ -637,6 +711,30 @@ export async function captureTimeline(
     deps.savePosts(req.caseId, posts),
     deps.saveItems(req.caseId, items),
   ]);
+
+  // FB2 (audit HIGH #7): snapshot the profile HEADER metadata read up front, emitting a
+  // `profile_change` on a bio/avatar/location/website/DISPLAY-NAME diff vs the last snapshot (the
+  // first snapshot is a baseline — no event). Run AFTER `savePosts` so a snapshot-store hiccup can
+  // never lose the just-captured posts. A profile with NO posts still snapshots (the header is the
+  // evidence here, not the timeline). An all-empty read (a page that exposed no header) records
+  // NOTHING — a baseline is only stored once we have actually observed some metadata.
+  const profileMeta = gatedResult.profileMeta;
+  if (profileMeta && (profileMeta.displayName || profileMeta.bio || profileMeta.avatar || profileMeta.location || profileMeta.website)) {
+    const sourceUsername = String(req.targetUsername || req.channelLabel || '') || undefined;
+    await deps.snapshotProfile(
+      req.caseId,
+      {
+        profileId: req.channelId,
+        ...(sourceUsername ? { sourceUsername } : {}),
+        displayName: profileMeta.displayName,
+        bio: profileMeta.bio,
+        avatar: profileMeta.avatar,
+        location: profileMeta.location,
+        website: profileMeta.website,
+      },
+      { now: startedAt },
+    );
+  }
 
   // Record the completed run (Task A3). `observed` = unique posts this capture accumulated across all
   // scroll passes; `added` = newly persisted; `duplicates` (= observed - added) is derived in

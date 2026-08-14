@@ -251,6 +251,9 @@ export interface XRunLogRecord {
 export interface XProfileSnapshot {
   profileId: string;
   sourceUsername?: string;
+  /** The visible profile display name (FB2, audit HIGH #7) — folded into the signature so a
+   *  rename is detected; was previously dropped, so an account rename fired no `profile_change`. */
+  displayName: string;
   bio: string;
   avatar: string;
   location: string;

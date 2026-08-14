@@ -479,6 +479,63 @@ export const USER_CELL_SCRIPT = `
   })()
 `;
 
+/** The visible profile-HEADER metadata a profile page exposes — the fields whose change over time
+ *  is evidentiary (`profile_change`). Port of Enterprise `readProfileMetadata`'s return shape
+ *  (`electron/main.cjs:1305-1334`). `avatar` is the raw header `profile_images` `src` as scraped;
+ *  it is host-anchored (or dropped) by `capture.ts` before it ever reaches the snapshot — it is used
+ *  ONLY as a change fingerprint, never fetched or inlined here. */
+export interface RawProfileMeta {
+  displayName: string;
+  bio: string;
+  location: string;
+  website: string;
+  avatar: string;
+}
+
+/**
+ * STATIC in-page payload reading the target profile HEADER's visible metadata (display name, bio,
+ * location, website, avatar). No interpolation — the ONLY inputs are literal selectors. Port of
+ * quarantine `readProfileMetadata` (`electron/main.cjs:1305-1334`), including its IMPORTANT guard:
+ * the avatar is taken from the `/<currentUser>/photo` anchor inside `main`, NEVER the first
+ * document-wide `profile_images` element (X's global nav shows the SIGNED-IN account's avatar, which
+ * can appear before the target header — using it would fingerprint the analyst's own account). The
+ * avatar `src` is returned verbatim; `capture.ts` host-anchors it before storage.
+ */
+export const X_PROFILE_META_SCRIPT = `
+  (() => {
+    const usernameArea = document.querySelector('[data-testid="UserName"]');
+    const displayName = Array.from((usernameArea && usernameArea.querySelectorAll('span')) || [])
+      .map((node) => (node.textContent || '').trim())
+      .find((text) => text && !text.startsWith('@')) || '';
+    const bio = (document.querySelector('[data-testid="UserDescription"]') || {}).innerText;
+    const locationText = (document.querySelector('[data-testid="UserLocation"]') || {}).innerText;
+    const websiteAnchor = document.querySelector('[data-testid="UserUrl"] a') || document.querySelector('[data-testid="UserUrl"]');
+    const website = (websiteAnchor && (websiteAnchor.getAttribute('href') || (websiteAnchor.textContent || '').trim())) || '';
+
+    // IMPORTANT: never use the first document-wide profile_images element — X's global navigation
+    // contains the SIGNED-IN account avatar and can appear before the target header.
+    const currentUsername = (location.pathname.split('/').filter(Boolean)[0] || '').toLowerCase();
+    const photoAnchor = Array.from(document.querySelectorAll('main a[href]')).find((anchor) => {
+      try {
+        const url = new URL(anchor.getAttribute('href') || '', location.origin);
+        return url.pathname.toLowerCase() === '/' + currentUsername + '/photo' &&
+          Boolean(anchor.querySelector('img[src*="profile_images"]'));
+      } catch {
+        return false;
+      }
+    });
+    const avatarImg = photoAnchor && photoAnchor.querySelector('img[src*="profile_images"]');
+    const avatar = (avatarImg && avatarImg.getAttribute('src')) || '';
+    return {
+      displayName: displayName,
+      bio: ((bio || '')).trim(),
+      location: ((locationText || '')).trim(),
+      website: website,
+      avatar: avatar
+    };
+  })()
+`;
+
 /**
  * Map one captured `UserCell` → an `XNetworkAccount`, or `null` when the handle is
  * not a real X username (never fabricate a row). The avatar is admitted ONLY as a
