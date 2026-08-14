@@ -780,6 +780,8 @@ const api = {
       ipcRenderer.invoke(channels.xListening.exportPostsToFile, req),
     exportNetworkToFile: (caseId: string) =>
       ipcRenderer.invoke(channels.xListening.exportNetworkToFile, caseId),
+    exportNetworkJsonToFile: (caseId: string) =>
+      ipcRenderer.invoke(channels.xListening.exportNetworkJsonToFile, caseId),
     mediaRead: (req: { caseId: string; ref: string }) =>
       ipcRenderer.invoke(channels.xListening.mediaRead, req),
     changeEvents: (caseId: string) => ipcRenderer.invoke(channels.xListening.changeEvents, caseId),

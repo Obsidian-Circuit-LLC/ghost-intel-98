@@ -76,9 +76,16 @@ import { readCachedMedia } from './media';
 import {
   exportXPostsToFile,
   writeChecksumSidecar,
+  buildPostsExportEnvelope,
+  buildNetworkExportEnvelope,
+  serializeExportEnvelope,
   type XExportFileFormat,
-  type XExportWriteResult
+  type XExportWriteResult,
+  type XExportPresetMatch,
+  type XPostsExportEnvelope,
+  type XNetworkExportEnvelope
 } from './exports';
+import type { XProfileSnapshot } from './store';
 
 // ---- X5: network export (the direct, non-file-write CSV-string surface `exportNetworkInteractive`
 // falls back to below; the accumulator/capture itself lives in `extract.ts`/`demo.ts`) --------
@@ -500,7 +507,7 @@ async function buildCollectionHealthInputs(caseId: string): Promise<{
  * as `computeNetworkAnalysis`'s synthetic-profile/relationship exclusion — a demo record must
  * never inflate real entity intel.
  */
-function aggregateEntities(posts: readonly XPostArtifact[]): XEntityCacheEntry[] {
+export function aggregateEntities(posts: readonly XPostArtifact[]): XEntityCacheEntry[] {
   const byKey = new Map<string, XEntityCacheEntry>();
   for (const post of posts) {
     if (post.synthetic) continue;
@@ -763,6 +770,14 @@ export interface InteractiveExportDeps {
   /** Forwarded in place of the module-level `exportNetworkCsv` (tests only — production omits
    *  this so the real, already-synthetic-filtered `exportNetworkCsv` runs). */
   readNetworkCsv?: (caseId: string) => Promise<{ csv: string; count: number }>;
+  /** FB4 (audit HIGH #10): serialize the posts JSON export as the self-describing MANIFEST
+   *  envelope. Production default (`productionPostsEnvelopeJson`) reads the case's notes/presets/
+   *  profile-snapshots/campaign + derives matches/entities; forwarded to `exportXPostsToFile`. */
+  serializeJson?: (caseId: string, posts: import('./store').XPostArtifact[]) => Promise<string> | string;
+  /** FB4: build the network JSON export envelope (embeds `computeNetworkAnalysis` + a
+   *  `manifestHash`). Production default (`productionNetworkEnvelope`) reads the case's networks;
+   *  tests inject a prebuilt envelope. */
+  readNetworkEnvelope?: (caseId: string) => Promise<XNetworkExportEnvelope>;
 }
 
 async function defaultAssertNotSymlink(filePath: string): Promise<void> {
@@ -785,7 +800,9 @@ function defaultInteractiveExportDeps(): InteractiveExportDeps {
     writeFile: async (filePath, data) => {
       const { writeFile } = await import('node:fs/promises');
       await writeFile(filePath, data);
-    }
+    },
+    serializeJson: productionPostsEnvelopeJson,
+    readNetworkEnvelope: productionNetworkEnvelope
   };
 }
 
@@ -808,7 +825,9 @@ export async function exportPostsInteractive(
   await deps.assertNotSymlink(res.filePath);
   const written = await exportXPostsToFile(caseId, format, res.filePath, {
     writeFile: deps.writeFile,
-    ...(deps.readPosts ? { readPosts: deps.readPosts } : {})
+    ...(deps.readPosts ? { readPosts: deps.readPosts } : {}),
+    // FB4: a `json` export is serialized as the self-describing manifest envelope; csv/pdf ignore it.
+    ...(deps.serializeJson ? { serializeJson: deps.serializeJson } : {})
   });
   return { canceled: false, ...written };
 }
@@ -838,6 +857,121 @@ export async function exportNetworkInteractive(
   await deps.writeFile(res.filePath, csv);
   const checksum = await writeChecksumSidecar({ writeFile: deps.writeFile }, res.filePath, csv);
   return { canceled: false, filePath: res.filePath, count, ...checksum };
+}
+
+// ---- FB4 (audit HIGH #10): self-describing JSON manifest envelopes -------
+// The pure envelope builders live in `exports.ts`; this layer supplies the case-scoped store reads
+// they need (notes/presets/profile-snapshots/campaign for posts; captured networks for the network
+// export), derives the preset `matches` + entity rollup, and threads an injected clock into the
+// envelope's provenance `exportedAt` (never into `manifestHash` — the builders strip it).
+
+/** Injectable seams for `assemblePostsExportEnvelope` — the case-scoped reads the manifest needs.
+ *  All pure store reads: no capture window, no network egress. */
+export interface PostsExportEnvelopeDeps {
+  readNotes: (caseId: string) => Promise<XNote[]>;
+  readPresets: (caseId: string) => Promise<XPreset[]>;
+  readProfileSnapshots: (caseId: string) => Promise<XProfileSnapshot[]>;
+  /** The campaign record written into the envelope's `case` field (his `case`). */
+  readCase: (caseId: string) => Promise<unknown>;
+  /** Injected clock → the envelope's provenance `exportedAt` (determinism; not hashed). */
+  now: () => string;
+}
+
+function defaultPostsExportEnvelopeDeps(): PostsExportEnvelopeDeps {
+  return {
+    readNotes: async (caseId) => (await prodXStore()).notes.read(caseId),
+    readPresets: async (caseId) => (await prodXStore()).presets.read(caseId),
+    readProfileSnapshots: async (caseId) => (await prodXStore()).profileSnapshots.read(caseId),
+    readCase: async (caseId) => (await listCampaigns()).find((c) => c.id === caseId) ?? null,
+    now: () => new Date().toISOString()
+  };
+}
+
+/**
+ * Assemble the self-describing posts export envelope (his `exportJson`, `main.cjs:2116-2134`) for a
+ * campaign from its already-read `posts` (the interactive path pre-excludes synthetic; this also
+ * filters defensively). Reads the case's notes/presets/profile-snapshots/campaign, derives the
+ * preset `matches` (only ENABLED presets are run) + the entity rollup over the REAL posts, and
+ * delegates the deterministic hashing to `buildPostsExportEnvelope`.
+ */
+export async function assemblePostsExportEnvelope(
+  caseId: string,
+  posts: readonly XPostArtifact[],
+  filters: Record<string, unknown> = {},
+  overrides: Partial<PostsExportEnvelopeDeps> = {}
+): Promise<XPostsExportEnvelope> {
+  const deps = { ...defaultPostsExportEnvelopeDeps(), ...overrides };
+  const real = posts.filter((p) => !p.synthetic);
+  const [notes, presets, profiles, caseRecord] = await Promise.all([
+    deps.readNotes(caseId),
+    deps.readPresets(caseId),
+    deps.readProfileSnapshots(caseId),
+    deps.readCase(caseId)
+  ]);
+  const matches: XExportPresetMatch[] = [];
+  for (const preset of presets) {
+    if (preset.enabled === false) continue;
+    for (const p of real) {
+      const matchedKeywords = evaluatePreset(preset, p);
+      if (matchedKeywords.length) {
+        matches.push({ presetId: preset.id, presetName: preset.name, postId: p.id, matchedKeywords });
+      }
+    }
+  }
+  return buildPostsExportEnvelope({
+    case: caseRecord,
+    filters,
+    profiles,
+    posts: real,
+    notes,
+    matches,
+    entities: aggregateEntities(real),
+    exportedAt: deps.now()
+  });
+}
+
+/** Production `serializeJson` seam for `exportPostsInteractive`: the full manifest envelope. */
+async function productionPostsEnvelopeJson(caseId: string, posts: XPostArtifact[]): Promise<string> {
+  return serializeExportEnvelope(await assemblePostsExportEnvelope(caseId, posts));
+}
+
+/**
+ * Build the network export envelope (his `exportRelationshipsJson`, `main.cjs:2485-2490`): the
+ * flattened relationships + the embedded `computeNetworkAnalysis` result + a deterministic
+ * `manifestHash`. A single injected clock feeds both the analysis `generatedAt` and the envelope
+ * `exportedAt`; neither reaches the hash (the builder strips them). Synthetic accounts are excluded
+ * by `computeNetworkAnalysis` and by the builder's relationship filter.
+ */
+async function productionNetworkEnvelope(caseId: string): Promise<XNetworkExportEnvelope> {
+  const now = new Date().toISOString();
+  const { profiles, relationships } = await buildNetworkAnalysisInputs(caseId);
+  const analysis = computeNetworkAnalysis(profiles, relationships, now);
+  const caseRecord = (await listCampaigns()).find((c) => c.id === caseId) ?? null;
+  return buildNetworkExportEnvelope({ case: caseRecord, filters: {}, relationships, analysis, exportedAt: now });
+}
+
+/**
+ * Export a campaign's captured network (followers/following) as the self-describing JSON envelope
+ * through the SAME native-save-dialog + SHA-256-sidecar discipline as `exportNetworkInteractive`
+ * (CSV) — restoring his `relationships:export-json` surface so the common-connection analysis
+ * reaches a JSON file, not only CSV. The renderer never supplies a filesystem path.
+ */
+export async function exportNetworkJsonInteractive(
+  caseId: string,
+  overrides: Partial<InteractiveExportDeps> = {}
+): Promise<InteractiveNetworkExportResult> {
+  const deps: InteractiveExportDeps = { ...defaultInteractiveExportDeps(), ...overrides };
+  const res = await deps.showSaveDialog(sanitizeExportName(caseId, 'json'), [
+    { name: 'JSON', extensions: ['json'] }
+  ]);
+  if (res.canceled || !res.filePath) return { canceled: true };
+  await deps.assertNotSymlink(res.filePath);
+  const build = deps.readNetworkEnvelope ?? productionNetworkEnvelope;
+  const envelope = await build(caseId);
+  const text = serializeExportEnvelope(envelope);
+  await deps.writeFile(res.filePath, text);
+  const checksum = await writeChecksumSidecar({ writeFile: deps.writeFile }, res.filePath, text);
+  return { canceled: false, filePath: res.filePath, count: envelope.relationships.length, ...checksum };
 }
 
 /**
@@ -1388,6 +1522,16 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
       throw new Error('Network export requires a caseId.');
     }
     return exportNetworkInteractive(ensureUuid(caseIdArg, 'caseId'));
+  });
+
+  // FB4 (audit HIGH #10): network JSON export — the envelope embedding computeNetworkAnalysis +
+  // manifestHash. Sender check FIRST; UUID-gate the caseId ahead of any store path/dialog.
+  deps.handle(channels.xListening.exportNetworkJsonToFile, (e, caseIdArg) => {
+    assertTrustedSender(e);
+    if (typeof caseIdArg !== 'string' || !caseIdArg) {
+      throw new Error('Network JSON export requires a caseId.');
+    }
+    return exportNetworkJsonInteractive(ensureUuid(caseIdArg, 'caseId'));
   });
 
   // ---- Task A2: historical change events (store.ts listChangeEvents) --------

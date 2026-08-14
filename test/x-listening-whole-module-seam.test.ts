@@ -62,6 +62,7 @@ const REACHABLE_CHANNELS: ReadonlyArray<keyof typeof channels.xListening> = [
   'loadDemoData',
   'exportPostsToFile',
   'exportNetworkToFile',
+  'exportNetworkJsonToFile',
   'mediaRead',
   'changeEvents',
   'verifyPost',

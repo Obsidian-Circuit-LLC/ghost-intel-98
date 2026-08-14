@@ -652,6 +652,10 @@ export const channels = {
      *  operator-chosen path via a native save dialog (`exportNetworkCsv`, Task 7) — same
      *  save-dialog-only discipline as `exportPostsToFile`, plus a SHA-256 checksum sidecar. */
     exportNetworkToFile: 'xListening:export:networkToFile',
+    /** FB4 (audit HIGH #10): export a campaign's REAL (synthetic-excluded) captured network as a
+     *  self-describing JSON envelope embedding the common-connection analysis + a deterministic
+     *  `manifestHash`, to an operator-chosen path via a native save dialog, plus a SHA-256 sidecar. */
+    exportNetworkJsonToFile: 'xListening:export:networkJsonToFile',
     /** Read back one previously-cached local media ref (media.ts `cacheRemoteMedia`, Task 9) as a
      *  `data:` URI for renderer display. `ref` is validated against the exact
      *  `x-media/<64-hex sha256>` shape `cacheRemoteMedia` produces BEFORE any path is built —

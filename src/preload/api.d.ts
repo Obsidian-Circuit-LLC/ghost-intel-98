@@ -993,6 +993,13 @@ export interface GhostApi {
       | { canceled: true }
       | { canceled: false; filePath: string; count: number; sha256: string; checksumPath: string }
     >;
+    /** Export a campaign's REAL (synthetic-excluded) captured network as a self-describing JSON
+     *  envelope embedding the common-connection analysis + a deterministic `manifestHash`, to an
+     *  operator-chosen path via a native save dialog, plus a SHA-256 checksum sidecar. */
+    exportNetworkJsonToFile(caseId: string): Promise<
+      | { canceled: true }
+      | { canceled: false; filePath: string; count: number; sha256: string; checksumPath: string }
+    >;
     /** Read back one previously-cached local media ref as a `data:` URI for display. Returns
      *  null (never throws) for a malformed ref or a read failure. */
     mediaRead(req: { caseId: string; ref: string }): Promise<string | null>;

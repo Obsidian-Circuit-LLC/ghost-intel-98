@@ -1028,6 +1028,25 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
     }
   }, [activeCampaignId]);
 
+  // FB4 (audit HIGH #10): export the captured network as a self-describing JSON envelope embedding
+  // the common-connection analysis + a manifestHash — the analysis reaches a JSON file, not only CSV.
+  const handleExportNetworkJson = useCallback(async () => {
+    if (!activeCampaignId) return;
+    setExportBusy(true);
+    try {
+      const res = await window.api.xListening.exportNetworkJsonToFile(activeCampaignId);
+      setNotice(
+        res.canceled
+          ? 'Export canceled.'
+          : `Exported ${res.count} relationship(s) to ${res.filePath} (sha256 ${res.sha256.slice(0, 10)}…).`,
+      );
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : String(err));
+    } finally {
+      setExportBusy(false);
+    }
+  }, [activeCampaignId]);
+
   // ── Task E1: Tor-gated "open in X" affordance (openInX) ─────────────────────────────────
   // Opens the real X surface (a thread / a @profile / a network identity) in an in-app,
   // Tor-gated capture window. The URL is validated + constructed MAIN-side BEFORE any window
@@ -2930,16 +2949,27 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
             <div className="xls-panel">
               <h3 className="xls-panel-title">EXPORT CAPTURED NETWORKS</h3>
               <p className="xls-help">
-                Follower/following accounts as formula-guarded CSV — demo/synthetic accounts
-                excluded.
+                Follower/following accounts as formula-guarded CSV, or a self-describing JSON
+                envelope embedding the common-connection analysis + a SHA-256 manifest hash —
+                demo/synthetic accounts excluded from both.
               </p>
-              <button
-                className="xls-btn xls-btn-primary"
-                onClick={() => void handleExportNetwork()}
-                disabled={exportBusy || !activeCampaignId}
-              >
-                Export Network CSV…
-              </button>
+              <div className="xls-dock-row">
+                <button
+                  className="xls-btn xls-btn-primary"
+                  onClick={() => void handleExportNetwork()}
+                  disabled={exportBusy || !activeCampaignId}
+                >
+                  Export Network CSV…
+                </button>
+                <button
+                  className="xls-btn xls-btn-primary"
+                  title="Export the captured network as JSON embedding the common-connection analysis (synthetic excluded, deterministic manifest hash, SHA-256 sidecar)."
+                  onClick={() => void handleExportNetworkJson()}
+                  disabled={exportBusy || !activeCampaignId}
+                >
+                  Export Network JSON…
+                </button>
+              </div>
             </div>
           </section>
         )}
