@@ -793,6 +793,7 @@ const api = {
     verifyPost: (req: { caseId: string; postId: string }) =>
       ipcRenderer.invoke(channels.xListening.verifyPost, req),
     runLog: (caseId: string) => ipcRenderer.invoke(channels.xListening.runLog, caseId),
+    networkEvents: (caseId: string) => ipcRenderer.invoke(channels.xListening.networkEvents, caseId),
     openInX: (req: { kind: 'thread' | 'profile' | 'identity'; ref: string }) =>
       ipcRenderer.invoke(channels.xListening.openInX, req),
     captureNetwork: (req: {

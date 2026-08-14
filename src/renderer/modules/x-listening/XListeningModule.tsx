@@ -369,6 +369,19 @@ export interface XRunLogRow {
   endedAt: string;
 }
 
+/** One persisted per-handle network delta event — the Network tab's RECENT NETWORK DELTAS stream
+ *  (store.ts `XNetworkDeltaEvent`, M2). Emitted by the network capture path, GATED so a shallow
+ *  re-scan cannot flood `not_seen_latest`. `not_seen_latest` is a review candidate (confidence
+ *  `unconfirmed`), NEVER a claimed unfollow. Rendered newest-first, synthetic handles excluded. */
+export interface XNetworkDeltaEventRow {
+  kind: 'newly_observed' | 'not_seen_latest';
+  handle: string;
+  target: string;
+  relationship: 'followers' | 'following';
+  observedAt: string;
+  confidence: 'observed' | 'unconfirmed';
+}
+
 export interface XArchiveStateView {
   cursor: string | null;
   cycles: number;
@@ -500,6 +513,9 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
   const [networks, setNetworks] = useState<XNetworkAccountRow[]>([]);
   const [changeEvents, setChangeEvents] = useState<XChangeEventRow[]>([]);
   const [runLog, setRunLog] = useState<XRunLogRow[]>([]);
+  /** M2: persisted, GATED per-handle network delta events (source of truth for RECENT NETWORK
+   *  DELTAS — replaces the old ungated first/last-observed timestamp derivation). */
+  const [networkDeltas, setNetworkDeltas] = useState<XNetworkDeltaEventRow[]>([]);
   /** The post id currently being live-verified (VERIFY LIVE, Task A1) — disables its button. */
   const [verifyingPostId, setVerifyingPostId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -608,6 +624,7 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
       setNetworks([]);
       setChangeEvents([]);
       setRunLog([]);
+      setNetworkDeltas([]);
       setNotes([]);
       setArchiveState(EMPTY_ARCHIVE_STATE);
       setPresets([]);
@@ -615,7 +632,7 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
     }
     setInsightsBusy(true);
     try {
-      const [postsRes, analysisRes, healthRes, entitiesRes, networksRes, notesRes, archiveRes, presetsRes, changeEventsRes, runLogRes] =
+      const [postsRes, analysisRes, healthRes, entitiesRes, networksRes, notesRes, archiveRes, presetsRes, changeEventsRes, runLogRes, networkEventsRes] =
         await Promise.all([
           window.api.xListening.postsList(id),
           window.api.xListening.analysis(id),
@@ -627,6 +644,7 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
           window.api.xListening.presetsRead(id),
           window.api.xListening.changeEvents(id),
           window.api.xListening.runLog(id),
+          window.api.xListening.networkEvents(id),
         ]);
       setPosts((postsRes as unknown as XPostRow[]) ?? []);
       setAnalysis((analysisRes as unknown as XAnalysisView) ?? EMPTY_ANALYSIS);
@@ -649,6 +667,7 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
       setPresets(((presetsRes as unknown as { presets: XPresetRow[] })?.presets) ?? []);
       setChangeEvents((changeEventsRes as unknown as XChangeEventRow[]) ?? []);
       setRunLog((runLogRes as unknown as XRunLogRow[]) ?? []);
+      setNetworkDeltas((networkEventsRes as unknown as XNetworkDeltaEventRow[]) ?? []);
     } catch (err) {
       console.warn('[XListening] loadInsights:', err);
     } finally {
@@ -1403,36 +1422,35 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
       .slice(0, 3000);
   }, [networks, matchesSelectedTarget, networkView, networkRecordQuery]);
 
-  // RECENT NETWORK DELTAS — CONSERVATIVE, derived honestly from the accounts' own first/last-seen
-  // bookkeeping (the hardened core keeps no separate network-event log). Per (target, kind) group
-  // the latest scan is the max `lastObservedAt`; an account first seen in that latest scan is
-  // NEWLY OBSERVED, and an account whose `lastObservedAt` predates its group's latest scan was NOT
-  // SEEN in the latest comparable scan — a review candidate, never asserted as an unfollow (X can
-  // truncate/reorder lists). Newest-first, capped 100 (source parity, main.tsx:289).
+  // RECENT NETWORK DELTAS — the PERSISTED, GATED per-handle event stream (store.ts
+  // `listNetworkEvents`, M2, his `recordNetworkSnapshot` `networkEvents`). This REPLACES the old
+  // ungated first/last-observed timestamp derivation, which flagged NOT SEEN for any account whose
+  // last-seen predated its group's latest scan — over-flagging on a shallow re-scan. The main-side
+  // gate (passesCompleted + observedCount vs the PREVIOUS scan) means a truncated pass no longer
+  // floods NOT SEEN, and a dropped handle is flagged ONCE. `not_seen_latest` is a review candidate
+  // (confidence `unconfirmed`), never a claimed unfollow. Events arrive newest-first + capped ~500;
+  // we re-cap to 100 for display (source parity, main.tsx:289).
   const recentNetworkDeltas = useMemo(() => {
-    // `networksList` is UNFILTERED — drop demo/seeded rows (`synthetic:true`, demo.ts) before both
-    // the per-group latest-scan reduction and the delta roll-up, so a demo account never surfaces
-    // as a NEWLY OBSERVED / NOT SEEN candidate (Global Constraints honesty rule).
-    const realNetworks = networks.filter((a) => !a.synthetic);
-    const latestByGroup = new Map<string, string>();
-    for (const a of realNetworks) {
-      const g = `${a.target}::${a.kind}`;
-      const last = a.lastObservedAt ?? '';
-      if (last > (latestByGroup.get(g) ?? '')) latestByGroup.set(g, last);
-    }
-    return realNetworks
-      .map((a) => {
-        const latest = latestByGroup.get(`${a.target}::${a.kind}`) ?? '';
-        const first = a.firstObservedAt ?? '';
-        const last = a.lastObservedAt ?? '';
-        const newlyObserved = !!first && first === last && last === latest;
-        const notSeen = !!last && !!latest && last < latest;
-        return { account: a, newlyObserved, notSeen, at: last };
-      })
-      .filter((r) => r.newlyObserved || r.notSeen)
-      .sort((x, y) => y.at.localeCompare(x.at))
-      .slice(0, 100);
-  }, [networks]);
+    // Belt-and-braces synthetic exclusion (Global Constraints honesty rule): a live capture never
+    // emits events for a demo/seeded row, but if a persisted event's handle collides with a
+    // synthetic account in this campaign's `networks`, drop it so a demo handle can never surface as
+    // a NEWLY OBSERVED / NOT SEEN delta.
+    const norm = (target: string, rel: string, handle: string) =>
+      `${target.replace(/^@+/, '').toLowerCase()}::${rel}::${handle.replace(/^@+/, '').toLowerCase()}`;
+    const syntheticKeys = new Set(
+      networks.filter((a) => a.synthetic).map((a) => norm(a.target, a.kind, a.handle)),
+    );
+    return networkDeltas
+      .filter((e) => !syntheticKeys.has(norm(e.target, e.relationship, e.handle)))
+      .slice(0, 100)
+      .map((e) => ({
+        handle: e.handle,
+        target: e.target,
+        relationship: e.relationship,
+        newlyObserved: e.kind === 'newly_observed',
+        at: e.observedAt,
+      }));
+  }, [networkDeltas, networks]);
 
   // ── Task 15(d): archive step, driven off the campaign's OWN Tor-default session ─────────
   const handleRunArchive = useCallback(async () => {
@@ -2603,16 +2621,16 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
                   {recentNetworkDeltas.map((d, i) => (
                     <li
                       className="xls-source-row xls-delta-row"
-                      key={`${d.account.target}:${d.account.kind}:${d.account.handle}:${i}`}
+                      key={`${d.target}:${d.relationship}:${d.handle}:${d.at}:${i}`}
                     >
                       <span>
                         <button
                           type="button"
                           className="xls-identity-main"
                           title="Open this identity's X profile in a Tor-gated in-app window"
-                          onClick={() => void handleOpenInX('identity', d.account.handle)}
+                          onClick={() => void handleOpenInX('identity', d.handle)}
                         >
-                          @{d.account.handle.replace(/^@+/, '')}
+                          @{d.handle.replace(/^@+/, '')}
                         </button>
                         <span
                           className={`xls-marker ${
@@ -2621,7 +2639,7 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
                         >
                           {d.newlyObserved ? 'NEWLY OBSERVED' : 'NOT SEEN IN LATEST COMPARABLE SCAN'}
                         </span>{' '}
-                        {d.account.kind.toUpperCase()} of @{d.account.target.replace(/^@+/, '')}
+                        {d.relationship.toUpperCase()} of @{d.target.replace(/^@+/, '')}
                       </span>
                       <span className="xls-count">{formatWhen(d.at)}</span>
                     </li>

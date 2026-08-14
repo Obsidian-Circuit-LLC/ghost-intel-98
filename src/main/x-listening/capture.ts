@@ -61,11 +61,12 @@ import {
 } from './changes';
 import { MEDIA_HOST_ALLOWLIST } from '../capture/security';
 import { buildRunRecord, recordCollectionRun, type RunRecordInput } from './run-log';
-import { deriveNetworkDeltaEvents } from './store';
+import { deriveNetworkDeltaEvents, dedupeHandlesCI, X_MAX_SCAN_OBSERVED } from './store';
 import type {
   XNetworkAccount,
   XNetworkArtifact,
   XNetworkDeltaEvent,
+  XNetworkScanState,
   XPostArtifact,
   XPostMetrics,
   XPostMetricsRaw,
@@ -1278,9 +1279,11 @@ export interface XNetworkCaptureResult {
   completedPasses: number;
   /** True iff the loop stopped on stagnation (a stable end) rather than the pass ceiling. */
   reachedEnd: boolean;
-  /** Per-handle network delta events for this scan (M2, his `recordNetworkSnapshot` `networkEvents`):
-   *  a `newly_observed` per newly-added handle and a CONSERVATIVE, gated `not_seen_latest` per prior
-   *  handle absent from a comparable scan. Absent on a blocked scan (nothing was observed). */
+  /** Per-handle network delta events computed AND PERSISTED this scan (M2, his
+   *  `recordNetworkSnapshot` `networkEvents`): a `newly_observed` per newly-added handle and a
+   *  CONSERVATIVE, gated `not_seen_latest` per PREVIOUS-SCAN handle absent from a comparable scan.
+   *  The durable stream (`store.networkEvents`, surfaced via `listNetworkEvents`) is the UI's source
+   *  of truth; this mirror is what was persisted. Absent on a blocked scan (nothing was observed). */
   deltaEvents?: XNetworkDeltaEvent[];
 }
 
@@ -1317,6 +1320,17 @@ export interface XNetworkCaptureDeps {
   ) => Promise<XNetworkAccount[]>;
   /** Persist the freshly captured artifact (store.ts `networks.save`, the Task 7 accumulator). */
   saveNetwork: (caseId: string, artifact: XNetworkArtifact) => Promise<number>;
+  /** Read the PREVIOUS scan's minimal state for one (target, relationship) — the diff basis + gate
+   *  inputs for `deriveNetworkDeltaEvents` (M2). Null if this is the first scan. */
+  readScanState: (
+    caseId: string,
+    target: string,
+    kind: 'followers' | 'following',
+  ) => Promise<XNetworkScanState | null>;
+  /** Overwrite the previous-scan record with THIS scan's observed set/count/passes (M2). */
+  saveScanState: (caseId: string, state: XNetworkScanState) => Promise<void>;
+  /** Append this scan's per-handle delta events to the durable stream (M2, his `networkEvents`). */
+  appendNetworkEvents: (caseId: string, events: XNetworkDeltaEvent[]) => Promise<void>;
   /** Append one collection-run record best-effort (telemetry, not evidence — see `emitRun`). */
   recordRun: (caseId: string, record: XRunLogRecord) => Promise<void>;
   /** Read this campaign's per-campaign collection settings (F2) — the source of the default
@@ -1422,6 +1436,21 @@ function defaultNetworkCaptureDeps(): XNetworkCaptureDeps {
       const { prodXStore } = await import('./store');
       const store = await prodXStore();
       return store.networks.save(caseId, artifact);
+    },
+    readScanState: async (caseId, target, kind) => {
+      const { prodXStore } = await import('./store');
+      const store = await prodXStore();
+      return store.networkScanState.read(caseId, target, kind);
+    },
+    saveScanState: async (caseId, state) => {
+      const { prodXStore } = await import('./store');
+      const store = await prodXStore();
+      await store.networkScanState.write(caseId, state);
+    },
+    appendNetworkEvents: async (caseId, events) => {
+      const { prodXStore } = await import('./store');
+      const store = await prodXStore();
+      await store.networkEvents.append(caseId, events);
     },
     recordRun: async (caseId, record) => {
       await recordCollectionRun(caseId, record);
@@ -1593,17 +1622,58 @@ export async function captureNetwork(
     const capturedAt = deps.now();
     const artifact = normalizeNetwork(rows, username, kind, capturedAt, { caseId: req.caseId });
 
-    // Honest `added` delta: how many of this scan's accounts weren't already in the accumulator.
+    // Honest `added` delta: which of this scan's accounts weren't already in the ACCUMULATOR.
+    // `addedHandles` (not just the count) seed the `newly_observed` events — his `addedUsernames`.
     const prior = await deps.readNetwork(req.caseId, fullTarget, kind);
     const priorHandles = new Set(prior.map((a) => a.handle.toLowerCase()));
-    const added = artifact.accounts.filter((a) => !priorHandles.has(a.handle.toLowerCase())).length;
+    const addedHandles = artifact.accounts
+      .filter((a) => !priorHandles.has(a.handle.toLowerCase()))
+      .map((a) => a.handle);
+    const added = addedHandles.length;
 
-    // M2: per-handle delta events (newly_observed + conservative, gated not_seen_latest) — his
-    // `recordNetworkSnapshot` emitted these alongside the scalar `added`. Computed against the
-    // PRIOR accumulator BEFORE the save folds this scan in.
-    const deltaEvents = deriveNetworkDeltaEvents(prior, artifact.accounts, capturedAt);
+    // M2: per-handle delta events — his `recordNetworkSnapshot` (main.cjs:540-581). `newly_observed`
+    // is the accumulator diff (`addedHandles`); `not_seen_latest` is a CONSERVATIVE observation
+    // gated against the PREVIOUS SCAN (never the all-time accumulator) on BOTH passesCompleted and
+    // observedCount, so a shallow re-scan cannot falsely flag every missing account as "gone" and a
+    // dropped handle is flagged ONCE, not on every later scan. The previous-scan read is fail-soft
+    // (a missing/unreadable record ⇒ null ⇒ newly_observed only) — the same electron-less-harness
+    // resilience `getCollectionSettings` uses; it never blocks a capture.
+    let previousScan: XNetworkScanState | null = null;
+    try {
+      previousScan = await deps.readScanState(req.caseId, fullTarget, kind);
+    } catch (err) {
+      console.warn('[XListening] readScanState (network):', err);
+    }
+    const deltaEvents = deriveNetworkDeltaEvents({
+      previous: previousScan,
+      observed: artifact.accounts,
+      passesCompleted: completedPasses,
+      added: addedHandles,
+      target: fullTarget,
+      relationship: kind,
+      observedAt: capturedAt,
+    });
 
     await deps.saveNetwork(req.caseId, artifact);
+
+    // Persist the delta stream + advance the previous-scan record (this scan becomes next scan's
+    // `previous`). Best-effort, exactly like `emitNetworkRun` — a persistence miss is logged, never
+    // fatal to the capture. The observed set is deduped + capped identically to the gate's basis so
+    // the next comparison compares like with like.
+    const observedUsernames = dedupeHandlesCI(artifact.accounts.map((a) => a.handle), X_MAX_SCAN_OBSERVED);
+    try {
+      if (deltaEvents.length > 0) await deps.appendNetworkEvents(req.caseId, deltaEvents);
+      await deps.saveScanState(req.caseId, {
+        target: fullTarget.toLowerCase(),
+        relationship: kind,
+        observedUsernames,
+        observedCount: observedUsernames.length,
+        passesCompleted: completedPasses,
+        capturedAt,
+      });
+    } catch (err) {
+      console.warn('[XListening] persist network deltas (M2):', err);
+    }
 
     await emitNetworkRun(deps, req.caseId, {
       profileId,

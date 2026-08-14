@@ -682,6 +682,12 @@ export const channels = {
      *  completedPasses, reachedEnd, stopReason, status, startedAt, endedAt }`) emitted by the
      *  capture/archive paths. Derived read; no capture window, no network. */
     runLog: 'xListening:runLog',
+    /** List a campaign's per-handle network delta events (store.ts `listNetworkEvents`, M2) —
+     *  newest-first, capped ~500. The Network tab's RECENT NETWORK DELTAS stream: a `newly_observed`
+     *  per newly-added follower/following handle and a CONSERVATIVE, gated `not_seen_latest` per
+     *  previous-scan handle absent from a comparable scan (his `recordNetworkSnapshot` `networkEvents`,
+     *  no-auto-unfollow). Derived read; no capture window, no network. */
+    networkEvents: 'xListening:networkEvents',
     /** Extract one target's followers or following into the campaign's `networks` accumulator
      *  (capture.ts `captureNetwork`, Task C1 — EXTRACT FOLLOWERS/FOLLOWING/BOTH). Opens a Tor-gated
      *  hidden capture window on the shared authenticated X partition, navigated to

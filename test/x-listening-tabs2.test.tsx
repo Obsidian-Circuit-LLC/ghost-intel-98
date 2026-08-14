@@ -99,6 +99,7 @@ function makeApi() {
       networksList: vi.fn(async () => [NETWORK_ARTIFACT]),
       changeEvents: vi.fn(async () => []),
       runLog: vi.fn(async () => []),
+      networkEvents: vi.fn(async () => []),
       readNotes: vi.fn(async () => ({ notes: [{ findingId: 'post-a', text: 'existing note', savedAt: '2026-08-01T00:00:00.000Z' }] })),
       saveNote: vi.fn(async (req: { findingId: string; text: string }) => ({
         notes: [{ id: 'note-1', findingId: req.findingId, text: req.text, savedAt: '2026-08-05T00:00:00.000Z' }],

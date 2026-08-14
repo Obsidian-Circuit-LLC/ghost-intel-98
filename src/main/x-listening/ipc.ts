@@ -1755,6 +1755,20 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
     return store.listRunLog(ensureUuid(caseIdArg, 'caseId'));
   });
 
+  // ---- M2: per-handle network delta events (store.ts listNetworkEvents) -----
+  // Derived read (no capture window, no network) — newest-first, capped ~500. Sender check + arg
+  // validation only, same shape as `changeEvents`/`runLog`. The events are emitted by the network
+  // capture path (capture.ts `captureNetwork` → store.networkEvents). No-auto-unfollow honesty:
+  // `not_seen_latest` is an OBSERVATION the renderer labels as a review candidate, never a claim.
+  deps.handle(channels.xListening.networkEvents, async (e, caseIdArg) => {
+    assertTrustedSender(e);
+    if (typeof caseIdArg !== 'string' || !caseIdArg) {
+      throw new Error('Listing network delta events requires a caseId.');
+    }
+    const store = await prodXStore();
+    return store.listNetworkEvents(ensureUuid(caseIdArg, 'caseId'));
+  });
+
   // ---- Task A1: live post verification (VERIFY LIVE) -----------------------
   // Opens the stored post's real URL in a Tor-gated capture window (capture.ts `verifyPost` reads
   // the acked clearnet flag + `resolveXTorGate` itself, MAIN-side — fail-closed, no clearnet

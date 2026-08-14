@@ -117,6 +117,7 @@ function makeApi(over: { changeEvents?: unknown[]; runLog?: unknown[]; networks?
       networksList: vi.fn(async () => over.networks ?? [NETWORK_ARTIFACT]),
       changeEvents: vi.fn(async () => over.changeEvents ?? CHANGE_EVENTS),
       runLog: vi.fn(async () => over.runLog ?? RUN_LOG),
+      networkEvents: vi.fn(async () => []),
       readNotes: vi.fn(async () => ({ notes: [] })),
       presetsRead: vi.fn(async () => ({ presets: [] })),
       archiveStatus: vi.fn(async () => ({ cursor: null, cycles: 0, lastRunAt: null })),

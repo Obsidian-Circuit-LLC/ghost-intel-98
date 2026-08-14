@@ -67,6 +67,7 @@ const REACHABLE_CHANNELS: ReadonlyArray<keyof typeof channels.xListening> = [
   'changeEvents',
   'verifyPost',
   'runLog',
+  'networkEvents',
   'openInX',
   'captureNetwork',
   'removeSource',

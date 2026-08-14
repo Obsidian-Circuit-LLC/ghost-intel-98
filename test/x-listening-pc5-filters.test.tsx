@@ -76,6 +76,7 @@ function makeApi() {
       networksList: vi.fn(async () => NETWORKS),
       changeEvents: vi.fn(async () => []),
       runLog: vi.fn(async () => RUN_LOG),
+      networkEvents: vi.fn(async () => []),
       readNotes: vi.fn(async () => ({ notes: [{ id: 'n1', findingId: 'p-repost', text: 'flagged by counter-intel', savedAt: '2026-08-05T00:00:00.000Z' }] })),
       presetsRead: vi.fn(async () => ({ presets: [] })),
       presetsRun: vi.fn(async () => ({ matches: [{ postId: 'p-post', matchedKeywords: ['ransomware'] }] })),

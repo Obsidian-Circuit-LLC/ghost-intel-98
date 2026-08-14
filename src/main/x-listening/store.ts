@@ -342,6 +342,10 @@ export interface XStoreDeps {
   profileSnapshotsPath(caseId: string): string;
   /** Resolve the collection-run-log sidecar path for a case (Task A3). */
   runLogPath(caseId: string): string;
+  /** Resolve the per-(target,relationship) previous-scan-state sidecar path for a case (M2). */
+  networkScanStatePath(caseId: string): string;
+  /** Resolve the per-handle network delta-events stream sidecar path for a case (M2). */
+  networkEventsPath(caseId: string): string;
 }
 
 // ---- helpers -----------------------------------------------------------
@@ -400,61 +404,122 @@ function mergeNetworkAccounts(
 
 // ---- M2 (PC4): per-handle network delta events ---------------------------
 
+/** Cap on the observed-handle list retained in ONE previous-scan record — his
+ *  `observedUsernames.slice(0, 30000)` (main.cjs:557). Bounds the per-(target,relationship) state. */
+export const X_MAX_SCAN_OBSERVED = 30000;
+
+/** Newest network delta events a case retains (and the cap `listNetworkEvents` returns). Mirrors the
+ *  `changeEvents` cap discipline; his stream was app-wide 5000, this port keeps a per-case 500-cap. */
+export const X_MAX_NETWORK_EVENTS = 500;
+
 /** One per-handle network observation event — his `appState.networkEvents` row
  *  (`recordNetworkSnapshot`, main.cjs:540-581), restored on the hardened core. `newly_observed`
  *  fires for a handle seen this scan but absent from the prior accumulator; `not_seen_latest` is a
- *  CONSERVATIVE observation that a prior handle did not appear in a COMPARABLE later scan — it is
- *  explicitly NOT an assertion the account unfollowed (confidence `unconfirmed`), and the account
- *  itself is never dropped or relabelled. */
+ *  CONSERVATIVE observation that a handle in the PREVIOUS SCAN did not appear in a COMPARABLE later
+ *  scan — it is explicitly NOT an assertion the account unfollowed (confidence `unconfirmed`), and
+ *  the account itself is never dropped or relabelled. `target`/`relationship` scope the event to one
+ *  captured (profile, followers|following) surface so the renderer can attribute + filter it. */
 export interface XNetworkDeltaEvent {
   kind: 'newly_observed' | 'not_seen_latest';
   /** The account handle this event is about (as captured, `@`-prefixed). */
   handle: string;
+  /** The profile whose network this event belongs to (as captured, `@`-prefixed). */
+  target: string;
+  /** Which relationship surface of `target` the event was observed on. */
+  relationship: 'followers' | 'following';
   /** The scan's injected-clock ISO time (never computed here — determinism floor). */
   observedAt: string;
   /** `observed` for a first sighting; `unconfirmed` for a not-seen observation (no-auto-unfollow). */
   confidence: 'observed' | 'unconfirmed';
 }
 
-/**
- * Derive the per-handle network delta events for one scan — a PURE diff of this scan's observed
- * accounts (`incoming`) against the persisted accumulator (`prior`) for the same (target, kind).
- * Ported from his `recordNetworkSnapshot` (main.cjs:540-581):
- *
- *  - `newly_observed` (confidence `observed`): one per incoming handle absent from `prior`.
- *  - `not_seen_latest` (confidence `unconfirmed`): one per prior handle absent from `incoming` —
- *    but ONLY when this scan is COMPARABLE to what came before, his conservative gate
- *    `observedCount >= max(10, floor(priorCount * 0.85))`. A shallow re-scan (far fewer accounts
- *    than the accumulator) fires NO not-seen events, so a truncated pass can never falsely flag
- *    every account as "gone". This preserves the no-auto-unfollow posture: not_seen_latest is an
- *    observation the analyst interprets, never a stored "unfollowed" fact.
- *
- * Deterministic: handles are compared case-insensitively; `observedAt` is the caller's injected
- * clock (no Date.now/RNG). Never mutates its inputs.
- */
-export function deriveNetworkDeltaEvents(
-  prior: readonly XNetworkAccount[],
-  incoming: readonly XNetworkAccount[],
-  observedAt: string,
-): XNetworkDeltaEvent[] {
-  const priorKeys = new Set(prior.map((a) => String(a.handle ?? '').toLowerCase()));
-  const incomingKeys = new Set(incoming.map((a) => String(a.handle ?? '').toLowerCase()));
+/** The PREVIOUS scan's observed set for ONE (target, relationship) — the minimal state his
+ *  `recordNetworkSnapshot` diffs a new scan against to gate `not_seen_latest` (main.cjs:542-578).
+ *  Only the LAST scan is retained (not full snapshot history): enough to compute the per-scan
+ *  delta and apply the dual comparability gate. `observedUsernames` are `@`-prefixed as captured,
+ *  case-insensitively deduped, capped `X_MAX_SCAN_OBSERVED`. `capturedAt` is the injected clock. */
+export interface XNetworkScanState {
+  /** Lowercased `@handle` of the profile (the stable key half). */
+  target: string;
+  relationship: 'followers' | 'following';
+  observedUsernames: string[];
+  observedCount: number;
+  passesCompleted: number;
+  capturedAt: string;
+}
 
+/** Case-insensitively dedupe a handle list, preserving first-seen order + original casing, capped to
+ *  `cap`. Deterministic (input order in, no clock/RNG). Used for BOTH the previous-scan record and
+ *  the diff's observed-set count so the gate compares like with like. */
+export function dedupeHandlesCI(handles: readonly string[], cap = X_MAX_SCAN_OBSERVED): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const h of handles) {
+    const raw = String(h ?? '');
+    const key = raw.toLowerCase();
+    if (!raw || seen.has(key)) continue;
+    seen.add(key);
+    out.push(raw);
+    if (out.length >= cap) break;
+  }
+  return out;
+}
+
+/**
+ * Derive the per-handle network delta events for ONE scan — a PURE, deterministic diff, ported
+ * faithfully from his `recordNetworkSnapshot` (main.cjs:540-581):
+ *
+ *  - `newly_observed` (confidence `observed`): one per handle in `added` — the handles this scan
+ *    added vs the ALL-TIME ACCUMULATOR (his `addedUsernames`, computed by the caller before the
+ *    accumulator folds this scan in). NOT re-derived here.
+ *  - `not_seen_latest` (confidence `unconfirmed`): one per handle in the PREVIOUS SCAN's observed set
+ *    (`previous.observedUsernames`) absent from THIS scan (`observed`) — but ONLY when this scan is
+ *    COMPARABLE to the previous one, his DUAL gate:
+ *        `passesCompleted >= previous.passesCompleted`
+ *        AND `observedCount >= max(10, floor(previous.observedCount * 0.85))`.
+ *    A shallow re-scan (fewer passes, or far fewer accounts than last time) fires NO not-seen events,
+ *    so a truncated pass can never falsely flag every account as "gone" — the no-false-intelligence
+ *    property. Diffing against the PREVIOUS SCAN (not the all-time accumulator) also means a handle
+ *    that dropped out emits `not_seen_latest` ONCE (the scan it vanished on); a later scan no longer
+ *    has it in `previous` either, so it is not re-emitted. `not_seen_latest` is an observation the
+ *    analyst interprets, never a stored "unfollowed" fact (the account is never dropped/relabelled).
+ *
+ * Deterministic: handles compared case-insensitively; `observedAt` is the caller's injected clock
+ * (no Date.now/RNG). Never mutates its inputs. `not_seen_latest` is capped at 500 per scan (his
+ * `missing.slice(0, 500)`).
+ */
+export function deriveNetworkDeltaEvents(params: {
+  previous: Pick<XNetworkScanState, 'observedUsernames' | 'observedCount' | 'passesCompleted'> | null;
+  observed: readonly XNetworkAccount[];
+  passesCompleted: number;
+  added: readonly string[];
+  target: string;
+  relationship: 'followers' | 'following';
+  observedAt: string;
+}): XNetworkDeltaEvent[] {
+  const { previous, observed, passesCompleted, added, target, relationship, observedAt } = params;
   const events: XNetworkDeltaEvent[] = [];
-  for (const acct of incoming) {
-    if (!priorKeys.has(String(acct.handle ?? '').toLowerCase())) {
-      events.push({ kind: 'newly_observed', handle: acct.handle, observedAt, confidence: 'observed' });
-    }
+
+  // newly_observed — one per accumulator-added handle (his `addedUsernames`).
+  for (const handle of dedupeHandlesCI(added)) {
+    events.push({ kind: 'newly_observed', handle, target, relationship, observedAt, confidence: 'observed' });
   }
 
-  // Conservative comparability gate (his `snapshot.observedCount >= Math.max(10, floor(prev*0.85))`).
-  // Only when this scan re-saw a comparable share of the prior set do we treat a prior handle's
-  // ABSENCE as an observation worth recording.
-  const comparable = incoming.length >= Math.max(10, Math.floor(prior.length * 0.85));
-  if (comparable) {
-    for (const acct of prior) {
-      if (!incomingKeys.has(String(acct.handle ?? '').toLowerCase())) {
-        events.push({ kind: 'not_seen_latest', handle: acct.handle, observedAt, confidence: 'unconfirmed' });
+  // not_seen_latest — gated against the PREVIOUS SCAN, never the all-time accumulator.
+  const observedKeys = new Set(observed.map((a) => String(a.handle ?? '').toLowerCase()));
+  const observedCount = observedKeys.size;
+  if (previous) {
+    const comparable =
+      passesCompleted >= Number(previous.passesCompleted || 0) &&
+      observedCount >= Math.max(10, Math.floor(Number(previous.observedCount || 0) * 0.85));
+    if (comparable) {
+      let emitted = 0;
+      for (const handle of previous.observedUsernames) {
+        if (emitted >= 500) break;
+        if (!observedKeys.has(String(handle ?? '').toLowerCase())) {
+          events.push({ kind: 'not_seen_latest', handle, target, relationship, observedAt, confidence: 'unconfirmed' });
+          emitted += 1;
+        }
       }
     }
   }
@@ -576,6 +641,31 @@ export interface XStore {
   /** Newest-first, `X_MAX_RUN_LOG`-capped view of a case's collection runs — the Change Intel
    *  tab's COLLECTION RUN LOG read (Task A3; consumed via `channels.xListening.runLog`). */
   listRunLog(caseId: string): Promise<XRunLogRecord[]>;
+  /** M2: the minimal PREVIOUS-scan state per (target, relationship), the diff basis + gate inputs
+   *  for `deriveNetworkDeltaEvents`. Only the last scan is retained (upsert overwrites). */
+  networkScanState: {
+    /** The last-persisted scan record for one (target, relationship), or null if none. `target` is
+     *  matched case-insensitively. */
+    read(
+      caseId: string,
+      target: string,
+      relationship: 'followers' | 'following',
+    ): Promise<XNetworkScanState | null>;
+    /** Upsert one scan record, keyed by (target, relationship) case-insensitively — a re-scan
+     *  REPLACES the prior record (only the previous scan is retained, never full history). */
+    write(caseId: string, state: XNetworkScanState): Promise<void>;
+  };
+  /** M2: the durable per-handle delta-events stream (his `appState.networkEvents`). */
+  networkEvents: {
+    /** All delta events for a case, in APPEND (oldest-first) order. */
+    read(caseId: string): Promise<XNetworkDeltaEvent[]>;
+    /** Append events; the persisted list is capped to the newest `X_MAX_NETWORK_EVENTS` (oldest
+     *  dropped). Returns the fresh (append-order) list. */
+    append(caseId: string, events: XNetworkDeltaEvent[]): Promise<XNetworkDeltaEvent[]>;
+  };
+  /** Newest-first, `X_MAX_NETWORK_EVENTS`-capped view of a case's network delta events — the
+   *  Network tab's RECENT NETWORK DELTAS read (M2; consumed via `channels.xListening.networkEvents`). */
+  listNetworkEvents(caseId: string): Promise<XNetworkDeltaEvent[]>;
 }
 
 export function makeXStore(deps: XStoreDeps): XStore {
@@ -880,6 +970,75 @@ export function makeXStore(deps: XStoreDeps): XStore {
       const bounded = records.length > X_MAX_RUN_LOG ? records.slice(-X_MAX_RUN_LOG) : records;
       return bounded.reverse();
     },
+
+    networkScanState: {
+      async read(caseId, target, relationship) {
+        const t = String(target ?? '').toLowerCase();
+        return withLock(`x-listening:networkScanState:${caseId}`, async () => {
+          const existing = await readJsonArr<XNetworkScanState>(deps, deps.networkScanStatePath(caseId));
+          for (let i = existing.length - 1; i >= 0; i--) {
+            const rec = existing[i]!;
+            if (String(rec.target ?? '').toLowerCase() === t && rec.relationship === relationship) {
+              return rec;
+            }
+          }
+          return null;
+        });
+      },
+      write(caseId, state) {
+        // Upsert by (target, relationship) case-insensitively — only the PREVIOUS scan is retained.
+        // Direct readJsonArr/writeJson inside the lock (withLock is not reentrant).
+        return withLock(`x-listening:networkScanState:${caseId}`, async () => {
+          const existing = await readJsonArr<XNetworkScanState>(deps, deps.networkScanStatePath(caseId));
+          const t = String(state.target ?? '').toLowerCase();
+          const next: XNetworkScanState = {
+            target: t,
+            relationship: state.relationship,
+            observedUsernames: dedupeHandlesCI(state.observedUsernames ?? []),
+            observedCount: Number(state.observedCount) || 0,
+            passesCompleted: Number(state.passesCompleted) || 0,
+            capturedAt: state.capturedAt,
+          };
+          const idx = existing.findIndex(
+            (r) => String(r.target ?? '').toLowerCase() === t && r.relationship === state.relationship,
+          );
+          if (idx >= 0) existing[idx] = next;
+          else existing.push(next);
+          await writeJson(deps, deps.networkScanStatePath(caseId), existing);
+        });
+      },
+    },
+
+    networkEvents: {
+      read(caseId) {
+        return withLock(`x-listening:networkEvents:${caseId}`, () =>
+          readJsonArr<XNetworkDeltaEvent>(deps, deps.networkEventsPath(caseId)),
+        );
+      },
+      append(caseId, events) {
+        // Direct readJsonArr/writeJson (NOT networkEvents.read) inside the lock: withLock is not
+        // reentrant, and read/append take the SAME key.
+        return withLock(`x-listening:networkEvents:${caseId}`, async () => {
+          const existing = await readJsonArr<XNetworkDeltaEvent>(deps, deps.networkEventsPath(caseId));
+          for (const ev of events) existing.push(ev);
+          // Cap to the newest X_MAX_NETWORK_EVENTS (drop oldest) so the stream never grows unbounded.
+          const capped =
+            existing.length > X_MAX_NETWORK_EVENTS ? existing.slice(-X_MAX_NETWORK_EVENTS) : existing;
+          await writeJson(deps, deps.networkEventsPath(caseId), capped);
+          return capped;
+        });
+      },
+    },
+
+    async listNetworkEvents(caseId) {
+      const events = await withLock(`x-listening:networkEvents:${caseId}`, () =>
+        readJsonArr<XNetworkDeltaEvent>(deps, deps.networkEventsPath(caseId)),
+      );
+      // Newest-first for the renderer; the persisted list is already capped, so reverse a bounded
+      // tail (defensive re-cap in case a legacy file exceeded the cap).
+      const bounded = events.length > X_MAX_NETWORK_EVENTS ? events.slice(-X_MAX_NETWORK_EVENTS) : events;
+      return bounded.reverse();
+    },
   };
 }
 
@@ -912,6 +1071,8 @@ export async function prodXStore(): Promise<XStore> {
     changeEventsPath: (id) => artifact(id, 'x-change-events.json'),
     profileSnapshotsPath: (id) => artifact(id, 'x-profile-snapshots.json'),
     runLogPath: (id) => artifact(id, 'x-run-log.json'),
+    networkScanStatePath: (id) => artifact(id, 'x-network-scan-state.json'),
+    networkEventsPath: (id) => artifact(id, 'x-network-events.json'),
   });
   return _prod;
 }

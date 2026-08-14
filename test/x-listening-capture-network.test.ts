@@ -57,6 +57,8 @@ function baseDeps(rows: ReturnType<typeof cell>[]): {
   openWindow: ReturnType<typeof vi.fn>;
   resolveGate: ReturnType<typeof vi.fn>;
   scroll: ReturnType<typeof vi.fn>;
+  appendEvents: ReturnType<typeof vi.fn>;
+  saveScanState: ReturnType<typeof vi.fn>;
 } {
   const win = fakeWindow();
   const openWindow = vi.fn(async () => win);
@@ -64,6 +66,8 @@ function baseDeps(rows: ReturnType<typeof cell>[]): {
   const scroll = vi.fn(async () => undefined);
   const saved = vi.fn(async () => 1);
   const runs = vi.fn(async () => undefined);
+  const appendEvents = vi.fn(async () => undefined);
+  const saveScanState = vi.fn(async () => undefined);
   const deps: XNetworkCaptureDeps = {
     loadClearnetEnabled: async () => false,
     resolveGate,
@@ -74,10 +78,13 @@ function baseDeps(rows: ReturnType<typeof cell>[]): {
     assertSignedIn: async () => ({ blocked: false }),
     readNetwork: async () => [],
     saveNetwork: saved,
+    readScanState: async () => null,
+    saveScanState,
+    appendNetworkEvents: appendEvents,
     recordRun: runs,
     now: () => '2026-08-12T00:00:00.000Z',
   };
-  return { deps, win, saved, runs, openWindow, resolveGate, scroll };
+  return { deps, win, saved, runs, openWindow, resolveGate, scroll, appendEvents, saveScanState };
 }
 
 describe('buildNetworkUrl — validate the target BEFORE any window opens', () => {
@@ -337,5 +344,99 @@ describe('captureNetwork — raised 240-pass ceiling', () => {
     );
     expect(res.completedPasses).toBe(8);
     expect(scroll).toHaveBeenCalledTimes(7);
+  });
+});
+
+// ---- M2: per-handle network delta events are computed + PERSISTED (his recordNetworkSnapshot) ----
+//
+// The half-built version returned `deltaEvents` inertly (nothing persisted/displayed) and gated
+// `not_seen_latest` against the ALL-TIME ACCUMULATOR — so a dropped handle re-emitted every scan and
+// a shallow re-scan over-flagged. These pin the corrected wiring: events persist to the durable
+// stream, and `not_seen_latest` is diffed against the PREVIOUS SCAN with his dual (passes+count)
+// gate, so a dropped handle is flagged ONCE and a shallow scan flags nobody.
+import type { XNetworkScanState } from '../src/main/x-listening/store';
+
+/** A tiny stateful store: an accumulator (`readNetwork`), the previous-scan record
+ *  (`readScanState`/`saveScanState`), and the appended event stream — enough to drive two
+ *  consecutive `captureNetwork` scans through the real M2 path. */
+function statefulNetworkStore() {
+  const accumulator = new Map<string, { handle: string }>(); // lowercased key
+  let scanState: XNetworkScanState | null = null;
+  const events: Array<{ kind: string; handle: string; relationship: string }> = [];
+  const scan = (rows: ReturnType<typeof cell>[], passes = 8) => {
+    const deps: XNetworkCaptureDeps = {
+      loadClearnetEnabled: async () => false,
+      resolveGate: async () => ({ blocked: false, proxy: { socks: 'socks5://127.0.0.1:9050' } }),
+      openWindow: async () => fakeWindow(),
+      runCapture: async () => rows,
+      guard: async (_w, capture) => ({ blocked: false, result: await capture() }),
+      scroll: async () => undefined,
+      assertSignedIn: async () => ({ blocked: false }),
+      readNetwork: async () => [...accumulator.values()] as never,
+      saveNetwork: async (_c, artifact) => {
+        for (const a of artifact.accounts) accumulator.set(a.handle.toLowerCase(), { handle: a.handle });
+        return accumulator.size;
+      },
+      readScanState: async () => scanState,
+      saveScanState: async (_c, state) => { scanState = state; },
+      appendNetworkEvents: async (_c, evs) => {
+        for (const e of evs) events.push({ kind: e.kind, handle: e.handle, relationship: e.relationship });
+      },
+      recordRun: async () => undefined,
+      loadCollectionSettings: async () => ({ ...DEFAULT_COLLECTION_SETTINGS, followerBasePasses: passes }),
+      now: () => '2026-08-12T00:00:00.000Z',
+    };
+    return captureNetwork(
+      { caseId: 'case-1', channelId: 'alice', targetUsername: 'alice', kind: 'followers', passes },
+      deps,
+    );
+  };
+  return { scan, events, get scanState() { return scanState; } };
+}
+
+/** A comparable-sized page (>=10 accounts) so his count gate can be satisfied. */
+function bigPage(n: number, drop: string[] = []): ReturnType<typeof cell>[] {
+  return Array.from({ length: n }, (_, i) => `u${i}`)
+    .filter((h) => !drop.includes(h))
+    .map((h) => cell(h));
+}
+
+describe('captureNetwork — M2 delta events persist across two consecutive scans', () => {
+  it('scan 1 persists newly_observed for every handle and NO not_seen (no previous scan)', async () => {
+    const store = statefulNetworkStore();
+    const res = await store.scan(bigPage(12));
+    expect(store.events.filter((e) => e.kind === 'not_seen_latest')).toHaveLength(0);
+    expect(store.events.filter((e) => e.kind === 'newly_observed')).toHaveLength(12);
+    // Every event carries its relationship surface.
+    expect(store.events.every((e) => e.relationship === 'followers')).toBe(true);
+    // The previous-scan record is written for the next comparison — observed set + this scan's passes.
+    expect(store.scanState?.observedCount).toBe(12);
+    expect(store.scanState?.passesCompleted).toBe(res.completedPasses);
+  });
+
+  it('scan 2 (comparable) flags a dropped handle ONCE as not_seen_latest, and it is not re-emitted on scan 3', async () => {
+    const store = statefulNetworkStore();
+    await store.scan(bigPage(12));           // scan 1: u0..u11
+    store.events.length = 0;                  // isolate scan-2 events
+    await store.scan(bigPage(12, ['u5']));   // scan 2: drop u5 (re-saw 11 of 12 → comparable)
+    const notSeen2 = store.events.filter((e) => e.kind === 'not_seen_latest');
+    expect(notSeen2.map((e) => e.handle)).toEqual(['@u5']);
+    // u5 was in the accumulator (scan 1) so it is NOT newly_observed again; nothing new appeared.
+    expect(store.events.filter((e) => e.kind === 'newly_observed')).toHaveLength(0);
+
+    // scan 3 re-sees the same 11 (u5 still gone). Its `previous` (scan 2) no longer has u5 →
+    // NO re-emit. This is the accumulator-diff bug the fix removes.
+    store.events.length = 0;
+    await store.scan(bigPage(12, ['u5']));
+    expect(store.events.filter((e) => e.kind === 'not_seen_latest')).toHaveLength(0);
+    expect(store.events.filter((e) => e.kind === 'newly_observed')).toHaveLength(0);
+  });
+
+  it('a shallow re-scan (few accounts) persists ZERO not_seen_latest — his no-false-intelligence gate', async () => {
+    const store = statefulNetworkStore();
+    await store.scan(bigPage(40));  // scan 1: u0..u39
+    store.events.length = 0;
+    await store.scan([cell('u0'), cell('u1')]); // scan 2: only 2 re-seen → not comparable
+    expect(store.events.filter((e) => e.kind === 'not_seen_latest')).toHaveLength(0);
   });
 });

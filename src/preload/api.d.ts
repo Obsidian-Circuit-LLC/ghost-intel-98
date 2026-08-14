@@ -1062,6 +1062,20 @@ export interface GhostApi {
         endedAt: string;
       }>
     >;
+    /** List a campaign's per-handle network delta events (M2) — newest-first, capped ~500. Each is a
+     *  `newly_observed` (a follower/following handle newly added vs the accumulator) or a
+     *  CONSERVATIVE, gated `not_seen_latest` (a previous-scan handle absent from a comparable scan —
+     *  a review candidate, NEVER a claimed unfollow). Derived read; no capture window, no network. */
+    networkEvents(caseId: string): Promise<
+      Array<{
+        kind: 'newly_observed' | 'not_seen_latest';
+        handle: string;
+        target: string;
+        relationship: 'followers' | 'following';
+        observedAt: string;
+        confidence: 'observed' | 'unconfirmed';
+      }>
+    >;
     /**
      * Open one in-app X window for a `{ kind, ref }` affordance (Task E1) — `kind:'thread'`
      * (ref = a `/<user>/status/<id>` URL), `kind:'profile'`/`'identity'` (ref = a `@username`

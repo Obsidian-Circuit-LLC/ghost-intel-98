@@ -48,6 +48,7 @@ function makeApi(campaigns = [CAMP_A, CAMP_B]) {
       networksList: vi.fn(async () => []),
       changeEvents: vi.fn(async () => []),
       runLog: vi.fn(async () => []),
+      networkEvents: vi.fn(async () => []),
       readNotes: vi.fn(async () => ({ notes: [] })),
       presetsRead: vi.fn(async () => ({ presets: [] })),
       archiveStatus: vi.fn(async () => ({ cursor: null, cycles: 0, lastRunAt: null })),
