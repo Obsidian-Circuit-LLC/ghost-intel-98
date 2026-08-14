@@ -17,6 +17,25 @@ const BUCKETS: { key: EntityRelationship | 'untagged'; label: string }[] = [
   { key: 'untagged', label: 'Untagged' }
 ];
 
+/** Multi-line summary of an entity — shared by the Share action and the right-click Copy-summary. */
+function entitySummary(item: ResolvedEntity): string {
+  const e = item.entity;
+  const lines = [`Case entity — ${e.type}: ${e.value}`];
+  if (e.aliases.length) lines.push(`aliases: ${e.aliases.join(', ')}`);
+  if (e.notes.trim()) lines.push(`notes: ${e.notes.trim()}`);
+  return lines.join('\n');
+}
+
+/** Local clipboard write (no egress) with a confirming toast; clipboard denial is non-fatal. */
+async function copyText(text: string, label: string): Promise<void> {
+  try {
+    await navigator.clipboard?.writeText?.(text);
+    toast.info(`Copied ${label}`);
+  } catch { toast.error('Copy failed — clipboard unavailable'); }
+}
+
+type EntityCtxMenu = { x: number; y: number; item: ResolvedEntity };
+
 export function EntitiesSection({ caseId, entities, attachments, onRefresh }: {
   caseId: string;
   entities: ResolvedEntity[];
@@ -28,6 +47,7 @@ export function EntitiesSection({ caseId, entities, attachments, onRefresh }: {
   const [rel, setRel] = useState<EntityRelationship | ''>('');
   const [registry, setRegistry] = useState<EntityRecord[]>([]);
   const [linkExistingId, setLinkExistingId] = useState('');
+  const [ctxMenu, setCtxMenu] = useState<EntityCtxMenu | null>(null);
 
   useEffect(() => { void window.api.entities.listAll().then(setRegistry).catch(() => undefined); }, [entities]);
 
@@ -87,20 +107,33 @@ export function EntitiesSection({ caseId, entities, attachments, onRefresh }: {
           <div key={b.key} style={{ marginBottom: 4 }}>
             <div style={{ fontSize: 11, fontWeight: 'bold', opacity: 0.7 }}>{b.label}</div>
             <ul className="ga98-list">
-              {items.map((e) => <EntityRow key={e.entity.id} caseId={caseId} item={e} attachments={attachments} onRefresh={onRefresh} />)}
+              {items.map((e) => <EntityRow key={e.entity.id} caseId={caseId} item={e} attachments={attachments} onRefresh={onRefresh}
+                onContext={(x, y, it) => setCtxMenu({ x, y, item: it })} />)}
             </ul>
           </div>
         );
       })}
+      {ctxMenu && (
+        <>
+          <div onClick={() => setCtxMenu(null)} style={{ position: 'fixed', inset: 0, zIndex: 99 }} />
+          <div className="ga98-menu" style={{ position: 'fixed', left: ctxMenu.x, top: ctxMenu.y, zIndex: 100, background: 'var(--ga98-grey)', border: '2px outset var(--ga98-shadow-light)' }}>
+            <div onClick={() => { const it = ctxMenu.item; setCtxMenu(null); void copyText(it.entity.value, 'value'); }}
+              style={{ padding: '3px 12px', cursor: 'pointer', whiteSpace: 'nowrap' }}>Copy value</div>
+            <div onClick={() => { const it = ctxMenu.item; setCtxMenu(null); void copyText(entitySummary(it), 'summary'); }}
+              style={{ padding: '3px 12px', cursor: 'pointer', whiteSpace: 'nowrap' }}>Copy summary</div>
+          </div>
+        </>
+      )}
     </fieldset>
   );
 }
 
-function EntityRow({ caseId, item, attachments, onRefresh }: {
+function EntityRow({ caseId, item, attachments, onRefresh, onContext }: {
   caseId: string;
   item: ResolvedEntity;
   attachments: AttachmentMeta[];
   onRefresh(): void | Promise<void>;
+  onContext(x: number, y: number, item: ResolvedEntity): void;
 }): JSX.Element {
   const [otherCases, setOtherCases] = useState<{ caseId: string; title: string }[] | null>(null);
   const [sharing, setSharing] = useState(false);
@@ -112,18 +145,10 @@ function EntityRow({ caseId, item, attachments, onRefresh }: {
     } catch { setOtherCases([]); }
   }
 
-  function entitySummary(): string {
-    const e = item.entity;
-    const lines = [`Case entity — ${e.type}: ${e.value}`];
-    if (e.aliases.length) lines.push(`aliases: ${e.aliases.join(', ')}`);
-    if (e.notes.trim()) lines.push(`notes: ${e.notes.trim()}`);
-    return lines.join('\n');
-  }
-
   async function shareTo(t: ShareTarget): Promise<void> {
     setSharing(false);
     try {
-      const text = entitySummary();
+      const text = entitySummary(item);
       if (t.kind === 'group') await window.api.chat.sendGroup(t.id, text);
       else await window.api.chat.send(t.id, text);
       toast.info(`Shared entity to ${t.name}`);
@@ -131,7 +156,9 @@ function EntityRow({ caseId, item, attachments, onRefresh }: {
   }
 
   return (
-    <li style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+    <li style={{ flexDirection: 'column', alignItems: 'stretch' }}
+      onContextMenu={(e) => { e.preventDefault(); onContext(e.clientX, e.clientY, item); }}
+      title="Right-click to copy">
       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
         <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           <b>{item.entity.value}</b> <span style={{ fontSize: 10, opacity: 0.6 }}>[{item.entity.type}]</span>
