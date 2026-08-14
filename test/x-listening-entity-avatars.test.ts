@@ -46,12 +46,20 @@ describe('X Listening entity display pics — buildAvatarLookup (cache-only, loc
     expect(readMedia).toHaveBeenCalledWith(CASE, REF('alice'));
   });
 
-  it('emits ONLY local data: URIs — never a remote URL (the no-remote-media-in-DOM invariant)', async () => {
-    const readCache = vi.fn(async () => cache({ bob: REF('bob') }));
-    const readMedia = vi.fn(async (_id: string, ref: string) => DATA_URI(ref));
+  it('emits ONLY local data: URIs — DROPS a non-data read-back (the no-remote-media-in-DOM guard, exercised)', async () => {
+    const readCache = vi.fn(async () => cache({ bob: REF('bob'), evil: REF('evil') }));
+    // Force the read-back seam to return a REMOTE URL for one handle. Even though production's
+    // readCachedMedia can only ever yield a data: URI or null (ref-shape-validated), the defensive
+    // startsWith('data:') guard in buildAvatarLookup must DROP any non-data value so a remote URL can
+    // never reach the map — and thus never the DOM. This case actually exercises that guard.
+    const readMedia = vi.fn(async (_id: string, ref: string) =>
+      ref === REF('evil') ? 'https://pbs.twimg.com/evil.jpg' : DATA_URI(ref),
+    );
 
     const lookup = await buildAvatarLookup(CASE, { readCache, readMedia });
 
+    expect(lookup.bob).toBe(DATA_URI(REF('bob')));
+    expect('evil' in lookup).toBe(false); // the remote URL was dropped, not mapped
     for (const v of Object.values(lookup)) {
       expect(v.startsWith('data:')).toBe(true);
       expect(v.startsWith('http')).toBe(false);
