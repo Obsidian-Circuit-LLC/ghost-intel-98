@@ -766,8 +766,15 @@
   padding-top: 13px;
   box-shadow: inset 0 3px 0 var(--ga98-accent), 1px 1px 3px rgba(0,0,0,0.3);
 }
-.xls-stat span { font-size: 10px; letter-spacing: 0.09em; color: var(--ga98-text-dim); }
+/* His dashboard stat labels + figures are Consolas monospace (styles.css). */
+.xls-stat span {
+  font-family: Consolas, 'Courier New', monospace;
+  font-size: 10px;
+  letter-spacing: 0.09em;
+  color: var(--ga98-text-dim);
+}
 .xls-stat strong {
+  font-family: Consolas, 'Courier New', monospace;
   font-size: 28px;
   font-weight: 700;
   line-height: 1.1;
@@ -1339,7 +1346,9 @@
   border-radius: 3px;
   background: transparent;
   color: var(--ga98-xls-sidebar-ink);
-  font-family: inherit;
+  /* His nav items render in Consolas monospace (styles.css). font-family is not a palette literal,
+     so the no-straggler guard stays green — no token needed. */
+  font-family: Consolas, 'Courier New', monospace;
   font-size: 11px;
   letter-spacing: 0.07em;
   text-align: left;
@@ -1364,6 +1373,8 @@
   border-radius: 9px;
   background: var(--ga98-xls-badge-bg);
   color: var(--ga98-xls-badge-ink);
+  /* His count badges are Consolas monospace (styles.css). */
+  font-family: Consolas, 'Courier New', monospace;
   font-size: 9px;
   font-weight: 700;
   text-align: center;
@@ -1460,6 +1471,8 @@
 .xls-eyebrow {
   display: block;
   color: var(--ga98-xls-eyebrow);
+  /* His eyebrow / section labels are Consolas monospace (styles.css). */
+  font-family: Consolas, 'Courier New', monospace;
   font-size: 10px;
   letter-spacing: 0.13em;
 }
@@ -1468,6 +1481,8 @@
 .xls-topbar-title {
   margin: 4px 0 3px;
   color: var(--ga98-xls-heading);
+  /* His masthead h1 is big Consolas monospace (styles.css). */
+  font-family: Consolas, 'Courier New', monospace;
   font-size: 22px;
   font-weight: 700;
   letter-spacing: 0.04em;
