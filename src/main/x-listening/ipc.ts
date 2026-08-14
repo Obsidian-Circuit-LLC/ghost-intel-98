@@ -978,7 +978,11 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
     // then navigate it to the target profile and wait for the timeline before scraping.
     let win = getXWindow(caseId);
     if (!win) {
-      const opened = await openXSession(caseId, await loadClearnetEnabled());
+      // Ensure the capture window HIDDEN — a one-click capture must never pop up the Chromium
+      // browser (GhostExodus: "it shouldn't pop up ... when Capturing Timeline or adding
+      // entities"). The Enterprise app scraped in the background; only the explicit "Open
+      // Session" sign-in shows a window. The Tor gate + fail-closed posture are unchanged.
+      const opened = await openXSession(caseId, await loadClearnetEnabled(), { visible: false });
       if (opened.blocked) {
         return {
           blocked: true,

@@ -49,6 +49,20 @@ export interface XConnectOk {
 }
 export type XConnectResult = XConnectBlocked | XConnectOk;
 
+/** Options for `connectXSession`. */
+export interface XConnectOptions {
+  /**
+   * Whether to SHOW + focus the capture window after opening it (or when reusing an already-open
+   * one). Defaults to `true` — the explicit, operator-initiated "Open Session" (sign-in) action.
+   *
+   * The one-click CAPTURE paths pass `false`: GhostExodus's Enterprise app scraped in the
+   * BACKGROUND — "it shouldn't pop up the dedicated Chromium browser when Capturing Timeline or
+   * adding entities". A hidden ensure-window keeps that behaviour: the window is created (Tor-gated,
+   * fail-closed, WebRTC-locked — all UNCHANGED), it simply never pops up or steals focus.
+   */
+  visible?: boolean;
+}
+
 export interface XSessionStatus {
   /** Derived from auth-cookie PRESENCE only — the token value is read for the domain check and
    *  never returned, echoed, or logged (mirrors the legacy `xSessionStatus`). */
@@ -114,14 +128,30 @@ export function resolveXTorGate(clearnetEnabled: boolean): XTorGate {
  *     `createCaptureWindow`'s `webRTCIPHandlingPolicy` option so the factory applies it BEFORE
  *     the guest's first navigation (setting it only on the returned webContents would land
  *     after that first load), then re-asserted belt-and-braces on the returned webContents.
+ *
+ * `opts.visible` (default `true`) governs ONLY whether the opened/reused window is shown +
+ * focused. The capture paths (the `captureTimeline` ensure-window, sweeps) pass `false` so the
+ * window stays hidden — the Enterprise app scraped in the background and never popped up the
+ * Chromium browser on a capture. The Tor gate + hardening above are identical regardless.
  */
-export async function connectXSession(caseId: string, clearnetEnabled: boolean): Promise<XConnectResult> {
+export async function connectXSession(
+  caseId: string,
+  clearnetEnabled: boolean,
+  opts: XConnectOptions = {}
+): Promise<XConnectResult> {
   const id = ensureUuid(caseId, 'caseId');
+  // Default VISIBLE (the "Open Session" sign-in action); the capture paths pass `visible:false`
+  // so a one-click capture never pops up the Chromium window (Enterprise scraped in the
+  // background). Only the show/focus is gated — the Tor gate + window hardening below are
+  // identical on both paths.
+  const visible = opts.visible !== false;
 
   const existing = xWindows.get(id);
   if (existing && !existing.isDestroyed()) {
-    existing.show();
-    existing.focus();
+    if (visible) {
+      existing.show();
+      existing.focus();
+    }
     return { blocked: false };
   }
 
@@ -141,8 +171,10 @@ export async function connectXSession(caseId: string, clearnetEnabled: boolean):
   win.webContents.setWebRTCIPHandlingPolicy('disable_non_proxied_udp');
 
   xWindows.set(id, win);
-  win.show();
-  win.focus();
+  if (visible) {
+    win.show();
+    win.focus();
+  }
   return { blocked: false };
 }
 
