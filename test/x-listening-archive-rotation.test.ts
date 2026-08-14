@@ -273,3 +273,49 @@ describe('captureProfileTimeline forwards the FA4 passes override into FA1 (capt
     expect(seenReqs).toEqual([9, undefined]);
   });
 });
+
+describe('the archive-posts op forces comments OFF (matches His collectComments:false)', () => {
+  it('the collect passed to captureProfileTimeline has comments:false even when the campaign gate has comments ON', async () => {
+    // His `runArchiveCycle` (main.cjs:1985) scrapes archive posts with `collectComments:false`.
+    // `captureTimeline` gates comment-thread scraping on `collect.comments` (capture.ts:624), so an
+    // archive tick with the campaign gate's comments ON would ALSO navigate up to
+    // `commentThreadsPerSource` individual post-thread URLs — heavy multi-URL egress that undercuts
+    // the round-robin "keep per-tick load light" goal. The production `capturePosts` dep MUST pin
+    // comments off regardless of the campaign gate.
+    const captureMod = await import('../src/main/x-listening/capture');
+    const imagePolicyMod = await import('../src/main/x-listening/image-policy');
+    const seen: Array<{ comments: boolean; replies: boolean; reposts: boolean }> = [];
+    const captureSpy = vi
+      .spyOn(captureMod, 'captureProfileTimeline')
+      .mockImplementation(async (r: { collect?: { comments: boolean; replies: boolean; reposts: boolean } }) => {
+        if (r.collect) seen.push({ comments: r.collect.comments, replies: r.collect.replies, reposts: r.collect.reposts });
+        return { blocked: false, reason: undefined, added: 1, skipped: 0, posts: [] } as never;
+      });
+    // Avoid secure-fs I/O in the image-policy resolver — the fetch is host-anchored + Tor-gated
+    // regardless; comments-off is the property under test.
+    const imageSpy = vi.spyOn(imagePolicyMod, 'resolveEffectiveImageCollection').mockResolvedValue(true);
+    try {
+      const { runArchiveRotation } = await import('../src/main/x-listening/archive');
+      const store = memState();
+      // Campaign gate: comments ON (and replies/reposts on) — the archive op must still strip comments.
+      const s = settings({ collectComments: true, collectReplies: true, collectReposts: true });
+      // Note: capturePosts is NOT overridden → the PRODUCTION default dep runs.
+      const res = await runArchiveRotation(req([A], s), {
+        readState: store.readState,
+        writeState: store.writeState,
+        now: () => '2026-08-14T12:00:00.000Z',
+      });
+      expect(res.ran).toBe(true);
+      expect(res.operation?.type).toBe('posts');
+      expect(captureSpy).toHaveBeenCalledTimes(1);
+      expect(seen).toHaveLength(1);
+      // comments FORCED off, the other gate flags pass through unchanged.
+      expect(seen[0].comments).toBe(false);
+      expect(seen[0].replies).toBe(true);
+      expect(seen[0].reposts).toBe(true);
+    } finally {
+      captureSpy.mockRestore();
+      imageSpy.mockRestore();
+    }
+  });
+});

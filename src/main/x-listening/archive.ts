@@ -190,6 +190,12 @@ export async function runArchiveStep(
   }
 
   const next: XArchiveState = {
+    // Spread the prior state so a manual step preserves the FA4 round-robin fields
+    // (`nextOperationIndex` + per-source `profiles` depth counters). Without this spread a
+    // single manual "Run Archive Step" click would wipe every per-source depth counter and
+    // reset the rotation pointer to 0 for the campaign — the manual `runArchiveSteps` IPC and
+    // the scheduled FA4 rotation write the SAME `archiveState[caseId]`.
+    ...prev,
     cursor: advanceCursor(prev.cursor, captured.posts),
     cycles: prev.cycles + 1,
     lastRunAt: deps.now(),
@@ -510,7 +516,14 @@ function defaultRotationDeps(): XArchiveRotationDeps {
     },
     capturePosts: async (source, passes, req) => {
       const { captureProfileTimeline } = await import('./capture');
-      const collect = collectGateFromSettings(req.settings);
+      // Force comment-thread scraping OFF for the archive-posts op, matching His
+      // `runArchiveCycle` (`main.cjs:1985` passes `collectComments:false`). `captureTimeline`
+      // gates comment-thread scraping on `collect.comments` (capture.ts:624), so leaving it on
+      // would make the archive tick ALSO navigate to up to `commentThreadsPerSource` individual
+      // post-thread URLs — heavy multi-URL egress that undercuts the round-robin "keep per-tick
+      // load light" goal and enlarges the bot-detection surface. Depth deepening drives the
+      // TIMELINE scroll, never comment threads.
+      const collect = { ...collectGateFromSettings(req.settings), comments: false };
       const imagesEnabled = await resolveRotationImages(req.caseId, source.targetUsername, req.settings);
       const res = await captureProfileTimeline({
         caseId: req.caseId,
