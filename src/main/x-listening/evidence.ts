@@ -122,6 +122,10 @@ export function postEvidenceHash(post: PostEvidenceSource): string {
  *  cached media (Task 9), not an evidentiary text fact, and its byte-hash is the media
  *  artifact's own evidence trail. */
 export interface RelationshipEvidenceSource {
+  /** The case this observation belongs to (L4, his `enterprise.cjs:24-34` `caseId`). Folded into
+   *  the canonical shape so the SAME account observed under two DIFFERENT cases hashes distinctly —
+   *  the evidence trail is case-scoped, not global. Coerced to '' when absent. */
+  caseId?: string;
   target: string;
   kind: XNetworkArtifact['kind'];
   handle: XNetworkAccount['handle'];
@@ -130,6 +134,7 @@ export interface RelationshipEvidenceSource {
 }
 
 export interface CanonicalRelationshipEvidence {
+  caseId: string;
   target: string;
   kind: string;
   handle: string;
@@ -137,11 +142,14 @@ export interface CanonicalRelationshipEvidence {
   bio: string;
 }
 
-/** Canonical evidence shape for one relationship row — adapted from `enterprise.cjs:24-34`. */
+/** Canonical evidence shape for one relationship row — adapted from `enterprise.cjs:24-34`.
+ *  `caseId` is folded in (L4) so identical accounts across DIFFERENT cases hash distinctly; it was
+ *  previously dropped, collapsing cross-case observations to one hash. */
 export function canonicalRelationshipEvidence(
   rel: RelationshipEvidenceSource,
 ): CanonicalRelationshipEvidence {
   return {
+    caseId: String(rel.caseId ?? ''),
     target: String(rel.target ?? ''),
     kind: String(rel.kind ?? ''),
     handle: String(rel.handle ?? ''),

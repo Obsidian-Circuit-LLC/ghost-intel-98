@@ -18,7 +18,7 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 
-import { evaluatePreset, runPreset, removePreset } from '../src/main/x-listening/ipc';
+import { evaluatePreset, runPreset, removePreset, aggregateEntities } from '../src/main/x-listening/ipc';
 import type { XPreset, XPostArtifact } from '../src/main/x-listening/store';
 
 const mkPreset = (overrides: Partial<XPreset> = {}): XPreset => ({
@@ -215,5 +215,43 @@ describe('removePreset (IPC orchestration)', () => {
 
     expect(res.presets.map((p) => p.id)).toEqual(['p2']);
     expect((await xStore.presets.read('case-a')).map((p) => p.id)).toEqual(['p2']);
+  });
+});
+
+// ---- L1 (PC4): entity rollup — distinct-post gate, postId cap, bare usernames ----
+//
+// His entity rollup (main.cjs:472-500) counts one per DISTINCT post-id (the `count`
+// increment sits INSIDE the `if (!postIds.includes(post.id))` gate), caps `postIds` to the
+// last 1000 (slice(-1000)), and stores `sourceUsernames` BARE (from `post.username`, no @).
+// Ours counted per extractEntities iteration, never capped, and stored the @-prefixed handle.
+describe('aggregateEntities: rollup fidelity (L1)', () => {
+  it('counts per DISTINCT post-id — a duplicate post entry does not double-count', () => {
+    const post = mkPost({ id: 'p-dup', text: 'ping @alice', authorHandle: '@target' });
+    // Same post id appearing twice in the input must count as ONE distinct post.
+    const [entry] = aggregateEntities([post, post]);
+    expect(entry.type).toBe('mention');
+    expect(entry.postIds).toEqual(['p-dup']);
+    expect(entry.count).toBe(1);
+  });
+
+  it('stores sourceUsernames BARE — no @ prefix', () => {
+    const [entry] = aggregateEntities([
+      mkPost({ id: 'p1', text: 'hello #opsec', authorHandle: '@ghostexodus' }),
+    ]);
+    expect(entry.sourceUsernames).toEqual(['ghostexodus']);
+    expect(entry.sourceUsernames.every((u) => !u.startsWith('@'))).toBe(true);
+  });
+
+  it('caps postIds to the last 1000 distinct posts', () => {
+    const posts = Array.from({ length: 1200 }, (_, i) =>
+      mkPost({ id: `p-${i}`, text: 'tag #opsec', authorHandle: '@target' }),
+    );
+    const [entry] = aggregateEntities(posts);
+    expect(entry.postIds).toHaveLength(1000);
+    // the cap keeps the LAST 1000 (slice(-1000)).
+    expect(entry.postIds[0]).toBe('p-200');
+    expect(entry.postIds[999]).toBe('p-1199');
+    // count still reflects every distinct post that mentioned the entity.
+    expect(entry.count).toBe(1200);
   });
 });

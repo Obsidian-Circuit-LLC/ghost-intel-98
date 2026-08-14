@@ -596,11 +596,20 @@ export function aggregateEntities(posts: readonly XPostArtifact[]): XEntityCache
         };
         byKey.set(key, entry);
       }
-      if (post.id && !entry.postIds.includes(post.id)) entry.postIds.push(post.id);
-      if (post.authorHandle && !entry.sourceUsernames.includes(post.authorHandle)) {
-        entry.sourceUsernames.push(post.authorHandle);
+      // L1: count per DISTINCT post-id (his main.cjs:493-496 gate), not per extractEntities
+      // iteration. The `count` bump + the `postIds` cap live INSIDE the distinct-post gate, so a
+      // duplicate post entry (or an entity that surfaces twice for the same post) never inflates
+      // the count. `postIds` is capped to the last 1000 (his `slice(-1000)`).
+      if (post.id && !entry.postIds.includes(post.id)) {
+        entry.postIds.push(post.id);
+        if (entry.postIds.length > 1000) entry.postIds = entry.postIds.slice(-1000);
+        entry.count += 1;
       }
-      entry.count += 1;
+      // L1: store the source username BARE (his `post.username`), never the @-prefixed handle.
+      const bareUsername = String(post.authorHandle ?? '').replace(/^@+/, '');
+      if (bareUsername && !entry.sourceUsernames.includes(bareUsername)) {
+        entry.sourceUsernames.push(bareUsername);
+      }
       if (post.publishedAt) {
         if (!entry.firstObservedAt || post.publishedAt < entry.firstObservedAt) {
           entry.firstObservedAt = post.publishedAt;

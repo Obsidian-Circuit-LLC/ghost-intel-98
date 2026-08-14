@@ -49,6 +49,11 @@ export interface RawPost {
   id: string;
   /** The visible author handle (no leading `@`). */
   username: string;
+  /** The visible author DISPLAY name exactly as rendered, or '' when none was visible (M1,
+   *  his `readVisibleTimelineItems`/`mapCollectedPost`). For a repost this is the ORIGINAL
+   *  author's name; for a comment the THIRD-PARTY replier's — the only place those names are
+   *  observed. Never backfilled from the @handle. */
+  displayName?: string;
   /** The visible permalink; scheme-guarded during normalization. */
   url: string;
   /** The visible tweet body text (verbatim). */
@@ -124,6 +129,11 @@ export interface XHarvestedItem extends HarvestedItem {
   media: string[];
   /** post / reply / repost / comment — see `XItemKind`. */
   kind: XItemKind;
+  /** The visible author DISPLAY name (M1). Carried verbatim from the captured DOM; for a
+   *  repost/comment this is the ORIGINAL/third-party author's name. OMITTED (not '') when no
+   *  display name was visible — an unobserved value is never presented as captured, and it is
+   *  deliberately NOT part of `canonicalPostEvidence` (a rename is not a content edit). */
+  displayName?: string;
   /** For a `comment`: the target root-post id whose thread it was seen under. Honest
    *  lineage only — never a fabricated "in reply to". Absent for every other kind. */
   parentId?: string;
@@ -165,6 +175,10 @@ export const X_POST_SCRIPT = `
       const tweetText = article.querySelector('[data-testid="tweetText"]');
       const fullText = article.innerText || '';
       const socialContext = (article.querySelector('[data-testid="socialContext"]') || {}).textContent || '';
+      const userNameArea = article.querySelector('[data-testid="User-Name"]') || article.querySelector('[data-testid="UserName"]');
+      const displayName = Array.from((userNameArea && userNameArea.querySelectorAll('span')) || [])
+        .map((node) => (node.textContent || '').trim())
+        .find((text) => text && !text.startsWith('@') && !/^·$/.test(text)) || '';
       const images = Array.from(article.querySelectorAll('img[src*="pbs.twimg.com/media"]'))
         .map((image) => image.getAttribute('src'))
         .filter(Boolean);
@@ -172,6 +186,7 @@ export const X_POST_SCRIPT = `
       return {
         id: (match && match[2]) || '',
         username: (match && match[1]) || '',
+        displayName: displayName,
         url: rawHref ? new URL(rawHref, location.origin).href : '',
         text: ((tweetText && tweetText.innerText) || '').trim(),
         createdAt: (time && time.getAttribute('datetime')) || '',
@@ -303,6 +318,11 @@ function normalizeItem(
   if (kind === 'comment' && parentId != null && parentId !== '') {
     item.parentId = String(parentId);
   }
+  // Carry the visible author display name (M1) when one was observed — OMITTED (never '') when
+  // absent, so honest-absence reads as "Not visible" rather than an empty string masquerading as
+  // a captured value. Not folded into the evidence hash (his canonicalPostEvidence omits it).
+  const displayName = String(raw.displayName ?? '').trim();
+  if (displayName) item.displayName = displayName;
   return item;
 }
 
@@ -586,7 +606,7 @@ export function normalizeNetwork(
   target: string,
   kind: 'followers' | 'following',
   capturedAt: string,
-  opts: { synthetic?: boolean } = {},
+  opts: { synthetic?: boolean; caseId?: string } = {},
 ): XNetworkArtifact {
   const seen = new Set<string>();
   const t = String(target ?? '').replace(/^@+/, '');
@@ -599,6 +619,7 @@ export function normalizeNetwork(
     if (seen.has(key)) continue;
     seen.add(key);
     const evidenceHash = relationshipEvidenceHash({
+      caseId: opts.caseId,
       target: fullTarget,
       kind,
       handle: account.handle,

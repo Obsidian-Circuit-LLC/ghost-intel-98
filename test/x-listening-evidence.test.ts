@@ -137,9 +137,10 @@ describe('postEvidenceHash — evidence hash changes when metrics change (Task 2
 });
 
 describe('canonicalRelationshipEvidence', () => {
-  it('produces a deterministic canonical shape from target/kind/handle', () => {
-    const c = canonicalRelationshipEvidence(baseRel());
+  it('produces a deterministic canonical shape from caseId/target/kind/handle', () => {
+    const c = canonicalRelationshipEvidence(baseRel({ caseId: 'case-1' }));
     expect(c).toEqual({
+      caseId: 'case-1',
       target: 'ghostexodus',
       kind: 'followers',
       handle: 'someuser',
@@ -148,10 +149,30 @@ describe('canonicalRelationshipEvidence', () => {
     });
   });
 
-  it('coerces missing optional fields to empty strings, never throws', () => {
+  it('coerces missing optional fields (incl. caseId) to empty strings, never throws', () => {
     const c = canonicalRelationshipEvidence({ target: 't', kind: 'following', handle: 'h' });
+    expect(c.caseId).toBe('');
     expect(c.displayName).toBe('');
     expect(c.bio).toBe('');
+  });
+});
+
+// ---- L4 (PC4): caseId in the relationship evidence canonical -------------
+//
+// His `canonicalRelationshipEvidence` (enterprise.cjs:24-34) folds `caseId` in, so the
+// SAME account observed under two DIFFERENT cases hashes distinctly — the evidence trail
+// is case-scoped. Ours had dropped caseId, so identical accounts across cases collided.
+describe('relationshipEvidenceHash: caseId scoping (L4)', () => {
+  it('the SAME account hashes DISTINCTLY across two different cases', () => {
+    const h1 = relationshipEvidenceHash(baseRel({ caseId: 'case-1' }));
+    const h2 = relationshipEvidenceHash(baseRel({ caseId: 'case-2' }));
+    expect(h1).not.toBe(h2);
+  });
+
+  it('is stable for the same account within ONE case', () => {
+    const h1 = relationshipEvidenceHash(baseRel({ caseId: 'case-1' }));
+    const h2 = relationshipEvidenceHash(baseRel({ caseId: 'case-1' }));
+    expect(h1).toBe(h2);
   });
 });
 

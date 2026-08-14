@@ -19,6 +19,7 @@ import { tmpdir } from 'node:os';
 
 import {
   makeXStore,
+  deriveNetworkDeltaEvents,
   type XStoreDeps,
   type XNote,
   type XNetworkArtifact,
@@ -273,6 +274,45 @@ describe('makeXStore: artifact stores', () => {
     expect(nets.find((n) => n.kind === 'following')!.accounts.map((a) => a.handle)).toEqual(['@carol']);
   });
 
+  // ---- M4 (PC4): observedCount increments on re-observation --------------
+  //
+  // His `ingestRelationships` (main.cjs:2331) tracks `observedCount = max(0, prior)+1` per
+  // account — a real count of how many scans re-saw the handle, surfaced in the network CSV
+  // (PC3). Ours never counted. The counter must bump ONLY when a handle is actually re-seen,
+  // and a carried-over (not-re-observed) account keeps its count frozen (no-auto-unfollow).
+  it('observedCount is 1 on first observation and increments each time a handle is re-seen', async () => {
+    const t1 = '2026-08-11T00:00:00.000Z';
+    const t2 = '2026-08-12T00:00:00.000Z';
+    const t3 = '2026-08-13T00:00:00.000Z';
+    await xStore.networks.save('case-a', {
+      target: '@target', kind: 'followers', capturedAt: t1, accounts: [acct('@alice', t1, t1)],
+    });
+    await xStore.networks.save('case-a', {
+      target: '@target', kind: 'followers', capturedAt: t2, accounts: [acct('@alice', t2, t2)],
+    });
+    await xStore.networks.save('case-a', {
+      target: '@target', kind: 'followers', capturedAt: t3, accounts: [acct('@alice', t3, t3)],
+    });
+    const [art] = await xStore.networks.read('case-a');
+    expect(art.accounts.find((a) => a.handle === '@alice')!.observedCount).toBe(3);
+  });
+
+  it('a carried-over account NOT re-observed keeps its observedCount frozen (no auto-unfollow)', async () => {
+    const t1 = '2026-08-11T00:00:00.000Z';
+    const t2 = '2026-08-12T00:00:00.000Z';
+    await xStore.networks.save('case-a', {
+      target: '@target', kind: 'followers', capturedAt: t1,
+      accounts: [acct('@alice', t1, t1), acct('@bob', t1, t1)],
+    });
+    // Second scan only re-observes @alice.
+    await xStore.networks.save('case-a', {
+      target: '@target', kind: 'followers', capturedAt: t2, accounts: [acct('@alice', t2, t2)],
+    });
+    const [art] = await xStore.networks.read('case-a');
+    expect(art.accounts.find((a) => a.handle === '@alice')!.observedCount).toBe(2);
+    expect(art.accounts.find((a) => a.handle === '@bob')!.observedCount).toBe(1);
+  });
+
   it('archiveState round-trips and is null before first write', async () => {
     expect(await xStore.archiveState.read('case-a')).toBeNull();
     const st: XArchiveState = { cursor: 'c1', cycles: 2, lastRunAt: '2026-08-06T00:00:00.000Z' };
@@ -362,6 +402,60 @@ describe('makeXStore: entitiesCache artifact', () => {
     await xStore.entitiesCache.write('case-a', entities);
     expect(await xStore.entitiesCache.read('case-a')).toEqual(entities);
     expect(await xStore.entitiesCache.read('case-b')).toEqual([]);
+  });
+});
+
+// ---- M2 (PC4): per-handle network delta events -------------------------
+//
+// His `recordNetworkSnapshot` (main.cjs:540-581) emits a `newly_observed` event per
+// newly-added handle and a CONSERVATIVE `not_seen_latest` per prior handle missing from a
+// COMPARABLE later scan. Ours reported only a scalar `added` count. The per-handle event
+// kinds are restored as a pure diff over (prior accumulator, this scan). No-auto-unfollow:
+// `not_seen_latest` is an OBSERVATION (confidence 'unconfirmed'), never a claim the account
+// unfollowed, and it is GATED so a shallow re-scan can't falsely flag everyone as gone.
+describe('deriveNetworkDeltaEvents (M2)', () => {
+  const a = (handle: string): XNetworkAccount => ({ handle });
+  const AT = '2026-08-12T00:00:00.000Z';
+
+  it('emits one newly_observed per handle present now but absent from the prior accumulator', () => {
+    const prior = [a('@alice'), a('@bob')];
+    const incoming = [a('@alice'), a('@bob'), a('@carol'), a('@dave')];
+    const events = deriveNetworkDeltaEvents(prior, incoming, AT);
+    const newly = events.filter((e) => e.kind === 'newly_observed');
+    expect(newly.map((e) => e.handle).sort()).toEqual(['@carol', '@dave']);
+    expect(newly.every((e) => e.observedAt === AT && e.confidence === 'observed')).toBe(true);
+  });
+
+  it('emits a conservative not_seen_latest per prior handle absent from a comparable scan', () => {
+    // A comparable scan: prior of 12, re-saw 11 (floor(12*0.85)=10, 11>=max(10,10)) — dropped @u5.
+    const prior = Array.from({ length: 12 }, (_, i) => a(`@u${i}`));
+    const incoming = prior.filter((acct) => acct.handle !== '@u5');
+    const events = deriveNetworkDeltaEvents(prior, incoming, AT);
+    const notSeen = events.filter((e) => e.kind === 'not_seen_latest');
+    expect(notSeen.map((e) => e.handle)).toEqual(['@u5']);
+    expect(notSeen[0].confidence).toBe('unconfirmed');
+    expect(notSeen[0].observedAt).toBe(AT);
+  });
+
+  it('SUPPRESSES not_seen_latest when the scan is NOT comparable (shallow re-scan) — no false "gone"', () => {
+    // A big prior set, a tiny scan: not comparable, so no not_seen events fire (his 85%/10 gate).
+    const prior = Array.from({ length: 40 }, (_, i) => a(`@u${i}`));
+    const incoming = [a('@u0'), a('@u1')];
+    const events = deriveNetworkDeltaEvents(prior, incoming, AT);
+    expect(events.some((e) => e.kind === 'not_seen_latest')).toBe(false);
+    // (a brand-new tiny scan can still add newly_observed for a genuinely new handle)
+    const events2 = deriveNetworkDeltaEvents(prior, [...incoming, a('@brandnew')], AT);
+    expect(events2.filter((e) => e.kind === 'newly_observed').map((e) => e.handle)).toEqual(['@brandnew']);
+  });
+
+  it('is case-insensitive on the handle and deterministic (no clock/RNG)', () => {
+    const prior = [a('@Alice')];
+    const incoming = [a('@alice'), a('@Bob')];
+    const e1 = deriveNetworkDeltaEvents(prior, incoming, AT);
+    const e2 = deriveNetworkDeltaEvents(prior, incoming, AT);
+    expect(e1).toEqual(e2);
+    // @alice re-seen (case-insensitive) → not newly_observed; @Bob is new.
+    expect(e1.filter((e) => e.kind === 'newly_observed').map((e) => e.handle)).toEqual(['@Bob']);
   });
 });
 

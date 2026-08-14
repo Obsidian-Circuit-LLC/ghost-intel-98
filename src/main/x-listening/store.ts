@@ -151,6 +151,11 @@ export interface XPostArtifact extends HarvestedItem {
   metrics: XPostMetrics;
   metricsRaw: XPostMetricsRaw;
   evidenceHash: string;
+  /** The visible author display name at capture (M1, his `mapCollectedPost` `displayName`). For a
+   *  repost/comment this is the ORIGINAL/third-party author's name — the only place it is observed.
+   *  Absent when none was visible (honest absence). NOT part of `canonicalPostEvidence` (a display
+   *  rename is not a content edit of the post), so it never perturbs `evidenceHash`. */
+  displayName?: string;
   synthetic?: boolean;
   mediaRefs?: string[];
   /** Prior captured versions of THIS post, appended on a text/media re-ingest diff (Task A2,
@@ -358,12 +363,88 @@ function mergeNetworkAccounts(
     const key = acct.handle.toLowerCase();
     seenThisScan.add(key);
     const prior = priorByHandle.get(key);
-    merged.push(prior?.firstObservedAt ? { ...acct, firstObservedAt: prior.firstObservedAt } : acct);
+    // M4: observedCount is a real count of how many scans RE-observed this handle — his
+    // `ingestRelationships` `Math.max(0, Number(existing?.observedCount) || 0) + 1`
+    // (main.cjs:2331). A first-ever observation is 1; each re-observation bumps it by one; the
+    // freshly-normalized incoming account carries none, so the counter is derived from the prior
+    // accumulator entry, never from the incoming row.
+    const observedCount = Math.max(0, Number(prior?.observedCount) || 0) + 1;
+    merged.push({
+      ...acct,
+      observedCount,
+      ...(prior?.firstObservedAt ? { firstObservedAt: prior.firstObservedAt } : {}),
+    });
   }
   for (const prior of existing) {
+    // CONSERVATIVE (no auto-unfollow): an account NOT re-observed this scan is carried over
+    // UNCHANGED — its `observedCount` is frozen, not decremented or reset, exactly like its
+    // first/last-observed timestamps. Its absence is not evidence it unfollowed.
     if (!seenThisScan.has(prior.handle.toLowerCase())) merged.push(prior);
   }
   return merged;
+}
+
+// ---- M2 (PC4): per-handle network delta events ---------------------------
+
+/** One per-handle network observation event — his `appState.networkEvents` row
+ *  (`recordNetworkSnapshot`, main.cjs:540-581), restored on the hardened core. `newly_observed`
+ *  fires for a handle seen this scan but absent from the prior accumulator; `not_seen_latest` is a
+ *  CONSERVATIVE observation that a prior handle did not appear in a COMPARABLE later scan — it is
+ *  explicitly NOT an assertion the account unfollowed (confidence `unconfirmed`), and the account
+ *  itself is never dropped or relabelled. */
+export interface XNetworkDeltaEvent {
+  kind: 'newly_observed' | 'not_seen_latest';
+  /** The account handle this event is about (as captured, `@`-prefixed). */
+  handle: string;
+  /** The scan's injected-clock ISO time (never computed here — determinism floor). */
+  observedAt: string;
+  /** `observed` for a first sighting; `unconfirmed` for a not-seen observation (no-auto-unfollow). */
+  confidence: 'observed' | 'unconfirmed';
+}
+
+/**
+ * Derive the per-handle network delta events for one scan — a PURE diff of this scan's observed
+ * accounts (`incoming`) against the persisted accumulator (`prior`) for the same (target, kind).
+ * Ported from his `recordNetworkSnapshot` (main.cjs:540-581):
+ *
+ *  - `newly_observed` (confidence `observed`): one per incoming handle absent from `prior`.
+ *  - `not_seen_latest` (confidence `unconfirmed`): one per prior handle absent from `incoming` —
+ *    but ONLY when this scan is COMPARABLE to what came before, his conservative gate
+ *    `observedCount >= max(10, floor(priorCount * 0.85))`. A shallow re-scan (far fewer accounts
+ *    than the accumulator) fires NO not-seen events, so a truncated pass can never falsely flag
+ *    every account as "gone". This preserves the no-auto-unfollow posture: not_seen_latest is an
+ *    observation the analyst interprets, never a stored "unfollowed" fact.
+ *
+ * Deterministic: handles are compared case-insensitively; `observedAt` is the caller's injected
+ * clock (no Date.now/RNG). Never mutates its inputs.
+ */
+export function deriveNetworkDeltaEvents(
+  prior: readonly XNetworkAccount[],
+  incoming: readonly XNetworkAccount[],
+  observedAt: string,
+): XNetworkDeltaEvent[] {
+  const priorKeys = new Set(prior.map((a) => String(a.handle ?? '').toLowerCase()));
+  const incomingKeys = new Set(incoming.map((a) => String(a.handle ?? '').toLowerCase()));
+
+  const events: XNetworkDeltaEvent[] = [];
+  for (const acct of incoming) {
+    if (!priorKeys.has(String(acct.handle ?? '').toLowerCase())) {
+      events.push({ kind: 'newly_observed', handle: acct.handle, observedAt, confidence: 'observed' });
+    }
+  }
+
+  // Conservative comparability gate (his `snapshot.observedCount >= Math.max(10, floor(prev*0.85))`).
+  // Only when this scan re-saw a comparable share of the prior set do we treat a prior handle's
+  // ABSENCE as an observation worth recording.
+  const comparable = incoming.length >= Math.max(10, Math.floor(prior.length * 0.85));
+  if (comparable) {
+    for (const acct of prior) {
+      if (!incomingKeys.has(String(acct.handle ?? '').toLowerCase())) {
+        events.push({ kind: 'not_seen_latest', handle: acct.handle, observedAt, confidence: 'unconfirmed' });
+      }
+    }
+  }
+  return events;
 }
 
 async function readJsonArr<T>(deps: Pick<XStoreDeps, 'readFile'>, path: string): Promise<T[]> {
@@ -552,7 +633,11 @@ export function makeXStore(deps: XStoreDeps): XStore {
               accounts: mergeNetworkAccounts(existing[idx].accounts ?? [], artifact.accounts ?? []),
             };
           } else {
-            existing.push(artifact);
+            // A brand-new (target, kind) artifact still runs through the merge against an EMPTY
+            // prior so every first-observed account is stamped `observedCount: 1` (M4) — his
+            // `ingestRelationships` has no separate first-capture path; the counter starts at 1 on
+            // the very first sighting, not on the first RE-sighting.
+            existing.push({ ...artifact, accounts: mergeNetworkAccounts([], artifact.accounts ?? []) });
           }
           await writeJson(deps, deps.networksPath(caseId), existing);
           return existing.length;

@@ -61,9 +61,11 @@ import {
 } from './changes';
 import { MEDIA_HOST_ALLOWLIST } from '../capture/security';
 import { buildRunRecord, recordCollectionRun, type RunRecordInput } from './run-log';
+import { deriveNetworkDeltaEvents } from './store';
 import type {
   XNetworkAccount,
   XNetworkArtifact,
+  XNetworkDeltaEvent,
   XPostArtifact,
   XPostMetrics,
   XPostMetricsRaw,
@@ -496,6 +498,10 @@ export function toPostArtifact(item: XHarvestedItem, mediaRefs?: readonly string
     parentPostId,
     metrics,
     metricsRaw,
+    // Carry the per-post display name (M1) when one was observed. Set BEFORE the hash, but
+    // `canonicalPostEvidence` excludes it, so it is preserved for display without perturbing
+    // `evidenceHash` (a repost/comment author's name is not content evidence of the post).
+    ...(item.displayName ? { displayName: item.displayName } : {}),
     mediaRefs: mediaRefs && mediaRefs.length ? [...mediaRefs] : undefined,
     evidenceHash: '',
   };
@@ -1272,6 +1278,10 @@ export interface XNetworkCaptureResult {
   completedPasses: number;
   /** True iff the loop stopped on stagnation (a stable end) rather than the pass ceiling. */
   reachedEnd: boolean;
+  /** Per-handle network delta events for this scan (M2, his `recordNetworkSnapshot` `networkEvents`):
+   *  a `newly_observed` per newly-added handle and a CONSERVATIVE, gated `not_seen_latest` per prior
+   *  handle absent from a comparable scan. Absent on a blocked scan (nothing was observed). */
+  deltaEvents?: XNetworkDeltaEvent[];
 }
 
 /** Injectable seams so extraction is testable without electron/network/secure-fs. Production
@@ -1581,12 +1591,17 @@ export async function captureNetwork(
       return { blocked: true, reason: challengeReason, kind, target: fullTarget, observed: 0, added: 0, completedPasses, reachedEnd: false };
     }
     const capturedAt = deps.now();
-    const artifact = normalizeNetwork(rows, username, kind, capturedAt);
+    const artifact = normalizeNetwork(rows, username, kind, capturedAt, { caseId: req.caseId });
 
     // Honest `added` delta: how many of this scan's accounts weren't already in the accumulator.
     const prior = await deps.readNetwork(req.caseId, fullTarget, kind);
     const priorHandles = new Set(prior.map((a) => a.handle.toLowerCase()));
     const added = artifact.accounts.filter((a) => !priorHandles.has(a.handle.toLowerCase())).length;
+
+    // M2: per-handle delta events (newly_observed + conservative, gated not_seen_latest) — his
+    // `recordNetworkSnapshot` emitted these alongside the scalar `added`. Computed against the
+    // PRIOR accumulator BEFORE the save folds this scan in.
+    const deltaEvents = deriveNetworkDeltaEvents(prior, artifact.accounts, capturedAt);
 
     await deps.saveNetwork(req.caseId, artifact);
 
@@ -1613,6 +1628,7 @@ export async function captureNetwork(
       added,
       completedPasses,
       reachedEnd,
+      deltaEvents,
     };
   } finally {
     const w = win as unknown as { isDestroyed?: () => boolean; destroy?: () => void };
