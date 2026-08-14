@@ -914,6 +914,78 @@
 .xls-observed { text-align: right; line-height: 1.4; }
 .xls-delta-row .xls-identity-main { margin-right: 6px; }
 
+/* ── ENTITY INDEX display pics — Enterprise entity-card grid + identity avatars ──────────────────
+ * Reproduces GhostExodus's ENTITY INDEX: a card grid where every MENTION entity shows its own
+ * avatar and each finding source is a small avatar chip. Colours route through the SAME generic
+ * theme tokens the already-ported `.xls-network-record` / `.xls-post-avatar` use (no colour literals
+ * — no-straggler stays green), so the cards read correctly on both the classic and QUIET AMETHYST
+ * skins. The avatars themselves are LOCAL `data:` URIs (cache-only `avatars` lookup) with a monogram
+ * fallback — no remote URL ever reaches the DOM. */
+.xls-entity-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+@media (max-width: 1100px) { .xls-entity-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 720px) { .xls-entity-grid { grid-template-columns: 1fr; } }
+.xls-entity-card {
+  display: grid;
+  gap: 7px;
+  padding: 12px;
+  background: var(--ga98-grey);
+  border: 1px solid var(--ga98-shadow-dark);
+  min-width: 0;
+}
+.xls-entity-heading { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.xls-entity-headtext { display: grid; gap: 4px; min-width: 0; }
+.xls-entity-card strong {
+  overflow: hidden;
+  color: var(--ga98-text);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.xls-entity-type {
+  justify-self: start;
+  padding: 3px 5px;
+  border: 1px solid var(--ga98-accent);
+  color: var(--ga98-accent);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+.xls-entity-count { color: var(--ga98-xls-badge-ink); font-size: 10px; letter-spacing: 0.02em; }
+.xls-entity-when { color: var(--ga98-text-dim); font-size: 10px; }
+.xls-entity-sources { display: flex; gap: 6px; flex-wrap: wrap; }
+.xls-entity-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 6px;
+  border: 1px solid var(--ga98-shadow-dark);
+  border-radius: 3px;
+  background: var(--ga98-row-hover);
+  color: var(--ga98-text-dim);
+  font-size: 10px;
+}
+.xls-entity-sources > small { color: var(--ga98-text-dim); font-size: 10px; }
+/* Identity avatar chip — mention card head (sm) + finding-source chips (xs). Localized image or
+ * monogram; same token palette as `.xls-post-avatar`. */
+.xls-ident-avatar {
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--ga98-row-hover);
+  border: 1px solid var(--ga98-shadow-dark);
+  color: var(--ga98-text-dim);
+  font-weight: 700;
+  vertical-align: middle;
+}
+.xls-ident-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.xls-ident-avatar--xs { width: 20px; height: 20px; font-size: 8px; }
+.xls-ident-avatar--sm { width: 30px; height: 30px; font-size: 10px; }
+
 .xls-panel { max-width: 1000px; }
 
 /* ── Task C2b: COMMON NETWORK MIND MAP (interactive SVG graph) ───────────────────────────────────

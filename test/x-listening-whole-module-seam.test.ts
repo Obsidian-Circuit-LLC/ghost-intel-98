@@ -51,6 +51,7 @@ const REACHABLE_CHANNELS: ReadonlyArray<keyof typeof channels.xListening> = [
   'analysis',
   'health',
   'entities',
+  'avatars',
   'presetsRead',
   'presetsSave',
   'presetsRemove',

@@ -882,6 +882,11 @@ export interface GhostApi {
     /** Derived entity rollup (mention/hashtag/email/url/domain/crypto/phone/org) over a case's
      *  captured posts — recomputed on every call; synthetic/demo posts excluded. */
     entities(caseId: string): Promise<Array<Record<string, unknown>>>;
+    /** Campaign-wide avatar lookup — `{ canonicalHandle → LOCAL data: URI }` over the per-campaign
+     *  avatar cache (the repair ledger). The ENTITY INDEX resolves each mention/source handle to a
+     *  localized avatar through this map (monogram fallback when absent). Cache-only: no capture
+     *  window, no network; only local `data:` URIs are ever returned, never a remote URL. */
+    avatars(caseId: string): Promise<Record<string, string>>;
     /** Read a case's saved highlight presets. */
     presetsRead(caseId: string): Promise<{
       presets: Array<{

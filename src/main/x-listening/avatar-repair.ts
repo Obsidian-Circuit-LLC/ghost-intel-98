@@ -391,3 +391,61 @@ export async function getRepairedAvatar(
   if (!entry) return null;
   return deps.readMedia(caseId, entry.ref);
 }
+
+/** Injectable seam for `buildAvatarLookup` — the SAME read-only pair `getRepairedAvatar` uses,
+ *  production defaults resolve secure-fs + `readCachedMedia` lazily. There is deliberately NO window,
+ *  network, or `cacheRemoteMedia` seam here: the lookup is a pure read-back of already-localized
+ *  avatars, so displaying an entity can never trigger a remote fetch. */
+export interface BuildAvatarLookupDeps {
+  readCache: (caseId: string) => Promise<Record<string, unknown> | null>;
+  readMedia: (caseId: string, ref: string) => Promise<string | null>;
+}
+
+/**
+ * Build the campaign-wide avatar lookup — `{ canonicalHandle → LOCAL display data: URI }` — over the
+ * per-campaign avatar cache (`x-avatar-cache.json`, the repair ledger). The hardened analog of
+ * Enterprise's `avatarLookup`/`avatarFor`: the ENTITY INDEX (and any identity consumer) resolves a
+ * handle to a LOCALIZED avatar through this map, never a raw remote URL.
+ *
+ * CACHE-ONLY BY CONSTRUCTION: it reads the ledger and reads each cached ref back through
+ * `readCachedMedia` (ref-shape-validated, returns a `data:` URI or null) — NO capture window, NO
+ * network, NO `cacheRemoteMedia`. A handle with no cached avatar (or whose read-back misses) is simply
+ * absent, so the renderer falls back to a monogram. Every value it can emit is a local `data:` URI —
+ * a remote URL can never enter the map, and therefore never the DOM. Any whole-cache read failure
+ * degrades to an EMPTY map (a display miss, not a fault).
+ */
+export async function buildAvatarLookup(
+  caseId: string,
+  overrides: Partial<BuildAvatarLookupDeps> = {},
+): Promise<Record<string, string>> {
+  const deps: BuildAvatarLookupDeps = {
+    readCache: async (id) => {
+      const [{ join }, paths, { secureReadFile }] = await Promise.all([
+        import('node:path'),
+        import('../storage/paths'),
+        import('../storage/secure-fs'),
+      ]);
+      const p = join(paths.scrapingCaseDir('x', id), X_AVATAR_CACHE_FILE);
+      try {
+        const buf = await secureReadFile(p);
+        return JSON.parse(buf.toString('utf8')) as Record<string, unknown>;
+      } catch {
+        return null;
+      }
+    },
+    readMedia: async (id, ref) => {
+      const { readCachedMedia } = await import('./media');
+      return readCachedMedia(id, ref);
+    },
+    ...overrides,
+  };
+  const map = normalizeCacheMap(await deps.readCache(caseId).catch(() => null));
+  const out: Record<string, string> = {};
+  // Canonical keys already (normalizeCacheMap re-canonicalizes every handle). Read each localized ref
+  // back to a data: URI; a null read-back (missing/locked file) drops that handle to the monogram path.
+  for (const [handle, entry] of Object.entries(map)) {
+    const uri = await deps.readMedia(caseId, entry.ref);
+    if (uri && uri.startsWith('data:')) out[handle] = uri;
+  }
+  return out;
+}

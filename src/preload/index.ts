@@ -748,6 +748,7 @@ const api = {
     analysis: (caseId: string) => ipcRenderer.invoke(channels.xListening.analysis, caseId),
     health: (caseId: string) => ipcRenderer.invoke(channels.xListening.health, caseId),
     entities: (caseId: string) => ipcRenderer.invoke(channels.xListening.entities, caseId),
+    avatars: (caseId: string) => ipcRenderer.invoke(channels.xListening.avatars, caseId),
     presetsRead: (caseId: string) => ipcRenderer.invoke(channels.xListening.presetsRead, caseId),
     presetsSave: (req: {
       caseId: string;

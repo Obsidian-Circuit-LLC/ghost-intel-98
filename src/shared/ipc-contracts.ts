@@ -608,6 +608,12 @@ export const channels = {
     /** Derived entity rollup (analysis.ts `extractEntities`) over a case's captured posts —
      *  recomputed on every call, never persisted; synthetic/demo posts are excluded (honesty). */
     entities: 'xListening:entities',
+    /** Campaign-wide avatar lookup — `{ canonicalHandle → LOCAL data: URI }` over the per-campaign
+     *  avatar cache (`buildAvatarLookup`, the repair ledger). The hardened analog of Enterprise's
+     *  `avatarLookup`/`avatarFor`: the ENTITY INDEX resolves each mention/source handle to a
+     *  LOCALIZED avatar through this map (monogram fallback when absent). CACHE-ONLY — no capture
+     *  window, no network; only local `data:` URIs are ever returned (never a remote URL). */
+    avatars: 'xListening:avatars',
     /** Read a case's saved highlight presets. */
     presetsRead: 'xListening:presets:read',
     /** Upsert one highlight preset (keyed by id); `updatedAt` is stamped MAIN-side. */

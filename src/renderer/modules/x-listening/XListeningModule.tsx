@@ -285,6 +285,14 @@ export interface XEntityRow {
   type: string;
   value: string;
   count: number;
+  // Task: ENTITY INDEX display pics. `normalizedValue` is the canonical handle for a MENTION entity
+  // (drives the card avatar + OPEN X PROFILE); `sourceUsernames` are the finding sources (each a
+  // small avatar chip). Present at runtime on the `entities` rollup (store.ts XEntityCacheEntry);
+  // optional here so a legacy/partial payload never crashes the card.
+  normalizedValue?: string;
+  sourceUsernames?: string[];
+  firstObservedAt?: string;
+  lastObservedAt?: string;
 }
 
 // ── Task 15: changes / search / notes / exports / campaigns / system tabs ──────────────────
@@ -404,6 +412,10 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
   const [analysis, setAnalysis] = useState<XAnalysisView>(EMPTY_ANALYSIS);
   const [health, setHealth] = useState<XHealthRow[]>([]);
   const [entities, setEntities] = useState<XEntityRow[]>([]);
+  // Campaign-wide avatar lookup (canonical handle → LOCAL data: URI) from the cache-only `avatars`
+  // channel — the ENTITY INDEX resolves each mention/source handle to a localized avatar through it,
+  // never a remote URL. A miss leaves the handle absent → monogram fallback.
+  const [avatars, setAvatars] = useState<Record<string, string>>({});
   const [insightsBusy, setInsightsBusy] = useState(false);
 
   const [targetUsername, setTargetUsername] = useState('');
@@ -527,6 +539,7 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
       setAnalysis(EMPTY_ANALYSIS);
       setHealth([]);
       setEntities([]);
+      setAvatars({});
       setNetworks([]);
       setChangeEvents([]);
       setRunLog([]);
@@ -575,6 +588,17 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
       console.warn('[XListening] loadInsights:', err);
     } finally {
       setInsightsBusy(false);
+    }
+    // Avatars are a display enhancement (ENTITY INDEX pics), resolved SEPARATELY so a miss never
+    // blanks the core insights — and guarded so an older preload without the channel degrades to
+    // monograms rather than throwing. The lookup is cache-only (no egress).
+    try {
+      if (typeof window.api?.xListening?.avatars === 'function') {
+        const avatarRes = await window.api.xListening.avatars(id);
+        setAvatars((avatarRes as unknown as Record<string, string>) ?? {});
+      }
+    } catch (err) {
+      console.warn('[XListening] avatars:', err);
     }
   }, []);
 
@@ -658,6 +682,33 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
   const filteredEntities = useMemo(
     () => (entityTypeFilter === 'all' ? entities : entities.filter((e) => e.type === entityTypeFilter)),
     [entities, entityTypeFilter],
+  );
+
+  // ── ENTITY INDEX display pics: canonical-handle → LOCAL avatar data: URI ─────────────────────
+  // The hardened analog of Enterprise's `avatarFor`. Resolves ONLY from the cache-only `avatars`
+  // lookup — a `data:` URI or undefined (→ monogram). Never a remote URL, so never in the DOM.
+  const avatarFor = useCallback(
+    (handle: string): string | undefined => {
+      const uri = avatars[normalizeXSourceKey(handle)];
+      return uri && uri.startsWith('data:') ? uri : undefined;
+    },
+    [avatars],
+  );
+
+  // Small identity-avatar chip (mirrors Enterprise's `IdentityAvatar`): the localized image when the
+  // handle has a cached avatar, else the handle's monogram initial — no broken image, no renderer
+  // fetch. `size` is 'sm' (mention card head) or 'xs' (finding-source chip).
+  const renderIdentAvatar = useCallback(
+    (handle: string, size: 'xs' | 'sm') => {
+      const src = avatarFor(handle);
+      const initial = handle.replace(/^@+/, '').slice(0, 1).toUpperCase() || '@';
+      return (
+        <span className={`xls-ident-avatar xls-ident-avatar--${size}`} aria-hidden="true">
+          {src ? <img src={src} alt="" /> : <span>{initial}</span>}
+        </span>
+      );
+    },
+    [avatarFor],
   );
 
   const healthyCount = useMemo(() => health.filter((h) => h.status === 'HEALTHY').length, [health]);
@@ -2372,16 +2423,52 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
             {filteredEntities.length === 0 ? (
               <div className="xls-empty">No extracted entities match.</div>
             ) : (
-              <ul className="xls-source-list">
-                {filteredEntities.map((e) => (
-                  <li className="xls-source-row" key={e.id}>
-                    <span>{e.value}</span>
-                    <span className="xls-count">
-                      {e.type.toUpperCase()} · {e.count} findings
-                    </span>
-                  </li>
-                ))}
-              </ul>
+              <div className="xls-entity-grid">
+                {filteredEntities.map((e) => {
+                  const isMention = e.type === 'mention';
+                  // Canonical handle for a mention drives the card avatar + OPEN X PROFILE; fall back
+                  // to the display value with any leading '@' stripped for a legacy/partial payload.
+                  const handle = (e.normalizedValue || e.value || '').replace(/^@+/, '');
+                  const sources = e.sourceUsernames ?? [];
+                  return (
+                    <article className="xls-entity-card" key={e.id}>
+                      <div className="xls-entity-heading">
+                        {isMention && handle && renderIdentAvatar(handle, 'sm')}
+                        <div className="xls-entity-headtext">
+                          <span className="xls-entity-type">{e.type}</span>
+                          <strong>{e.value}</strong>
+                        </div>
+                      </div>
+                      <b className="xls-entity-count">{e.count} FINDINGS</b>
+                      <div className="xls-entity-sources">
+                        {sources.length ? (
+                          sources.map((u) => (
+                            <span className="xls-entity-source" key={u}>
+                              {renderIdentAvatar(u, 'xs')}@{u.replace(/^@+/, '')}
+                            </span>
+                          ))
+                        ) : (
+                          <small>sources: —</small>
+                        )}
+                      </div>
+                      <small className="xls-entity-when">
+                        first {formatWhen(e.firstObservedAt ?? '')} · last{' '}
+                        {formatWhen(e.lastObservedAt ?? '')}
+                      </small>
+                      {isMention && handle && (
+                        <button
+                          type="button"
+                          className="xls-btn"
+                          title="Open this account's X profile in a Tor-gated in-app window"
+                          onClick={() => void handleOpenInX('profile', handle)}
+                        >
+                          OPEN X PROFILE
+                        </button>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
             )}
           </section>
         )}

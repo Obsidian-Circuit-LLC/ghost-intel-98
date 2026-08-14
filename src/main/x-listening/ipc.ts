@@ -27,7 +27,7 @@ import { getCollectionSettings, saveCollectionSettings } from './collection-sett
 import { normalizeImageMode, type XImageMode } from '@shared/x-listening-image-policy';
 import { getImagePolicy, setProfileImageMode, resolveEffectiveImageCollection } from './image-policy';
 import { restartSchedule, stopSchedule, scheduleStatus } from './scheduler';
-import { repairAvatars } from './avatar-repair';
+import { repairAvatars, buildAvatarLookup } from './avatar-repair';
 import { prodXStore } from './store';
 import type { XNote, XPostArtifact, XNetworkArtifact, XPreset, XEntityCacheEntry } from './store';
 import { ensureUuid } from '../security/validate';
@@ -1149,6 +1149,18 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
     const store = await prodXStore();
     const posts = await store.posts.read(caseId);
     return aggregateEntities(posts);
+  });
+
+  // Campaign-wide avatar lookup for the ENTITY INDEX (and any identity consumer): canonical handle
+  // → LOCAL display data: URI, read back from the per-campaign avatar cache. CACHE-ONLY — no capture
+  // window, no network; `buildAvatarLookup` can only ever emit local `data:` URIs (never a remote
+  // URL). Sender check + arg validation only, same shape as `entities` above.
+  deps.handle(channels.xListening.avatars, async (e, caseIdArg) => {
+    assertTrustedSender(e);
+    if (typeof caseIdArg !== 'string' || !caseIdArg) {
+      throw new Error('Avatars requires a caseId.');
+    }
+    return buildAvatarLookup(ensureUuid(caseIdArg, 'caseId'));
   });
 
   // Presets: pure store CRUD (extend XStore, Task 1) — no capture window, no network.
