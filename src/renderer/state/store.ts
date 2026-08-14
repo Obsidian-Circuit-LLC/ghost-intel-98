@@ -201,3 +201,20 @@ export const useLocalAi = create<LocalAiSliceState>((set) => ({
     finally { off(); }
   }
 }));
+
+/**
+ * App-wide "current case" — the single case the whole app agrees you are working (operator decision
+ * 2026-08-14 "App-wide active case"). Set wherever a case is opened/selected (Cases module,
+ * Searchlight `setActiveCaseId`); read by Q (`AiAssistantModule`) so its per-case memory recall +
+ * context auto-bind to that case instead of the old global cross-case fallback. Selecting a case
+ * sets it; deselecting does NOT clear it (there is no global "close case" — the last opened case
+ * stays current until another is opened).
+ */
+interface ActiveCaseState {
+  currentCaseId: string | null;
+  setCurrentCase(id: string | null): void;
+}
+export const useActiveCase = create<ActiveCaseState>((set) => ({
+  currentCaseId: null,
+  setCurrentCase: (id) => set({ currentCaseId: id }),
+}));

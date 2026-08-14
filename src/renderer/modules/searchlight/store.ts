@@ -13,6 +13,7 @@
  */
 
 import { create } from 'zustand';
+import { useActiveCase } from '../../state/store';
 import type {
   SearchlightCase,
   SearchlightCaseSummary,
@@ -144,7 +145,11 @@ export const useSearchlightStore = create<SearchlightState>((set, get) => ({
 
   // ── Cases ──────────────────────────────────────────────────────────────────
 
-  setActiveCaseId: (id) => set({ activeCaseId: id }),
+  setActiveCaseId: (id) => {
+    set({ activeCaseId: id });
+    // Selecting a case makes it the app-wide current case (so Q follows it); deselecting doesn't clear.
+    if (id) useActiveCase.getState().setCurrentCase(id);
+  },
 
   setSelectedJobId: (id) => set({ selectedJobId: id }),
 
