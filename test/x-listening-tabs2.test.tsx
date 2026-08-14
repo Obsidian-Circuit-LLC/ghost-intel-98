@@ -280,18 +280,26 @@ describe('X Listening Station tabs (Task 15)', () => {
     expect(container.textContent || '').toMatch(/OSINT watch/);
   });
 
-  it('search tab Save Preset drives the real presetsSave channel with the current query as keywords', async () => {
+  it('search tab Save Preset drives the real presetsSave channel with the keyword textarea (comma-split) + full shape', async () => {
     await mount();
     await clickTab(/^search$/i);
-    const query = container.querySelector('.xls-search-query') as HTMLInputElement;
-    await act(async () => setInputValue(query, 'foo, bar'));
+    // Audit HIGH #9: keywords come from the dedicated editor TEXTAREA now, not the live search box.
+    const keywords = container.querySelector('.xls-preset-keywords') as HTMLTextAreaElement;
+    await act(async () => setInputValue(keywords, 'foo, bar'));
     const name = container.querySelector('.xls-preset-name') as HTMLInputElement;
     await act(async () => setInputValue(name, 'My Preset'));
     await act(async () => { findButton(container, /save preset/i).click(); });
     await act(async () => { await Promise.resolve(); });
 
     expect(api.xListening.presetsSave).toHaveBeenCalledWith(
-      expect.objectContaining({ caseId: 'camp-a', name: 'My Preset', keywords: ['foo', 'bar'] }),
+      expect.objectContaining({
+        caseId: 'camp-a',
+        name: 'My Preset',
+        keywords: ['foo', 'bar'],
+        mode: 'any',
+        caseSensitive: false,
+        profileIds: [],
+      }),
     );
   });
 

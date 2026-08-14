@@ -489,6 +489,44 @@
 .xls-post-text { white-space: pre-wrap; font-size: 12px; line-height: 1.5; margin: 6px 0; }
 .xls-hl { background: var(--ga98-accent); color: var(--ga98-titlebar-text); padding: 0 1px; }
 
+/* ── Audit HIGH #9: the full highlight-preset editor (mode / case / per-source scope) ── */
+.xls-preset-keywords {
+  width: 100%;
+  min-height: 64px;
+  resize: vertical;
+  margin-bottom: 8px;
+  font-family: inherit;
+}
+.xls-preset-editor-row {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.xls-preset-mode {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ga98-text);
+}
+.xls-preset-mode .xls-input { width: auto; }
+.xls-preset-scope { margin-bottom: 8px; }
+.xls-preset-scope-label {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--ga98-text-dim);
+  margin-bottom: 4px;
+}
+.xls-preset-scope-label em { font-style: italic; text-transform: none; letter-spacing: normal; }
+.xls-preset-profile-grid { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.xls-preset-profile { margin: 0; }
+.xls-preset-meta { display: block; margin-top: 2px; }
+/* Audit HIGH #8: the matched-post results block below the saved-preset list. */
+.xls-preset-results .xls-count { font-size: 11px; color: var(--ga98-text-dim); }
+
 .xls-media-strip { display: flex; gap: 6px; margin: 6px 0; flex-wrap: wrap; }
 .xls-media-strip img,
 .xls-media-thumb { max-width: 120px; max-height: 120px; border: 1px solid var(--ga98-shadow-dark); }

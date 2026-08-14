@@ -371,7 +371,18 @@ export interface XPresetRow {
   name: string;
   keywords: string[];
   mode: 'any' | 'all';
+  /** Case-sensitive matching (default false). Restored with the full editor (audit HIGH #9). */
+  caseSensitive: boolean;
+  /** Per-source scope — when non-empty, only posts from these `channelId`s are matched (audit HIGH #9). */
+  profileIds: string[];
+  enabled?: boolean;
   updatedAt: string;
+}
+
+/** One preset RUN match returned by `presetsRun` — the post and the keywords that matched it. */
+export interface XPresetMatchView {
+  postId: string;
+  matchedKeywords: string[];
 }
 
 // Post kind labels + compact metric formatting now live in the extracted PostCard (Task I1); the
@@ -470,6 +481,15 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
   const [presets, setPresets] = useState<XPresetRow[]>([]);
   const [presetNameDraft, setPresetNameDraft] = useState('');
   const [presetsBusy, setPresetsBusy] = useState(false);
+  // Audit HIGH #9 — the full preset editor draft (mode / case / per-source scope / keyword textarea).
+  const [presetKeywordsDraft, setPresetKeywordsDraft] = useState('');
+  const [presetModeDraft, setPresetModeDraft] = useState<'any' | 'all'>('any');
+  const [presetCaseDraft, setPresetCaseDraft] = useState(false);
+  const [presetProfilesDraft, setPresetProfilesDraft] = useState<string[]>([]);
+  // Non-null while EDITing an existing preset (upsert its id) rather than creating a new one.
+  const [editingPresetId, setEditingPresetId] = useState<string | null>(null);
+  // Audit HIGH #8 — the last preset RUN result (derived-on-read; drives the MATCH display).
+  const [presetRun, setPresetRun] = useState<{ name: string; matches: XPresetMatchView[] } | null>(null);
 
   const xListeningSettings = settings?.xListening;
   const clearnet = xListeningSettings?.clearnet === true;
@@ -1506,36 +1526,73 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
 
   // ── Task 15: highlight presets (design doc: "Highlight presets / local search" is ONE
   // feature area) — save the current search query as a reusable, in-app-evaluated preset. ──
+  // Reset the editor back to a fresh "NEW PRESET" state (also the EDIT → Cancel path).
+  const clearPresetEditor = useCallback(() => {
+    setEditingPresetId(null);
+    setPresetNameDraft('');
+    setPresetKeywordsDraft('');
+    setPresetModeDraft('any');
+    setPresetCaseDraft(false);
+    setPresetProfilesDraft([]);
+  }, []);
+
+  // Audit HIGH #9 — EDIT: load an existing preset into the form (his `editPreset`, main.tsx:306).
+  // Keywords round-trip one-per-line so the textarea shows the saved phrase list.
+  const handleEditPreset = useCallback((preset: XPresetRow) => {
+    setEditingPresetId(preset.id);
+    setPresetNameDraft(preset.name);
+    setPresetKeywordsDraft(preset.keywords.join('\n'));
+    setPresetModeDraft(preset.mode);
+    setPresetCaseDraft(preset.caseSensitive === true);
+    setPresetProfilesDraft(preset.profileIds ?? []);
+  }, []);
+
   const handleSavePreset = useCallback(async () => {
     if (!activeCampaignId) return;
     const name = presetNameDraft.trim();
-    const query = searchQuery.trim();
+    // Audit HIGH #9 — keywords now come from a dedicated TEXTAREA split on comma OR newline
+    // (his form, main.tsx:345), no longer piggy-backed on the live search box.
+    const keywords = presetKeywordsDraft.split(/[,\n]/).map((k) => k.trim()).filter(Boolean);
     if (!name) {
       setNotice('Enter a name for this preset before saving.');
       return;
     }
-    if (!query) {
-      setNotice('Enter a search query above before saving it as a preset.');
+    if (!keywords.length) {
+      setNotice('Enter at least one keyword or phrase for this preset.');
       return;
     }
     setPresetsBusy(true);
     try {
-      const keywords = query.split(',').map((k) => k.trim()).filter(Boolean);
+      // Audit HIGH #9 — send the FULL preset shape (mode / caseSensitive / profileIds) the save
+      // handler already stores + evaluatePreset already honors. EDIT upserts the same id.
       const res = await window.api.xListening.presetsSave({
         caseId: activeCampaignId,
-        id: crypto.randomUUID(),
+        id: editingPresetId ?? crypto.randomUUID(),
         name,
         keywords,
+        mode: presetModeDraft,
+        caseSensitive: presetCaseDraft,
+        profileIds: presetProfilesDraft,
+        enabled: true,
       });
       setPresets(res.presets as unknown as XPresetRow[]);
-      setPresetNameDraft('');
-      setNotice(`Preset "${name}" saved.`);
+      clearPresetEditor();
+      setNotice(editingPresetId ? `Preset "${name}" updated.` : `Preset "${name}" saved.`);
     } catch (err) {
       setNotice(err instanceof Error ? err.message : String(err));
     } finally {
       setPresetsBusy(false);
     }
-  }, [activeCampaignId, presetNameDraft, searchQuery]);
+  }, [
+    activeCampaignId,
+    presetNameDraft,
+    presetKeywordsDraft,
+    presetModeDraft,
+    presetCaseDraft,
+    presetProfilesDraft,
+    editingPresetId,
+    clearPresetEditor,
+  ]);
 
   const handleRunPreset = useCallback(
     async (preset: XPresetRow) => {
@@ -1543,6 +1600,9 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
       setPresetsBusy(true);
       try {
         const res = await window.api.xListening.presetsRun({ caseId: activeCampaignId, id: preset.id });
+        // Audit HIGH #8 — keep the matches so the matched posts render with highlighting + a
+        // MATCH:<name> row, instead of discarding them behind a toast.
+        setPresetRun({ name: preset.name, matches: res.matches });
         setNotice(`Preset "${preset.name}" matched ${res.matches.length} post(s).`);
       } catch (err) {
         setNotice(err instanceof Error ? err.message : String(err));
@@ -1578,6 +1638,22 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
       (p) => p.text.toLowerCase().includes(q) || p.authorHandle.toLowerCase().includes(q),
     );
   }, [posts, searchQuery]);
+
+  // Audit HIGH #8 — the last preset RUN result, projected onto the loaded posts. `presetMatchByPost`
+  // maps each matched post to its highlight terms + the preset name (his `presetMatchByPost`,
+  // main.tsx:279); `presetMatchedPosts` are the posts to render, in the loaded order.
+  const presetMatchByPost = useMemo(() => {
+    const map = new Map<string, { terms: string[]; names: string[] }>();
+    if (!presetRun) return map;
+    for (const m of presetRun.matches) {
+      map.set(m.postId, { terms: m.matchedKeywords, names: [presetRun.name] });
+    }
+    return map;
+  }, [presetRun]);
+  const presetMatchedPosts = useMemo(
+    () => posts.filter((p) => presetMatchByPost.has(p.id)),
+    [posts, presetMatchByPost],
+  );
 
   // ── Task 15: Changes tab — newly-observed vs long-standing network accounts ─────────────
   const sortedNetworkChanges = useMemo(
@@ -2597,8 +2673,12 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
               )}
             </div>
 
-            <div className="xls-panel">
-              <h3 className="xls-panel-title">SAVE AS A HIGHLIGHT PRESET</h3>
+            {/* Audit HIGH #9 — the full highlight-preset editor: name, keyword TEXTAREA (comma OR
+                newline), MATCH ANY/ALL, CASE SENSITIVE, and per-source SCOPE checkboxes, plus EDIT. */}
+            <div className="xls-panel xls-preset-editor">
+              <h3 className="xls-panel-title">
+                {editingPresetId ? 'EDIT HIGHLIGHT PRESET' : 'NEW HIGHLIGHT PRESET'}
+              </h3>
               <div className="xls-add-source">
                 <input
                   className="xls-input xls-preset-name"
@@ -2607,13 +2687,79 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
                   value={presetNameDraft}
                   onChange={(e) => setPresetNameDraft(e.target.value)}
                 />
+              </div>
+              <textarea
+                className="xls-input xls-preset-keywords"
+                aria-label="Preset keywords"
+                placeholder="Keywords or phrases — one per line or comma separated…"
+                value={presetKeywordsDraft}
+                onChange={(e) => setPresetKeywordsDraft(e.target.value)}
+              />
+              <div className="xls-preset-editor-row">
+                <label className="xls-preset-mode">
+                  MODE
+                  <select
+                    className="xls-input"
+                    aria-label="Preset match mode"
+                    value={presetModeDraft}
+                    onChange={(e) => setPresetModeDraft(e.target.value === 'all' ? 'all' : 'any')}
+                  >
+                    <option value="any">MATCH ANY</option>
+                    <option value="all">MATCH ALL</option>
+                  </select>
+                </label>
+                <label className="xls-check">
+                  <input
+                    type="checkbox"
+                    aria-label="Case sensitive"
+                    checked={presetCaseDraft}
+                    onChange={(e) => setPresetCaseDraft(e.target.checked)}
+                  />
+                  CASE SENSITIVE
+                </label>
+              </div>
+              {sourceGroups.length > 0 && (
+                <div className="xls-preset-scope">
+                  <span className="xls-preset-scope-label">
+                    SCOPE TO SOURCES <em>(none = all campaign sources)</em>
+                  </span>
+                  <div className="xls-preset-profile-grid">
+                    {sourceGroups.map((g) => {
+                      const handle = g.channelId.replace(/^@/, '');
+                      return (
+                        <label className="xls-check xls-preset-profile" key={g.channelId}>
+                          <input
+                            type="checkbox"
+                            aria-label={`Scope to @${handle}`}
+                            checked={presetProfilesDraft.includes(g.channelId)}
+                            onChange={(e) =>
+                              setPresetProfilesDraft(
+                                e.target.checked
+                                  ? [...presetProfilesDraft, g.channelId]
+                                  : presetProfilesDraft.filter((id) => id !== g.channelId),
+                              )
+                            }
+                          />
+                          @{handle}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              <div className="xls-source-actions">
                 <button
                   className="xls-btn xls-btn-primary"
                   onClick={() => void handleSavePreset()}
                   disabled={presetsBusy || !activeCampaignId}
                 >
-                  Save Preset
+                  {editingPresetId ? 'Save Changes' : 'Save Preset'}
                 </button>
+                {editingPresetId && (
+                  <button className="xls-btn" onClick={clearPresetEditor} disabled={presetsBusy}>
+                    Cancel
+                  </button>
+                )}
               </div>
             </div>
 
@@ -2627,10 +2773,21 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
                     <li className="xls-source-row" key={p.id}>
                       <span>
                         <strong>{p.name}</strong> — {p.keywords.join(', ')}
+                        <span className="xls-count xls-preset-meta">
+                          {p.mode === 'all' ? 'MATCH ALL' : 'MATCH ANY'}
+                          {p.caseSensitive ? ' · case sensitive' : ''}
+                          {' · '}
+                          {p.profileIds && p.profileIds.length
+                            ? `${p.profileIds.length} scoped source(s)`
+                            : 'all sources'}
+                        </span>
                       </span>
                       <span className="xls-source-actions">
                         <button className="xls-btn" onClick={() => void handleRunPreset(p)} disabled={presetsBusy}>
                           Run
+                        </button>
+                        <button className="xls-btn" onClick={() => handleEditPreset(p)} disabled={presetsBusy}>
+                          Edit
                         </button>
                         <button
                           className="xls-btn xls-btn-danger"
@@ -2645,6 +2802,29 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
                 </ul>
               )}
             </div>
+
+            {/* Audit HIGH #8 — the matched posts from the last RUN, with keyword highlighting and a
+                MATCH:<preset name> row (PostCard's presetNames path). */}
+            {presetRun && (
+              <div className="xls-panel xls-preset-results">
+                <h3 className="xls-panel-title">
+                  PRESET MATCHES — {presetRun.name}{' '}
+                  <span className="xls-count">{presetMatchedPosts.length} post(s)</span>
+                </h3>
+                <div className="xls-feed">
+                  {presetMatchedPosts.length === 0 ? (
+                    <div className="xls-empty">
+                      No captured post currently matches “{presetRun.name}”.
+                    </div>
+                  ) : (
+                    presetMatchedPosts.map((p) => {
+                      const match = presetMatchByPost.get(p.id)!;
+                      return renderPost(p, { highlightTerms: match.terms, presetNames: match.names });
+                    })
+                  )}
+                </div>
+              </div>
+            )}
           </section>
         )}
 
