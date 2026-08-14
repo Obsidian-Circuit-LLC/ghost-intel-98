@@ -849,7 +849,21 @@ const api = {
     receiverExternalOpen: (url: string) =>
       ipcRenderer.invoke(channels.websdr.receiverExternalOpen, url),
     receiverEgressApply: (mode: unknown) =>
-      ipcRenderer.invoke(channels.websdr.receiverEgressApply, mode)
+      ipcRenderer.invoke(channels.websdr.receiverEgressApply, mode),
+    // Phase 3 — control-bar injection (confined to the receiver partition main-side) + recording
+    // archive. Captured bytes persist encrypted-at-rest; export is the one save-dialog-gated
+    // plaintext egress.
+    receiverTune: (hz: number) => ipcRenderer.invoke(channels.websdr.receiverTune, hz),
+    receiverMode: (mode: string) => ipcRenderer.invoke(channels.websdr.receiverMode, mode),
+    receiverVolume: (volume: number) => ipcRenderer.invoke(channels.websdr.receiverVolume, volume),
+    receiverCaptureSource: () => ipcRenderer.invoke(channels.websdr.receiverCaptureSource),
+    listRecordings: () => ipcRenderer.invoke(channels.websdr.recordingsList),
+    saveRecording: (payload: unknown) => ipcRenderer.invoke(channels.websdr.recordingsSave, payload),
+    recordingData: (id: string) => ipcRenderer.invoke(channels.websdr.recordingsData, id),
+    annotateRecording: (id: string, notes: string) =>
+      ipcRenderer.invoke(channels.websdr.recordingsAnnotate, id, notes),
+    deleteRecording: (id: string) => ipcRenderer.invoke(channels.websdr.recordingsDelete, id),
+    exportRecording: (id: string) => ipcRenderer.invoke(channels.websdr.recordingsExport, id)
   }
 } as const;
 

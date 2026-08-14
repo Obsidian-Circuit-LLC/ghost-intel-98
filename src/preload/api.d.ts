@@ -13,6 +13,7 @@ import type {
   WebSdrStationMenu,
   WebSdrEgressState,
   WebSdrEgressMode,
+  WebSdrRecordingMeta,
 } from '../shared/websdr/types';
 import type {
   AppSettings,
@@ -1163,6 +1164,31 @@ export interface GhostApi {
     receiverEgressApply(
       mode: WebSdrEgressMode,
     ): Promise<{ mode: WebSdrEgressMode; showWarning: boolean }>;
+    /** Phase 3 — control-bar injection (confined to the receiver partition main-side). Each returns
+     *  his {ok,message} result — an incompatible page reports "use native controls". */
+    receiverTune(hz: number): Promise<{ ok: boolean; message: string }>;
+    receiverMode(mode: string): Promise<{ ok: boolean; message: string }>;
+    receiverVolume(volume: number): Promise<{ ok: boolean; message: string }>;
+    /** His `getMediaSourceId` handshake — the source id the renderer's MediaRecorder captures. */
+    receiverCaptureSource(): Promise<string>;
+    /** Phase 3 — recording archive (R7). Captured bytes persist encrypted-at-rest via secure-fs. */
+    listRecordings(): Promise<WebSdrRecordingMeta[]>;
+    saveRecording(payload: {
+      data: ArrayBuffer | Uint8Array;
+      receiverId?: string;
+      receiverName: string;
+      sourceUrl?: string;
+      startedAt?: string;
+      endedAt?: string;
+      durationMs?: number;
+      frequencyHz?: number;
+      mode?: string;
+      notes?: string;
+    }): Promise<WebSdrRecordingMeta[]>;
+    recordingData(id: string): Promise<{ id: string; mime: string; bytes: Uint8Array }>;
+    annotateRecording(id: string, notes: string): Promise<WebSdrRecordingMeta[]>;
+    deleteRecording(id: string): Promise<WebSdrRecordingMeta[]>;
+    exportRecording(id: string): Promise<boolean>;
   };
 }
 

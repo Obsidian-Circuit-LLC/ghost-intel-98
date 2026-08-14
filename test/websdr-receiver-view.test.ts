@@ -75,6 +75,9 @@ function fakeView() {
     setAudioMuted: (m: boolean) => {
       calls.muted.push(m);
     },
+    // Phase-3 seam additions (unused on the Phase-2 paths, present so the fake satisfies the type).
+    executeJavaScript: async (_code: string) => '',
+    getMediaSourceId: (_forWc: unknown) => 'source-id',
     close: () => {
       calls.closed += 1;
     },

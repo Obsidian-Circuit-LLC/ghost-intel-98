@@ -153,4 +153,36 @@ export function registerWebSdrReceiverIpc(deps: {
     assertTrustedSender(e);
     return mgr.applyEgress(mode);
   });
+
+  // ---- Phase 3: control-bar injection (confined to the receiver view) ----
+  handle(channels.websdr.receiverTune, (e, hz) => {
+    assertTrustedSender(e);
+    if (typeof hz !== 'number' || !Number.isFinite(hz)) {
+      throw new Error('Tuning requires a finite frequency in hertz.');
+    }
+    return mgr.tune(hz);
+  });
+
+  handle(channels.websdr.receiverMode, (e, mode) => {
+    assertTrustedSender(e);
+    if (typeof mode !== 'string' || !mode) {
+      throw new Error('Setting the mode requires a mode string.');
+    }
+    return mgr.setMode(mode.slice(0, 32));
+  });
+
+  handle(channels.websdr.receiverVolume, (e, v) => {
+    assertTrustedSender(e);
+    if (typeof v !== 'number' || !Number.isFinite(v)) {
+      throw new Error('Setting the volume requires a finite number 0..1.');
+    }
+    return mgr.setVolume(v);
+  });
+
+  // ---- Phase 3: recording capture handshake (his getMediaSourceId) ----
+  handle(channels.websdr.receiverCaptureSource, (e) => {
+    assertTrustedSender(e);
+    // getMediaSourceId(sender) grants the requesting renderer capture of THIS receiver view only.
+    return mgr.captureSourceId(e.sender);
+  });
 }

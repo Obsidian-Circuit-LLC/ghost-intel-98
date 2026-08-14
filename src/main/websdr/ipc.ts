@@ -23,6 +23,14 @@ import {
   prodWebSdrStore,
   type WebSdrStore,
 } from './store';
+import {
+  listRecordings,
+  saveRecording,
+  recordingData,
+  annotateRecording,
+  deleteRecording,
+  exportRecording,
+} from './recordings';
 import type {
   WebSdrReceiver,
   WebSdrReceiverType,
@@ -381,5 +389,48 @@ export function registerWebSdrIpc(deps: { handle: HandleWithEvent }): void {
   handle(channels.websdr.egressSet, (e, mode) => {
     assertTrustedSender(e);
     return setEgress(mode);
+  });
+
+  // ---- recording archive (R7) ----
+  // Captured bytes persist ENCRYPTED-at-rest via secure-fs (never plaintext beside the exe); export
+  // is the ONE plaintext egress, gated behind a save dialog. Every handler sender-validates first.
+  handle(channels.websdr.recordingsList, (e) => {
+    assertTrustedSender(e);
+    return listRecordings();
+  });
+  handle(channels.websdr.recordingsSave, (e, raw) => {
+    assertTrustedSender(e);
+    if (!raw || typeof raw !== 'object') {
+      throw new Error('Saving a recording requires a recording payload.');
+    }
+    return saveRecording(raw as Record<string, unknown>);
+  });
+  handle(channels.websdr.recordingsData, (e, id) => {
+    assertTrustedSender(e);
+    if (typeof id !== 'string' || !id) {
+      throw new Error('Reading a recording requires an id.');
+    }
+    return recordingData(id);
+  });
+  handle(channels.websdr.recordingsAnnotate, (e, id, notes) => {
+    assertTrustedSender(e);
+    if (typeof id !== 'string' || !id) {
+      throw new Error('Annotating a recording requires an id.');
+    }
+    return annotateRecording(id, notes);
+  });
+  handle(channels.websdr.recordingsDelete, (e, id) => {
+    assertTrustedSender(e);
+    if (typeof id !== 'string' || !id) {
+      throw new Error('Deleting a recording requires an id.');
+    }
+    return deleteRecording(id);
+  });
+  handle(channels.websdr.recordingsExport, (e, id) => {
+    assertTrustedSender(e);
+    if (typeof id !== 'string' || !id) {
+      throw new Error('Exporting a recording requires an id.');
+    }
+    return exportRecording(id);
   });
 }

@@ -24,6 +24,7 @@
 
 import { normalizeWebSdrUrl } from '@shared/websdr/normalize-url';
 import type { WebSdrEgressMode, WebSdrEgressState } from '@shared/websdr/types';
+import { execControl, type WebSdrControlKind, type ControlResult } from './control';
 
 // ---- injectable electron-shaped seams ----------------------------------
 // Minimal structural shapes of exactly the Electron surface this manager drives. Kept structural
@@ -49,6 +50,12 @@ export interface ReceiverWebContentsLike {
   ): void;
   loadURL(url: string): Promise<unknown>;
   setAudioMuted(muted: boolean): void;
+  /** Run a script in the receiver page (his `execControl` injection channel). Phase 3 uses this
+   *  ONLY for the confined freq/mode/volume control script (Global Constraint 5). */
+  executeJavaScript(code: string, userGesture?: boolean): Promise<unknown>;
+  /** His `getMediaSourceId(forWebContents)` — the capture handshake the renderer's MediaRecorder
+   *  uses to record THIS receiver view (Phase 3, R7). */
+  getMediaSourceId(forWebContents: unknown): string;
   close(): void;
 }
 
@@ -130,6 +137,18 @@ export interface ReceiverViewManager {
   status(rawUrl: unknown): Promise<ReceiverStatus>;
   /** Mute/unmute the receiver audio (his `receiver:mute` → `setAudioMuted`). */
   setMuted(muted: boolean): void;
+  /** Tune the receiver (his `receiver:tune`): inject the frequency control script ONLY into the
+   *  receiver view. Returns his {ok,message} result; a no-view state reports "No receiver is
+   *  loaded." rather than injecting anywhere. */
+  tune(frequencyHz: number): Promise<ControlResult>;
+  /** Set the demod mode (his `receiver:mode`) via the confined control injection. */
+  setMode(mode: string): Promise<ControlResult>;
+  /** Set the receiver volume 0..1 (his `receiver:volume`) via the confined control injection. */
+  setVolume(volume: number): Promise<ControlResult>;
+  /** His `receiver:capture-source`: return the receiver view's media source id for `forWebContents`
+   *  (the requesting renderer). Throws his "Load a receiver before recording." when no view is
+   *  loaded — nothing to capture. */
+  captureSourceId(forWebContents: unknown): string;
   /** Open a receiver URL in the system browser (his `external:open`), URL-validated. */
   externalOpen(rawUrl: unknown): void;
   /** Apply + persist the egress toggle: set/clear the session proxy and return the live path plus
@@ -277,6 +296,13 @@ export function makeReceiverViewManager(deps: ReceiverViewDeps): ReceiverViewMan
     }
   }
 
+  /** Inject the confined control script for `kind`/`value` into the CURRENT receiver view only.
+   *  With no view loaded, `execControl(null, …)` reports "No receiver is loaded." — the injection
+   *  never runs against anything but the `persist:websdr` overlay (Global Constraint 5). */
+  function runControl(kind: WebSdrControlKind, value: string | number): Promise<ControlResult> {
+    return execControl(view ? view.webContents : null, kind, value);
+  }
+
   return {
     async load(rawUrl) {
       // Validate BEFORE creating a view — a bad URL rejects with no side effect.
@@ -326,6 +352,25 @@ export function makeReceiverViewManager(deps: ReceiverViewDeps): ReceiverViewMan
 
     setMuted(muted) {
       if (view) view.webContents.setAudioMuted(muted === true);
+    },
+
+    tune(frequencyHz) {
+      return runControl('frequency', frequencyHz);
+    },
+
+    setMode(mode) {
+      return runControl('mode', mode);
+    },
+
+    setVolume(volume) {
+      return runControl('volume', volume);
+    },
+
+    captureSourceId(forWebContents) {
+      // His guard: a recording needs a loaded receiver to capture. No view → refuse (nothing to
+      // record) rather than returning a dangling source id.
+      if (!view) throw new Error('Load a receiver before recording.');
+      return view.webContents.getMediaSourceId(forWebContents);
     },
 
     externalOpen(rawUrl) {

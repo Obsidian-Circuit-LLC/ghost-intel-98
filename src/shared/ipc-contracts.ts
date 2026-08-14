@@ -837,7 +837,24 @@ export const channels = {
     receiverStatus: 'websdr:receiver:status',
     receiverMute: 'websdr:receiver:mute',
     receiverExternalOpen: 'websdr:receiver:external-open',
-    receiverEgressApply: 'websdr:receiver:egress-apply'
+    receiverEgressApply: 'websdr:receiver:egress-apply',
+    // Phase 3 — control-bar injection (freq/mode/volume) confined to the receiver partition + the
+    // recording capture-source handshake. tune/mode/volume run his DOM-heuristic script ONLY into
+    // the persist:websdr view; capture-source returns getMediaSourceId(sender) for the renderer's
+    // MediaRecorder. Every handler sender-validates first (the overlay hosts a hostile remote page).
+    receiverTune: 'websdr:receiver:tune',
+    receiverMode: 'websdr:receiver:mode',
+    receiverVolume: 'websdr:receiver:volume',
+    receiverCaptureSource: 'websdr:receiver:capture-source',
+    // Phase 3 — recording archive (R7). Captured bytes are stored ENCRYPTED-at-rest via secure-fs
+    // (never plaintext .webm beside the exe); data decrypts to memory for in-app playback; export
+    // writes a plaintext .webm ONLY to a user-chosen save-dialog path. Metadata is the P1 store.
+    recordingsList: 'websdr:recordings:list',
+    recordingsSave: 'websdr:recordings:save',
+    recordingsData: 'websdr:recordings:data',
+    recordingsAnnotate: 'websdr:recordings:annotate',
+    recordingsDelete: 'websdr:recordings:delete',
+    recordingsExport: 'websdr:recordings:export'
   }
 } as const;
 
