@@ -60,7 +60,7 @@ function baseDeps(over: Partial<XSchedulerDeps> = {}): XSchedulerDeps {
       { channelId: 'alice', channelLabel: '@alice', targetUsername: 'alice' },
     ],
     sweepProfile: async () => ({ blocked: false, added: 1, skipped: 0, posts: [] }),
-    archiveProfile: async () => ({ blocked: false, added: 0, skipped: 0, posts: [] }),
+    archiveRotate: async () => ({ ran: false, blocked: false, added: 0 }),
     schedule: h.schedule,
     unschedule: h.unschedule,
     now: () => 1_700_000_000_000,

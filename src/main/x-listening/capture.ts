@@ -1465,6 +1465,11 @@ export interface XProfileTimelineRequest {
   collect?: XCollectSettings;
   /** This source's EFFECTIVE image policy (F1); when false `captureTimeline` fetches no media. */
   imagesEnabled?: boolean;
+  /** FA4 scroll-depth OVERRIDE (FA1's `req.passes`): how many scroll-and-accumulate passes to run.
+   *  The incremental-archive rotation supplies the source's stepped post-pass depth here so each
+   *  cycle digs progressively deeper into history. Absent ⇒ the campaign's `profileScrollPasses`
+   *  drives the loop (a plain sweep). */
+  passes?: number;
 }
 
 /** Injectable seams so the sweep primitive is testable without electron/network. Production defaults
@@ -1566,6 +1571,9 @@ export async function captureProfileTimeline(
         channelLabel: req.channelLabel,
         targetUsername: req.targetUsername,
         collect: req.collect,
+        // FA4: thread the archive rotation's stepped post-pass depth into FA1's scroll loop when
+        // present; a plain sweep leaves this undefined so `profileScrollPasses` drives the passes.
+        ...(req.passes !== undefined ? { passes: req.passes } : {}),
         operation: 'posts',
       },
       req.imagesEnabled !== undefined

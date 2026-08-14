@@ -74,6 +74,25 @@ export interface XNetworkArtifact {
   capturedAt: string;
 }
 
+/** Per-profile incremental-archive DEPTH counters (FA4, audit HIGH #2/#5). Each archive
+ *  operation for a source deepens its own pass budget one step per cycle (posts by
+ *  `postDepthPerCycle`→`maxPostDepth`; follower/following by `networkDepthPerCycle`→
+ *  `maxNetworkDepth`), so successive cycles dig progressively further into history — the
+ *  Enterprise `appState.archive.profiles[id]` model (`main.cjs:1926-1948`). Keyed by the
+ *  normalized source handle inside `XArchiveState.profiles`. */
+export interface XArchiveProfileProgress {
+  /** Last post-timeline pass depth reached for this source (seeds the next step). */
+  postPasses: number;
+  /** Last followers pass depth reached (only stepped when `archiveFollowers` is on). */
+  followerPasses: number;
+  /** Last following pass depth reached (only stepped when `archiveFollowing` is on). */
+  followingPasses: number;
+  /** ISO of the last completed posts/follower/following op for this source (injected clock). */
+  lastPostRunAt: string | null;
+  lastFollowerRunAt: string | null;
+  lastFollowingRunAt: string | null;
+}
+
 /** Resumable state for a bounded low-rate archive cycle. */
 export interface XArchiveState {
   /** Opaque pagination cursor for resuming a cycle; null = start from the top. */
@@ -81,6 +100,12 @@ export interface XArchiveState {
   cycles: number;
   /** ISO timestamp of the last cycle (injected clock); null before the first run. */
   lastRunAt: string | null;
+  /** FA4 round-robin pointer across archive operations (one op — posts/follower/following of
+   *  one source — runs per tick). Absent on a legacy state ⇒ treated as 0. */
+  nextOperationIndex?: number;
+  /** FA4 per-source archive depth counters, keyed by the normalized source handle. Absent on a
+   *  legacy state ⇒ treated as an empty map (every source seeds from its base pass budget). */
+  profiles?: Record<string, XArchiveProfileProgress>;
 }
 
 /** Parsed integer metrics for a captured post — the derived numbers used for display/sort/
