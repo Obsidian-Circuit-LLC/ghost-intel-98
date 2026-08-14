@@ -1026,7 +1026,14 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
         targetUsername: req.targetUsername,
         collect
       },
-      { imagesEnabledForSource: async () => imagesEnabled },
+      {
+        imagesEnabledForSource: async () => imagesEnabled,
+        // FA1: reuse the per-campaign COLLECTION SETTINGS already read above — the capture's
+        // scroll-and-accumulate loop reads `profileScrollPasses`/`delayPerPassMs` from these, so a
+        // manual "Capture Timeline" now scrolls to this campaign's configured depth instead of the
+        // first viewport. Injecting the value avoids a second secure-fs decrypt of the same record.
+        loadCollectionSettings: () => collectionSettings,
+      },
     );
   });
 

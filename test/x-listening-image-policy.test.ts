@@ -36,6 +36,7 @@ import {
   type XCaptureDeps,
 } from '../src/main/x-listening/capture';
 import type { RawPost } from '../src/main/x-listening/extract';
+import { DEFAULT_COLLECTION_SETTINGS } from '@shared/x-listening-collection-settings';
 
 // ── pure resolver ─────────────────────────────────────────────────────────────
 describe('effectiveImageCollection — per-profile override OR campaign toggle', () => {
@@ -173,6 +174,12 @@ function captureDeps(over: Partial<XCaptureDeps> = {}): Partial<XCaptureDeps> {
     savePosts: async () => ({ added: 1, skipped: 0 }),
     saveItems: async () => ({ added: 1, skipped: 0 }),
     recordRun: async () => {},
+    // FA1: pin to ONE scroll pass with a no-op scroll/delay so this image-policy test binds the
+    // capture loop deterministically (and instantly) instead of falling through to the production
+    // settings read + real inter-pass timers.
+    loadCollectionSettings: () => ({ ...DEFAULT_COLLECTION_SETTINGS, profileScrollPasses: 1, delayPerPassMs: 0 }),
+    scroll: async () => {},
+    delay: async () => {},
     now: () => '2026-08-13T12:00:00.000Z',
     ...over,
   };

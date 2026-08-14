@@ -88,6 +88,40 @@ export const DEFAULT_COLLECT: XCollectSettings = {
   comments: false,
 };
 
+/** FA1 scroll-and-accumulate loop bounds — Enterprise `scrapeProfile`'s hard clamps (`main.cjs:1657-1658`).
+ *  The persisted `profileScrollPasses` is already clamped to `[1,20]` by the shared reducer; this is a
+ *  defence-in-depth re-clamp (and it also bounds any `req.passes` override the archive path supplies). */
+export const MAX_PROFILE_SCROLL_PASSES = 120;
+const MIN_PROFILE_SCROLL_PASSES = 1;
+const MIN_PASS_DELAY_MS = 500;
+const MAX_PASS_DELAY_MS = 5000;
+/** Consecutive no-growth passes that end the scroll loop early (a stable end — the timeline gave
+ *  nothing new). Enterprise `scrapeProfile` stops after 5 stagnant passes (`main.cjs:1681,1691`). */
+const TIMELINE_STAGNATION_LIMIT = 5;
+
+/** STATIC scroll payload — no interpolation, no scraped data. Scrolls the timeline to the bottom so
+ *  the SPA lazy-loads the next batch of posts before the next `X_POST_SCRIPT` scrape, exactly as
+ *  Enterprise `scrapeProfile` (`window.scrollTo(0, document.body.scrollHeight)`, `main.cjs:1682-1688`).
+ *  Returns the post-scroll scroll position purely for logging/telemetry — never fed back into the page. */
+export const X_TIMELINE_SCROLL_SCRIPT = `
+  (() => {
+    const scroller = document.scrollingElement || document.documentElement;
+    window.scrollTo(0, document.body.scrollHeight);
+    return { top: scroller ? scroller.scrollTop : 0, height: scroller ? scroller.scrollHeight : 0 };
+  })()
+`;
+
+/** Resolve the effective scroll-pass budget for one capture: an explicit finite `req.passes > 0`
+ *  (the archive-depth override, FA2) beats the campaign's persisted `profileScrollPasses`; either is
+ *  re-clamped to `[1, MAX_PROFILE_SCROLL_PASSES]`. Pure. */
+function resolveScrollPasses(reqPasses: number | undefined, settingsPasses: number): number {
+  const override = Number(reqPasses);
+  const base =
+    Number.isFinite(override) && override > 0 ? Math.floor(override) : Math.floor(Number(settingsPasses));
+  const safe = Number.isFinite(base) && base > 0 ? base : MIN_PROFILE_SCROLL_PASSES;
+  return Math.max(MIN_PROFILE_SCROLL_PASSES, Math.min(MAX_PROFILE_SCROLL_PASSES, safe));
+}
+
 /** The renderer-supplied context for a timeline capture: which case/job, which profile
  *  timeline is being observed, and which surrounding-thread kinds to admit. `harvestedAt`
  *  + `collectorVersion` are stamped MAIN-side (the trusted clock + version), never accepted
@@ -103,6 +137,12 @@ export interface XTimelineCaptureRequest {
   targetUsername: string;
   /** Which surrounding-thread kinds to capture. Defaults to `DEFAULT_COLLECT` (all off). */
   collect?: XCollectSettings;
+  /** FA1 scroll-depth OVERRIDE: how many scroll-and-accumulate passes to run. When set (finite,
+   *  > 0) it beats this campaign's persisted `profileScrollPasses` — the seam the incremental-archive
+   *  path (FA2) uses to deepen a profile's capture cycle by cycle (Enterprise `scrapeProfile`'s
+   *  `options.passes`, `main.cjs:1654`). Absent ⇒ the campaign's `profileScrollPasses` drives the loop.
+   *  Re-clamped to `[1, MAX_PROFILE_SCROLL_PASSES]` MAIN-side regardless of source. */
+  passes?: number;
   /** Which collection operation this capture is (Task A3 run-log stamping). Defaults to `'posts'`
    *  (a manual/live timeline capture); the archive path passes `'archive_posts'` so its run record
    *  is logged as an incremental-archive cycle, not a manual capture. */
@@ -149,6 +189,23 @@ export interface XCaptureDeps {
    *  evidence — a failure here MUST NOT break the capture or drop captured posts, so
    *  `captureTimeline` calls this best-effort (see `emitRun`). */
   recordRun: (caseId: string, record: XRunLogRecord) => Promise<void>;
+  /** FA1: read THIS campaign's per-campaign COLLECTION SETTINGS — the source of the scroll-pass
+   *  budget (`profileScrollPasses`) and the inter-pass delay (`delayPerPassMs`) when `req.passes` is
+   *  unset. Production default is the fail-safe `getCollectionSettings` (heals to
+   *  `DEFAULT_COLLECTION_SETTINGS` on any read error), so a settings hiccup degrades to the
+   *  minimal-capture default depth rather than breaking the capture; a unit harness injects its own
+   *  so the scroll loop can be bound deterministically. */
+  loadCollectionSettings: (caseId: string) => Promise<XCollectionSettings> | XCollectionSettings;
+  /** FA1: scroll the capture page to the bottom for the next pass (a static in-page payload, no
+   *  interpolation — `window.scrollTo(0, document.body.scrollHeight)`). Injected so the accumulate
+   *  loop is exercisable without a live window; the production default runs
+   *  `X_TIMELINE_SCROLL_SCRIPT`. Never called after the final pass (gentle on X). */
+  scroll: (win: Electron.BrowserWindow) => Promise<void>;
+  /** FA1: await `ms` between scroll passes (Enterprise `scrollDelayMs`, ~1100ms) so the SPA has time
+   *  to render the newly-scrolled-in posts before the next scrape. Injected (no-op) in unit harnesses
+   *  so the loop runs instantly; the production default is a real `setTimeout`-backed sleep. Wall-clock
+   *  pacing only — it feeds NO evidence/hash path. */
+  delay: (ms: number) => Promise<void>;
   /** Injected clock — the ISO capture time stamped onto every item. */
   now: () => string;
 }
@@ -220,6 +277,14 @@ function defaultDeps(): XCaptureDeps {
     recordRun: async (caseId, record) => {
       await recordCollectionRun(caseId, record);
     },
+    loadCollectionSettings: async (caseId) => {
+      const { getCollectionSettings } = await import('./collection-settings');
+      return getCollectionSettings(caseId);
+    },
+    scroll: async (win) => {
+      await defaultRunCapture(win, X_TIMELINE_SCROLL_SCRIPT);
+    },
+    delay: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     now: () => new Date().toISOString(),
   };
 }
@@ -340,6 +405,18 @@ export async function captureTimeline(
     req.caseId,
     normalizeXSourceKey(req.targetUsername),
   );
+  // FA1: resolve the scroll-and-accumulate budget from THIS campaign's persisted COLLECTION SETTINGS
+  // (`profileScrollPasses`/`delayPerPassMs`, already clamped by the shared reducer) — or the explicit
+  // archive-depth override (`req.passes`, FA2). The read is fail-safe (heals to
+  // `DEFAULT_COLLECTION_SETTINGS`), so a settings hiccup degrades to minimal-depth capture rather than
+  // breaking the run. Re-clamped MAIN-side (defence-in-depth) regardless of source.
+  const settings = await deps.loadCollectionSettings(req.caseId);
+  const passes = resolveScrollPasses(req.passes, settings.profileScrollPasses);
+  const rawDelay = Math.floor(Number(settings.delayPerPassMs));
+  const delayMs = Math.max(
+    MIN_PASS_DELAY_MS,
+    Math.min(MAX_PASS_DELAY_MS, Number.isFinite(rawDelay) && rawDelay > 0 ? rawDelay : MIN_PASS_DELAY_MS),
+  );
   const ctx: NormalizeContext = {
     caseId: req.caseId,
     jobId: req.jobId,
@@ -350,9 +427,41 @@ export async function captureTimeline(
   };
 
   const gated = await deps.guard(win, async () => {
-    const rawCollected = await deps.runCapture(win, X_POST_SCRIPT);
-    const raws: RawPost[] = Array.isArray(rawCollected) ? (rawCollected as RawPost[]) : [];
-    const selections = selectTimelineCaptures(raws, req.targetUsername, collect);
+    // FA1: scroll-and-accumulate. Run `X_POST_SCRIPT` each pass (the ONLY payload ever run against the
+    // capture page — still static, no scraped-data interpolation), accumulating the visible items by
+    // Enterprise's `${id}:${repost|tweet}` key so a repost and the original tweet of the same status id
+    // never collapse. Between passes scroll to the bottom + await `delayMs` so the SPA lazy-loads the
+    // next batch; stop early after `TIMELINE_STAGNATION_LIMIT` consecutive no-growth passes (a stable
+    // end), and never scroll after the final pass. The whole loop stays INSIDE the signed-in guard, so
+    // a challenge surfacing mid-scroll still fails closed (the guard captured nothing → blocked).
+    const byKey = new Map<string, RawPost>();
+    let stagnant = 0;
+    let previousSize = 0;
+    let completedPasses = 0;
+    for (let i = 0; i < passes; i += 1) {
+      completedPasses = i + 1;
+      const rawCollected = await deps.runCapture(win, X_POST_SCRIPT);
+      const raws: RawPost[] = Array.isArray(rawCollected) ? (rawCollected as RawPost[]) : [];
+      for (const r of raws) {
+        const id = String(r?.id ?? '');
+        if (!id) continue;
+        byKey.set(`${id}:${r?.isRepost ? 'repost' : 'tweet'}`, r);
+      }
+      if (byKey.size === previousSize) stagnant += 1;
+      else stagnant = 0;
+      previousSize = byKey.size;
+      if (i >= passes - 1) break; // final pass — never scroll past the last read
+      if (stagnant >= TIMELINE_STAGNATION_LIMIT) break; // stable end reached
+      await deps.scroll(win);
+      await deps.delay(delayMs);
+    }
+    // Reached a stable end iff the most recent pass produced no new content — covers both the
+    // stagnation early-stop AND a budget that ran out exactly as the timeline did. `false` means the
+    // pass ceiling was hit while posts were still arriving (there may be more, honestly reported).
+    const reachedEnd = stagnant > 0;
+
+    const union = [...byKey.values()];
+    const selections = selectTimelineCaptures(union, req.targetUsername, collect);
     const results: { item: XHarvestedItem; mediaRefs: string[] }[] = [];
     for (const { raw, kind } of selections) {
       const item =
@@ -368,7 +477,7 @@ export async function captureTimeline(
         : [];
       results.push({ item, mediaRefs });
     }
-    return results;
+    return { results, completedPasses, reachedEnd };
   });
 
   if (gated.blocked) {
@@ -380,7 +489,7 @@ export async function captureTimeline(
       operation,
       observed: 0,
       added: 0,
-      requestedPasses: 1,
+      requestedPasses: passes,
       completedPasses: 0,
       reachedEnd: false,
       stopReason: gated.reason ?? 'blocked',
@@ -391,29 +500,29 @@ export async function captureTimeline(
     return { blocked: true, reason: gated.reason, added: 0, skipped: 0, posts: [] };
   }
 
-  const results = gated.result ?? [];
-  const items: XHarvestedItem[] = results.map((r) => r.item);
-  const posts: XPostArtifact[] = results.map((r) => toPostArtifact(r.item, r.mediaRefs));
+  const gatedResult = gated.result ?? { results: [], completedPasses: 0, reachedEnd: false };
+  const items: XHarvestedItem[] = gatedResult.results.map((r) => r.item);
+  const posts: XPostArtifact[] = gatedResult.results.map((r) => toPostArtifact(r.item, r.mediaRefs));
 
   const [postsResult] = await Promise.all([
     deps.savePosts(req.caseId, posts),
     deps.saveItems(req.caseId, items),
   ]);
 
-  // Record the completed run (Task A3). `observed` = posts this capture saw; `added` = newly
-  // persisted; `duplicates` (= observed - added) is derived in `buildRunRecord`. This port's
-  // capture is a single visible-DOM scrape, so requested/completed passes are 1 and the visible
-  // page is treated as reachedEnd.
+  // Record the completed run (Task A3). `observed` = unique posts this capture accumulated across all
+  // scroll passes; `added` = newly persisted; `duplicates` (= observed - added) is derived in
+  // `buildRunRecord`. FA1: requested/completed passes + reachedEnd are the REAL loop telemetry (no
+  // longer hardcoded 1/1/true), so the Collection Health / RUN LOG reflects the actual capture depth.
   await emitRun(deps, req.caseId, {
     profileId: req.channelId,
     username: req.targetUsername,
     operation,
     observed: posts.length,
     added: postsResult.added,
-    requestedPasses: 1,
-    completedPasses: 1,
-    reachedEnd: true,
-    stopReason: 'complete',
+    requestedPasses: passes,
+    completedPasses: gatedResult.completedPasses,
+    reachedEnd: gatedResult.reachedEnd,
+    stopReason: gatedResult.reachedEnd ? 'stable_end' : 'pass_limit',
     status: 'complete',
     startedAt,
     endedAt: deps.now(),

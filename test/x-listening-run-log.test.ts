@@ -27,6 +27,7 @@ import {
   type XCaptureDeps,
 } from '../src/main/x-listening/capture';
 import type { RawPost } from '../src/main/x-listening/extract';
+import { DEFAULT_COLLECTION_SETTINGS } from '@shared/x-listening-collection-settings';
 
 // ---- in-memory fs seam (mirrors x-listening-changes.test.ts's memStore) ----
 
@@ -97,6 +98,11 @@ function deps(store: XStore, over: Partial<XCaptureDeps> = {}): Partial<XCapture
     recordRun: async (caseId, record) => {
       await recordCollectionRun(caseId, record, store);
     },
+    // FA1: pin to ONE scroll pass so the run-record assertions below (requested/completed passes)
+    // are exact; the multi-pass telemetry is covered in x-listening-capture-scroll.test.ts.
+    loadCollectionSettings: () => ({ ...DEFAULT_COLLECTION_SETTINGS, profileScrollPasses: 1, delayPerPassMs: 0 }),
+    scroll: async () => {},
+    delay: async () => {},
     now: () => '2026-08-11T12:00:00.000Z',
     ...over,
   };
@@ -117,7 +123,10 @@ describe('A3 — captureTimeline emits a collection-run record', () => {
     expect(rec.added).toBe(1);
     expect(rec.duplicates).toBe(0);
     expect(rec.status).toBe('complete');
-    expect(rec.reachedEnd).toBe(true);
+    // FA1: a single-pass capture that still saw new content on its one-and-only pass has NOT
+    // confirmed a stable end (there may be more below the first viewport) — reachedEnd is now the
+    // REAL loop telemetry (stagnant>0), not the old hardcoded `true`.
+    expect(rec.reachedEnd).toBe(false);
     expect(rec.requestedPasses).toBe(1);
     expect(rec.completedPasses).toBe(1);
     expect(rec.startedAt).toBe('2026-08-11T12:00:00.000Z');
