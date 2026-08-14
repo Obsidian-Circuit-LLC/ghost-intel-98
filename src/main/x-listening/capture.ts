@@ -123,6 +123,13 @@ const MAX_COMMENT_SCROLL_PASSES = 12;
  *  (`main.cjs:1613-1614`). Wall-clock pacing only; feeds NO evidence/hash path. */
 const COMMENT_THREAD_SETTLE_MS = 2500;
 
+/** Fixed post-navigation SPA-render settle before a live post is READ during verification —
+ *  Enterprise `verifyPostLive` does `loadURL` → `sleep(2600)` → `assertSignedInPage` → read
+ *  (`main.cjs:2626-2640`). Without it the read can race X's client-side hydration and misread a
+ *  not-yet-rendered page as "available, unchanged". Wall-clock pacing only; feeds NO evidence/hash
+ *  path. Exported so the verify suite can assert the ceiling. */
+export const VERIFY_POST_SETTLE_MS = 2600;
+
 /** STATIC scroll payload — no interpolation, no scraped data. Scrolls the timeline to the bottom so
  *  the SPA lazy-loads the next batch of posts before the next `X_POST_SCRIPT` scrape, exactly as
  *  Enterprise `scrapeProfile` (`window.scrollTo(0, document.body.scrollHeight)`, `main.cjs:1682-1688`).
@@ -901,6 +908,11 @@ export interface XVerifyPostDeps {
     win: Electron.BrowserWindow,
     capture: () => Promise<T>,
   ) => Promise<{ blocked: boolean; reason?: string; result?: T }>;
+  /** Await `ms` after the window loads and BEFORE the verify read, so X's SPA has time to hydrate
+   *  (Enterprise's `sleep(2600)` between `loadURL` and the read, `main.cjs:2626-2640`). A unit
+   *  harness injects an instant no-op; the production default is a real `setTimeout`-backed sleep.
+   *  Wall-clock pacing only — never feeds an evidence/hash path. */
+  delay: (ms: number) => Promise<void>;
   /** Injected clock — the ISO verification time (determinism; never feeds a hash). */
   now: () => string;
 }
@@ -939,6 +951,7 @@ function defaultVerifyDeps(): XVerifyPostDeps {
     },
     runCapture: defaultRunCapture,
     guard: defaultGuard,
+    delay: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     now: () => new Date().toISOString(),
   };
 }
@@ -1017,6 +1030,16 @@ export async function verifyPost(
 
   const win = await deps.openWindow(target.toString(), gate.proxy);
   try {
+    // SPA-render settle — Enterprise `verifyPostLive` sleeps 2600ms between `loadURL` and the read
+    // (`main.cjs:2626-2640`) so X's client-side hydration finishes. Reading immediately after the
+    // load can race the render and misclassify a not-yet-hydrated page as "available, unchanged".
+    // Fail SOFT exactly like the rest of the module: a settle that rejects must not abort the
+    // verification (the finally still destroys the window; the read proceeds best-effort).
+    try {
+      await deps.delay(VERIFY_POST_SETTLE_MS);
+    } catch {
+      /* ignore a settle error — proceed to read, same soft posture as the scroll/comment paths */
+    }
     const gated = await deps.guard(win, () => deps.runCapture(win, X_VERIFY_POST_SCRIPT));
     if (gated.blocked) {
       throw new Error(gated.reason ?? 'The saved X session is no longer signed in.');
