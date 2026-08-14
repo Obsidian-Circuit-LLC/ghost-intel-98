@@ -22,12 +22,13 @@ import {
   extractEntities,
   computeNetworkAnalysis,
   deriveCollectionHealth,
+  runLogRecordToRun,
   flattenNetworkArtifacts,
   type AnalysisProfile,
   type AnalysisRelationship,
   type XCollectionRun,
 } from '../src/main/x-listening/analysis';
-import type { XNetworkArtifact } from '../src/main/x-listening/store';
+import type { XNetworkArtifact, XRunLogRecord } from '../src/main/x-listening/store';
 
 describe('extractEntities', () => {
   it('extracts a mention', () => {
@@ -257,7 +258,7 @@ describe('deriveCollectionHealth', () => {
     const newer = run({ startedAt: '2026-08-02T00:00:00.000Z', error: null });
     const out = deriveCollectionHealth([older, newer]);
     expect(out[0].status).toBe('HEALTHY');
-    expect(out[0].lastRun.startedAt).toBe('2026-08-02T00:00:00.000Z');
+    expect(out[0].lastRun!.startedAt).toBe('2026-08-02T00:00:00.000Z');
   });
 
   it('splits lastPostRun/lastFollowerRun/lastFollowingRun by operation family, falling back to the archive_* variant', () => {
@@ -280,8 +281,121 @@ describe('deriveCollectionHealth', () => {
     expect(out.map((h) => h.profileId).sort()).toEqual(['p1', 'p2']);
   });
 
-  it('returns [] for no runs', () => {
+  it('returns [] for no runs and no roster targets', () => {
     expect(deriveCollectionHealth([])).toEqual([]);
+  });
+
+  // ---- FB1: IDLE state + restored per-target counts --------------------
+
+  it('reports IDLE for a roster target that has no runs at all', () => {
+    const out = deriveCollectionHealth([], {
+      targets: [{ profileId: 'p9', username: 'nevercollected' }],
+    });
+    expect(out).toHaveLength(1);
+    expect(out[0].status).toBe('IDLE');
+    expect(out[0].profileId).toBe('p9');
+    expect(out[0].username).toBe('nevercollected');
+    expect(out[0].lastRun).toBeNull();
+    expect(out[0].lastError).toBeNull();
+  });
+
+  it('keeps a run-having roster target HEALTHY while a run-less one is IDLE (one record each)', () => {
+    const out = deriveCollectionHealth([run({ profileId: 'p1', username: 'targetone' })], {
+      targets: [
+        { profileId: 'p1', username: 'targetone' },
+        { profileId: 'p2', username: 'idletwo' },
+      ],
+    });
+    const byId = Object.fromEntries(out.map((h) => [h.profileId, h.status]));
+    expect(byId).toEqual({ p1: 'HEALTHY', p2: 'IDLE' });
+  });
+
+  it('restores postCount/followerCount/followingCount/oldestPostAt from posts + relationships', () => {
+    const out = deriveCollectionHealth([run({ profileId: 'p1', username: 'targetone' })], {
+      targets: [{ profileId: 'p1', username: 'targetone' }],
+      posts: [
+        { profileId: 'p1', createdAt: '2026-08-03T00:00:00.000Z' },
+        { profileId: 'p1', createdAt: '2026-08-01T00:00:00.000Z' },
+        { profileId: 'other', createdAt: '2020-01-01T00:00:00.000Z' },
+      ],
+      relationships: [
+        { profileId: 'p1', relationship: 'follower' },
+        { profileId: 'p1', relationship: 'follower' },
+        { profileId: 'p1', relationship: 'following' },
+        { profileId: 'other', relationship: 'follower' },
+      ],
+    });
+    expect(out[0].postCount).toBe(2);
+    expect(out[0].followerCount).toBe(2);
+    expect(out[0].followingCount).toBe(1);
+    // oldest = min publishedAt across THIS target's posts only (not `other`'s 2020 row)
+    expect(out[0].oldestPostAt).toBe('2026-08-01T00:00:00.000Z');
+  });
+
+  it('an IDLE target still reports its counts (posts/networks captured, no run recorded)', () => {
+    const out = deriveCollectionHealth([], {
+      targets: [{ profileId: 'p1', username: 'targetone' }],
+      posts: [{ profileId: 'p1', createdAt: '2026-08-01T00:00:00.000Z' }],
+      relationships: [{ profileId: 'p1', relationship: 'follower' }],
+    });
+    expect(out[0].status).toBe('IDLE');
+    expect(out[0].postCount).toBe(1);
+    expect(out[0].followerCount).toBe(1);
+    expect(out[0].oldestPostAt).toBe('2026-08-01T00:00:00.000Z');
+  });
+
+  it('defaults the 4 counts to 0/null when no posts/relationships supplied', () => {
+    const out = deriveCollectionHealth([run()]);
+    expect(out[0].postCount).toBe(0);
+    expect(out[0].followerCount).toBe(0);
+    expect(out[0].followingCount).toBe(0);
+    expect(out[0].oldestPostAt).toBeNull();
+  });
+});
+
+// ---- FB1: runLogRecordToRun (ERROR keyed off status, not a nonexistent `error` field) ----
+
+function runLog(overrides: Partial<XRunLogRecord> = {}): XRunLogRecord {
+  return {
+    profileId: 'p1',
+    username: 'targetone',
+    operation: 'posts',
+    observed: 3,
+    added: 1,
+    duplicates: 2,
+    requestedPasses: 1,
+    completedPasses: 2,
+    reachedEnd: true,
+    stopReason: 'complete',
+    status: 'complete',
+    startedAt: '2026-08-01T00:00:00.000Z',
+    endedAt: '2026-08-01T00:01:00.000Z',
+    ...overrides,
+  };
+}
+
+describe('runLogRecordToRun', () => {
+  it('maps a complete run to error:null (a healthy run must not be flagged ERROR)', () => {
+    const r = runLogRecordToRun(runLog({ status: 'complete' }));
+    expect(r.error).toBeNull();
+    expect(r.added).toBe(1);
+    expect(r.observed).toBe(3);
+    expect(r.operation).toBe('posts');
+    expect(r.startedAt).toBe('2026-08-01T00:00:00.000Z');
+  });
+
+  it('keys ERROR off status==="error" (XRunLogRecord has no `error` field) and carries stopReason', () => {
+    const r = runLogRecordToRun(runLog({ status: 'error', stopReason: 'rate limited' }));
+    expect(r.error).toBe('rate limited');
+    // and that error surfaces as ERROR through deriveCollectionHealth
+    const out = deriveCollectionHealth([r]);
+    expect(out[0].status).toBe('ERROR');
+    expect(out[0].lastError).toBe('rate limited');
+  });
+
+  it('falls back to a generic "error" message when an error run has no stopReason', () => {
+    const r = runLogRecordToRun(runLog({ status: 'error', stopReason: '' }));
+    expect(r.error).toBe('error');
   });
 });
 

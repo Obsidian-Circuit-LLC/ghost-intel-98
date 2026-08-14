@@ -877,7 +877,8 @@ export interface GhostApi {
     /** Derived, on-read common-connection network analysis over a case's captured `networks`
      *  artifacts — not persisted; synthetic/demo rows excluded. */
     analysis(caseId: string): Promise<Record<string, unknown>>;
-    /** Derived collection-health rollup — currently always empty (no run-log persisted yet). */
+    /** Derived collection-health rollup — per-target roster (HEALTHY/PLATEAU/ERROR/IDLE + counts)
+     *  from the persisted run log + captured posts/networks (analysis.ts `deriveCollectionHealth`). */
     health(caseId: string): Promise<Array<Record<string, unknown>>>;
     /** Derived entity rollup (mention/hashtag/email/url/domain/crypto/phone/org) over a case's
      *  captured posts — recomputed on every call; synthetic/demo posts excluded. */

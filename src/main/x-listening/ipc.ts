@@ -61,10 +61,14 @@ import type { XCampaignMeta } from './campaign-meta';
 import {
   computeNetworkAnalysis,
   deriveCollectionHealth,
+  runLogRecordToRun,
   extractEntities,
   flattenNetworkArtifacts,
   type AnalysisProfile,
-  type AnalysisRelationship
+  type AnalysisRelationship,
+  type XHealthTarget,
+  type XHealthPost,
+  type XHealthRelationship
 } from './analysis';
 import { runArchiveSteps } from './archive';
 import { loadDemoData } from './demo';
@@ -424,6 +428,68 @@ async function buildNetworkAnalysisInputs(
   const store = await prodXStore();
   const artifacts = await store.networks.read(caseId);
   return flattenNetworkArtifacts(artifacts);
+}
+
+/**
+ * Assemble the COLLECTION HEALTH inputs (audit HIGH #6) from a case's persisted store — the
+ * run log (`store.listRunLog`, the roster's HEALTHY/PLATEAU/ERROR/IDLE signal), captured posts
+ * (postCount + oldestPostAt), and captured networks (follower/following counts). GI98 has no
+ * first-class profile record, so the TARGET ROSTER is DERIVED: the union of every source seen
+ * across runs, posts and networks, canonicalized with `normalizeSourceKey` so a run keyed by
+ * `channelId`, a post keyed by `channelId`/`authorHandle`, and a network keyed by `target` all
+ * collapse onto the same target. A target present in posts/networks but with NO run surfaces as
+ * IDLE. Synthetic/demo posts + accounts are excluded (honesty — a demo row must never inflate a
+ * real health count, same posture as `aggregateEntities`/`computeNetworkAnalysis`).
+ */
+async function buildCollectionHealthInputs(caseId: string): Promise<{
+  runs: ReturnType<typeof runLogRecordToRun>[];
+  options: { targets: XHealthTarget[]; posts: XHealthPost[]; relationships: XHealthRelationship[] };
+}> {
+  const store = await prodXStore();
+  const [runLog, posts, networks] = await Promise.all([
+    store.listRunLog(caseId),
+    store.posts.read(caseId),
+    store.networks.read(caseId)
+  ]);
+
+  // Roster: canonical source key -> best-available display username (first writer wins per source).
+  const roster = new Map<string, string>();
+  const remember = (rawKey: string, username: string): string => {
+    const key = normalizeSourceKey(rawKey);
+    if (key && !roster.has(key)) roster.set(key, username || rawKey);
+    return key;
+  };
+
+  const runs = runLog.map((rec) => {
+    const key = remember(rec.profileId || rec.username, rec.username);
+    // Re-key onto the canonical source key so runs/posts/networks group together.
+    return { ...runLogRecordToRun(rec), profileId: key || rec.profileId };
+  });
+
+  const healthPosts: XHealthPost[] = [];
+  for (const p of posts) {
+    if (p.synthetic) continue;
+    const key = remember(p.channelId || p.authorHandle, p.authorHandle || p.channelId);
+    if (!key) continue;
+    healthPosts.push({ profileId: key, createdAt: p.publishedAt || null });
+  }
+
+  const relationships: XHealthRelationship[] = [];
+  for (const artifact of networks) {
+    const key = remember(artifact.target, artifact.target);
+    if (!key) continue;
+    const relationship = artifact.kind === 'followers' ? 'follower' : 'following';
+    for (const account of artifact.accounts ?? []) {
+      if (account.synthetic) continue;
+      relationships.push({ profileId: key, relationship });
+    }
+  }
+
+  const targets: XHealthTarget[] = [...roster.entries()].map(([profileId, username]) => ({
+    profileId,
+    username
+  }));
+  return { runs, options: { targets, posts: healthPosts, relationships } };
 }
 
 /**
@@ -1143,11 +1209,16 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
     return computeNetworkAnalysis(profiles, relationships, new Date().toISOString());
   });
 
-  deps.handle(channels.xListening.health, (e) => {
+  deps.handle(channels.xListening.health, async (e, caseIdArg) => {
     assertTrustedSender(e);
-    // No collection-run log is persisted yet (a later task adds one) — an honest empty roster
-    // beats a fabricated one. See the channel doc in ipc-contracts.ts.
-    return deriveCollectionHealth([]);
+    if (typeof caseIdArg !== 'string' || !caseIdArg) {
+      throw new Error('Health requires a caseId.');
+    }
+    const caseId = ensureUuid(caseIdArg, 'caseId');
+    // Audit HIGH #6: read the persisted run log (+ posts/networks) and derive the per-target
+    // roster — HEALTHY/PLATEAU/ERROR for a collected target, IDLE for a never-collected one.
+    const { runs, options } = await buildCollectionHealthInputs(caseId);
+    return deriveCollectionHealth(runs, options);
   });
 
   deps.handle(channels.xListening.entities, async (e, caseIdArg) => {

@@ -600,10 +600,11 @@ export const channels = {
      *  artifacts (analysis.ts `computeNetworkAnalysis`) — not persisted; synthetic/demo rows
      *  are excluded (honesty). */
     analysis: 'xListening:analysis',
-    /** Derived collection-health rollup (analysis.ts `deriveCollectionHealth`). No collection-run
-     *  log is persisted yet (a later archive/network-capture task adds one), so this currently
-     *  always derives an honest empty roster rather than a fabricated one — wired now so the
-     *  renderer's Health tab is real end-to-end, not a hollow placeholder. */
+    /** Derived collection-health rollup (analysis.ts `deriveCollectionHealth`). Reads the persisted
+     *  run log (`store.listRunLog`) + captured posts/networks and derives a per-target roster:
+     *  HEALTHY/PLATEAU/ERROR for a collected target, IDLE for a derived-but-never-collected one,
+     *  each with postCount/followerCount/followingCount/oldestPostAt. Synthetic/demo rows excluded
+     *  (honesty). Arg: the caseId (campaign) to scope the rollup to. */
     health: 'xListening:health',
     /** Derived entity rollup (analysis.ts `extractEntities`) over a case's captured posts —
      *  recomputed on every call, never persisted; synthetic/demo posts are excluded (honesty). */

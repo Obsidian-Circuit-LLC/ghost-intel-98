@@ -2531,7 +2531,11 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
                               {run.operation.replace(/_/g, ' ').toUpperCase()}
                             </span>{' '}
                             {run.observed} observed / {run.added} new / {run.duplicates} duplicate ·{' '}
-                            {run.completedPasses}/{run.requestedPasses || '—'} passes · {statusLabel}
+                            {/* completedPasses includes the +1 initial read, so it can exceed the
+                                requested budget; clamp the displayed ratio so no >100% figure shows
+                                (FB1 carried Phase-A minor). */}
+                            {Math.min(run.completedPasses, run.requestedPasses || run.completedPasses)}/
+                            {run.requestedPasses || '—'} passes · {statusLabel}
                           </span>
                           <span className="xls-count">{formatWhen(run.startedAt)}</span>
                         </li>
