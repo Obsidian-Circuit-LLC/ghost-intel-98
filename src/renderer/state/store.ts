@@ -53,7 +53,8 @@ export type ModuleKey =
   | 'report'
   | 'number-muncher'
   | 'pdf-signer'
-  | 'ghost-social';
+  | 'ghost-social'
+  | 'weather';
 
 export interface WindowSpec {
   id: string;

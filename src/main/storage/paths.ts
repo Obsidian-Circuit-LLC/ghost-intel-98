@@ -181,6 +181,12 @@ export function settingsFile(): string {
   return join(dataRoot(), 'settings.json');
 }
 
+/** The Weather tool's single global store (saved locations + units pref + last-conditions cache),
+ *  written/read through secure-fs (encrypt-at-rest — constraint 4). Not case-scoped. */
+export function weatherStoreFile(): string {
+  return join(dataRoot(), 'weather.json');
+}
+
 export function globalRemindersFile(): string {
   return join(dataRoot(), 'reminders.global.json');
 }

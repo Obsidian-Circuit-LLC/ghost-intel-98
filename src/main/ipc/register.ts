@@ -160,6 +160,7 @@ import { registerWebSdrReceiverIpc } from '../websdr/receiver-ipc';
 import { registerGhostSocialIpc } from '../ghost-social/ipc';
 import { registerGhostSocialViewIpc } from '../ghost-social/view-ipc';
 import { registerGhostSocialPublishingIpc } from '../ghost-social/publishing-ipc';
+import { registerWeatherIpc } from '../weather/ipc';
 import { registerInvestigationReportIpc } from '../investigation/report-ipc';
 import { renderIntelReportPdf } from '../investigation/report-pdf';
 import { addManualNode, addManualEdge } from '../investigation/graph';
@@ -1817,6 +1818,10 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     viewManager: ghostSocialViewManager,
     startDriver: true,
   });
+  // ---- Weather tool (OURS, 2026-08-15): Tor-default Open-Meteo client + encrypted store ----
+  // Wired via safeHandleWithEvent so each handler's assertTrustedSender reads the Electron-delivered
+  // sender frame (constraint 7); egress is Tor-default/fail-closed, host-anchored MAIN-side (client.ts).
+  registerWeatherIpc({ handle: safeHandleWithEvent });
 
   // ---- SP-4 investigation graph: per-case scene fetch + live delta push (Task 5) ----
   registerInvestigationGraphIpc({

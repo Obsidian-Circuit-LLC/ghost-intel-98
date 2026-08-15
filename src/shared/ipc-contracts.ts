@@ -833,6 +833,32 @@ export const channels = {
      *  `scheduler:stateChanged`) so the Queue page re-reads state. */
     scheduledStateChanged: 'ghostSocial:scheduled:stateChanged'
   },
+  // Weather tool (OURS — design spec 2026-08-15). Tor-default egress (fail-closed) + clearnet toggle;
+  // every request URL is host-anchored MAIN-side to the Open-Meteo hosts (client.ts), and a saved
+  // location contributes only validated numeric lat/lon + a display name — never a raw URL/host.
+  weather: {
+    /** Geocode a city name → display-safe matches (Tor-gated). No save; the renderer presents matches
+     *  for the user to pick before `locationsAdd`. */
+    geocode: 'weather:geocode',
+    /** List saved locations (encrypt-at-rest store). */
+    locationsList: 'weather:locations:list',
+    /** Save a chosen geocoder match (or manual lat/lon). MAIN validates/clamps lat/lon + bounds the
+     *  display strings; assigns id + addedAt. Returns the fresh list. */
+    locationsAdd: 'weather:locations:add',
+    /** Remove a saved location by id (and its cache entry). Returns the fresh list. */
+    locationsRemove: 'weather:locations:remove',
+    /** Reorder saved locations to a renderer-supplied id order (missing ids appended). Returns list. */
+    locationsReorder: 'weather:locations:reorder',
+    /** Fetch a saved location's forecast (Tor-gated, timezone=auto) + cache it. On failure, returns the
+     *  last cached forecast with `stale:true`; fail-closed when Tor-default and Tor not ready. */
+    forecast: 'weather:forecast',
+    /** Read the persisted units preference. */
+    unitsGet: 'weather:units:get',
+    /** Set the units preference (re-fetch/re-label happens renderer-side). Returns the stored units. */
+    unitsSet: 'weather:units:set',
+    /** Resolved egress state for the TOR/CLEARNET marker (mode + tor-bootstrapped + ack flags). */
+    egressState: 'weather:egress:state'
+  },
   // Scraping cases — the isolated per-namespace case stores for SOCMINT + X collection runs
   // (kept apart from the core investigation `cases` namespace). Every handler takes a
   // `store: 'socmint' | 'x'` discriminator that main validates against an allowlist and routes

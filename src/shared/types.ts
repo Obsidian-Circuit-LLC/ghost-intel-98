@@ -3,6 +3,8 @@
  * Imported by both main and renderer processes.
  */
 
+import type { Units } from './weather/types';
+
 export type CaseId = string;
 export type ISODate = string;
 
@@ -628,6 +630,25 @@ export interface AppSettings {
      *  scalar healing as `clearnet` — no extra mergeSettings work needed. */
     clearnetAck: boolean;
   };
+  /** Weather tool egress + units posture (OURS — design spec 2026-08-15). A fixed-shape nested block;
+   *  MUST be deep-merged in mergeSettings so a settings.json predating it (or predating a future
+   *  sub-field) heals to the default instead of dropping the block (v3.24.0 dataloss class). */
+  weather: {
+    /** Persisted default-posture flag (default true = Tor). Surfaced by the TOR/CLEARNET marker; the
+     *  ENFORCED "leave Tor" decision is `clearnet && clearnetAck` (client.ts `resolveWeatherEgress`),
+     *  so this flag alone can never route over the real IP. */
+    torDefault: boolean;
+    /** Clearnet egress opt-out of Tor. False (default) ⇒ fetches are Tor-routed and FAIL CLOSED when
+     *  background Tor is not bootstrapped (no clearnet fallback). True + `clearnetAck` ⇒ direct fetch
+     *  over the operator's real IP. The renderer gates the FIRST flip behind a one-time real-IP
+     *  acknowledgement (mirrors `xListening.clearnet` / `geoint.cctvResolveClearnetAck`). */
+    clearnet: boolean;
+    /** One-time real-IP acknowledgement gate for `clearnet` (mirrors `xListening.clearnetAck`). */
+    clearnetAck: boolean;
+    /** Units preference for forecasts. Persisted here so the renderer's toggle survives a restart even
+     *  before the store file exists; the weather store mirrors it as the read source of truth. */
+    units: Units;
+  };
 }
 
 export const defaultShortcuts: AccessShortcut[] = [
@@ -784,6 +805,12 @@ export const defaultSettings: AppSettings = {
     archiveCycles: false,
     clearnet: false,
     clearnetAck: false
+  },
+  weather: {
+    torDefault: true,
+    clearnet: false,
+    clearnetAck: false,
+    units: 'metric'
   },
   plugins: {},
   offensive: { confirmMode: 'per-scan', rateLimitPerSec: 10, downstreamProxy: null, requireSignedAuthorization: false, issuerKeys: [] },

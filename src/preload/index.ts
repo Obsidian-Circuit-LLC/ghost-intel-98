@@ -20,6 +20,7 @@ import type {
   PublishResult,
   AccountStats,
 } from '../shared/ghost-social/types';
+import type { GeocodeMatch, SavedLocation, Units, WeatherEgressState } from '../shared/weather/types';
 
 const api = {
   cases: {
@@ -904,6 +905,30 @@ const api = {
       ipcRenderer.on(channels.ghostSocial.scheduledStateChanged, listener);
       return () => ipcRenderer.removeListener(channels.ghostSocial.scheduledStateChanged, listener);
     }
+  },
+  // Weather tool (OURS, 2026-08-15) — Tor-default Open-Meteo client + encrypted saved-locations store.
+  weather: {
+    geocode: (query: string): Promise<GeocodeMatch[]> =>
+      ipcRenderer.invoke(channels.weather.geocode, query),
+    locationsList: (): Promise<SavedLocation[]> =>
+      ipcRenderer.invoke(channels.weather.locationsList),
+    locationsAdd: (input: {
+      name: string;
+      country: string;
+      admin1?: string;
+      latitude: number;
+      longitude: number;
+    }): Promise<SavedLocation[]> => ipcRenderer.invoke(channels.weather.locationsAdd, input),
+    locationsRemove: (id: string): Promise<SavedLocation[]> =>
+      ipcRenderer.invoke(channels.weather.locationsRemove, id),
+    locationsReorder: (ids: string[]): Promise<SavedLocation[]> =>
+      ipcRenderer.invoke(channels.weather.locationsReorder, ids),
+    forecast: (id: string): Promise<import('../shared/weather/types').WeatherForecastResult> =>
+      ipcRenderer.invoke(channels.weather.forecast, { id }),
+    unitsGet: (): Promise<Units> => ipcRenderer.invoke(channels.weather.unitsGet),
+    unitsSet: (units: Units): Promise<Units> => ipcRenderer.invoke(channels.weather.unitsSet, units),
+    egressState: (): Promise<WeatherEgressState> =>
+      ipcRenderer.invoke(channels.weather.egressState)
   },
   // Scraping cases (W4) — the isolated SOCMINT/X collection-run stores. Every call passes a
   // `store: 'socmint' | 'x'` discriminator that main validates against an allowlist and routes

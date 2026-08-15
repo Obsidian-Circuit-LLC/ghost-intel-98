@@ -22,6 +22,13 @@ import type {
   AccountStats,
 } from '../shared/ghost-social/types';
 import type {
+  GeocodeMatch as WeatherGeocodeMatch,
+  SavedLocation as WeatherSavedLocation,
+  Units as WeatherUnits,
+  WeatherEgressState as WeatherEgressStateT,
+  WeatherForecastResult,
+} from '../shared/weather/types';
+import type {
   AppSettings,
   AttachmentBytesResult,
   MediaUrlResult,
@@ -1258,6 +1265,40 @@ export interface GhostApi {
     /** Subscribe to the MAIN→renderer scheduler-state-changed push (the Queue page re-reads state).
      *  Returns an unsubscribe function. */
     onScheduledStateChanged(cb: () => void): () => void;
+  },
+  /**
+   * Weather tool (OURS — design spec 2026-08-15). Tor-default Open-Meteo client (fail-closed; acked
+   * clearnet toggle) + an encrypt-at-rest saved-locations/units/cache store. A saved location
+   * contributes only a validated numeric lat/lon + a display name; every request URL is host-anchored
+   * MAIN-side to the Open-Meteo hosts, so no renderer input ever becomes a request host.
+   */
+  weather: {
+    /** Geocode a city name → display-safe matches (Tor-gated). No save. */
+    geocode(query: string): Promise<WeatherGeocodeMatch[]>;
+    /** List saved locations (encrypt-at-rest). */
+    locationsList(): Promise<WeatherSavedLocation[]>;
+    /** Save a chosen geocoder match (or manual lat/lon); MAIN validates/clamps lat/lon. Returns list. */
+    locationsAdd(input: {
+      name: string;
+      country: string;
+      admin1?: string;
+      latitude: number;
+      longitude: number;
+    }): Promise<WeatherSavedLocation[]>;
+    /** Remove a saved location (and its cache entry) by id. Returns the fresh list. */
+    locationsRemove(id: string): Promise<WeatherSavedLocation[]>;
+    /** Reorder saved locations to an id order (missing ids appended). Returns the fresh list. */
+    locationsReorder(ids: string[]): Promise<WeatherSavedLocation[]>;
+    /** Fetch a saved location's forecast + cache it; on failure serve the last cached bundle stamped
+     *  `stale:true`; fail-closed (throws the reach/blocked message) when Tor-default + Tor not ready
+     *  and there is no cache. */
+    forecast(id: string): Promise<WeatherForecastResult>;
+    /** Read the persisted units preference. */
+    unitsGet(): Promise<WeatherUnits>;
+    /** Set the units preference. Returns the stored units. */
+    unitsSet(units: WeatherUnits): Promise<WeatherUnits>;
+    /** Resolved egress state for the TOR/CLEARNET marker. */
+    egressState(): Promise<WeatherEgressStateT>;
   };
   /**
    * Scraping cases (W4) — the isolated per-namespace SOCMINT/X collection-run stores, kept

@@ -24,10 +24,19 @@ function stripCrossOriginHeaders(headers: Record<string, string> | undefined): R
   return out;
 }
 
-export async function safeFetch(url: string, maxHops = 4, headers?: Record<string, string>): Promise<Response> {
+export async function safeFetch(
+  url: string,
+  maxHops = 4,
+  headers?: Record<string, string>,
+  opts?: { sameHostOnly?: boolean },
+): Promise<Response> {
   let current = url;
   // Origin of the ORIGINAL request. Any hop whose origin differs from this drops sensitive headers.
   const originalOrigin = new URL(url).origin;
+  // Host-anchored callers (e.g. the Open-Meteo weather client, allowlisted to open-meteo.com) opt into
+  // sameHostOnly so a 30x can never carry the request off its allowed host, even to another PUBLIC host
+  // (the SSRF guard below only blocks INWARD/private targets). Default off — existing callers unchanged.
+  const originalHost = new URL(url).host;
   for (let hop = 0; hop < maxHops; hop++) {
     if (!isPublicHttpUrl(current)) throw new Error('refusing to fetch a non-public URL');
     await assertResolvedPublic(new URL(current).hostname);
@@ -38,6 +47,9 @@ export async function safeFetch(url: string, maxHops = 4, headers?: Record<strin
       const loc = res.headers.get('location');
       if (!loc) return res;
       current = new URL(loc, current).toString();
+      if (opts?.sameHostOnly && new URL(current).host !== originalHost) {
+        throw new Error('refusing a cross-host redirect');
+      }
       continue;
     }
     return res;
