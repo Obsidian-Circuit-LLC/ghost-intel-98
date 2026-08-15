@@ -76,7 +76,7 @@
 }
 .ga98-weather-loc:hover { background: var(--ga98-row-hover); }
 .ga98-weather-loc.is-selected {
-  background: var(--ga98-select-bg);
+  background: var(--ga98-select-bg, #4a3568);
   color: var(--ga98-titlebar-text);
 }
 .ga98-weather-loc-pick {
@@ -168,7 +168,7 @@
 }
 .ga98-weather-units button[aria-pressed='true'] {
   border-style: inset;
-  background: var(--ga98-select-bg);
+  background: var(--ga98-select-bg, #4a3568);
   color: var(--ga98-titlebar-text);
 }
 
