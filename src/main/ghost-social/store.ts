@@ -93,11 +93,23 @@ export async function getGhostState(deps: StoreDeps): Promise<GhostState> {
   return normalizeGhostState(parsed);
 }
 
-/** Persist the whole module state (normalized first, so the ARM flag can never be smuggled in
- *  as a truthy non-boolean). Requires the vault unlocked. Returns the exact stored state. */
+/**
+ * Persist the whole module state via the GENERIC save path (the `stateSave` IPC).
+ *
+ * SAFETY-CRITICAL (G7, Finding 1): the generic save must NEVER change the auto-post ARM flag. A
+ * renderer that never resynced its React `autoPostArmed` could otherwise smuggle a stale `true` back
+ * in via any unrelated `persist()`, silently RE-ARMING main after the user disarmed. So before
+ * writing, we read the CURRENT stored flag and FORCE the persisted value to it — the renderer-
+ * supplied flag is ignored entirely. The ONE authoritative mutation path for the flag is
+ * `setAutoPostArmed`/`armSet`, which writes directly (below) and bypasses this override.
+ * (`normalizeGhostState` still strict-boolean-heals for fresh/default state; this persist path
+ * additionally clamps the flag to the stored value.)
+ */
 export async function saveGhostState(deps: StoreDeps, state: unknown): Promise<GhostState> {
   assertUnlocked(deps);
+  const stored = (await getGhostState(deps)).autoPostArmed === true;
   const normalized = normalizeGhostState(state);
+  normalized.autoPostArmed = stored; // generic save can never move the flag
   await deps.write(deps.statePath, JSON.stringify(normalized));
   return normalized;
 }
@@ -108,10 +120,17 @@ export async function isAutoPostArmed(deps: StoreDeps): Promise<boolean> {
   return (await getGhostState(deps)).autoPostArmed === true;
 }
 
-/** Set the auto-post ARM flag (G7). Coerced to a strict boolean before persistence. */
+/**
+ * Set the auto-post ARM flag (G7) — THE ONE authoritative mutation path for the flag. Coerced to a
+ * strict boolean, then written DIRECTLY (not through `saveGhostState`, whose Finding-1 override
+ * would otherwise clamp the flag to its prior stored value and make it un-settable).
+ */
 export async function setAutoPostArmed(deps: StoreDeps, armed: boolean): Promise<GhostState> {
+  assertUnlocked(deps);
   const state = await getGhostState(deps);
-  return saveGhostState(deps, { ...state, autoPostArmed: armed === true });
+  const normalized = normalizeGhostState({ ...state, autoPostArmed: armed === true });
+  await deps.write(deps.statePath, JSON.stringify(normalized));
+  return normalized;
 }
 
 // ── production wiring ─────────────────────────────────────────────────────────

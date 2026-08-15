@@ -479,6 +479,31 @@ describe('view-manager: overlay lifecycle governor (constraint 9)', () => {
     expect(h.mgr.cacheStatus().cachedKeys).toEqual([]);
   });
 
+  it('openForPrepare (manual publish, Finding 2/6) returns a TRACKED view torn down by closeAll', async () => {
+    const h = harness();
+    h.activate();
+    // Manual prepare opens-or-reuses the account's embedded view THROUGH the manager (no untracked
+    // top-level window) and hands back its webContents.
+    const wc = await h.mgr.openForPrepare(CID, ACC);
+    expect(wc).toBe(h.viewFor(CID, ACC.id).view.webContents); // the SAME tracked view's webContents
+    expect(h.mgr.cacheStatus().cachedKeys).toContain(`${CID}::${ACC.id}`); // it is cached/tracked
+    // Reuse: a second prepare does NOT create a second view.
+    const created1 = h.created();
+    await h.mgr.openForPrepare(CID, ACC);
+    expect(h.created()).toBe(created1);
+    // Lifecycle-managed: closeAll tears it down (no authenticated view outlives the module).
+    h.mgr.closeAll();
+    expect(h.viewFor(CID, ACC.id).calls.closed).toBe(1);
+    expect(h.mgr.cacheStatus().cachedKeys).toEqual([]);
+  });
+
+  it('openForPrepare scheme-guards the account URL (never opens a non-http(s) view)', async () => {
+    const h = harness();
+    h.activate();
+    await expect(h.mgr.openForPrepare(CID, { ...ACC, url: 'file:///etc/passwd' })).rejects.toThrow();
+    expect(h.created()).toBe(0);
+  });
+
   it('deleteAccountData closes the view and clears its partition storage', async () => {
     const h = harness();
     await openActive(h);

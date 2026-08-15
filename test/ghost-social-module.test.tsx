@@ -216,6 +216,45 @@ describe('Ghost Social — overlay lifecycle (constraint 9, the SDR regression c
   });
 });
 
+describe('Ghost Social — renderer resyncs the arm flag (Finding 1) + deferred-open unmount safety (Finding 4)', () => {
+  it('disarming resyncs React state.autoPostArmed so a later persist() never carries a stale true', async () => {
+    // Vault loads with auto-posting ARMED (getState carries autoPostArmed:true). After the user
+    // disarms, any unrelated persist() must send autoPostArmed:false — never the stale true that the
+    // MAIN Finding-1 override would otherwise have to catch. Belt-and-braces with the MAIN fix.
+    await mount({ armGet: vi.fn(async () => true), getState: vi.fn(async () => ({ ...seedState(), autoPostArmed: true } as GhostState)) });
+    await unlock();
+    clickText(/Scheduled Queue/);
+    await tick();
+    expect(container.querySelector('.gsm-armed-marker')).toBeTruthy(); // armed indicator shows
+    // Disarm.
+    const sw = container.querySelector('[aria-label="Arm auto-posting"]') as HTMLButtonElement;
+    await act(async () => { sw.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+    await tick();
+    expect(api.armSet).toHaveBeenCalledWith(false);
+    expect(container.querySelector('.gsm-armed-marker')).toBeNull(); // indicator cleared
+    // Trigger an UNRELATED persist (click the campaign in the sidebar → persist({...state,…})).
+    api.saveState.mockClear();
+    const campBtn = container.querySelector('.gsm-campaign') as HTMLButtonElement;
+    await act(async () => { campBtn.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+    await tick();
+    const lastSave = api.saveState.mock.calls.at(-1)?.[0] as GhostState;
+    expect(lastSave).toBeTruthy();
+    expect(lastSave.autoPostArmed).toBe(false); // resynced — no stale true persisted
+  });
+
+  it('unmounting within the 30ms open defer cancels the deferred browserOpenAccount (Finding 4)', async () => {
+    await mount();
+    await unlock();
+    api.browserOpenAccount.mockClear();
+    // Click the account to schedule the deferred open, then unmount synchronously BEFORE 30ms.
+    clickText(/@one/);
+    act(() => { root.unmount(); });
+    // Wait past the defer window: the deferred call must have been cancelled by unmount.
+    await act(async () => { await new Promise((r) => setTimeout(r, 90)); });
+    expect(api.browserOpenAccount).not.toHaveBeenCalled();
+  });
+});
+
 describe('Ghost Social — recovery export (constraint 2) + composer prepare-only (G5)', () => {
   it('recovery export routes through the native save-dialog IPC, never an auto-write', async () => {
     await mount({ vaultIsConfigured: vi.fn(async () => false) });

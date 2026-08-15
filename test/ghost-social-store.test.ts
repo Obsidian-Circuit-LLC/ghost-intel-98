@@ -105,6 +105,52 @@ describe('ghost-social store — gate, defaults, healing, ARM flag', () => {
     await setAutoPostArmed(deps, false);
     expect(await isAutoPostArmed(deps)).toBe(false);
   });
+
+  // ── Finding 1 (CRITICAL, SAFETY): the generic save path must NOT change the ARM flag ─────────
+  // The ONLY mutation path for `autoPostArmed` is setAutoPostArmed/armSet. A generic saveGhostState
+  // (the `stateSave` IPC) carrying a renderer-supplied `autoPostArmed:true` must be IGNORED and the
+  // CURRENT stored flag preserved — otherwise a stale renderer flag silently re-arms MAIN.
+  it('(a) saveGhostState IGNORES a renderer-supplied arm flag and preserves the stored value', async () => {
+    const { deps } = memDeps();
+    // Stored flag is FALSE (default / never armed).
+    expect(await isAutoPostArmed(deps)).toBe(false);
+    // A generic save carrying autoPostArmed:true must NOT arm.
+    const saved = await saveGhostState(deps, { ...defaultGhostState(), autoPostArmed: true });
+    expect(saved.autoPostArmed).toBe(false);
+    expect(await isAutoPostArmed(deps)).toBe(false);
+
+    // Symmetric: once ARMED via the authoritative path, a generic save carrying false must NOT
+    // silently disarm either — the stored value (true) is preserved.
+    await setAutoPostArmed(deps, true);
+    const saved2 = await saveGhostState(deps, { ...defaultGhostState(), autoPostArmed: false });
+    expect(saved2.autoPostArmed).toBe(true);
+    expect(await isAutoPostArmed(deps)).toBe(true);
+  });
+
+  it('(b) full scenario: arm → disarm → generic save carrying stale true keeps isAutoPostArmed FALSE', async () => {
+    const { deps } = memDeps();
+    await setAutoPostArmed(deps, true); // arm
+    expect(await isAutoPostArmed(deps)).toBe(true);
+    await setAutoPostArmed(deps, false); // disarm (authoritative)
+    expect(await isAutoPostArmed(deps)).toBe(false);
+    // The renderer never resynced its React flag → a later unrelated persist() carries stale true.
+    await saveGhostState(deps, { ...defaultGhostState(), campaigns: [{ id: 'c9', name: 'Edited', accounts: [], notes: '' }], autoPostArmed: true });
+    // MAIN must remain DISARMED. And the unrelated edit still persisted.
+    expect(await isAutoPostArmed(deps)).toBe(false);
+    expect((await getGhostState(deps)).campaigns[0].name).toBe('Edited');
+  });
+
+  it('setAutoPostArmed remains the authoritative mutation path (still flips the flag)', async () => {
+    const { deps } = memDeps();
+    // Prove the generic-save override does NOT wedge the real arm path.
+    await setAutoPostArmed(deps, true);
+    expect(await isAutoPostArmed(deps)).toBe(true);
+    // A generic save in between preserves it.
+    await saveGhostState(deps, defaultGhostState());
+    expect(await isAutoPostArmed(deps)).toBe(true);
+    await setAutoPostArmed(deps, false);
+    expect(await isAutoPostArmed(deps)).toBe(false);
+  });
 });
 
 // ── secure-fs ENCX round-trip ─────────────────────────────────────────────────

@@ -19,7 +19,12 @@
  */
 
 import { channels } from '@shared/ipc-contracts';
-import { accountPartition, type AccountLike, type PublishRequest } from '@shared/ghost-social/types';
+import {
+  accountPartition,
+  type AccountLike,
+  type PlatformKey,
+  type PublishRequest,
+} from '@shared/ghost-social/types';
 import { assertTrustedSender } from '../capture/capture-window';
 import {
   makePublishingService,
@@ -28,6 +33,7 @@ import {
   type PublishWindow,
   type PublishWc,
 } from './publishing';
+import type { GhostSocialViewManager } from './view-manager';
 import { makeScheduler, type Scheduler } from './queue';
 import { makeProfileStatsService, type ProfileStatsService, type StatsWindow } from './stats';
 import { prodStoreDeps, getGhostState, saveGhostState, isAutoPostArmed, setAutoPostArmed } from './store';
@@ -74,8 +80,13 @@ async function prodClickPublish(wc: PublishWc, platform: string): Promise<boolea
   return !!(await wc.executeJavaScript(clickPublishScript(platform), true).catch(() => false));
 }
 
-/** Build the production publishing service (its arm-gate reader is the encrypted store). */
-function prodPublishingService(): PublishingService {
+/** Build the production publishing service (its arm-gate reader is the encrypted store). The
+ *  manual-prepare path routes through the LIFECYCLE-MANAGED view manager (Finding 2/6): it opens or
+ *  reuses the account's TRACKED embedded view and returns its webContents, so no untracked
+ *  authenticated window is ever created. `viewManager` is optional only so the Phase-3 IPC
+ *  registration test can construct the registrar without the Phase-2 manager; production always
+ *  wires it, and without it a manual prepare fails closed rather than opening an untracked window. */
+function prodPublishingService(viewManager?: GhostSocialViewManager): PublishingService {
   // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
   const { clipboard } = require('electron') as typeof import('electron');
   return makePublishingService({
@@ -85,6 +96,15 @@ function prodPublishingService(): PublishingService {
     sleep,
     isAutoPostArmed: async () => isAutoPostArmed(await prodStoreDeps()),
     clickPublish: prodClickPublish,
+    openManagedView: async (campaignId, account) => {
+      if (!viewManager) return null;
+      const wc = await viewManager.openForPrepare(campaignId, {
+        id: account.id,
+        url: account.url,
+        platform: account.platform as PlatformKey,
+      });
+      return (wc as unknown as PublishWc) ?? null;
+    },
   });
 }
 
@@ -118,6 +138,60 @@ function prodScheduler(publishing: PublishingService, getWindow: () => WindowLik
       }
     },
   });
+}
+
+// ---- the scheduled-queue background DRIVER (Finding 5, his `startScheduler`) -------------------
+// His v2.5 `startScheduler` (a 15s setInterval calling `processDueScheduledPosts`) was never ported,
+// so scheduled posts never auto-fired. This driver restores it. The tick only DRIVES `processDue`;
+// whether anything is actually published stays governed by THE ARM GATE inside `autoPublish`
+// (disarmed ⇒ the tick prepares nothing and clicks nothing). Timer seams are injected so this is
+// deterministic-testable — production wires the real setInterval/clearInterval.
+
+export interface SchedulerDriverHandle {
+  stop(): void;
+}
+
+export interface SchedulerTimers {
+  setInterval(fn: () => void, ms: number): unknown;
+  clearInterval(handle: unknown): void;
+  intervalMs?: number;
+}
+
+export function startSchedulerDriver(
+  scheduler: Pick<Scheduler, 'processDue'>,
+  timers: SchedulerTimers,
+): SchedulerDriverHandle {
+  const ms = timers.intervalMs ?? 15000;
+  const handle = timers.setInterval(() => {
+    void scheduler.processDue().catch(() => {
+      /* a failing tick must never crash main; the next tick retries */
+    });
+  }, ms);
+  return { stop: () => timers.clearInterval(handle) };
+}
+
+/** Module-level handle so the app-teardown backstop (index.ts will-quit) can stop the driver even
+ *  though registration returns void to the caller. Mirrors `disposeAllSchedules`/`clearAllBrains`. */
+let activeSchedulerDriver: SchedulerDriverHandle | null = null;
+
+/** Stop the background scheduled-queue driver (app teardown). Idempotent. */
+export function stopGhostSocialScheduler(): void {
+  activeSchedulerDriver?.stop();
+  activeSchedulerDriver = null;
+}
+
+/** Production timer seams: real (unref'd) setInterval so the driver never on its own keeps the
+ *  process alive, but keeps ticking while the app runs. */
+function prodSchedulerTimers(): SchedulerTimers {
+  return {
+    setInterval: (fn, ms) => {
+      const t = setInterval(fn, ms);
+      (t as unknown as { unref?: () => void }).unref?.();
+      return t;
+    },
+    clearInterval: (h) => clearInterval(h as ReturnType<typeof setInterval>),
+    intervalMs: 15000,
+  };
 }
 
 // ---- argument-shape validators (the renderer is hostile) ---------------
@@ -158,13 +232,19 @@ function asPublishRequest(v: unknown): PublishRequest {
 /**
  * Register the Phase-3 channels. A single publishing service + scheduler + stats service is built
  * per registration (production calls this once). `getWindow` supplies the renderer-push target.
+ * `viewManager` (the Phase-2 manager) routes the MANUAL prepare path through the lifecycle-managed
+ * embedded view (Finding 2/6). When `startDriver` is true, the background scheduled-queue driver
+ * (Finding 5) is started with real timers and stored for the app-teardown backstop; unit tests omit
+ * it so no real interval leaks.
  */
 export function registerGhostSocialPublishingIpc(deps: {
   handle: HandleWithEvent;
   getWindow: () => WindowLike;
-}): { publishing: PublishingService; scheduler: Scheduler; stats: ProfileStatsService } {
-  const { handle, getWindow } = deps;
-  const publishing = prodPublishingService();
+  viewManager?: GhostSocialViewManager;
+  startDriver?: boolean;
+}): { publishing: PublishingService; scheduler: Scheduler; stats: ProfileStatsService; driver: SchedulerDriverHandle | null } {
+  const { handle, getWindow, viewManager } = deps;
+  const publishing = prodPublishingService(viewManager);
   const scheduler = prodScheduler(publishing, getWindow);
   const stats = prodStatsService();
 
@@ -206,5 +286,15 @@ export function registerGhostSocialPublishingIpc(deps: {
     return stats.refresh(asString(campaignId, 'campaignId'), asAccountLike(account));
   });
 
-  return { publishing, scheduler, stats };
+  // ---- the background scheduled-queue driver (Finding 5) ------------------
+  // His `startScheduler` restored: production starts it here (real timers) so DUE scheduled posts
+  // auto-fire; it is stopped by `stopGhostSocialScheduler()` on app teardown (index.ts will-quit).
+  let driver: SchedulerDriverHandle | null = null;
+  if (deps.startDriver) {
+    stopGhostSocialScheduler(); // never leave two drivers ticking
+    driver = startSchedulerDriver(scheduler, prodSchedulerTimers());
+    activeSchedulerDriver = driver;
+  }
+
+  return { publishing, scheduler, stats, driver };
 }

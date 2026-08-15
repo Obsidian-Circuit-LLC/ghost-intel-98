@@ -139,6 +139,11 @@ export interface GhostSocialViewManager {
    *  ACTIVE view at `bounds`; all OTHER views hide. Applies the account's persisted egress before
    *  the first navigation. */
   openAccount(campaignId: string, account: ViewAccount, bounds?: ViewBounds): Promise<boolean>;
+  /** MANUAL PREPARE support (Finding 2/6): open-or-reuse the account's TRACKED embedded view and
+   *  return its `webContents` so a manual prepare fills the SAME lifecycle-managed view instead of
+   *  an untracked top-level window. The view is registered in the cache, so `closeAll()`/teardown/
+   *  lock tears it down; it never outlives the module. Returns null if the app window is gone. */
+  openForPrepare(campaignId: string, account: ViewAccount): Promise<GsmWebContentsLike | null>;
   /** Show a grid of live per-account views (his `browser:showComposeGrid` — the Compose Live
    *  Account Wall), each at its own card bounds; all others hide. No single active view. */
   showGrid(
@@ -436,6 +441,17 @@ export function makeGhostSocialViewManager(deps: ViewManagerDeps): GhostSocialVi
       reconcile(cv);
       enforceCache();
       return true;
+    },
+
+    async openForPrepare(campaignId, account) {
+      // Ensure a TRACKED cached view exists for this account (create-through-the-manager if absent,
+      // reuse if the grid/browser already opened it) and return its webContents. We do NOT change
+      // visibility/active selection here — the overlay governor (window active + grid/browser
+      // desiredVisible) owns that; a manual prepare only needs to fill the composer in the tracked
+      // webContents. Because the view lives in `views`, closeAll()/teardown/lock destroys it.
+      const cv = await ensureView(campaignId, account);
+      cv.lastUsed = Date.now();
+      return cv.view.webContents;
     },
 
     async showGrid(campaignId, items) {

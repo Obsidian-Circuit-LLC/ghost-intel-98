@@ -84,6 +84,10 @@ export function GhostSocialModule({ windowId }: { windowId: string }): JSX.Eleme
   const [armed, setArmed] = useState(false);
   const [showArmConfirm, setShowArmConfirm] = useState(false);
   const browserHost = useRef<HTMLDivElement | null>(null);
+  // Finding 4: track the deferred-open timer + a mounted flag so a module unmount inside the 30ms
+  // open window cannot create a native view AFTER teardown.
+  const mountedRef = useRef(true);
+  const openTimerRef = useRef<number | null>(null);
 
   const campaign = useMemo(() => state.campaigns.find((c) => c.id === state.selectedCampaignId) || state.campaigns[0], [state]);
   const persist = (next: GhostState): void => { setState(next); void gs().saveState(next).catch(() => {}); };
@@ -132,8 +136,13 @@ export function GhostSocialModule({ windowId }: { windowId: string }): JSX.Eleme
   useEffect(() => {
     if (!windowActive || (page !== 'browser' && page !== 'compose')) void gs().browserHide().catch(() => {});
   }, [page, windowActive]);
-  // 4. Module unmount (window close) ⇒ tear down EVERY native view — no stray overlay survives.
-  useEffect(() => () => { void gs().browserCloseAll().catch(() => {}); }, []);
+  // 4. Module unmount (window close) ⇒ tear down EVERY native view — no stray overlay survives — and
+  //    cancel any pending deferred openAccount so it can't create a view after teardown (Finding 4).
+  useEffect(() => () => {
+    mountedRef.current = false;
+    if (openTimerRef.current != null) { window.clearTimeout(openTimerRef.current); openTimerRef.current = null; }
+    void gs().browserCloseAll().catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (composeStatus.kind !== 'done' && composeStatus.kind !== 'warning') return;
@@ -175,8 +184,15 @@ export function GhostSocialModule({ windowId }: { windowId: string }): JSX.Eleme
   async function openAccount(a: SocialAccount): Promise<void> {
     if (!campaign) return;
     setActiveAccount(a); setPage('browser');
-    setTimeout(async () => {
-      await gs().browserOpenAccount(campaign.id, a);
+    const cid = campaign.id;
+    // Finding 4: track the deferred open + guard on the mounted flag so an unmount within the 30ms
+    // window cancels it (clearTimeout on unmount) and the late callback no-ops if it ever fires.
+    if (openTimerRef.current != null) window.clearTimeout(openTimerRef.current);
+    openTimerRef.current = window.setTimeout(async () => {
+      openTimerRef.current = null;
+      if (!mountedRef.current) return;
+      await gs().browserOpenAccount(cid, a);
+      if (!mountedRef.current) return;
       await syncCacheStatus();
     }, 30);
   }
@@ -256,8 +272,11 @@ export function GhostSocialModule({ windowId }: { windowId: string }): JSX.Eleme
 
   // ── THE AUTO-POST ARM GATE (constraint 3) ─────────────────────────────────
   function requestArm(): void { setShowArmConfirm(true); } // one-time confirm before arming
-  async function confirmArm(): Promise<void> { setShowArmConfirm(false); setArmed(await gs().armSet(true)); }
-  async function disarm(): Promise<void> { setArmed(await gs().armSet(false)); } // disarming is always safe
+  // Finding 1 (renderer half): after arm/disarm succeeds, resync React `state.autoPostArmed` too, so
+  // a later unrelated persist() never writes back a STALE flag. MAIN's saveGhostState is the
+  // authoritative guard; this keeps the renderer from ever sending a wrong value in the first place.
+  async function confirmArm(): Promise<void> { setShowArmConfirm(false); const a = await gs().armSet(true); setArmed(a); setState((s) => ({ ...s, autoPostArmed: a })); }
+  async function disarm(): Promise<void> { const a = await gs().armSet(false); setArmed(a); setState((s) => ({ ...s, autoPostArmed: a })); } // disarming is always safe
   async function setAccountEgress(a: SocialAccount, torEnabled: boolean): Promise<{ showWarning: boolean }> {
     if (!campaign) return { showWarning: false };
     const res = await gs().browserApplyEgress(campaign.id, a.id, torEnabled).catch(() => ({ mode: 'clearnet' as const, showWarning: false }));

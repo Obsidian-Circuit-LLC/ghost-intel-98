@@ -1788,7 +1788,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   // via safeHandleWithEvent so each handler validates the sender frame first (the overlays host the
   // user's authenticated social sessions). `getWindow` supplies the overlay parent (the desktop
   // window's contentView).
-  registerGhostSocialViewIpc({ handle: safeHandleWithEvent, getWindow });
+  const ghostSocialViewManager = registerGhostSocialViewIpc({ handle: safeHandleWithEvent, getWindow });
 
   // ---- Ghost Social Media Manager: publishing + scheduled queue + THE AUTO-POST ARM GATE + stats (Phase 3) ----
   // SAFETY-CRITICAL. Wired via safeHandleWithEvent so every handler validates the sender frame
@@ -1796,7 +1796,16 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   // scheduler's autoPublish seam reads the default-OFF ARM flag from the encrypted state in MAIN
   // and refuses to click Publish while disarmed — a renderer bug cannot auto-post. `getWindow`
   // supplies the renderer-push target for the scheduler's state-changed notification.
-  registerGhostSocialPublishingIpc({ handle: safeHandleWithEvent, getWindow });
+  //  - `viewManager` routes the MANUAL prepare path through the lifecycle-managed embedded view
+  //    (Finding 2/6), so a manual publish never leaks an untracked authenticated window.
+  //  - `startDriver` starts the background scheduled-queue tick (Finding 5 — his `startScheduler`),
+  //    stopped on app teardown by `stopGhostSocialScheduler()` (index.ts will-quit).
+  registerGhostSocialPublishingIpc({
+    handle: safeHandleWithEvent,
+    getWindow,
+    viewManager: ghostSocialViewManager,
+    startDriver: true,
+  });
 
   // ---- SP-4 investigation graph: per-case scene fetch + live delta push (Task 5) ----
   registerInvestigationGraphIpc({

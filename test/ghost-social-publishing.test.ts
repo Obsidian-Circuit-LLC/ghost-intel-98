@@ -49,10 +49,36 @@ import {
 } from '../src/main/ghost-social/publishing';
 import { makeScheduler, JobQueue, type SchedulerDeps } from '../src/main/ghost-social/queue';
 import { makeProfileStatsService, type StatsDeps, type StatsWindow } from '../src/main/ghost-social/stats';
-import { registerGhostSocialPublishingIpc } from '../src/main/ghost-social/publishing-ipc';
+import { registerGhostSocialPublishingIpc, startSchedulerDriver } from '../src/main/ghost-social/publishing-ipc';
 import { assertTrustedSender } from '../src/main/capture/capture-window';
 import type { AccountLike, GhostState } from '../src/shared/ghost-social/types';
-import { defaultGhostState } from '../src/main/ghost-social/store';
+import {
+  defaultGhostState,
+  getGhostState,
+  saveGhostState,
+  isAutoPostArmed,
+  setAutoPostArmed,
+  type StoreDeps,
+} from '../src/main/ghost-social/store';
+
+// In-memory store deps (gate always unlocked, Map-backed IO) — lets a publishing/scheduler test
+// exercise the REAL store arm-flag semantics (Finding 1) end-to-end.
+function memStoreDeps(): { deps: StoreDeps; files: Map<string, string> } {
+  const files = new Map<string, string>();
+  const deps: StoreDeps = {
+    isUnlocked: () => true,
+    read: async (p) => {
+      if (!files.has(p)) throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+      return files.get(p) as string;
+    },
+    write: async (p, data) => {
+      files.set(p, data);
+    },
+    exists: async (p) => files.has(p),
+    statePath: '/mem/ghost-state.enc',
+  };
+  return { deps, files };
+}
 
 // ── fake publishing seams ─────────────────────────────────────────────────────
 function fakeWc(overrides: Partial<PublishWc> = {}): PublishWc {
@@ -84,10 +110,29 @@ function fakeWindow(wc: PublishWc): PublishWindow & { _destroyed: boolean } {
 
 const X_ACCOUNT: AccountLike = { id: 'a1', platform: 'x', name: 'X acct', url: 'https://x.com/' };
 
+/** A fake stand-in for the LIFECYCLE-MANAGED view manager the manual-prepare path now uses
+ *  (Finding 2/6). `openManagedView` hands back a tracked webContents; `closeAll` tears every one
+ *  down — exactly what the real view manager's `closeAll()`/teardown/lock does. */
+function fakeManagedViews(): {
+  openManagedView: PublishingDeps['openManagedView'];
+  opened: Array<{ wc: PublishWc; destroyed: boolean }>;
+  closeAll: () => void;
+} {
+  const opened: Array<{ wc: PublishWc; destroyed: boolean }> = [];
+  const openManagedView = vi.fn(async () => {
+    const entry = { wc: fakeWc(), destroyed: false };
+    opened.push(entry);
+    return entry.wc;
+  });
+  const closeAll = (): void => opened.forEach((e) => (e.destroyed = true));
+  return { openManagedView, opened, closeAll };
+}
+
 function pubDeps(
   armed: boolean,
   clickPublish = vi.fn(async () => true),
   createWindow?: PublishingDeps['createWindow'],
+  openManagedView?: PublishingDeps['openManagedView'],
 ): { deps: PublishingDeps; clickPublish: ReturnType<typeof vi.fn>; created: PublishWindow[] } {
   const created: PublishWindow[] = [];
   const deps: PublishingDeps = {
@@ -103,6 +148,7 @@ function pubDeps(
     sleep: async () => undefined, // no real delays in tests
     isAutoPostArmed: async () => armed,
     clickPublish,
+    openManagedView: openManagedView ?? (async () => fakeWc()),
   };
   return { deps, clickPublish, created };
 }
@@ -151,17 +197,39 @@ describe('ghost-social publishing — THE AUTO-POST ARM GATE (G7, safety-critica
   });
 });
 
-describe('ghost-social publishing — manual publish is PREPARE-ONLY', () => {
-  it('publish fills the composer, shows the window, and NEVER clicks Publish', async () => {
-    const wc = fakeWc();
-    const win = fakeWindow(wc);
-    const { deps, clickPublish } = pubDeps(true, vi.fn(async () => true), () => win);
+describe('ghost-social publishing — manual publish is PREPARE-ONLY (Finding 2/6)', () => {
+  it('manual publish prepares into the LIFECYCLE-MANAGED view — NO untracked window — and never clicks', async () => {
+    const managed = fakeManagedViews();
+    // createWindow MUST NOT be used by the manual-prepare path (an untracked top-level authenticated
+    // window that outlives the module was the leak). Make it explode if publish() reaches for it.
+    const explodingCreate: PublishingDeps['createWindow'] = () => {
+      throw new Error('manual publish must not create an untracked top-level window');
+    };
+    const { deps, clickPublish, created } = pubDeps(
+      true,
+      vi.fn(async () => true),
+      explodingCreate,
+      managed.openManagedView,
+    );
     const svc = makePublishingService(deps);
     const r = await svc.publish('c1', X_ACCOUNT, { text: 'draft tweet' });
     expect(r.status).toBe('prepared');
-    expect(win.show).toHaveBeenCalledTimes(1); // shown for human review
+    expect(managed.openManagedView).toHaveBeenCalledTimes(1); // prepared into the managed view
+    expect(created).toHaveLength(0); // NO untracked top-level window created
     expect(clickPublish).not.toHaveBeenCalled(); // prepare-only: the human clicks Publish
     expect(/Publish\/Post button/i.test(r.message)).toBe(true);
+  });
+
+  it('any view a manual publish uses is torn down by the view manager closeAll (lifecycle-managed)', async () => {
+    const managed = fakeManagedViews();
+    const { deps } = pubDeps(true, vi.fn(async () => true), undefined, managed.openManagedView);
+    const svc = makePublishingService(deps);
+    await svc.publish('c1', X_ACCOUNT, { text: 'draft tweet' });
+    expect(managed.opened).toHaveLength(1);
+    expect(managed.opened[0].destroyed).toBe(false);
+    // The view manager's teardown/lock/closeAll governs the view — nothing outlives it.
+    managed.closeAll();
+    expect(managed.opened[0].destroyed).toBe(true);
   });
 
   it('clickPublishScript is his verbatim per-platform Publish-button clicker', () => {
@@ -372,6 +440,111 @@ describe('ghost-social profile stats — hidden window ALWAYS closed', () => {
     const stats = await svc.refresh('c1', ACCT);
     expect(stats.status).toBe('error');
     expect((created[0] as unknown as { _destroyed: boolean })._destroyed).toBe(true); // ALWAYS closed
+  });
+});
+
+// ── Finding 1(c): the arm gate holds against a stale-flag generic save (store↔publishing) ───────
+describe('ghost-social publishing — arm gate survives a stale-flag generic save (Finding 1c)', () => {
+  it('after arm→disarm→saveState(stale true), a disarmed autoPublish still refuses to click Publish', async () => {
+    const { deps: store } = memStoreDeps();
+    // Real arm path: arm then disarm (authoritative).
+    await setAutoPostArmed(store, true);
+    await setAutoPostArmed(store, false);
+    // The renderer's stale React flag rides in on an unrelated generic save.
+    await saveGhostState(store, { ...defaultGhostState(), autoPostArmed: true });
+    expect(await isAutoPostArmed(store)).toBe(false); // MAIN stayed DISARMED (Finding 1)
+
+    // Publishing reads the SAME authoritative store flag (production wiring).
+    const clickPublish = vi.fn(async () => true);
+    const managed = fakeManagedViews();
+    const { deps } = pubDeps(false, clickPublish, undefined, managed.openManagedView);
+    deps.isAutoPostArmed = () => isAutoPostArmed(store);
+    const svc = makePublishingService(deps);
+    const r = await svc.autoPublish('c1', X_ACCOUNT, { text: 'hello world' });
+    expect(r.status).toBe('blocked_disarmed');
+    expect(clickPublish).not.toHaveBeenCalled(); // provably never clicked Publish
+  });
+});
+
+// ── Finding 5: the scheduled-queue tick, arm-gated end-to-end (processDue → autoPublish → click) ─
+describe('ghost-social scheduler tick — arm gate governs clickPublish (Finding 5)', () => {
+  const DUE = '2026-08-15T00:00:00.000Z';
+  const NOW = Date.parse('2026-08-15T01:00:00.000Z');
+
+  function wireChain(store: StoreDeps): {
+    scheduler: ReturnType<typeof makeScheduler>;
+    clickPublish: ReturnType<typeof vi.fn>;
+    state: { current: GhostState };
+  } {
+    const clickPublish = vi.fn(async () => true);
+    const managed = fakeManagedViews();
+    const pub = makePublishingService({
+      partitionFor: (c, a) => `persist:ghost-${c}-${a}`,
+      createWindow: () => fakeWindow(fakeWc()),
+      clipboard: { readText: () => '', writeText: () => undefined },
+      sleep: async () => undefined,
+      isAutoPostArmed: () => isAutoPostArmed(store),
+      clickPublish,
+      openManagedView: managed.openManagedView,
+    });
+    const state = { current: schedState(DUE) };
+    const scheduler = makeScheduler({
+      getState: async () => state.current,
+      saveState: async (s) => (state.current = s as GhostState),
+      autoPublish: (c, a, p) => pub.autoPublish(c, a, p),
+      isArmed: () => isAutoPostArmed(store),
+      now: () => NOW,
+      uuid: () => 'fixed-uuid',
+    });
+    return { scheduler, clickPublish, state };
+  }
+
+  it('ARMED: a due processDue tick drives clickPublish through the whole chain', async () => {
+    const { deps: store } = memStoreDeps();
+    await setAutoPostArmed(store, true);
+    const { scheduler, clickPublish, state } = wireChain(store);
+    const res = await scheduler.processDue();
+    expect(res.ran).toBe(true);
+    expect(clickPublish).toHaveBeenCalledTimes(1);
+    expect(state.current.scheduledPosts![0].status).toBe('complete');
+  });
+
+  it('DISARMED: a due processDue tick prepares nothing and NEVER clicks Publish', async () => {
+    const { deps: store } = memStoreDeps(); // default OFF
+    const { scheduler, clickPublish, state } = wireChain(store);
+    const res = await scheduler.processDue();
+    expect(res.ran).toBe(false);
+    expect(res.disarmed).toBe(true);
+    expect(clickPublish).not.toHaveBeenCalled();
+    expect(state.current.scheduledPosts![0].status).toBe('scheduled'); // still ready
+  });
+});
+
+// ── Finding 5: the background scheduler DRIVER (his startScheduler), deterministic timer seams ───
+describe('ghost-social scheduler driver — periodic processDue + teardown (Finding 5)', () => {
+  it('startSchedulerDriver ticks processDue on the interval and stops cleanly on teardown', async () => {
+    const processDue = vi.fn(async () => ({ ran: false as const }));
+    let fired: (() => void) | null = null;
+    let cleared = false;
+    const handle = startSchedulerDriver(
+      { processDue },
+      {
+        setInterval: (fn) => {
+          fired = fn;
+          return 'timer-1';
+        },
+        clearInterval: (h) => {
+          cleared = h === 'timer-1';
+        },
+        intervalMs: 15000,
+      },
+    );
+    expect(fired).toBeTypeOf('function');
+    fired!(); // simulate one interval tick
+    fired!(); // and another
+    expect(processDue).toHaveBeenCalledTimes(2);
+    handle.stop();
+    expect(cleared).toBe(true);
   });
 });
 

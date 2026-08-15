@@ -72,6 +72,15 @@ export interface PublishingDeps {
    * `wc.executeJavaScript(clickPublishScript(platform), true)`.
    */
   clickPublish(wc: PublishWc, platform: string): Promise<boolean>;
+  /**
+   * MANUAL PREPARE (G5, Finding 2/6): open-or-reuse the account's LIFECYCLE-MANAGED embedded view
+   * through the view manager and return its webContents. His `publish:account` prepared into the
+   * account's ALREADY-OPEN cached view; the port routes manual prepare the same way so the view is
+   * tracked, governed by the overlay lifecycle, and torn down by the view manager's
+   * `closeAll()`/teardown/lock. NO untracked top-level window is ever created for a manual prepare
+   * (the old leak). Returns null when no managed view can be opened.
+   */
+  openManagedView(campaignId: string, account: AccountLike): Promise<PublishWc | null>;
 }
 
 export interface PublishingService {
@@ -309,24 +318,29 @@ export function makePublishingService(deps: PublishingDeps): PublishingService {
     prepareInWebContents,
 
     async publish(campaignId, account, post) {
-      // His manual publish: PREPARE-ONLY. Fill the composer in a hidden window, show it for the
-      // human to review, and STOP. Never clicks Publish.
+      // His manual publish: PREPARE-ONLY. Fill the composer and STOP; the human clicks Publish.
+      // Finding 2/6: prepare into the account's LIFECYCLE-MANAGED embedded view (his
+      // `publish:account` → prepare-in-already-open-cached-view), NOT an untracked top-level window.
+      // The view is tracked + governed + torn down by the view manager (closeAll/teardown/lock), so
+      // no authenticated window can outlive the module, the vault lock, or unmount.
       if (account.platform === 'messenger')
         return {
           status: 'unsupported',
           message: 'Messenger is a messaging destination, not a public-post destination.',
         };
-      const win = deps.createWindow(deps.partitionFor(campaignId, account.id));
       try {
-        const r = await prepareInWebContents(win.webContents, account, post);
-        if (r.status !== 'prepared') {
-          if (!win.isDestroyed()) win.destroy();
-          return r;
-        }
-        win.show();
+        const wc = await deps.openManagedView(campaignId, account);
+        if (!wc)
+          return {
+            status: 'failed',
+            message: 'Could not open a managed account view to prepare this post. Open the account first.',
+          };
+        const r = await prepareInWebContents(wc, account, post);
+        if (r.status !== 'prepared') return r;
+        // No window.show()/destroy() here — the overlay governor already shows the account's view
+        // and the view manager owns its teardown.
         return { ...r, message: r.message + ' Review the prepared post and click the platform Publish/Post button.' };
       } catch (e) {
-        if (!win.isDestroyed()) win.destroy();
         return { status: 'failed', message: errMessage(e, 'Could not prepare post.') };
       }
     },

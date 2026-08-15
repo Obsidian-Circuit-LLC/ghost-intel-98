@@ -91,19 +91,34 @@ export const useWindows = create<WindowState>((set) => ({
   windows: [],
   focusStack: [],
   open(spec) {
-    const id = spec.id ?? nextId();
+    // `resultId` is the id the caller gets back. For a singleton whose window already exists it is
+    // reassigned to that existing window's id (below), so the caller focuses the right window.
+    let resultId = spec.id ?? nextId();
     set((s) => {
-      const existing = s.windows.find((w) => w.id === id);
+      const existing = s.windows.find((w) => w.id === resultId);
       if (existing) {
         return {
-          windows: s.windows.map((w) => (w.id === id ? { ...w, minimized: false } : w)),
-          focusStack: [...s.focusStack.filter((x) => x !== id), id]
+          windows: s.windows.map((w) => (w.id === resultId ? { ...w, minimized: false } : w)),
+          focusStack: [...s.focusStack.filter((x) => x !== resultId), resultId]
         };
       }
       const desc = getModule(spec.module);
+      // SINGLETON (Finding 3): if a singleton module already has an open window, FOCUS it (restore
+      // if minimized) instead of creating a second — a second window would share the module's
+      // process-global native resources and cross-composite / tear down the first's views.
+      if (desc?.singleton) {
+        const open = s.windows.find((w) => w.module === spec.module);
+        if (open) {
+          resultId = open.id;
+          return {
+            windows: s.windows.map((w) => (w.id === open.id ? { ...w, minimized: false } : w)),
+            focusStack: [...s.focusStack.filter((x) => x !== open.id), open.id]
+          };
+        }
+      }
       const placed: WindowSpec = {
         ...spec,
-        id,
+        id: resultId,
         x: spec.x ?? 60 + (s.windows.length % 6) * 30,
         y: spec.y ?? 60 + (s.windows.length % 6) * 30,
         width: spec.width ?? desc?.defaultWidth ?? 760,
@@ -111,10 +126,10 @@ export const useWindows = create<WindowState>((set) => ({
       };
       return {
         windows: [...s.windows, placed],
-        focusStack: [...s.focusStack, id]
+        focusStack: [...s.focusStack, resultId]
       };
     });
-    return id;
+    return resultId;
   },
   close(id) {
     set((s) => ({

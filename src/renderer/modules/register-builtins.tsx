@@ -297,5 +297,5 @@ export function registerBuiltins(): void {
   registerModule({ key: 'report', title: 'Reports', glyph: '📋', component: ReportsAdapter, builtin: true, defaultWidth: 1040, defaultHeight: 680 });
   registerModule({ key: 'number-muncher', title: 'Number Muncher', glyph: '🧮', component: NumberMuncherAdapter, builtin: true, defaultWidth: 320, defaultHeight: 450 });
   registerModule({ key: 'pdf-signer', title: 'PDF Signer', glyph: '✒️', component: PdfSignerAdapter, builtin: true, defaultWidth: 900, defaultHeight: 720 });
-  registerModule({ key: 'ghost-social', title: 'Ghost Social', glyph: '👻', component: GhostSocialAdapter, builtin: true, defaultWidth: 1180, defaultHeight: 760 });
+  registerModule({ key: 'ghost-social', title: 'Ghost Social', glyph: '👻', component: GhostSocialAdapter, builtin: true, defaultWidth: 1180, defaultHeight: 760, singleton: true });
 }
