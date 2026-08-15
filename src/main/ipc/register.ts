@@ -156,6 +156,7 @@ import { prodScrapingCaseStore } from '../storage/scraping-cases';
 import { registerInvestigationGraphIpc, registerInvestigationRunIpc } from '../investigation/ipc';
 import { registerXListeningIpc } from '../x-listening/ipc';
 import { registerGhostSocialIpc } from '../ghost-social/ipc';
+import { registerGhostSocialViewIpc } from '../ghost-social/view-ipc';
 import { registerInvestigationReportIpc } from '../investigation/report-ipc';
 import { renderIntelReportPdf } from '../investigation/report-pdf';
 import { addManualNode, addManualEdge } from '../investigation/graph';
@@ -1779,6 +1780,14 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   // social pages in embedded views, so every handler must validate the sender frame first
   // (assertTrustedSender inside the module). The plain safeHandle discards the event and cannot.
   registerGhostSocialIpc({ handle: safeHandleWithEvent });
+
+  // ---- Ghost Social Media Manager: per-account embedded-view manager + OVERLAY LIFECYCLE (Phase 2) ----
+  // Every per-account WebContentsView is a main-managed native overlay governed by the shared
+  // show/hide governor (windowActive + modal + per-view bounds), torn down on module unmount. Wired
+  // via safeHandleWithEvent so each handler validates the sender frame first (the overlays host the
+  // user's authenticated social sessions). `getWindow` supplies the overlay parent (the desktop
+  // window's contentView).
+  registerGhostSocialViewIpc({ handle: safeHandleWithEvent, getWindow });
 
   // ---- SP-4 investigation graph: per-case scene fetch + live delta push (Task 5) ----
   registerInvestigationGraphIpc({

@@ -826,7 +826,48 @@ const api = {
     saveState: (state: GhostState): Promise<GhostState> =>
       ipcRenderer.invoke(channels.ghostSocial.stateSave, state),
     platformDefaults: (platform: string): Promise<PlatformDefault> =>
-      ipcRenderer.invoke(channels.ghostSocial.platformDefaults, platform)
+      ipcRenderer.invoke(channels.ghostSocial.platformDefaults, platform),
+    // ---- Phase 2: per-account embedded-view manager + the overlay lifecycle ----
+    browserOpenAccount: (campaignId: string, account: unknown, bounds?: unknown): Promise<boolean> =>
+      ipcRenderer.invoke(channels.ghostSocial.browserOpenAccount, campaignId, account, bounds),
+    browserShowGrid: (campaignId: string, items: unknown): Promise<boolean> =>
+      ipcRenderer.invoke(channels.ghostSocial.browserShowGrid, campaignId, items),
+    browserHide: (): Promise<void> => ipcRenderer.invoke(channels.ghostSocial.browserHide),
+    browserClose: (campaignId: string, accountId: string): Promise<void> =>
+      ipcRenderer.invoke(channels.ghostSocial.browserClose, campaignId, accountId),
+    browserCloseAll: (): Promise<void> => ipcRenderer.invoke(channels.ghostSocial.browserCloseAll),
+    browserRefresh: (campaignId: string, accountId: string): Promise<boolean> =>
+      ipcRenderer.invoke(channels.ghostSocial.browserRefresh, campaignId, accountId),
+    browserNav: (action: 'back' | 'forward' | 'reload' | 'home'): Promise<boolean> =>
+      ipcRenderer.invoke(channels.ghostSocial.browserNav, action),
+    browserResize: (bounds: unknown): Promise<void> =>
+      ipcRenderer.invoke(channels.ghostSocial.browserResize, bounds),
+    browserSetCacheMode: (mode: string): Promise<void> =>
+      ipcRenderer.invoke(channels.ghostSocial.browserSetCacheMode, mode),
+    browserDeleteAccountData: (campaignId: string, accountId: string): Promise<boolean> =>
+      ipcRenderer.invoke(channels.ghostSocial.browserDeleteAccountData, campaignId, accountId),
+    browserSetWindowActive: (active: boolean): Promise<void> =>
+      ipcRenderer.invoke(channels.ghostSocial.browserSetWindowActive, active),
+    browserSetModal: (open: boolean): Promise<void> =>
+      ipcRenderer.invoke(channels.ghostSocial.browserSetModal, open),
+    browserApplyEgress: (
+      campaignId: string,
+      accountId: string,
+      torEnabled: boolean
+    ): Promise<{ mode: 'clearnet' | 'tor'; showWarning: boolean }> =>
+      ipcRenderer.invoke(channels.ghostSocial.browserApplyEgress, campaignId, accountId, torEnabled),
+    browserRegisterHosts: (urls: string[]): Promise<void> =>
+      ipcRenderer.invoke(channels.ghostSocial.browserRegisterHosts, urls),
+    browserCacheStatus: (): Promise<{
+      mode: string;
+      activeKey: string | null;
+      cachedKeys: string[];
+      visibleKeys: string[];
+    }> => ipcRenderer.invoke(channels.ghostSocial.browserCacheStatus),
+    faviconFetch: (url: string): Promise<string | null> =>
+      ipcRenderer.invoke(channels.ghostSocial.faviconFetch, url),
+    openExternal: (url: string): Promise<void> =>
+      ipcRenderer.invoke(channels.ghostSocial.openExternal, url)
   },
   // Scraping cases (W4) — the isolated SOCMINT/X collection-run stores. Every call passes a
   // `store: 'socmint' | 'x'` discriminator that main validates against an allowlist and routes

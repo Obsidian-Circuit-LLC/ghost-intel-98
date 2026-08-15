@@ -1132,6 +1132,62 @@ export interface GhostApi {
     saveState(state: GhostState): Promise<GhostState>;
     /** A platform's default home URL + capabilities; unknown keys fall back to `custom`. */
     platformDefaults(platform: string): Promise<PlatformDefault>;
+    // ---- Phase 2: per-account embedded-view manager + the overlay lifecycle ----
+    /** Open/cache an account's embedded view and make it the single ACTIVE view at `bounds`; all
+     *  other views hide. Applies the account's persisted egress before its first navigation. */
+    browserOpenAccount(
+      campaignId: string,
+      account: unknown,
+      bounds?: { x: number; y: number; width: number; height: number }
+    ): Promise<boolean>;
+    /** Show a grid of live per-account views (the Compose Live Account Wall), each at its card
+     *  bounds; all others hide. */
+    browserShowGrid(
+      campaignId: string,
+      items: Array<{ account: unknown; bounds: { x: number; y: number; width: number; height: number } }>
+    ): Promise<boolean>;
+    /** Hide + detach ALL cached views (kept in cache). */
+    browserHide(): Promise<void>;
+    /** Close one account's view. */
+    browserClose(campaignId: string, accountId: string): Promise<void>;
+    /** Close + tear down EVERY view (module-unmount teardown). */
+    browserCloseAll(): Promise<void>;
+    /** Reload one cached account's view. */
+    browserRefresh(campaignId: string, accountId: string): Promise<boolean>;
+    /** back/forward/reload/home on the active embedded view. */
+    browserNav(action: 'back' | 'forward' | 'reload' | 'home'): Promise<boolean>;
+    /** Update the active embedded view's bounds. */
+    browserResize(bounds: { x: number; y: number; width: number; height: number }): Promise<void>;
+    /** Set the LRU cache mode (all/recent3/reload). */
+    browserSetCacheMode(mode: 'all' | 'recent3' | 'reload'): Promise<void>;
+    /** Delete one account's session storage + cache and close its view. */
+    browserDeleteAccountData(campaignId: string, accountId: string): Promise<boolean>;
+    /** Governor: report whether THIS module window is focused + non-minimized. Inactive hides +
+     *  detaches ALL views so none can float over another GI98 window. */
+    browserSetWindowActive(active: boolean): Promise<void>;
+    /** Governor: a GI98 modal is open — detach ALL views; restore (no reload) when it closes. */
+    browserSetModal(open: boolean): Promise<void>;
+    /** G8 per-account egress toggle: set/clear that partition's proxy (clearnet default = no proxy;
+     *  Tor = bg-Tor SOCKS). `showWarning` is true only the first time Tor is enabled this session. */
+    browserApplyEgress(
+      campaignId: string,
+      accountId: string,
+      torEnabled: boolean
+    ): Promise<{ mode: 'clearnet' | 'tor'; showWarning: boolean }>;
+    /** Seed the set of known account hosts so the host-anchored favicon fetch can accept them. */
+    browserRegisterHosts(urls: string[]): Promise<void>;
+    /** Debug/inspection snapshot of the view cache. */
+    browserCacheStatus(): Promise<{
+      mode: string;
+      activeKey: string | null;
+      cachedKeys: string[];
+      visibleKeys: string[];
+    }>;
+    /** Host-anchored favicon fetch: only a REGISTERED account host's own /favicon.ico; a foreign or
+     *  non-http(s) host resolves `null` without a fetch. */
+    faviconFetch(url: string): Promise<string | null>;
+    /** Scheme-guarded external open (http/https only); rejects a non-http(s) URL. */
+    openExternal(url: string): Promise<void>;
   };
   /**
    * Scraping cases (W4) — the isolated per-namespace SOCMINT/X collection-run stores, kept

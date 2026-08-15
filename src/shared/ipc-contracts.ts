@@ -747,7 +747,50 @@ export const channels = {
     /** Persist the whole module state (normalized MAIN-side; the ARM flag can't be smuggled in). */
     stateSave: 'ghostSocial:state:save',
     /** A platform's default home URL + capabilities (his `platform:defaults`). */
-    platformDefaults: 'ghostSocial:platform:defaults'
+    platformDefaults: 'ghostSocial:platform:defaults',
+    // ---- Phase 2: per-account embedded-view manager + the overlay lifecycle -----------------
+    // Every per-account `WebContentsView` is a main-managed native overlay governed by the shared
+    // show/hide governor (windowActive + modal + per-view bounds). All channels sender-validate.
+    /** Open/cache an account's embedded browser view on its `persist:` partition (his
+     *  `browser:openAccount`) at renderer-reported bounds. */
+    browserOpenAccount: 'ghostSocial:browser:openAccount',
+    /** Show a grid of live per-account views, each at its own card bounds (his
+     *  `browser:showComposeGrid` — the Compose Live Account Wall). */
+    browserShowGrid: 'ghostSocial:browser:showGrid',
+    /** Hide + detach ALL cached views (kept in cache); his `browser:hide`. */
+    browserHide: 'ghostSocial:browser:hide',
+    /** Close one account's view (his `browser:close`). */
+    browserClose: 'ghostSocial:browser:close',
+    /** Close + tear down EVERY view (his `browser:closeAll` + module-unmount teardown). */
+    browserCloseAll: 'ghostSocial:browser:closeAll',
+    /** Reload one account's view (his `browser:refreshAccount`). */
+    browserRefresh: 'ghostSocial:browser:refresh',
+    /** back/forward/reload/home on the active embedded view (his `browser:nav`). */
+    browserNav: 'ghostSocial:browser:nav',
+    /** Update the active embedded view's bounds (his `browser:resize`). */
+    browserResize: 'ghostSocial:browser:resize',
+    /** Set the LRU cache mode all/recent3/reload (his `browser:setCacheMode`). */
+    browserSetCacheMode: 'ghostSocial:browser:setCacheMode',
+    /** Delete one account's session storage + cache and close its view (his
+     *  `browser:deleteAccountData`). */
+    browserDeleteAccountData: 'ghostSocial:browser:deleteAccountData',
+    /** Governor: the module reports whether ITS window is focused + non-minimized. Inactive hides +
+     *  detaches ALL views so none can float over another GI98 window (constraint 9). */
+    browserSetWindowActive: 'ghostSocial:browser:setWindowActive',
+    /** Governor: a GI98 modal is open — detach ALL views, restore (no reload) when it closes. */
+    browserSetModal: 'ghostSocial:browser:setModal',
+    /** G8 per-account egress toggle: set/clear that partition's session proxy (clearnet default =
+     *  no proxy; Tor = bg-Tor SOCKS) + the one-time warning flag. */
+    browserApplyEgress: 'ghostSocial:browser:applyEgress',
+    /** Seed the set of known account hosts so the host-anchored favicon fetch can accept them. */
+    browserRegisterHosts: 'ghostSocial:browser:registerHosts',
+    /** Debug/inspection snapshot of the view cache (his `browser:cacheStatus`). */
+    browserCacheStatus: 'ghostSocial:browser:cacheStatus',
+    /** Host-anchored favicon fetch (hardening #3: only a REGISTERED account host's own
+     *  `/favicon.ico`, never an arbitrary attacker host). */
+    faviconFetch: 'ghostSocial:favicon:fetch',
+    /** Scheme-guarded external open (hardening #4: http/https only). */
+    openExternal: 'ghostSocial:shell:openExternal'
   },
   // Scraping cases — the isolated per-namespace case stores for SOCMINT + X collection runs
   // (kept apart from the core investigation `cases` namespace). Every handler takes a

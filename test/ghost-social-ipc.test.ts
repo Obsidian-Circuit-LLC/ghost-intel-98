@@ -34,11 +34,25 @@ const UNTRUSTED = { senderFrame: { url: 'https://x.com/' } } as unknown as Elect
 
 describe('ghost-social IPC — registration + hardening', () => {
   it('registers all eight Phase-1 channels', () => {
+    // Phase 2 adds the per-account view-manager channels to `channels.ghostSocial`, but those are
+    // registered by `registerGhostSocialViewIpc` (view-ipc.ts), NOT this Phase-1 registrar — so
+    // pin the exact eight vault/state/defaults channels this function owns rather than iterating
+    // the whole (now larger) namespace.
+    const PHASE1_CHANNELS = [
+      channels.ghostSocial.vaultIsConfigured,
+      channels.ghostSocial.vaultSetup,
+      channels.ghostSocial.vaultUnlock,
+      channels.ghostSocial.vaultLock,
+      channels.ghostSocial.vaultSaveRecoveryKey,
+      channels.ghostSocial.stateGet,
+      channels.ghostSocial.stateSave,
+      channels.ghostSocial.platformDefaults,
+    ];
     const h = collectHandlers();
-    for (const ch of Object.values(channels.ghostSocial)) {
+    for (const ch of PHASE1_CHANNELS) {
       expect(h.has(ch)).toBe(true);
     }
-    expect(h.size).toBe(8);
+    expect(h.size).toBe(PHASE1_CHANNELS.length);
   });
 
   it('every handler rejects an untrusted sender frame', async () => {

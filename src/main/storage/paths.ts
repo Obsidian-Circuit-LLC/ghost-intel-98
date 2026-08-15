@@ -122,6 +122,12 @@ export function ghostSocialStateFile(): string {
   return join(ghostSocialDir(), 'ghost-state.enc');
 }
 
+/** On-disk cache dir for host-anchored account favicons (Phase 2, favicon:fetch). Kept under the
+ *  module data dir; each icon is named by a hash of its (registered account) host. */
+export function ghostSocialFaviconDir(): string {
+  return join(ghostSocialDir(), 'favicons');
+}
+
 export function settingsFile(): string {
   return join(dataRoot(), 'settings.json');
 }
