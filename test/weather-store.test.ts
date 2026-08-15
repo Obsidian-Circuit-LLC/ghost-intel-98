@@ -71,6 +71,14 @@ describe('weather store — locations CRUD + determinism', () => {
     expect(await listLocations(deps)).toHaveLength(1);
   });
 
+  it('dedups by exact coordinates — re-adding a saved city is a no-op (no duplicate row)', async () => {
+    const { deps } = memStore();
+    await addLocation({ name: 'Paris', country: 'France', latitude: 48.85, longitude: 2.35 }, deps); // loc-1
+    const list = await addLocation({ name: 'Paris', country: 'France', latitude: 48.85, longitude: 2.35 }, deps);
+    expect(list).toHaveLength(1);
+    expect(list[0].id).toBe('loc-1'); // the original entry, not a fresh duplicate
+  });
+
   it('rejects an out-of-range lat/lon (never persists a bad coordinate)', async () => {
     const { deps, get } = memStore();
     await expect(addLocation({ name: 'x', country: 'y', latitude: 999, longitude: 0 }, deps)).rejects.toThrow(/out-of-range/);

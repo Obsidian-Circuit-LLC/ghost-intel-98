@@ -216,7 +216,9 @@ async function torGet(u: URL, socksPort: number, dial: typeof socksDial): Promis
 
 /** GET over clearnet via the shared SSRF-guarded fetch (redirects re-validated each hop). */
 async function clearnetGet(u: URL): Promise<WeatherHttpResponse> {
-  const res = await safeFetch(u.href, 2, { 'User-Agent': UA, Accept: 'application/json' });
+  // sameHostOnly: the URL is already host-anchored to open-meteo.com (assertAllowedHost); pin redirects
+  // to that host too, so the allowlist can't be escaped by a 30x even on the acked-clearnet path.
+  const res = await safeFetch(u.href, 2, { 'User-Agent': UA, Accept: 'application/json' }, { sameHostOnly: true });
   const body = (await res.text()).slice(0, BODY_CAP);
   return { status: res.status, body };
 }

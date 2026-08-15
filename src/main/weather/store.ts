@@ -188,6 +188,11 @@ export async function addLocation(
     longitude: ll.longitude,
     addedAt: deps.now(),
   };
+  // Dedup by exact coordinates: re-adding a city already saved is a no-op that keeps the existing
+  // entry (Open-Meteo geocoding is deterministic per result, so the same pick yields identical
+  // lat/lon). Prevents a duplicate row whose identical coords would confuse selection-by-coordinate.
+  const dup = data.locations.find((l) => l.latitude === ll.latitude && l.longitude === ll.longitude);
+  if (dup) return data.locations;
   data.locations.push(loc);
   await deps.write(data);
   return data.locations;

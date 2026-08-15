@@ -132,11 +132,16 @@ export function WeatherModule(): JSX.Element {
   useEffect(() => {
     let alive = true;
     void (async () => {
-      const [list] = await Promise.all([
+      const [list, storedUnits] = await Promise.all([
         window.api.weather.locationsList().catch(() => [] as SavedLocation[]),
+        window.api.weather.unitsGet().catch(() => null),
         refreshEgress(),
       ]);
       if (!alive) return;
+      // The store is the read source of truth for the fetched units; heal the settings-backed toggle
+      // to it on mount so the two can't disagree (e.g. if weather.json was reset but settings survived).
+      const w = useSettings.getState().settings?.weather;
+      if (storedUnits && w && w.units !== storedUnits) await patchSettings({ weather: { ...w, units: storedUnits } });
       setLocations(list);
       if (list.length > 0) selectLocation(list[0].id);
     })();

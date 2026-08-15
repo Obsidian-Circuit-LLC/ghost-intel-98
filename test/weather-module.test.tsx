@@ -149,6 +149,16 @@ describe('WeatherModule — forecast render', () => {
   });
 });
 
+describe('WeatherModule — units reconcile on mount', () => {
+  it('heals the settings-backed toggle to the STORE units (the fetch source of truth) on mount', async () => {
+    // settings say metric (beforeEach default) but the store (authoritative for the fetch) says imperial.
+    installApi({ unitsGet: vi.fn(async (): Promise<Units> => 'imperial') });
+    await mount();
+    expect(useSettings.getState().settings?.weather?.units).toBe('imperial');
+    expect(byAria('Imperial units')?.getAttribute('aria-pressed')).toBe('true');
+  });
+});
+
 describe('WeatherModule — saved locations', () => {
   it('adds a geocoded location via the real channels and selects it', async () => {
     const match: GeocodeMatch = { geoId: '1', name: 'Paris', country: 'France', admin1: 'Île-de-France', latitude: 48.85, longitude: 2.35 };
