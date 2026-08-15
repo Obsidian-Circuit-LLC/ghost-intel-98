@@ -101,6 +101,27 @@ export function scrapingBackupDir(): string {
   return join(scrapingCasesRoot(), 'backup-pre-v3.27.0');
 }
 
+/** Ghost Social Media Manager module data dir — all its vault + state artifacts live here,
+ *  under the app's data root (never a discoverable location like ~/Desktop). */
+export function ghostSocialDir(): string {
+  return join(dataRoot(), 'ghost-social');
+}
+
+/** His vault metadata (salt/verifier/recovery-verifier/marker) — no recoverable secret in it. */
+export function ghostSocialVaultMetaFile(): string {
+  return join(ghostSocialDir(), 'vault-meta.json');
+}
+
+/** The vault key wrapped under the recovery-derived key (recovery-unlock path). */
+export function ghostSocialWrappedKeyFile(): string {
+  return join(ghostSocialDir(), 'recovery-wrapped-key.enc');
+}
+
+/** The module's encrypted application state (campaigns/accounts/queue/settings/armed-flag). */
+export function ghostSocialStateFile(): string {
+  return join(ghostSocialDir(), 'ghost-state.enc');
+}
+
 export function settingsFile(): string {
   return join(dataRoot(), 'settings.json');
 }

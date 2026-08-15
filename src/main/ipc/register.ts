@@ -155,6 +155,7 @@ import { createScrapingCasesHandlers } from '../scraping-cases/ipc';
 import { prodScrapingCaseStore } from '../storage/scraping-cases';
 import { registerInvestigationGraphIpc, registerInvestigationRunIpc } from '../investigation/ipc';
 import { registerXListeningIpc } from '../x-listening/ipc';
+import { registerGhostSocialIpc } from '../ghost-social/ipc';
 import { registerInvestigationReportIpc } from '../investigation/report-ipc';
 import { renderIntelReportPdf } from '../investigation/report-pdf';
 import { addManualNode, addManualEdge } from '../investigation/graph';
@@ -1772,6 +1773,12 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   // hostile remote page (x.com), so every handler must validate the sender frame first
   // (assertTrustedSender inside the module). The plain safeHandle discards the event and cannot.
   registerXListeningIpc({ handle: safeHandleWithEvent });
+
+  // ---- Ghost Social Media Manager (hardened port): vault/state/defaults seam (Phase 1) ----
+  // Wired via safeHandleWithEvent — NOT plain safeHandle — because this module later hosts remote
+  // social pages in embedded views, so every handler must validate the sender frame first
+  // (assertTrustedSender inside the module). The plain safeHandle discards the event and cannot.
+  registerGhostSocialIpc({ handle: safeHandleWithEvent });
 
   // ---- SP-4 investigation graph: per-case scene fetch + live delta push (Task 5) ----
   registerInvestigationGraphIpc({

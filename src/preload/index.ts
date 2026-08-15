@@ -14,6 +14,7 @@ import type { IntelReport } from '../shared/investigation-report';
 import type { XCollectionSettings } from '../shared/x-listening-collection-settings';
 import type { XImageMode } from '../shared/x-listening-image-policy';
 import type { XScheduleStatus } from '../shared/x-listening-schedule';
+import type { GhostState, PlatformDefault } from '../shared/ghost-social/types';
 
 const api = {
   cases: {
@@ -807,6 +808,25 @@ const api = {
       ipcRenderer.invoke(channels.xListening.setProfileImageMode, req),
     scheduleStatus: (caseId: string): Promise<XScheduleStatus> =>
       ipcRenderer.invoke(channels.xListening.scheduleStatus, caseId)
+  },
+  // Ghost Social Media Manager (hardened port) — Phase 1: password-vault lifecycle, encrypted
+  // state store, per-platform defaults. No credential value ever crosses this bridge; the
+  // recovery-key export is routed to a native save dialog (never an auto-write to Desktop).
+  ghostSocial: {
+    vaultIsConfigured: (): Promise<boolean> =>
+      ipcRenderer.invoke(channels.ghostSocial.vaultIsConfigured),
+    vaultSetup: (password: string): Promise<{ recoveryKey: string }> =>
+      ipcRenderer.invoke(channels.ghostSocial.vaultSetup, password),
+    vaultUnlock: (value: string): Promise<boolean> =>
+      ipcRenderer.invoke(channels.ghostSocial.vaultUnlock, value),
+    vaultLock: (): Promise<boolean> => ipcRenderer.invoke(channels.ghostSocial.vaultLock),
+    vaultSaveRecoveryKey: (key: string): Promise<{ saved: boolean; filePath?: string }> =>
+      ipcRenderer.invoke(channels.ghostSocial.vaultSaveRecoveryKey, key),
+    getState: (): Promise<GhostState> => ipcRenderer.invoke(channels.ghostSocial.stateGet),
+    saveState: (state: GhostState): Promise<GhostState> =>
+      ipcRenderer.invoke(channels.ghostSocial.stateSave, state),
+    platformDefaults: (platform: string): Promise<PlatformDefault> =>
+      ipcRenderer.invoke(channels.ghostSocial.platformDefaults, platform)
   },
   // Scraping cases (W4) — the isolated SOCMINT/X collection-run stores. Every call passes a
   // `store: 'socmint' | 'x'` discriminator that main validates against an allowlist and routes

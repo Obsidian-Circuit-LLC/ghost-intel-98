@@ -725,6 +725,30 @@ export const channels = {
      *  Tor gate as a manual capture (fail-closed, no clearnet unless clearnet+clearnetAck). */
     scheduleStatus: 'xListening:schedule:status'
   },
+  // Ghost Social Media Manager (hardened port) — API-free social workstation. Phase 1 exposes
+  // the password-vault lifecycle, the encrypted state store, and the per-platform defaults.
+  // Every handler is safeHandleWithEvent + assertTrustedSender: the module later hosts remote
+  // social pages in embedded views, so an IPC message from a non-app frame is never honoured.
+  ghostSocial: {
+    /** Whether the module password vault has been set up (his `vault:isConfigured`). */
+    vaultIsConfigured: 'ghostSocial:vault:isConfigured',
+    /** First-run vault setup → returns the one-time recovery key (his `vault:setup`, hardened
+     *  crypto kept). */
+    vaultSetup: 'ghostSocial:vault:setup',
+    /** Unlock with the password OR a `GSMM-…` recovery key (his `vault:unlock`). */
+    vaultUnlock: 'ghostSocial:vault:unlock',
+    /** Lock the vault — zeroize the in-memory key (his `vault:lock`). */
+    vaultLock: 'ghostSocial:vault:lock',
+    /** Export the recovery key through a NATIVE save dialog to a user-chosen path (hardening #2:
+     *  replaces his auto-write of a plaintext key file to ~/Desktop). */
+    vaultSaveRecoveryKey: 'ghostSocial:vault:saveRecoveryKey',
+    /** Read the whole encrypted module state (campaigns/accounts/queue/settings/armed-flag). */
+    stateGet: 'ghostSocial:state:get',
+    /** Persist the whole module state (normalized MAIN-side; the ARM flag can't be smuggled in). */
+    stateSave: 'ghostSocial:state:save',
+    /** A platform's default home URL + capabilities (his `platform:defaults`). */
+    platformDefaults: 'ghostSocial:platform:defaults'
+  },
   // Scraping cases — the isolated per-namespace case stores for SOCMINT + X collection runs
   // (kept apart from the core investigation `cases` namespace). Every handler takes a
   // `store: 'socmint' | 'x'` discriminator that main validates against an allowlist and routes

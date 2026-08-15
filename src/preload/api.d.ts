@@ -6,6 +6,7 @@ import type { VerifiedPluginInfo, PluginStatus, PluginBridgeApi } from '../share
 import type { XCollectionSettings } from '../shared/x-listening-collection-settings';
 import type { XImageMode } from '../shared/x-listening-image-policy';
 import type { XScheduleStatus } from '../shared/x-listening-schedule';
+import type { GhostState, PlatformDefault } from '../shared/ghost-social/types';
 import type {
   AppSettings,
   AttachmentBytesResult,
@@ -1104,6 +1105,33 @@ export interface GhostApi {
      *  times — drives the renderer's next-sweep indicator + one-click Pause. Pure in-memory read of the
      *  scheduler registry; no capture window, no network egress. */
     scheduleStatus(caseId: string): Promise<XScheduleStatus>;
+  };
+  /**
+   * Ghost Social Media Manager (hardened port) — Phase 1 surface: the password-vault lifecycle,
+   * the encrypted state store, and the per-platform defaults. His AES-256-GCM + scrypt vault
+   * crypto is kept; the recovery-key export is routed to a native save dialog (never an
+   * auto-write to ~/Desktop). No credential value ever crosses this surface.
+   */
+  ghostSocial: {
+    /** Whether the module password vault has been set up. */
+    vaultIsConfigured(): Promise<boolean>;
+    /** First-run vault setup → the one-time recovery key (displayed once for the user to save). */
+    vaultSetup(password: string): Promise<{ recoveryKey: string }>;
+    /** Unlock with the password OR a `GSMM-…` recovery key. Resolves `false` (never throws) on a
+     *  wrong secret. */
+    vaultUnlock(value: string): Promise<boolean>;
+    /** Lock the vault — the in-memory key is zeroized. */
+    vaultLock(): Promise<boolean>;
+    /** Export the recovery key through a native save dialog to a user-chosen path. `saved:false`
+     *  when the dialog is cancelled — nothing is written, and nothing ever lands on Desktop. */
+    vaultSaveRecoveryKey(key: string): Promise<{ saved: boolean; filePath?: string }>;
+    /** Read the whole encrypted module state (campaigns/accounts/queue/settings/armed-flag). */
+    getState(): Promise<GhostState>;
+    /** Persist the whole module state — normalized MAIN-side (the ARM flag can't be smuggled in
+     *  as a truthy non-boolean). Returns the exact stored record. */
+    saveState(state: GhostState): Promise<GhostState>;
+    /** A platform's default home URL + capabilities; unknown keys fall back to `custom`. */
+    platformDefaults(platform: string): Promise<PlatformDefault>;
   };
   /**
    * Scraping cases (W4) — the isolated per-namespace SOCMINT/X collection-run stores, kept
