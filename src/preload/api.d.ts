@@ -16,6 +16,12 @@ import type {
   WebSdrRecordingMeta,
 } from '../shared/websdr/types';
 import type {
+  GhostState,
+  PlatformDefault,
+  PublishResult,
+  AccountStats,
+} from '../shared/ghost-social/types';
+import type {
   AppSettings,
   AttachmentBytesResult,
   MediaUrlResult,
@@ -1149,6 +1155,109 @@ export interface GhostApi {
      *  times — drives the renderer's next-sweep indicator + one-click Pause. Pure in-memory read of the
      *  scheduler registry; no capture window, no network egress. */
     scheduleStatus(caseId: string): Promise<XScheduleStatus>;
+  };
+  /**
+   * Ghost Social Media Manager (hardened port) — Phase 1 surface: the password-vault lifecycle,
+   * the encrypted state store, and the per-platform defaults. His AES-256-GCM + scrypt vault
+   * crypto is kept; the recovery-key export is routed to a native save dialog (never an
+   * auto-write to ~/Desktop). No credential value ever crosses this surface.
+   */
+  ghostSocial: {
+    /** Whether the module password vault has been set up. */
+    vaultIsConfigured(): Promise<boolean>;
+    /** First-run vault setup → the one-time recovery key (displayed once for the user to save). */
+    vaultSetup(password: string): Promise<{ recoveryKey: string }>;
+    /** Unlock with the password OR a `GSMM-…` recovery key. Resolves `false` (never throws) on a
+     *  wrong secret. */
+    vaultUnlock(value: string): Promise<boolean>;
+    /** Lock the vault — the in-memory key is zeroized. */
+    vaultLock(): Promise<boolean>;
+    /** Export the recovery key through a native save dialog to a user-chosen path. `saved:false`
+     *  when the dialog is cancelled — nothing is written, and nothing ever lands on Desktop. */
+    vaultSaveRecoveryKey(key: string): Promise<{ saved: boolean; filePath?: string }>;
+    /** Read the whole encrypted module state (campaigns/accounts/queue/settings/armed-flag). */
+    getState(): Promise<GhostState>;
+    /** Persist the whole module state — normalized MAIN-side (the ARM flag can't be smuggled in
+     *  as a truthy non-boolean). Returns the exact stored record. */
+    saveState(state: GhostState): Promise<GhostState>;
+    /** A platform's default home URL + capabilities; unknown keys fall back to `custom`. */
+    platformDefaults(platform: string): Promise<PlatformDefault>;
+    // ---- Phase 2: per-account embedded-view manager + the overlay lifecycle ----
+    /** Open/cache an account's embedded view and make it the single ACTIVE view at `bounds`; all
+     *  other views hide. Applies the account's persisted egress before its first navigation. */
+    browserOpenAccount(
+      campaignId: string,
+      account: unknown,
+      bounds?: { x: number; y: number; width: number; height: number }
+    ): Promise<boolean>;
+    /** Show a grid of live per-account views (the Compose Live Account Wall), each at its card
+     *  bounds; all others hide. */
+    browserShowGrid(
+      campaignId: string,
+      items: Array<{ account: unknown; bounds: { x: number; y: number; width: number; height: number } }>
+    ): Promise<boolean>;
+    /** Hide + detach ALL cached views (kept in cache). */
+    browserHide(): Promise<void>;
+    /** Close one account's view. */
+    browserClose(campaignId: string, accountId: string): Promise<void>;
+    /** Close + tear down EVERY view (module-unmount teardown). */
+    browserCloseAll(): Promise<void>;
+    /** Reload one cached account's view. */
+    browserRefresh(campaignId: string, accountId: string): Promise<boolean>;
+    /** back/forward/reload/home on the active embedded view. */
+    browserNav(action: 'back' | 'forward' | 'reload' | 'home'): Promise<boolean>;
+    /** Update the active embedded view's bounds. */
+    browserResize(bounds: { x: number; y: number; width: number; height: number }): Promise<void>;
+    /** Set the LRU cache mode (all/recent3/reload). */
+    browserSetCacheMode(mode: 'all' | 'recent3' | 'reload'): Promise<void>;
+    /** Delete one account's session storage + cache and close its view. */
+    browserDeleteAccountData(campaignId: string, accountId: string): Promise<boolean>;
+    /** Governor: report whether THIS module window is focused + non-minimized. Inactive hides +
+     *  detaches ALL views so none can float over another GI98 window. */
+    browserSetWindowActive(active: boolean): Promise<void>;
+    /** Governor: a GI98 modal is open — detach ALL views; restore (no reload) when it closes. */
+    browserSetModal(open: boolean): Promise<void>;
+    /** G8 per-account egress toggle: set/clear that partition's proxy (clearnet default = no proxy;
+     *  Tor = bg-Tor SOCKS). `showWarning` is true only the first time Tor is enabled this session. */
+    browserApplyEgress(
+      campaignId: string,
+      accountId: string,
+      torEnabled: boolean
+    ): Promise<{ mode: 'clearnet' | 'tor'; showWarning: boolean }>;
+    /** Seed the set of known account hosts so the host-anchored favicon fetch can accept them. */
+    browserRegisterHosts(urls: string[]): Promise<void>;
+    /** Debug/inspection snapshot of the view cache. */
+    browserCacheStatus(): Promise<{
+      mode: string;
+      activeKey: string | null;
+      cachedKeys: string[];
+      visibleKeys: string[];
+    }>;
+    /** Host-anchored favicon fetch: only a REGISTERED account host's own /favicon.ico; a foreign or
+     *  non-http(s) host resolves `null` without a fetch. */
+    faviconFetch(url: string): Promise<string | null>;
+    /** Scheme-guarded external open (http/https only); rejects a non-http(s) URL. */
+    openExternal(url: string): Promise<void>;
+    // ---- Phase 3: publishing + scheduled queue + THE AUTO-POST ARM GATE + stats ----
+    /** Manual Composer publish — PREPARE-ONLY: fills the composer in the account's authenticated
+     *  view and shows it for review; NEVER clicks Publish (the human does). */
+    publishPrepare(campaignId: string, account: unknown, post: unknown): Promise<PublishResult>;
+    /** Read the SAFETY-CRITICAL auto-post ARM flag (drives the persistent ARMED indicator). */
+    armGet(): Promise<boolean>;
+    /** Set the ARM flag (only the literal `true` arms). The renderer supplies the one-time confirm;
+     *  MAIN records the authoritative flag the scheduler consults before auto-clicking Publish. */
+    armSet(armed: boolean): Promise<boolean>;
+    /** Run one scheduled job NOW — routes through the MAIN arm gate. A disarmed run publishes
+     *  nothing and leaves the job ready (`ran:false, disarmed:true`). */
+    scheduledRunNow(postId: string): Promise<{ ran: boolean; disarmed?: boolean; jobId?: string }>;
+    /** Process the earliest DUE scheduled job. Disarmed ⇒ no-op (`ran:false, disarmed:true`). */
+    scheduledProcessDue(): Promise<{ ran: boolean; disarmed?: boolean; jobId?: string }>;
+    /** Refresh one account's follower/following stats via a HIDDEN same-partition window + the
+     *  per-platform DOM adapter; the window is ALWAYS closed after. */
+    statsRefresh(campaignId: string, account: unknown): Promise<AccountStats>;
+    /** Subscribe to the MAIN→renderer scheduler-state-changed push (the Queue page re-reads state).
+     *  Returns an unsubscribe function. */
+    onScheduledStateChanged(cb: () => void): () => void;
   };
   /**
    * Scraping cases (W4) — the isolated per-namespace SOCMINT/X collection-run stores, kept

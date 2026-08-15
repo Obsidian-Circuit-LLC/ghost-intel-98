@@ -14,6 +14,12 @@ import type { IntelReport } from '../shared/investigation-report';
 import type { XCollectionSettings } from '../shared/x-listening-collection-settings';
 import type { XImageMode } from '../shared/x-listening-image-policy';
 import type { XScheduleStatus } from '../shared/x-listening-schedule';
+import type {
+  GhostState,
+  PlatformDefault,
+  PublishResult,
+  AccountStats,
+} from '../shared/ghost-social/types';
 
 const api = {
   cases: {
@@ -816,6 +822,88 @@ const api = {
       ipcRenderer.invoke(channels.xListening.setProfileImageMode, req),
     scheduleStatus: (caseId: string): Promise<XScheduleStatus> =>
       ipcRenderer.invoke(channels.xListening.scheduleStatus, caseId)
+  },
+  // Ghost Social Media Manager (hardened port) — Phase 1: password-vault lifecycle, encrypted
+  // state store, per-platform defaults. No credential value ever crosses this bridge; the
+  // recovery-key export is routed to a native save dialog (never an auto-write to Desktop).
+  ghostSocial: {
+    vaultIsConfigured: (): Promise<boolean> =>
+      ipcRenderer.invoke(channels.ghostSocial.vaultIsConfigured),
+    vaultSetup: (password: string): Promise<{ recoveryKey: string }> =>
+      ipcRenderer.invoke(channels.ghostSocial.vaultSetup, password),
+    vaultUnlock: (value: string): Promise<boolean> =>
+      ipcRenderer.invoke(channels.ghostSocial.vaultUnlock, value),
+    vaultLock: (): Promise<boolean> => ipcRenderer.invoke(channels.ghostSocial.vaultLock),
+    vaultSaveRecoveryKey: (key: string): Promise<{ saved: boolean; filePath?: string }> =>
+      ipcRenderer.invoke(channels.ghostSocial.vaultSaveRecoveryKey, key),
+    getState: (): Promise<GhostState> => ipcRenderer.invoke(channels.ghostSocial.stateGet),
+    saveState: (state: GhostState): Promise<GhostState> =>
+      ipcRenderer.invoke(channels.ghostSocial.stateSave, state),
+    platformDefaults: (platform: string): Promise<PlatformDefault> =>
+      ipcRenderer.invoke(channels.ghostSocial.platformDefaults, platform),
+    // ---- Phase 2: per-account embedded-view manager + the overlay lifecycle ----
+    browserOpenAccount: (campaignId: string, account: unknown, bounds?: unknown): Promise<boolean> =>
+      ipcRenderer.invoke(channels.ghostSocial.browserOpenAccount, campaignId, account, bounds),
+    browserShowGrid: (campaignId: string, items: unknown): Promise<boolean> =>
+      ipcRenderer.invoke(channels.ghostSocial.browserShowGrid, campaignId, items),
+    browserHide: (): Promise<void> => ipcRenderer.invoke(channels.ghostSocial.browserHide),
+    browserClose: (campaignId: string, accountId: string): Promise<void> =>
+      ipcRenderer.invoke(channels.ghostSocial.browserClose, campaignId, accountId),
+    browserCloseAll: (): Promise<void> => ipcRenderer.invoke(channels.ghostSocial.browserCloseAll),
+    browserRefresh: (campaignId: string, accountId: string): Promise<boolean> =>
+      ipcRenderer.invoke(channels.ghostSocial.browserRefresh, campaignId, accountId),
+    browserNav: (action: 'back' | 'forward' | 'reload' | 'home'): Promise<boolean> =>
+      ipcRenderer.invoke(channels.ghostSocial.browserNav, action),
+    browserResize: (bounds: unknown): Promise<void> =>
+      ipcRenderer.invoke(channels.ghostSocial.browserResize, bounds),
+    browserSetCacheMode: (mode: string): Promise<void> =>
+      ipcRenderer.invoke(channels.ghostSocial.browserSetCacheMode, mode),
+    browserDeleteAccountData: (campaignId: string, accountId: string): Promise<boolean> =>
+      ipcRenderer.invoke(channels.ghostSocial.browserDeleteAccountData, campaignId, accountId),
+    browserSetWindowActive: (active: boolean): Promise<void> =>
+      ipcRenderer.invoke(channels.ghostSocial.browserSetWindowActive, active),
+    browserSetModal: (open: boolean): Promise<void> =>
+      ipcRenderer.invoke(channels.ghostSocial.browserSetModal, open),
+    browserApplyEgress: (
+      campaignId: string,
+      accountId: string,
+      torEnabled: boolean
+    ): Promise<{ mode: 'clearnet' | 'tor'; showWarning: boolean }> =>
+      ipcRenderer.invoke(channels.ghostSocial.browserApplyEgress, campaignId, accountId, torEnabled),
+    browserRegisterHosts: (urls: string[]): Promise<void> =>
+      ipcRenderer.invoke(channels.ghostSocial.browserRegisterHosts, urls),
+    browserCacheStatus: (): Promise<{
+      mode: string;
+      activeKey: string | null;
+      cachedKeys: string[];
+      visibleKeys: string[];
+    }> => ipcRenderer.invoke(channels.ghostSocial.browserCacheStatus),
+    faviconFetch: (url: string): Promise<string | null> =>
+      ipcRenderer.invoke(channels.ghostSocial.faviconFetch, url),
+    openExternal: (url: string): Promise<void> =>
+      ipcRenderer.invoke(channels.ghostSocial.openExternal, url),
+    // ---- Phase 3: publishing + scheduled queue + THE AUTO-POST ARM GATE + stats ----
+    // Manual Composer publish is PREPARE-ONLY (fills the composer + shows for review; never clicks).
+    publishPrepare: (campaignId: string, account: unknown, post: unknown): Promise<PublishResult> =>
+      ipcRenderer.invoke(channels.ghostSocial.publishPrepare, campaignId, account, post),
+    // Read the default-OFF ARM flag (drives the persistent ARMED indicator).
+    armGet: (): Promise<boolean> => ipcRenderer.invoke(channels.ghostSocial.armGet),
+    // Set the ARM flag. The renderer supplies the one-time confirm; MAIN records it authoritatively.
+    armSet: (armed: boolean): Promise<boolean> => ipcRenderer.invoke(channels.ghostSocial.armSet, armed),
+    // Run one scheduled job now / process the earliest due job — both route through the MAIN arm gate.
+    scheduledRunNow: (postId: string): Promise<{ ran: boolean; disarmed?: boolean; jobId?: string }> =>
+      ipcRenderer.invoke(channels.ghostSocial.scheduledRunNow, postId),
+    scheduledProcessDue: (): Promise<{ ran: boolean; disarmed?: boolean; jobId?: string }> =>
+      ipcRenderer.invoke(channels.ghostSocial.scheduledProcessDue),
+    // Refresh one account's follower/following stats (hidden window, always closed).
+    statsRefresh: (campaignId: string, account: unknown): Promise<AccountStats> =>
+      ipcRenderer.invoke(channels.ghostSocial.statsRefresh, campaignId, account),
+    // MAIN→renderer push after the scheduler mutates a job — the Queue page re-reads state.
+    onScheduledStateChanged: (cb: () => void) => {
+      const listener = (): void => cb();
+      ipcRenderer.on(channels.ghostSocial.scheduledStateChanged, listener);
+      return () => ipcRenderer.removeListener(channels.ghostSocial.scheduledStateChanged, listener);
+    }
   },
   // Scraping cases (W4) — the isolated SOCMINT/X collection-run stores. Every call passes a
   // `store: 'socmint' | 'x'` discriminator that main validates against an allowlist and routes

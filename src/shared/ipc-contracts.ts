@@ -744,6 +744,95 @@ export const channels = {
      *  Tor gate as a manual capture (fail-closed, no clearnet unless clearnet+clearnetAck). */
     scheduleStatus: 'xListening:schedule:status'
   },
+  // Ghost Social Media Manager (hardened port) — API-free social workstation. Phase 1 exposes
+  // the password-vault lifecycle, the encrypted state store, and the per-platform defaults.
+  // Every handler is safeHandleWithEvent + assertTrustedSender: the module later hosts remote
+  // social pages in embedded views, so an IPC message from a non-app frame is never honoured.
+  ghostSocial: {
+    /** Whether the module password vault has been set up (his `vault:isConfigured`). */
+    vaultIsConfigured: 'ghostSocial:vault:isConfigured',
+    /** First-run vault setup → returns the one-time recovery key (his `vault:setup`, hardened
+     *  crypto kept). */
+    vaultSetup: 'ghostSocial:vault:setup',
+    /** Unlock with the password OR a `GSMM-…` recovery key (his `vault:unlock`). */
+    vaultUnlock: 'ghostSocial:vault:unlock',
+    /** Lock the vault — zeroize the in-memory key (his `vault:lock`). */
+    vaultLock: 'ghostSocial:vault:lock',
+    /** Export the recovery key through a NATIVE save dialog to a user-chosen path (hardening #2:
+     *  replaces his auto-write of a plaintext key file to ~/Desktop). */
+    vaultSaveRecoveryKey: 'ghostSocial:vault:saveRecoveryKey',
+    /** Read the whole encrypted module state (campaigns/accounts/queue/settings/armed-flag). */
+    stateGet: 'ghostSocial:state:get',
+    /** Persist the whole module state (normalized MAIN-side; the ARM flag can't be smuggled in). */
+    stateSave: 'ghostSocial:state:save',
+    /** A platform's default home URL + capabilities (his `platform:defaults`). */
+    platformDefaults: 'ghostSocial:platform:defaults',
+    // ---- Phase 2: per-account embedded-view manager + the overlay lifecycle -----------------
+    // Every per-account `WebContentsView` is a main-managed native overlay governed by the shared
+    // show/hide governor (windowActive + modal + per-view bounds). All channels sender-validate.
+    /** Open/cache an account's embedded browser view on its `persist:` partition (his
+     *  `browser:openAccount`) at renderer-reported bounds. */
+    browserOpenAccount: 'ghostSocial:browser:openAccount',
+    /** Show a grid of live per-account views, each at its own card bounds (his
+     *  `browser:showComposeGrid` — the Compose Live Account Wall). */
+    browserShowGrid: 'ghostSocial:browser:showGrid',
+    /** Hide + detach ALL cached views (kept in cache); his `browser:hide`. */
+    browserHide: 'ghostSocial:browser:hide',
+    /** Close one account's view (his `browser:close`). */
+    browserClose: 'ghostSocial:browser:close',
+    /** Close + tear down EVERY view (his `browser:closeAll` + module-unmount teardown). */
+    browserCloseAll: 'ghostSocial:browser:closeAll',
+    /** Reload one account's view (his `browser:refreshAccount`). */
+    browserRefresh: 'ghostSocial:browser:refresh',
+    /** back/forward/reload/home on the active embedded view (his `browser:nav`). */
+    browserNav: 'ghostSocial:browser:nav',
+    /** Update the active embedded view's bounds (his `browser:resize`). */
+    browserResize: 'ghostSocial:browser:resize',
+    /** Set the LRU cache mode all/recent3/reload (his `browser:setCacheMode`). */
+    browserSetCacheMode: 'ghostSocial:browser:setCacheMode',
+    /** Delete one account's session storage + cache and close its view (his
+     *  `browser:deleteAccountData`). */
+    browserDeleteAccountData: 'ghostSocial:browser:deleteAccountData',
+    /** Governor: the module reports whether ITS window is focused + non-minimized. Inactive hides +
+     *  detaches ALL views so none can float over another GI98 window (constraint 9). */
+    browserSetWindowActive: 'ghostSocial:browser:setWindowActive',
+    /** Governor: a GI98 modal is open — detach ALL views, restore (no reload) when it closes. */
+    browserSetModal: 'ghostSocial:browser:setModal',
+    /** G8 per-account egress toggle: set/clear that partition's session proxy (clearnet default =
+     *  no proxy; Tor = bg-Tor SOCKS) + the one-time warning flag. */
+    browserApplyEgress: 'ghostSocial:browser:applyEgress',
+    /** Seed the set of known account hosts so the host-anchored favicon fetch can accept them. */
+    browserRegisterHosts: 'ghostSocial:browser:registerHosts',
+    /** Debug/inspection snapshot of the view cache (his `browser:cacheStatus`). */
+    browserCacheStatus: 'ghostSocial:browser:cacheStatus',
+    /** Host-anchored favicon fetch (hardening #3: only a REGISTERED account host's own
+     *  `/favicon.ico`, never an arbitrary attacker host). */
+    faviconFetch: 'ghostSocial:favicon:fetch',
+    /** Scheme-guarded external open (hardening #4: http/https only). */
+    openExternal: 'ghostSocial:shell:openExternal',
+    // ---- Phase 3: publishing + scheduled queue + THE AUTO-POST ARM GATE + stats --------------
+    /** Manual Composer publish — PREPARE-ONLY (his `PublishingService.publish`): fills the
+     *  composer in the account's authenticated view and STOPS; the human clicks Publish. Never
+     *  auto-clicks. */
+    publishPrepare: 'ghostSocial:publish:prepare',
+    /** Read the SAFETY-CRITICAL auto-post ARM flag (G7) — drives the persistent ARMED indicator. */
+    armGet: 'ghostSocial:arm:get',
+    /** Set the auto-post ARM flag (G7). Renderer supplies the one-time-confirm; MAIN records the
+     *  armed state (the single authoritative source the scheduler consults before auto-clicking). */
+    armSet: 'ghostSocial:arm:set',
+    /** Run one scheduled job NOW (his `scheduled:runNow`). Goes through the MAIN arm gate — a
+     *  disarmed run prepares/clicks nothing and leaves the job waiting. */
+    scheduledRunNow: 'ghostSocial:scheduled:runNow',
+    /** Process the earliest DUE scheduled job (the v2.5 background tick, on demand). Disarmed ⇒
+     *  no-op; the job stays ready. */
+    scheduledProcessDue: 'ghostSocial:scheduled:processDue',
+    /** Refresh one account's follower/following stats via a HIDDEN same-partition window + the
+     *  per-platform DOM adapter; the window is ALWAYS closed after (his `ProfileStatsService`). */
+    statsRefresh: 'ghostSocial:stats:refresh',
+    /** MAIN→renderer push after the scheduler mutates a job's status/results (his
+     *  `scheduler:stateChanged`) so the Queue page re-reads state. */
+    scheduledStateChanged: 'ghostSocial:scheduled:stateChanged'
+  },
   // Scraping cases — the isolated per-namespace case stores for SOCMINT + X collection runs
   // (kept apart from the core investigation `cases` namespace). Every handler takes a
   // `store: 'socmint' | 'x'` discriminator that main validates against an allowlist and routes

@@ -16,6 +16,12 @@ export interface ModuleDescriptor {
    *  Toolkit launcher under its subcategory. Non-OSINT modules omit both. */
   category?: string;
   subcategory?: string;
+  /** SINGLETON (Finding 3): only ONE window of this module may be open at a time. A module that
+   *  drives a process-global native resource (e.g. Ghost Social's per-account view manager — one
+   *  overlay host, one cache, one teardown) must be singleton, or a second window shares and
+   *  cross-composites/tears down the first's views. When set, the window store's `open()` FOCUSES
+   *  the existing window instead of creating a second. */
+  singleton?: boolean;
 }
 
 const registry = new Map<string, ModuleDescriptor>();
