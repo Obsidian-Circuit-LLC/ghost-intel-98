@@ -27,8 +27,8 @@ import { getCollectionSettings, saveCollectionSettings } from './collection-sett
 import { normalizeImageMode, type XImageMode } from '@shared/x-listening-image-policy';
 import { getImagePolicy, setProfileImageMode, resolveEffectiveImageCollection } from './image-policy';
 import { restartSchedule, stopSchedule, scheduleStatus } from './scheduler';
-import { repairAvatars } from './avatar-repair';
-import { prodXStore } from './store';
+import { repairAvatars, buildAvatarLookup } from './avatar-repair';
+import { prodXStore, xNoteKey } from './store';
 import type { XNote, XPostArtifact, XNetworkArtifact, XPreset, XEntityCacheEntry } from './store';
 import { ensureUuid } from '../security/validate';
 
@@ -61,20 +61,33 @@ import type { XCampaignMeta } from './campaign-meta';
 import {
   computeNetworkAnalysis,
   deriveCollectionHealth,
+  runLogRecordToRun,
   extractEntities,
   flattenNetworkArtifacts,
   type AnalysisProfile,
-  type AnalysisRelationship
+  type AnalysisRelationship,
+  type XHealthTarget,
+  type XHealthPost,
+  type XHealthRelationship
 } from './analysis';
 import { runArchiveSteps } from './archive';
+import { withCollectionLock } from './collection-lock';
 import { loadDemoData } from './demo';
 import { readCachedMedia } from './media';
 import {
   exportXPostsToFile,
   writeChecksumSidecar,
+  buildPostsExportEnvelope,
+  buildNetworkExportEnvelope,
+  serializeExportEnvelope,
   type XExportFileFormat,
-  type XExportWriteResult
+  type XExportWriteResult,
+  type XExportPresetMatch,
+  type XExportFilters,
+  type XPostsExportEnvelope,
+  type XNetworkExportEnvelope
 } from './exports';
+import type { XProfileSnapshot } from './store';
 
 // ---- X5: network export (the direct, non-file-write CSV-string surface `exportNetworkInteractive`
 // falls back to below; the accumulator/capture itself lives in `extract.ts`/`demo.ts`) --------
@@ -110,30 +123,36 @@ export interface SaveNoteRequest {
   text: string;
 }
 
-/** Injectable seams so the notes orchestration is testable without electron/secure-fs. */
+/** Injectable seams so the notes orchestration is testable without electron/secure-fs.
+ *  M11: `saveNote` now APPENDS a note (his multi-note model) — it generates a unique id via
+ *  `newId` and delegates to the store's `add`, never coalescing onto a prior note. */
 export interface NotesDeps {
-  /** Upsert one note keyed by findingId → the fresh note list. */
-  saveNote: (caseId: string, findingId: string, text: string, savedAt: string) => Promise<XNote[]>;
+  /** APPEND one note (M11) → the fresh note list. `id` is the caller-generated note id. */
+  addNote: (caseId: string, id: string, findingId: string, text: string, savedAt: string) => Promise<XNote[]>;
   /** Read the case's notes. */
   readNotes: (caseId: string) => Promise<XNote[]>;
   /** Injected clock — the ISO `savedAt` stamped onto the note (determinism). */
   now: () => string;
+  /** Injected id seam — the unique note id (determinism; never `randomUUID()` in a test). */
+  newId: () => string;
 }
 
 function defaultNotesDeps(): NotesDeps {
   return {
-    saveNote: async (caseId, findingId, text, savedAt) =>
-      (await prodXStore()).notes.save(caseId, findingId, text, savedAt),
+    addNote: async (caseId, id, findingId, text, savedAt) =>
+      (await prodXStore()).notes.add(caseId, id, findingId, text, savedAt),
     readNotes: async (caseId) => (await prodXStore()).notes.read(caseId),
-    now: () => new Date().toISOString()
+    now: () => new Date().toISOString(),
+    newId: () => globalThis.crypto.randomUUID()
   };
 }
 
 /**
- * Save (upsert) an analyst note against a finding. The text is trimmed and validated
- * (non-empty, ≤ NOTE_MAX_LENGTH) — ported from the quarantine `notes:add`/`notes:update`
- * guards (`main.cjs:1308-1310`, `1321-1323`) — and `savedAt` is stamped MAIN-side from
- * the injected clock, never accepted from the renderer. Returns the fresh note list.
+ * Save (APPEND) an analyst note against a finding (M11 — his multi-note-per-post model; a
+ * finding may carry many notes). The text is trimmed and validated (non-empty,
+ * ≤ NOTE_MAX_LENGTH) — ported from the quarantine `notes:add` guard (`main.cjs:1308-1310`) —
+ * `savedAt` is stamped MAIN-side from the injected clock and the note `id` from the injected id
+ * seam, never accepted from the renderer. Returns the fresh note list.
  */
 export async function saveNote(
   req: SaveNoteRequest,
@@ -151,7 +170,54 @@ export async function saveNote(
     throw new Error(`Note is too long. Maximum length is ${NOTE_MAX_LENGTH} characters.`);
   }
   const deps = { ...defaultNotesDeps(), ...overrides };
-  const notes = await deps.saveNote(req.caseId, findingId, text, deps.now());
+  const notes = await deps.addNote(req.caseId, deps.newId(), findingId, text, deps.now());
+  return { notes };
+}
+
+/** An edit-note request from the renderer (M11). `savedAt` is re-stamped MAIN-side. */
+export interface UpdateNoteRequest {
+  caseId: string;
+  /** The note to edit, matched by `xNoteKey` (its own id, or a legacy note's findingId). */
+  noteId: string;
+  text: string;
+}
+
+/** Injectable seams for `updateNote` (M11) — edit one note in place by id. */
+export interface UpdateNoteDeps {
+  updateNote: (caseId: string, id: string, text: string, savedAt: string) => Promise<XNote[]>;
+  now: () => string;
+}
+
+function defaultUpdateNoteDeps(): UpdateNoteDeps {
+  return {
+    updateNote: async (caseId, id, text, savedAt) =>
+      (await prodXStore()).notes.update(caseId, id, text, savedAt),
+    now: () => new Date().toISOString()
+  };
+}
+
+/**
+ * Edit (M11) one analyst note in place, matched by note id. Same text guards as `saveNote`
+ * (trim, non-empty, ≤ NOTE_MAX_LENGTH) and the same injected-clock `savedAt`. Returns the fresh
+ * note list. A `noteId` matching nothing is a harmless no-op (the store returns the list unchanged).
+ */
+export async function updateNote(
+  req: UpdateNoteRequest,
+  overrides: Partial<UpdateNoteDeps> = {}
+): Promise<{ notes: XNote[] }> {
+  const noteId = String(req?.noteId ?? '').trim();
+  if (!noteId) {
+    throw new Error('Editing a note requires a note id.');
+  }
+  const text = String(req?.text ?? '').trim();
+  if (!text) {
+    throw new Error('Note text is required.');
+  }
+  if (text.length > NOTE_MAX_LENGTH) {
+    throw new Error(`Note is too long. Maximum length is ${NOTE_MAX_LENGTH} characters.`);
+  }
+  const deps = { ...defaultUpdateNoteDeps(), ...overrides };
+  const notes = await deps.updateNote(req.caseId, noteId, text, deps.now());
   return { notes };
 }
 
@@ -180,23 +246,25 @@ function defaultRemoveNoteDeps(): RemoveNoteDeps {
 }
 
 /**
- * Delete the note attached to `findingId`, if any (Task 10). A findingId with no note is a
- * harmless no-op — the store is still re-written with the unchanged list so this always
- * returns the CURRENT fresh list (the same "returns the fresh list" contract as `saveNote`).
- * Rejects a blank `findingId` before touching the store, mirroring `saveNote`'s guard.
+ * Delete ONE analyst note, matched by `xNoteKey` (its own id, or a legacy note's `findingId`).
+ * M11: notes are now unbounded per finding, so a delete targets a single note by id rather than
+ * wiping the finding's (formerly sole) note — but a legacy note without an id still deletes when
+ * its `findingId` is passed, so the pre-M11 remove-by-finding path is preserved. An id matching
+ * nothing is a harmless no-op — the store is still re-written with the unchanged list so this
+ * always returns the CURRENT fresh list. Rejects a blank id before touching the store.
  */
 export async function removeNote(
   caseId: string,
-  findingId: string,
+  noteId: string,
   overrides: Partial<RemoveNoteDeps> = {}
 ): Promise<{ notes: XNote[] }> {
-  const id = String(findingId ?? '').trim();
+  const id = String(noteId ?? '').trim();
   if (!id) {
     throw new Error('A note must be attached to a finding.');
   }
   const deps = { ...defaultRemoveNoteDeps(), ...overrides };
   const existing = await deps.readNotes(caseId);
-  const notes = existing.filter((note) => note.findingId !== id);
+  const notes = existing.filter((note) => xNoteKey(note) !== id);
   await deps.writeNotes(caseId, notes);
   return { notes };
 }
@@ -232,6 +300,7 @@ export const X_ITEMS_CSV_HEADER = [
  *  along at runtime (they were persisted by `normalizePost` et al.), read here
  *  defensively so a legacy or partial record never throws mid-export. */
 interface XItemView {
+  id: string;
   kind: string;
   handle: string;
   authorId: string;
@@ -248,20 +317,45 @@ interface XItemView {
   media: string[];
   verified: boolean;
   provenance: string;
+  /** M9 evidence fields restored to the PDF footer (his `main.cjs:2159-2172`). */
+  evidenceHash: string;
+  /** The monitored profile this post was surfaced through — his `sourceUsername || username`. */
+  sourceUsername: string;
+  firstObserved: string;
+  lastObserved: string;
 }
 
-/** The runtime superset of a captured item — the X-specific fields the store round-trips. */
+/** The runtime superset of a captured item — the X-specific fields the store round-trips.
+ *  Two metric shapes flow through here: `XPostArtifact` (x-posts.json — the store this module's
+ *  file exports read) keeps a FLAT number map on `metrics` with the raw platform strings on a
+ *  separate `metricsRaw`; the older `XHarvestedItem` (x-items.json) keeps a NESTED `{raw}` per
+ *  metric. `metricRaw` reads either (M10). */
 type XItemRuntime = HarvestedItem & {
   kind?: string;
   media?: unknown;
   verified?: unknown;
   captureProvenance?: unknown;
-  metrics?: Record<string, { raw?: unknown } | undefined>;
+  metrics?: Record<string, { raw?: unknown } | number | undefined>;
+  metricsRaw?: Record<string, unknown>;
+  evidenceHash?: unknown;
+  sourceUsername?: unknown;
+  firstObservedAt?: unknown;
+  lastObservedAt?: unknown;
 };
 
-/** The verbatim display token of one metric, or '' — never an expanded integer. */
+/** The verbatim display token of one metric, or '' — never an expanded integer.
+ *  M10 fix: an `XPostArtifact` carries the raw platform string on the flat `metricsRaw` map
+ *  (its `metrics[name]` is a plain number, so the old `metrics?.[name]?.raw` read `undefined`
+ *  and every metric column rendered ''). Prefer `metricsRaw[name]`; fall back to the nested
+ *  `metrics[name].raw` shape so the legacy `x-items.json` records still serialize. */
 function metricRaw(item: XItemRuntime, name: string): string {
-  return String(item.metrics?.[name]?.raw ?? '');
+  const flat = item.metricsRaw?.[name];
+  if (flat != null) return String(flat);
+  const nested = item.metrics?.[name];
+  if (nested && typeof nested === 'object' && 'raw' in nested) {
+    return String((nested as { raw?: unknown }).raw ?? '');
+  }
+  return '';
 }
 
 /** Project a stored item to its flat export view. Remote media is filtered out here
@@ -271,12 +365,18 @@ function viewItem(raw: HarvestedItem): XItemView {
   const media = Array.isArray(item.media)
     ? item.media.map((m) => String(m ?? '')).filter((m) => m.startsWith('data:'))
     : [];
+  const handle = String(item.authorHandle ?? '');
+  const harvestedAt = String(item.harvestedAt ?? '');
+  // "Monitored via @source" — his `sourceUsername || username` (main.cjs:2172); the post's own
+  // handle is the honest fallback when no monitored-source was stored on the artifact.
+  const source = String(item.sourceUsername ?? '') || handle;
   return {
+    id: String(item.id ?? ''),
     kind: String(item.kind ?? ''),
-    handle: String(item.authorHandle ?? ''),
+    handle,
     authorId: String(item.authorId ?? ''),
     publishedAt: String(item.publishedAt ?? ''),
-    harvestedAt: String(item.harvestedAt ?? ''),
+    harvestedAt,
     text: String(item.text ?? ''),
     url: String(item.url ?? ''),
     likes: metricRaw(item, 'likes'),
@@ -288,7 +388,13 @@ function viewItem(raw: HarvestedItem): XItemView {
     // Honesty stamps are NOT trusted from the record — they are what this collector
     // guarantees. A visible-DOM capture is never verified; the provenance is fixed.
     verified: false,
-    provenance: 'visible-capture'
+    provenance: 'visible-capture',
+    // M9 evidence fields — first/last observed fall back to the capture time when the post
+    // carries no observed range (his `firstObservedAt || collectedAt`).
+    evidenceHash: String(item.evidenceHash ?? ''),
+    sourceUsername: source.replace(/^@+/, ''),
+    firstObserved: String(item.firstObservedAt ?? '') || harvestedAt,
+    lastObserved: String(item.lastObservedAt ?? '') || harvestedAt
   };
 }
 
@@ -340,7 +446,11 @@ export function itemsToCsv(items: readonly HarvestedItem[] | undefined): string 
  * `src` must never reach an `<img>` and beacon the analyst's view (the review's media
  * finding). No remote CSS/JS/fonts — fully offline, matching the app's other exports.
  */
-export function buildXItemsHtml(caseId: string, items: readonly HarvestedItem[] | undefined): string {
+export function buildXItemsHtml(
+  caseId: string,
+  items: readonly HarvestedItem[] | undefined,
+  notesByPost?: ReadonlyMap<string, readonly XNote[]>
+): string {
   const rows = (items ?? [])
     .map((raw) => {
       const v = viewItem(raw);
@@ -350,6 +460,25 @@ export function buildXItemsHtml(caseId: string, items: readonly HarvestedItem[] 
       const metrics = `likes ${escapeField(v.likes || '—')} · reposts ${escapeField(
         v.reposts || '—'
       )} · replies ${escapeField(v.replies || '—')} · views ${escapeField(v.views || '—')}`;
+      // M9: analyst-notes section (his `main.cjs:2159-2166`) — every note escaped, newlines
+      // rendered as <br>. Absent when the post has no notes (matches his conditional section).
+      const notes = notesByPost?.get(v.id) ?? [];
+      const notesHtml = notes.length
+        ? `<section class="analyst-notes"><h3>Analyst notes</h3>${notes
+            .map(
+              (n) =>
+                `<div class="analyst-note"><p>${escapeField(n.text).replace(/\n/g, '<br>')}</p>` +
+                `<small>Updated ${escapeField(n.savedAt)}</small></div>`
+            )
+            .join('')}</section>`
+        : '';
+      // M9: the evidence footer — KIND · Monitored via @source · First/Last observed · SHA-256
+      // (his `main.cjs:2172`). Keeps our added metrics/media footers above it.
+      const evidence =
+        `${escapeField(v.kind.toUpperCase())} · Monitored via @${escapeField(v.sourceUsername)} ` +
+        `· First observed ${escapeField(v.firstObserved)} · Last observed ${escapeField(
+          v.lastObserved
+        )} · SHA-256 ${escapeField(v.evidenceHash)}`;
       return (
         `<article class="x-item">` +
         `<header><span class="handle">${escapeField(v.handle)}</span> ` +
@@ -357,7 +486,9 @@ export function buildXItemsHtml(caseId: string, items: readonly HarvestedItem[] 
         `<time>${escapeField(v.publishedAt)}</time></header>` +
         `<p class="text">${escapeField(v.text)}</p>` +
         (imgs ? `<div class="media">${imgs}</div>` : '') +
+        notesHtml +
         `<footer class="metrics">${metrics}</footer>` +
+        `<footer class="evidence">${evidence}</footer>` +
         (v.url ? `<footer class="url">${escapeField(v.url)}</footer>` : '') +
         `<footer class="stamp">visible-capture · unverified</footer>` +
         `</article>`
@@ -371,7 +502,11 @@ export function buildXItemsHtml(caseId: string, items: readonly HarvestedItem[] 
     `.x-item{border:1px solid #ccc;border-radius:6px;padding:12px;margin:0 0 12px}` +
     `.handle{font-weight:bold}.kind{color:#666}.text{white-space:pre-wrap}` +
     `.media img{max-width:160px;max-height:160px;margin:4px}` +
-    `.metrics,.url,.stamp{color:#666;font-size:12px}</style></head>` +
+    `.metrics,.url,.stamp,.evidence{color:#666;font-size:12px}` +
+    `.analyst-notes{margin:9px 0;padding:8px 10px;border-left:3px solid #8a6a17;background:#f6f1e4}` +
+    `.analyst-notes h3{margin:0 0 6px;font-size:13px}` +
+    `.analyst-note{margin-top:7px;padding-top:7px;border-top:1px solid #d8ccb0}` +
+    `.analyst-note p{margin:0 0 3px}.analyst-note small{color:#666}</style></head>` +
     `<body><h1>X Listening Station export — ${escapeField(caseId)}</h1>` +
     `<p class="stamp">${(items ?? []).length} captured item(s) · visible-DOM capture · unverified</p>` +
     rows +
@@ -427,6 +562,68 @@ async function buildNetworkAnalysisInputs(
 }
 
 /**
+ * Assemble the COLLECTION HEALTH inputs (audit HIGH #6) from a case's persisted store — the
+ * run log (`store.listRunLog`, the roster's HEALTHY/PLATEAU/ERROR/IDLE signal), captured posts
+ * (postCount + oldestPostAt), and captured networks (follower/following counts). GI98 has no
+ * first-class profile record, so the TARGET ROSTER is DERIVED: the union of every source seen
+ * across runs, posts and networks, canonicalized with `normalizeSourceKey` so a run keyed by
+ * `channelId`, a post keyed by `channelId`/`authorHandle`, and a network keyed by `target` all
+ * collapse onto the same target. A target present in posts/networks but with NO run surfaces as
+ * IDLE. Synthetic/demo posts + accounts are excluded (honesty — a demo row must never inflate a
+ * real health count, same posture as `aggregateEntities`/`computeNetworkAnalysis`).
+ */
+async function buildCollectionHealthInputs(caseId: string): Promise<{
+  runs: ReturnType<typeof runLogRecordToRun>[];
+  options: { targets: XHealthTarget[]; posts: XHealthPost[]; relationships: XHealthRelationship[] };
+}> {
+  const store = await prodXStore();
+  const [runLog, posts, networks] = await Promise.all([
+    store.listRunLog(caseId),
+    store.posts.read(caseId),
+    store.networks.read(caseId)
+  ]);
+
+  // Roster: canonical source key -> best-available display username (first writer wins per source).
+  const roster = new Map<string, string>();
+  const remember = (rawKey: string, username: string): string => {
+    const key = normalizeSourceKey(rawKey);
+    if (key && !roster.has(key)) roster.set(key, username || rawKey);
+    return key;
+  };
+
+  const runs = runLog.map((rec) => {
+    const key = remember(rec.profileId || rec.username, rec.username);
+    // Re-key onto the canonical source key so runs/posts/networks group together.
+    return { ...runLogRecordToRun(rec), profileId: key || rec.profileId };
+  });
+
+  const healthPosts: XHealthPost[] = [];
+  for (const p of posts) {
+    if (p.synthetic) continue;
+    const key = remember(p.channelId || p.authorHandle, p.authorHandle || p.channelId);
+    if (!key) continue;
+    healthPosts.push({ profileId: key, createdAt: p.publishedAt || null });
+  }
+
+  const relationships: XHealthRelationship[] = [];
+  for (const artifact of networks) {
+    const key = remember(artifact.target, artifact.target);
+    if (!key) continue;
+    const relationship = artifact.kind === 'followers' ? 'follower' : 'following';
+    for (const account of artifact.accounts ?? []) {
+      if (account.synthetic) continue;
+      relationships.push({ profileId: key, relationship });
+    }
+  }
+
+  const targets: XHealthTarget[] = [...roster.entries()].map(([profileId, username]) => ({
+    profileId,
+    username
+  }));
+  return { runs, options: { targets, posts: healthPosts, relationships } };
+}
+
+/**
  * Derive an entity rollup over a case's captured post artifacts (store.ts `posts`,
  * populated by capture.ts's `captureTimeline`) via `extractEntities` (analysis.ts, Task 2).
  * Computed fresh on every call — nothing here is persisted to the `entitiesCache` sidecar
@@ -434,7 +631,7 @@ async function buildNetworkAnalysisInputs(
  * as `computeNetworkAnalysis`'s synthetic-profile/relationship exclusion — a demo record must
  * never inflate real entity intel.
  */
-function aggregateEntities(posts: readonly XPostArtifact[]): XEntityCacheEntry[] {
+export function aggregateEntities(posts: readonly XPostArtifact[]): XEntityCacheEntry[] {
   const byKey = new Map<string, XEntityCacheEntry>();
   for (const post of posts) {
     if (post.synthetic) continue;
@@ -455,11 +652,20 @@ function aggregateEntities(posts: readonly XPostArtifact[]): XEntityCacheEntry[]
         };
         byKey.set(key, entry);
       }
-      if (post.id && !entry.postIds.includes(post.id)) entry.postIds.push(post.id);
-      if (post.authorHandle && !entry.sourceUsernames.includes(post.authorHandle)) {
-        entry.sourceUsernames.push(post.authorHandle);
+      // L1: count per DISTINCT post-id (his main.cjs:493-496 gate), not per extractEntities
+      // iteration. The `count` bump + the `postIds` cap live INSIDE the distinct-post gate, so a
+      // duplicate post entry (or an entity that surfaces twice for the same post) never inflates
+      // the count. `postIds` is capped to the last 1000 (his `slice(-1000)`).
+      if (post.id && !entry.postIds.includes(post.id)) {
+        entry.postIds.push(post.id);
+        if (entry.postIds.length > 1000) entry.postIds = entry.postIds.slice(-1000);
+        entry.count += 1;
       }
-      entry.count += 1;
+      // L1: store the source username BARE (his `post.username`), never the @-prefixed handle.
+      const bareUsername = String(post.authorHandle ?? '').replace(/^@+/, '');
+      if (bareUsername && !entry.sourceUsernames.includes(bareUsername)) {
+        entry.sourceUsernames.push(bareUsername);
+      }
       if (post.publishedAt) {
         if (!entry.firstObservedAt || post.publishedAt < entry.firstObservedAt) {
           entry.firstObservedAt = post.publishedAt;
@@ -697,6 +903,17 @@ export interface InteractiveExportDeps {
   /** Forwarded in place of the module-level `exportNetworkCsv` (tests only — production omits
    *  this so the real, already-synthetic-filtered `exportNetworkCsv` runs). */
   readNetworkCsv?: (caseId: string) => Promise<{ csv: string; count: number }>;
+  /** FB4 (audit HIGH #10): serialize the posts JSON export as the self-describing MANIFEST
+   *  envelope. Production default (`productionPostsEnvelopeJson`) reads the case's notes/presets/
+   *  profile-snapshots/campaign + derives matches/entities; forwarded to `exportXPostsToFile`. */
+  serializeJson?: (caseId: string, posts: import('./store').XPostArtifact[]) => Promise<string> | string;
+  /** FB4: build the network JSON export envelope (embeds `computeNetworkAnalysis` + a
+   *  `manifestHash`). Production default (`productionNetworkEnvelope`) reads the case's networks;
+   *  tests inject a prebuilt envelope. */
+  readNetworkEnvelope?: (caseId: string) => Promise<XNetworkExportEnvelope>;
+  /** M9: read the case's analyst notes for the PDF evidence export. Forwarded to
+   *  `exportXPostsToFile`; production default reads the encrypted `notes` store. */
+  readNotes?: (caseId: string) => Promise<XNote[]>;
 }
 
 async function defaultAssertNotSymlink(filePath: string): Promise<void> {
@@ -719,7 +936,10 @@ function defaultInteractiveExportDeps(): InteractiveExportDeps {
     writeFile: async (filePath, data) => {
       const { writeFile } = await import('node:fs/promises');
       await writeFile(filePath, data);
-    }
+    },
+    serializeJson: productionPostsEnvelopeJson,
+    readNetworkEnvelope: productionNetworkEnvelope,
+    readNotes: async (caseId) => (await prodXStore()).notes.read(caseId)
   };
 }
 
@@ -734,7 +954,8 @@ export type InteractiveExportResult = ({ canceled: false } & XExportWriteResult)
 export async function exportPostsInteractive(
   caseId: string,
   format: XExportFileFormat,
-  overrides: Partial<InteractiveExportDeps> = {}
+  overrides: Partial<InteractiveExportDeps> = {},
+  filters?: XExportFilters
 ): Promise<InteractiveExportResult> {
   const deps: InteractiveExportDeps = { ...defaultInteractiveExportDeps(), ...overrides };
   const res = await deps.showSaveDialog(sanitizeExportName(caseId, format), EXPORT_FILE_FILTERS[format]);
@@ -742,8 +963,12 @@ export async function exportPostsInteractive(
   await deps.assertNotSymlink(res.filePath);
   const written = await exportXPostsToFile(caseId, format, res.filePath, {
     writeFile: deps.writeFile,
-    ...(deps.readPosts ? { readPosts: deps.readPosts } : {})
-  });
+    ...(deps.readPosts ? { readPosts: deps.readPosts } : {}),
+    // FB4: a `json` export is serialized as the self-describing manifest envelope; csv/pdf ignore it.
+    ...(deps.serializeJson ? { serializeJson: deps.serializeJson } : {}),
+    // M9: a `pdf` export threads the case's analyst notes into the per-post evidence section.
+    ...(deps.readNotes ? { readNotes: deps.readNotes } : {})
+  }, filters); // M15: per-export SOURCE / TYPE / QUERY filters
   return { canceled: false, ...written };
 }
 
@@ -772,6 +997,128 @@ export async function exportNetworkInteractive(
   await deps.writeFile(res.filePath, csv);
   const checksum = await writeChecksumSidecar({ writeFile: deps.writeFile }, res.filePath, csv);
   return { canceled: false, filePath: res.filePath, count, ...checksum };
+}
+
+// ---- FB4 (audit HIGH #10): self-describing JSON manifest envelopes -------
+// The pure envelope builders live in `exports.ts`; this layer supplies the case-scoped store reads
+// they need (notes/presets/profile-snapshots/campaign for posts; captured networks for the network
+// export), derives the preset `matches` + entity rollup, and threads an injected clock into the
+// envelope's provenance `exportedAt` (never into `manifestHash` — the builders strip it).
+
+/** Injectable seams for `assemblePostsExportEnvelope` — the case-scoped reads the manifest needs.
+ *  All pure store reads: no capture window, no network egress. */
+export interface PostsExportEnvelopeDeps {
+  readNotes: (caseId: string) => Promise<XNote[]>;
+  readPresets: (caseId: string) => Promise<XPreset[]>;
+  readProfileSnapshots: (caseId: string) => Promise<XProfileSnapshot[]>;
+  /** The campaign record written into the envelope's `case` field (his `case`). */
+  readCase: (caseId: string) => Promise<unknown>;
+  /** Injected clock → the envelope's provenance `exportedAt` (determinism; not hashed). */
+  now: () => string;
+}
+
+function defaultPostsExportEnvelopeDeps(): PostsExportEnvelopeDeps {
+  return {
+    readNotes: async (caseId) => (await prodXStore()).notes.read(caseId),
+    readPresets: async (caseId) => (await prodXStore()).presets.read(caseId),
+    readProfileSnapshots: async (caseId) => (await prodXStore()).profileSnapshots.read(caseId),
+    readCase: async (caseId) => (await listCampaigns()).find((c) => c.id === caseId) ?? null,
+    now: () => new Date().toISOString()
+  };
+}
+
+/**
+ * Assemble the self-describing posts export envelope (his `exportJson`, `main.cjs:2116-2134`) for a
+ * campaign from its already-read `posts` (the interactive path pre-excludes synthetic; this also
+ * filters defensively). Reads the case's notes/presets/profile-snapshots/campaign, derives the
+ * preset `matches` (only ENABLED presets are run) + the entity rollup over the REAL posts, and
+ * delegates the deterministic hashing to `buildPostsExportEnvelope`.
+ */
+export async function assemblePostsExportEnvelope(
+  caseId: string,
+  posts: readonly XPostArtifact[],
+  filters: Record<string, unknown> = {},
+  overrides: Partial<PostsExportEnvelopeDeps> = {}
+): Promise<XPostsExportEnvelope> {
+  const deps = { ...defaultPostsExportEnvelopeDeps(), ...overrides };
+  const real = posts.filter((p) => !p.synthetic);
+  const [notes, presets, profiles, caseRecord] = await Promise.all([
+    deps.readNotes(caseId),
+    deps.readPresets(caseId),
+    deps.readProfileSnapshots(caseId),
+    deps.readCase(caseId)
+  ]);
+  const matches: XExportPresetMatch[] = [];
+  for (const preset of presets) {
+    if (preset.enabled === false) continue;
+    for (const p of real) {
+      const matchedKeywords = evaluatePreset(preset, p);
+      if (matchedKeywords.length) {
+        matches.push({ presetId: preset.id, presetName: preset.name, postId: p.id, matchedKeywords });
+      }
+    }
+  }
+  return buildPostsExportEnvelope({
+    case: caseRecord,
+    filters,
+    profiles,
+    posts: real,
+    notes,
+    matches,
+    entities: aggregateEntities(real),
+    exportedAt: deps.now()
+  });
+}
+
+/** Production `serializeJson` seam for `exportPostsInteractive`: the full manifest envelope.
+ *  M15: the applied filters ride into the envelope's `filters` metadata block. */
+async function productionPostsEnvelopeJson(
+  caseId: string,
+  posts: XPostArtifact[],
+  filters?: XExportFilters
+): Promise<string> {
+  return serializeExportEnvelope(
+    await assemblePostsExportEnvelope(caseId, posts, (filters ?? {}) as Record<string, unknown>)
+  );
+}
+
+/**
+ * Build the network export envelope (his `exportRelationshipsJson`, `main.cjs:2485-2490`): the
+ * flattened relationships + the embedded `computeNetworkAnalysis` result + a deterministic
+ * `manifestHash`. A single injected clock feeds both the analysis `generatedAt` and the envelope
+ * `exportedAt`; neither reaches the hash (the builder strips them). Synthetic accounts are excluded
+ * by `computeNetworkAnalysis` and by the builder's relationship filter.
+ */
+async function productionNetworkEnvelope(caseId: string): Promise<XNetworkExportEnvelope> {
+  const now = new Date().toISOString();
+  const { profiles, relationships } = await buildNetworkAnalysisInputs(caseId);
+  const analysis = computeNetworkAnalysis(profiles, relationships, now);
+  const caseRecord = (await listCampaigns()).find((c) => c.id === caseId) ?? null;
+  return buildNetworkExportEnvelope({ case: caseRecord, filters: {}, relationships, analysis, exportedAt: now });
+}
+
+/**
+ * Export a campaign's captured network (followers/following) as the self-describing JSON envelope
+ * through the SAME native-save-dialog + SHA-256-sidecar discipline as `exportNetworkInteractive`
+ * (CSV) — restoring his `relationships:export-json` surface so the common-connection analysis
+ * reaches a JSON file, not only CSV. The renderer never supplies a filesystem path.
+ */
+export async function exportNetworkJsonInteractive(
+  caseId: string,
+  overrides: Partial<InteractiveExportDeps> = {}
+): Promise<InteractiveNetworkExportResult> {
+  const deps: InteractiveExportDeps = { ...defaultInteractiveExportDeps(), ...overrides };
+  const res = await deps.showSaveDialog(sanitizeExportName(caseId, 'json'), [
+    { name: 'JSON', extensions: ['json'] }
+  ]);
+  if (res.canceled || !res.filePath) return { canceled: true };
+  await deps.assertNotSymlink(res.filePath);
+  const build = deps.readNetworkEnvelope ?? productionNetworkEnvelope;
+  const envelope = await build(caseId);
+  const text = serializeExportEnvelope(envelope);
+  await deps.writeFile(res.filePath, text);
+  const checksum = await writeChecksumSidecar({ writeFile: deps.writeFile }, res.filePath, text);
+  return { canceled: false, filePath: res.filePath, count: envelope.relationships.length, ...checksum };
 }
 
 /**
@@ -812,13 +1159,30 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
     }
     return readNotes(ensureUuid(caseIdArg, 'caseId'));
   });
+  // M11: the note is targeted by `noteId` (its unique id). A legacy caller passing `findingId`
+  // still works — a pre-M11 note keys on its findingId — so accept either key here.
   deps.handle(channels.xListening.removeNote, (e, reqArg) => {
     assertTrustedSender(e);
-    const req = reqArg as { caseId?: unknown; findingId?: unknown } | undefined;
-    if (!req || typeof req.caseId !== 'string' || typeof req.findingId !== 'string') {
-      throw new Error('Removing a note requires a caseId and findingId.');
+    const req = reqArg as { caseId?: unknown; noteId?: unknown; findingId?: unknown } | undefined;
+    const key = typeof req?.noteId === 'string' ? req.noteId : req?.findingId;
+    if (!req || typeof req.caseId !== 'string' || typeof key !== 'string') {
+      throw new Error('Removing a note requires a caseId and note id.');
     }
-    return removeNote(ensureUuid(req.caseId, 'caseId'), req.findingId);
+    return removeNote(ensureUuid(req.caseId, 'caseId'), key);
+  });
+  // M11: edit one note in place, targeted by note id. Same pure-store posture as saveNote.
+  deps.handle(channels.xListening.updateNote, (e, reqArg) => {
+    assertTrustedSender(e);
+    const req = reqArg as Partial<UpdateNoteRequest> | undefined;
+    if (
+      !req ||
+      typeof req.caseId !== 'string' ||
+      typeof req.noteId !== 'string' ||
+      typeof req.text !== 'string'
+    ) {
+      throw new Error('Editing a note requires a caseId, noteId and text.');
+    }
+    return updateNote({ caseId: ensureUuid(req.caseId, 'caseId'), noteId: req.noteId, text: req.text });
   });
   // Task D1 — per-source cascade removal. `assertTrustedSender` FIRST; then require a caseId +
   // a non-empty `sourceKey` string before delegating. UUID-gates the caseId; the sourceKey is
@@ -978,7 +1342,11 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
     // then navigate it to the target profile and wait for the timeline before scraping.
     let win = getXWindow(caseId);
     if (!win) {
-      const opened = await openXSession(caseId, await loadClearnetEnabled());
+      // Ensure the capture window HIDDEN — a one-click capture must never pop up the Chromium
+      // browser (GhostExodus: "it shouldn't pop up ... when Capturing Timeline or adding
+      // entities"). The Enterprise app scraped in the background; only the explicit "Open
+      // Session" sign-in shows a window. The Tor gate + fail-closed posture are unchanged.
+      const opened = await openXSession(caseId, await loadClearnetEnabled(), { visible: false });
       if (opened.blocked) {
         return {
           blocked: true,
@@ -993,37 +1361,62 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
     if (!win) {
       return { blocked: true, reason: 'Could not open a capture window for this campaign.', added: 0, skipped: 0, posts: [] };
     }
-    // Drive the window to the target profile so the analyst does not have to hand-navigate it first
-    // (the "Capture Timeline" field says "capture THIS username"). A blocked/signed-out page returns
-    // its reason; a render timeout is non-fatal (the capture below then reports 0 honestly).
-    const nav = await navigateXToProfile(caseId, req.targetUsername);
-    if (nav.blocked) {
-      return { blocked: true, reason: nav.reason, added: 0, skipped: 0, posts: [] };
-    }
     // F2: the surrounding-thread collect gate is derived from THIS campaign's per-campaign
     // COLLECTION SETTINGS (RECORD TYPES), MAIN-side — the renderer never widens capture; it only
     // ever edits the persisted per-campaign record through `saveCollectionSettings` (clamped there).
     // `getCollectionSettings` is fail-safe (heals to minimal-capture defaults on any read error).
+    // Resolved BEFORE navigation so the collect gate can steer the route (audit HIGH #4 below).
     const collectionSettings = await getCollectionSettings(caseId);
     const collect = collectGateFromSettings(collectionSettings);
-    // F1: resolve this source's EFFECTIVE image policy MAIN-side, reusing the campaign settings just
-    // read (no second read) — the per-profile override resolved against `retrieveImages`. Injected so
-    // `captureTimeline` skips media caching for an 'off' source (no pbs.twimg fetch at all).
-    const imagesEnabled = await resolveEffectiveImageCollection(caseId, req.targetUsername, {
-      loadRetrieveImages: async () => collectionSettings.retrieveImages,
+    // Hoist the (already-validated) request fields into locals BEFORE the lock closure — TS drops the
+    // `req.X` string-narrowing across a closure boundary, and capturing them here keeps the exact
+    // shape unchanged.
+    const targetUsername = req.targetUsername;
+    const channelId = req.channelId;
+    const jobId = typeof req.jobId === 'string' ? req.jobId : caseId;
+    const channelLabel = typeof req.channelLabel === 'string' ? req.channelLabel : `@${req.channelId}`;
+    // M5: this manual capture is a collection op — acquire the single app-wide collection lock so it
+    // never egresses concurrently with a background sweep / archive tick / another manual op
+    // (Enterprise's global `sweepRunning`, `main.cjs:56,1836`). Contention THROWS "Another collection
+    // operation is already running." (his manual-entrypoint behaviour) rather than opening a second
+    // capture window. The lock spans the profile navigation + the scroll-and-accumulate scrape (the
+    // egressing work) and releases in `finally`.
+    return withCollectionLock(async () => {
+      // Drive the window to the target profile so the analyst does not have to hand-navigate it first
+      // (the "Capture Timeline" field says "capture THIS username"). A blocked/signed-out page returns
+      // its reason; a render timeout is non-fatal (the capture below then reports 0 honestly).
+      // Audit HIGH #4: with REPLIES on, navigate to `/with_replies` (His `scrapeProfile` route) so the
+      // target's own replies surface — the handle is re-validated + host-anchored inside navigateXToProfile.
+      const nav = await navigateXToProfile(caseId, targetUsername, {}, { collectReplies: collect.replies });
+      if (nav.blocked) {
+        return { blocked: true, reason: nav.reason, added: 0, skipped: 0, posts: [] };
+      }
+      // F1: resolve this source's EFFECTIVE image policy MAIN-side, reusing the campaign settings just
+      // read (no second read) — the per-profile override resolved against `retrieveImages`. Injected so
+      // `captureTimeline` skips media caching for an 'off' source (no pbs.twimg fetch at all).
+      const imagesEnabled = await resolveEffectiveImageCollection(caseId, targetUsername, {
+        loadRetrieveImages: async () => collectionSettings.retrieveImages,
+      });
+      return captureTimeline(
+        win,
+        {
+          caseId,
+          jobId,
+          channelId,
+          channelLabel,
+          targetUsername,
+          collect
+        },
+        {
+          imagesEnabledForSource: async () => imagesEnabled,
+          // FA1: reuse the per-campaign COLLECTION SETTINGS already read above — the capture's
+          // scroll-and-accumulate loop reads `profileScrollPasses`/`delayPerPassMs` from these, so a
+          // manual "Capture Timeline" now scrolls to this campaign's configured depth instead of the
+          // first viewport. Injecting the value avoids a second secure-fs decrypt of the same record.
+          loadCollectionSettings: () => collectionSettings,
+        },
+      );
     });
-    return captureTimeline(
-      win,
-      {
-        caseId,
-        jobId: typeof req.jobId === 'string' ? req.jobId : caseId,
-        channelId: req.channelId,
-        channelLabel: typeof req.channelLabel === 'string' ? req.channelLabel : `@${req.channelId}`,
-        targetUsername: req.targetUsername,
-        collect
-      },
-      { imagesEnabledForSource: async () => imagesEnabled },
-    );
   });
 
   // Task 14: list every captured post artifact for a campaign — the persisted source of truth
@@ -1129,11 +1522,16 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
     return computeNetworkAnalysis(profiles, relationships, new Date().toISOString());
   });
 
-  deps.handle(channels.xListening.health, (e) => {
+  deps.handle(channels.xListening.health, async (e, caseIdArg) => {
     assertTrustedSender(e);
-    // No collection-run log is persisted yet (a later task adds one) — an honest empty roster
-    // beats a fabricated one. See the channel doc in ipc-contracts.ts.
-    return deriveCollectionHealth([]);
+    if (typeof caseIdArg !== 'string' || !caseIdArg) {
+      throw new Error('Health requires a caseId.');
+    }
+    const caseId = ensureUuid(caseIdArg, 'caseId');
+    // Audit HIGH #6: read the persisted run log (+ posts/networks) and derive the per-target
+    // roster — HEALTHY/PLATEAU/ERROR for a collected target, IDLE for a never-collected one.
+    const { runs, options } = await buildCollectionHealthInputs(caseId);
+    return deriveCollectionHealth(runs, options);
   });
 
   deps.handle(channels.xListening.entities, async (e, caseIdArg) => {
@@ -1145,6 +1543,18 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
     const store = await prodXStore();
     const posts = await store.posts.read(caseId);
     return aggregateEntities(posts);
+  });
+
+  // Campaign-wide avatar lookup for the ENTITY INDEX (and any identity consumer): canonical handle
+  // → LOCAL display data: URI, read back from the per-campaign avatar cache. CACHE-ONLY — no capture
+  // window, no network; `buildAvatarLookup` can only ever emit local `data:` URIs (never a remote
+  // URL). Sender check + arg validation only, same shape as `entities` above.
+  deps.handle(channels.xListening.avatars, async (e, caseIdArg) => {
+    assertTrustedSender(e);
+    if (typeof caseIdArg !== 'string' || !caseIdArg) {
+      throw new Error('Avatars requires a caseId.');
+    }
+    return buildAvatarLookup(ensureUuid(caseIdArg, 'caseId'));
   });
 
   // Presets: pure store CRUD (extend XStore, Task 1) — no capture window, no network.
@@ -1249,16 +1659,25 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
       );
     }
     const maxCycles = Number(req.maxCycles);
-    return runArchiveSteps(
-      win,
-      {
-        caseId,
-        jobId: caseId,
-        channelId: req.channelId,
-        channelLabel: typeof req.channelLabel === 'string' ? req.channelLabel : `@${req.channelId}`,
-        targetUsername: req.targetUsername
-      },
-      { maxCycles: Number.isFinite(maxCycles) && maxCycles > 0 ? maxCycles : 1 }
+    // Hoist the validated request fields before the lock closure (TS drops `req.X` narrowing across it).
+    const channelId = req.channelId;
+    const channelLabel = typeof req.channelLabel === 'string' ? req.channelLabel : `@${req.channelId}`;
+    const targetUsername = req.targetUsername;
+    // M5: a manual archive is a collection op — hold the single app-wide collection lock across the
+    // whole (possibly multi-cycle) run so it never egresses concurrently with a sweep / another op
+    // (Enterprise `runArchiveCycle`'s `sweepRunning`, `main.cjs:1962`). Contention throws.
+    return withCollectionLock(() =>
+      runArchiveSteps(
+        win,
+        {
+          caseId,
+          jobId: caseId,
+          channelId,
+          channelLabel,
+          targetUsername
+        },
+        { maxCycles: Number.isFinite(maxCycles) && maxCycles > 0 ? maxCycles : 1 }
+      )
     );
   });
 
@@ -1275,14 +1694,22 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
   // ---- Task 15(b): interactive (save-dialog-gated) exports -----------------
   deps.handle(channels.xListening.exportPostsToFile, (e, reqArg) => {
     assertTrustedSender(e);
-    const req = reqArg as { caseId?: unknown; format?: unknown } | undefined;
+    const req = reqArg as { caseId?: unknown; format?: unknown; filters?: unknown } | undefined;
     if (!req || typeof req.caseId !== 'string' || !req.caseId) {
       throw new Error('Export requires a caseId.');
     }
     if (!isXExportFileFormat(req.format)) {
       throw new Error('Export requires a format of json, csv or pdf.');
     }
-    return exportPostsInteractive(ensureUuid(req.caseId, 'caseId'), req.format);
+    // M15: coerce the renderer-supplied per-export filters to a safe string shape — an unexpected
+    // field type is dropped rather than trusted (the filter only narrows an already-safe post list).
+    const rawFilters = (req.filters ?? {}) as Record<string, unknown>;
+    const filters: XExportFilters = {
+      source: typeof rawFilters.source === 'string' ? rawFilters.source : undefined,
+      kind: typeof rawFilters.kind === 'string' ? rawFilters.kind : undefined,
+      query: typeof rawFilters.query === 'string' ? rawFilters.query : undefined,
+    };
+    return exportPostsInteractive(ensureUuid(req.caseId, 'caseId'), req.format, {}, filters);
   });
 
   deps.handle(channels.xListening.exportNetworkToFile, (e, caseIdArg) => {
@@ -1291,6 +1718,16 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
       throw new Error('Network export requires a caseId.');
     }
     return exportNetworkInteractive(ensureUuid(caseIdArg, 'caseId'));
+  });
+
+  // FB4 (audit HIGH #10): network JSON export — the envelope embedding computeNetworkAnalysis +
+  // manifestHash. Sender check FIRST; UUID-gate the caseId ahead of any store path/dialog.
+  deps.handle(channels.xListening.exportNetworkJsonToFile, (e, caseIdArg) => {
+    assertTrustedSender(e);
+    if (typeof caseIdArg !== 'string' || !caseIdArg) {
+      throw new Error('Network JSON export requires a caseId.');
+    }
+    return exportNetworkJsonInteractive(ensureUuid(caseIdArg, 'caseId'));
   });
 
   // ---- Task A2: historical change events (store.ts listChangeEvents) --------
@@ -1318,6 +1755,20 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
     return store.listRunLog(ensureUuid(caseIdArg, 'caseId'));
   });
 
+  // ---- M2: per-handle network delta events (store.ts listNetworkEvents) -----
+  // Derived read (no capture window, no network) — newest-first, capped ~500. Sender check + arg
+  // validation only, same shape as `changeEvents`/`runLog`. The events are emitted by the network
+  // capture path (capture.ts `captureNetwork` → store.networkEvents). No-auto-unfollow honesty:
+  // `not_seen_latest` is an OBSERVATION the renderer labels as a review candidate, never a claim.
+  deps.handle(channels.xListening.networkEvents, async (e, caseIdArg) => {
+    assertTrustedSender(e);
+    if (typeof caseIdArg !== 'string' || !caseIdArg) {
+      throw new Error('Listing network delta events requires a caseId.');
+    }
+    const store = await prodXStore();
+    return store.listNetworkEvents(ensureUuid(caseIdArg, 'caseId'));
+  });
+
   // ---- Task A1: live post verification (VERIFY LIVE) -----------------------
   // Opens the stored post's real URL in a Tor-gated capture window (capture.ts `verifyPost` reads
   // the acked clearnet flag + `resolveXTorGate` itself, MAIN-side — fail-closed, no clearnet
@@ -1330,7 +1781,10 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
     if (!req || typeof req.caseId !== 'string' || typeof req.postId !== 'string' || !req.postId) {
       throw new Error('Verifying a post requires a caseId and postId.');
     }
-    return verifyPost(ensureUuid(req.caseId, 'caseId'), req.postId);
+    // M5: a live verify opens a Tor-gated capture window (Enterprise `verifyPostLive` runs under the
+    // global `sweepRunning`, `main.cjs:2425-2427`) — hold the app-wide collection lock so it never
+    // races a sweep/archive/manual capture. Contention throws.
+    return withCollectionLock(() => verifyPost(ensureUuid(req.caseId as string, 'caseId'), req.postId as string));
   });
 
   // ---- Task C1: live follower/following network extraction (captureNetwork) ----------------
@@ -1360,12 +1814,17 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
     }
     const targetUsername = req.targetUsername;
     const channelId = typeof req.channelId === 'string' && req.channelId ? req.channelId : targetUsername;
-    return captureNetwork({
-      caseId: ensureUuid(req.caseId, 'caseId'),
-      channelId,
-      targetUsername,
-      kind: kind as 'followers' | 'following'
-    });
+    // M5: live follower/following extraction opens a Tor-gated capture window (Enterprise's
+    // relationship capture runs under the global `sweepRunning`, `main.cjs:2427`) — hold the app-wide
+    // collection lock so it never egresses concurrently with a sweep/archive/manual capture.
+    return withCollectionLock(() =>
+      captureNetwork({
+        caseId: ensureUuid(req.caseId as string, 'caseId'),
+        channelId,
+        targetUsername,
+        kind: kind as 'followers' | 'following'
+      })
+    );
   });
 
   // ---- Task E1: Tor-gated "open in X" affordances (openInX) ----------------

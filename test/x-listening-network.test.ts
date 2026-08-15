@@ -221,7 +221,76 @@ describe('networkToCsv', () => {
     const csv = networkToCsv([art]);
     expect(csv.startsWith('﻿')).toBe(true);
     const lines = csv.replace('﻿', '').split('\r\n');
-    expect(lines[0]).toContain('handle');
+    // Fidelity (M4/audit): the header carries his `username` column (renamed from `handle`).
+    expect(lines[0]).toContain('username');
     expect(lines).toHaveLength(1 + art.accounts.length);
+  });
+
+  // ---- M4(csv): full 10-column network CSV (his main.cjs:2505) ----------
+  const parseRow = (line: string) => line.split(',').map((c) => c.replace(/^"|"$/g, ''));
+
+  it('emits the full 10-column network CSV with url, observed_count, evidence_sha256, and separate first/last observed (M4)', () => {
+    const richArt: XNetworkArtifact = {
+      target: '@target',
+      kind: 'followers',
+      capturedAt: '2026-08-06T12:00:00.000Z',
+      accounts: [
+        {
+          handle: '@alice',
+          displayName: 'Alice',
+          bio: 'analyst',
+          evidenceHash: 'ev-hash-1',
+          firstObservedAt: '2026-08-01T00:00:00.000Z',
+          lastObservedAt: '2026-08-06T12:00:00.000Z',
+          observedCount: 4,
+        },
+      ],
+    };
+    const csv = networkToCsv([richArt]);
+    const lines = csv.replace('﻿', '').split('\r\n');
+    const header = parseRow(lines[0]);
+    expect(header).toEqual([
+      'source_username',
+      'relationship',
+      'username',
+      'display_name',
+      'bio',
+      'url',
+      'first_observed_at',
+      'last_observed_at',
+      'observed_count',
+      'evidence_sha256',
+    ]);
+    const row = parseRow(lines[1]);
+    const col = (name: string) => row[header.indexOf(name)];
+    // The @-leading handle cells are apostrophe-guarded by our CSV formula-injection hardening
+    // (kept, not "fixed" toward his); the derived url starts with `h` so it is never guarded.
+    expect(col('source_username')).toBe("'@target");
+    expect(col('relationship')).toBe('followers');
+    expect(col('username')).toBe("'@alice");
+    expect(col('url')).toBe('https://x.com/alice');
+    expect(col('first_observed_at')).toBe('2026-08-01T00:00:00.000Z');
+    expect(col('last_observed_at')).toBe('2026-08-06T12:00:00.000Z');
+    expect(col('observed_count')).toBe('4');
+    expect(col('evidence_sha256')).toBe('ev-hash-1');
+  });
+
+  it('defaults observed_count to 1 and first/last observed to captured_at when the account lacks them (M4)', () => {
+    const thinArt: XNetworkArtifact = {
+      target: '@t',
+      kind: 'following',
+      capturedAt: '2026-08-06T12:00:00.000Z',
+      accounts: [{ handle: 'bob', displayName: 'Bob', bio: '' }],
+    };
+    const csv = networkToCsv([thinArt]);
+    const lines = csv.replace('﻿', '').split('\r\n');
+    const header = parseRow(lines[0]);
+    const row = parseRow(lines[1]);
+    const col = (name: string) => row[header.indexOf(name)];
+    expect(col('observed_count')).toBe('1');
+    expect(col('first_observed_at')).toBe('2026-08-06T12:00:00.000Z');
+    expect(col('last_observed_at')).toBe('2026-08-06T12:00:00.000Z');
+    // url is derived host-anchored from the bare handle (no @ prefix in the fixture)
+    expect(col('url')).toBe('https://x.com/bob');
   });
 });

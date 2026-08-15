@@ -183,6 +183,8 @@ export async function markPostUnavailable(
 export interface ProfileSnapshotInput {
   profileId: string;
   sourceUsername?: string;
+  /** The visible profile display name (FB2) — folded into the signature so a rename is detected. */
+  displayName?: string;
   bio?: string;
   avatar?: string;
   location?: string;
@@ -226,6 +228,7 @@ export async function snapshotProfile(
   const snapshot: XProfileSnapshot = {
     profileId,
     ...(sourceUsername ? { sourceUsername } : {}),
+    displayName: canonical.displayName,
     bio: canonical.bio,
     avatar: canonical.avatar,
     location: canonical.location,

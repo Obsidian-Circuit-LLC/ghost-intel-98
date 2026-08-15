@@ -37,9 +37,13 @@ import {
   normalizePost,
   normalizeReply,
   normalizeRepost,
+  normalizeComment,
   normalizeNetwork,
   selectTimelineCaptures,
+  selectThreadComments,
+  X_PROFILE_META_SCRIPT,
   type RawPost,
+  type RawProfileMeta,
   type RawUserCell,
   type NormalizeContext,
   type XHarvestedItem,
@@ -48,11 +52,21 @@ import {
   type XVerifyPage,
 } from './extract';
 import { postEvidenceHash } from './evidence';
-import { ingestPostsWithHistory, markPostUnavailable } from './changes';
+import {
+  ingestPostsWithHistory,
+  markPostUnavailable,
+  snapshotProfile,
+  type ProfileSnapshotInput,
+  type ProfileSnapshotResult,
+} from './changes';
+import { MEDIA_HOST_ALLOWLIST } from '../capture/security';
 import { buildRunRecord, recordCollectionRun, type RunRecordInput } from './run-log';
+import { deriveNetworkDeltaEvents, dedupeHandlesCI, X_MAX_SCAN_OBSERVED } from './store';
 import type {
   XNetworkAccount,
   XNetworkArtifact,
+  XNetworkDeltaEvent,
+  XNetworkScanState,
   XPostArtifact,
   XPostMetrics,
   XPostMetricsRaw,
@@ -88,6 +102,60 @@ export const DEFAULT_COLLECT: XCollectSettings = {
   comments: false,
 };
 
+/** FA1 scroll-and-accumulate loop bounds — Enterprise `scrapeProfile`'s hard clamps (`main.cjs:1657-1658`).
+ *  The persisted `profileScrollPasses` is already clamped to `[1,20]` by the shared reducer; this is a
+ *  defence-in-depth re-clamp (and it also bounds any `req.passes` override the archive path supplies). */
+export const MAX_PROFILE_SCROLL_PASSES = 120;
+const MIN_PROFILE_SCROLL_PASSES = 1;
+const MIN_PASS_DELAY_MS = 500;
+const MAX_PASS_DELAY_MS = 5000;
+/** Consecutive no-growth passes that end the scroll loop early (a stable end — the timeline gave
+ *  nothing new). Enterprise `scrapeProfile` stops after 5 stagnant passes (`main.cjs:1681,1691`). */
+const TIMELINE_STAGNATION_LIMIT = 5;
+
+/** FA3 comment-thread clamps — Enterprise `scrapeCommentsForPosts`'s bounds (`main.cjs:1606-1608`),
+ *  re-clamped MAIN-side (defence-in-depth) even though the shared reducer already bounds the persisted
+ *  `commentThreadsPerSource` / `commentScrollPasses`. `MAX_COMMENT_SCROLL_PASSES` follows OUR shared
+ *  clamp band (`[1,12]`), the ceiling the settings reducer already enforces. */
+const MIN_COMMENT_THREADS = 1;
+const MAX_COMMENT_THREADS = 20;
+const MIN_COMMENT_SCROLL_PASSES = 1;
+const MAX_COMMENT_SCROLL_PASSES = 12;
+/** Fixed post-navigation SPA-render settle before a thread's comments are read — Enterprise
+ *  `scrapeCommentsForPosts` sleeps 2500ms after `loadURL` and before `assertSignedInPage`
+ *  (`main.cjs:1613-1614`). Wall-clock pacing only; feeds NO evidence/hash path. */
+const COMMENT_THREAD_SETTLE_MS = 2500;
+
+/** Fixed post-navigation SPA-render settle before a live post is READ during verification —
+ *  Enterprise `verifyPostLive` does `loadURL` → `sleep(2600)` → `assertSignedInPage` → read
+ *  (`main.cjs:2626-2640`). Without it the read can race X's client-side hydration and misread a
+ *  not-yet-rendered page as "available, unchanged". Wall-clock pacing only; feeds NO evidence/hash
+ *  path. Exported so the verify suite can assert the ceiling. */
+export const VERIFY_POST_SETTLE_MS = 2600;
+
+/** STATIC scroll payload — no interpolation, no scraped data. Scrolls the timeline to the bottom so
+ *  the SPA lazy-loads the next batch of posts before the next `X_POST_SCRIPT` scrape, exactly as
+ *  Enterprise `scrapeProfile` (`window.scrollTo(0, document.body.scrollHeight)`, `main.cjs:1682-1688`).
+ *  Returns the post-scroll scroll position purely for logging/telemetry — never fed back into the page. */
+export const X_TIMELINE_SCROLL_SCRIPT = `
+  (() => {
+    const scroller = document.scrollingElement || document.documentElement;
+    window.scrollTo(0, document.body.scrollHeight);
+    return { top: scroller ? scroller.scrollTop : 0, height: scroller ? scroller.scrollHeight : 0 };
+  })()
+`;
+
+/** Resolve the effective scroll-pass budget for one capture: an explicit finite `req.passes > 0`
+ *  (the archive-depth override, FA2) beats the campaign's persisted `profileScrollPasses`; either is
+ *  re-clamped to `[1, MAX_PROFILE_SCROLL_PASSES]`. Pure. */
+function resolveScrollPasses(reqPasses: number | undefined, settingsPasses: number): number {
+  const override = Number(reqPasses);
+  const base =
+    Number.isFinite(override) && override > 0 ? Math.floor(override) : Math.floor(Number(settingsPasses));
+  const safe = Number.isFinite(base) && base > 0 ? base : MIN_PROFILE_SCROLL_PASSES;
+  return Math.max(MIN_PROFILE_SCROLL_PASSES, Math.min(MAX_PROFILE_SCROLL_PASSES, safe));
+}
+
 /** The renderer-supplied context for a timeline capture: which case/job, which profile
  *  timeline is being observed, and which surrounding-thread kinds to admit. `harvestedAt`
  *  + `collectorVersion` are stamped MAIN-side (the trusted clock + version), never accepted
@@ -103,6 +171,12 @@ export interface XTimelineCaptureRequest {
   targetUsername: string;
   /** Which surrounding-thread kinds to capture. Defaults to `DEFAULT_COLLECT` (all off). */
   collect?: XCollectSettings;
+  /** FA1 scroll-depth OVERRIDE: how many scroll-and-accumulate passes to run. When set (finite,
+   *  > 0) it beats this campaign's persisted `profileScrollPasses` — the seam the incremental-archive
+   *  path (FA2) uses to deepen a profile's capture cycle by cycle (Enterprise `scrapeProfile`'s
+   *  `options.passes`, `main.cjs:1654`). Absent ⇒ the campaign's `profileScrollPasses` drives the loop.
+   *  Re-clamped to `[1, MAX_PROFILE_SCROLL_PASSES]` MAIN-side regardless of source. */
+  passes?: number;
   /** Which collection operation this capture is (Task A3 run-log stamping). Defaults to `'posts'`
    *  (a manual/live timeline capture); the archive path passes `'archive_posts'` so its run record
    *  is logged as an incremental-archive cycle, not a manual capture. */
@@ -149,6 +223,55 @@ export interface XCaptureDeps {
    *  evidence — a failure here MUST NOT break the capture or drop captured posts, so
    *  `captureTimeline` calls this best-effort (see `emitRun`). */
   recordRun: (caseId: string, record: XRunLogRecord) => Promise<void>;
+  /** FA1: read THIS campaign's per-campaign COLLECTION SETTINGS — the source of the scroll-pass
+   *  budget (`profileScrollPasses`) and the inter-pass delay (`delayPerPassMs`) when `req.passes` is
+   *  unset. Production default is the fail-safe `getCollectionSettings` (heals to
+   *  `DEFAULT_COLLECTION_SETTINGS` on any read error), so a settings hiccup degrades to the
+   *  minimal-capture default depth rather than breaking the capture; a unit harness injects its own
+   *  so the scroll loop can be bound deterministically. */
+  loadCollectionSettings: (caseId: string) => Promise<XCollectionSettings> | XCollectionSettings;
+  /** FA1: scroll the capture page to the bottom for the next pass (a static in-page payload, no
+   *  interpolation — `window.scrollTo(0, document.body.scrollHeight)`). Injected so the accumulate
+   *  loop is exercisable without a live window; the production default runs
+   *  `X_TIMELINE_SCROLL_SCRIPT`. Never called after the final pass (gentle on X). */
+  scroll: (win: Electron.BrowserWindow) => Promise<void>;
+  /** FA3 (audit HIGH #3): navigate the capture window to a NEW url — the comment-thread scraping path
+   *  loads each captured root post's thread URL into the SAME hidden, Tor-gated window (Enterprise
+   *  `scrapeCommentsForPosts` calls `win.loadURL(rootPost.url)`, `main.cjs:1612`). The URL passed here
+   *  is ALWAYS the canonical `https://x.com/<user>/status/<id>` returned by `assertValidPostUrl` —
+   *  host-anchored + username-validated + `/status/<digits>`-checked BEFORE this seam is ever called,
+   *  so an off-host / malformed post URL is never loaded. Injected so the comment path is exercisable
+   *  without a live window; the production default is `win.loadURL(url)`. */
+  navigate: (win: Electron.BrowserWindow, url: string) => Promise<void>;
+  /** FA1 (finding 1): re-probe the page's signed-in/challenge state MID-SCROLL — Enterprise
+   *  `scrapeProfile` calls `assertSignedInPage(win)` after EVERY scroll (`main.cjs:1690`) so a session
+   *  drop or a verification challenge that surfaces AFTER a scroll stops the capture immediately. The
+   *  accumulate loop calls this after each scroll+delay and, on `{ blocked: true }`, BREAKS and records
+   *  the run as an ERROR (stopReason `'challenge'`) rather than scrolling+scraping a flagged page for
+   *  more passes and then dishonestly logging a clean stable end. Production default reuses the same
+   *  static `X_PAGE_STATE_SCRIPT` probe `guard` uses; a unit harness injects its own. */
+  assertSignedIn: (win: Electron.BrowserWindow) => Promise<{ blocked: boolean; reason?: string }>;
+  /** FA1: await `ms` between scroll passes (Enterprise `scrollDelayMs`, ~1100ms) so the SPA has time
+   *  to render the newly-scrolled-in posts before the next scrape. Injected (no-op) in unit harnesses
+   *  so the loop runs instantly; the production default is a real `setTimeout`-backed sleep. Wall-clock
+   *  pacing only — it feeds NO evidence/hash path. */
+  delay: (ms: number) => Promise<void>;
+  /** FB2 (audit HIGH #7): read the target profile HEADER's visible metadata (display name / bio /
+   *  location / website / avatar) from the SIGNED-IN capture page via the STATIC `X_PROFILE_META_SCRIPT`,
+   *  host-anchoring the avatar. Returns `null` when the header could not be read (Enterprise
+   *  `readProfileMetadata` swallows its own errors to `null`). Used to feed `snapshotProfile` so a
+   *  bio/avatar/location/website/DISPLAY-NAME change over time emits a `profile_change`. Injected so
+   *  the profile-change path is exercisable without a live window. */
+  readProfileMeta: (win: Electron.BrowserWindow) => Promise<RawProfileMeta | null>;
+  /** FB2: snapshot the captured profile's metadata + emit a `profile_change` on a metadata-signature
+   *  diff vs the last snapshot (the first snapshot is a baseline, no event). Production default routes
+   *  to changes.ts `snapshotProfile` over the encrypted `profileSnapshots` / `changeEvents` sidecars;
+   *  a unit harness injects one bound to an in-memory store. */
+  snapshotProfile: (
+    caseId: string,
+    input: ProfileSnapshotInput,
+    opts: { now: string },
+  ) => Promise<ProfileSnapshotResult>;
   /** Injected clock — the ISO capture time stamped onto every item. */
   now: () => string;
 }
@@ -160,14 +283,14 @@ function defaultRunCapture(win: Electron.BrowserWindow, js: string): Promise<unk
 }
 
 /**
- * The production challenge/lock gate: probe the visible page and refuse on a challenge OR
- * a signed-out page (the two `assertSignedInPage` branches); otherwise run the capture.
- * Uses `defaultRunCapture` for the probe.
+ * FA1 (finding 1): probe the capture page's signed-in/challenge state via the STATIC
+ * `X_PAGE_STATE_SCRIPT` and classify it (the two `assertSignedInPage` branches: a challenge OR a
+ * signed-out page → `{ blocked: true }`). Shared by the up-front `defaultGuard` AND the MID-SCROLL
+ * re-assertion (`defaultDeps().assertSignedIn`) so both apply identical fail-closed semantics.
  */
-async function defaultGuard<T>(
+async function probeSignedInState(
   win: Electron.BrowserWindow,
-  capture: () => Promise<T>,
-): Promise<{ blocked: boolean; reason?: string; result?: T }> {
+): Promise<{ blocked: boolean; reason?: string }> {
   const probe = (await defaultRunCapture(win, X_PAGE_STATE_SCRIPT)) as XPageState;
   const state = classifyXPageState({
     url: String(probe?.url ?? ''),
@@ -178,6 +301,20 @@ async function defaultGuard<T>(
   if (!state.signedIn) {
     return { blocked: true, reason: state.reason ?? 'The saved X session is no longer signed in.' };
   }
+  return { blocked: false };
+}
+
+/**
+ * The production challenge/lock gate: probe the visible page and refuse on a challenge OR
+ * a signed-out page (the two `assertSignedInPage` branches); otherwise run the capture.
+ * Uses `probeSignedInState` (which uses `defaultRunCapture`) for the up-front probe.
+ */
+async function defaultGuard<T>(
+  win: Electron.BrowserWindow,
+  capture: () => Promise<T>,
+): Promise<{ blocked: boolean; reason?: string; result?: T }> {
+  const state = await probeSignedInState(win);
+  if (state.blocked) return { blocked: true, reason: state.reason };
   return { blocked: false, result: await capture() };
 }
 
@@ -220,7 +357,62 @@ function defaultDeps(): XCaptureDeps {
     recordRun: async (caseId, record) => {
       await recordCollectionRun(caseId, record);
     },
+    loadCollectionSettings: async (caseId) => {
+      const { getCollectionSettings } = await import('./collection-settings');
+      return getCollectionSettings(caseId);
+    },
+    scroll: async (win) => {
+      await defaultRunCapture(win, X_TIMELINE_SCROLL_SCRIPT);
+    },
+    navigate: async (win, url) => {
+      await win.loadURL(url);
+    },
+    assertSignedIn: (win) => probeSignedInState(win),
+    delay: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    readProfileMeta: async (win) => {
+      try {
+        const raw = await defaultRunCapture(win, X_PROFILE_META_SCRIPT);
+        return normalizeProfileMeta(raw);
+      } catch {
+        // Enterprise `readProfileMetadata` swallows any scrape error to `null` — a header that
+        // could not be read simply skips the snapshot, never breaks the capture.
+        return null;
+      }
+    },
+    snapshotProfile: (caseId, input, opts) => snapshotProfile(caseId, input, opts),
     now: () => new Date().toISOString(),
+  };
+}
+
+/** Host-anchor a scraped profile-header avatar `src` (FB2): return it VERBATIM only when its host is
+ *  the X image CDN (exact host or a subdomain of a `MEDIA_HOST_ALLOWLIST` entry — the same named,
+ *  auditable allowlist the media-fetch path enforces), else ''. Anchored on `new URL(...).hostname`,
+ *  NOT a substring, so an off-allowlist decoy (`https://evil.example/?x=pbs.twimg.com`) is dropped.
+ *  The URL is never fetched or inlined here — it is used ONLY as a change fingerprint in the snapshot
+ *  signature, so an avatar swap flips the signature and emits a `profile_change`. */
+export function hostAnchoredAvatar(rawUrl: string): string {
+  const url = String(rawUrl ?? '').trim();
+  if (!url) return '';
+  let host: string;
+  try {
+    host = new URL(url).hostname.toLowerCase();
+  } catch {
+    return '';
+  }
+  const allowed = MEDIA_HOST_ALLOWLIST.some((a) => host === a || host.endsWith(`.${a}`));
+  return allowed ? url : '';
+}
+
+/** Coerce a raw profile-header scrape into a `RawProfileMeta`, trimming every text field and
+ *  host-anchoring the avatar. Pure (no fetch); `null`/malformed input → all-empty. */
+export function normalizeProfileMeta(raw: unknown): RawProfileMeta {
+  const r = (raw ?? {}) as Partial<RawProfileMeta>;
+  return {
+    displayName: String(r.displayName ?? '').trim(),
+    bio: String(r.bio ?? '').trim(),
+    location: String(r.location ?? '').trim(),
+    website: String(r.website ?? '').trim(),
+    avatar: hostAnchoredAvatar(String(r.avatar ?? '')),
   };
 }
 
@@ -307,6 +499,10 @@ export function toPostArtifact(item: XHarvestedItem, mediaRefs?: readonly string
     parentPostId,
     metrics,
     metricsRaw,
+    // Carry the per-post display name (M1) when one was observed. Set BEFORE the hash, but
+    // `canonicalPostEvidence` excludes it, so it is preserved for display without perturbing
+    // `evidenceHash` (a repost/comment author's name is not content evidence of the post).
+    ...(item.displayName ? { displayName: item.displayName } : {}),
     mediaRefs: mediaRefs && mediaRefs.length ? [...mediaRefs] : undefined,
     evidenceHash: '',
   };
@@ -340,6 +536,18 @@ export async function captureTimeline(
     req.caseId,
     normalizeXSourceKey(req.targetUsername),
   );
+  // FA1: resolve the scroll-and-accumulate budget from THIS campaign's persisted COLLECTION SETTINGS
+  // (`profileScrollPasses`/`delayPerPassMs`, already clamped by the shared reducer) — or the explicit
+  // archive-depth override (`req.passes`, FA2). The read is fail-safe (heals to
+  // `DEFAULT_COLLECTION_SETTINGS`), so a settings hiccup degrades to minimal-depth capture rather than
+  // breaking the run. Re-clamped MAIN-side (defence-in-depth) regardless of source.
+  const settings = await deps.loadCollectionSettings(req.caseId);
+  const passes = resolveScrollPasses(req.passes, settings.profileScrollPasses);
+  const rawDelay = Math.floor(Number(settings.delayPerPassMs));
+  const delayMs = Math.max(
+    MIN_PASS_DELAY_MS,
+    Math.min(MAX_PASS_DELAY_MS, Number.isFinite(rawDelay) && rawDelay > 0 ? rawDelay : MIN_PASS_DELAY_MS),
+  );
   const ctx: NormalizeContext = {
     caseId: req.caseId,
     jobId: req.jobId,
@@ -350,9 +558,76 @@ export async function captureTimeline(
   };
 
   const gated = await deps.guard(win, async () => {
-    const rawCollected = await deps.runCapture(win, X_POST_SCRIPT);
-    const raws: RawPost[] = Array.isArray(rawCollected) ? (rawCollected as RawPost[]) : [];
-    const selections = selectTimelineCaptures(raws, req.targetUsername, collect);
+    // FA1: scroll-and-accumulate. Run `X_POST_SCRIPT` each pass (the ONLY payload ever run against the
+    // capture page — still static, no scraped-data interpolation), accumulating the visible items by
+    // Enterprise's `${id}:${repost|tweet}` key so a repost and the original tweet of the same status id
+    // never collapse. Between passes scroll to the bottom + await `delayMs` so the SPA lazy-loads the
+    // next batch; stop early after `TIMELINE_STAGNATION_LIMIT` consecutive no-growth passes (a stable
+    // end), and never scroll after the final pass.
+    //
+    // FA1 finding 2 — iteration count matches Enterprise `scrapeProfile` EXACTLY: `for (index = 0;
+    // index <= passes; index++)` (`main.cjs:1665`) ⇒ `passes + 1` reads and `passes` scrolls. The
+    // previous `i < passes` loop read one viewport too few on every sweep (a systematic ~1-pass-
+    // shallower capture, worst on a still-arriving prolific timeline).
+    //
+    // FA1 finding 1 — a challenge is re-checked MID-SCROLL: `deps.assertSignedIn(win)` runs after each
+    // scroll+delay (Enterprise's `assertSignedInPage` at `main.cjs:1690`). The up-front `guard` only
+    // covers the INITIAL page state; without this a session drop / verification challenge surfacing
+    // after pass N would let us keep scrolling+scraping a flagged page for the rest of the budget and
+    // then log the sweep as a clean stable end. On a mid-scroll block we stop and surface it so the
+    // caller records an ERROR run (stopReason `'challenge'`), discarding the partial capture.
+    // FB2 (audit HIGH #7): read the target profile HEADER's metadata FIRST — on the initial, still-
+    // signed-in page, BEFORE the scroll loop (Enterprise `scrapeProfile` calls `readProfileMetadata`
+    // before its post loop, `main.cjs:1652`). Carried out of the guard so the snapshot/`profile_change`
+    // persistence happens alongside `savePosts` (never inside the scrape callback). `null` ⇒ no header.
+    const profileMeta = await deps.readProfileMeta(win);
+    const byKey = new Map<string, RawPost>();
+    let stagnant = 0;
+    let previousSize = 0;
+    let completedPasses = 0;
+    let challenged = false;
+    let challengeReason: string | undefined;
+    for (let i = 0; i <= passes; i += 1) {
+      completedPasses = i + 1;
+      const rawCollected = await deps.runCapture(win, X_POST_SCRIPT);
+      const raws: RawPost[] = Array.isArray(rawCollected) ? (rawCollected as RawPost[]) : [];
+      for (const r of raws) {
+        const id = String(r?.id ?? '');
+        if (!id) continue;
+        byKey.set(`${id}:${r?.isRepost ? 'repost' : 'tweet'}`, r);
+      }
+      // FA-A review (Minor): don't let a slow-rendering SPA's LEADING empty reads trip the stable-end
+      // early-stop before any post has appeared (the sweep/archive path has no article>0 pre-wait
+      // that navigateXToProfile gives the manual path). Only count no-growth passes toward stagnation
+      // once at least one post has been seen; leading all-empty reads just wait for the render.
+      if (byKey.size !== previousSize) stagnant = 0;
+      else if (byKey.size > 0) stagnant += 1;
+      previousSize = byKey.size;
+      if (stagnant >= TIMELINE_STAGNATION_LIMIT) break; // stable end reached
+      if (i >= passes) break; // final pass — never scroll past the last read
+      await deps.scroll(win);
+      await deps.delay(delayMs);
+      const midState = await deps.assertSignedIn(win);
+      if (midState.blocked) {
+        challenged = true;
+        challengeReason = midState.reason;
+        break;
+      }
+    }
+    // Reached a stable end iff the most recent pass produced no new content AND no challenge cut the
+    // loop short — covers both the stagnation early-stop AND a budget that ran out exactly as the
+    // timeline did. `false` means the pass ceiling was hit while posts were still arriving (there may
+    // be more, honestly reported).
+    const reachedEnd = !challenged && stagnant > 0;
+
+    if (challenged) {
+      // A mid-scroll challenge: DISCARD the partial capture (Enterprise's `assertSignedInPage` throws,
+      // so its `scrapeProfile` ingests nothing) and surface the block — the caller logs an ERROR run.
+      return { results: [], completedPasses, reachedEnd: false, challenged: true, challengeReason, profileMeta };
+    }
+
+    const union = [...byKey.values()];
+    const selections = selectTimelineCaptures(union, req.targetUsername, collect);
     const results: { item: XHarvestedItem; mediaRefs: string[] }[] = [];
     for (const { raw, kind } of selections) {
       const item =
@@ -368,7 +643,7 @@ export async function captureTimeline(
         : [];
       results.push({ item, mediaRefs });
     }
-    return results;
+    return { results, completedPasses, reachedEnd, challenged: false, challengeReason: undefined, profileMeta };
   });
 
   if (gated.blocked) {
@@ -380,7 +655,7 @@ export async function captureTimeline(
       operation,
       observed: 0,
       added: 0,
-      requestedPasses: 1,
+      requestedPasses: passes,
       completedPasses: 0,
       reachedEnd: false,
       stopReason: gated.reason ?? 'blocked',
@@ -391,35 +666,212 @@ export async function captureTimeline(
     return { blocked: true, reason: gated.reason, added: 0, skipped: 0, posts: [] };
   }
 
-  const results = gated.result ?? [];
-  const items: XHarvestedItem[] = results.map((r) => r.item);
-  const posts: XPostArtifact[] = results.map((r) => toPostArtifact(r.item, r.mediaRefs));
+  const gatedResult = gated.result ?? {
+    results: [],
+    completedPasses: 0,
+    reachedEnd: false,
+    challenged: false,
+    challengeReason: undefined as string | undefined,
+    profileMeta: null as RawProfileMeta | null,
+  };
+
+  // FA1 finding 1: a challenge that surfaced MID-SCROLL — the loop stopped and captured nothing usable.
+  // Record an ERROR run (stopReason `'challenge'`) so the RUN LOG reflects the interrupted sweep
+  // HONESTLY, not as a clean 'complete'/'stable_end', and return blocked (no partial persistence).
+  if (gatedResult.challenged) {
+    await emitRun(deps, req.caseId, {
+      profileId: req.channelId,
+      username: req.targetUsername,
+      operation,
+      observed: 0,
+      added: 0,
+      requestedPasses: passes,
+      completedPasses: gatedResult.completedPasses,
+      reachedEnd: false,
+      stopReason: 'challenge',
+      status: 'error',
+      startedAt,
+      endedAt: deps.now(),
+    });
+    return {
+      blocked: true,
+      reason: gatedResult.challengeReason ?? 'X presented a verification challenge mid-capture.',
+      added: 0,
+      skipped: 0,
+      posts: [],
+    };
+  }
+
+  const items: XHarvestedItem[] = gatedResult.results.map((r) => r.item);
+  const posts: XPostArtifact[] = gatedResult.results.map((r) => toPostArtifact(r.item, r.mediaRefs));
+
+  // Audit HIGH #3 (FA3): comment-thread scraping. When THIS campaign's collect gate has COMMENTS on,
+  // navigate the same headless, Tor-gated, still-signed-in capture window to each captured ROOT post's
+  // thread (up to `commentThreadsPerSource`), scroll `commentScrollPasses` passes, and record the
+  // THIRD-PARTY replies as `kind:'comment'` linked to their root post via `parentPostId` — Enterprise
+  // `scrapeCommentsForPosts` (`main.cjs:1603-1632`), previously a dead toggle here (the normalizer +
+  // gate existed but were never called). The captured root posts (FA1) are the ONLY input; each thread
+  // URL is host-anchored + validated by `assertValidPostUrl` BEFORE any navigation. Persisted ALONGSIDE
+  // the timeline posts in the same `savePosts`/`saveItems` upsert below (each dedups by id).
+  if (collect.comments && posts.length) {
+    const commentPairs = await captureThreadComments(win, deps, req, ctx, collect, delayMs, settings, imagesEnabled, posts);
+    for (const { item, mediaRefs } of commentPairs) {
+      items.push(item);
+      posts.push(toPostArtifact(item, mediaRefs));
+    }
+  }
 
   const [postsResult] = await Promise.all([
     deps.savePosts(req.caseId, posts),
     deps.saveItems(req.caseId, items),
   ]);
 
-  // Record the completed run (Task A3). `observed` = posts this capture saw; `added` = newly
-  // persisted; `duplicates` (= observed - added) is derived in `buildRunRecord`. This port's
-  // capture is a single visible-DOM scrape, so requested/completed passes are 1 and the visible
-  // page is treated as reachedEnd.
+  // FB2 (audit HIGH #7): snapshot the profile HEADER metadata read up front, emitting a
+  // `profile_change` on a bio/avatar/location/website/DISPLAY-NAME diff vs the last snapshot (the
+  // first snapshot is a baseline — no event). Run AFTER `savePosts` so a snapshot-store hiccup can
+  // never lose the just-captured posts. A profile with NO posts still snapshots (the header is the
+  // evidence here, not the timeline). An all-empty read (a page that exposed no header) records
+  // NOTHING — a baseline is only stored once we have actually observed some metadata.
+  const profileMeta = gatedResult.profileMeta;
+  if (profileMeta && (profileMeta.displayName || profileMeta.bio || profileMeta.avatar || profileMeta.location || profileMeta.website)) {
+    const sourceUsername = String(req.targetUsername || req.channelLabel || '') || undefined;
+    // BEST-EFFORT (review): profile-change tracking is derived intel, like the run-log below — a
+    // snapshot-store hiccup must NOT reject an otherwise-successful capture or suppress the run-log
+    // write. Swallow + warn, mirroring emitRun's telemetry-never-breaks-capture posture.
+    try {
+      await deps.snapshotProfile(
+        req.caseId,
+        {
+          profileId: req.channelId,
+          ...(sourceUsername ? { sourceUsername } : {}),
+          displayName: profileMeta.displayName,
+          bio: profileMeta.bio,
+          avatar: profileMeta.avatar,
+          location: profileMeta.location,
+          website: profileMeta.website,
+        },
+        { now: startedAt },
+      );
+    } catch (err) {
+      console.warn('[XListening] snapshotProfile (best-effort):', err);
+    }
+  }
+
+  // Record the completed run (Task A3). `observed` = unique posts this capture accumulated across all
+  // scroll passes; `added` = newly persisted; `duplicates` (= observed - added) is derived in
+  // `buildRunRecord`. FA1: requested/completed passes + reachedEnd are the REAL loop telemetry (no
+  // longer hardcoded 1/1/true), so the Collection Health / RUN LOG reflects the actual capture depth.
   await emitRun(deps, req.caseId, {
     profileId: req.channelId,
     username: req.targetUsername,
     operation,
     observed: posts.length,
     added: postsResult.added,
-    requestedPasses: 1,
-    completedPasses: 1,
-    reachedEnd: true,
-    stopReason: 'complete',
+    requestedPasses: passes,
+    completedPasses: gatedResult.completedPasses,
+    reachedEnd: gatedResult.reachedEnd,
+    stopReason: gatedResult.reachedEnd ? 'stable_end' : 'pass_limit',
     status: 'complete',
     startedAt,
     endedAt: deps.now(),
   });
 
   return { blocked: false, added: postsResult.added, skipped: postsResult.skipped, posts };
+}
+
+/**
+ * FA3 (audit HIGH #3) — scrape the third-party comment threads under a source's captured root posts.
+ *
+ * A faithful rebuild of Enterprise `scrapeCommentsForPosts` (`main.cjs:1603-1632`) onto OUR hardened,
+ * injectable seams. For up to `commentThreadsPerSource` of the just-captured ROOT posts (`kind:'post'`,
+ * FA1's timeline output — the ONLY input), it:
+ *
+ *   1. VALIDATES the post's live URL with `assertValidPostUrl` — the same `openPostThread` guards the
+ *      "VERIFY LIVE"/"Open Real Thread" paths use (host ∈ x/twitter apex, `/status/<digits>`, username
+ *      `^[A-Za-z0-9_]{1,15}$`, forced https). An off-host / malformed URL is SKIPPED (never navigated
+ *      to) — validation happens BEFORE `deps.navigate` is ever called;
+ *   2. navigates the SAME hidden, Tor-gated, signed-in capture window to that canonical thread URL,
+ *      settles for the SPA render (`COMMENT_THREAD_SETTLE_MS`), then re-asserts signed-in — a blocked
+ *      page STOPS the comment phase (fail closed; a flagged page is never scraped further);
+ *   3. scrolls `commentScrollPasses` passes accumulating the visible items, then admits the THIRD-PARTY
+ *      replies via `selectThreadComments` (root post + the target's own replies excluded), normalizing
+ *      each with `normalizeComment(raw, ctx, rootStatusId)` so it carries `kind:'comment'` + the root's
+ *      bare status id as its parent.
+ *
+ * Media for a comment is resolved (host-anchored → local ref) only when the source's image policy is on,
+ * exactly as the timeline path. Returns the `{item, mediaRefs}` pairs; the caller folds them into the
+ * same evidence-hashed persistence as the timeline posts. `X_POST_SCRIPT` remains the ONLY payload run
+ * against the page (the scroll uses the static `X_TIMELINE_SCROLL_SCRIPT` via `deps.scroll`).
+ */
+async function captureThreadComments(
+  win: Electron.BrowserWindow,
+  deps: XCaptureDeps,
+  req: XTimelineCaptureRequest,
+  ctx: NormalizeContext,
+  collect: XCollectSettings,
+  delayMs: number,
+  settings: XCollectionSettings,
+  imagesEnabled: boolean,
+  timelinePosts: readonly XPostArtifact[],
+): Promise<Array<{ item: XHarvestedItem; mediaRefs: string[] }>> {
+  const maxThreads = Math.max(
+    MIN_COMMENT_THREADS,
+    Math.min(MAX_COMMENT_THREADS, Math.floor(Number(settings.commentThreadsPerSource)) || MIN_COMMENT_THREADS),
+  );
+  const passes = Math.max(
+    MIN_COMMENT_SCROLL_PASSES,
+    Math.min(MAX_COMMENT_SCROLL_PASSES, Math.floor(Number(settings.commentScrollPasses)) || MIN_COMMENT_SCROLL_PASSES),
+  );
+  // ONLY the target's own top-level posts have a comment thread worth reading (Enterprise filters
+  // `profileRecords` to `kind === 'post'` before calling this, `main.cjs:1713`).
+  const rootPosts = timelinePosts.filter((p) => p.kind === 'post').slice(0, maxThreads);
+
+  const out: Array<{ item: XHarvestedItem; mediaRefs: string[] }> = [];
+  for (const rootPost of rootPosts) {
+    // VALIDATE BEFORE NAVIGATION: a malformed / off-host post URL is never loaded. `assertValidPostUrl`
+    // canonicalizes to `https://x.com/<user>/status/<id>` (or throws) — so `deps.navigate` only ever
+    // receives a host-anchored, username-validated thread URL. A throw skips just THIS thread.
+    let target: URL;
+    try {
+      target = assertValidPostUrl(rootPost);
+    } catch (err) {
+      console.warn('[XListening] skipping comment thread — invalid post URL:', err);
+      continue;
+    }
+
+    await deps.navigate(win, target.toString());
+    await deps.delay(COMMENT_THREAD_SETTLE_MS);
+    const state = await deps.assertSignedIn(win);
+    if (state.blocked) break; // fail closed — stop the comment phase on a challenge / session drop
+
+    // Accumulate the thread's visible items by bare status id (Enterprise keys the comment map on
+    // `String(item.id)`, `main.cjs:1618`). `passes + 1` reads / `passes` scrolls (matches Enterprise's
+    // `for (index = 0; index <= passes; index++)` comment loop, `main.cjs:1616`).
+    const byKey = new Map<string, RawPost>();
+    for (let i = 0; i <= passes; i += 1) {
+      const rawCollected = await deps.runCapture(win, X_POST_SCRIPT);
+      const raws: RawPost[] = Array.isArray(rawCollected) ? (rawCollected as RawPost[]) : [];
+      for (const r of raws) {
+        const id = String(r?.id ?? '');
+        if (!id) continue;
+        byKey.set(id, r);
+      }
+      if (i >= passes) break; // final read — never scroll past the last
+      await deps.scroll(win);
+      await deps.delay(delayMs);
+    }
+
+    const rootStatusId = String(rootPost.messageId || rootPost.id || '');
+    const commentRaws = selectThreadComments([...byKey.values()], req.targetUsername, rootStatusId, collect);
+    for (const raw of commentRaws) {
+      const item = normalizeComment(raw, ctx, rootStatusId);
+      const mediaRefs = imagesEnabled
+        ? await resolvePostMediaRefs(win, raw, req.caseId, deps.resolveMedia)
+        : [];
+      out.push({ item, mediaRefs });
+    }
+  }
+  return out;
 }
 
 // ---- live post verification ("VERIFY LIVE", Task A1) ----------------------
@@ -463,6 +915,11 @@ export interface XVerifyPostDeps {
     win: Electron.BrowserWindow,
     capture: () => Promise<T>,
   ) => Promise<{ blocked: boolean; reason?: string; result?: T }>;
+  /** Await `ms` after the window loads and BEFORE the verify read, so X's SPA has time to hydrate
+   *  (Enterprise's `sleep(2600)` between `loadURL` and the read, `main.cjs:2626-2640`). A unit
+   *  harness injects an instant no-op; the production default is a real `setTimeout`-backed sleep.
+   *  Wall-clock pacing only — never feeds an evidence/hash path. */
+  delay: (ms: number) => Promise<void>;
   /** Injected clock — the ISO verification time (determinism; never feeds a hash). */
   now: () => string;
 }
@@ -501,6 +958,7 @@ function defaultVerifyDeps(): XVerifyPostDeps {
     },
     runCapture: defaultRunCapture,
     guard: defaultGuard,
+    delay: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     now: () => new Date().toISOString(),
   };
 }
@@ -579,6 +1037,16 @@ export async function verifyPost(
 
   const win = await deps.openWindow(target.toString(), gate.proxy);
   try {
+    // SPA-render settle — Enterprise `verifyPostLive` sleeps 2600ms between `loadURL` and the read
+    // (`main.cjs:2626-2640`) so X's client-side hydration finishes. Reading immediately after the
+    // load can race the render and misclassify a not-yet-hydrated page as "available, unchanged".
+    // Fail SOFT exactly like the rest of the module: a settle that rejects must not abort the
+    // verification (the finally still destroys the window; the read proceeds best-effort).
+    try {
+      await deps.delay(VERIFY_POST_SETTLE_MS);
+    } catch {
+      /* ignore a settle error — proceed to read, same soft posture as the scroll/comment paths */
+    }
     const gated = await deps.guard(win, () => deps.runCapture(win, X_VERIFY_POST_SCRIPT));
     if (gated.blocked) {
       throw new Error(gated.reason ?? 'The saved X session is no longer signed in.');
@@ -792,7 +1260,8 @@ export interface XNetworkCaptureRequest {
   channelId: string;
   targetUsername: string;
   kind: 'followers' | 'following';
-  /** Scroll passes — clamped to [1, 60]. Defaults to `DEFAULT_NETWORK_PASSES`. */
+  /** Scroll passes — clamped to [1, 240] (Enterprise `scrapeRelationshipRows`, `main.cjs:2356`).
+   *  Defaults to `DEFAULT_NETWORK_PASSES`. */
   passes?: number;
 }
 
@@ -810,6 +1279,12 @@ export interface XNetworkCaptureResult {
   completedPasses: number;
   /** True iff the loop stopped on stagnation (a stable end) rather than the pass ceiling. */
   reachedEnd: boolean;
+  /** Per-handle network delta events computed AND PERSISTED this scan (M2, his
+   *  `recordNetworkSnapshot` `networkEvents`): a `newly_observed` per newly-added handle and a
+   *  CONSERVATIVE, gated `not_seen_latest` per PREVIOUS-SCAN handle absent from a comparable scan.
+   *  The durable stream (`store.networkEvents`, surfaced via `listNetworkEvents`) is the UI's source
+   *  of truth; this mirror is what was persisted. Absent on a blocked scan (nothing was observed). */
+  deltaEvents?: XNetworkDeltaEvent[];
 }
 
 /** Injectable seams so extraction is testable without electron/network/secure-fs. Production
@@ -831,6 +1306,11 @@ export interface XNetworkCaptureDeps {
   ) => Promise<{ blocked: boolean; reason?: string; result?: T }>;
   /** Scroll the capture page one step (a static in-page payload, no interpolation). */
   scroll: (win: Electron.BrowserWindow) => Promise<void>;
+  /** Mid-scroll signed-in/challenge re-check. The network scroll loop runs up to `MAX_NETWORK_PASSES`
+   *  (240); a rate-limit or challenge surfacing PARTWAY through must DISCARD the truncated list and
+   *  flag it, never persist it as `complete` — the same fail-closed honesty the timeline + comment
+   *  loops already apply. Production default = `probeSignedInState`; a unit harness injects its own. */
+  assertSignedIn: (win: Electron.BrowserWindow) => Promise<{ blocked: boolean; reason?: string }>;
   /** Read the ALREADY-persisted accounts for one (target, kind) — used only to report an honest
    *  `added` delta against the accumulator, never to gate the scan. */
   readNetwork: (
@@ -840,6 +1320,17 @@ export interface XNetworkCaptureDeps {
   ) => Promise<XNetworkAccount[]>;
   /** Persist the freshly captured artifact (store.ts `networks.save`, the Task 7 accumulator). */
   saveNetwork: (caseId: string, artifact: XNetworkArtifact) => Promise<number>;
+  /** Read the PREVIOUS scan's minimal state for one (target, relationship) — the diff basis + gate
+   *  inputs for `deriveNetworkDeltaEvents` (M2). Null if this is the first scan. */
+  readScanState: (
+    caseId: string,
+    target: string,
+    kind: 'followers' | 'following',
+  ) => Promise<XNetworkScanState | null>;
+  /** Overwrite the previous-scan record with THIS scan's observed set/count/passes (M2). */
+  saveScanState: (caseId: string, state: XNetworkScanState) => Promise<void>;
+  /** Append this scan's per-handle delta events to the durable stream (M2, his `networkEvents`). */
+  appendNetworkEvents: (caseId: string, events: XNetworkDeltaEvent[]) => Promise<void>;
   /** Append one collection-run record best-effort (telemetry, not evidence — see `emitRun`). */
   recordRun: (caseId: string, record: XRunLogRecord) => Promise<void>;
   /** Read this campaign's per-campaign collection settings (F2) — the source of the default
@@ -854,8 +1345,16 @@ export interface XNetworkCaptureDeps {
 /** Default scroll passes when the caller doesn't specify — matches Enterprise's
  *  `relationshipScrollPasses` default (`main.cjs:2354`). */
 export const DEFAULT_NETWORK_PASSES = 8;
-/** Consecutive no-growth passes that end the loop early (a stable end). */
-const NETWORK_STAGNATION_LIMIT = 3;
+/** Hard ceiling on the network scroll budget — Enterprise `scrapeRelationshipRows`'s
+ *  `Math.min(240, requestedPasses)` (`main.cjs:2356`). Lets the FA4 archive relationship stepping
+ *  actually deepen toward `maxNetworkDepth` (up to 240) instead of being re-capped at 60. */
+const MAX_NETWORK_PASSES = 240;
+/** Fallback consecutive-no-growth early-stop when settings can't supply one — Enterprise's
+ *  `networkStagnationLimit` default (`main.cjs:2358`). The live limit is read per-campaign and
+ *  re-clamped to [`MIN`,`MAX`] MAIN-side (defence-in-depth over the already-clamped setting). */
+const DEFAULT_NETWORK_STAGNATION_LIMIT = 7;
+const MIN_NETWORK_STAGNATION_LIMIT = 4;
+const MAX_NETWORK_STAGNATION_LIMIT = 20;
 
 /** STATIC scroll payload — the ONLY inputs are literal numbers; no scraped data is interpolated.
  *  Jumps ~90% of the viewport (min 650px), matching Enterprise's `scrapeRelationshipRows` scroll. */
@@ -922,6 +1421,7 @@ function defaultNetworkCaptureDeps(): XNetworkCaptureDeps {
     scroll: async (win) => {
       await defaultRunCapture(win, X_NETWORK_SCROLL_SCRIPT);
     },
+    assertSignedIn: (win) => probeSignedInState(win),
     readNetwork: async (caseId, target, kind) => {
       const { prodXStore } = await import('./store');
       const store = await prodXStore();
@@ -937,6 +1437,21 @@ function defaultNetworkCaptureDeps(): XNetworkCaptureDeps {
       const store = await prodXStore();
       return store.networks.save(caseId, artifact);
     },
+    readScanState: async (caseId, target, kind) => {
+      const { prodXStore } = await import('./store');
+      const store = await prodXStore();
+      return store.networkScanState.read(caseId, target, kind);
+    },
+    saveScanState: async (caseId, state) => {
+      const { prodXStore } = await import('./store');
+      const store = await prodXStore();
+      await store.networkScanState.write(caseId, state);
+    },
+    appendNetworkEvents: async (caseId, events) => {
+      const { prodXStore } = await import('./store');
+      const store = await prodXStore();
+      await store.networkEvents.append(caseId, events);
+    },
     recordRun: async (caseId, record) => {
       await recordCollectionRun(caseId, record);
     },
@@ -951,15 +1466,16 @@ function defaultNetworkCaptureDeps(): XNetworkCaptureDeps {
 /**
  * Scroll-scrape the visible follower/following `UserCell` rows, accumulating unique handles across
  * bounded passes. Runs the STATIC `USER_CELL_SCRIPT` each pass, dedups case-insensitively by handle
- * (the same key `normalizeNetwork`/`store.networks.save` use), and stops early once
- * `NETWORK_STAGNATION_LIMIT` consecutive passes add nothing new (a stable end). Never runs the
- * scroll after the final pass (gentle on X). Returns the accumulated raw cells + the loop telemetry.
+ * (the same key `normalizeNetwork`/`store.networks.save` use), and stops early once `stagnationLimit`
+ * consecutive passes add nothing new (a stable end). Never runs the scroll after the final pass
+ * (gentle on X). Returns the accumulated raw cells + the loop telemetry.
  */
 async function scrapeNetworkRows(
   win: Electron.BrowserWindow,
   passes: number,
+  stagnationLimit: number,
   deps: XNetworkCaptureDeps,
-): Promise<{ rows: RawUserCell[]; completedPasses: number; reachedEnd: boolean }> {
+): Promise<{ rows: RawUserCell[]; completedPasses: number; reachedEnd: boolean; challenged?: boolean; challengeReason?: string }> {
   const seen = new Map<string, RawUserCell>();
   let completedPasses = 0;
   let stagnant = 0;
@@ -977,11 +1493,20 @@ async function scrapeNetworkRows(
     if (seen.size === before) stagnant += 1;
     else stagnant = 0;
     if (i >= passes - 1) break;
-    if (stagnant >= NETWORK_STAGNATION_LIMIT) {
+    if (stagnant >= stagnationLimit) {
       reachedEnd = true;
       break;
     }
     await deps.scroll(win);
+    // FA-A review (Important): re-assert signed-in/challenge MID-SCROLL — mirrors the timeline +
+    // comment loops. Over up to MAX_NETWORK_PASSES (240), a rate-limit/challenge interstitial can
+    // surface partway through; without this the loop would keep scrolling the flagged page and the
+    // caller would persist a TRUNCATED follower list logged as 'complete'. On a block we DISCARD the
+    // partial (rows:[]) and flag it so the caller records an error run, never a false stable end.
+    const mid = await deps.assertSignedIn(win);
+    if (mid.blocked) {
+      return { rows: [], completedPasses, reachedEnd: false, challenged: true, challengeReason: mid.reason };
+    }
   }
   return { rows: [...seen.values()], completedPasses, reachedEnd };
 }
@@ -1008,11 +1533,21 @@ export async function captureNetwork(
   // F2: the scroll-pass budget defaults to the per-campaign follower/following base passes (Enterprise
   // `relationshipScrollPasses`, split per direction). An explicit `req.passes` still overrides. The
   // settings read is fail-safe (`getCollectionSettings` heals to defaults), so this never blocks a
-  // capture; the value is re-clamped to [1,60] here regardless of source (defence-in-depth over the
-  // already-clamped stored value).
+  // capture; the value is re-clamped to [1,240] here (Enterprise's ceiling) regardless of source
+  // (defence-in-depth over the already-clamped stored value). The 240 ceiling also lets the FA4
+  // archive relationship stepping actually reach `maxNetworkDepth` instead of being re-capped at 60.
   const settings = await deps.loadCollectionSettings(req.caseId);
   const basePasses = kind === 'following' ? settings.followingBasePasses : settings.followerBasePasses;
-  const passes = Math.max(1, Math.min(60, Math.floor(Number(req.passes ?? basePasses)) || basePasses));
+  const passes = Math.max(1, Math.min(MAX_NETWORK_PASSES, Math.floor(Number(req.passes ?? basePasses)) || basePasses));
+  // Early-stop limit from the campaign's `networkStagnationLimit` (Enterprise `main.cjs:2358`),
+  // re-clamped to [4,20] MAIN-side (defence-in-depth over the already-clamped setting).
+  const stagnationLimit = Math.max(
+    MIN_NETWORK_STAGNATION_LIMIT,
+    Math.min(
+      MAX_NETWORK_STAGNATION_LIMIT,
+      Math.floor(Number(settings.networkStagnationLimit)) || DEFAULT_NETWORK_STAGNATION_LIMIT,
+    ),
+  );
   const startedAt = deps.now();
   const username = String(req.targetUsername ?? '').replace(/^@+/, '').trim();
   const fullTarget = `@${username}`;
@@ -1041,7 +1576,7 @@ export async function captureNetwork(
 
   const win = await deps.openWindow(url.toString(), gate.proxy);
   try {
-    const gated = await deps.guard(win, () => scrapeNetworkRows(win, passes, deps));
+    const gated = await deps.guard(win, () => scrapeNetworkRows(win, passes, stagnationLimit, deps));
     if (gated.blocked) {
       await emitNetworkRun(deps, req.caseId, {
         profileId,
@@ -1060,20 +1595,85 @@ export async function captureNetwork(
       return { blocked: true, reason: gated.reason, kind, target: fullTarget, observed: 0, added: 0, completedPasses: 0, reachedEnd: false };
     }
 
-    const { rows, completedPasses, reachedEnd } = gated.result ?? {
+    const { rows, completedPasses, reachedEnd, challenged, challengeReason } = gated.result ?? {
       rows: [],
       completedPasses: 0,
       reachedEnd: false,
     };
+    if (challenged) {
+      // Mid-scroll challenge (FA-A review): DISCARD the truncated list and record an honest ERROR
+      // run — never persist a partial follower list logged as complete.
+      await emitNetworkRun(deps, req.caseId, {
+        profileId,
+        username,
+        operation: kind,
+        observed: 0,
+        added: 0,
+        requestedPasses: passes,
+        completedPasses,
+        reachedEnd: false,
+        stopReason: challengeReason ?? 'challenge',
+        status: 'error',
+        startedAt,
+        endedAt: deps.now(),
+      });
+      return { blocked: true, reason: challengeReason, kind, target: fullTarget, observed: 0, added: 0, completedPasses, reachedEnd: false };
+    }
     const capturedAt = deps.now();
-    const artifact = normalizeNetwork(rows, username, kind, capturedAt);
+    const artifact = normalizeNetwork(rows, username, kind, capturedAt, { caseId: req.caseId });
 
-    // Honest `added` delta: how many of this scan's accounts weren't already in the accumulator.
+    // Honest `added` delta: which of this scan's accounts weren't already in the ACCUMULATOR.
+    // `addedHandles` (not just the count) seed the `newly_observed` events — his `addedUsernames`.
     const prior = await deps.readNetwork(req.caseId, fullTarget, kind);
     const priorHandles = new Set(prior.map((a) => a.handle.toLowerCase()));
-    const added = artifact.accounts.filter((a) => !priorHandles.has(a.handle.toLowerCase())).length;
+    const addedHandles = artifact.accounts
+      .filter((a) => !priorHandles.has(a.handle.toLowerCase()))
+      .map((a) => a.handle);
+    const added = addedHandles.length;
+
+    // M2: per-handle delta events — his `recordNetworkSnapshot` (main.cjs:540-581). `newly_observed`
+    // is the accumulator diff (`addedHandles`); `not_seen_latest` is a CONSERVATIVE observation
+    // gated against the PREVIOUS SCAN (never the all-time accumulator) on BOTH passesCompleted and
+    // observedCount, so a shallow re-scan cannot falsely flag every missing account as "gone" and a
+    // dropped handle is flagged ONCE, not on every later scan. The previous-scan read is fail-soft
+    // (a missing/unreadable record ⇒ null ⇒ newly_observed only) — the same electron-less-harness
+    // resilience `getCollectionSettings` uses; it never blocks a capture.
+    let previousScan: XNetworkScanState | null = null;
+    try {
+      previousScan = await deps.readScanState(req.caseId, fullTarget, kind);
+    } catch (err) {
+      console.warn('[XListening] readScanState (network):', err);
+    }
+    const deltaEvents = deriveNetworkDeltaEvents({
+      previous: previousScan,
+      observed: artifact.accounts,
+      passesCompleted: completedPasses,
+      added: addedHandles,
+      target: fullTarget,
+      relationship: kind,
+      observedAt: capturedAt,
+    });
 
     await deps.saveNetwork(req.caseId, artifact);
+
+    // Persist the delta stream + advance the previous-scan record (this scan becomes next scan's
+    // `previous`). Best-effort, exactly like `emitNetworkRun` — a persistence miss is logged, never
+    // fatal to the capture. The observed set is deduped + capped identically to the gate's basis so
+    // the next comparison compares like with like.
+    const observedUsernames = dedupeHandlesCI(artifact.accounts.map((a) => a.handle), X_MAX_SCAN_OBSERVED);
+    try {
+      if (deltaEvents.length > 0) await deps.appendNetworkEvents(req.caseId, deltaEvents);
+      await deps.saveScanState(req.caseId, {
+        target: fullTarget.toLowerCase(),
+        relationship: kind,
+        observedUsernames,
+        observedCount: observedUsernames.length,
+        passesCompleted: completedPasses,
+        capturedAt,
+      });
+    } catch (err) {
+      console.warn('[XListening] persist network deltas (M2):', err);
+    }
 
     await emitNetworkRun(deps, req.caseId, {
       profileId,
@@ -1098,6 +1698,7 @@ export async function captureNetwork(
       added,
       completedPasses,
       reachedEnd,
+      deltaEvents,
     };
   } finally {
     const w = win as unknown as { isDestroyed?: () => boolean; destroy?: () => void };
@@ -1136,6 +1737,11 @@ export interface XProfileTimelineRequest {
   collect?: XCollectSettings;
   /** This source's EFFECTIVE image policy (F1); when false `captureTimeline` fetches no media. */
   imagesEnabled?: boolean;
+  /** FA4 scroll-depth OVERRIDE (FA1's `req.passes`): how many scroll-and-accumulate passes to run.
+   *  The incremental-archive rotation supplies the source's stepped post-pass depth here so each
+   *  cycle digs progressively deeper into history. Absent ⇒ the campaign's `profileScrollPasses`
+   *  drives the loop (a plain sweep). */
+  passes?: number;
 }
 
 /** Injectable seams so the sweep primitive is testable without electron/network. Production defaults
@@ -1209,6 +1815,13 @@ export async function captureProfileTimeline(
   // Validate BEFORE touching the gate or network — a malformed handle opens nothing. Reuse the
   // exact `openInX('profile')` username guard + canonical `https://x.com/<user>` construction.
   const url = buildXOpenUrl('profile', req.targetUsername);
+  // Audit HIGH #4: when this campaign's collect gate has REPLIES on, load the `/with_replies` tab
+  // (His `scrapeProfile` route, main.cjs:1647-1648) so the target's own replies actually surface.
+  // The username inside `url` was validated by `buildXOpenUrl` (`^[A-Za-z0-9_]{1,15}$`); `/with_replies`
+  // is a fixed literal appended to the path — host stays x.com, no injection.
+  if (req.collect?.replies) {
+    url.pathname = `${url.pathname}/with_replies`;
+  }
 
   const deps: XProfileTimelineDeps = { ...defaultProfileTimelineDeps(), ...overrides };
 
@@ -1230,6 +1843,9 @@ export async function captureProfileTimeline(
         channelLabel: req.channelLabel,
         targetUsername: req.targetUsername,
         collect: req.collect,
+        // FA4: thread the archive rotation's stepped post-pass depth into FA1's scroll loop when
+        // present; a plain sweep leaves this undefined so `profileScrollPasses` drives the passes.
+        ...(req.passes !== undefined ? { passes: req.passes } : {}),
         operation: 'posts',
       },
       req.imagesEnabled !== undefined

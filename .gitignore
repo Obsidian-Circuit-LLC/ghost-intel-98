@@ -74,6 +74,7 @@ resources/exiftool/*/
 # Bundled local-AI resources (embedding model staged by `pnpm fetch:embed`; see README-LOCAL-AI.txt).
 # The README is committed; the model blobs + marker are build/CI-supplied, not committed.
 resources/local-ai/models/
+resources/local-ai/lib/
 resources/local-ai/EMBED_MODEL_PRESENT
 
 # twscrape-runner PyInstaller sidecar — per-platform built binaries (operator build gate; not committed)

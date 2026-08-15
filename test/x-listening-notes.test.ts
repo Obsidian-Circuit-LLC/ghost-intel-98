@@ -104,24 +104,59 @@ describe('makeXStore: notes.save (upsert by findingId)', () => {
   });
 });
 
+// ---- 1b. M11: multi-note per finding (store.add / store.update) ---------
+
+describe('makeXStore: notes.add / notes.update (M11 multi-note)', () => {
+  let xStore: ReturnType<typeof makeXStore>;
+  beforeEach(() => { xStore = makeXStore(memDeps()); });
+
+  it('APPENDS many notes to the SAME finding (never coalesces — his multi-note model)', async () => {
+    await xStore.notes.add('case-a', 'n1', 'f1', 'first observation', '2026-08-06T00:00:00.000Z');
+    await xStore.notes.add('case-a', 'n2', 'f1', 'second observation', '2026-08-06T01:00:00.000Z');
+    const notes = await xStore.notes.read('case-a');
+    expect(notes).toEqual([
+      { id: 'n1', findingId: 'f1', text: 'first observation', savedAt: '2026-08-06T00:00:00.000Z' },
+      { id: 'n2', findingId: 'f1', text: 'second observation', savedAt: '2026-08-06T01:00:00.000Z' },
+    ]);
+  });
+
+  it('update edits ONE note in place by id, leaving its siblings on the same finding untouched', async () => {
+    await xStore.notes.add('case-a', 'n1', 'f1', 'draft one', '2026-08-06T00:00:00.000Z');
+    await xStore.notes.add('case-a', 'n2', 'f1', 'draft two', '2026-08-06T01:00:00.000Z');
+    const after = await xStore.notes.update('case-a', 'n2', 'revised two', '2026-08-06T02:00:00.000Z');
+    expect(after).toEqual([
+      { id: 'n1', findingId: 'f1', text: 'draft one', savedAt: '2026-08-06T00:00:00.000Z' },
+      { id: 'n2', findingId: 'f1', text: 'revised two', savedAt: '2026-08-06T02:00:00.000Z' },
+    ]);
+  });
+
+  it('update of a legacy (id-less) note matches on its findingId (xNoteKey back-compat)', async () => {
+    await xStore.notes.save('case-a', 'f1', 'legacy note', '2026-08-06T00:00:00.000Z');
+    const after = await xStore.notes.update('case-a', 'f1', 'legacy revised', '2026-08-06T03:00:00.000Z');
+    expect(after).toEqual([{ findingId: 'f1', text: 'legacy revised', savedAt: '2026-08-06T03:00:00.000Z' }]);
+  });
+});
+
 // ---- 2. IPC orchestration: injected clock + validation -----------------
 
 describe('saveNote / readNotes (IPC orchestration)', () => {
-  it('stamps savedAt from the injected clock — never from the renderer', async () => {
+  it('APPENDS with an injected id + clock — never from the renderer (M11)', async () => {
     const { saveNote } = await import('../src/main/x-listening/ipc');
-    let saved: { findingId: string; text: string; savedAt: string } | null = null;
+    let saved: { id: string; findingId: string; text: string; savedAt: string } | null = null;
     const res = await saveNote(
       { caseId: 'case-a', findingId: 'f1', text: 'observed' },
       {
-        saveNote: async (_c, findingId, text, savedAt) => {
-          saved = { findingId, text, savedAt };
-          return [{ findingId, text, savedAt }];
+        addNote: async (_c, id, findingId, text, savedAt) => {
+          saved = { id, findingId, text, savedAt };
+          return [{ id, findingId, text, savedAt }];
         },
         readNotes: async () => [],
         now: () => '2026-08-06T12:00:00.000Z',
+        newId: () => 'note-fixed-id',
       },
     );
     expect(saved!.savedAt).toBe('2026-08-06T12:00:00.000Z');
+    expect(saved!.id).toBe('note-fixed-id');
     expect(res.notes[0].text).toBe('observed');
   });
 
@@ -130,7 +165,7 @@ describe('saveNote / readNotes (IPC orchestration)', () => {
     let savedText = '';
     await saveNote(
       { caseId: 'case-a', findingId: 'f1', text: '  padded note  ' },
-      { saveNote: async (_c, _f, text) => { savedText = text; return []; }, readNotes: async () => [], now: () => 'now' },
+      { addNote: async (_c, _id, _f, text) => { savedText = text; return []; }, readNotes: async () => [], now: () => 'now', newId: () => 'x' },
     );
     expect(savedText).toBe('padded note');
   });
@@ -139,7 +174,7 @@ describe('saveNote / readNotes (IPC orchestration)', () => {
     const { saveNote } = await import('../src/main/x-listening/ipc');
     const store = vi.fn(async () => []);
     await expect(
-      saveNote({ caseId: 'case-a', findingId: 'f1', text: '   ' }, { saveNote: store, readNotes: async () => [], now: () => 'now' }),
+      saveNote({ caseId: 'case-a', findingId: 'f1', text: '   ' }, { addNote: store, readNotes: async () => [], now: () => 'now', newId: () => 'x' }),
     ).rejects.toThrow(/required/i);
     expect(store).not.toHaveBeenCalled();
   });
@@ -148,7 +183,7 @@ describe('saveNote / readNotes (IPC orchestration)', () => {
     const { saveNote } = await import('../src/main/x-listening/ipc');
     const store = vi.fn(async () => []);
     await expect(
-      saveNote({ caseId: 'case-a', findingId: 'f1', text: 'x'.repeat(20001) }, { saveNote: store, readNotes: async () => [], now: () => 'now' }),
+      saveNote({ caseId: 'case-a', findingId: 'f1', text: 'x'.repeat(20001) }, { addNote: store, readNotes: async () => [], now: () => 'now', newId: () => 'x' }),
     ).rejects.toThrow(/too long/i);
     expect(store).not.toHaveBeenCalled();
   });
@@ -157,16 +192,39 @@ describe('saveNote / readNotes (IPC orchestration)', () => {
     const { saveNote } = await import('../src/main/x-listening/ipc');
     const store = vi.fn(async () => []);
     await expect(
-      saveNote({ caseId: 'case-a', findingId: '  ', text: 'orphan' }, { saveNote: store, readNotes: async () => [], now: () => 'now' }),
+      saveNote({ caseId: 'case-a', findingId: '  ', text: 'orphan' }, { addNote: store, readNotes: async () => [], now: () => 'now', newId: () => 'x' }),
     ).rejects.toThrow(/finding/i);
     expect(store).not.toHaveBeenCalled();
   });
 
   it('readNotes returns the case notes through the injected store', async () => {
     const { readNotes } = await import('../src/main/x-listening/ipc');
-    const fixture: XNote[] = [{ findingId: 'f1', text: 'note', savedAt: 'now' }];
-    const res = await readNotes('case-a', { saveNote: async () => [], readNotes: async () => fixture, now: () => 'now' });
+    const fixture: XNote[] = [{ id: 'n1', findingId: 'f1', text: 'note', savedAt: 'now' }];
+    const res = await readNotes('case-a', { addNote: async () => [], readNotes: async () => fixture, now: () => 'now', newId: () => 'x' });
     expect(res.notes).toEqual(fixture);
+  });
+});
+
+// ---- 2a. M11: updateNote IPC orchestration ------------------------------
+
+describe('updateNote (IPC orchestration, M11)', () => {
+  it('edits by note id, stamping savedAt from the injected clock', async () => {
+    const { updateNote } = await import('../src/main/x-listening/ipc');
+    let seen: { id: string; text: string; savedAt: string } | null = null;
+    const res = await updateNote(
+      { caseId: 'case-a', noteId: 'n2', text: '  edited  ' },
+      { updateNote: async (_c, id, text, savedAt) => { seen = { id, text, savedAt }; return [{ id, findingId: 'f1', text, savedAt }]; }, now: () => '2026-08-06T09:00:00.000Z' },
+    );
+    expect(seen).toEqual({ id: 'n2', text: 'edited', savedAt: '2026-08-06T09:00:00.000Z' });
+    expect(res.notes[0].text).toBe('edited');
+  });
+
+  it('rejects a blank noteId / empty text (never touches the store)', async () => {
+    const { updateNote } = await import('../src/main/x-listening/ipc');
+    const store = vi.fn(async () => []);
+    await expect(updateNote({ caseId: 'c', noteId: '  ', text: 'x' }, { updateNote: store, now: () => 'now' })).rejects.toThrow(/note id/i);
+    await expect(updateNote({ caseId: 'c', noteId: 'n1', text: '  ' }, { updateNote: store, now: () => 'now' })).rejects.toThrow(/required/i);
+    expect(store).not.toHaveBeenCalled();
   });
 });
 

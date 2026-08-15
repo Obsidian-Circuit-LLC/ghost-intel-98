@@ -49,6 +49,11 @@ export interface RawPost {
   id: string;
   /** The visible author handle (no leading `@`). */
   username: string;
+  /** The visible author DISPLAY name exactly as rendered, or '' when none was visible (M1,
+   *  his `readVisibleTimelineItems`/`mapCollectedPost`). For a repost this is the ORIGINAL
+   *  author's name; for a comment the THIRD-PARTY replier's — the only place those names are
+   *  observed. Never backfilled from the @handle. */
+  displayName?: string;
   /** The visible permalink; scheme-guarded during normalization. */
   url: string;
   /** The visible tweet body text (verbatim). */
@@ -124,6 +129,11 @@ export interface XHarvestedItem extends HarvestedItem {
   media: string[];
   /** post / reply / repost / comment — see `XItemKind`. */
   kind: XItemKind;
+  /** The visible author DISPLAY name (M1). Carried verbatim from the captured DOM; for a
+   *  repost/comment this is the ORIGINAL/third-party author's name. OMITTED (not '') when no
+   *  display name was visible — an unobserved value is never presented as captured, and it is
+   *  deliberately NOT part of `canonicalPostEvidence` (a rename is not a content edit). */
+  displayName?: string;
   /** For a `comment`: the target root-post id whose thread it was seen under. Honest
    *  lineage only — never a fabricated "in reply to". Absent for every other kind. */
   parentId?: string;
@@ -165,6 +175,10 @@ export const X_POST_SCRIPT = `
       const tweetText = article.querySelector('[data-testid="tweetText"]');
       const fullText = article.innerText || '';
       const socialContext = (article.querySelector('[data-testid="socialContext"]') || {}).textContent || '';
+      const userNameArea = article.querySelector('[data-testid="User-Name"]') || article.querySelector('[data-testid="UserName"]');
+      const displayName = Array.from((userNameArea && userNameArea.querySelectorAll('span')) || [])
+        .map((node) => (node.textContent || '').trim())
+        .find((text) => text && !text.startsWith('@') && !/^·$/.test(text)) || '';
       const images = Array.from(article.querySelectorAll('img[src*="pbs.twimg.com/media"]'))
         .map((image) => image.getAttribute('src'))
         .filter(Boolean);
@@ -172,6 +186,7 @@ export const X_POST_SCRIPT = `
       return {
         id: (match && match[2]) || '',
         username: (match && match[1]) || '',
+        displayName: displayName,
         url: rawHref ? new URL(rawHref, location.origin).href : '',
         text: ((tweetText && tweetText.innerText) || '').trim(),
         createdAt: (time && time.getAttribute('datetime')) || '',
@@ -303,6 +318,11 @@ function normalizeItem(
   if (kind === 'comment' && parentId != null && parentId !== '') {
     item.parentId = String(parentId);
   }
+  // Carry the visible author display name (M1) when one was observed — OMITTED (never '') when
+  // absent, so honest-absence reads as "Not visible" rather than an empty string masquerading as
+  // a captured value. Not folded into the evidence hash (his canonicalPostEvidence omits it).
+  const displayName = String(raw.displayName ?? '').trim();
+  if (displayName) item.displayName = displayName;
   return item;
 }
 
@@ -479,6 +499,63 @@ export const USER_CELL_SCRIPT = `
   })()
 `;
 
+/** The visible profile-HEADER metadata a profile page exposes — the fields whose change over time
+ *  is evidentiary (`profile_change`). Port of Enterprise `readProfileMetadata`'s return shape
+ *  (`electron/main.cjs:1305-1334`). `avatar` is the raw header `profile_images` `src` as scraped;
+ *  it is host-anchored (or dropped) by `capture.ts` before it ever reaches the snapshot — it is used
+ *  ONLY as a change fingerprint, never fetched or inlined here. */
+export interface RawProfileMeta {
+  displayName: string;
+  bio: string;
+  location: string;
+  website: string;
+  avatar: string;
+}
+
+/**
+ * STATIC in-page payload reading the target profile HEADER's visible metadata (display name, bio,
+ * location, website, avatar). No interpolation — the ONLY inputs are literal selectors. Port of
+ * quarantine `readProfileMetadata` (`electron/main.cjs:1305-1334`), including its IMPORTANT guard:
+ * the avatar is taken from the `/<currentUser>/photo` anchor inside `main`, NEVER the first
+ * document-wide `profile_images` element (X's global nav shows the SIGNED-IN account's avatar, which
+ * can appear before the target header — using it would fingerprint the analyst's own account). The
+ * avatar `src` is returned verbatim; `capture.ts` host-anchors it before storage.
+ */
+export const X_PROFILE_META_SCRIPT = `
+  (() => {
+    const usernameArea = document.querySelector('[data-testid="UserName"]');
+    const displayName = Array.from((usernameArea && usernameArea.querySelectorAll('span')) || [])
+      .map((node) => (node.textContent || '').trim())
+      .find((text) => text && !text.startsWith('@')) || '';
+    const bio = (document.querySelector('[data-testid="UserDescription"]') || {}).innerText;
+    const locationText = (document.querySelector('[data-testid="UserLocation"]') || {}).innerText;
+    const websiteAnchor = document.querySelector('[data-testid="UserUrl"] a') || document.querySelector('[data-testid="UserUrl"]');
+    const website = (websiteAnchor && (websiteAnchor.getAttribute('href') || (websiteAnchor.textContent || '').trim())) || '';
+
+    // IMPORTANT: never use the first document-wide profile_images element — X's global navigation
+    // contains the SIGNED-IN account avatar and can appear before the target header.
+    const currentUsername = (location.pathname.split('/').filter(Boolean)[0] || '').toLowerCase();
+    const photoAnchor = Array.from(document.querySelectorAll('main a[href]')).find((anchor) => {
+      try {
+        const url = new URL(anchor.getAttribute('href') || '', location.origin);
+        return url.pathname.toLowerCase() === '/' + currentUsername + '/photo' &&
+          Boolean(anchor.querySelector('img[src*="profile_images"]'));
+      } catch {
+        return false;
+      }
+    });
+    const avatarImg = photoAnchor && photoAnchor.querySelector('img[src*="profile_images"]');
+    const avatar = (avatarImg && avatarImg.getAttribute('src')) || '';
+    return {
+      displayName: displayName,
+      bio: ((bio || '')).trim(),
+      location: ((locationText || '')).trim(),
+      website: website,
+      avatar: avatar
+    };
+  })()
+`;
+
 /**
  * Map one captured `UserCell` → an `XNetworkAccount`, or `null` when the handle is
  * not a real X username (never fabricate a row). The avatar is admitted ONLY as a
@@ -529,7 +606,7 @@ export function normalizeNetwork(
   target: string,
   kind: 'followers' | 'following',
   capturedAt: string,
-  opts: { synthetic?: boolean } = {},
+  opts: { synthetic?: boolean; caseId?: string } = {},
 ): XNetworkArtifact {
   const seen = new Set<string>();
   const t = String(target ?? '').replace(/^@+/, '');
@@ -542,6 +619,7 @@ export function normalizeNetwork(
     if (seen.has(key)) continue;
     seen.add(key);
     const evidenceHash = relationshipEvidenceHash({
+      caseId: opts.caseId,
       target: fullTarget,
       kind,
       handle: account.handle,
@@ -559,14 +637,21 @@ export function normalizeNetwork(
   return { target: fullTarget, kind, accounts, capturedAt };
 }
 
-/** CSV columns for a follower/following network export. */
+/** CSV columns for a follower/following network export — the full 10-column shape his
+ *  `exportRelationshipsCsv` wrote (`main.cjs:2505`), restored (M4). `url` is derived
+ *  host-anchored from the handle; `observed_count`/`evidence_sha256` + the SEPARATE
+ *  `first_observed_at`/`last_observed_at` are the columns our thinned 6-column CSV had dropped. */
 export const NETWORK_CSV_HEADER = [
-  'target',
+  'source_username',
   'relationship',
-  'handle',
+  'username',
   'display_name',
   'bio',
-  'captured_at',
+  'url',
+  'first_observed_at',
+  'last_observed_at',
+  'observed_count',
+  'evidence_sha256',
 ] as const;
 
 /**
@@ -574,20 +659,33 @@ export const NETWORK_CSV_HEADER = [
  * EVERY cell routed through `csvCell` — so a scraped bio like `=HYPERLINK("http://evil")`
  * is neutralized as literal text (the review's spreadsheet formula-injection finding).
  * A leading BOM + CRLF line endings match the app's other CSV exports. Port of
- * quarantine `exportRelationshipsCsv` (`electron/main.cjs:1146-1170`).
+ * quarantine `exportRelationshipsCsv` (`electron/main.cjs:2497-2517`).
+ *
+ * M4: the full 10 columns are restored. `url` is derived host-anchored (`https://x.com/<handle>`)
+ * — the XNetworkAccount never stores a scraped remote URL (no-remote-media discipline), and the
+ * canonical profile URL is deterministic from the bare handle. `first/last_observed_at` fall back
+ * to the artifact's `capturedAt` when the account carries no observed range (his `|| collectedAt`);
+ * `observed_count` defaults to 1 (his `|| 1`; the counter itself is PC4's `mergeNetworkAccounts`
+ * change); `evidence_sha256` is the account's `evidenceHash` or ''.
  */
 export function networkToCsv(artifacts: readonly XNetworkArtifact[] | undefined): string {
   const lines: string[] = [NETWORK_CSV_HEADER.map((h) => csvCell(h)).join(',')];
   for (const art of artifacts ?? []) {
     for (const account of art.accounts ?? []) {
+      const bareHandle = String(account.handle ?? '').replace(/^@+/, '');
+      const url = bareHandle ? `https://x.com/${bareHandle}` : '';
       lines.push(
         [
           art.target,
           art.kind,
           account.handle,
-          account.displayName,
+          account.displayName ?? '',
           account.bio ?? '',
-          art.capturedAt,
+          url,
+          account.firstObservedAt || art.capturedAt,
+          account.lastObservedAt || art.capturedAt,
+          String(account.observedCount ?? 1),
+          account.evidenceHash ?? '',
         ]
           .map((cellValue) => csvCell(String(cellValue ?? '')))
           .join(','),

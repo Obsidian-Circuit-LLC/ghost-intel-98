@@ -122,6 +122,10 @@ export function postEvidenceHash(post: PostEvidenceSource): string {
  *  cached media (Task 9), not an evidentiary text fact, and its byte-hash is the media
  *  artifact's own evidence trail. */
 export interface RelationshipEvidenceSource {
+  /** The case this observation belongs to (L4, his `enterprise.cjs:24-34` `caseId`). Folded into
+   *  the canonical shape so the SAME account observed under two DIFFERENT cases hashes distinctly —
+   *  the evidence trail is case-scoped, not global. Coerced to '' when absent. */
+  caseId?: string;
   target: string;
   kind: XNetworkArtifact['kind'];
   handle: XNetworkAccount['handle'];
@@ -130,6 +134,7 @@ export interface RelationshipEvidenceSource {
 }
 
 export interface CanonicalRelationshipEvidence {
+  caseId: string;
   target: string;
   kind: string;
   handle: string;
@@ -137,11 +142,14 @@ export interface CanonicalRelationshipEvidence {
   bio: string;
 }
 
-/** Canonical evidence shape for one relationship row — adapted from `enterprise.cjs:24-34`. */
+/** Canonical evidence shape for one relationship row — adapted from `enterprise.cjs:24-34`.
+ *  `caseId` is folded in (L4) so identical accounts across DIFFERENT cases hash distinctly; it was
+ *  previously dropped, collapsing cross-case observations to one hash. */
 export function canonicalRelationshipEvidence(
   rel: RelationshipEvidenceSource,
 ): CanonicalRelationshipEvidence {
   return {
+    caseId: String(rel.caseId ?? ''),
     target: String(rel.target ?? ''),
     kind: String(rel.kind ?? ''),
     handle: String(rel.handle ?? ''),
@@ -157,13 +165,14 @@ export function relationshipEvidenceHash(rel: RelationshipEvidenceSource): strin
 
 // ---- profile-metadata evidence (Task A2) ----------------------------------
 
-/** The visible profile-metadata fields whose change is evidentiary — the exact set Enterprise's
- *  `updateProfileMetadata` signs (`main.cjs:532`), minus `displayName` (per the A2 task's snapshot
- *  shape `{bio,avatar,location,website}`; a display-name change is captured in the snapshot's own
- *  fields elsewhere, not folded into this metadata signature). Any string is coerced + trimmed so
- *  a whitespace-only difference never falsely reads as a metadata change (mirrors Enterprise's
- *  `String(x||'').trim()` compare). */
+/** The visible profile-metadata fields whose change is evidentiary — the EXACT set Enterprise's
+ *  `updateProfileMetadata` signs (`main.cjs:532`): `{displayName,bio,avatar,location,website}`.
+ *  `displayName` is folded back in (FB2, audit HIGH #7) — without it an account RENAME produced no
+ *  `profile_change`, since the display name was the only field that changed. Any string is coerced +
+ *  trimmed so a whitespace-only difference never falsely reads as a metadata change (mirrors
+ *  Enterprise's `String(x||'').trim()` compare). */
 export interface ProfileMetadataSource {
+  displayName?: string;
   bio?: string;
   avatar?: string;
   location?: string;
@@ -171,6 +180,7 @@ export interface ProfileMetadataSource {
 }
 
 export interface CanonicalProfileMetadata {
+  displayName: string;
   bio: string;
   avatar: string;
   location: string;
@@ -179,9 +189,11 @@ export interface CanonicalProfileMetadata {
 
 /** Canonical (fixed-key-order, trimmed) profile-metadata shape — the input to the snapshot
  *  signature. Built as a fixed-key literal on every call so `JSON.stringify` (and the hash) is a
- *  pure function of the values, never of iteration/insertion order or a clock. */
+ *  pure function of the values, never of iteration/insertion order or a clock. Key order matches
+ *  Enterprise's `sha256({displayName,bio,avatar,location,website})` (`main.cjs:532`). */
 export function canonicalProfileMetadata(meta: ProfileMetadataSource): CanonicalProfileMetadata {
   return {
+    displayName: String(meta?.displayName ?? '').trim(),
     bio: String(meta?.bio ?? '').trim(),
     avatar: String(meta?.avatar ?? '').trim(),
     location: String(meta?.location ?? '').trim(),

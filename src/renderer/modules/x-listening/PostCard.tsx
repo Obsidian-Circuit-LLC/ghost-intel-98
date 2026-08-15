@@ -98,8 +98,8 @@ export interface PostCardProps {
   post: XPostRow;
   /** Active campaign id — required to resolve LOCAL media thumbs via `mediaRead`. */
   caseId: string;
-  /** Analyst notes attached to THIS post (findingId === post.id). GI98's notes are keyed by
-   *  findingId (one per finding), so this is 0 or 1 entry; the inline panel edits it in place. */
+  /** Analyst notes attached to THIS post (findingId === post.id). M11: unbounded per post —
+   *  the inline panel appends new notes and edits/deletes each one independently by note id. */
   notes: XNoteRow[];
   /** This post is mid-verification (VERIFY LIVE) — disables its button. */
   verifying?: boolean;
@@ -107,14 +107,22 @@ export interface PostCardProps {
   onOpenThread: (post: XPostRow) => void;
   /** VERIFY LIVE — the caller wires this to A1's `verifyPost`. Never shown for a synthetic post. */
   onVerify: (postId: string) => void;
-  /** Upsert an analyst note (add or edit) through the existing notes IPC. */
-  onSaveNote: (findingId: string, text: string) => Promise<void> | void;
-  /** Delete an analyst note through the existing notes IPC. */
-  onDeleteNote: (findingId: string) => Promise<void> | void;
+  /** APPEND a new analyst note to this post (M11) through the notes IPC. */
+  onAddNote: (findingId: string, text: string) => Promise<void> | void;
+  /** EDIT one existing analyst note in place, by note id (M11). */
+  onUpdateNote: (noteId: string, text: string) => Promise<void> | void;
+  /** Delete one analyst note through the notes IPC, by note id (M11). */
+  onDeleteNote: (noteId: string) => Promise<void> | void;
   /** Preset keywords to highlight in the post text (Search passes the active query). */
   highlightTerms?: string[];
   /** Names of highlight presets that matched this post → rendered as MATCH rows. */
   presetNames?: string[];
+}
+
+/** Stable key for a note: its own id, or (a legacy record's) findingId. Mirrors the store's
+ *  `xNoteKey` — a pre-M11 note held at most one per finding, so `findingId` is a safe key. */
+function noteKey(note: XNoteRow): string {
+  return note.id ?? note.findingId;
 }
 
 export function PostCard({
@@ -124,14 +132,16 @@ export function PostCard({
   verifying = false,
   onOpenThread,
   onVerify,
-  onSaveNote,
+  onAddNote,
+  onUpdateNote,
   onDeleteNote,
   highlightTerms,
   presetNames,
 }: PostCardProps): JSX.Element {
   const [notesOpen, setNotesOpen] = useState(false);
   const [draft, setDraft] = useState('');
-  const [editing, setEditing] = useState(false);
+  // M11: which note is mid-edit (by note id) — many notes per post, each edited independently.
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState('');
   const [noteBusy, setNoteBusy] = useState(false);
 
@@ -165,19 +175,19 @@ export function PostCard({
     if (!text) return;
     setNoteBusy(true);
     try {
-      await onSaveNote(post.id, text);
+      await onAddNote(post.id, text);
       setDraft('');
     } finally {
       setNoteBusy(false);
     }
   };
-  const saveEdit = async () => {
+  const saveEdit = async (noteId: string) => {
     const text = editingText.trim();
     if (!text) return;
     setNoteBusy(true);
     try {
-      await onSaveNote(post.id, text);
-      setEditing(false);
+      await onUpdateNote(noteId, text);
+      setEditingId(null);
       setEditingText('');
     } finally {
       setNoteBusy(false);
@@ -287,90 +297,93 @@ export function PostCard({
       {notesOpen && (
         <div className="xls-notes-inline">
           <div className="xls-note-list">
-            {notes.map((note) => (
-              <article className="xls-note-entry" key={note.findingId}>
-                {editing ? (
-                  <>
-                    <textarea
-                      className="xls-input"
-                      aria-label="Edit analyst note"
-                      value={editingText}
-                      onChange={(e) => setEditingText(e.target.value)}
-                    />
-                    <div className="xls-note-actions">
-                      <button
-                        type="button"
-                        className="xls-btn xls-btn-primary"
-                        disabled={noteBusy || !editingText.trim()}
-                        onClick={() => void saveEdit()}
-                      >
-                        SAVE EDIT
-                      </button>
-                      <button
-                        type="button"
-                        className="xls-btn"
-                        onClick={() => {
-                          setEditing(false);
-                          setEditingText('');
-                        }}
-                      >
-                        CANCEL
-                      </button>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <p className="xls-note-body">{note.text}</p>
-                    <div className="xls-note-meta">
-                      <span className="xls-count">UPDATED {formatWhen(note.savedAt)}</span>
+            {notes.map((note) => {
+              const key = noteKey(note);
+              return (
+                <article className="xls-note-entry" key={key}>
+                  {editingId === key ? (
+                    <>
+                      <textarea
+                        className="xls-input"
+                        aria-label="Edit analyst note"
+                        value={editingText}
+                        onChange={(e) => setEditingText(e.target.value)}
+                      />
                       <div className="xls-note-actions">
                         <button
                           type="button"
-                          className="xls-text-button"
-                          onClick={() => {
-                            setEditing(true);
-                            setEditingText(note.text);
-                          }}
+                          className="xls-btn xls-btn-primary"
+                          disabled={noteBusy || !editingText.trim()}
+                          onClick={() => void saveEdit(key)}
                         >
-                          EDIT
+                          SAVE EDIT
                         </button>
                         <button
                           type="button"
-                          className="xls-text-button xls-danger-text"
-                          disabled={noteBusy}
-                          onClick={() => void onDeleteNote(note.findingId)}
+                          className="xls-btn"
+                          onClick={() => {
+                            setEditingId(null);
+                            setEditingText('');
+                          }}
                         >
-                          DELETE
+                          CANCEL
                         </button>
                       </div>
-                    </div>
-                  </>
-                )}
-              </article>
-            ))}
+                    </>
+                  ) : (
+                    <>
+                      <p className="xls-note-body">{note.text}</p>
+                      <div className="xls-note-meta">
+                        <span className="xls-count">UPDATED {formatWhen(note.savedAt)}</span>
+                        <div className="xls-note-actions">
+                          <button
+                            type="button"
+                            className="xls-text-button"
+                            onClick={() => {
+                              setEditingId(key);
+                              setEditingText(note.text);
+                            }}
+                          >
+                            EDIT
+                          </button>
+                          <button
+                            type="button"
+                            className="xls-text-button xls-danger-text"
+                            disabled={noteBusy}
+                            onClick={() => void onDeleteNote(key)}
+                          >
+                            DELETE
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </article>
+              );
+            })}
             {notes.length === 0 && (
               <div className="xls-empty">No investigative notes attached to this record.</div>
             )}
           </div>
-          {notes.length === 0 && (
-            <div className="xls-note-compose">
-              <textarea
-                className="xls-input"
-                aria-label="Add analyst note"
-                placeholder="Assessment, source caveat, verification step, or follow-up action…"
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-              />
-              <button
-                type="button"
-                className="xls-btn xls-btn-primary"
-                disabled={noteBusy || !draft.trim()}
-                onClick={() => void addNote()}
-              >
-                ADD NOTE
-              </button>
-            </div>
-          )}
+          {/* M11: the composer is ALWAYS available — a post carries unbounded notes (his
+              multi-note model), so a new note appends rather than replacing the prior one. */}
+          <div className="xls-note-compose">
+            <textarea
+              className="xls-input"
+              aria-label="Add analyst note"
+              placeholder="Assessment, source caveat, verification step, or follow-up action…"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+            />
+            <button
+              type="button"
+              className="xls-btn xls-btn-primary"
+              disabled={noteBusy || !draft.trim()}
+              onClick={() => void addNote()}
+            >
+              ADD NOTE
+            </button>
+          </div>
         </div>
       )}
     </article>

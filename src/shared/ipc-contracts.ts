@@ -547,12 +547,14 @@ export const channels = {
   // `runArchiveCycle(s)`/`exportItems`) was retired wholesale at Task 16 — every surviving
   // capture channel below is Tor-safe. Every handler is safeHandle + assertTrustedSender.
   xListening: {
-    /** Upsert one analyst note (keyed by findingId) into the encrypted `notes` store. */
+    /** APPEND one analyst note to a finding (M11 — his multi-note model) into the encrypted
+     *  `notes` store. A finding may carry many notes; each gets a unique id. */
     saveNote: 'xListening:saveNote',
+    /** Edit one analyst note in place, by note id (M11). */
+    updateNote: 'xListening:updateNote',
     /** Read a case's analyst notes from the encrypted `notes` store. */
     readNotes: 'xListening:readNotes',
-    /** Delete the note attached to one finding, if any (Task 10). A no-op when the finding
-     *  has no note. */
+    /** Delete one analyst note by id (M11). A no-op when no note matches. */
     removeNote: 'xListening:removeNote',
 
     // ---- Phase-1 Enterprise-port surface (plan Task 6) ---------------------------------
@@ -600,14 +602,21 @@ export const channels = {
      *  artifacts (analysis.ts `computeNetworkAnalysis`) — not persisted; synthetic/demo rows
      *  are excluded (honesty). */
     analysis: 'xListening:analysis',
-    /** Derived collection-health rollup (analysis.ts `deriveCollectionHealth`). No collection-run
-     *  log is persisted yet (a later archive/network-capture task adds one), so this currently
-     *  always derives an honest empty roster rather than a fabricated one — wired now so the
-     *  renderer's Health tab is real end-to-end, not a hollow placeholder. */
+    /** Derived collection-health rollup (analysis.ts `deriveCollectionHealth`). Reads the persisted
+     *  run log (`store.listRunLog`) + captured posts/networks and derives a per-target roster:
+     *  HEALTHY/PLATEAU/ERROR for a collected target, IDLE for a derived-but-never-collected one,
+     *  each with postCount/followerCount/followingCount/oldestPostAt. Synthetic/demo rows excluded
+     *  (honesty). Arg: the caseId (campaign) to scope the rollup to. */
     health: 'xListening:health',
     /** Derived entity rollup (analysis.ts `extractEntities`) over a case's captured posts —
      *  recomputed on every call, never persisted; synthetic/demo posts are excluded (honesty). */
     entities: 'xListening:entities',
+    /** Campaign-wide avatar lookup — `{ canonicalHandle → LOCAL data: URI }` over the per-campaign
+     *  avatar cache (`buildAvatarLookup`, the repair ledger). The hardened analog of Enterprise's
+     *  `avatarLookup`/`avatarFor`: the ENTITY INDEX resolves each mention/source handle to a
+     *  LOCALIZED avatar through this map (monogram fallback when absent). CACHE-ONLY — no capture
+     *  window, no network; only local `data:` URIs are ever returned (never a remote URL). */
+    avatars: 'xListening:avatars',
     /** Read a case's saved highlight presets. */
     presetsRead: 'xListening:presets:read',
     /** Upsert one highlight preset (keyed by id); `updatedAt` is stamped MAIN-side. */
@@ -645,6 +654,10 @@ export const channels = {
      *  operator-chosen path via a native save dialog (`exportNetworkCsv`, Task 7) — same
      *  save-dialog-only discipline as `exportPostsToFile`, plus a SHA-256 checksum sidecar. */
     exportNetworkToFile: 'xListening:export:networkToFile',
+    /** FB4 (audit HIGH #10): export a campaign's REAL (synthetic-excluded) captured network as a
+     *  self-describing JSON envelope embedding the common-connection analysis + a deterministic
+     *  `manifestHash`, to an operator-chosen path via a native save dialog, plus a SHA-256 sidecar. */
+    exportNetworkJsonToFile: 'xListening:export:networkJsonToFile',
     /** Read back one previously-cached local media ref (media.ts `cacheRemoteMedia`, Task 9) as a
      *  `data:` URI for renderer display. `ref` is validated against the exact
      *  `x-media/<64-hex sha256>` shape `cacheRemoteMedia` produces BEFORE any path is built —
@@ -669,6 +682,12 @@ export const channels = {
      *  completedPasses, reachedEnd, stopReason, status, startedAt, endedAt }`) emitted by the
      *  capture/archive paths. Derived read; no capture window, no network. */
     runLog: 'xListening:runLog',
+    /** List a campaign's per-handle network delta events (store.ts `listNetworkEvents`, M2) —
+     *  newest-first, capped ~500. The Network tab's RECENT NETWORK DELTAS stream: a `newly_observed`
+     *  per newly-added follower/following handle and a CONSERVATIVE, gated `not_seen_latest` per
+     *  previous-scan handle absent from a comparable scan (his `recordNetworkSnapshot` `networkEvents`,
+     *  no-auto-unfollow). Derived read; no capture window, no network. */
+    networkEvents: 'xListening:networkEvents',
     /** Extract one target's followers or following into the campaign's `networks` accumulator
      *  (capture.ts `captureNetwork`, Task C1 — EXTRACT FOLLOWERS/FOLLOWING/BOTH). Opens a Tor-gated
      *  hidden capture window on the shared authenticated X partition, navigated to

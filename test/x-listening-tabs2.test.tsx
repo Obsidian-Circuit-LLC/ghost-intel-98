@@ -99,9 +99,13 @@ function makeApi() {
       networksList: vi.fn(async () => [NETWORK_ARTIFACT]),
       changeEvents: vi.fn(async () => []),
       runLog: vi.fn(async () => []),
+      networkEvents: vi.fn(async () => []),
       readNotes: vi.fn(async () => ({ notes: [{ findingId: 'post-a', text: 'existing note', savedAt: '2026-08-01T00:00:00.000Z' }] })),
       saveNote: vi.fn(async (req: { findingId: string; text: string }) => ({
-        notes: [{ findingId: req.findingId, text: req.text, savedAt: '2026-08-05T00:00:00.000Z' }],
+        notes: [{ id: 'note-1', findingId: req.findingId, text: req.text, savedAt: '2026-08-05T00:00:00.000Z' }],
+      })),
+      updateNote: vi.fn(async (req: { noteId: string; text: string }) => ({
+        notes: [{ id: req.noteId, findingId: 'post-a', text: req.text, savedAt: '2026-08-06T00:00:00.000Z' }],
       })),
       removeNote: vi.fn(async () => ({ notes: [] })),
       archiveStatus: vi.fn(async () => ({ cursor: 'cursor-123', cycles: 3, lastRunAt: '2026-08-04T00:00:00.000Z' })),
@@ -280,18 +284,26 @@ describe('X Listening Station tabs (Task 15)', () => {
     expect(container.textContent || '').toMatch(/OSINT watch/);
   });
 
-  it('search tab Save Preset drives the real presetsSave channel with the current query as keywords', async () => {
+  it('search tab Save Preset drives the real presetsSave channel with the keyword textarea (comma-split) + full shape', async () => {
     await mount();
     await clickTab(/^search$/i);
-    const query = container.querySelector('.xls-search-query') as HTMLInputElement;
-    await act(async () => setInputValue(query, 'foo, bar'));
+    // Audit HIGH #9: keywords come from the dedicated editor TEXTAREA now, not the live search box.
+    const keywords = container.querySelector('.xls-preset-keywords') as HTMLTextAreaElement;
+    await act(async () => setInputValue(keywords, 'foo, bar'));
     const name = container.querySelector('.xls-preset-name') as HTMLInputElement;
     await act(async () => setInputValue(name, 'My Preset'));
     await act(async () => { findButton(container, /save preset/i).click(); });
     await act(async () => { await Promise.resolve(); });
 
     expect(api.xListening.presetsSave).toHaveBeenCalledWith(
-      expect.objectContaining({ caseId: 'camp-a', name: 'My Preset', keywords: ['foo', 'bar'] }),
+      expect.objectContaining({
+        caseId: 'camp-a',
+        name: 'My Preset',
+        keywords: ['foo', 'bar'],
+        mode: 'any',
+        caseSensitive: false,
+        profileIds: [],
+      }),
     );
   });
 
@@ -343,7 +355,8 @@ describe('X Listening Station tabs (Task 15)', () => {
     await clickTab(/^notes$/i);
     await act(async () => { findButton(container, /remove/i).click(); });
     await act(async () => { await Promise.resolve(); });
-    expect(api.xListening.removeNote).toHaveBeenCalledWith({ caseId: 'camp-a', findingId: 'post-a' });
+    // M11: notes are deleted by note id; the legacy fixture has no id, so it keys on its findingId.
+    expect(api.xListening.removeNote).toHaveBeenCalledWith({ caseId: 'camp-a', noteId: 'post-a' });
   });
 
   // ── exports ────────────────────────────────────────────────────────────────
