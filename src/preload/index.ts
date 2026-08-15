@@ -829,6 +829,50 @@ const api = {
       ipcRenderer.invoke(channels.scrapingCases.importToCase, store, scrapingCaseId, mainCaseId),
     saveArtifact: (store: ScrapingCaseStoreId, scrapingCaseId: string, name: string, content: string) =>
       ipcRenderer.invoke(channels.scrapingCases.saveArtifact, store, scrapingCaseId, name, content)
+  },
+  // WebSDR Viewer (core module) — hardened manager + embedded browser for PUBLIC SDR websites.
+  // Phase 1: the encrypt-at-rest directory/presets/notes/menu/egress stores. Every channel is
+  // sender-validated + arg-checked main-side; a receiver URL is validated http/https-only there.
+  websdr: {
+    listReceivers: () => ipcRenderer.invoke(channels.websdr.directoryList),
+    saveReceiver: (receiver: unknown) => ipcRenderer.invoke(channels.websdr.directorySave, receiver),
+    deleteReceiver: (id: string) => ipcRenderer.invoke(channels.websdr.directoryDelete, id),
+    listPresets: () => ipcRenderer.invoke(channels.websdr.presetsList),
+    savePreset: (preset: unknown) => ipcRenderer.invoke(channels.websdr.presetsSave, preset),
+    deletePreset: (id: string) => ipcRenderer.invoke(channels.websdr.presetsDelete, id),
+    listNotes: () => ipcRenderer.invoke(channels.websdr.notesList),
+    saveNote: (note: unknown) => ipcRenderer.invoke(channels.websdr.notesSave, note),
+    deleteNote: (id: string) => ipcRenderer.invoke(channels.websdr.notesDelete, id),
+    getMenu: () => ipcRenderer.invoke(channels.websdr.menuGet),
+    saveMenu: (menu: unknown) => ipcRenderer.invoke(channels.websdr.menuSave, menu),
+    getEgress: () => ipcRenderer.invoke(channels.websdr.egressGet),
+    setEgress: (mode: unknown) => ipcRenderer.invoke(channels.websdr.egressSet, mode),
+    // Phase 2 — hardened receiver-view overlay. Every channel is sender-validated + arg-checked
+    // main-side; every receiver URL is validated http/https-only there.
+    receiverLoad: (url: string) => ipcRenderer.invoke(channels.websdr.receiverLoad, url),
+    receiverHide: () => ipcRenderer.invoke(channels.websdr.receiverHide),
+    receiverPresent: (input: unknown) => ipcRenderer.invoke(channels.websdr.receiverPresent, input),
+    receiverModal: (open: boolean) => ipcRenderer.invoke(channels.websdr.receiverModal, open),
+    receiverStatus: (url: string) => ipcRenderer.invoke(channels.websdr.receiverStatus, url),
+    receiverMute: (muted: boolean) => ipcRenderer.invoke(channels.websdr.receiverMute, muted),
+    receiverExternalOpen: (url: string) =>
+      ipcRenderer.invoke(channels.websdr.receiverExternalOpen, url),
+    receiverEgressApply: (mode: unknown) =>
+      ipcRenderer.invoke(channels.websdr.receiverEgressApply, mode),
+    // Phase 3 — control-bar injection (confined to the receiver partition main-side) + recording
+    // archive. Captured bytes persist encrypted-at-rest; export is the one save-dialog-gated
+    // plaintext egress.
+    receiverTune: (hz: number) => ipcRenderer.invoke(channels.websdr.receiverTune, hz),
+    receiverMode: (mode: string) => ipcRenderer.invoke(channels.websdr.receiverMode, mode),
+    receiverVolume: (volume: number) => ipcRenderer.invoke(channels.websdr.receiverVolume, volume),
+    receiverCaptureSource: () => ipcRenderer.invoke(channels.websdr.receiverCaptureSource),
+    listRecordings: () => ipcRenderer.invoke(channels.websdr.recordingsList),
+    saveRecording: (payload: unknown) => ipcRenderer.invoke(channels.websdr.recordingsSave, payload),
+    recordingData: (id: string) => ipcRenderer.invoke(channels.websdr.recordingsData, id),
+    annotateRecording: (id: string, notes: string) =>
+      ipcRenderer.invoke(channels.websdr.recordingsAnnotate, id, notes),
+    deleteRecording: (id: string) => ipcRenderer.invoke(channels.websdr.recordingsDelete, id),
+    exportRecording: (id: string) => ipcRenderer.invoke(channels.websdr.recordingsExport, id)
   }
 } as const;
 

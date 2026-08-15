@@ -823,6 +823,57 @@ export const channels = {
   pdfsign: {
     read: 'pdfsign:read',
     sign: 'pdfsign:sign'
+  },
+  // WebSDR Viewer (core module) — a hardened manager + embedded browser for PUBLIC SDR websites
+  // (WebSDR/KiwiSDR/OpenWebRX). Phase 1 wires the encrypt-at-rest stores only: the receiver
+  // directory (seeded with 851 public KiwiSDR receivers), frequency presets, listening notes, the
+  // customizable Station Menu, and the receiver-session egress toggle (clearnet default / warned
+  // Tor opt-in — the app's ONE narrow clearnet-default exception). Every handler validates the
+  // sender frame + argument shape; every receiver URL passes normalizeWebSdrUrl (http/https-only)
+  // at the boundary. The receiver-view/recording channels arrive in Phase 2/3.
+  websdr: {
+    directoryList: 'websdr:directory:list',
+    directorySave: 'websdr:directory:save',
+    directoryDelete: 'websdr:directory:delete',
+    presetsList: 'websdr:presets:list',
+    presetsSave: 'websdr:presets:save',
+    presetsDelete: 'websdr:presets:delete',
+    notesList: 'websdr:notes:list',
+    notesSave: 'websdr:notes:save',
+    notesDelete: 'websdr:notes:delete',
+    menuGet: 'websdr:menu:get',
+    menuSave: 'websdr:menu:save',
+    egressGet: 'websdr:egress:get',
+    egressSet: 'websdr:egress:set',
+    // Phase 2 — the hardened receiver-view overlay (persist:websdr). load/hide/present/modal drive
+    // the WebContents< z-order on the multi-window desktop; status runs over the active egress
+    // path; external-open + egress-apply are the guarded egress/navigation seams. Every handler
+    // sender-validates first (the overlay hosts a hostile remote SDR page).
+    receiverLoad: 'websdr:receiver:load',
+    receiverHide: 'websdr:receiver:hide',
+    receiverPresent: 'websdr:receiver:present',
+    receiverModal: 'websdr:receiver:modal',
+    receiverStatus: 'websdr:receiver:status',
+    receiverMute: 'websdr:receiver:mute',
+    receiverExternalOpen: 'websdr:receiver:external-open',
+    receiverEgressApply: 'websdr:receiver:egress-apply',
+    // Phase 3 — control-bar injection (freq/mode/volume) confined to the receiver partition + the
+    // recording capture-source handshake. tune/mode/volume run his DOM-heuristic script ONLY into
+    // the persist:websdr view; capture-source returns getMediaSourceId(sender) for the renderer's
+    // MediaRecorder. Every handler sender-validates first (the overlay hosts a hostile remote page).
+    receiverTune: 'websdr:receiver:tune',
+    receiverMode: 'websdr:receiver:mode',
+    receiverVolume: 'websdr:receiver:volume',
+    receiverCaptureSource: 'websdr:receiver:capture-source',
+    // Phase 3 — recording archive (R7). Captured bytes are stored ENCRYPTED-at-rest via secure-fs
+    // (never plaintext .webm beside the exe); data decrypts to memory for in-app playback; export
+    // writes a plaintext .webm ONLY to a user-chosen save-dialog path. Metadata is the P1 store.
+    recordingsList: 'websdr:recordings:list',
+    recordingsSave: 'websdr:recordings:save',
+    recordingsData: 'websdr:recordings:data',
+    recordingsAnnotate: 'websdr:recordings:annotate',
+    recordingsDelete: 'websdr:recordings:delete',
+    recordingsExport: 'websdr:recordings:export'
   }
 } as const;
 

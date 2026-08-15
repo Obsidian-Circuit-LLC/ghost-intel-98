@@ -211,6 +211,97 @@
   --ga98-xls-tor-ok-ink: #6cf1aa;
   --ga98-xls-tor-ok-border: #236347;
   --ga98-xls-dot-off: #8b3c3c;           /* his offline session dot */
+
+  /* ── WebSDR Viewer — HIS fixed green console (Global Constraint 7) ──────────────
+     Ported verbatim from GhostExodus's SDR-Eaves-Dropper styles.css. This is a FIXED
+     theme, NOT the app skin: these tokens are defined ONCE here and deliberately NOT
+     overridden in the amethyst block below, so `.sdr-root` renders his dark-green
+     radio-intelligence look IDENTICALLY under classic + QUIET AMETHYST (mirrors the
+     `--ga98-xls-*` precedent, but single-valued). Module CSS references these only —
+     no raw literal lives in websdr.css. */
+  --ga98-sdr-sans: 'Segoe UI', Tahoma, sans-serif;
+  --ga98-sdr-mono: Consolas, 'Courier New', monospace;
+  --ga98-sdr-bg: #07110b;                /* app ground */
+  --ga98-sdr-bg-deep: #020805;           /* gradient floor / deep inset */
+  --ga98-sdr-banner-bg: #010603;         /* banner frame */
+  --ga98-sdr-banner-border: #1b5f31;
+  --ga98-sdr-sidebar-bg: #08140d;        /* left rail */
+  --ga98-sdr-heading-bg: #061009;        /* menu heading / modal inputs */
+  --ga98-sdr-heading-border: #174426;
+  --ga98-sdr-heading-ink: #62ef88;
+  --ga98-sdr-nav-bg: #0b1d12;            /* nav button */
+  --ga98-sdr-nav-border: #1d4b2b;
+  --ga98-sdr-nav-hover-bg: #10291a;
+  --ga98-sdr-nav-hover-border: #337344;
+  --ga98-sdr-nav-active-bg: #164124;
+  --ga98-sdr-nav-active-border: #52d876;
+  --ga98-sdr-toolbar-bg: #0c1c12;
+  --ga98-sdr-toolbar-border: #1c5930;
+  --ga98-sdr-header-bg: #09150e;
+  --ga98-sdr-frame-bg: #020402;          /* receiver host ground */
+  --ga98-sdr-footer-bg: #07110b;
+  --ga98-sdr-modal-bg: #0d1b12;
+  --ga98-sdr-modal-shade: rgba(0, 10, 3, 0.67);
+  --ga98-sdr-inset-bg: #020704;          /* freq/archive text inputs */
+  --ga98-sdr-inset-bg2: #030906;         /* note inputs */
+  --ga98-sdr-search-bg: #051009;
+  --ga98-sdr-card-bg: #0a1810;           /* note card */
+  --ga98-sdr-card-bg2: #09170f;          /* note editor / recording item */
+  --ga98-sdr-receiver-active-bg: #123a1f;
+  --ga98-sdr-recording-active-bg: #12351e;
+  --ga98-sdr-archive-bg: #040804;
+  --ga98-sdr-archive-panel-bg: #08130d;
+  --ga98-sdr-btn-bg: #102519;            /* default button */
+  --ga98-sdr-btn-ink: #bbf7ca;
+  --ga98-sdr-ink: #d7ffe1;               /* primary text */
+  --ga98-sdr-ink-bright: #caffd6;
+  --ga98-sdr-ink-soft: #a9cfb3;
+  --ga98-sdr-ink-dim: #789783;
+  --ga98-sdr-ink-mute: #6e8875;
+  --ga98-sdr-label: #78d491;             /* toolbar caption */
+  --ga98-sdr-green: #52d876;
+  --ga98-sdr-green-bright: #5cff81;      /* freq readout / online dot */
+  --ga98-sdr-accent: #62ef88;
+  --ga98-sdr-accent-2: #66ee8b;          /* section titles */
+  --ga98-sdr-title: #77f298;             /* modal headings */
+  --ga98-sdr-title-2: #7dff9d;           /* nav-active / fatal title */
+  --ga98-sdr-border: #1b522d;            /* sidebar seam */
+  --ga98-sdr-border-dim: #12321c;
+  --ga98-sdr-border-soft: #153c22;
+  --ga98-sdr-border-mid: #285b37;        /* button border */
+  --ga98-sdr-border-input: #285d38;
+  --ga98-sdr-border-strong: #3c8a51;     /* freq input border */
+  --ga98-sdr-border-accent: #398b51;     /* modal border */
+  --ga98-sdr-primary-bg: #45cf68;        /* PRIMARY action */
+  --ga98-sdr-primary-ink: #031107;
+  --ga98-sdr-primary-border: #77f397;
+  --ga98-sdr-mode-active-bg: #42d66a;    /* selected mode button */
+  --ga98-sdr-mode-active-ink: #031507;
+  --ga98-sdr-mode-active-border: #72ff95;
+  --ga98-sdr-dot-idle: #526359;
+  --ga98-sdr-dot-online: #5cff81;
+  --ga98-sdr-dot-offline: #ff5454;
+  --ga98-sdr-dot-checking: #ffd84d;
+  --ga98-sdr-amber: #e8d65d;             /* row action / clearnet marker */
+  --ga98-sdr-fav: #ffe45c;               /* favourite star lit */
+  --ga98-sdr-fav-border: #776b25;
+  --ga98-sdr-record-bg: #9e1f27;         /* live RECORD button */
+  --ga98-sdr-record-border: #ff626b;
+  --ga98-sdr-record-ink: #ffffff;
+  --ga98-sdr-record-glow: rgba(255, 65, 75, 0.55);
+  --ga98-sdr-tor-on-bg: #142a1a;         /* Tor marker */
+  --ga98-sdr-tor-on-ink: #7dff9d;
+  --ga98-sdr-tor-warn-bg: #24121a;       /* Tor-may-break-audio warning */
+  --ga98-sdr-tor-warn-ink: #f0c65e;
+  --ga98-sdr-tor-warn-border: #7a2e37;
+  --ga98-sdr-danger-ink: #ff8a8a;
+  --ga98-sdr-danger-border: #663333;
+  --ga98-sdr-empty-ink: #3e7d4f;         /* empty-state hero */
+  --ga98-sdr-empty-title: #64c57d;
+  --ga98-sdr-empty-text: #587361;
+  --ga98-sdr-fatal-icon: #ffcf66;        /* failure surface */
+  --ga98-sdr-fatal-danger: #ffc5c5;
+  --ga98-sdr-fatal-mute: #75917c;
 }
 
 html, body, #root {

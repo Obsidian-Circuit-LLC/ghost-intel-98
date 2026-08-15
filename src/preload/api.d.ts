@@ -7,6 +7,15 @@ import type { XCollectionSettings } from '../shared/x-listening-collection-setti
 import type { XImageMode } from '../shared/x-listening-image-policy';
 import type { XScheduleStatus } from '../shared/x-listening-schedule';
 import type {
+  WebSdrReceiver,
+  WebSdrPreset,
+  WebSdrNote,
+  WebSdrStationMenu,
+  WebSdrEgressState,
+  WebSdrEgressMode,
+  WebSdrRecordingMeta,
+} from '../shared/websdr/types';
+import type {
   AppSettings,
   AttachmentBytesResult,
   MediaUrlResult,
@@ -1154,6 +1163,68 @@ export interface GhostApi {
     remove(store: ScrapingCaseStoreId, id: string): Promise<void>;
     importToCase(store: ScrapingCaseStoreId, scrapingCaseId: string, mainCaseId: string): Promise<ScrapingImportResult>;
     saveArtifact(store: ScrapingCaseStoreId, scrapingCaseId: string, name: string, content: string): Promise<string>;
+  };
+  /**
+   * WebSDR Viewer (core module) — a hardened manager + embedded browser for PUBLIC SDR websites.
+   * Phase 1 exposes the encrypt-at-rest stores: the seeded receiver directory, frequency presets,
+   * listening notes, the customizable Station Menu, and the receiver-session egress toggle
+   * (clearnet default / warned Tor opt-in). Every save is normalized + bounded MAIN-side; a
+   * receiver URL is validated http/https-only at the boundary. Receiver-view + recording calls
+   * arrive in Phase 2/3.
+   */
+  websdr: {
+    listReceivers(): Promise<WebSdrReceiver[]>;
+    saveReceiver(receiver: Partial<WebSdrReceiver>): Promise<WebSdrReceiver[]>;
+    deleteReceiver(id: string): Promise<WebSdrReceiver[]>;
+    listPresets(): Promise<WebSdrPreset[]>;
+    savePreset(preset: Partial<WebSdrPreset>): Promise<WebSdrPreset[]>;
+    deletePreset(id: string): Promise<WebSdrPreset[]>;
+    listNotes(): Promise<WebSdrNote[]>;
+    saveNote(note: Partial<WebSdrNote>): Promise<WebSdrNote[]>;
+    deleteNote(id: string): Promise<WebSdrNote[]>;
+    getMenu(): Promise<WebSdrStationMenu>;
+    saveMenu(menu: WebSdrStationMenu): Promise<WebSdrStationMenu>;
+    getEgress(): Promise<WebSdrEgressState>;
+    setEgress(mode: WebSdrEgressMode): Promise<WebSdrEgressState>;
+    /** Phase 2 — hardened receiver-view overlay (persist:websdr). */
+    receiverLoad(url: string): Promise<void>;
+    receiverHide(): Promise<void>;
+    receiverPresent(input: {
+      visible: boolean;
+      bounds?: { x: number; y: number; width: number; height: number };
+    }): Promise<void>;
+    receiverModal(open: boolean): Promise<void>;
+    receiverStatus(url: string): Promise<{ online: boolean; status?: number; error?: string }>;
+    receiverMute(muted: boolean): Promise<void>;
+    receiverExternalOpen(url: string): Promise<void>;
+    receiverEgressApply(
+      mode: WebSdrEgressMode,
+    ): Promise<{ mode: WebSdrEgressMode; showWarning: boolean }>;
+    /** Phase 3 — control-bar injection (confined to the receiver partition main-side). Each returns
+     *  his {ok,message} result — an incompatible page reports "use native controls". */
+    receiverTune(hz: number): Promise<{ ok: boolean; message: string }>;
+    receiverMode(mode: string): Promise<{ ok: boolean; message: string }>;
+    receiverVolume(volume: number): Promise<{ ok: boolean; message: string }>;
+    /** His `getMediaSourceId` handshake — the source id the renderer's MediaRecorder captures. */
+    receiverCaptureSource(): Promise<string>;
+    /** Phase 3 — recording archive (R7). Captured bytes persist encrypted-at-rest via secure-fs. */
+    listRecordings(): Promise<WebSdrRecordingMeta[]>;
+    saveRecording(payload: {
+      data: ArrayBuffer | Uint8Array;
+      receiverId?: string;
+      receiverName: string;
+      sourceUrl?: string;
+      startedAt?: string;
+      endedAt?: string;
+      durationMs?: number;
+      frequencyHz?: number;
+      mode?: string;
+      notes?: string;
+    }): Promise<WebSdrRecordingMeta[]>;
+    recordingData(id: string): Promise<{ id: string; mime: string; bytes: Uint8Array }>;
+    annotateRecording(id: string, notes: string): Promise<WebSdrRecordingMeta[]>;
+    deleteRecording(id: string): Promise<WebSdrRecordingMeta[]>;
+    exportRecording(id: string): Promise<boolean>;
   };
 }
 
