@@ -1,0 +1,273 @@
+/* ── Weather tool (OURS, 2026-08-15) ─────────────────────────────────────────
+   A native Win98-retro utility themed onto the two-tier --ga98-* palette so it
+   follows BOTH the classic skin and QUIET AMETHYST like every built-in module.
+   Every colour below routes through a palette token (surface = grey, ink = text,
+   dim = text-dim, borders = shadow-dark/divider, status = ok/error/warning,
+   the egress markers use the generic ok/error status boxes). No raw literals —
+   the no-straggler guard scans this file. */
+
+.ga98-weather {
+  display: flex;
+  flex-direction: row;
+  height: 100%;
+  background: var(--ga98-grey);
+  color: var(--ga98-text);
+  font-family: inherit;
+  overflow: hidden;
+}
+
+/* ── Sidebar: saved locations + add-a-city search ─────────────────────────── */
+.ga98-weather-side {
+  flex: 0 0 220px;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--ga98-shadow-dark);
+  background: var(--ga98-grey);
+  overflow: hidden;
+}
+
+.ga98-weather-search {
+  padding: 8px;
+  border-bottom: 1px solid var(--ga98-divider);
+}
+.ga98-weather-search-row {
+  display: flex;
+  gap: 4px;
+}
+.ga98-weather-search input {
+  flex: 1;
+  min-width: 0;
+}
+.ga98-weather-matches {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  max-height: 168px;
+  overflow-y: auto;
+  border: 1px solid var(--ga98-inset-border);
+  background: var(--ga98-inset-panel);
+}
+.ga98-weather-match {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--ga98-hairline);
+}
+.ga98-weather-match:last-child { border-bottom: none; }
+.ga98-weather-match-name { font-size: 12px; }
+.ga98-weather-match-sub { color: var(--ga98-text-dim); font-size: 11px; }
+
+.ga98-weather-locs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex: 1;
+  overflow-y: auto;
+}
+.ga98-weather-loc {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 4px 4px 8px;
+  border-bottom: 1px solid var(--ga98-hairline);
+  cursor: default;
+}
+.ga98-weather-loc:hover { background: var(--ga98-row-hover); }
+.ga98-weather-loc.is-selected {
+  background: var(--ga98-select-bg, #4a3568);
+  color: var(--ga98-titlebar-text);
+}
+.ga98-weather-loc-pick {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font-family: inherit;
+  font-size: 12px;
+  padding: 2px;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ga98-weather-loc-sub { color: var(--ga98-text-dim); font-size: 11px; }
+.ga98-weather-loc.is-selected .ga98-weather-loc-sub { color: var(--ga98-titlebar-text); }
+.ga98-weather-loc-btns { display: flex; gap: 1px; flex: 0 0 auto; }
+.ga98-weather-loc-btns button {
+  min-width: 20px;
+  padding: 0 3px;
+  font-size: 11px;
+}
+.ga98-weather-empty {
+  padding: 10px 8px;
+  color: var(--ga98-text-dim);
+  font-size: 12px;
+}
+
+/* ── Main pane ────────────────────────────────────────────────────────────── */
+.ga98-weather-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  padding: 8px;
+  gap: 8px;
+}
+
+.ga98-weather-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Egress marker — the generic theme-following status boxes (ok = Tor-safe, error = clearnet-danger).
+   NOT the X-Listening --ga98-xls-tor-* tokens: those are that module's FIXED-dark console palette, so
+   reusing them here painted the marker dark under the classic skin. Weather follows the app theme. */
+.ga98-weather-egress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border: 1px solid var(--ga98-ok-dot);
+  border-left: 3px solid var(--ga98-ok-dot);
+  background: var(--ga98-ok-surface);
+  color: var(--ga98-ok-ink);
+}
+.ga98-weather-egress.is-clearnet {
+  border-color: var(--ga98-error-border);
+  border-left-color: var(--ga98-error-border);
+  background: var(--ga98-error-surface);
+  color: var(--ga98-danger-ink);
+}
+.ga98-weather-egress.is-blocked {
+  border-color: var(--ga98-status-warning);
+  border-left-color: var(--ga98-status-warning);
+  background: var(--ga98-status-warning-fill);
+  color: var(--ga98-badge-warn-ink);
+}
+.ga98-weather-egress-label { display: flex; flex-direction: column; }
+.ga98-weather-egress-label strong { font-size: 12px; }
+.ga98-weather-egress-label small { font-size: 11px; opacity: 0.85; }
+.ga98-weather-egress-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  margin-left: auto;
+}
+
+.ga98-weather-units { display: flex; gap: 0; }
+.ga98-weather-units button {
+  min-width: 34px;
+  font-weight: bold;
+}
+.ga98-weather-units button[aria-pressed='true'] {
+  border-style: inset;
+  background: var(--ga98-select-bg, #4a3568);
+  color: var(--ga98-titlebar-text);
+}
+
+/* Stale + blocked banners. */
+.ga98-weather-stale {
+  padding: 5px 8px;
+  border: 1px solid var(--ga98-status-warning);
+  background: var(--ga98-status-warning-fill);
+  color: var(--ga98-badge-warn-ink);
+  font-size: 12px;
+}
+.ga98-weather-blocked {
+  padding: 10px;
+  border: 1px solid var(--ga98-error-border);
+  background: var(--ga98-error-surface);
+  color: var(--ga98-danger-ink);
+  font-size: 12px;
+}
+.ga98-weather-note { color: var(--ga98-text-dim); font-size: 12px; padding: 8px; }
+
+/* Current conditions card. */
+.ga98-weather-current {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px;
+  border: 1px solid var(--ga98-inset-border);
+  background: var(--ga98-inset-panel);
+}
+.ga98-weather-current-glyph { font-size: 42px; line-height: 1; }
+.ga98-weather-current-main { display: flex; flex-direction: column; gap: 2px; }
+.ga98-weather-current-temp { font-size: 30px; font-weight: bold; }
+.ga98-weather-current-cond { font-size: 14px; }
+.ga98-weather-current-meta { color: var(--ga98-text-dim); font-size: 12px; }
+.ga98-weather-current-stats {
+  margin-left: auto;
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 2px 10px;
+  font-size: 12px;
+}
+.ga98-weather-current-stats dt { color: var(--ga98-text-dim); }
+.ga98-weather-current-stats dd { margin: 0; text-align: right; }
+
+/* Section heading. */
+.ga98-weather-h {
+  font-size: 12px;
+  font-weight: bold;
+  color: var(--ga98-text-dim);
+  margin: 2px 0;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Today's hourly strip. */
+.ga98-weather-hourly {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+.ga98-weather-hour {
+  flex: 0 0 auto;
+  min-width: 52px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 4px;
+  border: 1px solid var(--ga98-inset-border);
+  background: var(--ga98-inset-panel);
+  font-size: 11px;
+}
+.ga98-weather-hour-time { color: var(--ga98-text-dim); }
+.ga98-weather-hour-glyph { font-size: 18px; line-height: 1; }
+.ga98-weather-hour-temp { font-weight: bold; }
+.ga98-weather-hour-pop { color: var(--ga98-link-ext); }
+
+/* 7-day row. */
+.ga98-weather-daily {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--ga98-inset-border);
+  background: var(--ga98-inset-panel);
+}
+.ga98-weather-day {
+  display: grid;
+  grid-template-columns: 3fr 1fr 3fr 2fr;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--ga98-hairline);
+  font-size: 12px;
+}
+.ga98-weather-day:last-child { border-bottom: none; }
+.ga98-weather-day-name { font-weight: bold; }
+.ga98-weather-day-glyph { font-size: 16px; text-align: center; }
+.ga98-weather-day-hilo { color: var(--ga98-text); }
+.ga98-weather-day-lo { color: var(--ga98-text-dim); }
+.ga98-weather-day-pop { color: var(--ga98-link-ext); text-align: right; }

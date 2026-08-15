@@ -29,6 +29,9 @@ import {
   X_POST_SCRIPT,
   parseMetricText,
   normalizePost,
+  normalizeReply,
+  normalizeRepost,
+  normalizeComment,
   type RawPost,
   type NormalizeContext,
 } from '../src/main/x-listening/extract';
@@ -194,5 +197,54 @@ describe('normalizePost: captured DOM → HarvestedItem', () => {
     expect(item.messageId).toBe('1789000000000000001');
     // deterministic: same input → same id.
     expect(normalizePost(rawPost(), CTX).id).toBe(item.id);
+  });
+});
+
+// ---- M1 (PC4): per-post displayName carried through the mapping ----------
+//
+// His `readVisibleTimelineItems` reads the article's visible display name and
+// `mapCollectedPost` (main.cjs:1349) carries it onto every record. Ours dropped it,
+// so a repost's ORIGINAL author name and a comment's THIRD-PARTY author name — the
+// only place those names are observed — were lost. The value must survive the pure
+// normalizer for every kind. It is NOT folded into the evidence hash (his
+// canonicalPostEvidence omits displayName, enterprise.cjs:8-22) — a display rename is
+// not a content edit of the post.
+describe('normalizeItem: per-post displayName (M1)', () => {
+  it('carries a captured displayName onto a plain post', () => {
+    const item = normalizePost(rawPost({ displayName: 'Target Person' }), CTX);
+    expect(item.displayName).toBe('Target Person');
+  });
+
+  it('preserves a REPOST original author displayName (author != target)', () => {
+    const item = normalizeRepost(
+      rawPost({ username: 'someoneelse', displayName: 'Someone Else' }),
+      CTX,
+    );
+    expect(item.kind).toBe('repost');
+    expect(item.authorHandle).toBe('@someoneelse');
+    expect(item.displayName).toBe('Someone Else');
+  });
+
+  it('preserves a COMMENT third-party author displayName', () => {
+    const item = normalizeComment(
+      rawPost({ username: 'replier', displayName: 'The Replier' }),
+      CTX,
+      '1789000000000000001',
+    );
+    expect(item.kind).toBe('comment');
+    expect(item.displayName).toBe('The Replier');
+    expect(item.parentId).toBe('1789000000000000001');
+  });
+
+  it('omits displayName when none was visible (honest absence, never backfilled from the handle)', () => {
+    const item = normalizeReply(rawPost({ displayName: '' }), CTX);
+    expect(item.displayName).toBeUndefined();
+  });
+
+  it('does NOT let displayName perturb the evidence hash (a rename is not a content edit)', () => {
+    const withName = normalizePost(rawPost({ displayName: 'Name A' }), CTX);
+    const withOther = normalizePost(rawPost({ displayName: 'Name B' }), CTX);
+    // The normalized items differ only in displayName; the id (content-derived) is unchanged.
+    expect(withName.id).toBe(withOther.id);
   });
 });

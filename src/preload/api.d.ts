@@ -7,6 +7,28 @@ import type { XCollectionSettings } from '../shared/x-listening-collection-setti
 import type { XImageMode } from '../shared/x-listening-image-policy';
 import type { XScheduleStatus } from '../shared/x-listening-schedule';
 import type {
+  WebSdrReceiver,
+  WebSdrPreset,
+  WebSdrNote,
+  WebSdrStationMenu,
+  WebSdrEgressState,
+  WebSdrEgressMode,
+  WebSdrRecordingMeta,
+} from '../shared/websdr/types';
+import type {
+  GhostState,
+  PlatformDefault,
+  PublishResult,
+  AccountStats,
+} from '../shared/ghost-social/types';
+import type {
+  GeocodeMatch as WeatherGeocodeMatch,
+  SavedLocation as WeatherSavedLocation,
+  Units as WeatherUnits,
+  WeatherEgressState as WeatherEgressStateT,
+  WeatherForecastResult,
+} from '../shared/weather/types';
+import type {
   AppSettings,
   AttachmentBytesResult,
   MediaUrlResult,
@@ -806,21 +828,24 @@ export interface GhostApi {
    */
   xListening: {
     /**
-     * Upsert one analyst note against a finding (one note per finding — a re-save
-     * REPLACES it). Text is trimmed + validated (non-empty, ≤ 20 000 chars) and
-     * `savedAt` is stamped MAIN-side. Returns the fresh note list.
+     * APPEND one analyst note to a finding (M11 — his multi-note-per-post model; a finding may
+     * carry many notes, each with a unique `id`). Text is trimmed + validated (non-empty,
+     * ≤ 20 000 chars); `savedAt` + the note `id` are stamped MAIN-side. Returns the fresh list.
      */
     saveNote(req: { caseId: string; findingId: string; text: string }): Promise<{
-      notes: Array<{ findingId: string; text: string; savedAt: string }>;
+      notes: Array<{ id?: string; findingId: string; text: string; savedAt: string }>;
+    }>;
+    /** Edit one analyst note in place, by note id (M11). Same guards as `saveNote`. */
+    updateNote(req: { caseId: string; noteId: string; text: string }): Promise<{
+      notes: Array<{ id?: string; findingId: string; text: string; savedAt: string }>;
     }>;
     /** Read the case's analyst notes from the encrypted `notes` store. */
     readNotes(caseId: string): Promise<{
-      notes: Array<{ findingId: string; text: string; savedAt: string }>;
+      notes: Array<{ id?: string; findingId: string; text: string; savedAt: string }>;
     }>;
-    /** Delete the note attached to one finding, if any — a no-op when the finding has no
-     *  note. Returns the fresh note list. */
-    removeNote(req: { caseId: string; findingId: string }): Promise<{
-      notes: Array<{ findingId: string; text: string; savedAt: string }>;
+    /** Delete one analyst note by id (M11) — a no-op when no note matches. Returns the fresh list. */
+    removeNote(req: { caseId: string; noteId: string }): Promise<{
+      notes: Array<{ id?: string; findingId: string; text: string; savedAt: string }>;
     }>;
 
     // ---- Phase-1 Enterprise-port surface (plan Task 6) --------------------------------
@@ -877,11 +902,17 @@ export interface GhostApi {
     /** Derived, on-read common-connection network analysis over a case's captured `networks`
      *  artifacts — not persisted; synthetic/demo rows excluded. */
     analysis(caseId: string): Promise<Record<string, unknown>>;
-    /** Derived collection-health rollup — currently always empty (no run-log persisted yet). */
+    /** Derived collection-health rollup — per-target roster (HEALTHY/PLATEAU/ERROR/IDLE + counts)
+     *  from the persisted run log + captured posts/networks (analysis.ts `deriveCollectionHealth`). */
     health(caseId: string): Promise<Array<Record<string, unknown>>>;
     /** Derived entity rollup (mention/hashtag/email/url/domain/crypto/phone/org) over a case's
      *  captured posts — recomputed on every call; synthetic/demo posts excluded. */
     entities(caseId: string): Promise<Array<Record<string, unknown>>>;
+    /** Campaign-wide avatar lookup — `{ canonicalHandle → LOCAL data: URI }` over the per-campaign
+     *  avatar cache (the repair ledger). The ENTITY INDEX resolves each mention/source handle to a
+     *  localized avatar through this map (monogram fallback when absent). Cache-only: no capture
+     *  window, no network; only local `data:` URIs are ever returned, never a remote URL. */
+    avatars(caseId: string): Promise<Record<string, string>>;
     /** Read a case's saved highlight presets. */
     presetsRead(caseId: string): Promise<{
       presets: Array<{
@@ -977,13 +1008,26 @@ export interface GhostApi {
      * via a native save dialog — the renderer never supplies a filesystem path. Returns
      * `{canceled:true}` if the operator dismisses the dialog.
      */
-    exportPostsToFile(req: { caseId: string; format: 'json' | 'csv' | 'pdf' }): Promise<
+    exportPostsToFile(req: {
+      caseId: string;
+      format: 'json' | 'csv' | 'pdf';
+      /** M15: per-export SOURCE (normalized source key) / TYPE (post kind) / QUERY (substring)
+       *  filters. Applied MAIN-side after synthetic-exclusion; omitted ⇒ the full campaign. */
+      filters?: { source?: string; kind?: string; query?: string };
+    }): Promise<
       | { canceled: true }
       | { canceled: false; filePath: string; count: number; sha256: string; checksumPath: string }
     >;
     /** Export a campaign's REAL (synthetic-excluded) captured networks as CSV to an
      *  operator-chosen path via a native save dialog, plus a SHA-256 checksum sidecar. */
     exportNetworkToFile(caseId: string): Promise<
+      | { canceled: true }
+      | { canceled: false; filePath: string; count: number; sha256: string; checksumPath: string }
+    >;
+    /** Export a campaign's REAL (synthetic-excluded) captured network as a self-describing JSON
+     *  envelope embedding the common-connection analysis + a deterministic `manifestHash`, to an
+     *  operator-chosen path via a native save dialog, plus a SHA-256 checksum sidecar. */
+    exportNetworkJsonToFile(caseId: string): Promise<
       | { canceled: true }
       | { canceled: false; filePath: string; count: number; sha256: string; checksumPath: string }
     >;
@@ -1038,6 +1082,20 @@ export interface GhostApi {
         status: string;
         startedAt: string;
         endedAt: string;
+      }>
+    >;
+    /** List a campaign's per-handle network delta events (M2) — newest-first, capped ~500. Each is a
+     *  `newly_observed` (a follower/following handle newly added vs the accumulator) or a
+     *  CONSERVATIVE, gated `not_seen_latest` (a previous-scan handle absent from a comparable scan —
+     *  a review candidate, NEVER a claimed unfollow). Derived read; no capture window, no network. */
+    networkEvents(caseId: string): Promise<
+      Array<{
+        kind: 'newly_observed' | 'not_seen_latest';
+        handle: string;
+        target: string;
+        relationship: 'followers' | 'following';
+        observedAt: string;
+        confidence: 'observed' | 'unconfirmed';
       }>
     >;
     /**
@@ -1106,6 +1164,143 @@ export interface GhostApi {
     scheduleStatus(caseId: string): Promise<XScheduleStatus>;
   };
   /**
+   * Ghost Social Media Manager (hardened port) — Phase 1 surface: the password-vault lifecycle,
+   * the encrypted state store, and the per-platform defaults. His AES-256-GCM + scrypt vault
+   * crypto is kept; the recovery-key export is routed to a native save dialog (never an
+   * auto-write to ~/Desktop). No credential value ever crosses this surface.
+   */
+  ghostSocial: {
+    /** Whether the module password vault has been set up. */
+    vaultIsConfigured(): Promise<boolean>;
+    /** First-run vault setup → the one-time recovery key (displayed once for the user to save). */
+    vaultSetup(password: string): Promise<{ recoveryKey: string }>;
+    /** Unlock with the password OR a `GSMM-…` recovery key. Resolves `false` (never throws) on a
+     *  wrong secret. */
+    vaultUnlock(value: string): Promise<boolean>;
+    /** Lock the vault — the in-memory key is zeroized. */
+    vaultLock(): Promise<boolean>;
+    /** Export the recovery key through a native save dialog to a user-chosen path. `saved:false`
+     *  when the dialog is cancelled — nothing is written, and nothing ever lands on Desktop. */
+    vaultSaveRecoveryKey(key: string): Promise<{ saved: boolean; filePath?: string }>;
+    /** Read the whole encrypted module state (campaigns/accounts/queue/settings/armed-flag). */
+    getState(): Promise<GhostState>;
+    /** Persist the whole module state — normalized MAIN-side (the ARM flag can't be smuggled in
+     *  as a truthy non-boolean). Returns the exact stored record. */
+    saveState(state: GhostState): Promise<GhostState>;
+    /** A platform's default home URL + capabilities; unknown keys fall back to `custom`. */
+    platformDefaults(platform: string): Promise<PlatformDefault>;
+    // ---- Phase 2: per-account embedded-view manager + the overlay lifecycle ----
+    /** Open/cache an account's embedded view and make it the single ACTIVE view at `bounds`; all
+     *  other views hide. Applies the account's persisted egress before its first navigation. */
+    browserOpenAccount(
+      campaignId: string,
+      account: unknown,
+      bounds?: { x: number; y: number; width: number; height: number }
+    ): Promise<boolean>;
+    /** Show a grid of live per-account views (the Compose Live Account Wall), each at its card
+     *  bounds; all others hide. */
+    browserShowGrid(
+      campaignId: string,
+      items: Array<{ account: unknown; bounds: { x: number; y: number; width: number; height: number } }>
+    ): Promise<boolean>;
+    /** Hide + detach ALL cached views (kept in cache). */
+    browserHide(): Promise<void>;
+    /** Close one account's view. */
+    browserClose(campaignId: string, accountId: string): Promise<void>;
+    /** Close + tear down EVERY view (module-unmount teardown). */
+    browserCloseAll(): Promise<void>;
+    /** Reload one cached account's view. */
+    browserRefresh(campaignId: string, accountId: string): Promise<boolean>;
+    /** back/forward/reload/home on the active embedded view. */
+    browserNav(action: 'back' | 'forward' | 'reload' | 'home'): Promise<boolean>;
+    /** Update the active embedded view's bounds. */
+    browserResize(bounds: { x: number; y: number; width: number; height: number }): Promise<void>;
+    /** Set the LRU cache mode (all/recent3/reload). */
+    browserSetCacheMode(mode: 'all' | 'recent3' | 'reload'): Promise<void>;
+    /** Delete one account's session storage + cache and close its view. */
+    browserDeleteAccountData(campaignId: string, accountId: string): Promise<boolean>;
+    /** Governor: report whether THIS module window is focused + non-minimized. Inactive hides +
+     *  detaches ALL views so none can float over another GI98 window. */
+    browserSetWindowActive(active: boolean): Promise<void>;
+    /** Governor: a GI98 modal is open — detach ALL views; restore (no reload) when it closes. */
+    browserSetModal(open: boolean): Promise<void>;
+    /** G8 per-account egress toggle: set/clear that partition's proxy (clearnet default = no proxy;
+     *  Tor = bg-Tor SOCKS). `showWarning` is true only the first time Tor is enabled this session. */
+    browserApplyEgress(
+      campaignId: string,
+      accountId: string,
+      torEnabled: boolean
+    ): Promise<{ mode: 'clearnet' | 'tor'; showWarning: boolean }>;
+    /** Seed the set of known account hosts so the host-anchored favicon fetch can accept them. */
+    browserRegisterHosts(urls: string[]): Promise<void>;
+    /** Debug/inspection snapshot of the view cache. */
+    browserCacheStatus(): Promise<{
+      mode: string;
+      activeKey: string | null;
+      cachedKeys: string[];
+      visibleKeys: string[];
+    }>;
+    /** Host-anchored favicon fetch: only a REGISTERED account host's own /favicon.ico; a foreign or
+     *  non-http(s) host resolves `null` without a fetch. */
+    faviconFetch(url: string): Promise<string | null>;
+    /** Scheme-guarded external open (http/https only); rejects a non-http(s) URL. */
+    openExternal(url: string): Promise<void>;
+    // ---- Phase 3: publishing + scheduled queue + THE AUTO-POST ARM GATE + stats ----
+    /** Manual Composer publish — PREPARE-ONLY: fills the composer in the account's authenticated
+     *  view and shows it for review; NEVER clicks Publish (the human does). */
+    publishPrepare(campaignId: string, account: unknown, post: unknown): Promise<PublishResult>;
+    /** Read the SAFETY-CRITICAL auto-post ARM flag (drives the persistent ARMED indicator). */
+    armGet(): Promise<boolean>;
+    /** Set the ARM flag (only the literal `true` arms). The renderer supplies the one-time confirm;
+     *  MAIN records the authoritative flag the scheduler consults before auto-clicking Publish. */
+    armSet(armed: boolean): Promise<boolean>;
+    /** Run one scheduled job NOW — routes through the MAIN arm gate. A disarmed run publishes
+     *  nothing and leaves the job ready (`ran:false, disarmed:true`). */
+    scheduledRunNow(postId: string): Promise<{ ran: boolean; disarmed?: boolean; jobId?: string }>;
+    /** Process the earliest DUE scheduled job. Disarmed ⇒ no-op (`ran:false, disarmed:true`). */
+    scheduledProcessDue(): Promise<{ ran: boolean; disarmed?: boolean; jobId?: string }>;
+    /** Refresh one account's follower/following stats via a HIDDEN same-partition window + the
+     *  per-platform DOM adapter; the window is ALWAYS closed after. */
+    statsRefresh(campaignId: string, account: unknown): Promise<AccountStats>;
+    /** Subscribe to the MAIN→renderer scheduler-state-changed push (the Queue page re-reads state).
+     *  Returns an unsubscribe function. */
+    onScheduledStateChanged(cb: () => void): () => void;
+  },
+  /**
+   * Weather tool (OURS — design spec 2026-08-15). Tor-default Open-Meteo client (fail-closed; acked
+   * clearnet toggle) + an encrypt-at-rest saved-locations/units/cache store. A saved location
+   * contributes only a validated numeric lat/lon + a display name; every request URL is host-anchored
+   * MAIN-side to the Open-Meteo hosts, so no renderer input ever becomes a request host.
+   */
+  weather: {
+    /** Geocode a city name → display-safe matches (Tor-gated). No save. */
+    geocode(query: string): Promise<WeatherGeocodeMatch[]>;
+    /** List saved locations (encrypt-at-rest). */
+    locationsList(): Promise<WeatherSavedLocation[]>;
+    /** Save a chosen geocoder match (or manual lat/lon); MAIN validates/clamps lat/lon. Returns list. */
+    locationsAdd(input: {
+      name: string;
+      country: string;
+      admin1?: string;
+      latitude: number;
+      longitude: number;
+    }): Promise<WeatherSavedLocation[]>;
+    /** Remove a saved location (and its cache entry) by id. Returns the fresh list. */
+    locationsRemove(id: string): Promise<WeatherSavedLocation[]>;
+    /** Reorder saved locations to an id order (missing ids appended). Returns the fresh list. */
+    locationsReorder(ids: string[]): Promise<WeatherSavedLocation[]>;
+    /** Fetch a saved location's forecast + cache it; on failure serve the last cached bundle stamped
+     *  `stale:true`; fail-closed (throws the reach/blocked message) when Tor-default + Tor not ready
+     *  and there is no cache. */
+    forecast(id: string): Promise<WeatherForecastResult>;
+    /** Read the persisted units preference. */
+    unitsGet(): Promise<WeatherUnits>;
+    /** Set the units preference. Returns the stored units. */
+    unitsSet(units: WeatherUnits): Promise<WeatherUnits>;
+    /** Resolved egress state for the TOR/CLEARNET marker. */
+    egressState(): Promise<WeatherEgressStateT>;
+  };
+  /**
    * Scraping cases (W4) — the isolated per-namespace SOCMINT/X collection-run stores, kept
    * apart from `cases` (investigation cases). Every call passes a `store: 'socmint' | 'x'`
    * discriminator validated main-side against an allowlist. `saveArtifact` writes a saved
@@ -1118,6 +1313,68 @@ export interface GhostApi {
     remove(store: ScrapingCaseStoreId, id: string): Promise<void>;
     importToCase(store: ScrapingCaseStoreId, scrapingCaseId: string, mainCaseId: string): Promise<ScrapingImportResult>;
     saveArtifact(store: ScrapingCaseStoreId, scrapingCaseId: string, name: string, content: string): Promise<string>;
+  };
+  /**
+   * WebSDR Viewer (core module) — a hardened manager + embedded browser for PUBLIC SDR websites.
+   * Phase 1 exposes the encrypt-at-rest stores: the seeded receiver directory, frequency presets,
+   * listening notes, the customizable Station Menu, and the receiver-session egress toggle
+   * (clearnet default / warned Tor opt-in). Every save is normalized + bounded MAIN-side; a
+   * receiver URL is validated http/https-only at the boundary. Receiver-view + recording calls
+   * arrive in Phase 2/3.
+   */
+  websdr: {
+    listReceivers(): Promise<WebSdrReceiver[]>;
+    saveReceiver(receiver: Partial<WebSdrReceiver>): Promise<WebSdrReceiver[]>;
+    deleteReceiver(id: string): Promise<WebSdrReceiver[]>;
+    listPresets(): Promise<WebSdrPreset[]>;
+    savePreset(preset: Partial<WebSdrPreset>): Promise<WebSdrPreset[]>;
+    deletePreset(id: string): Promise<WebSdrPreset[]>;
+    listNotes(): Promise<WebSdrNote[]>;
+    saveNote(note: Partial<WebSdrNote>): Promise<WebSdrNote[]>;
+    deleteNote(id: string): Promise<WebSdrNote[]>;
+    getMenu(): Promise<WebSdrStationMenu>;
+    saveMenu(menu: WebSdrStationMenu): Promise<WebSdrStationMenu>;
+    getEgress(): Promise<WebSdrEgressState>;
+    setEgress(mode: WebSdrEgressMode): Promise<WebSdrEgressState>;
+    /** Phase 2 — hardened receiver-view overlay (persist:websdr). */
+    receiverLoad(url: string): Promise<void>;
+    receiverHide(): Promise<void>;
+    receiverPresent(input: {
+      visible: boolean;
+      bounds?: { x: number; y: number; width: number; height: number };
+    }): Promise<void>;
+    receiverModal(open: boolean): Promise<void>;
+    receiverStatus(url: string): Promise<{ online: boolean; status?: number; error?: string }>;
+    receiverMute(muted: boolean): Promise<void>;
+    receiverExternalOpen(url: string): Promise<void>;
+    receiverEgressApply(
+      mode: WebSdrEgressMode,
+    ): Promise<{ mode: WebSdrEgressMode; showWarning: boolean }>;
+    /** Phase 3 — control-bar injection (confined to the receiver partition main-side). Each returns
+     *  his {ok,message} result — an incompatible page reports "use native controls". */
+    receiverTune(hz: number): Promise<{ ok: boolean; message: string }>;
+    receiverMode(mode: string): Promise<{ ok: boolean; message: string }>;
+    receiverVolume(volume: number): Promise<{ ok: boolean; message: string }>;
+    /** His `getMediaSourceId` handshake — the source id the renderer's MediaRecorder captures. */
+    receiverCaptureSource(): Promise<string>;
+    /** Phase 3 — recording archive (R7). Captured bytes persist encrypted-at-rest via secure-fs. */
+    listRecordings(): Promise<WebSdrRecordingMeta[]>;
+    saveRecording(payload: {
+      data: ArrayBuffer | Uint8Array;
+      receiverId?: string;
+      receiverName: string;
+      sourceUrl?: string;
+      startedAt?: string;
+      endedAt?: string;
+      durationMs?: number;
+      frequencyHz?: number;
+      mode?: string;
+      notes?: string;
+    }): Promise<WebSdrRecordingMeta[]>;
+    recordingData(id: string): Promise<{ id: string; mime: string; bytes: Uint8Array }>;
+    annotateRecording(id: string, notes: string): Promise<WebSdrRecordingMeta[]>;
+    deleteRecording(id: string): Promise<WebSdrRecordingMeta[]>;
+    exportRecording(id: string): Promise<boolean>;
   };
 }
 

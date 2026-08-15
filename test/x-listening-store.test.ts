@@ -19,10 +19,15 @@ import { tmpdir } from 'node:os';
 
 import {
   makeXStore,
+  deriveNetworkDeltaEvents,
+  dedupeHandlesCI,
+  X_MAX_NETWORK_EVENTS,
   type XStoreDeps,
   type XNote,
   type XNetworkArtifact,
   type XNetworkAccount,
+  type XNetworkScanState,
+  type XNetworkDeltaEvent,
   type XArchiveState,
   type XPostArtifact,
   type XPreset,
@@ -71,6 +76,11 @@ function memDeps(): XStoreDeps {
     postsPath: (caseId) => `x/${caseId}/x-posts.json`,
     presetsPath: (caseId) => `x/${caseId}/x-presets.json`,
     entitiesCachePath: (caseId) => `x/${caseId}/x-entities-cache.json`,
+    changeEventsPath: (caseId) => `x/${caseId}/x-change-events.json`,
+    profileSnapshotsPath: (caseId) => `x/${caseId}/x-profile-snapshots.json`,
+    runLogPath: (caseId) => `x/${caseId}/x-run-log.json`,
+    networkScanStatePath: (caseId) => `x/${caseId}/x-network-scan-state.json`,
+    networkEventsPath: (caseId) => `x/${caseId}/x-network-events.json`,
   };
 }
 
@@ -273,6 +283,45 @@ describe('makeXStore: artifact stores', () => {
     expect(nets.find((n) => n.kind === 'following')!.accounts.map((a) => a.handle)).toEqual(['@carol']);
   });
 
+  // ---- M4 (PC4): observedCount increments on re-observation --------------
+  //
+  // His `ingestRelationships` (main.cjs:2331) tracks `observedCount = max(0, prior)+1` per
+  // account — a real count of how many scans re-saw the handle, surfaced in the network CSV
+  // (PC3). Ours never counted. The counter must bump ONLY when a handle is actually re-seen,
+  // and a carried-over (not-re-observed) account keeps its count frozen (no-auto-unfollow).
+  it('observedCount is 1 on first observation and increments each time a handle is re-seen', async () => {
+    const t1 = '2026-08-11T00:00:00.000Z';
+    const t2 = '2026-08-12T00:00:00.000Z';
+    const t3 = '2026-08-13T00:00:00.000Z';
+    await xStore.networks.save('case-a', {
+      target: '@target', kind: 'followers', capturedAt: t1, accounts: [acct('@alice', t1, t1)],
+    });
+    await xStore.networks.save('case-a', {
+      target: '@target', kind: 'followers', capturedAt: t2, accounts: [acct('@alice', t2, t2)],
+    });
+    await xStore.networks.save('case-a', {
+      target: '@target', kind: 'followers', capturedAt: t3, accounts: [acct('@alice', t3, t3)],
+    });
+    const [art] = await xStore.networks.read('case-a');
+    expect(art.accounts.find((a) => a.handle === '@alice')!.observedCount).toBe(3);
+  });
+
+  it('a carried-over account NOT re-observed keeps its observedCount frozen (no auto-unfollow)', async () => {
+    const t1 = '2026-08-11T00:00:00.000Z';
+    const t2 = '2026-08-12T00:00:00.000Z';
+    await xStore.networks.save('case-a', {
+      target: '@target', kind: 'followers', capturedAt: t1,
+      accounts: [acct('@alice', t1, t1), acct('@bob', t1, t1)],
+    });
+    // Second scan only re-observes @alice.
+    await xStore.networks.save('case-a', {
+      target: '@target', kind: 'followers', capturedAt: t2, accounts: [acct('@alice', t2, t2)],
+    });
+    const [art] = await xStore.networks.read('case-a');
+    expect(art.accounts.find((a) => a.handle === '@alice')!.observedCount).toBe(2);
+    expect(art.accounts.find((a) => a.handle === '@bob')!.observedCount).toBe(1);
+  });
+
   it('archiveState round-trips and is null before first write', async () => {
     expect(await xStore.archiveState.read('case-a')).toBeNull();
     const st: XArchiveState = { cursor: 'c1', cycles: 2, lastRunAt: '2026-08-06T00:00:00.000Z' };
@@ -365,6 +414,167 @@ describe('makeXStore: entitiesCache artifact', () => {
   });
 });
 
+// ---- M2 (PC4): per-handle network delta events -------------------------
+//
+// His `recordNetworkSnapshot` (main.cjs:540-581) emits a `newly_observed` event per
+// newly-added handle and a CONSERVATIVE `not_seen_latest` per prior handle missing from a
+// COMPARABLE later scan. Ours reported only a scalar `added` count. The per-handle event
+// kinds are restored as a pure diff over (prior accumulator, this scan). No-auto-unfollow:
+// `not_seen_latest` is an OBSERVATION (confidence 'unconfirmed'), never a claim the account
+// unfollowed, and it is GATED so a shallow re-scan can't falsely flag everyone as gone.
+describe('deriveNetworkDeltaEvents (M2) — faithful to his recordNetworkSnapshot', () => {
+  const a = (handle: string): XNetworkAccount => ({ handle });
+  const AT = '2026-08-12T00:00:00.000Z';
+  /** Build a previous-scan record from a bare handle list (passes default to `passes`). */
+  const prev = (handles: string[], passes = 8): XNetworkScanState => ({
+    target: '@alice',
+    relationship: 'followers',
+    observedUsernames: dedupeHandlesCI(handles),
+    observedCount: dedupeHandlesCI(handles).length,
+    passesCompleted: passes,
+    capturedAt: AT,
+  });
+  const call = (over: Partial<Parameters<typeof deriveNetworkDeltaEvents>[0]>) =>
+    deriveNetworkDeltaEvents({
+      previous: null,
+      observed: [],
+      passesCompleted: 8,
+      added: [],
+      target: '@alice',
+      relationship: 'followers',
+      observedAt: AT,
+      ...over,
+    });
+
+  it('emits one newly_observed per ADDED handle (accumulator diff), stamped target+relationship', () => {
+    const events = call({ added: ['@carol', '@dave'], observed: [a('@carol'), a('@dave')] });
+    const newly = events.filter((e) => e.kind === 'newly_observed');
+    expect(newly.map((e) => e.handle).sort()).toEqual(['@carol', '@dave']);
+    expect(newly.every((e) => e.observedAt === AT && e.confidence === 'observed')).toBe(true);
+    expect(newly.every((e) => e.target === '@alice' && e.relationship === 'followers')).toBe(true);
+  });
+
+  it('emits a conservative not_seen_latest per PREVIOUS-SCAN handle absent from a comparable scan', () => {
+    // Previous scan saw 12; this scan (same passes) re-saw 11 — dropped @u5. floor(12*0.85)=10,
+    // observedCount 11 >= max(10,10) AND passes 8>=8 ⇒ comparable.
+    const previousHandles = Array.from({ length: 12 }, (_, i) => `@u${i}`);
+    const observed = previousHandles.filter((h) => h !== '@u5').map(a);
+    const events = call({ previous: prev(previousHandles), observed, passesCompleted: 8 });
+    const notSeen = events.filter((e) => e.kind === 'not_seen_latest');
+    expect(notSeen.map((e) => e.handle)).toEqual(['@u5']);
+    expect(notSeen[0].confidence).toBe('unconfirmed');
+    expect(notSeen[0].observedAt).toBe(AT);
+    expect(notSeen[0].target).toBe('@alice');
+  });
+
+  it('SUPPRESSES not_seen_latest on a shallow re-scan (observedCount below the gate) — no false "gone"', () => {
+    // Previous scan saw 40; this scan re-saw only 2 — not comparable (2 < max(10, floor(40*0.85)=34)).
+    const previousHandles = Array.from({ length: 40 }, (_, i) => `@u${i}`);
+    const observed = [a('@u0'), a('@u1')];
+    const events = call({ previous: prev(previousHandles), observed, passesCompleted: 8 });
+    expect(events.some((e) => e.kind === 'not_seen_latest')).toBe(false);
+  });
+
+  it('SUPPRESSES not_seen_latest when this scan ran FEWER passes than the previous (his passes gate)', () => {
+    // Enough accounts to clear the count gate, but fewer passes than last time ⇒ not comparable.
+    const previousHandles = Array.from({ length: 12 }, (_, i) => `@u${i}`);
+    const observed = previousHandles.filter((h) => h !== '@u5').map(a);
+    const events = call({ previous: prev(previousHandles, 8), observed, passesCompleted: 4 });
+    expect(events.some((e) => e.kind === 'not_seen_latest')).toBe(false);
+  });
+
+  it('emits not_seen_latest for a dropped handle ONCE across consecutive comparable scans (no re-emit)', () => {
+    // Scan 1 saw u0..u11. Scan 2 (comparable) drops @u5 → ONE not_seen_latest for @u5.
+    const s1Handles = Array.from({ length: 12 }, (_, i) => `@u${i}`);
+    const s2Observed = s1Handles.filter((h) => h !== '@u5').map(a);
+    const scan2 = call({ previous: prev(s1Handles), observed: s2Observed, passesCompleted: 8 });
+    expect(scan2.filter((e) => e.kind === 'not_seen_latest').map((e) => e.handle)).toEqual(['@u5']);
+
+    // Scan 3's PREVIOUS is scan 2's observed set (which no longer contains @u5). Re-observing the
+    // same 11 accounts ⇒ NO not_seen_latest — the drop is not re-flagged on every later scan.
+    const s2Handles = s1Handles.filter((h) => h !== '@u5');
+    const scan3 = call({ previous: prev(s2Handles), observed: s2Observed, passesCompleted: 8 });
+    expect(scan3.some((e) => e.kind === 'not_seen_latest')).toBe(false);
+  });
+
+  it('a first scan (no previous) fires NO not_seen_latest, only newly_observed', () => {
+    const events = call({ previous: null, added: ['@carol'], observed: [a('@carol')] });
+    expect(events.some((e) => e.kind === 'not_seen_latest')).toBe(false);
+    expect(events.filter((e) => e.kind === 'newly_observed').map((e) => e.handle)).toEqual(['@carol']);
+  });
+
+  it('is case-insensitive on the handle and deterministic (no clock/RNG), never mutating inputs', () => {
+    const previous = prev(['@Alice', '@Bob']);
+    const observed = [a('@alice')]; // @Bob dropped, @Alice re-seen (case-insensitive)
+    const frozenPrev = JSON.parse(JSON.stringify(previous));
+    // Not comparable by count (observedCount 1 < max(10,..)), so no not_seen — test the CI match on added.
+    const e1 = deriveNetworkDeltaEvents({ previous, observed, passesCompleted: 8, added: ['@Carol'], target: '@alice', relationship: 'followers', observedAt: AT });
+    const e2 = deriveNetworkDeltaEvents({ previous, observed, passesCompleted: 8, added: ['@Carol'], target: '@alice', relationship: 'followers', observedAt: AT });
+    expect(e1).toEqual(e2);
+    expect(e1.filter((e) => e.kind === 'newly_observed').map((e) => e.handle)).toEqual(['@Carol']);
+    expect(previous).toEqual(frozenPrev); // inputs untouched
+  });
+});
+
+describe('dedupeHandlesCI', () => {
+  it('dedupes case-insensitively, preserving first-seen order + original casing, capped', () => {
+    expect(dedupeHandlesCI(['@Alice', '@alice', '@Bob', '@BOB', '@carol'])).toEqual(['@Alice', '@Bob', '@carol']);
+    expect(dedupeHandlesCI(['@a', '@b', '@c'], 2)).toEqual(['@a', '@b']);
+    expect(dedupeHandlesCI(['', '@x', ''])).toEqual(['@x']);
+  });
+});
+
+describe('makeXStore: networkScanState + networkEvents (M2 persistence)', () => {
+  let xStore: ReturnType<typeof makeXStore>;
+  beforeEach(() => { xStore = makeXStore(memDeps()); });
+  const AT = '2026-08-12T00:00:00.000Z';
+
+  it('round-trips a previous-scan record and OVERWRITES it on re-write (only the last scan retained)', async () => {
+    expect(await xStore.networkScanState.read('c', '@alice', 'followers')).toBeNull();
+    await xStore.networkScanState.write('c', {
+      target: '@Alice', relationship: 'followers',
+      observedUsernames: ['@u0', '@u1'], observedCount: 2, passesCompleted: 8, capturedAt: AT,
+    });
+    // target matched case-insensitively; stored lowercased.
+    const first = await xStore.networkScanState.read('c', '@ALICE', 'followers');
+    expect(first?.observedUsernames).toEqual(['@u0', '@u1']);
+    expect(first?.target).toBe('@alice');
+
+    // A re-scan REPLACES (does not append) the record for the same (target, relationship).
+    await xStore.networkScanState.write('c', {
+      target: '@alice', relationship: 'followers',
+      observedUsernames: ['@u0', '@u1', '@u2'], observedCount: 3, passesCompleted: 9, capturedAt: AT,
+    });
+    const second = await xStore.networkScanState.read('c', '@alice', 'followers');
+    expect(second?.observedUsernames).toEqual(['@u0', '@u1', '@u2']);
+    expect(second?.observedCount).toBe(3);
+    // The following surface is a SEPARATE key — untouched by the followers writes.
+    expect(await xStore.networkScanState.read('c', '@alice', 'following')).toBeNull();
+  });
+
+  it('appends delta events, caps to the newest X_MAX_NETWORK_EVENTS, and lists newest-first', async () => {
+    const mk = (handle: string, kind: XNetworkDeltaEvent['kind'] = 'newly_observed'): XNetworkDeltaEvent => ({
+      kind, handle, target: '@alice', relationship: 'followers', observedAt: AT,
+      confidence: kind === 'newly_observed' ? 'observed' : 'unconfirmed',
+    });
+    await xStore.networkEvents.append('c', [mk('@a'), mk('@b')]);
+    const after = await xStore.networkEvents.append('c', [mk('@c')]);
+    expect(after.map((e) => e.handle)).toEqual(['@a', '@b', '@c']); // append order
+
+    // listNetworkEvents is newest-first.
+    const listed = await xStore.listNetworkEvents('c');
+    expect(listed.map((e) => e.handle)).toEqual(['@c', '@b', '@a']);
+
+    // Cap: push more than the cap; only the newest X_MAX_NETWORK_EVENTS survive.
+    const many = Array.from({ length: X_MAX_NETWORK_EVENTS }, (_, i) => mk(`@x${i}`));
+    const capped = await xStore.networkEvents.append('c', many);
+    expect(capped.length).toBe(X_MAX_NETWORK_EVENTS);
+    // The oldest (@a,@b,@c) were dropped; the newest survive.
+    expect(capped.some((e) => e.handle === '@a')).toBe(false);
+    expect(capped.at(-1)!.handle).toBe(`@x${X_MAX_NETWORK_EVENTS - 1}`);
+  });
+});
+
 describe('store.ts encrypt-at-rest structural invariant', () => {
   it('never imports node:fs directly — every IO path goes through the injected/secure-fs deps', async () => {
     const src = await readFile(join(process.cwd(), 'src/main/x-listening/store.ts'), 'utf8');
@@ -447,6 +657,36 @@ describe('prodXStore: encrypt-at-rest', () => {
 
     expect((await s.presets.read('case-enc'))[0].keywords).toContain(SECRET_TEXT);
     expect((await s.entitiesCache.read('case-enc'))[0].value).toBe(SECRET_TEXT);
+  });
+
+  it('writes the network-scan-state + network-events sidecars as ciphertext (M2) but reads back plaintext', async () => {
+    const { prodXStore } = await import('../src/main/x-listening/store');
+    const { scrapingCaseDir } = await import('../src/main/storage/paths');
+
+    const s = await prodXStore();
+    // The captured handle is a real observation → must be encrypted at rest, same as every sibling.
+    const secretHandle = `@${SECRET_TEXT.replace(/[^a-z0-9]/gi, '')}`;
+    await s.networkScanState.write('case-enc', {
+      target: '@target', relationship: 'followers',
+      observedUsernames: [secretHandle], observedCount: 1, passesCompleted: 8,
+      capturedAt: '2026-08-12T00:00:00.000Z',
+    });
+    await s.networkEvents.append('case-enc', [{
+      kind: 'newly_observed', handle: secretHandle, target: '@target', relationship: 'followers',
+      observedAt: '2026-08-12T00:00:00.000Z', confidence: 'observed',
+    }]);
+
+    const dir = scrapingCaseDir('x', 'case-enc');
+    const scanOnDisk = await readFile(join(dir, 'x-network-scan-state.json'));
+    const eventsOnDisk = await readFile(join(dir, 'x-network-events.json'));
+    for (const onDisk of [scanOnDisk, eventsOnDisk]) {
+      expect(onDisk.subarray(0, 4).toString()).toBe('ENCX');                        // encrypted envelope
+      expect(onDisk.includes(Buffer.from(secretHandle))).toBe(false);               // plaintext handle absent
+    }
+
+    expect((await s.networkScanState.read('case-enc', '@target', 'followers'))?.observedUsernames)
+      .toEqual([secretHandle]);
+    expect((await s.listNetworkEvents('case-enc'))[0].handle).toBe(secretHandle);
   });
 });
 

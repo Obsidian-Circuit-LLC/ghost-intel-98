@@ -22,7 +22,11 @@ import {
   type XStoreDeps,
   type XPostArtifact,
 } from '../src/main/x-listening/store';
-import { verifyPost, type XVerifyPostDeps } from '../src/main/x-listening/capture';
+import {
+  verifyPost,
+  VERIFY_POST_SETTLE_MS,
+  type XVerifyPostDeps,
+} from '../src/main/x-listening/capture';
 import { isPostUnavailableText, X_POST_UNAVAILABLE_RE } from '../src/main/x-listening/extract';
 
 // ---- in-memory fs seam (mirrors x-listening-changes.test.ts's memStore) -------
@@ -98,6 +102,9 @@ function deps(over: Partial<XVerifyPostDeps> = {}): Partial<XVerifyPostDeps> {
     openWindow: async () => fakeWin(),
     guard: async (_win, capture) => ({ blocked: false, result: await capture() }),
     runCapture: async () => ({ body: '', items: [{ id: '100', text: 'original text' }] }),
+    // Deterministic, instant settle for the fast unit tests (the production default is a real
+    // setTimeout-backed sleep; leaving it unset would make every verify test wait ~2.6s).
+    delay: async () => {},
     now: () => '2026-08-12T12:00:00.000Z',
     ...over,
   };
@@ -212,6 +219,65 @@ describe('A1 — verifyPost detects an edit', () => {
     expect(stored[0]!.versionHistory ?? []).toHaveLength(0);
     expect(stored[0]!.availability).toBe('available');
     expect(await store.listChangeEvents(CASE)).toHaveLength(0);
+  });
+});
+
+// ---- 3b. SPA-render settle happens BEFORE the verify read (M8) -------------
+
+describe('A1/M8 — verifyPost settles for the SPA render before reading', () => {
+  it('awaits the ~2600ms settle after load and BEFORE the verify read', async () => {
+    const store = memStore();
+    await store.posts.write(CASE, [post()]);
+    const order: string[] = [];
+    const delay = vi.fn(async (ms: number) => {
+      order.push(`delay:${ms}`);
+    });
+    await verifyPost(
+      CASE,
+      '100',
+      deps({
+        delay,
+        runCapture: async () => {
+          order.push('read');
+          return { body: 'ordinary body', items: [{ id: '100', text: 'original text' }] };
+        },
+      }),
+      store,
+    );
+    // The settle matches Enterprise verifyPostLive's sleep(2600) (main.cjs:2626-2627).
+    expect(VERIFY_POST_SETTLE_MS).toBe(2600);
+    expect(delay).toHaveBeenCalledWith(VERIFY_POST_SETTLE_MS);
+    // ...and it precedes the page read (load → settle → read).
+    expect(order).toEqual([`delay:${VERIFY_POST_SETTLE_MS}`, 'read']);
+  });
+
+  it('does NOT misread a not-yet-hydrated page as available+unchanged', async () => {
+    const store = memStore();
+    await store.posts.write(CASE, [post()]);
+    // Model X's SPA: before the settle fires the page is a bare shell (no tweet articles);
+    // the real post text only hydrates once we have waited. If the read raced ahead of the
+    // settle it would see the empty shell → no live match → falsely "available, unchanged".
+    let hydrated = false;
+    const res = await verifyPost(
+      CASE,
+      '100',
+      deps({
+        delay: async () => {
+          hydrated = true;
+        },
+        runCapture: async () =>
+          hydrated
+            ? { body: 'ordinary body', items: [{ id: '100', text: 'EDITED live text' }] }
+            : { body: '', items: [] },
+      }),
+      store,
+    );
+    // Because the read waited for hydration, the edit is observed — not swallowed as unchanged.
+    expect(res.changed).toBe(true);
+    expect(res.availability).toBe('available');
+    const stored = await store.posts.read(CASE);
+    expect(stored[0]!.text).toBe('EDITED live text');
+    expect(stored[0]!.versionHistory).toHaveLength(1);
   });
 });
 

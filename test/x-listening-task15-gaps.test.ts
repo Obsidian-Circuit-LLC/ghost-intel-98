@@ -155,7 +155,15 @@ describe('exportPostsInteractive', () => {
     const writeFile = vi.fn(async (p: string, data: Buffer | string) => void written.set(p, data));
     const readPosts = vi.fn(async () => [post({ text: 'real intel', synthetic: false as never })]);
 
-    const res = await exportPostsInteractive('case-a', 'json', { showSaveDialog, writeFile, readPosts });
+    // FB4: the manifest-envelope assembly is exercised in x-listening-export-envelope.test.ts; here
+    // we inject a trivial serializer so this test stays focused on the dialog/sidecar mechanics
+    // without touching the case-scoped stores the production envelope reads.
+    const res = await exportPostsInteractive('case-a', 'json', {
+      showSaveDialog,
+      writeFile,
+      readPosts,
+      serializeJson: (_c, posts) => JSON.stringify(posts),
+    });
 
     expect(res.canceled).toBe(false);
     if (res.canceled) throw new Error('unreachable');
@@ -188,7 +196,10 @@ describe('exportPostsInteractive', () => {
     const res = await exportPostsInteractive('case-a', 'json', {
       showSaveDialog: async () => ({ canceled: false, filePath: '/out/export.json' }),
       writeFile: async (p, d) => void written.set(p, d),
-      readPosts: async () => [post({ id: 'real' }), post({ id: 'demo', synthetic: true })]
+      readPosts: async () => [post({ id: 'real' }), post({ id: 'demo', synthetic: true })],
+      // exportXPostsToFile excludes synthetic BEFORE serializeJson runs, so the injected serializer
+      // only ever sees the real posts (single source of truth for that honesty rule).
+      serializeJson: (_c, posts) => JSON.stringify(posts)
     });
     expect(res.canceled).toBe(false);
     if (res.canceled) throw new Error('unreachable');

@@ -42,6 +42,7 @@ import { HelpModule } from './help/HelpModule';
 import { SearchlightModule } from './searchlight/SearchlightModule';
 import { SocmintModule } from './socmint/SocmintModule';
 import { XListeningModule } from './x-listening/XListeningModule';
+import { WebSdrModule } from './websdr/WebSdrModule';
 import { OSINTToolkitModule } from './osint-toolkit/OSINTToolkitModule';
 import { MindsEyeModule } from './minds-eye/MindsEyeModule';
 import { InvestigationGraphModule } from './investigation-graph/InvestigationGraphModule';
@@ -49,6 +50,8 @@ import { InvoicesModule } from './invoices/InvoicesModule';
 import { ReportsModule } from './reports/ReportsModule';
 import { NumberMuncherModule } from './number-muncher/NumberMuncherModule';
 import { PdfSignerModule } from './pdf-signer/PdfSignerModule';
+import { GhostSocialModule } from './ghost-social/GhostSocialModule';
+import { WeatherModule } from './weather/WeatherModule';
 
 // ---------------------------------------------------------------------------
 // Adapter components — each has the uniform { spec: WindowSpec } signature and
@@ -211,6 +214,10 @@ function XListeningAdapter({ spec }: { spec: WindowSpec }): JSX.Element {
   return <XListeningModule caseId={spec.props?.['caseId'] as string | undefined} />;
 }
 
+function WebSdrAdapter({ spec }: { spec: WindowSpec }): JSX.Element {
+  return <WebSdrModule windowId={spec.id} />;
+}
+
 function OSINTToolkitAdapter({ spec: _spec }: { spec: WindowSpec }): JSX.Element {
   return <OSINTToolkitModule />;
 }
@@ -237,6 +244,16 @@ function NumberMuncherAdapter({ spec: _spec }: { spec: WindowSpec }): JSX.Elemen
 
 function PdfSignerAdapter({ spec: _spec }: { spec: WindowSpec }): JSX.Element {
   return <PdfSignerModule />;
+}
+
+// Ghost Social Media Manager (hardened port) — takes the window id (spec.id) so its overlay
+// governor can gate every per-account WebContentsView on this GI98 window's focus/minimize
+// state (constraint 9, the SDR window-active lifecycle).
+function GhostSocialAdapter({ spec }: { spec: WindowSpec }): JSX.Element {
+  return <GhostSocialModule windowId={spec.id} />;
+}
+function WeatherAdapter({ spec: _spec }: { spec: WindowSpec }): JSX.Element {
+  return <WeatherModule />;
 }
 
 // ---------------------------------------------------------------------------
@@ -282,6 +299,7 @@ export function registerBuiltins(): void {
   registerModule({ key: 'searchlight', title: 'Searchlight', glyph: '🔎', component: SearchlightAdapter, builtin: true, defaultWidth: 1100, defaultHeight: 720, category: 'osint', subcategory: 'Identity' });
   registerModule({ key: 'socmint', title: 'SOCMINT', glyph: '📡', component: SocmintAdapter, builtin: true, defaultWidth: 900, defaultHeight: 640, category: 'osint', subcategory: 'Social Media' });
   registerModule({ key: 'x-listening-station', title: 'X Listening Station', glyph: '🎧', component: XListeningAdapter, builtin: true, defaultWidth: 1040, defaultHeight: 720, category: 'osint', subcategory: 'Social Media' });
+  registerModule({ key: 'websdr', title: 'WebSDR Viewer', glyph: '📻', component: WebSdrAdapter, builtin: true, defaultWidth: 1180, defaultHeight: 760, category: 'osint', subcategory: 'Signals', singleton: true });
   registerModule({ key: 'osint-toolkit', title: 'OSINT Toolkit', glyph: '🧰', component: OSINTToolkitAdapter, builtin: true, defaultWidth: 360, defaultHeight: 470 });
   registerModule({ key: 'minds-eye', title: "Mind's Eye", glyph: '👁', component: MindsEyeAdapter, builtin: true, defaultWidth: 760, defaultHeight: 560 });
   registerModule({ key: 'investigation-graph', title: 'Investigation Graph', glyph: '🕸', component: InvestigationGraphAdapter, builtin: true, defaultWidth: 900, defaultHeight: 640, category: 'osint', subcategory: 'Identity' });
@@ -289,4 +307,6 @@ export function registerBuiltins(): void {
   registerModule({ key: 'report', title: 'Reports', glyph: '📋', component: ReportsAdapter, builtin: true, defaultWidth: 1040, defaultHeight: 680 });
   registerModule({ key: 'number-muncher', title: 'Number Muncher', glyph: '🧮', component: NumberMuncherAdapter, builtin: true, defaultWidth: 320, defaultHeight: 450 });
   registerModule({ key: 'pdf-signer', title: 'PDF Signer', glyph: '✒️', component: PdfSignerAdapter, builtin: true, defaultWidth: 900, defaultHeight: 720 });
+  registerModule({ key: 'ghost-social', title: 'Ghost Social', glyph: '👻', component: GhostSocialAdapter, builtin: true, defaultWidth: 1180, defaultHeight: 760, singleton: true });
+  registerModule({ key: 'weather', title: 'Weather', glyph: '🌦', component: WeatherAdapter, builtin: true, defaultWidth: 760, defaultHeight: 560 });
 }

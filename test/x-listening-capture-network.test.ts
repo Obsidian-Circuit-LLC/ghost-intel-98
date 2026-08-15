@@ -20,6 +20,7 @@ import {
   captureNetwork,
   type XNetworkCaptureDeps,
 } from '../src/main/x-listening/capture';
+import { DEFAULT_COLLECTION_SETTINGS } from '../src/shared/x-listening-collection-settings';
 
 /** A fake capture window that records destroy() — enough to prove the `finally` cleanup. */
 function fakeWindow() {
@@ -56,6 +57,8 @@ function baseDeps(rows: ReturnType<typeof cell>[]): {
   openWindow: ReturnType<typeof vi.fn>;
   resolveGate: ReturnType<typeof vi.fn>;
   scroll: ReturnType<typeof vi.fn>;
+  appendEvents: ReturnType<typeof vi.fn>;
+  saveScanState: ReturnType<typeof vi.fn>;
 } {
   const win = fakeWindow();
   const openWindow = vi.fn(async () => win);
@@ -63,6 +66,8 @@ function baseDeps(rows: ReturnType<typeof cell>[]): {
   const scroll = vi.fn(async () => undefined);
   const saved = vi.fn(async () => 1);
   const runs = vi.fn(async () => undefined);
+  const appendEvents = vi.fn(async () => undefined);
+  const saveScanState = vi.fn(async () => undefined);
   const deps: XNetworkCaptureDeps = {
     loadClearnetEnabled: async () => false,
     resolveGate,
@@ -70,12 +75,16 @@ function baseDeps(rows: ReturnType<typeof cell>[]): {
     runCapture: async () => rows,
     guard: async (_w, capture) => ({ blocked: false, result: await capture() }),
     scroll,
+    assertSignedIn: async () => ({ blocked: false }),
     readNetwork: async () => [],
     saveNetwork: saved,
+    readScanState: async () => null,
+    saveScanState,
+    appendNetworkEvents: appendEvents,
     recordRun: runs,
     now: () => '2026-08-12T00:00:00.000Z',
   };
-  return { deps, win, saved, runs, openWindow, resolveGate, scroll };
+  return { deps, win, saved, runs, openWindow, resolveGate, scroll, appendEvents, saveScanState };
 }
 
 describe('buildNetworkUrl — validate the target BEFORE any window opens', () => {
@@ -156,6 +165,28 @@ describe('captureNetwork — happy path', () => {
   });
 });
 
+describe('captureNetwork — mid-scroll challenge (FA-A review: no truncated list logged as complete)', () => {
+  it('DISCARDS the partial list and records an ERROR run when a challenge surfaces mid-scroll', async () => {
+    const { deps, saved, runs } = baseDeps([]);
+    // One NEW cell per pass so the loop never stagnates; block the signed-in re-check after the
+    // first scroll — the raised 240-pass ceiling must not keep scrolling a flagged page.
+    let pass = 0;
+    deps.runCapture = async () => [cell(`u${pass++}`)];
+    deps.assertSignedIn = async () => ({ blocked: true, reason: 'rate limit interstitial' });
+    const res = await captureNetwork(
+      { caseId: 'case-1', channelId: 'alice', targetUsername: 'alice', kind: 'followers', passes: 20 },
+      deps,
+    );
+    expect(res.blocked).toBe(true);
+    // The truncated follower list is DISCARDED — nothing persisted.
+    expect(saved).not.toHaveBeenCalled();
+    // An honest ERROR run is recorded — never 'complete'.
+    const rec = runs.mock.calls.at(-1)![1];
+    expect(rec.status).toBe('error');
+    expect(rec.stopReason).toMatch(/rate limit|challenge/i);
+  });
+});
+
 describe('captureNetwork — fail closed (Tor gate blocked)', () => {
   it('opens NO window and persists NOTHING when the gate is blocked', async () => {
     const { deps, openWindow, saved } = baseDeps([cell('carol')]);
@@ -214,5 +245,198 @@ describe('captureNetwork — scroll loop', () => {
     // Stopped well before the 30-pass ceiling once accounts stopped growing.
     expect(scroll.mock.calls.length).toBeLessThan(10);
     expect(saved.mock.calls[0][1].accounts).toHaveLength(2);
+  });
+});
+
+// ---- FA5: configurable stagnation limit + 240-pass ceiling (audit medium) --------------------
+//
+// His `scrapeRelationshipRows` (main.cjs:2354-2358) clamps the network scroll budget to [1,240] and
+// derives the early-stop stagnation limit from `settings.networkStagnationLimit` clamped [4,20]
+// (default 7). Ours previously hard-capped the ceiling at 60 and used a FIXED stagnation of 3 — so a
+// large follower list stopped ~2x too shallow and bailed after only 3 no-growth passes. These pin the
+// raised ceiling and the settings-driven, clamped stagnation limit onto OUR injectable seams.
+
+/** A never-stagnating page source: pass N returns N+1 cumulative unique cells, so `seen` grows every
+ *  pass and the loop only ever stops at the pass ceiling. */
+function growingRows(): () => Promise<ReturnType<typeof cell>[]> {
+  let call = 0;
+  return async () => {
+    const n = (call += 1);
+    return Array.from({ length: n }, (_, k) => cell(`u${k}`));
+  };
+}
+
+describe('captureNetwork — configurable stagnation limit (settings-driven)', () => {
+  // pages: grow for two passes (a, then a+b), then a constant [a,b] forever ⇒ stagnation begins pass 3.
+  function twoGrowThenStagnant(): () => Promise<ReturnType<typeof cell>[]> {
+    const pages = [[cell('a')], [cell('a'), cell('b')], [cell('a'), cell('b')]];
+    let call = 0;
+    return async () => pages[Math.min(call++, pages.length - 1)];
+  }
+
+  it('honors networkStagnationLimit=5 from campaign settings (breaks on the 5th stagnant pass)', async () => {
+    const { deps, scroll } = baseDeps([]);
+    deps.loadCollectionSettings = async () => ({ ...DEFAULT_COLLECTION_SETTINGS, networkStagnationLimit: 5 });
+    deps.runCapture = twoGrowThenStagnant();
+    const res = await captureNetwork(
+      { caseId: 'case-1', channelId: 'alice', targetUsername: 'alice', kind: 'followers', passes: 100 },
+      deps,
+    );
+    expect(res.observed).toBe(2);
+    // 2 growth scrolls + 4 stagnant scrolls, then the 5th stagnant pass breaks before scrolling.
+    expect(scroll).toHaveBeenCalledTimes(6);
+    expect(res.reachedEnd).toBe(true);
+  });
+
+  it('a lower networkStagnationLimit=4 stops one pass sooner', async () => {
+    const { deps, scroll } = baseDeps([]);
+    deps.loadCollectionSettings = async () => ({ ...DEFAULT_COLLECTION_SETTINGS, networkStagnationLimit: 4 });
+    deps.runCapture = twoGrowThenStagnant();
+    await captureNetwork(
+      { caseId: 'case-1', channelId: 'alice', targetUsername: 'alice', kind: 'followers', passes: 100 },
+      deps,
+    );
+    expect(scroll).toHaveBeenCalledTimes(5);
+  });
+
+  it('re-clamps a below-band configured limit up to 4 MAIN-side (defence in depth)', async () => {
+    const { deps, scroll } = baseDeps([]);
+    // A raw 1 (below His [4,20] band) must NOT stop after a single stagnant pass — it clamps to 4.
+    deps.loadCollectionSettings = async () => ({ ...DEFAULT_COLLECTION_SETTINGS, networkStagnationLimit: 1 });
+    deps.runCapture = twoGrowThenStagnant();
+    await captureNetwork(
+      { caseId: 'case-1', channelId: 'alice', targetUsername: 'alice', kind: 'followers', passes: 100 },
+      deps,
+    );
+    // Behaves as limit 4 (5 scrolls), not limit 1 (which would be 2 scrolls).
+    expect(scroll).toHaveBeenCalledTimes(5);
+  });
+});
+
+describe('captureNetwork — raised 240-pass ceiling', () => {
+  it('scrolls up to 240 passes (His ceiling), not the old 60 cap', async () => {
+    const { deps, scroll } = baseDeps([]);
+    deps.loadCollectionSettings = async () => ({ ...DEFAULT_COLLECTION_SETTINGS, networkStagnationLimit: 20 });
+    deps.runCapture = growingRows();
+    const res = await captureNetwork(
+      // A request above the ceiling clamps to 240 (never 300, never the old 60).
+      { caseId: 'case-1', channelId: 'alice', targetUsername: 'alice', kind: 'followers', passes: 300 },
+      deps,
+    );
+    expect(res.completedPasses).toBe(240);
+    // 240 reads ⇒ 239 scrolls (never scroll past the final pass).
+    expect(scroll).toHaveBeenCalledTimes(239);
+    expect(res.observed).toBe(240);
+  });
+
+  it('an ordinary capture still uses the base pass budget (8), not the raised ceiling', async () => {
+    const { deps, scroll } = baseDeps([]);
+    deps.loadCollectionSettings = async () => ({
+      ...DEFAULT_COLLECTION_SETTINGS,
+      followerBasePasses: 8,
+      networkStagnationLimit: 20,
+    });
+    deps.runCapture = growingRows();
+    const res = await captureNetwork(
+      // No explicit passes ⇒ defaults to the per-direction base budget (8), unchanged by the raise.
+      { caseId: 'case-1', channelId: 'alice', targetUsername: 'alice', kind: 'followers' },
+      deps,
+    );
+    expect(res.completedPasses).toBe(8);
+    expect(scroll).toHaveBeenCalledTimes(7);
+  });
+});
+
+// ---- M2: per-handle network delta events are computed + PERSISTED (his recordNetworkSnapshot) ----
+//
+// The half-built version returned `deltaEvents` inertly (nothing persisted/displayed) and gated
+// `not_seen_latest` against the ALL-TIME ACCUMULATOR — so a dropped handle re-emitted every scan and
+// a shallow re-scan over-flagged. These pin the corrected wiring: events persist to the durable
+// stream, and `not_seen_latest` is diffed against the PREVIOUS SCAN with his dual (passes+count)
+// gate, so a dropped handle is flagged ONCE and a shallow scan flags nobody.
+import type { XNetworkScanState } from '../src/main/x-listening/store';
+
+/** A tiny stateful store: an accumulator (`readNetwork`), the previous-scan record
+ *  (`readScanState`/`saveScanState`), and the appended event stream — enough to drive two
+ *  consecutive `captureNetwork` scans through the real M2 path. */
+function statefulNetworkStore() {
+  const accumulator = new Map<string, { handle: string }>(); // lowercased key
+  let scanState: XNetworkScanState | null = null;
+  const events: Array<{ kind: string; handle: string; relationship: string }> = [];
+  const scan = (rows: ReturnType<typeof cell>[], passes = 8) => {
+    const deps: XNetworkCaptureDeps = {
+      loadClearnetEnabled: async () => false,
+      resolveGate: async () => ({ blocked: false, proxy: { socks: 'socks5://127.0.0.1:9050' } }),
+      openWindow: async () => fakeWindow(),
+      runCapture: async () => rows,
+      guard: async (_w, capture) => ({ blocked: false, result: await capture() }),
+      scroll: async () => undefined,
+      assertSignedIn: async () => ({ blocked: false }),
+      readNetwork: async () => [...accumulator.values()] as never,
+      saveNetwork: async (_c, artifact) => {
+        for (const a of artifact.accounts) accumulator.set(a.handle.toLowerCase(), { handle: a.handle });
+        return accumulator.size;
+      },
+      readScanState: async () => scanState,
+      saveScanState: async (_c, state) => { scanState = state; },
+      appendNetworkEvents: async (_c, evs) => {
+        for (const e of evs) events.push({ kind: e.kind, handle: e.handle, relationship: e.relationship });
+      },
+      recordRun: async () => undefined,
+      loadCollectionSettings: async () => ({ ...DEFAULT_COLLECTION_SETTINGS, followerBasePasses: passes }),
+      now: () => '2026-08-12T00:00:00.000Z',
+    };
+    return captureNetwork(
+      { caseId: 'case-1', channelId: 'alice', targetUsername: 'alice', kind: 'followers', passes },
+      deps,
+    );
+  };
+  return { scan, events, get scanState() { return scanState; } };
+}
+
+/** A comparable-sized page (>=10 accounts) so his count gate can be satisfied. */
+function bigPage(n: number, drop: string[] = []): ReturnType<typeof cell>[] {
+  return Array.from({ length: n }, (_, i) => `u${i}`)
+    .filter((h) => !drop.includes(h))
+    .map((h) => cell(h));
+}
+
+describe('captureNetwork — M2 delta events persist across two consecutive scans', () => {
+  it('scan 1 persists newly_observed for every handle and NO not_seen (no previous scan)', async () => {
+    const store = statefulNetworkStore();
+    const res = await store.scan(bigPage(12));
+    expect(store.events.filter((e) => e.kind === 'not_seen_latest')).toHaveLength(0);
+    expect(store.events.filter((e) => e.kind === 'newly_observed')).toHaveLength(12);
+    // Every event carries its relationship surface.
+    expect(store.events.every((e) => e.relationship === 'followers')).toBe(true);
+    // The previous-scan record is written for the next comparison — observed set + this scan's passes.
+    expect(store.scanState?.observedCount).toBe(12);
+    expect(store.scanState?.passesCompleted).toBe(res.completedPasses);
+  });
+
+  it('scan 2 (comparable) flags a dropped handle ONCE as not_seen_latest, and it is not re-emitted on scan 3', async () => {
+    const store = statefulNetworkStore();
+    await store.scan(bigPage(12));           // scan 1: u0..u11
+    store.events.length = 0;                  // isolate scan-2 events
+    await store.scan(bigPage(12, ['u5']));   // scan 2: drop u5 (re-saw 11 of 12 → comparable)
+    const notSeen2 = store.events.filter((e) => e.kind === 'not_seen_latest');
+    expect(notSeen2.map((e) => e.handle)).toEqual(['@u5']);
+    // u5 was in the accumulator (scan 1) so it is NOT newly_observed again; nothing new appeared.
+    expect(store.events.filter((e) => e.kind === 'newly_observed')).toHaveLength(0);
+
+    // scan 3 re-sees the same 11 (u5 still gone). Its `previous` (scan 2) no longer has u5 →
+    // NO re-emit. This is the accumulator-diff bug the fix removes.
+    store.events.length = 0;
+    await store.scan(bigPage(12, ['u5']));
+    expect(store.events.filter((e) => e.kind === 'not_seen_latest')).toHaveLength(0);
+    expect(store.events.filter((e) => e.kind === 'newly_observed')).toHaveLength(0);
+  });
+
+  it('a shallow re-scan (few accounts) persists ZERO not_seen_latest — his no-false-intelligence gate', async () => {
+    const store = statefulNetworkStore();
+    await store.scan(bigPage(40));  // scan 1: u0..u39
+    store.events.length = 0;
+    await store.scan([cell('u0'), cell('u1')]); // scan 2: only 2 re-seen → not comparable
+    expect(store.events.filter((e) => e.kind === 'not_seen_latest')).toHaveLength(0);
   });
 });

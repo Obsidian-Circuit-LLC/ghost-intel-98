@@ -49,6 +49,20 @@ export interface XConnectOk {
 }
 export type XConnectResult = XConnectBlocked | XConnectOk;
 
+/** Options for `connectXSession`. */
+export interface XConnectOptions {
+  /**
+   * Whether to SHOW + focus the capture window after opening it (or when reusing an already-open
+   * one). Defaults to `true` — the explicit, operator-initiated "Open Session" (sign-in) action.
+   *
+   * The one-click CAPTURE paths pass `false`: GhostExodus's Enterprise app scraped in the
+   * BACKGROUND — "it shouldn't pop up the dedicated Chromium browser when Capturing Timeline or
+   * adding entities". A hidden ensure-window keeps that behaviour: the window is created (Tor-gated,
+   * fail-closed, WebRTC-locked — all UNCHANGED), it simply never pops up or steals focus.
+   */
+  visible?: boolean;
+}
+
 export interface XSessionStatus {
   /** Derived from auth-cookie PRESENCE only — the token value is read for the domain check and
    *  never returned, echoed, or logged (mirrors the legacy `xSessionStatus`). */
@@ -114,14 +128,30 @@ export function resolveXTorGate(clearnetEnabled: boolean): XTorGate {
  *     `createCaptureWindow`'s `webRTCIPHandlingPolicy` option so the factory applies it BEFORE
  *     the guest's first navigation (setting it only on the returned webContents would land
  *     after that first load), then re-asserted belt-and-braces on the returned webContents.
+ *
+ * `opts.visible` (default `true`) governs ONLY whether the opened/reused window is shown +
+ * focused. The capture paths (the `captureTimeline` ensure-window, sweeps) pass `false` so the
+ * window stays hidden — the Enterprise app scraped in the background and never popped up the
+ * Chromium browser on a capture. The Tor gate + hardening above are identical regardless.
  */
-export async function connectXSession(caseId: string, clearnetEnabled: boolean): Promise<XConnectResult> {
+export async function connectXSession(
+  caseId: string,
+  clearnetEnabled: boolean,
+  opts: XConnectOptions = {}
+): Promise<XConnectResult> {
   const id = ensureUuid(caseId, 'caseId');
+  // Default VISIBLE (the "Open Session" sign-in action); the capture paths pass `visible:false`
+  // so a one-click capture never pops up the Chromium window (Enterprise scraped in the
+  // background). Only the show/focus is gated — the Tor gate + window hardening below are
+  // identical on both paths.
+  const visible = opts.visible !== false;
 
   const existing = xWindows.get(id);
   if (existing && !existing.isDestroyed()) {
-    existing.show();
-    existing.focus();
+    if (visible) {
+      existing.show();
+      existing.focus();
+    }
     return { blocked: false };
   }
 
@@ -141,8 +171,10 @@ export async function connectXSession(caseId: string, clearnetEnabled: boolean):
   win.webContents.setWebRTCIPHandlingPolicy('disable_non_proxied_udp');
 
   xWindows.set(id, win);
-  win.show();
-  win.focus();
+  if (visible) {
+    win.show();
+    win.focus();
+  }
   return { blocked: false };
 }
 
@@ -222,11 +254,18 @@ function defaultNavigateDeps(): XNavigateDeps {
  * capture, which then reports honestly (0 captured) instead of the old hard "not connected" error.
  * `classifyXPageState` keeps a still-loading (articles:0) profile page as signedIn, so the poll waits
  * through the render rather than mis-flagging it signed-out.
+ *
+ * `options.collectReplies` (audit HIGH #4): when the campaign's collect gate has REPLIES on, load the
+ * `/with_replies` tab (`https://x.com/<handle>/with_replies`) — the route His `scrapeProfile` uses to
+ * surface the target's own replies (main.cjs:1647-1648) — instead of the bare profile. The `handle` is
+ * already validated (`^[A-Za-z0-9_]{1,15}$`) above and `/with_replies` is a fixed literal, so no path
+ * or scheme injection is possible; the host stays x.com on the same allowlisted partition.
  */
 export async function navigateXToProfile(
   caseId: string,
   username: string,
   overrides: Partial<XNavigateDeps> = {},
+  options: { collectReplies?: boolean } = {},
 ): Promise<{ ready: boolean; blocked: boolean; reason?: string }> {
   const handle = String(username ?? '').replace(/^@+/, '').trim();
   if (!X_PROFILE_USERNAME_RE.test(handle)) {
@@ -236,7 +275,8 @@ export async function navigateXToProfile(
   const win = deps.resolveWindow(caseId);
   if (!win) throw new Error('No capture window is open for this campaign.');
 
-  await deps.loadUrl(win, `https://x.com/${handle}`);
+  const route = options.collectReplies ? '/with_replies' : '';
+  await deps.loadUrl(win, `https://x.com/${handle}${route}`);
 
   for (let attempt = 0; attempt < deps.maxAttempts; attempt++) {
     await deps.delay(deps.intervalMs);

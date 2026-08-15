@@ -9,7 +9,7 @@ import { CaseDetail } from './CaseDetail';
 import { confirmDialog, promptDialog } from '../../state/dialogs';
 import { toast } from '../../state/toasts';
 import { shortcutBus, type ShortcutEventDetail } from '../../shell/Shortcuts';
-import { useSettings } from '../../state/store';
+import { useSettings, useActiveCase } from '../../state/store';
 import { resolveCollapsed, toggleCollapsed } from './collapse';
 import emptyHero from '../../assets/cases-empty-hero.jpg';
 
@@ -75,6 +75,8 @@ export function CasesModule({ initialCaseId }: { initialCaseId?: string } = {}):
       setDetail(null);
       return;
     }
+    // Opening a case here makes it the app-wide current case (so Q follows it).
+    useActiveCase.getState().setCurrentCase(selectedId);
     void window.api.cases.read(selectedId).then(setDetail).catch(() => setDetail(null));
   }, [selectedId]);
 

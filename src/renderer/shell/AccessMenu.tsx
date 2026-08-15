@@ -32,9 +32,11 @@ const CATEGORIES: { label: string; glyph: string; items: { module: ModuleKey; la
   { label: 'Programs', glyph: '📁', items: [
     { module: 'cases', label: 'My Cases' }, { module: 'notepad', label: 'Notepad 98' },
     { module: 'briefcase', label: 'Briefcase' }, { module: 'markets', label: 'Markets' },
+    { module: 'weather', label: 'Weather' },
     { module: 'search', label: 'Search' }, { module: 'ai-assistant', label: 'Q' } ] },
   { label: 'Creativity', glyph: '🎨', items: [
-    { module: 'notepad', label: 'Notepad 98' }, { module: 'journal', label: 'Journal Jots' } ] },
+    { module: 'notepad', label: 'Notepad 98' }, { module: 'journal', label: 'Journal Jots' },
+    { module: 'ghost-social', label: 'Ghost Social' } ] },
   { label: 'Music', glyph: '🎵', items: [ { module: 'media-player', label: 'Jukebox' } ] },
   { label: 'Network', glyph: '🖧', items: [
     { module: 'dialterm', label: 'DialTerm' }, { module: 'mail', label: 'Mail' },

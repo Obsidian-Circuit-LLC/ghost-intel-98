@@ -101,8 +101,90 @@ export function scrapingBackupDir(): string {
   return join(scrapingCasesRoot(), 'backup-pre-v3.27.0');
 }
 
+/** WebSDR Viewer module data root. Its stores (directory/presets/notes/menu/egress/recordings)
+ *  are module-global, not case-scoped — the viewer is a standalone built-in, not a scraping case.
+ *  Everything under here routes through secure-fs (AES-GCM at rest), never plaintext beside the exe. */
+export function websdrDir(): string {
+  return join(dataRoot(), 'websdr');
+}
+
+/** The seeded receiver directory sidecar (`{ receivers, directorySeedVersion }`). */
+export function websdrDirectoryFile(): string {
+  return join(websdrDir(), 'directory.json');
+}
+
+/** Saved frequency presets sidecar. */
+export function websdrPresetsFile(): string {
+  return join(websdrDir(), 'presets.json');
+}
+
+/** Listening notes sidecar. */
+export function websdrNotesFile(): string {
+  return join(websdrDir(), 'notes.json');
+}
+
+/** Station Menu configuration sidecar. */
+export function websdrMenuFile(): string {
+  return join(websdrDir(), 'menu.json');
+}
+
+/** Egress-toggle state sidecar (clearnet/tor for the receiver session). */
+export function websdrEgressFile(): string {
+  return join(websdrDir(), 'egress.json');
+}
+
+/** Recording metadata sidecar (the archive index — the captured bytes live in `websdrRecordingsDir`). */
+export function websdrRecordingsFile(): string {
+  return join(websdrDir(), 'recordings.json');
+}
+
+/** Directory holding the encrypted captured-recording blobs (one per recording id). The actual
+ *  capture/write lands in Phase 3; the path is the single source of truth for that seam. */
+export function websdrRecordingsDir(): string {
+  return join(websdrDir(), 'recordings');
+}
+
+/** One encrypted recording blob path, keyed by recording id. `id` must already be a validated
+ *  WebSDR id (no separators/traversal — see the IPC boundary). */
+export function websdrRecordingBlobFile(id: string): string {
+  return join(websdrRecordingsDir(), `${id}.webm`);
+}
+
+/** Ghost Social Media Manager module data dir — all its vault + state artifacts live here,
+ *  under the app's data root (never a discoverable location like ~/Desktop). */
+export function ghostSocialDir(): string {
+  return join(dataRoot(), 'ghost-social');
+}
+
+/** His vault metadata (salt/verifier/recovery-verifier/marker) — no recoverable secret in it. */
+export function ghostSocialVaultMetaFile(): string {
+  return join(ghostSocialDir(), 'vault-meta.json');
+}
+
+/** The vault key wrapped under the recovery-derived key (recovery-unlock path). */
+export function ghostSocialWrappedKeyFile(): string {
+  return join(ghostSocialDir(), 'recovery-wrapped-key.enc');
+}
+
+/** The module's encrypted application state (campaigns/accounts/queue/settings/armed-flag). */
+export function ghostSocialStateFile(): string {
+  return join(ghostSocialDir(), 'ghost-state.enc');
+}
+
+/** On-disk cache dir for host-anchored account favicons (Phase 2, favicon:fetch). Kept under the
+ *  module data dir; each icon is named by a hash of its (registered account) host. */
+export function ghostSocialFaviconDir(): string {
+  return join(ghostSocialDir(), 'favicons');
+}
+
 export function settingsFile(): string {
   return join(dataRoot(), 'settings.json');
+}
+
+/** The Weather tool's single global store (saved locations + units pref + last-conditions cache),
+ *  written/read through secure-fs (encrypt-at-rest — constraint 4). Not case-scoped. */
+export function weatherStoreFile(): string {
+  return join(dataRoot(), 'weather.json');
 }
 
 export function globalRemindersFile(): string {

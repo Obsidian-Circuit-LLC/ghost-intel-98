@@ -117,6 +117,7 @@ function makeApi(over: { changeEvents?: unknown[]; runLog?: unknown[]; networks?
       networksList: vi.fn(async () => over.networks ?? [NETWORK_ARTIFACT]),
       changeEvents: vi.fn(async () => over.changeEvents ?? CHANGE_EVENTS),
       runLog: vi.fn(async () => over.runLog ?? RUN_LOG),
+      networkEvents: vi.fn(async () => []),
       readNotes: vi.fn(async () => ({ notes: [] })),
       presetsRead: vi.fn(async () => ({ presets: [] })),
       archiveStatus: vi.fn(async () => ({ cursor: null, cycles: 0, lastRunAt: null })),
@@ -219,6 +220,38 @@ describe('X Listening Station — Change Intel tab (Task B1)', () => {
     expect(et).toMatch(/0\/1 passes/);
     expect(et).toMatch(/ERROR/);
     expect(errRow.querySelector('.xls-marker-run-error')).toBeTruthy();
+  });
+
+  it('clamps the passes ratio so completedPasses>requestedPasses (the +1 initial read) never renders >100% (FB1)', async () => {
+    install(
+      makeApi({
+        runLog: [
+          {
+            profileId: 'dave',
+            username: 'dave',
+            operation: 'posts' as const,
+            observed: 20,
+            added: 5,
+            duplicates: 15,
+            requestedPasses: 1,
+            completedPasses: 2, // requestedPasses + 1 (the initial read)
+            reachedEnd: true,
+            stopReason: 'reached-end',
+            status: 'complete',
+            startedAt: '2026-08-11T00:00:00.000Z',
+            endedAt: '2026-08-11T00:01:00.000Z',
+          },
+        ],
+      }),
+    );
+    await mount();
+    await clickTab(/^changes$/i);
+    const grid = container.querySelector('.xls-changes-grid')!;
+    const runPanel = Array.from(grid.querySelectorAll('.xls-panel'))
+      .find((p) => /COLLECTION RUN LOG/.test(p.querySelector('.xls-panel-title')?.textContent || ''))!;
+    const t = runPanel.textContent || '';
+    expect(t).toMatch(/1\/1 passes/); // clamped
+    expect(t).not.toMatch(/2\/1 passes/); // never the raw >100% figure
   });
 
   it('keeps the network-deltas rendering alongside the two-column grid', async () => {

@@ -67,6 +67,7 @@ function makeApi() {
       networksList: vi.fn(async () => []),
       changeEvents: vi.fn(async () => []),
       runLog: vi.fn(async () => []),
+      networkEvents: vi.fn(async () => []),
       readNotes: vi.fn(async () => ({ notes: [{ id: 'n1', findingId: 'p0', text: 'note', updatedAt: 1 }] })),
       archiveStatus: vi.fn(async () => null),
       presetsRead: vi.fn(async () => ({ presets: PRESETS })),

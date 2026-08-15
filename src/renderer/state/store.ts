@@ -52,7 +52,9 @@ export type ModuleKey =
   | 'invoices'
   | 'report'
   | 'number-muncher'
-  | 'pdf-signer';
+  | 'pdf-signer'
+  | 'ghost-social'
+  | 'weather';
 
 export interface WindowSpec {
   id: string;
@@ -90,19 +92,34 @@ export const useWindows = create<WindowState>((set) => ({
   windows: [],
   focusStack: [],
   open(spec) {
-    const id = spec.id ?? nextId();
+    // `resultId` is the id the caller gets back. For a singleton whose window already exists it is
+    // reassigned to that existing window's id (below), so the caller focuses the right window.
+    let resultId = spec.id ?? nextId();
     set((s) => {
-      const existing = s.windows.find((w) => w.id === id);
+      const existing = s.windows.find((w) => w.id === resultId);
       if (existing) {
         return {
-          windows: s.windows.map((w) => (w.id === id ? { ...w, minimized: false } : w)),
-          focusStack: [...s.focusStack.filter((x) => x !== id), id]
+          windows: s.windows.map((w) => (w.id === resultId ? { ...w, minimized: false } : w)),
+          focusStack: [...s.focusStack.filter((x) => x !== resultId), resultId]
         };
       }
       const desc = getModule(spec.module);
+      // SINGLETON (Finding 3): if a singleton module already has an open window, FOCUS it (restore
+      // if minimized) instead of creating a second — a second window would share the module's
+      // process-global native resources and cross-composite / tear down the first's views.
+      if (desc?.singleton) {
+        const open = s.windows.find((w) => w.module === spec.module);
+        if (open) {
+          resultId = open.id;
+          return {
+            windows: s.windows.map((w) => (w.id === open.id ? { ...w, minimized: false } : w)),
+            focusStack: [...s.focusStack.filter((x) => x !== open.id), open.id]
+          };
+        }
+      }
       const placed: WindowSpec = {
         ...spec,
-        id,
+        id: resultId,
         x: spec.x ?? 60 + (s.windows.length % 6) * 30,
         y: spec.y ?? 60 + (s.windows.length % 6) * 30,
         width: spec.width ?? desc?.defaultWidth ?? 760,
@@ -110,10 +127,10 @@ export const useWindows = create<WindowState>((set) => ({
       };
       return {
         windows: [...s.windows, placed],
-        focusStack: [...s.focusStack, id]
+        focusStack: [...s.focusStack, resultId]
       };
     });
-    return id;
+    return resultId;
   },
   close(id) {
     set((s) => ({
@@ -200,4 +217,21 @@ export const useLocalAi = create<LocalAiSliceState>((set) => ({
     try { const status = await window.api.localAi.setup({ mode }); set({ status, progress: null }); }
     finally { off(); }
   }
+}));
+
+/**
+ * App-wide "current case" — the single case the whole app agrees you are working (operator decision
+ * 2026-08-14 "App-wide active case"). Set wherever a case is opened/selected (Cases module,
+ * Searchlight `setActiveCaseId`); read by Q (`AiAssistantModule`) so its per-case memory recall +
+ * context auto-bind to that case instead of the old global cross-case fallback. Selecting a case
+ * sets it; deselecting does NOT clear it (there is no global "close case" — the last opened case
+ * stays current until another is opened).
+ */
+interface ActiveCaseState {
+  currentCaseId: string | null;
+  setCurrentCase(id: string | null): void;
+}
+export const useActiveCase = create<ActiveCaseState>((set) => ({
+  currentCaseId: null,
+  setCurrentCase: (id) => set({ currentCaseId: id }),
 }));

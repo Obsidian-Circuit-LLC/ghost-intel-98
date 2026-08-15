@@ -278,6 +278,12 @@ export interface XHealthRow {
   profileId: string;
   username: string;
   status: string;
+  // Enterprise COLLECTION HEALTH columns (enterprise.cjs:221-224) — computed main-side +
+  // carried over IPC; optional so a partial/legacy payload never crashes the row.
+  postCount?: number;
+  followerCount?: number;
+  followingCount?: number;
+  oldestPostAt?: string | null;
 }
 
 export interface XEntityRow {
@@ -285,6 +291,14 @@ export interface XEntityRow {
   type: string;
   value: string;
   count: number;
+  // Task: ENTITY INDEX display pics. `normalizedValue` is the canonical handle for a MENTION entity
+  // (drives the card avatar + OPEN X PROFILE); `sourceUsernames` are the finding sources (each a
+  // small avatar chip). Present at runtime on the `entities` rollup (store.ts XEntityCacheEntry);
+  // optional here so a legacy/partial payload never crashes the card.
+  normalizedValue?: string;
+  sourceUsernames?: string[];
+  firstObservedAt?: string;
+  lastObservedAt?: string;
 }
 
 // ── Task 15: changes / search / notes / exports / campaigns / system tabs ──────────────────
@@ -306,9 +320,17 @@ export interface XNetworkAccountRow {
 }
 
 export interface XNoteRow {
+  /** Unique note id (M11) — present on every note the multi-note path writes; absent only on a
+   *  legacy pre-M11 record, where a finding held at most one note (key on `id ?? findingId`). */
+  id?: string;
   findingId: string;
   text: string;
   savedAt: string;
+}
+
+/** Stable key for a note: its own id, or (legacy) the finding it was pinned to (M11). */
+function xNoteRowKey(note: XNoteRow): string {
+  return note.id ?? note.findingId;
 }
 
 /** One historical change event — the Change Intel tab's HISTORICAL CHANGE EVENTS stream
@@ -347,6 +369,19 @@ export interface XRunLogRow {
   endedAt: string;
 }
 
+/** One persisted per-handle network delta event — the Network tab's RECENT NETWORK DELTAS stream
+ *  (store.ts `XNetworkDeltaEvent`, M2). Emitted by the network capture path, GATED so a shallow
+ *  re-scan cannot flood `not_seen_latest`. `not_seen_latest` is a review candidate (confidence
+ *  `unconfirmed`), NEVER a claimed unfollow. Rendered newest-first, synthetic handles excluded. */
+export interface XNetworkDeltaEventRow {
+  kind: 'newly_observed' | 'not_seen_latest';
+  handle: string;
+  target: string;
+  relationship: 'followers' | 'following';
+  observedAt: string;
+  confidence: 'observed' | 'unconfirmed';
+}
+
 export interface XArchiveStateView {
   cursor: string | null;
   cycles: number;
@@ -363,11 +398,30 @@ export interface XPresetRow {
   name: string;
   keywords: string[];
   mode: 'any' | 'all';
+  /** Case-sensitive matching (default false). Restored with the full editor (audit HIGH #9). */
+  caseSensitive: boolean;
+  /** Per-source scope — when non-empty, only posts from these `channelId`s are matched (audit HIGH #9). */
+  profileIds: string[];
+  enabled?: boolean;
   updatedAt: string;
 }
 
-// Post kind labels + compact metric formatting now live in the extracted PostCard (Task I1); the
-// module keeps only `formatWhen`, still used by the network / changes / sources / notes tabs.
+/** One preset RUN match returned by `presetsRun` — the post and the keywords that matched it. */
+export interface XPresetMatchView {
+  postId: string;
+  matchedKeywords: string[];
+}
+
+// Compact metric formatting lives in the extracted PostCard (Task I1); the module keeps `formatWhen`
+// (network / changes / sources / notes tabs) and a local kind-label map for the M12/M13/M15 filter
+// controls (four independent kind checkboxes + the search/export TYPE selectors).
+const POST_KIND_LABEL: Record<XPostRow['kind'], string> = {
+  post: 'POSTS',
+  reply: 'REPLIES',
+  repost: 'REPOSTS',
+  comment: 'COMMENTS',
+};
+
 function formatWhen(iso: string | undefined): string {
   if (!iso) return 'Unknown time';
   const d = new Date(iso);
@@ -404,6 +458,10 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
   const [analysis, setAnalysis] = useState<XAnalysisView>(EMPTY_ANALYSIS);
   const [health, setHealth] = useState<XHealthRow[]>([]);
   const [entities, setEntities] = useState<XEntityRow[]>([]);
+  // Campaign-wide avatar lookup (canonical handle → LOCAL data: URI) from the cache-only `avatars`
+  // channel — the ENTITY INDEX resolves each mention/source handle to a localized avatar through it,
+  // never a remote URL. A miss leaves the handle absent → monogram fallback.
+  const [avatars, setAvatars] = useState<Record<string, string>>({});
   const [insightsBusy, setInsightsBusy] = useState(false);
 
   const [targetUsername, setTargetUsername] = useState('');
@@ -411,8 +469,31 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
   // Task D1: which source card is mid-action (REFRESH/REMOVE) — drives per-card busy state so the
   // analyst gets immediate one-click feedback on the exact row acted on (ADHD-friendly).
   const [sourceBusyId, setSourceBusyId] = useState<string | null>(null);
-  const [liveKindFilter, setLiveKindFilter] = useState<'all' | XPostRow['kind']>('all');
+  // M12: four INDEPENDENT live-feed kind checkboxes (his `feedKinds`, main.tsx:328) + a SOURCE
+  // dropdown — restored from the single-select ALL/one downgrade. All kinds on by default.
+  const [feedKinds, setFeedKinds] = useState<Record<XPostRow['kind'], boolean>>({
+    post: true,
+    reply: true,
+    repost: true,
+    comment: true,
+  });
+  const [feedSourceFilter, setFeedSourceFilter] = useState('all');
+  // M14: Entities-tab free-text search (his `entityQuery`, main.tsx:341).
   const [entityTypeFilter, setEntityTypeFilter] = useState('all');
+  const [entityQuery, setEntityQuery] = useState('');
+  // M14: Network-records free-text search (his `networkQuery`, main.tsx:332).
+  const [networkRecordQuery, setNetworkRecordQuery] = useState('');
+  // M13: Search-tab SOURCE / TYPE / preset-matches-only scope (his search controls, main.tsx:345).
+  const [searchSource, setSearchSource] = useState('all');
+  const [searchKind, setSearchKind] = useState<'all' | XPostRow['kind']>('all');
+  const [presetMatchesOnly, setPresetMatchesOnly] = useState(false);
+  // M14: Notes-tab SOURCE filter + note-text search (his notes toolbar, main.tsx:347).
+  const [noteSourceFilter, setNoteSourceFilter] = useState('all');
+  const [noteSearch, setNoteSearch] = useState('');
+  // M15: per-export SOURCE / TYPE / QUERY filters (his export filters, main.tsx:349).
+  const [exportSource, setExportSource] = useState('all');
+  const [exportKind, setExportKind] = useState<'all' | XPostRow['kind']>('all');
+  const [exportQuery, setExportQuery] = useState('');
 
   // ── Task C1: Network tab extraction controls ───────────────────────────────
   // TARGET SOURCE selector ('all' or one captured source's username) + VIEW selector
@@ -432,6 +513,9 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
   const [networks, setNetworks] = useState<XNetworkAccountRow[]>([]);
   const [changeEvents, setChangeEvents] = useState<XChangeEventRow[]>([]);
   const [runLog, setRunLog] = useState<XRunLogRow[]>([]);
+  /** M2: persisted, GATED per-handle network delta events (source of truth for RECENT NETWORK
+   *  DELTAS — replaces the old ungated first/last-observed timestamp derivation). */
+  const [networkDeltas, setNetworkDeltas] = useState<XNetworkDeltaEventRow[]>([]);
   /** The post id currently being live-verified (VERIFY LIVE, Task A1) — disables its button. */
   const [verifyingPostId, setVerifyingPostId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -458,6 +542,15 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
   const [presets, setPresets] = useState<XPresetRow[]>([]);
   const [presetNameDraft, setPresetNameDraft] = useState('');
   const [presetsBusy, setPresetsBusy] = useState(false);
+  // Audit HIGH #9 — the full preset editor draft (mode / case / per-source scope / keyword textarea).
+  const [presetKeywordsDraft, setPresetKeywordsDraft] = useState('');
+  const [presetModeDraft, setPresetModeDraft] = useState<'any' | 'all'>('any');
+  const [presetCaseDraft, setPresetCaseDraft] = useState(false);
+  const [presetProfilesDraft, setPresetProfilesDraft] = useState<string[]>([]);
+  // Non-null while EDITing an existing preset (upsert its id) rather than creating a new one.
+  const [editingPresetId, setEditingPresetId] = useState<string | null>(null);
+  // Audit HIGH #8 — the last preset RUN result (derived-on-read; drives the MATCH display).
+  const [presetRun, setPresetRun] = useState<{ name: string; matches: XPresetMatchView[] } | null>(null);
 
   const xListeningSettings = settings?.xListening;
   const clearnet = xListeningSettings?.clearnet === true;
@@ -527,9 +620,11 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
       setAnalysis(EMPTY_ANALYSIS);
       setHealth([]);
       setEntities([]);
+      setAvatars({});
       setNetworks([]);
       setChangeEvents([]);
       setRunLog([]);
+      setNetworkDeltas([]);
       setNotes([]);
       setArchiveState(EMPTY_ARCHIVE_STATE);
       setPresets([]);
@@ -537,7 +632,7 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
     }
     setInsightsBusy(true);
     try {
-      const [postsRes, analysisRes, healthRes, entitiesRes, networksRes, notesRes, archiveRes, presetsRes, changeEventsRes, runLogRes] =
+      const [postsRes, analysisRes, healthRes, entitiesRes, networksRes, notesRes, archiveRes, presetsRes, changeEventsRes, runLogRes, networkEventsRes] =
         await Promise.all([
           window.api.xListening.postsList(id),
           window.api.xListening.analysis(id),
@@ -549,6 +644,7 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
           window.api.xListening.presetsRead(id),
           window.api.xListening.changeEvents(id),
           window.api.xListening.runLog(id),
+          window.api.xListening.networkEvents(id),
         ]);
       setPosts((postsRes as unknown as XPostRow[]) ?? []);
       setAnalysis((analysisRes as unknown as XAnalysisView) ?? EMPTY_ANALYSIS);
@@ -571,10 +667,22 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
       setPresets(((presetsRes as unknown as { presets: XPresetRow[] })?.presets) ?? []);
       setChangeEvents((changeEventsRes as unknown as XChangeEventRow[]) ?? []);
       setRunLog((runLogRes as unknown as XRunLogRow[]) ?? []);
+      setNetworkDeltas((networkEventsRes as unknown as XNetworkDeltaEventRow[]) ?? []);
     } catch (err) {
       console.warn('[XListening] loadInsights:', err);
     } finally {
       setInsightsBusy(false);
+    }
+    // Avatars are a display enhancement (ENTITY INDEX pics), resolved SEPARATELY so a miss never
+    // blanks the core insights — and guarded so an older preload without the channel degrades to
+    // monograms rather than throwing. The lookup is cache-only (no egress).
+    try {
+      if (typeof window.api?.xListening?.avatars === 'function') {
+        const avatarRes = await window.api.xListening.avatars(id);
+        setAvatars((avatarRes as unknown as Record<string, string>) ?? {});
+      }
+    } catch (err) {
+      console.warn('[XListening] avatars:', err);
     }
   }, []);
 
@@ -649,15 +757,74 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
     return [...map.values()].sort((a, b) => b.count - a.count);
   }, [posts]);
 
+  // The canonical source key a post is grouped under (the SAME key `sourceGroups`/`removeSource`
+  // use), so a SOURCE dropdown selection matches a post regardless of handle casing.
+  const postSourceKey = useCallback(
+    (p: XPostRow) => normalizeXSourceKey(p.channelId || p.authorHandle),
+    [],
+  );
+
+  // M12: per-kind live-feed counts (his `postKindCounts`, main.tsx:328) — computed over the posts
+  // that pass the SOURCE filter so a checkbox label reflects what selecting it would show.
+  const feedSourcePosts = useMemo(
+    () => (feedSourceFilter === 'all' ? posts : posts.filter((p) => postSourceKey(p) === feedSourceFilter)),
+    [posts, feedSourceFilter, postSourceKey],
+  );
+  const postKindCounts = useMemo(() => {
+    const counts: Record<XPostRow['kind'], number> = { post: 0, reply: 0, repost: 0, comment: 0 };
+    for (const p of feedSourcePosts) counts[p.kind] = (counts[p.kind] ?? 0) + 1;
+    return counts;
+  }, [feedSourcePosts]);
+  // M12: the visible feed — SOURCE filter AND the set of checked kinds (four independent toggles).
   const livePosts = useMemo(
-    () => posts.filter((p) => liveKindFilter === 'all' || p.kind === liveKindFilter),
-    [posts, liveKindFilter],
+    () => feedSourcePosts.filter((p) => feedKinds[p.kind]),
+    [feedSourcePosts, feedKinds],
   );
 
   const entityTypes = useMemo(() => [...new Set(entities.map((e) => e.type))].sort(), [entities]);
-  const filteredEntities = useMemo(
-    () => (entityTypeFilter === 'all' ? entities : entities.filter((e) => e.type === entityTypeFilter)),
-    [entities, entityTypeFilter],
+  // M14: Entities tab — TYPE selector AND a free-text query over value/type/source handles.
+  const filteredEntities = useMemo(() => {
+    const q = entityQuery.trim().toLowerCase();
+    return entities.filter((e) => {
+      if (entityTypeFilter !== 'all' && e.type !== entityTypeFilter) return false;
+      if (!q) return true;
+      const hay = [
+        e.value,
+        e.type,
+        e.normalizedValue ?? '',
+        ...(e.sourceUsernames ?? []),
+      ]
+        .join(' ')
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }, [entities, entityTypeFilter, entityQuery]);
+
+  // ── ENTITY INDEX display pics: canonical-handle → LOCAL avatar data: URI ─────────────────────
+  // The hardened analog of Enterprise's `avatarFor`. Resolves ONLY from the cache-only `avatars`
+  // lookup — a `data:` URI or undefined (→ monogram). Never a remote URL, so never in the DOM.
+  const avatarFor = useCallback(
+    (handle: string): string | undefined => {
+      const uri = avatars[normalizeXSourceKey(handle)];
+      return uri && uri.startsWith('data:') ? uri : undefined;
+    },
+    [avatars],
+  );
+
+  // Small identity-avatar chip (mirrors Enterprise's `IdentityAvatar`): the localized image when the
+  // handle has a cached avatar, else the handle's monogram initial — no broken image, no renderer
+  // fetch. `size` is 'sm' (mention card head) or 'xs' (finding-source chip).
+  const renderIdentAvatar = useCallback(
+    (handle: string, size: 'xs' | 'sm') => {
+      const src = avatarFor(handle);
+      const initial = handle.replace(/^@+/, '').slice(0, 1).toUpperCase() || '@';
+      return (
+        <span className={`xls-ident-avatar xls-ident-avatar--${size}`} aria-hidden="true">
+          {src ? <img src={src} alt="" /> : <span>{initial}</span>}
+        </span>
+      );
+    },
+    [avatarFor],
   );
 
   const healthyCount = useMemo(() => health.filter((h) => h.status === 'HEALTHY').length, [health]);
@@ -692,7 +859,8 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
   );
 
   // `renderPost` (the shared PostCard binding used by Dashboard / Live / Search) is defined lower,
-  // after the analyst-note handlers it depends on (handleSaveNoteFor / handleRemoveNote), so its
+  // after the analyst-note handlers it depends on (handleAddNoteFor / handleUpdateNote /
+  // handleRemoveNote), so its
   // dependency array never references a still-in-TDZ const.
 
   // ── campaign dock actions ──────────────────────────────────────────────────
@@ -882,12 +1050,13 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
     }
   }, [activeCampaignId, noteDraftFindingId, noteDraftText]);
 
+  // M11: delete ONE note by its id (the multi-note UI targets a single note, not the finding).
   const handleRemoveNote = useCallback(
-    async (findingId: string) => {
+    async (noteId: string) => {
       if (!activeCampaignId) return;
       setNotesBusy(true);
       try {
-        const res = await window.api.xListening.removeNote({ caseId: activeCampaignId, findingId });
+        const res = await window.api.xListening.removeNote({ caseId: activeCampaignId, noteId });
         setNotes(res.notes as unknown as XNoteRow[]);
         setNotice('Note removed.');
       } catch (err) {
@@ -899,11 +1068,10 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
     [activeCampaignId],
   );
 
-  // Task I1: upsert an analyst note straight from a PostCard's inline notes panel (findingId = the
-  // post id) through the SAME real `saveNote` upsert the Notes tab uses — a re-save of the same
-  // finding REPLACES its note (edit), so add + edit share one path. On success the persisted note
-  // list is re-seated from the returned record so every card + the Notes tab agree.
-  const handleSaveNoteFor = useCallback(
+  // Task I1 / M11: APPEND an analyst note straight from a PostCard's inline notes panel (findingId
+  // = the post id) through the same `saveNote` (append) the Notes tab uses. A finding may carry
+  // many notes; on success the persisted list is re-seated so every card + the Notes tab agree.
+  const handleAddNoteFor = useCallback(
     async (findingId: string, text: string) => {
       if (!activeCampaignId) return;
       const clean = text.trim();
@@ -919,13 +1087,40 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
     [activeCampaignId],
   );
 
+  // M11: EDIT one existing note in place, by note id.
+  const handleUpdateNote = useCallback(
+    async (noteId: string, text: string) => {
+      if (!activeCampaignId) return;
+      const clean = text.trim();
+      if (!noteId || !clean) return;
+      try {
+        const res = await window.api.xListening.updateNote({ caseId: activeCampaignId, noteId, text: clean });
+        setNotes(res.notes as unknown as XNoteRow[]);
+        setNotice('Analyst note updated.');
+      } catch (err) {
+        setNotice(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [activeCampaignId],
+  );
+
   // ── Task 15: interactive exports (native save dialog — real IPC, no fabricated path) ────
   const handleExportPosts = useCallback(
     async (format: 'json' | 'csv' | 'pdf') => {
       if (!activeCampaignId) return;
       setExportBusy(true);
       try {
-        const res = await window.api.xListening.exportPostsToFile({ caseId: activeCampaignId, format });
+        // M15: thread the per-export SOURCE / TYPE / QUERY filters (only non-default fields are
+        // sent; the MAIN side applies them after synthetic-exclusion).
+        const filters: { source?: string; kind?: string; query?: string } = {};
+        if (exportSource !== 'all') filters.source = exportSource;
+        if (exportKind !== 'all') filters.kind = exportKind;
+        if (exportQuery.trim()) filters.query = exportQuery.trim();
+        const res = await window.api.xListening.exportPostsToFile({
+          caseId: activeCampaignId,
+          format,
+          ...(Object.keys(filters).length ? { filters } : {}),
+        });
         setNotice(
           res.canceled
             ? 'Export canceled.'
@@ -937,7 +1132,7 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
         setExportBusy(false);
       }
     },
-    [activeCampaignId],
+    [activeCampaignId, exportSource, exportKind, exportQuery],
   );
 
   const handleExportNetwork = useCallback(async () => {
@@ -949,6 +1144,25 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
         res.canceled
           ? 'Export canceled.'
           : `Exported ${res.count} network account(s) to ${res.filePath} (sha256 ${res.sha256.slice(0, 10)}…).`,
+      );
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : String(err));
+    } finally {
+      setExportBusy(false);
+    }
+  }, [activeCampaignId]);
+
+  // FB4 (audit HIGH #10): export the captured network as a self-describing JSON envelope embedding
+  // the common-connection analysis + a manifestHash — the analysis reaches a JSON file, not only CSV.
+  const handleExportNetworkJson = useCallback(async () => {
+    if (!activeCampaignId) return;
+    setExportBusy(true);
+    try {
+      const res = await window.api.xListening.exportNetworkJsonToFile(activeCampaignId);
+      setNotice(
+        res.canceled
+          ? 'Export canceled.'
+          : `Exported ${res.count} relationship(s) to ${res.filePath} (sha256 ${res.sha256.slice(0, 10)}…).`,
       );
     } catch (err) {
       setNotice(err instanceof Error ? err.message : String(err));
@@ -1189,49 +1403,54 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
   // 3000 (source parity). `networksList` is UNFILTERED, so demo/seeded rows (`synthetic:true`,
   // demo.ts) are dropped here — this list sits directly above an EXPORT CSV whose count already
   // excludes synthetic, so an unfiltered list would show demo accounts the export omits.
-  const networkRecordRows = useMemo(
-    () =>
-      networks
-        .filter(
-          (a) =>
-            !a.synthetic &&
-            matchesSelectedTarget(a.target) &&
-            (networkView === 'both' || a.kind === networkView),
-        )
-        .slice(0, 3000),
-    [networks, matchesSelectedTarget, networkView],
-  );
-
-  // RECENT NETWORK DELTAS — CONSERVATIVE, derived honestly from the accounts' own first/last-seen
-  // bookkeeping (the hardened core keeps no separate network-event log). Per (target, kind) group
-  // the latest scan is the max `lastObservedAt`; an account first seen in that latest scan is
-  // NEWLY OBSERVED, and an account whose `lastObservedAt` predates its group's latest scan was NOT
-  // SEEN in the latest comparable scan — a review candidate, never asserted as an unfollow (X can
-  // truncate/reorder lists). Newest-first, capped 100 (source parity, main.tsx:289).
-  const recentNetworkDeltas = useMemo(() => {
-    // `networksList` is UNFILTERED — drop demo/seeded rows (`synthetic:true`, demo.ts) before both
-    // the per-group latest-scan reduction and the delta roll-up, so a demo account never surfaces
-    // as a NEWLY OBSERVED / NOT SEEN candidate (Global Constraints honesty rule).
-    const realNetworks = networks.filter((a) => !a.synthetic);
-    const latestByGroup = new Map<string, string>();
-    for (const a of realNetworks) {
-      const g = `${a.target}::${a.kind}`;
-      const last = a.lastObservedAt ?? '';
-      if (last > (latestByGroup.get(g) ?? '')) latestByGroup.set(g, last);
-    }
-    return realNetworks
-      .map((a) => {
-        const latest = latestByGroup.get(`${a.target}::${a.kind}`) ?? '';
-        const first = a.firstObservedAt ?? '';
-        const last = a.lastObservedAt ?? '';
-        const newlyObserved = !!first && first === last && last === latest;
-        const notSeen = !!last && !!latest && last < latest;
-        return { account: a, newlyObserved, notSeen, at: last };
+  // M14: a free-text SEARCH over the records (his `networkQuery` — "name, username, bio",
+  // main.tsx:332), applied alongside the TARGET SOURCE + VIEW scoping.
+  const networkRecordRows = useMemo(() => {
+    const q = networkRecordQuery.trim().toLowerCase();
+    return networks
+      .filter(
+        (a) =>
+          !a.synthetic &&
+          matchesSelectedTarget(a.target) &&
+          (networkView === 'both' || a.kind === networkView),
+      )
+      .filter((a) => {
+        if (!q) return true;
+        const hay = [a.handle, a.displayName ?? '', a.bio ?? ''].join(' ').toLowerCase();
+        return hay.includes(q);
       })
-      .filter((r) => r.newlyObserved || r.notSeen)
-      .sort((x, y) => y.at.localeCompare(x.at))
-      .slice(0, 100);
-  }, [networks]);
+      .slice(0, 3000);
+  }, [networks, matchesSelectedTarget, networkView, networkRecordQuery]);
+
+  // RECENT NETWORK DELTAS — the PERSISTED, GATED per-handle event stream (store.ts
+  // `listNetworkEvents`, M2, his `recordNetworkSnapshot` `networkEvents`). This REPLACES the old
+  // ungated first/last-observed timestamp derivation, which flagged NOT SEEN for any account whose
+  // last-seen predated its group's latest scan — over-flagging on a shallow re-scan. The main-side
+  // gate (passesCompleted + observedCount vs the PREVIOUS scan) means a truncated pass no longer
+  // floods NOT SEEN, and a dropped handle is flagged ONCE. `not_seen_latest` is a review candidate
+  // (confidence `unconfirmed`), never a claimed unfollow. Events arrive newest-first + capped ~500;
+  // we re-cap to 100 for display (source parity, main.tsx:289).
+  const recentNetworkDeltas = useMemo(() => {
+    // Belt-and-braces synthetic exclusion (Global Constraints honesty rule): a live capture never
+    // emits events for a demo/seeded row, but if a persisted event's handle collides with a
+    // synthetic account in this campaign's `networks`, drop it so a demo handle can never surface as
+    // a NEWLY OBSERVED / NOT SEEN delta.
+    const norm = (target: string, rel: string, handle: string) =>
+      `${target.replace(/^@+/, '').toLowerCase()}::${rel}::${handle.replace(/^@+/, '').toLowerCase()}`;
+    const syntheticKeys = new Set(
+      networks.filter((a) => a.synthetic).map((a) => norm(a.target, a.kind, a.handle)),
+    );
+    return networkDeltas
+      .filter((e) => !syntheticKeys.has(norm(e.target, e.relationship, e.handle)))
+      .slice(0, 100)
+      .map((e) => ({
+        handle: e.handle,
+        target: e.target,
+        relationship: e.relationship,
+        newlyObserved: e.kind === 'newly_observed',
+        at: e.observedAt,
+      }));
+  }, [networkDeltas, networks]);
 
   // ── Task 15(d): archive step, driven off the campaign's OWN Tor-default session ─────────
   const handleRunArchive = useCallback(async () => {
@@ -1455,36 +1674,73 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
 
   // ── Task 15: highlight presets (design doc: "Highlight presets / local search" is ONE
   // feature area) — save the current search query as a reusable, in-app-evaluated preset. ──
+  // Reset the editor back to a fresh "NEW PRESET" state (also the EDIT → Cancel path).
+  const clearPresetEditor = useCallback(() => {
+    setEditingPresetId(null);
+    setPresetNameDraft('');
+    setPresetKeywordsDraft('');
+    setPresetModeDraft('any');
+    setPresetCaseDraft(false);
+    setPresetProfilesDraft([]);
+  }, []);
+
+  // Audit HIGH #9 — EDIT: load an existing preset into the form (his `editPreset`, main.tsx:306).
+  // Keywords round-trip one-per-line so the textarea shows the saved phrase list.
+  const handleEditPreset = useCallback((preset: XPresetRow) => {
+    setEditingPresetId(preset.id);
+    setPresetNameDraft(preset.name);
+    setPresetKeywordsDraft(preset.keywords.join('\n'));
+    setPresetModeDraft(preset.mode);
+    setPresetCaseDraft(preset.caseSensitive === true);
+    setPresetProfilesDraft(preset.profileIds ?? []);
+  }, []);
+
   const handleSavePreset = useCallback(async () => {
     if (!activeCampaignId) return;
     const name = presetNameDraft.trim();
-    const query = searchQuery.trim();
+    // Audit HIGH #9 — keywords now come from a dedicated TEXTAREA split on comma OR newline
+    // (his form, main.tsx:345), no longer piggy-backed on the live search box.
+    const keywords = presetKeywordsDraft.split(/[,\n]/).map((k) => k.trim()).filter(Boolean);
     if (!name) {
       setNotice('Enter a name for this preset before saving.');
       return;
     }
-    if (!query) {
-      setNotice('Enter a search query above before saving it as a preset.');
+    if (!keywords.length) {
+      setNotice('Enter at least one keyword or phrase for this preset.');
       return;
     }
     setPresetsBusy(true);
     try {
-      const keywords = query.split(',').map((k) => k.trim()).filter(Boolean);
+      // Audit HIGH #9 — send the FULL preset shape (mode / caseSensitive / profileIds) the save
+      // handler already stores + evaluatePreset already honors. EDIT upserts the same id.
       const res = await window.api.xListening.presetsSave({
         caseId: activeCampaignId,
-        id: crypto.randomUUID(),
+        id: editingPresetId ?? crypto.randomUUID(),
         name,
         keywords,
+        mode: presetModeDraft,
+        caseSensitive: presetCaseDraft,
+        profileIds: presetProfilesDraft,
+        enabled: true,
       });
       setPresets(res.presets as unknown as XPresetRow[]);
-      setPresetNameDraft('');
-      setNotice(`Preset "${name}" saved.`);
+      clearPresetEditor();
+      setNotice(editingPresetId ? `Preset "${name}" updated.` : `Preset "${name}" saved.`);
     } catch (err) {
       setNotice(err instanceof Error ? err.message : String(err));
     } finally {
       setPresetsBusy(false);
     }
-  }, [activeCampaignId, presetNameDraft, searchQuery]);
+  }, [
+    activeCampaignId,
+    presetNameDraft,
+    presetKeywordsDraft,
+    presetModeDraft,
+    presetCaseDraft,
+    presetProfilesDraft,
+    editingPresetId,
+    clearPresetEditor,
+  ]);
 
   const handleRunPreset = useCallback(
     async (preset: XPresetRow) => {
@@ -1492,6 +1748,9 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
       setPresetsBusy(true);
       try {
         const res = await window.api.xListening.presetsRun({ caseId: activeCampaignId, id: preset.id });
+        // Audit HIGH #8 — keep the matches so the matched posts render with highlighting + a
+        // MATCH:<name> row, instead of discarding them behind a toast.
+        setPresetRun({ name: preset.name, matches: res.matches });
         setNotice(`Preset "${preset.name}" matched ${res.matches.length} post(s).`);
       } catch (err) {
         setNotice(err instanceof Error ? err.message : String(err));
@@ -1519,14 +1778,82 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
     [activeCampaignId],
   );
 
-  // ── Task 15: client-side local search over the persisted posts (no server round-trip) ───
+  // Per-post analyst-note text, joined lowercase — lets Search (M13) and the Notes tab (M14) match
+  // on note bodies (his `notesByPost` join, main.tsx:282/288). Keyed by post id (= findingId).
+  const notesTextByPost = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const n of notes) {
+      const prior = map.get(n.findingId);
+      map.set(n.findingId, prior ? `${prior} ${n.text}` : n.text);
+    }
+    return map;
+  }, [notes]);
+
+  // Audit HIGH #8 — the last preset RUN result, projected onto the loaded posts. `presetMatchByPost`
+  // maps each matched post to its highlight terms + the preset name (his `presetMatchByPost`,
+  // main.tsx:279); `presetMatchedPosts` are the posts to render, in the loaded order. Declared
+  // BEFORE `searchResults` so the PRESET-MATCHES-ONLY filter (M13) can consult it.
+  const presetMatchByPost = useMemo(() => {
+    const map = new Map<string, { terms: string[]; names: string[] }>();
+    if (!presetRun) return map;
+    for (const m of presetRun.matches) {
+      map.set(m.postId, { terms: m.matchedKeywords, names: [presetRun.name] });
+    }
+    return map;
+  }, [presetRun]);
+
+  // ── Task 15 / M13: client-side local search over the persisted posts (no server round-trip) ──
+  // His search matched post text, @handle AND analyst-note text, with SOURCE / TYPE /
+  // preset-matches-only filters (main.tsx:282/345). An empty query with NO active filter still
+  // shows the "type to search" hint (our anti-hollow-dump guard) rather than the full campaign;
+  // an active filter with an empty query narrows to that filter's posts (his return-all-with-filters).
+  const searchFilterActive =
+    searchSource !== 'all' || searchKind !== 'all' || presetMatchesOnly;
   const searchResults = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return [];
-    return posts.filter(
-      (p) => p.text.toLowerCase().includes(q) || p.authorHandle.toLowerCase().includes(q),
-    );
-  }, [posts, searchQuery]);
+    if (!q && !searchFilterActive) return [];
+    return posts.filter((p) => {
+      if (searchSource !== 'all' && postSourceKey(p) !== searchSource) return false;
+      if (searchKind !== 'all' && p.kind !== searchKind) return false;
+      if (presetMatchesOnly && !presetMatchByPost.has(p.id)) return false;
+      if (!q) return true;
+      const noteText = notesTextByPost.get(p.id) ?? '';
+      return (
+        p.text.toLowerCase().includes(q) ||
+        p.authorHandle.toLowerCase().includes(q) ||
+        noteText.toLowerCase().includes(q)
+      );
+    });
+  }, [
+    posts,
+    searchQuery,
+    searchSource,
+    searchKind,
+    presetMatchesOnly,
+    searchFilterActive,
+    postSourceKey,
+    presetMatchByPost,
+    notesTextByPost,
+  ]);
+  const presetMatchedPosts = useMemo(
+    () => posts.filter((p) => presetMatchByPost.has(p.id)),
+    [posts, presetMatchByPost],
+  );
+
+  // M14: the Notes tab's SAVED-NOTES list, filtered by SOURCE (the post's source) + a free-text
+  // query over the note body, the post text, and the @handle (his notes toolbar, main.tsx:347).
+  const filteredNotes = useMemo(() => {
+    const q = noteSearch.trim().toLowerCase();
+    return notes.filter((n) => {
+      const post = posts.find((p) => p.id === n.findingId);
+      if (noteSourceFilter !== 'all') {
+        if (!post || postSourceKey(post) !== noteSourceFilter) return false;
+      }
+      if (!q) return true;
+      const hay = [n.text, post?.text ?? '', post?.authorHandle ?? ''].join(' ').toLowerCase();
+      return hay.includes(q);
+    });
+  }, [notes, posts, noteSourceFilter, noteSearch, postSourceKey]);
 
   // ── Task 15: Changes tab — newly-observed vs long-standing network accounts ─────────────
   const sortedNetworkChanges = useMemo(
@@ -1552,7 +1879,8 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
         verifying={verifyingPostId === post.id}
         onOpenThread={(p) => void handleOpenInX('thread', p.url)}
         onVerify={(id) => void handleVerifyPost(id)}
-        onSaveNote={handleSaveNoteFor}
+        onAddNote={handleAddNoteFor}
+        onUpdateNote={handleUpdateNote}
         onDeleteNote={handleRemoveNote}
         highlightTerms={opts?.highlightTerms}
         presetNames={opts?.presetNames}
@@ -1564,7 +1892,8 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
       verifyingPostId,
       handleOpenInX,
       handleVerifyPost,
-      handleSaveNoteFor,
+      handleAddNoteFor,
+      handleUpdateNote,
       handleRemoveNote,
     ],
   );
@@ -1818,6 +2147,10 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
                     <li className="xls-source-row" key={h.profileId}>
                       <span>@{h.username}</span>
                       <span>{h.status}</span>
+                      <span className="xls-health-counts">
+                        {h.postCount ?? 0} posts · {h.followerCount ?? 0} followers · {h.followingCount ?? 0} following
+                        {h.oldestPostAt ? ` · oldest ${h.oldestPostAt.slice(0, 10)}` : ''}
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -1854,21 +2187,36 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
                 {captureBusy ? 'Capturing…' : 'Capture Timeline'}
               </button>
             </div>
-            <div className="xls-network-controls">
+            {/* M12: SOURCE dropdown + four INDEPENDENT kind checkboxes with per-kind counts (his
+                live toolbar, main.tsx:328) — restored from the single-select ALL/one downgrade. */}
+            <div className="xls-network-controls xls-live-toolbar">
               <label className="xls-field">
-                KIND
+                SOURCE
                 <select
-                  className="xls-input"
-                  value={liveKindFilter}
-                  onChange={(e) => setLiveKindFilter(e.target.value as 'all' | XPostRow['kind'])}
+                  className="xls-input xls-live-source"
+                  value={feedSourceFilter}
+                  onChange={(e) => setFeedSourceFilter(e.target.value)}
                 >
-                  <option value="all">ALL</option>
-                  <option value="post">POST</option>
-                  <option value="reply">REPLY</option>
-                  <option value="repost">REPOST</option>
-                  <option value="comment">COMMENT</option>
+                  <option value="all">ALL SOURCES</option>
+                  {sourceGroups.map((g) => (
+                    <option key={normalizeXSourceKey(g.channelId)} value={normalizeXSourceKey(g.channelId)}>
+                      {g.channelLabel}
+                    </option>
+                  ))}
                 </select>
               </label>
+              <div className="xls-kind-checks">
+                {(['post', 'reply', 'repost', 'comment'] as const).map((k) => (
+                  <label className="xls-check" key={k}>
+                    <input
+                      type="checkbox"
+                      checked={feedKinds[k]}
+                      onChange={(e) => setFeedKinds((prev) => ({ ...prev, [k]: e.target.checked }))}
+                    />
+                    {POST_KIND_LABEL[k]} ({postKindCounts[k]})
+                  </label>
+                ))}
+              </div>
               <span className="xls-count">{livePosts.length} displayed</span>
               {insightsBusy && <span className="xls-count">Loading…</span>}
             </div>
@@ -2027,6 +2375,18 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
                     <option value="followers">FOLLOWERS</option>
                     <option value="following">FOLLOWING</option>
                   </select>
+                </label>
+                {/* M14: free-text SEARCH over the extracted records (his `networkQuery`,
+                    main.tsx:332). Filters EXTRACTED NETWORK RECORDS below by name/username/bio. */}
+                <label className="xls-field">
+                  SEARCH
+                  <input
+                    className="xls-input xls-network-search"
+                    aria-label="Search network records"
+                    placeholder="name, username, bio"
+                    value={networkRecordQuery}
+                    onChange={(e) => setNetworkRecordQuery(e.target.value)}
+                  />
                 </label>
               </div>
               <div className="xls-add-source">
@@ -2261,16 +2621,16 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
                   {recentNetworkDeltas.map((d, i) => (
                     <li
                       className="xls-source-row xls-delta-row"
-                      key={`${d.account.target}:${d.account.kind}:${d.account.handle}:${i}`}
+                      key={`${d.target}:${d.relationship}:${d.handle}:${d.at}:${i}`}
                     >
                       <span>
                         <button
                           type="button"
                           className="xls-identity-main"
                           title="Open this identity's X profile in a Tor-gated in-app window"
-                          onClick={() => void handleOpenInX('identity', d.account.handle)}
+                          onClick={() => void handleOpenInX('identity', d.handle)}
                         >
-                          @{d.account.handle.replace(/^@+/, '')}
+                          @{d.handle.replace(/^@+/, '')}
                         </button>
                         <span
                           className={`xls-marker ${
@@ -2279,7 +2639,7 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
                         >
                           {d.newlyObserved ? 'NEWLY OBSERVED' : 'NOT SEEN IN LATEST COMPARABLE SCAN'}
                         </span>{' '}
-                        {d.account.kind.toUpperCase()} of @{d.account.target.replace(/^@+/, '')}
+                        {d.relationship.toUpperCase()} of @{d.target.replace(/^@+/, '')}
                       </span>
                       <span className="xls-count">{formatWhen(d.at)}</span>
                     </li>
@@ -2367,21 +2727,68 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
                   ))}
                 </select>
               </label>
+              {/* M14: Entities free-text search (his `entityQuery`, main.tsx:341). */}
+              <label className="xls-field">
+                SEARCH
+                <input
+                  className="xls-input xls-entity-search"
+                  aria-label="Search entities"
+                  placeholder="entity, domain, username, source"
+                  value={entityQuery}
+                  onChange={(e) => setEntityQuery(e.target.value)}
+                />
+              </label>
               <span className="xls-count">{filteredEntities.length} entities</span>
             </div>
             {filteredEntities.length === 0 ? (
               <div className="xls-empty">No extracted entities match.</div>
             ) : (
-              <ul className="xls-source-list">
-                {filteredEntities.map((e) => (
-                  <li className="xls-source-row" key={e.id}>
-                    <span>{e.value}</span>
-                    <span className="xls-count">
-                      {e.type.toUpperCase()} · {e.count} findings
-                    </span>
-                  </li>
-                ))}
-              </ul>
+              <div className="xls-entity-grid">
+                {filteredEntities.map((e) => {
+                  const isMention = e.type === 'mention';
+                  // Canonical handle for a mention drives the card avatar + OPEN X PROFILE; fall back
+                  // to the display value with any leading '@' stripped for a legacy/partial payload.
+                  const handle = (e.normalizedValue || e.value || '').replace(/^@+/, '');
+                  const sources = e.sourceUsernames ?? [];
+                  return (
+                    <article className="xls-entity-card" key={e.id}>
+                      <div className="xls-entity-heading">
+                        {isMention && handle && renderIdentAvatar(handle, 'sm')}
+                        <div className="xls-entity-headtext">
+                          <span className="xls-entity-type">{e.type}</span>
+                          <strong>{e.value}</strong>
+                        </div>
+                      </div>
+                      <b className="xls-entity-count">{e.count} FINDINGS</b>
+                      <div className="xls-entity-sources">
+                        {sources.length ? (
+                          sources.map((u) => (
+                            <span className="xls-entity-source" key={u}>
+                              {renderIdentAvatar(u, 'xs')}@{u.replace(/^@+/, '')}
+                            </span>
+                          ))
+                        ) : (
+                          <small>sources: —</small>
+                        )}
+                      </div>
+                      <small className="xls-entity-when">
+                        first {formatWhen(e.firstObservedAt ?? '')} · last{' '}
+                        {formatWhen(e.lastObservedAt ?? '')}
+                      </small>
+                      {isMention && handle && (
+                        <button
+                          type="button"
+                          className="xls-btn"
+                          title="Open this account's X profile in a Tor-gated in-app window"
+                          onClick={() => void handleOpenInX('profile', handle)}
+                        >
+                          OPEN X PROFILE
+                        </button>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
             )}
           </section>
         )}
@@ -2444,7 +2851,11 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
                               {run.operation.replace(/_/g, ' ').toUpperCase()}
                             </span>{' '}
                             {run.observed} observed / {run.added} new / {run.duplicates} duplicate ·{' '}
-                            {run.completedPasses}/{run.requestedPasses || '—'} passes · {statusLabel}
+                            {/* completedPasses includes the +1 initial read, so it can exceed the
+                                requested budget; clamp the displayed ratio so no >100% figure shows
+                                (FB1 carried Phase-A minor). */}
+                            {Math.min(run.completedPasses, run.requestedPasses || run.completedPasses)}/
+                            {run.requestedPasses || '—'} passes · {statusLabel}
                           </span>
                           <span className="xls-count">{formatWhen(run.startedAt)}</span>
                         </li>
@@ -2490,24 +2901,71 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
               <input
                 className="xls-input xls-search-query"
                 aria-label="Search captured posts"
-                placeholder="Search captured post text or @handle… (comma-separate for a multi-keyword preset)"
+                placeholder="keyword, phrase, @handle, or analyst note… (comma-separate for a multi-keyword preset)"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
               <span className="xls-count">{searchResults.length} match(es)</span>
             </div>
+            {/* M13: SOURCE / TYPE / PRESET-MATCHES-ONLY scope (his search controls, main.tsx:345) —
+                also matches analyst-note text (see `searchResults`). */}
+            <div className="xls-network-controls xls-search-controls">
+              <label className="xls-field">
+                SOURCE
+                <select
+                  className="xls-input xls-search-source"
+                  value={searchSource}
+                  onChange={(e) => setSearchSource(e.target.value)}
+                >
+                  <option value="all">ALL SOURCES</option>
+                  {sourceGroups.map((g) => (
+                    <option key={normalizeXSourceKey(g.channelId)} value={normalizeXSourceKey(g.channelId)}>
+                      {g.channelLabel}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="xls-field">
+                TYPE
+                <select
+                  className="xls-input xls-search-kind"
+                  value={searchKind}
+                  onChange={(e) => setSearchKind(e.target.value as 'all' | XPostRow['kind'])}
+                >
+                  <option value="all">ALL TYPES</option>
+                  <option value="post">{POST_KIND_LABEL.post}</option>
+                  <option value="reply">{POST_KIND_LABEL.reply}</option>
+                  <option value="repost">{POST_KIND_LABEL.repost}</option>
+                  <option value="comment">{POST_KIND_LABEL.comment}</option>
+                </select>
+              </label>
+              <label className="xls-check xls-preset-only">
+                <input
+                  type="checkbox"
+                  checked={presetMatchesOnly}
+                  onChange={(e) => setPresetMatchesOnly(e.target.checked)}
+                />
+                PRESET MATCHES ONLY
+              </label>
+            </div>
             <div className="xls-feed">
-              {searchQuery.trim() === '' ? (
+              {searchQuery.trim() === '' && !searchFilterActive ? (
                 <div className="xls-empty">Type to search locally over this campaign's captured posts.</div>
               ) : searchResults.length === 0 ? (
-                <div className="xls-empty">No captured post matches "{searchQuery}".</div>
+                <div className="xls-empty">No captured post matches these search filters.</div>
               ) : (
-                searchResults.map((p) => renderPost(p, { highlightTerms: [searchQuery.trim()] }))
+                searchResults.map((p) =>
+                  renderPost(p, searchQuery.trim() ? { highlightTerms: [searchQuery.trim()] } : undefined),
+                )
               )}
             </div>
 
-            <div className="xls-panel">
-              <h3 className="xls-panel-title">SAVE AS A HIGHLIGHT PRESET</h3>
+            {/* Audit HIGH #9 — the full highlight-preset editor: name, keyword TEXTAREA (comma OR
+                newline), MATCH ANY/ALL, CASE SENSITIVE, and per-source SCOPE checkboxes, plus EDIT. */}
+            <div className="xls-panel xls-preset-editor">
+              <h3 className="xls-panel-title">
+                {editingPresetId ? 'EDIT HIGHLIGHT PRESET' : 'NEW HIGHLIGHT PRESET'}
+              </h3>
               <div className="xls-add-source">
                 <input
                   className="xls-input xls-preset-name"
@@ -2516,13 +2974,79 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
                   value={presetNameDraft}
                   onChange={(e) => setPresetNameDraft(e.target.value)}
                 />
+              </div>
+              <textarea
+                className="xls-input xls-preset-keywords"
+                aria-label="Preset keywords"
+                placeholder="Keywords or phrases — one per line or comma separated…"
+                value={presetKeywordsDraft}
+                onChange={(e) => setPresetKeywordsDraft(e.target.value)}
+              />
+              <div className="xls-preset-editor-row">
+                <label className="xls-preset-mode">
+                  MODE
+                  <select
+                    className="xls-input"
+                    aria-label="Preset match mode"
+                    value={presetModeDraft}
+                    onChange={(e) => setPresetModeDraft(e.target.value === 'all' ? 'all' : 'any')}
+                  >
+                    <option value="any">MATCH ANY</option>
+                    <option value="all">MATCH ALL</option>
+                  </select>
+                </label>
+                <label className="xls-check">
+                  <input
+                    type="checkbox"
+                    aria-label="Case sensitive"
+                    checked={presetCaseDraft}
+                    onChange={(e) => setPresetCaseDraft(e.target.checked)}
+                  />
+                  CASE SENSITIVE
+                </label>
+              </div>
+              {sourceGroups.length > 0 && (
+                <div className="xls-preset-scope">
+                  <span className="xls-preset-scope-label">
+                    SCOPE TO SOURCES <em>(none = all campaign sources)</em>
+                  </span>
+                  <div className="xls-preset-profile-grid">
+                    {sourceGroups.map((g) => {
+                      const handle = g.channelId.replace(/^@/, '');
+                      return (
+                        <label className="xls-check xls-preset-profile" key={g.channelId}>
+                          <input
+                            type="checkbox"
+                            aria-label={`Scope to @${handle}`}
+                            checked={presetProfilesDraft.includes(g.channelId)}
+                            onChange={(e) =>
+                              setPresetProfilesDraft(
+                                e.target.checked
+                                  ? [...presetProfilesDraft, g.channelId]
+                                  : presetProfilesDraft.filter((id) => id !== g.channelId),
+                              )
+                            }
+                          />
+                          @{handle}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              <div className="xls-source-actions">
                 <button
                   className="xls-btn xls-btn-primary"
                   onClick={() => void handleSavePreset()}
                   disabled={presetsBusy || !activeCampaignId}
                 >
-                  Save Preset
+                  {editingPresetId ? 'Save Changes' : 'Save Preset'}
                 </button>
+                {editingPresetId && (
+                  <button className="xls-btn" onClick={clearPresetEditor} disabled={presetsBusy}>
+                    Cancel
+                  </button>
+                )}
               </div>
             </div>
 
@@ -2536,10 +3060,21 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
                     <li className="xls-source-row" key={p.id}>
                       <span>
                         <strong>{p.name}</strong> — {p.keywords.join(', ')}
+                        <span className="xls-count xls-preset-meta">
+                          {p.mode === 'all' ? 'MATCH ALL' : 'MATCH ANY'}
+                          {p.caseSensitive ? ' · case sensitive' : ''}
+                          {' · '}
+                          {p.profileIds && p.profileIds.length
+                            ? `${p.profileIds.length} scoped source(s)`
+                            : 'all sources'}
+                        </span>
                       </span>
                       <span className="xls-source-actions">
                         <button className="xls-btn" onClick={() => void handleRunPreset(p)} disabled={presetsBusy}>
                           Run
+                        </button>
+                        <button className="xls-btn" onClick={() => handleEditPreset(p)} disabled={presetsBusy}>
+                          Edit
                         </button>
                         <button
                           className="xls-btn xls-btn-danger"
@@ -2554,6 +3089,29 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
                 </ul>
               )}
             </div>
+
+            {/* Audit HIGH #8 — the matched posts from the last RUN, with keyword highlighting and a
+                MATCH:<preset name> row (PostCard's presetNames path). */}
+            {presetRun && (
+              <div className="xls-panel xls-preset-results">
+                <h3 className="xls-panel-title">
+                  PRESET MATCHES — {presetRun.name}{' '}
+                  <span className="xls-count">{presetMatchedPosts.length} post(s)</span>
+                </h3>
+                <div className="xls-feed">
+                  {presetMatchedPosts.length === 0 ? (
+                    <div className="xls-empty">
+                      No captured post currently matches “{presetRun.name}”.
+                    </div>
+                  ) : (
+                    presetMatchedPosts.map((p) => {
+                      const match = presetMatchByPost.get(p.id)!;
+                      return renderPost(p, { highlightTerms: match.terms, presetNames: match.names });
+                    })
+                  )}
+                </div>
+              </div>
+            )}
           </section>
         )}
 
@@ -2592,15 +3150,51 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
               </button>
             </div>
             <div className="xls-panel">
-              <h3 className="xls-panel-title">SAVED NOTES</h3>
-              {notes.length === 0 ? (
-                <div className="xls-empty">No analyst notes saved in this campaign yet.</div>
+              <div className="xls-panel-title-row">
+                <h3 className="xls-panel-title">SAVED NOTES</h3>
+                <span className="xls-count">{filteredNotes.length} note(s)</span>
+              </div>
+              {/* M14: Notes-tab SOURCE filter + note-text search (his notes toolbar, main.tsx:347). */}
+              <div className="xls-network-controls">
+                <label className="xls-field">
+                  SOURCE
+                  <select
+                    className="xls-input xls-note-source"
+                    value={noteSourceFilter}
+                    onChange={(e) => setNoteSourceFilter(e.target.value)}
+                  >
+                    <option value="all">ALL SOURCES</option>
+                    {sourceGroups.map((g) => (
+                      <option key={normalizeXSourceKey(g.channelId)} value={normalizeXSourceKey(g.channelId)}>
+                        {g.channelLabel}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="xls-field">
+                  SEARCH NOTES
+                  <input
+                    className="xls-input xls-note-search"
+                    aria-label="Search analyst notes"
+                    placeholder="note text, post text, or @handle"
+                    value={noteSearch}
+                    onChange={(e) => setNoteSearch(e.target.value)}
+                  />
+                </label>
+              </div>
+              {filteredNotes.length === 0 ? (
+                <div className="xls-empty">
+                  {notes.length === 0
+                    ? 'No analyst notes saved in this campaign yet.'
+                    : 'No analyst notes match these filters.'}
+                </div>
               ) : (
                 <ul className="xls-source-list">
-                  {notes.map((n) => {
+                  {filteredNotes.map((n) => {
                     const post = posts.find((p) => p.id === n.findingId);
+                    const key = xNoteRowKey(n);
                     return (
-                      <li className="xls-source-row" key={n.findingId}>
+                      <li className="xls-source-row" key={key}>
                         <span>
                           <strong>{post ? `@${post.authorHandle}` : n.findingId}</strong> —{' '}
                           {n.text}
@@ -2609,7 +3203,7 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
                           <span className="xls-count">{formatWhen(n.savedAt)}</span>
                           <button
                             className="xls-btn xls-btn-danger"
-                            onClick={() => void handleRemoveNote(n.findingId)}
+                            onClick={() => void handleRemoveNote(key)}
                             disabled={notesBusy}
                           >
                             Remove
@@ -2632,6 +3226,49 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
                 Choose a destination in a native save dialog — demo/synthetic posts are always
                 excluded, and a SHA-256 checksum sidecar is written alongside the export.
               </p>
+              {/* M15: per-export SOURCE / TYPE / QUERY filters (his export filters, main.tsx:349) —
+                  applied MAIN-side after synthetic-exclusion. Blank/ALL ⇒ the full campaign. */}
+              <div className="xls-network-controls xls-export-filters">
+                <label className="xls-field">
+                  SOURCE
+                  <select
+                    className="xls-input xls-export-source"
+                    value={exportSource}
+                    onChange={(e) => setExportSource(e.target.value)}
+                  >
+                    <option value="all">ALL SOURCES</option>
+                    {sourceGroups.map((g) => (
+                      <option key={normalizeXSourceKey(g.channelId)} value={normalizeXSourceKey(g.channelId)}>
+                        {g.channelLabel}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="xls-field">
+                  TYPE
+                  <select
+                    className="xls-input xls-export-kind"
+                    value={exportKind}
+                    onChange={(e) => setExportKind(e.target.value as 'all' | XPostRow['kind'])}
+                  >
+                    <option value="all">ALL TYPES</option>
+                    <option value="post">{POST_KIND_LABEL.post}</option>
+                    <option value="reply">{POST_KIND_LABEL.reply}</option>
+                    <option value="repost">{POST_KIND_LABEL.repost}</option>
+                    <option value="comment">{POST_KIND_LABEL.comment}</option>
+                  </select>
+                </label>
+                <label className="xls-field">
+                  QUERY
+                  <input
+                    className="xls-input xls-export-query"
+                    aria-label="Export query filter"
+                    placeholder="keyword or @handle"
+                    value={exportQuery}
+                    onChange={(e) => setExportQuery(e.target.value)}
+                  />
+                </label>
+              </div>
               <div className="xls-dock-row">
                 <button
                   className="xls-btn xls-btn-primary"
@@ -2659,16 +3296,27 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
             <div className="xls-panel">
               <h3 className="xls-panel-title">EXPORT CAPTURED NETWORKS</h3>
               <p className="xls-help">
-                Follower/following accounts as formula-guarded CSV — demo/synthetic accounts
-                excluded.
+                Follower/following accounts as formula-guarded CSV, or a self-describing JSON
+                envelope embedding the common-connection analysis + a SHA-256 manifest hash —
+                demo/synthetic accounts excluded from both.
               </p>
-              <button
-                className="xls-btn xls-btn-primary"
-                onClick={() => void handleExportNetwork()}
-                disabled={exportBusy || !activeCampaignId}
-              >
-                Export Network CSV…
-              </button>
+              <div className="xls-dock-row">
+                <button
+                  className="xls-btn xls-btn-primary"
+                  onClick={() => void handleExportNetwork()}
+                  disabled={exportBusy || !activeCampaignId}
+                >
+                  Export Network CSV…
+                </button>
+                <button
+                  className="xls-btn xls-btn-primary"
+                  title="Export the captured network as JSON embedding the common-connection analysis (synthetic excluded, deterministic manifest hash, SHA-256 sidecar)."
+                  onClick={() => void handleExportNetworkJson()}
+                  disabled={exportBusy || !activeCampaignId}
+                >
+                  Export Network JSON…
+                </button>
+              </div>
             </div>
           </section>
         )}

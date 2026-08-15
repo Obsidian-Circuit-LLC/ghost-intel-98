@@ -44,6 +44,23 @@ describe('safeFetch redirect header handling', () => {
     expect(calls[1].headers.accept).toBe('application/json');
   });
 
+  it('sameHostOnly: refuses a cross-host redirect even to a PUBLIC host (host-allowlisted callers)', async () => {
+    const fetchMock = vi.fn(async () => redirect('https://evil.example/steal'));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(
+      safeFetch('https://api.example/resource', 4, { accept: 'application/json' }, { sameHostOnly: true }),
+    ).rejects.toThrow(/cross-host/i);
+  });
+
+  it('sameHostOnly: still follows a SAME-host redirect', async () => {
+    let n = 0;
+    const fetchMock = vi.fn(async () => (n++ === 0 ? redirect('https://api.example/resource/v2') : ok()));
+    vi.stubGlobal('fetch', fetchMock);
+    const res = await safeFetch('https://api.example/resource', 4, undefined, { sameHostOnly: true });
+    expect(res.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it('keeps sensitive headers across a same-origin redirect', async () => {
     const calls: { url: string; headers: Record<string, string> }[] = [];
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {

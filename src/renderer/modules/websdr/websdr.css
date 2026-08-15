@@ -1,0 +1,246 @@
+/*
+ * WebSDR Viewer — his GREEN CONSOLE as a FIXED theme (Phase 4, Global Constraint 7).
+ *
+ * A faithful reskin of GhostExodus's `src/styles.css` (v0.1.5→v0.1.11) scoped under `.sdr-root`,
+ * using ONLY the `--ga98-sdr-*` token namespace (defined in styles/theme.css). The tokens resolve to
+ * his fixed dark-green radio-intelligence palette IDENTICALLY under classic + QUIET AMETHYST — this
+ * module deliberately does NOT follow the app skin (mirrors X-Listening's `.xls-root`). No raw colour
+ * literal appears here (the no-straggler guard scans this file); every colour is a var(). Icons are
+ * inline SVG in the TSX (currentColor), so they inherit the console ink.
+ */
+
+.sdr-root {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  font-family: var(--ga98-sdr-sans);
+  color: var(--ga98-sdr-ink);
+  background: var(--ga98-sdr-bg);
+}
+.sdr-root * { box-sizing: border-box; }
+
+.sdr-app {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, var(--ga98-sdr-bg), var(--ga98-sdr-bg-deep));
+}
+
+/* ── banner (his v0.1.10 finalBanner: full-width, source proportions) ─────────── */
+.sdr-banner {
+  aspect-ratio: 1592 / 236;
+  display: block;
+  position: relative;
+  overflow: hidden;
+  background: var(--ga98-sdr-banner-bg);
+  border-bottom: 1px solid var(--ga98-sdr-banner-border);
+  flex: 0 0 auto;
+}
+.sdr-banner-art { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center center; }
+
+/* ── layout ───────────────────────────────────────────────────────────────── */
+.sdr-layout { flex: 1; min-height: 0; display: grid; grid-template-columns: 310px 1fr; }
+.sdr-sidebar {
+  border-right: 1px solid var(--ga98-sdr-border);
+  background: var(--ga98-sdr-sidebar-bg);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.sdr-menu-heading {
+  height: 36px; display: flex; align-items: center; gap: 8px; padding: 0 11px;
+  background: var(--ga98-sdr-heading-bg); border-bottom: 1px solid var(--ga98-sdr-heading-border);
+  color: var(--ga98-sdr-heading-ink); font: 11px var(--ga98-sdr-mono); letter-spacing: 1.2px;
+}
+.sdr-nav { padding: 7px; display: grid; gap: 4px; }
+.sdr-nav button {
+  height: 35px; width: 100%; display: flex; align-items: center; gap: 9px; padding: 0 10px;
+  text-align: left; background: var(--ga98-sdr-nav-bg); border: 1px solid var(--ga98-sdr-nav-border);
+  color: var(--ga98-sdr-ink-soft); cursor: pointer;
+}
+.sdr-nav button:hover { background: var(--ga98-sdr-nav-hover-bg); border-color: var(--ga98-sdr-nav-hover-border); color: var(--ga98-sdr-ink); }
+.sdr-nav button.active { background: var(--ga98-sdr-nav-active-bg); border-color: var(--ga98-sdr-nav-active-border); color: var(--ga98-sdr-title-2); }
+.sdr-side-divider { height: 1px; background: var(--ga98-sdr-border-dim); margin: 1px 7px 6px; }
+
+.sdr-section-title {
+  height: 38px; display: flex; align-items: center; justify-content: space-between; padding: 0 10px;
+  border-bottom: 1px solid var(--ga98-sdr-border-soft); border-top: 1px solid var(--ga98-sdr-border-soft);
+  font-family: var(--ga98-sdr-mono); font-size: 11px; color: var(--ga98-sdr-accent-2);
+}
+.sdr-root button {
+  background: var(--ga98-sdr-btn-bg); color: var(--ga98-sdr-btn-ink); border: 1px solid var(--ga98-sdr-border-mid);
+  border-radius: 3px; cursor: pointer;
+}
+.sdr-section-title button { width: 26px; height: 26px; display: grid; place-items: center; }
+
+.sdr-receiver-search {
+  margin: 6px 7px; height: 31px; display: flex; align-items: center; gap: 6px; padding: 0 8px;
+  border: 1px solid var(--ga98-sdr-nav-border); background: var(--ga98-sdr-search-bg); color: var(--ga98-sdr-green);
+}
+.sdr-receiver-search input { min-width: 0; width: 100%; border: 0; outline: 0; background: transparent; color: var(--ga98-sdr-ink-bright); font: 10px var(--ga98-sdr-mono); }
+
+.sdr-receiver-list { overflow: auto; flex: 1; min-height: 0; }
+.sdr-receiver { border-bottom: 1px solid var(--ga98-sdr-border-dim); }
+.sdr-receiver.active { background: var(--ga98-sdr-receiver-active-bg); }
+.sdr-receiver-main {
+  width: 100%; padding: 10px 8px; border: 0; background: transparent; display: grid;
+  grid-template-columns: 9px 1fr; gap: 8px; text-align: left;
+}
+.sdr-receiver-main span:last-child { display: flex; flex-direction: column; }
+.sdr-receiver-main b { font-size: 13px; color: var(--ga98-sdr-ink-bright); }
+.sdr-receiver-main small { font-size: 10px; color: var(--ga98-sdr-ink-dim); margin-top: 3px; }
+.sdr-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 4px; background: var(--ga98-sdr-dot-idle); }
+.sdr-dot.online { background: var(--ga98-sdr-dot-online); box-shadow: 0 0 8px var(--ga98-sdr-dot-online); }
+.sdr-dot.offline { background: var(--ga98-sdr-dot-offline); }
+.sdr-dot.checking { background: var(--ga98-sdr-dot-checking); }
+.sdr-row-btns { height: 25px; padding: 0 8px 6px; display: flex; justify-content: flex-end; gap: 4px; color: var(--ga98-sdr-amber); }
+.sdr-row-btns button { border: 0; background: transparent; padding: 1px 4px; color: inherit; }
+.sdr-row-btns .sdr-fav { color: var(--ga98-sdr-ink-dim); }
+.sdr-row-btns .sdr-fav.active { color: var(--ga98-sdr-fav); border-color: var(--ga98-sdr-fav-border); }
+
+.sdr-preset-list { overflow: auto; flex: 1; padding: 6px; }
+.sdr-preset-row { display: grid; grid-template-columns: 1fr 28px; gap: 4px; margin-bottom: 5px; }
+.sdr-preset { display: flex; flex-direction: column; text-align: left; width: 100%; padding: 7px; }
+.sdr-preset b { color: var(--ga98-sdr-ink-bright); }
+.sdr-preset span { font-size: 10px; color: var(--ga98-sdr-ink-dim); }
+.sdr-preset-delete { display: grid; place-items: center; }
+.sdr-muted { font-size: 11px; color: var(--ga98-sdr-ink-mute); padding: 8px; }
+
+.sdr-customize-bottom {
+  height: 34px; margin: 7px; display: flex; align-items: center; justify-content: center; gap: 7px;
+  background: var(--ga98-sdr-card-bg2); color: var(--ga98-sdr-ink-dim); font: 10px var(--ga98-sdr-mono);
+}
+.sdr-customize-bottom:hover { color: var(--ga98-sdr-ink-bright); border-color: var(--ga98-sdr-nav-hover-border); }
+
+/* ── notes ────────────────────────────────────────────────────────────────── */
+.sdr-notes-pane { overflow: auto; flex: 1; min-height: 0; padding: 6px; }
+.sdr-new-note { width: 100%; padding: 8px; display: flex; align-items: center; justify-content: center; gap: 6px; margin-bottom: 7px; }
+.sdr-note-editor { border: 1px solid var(--ga98-sdr-border-input); background: var(--ga98-sdr-card-bg2); padding: 8px; margin-bottom: 8px; }
+.sdr-note-editor-head { display: flex; align-items: center; justify-content: space-between; color: var(--ga98-sdr-accent-2); font: 10px var(--ga98-sdr-mono); margin-bottom: 6px; }
+.sdr-note-editor-head button { width: 25px; height: 25px; display: grid; place-items: center; }
+.sdr-note-title { width: 100%; background: var(--ga98-sdr-inset-bg2); border: 1px solid var(--ga98-sdr-border-input); color: var(--ga98-sdr-ink); padding: 7px; font: 12px var(--ga98-sdr-mono); margin-bottom: 5px; }
+.sdr-note-context { color: var(--ga98-sdr-ink-mute); font: 9px var(--ga98-sdr-mono); margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sdr-note-editor textarea { width: 100%; min-height: 145px; resize: vertical; background: var(--ga98-sdr-inset-bg2); border: 1px solid var(--ga98-sdr-border-input); color: var(--ga98-sdr-ink); padding: 8px; font: 11px var(--ga98-sdr-mono); line-height: 1.45; }
+.sdr-note-actions { display: flex; justify-content: flex-end; gap: 5px; margin-top: 6px; }
+.sdr-note-actions button { padding: 6px 8px; display: flex; align-items: center; gap: 4px; }
+.sdr-note-list { display: grid; gap: 5px; }
+.sdr-note-card { position: relative; border: 1px solid var(--ga98-sdr-border-soft); background: var(--ga98-sdr-card-bg); }
+.sdr-note-card:hover { border-color: var(--ga98-sdr-nav-hover-border); }
+.sdr-note-open { width: 100%; border: 0; background: transparent; text-align: left; padding: 8px 30px 8px 8px; display: flex; flex-direction: column; }
+.sdr-note-open b { font-size: 12px; color: var(--ga98-sdr-ink-bright); }
+.sdr-note-open span { font: 9px var(--ga98-sdr-mono); color: var(--ga98-sdr-ink-dim); margin-top: 3px; }
+.sdr-note-open p { margin: 5px 0 0; font-size: 10px; color: var(--ga98-sdr-ink-soft); line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.sdr-note-delete { position: absolute; right: 4px; top: 4px; width: 24px; height: 24px; display: grid; place-items: center; color: var(--ga98-sdr-danger-ink); background: transparent; border: 0; }
+
+/* ── recordings side list ─────────────────────────────────────────────────── */
+.sdr-recording-side-list { overflow: auto; flex: 1; min-height: 0; padding: 5px; }
+.sdr-recording-side-list > button { width: 100%; text-align: left; display: flex; flex-direction: column; padding: 8px; margin-bottom: 5px; background: var(--ga98-sdr-card-bg2); }
+.sdr-recording-side-list > button.active { border-color: var(--ga98-sdr-nav-active-border); background: var(--ga98-sdr-recording-active-bg); }
+.sdr-recording-side-list b { font-size: 11px; color: var(--ga98-sdr-ink-bright); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sdr-recording-side-list span, .sdr-recording-side-list small { font: 9px var(--ga98-sdr-mono); color: var(--ga98-sdr-ink-dim); margin-top: 3px; }
+
+/* ── main column ──────────────────────────────────────────────────────────── */
+.sdr-main { min-width: 0; display: grid; grid-template-rows: auto auto auto 1fr 28px; }
+.sdr-toolbar { padding: 9px 12px; background: var(--ga98-sdr-toolbar-bg); border-bottom: 1px solid var(--ga98-sdr-toolbar-border); display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+.sdr-toolbar label { font: 10px var(--ga98-sdr-mono); color: var(--ga98-sdr-label); }
+.sdr-freq { display: flex; margin-top: 4px; }
+.sdr-freq input { width: 150px; background: var(--ga98-sdr-inset-bg); border: 1px solid var(--ga98-sdr-border-strong); color: var(--ga98-sdr-green-bright); font: 18px var(--ga98-sdr-mono); padding: 6px 8px; outline: 0; }
+.sdr-freq span { display: flex; align-items: center; padding: 0 7px; background: var(--ga98-sdr-nav-active-bg); border-block: 1px solid var(--ga98-sdr-border-strong); font: 11px var(--ga98-sdr-mono); }
+.sdr-freq button { border-radius: 0; padding: 0 10px; font-weight: 700; }
+.sdr-steps, .sdr-modes { display: flex; gap: 3px; }
+.sdr-steps button, .sdr-modes button { padding: 7px 8px; font: 11px var(--ga98-sdr-mono); }
+.sdr-modes button.selected { background: var(--ga98-sdr-mode-active-bg); color: var(--ga98-sdr-mode-active-ink); border-color: var(--ga98-sdr-mode-active-border); }
+
+.sdr-egress { display: flex; align-items: flex-end; }
+.sdr-egress-marker { display: inline-flex; align-items: center; gap: 5px; padding: 7px 9px; font: 11px var(--ga98-sdr-mono); letter-spacing: .6px; }
+.sdr-egress-marker.clearnet { color: var(--ga98-sdr-amber); border-color: var(--ga98-sdr-fav-border); }
+.sdr-egress-marker.tor { background: var(--ga98-sdr-tor-on-bg); color: var(--ga98-sdr-tor-on-ink); border-color: var(--ga98-sdr-nav-active-border); }
+
+.sdr-volume { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.sdr-volume button { width: 32px; height: 30px; display: grid; place-items: center; }
+.sdr-volume input { width: 110px; }
+
+.sdr-tor-warning {
+  display: flex; align-items: center; gap: 8px; padding: 7px 12px;
+  background: var(--ga98-sdr-tor-warn-bg); color: var(--ga98-sdr-tor-warn-ink);
+  border-bottom: 1px solid var(--ga98-sdr-tor-warn-border); font: 11px var(--ga98-sdr-mono);
+}
+.sdr-tor-warning span { flex: 1; }
+.sdr-tor-warning button { background: transparent; border: 0; color: inherit; display: grid; place-items: center; }
+
+.sdr-receiver-header { height: 52px; background: var(--ga98-sdr-header-bg); border-bottom: 1px solid var(--ga98-sdr-border-soft); padding: 7px 12px; display: flex; justify-content: space-between; align-items: center; }
+.sdr-receiver-header > div:first-child { display: flex; flex-direction: column; min-width: 0; }
+.sdr-receiver-header b { font-size: 13px; color: var(--ga98-sdr-ink-bright); }
+.sdr-receiver-header span { font: 10px var(--ga98-sdr-mono); color: var(--ga98-sdr-ink-dim); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sdr-receiver-header > div:last-child { display: flex; gap: 5px; }
+.sdr-receiver-header button { display: inline-flex; align-items: center; gap: 5px; padding: 6px 8px; }
+.sdr-header-fav.active { color: var(--ga98-sdr-fav); border-color: var(--ga98-sdr-fav-border); }
+.sdr-record.active { background: var(--ga98-sdr-record-bg); border-color: var(--ga98-sdr-record-border); color: var(--ga98-sdr-record-ink); animation: sdrRecordPulse 1.4s infinite; }
+@keyframes sdrRecordPulse { 50% { box-shadow: 0 0 14px var(--ga98-sdr-record-glow); } }
+
+.sdr-browser-frame { position: relative; background: var(--ga98-sdr-frame-bg); min-height: 0; }
+.sdr-empty { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; color: var(--ga98-sdr-empty-ink); }
+.sdr-empty h2 { margin: 12px 0 3px; color: var(--ga98-sdr-empty-title); }
+.sdr-empty p { font-size: 12px; color: var(--ga98-sdr-empty-text); max-width: 560px; }
+
+.sdr-footer { display: flex; align-items: center; justify-content: space-between; padding: 0 10px; background: var(--ga98-sdr-footer-bg); border-top: 1px solid var(--ga98-sdr-heading-border); font: 10px var(--ga98-sdr-mono); color: var(--ga98-sdr-ink-dim); }
+.sdr-rec-indicator { color: var(--ga98-sdr-record-border); }
+
+/* ── recording archive ────────────────────────────────────────────────────── */
+.sdr-archive-empty { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; color: var(--ga98-sdr-empty-ink); }
+.sdr-archive-empty h2 { color: var(--ga98-sdr-empty-title); margin: 12px 0 2px; }
+.sdr-archive-empty p { max-width: 560px; color: var(--ga98-sdr-empty-text); }
+.sdr-archive { position: absolute; inset: 0; padding: 12px; display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 12px; overflow: auto; background: var(--ga98-sdr-archive-bg); }
+.sdr-archive-player, .sdr-archive-notes { border: 1px solid var(--ga98-sdr-nav-border); background: var(--ga98-sdr-archive-panel-bg); padding: 12px; min-width: 0; }
+.sdr-archive-title { display: flex; gap: 9px; align-items: center; margin-bottom: 9px; }
+.sdr-archive-title h2 { font-size: 15px; color: var(--ga98-sdr-empty-title); margin: 0; }
+.sdr-archive-title p { font: 10px var(--ga98-sdr-mono); color: var(--ga98-sdr-ink-dim); margin: 3px 0 0; }
+.sdr-archive-player video { display: block; width: 100%; max-height: calc(100vh - 440px); min-height: 260px; background: var(--ga98-sdr-bg-deep); border: 1px solid var(--ga98-sdr-border-soft); }
+.sdr-archive-meta { display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 6px; margin-top: 8px; }
+.sdr-archive-meta span { display: flex; flex-direction: column; border: 1px solid var(--ga98-sdr-border-soft); padding: 7px; overflow: hidden; font: 10px var(--ga98-sdr-mono); color: var(--ga98-sdr-ink-soft); }
+.sdr-archive-meta b { color: var(--ga98-sdr-green); margin-bottom: 3px; }
+.sdr-archive-notes { display: flex; flex-direction: column; }
+.sdr-archive-notes h3 { font: 11px var(--ga98-sdr-mono); color: var(--ga98-sdr-accent-2); letter-spacing: .7px; margin: 0 0 8px; }
+.sdr-archive-notes textarea { flex: 1; min-height: 220px; resize: none; background: var(--ga98-sdr-inset-bg); border: 1px solid var(--ga98-sdr-border-input); color: var(--ga98-sdr-ink); padding: 9px; font: 11px var(--ga98-sdr-mono); line-height: 1.45; }
+.sdr-archive-actions { display: grid; gap: 5px; margin-top: 12px; }
+.sdr-archive-actions button { padding: 8px; display: flex; align-items: center; gap: 6px; }
+.sdr-missing-recording { height: 280px; display: grid; place-items: center; background: var(--ga98-sdr-frame-bg); color: var(--ga98-sdr-danger-ink); }
+
+/* ── shared primary / danger accents ──────────────────────────────────────── */
+.sdr-primary { background: var(--ga98-sdr-primary-bg); color: var(--ga98-sdr-primary-ink); border-color: var(--ga98-sdr-primary-border); font-weight: 700; }
+.sdr-danger { color: var(--ga98-sdr-danger-ink); border-color: var(--ga98-sdr-danger-border); }
+
+/* ── modals ───────────────────────────────────────────────────────────────── */
+.sdr-modal-shade { position: absolute; z-index: 50; inset: 0; background: var(--ga98-sdr-modal-shade); display: grid; place-items: center; }
+.sdr-modal { width: min(600px, 90%); max-height: 88%; overflow: auto; background: var(--ga98-sdr-modal-bg); border: 1px solid var(--ga98-sdr-border-accent); box-shadow: 0 16px 60px var(--ga98-sdr-bg-deep); padding: 18px; }
+.sdr-modal h2 { margin: 0 0 14px; color: var(--ga98-sdr-title); }
+.sdr-modal > label, .sdr-two label { display: flex; flex-direction: column; gap: 5px; font-size: 11px; color: var(--ga98-sdr-ink-soft); margin-bottom: 10px; }
+.sdr-modal input, .sdr-modal select, .sdr-modal textarea { background: var(--ga98-sdr-heading-bg); border: 1px solid var(--ga98-sdr-border-input); color: var(--ga98-sdr-ink); padding: 8px; font: 12px var(--ga98-sdr-mono); }
+.sdr-two { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.sdr-modal .sdr-check { flex-direction: row; align-items: center; }
+.sdr-modal-btns { display: flex; justify-content: flex-end; gap: 7px; margin-top: 14px; }
+.sdr-modal-btns button { padding: 8px 12px; }
+.sdr-editor-help { font-size: 11px; color: var(--ga98-sdr-ink-soft); }
+.sdr-menu-edit-list { display: grid; gap: 5px; }
+.sdr-menu-edit-row { display: grid; grid-template-columns: 32px 32px 32px 1fr 70px; gap: 5px; align-items: center; }
+.sdr-menu-edit-row > button { height: 31px; display: grid; place-items: center; }
+.sdr-menu-edit-row input { width: 100%; height: 31px; }
+.sdr-menu-edit-row .sdr-locked { font: 9px var(--ga98-sdr-mono); color: var(--ga98-sdr-ink-mute); text-align: center; }
+.sdr-editor-actions { display: flex; gap: 7px; margin-top: 12px; }
+.sdr-editor-actions button { display: flex; align-items: center; gap: 5px; padding: 7px; }
+
+/* ── failure surface (R10) ────────────────────────────────────────────────── */
+.sdr-fatal { height: 100%; background: var(--ga98-sdr-bg); color: var(--ga98-sdr-ink); display: grid; place-content: center; text-align: center; padding: 30px; }
+.sdr-fatal svg { justify-self: center; color: var(--ga98-sdr-fatal-icon); }
+.sdr-fatal h1 { color: var(--ga98-sdr-title-2); }
+.sdr-fatal p { max-width: 650px; color: var(--ga98-sdr-fatal-danger); }
+.sdr-fatal small { color: var(--ga98-sdr-fatal-mute); }
+
+@media (max-width: 1150px) {
+  .sdr-layout { grid-template-columns: 270px 1fr; }
+  .sdr-steps { display: none; }
+  .sdr-archive { grid-template-columns: 1fr; }
+}

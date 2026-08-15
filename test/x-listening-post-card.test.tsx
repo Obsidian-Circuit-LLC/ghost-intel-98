@@ -77,7 +77,8 @@ describe('X Listening Station — rich PostCard (Task I1)', () => {
       verifying: false,
       onOpenThread: vi.fn(),
       onVerify: vi.fn(),
-      onSaveNote: vi.fn(async () => undefined),
+      onAddNote: vi.fn(async () => undefined),
+      onUpdateNote: vi.fn(async () => undefined),
       onDeleteNote: vi.fn(async () => undefined),
       ...props,
     };
@@ -178,7 +179,7 @@ describe('X Listening Station — rich PostCard (Task I1)', () => {
     expect(base.onVerify).toHaveBeenCalledWith('post-a');
   });
 
-  it('inline notes: opening the toggle and adding a note calls onSaveNote(findingId, text)', async () => {
+  it('inline notes: opening the toggle and adding a note calls onAddNote(findingId, text)', async () => {
     const base = await renderCard({ notes: [] });
     await act(async () => { findButton(/ANALYST NOTES/).click(); });
     const compose = container.querySelector('.xls-note-compose textarea') as HTMLTextAreaElement;
@@ -186,12 +187,27 @@ describe('X Listening Station — rich PostCard (Task I1)', () => {
     await act(async () => setValue(compose, 'first analyst assessment'));
     await act(async () => { findButton(/ADD NOTE/).click(); });
     for (let i = 0; i < 3; i++) await act(async () => { await Promise.resolve(); });
-    expect(base.onSaveNote).toHaveBeenCalledWith('post-a', 'first analyst assessment');
+    expect(base.onAddNote).toHaveBeenCalledWith('post-a', 'first analyst assessment');
   });
 
-  it('inline notes: an existing note can be edited (re-save through onSaveNote)', async () => {
+  // M11: the composer stays available even when the post already has notes, so a second note
+  // APPENDS (his multi-note model) rather than being hidden after the first.
+  it('inline notes: the composer is still shown when notes already exist (multi-note append)', async () => {
     const base = await renderCard({
-      notes: [{ findingId: 'post-a', text: 'original note', savedAt: '2026-08-02T00:00:00.000Z' }],
+      notes: [{ id: 'n1', findingId: 'post-a', text: 'first note', savedAt: '2026-08-02T00:00:00.000Z' }],
+    });
+    await act(async () => { findButton(/ANALYST NOTES/).click(); });
+    const compose = container.querySelector('.xls-note-compose textarea') as HTMLTextAreaElement;
+    expect(compose).toBeTruthy();
+    await act(async () => setValue(compose, 'a second, independent note'));
+    await act(async () => { findButton(/ADD NOTE/).click(); });
+    for (let i = 0; i < 3; i++) await act(async () => { await Promise.resolve(); });
+    expect(base.onAddNote).toHaveBeenCalledWith('post-a', 'a second, independent note');
+  });
+
+  it('inline notes: an existing note can be edited in place through onUpdateNote(noteId, text)', async () => {
+    const base = await renderCard({
+      notes: [{ id: 'n1', findingId: 'post-a', text: 'original note', savedAt: '2026-08-02T00:00:00.000Z' }],
     });
     await act(async () => { findButton(/ANALYST NOTES/).click(); });
     // the existing note text is shown
@@ -202,17 +218,17 @@ describe('X Listening Station — rich PostCard (Task I1)', () => {
     await act(async () => setValue(editor, 'revised note'));
     await act(async () => { findButton(/SAVE EDIT/).click(); });
     for (let i = 0; i < 3; i++) await act(async () => { await Promise.resolve(); });
-    expect(base.onSaveNote).toHaveBeenCalledWith('post-a', 'revised note');
+    expect(base.onUpdateNote).toHaveBeenCalledWith('n1', 'revised note');
   });
 
-  it('inline notes: an existing note can be deleted through onDeleteNote', async () => {
+  it('inline notes: an existing note can be deleted by note id through onDeleteNote', async () => {
     const base = await renderCard({
-      notes: [{ findingId: 'post-a', text: 'original note', savedAt: '2026-08-02T00:00:00.000Z' }],
+      notes: [{ id: 'n1', findingId: 'post-a', text: 'original note', savedAt: '2026-08-02T00:00:00.000Z' }],
     });
     await act(async () => { findButton(/ANALYST NOTES/).click(); });
     await act(async () => { findButton(/^DELETE$/).click(); });
     for (let i = 0; i < 3; i++) await act(async () => { await Promise.resolve(); });
-    expect(base.onDeleteNote).toHaveBeenCalledWith('post-a');
+    expect(base.onDeleteNote).toHaveBeenCalledWith('n1');
   });
 });
 
@@ -247,6 +263,7 @@ function makeModuleApi() {
       networksList: vi.fn(async () => []),
       changeEvents: vi.fn(async () => []),
       runLog: vi.fn(async () => []),
+      networkEvents: vi.fn(async () => []),
       readNotes: vi.fn(async () => ({ notes: [] })),
       presetsRead: vi.fn(async () => ({ presets: [] })),
       archiveStatus: vi.fn(async () => ({ cursor: null, cycles: 0, lastRunAt: null })),

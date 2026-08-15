@@ -151,34 +151,208 @@
   --ga98-graph-hue-6: #b26bff;
   --ga98-graph-hue-7: #1de9b6;
 
-  /* ── X Listening Station — Enterprise "dark command-console" reskin (Task J2) ──
-     Reproduces GhostExodus's CYBERVS DOMINATVS console look in GI98 tokens. QUIET
-     AMETHYST is the PRIMARY target (values in the amethyst block below); these base
-     :root values are the CLASSIC (light) variant — a paler console that stays legible
-     on the default Win98 skin. Section headings route through --ga98-accent (blue
-     classic / violet amethyst); the amber action + red/green Tor states are here. */
-  --ga98-xls-sidebar-bg: #e2e5ea;        /* left console rail — light steel on classic */
-  --ga98-xls-sidebar-ink: #2a2f38;       /* nav/dim ink on the light rail */
-  --ga98-xls-console-border: #9aa4b2;    /* console seams */
-  --ga98-xls-main-bg: #eef0f3;           /* right column ground */
-  --ga98-xls-seal-bg: #d3dded;           /* brand seal fill */
-  --ga98-xls-seal-ink: #12508a;          /* brand seal "CD" ink */
-  --ga98-xls-seal-border: #2387c5;       /* brand seal ring */
-  --ga98-xls-nav-active-bg: #d0d9e6;      /* selected nav row fill */
-  --ga98-xls-badge-bg: #33404f;          /* count-badge pill fill */
-  --ga98-xls-badge-ink: #f4d78a;         /* count-badge amber ink (>=4.5:1 on the pill) */
-  --ga98-xls-action-bg: #e0a92e;         /* amber/yellow PRIMARY action button */
-  --ga98-xls-action-ink: #1a1206;        /* near-black ink on amber */
-  --ga98-xls-action-border: #b8871f;
-  --ga98-xls-eyebrow: #4a5a74;           /* topbar eyebrow caption */
-  --ga98-xls-masthead-bg: #0a1622;       /* masthead frame (the banner art is dark either way) */
-  --ga98-xls-tor-bad-bg: #f6dede;        /* Tor-off / clearnet danger box */
-  --ga98-xls-tor-bad-ink: #8a1f27;
-  --ga98-xls-tor-bad-border: #c0444c;
-  --ga98-xls-tor-ok-bg: #dcefe2;         /* Tor-on safe box */
-  --ga98-xls-tor-ok-ink: #1c6742;
-  --ga98-xls-tor-ok-border: #4aa06e;
-  --ga98-xls-dot-off: #b23b3b;           /* offline status dot */
+  /* ══ X Listening Station — GhostExodus Enterprise (CYBERVS DOMINATVS) console ══════════════════
+     FIXED dark console (operator decision): the X Listening Station reproduces GhostExodus's
+     Enterprise look FAITHFULLY and does NOT follow the app's classic / QUIET AMETHYST skins. Every
+     value below is his EXACT colour, pulled from his `src/styles.css`. This group is declared
+     IDENTICALLY under `:root` (classic) and `:root[data-ga98-theme='amethyst']` (see the mirror
+     block further down) so the module renders as his dark console under either app theme. The
+     module's `.xls-root` scoped remap (in x-listening.css) rebinds the generic --ga98-* surface/ink
+     tokens to the --ga98-xls-* values below, so the WHOLE module — sidebar AND body cards — is dark
+     in both themes. Editing a value here: keep the two blocks byte-identical. */
+  --ga98-xls-main-bg: radial-gradient(circle at 80% -10%, #10242c 0, #05090d 34%, #020508 100%); /* his body ground */
+  --ga98-xls-sidebar-bg: linear-gradient(180deg, rgba(9,20,25,0.97), rgba(3,8,11,0.99)); /* his aside gradient */
+  --ga98-xls-sidebar-border: #1c3941;    /* his sidebar right edge */
+  --ga98-xls-sidebar-ink: #879da3;       /* his nav text */
+  --ga98-xls-console-border: #173039;    /* his common seam (brand / topbar / panel / session box) */
+  --ga98-xls-masthead-bg: #02070c;       /* his brand-masthead frame */
+  --ga98-xls-masthead-border: #15527a;   /* his masthead border */
+  --ga98-xls-seal-bg: radial-gradient(circle, rgba(17,85,132,0.55), rgba(4,16,24,0.9)); /* his seal fill */
+  --ga98-xls-seal-ink: #d9f4ff;          /* his seal "CD" ink */
+  --ga98-xls-seal-border: #2387c5;       /* his seal ring */
+  --ga98-xls-nav-hover-bg: #0c1a1f;      /* his nav :hover fill */
+  --ga98-xls-nav-hover-border: #1e414b;  /* his nav :hover border */
+  --ga98-xls-nav-active-bg: linear-gradient(90deg, rgba(31,88,101,0.42), rgba(9,24,29,0.8)); /* his active-nav fill */
+  --ga98-xls-nav-active-border: #2b5e6b; /* his active-nav border */
+  --ga98-xls-nav-active-ink: #e7f5f6;    /* his active-nav text */
+  --ga98-xls-nav-active-inset: #e5b742;  /* his active-nav amber inset bar */
+  --ga98-xls-badge-bg: #17252a;          /* his nav count-badge pill fill */
+  --ga98-xls-badge-ink: #eac45e;         /* his nav count-badge amber ink */
+  --ga98-xls-dock-bg: linear-gradient(180deg, #08161b, #061116); /* his campaign-dock fill */
+  --ga98-xls-dock-accent: #d4aa42;       /* his campaign-dock amber left rule */
+  --ga98-xls-session-bg: #071116;        /* his session-box fill */
+  --ga98-xls-action-bg: linear-gradient(180deg, #e8c461, #bd8b25); /* his amber PRIMARY action button */
+  --ga98-xls-action-ink: #080a0b;        /* his ink on the amber button */
+  --ga98-xls-action-border: #c99c31;     /* his amber button border */
+  --ga98-xls-heading: #f0f4f4;           /* his h1 heading (near-white) */
+  --ga98-xls-eyebrow: #658087;           /* his topbar eyebrow caption */
+  --ga98-xls-stat-figure: #eac259;       /* his big amber dashboard figure (.stat > strong) */
+  --ga98-xls-count-ink: #e0b74d;         /* his amber entity-card count (.entity-card > b) */
+  /* Body surface/ink remap sources — the .xls-root scoped remap binds the generic tokens to these,
+     so the module's body (cards, text, fields, links) renders in his dark palette in both themes. */
+  --ga98-xls-ink: #d8e4e8;               /* → --ga98-text (his base text) */
+  --ga98-xls-ink-dim: #82989e;           /* → --ga98-text-dim (his label / caption ink) */
+  --ga98-xls-surface: #081419;           /* → --ga98-grey (his card / source / entity ground) */
+  --ga98-xls-seam: #1e3e47;              /* → --ga98-shadow-dark (his card / entity border) */
+  --ga98-xls-accent: #6ed7eb;            /* → --ga98-accent (his interactive neon-cyan) */
+  --ga98-xls-hover: #0c1a1f;             /* → --ga98-row-hover (his row/nav hover fill) */
+  --ga98-xls-recessed: #071216;          /* → --ga98-recessed-bg / --ga98-field-bg (his input ground) */
+  --ga98-xls-hl-ink: #091114;            /* → --ga98-titlebar-text (his dark ink on a bright highlight) */
+  --ga98-xls-ok-surface: #10271d;        /* → --ga98-ok-surface (his connected-banner fill) */
+  --ga98-xls-ok-ink: #76d3a4;            /* → --ga98-ok-ink (his connected-banner text) */
+  --ga98-xls-ok-dot: #46c489;            /* → --ga98-ok-dot (his online status green) */
+  --ga98-xls-err-surface: #281518;       /* → --ga98-error-surface (his disconnected-banner fill) */
+  --ga98-xls-err-border: #713c40;        /* → --ga98-error-border (his disconnected-banner border) */
+  --ga98-xls-danger-ink: #e08d92;        /* → --ga98-danger-ink (his disconnected-banner text) */
+  --ga98-xls-tor-bad-bg: #16090d;        /* his Tor-disconnected (clearnet) danger box */
+  --ga98-xls-tor-bad-ink: #ed7e87;
+  --ga98-xls-tor-bad-border: #5c2c34;
+  --ga98-xls-tor-ok-bg: #071711;         /* his Tor-connected safe box */
+  --ga98-xls-tor-ok-ink: #6cf1aa;
+  --ga98-xls-tor-ok-border: #236347;
+  --ga98-xls-dot-off: #8b3c3c;           /* his offline session dot */
+
+  /* ── WebSDR Viewer — HIS fixed green console (Global Constraint 7) ──────────────
+     Ported verbatim from GhostExodus's SDR-Eaves-Dropper styles.css. This is a FIXED
+     theme, NOT the app skin: these tokens are defined ONCE here and deliberately NOT
+     overridden in the amethyst block below, so `.sdr-root` renders his dark-green
+     radio-intelligence look IDENTICALLY under classic + QUIET AMETHYST (mirrors the
+     `--ga98-xls-*` precedent, but single-valued). Module CSS references these only —
+     no raw literal lives in websdr.css. */
+  --ga98-sdr-sans: 'Segoe UI', Tahoma, sans-serif;
+  --ga98-sdr-mono: Consolas, 'Courier New', monospace;
+  --ga98-sdr-bg: #07110b;                /* app ground */
+  --ga98-sdr-bg-deep: #020805;           /* gradient floor / deep inset */
+  --ga98-sdr-banner-bg: #010603;         /* banner frame */
+  --ga98-sdr-banner-border: #1b5f31;
+  --ga98-sdr-sidebar-bg: #08140d;        /* left rail */
+  --ga98-sdr-heading-bg: #061009;        /* menu heading / modal inputs */
+  --ga98-sdr-heading-border: #174426;
+  --ga98-sdr-heading-ink: #62ef88;
+  --ga98-sdr-nav-bg: #0b1d12;            /* nav button */
+  --ga98-sdr-nav-border: #1d4b2b;
+  --ga98-sdr-nav-hover-bg: #10291a;
+  --ga98-sdr-nav-hover-border: #337344;
+  --ga98-sdr-nav-active-bg: #164124;
+  --ga98-sdr-nav-active-border: #52d876;
+  --ga98-sdr-toolbar-bg: #0c1c12;
+  --ga98-sdr-toolbar-border: #1c5930;
+  --ga98-sdr-header-bg: #09150e;
+  --ga98-sdr-frame-bg: #020402;          /* receiver host ground */
+  --ga98-sdr-footer-bg: #07110b;
+  --ga98-sdr-modal-bg: #0d1b12;
+  --ga98-sdr-modal-shade: rgba(0, 10, 3, 0.67);
+  --ga98-sdr-inset-bg: #020704;          /* freq/archive text inputs */
+  --ga98-sdr-inset-bg2: #030906;         /* note inputs */
+  --ga98-sdr-search-bg: #051009;
+  --ga98-sdr-card-bg: #0a1810;           /* note card */
+  --ga98-sdr-card-bg2: #09170f;          /* note editor / recording item */
+  --ga98-sdr-receiver-active-bg: #123a1f;
+  --ga98-sdr-recording-active-bg: #12351e;
+  --ga98-sdr-archive-bg: #040804;
+  --ga98-sdr-archive-panel-bg: #08130d;
+  --ga98-sdr-btn-bg: #102519;            /* default button */
+  --ga98-sdr-btn-ink: #bbf7ca;
+  --ga98-sdr-ink: #d7ffe1;               /* primary text */
+  --ga98-sdr-ink-bright: #caffd6;
+  --ga98-sdr-ink-soft: #a9cfb3;
+  --ga98-sdr-ink-dim: #789783;
+  --ga98-sdr-ink-mute: #6e8875;
+  --ga98-sdr-label: #78d491;             /* toolbar caption */
+  --ga98-sdr-green: #52d876;
+  --ga98-sdr-green-bright: #5cff81;      /* freq readout / online dot */
+  --ga98-sdr-accent: #62ef88;
+  --ga98-sdr-accent-2: #66ee8b;          /* section titles */
+  --ga98-sdr-title: #77f298;             /* modal headings */
+  --ga98-sdr-title-2: #7dff9d;           /* nav-active / fatal title */
+  --ga98-sdr-border: #1b522d;            /* sidebar seam */
+  --ga98-sdr-border-dim: #12321c;
+  --ga98-sdr-border-soft: #153c22;
+  --ga98-sdr-border-mid: #285b37;        /* button border */
+  --ga98-sdr-border-input: #285d38;
+  --ga98-sdr-border-strong: #3c8a51;     /* freq input border */
+  --ga98-sdr-border-accent: #398b51;     /* modal border */
+  --ga98-sdr-primary-bg: #45cf68;        /* PRIMARY action */
+  --ga98-sdr-primary-ink: #031107;
+  --ga98-sdr-primary-border: #77f397;
+  --ga98-sdr-mode-active-bg: #42d66a;    /* selected mode button */
+  --ga98-sdr-mode-active-ink: #031507;
+  --ga98-sdr-mode-active-border: #72ff95;
+  --ga98-sdr-dot-idle: #526359;
+  --ga98-sdr-dot-online: #5cff81;
+  --ga98-sdr-dot-offline: #ff5454;
+  --ga98-sdr-dot-checking: #ffd84d;
+  --ga98-sdr-amber: #e8d65d;             /* row action / clearnet marker */
+  --ga98-sdr-fav: #ffe45c;               /* favourite star lit */
+  --ga98-sdr-fav-border: #776b25;
+  --ga98-sdr-record-bg: #9e1f27;         /* live RECORD button */
+  --ga98-sdr-record-border: #ff626b;
+  --ga98-sdr-record-ink: #ffffff;
+  --ga98-sdr-record-glow: rgba(255, 65, 75, 0.55);
+  --ga98-sdr-tor-on-bg: #142a1a;         /* Tor marker */
+  --ga98-sdr-tor-on-ink: #7dff9d;
+  --ga98-sdr-tor-warn-bg: #24121a;       /* Tor-may-break-audio warning */
+  --ga98-sdr-tor-warn-ink: #f0c65e;
+  --ga98-sdr-tor-warn-border: #7a2e37;
+  --ga98-sdr-danger-ink: #ff8a8a;
+  --ga98-sdr-danger-border: #663333;
+  --ga98-sdr-empty-ink: #3e7d4f;         /* empty-state hero */
+  --ga98-sdr-empty-title: #64c57d;
+  --ga98-sdr-empty-text: #587361;
+  --ga98-sdr-fatal-icon: #ffcf66;        /* failure surface */
+  --ga98-sdr-fatal-danger: #ffc5c5;
+  --ga98-sdr-fatal-mute: #75917c;
+
+  /* ── Ghost Social Media Manager (hardened port) — FIXED teal console ──────
+     GhostExodus's dark-teal look ported as a fixed `.gsm-root` skin (constraint
+     10). These tokens are DEFINED ONLY here in the base :root and are NEVER
+     overridden in the amethyst block below, so `.gsm-root` renders byte-for-byte
+     IDENTICALLY under classic + QUIET AMETHYST — exactly his console, not the app
+     theme. Every value below is one of his `src/styles.css` literals; near-equal
+     shades are consolidated to a semantic token. ghost-social.css consumes these
+     via var() only (no raw literals — no-straggler green). */
+  --ga98-gsm-bg: #070b0d;                 /* deep ground */
+  --ga98-gsm-sidebar-bg: #091013;         /* left rail */
+  --ga98-gsm-panel-bg: #0a1012;           /* panels / cards / metrics */
+  --ga98-gsm-card-bg: #0a1113;            /* auth card / modal */
+  --ga98-gsm-inset-bg: #0b1315;           /* secondary btn / titles / status */
+  --ga98-gsm-elevated-bg: #0d1719;        /* media / platform / queue chrome */
+  --ga98-gsm-host-bg: #0a0f11;            /* embedded browser host backdrop */
+  --ga98-gsm-selected-bg: #10231f;        /* selected campaign / nav-active */
+  --ga98-gsm-dest-selected-bg: #0d1d19;   /* selected queue destination */
+  --ga98-gsm-hero-a: #0d1716;             /* hero gradient start */
+  --ga98-gsm-hero-b: #0a1012;             /* hero gradient end */
+  --ga98-gsm-backdrop: rgba(0, 0, 0, 0.73); /* modal veil (#000b) */
+  --ga98-gsm-text: #d7e3e3;               /* primary ink */
+  --ga98-gsm-heading: #e8f3f0;            /* bright headings */
+  --ga98-gsm-text-bright: #cfe0de;        /* card / body-bright ink */
+  --ga98-gsm-text-dim: #789092;           /* nav / dim ink */
+  --ga98-gsm-text-dimmer: #5b7477;        /* eyebrow / caption */
+  --ga98-gsm-text-faint: #536b6e;         /* small meta */
+  --ga98-gsm-teal: #52ddb9;               /* primary teal action */
+  --ga98-gsm-teal-bright: #55dfba;        /* bright teal accents */
+  --ga98-gsm-teal-soft: #54e1bd;          /* metric / selected teal */
+  --ga98-gsm-teal-ring: #48dcb4;          /* logo ring / teal borders */
+  --ga98-gsm-teal-dot: #51e5be;           /* live status dot */
+  --ga98-gsm-teal-ink: #06100e;           /* near-black ink on teal btn */
+  --ga98-gsm-border: #142126;             /* hairline seams */
+  --ga98-gsm-border-strong: #17282b;      /* panel / card borders */
+  --ga98-gsm-border-input: #1c2e31;       /* input / select borders */
+  --ga98-gsm-border-accent: #21413b;      /* primary/secondary btn border */
+  --ga98-gsm-switch-bg: #111b1e;          /* off switch track */
+  --ga98-gsm-switch-on-bg: #1b594b;       /* armed/on switch track */
+  --ga98-gsm-switch-knob: #536568;        /* off switch knob */
+  --ga98-gsm-danger: #ff7c86;             /* danger ink */
+  --ga98-gsm-danger-bg: #2a1015;          /* danger button fill */
+  --ga98-gsm-danger-border: #59232b;      /* danger border */
+  --ga98-gsm-warning: #d7c49a;            /* warning ink */
+  --ga98-gsm-warning-bg: #15120b;         /* warning box fill */
+  --ga98-gsm-warning-border: #5c4c2f;     /* warning border */
+  --ga98-gsm-armed-bg: #3a0f14;           /* AUTO-POSTING ARMED banner fill */
+  --ga98-gsm-armed-border: #7a2530;       /* armed banner border */
+  --ga98-gsm-tor-bg: #0d1d19;             /* per-account TOR marker fill */
+  --ga98-gsm-tor-ink: #55dfba;            /* TOR marker ink (teal) */
+  --ga98-gsm-clearnet-ink: #789092;       /* CLEARNET marker ink (dim) */
 }
 
 html, body, #root {
@@ -329,32 +503,59 @@ input, textarea, [contenteditable="true"], .ga98-selectable {
   --ga98-graph-ring: #322550;
   --ga98-graph-hub: #3a2168;
 
-  /* ── X Listening Station — Enterprise console reskin, AMETHYST (primary) ──
-     The dark neon command console: near-black violet-tinted surfaces, accent
-     (violet) headings, amber action buttons, red Tor-disconnected / green Tor-on.
-     Every value clears >=4.5:1 for its ink/ground pair on the near-black skin. */
-  --ga98-xls-sidebar-bg: #0a0912;        /* left console rail — deep near-black */
-  --ga98-xls-sidebar-ink: #9891ac;       /* dim nav ink on the rail */
-  --ga98-xls-console-border: #2a2440;    /* violet-tinted console seams */
-  --ga98-xls-main-bg: #0d0b16;           /* right column ground */
-  --ga98-xls-seal-bg: #1c1633;           /* brand seal fill */
-  --ga98-xls-seal-ink: #cbb8ff;          /* brand seal "CD" ink (violet, bright on dark) */
-  --ga98-xls-seal-border: #6f5bb0;       /* brand seal ring */
-  --ga98-xls-nav-active-bg: #1a1430;      /* selected nav row fill */
-  --ga98-xls-badge-bg: #201a36;          /* count-badge pill fill */
-  --ga98-xls-badge-ink: #f0c65e;         /* amber count ink, legible on the dark pill */
-  --ga98-xls-action-bg: #e5b742;         /* amber/yellow PRIMARY action button */
-  --ga98-xls-action-ink: #1a1206;        /* near-black ink on amber */
-  --ga98-xls-action-border: #caa23a;
-  --ga98-xls-eyebrow: #8b86a4;           /* topbar eyebrow caption, dim on dark */
-  --ga98-xls-masthead-bg: #05060c;       /* masthead frame */
-  --ga98-xls-tor-bad-bg: #24121a;        /* Tor-off / clearnet danger box */
-  --ga98-xls-tor-bad-ink: #f08c95;
-  --ga98-xls-tor-bad-border: #7a2e37;
-  --ga98-xls-tor-ok-bg: #0d2018;         /* Tor-on safe box */
-  --ga98-xls-tor-ok-ink: #6fdc9a;
-  --ga98-xls-tor-ok-border: #2c6347;
-  --ga98-xls-dot-off: #d1585f;           /* offline status dot */
+  /* ══ X Listening Station — GhostExodus Enterprise console, AMETHYST MIRROR ═════════════════════
+     BYTE-IDENTICAL to the `:root` block above (operator decision: FIXED dark console that does NOT
+     follow the app skin). The module renders as his exact Enterprise console under amethyst too.
+     Keep these two blocks identical — edit both together. */
+  --ga98-xls-main-bg: radial-gradient(circle at 80% -10%, #10242c 0, #05090d 34%, #020508 100%); /* his body ground */
+  --ga98-xls-sidebar-bg: linear-gradient(180deg, rgba(9,20,25,0.97), rgba(3,8,11,0.99)); /* his aside gradient */
+  --ga98-xls-sidebar-border: #1c3941;    /* his sidebar right edge */
+  --ga98-xls-sidebar-ink: #879da3;       /* his nav text */
+  --ga98-xls-console-border: #173039;    /* his common seam (brand / topbar / panel / session box) */
+  --ga98-xls-masthead-bg: #02070c;       /* his brand-masthead frame */
+  --ga98-xls-masthead-border: #15527a;   /* his masthead border */
+  --ga98-xls-seal-bg: radial-gradient(circle, rgba(17,85,132,0.55), rgba(4,16,24,0.9)); /* his seal fill */
+  --ga98-xls-seal-ink: #d9f4ff;          /* his seal "CD" ink */
+  --ga98-xls-seal-border: #2387c5;       /* his seal ring */
+  --ga98-xls-nav-hover-bg: #0c1a1f;      /* his nav :hover fill */
+  --ga98-xls-nav-hover-border: #1e414b;  /* his nav :hover border */
+  --ga98-xls-nav-active-bg: linear-gradient(90deg, rgba(31,88,101,0.42), rgba(9,24,29,0.8)); /* his active-nav fill */
+  --ga98-xls-nav-active-border: #2b5e6b; /* his active-nav border */
+  --ga98-xls-nav-active-ink: #e7f5f6;    /* his active-nav text */
+  --ga98-xls-nav-active-inset: #e5b742;  /* his active-nav amber inset bar */
+  --ga98-xls-badge-bg: #17252a;          /* his nav count-badge pill fill */
+  --ga98-xls-badge-ink: #eac45e;         /* his nav count-badge amber ink */
+  --ga98-xls-dock-bg: linear-gradient(180deg, #08161b, #061116); /* his campaign-dock fill */
+  --ga98-xls-dock-accent: #d4aa42;       /* his campaign-dock amber left rule */
+  --ga98-xls-session-bg: #071116;        /* his session-box fill */
+  --ga98-xls-action-bg: linear-gradient(180deg, #e8c461, #bd8b25); /* his amber PRIMARY action button */
+  --ga98-xls-action-ink: #080a0b;        /* his ink on the amber button */
+  --ga98-xls-action-border: #c99c31;     /* his amber button border */
+  --ga98-xls-heading: #f0f4f4;           /* his h1 heading (near-white) */
+  --ga98-xls-eyebrow: #658087;           /* his topbar eyebrow caption */
+  --ga98-xls-stat-figure: #eac259;       /* his big amber dashboard figure (.stat > strong) */
+  --ga98-xls-count-ink: #e0b74d;         /* his amber entity-card count (.entity-card > b) */
+  --ga98-xls-ink: #d8e4e8;               /* → --ga98-text (his base text) */
+  --ga98-xls-ink-dim: #82989e;           /* → --ga98-text-dim (his label / caption ink) */
+  --ga98-xls-surface: #081419;           /* → --ga98-grey (his card / source / entity ground) */
+  --ga98-xls-seam: #1e3e47;              /* → --ga98-shadow-dark (his card / entity border) */
+  --ga98-xls-accent: #6ed7eb;            /* → --ga98-accent (his interactive neon-cyan) */
+  --ga98-xls-hover: #0c1a1f;             /* → --ga98-row-hover (his row/nav hover fill) */
+  --ga98-xls-recessed: #071216;          /* → --ga98-recessed-bg / --ga98-field-bg (his input ground) */
+  --ga98-xls-hl-ink: #091114;            /* → --ga98-titlebar-text (his dark ink on a bright highlight) */
+  --ga98-xls-ok-surface: #10271d;        /* → --ga98-ok-surface (his connected-banner fill) */
+  --ga98-xls-ok-ink: #76d3a4;            /* → --ga98-ok-ink (his connected-banner text) */
+  --ga98-xls-ok-dot: #46c489;            /* → --ga98-ok-dot (his online status green) */
+  --ga98-xls-err-surface: #281518;       /* → --ga98-error-surface (his disconnected-banner fill) */
+  --ga98-xls-err-border: #713c40;        /* → --ga98-error-border (his disconnected-banner border) */
+  --ga98-xls-danger-ink: #e08d92;        /* → --ga98-danger-ink (his disconnected-banner text) */
+  --ga98-xls-tor-bad-bg: #16090d;        /* his Tor-disconnected (clearnet) danger box */
+  --ga98-xls-tor-bad-ink: #ed7e87;
+  --ga98-xls-tor-bad-border: #5c2c34;
+  --ga98-xls-tor-ok-bg: #071711;         /* his Tor-connected safe box */
+  --ga98-xls-tor-ok-ink: #6cf1aa;
+  --ga98-xls-tor-ok-border: #236347;
+  --ga98-xls-dot-off: #8b3c3c;           /* his offline session dot */
 }
 
 /* ── QUIET AMETHYST — Task 8 long-tail utility classes ──────────────────────────────────────────
@@ -1272,7 +1473,11 @@ input.ga98-text, select.ga98-text {
   border-color: var(--ga98-shadow-dark);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 -1px 0 rgba(0, 0, 0, 0.4);
 }
-.ga98-wmp-deck { display: flex; flex-direction: column; gap: 4px; }
+/* flex-shrink:0 — the deck (transport + control row) keeps its natural height; when the window is
+   dragged shorter, the scrollable library body (`flex:1 1 0%`, min-height:0) absorbs the whole
+   deficit instead of the deck, so the bottom control row never clips under the jukebox's
+   overflow:hidden (GhostExodus v3.72.0 resize-clip report). */
+.ga98-wmp-deck { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
 /* Now-Playing readout: inset LCD panel — big title, artist, format/kbps badges + the spectrum. */
 .ga98-np {
   display: flex; gap: 6px; align-items: stretch;

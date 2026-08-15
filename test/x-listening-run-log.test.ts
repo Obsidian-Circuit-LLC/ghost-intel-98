@@ -27,6 +27,7 @@ import {
   type XCaptureDeps,
 } from '../src/main/x-listening/capture';
 import type { RawPost } from '../src/main/x-listening/extract';
+import { DEFAULT_COLLECTION_SETTINGS } from '@shared/x-listening-collection-settings';
 
 // ---- in-memory fs seam (mirrors x-listening-changes.test.ts's memStore) ----
 
@@ -97,6 +98,13 @@ function deps(store: XStore, over: Partial<XCaptureDeps> = {}): Partial<XCapture
     recordRun: async (caseId, record) => {
       await recordCollectionRun(caseId, record, store);
     },
+    // FA1: pin to ONE scroll pass so the run-record assertions below (requested/completed passes)
+    // are exact; the multi-pass telemetry is covered in x-listening-capture-scroll.test.ts.
+    loadCollectionSettings: () => ({ ...DEFAULT_COLLECTION_SETTINGS, profileScrollPasses: 1, delayPerPassMs: 0 }),
+    scroll: async () => {},
+    // FA1 finding 1: the mid-scroll signed-in re-assertion (always signed-in for these tests).
+    assertSignedIn: async () => ({ blocked: false }),
+    delay: async () => {},
     now: () => '2026-08-11T12:00:00.000Z',
     ...over,
   };
@@ -117,9 +125,13 @@ describe('A3 — captureTimeline emits a collection-run record', () => {
     expect(rec.added).toBe(1);
     expect(rec.duplicates).toBe(0);
     expect(rec.status).toBe('complete');
+    // FA1 finding 2: profileScrollPasses=1 is TWO reads (Enterprise loops `index=0..passes`). The same
+    // single post is visible on both reads, so the 2nd read added nothing new → the loop reached a
+    // stable end (reachedEnd true, REAL loop telemetry, not the old hardcoded `true`). completedPasses
+    // honors the +1 (2), while requestedPasses is the clamped budget (1).
     expect(rec.reachedEnd).toBe(true);
     expect(rec.requestedPasses).toBe(1);
-    expect(rec.completedPasses).toBe(1);
+    expect(rec.completedPasses).toBe(2);
     expect(rec.startedAt).toBe('2026-08-11T12:00:00.000Z');
     expect(rec.endedAt).toBe('2026-08-11T12:00:00.000Z');
   });

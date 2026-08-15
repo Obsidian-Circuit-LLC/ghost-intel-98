@@ -52,6 +52,7 @@ import { stopAis } from './services/livefeeds/ais-stream';
 import { cancelAllSweeps } from './searchlight/sweep';
 import { disposeAllSchedules } from './plugins/schedule';
 import { clearAllBrains } from './investigation/brain-registry';
+import { stopGhostSocialScheduler } from './ghost-social/publishing-ipc';
 
 const isDev = !!process.env['ELECTRON_RENDERER_URL'];
 
@@ -421,7 +422,7 @@ app.on('before-quit', (event) => {
   });
 });
 
-app.on('will-quit', () => { localAi.stop(); getBgTor()?.killNow(); getPluginTor()?.killNow(); disposeAllSchedules(); clearAllBrains(); }); // sync backstops (idempotent)
+app.on('will-quit', () => { localAi.stop(); getBgTor()?.killNow(); getPluginTor()?.killNow(); disposeAllSchedules(); clearAllBrains(); stopGhostSocialScheduler(); }); // sync backstops (idempotent)
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();

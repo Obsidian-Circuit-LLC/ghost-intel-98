@@ -99,6 +99,7 @@ function makeApi() {
       networksList: vi.fn(async () => NETWORKS),
       changeEvents: vi.fn(async () => []),
       runLog: vi.fn(async () => []),
+      networkEvents: vi.fn(async () => []),
       readNotes: vi.fn(async () => ({ notes: [] })),
       archiveStatus: vi.fn(async () => ({ cursor: null, cycles: 0, lastRunAt: null })),
       presetsRead: vi.fn(async () => ({ presets: [] })),
@@ -239,7 +240,13 @@ describe('X Listening Station — Network tab non-graph panels (Task C2a)', () =
     expect(/mallory/i.test(recordsText)).toBe(false);
   });
 
-  it('renders the RECENT NETWORK DELTAS panel with the conservative caveat', async () => {
+  it('renders the RECENT NETWORK DELTAS panel from the PERSISTED gated event stream, with the caveat', async () => {
+    // M2: deltas now come from the main-side GATED event stream (`networkEvents`), not an ungated
+    // renderer timestamp derivation. Seed one not_seen_latest (a review candidate) + one newly_observed.
+    api.xListening.networkEvents = vi.fn(async () => [
+      { kind: 'not_seen_latest', handle: '@eve', target: '@alice', relationship: 'followers', observedAt: '2026-08-03T00:00:00.000Z', confidence: 'unconfirmed' },
+      { kind: 'newly_observed', handle: '@dave', target: '@alice', relationship: 'followers', observedAt: '2026-08-03T00:00:00.000Z', confidence: 'observed' },
+    ]) as never;
     await mount();
     await clickTab(/network/i);
     const panel = Array.from(container.querySelectorAll('.xls-panel')).find((p) =>
@@ -248,7 +255,38 @@ describe('X Listening Station — Network tab non-graph panels (Task C2a)', () =
     expect(panel).toBeTruthy();
     // The conservative caveat must be present (not proof of an unfollow).
     expect(/not proof of an unfollow/i.test(panel?.textContent || '')).toBe(true);
-    // eve (seen 08-01 but not the latest 08-03 scan of alice) is a "not seen" delta candidate.
-    expect(container.querySelectorAll('.xls-delta-row').length).toBeGreaterThan(0);
+    // Both seeded events render as delta rows.
+    expect(container.querySelectorAll('.xls-delta-row').length).toBe(2);
+    expect(/NOT SEEN IN LATEST COMPARABLE SCAN/i.test(panel?.textContent || '')).toBe(true);
+    expect(/NEWLY OBSERVED/i.test(panel?.textContent || '')).toBe(true);
+  });
+
+  it('EXCLUDES a delta whose handle matches a synthetic/demo account (honesty belt-and-braces)', async () => {
+    // A synthetic follower `mallory` exists in the campaign networks; even if an event references it,
+    // it must NOT surface as a delta (a demo handle is never intelligence).
+    const withSynthetic = [
+      {
+        target: 'alice', kind: 'followers', capturedAt: '2026-08-03T00:00:00.000Z',
+        accounts: [
+          ...NETWORKS[0].accounts,
+          { handle: 'mallory', displayName: 'Mallory', bio: 'demo', firstObservedAt: '2026-08-03T00:00:00.000Z', lastObservedAt: '2026-08-03T00:00:00.000Z', synthetic: true },
+        ],
+      },
+      NETWORKS[1],
+    ];
+    api.xListening.networksList = vi.fn(async () => withSynthetic);
+    api.xListening.networkEvents = vi.fn(async () => [
+      { kind: 'newly_observed', handle: '@mallory', target: '@alice', relationship: 'followers', observedAt: '2026-08-03T00:00:00.000Z', confidence: 'observed' },
+      { kind: 'newly_observed', handle: '@dave', target: '@alice', relationship: 'followers', observedAt: '2026-08-03T00:00:00.000Z', confidence: 'observed' },
+    ]) as never;
+    await mount();
+    await clickTab(/network/i);
+    const panel = Array.from(container.querySelectorAll('.xls-panel')).find((p) =>
+      /RECENT NETWORK DELTAS/i.test(p.textContent || ''),
+    );
+    // Only @dave survives; the synthetic @mallory delta is dropped.
+    expect(container.querySelectorAll('.xls-delta-row').length).toBe(1);
+    expect(/mallory/i.test(panel?.textContent || '')).toBe(false);
+    expect(/dave/i.test(panel?.textContent || '')).toBe(true);
   });
 });

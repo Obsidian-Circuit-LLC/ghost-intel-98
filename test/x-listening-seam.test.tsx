@@ -38,6 +38,10 @@ const rec = vi.hoisted(() => ({
 }));
 
 vi.mock('electron', () => ({
+  // A real userData path so the derived-read insights handlers (changeEvents / runLog /
+  // networkEvents → prodXStore) resolve to [] via ENOENT instead of throwing on a missing `app`
+  // (an incomplete mock left sibling Promise.all rejections unhandled past teardown).
+  app: { getPath: () => require('node:os').tmpdir() },
   contextBridge: {
     exposeInMainWorld: (key: string, value: unknown) => {
       rec.exposed[key] = value;

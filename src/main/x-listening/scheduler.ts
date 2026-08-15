@@ -34,6 +34,7 @@ import {
 } from '@shared/x-listening-collection-settings';
 import type { XScheduleStatus } from '@shared/x-listening-schedule';
 import type { XTimelineCaptureResult } from './capture';
+import { tryAcquireCollectionLock, releaseCollectionLock } from './collection-lock';
 
 export type { XScheduleStatus };
 
@@ -81,19 +82,29 @@ export interface XSchedulerDeps {
     source: XSweepSource,
     settings: XCollectionSettings,
   ) => Promise<XSweepCaptureOutcome>;
-  /** Run ONE incremental-archive step for a source through the Tor-gated primitive (fail-closed). */
-  archiveProfile: (
+  /** Run ONE incremental-archive OPERATION this tick (FA4 round-robin — posts/follower/following of a
+   *  single source, not every source at once) through the Tor-gated primitive (fail-closed). */
+  archiveRotate: (
     caseId: string,
-    source: XSweepSource,
+    sources: XSweepSource[],
     settings: XCollectionSettings,
-  ) => Promise<XSweepCaptureOutcome>;
+  ) => Promise<{ ran: boolean; blocked: boolean; reason?: string; added: number }>;
   /** Arm a repeating timer; defaults to the global `setInterval`. */
   schedule: (fn: () => void, ms: number) => ReturnType<typeof setInterval>;
   /** Clear a timer armed by `schedule`; defaults to the global `clearInterval`. */
   unschedule: (handle: ReturnType<typeof setInterval>) => void;
   /** Injected clock in ms (determinism); defaults to `Date.now`. Feeds `nextSweepAt` only. */
   now: () => number;
+  /** Injectable delay seam (M6 per-target spacing); defaults to a real `setTimeout` sleep. */
+  sleep: (ms: number) => Promise<void>;
+  /** M6: milliseconds to pause BETWEEN targets in a sweep (Enterprise `refreshAll`'s 1500ms gap,
+   *  `main.cjs:1907`); defaults to `SWEEP_TARGET_SPACING_MS`. */
+  interTargetDelayMs: number;
 }
+
+/** Enterprise's fixed 1500ms inter-target sweep gap (`refreshAll`, `main.cjs:1907`) — less bot-like
+ *  than back-to-back egress. Injectable per-run via `XSchedulerDeps.interTargetDelayMs`. */
+const SWEEP_TARGET_SPACING_MS = 1500;
 
 /** A campaign's live schedule state — the armed timers + the metadata the renderer's next-sweep
  *  indicator reads back through `scheduleStatus`. */
@@ -190,49 +201,21 @@ export function defaultSchedulerDeps(): XSchedulerDeps {
       });
       return { blocked: res.blocked, reason: res.reason, added: res.added, skipped: res.skipped, posts: res.posts };
     },
-    archiveProfile: async (caseId, source, settings) => {
-      const imagesEnabled = await resolveSourceImages(caseId, source.targetUsername, settings);
-      const { captureProfileTimeline } = await import('./capture');
-      // The archive tick reuses the SAME Tor-gated profile window as a sweep, but runs ONE
-      // incremental-archive step against it (advancing the resumable archive cursor) instead of a
-      // plain capture. Per-campaign `archiveEnabled` already gated this at schedule time, so the
-      // archive loop's own `isEnabled` (the GLOBAL `archiveCycles` toggle, which governs the manual
-      // "Run Archive Step" button) is overridden true here — the Tor gate is still the egress
-      // authority (resolved inside `captureProfileTimeline`).
-      const res = await captureProfileTimeline(
-        {
-          caseId,
-          channelId: source.channelId,
-          channelLabel: source.channelLabel,
-          targetUsername: source.targetUsername,
-          collect: collectGateFromSettings(settings),
-          imagesEnabled,
-        },
-        {
-          capture: async (win, req) => {
-            const { runArchiveSteps } = await import('./archive');
-            const loop = await runArchiveSteps(
-              win,
-              {
-                caseId: req.caseId,
-                jobId: req.jobId,
-                channelId: req.channelId,
-                channelLabel: req.channelLabel,
-                targetUsername: req.targetUsername,
-                collect: req.collect,
-              },
-              { maxCycles: 1, delayMs: 0 },
-              { isEnabled: async () => true },
-            );
-            return { blocked: loop.blocked, reason: loop.reason, added: loop.totalAdded, skipped: 0, posts: loop.posts };
-          },
-        },
-      );
-      return { blocked: res.blocked, reason: res.reason, added: res.added, skipped: res.skipped, posts: res.posts };
+    archiveRotate: async (caseId, sources, settings) => {
+      // FA4: one incremental-archive OPERATION per tick (round-robin across posts/follower/following
+      // of the campaign's sources), stepping that operation's per-source pass depth toward its
+      // ceiling. Per-campaign `archiveEnabled` already gated this at schedule time; the Tor gate is
+      // still the egress authority (resolved inside `captureProfileTimeline`/`captureNetwork`), so a
+      // blocked op captures nothing and advances neither the round-robin pointer nor the depth.
+      const { runArchiveRotation } = await import('./archive');
+      const res = await runArchiveRotation({ caseId, jobId: caseId, sources, settings });
+      return { ran: res.ran, blocked: res.blocked, reason: res.reason, added: res.added };
     },
     schedule: (fn, ms) => setInterval(fn, ms),
     unschedule: (handle) => clearInterval(handle),
     now: () => Date.now(),
+    sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    interTargetDelayMs: SWEEP_TARGET_SPACING_MS,
   };
 }
 
@@ -267,57 +250,79 @@ export async function runScheduledSweep(
   overrides: Partial<XSchedulerDeps> = {},
 ): Promise<XSweepRunResult> {
   const deps: XSchedulerDeps = { ...defaultSchedulerDeps(), ...overrides };
-  if (!(await deps.isConnected(caseId))) {
-    return { swept: false, blocked: false, reason: 'not-connected', sources: 0, added: 0 };
+  // M5: acquire the single app-wide collection lock BEFORE any egress. If another collection op
+  // (a manual capture, another campaign's sweep, an archive tick, a live verify) already holds it,
+  // this scheduled sweep SKIPS this tick (Enterprise's background-timer `if (!sweepRunning && …)`,
+  // `main.cjs:1919`) — never a second concurrent capture window. The timer keeps ticking; the next
+  // tick retries once the lock is free.
+  if (!tryAcquireCollectionLock()) {
+    return { swept: false, blocked: false, reason: 'collection-busy', sources: 0, added: 0 };
   }
-  const settings = await deps.loadSettings(caseId);
-  const sources = await deps.listSources(caseId);
-  if (!sources.length) {
-    return { swept: false, blocked: false, reason: 'no-sources', sources: 0, added: 0 };
-  }
-  let added = 0;
-  let captured = 0;
-  for (const source of sources) {
-    const res = await deps.sweepProfile(caseId, source, settings);
-    if (res.blocked) {
-      // Fail closed: the Tor gate refused — stop the pass, egress nothing further.
-      return { swept: false, blocked: true, reason: res.reason, sources: captured, added };
+  try {
+    if (!(await deps.isConnected(caseId))) {
+      return { swept: false, blocked: false, reason: 'not-connected', sources: 0, added: 0 };
     }
-    captured += 1;
-    added += res.added ?? 0;
+    const settings = await deps.loadSettings(caseId);
+    const sources = await deps.listSources(caseId);
+    if (!sources.length) {
+      return { swept: false, blocked: false, reason: 'no-sources', sources: 0, added: 0 };
+    }
+    let added = 0;
+    let captured = 0;
+    for (let index = 0; index < sources.length; index += 1) {
+      const res = await deps.sweepProfile(caseId, sources[index]!, settings);
+      if (res.blocked) {
+        // Fail closed: the Tor gate refused — stop the pass, egress nothing further (no trailing gap).
+        return { swept: false, blocked: true, reason: res.reason, sources: captured, added };
+      }
+      captured += 1;
+      added += res.added ?? 0;
+      // M6: pause BETWEEN targets (Enterprise `refreshAll`'s 1500ms gap, `main.cjs:1907`) — less
+      // bot-like than back-to-back egress. Never after the final target.
+      if (index < sources.length - 1) await deps.sleep(deps.interTargetDelayMs);
+    }
+    return { swept: true, blocked: false, sources: captured, added };
+  } finally {
+    releaseCollectionLock();
   }
-  return { swept: true, blocked: false, sources: captured, added };
 }
 
 /**
- * Run ONE incremental-archive pass over a campaign's sources (Task G1). Same connected-gate + Tor
- * fail-closed discipline as `runScheduledSweep`, but each source runs one archive step (advancing its
- * resumable cursor) via `archiveProfile`.
+ * Run ONE incremental-archive TICK over a campaign (Task G1 + FA4). Same connected-gate + Tor
+ * fail-closed discipline as `runScheduledSweep`, but — unlike a sweep, which captures every source —
+ * an archive tick runs exactly ONE round-robin operation (posts/follower/following of a single
+ * source, stepping that source's pass depth deeper), keeping per-tick load light (Enterprise
+ * `runArchiveCycle`, `main.cjs:1966-1968`). A Tor/challenge-blocked op advances nothing and reports
+ * blocked.
  */
 export async function runScheduledArchive(
   caseId: string,
   overrides: Partial<XSchedulerDeps> = {},
 ): Promise<XSweepRunResult> {
   const deps: XSchedulerDeps = { ...defaultSchedulerDeps(), ...overrides };
-  if (!(await deps.isConnected(caseId))) {
-    return { swept: false, blocked: false, reason: 'not-connected', sources: 0, added: 0 };
+  // M5: same single app-wide collection lock as a sweep — an archive tick contending with any other
+  // collection op SKIPS (Enterprise's archive-timer `if (!sweepRunning && …)`, `main.cjs:2065`), so
+  // an archive op never egresses concurrently with a sweep / manual capture / another campaign.
+  if (!tryAcquireCollectionLock()) {
+    return { swept: false, blocked: false, reason: 'collection-busy', sources: 0, added: 0 };
   }
-  const settings = await deps.loadSettings(caseId);
-  const sources = await deps.listSources(caseId);
-  if (!sources.length) {
-    return { swept: false, blocked: false, reason: 'no-sources', sources: 0, added: 0 };
-  }
-  let added = 0;
-  let ran = 0;
-  for (const source of sources) {
-    const res = await deps.archiveProfile(caseId, source, settings);
-    if (res.blocked) {
-      return { swept: false, blocked: true, reason: res.reason, sources: ran, added };
+  try {
+    if (!(await deps.isConnected(caseId))) {
+      return { swept: false, blocked: false, reason: 'not-connected', sources: 0, added: 0 };
     }
-    ran += 1;
-    added += res.added ?? 0;
+    const settings = await deps.loadSettings(caseId);
+    const sources = await deps.listSources(caseId);
+    if (!sources.length) {
+      return { swept: false, blocked: false, reason: 'no-sources', sources: 0, added: 0 };
+    }
+    const res = await deps.archiveRotate(caseId, sources, settings);
+    if (res.blocked) {
+      return { swept: false, blocked: true, reason: res.reason, sources: 0, added: res.added };
+    }
+    return { swept: res.ran, blocked: false, sources: res.ran ? 1 : 0, added: res.added };
+  } finally {
+    releaseCollectionLock();
   }
-  return { swept: true, blocked: false, sources: ran, added };
 }
 
 /** Fire one sweep tick: advance the next-fire metadata, skip if the prior tick is still running

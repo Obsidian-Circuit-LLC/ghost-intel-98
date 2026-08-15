@@ -50,6 +50,22 @@ describe('GeoINT Live News — the fieldset border spans the rail panel', () => 
   });
 });
 
+describe('Jukebox — the deck (transport + control row) never clips on resize', () => {
+  // GhostExodus field report (v3.72.0): dragging the Jukebox window shorter cut the bottom control
+  // row (Playlist/EQ/time/Vol) off the frame. Root cause: `.ga98-jukebox` is `overflow:hidden` and
+  // the deck defaulted to `flex-shrink:1`, while the library body is `flex:1 1 0%` (basis 0). Flex
+  // distributes a height deficit by shrink×basis, so the basis-0 body absorbed NONE and the whole
+  // deficit landed on the deck — clipping its bottom control row. Pinning the deck to
+  // `flex-shrink:0` makes the scrollable library absorb the shrink instead, so the controls survive.
+  it('.ga98-wmp-deck computes flex-shrink: 0', () => {
+    inject('src/renderer/styles/theme.css');
+    const el = document.createElement('div');
+    el.className = 'ga98-wmp-deck';
+    document.body.appendChild(el);
+    expect(getComputedStyle(el).flexShrink).toBe('0');
+  });
+});
+
 describe('Number Muncher — the calc info-grid is shared, not Info-panel-only', () => {
   // v3.41.0 dropped Number Muncher's Info side panel, but StatisticsKeypad reuses .ga98-calc-info-grid
   // for its results readout. This locks the rule so deleting the (now defunct) Info panel again can't

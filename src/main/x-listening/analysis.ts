@@ -18,7 +18,7 @@
  * `synthetic` profiles/relationships out itself, defense-in-depth, so a caller that forgets
  * to pre-filter still can't taint the analysis.
  */
-import type { XNetworkArtifact } from './store';
+import type { XNetworkArtifact, XRunLogRecord } from './store';
 
 // ---- entity extraction ----------------------------------------------------
 
@@ -457,17 +457,78 @@ export interface XCollectionRun {
   error?: string | null;
 }
 
-export type CollectionStatus = 'HEALTHY' | 'ERROR' | 'PLATEAU';
+export type CollectionStatus = 'HEALTHY' | 'ERROR' | 'PLATEAU' | 'IDLE';
+
+/** A tracked target for the health roster (audit HIGH #6). GI98 has no first-class profile
+ *  record — a "target" is DERIVED (see `campaigns.ts`) from captured posts/networks/runs — so
+ *  the caller (ipc.ts) unions those sources into this roster. A roster target with NO runs
+ *  yields an `IDLE` health record (Enterprise's 4th status, `enterprise.cjs:214`), instead of
+ *  the record simply being absent. `profileId` is the caller's canonical source key. */
+export interface XHealthTarget {
+  profileId: string;
+  username: string;
+}
+
+/** One captured post reduced to the two fields the health rollup needs: which target it came
+ *  from (`profileId`, the caller's canonical source key) and its platform timestamp
+ *  (`createdAt`) for the `oldestPostAt` column. */
+export interface XHealthPost {
+  profileId: string;
+  createdAt: string | null;
+}
+
+/** One flattened follower/following observation for the health rollup — `profileId` is the
+ *  target whose network it belongs to, `relationship` splits the follower/following counts. */
+export interface XHealthRelationship {
+  profileId: string;
+  relationship: 'follower' | 'following';
+}
+
+/** Per-target contextual inputs restoring Enterprise's `postCount`/`followerCount`/
+ *  `followingCount`/`oldestPostAt` columns + the `IDLE` roster (`enterprise.cjs:203-231`),
+ *  all of which the runs-only port dropped. Every field is optional so a legacy caller
+ *  passing only `runs` keeps the exact prior behaviour (roster derived from runs, counts 0). */
+export interface DeriveCollectionHealthOptions {
+  targets?: readonly XHealthTarget[];
+  posts?: readonly XHealthPost[];
+  relationships?: readonly XHealthRelationship[];
+}
 
 export interface XCollectionHealth {
   profileId: string;
   username: string;
   status: CollectionStatus;
   lastError: string | null;
+  /** Restored Enterprise columns (`enterprise.cjs:221-224`). */
+  postCount: number;
+  followerCount: number;
+  followingCount: number;
+  oldestPostAt: string | null;
   lastPostRun: XCollectionRun | null;
   lastFollowerRun: XCollectionRun | null;
   lastFollowingRun: XCollectionRun | null;
-  lastRun: XCollectionRun;
+  /** Null for an `IDLE` target (no run recorded yet) — matches Enterprise `lastAny || null`. */
+  lastRun: XCollectionRun | null;
+}
+
+/**
+ * Reduce a persisted run-log record (`store.ts` `XRunLogRecord`) to the health-layer
+ * `XCollectionRun` shape. THE ERROR-KEYING FIX (audit HIGH #6): Enterprise's health keyed
+ * ERROR off the profile's sticky `lastError`; the runs-only port keyed it off a `lastAny.error`
+ * field that `XRunLogRecord` does NOT have (it carries `status`/`stopReason`, not `error`), so
+ * ERROR could never fire. Here `error` is derived from `status === 'error'` (message = the
+ * `stopReason`, or a generic `'error'`), so a failed run is now correctly flagged.
+ */
+export function runLogRecordToRun(record: XRunLogRecord): XCollectionRun {
+  return {
+    profileId: record.profileId,
+    username: record.username,
+    operation: record.operation,
+    startedAt: record.startedAt,
+    added: record.added,
+    observed: record.observed,
+    error: record.status === 'error' ? (record.stopReason || 'error') : null,
+  };
 }
 
 const PLATEAU_OPERATIONS = new Set<CollectionOperation>([
@@ -478,46 +539,100 @@ const PLATEAU_OPERATIONS = new Set<CollectionOperation>([
 ]);
 
 /**
- * Derive one collection-health record per distinct `profileId` seen in `runs` — adapted from
- * `enterprise.cjs:203-231`. Takes ONLY `runs` (per the Task 2 plan signature): a target with
- * zero runs simply produces no record here (a caller merging this against the full target
- * list can present that absence as its own "IDLE" state — this pure function doesn't invent
- * one). Status precedence — most-recent-run error, THEN the plateau check overrides it if
- * BOTH conditions hold — is preserved exactly as Enterprise computed it (`enterprise.cjs:214-215`:
- * the plateau `if` runs unconditionally after the ERROR assignment), since this is a
- * near-verbatim port of a status heuristic, not a security/honesty invariant.
+ * Derive one collection-health record per tracked target — a near-verbatim port of
+ * `enterprise.cjs:203-231`, restoring the three things the runs-only port dropped (audit HIGH #6):
+ *
+ *  1. The IDLE roster. Enterprise iterated `state.profiles` (every monitored target), so a target
+ *     with zero runs surfaced as `IDLE`, not as an absent record. GI98 has no profile list, so the
+ *     caller (ipc.ts) unions its derived sources into `options.targets`; every roster target is
+ *     reported, and one with no runs yields `IDLE`. When `options.targets` is omitted the roster
+ *     falls back to the distinct `profileId`s in `runs` — the exact prior (runs-only) behaviour.
+ *  2. The `postCount`/`followerCount`/`followingCount`/`oldestPostAt` columns, computed from
+ *     `options.posts`/`options.relationships` (0/null when omitted).
+ *  3. Correct ERROR keying lives in `runLogRecordToRun` (the caller maps records through it before
+ *     handing them here); this function keys ERROR off `run.error` as before.
+ *
+ * Status precedence — most-recent-run error, THEN the plateau check overrides it if BOTH conditions
+ * hold — is preserved exactly as Enterprise computed it (`enterprise.cjs:214-215`). A target with no
+ * runs is `IDLE` regardless of counts (`enterprise.cjs:214`: `lastAny ? 'HEALTHY' : 'IDLE'`).
+ *
+ * Determinism: roster iteration is Map insertion order — targets first (caller order), then any
+ * run-only profile in first-seen order — a pure function of the argument order, never a clock or
+ * readdir (matching the original and store.ts's "caller supplies order" convention).
  */
-export function deriveCollectionHealth(runs: XCollectionRun[]): XCollectionHealth[] {
-  const byProfile = new Map<string, XCollectionRun[]>();
+export function deriveCollectionHealth(
+  runs: readonly XCollectionRun[],
+  options: DeriveCollectionHealthOptions = {},
+): XCollectionHealth[] {
+  const runsByProfile = new Map<string, XCollectionRun[]>();
   for (const r of runs) {
-    const list = byProfile.get(r.profileId);
+    const list = runsByProfile.get(r.profileId);
     if (list) list.push(r);
-    else byProfile.set(r.profileId, [r]);
+    else runsByProfile.set(r.profileId, [r]);
+  }
+
+  // Roster: explicit targets first (stable caller order), then any profile seen only in runs.
+  const roster = new Map<string, string>();
+  for (const t of options.targets ?? []) {
+    if (t.profileId && !roster.has(t.profileId)) roster.set(t.profileId, t.username);
+  }
+  for (const [profileId, list] of runsByProfile) {
+    if (!roster.has(profileId)) roster.set(profileId, list[0]?.username ?? profileId);
+  }
+
+  const postsByProfile = new Map<string, XHealthPost[]>();
+  for (const p of options.posts ?? []) {
+    const list = postsByProfile.get(p.profileId);
+    if (list) list.push(p);
+    else postsByProfile.set(p.profileId, [p]);
+  }
+  const relsByProfile = new Map<string, XHealthRelationship[]>();
+  for (const r of options.relationships ?? []) {
+    const list = relsByProfile.get(r.profileId);
+    if (list) list.push(r);
+    else relsByProfile.set(r.profileId, [r]);
   }
 
   const health: XCollectionHealth[] = [];
-  for (const [profileId, profileRuns] of byProfile) {
-    const sorted = [...profileRuns].sort((a, b) =>
+  for (const [profileId, username] of roster) {
+    const sorted = [...(runsByProfile.get(profileId) ?? [])].sort((a, b) =>
       String(b.startedAt).localeCompare(String(a.startedAt)),
     );
-    const lastAny = sorted[0];
+    const lastAny = sorted[0] ?? null;
     const last = (operation: CollectionOperation): XCollectionRun | null =>
       sorted.find((r) => r.operation === operation) ?? null;
 
-    let status: CollectionStatus = lastAny.error ? 'ERROR' : 'HEALTHY';
-    if (
-      (lastAny.added ?? 0) === 0 &&
-      (lastAny.observed ?? 0) > 0 &&
-      PLATEAU_OPERATIONS.has(lastAny.operation)
-    ) {
-      status = 'PLATEAU';
+    const profilePosts = postsByProfile.get(profileId) ?? [];
+    const profileRels = relsByProfile.get(profileId) ?? [];
+    const oldestPostAt =
+      profilePosts
+        .map((p) => p.createdAt)
+        .filter((v): v is string => Boolean(v))
+        .sort()[0] ?? null;
+
+    let status: CollectionStatus;
+    if (!lastAny) {
+      status = 'IDLE';
+    } else {
+      status = lastAny.error ? 'ERROR' : 'HEALTHY';
+      if (
+        (lastAny.added ?? 0) === 0 &&
+        (lastAny.observed ?? 0) > 0 &&
+        PLATEAU_OPERATIONS.has(lastAny.operation)
+      ) {
+        status = 'PLATEAU';
+      }
     }
 
     health.push({
       profileId,
-      username: lastAny.username,
+      username,
       status,
-      lastError: lastAny.error ?? null,
+      lastError: lastAny?.error ?? null,
+      postCount: profilePosts.length,
+      followerCount: profileRels.filter((r) => r.relationship === 'follower').length,
+      followingCount: profileRels.filter((r) => r.relationship === 'following').length,
+      oldestPostAt,
       lastPostRun: last('posts') ?? last('archive_posts'),
       lastFollowerRun: last('followers') ?? last('archive_followers'),
       lastFollowingRun: last('following') ?? last('archive_following'),

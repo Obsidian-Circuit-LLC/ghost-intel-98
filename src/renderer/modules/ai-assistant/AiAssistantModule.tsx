@@ -12,7 +12,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AiChatMessage, AiChatRequest, AiConversationSummary } from '@shared/post-mvp-types';
 import type { CaseSummary, CaseRecord } from '@shared/types';
 import type { MemoryItem, RecallPreview } from '@shared/ipc-contracts';
-import { useSettings, useWindows } from '../../state/store';
+import { useSettings, useWindows, useActiveCase } from '../../state/store';
 import { toast } from '../../state/toasts';
 import { confirmDialog } from '../../state/dialogs';
 import { ttsSupported, listVoices, onVoicesChanged, speakAuto, cancelSpeechAll, setTtsEnginePref, type TtsVoice } from '../../audio/tts';
@@ -264,6 +264,14 @@ export function AiAssistantModule(): JSX.Element {
     setIncludeFiles(settings?.ai.provider === 'ollama');
     remoteEgressConfirmedRef.current = false;
   }, [settings?.ai.provider]);
+
+  // App-wide active case → Q auto-binds its context to it (operator "App-wide active case"). On mount
+  // and whenever the app switches case, Q scopes to that case instead of the old global (none)
+  // fallback; the dropdown remains a manual override between switches.
+  const currentCaseId = useActiveCase((s) => s.currentCaseId);
+  useEffect(() => {
+    if (currentCaseId) setContextCaseId(currentCaseId);
+  }, [currentCaseId]);
 
   useEffect(() => {
     setContextError(null);

@@ -6,6 +6,29 @@
    Text-entry fields fall back to #fff in classic (--ga98-field-bg is amethyst-
    only) so an input reads as a white Win98 field under the default theme. */
 .xls-root {
+  /* FIXED dark console (operator decision): rebind the generic --ga98-* surface/ink tokens to the
+     module's --ga98-xls-* values (GhostExodus's EXACT Enterprise palette, defined identically in
+     both theme blocks in theme.css). Because custom properties inherit, EVERY descendant rule below
+     that paints via a generic token (--ga98-grey card grounds, --ga98-text/-dim, --ga98-accent,
+     borders, status colours, fields) now resolves to his dark palette — under BOTH the classic and
+     amethyst app skins. Token-only: no colour literal here (the no-straggler guard stays green); the
+     literals live on the --ga98-xls-* definitions in theme.css, which the guard exempts. */
+  --ga98-text: var(--ga98-xls-ink);
+  --ga98-text-dim: var(--ga98-xls-ink-dim);
+  --ga98-grey: var(--ga98-xls-surface);
+  --ga98-shadow-dark: var(--ga98-xls-seam);
+  --ga98-accent: var(--ga98-xls-accent);
+  --ga98-row-hover: var(--ga98-xls-hover);
+  --ga98-recessed-bg: var(--ga98-xls-recessed);
+  --ga98-field-bg: var(--ga98-xls-recessed);
+  --ga98-titlebar-text: var(--ga98-xls-hl-ink);
+  --ga98-ok-surface: var(--ga98-xls-ok-surface);
+  --ga98-ok-ink: var(--ga98-xls-ok-ink);
+  --ga98-ok-dot: var(--ga98-xls-ok-dot);
+  --ga98-error-surface: var(--ga98-xls-err-surface);
+  --ga98-error-border: var(--ga98-xls-err-border);
+  --ga98-danger-ink: var(--ga98-xls-danger-ink);
+
   display: flex;
   flex-direction: row;
   height: 100%;
@@ -327,6 +350,7 @@
   justify-content: space-between;
 }
 .xls-count { font-size: 11px; color: var(--ga98-text-dim); }
+.xls-health-counts { font-size: 11px; color: var(--ga98-text-dim); margin-left: auto; }
 .xls-help { font-size: 11px; line-height: 1.5; color: var(--ga98-text-dim); margin: 8px 0; }
 
 .xls-input {
@@ -465,6 +489,44 @@
 
 .xls-post-text { white-space: pre-wrap; font-size: 12px; line-height: 1.5; margin: 6px 0; }
 .xls-hl { background: var(--ga98-accent); color: var(--ga98-titlebar-text); padding: 0 1px; }
+
+/* ── Audit HIGH #9: the full highlight-preset editor (mode / case / per-source scope) ── */
+.xls-preset-keywords {
+  width: 100%;
+  min-height: 64px;
+  resize: vertical;
+  margin-bottom: 8px;
+  font-family: inherit;
+}
+.xls-preset-editor-row {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.xls-preset-mode {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ga98-text);
+}
+.xls-preset-mode .xls-input { width: auto; }
+.xls-preset-scope { margin-bottom: 8px; }
+.xls-preset-scope-label {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--ga98-text-dim);
+  margin-bottom: 4px;
+}
+.xls-preset-scope-label em { font-style: italic; text-transform: none; letter-spacing: normal; }
+.xls-preset-profile-grid { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.xls-preset-profile { margin: 0; }
+.xls-preset-meta { display: block; margin-top: 2px; }
+/* Audit HIGH #8: the matched-post results block below the saved-preset list. */
+.xls-preset-results .xls-count { font-size: 11px; color: var(--ga98-text-dim); }
 
 .xls-media-strip { display: flex; gap: 6px; margin: 6px 0; flex-wrap: wrap; }
 .xls-media-strip img,
@@ -743,12 +805,19 @@
   padding-top: 13px;
   box-shadow: inset 0 3px 0 var(--ga98-accent), 1px 1px 3px rgba(0,0,0,0.3);
 }
-.xls-stat span { font-size: 10px; letter-spacing: 0.09em; color: var(--ga98-text-dim); }
+/* His dashboard stat labels + figures are Consolas monospace (styles.css). */
+.xls-stat span {
+  font-family: Consolas, 'Courier New', monospace;
+  font-size: 10px;
+  letter-spacing: 0.09em;
+  color: var(--ga98-text-dim);
+}
 .xls-stat strong {
+  font-family: Consolas, 'Courier New', monospace;
   font-size: 28px;
   font-weight: 700;
   line-height: 1.1;
-  color: var(--ga98-accent);
+  color: var(--ga98-xls-stat-figure);
   font-variant-numeric: tabular-nums;
 }
 
@@ -913,6 +982,84 @@
 }
 .xls-observed { text-align: right; line-height: 1.4; }
 .xls-delta-row .xls-identity-main { margin-right: 6px; }
+
+/* ── ENTITY INDEX display pics — Enterprise entity-card grid + identity avatars ──────────────────
+ * Reproduces GhostExodus's ENTITY INDEX: a card grid where every MENTION entity shows its own
+ * avatar and each finding source is a small avatar chip. Colours route through the SAME generic
+ * theme tokens the already-ported `.xls-network-record` / `.xls-post-avatar` use (no colour literals
+ * — no-straggler stays green), so the cards read correctly on both the classic and QUIET AMETHYST
+ * skins. The avatars themselves are LOCAL `data:` URIs (cache-only `avatars` lookup) with a monogram
+ * fallback — no remote URL ever reaches the DOM. */
+.xls-entity-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+@media (max-width: 1100px) { .xls-entity-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 720px) { .xls-entity-grid { grid-template-columns: 1fr; } }
+.xls-entity-card {
+  display: grid;
+  gap: 7px;
+  padding: 12px;
+  background: var(--ga98-grey);
+  border: 1px solid var(--ga98-shadow-dark);
+  min-width: 0;
+}
+.xls-entity-heading { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.xls-entity-headtext { display: grid; gap: 4px; min-width: 0; }
+.xls-entity-card strong {
+  overflow: hidden;
+  color: var(--ga98-text);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.xls-entity-type {
+  justify-self: start;
+  padding: 3px 5px;
+  border: 1px solid var(--ga98-accent);
+  color: var(--ga98-accent);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+/* His entity-card count `<b>{e.count} FINDINGS</b>` renders through `.entity-card > b { color:#e0b74d }`
+   (his styles.css) — amber gold, as seen in his ENTITY INDEX frame. That amber is now RESTORED here
+   (via --ga98-xls-count-ink): under the FIXED dark console the entity card always paints the dark
+   --ga98-xls-surface ground (#081419), where his amber clears ~10:1. (The earlier bright-text
+   compromise was only needed while the classic card ground was silver #c0c0c0 — a condition the
+   fixed dark console removes.) */
+.xls-entity-count { color: var(--ga98-xls-count-ink); font-size: 10px; letter-spacing: 0.02em; }
+.xls-entity-when { color: var(--ga98-text-dim); font-size: 10px; }
+.xls-entity-sources { display: flex; gap: 6px; flex-wrap: wrap; }
+.xls-entity-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 6px;
+  border: 1px solid var(--ga98-shadow-dark);
+  border-radius: 3px;
+  background: var(--ga98-row-hover);
+  color: var(--ga98-text-dim);
+  font-size: 10px;
+}
+.xls-entity-sources > small { color: var(--ga98-text-dim); font-size: 10px; }
+/* Identity avatar chip — mention card head (sm) + finding-source chips (xs). Localized image or
+ * monogram; same token palette as `.xls-post-avatar`. */
+.xls-ident-avatar {
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--ga98-row-hover);
+  border: 1px solid var(--ga98-shadow-dark);
+  color: var(--ga98-text-dim);
+  font-weight: 700;
+  vertical-align: middle;
+}
+.xls-ident-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.xls-ident-avatar--xs { width: 20px; height: 20px; font-size: 8px; }
+.xls-ident-avatar--sm { width: 30px; height: 30px; font-size: 10px; }
 
 .xls-panel { max-width: 1000px; }
 
@@ -1136,7 +1283,7 @@
   overflow-y: auto;
   padding: 16px 13px;
   background: var(--ga98-xls-sidebar-bg);
-  border-right: 1px solid var(--ga98-xls-console-border);
+  border-right: 1px solid var(--ga98-xls-sidebar-border);
   color: var(--ga98-xls-sidebar-ink);
 }
 
@@ -1193,8 +1340,8 @@
   margin: 14px 0;
   padding: 11px;
   border: 1px solid var(--ga98-xls-console-border);
-  border-left: 3px solid var(--ga98-xls-action-bg);
-  background: var(--ga98-xls-nav-active-bg);
+  border-left: 3px solid var(--ga98-xls-dock-accent);
+  background: var(--ga98-xls-dock-bg);
 }
 .xls-dock-eyebrow {
   color: var(--ga98-text-dim);
@@ -1238,22 +1385,24 @@
   border-radius: 3px;
   background: transparent;
   color: var(--ga98-xls-sidebar-ink);
-  font-family: inherit;
+  /* His nav items render in Consolas monospace (styles.css). font-family is not a palette literal,
+     so the no-straggler guard stays green — no token needed. */
+  font-family: Consolas, 'Courier New', monospace;
   font-size: 11px;
   letter-spacing: 0.07em;
   text-align: left;
   cursor: pointer;
 }
 .xls-nav .xls-tab:hover {
-  color: var(--ga98-text);
-  background: var(--ga98-xls-nav-active-bg);
-  border-color: var(--ga98-xls-console-border);
+  color: var(--ga98-xls-nav-active-ink);
+  background: var(--ga98-xls-nav-hover-bg);
+  border-color: var(--ga98-xls-nav-hover-border);
 }
 .xls-nav .xls-tab-active {
-  color: var(--ga98-text);
+  color: var(--ga98-xls-nav-active-ink);
   background: var(--ga98-xls-nav-active-bg);
-  border-color: var(--ga98-xls-console-border);
-  box-shadow: inset 3px 0 0 var(--ga98-xls-action-bg);
+  border-color: var(--ga98-xls-nav-active-border);
+  box-shadow: inset 3px 0 0 var(--ga98-xls-nav-active-inset);
   font-weight: 700;
 }
 .xls-nav-label { flex: 1 1 auto; }
@@ -1263,6 +1412,8 @@
   border-radius: 9px;
   background: var(--ga98-xls-badge-bg);
   color: var(--ga98-xls-badge-ink);
+  /* His count badges are Consolas monospace (styles.css). */
+  font-family: Consolas, 'Courier New', monospace;
   font-size: 9px;
   font-weight: 700;
   text-align: center;
@@ -1319,7 +1470,7 @@
   padding: 12px;
   border: 1px solid var(--ga98-xls-console-border);
   border-radius: 3px;
-  background: var(--ga98-xls-nav-active-bg);
+  background: var(--ga98-xls-session-bg);
 }
 .xls-session-box .xls-status-dot { margin-top: 2px; background: var(--ga98-xls-dot-off); }
 .xls-session-box .xls-status-dot.xls-online { background: var(--ga98-ok-dot); }
@@ -1340,7 +1491,7 @@
 .xls-main .ga98-module-banner-wrap {
   flex: 0 0 auto;
   margin: 14px 16px 0;
-  border: 1px solid var(--ga98-xls-seal-border);
+  border: 1px solid var(--ga98-xls-masthead-border);
   border-radius: 4px;
   background: var(--ga98-xls-masthead-bg);
 }
@@ -1359,12 +1510,18 @@
 .xls-eyebrow {
   display: block;
   color: var(--ga98-xls-eyebrow);
+  /* His eyebrow / section labels are Consolas monospace (styles.css). */
+  font-family: Consolas, 'Courier New', monospace;
   font-size: 10px;
   letter-spacing: 0.13em;
 }
+/* His h1: near-white, big Consolas. (His interactive neon-cyan lives on --ga98-accent, used for the
+   section-title ticks / entity-type chips / links — not the masthead heading itself.) */
 .xls-topbar-title {
   margin: 4px 0 3px;
-  color: var(--ga98-accent);
+  color: var(--ga98-xls-heading);
+  /* His masthead h1 is big Consolas monospace (styles.css). */
+  font-family: Consolas, 'Courier New', monospace;
   font-size: 22px;
   font-weight: 700;
   letter-spacing: 0.04em;

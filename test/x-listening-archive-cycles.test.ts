@@ -140,6 +140,55 @@ describe('runArchiveStep: a single low-rate cycle', () => {
     expect(res.state.lastRunAt).toBe('2026-08-11T13:00:00.000Z');
   });
 
+  it('a manual step PRESERVES the FA4 round-robin fields (nextOperationIndex + per-source profiles)', async () => {
+    // Cross-path regression: the manual `runArchiveSteps` IPC and the scheduled FA4 rotation write
+    // the SAME `archiveState[caseId]`. A manual step MUST spread the prior state so a single "Run
+    // Archive Step" click does not wipe every per-source depth counter or reset the rotation pointer
+    // to 0 — that would silently defeat HIGH #2's persisted progressive-deepening.
+    const { runArchiveStep } = await import('../src/main/x-listening/archive');
+    const store = memState();
+    store.map.set('case-a', {
+      cursor: '50',
+      cycles: 2,
+      lastRunAt: '2026-08-10T00:00:00.000Z',
+      nextOperationIndex: 3,
+      profiles: {
+        alice: {
+          postPasses: 12,
+          followerPasses: 8,
+          followingPasses: 8,
+          lastPostRunAt: '2026-08-10T00:00:00.000Z',
+          lastFollowerRunAt: null,
+          lastFollowingRunAt: null,
+        },
+      },
+    });
+    const res = await runArchiveStep({} as unknown as Electron.BrowserWindow, REQ, {
+      isEnabled: async () => true,
+      capture: async () => ({ blocked: false, added: 1, skipped: 0, posts: [post('99')] }),
+      readState: store.readState,
+      writeState: store.writeState,
+      now: () => '2026-08-11T15:00:00.000Z',
+    });
+    // cursor path advanced as before…
+    expect(res.state.cursor).toBe('99');
+    expect(res.state.cycles).toBe(3);
+    // …AND the FA4 depth/rotation fields survive the manual step, byte-for-byte.
+    expect(res.state.nextOperationIndex).toBe(3);
+    expect(res.state.profiles).toEqual({
+      alice: {
+        postPasses: 12,
+        followerPasses: 8,
+        followingPasses: 8,
+        lastPostRunAt: '2026-08-10T00:00:00.000Z',
+        lastFollowerRunAt: null,
+        lastFollowingRunAt: null,
+      },
+    });
+    // and the persisted state matches
+    expect(store.map.get('case-a')).toEqual(res.state);
+  });
+
   it('a step that captures nothing still completes, keeping the prior cursor', async () => {
     const { runArchiveStep } = await import('../src/main/x-listening/archive');
     const store = memState();
