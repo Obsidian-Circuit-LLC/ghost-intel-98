@@ -14,7 +14,12 @@ import type { IntelReport } from '../shared/investigation-report';
 import type { XCollectionSettings } from '../shared/x-listening-collection-settings';
 import type { XImageMode } from '../shared/x-listening-image-policy';
 import type { XScheduleStatus } from '../shared/x-listening-schedule';
-import type { GhostState, PlatformDefault } from '../shared/ghost-social/types';
+import type {
+  GhostState,
+  PlatformDefault,
+  PublishResult,
+  AccountStats,
+} from '../shared/ghost-social/types';
 
 const api = {
   cases: {
@@ -867,7 +872,29 @@ const api = {
     faviconFetch: (url: string): Promise<string | null> =>
       ipcRenderer.invoke(channels.ghostSocial.faviconFetch, url),
     openExternal: (url: string): Promise<void> =>
-      ipcRenderer.invoke(channels.ghostSocial.openExternal, url)
+      ipcRenderer.invoke(channels.ghostSocial.openExternal, url),
+    // ---- Phase 3: publishing + scheduled queue + THE AUTO-POST ARM GATE + stats ----
+    // Manual Composer publish is PREPARE-ONLY (fills the composer + shows for review; never clicks).
+    publishPrepare: (campaignId: string, account: unknown, post: unknown): Promise<PublishResult> =>
+      ipcRenderer.invoke(channels.ghostSocial.publishPrepare, campaignId, account, post),
+    // Read the default-OFF ARM flag (drives the persistent ARMED indicator).
+    armGet: (): Promise<boolean> => ipcRenderer.invoke(channels.ghostSocial.armGet),
+    // Set the ARM flag. The renderer supplies the one-time confirm; MAIN records it authoritatively.
+    armSet: (armed: boolean): Promise<boolean> => ipcRenderer.invoke(channels.ghostSocial.armSet, armed),
+    // Run one scheduled job now / process the earliest due job — both route through the MAIN arm gate.
+    scheduledRunNow: (postId: string): Promise<{ ran: boolean; disarmed?: boolean; jobId?: string }> =>
+      ipcRenderer.invoke(channels.ghostSocial.scheduledRunNow, postId),
+    scheduledProcessDue: (): Promise<{ ran: boolean; disarmed?: boolean; jobId?: string }> =>
+      ipcRenderer.invoke(channels.ghostSocial.scheduledProcessDue),
+    // Refresh one account's follower/following stats (hidden window, always closed).
+    statsRefresh: (campaignId: string, account: unknown): Promise<AccountStats> =>
+      ipcRenderer.invoke(channels.ghostSocial.statsRefresh, campaignId, account),
+    // MAIN→renderer push after the scheduler mutates a job — the Queue page re-reads state.
+    onScheduledStateChanged: (cb: () => void) => {
+      const listener = (): void => cb();
+      ipcRenderer.on(channels.ghostSocial.scheduledStateChanged, listener);
+      return () => ipcRenderer.removeListener(channels.ghostSocial.scheduledStateChanged, listener);
+    }
   },
   // Scraping cases (W4) — the isolated SOCMINT/X collection-run stores. Every call passes a
   // `store: 'socmint' | 'x'` discriminator that main validates against an allowlist and routes

@@ -196,10 +196,15 @@ export interface PublishRequest {
   mediaType?: string;
 }
 
-/** The outcome of a publish. `prepared` = his prepare-only manual publish; `published` = an
- *  armed scheduled auto-publish that actually clicked the platform's Publish button. */
+/**
+ * The outcome of a publish. `prepared` = his prepare-only manual publish; `published` = an
+ * armed scheduled auto-publish that actually clicked the platform's Publish button.
+ * `blocked_disarmed` (hardening G7, safety-critical) = MAIN refused to auto-click Publish because
+ * auto-posting is DISARMED — no window was opened, no composer touched, no Publish clicked. It is
+ * NOT a failure: the job is simply waiting for the user to arm auto-posting (or publish manually).
+ */
 export interface PublishResult {
-  status: 'published' | 'prepared' | 'unsupported' | 'failed';
+  status: 'published' | 'prepared' | 'unsupported' | 'failed' | 'blocked_disarmed';
   message: string;
   url?: string;
 }

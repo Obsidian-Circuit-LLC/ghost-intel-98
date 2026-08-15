@@ -157,6 +157,7 @@ import { registerInvestigationGraphIpc, registerInvestigationRunIpc } from '../i
 import { registerXListeningIpc } from '../x-listening/ipc';
 import { registerGhostSocialIpc } from '../ghost-social/ipc';
 import { registerGhostSocialViewIpc } from '../ghost-social/view-ipc';
+import { registerGhostSocialPublishingIpc } from '../ghost-social/publishing-ipc';
 import { registerInvestigationReportIpc } from '../investigation/report-ipc';
 import { renderIntelReportPdf } from '../investigation/report-pdf';
 import { addManualNode, addManualEdge } from '../investigation/graph';
@@ -1788,6 +1789,14 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   // user's authenticated social sessions). `getWindow` supplies the overlay parent (the desktop
   // window's contentView).
   registerGhostSocialViewIpc({ handle: safeHandleWithEvent, getWindow });
+
+  // ---- Ghost Social Media Manager: publishing + scheduled queue + THE AUTO-POST ARM GATE + stats (Phase 3) ----
+  // SAFETY-CRITICAL. Wired via safeHandleWithEvent so every handler validates the sender frame
+  // first (these flows drive the user's authenticated LIVE accounts, auto-publish included). The
+  // scheduler's autoPublish seam reads the default-OFF ARM flag from the encrypted state in MAIN
+  // and refuses to click Publish while disarmed — a renderer bug cannot auto-post. `getWindow`
+  // supplies the renderer-push target for the scheduler's state-changed notification.
+  registerGhostSocialPublishingIpc({ handle: safeHandleWithEvent, getWindow });
 
   // ---- SP-4 investigation graph: per-case scene fetch + live delta push (Task 5) ----
   registerInvestigationGraphIpc({

@@ -790,7 +790,29 @@ export const channels = {
      *  `/favicon.ico`, never an arbitrary attacker host). */
     faviconFetch: 'ghostSocial:favicon:fetch',
     /** Scheme-guarded external open (hardening #4: http/https only). */
-    openExternal: 'ghostSocial:shell:openExternal'
+    openExternal: 'ghostSocial:shell:openExternal',
+    // ---- Phase 3: publishing + scheduled queue + THE AUTO-POST ARM GATE + stats --------------
+    /** Manual Composer publish — PREPARE-ONLY (his `PublishingService.publish`): fills the
+     *  composer in the account's authenticated view and STOPS; the human clicks Publish. Never
+     *  auto-clicks. */
+    publishPrepare: 'ghostSocial:publish:prepare',
+    /** Read the SAFETY-CRITICAL auto-post ARM flag (G7) — drives the persistent ARMED indicator. */
+    armGet: 'ghostSocial:arm:get',
+    /** Set the auto-post ARM flag (G7). Renderer supplies the one-time-confirm; MAIN records the
+     *  armed state (the single authoritative source the scheduler consults before auto-clicking). */
+    armSet: 'ghostSocial:arm:set',
+    /** Run one scheduled job NOW (his `scheduled:runNow`). Goes through the MAIN arm gate — a
+     *  disarmed run prepares/clicks nothing and leaves the job waiting. */
+    scheduledRunNow: 'ghostSocial:scheduled:runNow',
+    /** Process the earliest DUE scheduled job (the v2.5 background tick, on demand). Disarmed ⇒
+     *  no-op; the job stays ready. */
+    scheduledProcessDue: 'ghostSocial:scheduled:processDue',
+    /** Refresh one account's follower/following stats via a HIDDEN same-partition window + the
+     *  per-platform DOM adapter; the window is ALWAYS closed after (his `ProfileStatsService`). */
+    statsRefresh: 'ghostSocial:stats:refresh',
+    /** MAIN→renderer push after the scheduler mutates a job's status/results (his
+     *  `scheduler:stateChanged`) so the Queue page re-reads state. */
+    scheduledStateChanged: 'ghostSocial:scheduled:stateChanged'
   },
   // Scraping cases — the isolated per-namespace case stores for SOCMINT + X collection runs
   // (kept apart from the core investigation `cases` namespace). Every handler takes a

@@ -6,7 +6,12 @@ import type { VerifiedPluginInfo, PluginStatus, PluginBridgeApi } from '../share
 import type { XCollectionSettings } from '../shared/x-listening-collection-settings';
 import type { XImageMode } from '../shared/x-listening-image-policy';
 import type { XScheduleStatus } from '../shared/x-listening-schedule';
-import type { GhostState, PlatformDefault } from '../shared/ghost-social/types';
+import type {
+  GhostState,
+  PlatformDefault,
+  PublishResult,
+  AccountStats,
+} from '../shared/ghost-social/types';
 import type {
   AppSettings,
   AttachmentBytesResult,
@@ -1188,6 +1193,26 @@ export interface GhostApi {
     faviconFetch(url: string): Promise<string | null>;
     /** Scheme-guarded external open (http/https only); rejects a non-http(s) URL. */
     openExternal(url: string): Promise<void>;
+    // ---- Phase 3: publishing + scheduled queue + THE AUTO-POST ARM GATE + stats ----
+    /** Manual Composer publish — PREPARE-ONLY: fills the composer in the account's authenticated
+     *  view and shows it for review; NEVER clicks Publish (the human does). */
+    publishPrepare(campaignId: string, account: unknown, post: unknown): Promise<PublishResult>;
+    /** Read the SAFETY-CRITICAL auto-post ARM flag (drives the persistent ARMED indicator). */
+    armGet(): Promise<boolean>;
+    /** Set the ARM flag (only the literal `true` arms). The renderer supplies the one-time confirm;
+     *  MAIN records the authoritative flag the scheduler consults before auto-clicking Publish. */
+    armSet(armed: boolean): Promise<boolean>;
+    /** Run one scheduled job NOW — routes through the MAIN arm gate. A disarmed run publishes
+     *  nothing and leaves the job ready (`ran:false, disarmed:true`). */
+    scheduledRunNow(postId: string): Promise<{ ran: boolean; disarmed?: boolean; jobId?: string }>;
+    /** Process the earliest DUE scheduled job. Disarmed ⇒ no-op (`ran:false, disarmed:true`). */
+    scheduledProcessDue(): Promise<{ ran: boolean; disarmed?: boolean; jobId?: string }>;
+    /** Refresh one account's follower/following stats via a HIDDEN same-partition window + the
+     *  per-platform DOM adapter; the window is ALWAYS closed after. */
+    statsRefresh(campaignId: string, account: unknown): Promise<AccountStats>;
+    /** Subscribe to the MAIN→renderer scheduler-state-changed push (the Queue page re-reads state).
+     *  Returns an unsubscribe function. */
+    onScheduledStateChanged(cb: () => void): () => void;
   };
   /**
    * Scraping cases (W4) — the isolated per-namespace SOCMINT/X collection-run stores, kept
