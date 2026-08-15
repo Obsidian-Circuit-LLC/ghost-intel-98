@@ -3,7 +3,7 @@
    follows BOTH the classic skin and QUIET AMETHYST like every built-in module.
    Every colour below routes through a palette token (surface = grey, ink = text,
    dim = text-dim, borders = shadow-dark/divider, status = ok/error/warning,
-   the Tor marker reuses the shared --ga98-xls-tor-* boxes). No raw literals —
+   the egress markers use the generic ok/error status boxes). No raw literals —
    the no-straggler guard scans this file. */
 
 .ga98-weather {
@@ -127,22 +127,24 @@
   flex-wrap: wrap;
 }
 
-/* Egress marker — reuses the shared Tor-safe / clearnet-danger boxes. */
+/* Egress marker — the generic theme-following status boxes (ok = Tor-safe, error = clearnet-danger).
+   NOT the X-Listening --ga98-xls-tor-* tokens: those are that module's FIXED-dark console palette, so
+   reusing them here painted the marker dark under the classic skin. Weather follows the app theme. */
 .ga98-weather-egress {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 5px 8px;
-  border: 1px solid var(--ga98-xls-tor-ok-border);
-  border-left: 3px solid var(--ga98-xls-tor-ok-border);
-  background: var(--ga98-xls-tor-ok-bg);
-  color: var(--ga98-xls-tor-ok-ink);
+  border: 1px solid var(--ga98-ok-dot);
+  border-left: 3px solid var(--ga98-ok-dot);
+  background: var(--ga98-ok-surface);
+  color: var(--ga98-ok-ink);
 }
 .ga98-weather-egress.is-clearnet {
-  border-color: var(--ga98-xls-tor-bad-border);
-  border-left-color: var(--ga98-xls-tor-bad-border);
-  background: var(--ga98-xls-tor-bad-bg);
-  color: var(--ga98-xls-tor-bad-ink);
+  border-color: var(--ga98-error-border);
+  border-left-color: var(--ga98-error-border);
+  background: var(--ga98-error-surface);
+  color: var(--ga98-danger-ink);
 }
 .ga98-weather-egress.is-blocked {
   border-color: var(--ga98-status-warning);

@@ -58,8 +58,8 @@ describe('weather.css — classic skin', () => {
     expect(await bg('wroot')).toBe('rgb(192, 192, 192)');
     // --ga98-text classic = black
     expect(await fg('wroot')).toBe('rgb(0, 0, 0)');
-    // the Tor-safe marker uses the shared tor-ok box (classic #dcefe2)
-    expect(await bg('egress-tor')).toBe('rgb(220, 239, 226)');
+    // the Tor-safe marker uses the generic ok box (--ga98-ok-surface classic #bfe0bf)
+    expect(await bg('egress-tor')).toBe('rgb(191, 224, 191)');
   });
 });
 
