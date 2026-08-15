@@ -26,7 +26,7 @@ describe('registerBuiltins', () => {
       'ai-assistant', 'alarm', 'bookmarks', 'briefcase', 'calendar', 'camera-view', 'cases', 'chat', 'chess',
       'dialterm', 'doc-viewer', 'eyespy', 'geoint', 'help', 'host-info', 'investigation-graph', 'invoices', 'journal', 'mail', 'markets', 'media-player',
       'minds-eye', 'minesweeper', 'my-documents', 'net-explorer', 'news-view', 'notepad', 'number-muncher', 'osint-toolkit', 'pdf-signer', 'pinball', 'reminders', 'report', 'search', 'searchlight', 'settings',
-      'shred', 'socmint', 'solitaire', 'whiteboard', 'x-listening-station'
+      'shred', 'socmint', 'solitaire', 'weather', 'whiteboard', 'x-listening-station'
     ].sort();
     expect(keys).toEqual(EXPECTED);
     expect(listModules().every((m) => m.builtin)).toBe(true);

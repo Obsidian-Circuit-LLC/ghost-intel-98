@@ -49,6 +49,7 @@ import { InvoicesModule } from './invoices/InvoicesModule';
 import { ReportsModule } from './reports/ReportsModule';
 import { NumberMuncherModule } from './number-muncher/NumberMuncherModule';
 import { PdfSignerModule } from './pdf-signer/PdfSignerModule';
+import { WeatherModule } from './weather/WeatherModule';
 
 // ---------------------------------------------------------------------------
 // Adapter components — each has the uniform { spec: WindowSpec } signature and
@@ -239,6 +240,10 @@ function PdfSignerAdapter({ spec: _spec }: { spec: WindowSpec }): JSX.Element {
   return <PdfSignerModule />;
 }
 
+function WeatherAdapter({ spec: _spec }: { spec: WindowSpec }): JSX.Element {
+  return <WeatherModule />;
+}
+
 // ---------------------------------------------------------------------------
 // Registration
 // Titles are VERBATIM from Desktop.tsx moduleTitles.
@@ -289,4 +294,5 @@ export function registerBuiltins(): void {
   registerModule({ key: 'report', title: 'Reports', glyph: '📋', component: ReportsAdapter, builtin: true, defaultWidth: 1040, defaultHeight: 680 });
   registerModule({ key: 'number-muncher', title: 'Number Muncher', glyph: '🧮', component: NumberMuncherAdapter, builtin: true, defaultWidth: 320, defaultHeight: 450 });
   registerModule({ key: 'pdf-signer', title: 'PDF Signer', glyph: '✒️', component: PdfSignerAdapter, builtin: true, defaultWidth: 900, defaultHeight: 720 });
+  registerModule({ key: 'weather', title: 'Weather', glyph: '🌦', component: WeatherAdapter, builtin: true, defaultWidth: 760, defaultHeight: 560 });
 }
