@@ -49,6 +49,7 @@ import { InvoicesModule } from './invoices/InvoicesModule';
 import { ReportsModule } from './reports/ReportsModule';
 import { NumberMuncherModule } from './number-muncher/NumberMuncherModule';
 import { PdfSignerModule } from './pdf-signer/PdfSignerModule';
+import { GhostSocialModule } from './ghost-social/GhostSocialModule';
 
 // ---------------------------------------------------------------------------
 // Adapter components — each has the uniform { spec: WindowSpec } signature and
@@ -239,6 +240,13 @@ function PdfSignerAdapter({ spec: _spec }: { spec: WindowSpec }): JSX.Element {
   return <PdfSignerModule />;
 }
 
+// Ghost Social Media Manager (hardened port) — takes the window id (spec.id) so its overlay
+// governor can gate every per-account WebContentsView on this GI98 window's focus/minimize
+// state (constraint 9, the SDR window-active lifecycle).
+function GhostSocialAdapter({ spec }: { spec: WindowSpec }): JSX.Element {
+  return <GhostSocialModule windowId={spec.id} />;
+}
+
 // ---------------------------------------------------------------------------
 // Registration
 // Titles are VERBATIM from Desktop.tsx moduleTitles.
@@ -289,4 +297,5 @@ export function registerBuiltins(): void {
   registerModule({ key: 'report', title: 'Reports', glyph: '📋', component: ReportsAdapter, builtin: true, defaultWidth: 1040, defaultHeight: 680 });
   registerModule({ key: 'number-muncher', title: 'Number Muncher', glyph: '🧮', component: NumberMuncherAdapter, builtin: true, defaultWidth: 320, defaultHeight: 450 });
   registerModule({ key: 'pdf-signer', title: 'PDF Signer', glyph: '✒️', component: PdfSignerAdapter, builtin: true, defaultWidth: 900, defaultHeight: 720 });
+  registerModule({ key: 'ghost-social', title: 'Ghost Social', glyph: '👻', component: GhostSocialAdapter, builtin: true, defaultWidth: 1180, defaultHeight: 760 });
 }

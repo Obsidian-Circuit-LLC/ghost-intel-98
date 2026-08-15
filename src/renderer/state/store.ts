@@ -52,7 +52,8 @@ export type ModuleKey =
   | 'invoices'
   | 'report'
   | 'number-muncher'
-  | 'pdf-signer';
+  | 'pdf-signer'
+  | 'ghost-social';
 
 export interface WindowSpec {
   id: string;

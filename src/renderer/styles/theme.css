@@ -179,6 +179,57 @@
   --ga98-xls-tor-ok-ink: #1c6742;
   --ga98-xls-tor-ok-border: #4aa06e;
   --ga98-xls-dot-off: #b23b3b;           /* offline status dot */
+
+  /* ── Ghost Social Media Manager (hardened port) — FIXED teal console ──────
+     GhostExodus's dark-teal look ported as a fixed `.gsm-root` skin (constraint
+     10). These tokens are DEFINED ONLY here in the base :root and are NEVER
+     overridden in the amethyst block below, so `.gsm-root` renders byte-for-byte
+     IDENTICALLY under classic + QUIET AMETHYST — exactly his console, not the app
+     theme. Every value below is one of his `src/styles.css` literals; near-equal
+     shades are consolidated to a semantic token. ghost-social.css consumes these
+     via var() only (no raw literals — no-straggler green). */
+  --ga98-gsm-bg: #070b0d;                 /* deep ground */
+  --ga98-gsm-sidebar-bg: #091013;         /* left rail */
+  --ga98-gsm-panel-bg: #0a1012;           /* panels / cards / metrics */
+  --ga98-gsm-card-bg: #0a1113;            /* auth card / modal */
+  --ga98-gsm-inset-bg: #0b1315;           /* secondary btn / titles / status */
+  --ga98-gsm-elevated-bg: #0d1719;        /* media / platform / queue chrome */
+  --ga98-gsm-host-bg: #0a0f11;            /* embedded browser host backdrop */
+  --ga98-gsm-selected-bg: #10231f;        /* selected campaign / nav-active */
+  --ga98-gsm-dest-selected-bg: #0d1d19;   /* selected queue destination */
+  --ga98-gsm-hero-a: #0d1716;             /* hero gradient start */
+  --ga98-gsm-hero-b: #0a1012;             /* hero gradient end */
+  --ga98-gsm-backdrop: rgba(0, 0, 0, 0.73); /* modal veil (#000b) */
+  --ga98-gsm-text: #d7e3e3;               /* primary ink */
+  --ga98-gsm-heading: #e8f3f0;            /* bright headings */
+  --ga98-gsm-text-bright: #cfe0de;        /* card / body-bright ink */
+  --ga98-gsm-text-dim: #789092;           /* nav / dim ink */
+  --ga98-gsm-text-dimmer: #5b7477;        /* eyebrow / caption */
+  --ga98-gsm-text-faint: #536b6e;         /* small meta */
+  --ga98-gsm-teal: #52ddb9;               /* primary teal action */
+  --ga98-gsm-teal-bright: #55dfba;        /* bright teal accents */
+  --ga98-gsm-teal-soft: #54e1bd;          /* metric / selected teal */
+  --ga98-gsm-teal-ring: #48dcb4;          /* logo ring / teal borders */
+  --ga98-gsm-teal-dot: #51e5be;           /* live status dot */
+  --ga98-gsm-teal-ink: #06100e;           /* near-black ink on teal btn */
+  --ga98-gsm-border: #142126;             /* hairline seams */
+  --ga98-gsm-border-strong: #17282b;      /* panel / card borders */
+  --ga98-gsm-border-input: #1c2e31;       /* input / select borders */
+  --ga98-gsm-border-accent: #21413b;      /* primary/secondary btn border */
+  --ga98-gsm-switch-bg: #111b1e;          /* off switch track */
+  --ga98-gsm-switch-on-bg: #1b594b;       /* armed/on switch track */
+  --ga98-gsm-switch-knob: #536568;        /* off switch knob */
+  --ga98-gsm-danger: #ff7c86;             /* danger ink */
+  --ga98-gsm-danger-bg: #2a1015;          /* danger button fill */
+  --ga98-gsm-danger-border: #59232b;      /* danger border */
+  --ga98-gsm-warning: #d7c49a;            /* warning ink */
+  --ga98-gsm-warning-bg: #15120b;         /* warning box fill */
+  --ga98-gsm-warning-border: #5c4c2f;     /* warning border */
+  --ga98-gsm-armed-bg: #3a0f14;           /* AUTO-POSTING ARMED banner fill */
+  --ga98-gsm-armed-border: #7a2530;       /* armed banner border */
+  --ga98-gsm-tor-bg: #0d1d19;             /* per-account TOR marker fill */
+  --ga98-gsm-tor-ink: #55dfba;            /* TOR marker ink (teal) */
+  --ga98-gsm-clearnet-ink: #789092;       /* CLEARNET marker ink (dim) */
 }
 
 html, body, #root {
