@@ -155,6 +155,7 @@ import { createScrapingCasesHandlers } from '../scraping-cases/ipc';
 import { prodScrapingCaseStore } from '../storage/scraping-cases';
 import { registerInvestigationGraphIpc, registerInvestigationRunIpc } from '../investigation/ipc';
 import { registerXListeningIpc } from '../x-listening/ipc';
+import { registerWeatherIpc } from '../weather/ipc';
 import { registerInvestigationReportIpc } from '../investigation/report-ipc';
 import { renderIntelReportPdf } from '../investigation/report-pdf';
 import { addManualNode, addManualEdge } from '../investigation/graph';
@@ -1772,6 +1773,11 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   // hostile remote page (x.com), so every handler must validate the sender frame first
   // (assertTrustedSender inside the module). The plain safeHandle discards the event and cannot.
   registerXListeningIpc({ handle: safeHandleWithEvent });
+
+  // ---- Weather tool (OURS, 2026-08-15): Tor-default Open-Meteo client + encrypted store ----
+  // Wired via safeHandleWithEvent so each handler's assertTrustedSender reads the Electron-delivered
+  // sender frame (constraint 7); egress is Tor-default/fail-closed, host-anchored MAIN-side (client.ts).
+  registerWeatherIpc({ handle: safeHandleWithEvent });
 
   // ---- SP-4 investigation graph: per-case scene fetch + live delta push (Task 5) ----
   registerInvestigationGraphIpc({
