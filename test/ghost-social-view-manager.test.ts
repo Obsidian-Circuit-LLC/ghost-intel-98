@@ -262,6 +262,44 @@ describe('view-manager: egress (per-account clearnet default + warned Tor toggle
   });
 });
 
+// ---- A. initial-load scheme guard + Tor fail-closed --------------------
+
+describe('view-manager: initial account load is scheme-guarded + fails closed on no-Tor', () => {
+  it('openAccount REJECTS a non-http(s) account.url and never creates/loads a view', async () => {
+    const h = harness();
+    h.activate();
+    await expect(
+      h.mgr.openAccount(CID, { ...ACC, url: 'file:///etc/passwd' }, BOUNDS),
+    ).rejects.toThrow();
+    // The scheme guard runs BEFORE the view is built, so nothing was created or navigated.
+    expect(h.created()).toBe(0);
+    expect(h.mgr.cacheStatus().cachedKeys).toEqual([]);
+  });
+
+  it('showGrid REJECTS a non-http(s) account.url without loading it', async () => {
+    const h = harness();
+    h.activate();
+    await expect(
+      h.mgr.showGrid(CID, [{ account: { ...ACC, url: 'chrome://settings' }, bounds: BOUNDS }]),
+    ).rejects.toThrow();
+    expect(h.created()).toBe(0);
+  });
+
+  it('a persisted torEnabled account on a NO-Tor build FAILS CLOSED — never navigates over clearnet', async () => {
+    const h = harness({ torSocks: null });
+    h.activate();
+    await expect(
+      h.mgr.openAccount(CID, { ...ACC, torEnabled: true }, BOUNDS),
+    ).rejects.toThrow();
+    // The authenticated session was NEVER loaded over clearnet, and the half-open view was torn
+    // down (no silent downgrade of an explicitly-Tor account — matches applyEgress's posture).
+    const v = h.viewFor(CID, ACC.id);
+    expect(v.calls.loadURL).toEqual([]);
+    expect(v.calls.closed).toBe(1);
+    expect(h.mgr.cacheStatus().cachedKeys).toEqual([]);
+  });
+});
+
 // ---- A. isolation guards -----------------------------------------------
 
 describe('view-manager: window-open + navigation guards', () => {

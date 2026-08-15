@@ -341,22 +341,30 @@ export function makeGhostSocialViewManager(deps: ViewManagerDeps): GhostSocialVi
    *  navigation, and navigate to its home. On REUSE: refresh home/lastUsed. */
   async function ensureView(campaignId: string, account: ViewAccount): Promise<CachedView> {
     const key = browserKey(campaignId, account.id);
+    // Scheme-guard the account URL at the trust boundary (hardening #5). The renderer is hostile;
+    // `account.url` arrives from IPC as any non-empty string. Every OTHER URL path in this file
+    // (popups, will-navigate/will-redirect, favicon, openExternal) is normalizeSocialUrl-guarded,
+    // but the top-level programmatic `loadURL(account.url)` — and `nav('home')` off `cv.home` —
+    // bypass the nav listeners entirely, so a `file:`/`chrome:`/`javascript:` account URL would
+    // otherwise drive the authenticated partition to an arbitrary non-http(s) scheme. normalize
+    // THROWS on a non-http(s) or unparseable URL, rejecting the open before any view is created.
+    const home = normalizeSocialUrl(account.url);
     let cv = views.get(key);
     if (cv && !cv.view.webContents.isDestroyed()) {
-      cv.home = account.url;
+      cv.home = home;
       cv.lastUsed = Date.now();
       return cv;
     }
     const partition = accountPartition(campaignId, account.id);
-    registerHost(account.url);
+    registerHost(home);
     const view = deps.createView(partition);
     cv = {
       key,
       campaignId,
       accountId: account.id,
       partition,
-      home: account.url,
-      host: hostOfUrl(account.url),
+      home,
+      host: hostOfUrl(home),
       view,
       lastUsed: Date.now(),
       desiredVisible: false,
@@ -367,18 +375,23 @@ export function makeGhostSocialViewManager(deps: ViewManagerDeps): GhostSocialVi
     views.set(key, cv);
     installGuards(cv);
     // Apply the account's persisted egress BEFORE the first navigation so the very first request
-    // already follows the chosen path. Tor best-effort: a degenerate no-Tor build heals to clearnet
-    // rather than failing the open.
+    // already follows the chosen path. G8 fail-CLOSED: an account the user EXPLICITLY marked Tor
+    // must NEVER heal to clearnet. applyProxy throws only when no Tor instance exists in this build
+    // (torSocks()===null); the everyday pre-bootstrap case sets a real SOCKS proxy that fails closed
+    // at connect time and does not throw here. On the no-Tor throw, tear the freshly-created view
+    // down and propagate — matching applyEgress()'s refuse-don't-downgrade posture — so the
+    // authenticated session is never navigated over clearnet (a retry rebuilds cleanly).
     if (account.torEnabled === true) {
       try {
         await applyProxy(partition, 'tor');
-        cv.egress = 'tor';
-        if (!torWarned) torWarned = true;
-      } catch {
-        cv.egress = 'clearnet';
+      } catch (err) {
+        destroyView(key);
+        throw err;
       }
+      cv.egress = 'tor';
+      if (!torWarned) torWarned = true;
     }
-    await cv.view.webContents.loadURL(account.url);
+    await cv.view.webContents.loadURL(home);
     return cv;
   }
 
