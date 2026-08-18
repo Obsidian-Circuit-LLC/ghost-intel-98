@@ -101,6 +101,11 @@ export interface ReceiverViewDeps {
   writeEgress(mode: WebSdrEgressMode): Promise<WebSdrEgressState>;
   /** Open a URL in the system browser (already `normalizeUrl`-validated by the manager). */
   openExternal(url: string): void;
+  /** v3.72.1 field diagnostic (optional): a one-line append sink for the overlay show/bounds/load
+   *  lifecycle, so a blank receiver view is diagnosable from a log the user can send. Production wires
+   *  it to a plaintext file under the module data dir; tests leave it undefined (no-op). Never carries
+   *  a secret — only visibility, integer bounds, and load outcomes. */
+  diag?(line: string): void;
 }
 
 // ---- status result (his `receiver:status` shape) -----------------------
@@ -129,7 +134,7 @@ export interface ReceiverViewManager {
    *  desktop): the renderer reports whether the SDR module window is focused+visible+uncovered and
    *  the overlay bounds; main shows+positions or hides the native overlay to match, so a stray
    *  overlay never floats over another GI98 window. */
-  present(input: { visible: boolean; bounds?: ReceiverBounds }): void;
+  present(input: { visible: boolean; bounds?: ReceiverBounds; diag?: string }): void;
   /** Detach the overlay while a GI98 modal/dialog is open, and restore it WITHOUT reloading when
    *  the modal closes (his v0.1.6 fix). */
   setModal(open: boolean): void;
@@ -280,6 +285,11 @@ export function makeReceiverViewManager(deps: ReceiverViewDeps): ReceiverViewMan
     const win = deps.getWindow();
     if (!win) return;
     const show = desiredVisible && !modalOpen;
+    const b = bounds;
+    deps.diag?.(
+      `reconcile show=${show} desiredVisible=${desiredVisible} modalOpen=${modalOpen} attached=${attached} ` +
+      `bounds=${b ? `${b.x},${b.y} ${b.width}x${b.height}` : 'none'}`,
+    );
     if (show) {
       if (!attached) {
         win.contentView.addChildView(view);
@@ -310,7 +320,14 @@ export function makeReceiverViewManager(deps: ReceiverViewDeps): ReceiverViewMan
       const v = await ensureView();
       desiredVisible = true;
       reconcile();
-      await v.webContents.loadURL(url);
+      deps.diag?.(`load ${url}`);
+      try {
+        await v.webContents.loadURL(url);
+        deps.diag?.(`load ok ${url}`);
+      } catch (e) {
+        deps.diag?.(`load FAILED ${url} :: ${(e as Error)?.message ?? e}`);
+        throw e;
+      }
     },
 
     hide() {
@@ -327,6 +344,11 @@ export function makeReceiverViewManager(deps: ReceiverViewDeps): ReceiverViewMan
       desiredVisible = input.visible === true;
       const clean = sanitizeBounds(input.bounds);
       if (clean) bounds = clean;
+      deps.diag?.(
+        `present recv visible=${input.visible === true} ` +
+        `bounds=${clean ? `${clean.x},${clean.y} ${clean.width}x${clean.height}` : 'none'} ` +
+        `why=${input.diag ?? '-'}`,
+      );
       reconcile();
     },
 

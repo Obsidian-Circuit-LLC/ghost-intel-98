@@ -212,17 +212,32 @@ export function WebSdrModule({ windowId }: { windowId?: string } = {}): JSX.Elem
   }, []);
 
   // ---- receiver overlay bounds / visibility -----------------------------
+  const boundsRetryRef = useRef(0);
   function syncBounds(): void {
     if (!api) return;
-    // Single source of truth for overlay visibility: show only when this window is active, a receiver
-    // is loaded, and we're not on the recordings panel; otherwise HIDE (never leave it floating).
-    const show = !!host.current && !!selectedRef.current && panelRef.current !== 'recordings' && windowActiveRef.current;
-    if (!show) {
-      void api.receiverPresent({ visible: false });
+    // Show the overlay only when this window is active, a receiver is loaded, and we're not on the
+    // recordings panel; otherwise HIDE (never leave it floating). windowActive/selected drive the gate.
+    const wantShow = !!selectedRef.current && panelRef.current !== 'recordings' && windowActiveRef.current;
+    if (!wantShow) {
+      boundsRetryRef.current = 0;
+      const why = !windowActiveRef.current ? 'window-inactive' : !selectedRef.current ? 'no-receiver' : 'recordings-panel';
+      void api.receiverPresent({ visible: false, diag: why });
       return;
     }
-    const r = host.current!.getBoundingClientRect();
-    void api.receiverPresent({ visible: true, bounds: { x: r.left, y: r.top, width: r.width, height: r.height } });
+    const r = host.current?.getBoundingClientRect();
+    // v3.72.1 blank-view fix: DON'T park the native view at 0×0 (it renders blank) before the host has
+    // laid out. Retry on the next frame (bounded) until the host reports real bounds, then show once.
+    if (!r || r.width < 2 || r.height < 2) {
+      if (boundsRetryRef.current < 40) {
+        boundsRetryRef.current += 1;
+        requestAnimationFrame(syncBounds);
+      } else {
+        void api.receiverPresent({ visible: false, diag: 'host-zero-bounds' });
+      }
+      return;
+    }
+    boundsRetryRef.current = 0;
+    void api.receiverPresent({ visible: true, bounds: { x: r.left, y: r.top, width: r.width, height: r.height }, diag: 'shown' });
   }
 
   // Detach the overlay while any GI98 modal is open (his v0.1.6 fix) so it never paints over it.
@@ -297,7 +312,11 @@ export function WebSdrModule({ windowId }: { windowId?: string } = {}): JSX.Elem
     setPanel('feeds');
     setMessage(`Loading ${r.name}…`);
     await api.receiverLoad(r.url);
-    setTimeout(syncBounds, 100);
+    // v3.72.1 blank-view fix: the host region often finishes laying out AFTER the load resolves, so a
+    // single 100ms re-sync can still park the view at stale/zero bounds. Re-assert across a frame and a
+    // few settle points (syncBounds is idempotent + self-guards against zero bounds).
+    requestAnimationFrame(syncBounds);
+    for (const ms of [100, 400, 1000]) setTimeout(syncBounds, ms);
     setMessage(`${r.name} loaded.`);
   }
   async function saveReceiver(r: WebSdrReceiver): Promise<void> {

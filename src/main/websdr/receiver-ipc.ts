@@ -19,10 +19,27 @@
 
 import { WebContentsView, session, shell } from 'electron';
 import type { BrowserWindow } from 'electron';
+import { appendFileSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { channels } from '@shared/ipc-contracts';
 import { assertTrustedSender } from '../capture/capture-window';
 import { getBgTor } from '../bgconn/tor-singleton';
 import { getEgress, setEgress } from './ipc';
+import { websdrDir } from '../storage/paths';
+
+/** v3.72.1 field diagnostic sink: append one timestamped line to `<module data>/diag.log`, self-capped
+ *  at ~512 KB (rotated by truncation). Plaintext by design — it carries only overlay visibility, integer
+ *  bounds, and load outcomes, never a secret — so a user can send it to diagnose a blank receiver view.
+ *  Never throws (a diagnostic must never break the feature it observes). */
+function appendWebSdrDiag(line: string): void {
+  try {
+    const dir = websdrDir();
+    mkdirSync(dir, { recursive: true });
+    const p = join(dir, 'diag.log');
+    try { if (statSync(p).size > 512 * 1024) writeFileSync(p, ''); } catch { /* first write, no file yet */ }
+    appendFileSync(p, `${new Date().toISOString()} ${line}\n`);
+  } catch { /* diagnostic only */ }
+}
 import {
   makeReceiverViewManager,
   type ReceiverViewDeps,
@@ -78,6 +95,7 @@ export function prodReceiverViewDeps(getWindow: () => BrowserWindow | null): Rec
     openExternal: (url) => {
       void shell.openExternal(url);
     },
+    diag: appendWebSdrDiag,
   };
 }
 
@@ -120,7 +138,11 @@ export function registerWebSdrReceiverIpc(deps: {
       throw new Error('Presenting the receiver requires a { visible, bounds } object.');
     }
     const o = input as Record<string, unknown>;
-    mgr.present({ visible: o.visible === true, bounds: asBounds(o.bounds) });
+    mgr.present({
+      visible: o.visible === true,
+      bounds: asBounds(o.bounds),
+      diag: typeof o.diag === 'string' ? o.diag.slice(0, 40) : undefined,
+    });
   });
 
   handle(channels.websdr.receiverModal, (e, open) => {

@@ -233,12 +233,18 @@ describe('WebSDR renderer module', () => {
   it('reports the receiver-host bounds to the overlay on select', async () => {
     const api = mkApi();
     setApi(api);
+    // jsdom does no layout (getBoundingClientRect is all zeros); the v3.72.1 blank-view guard refuses
+    // to show the overlay at 0×0, so give the host a real rect the way a browser would.
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockReturnValue({ x: 12, y: 34, left: 12, top: 34, width: 800, height: 560, right: 812, bottom: 594, toJSON: () => ({}) } as DOMRect);
     await mount();
     await act(async () => {
       (container.querySelector('.sdr-receiver-main') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       );
     });
+    rectSpy.mockRestore();
     // present is called with a { visible, bounds } shape carrying numeric bounds.
     expect(api.receiverPresent).toHaveBeenCalled();
     const withBounds = api.receiverPresent.mock.calls
@@ -418,7 +424,7 @@ describe('WebSDR overlay lifecycle — the native view never leaks', () => {
     api.receiverPresent.mockClear();
     setWindows(['w1', 'w2'], [{ id: 'w1' }, { id: 'w2' }]);
     await act(async () => { await Promise.resolve(); });
-    expect(api.receiverPresent.mock.calls.at(-1)![0]).toEqual({ visible: false });
+    expect(api.receiverPresent.mock.calls.at(-1)![0]).toMatchObject({ visible: false });
   });
 
   it('minimizing the window hides the overlay', async () => {
@@ -427,6 +433,17 @@ describe('WebSDR overlay lifecycle — the native view never leaks', () => {
     api.receiverPresent.mockClear();
     setWindows(['w1'], [{ id: 'w1', minimized: true }]);
     await act(async () => { await Promise.resolve(); });
-    expect(api.receiverPresent.mock.calls.at(-1)![0]).toEqual({ visible: false });
+    expect(api.receiverPresent.mock.calls.at(-1)![0]).toMatchObject({ visible: false });
+  });
+
+  it('never parks the overlay at zero bounds before the host lays out (blank-view guard)', async () => {
+    // No getBoundingClientRect stub → jsdom reports 0×0, i.e. "host not laid out yet". The guard must
+    // never emit a visible:true present with bounds at that size (that is what paints the view blank).
+    const api = mkApi();
+    await mountFocusedWithReceiver(api);
+    const shownWithBounds = api.receiverPresent.mock.calls
+      .map((c: any[]) => c[0])
+      .find((a: any) => a && a.visible === true && a.bounds);
+    expect(shownWithBounds).toBeUndefined();
   });
 });
