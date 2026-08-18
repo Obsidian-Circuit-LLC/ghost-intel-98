@@ -1397,7 +1397,7 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
       const imagesEnabled = await resolveEffectiveImageCollection(caseId, targetUsername, {
         loadRetrieveImages: async () => collectionSettings.retrieveImages,
       });
-      return captureTimeline(
+      const capResult = await captureTimeline(
         win,
         {
           caseId,
@@ -1416,6 +1416,14 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
           loadCollectionSettings: () => collectionSettings,
         },
       );
+      // v3.72.1 display-pics fix: a sweep discovers NEW author handles, but the avatar fetch+cache
+      // repair otherwise runs ONLY on session-open — so freshly-captured authors render pic-less.
+      // Re-run it after a successful capture (idempotent: won't re-fetch a cached avatar; Tor-gated +
+      // fail-closed; fire-and-forget so a repair hiccup never fails the capture).
+      if (!capResult.blocked) {
+        void repairAvatars(caseId).catch((err) => console.warn('[XListening] repairAvatars (post-capture):', err));
+      }
+      return capResult;
     });
   });
 
@@ -1795,7 +1803,7 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
   // inside `captureNetwork`, opening nothing. Sender check + arg-shape validation only here; `kind`
   // is allowlisted to the two valid relationship surfaces so a bogus value can never reach the
   // helper. Consumed by the Network tab's EXTRACT FOLLOWERS/FOLLOWING/BOTH actions.
-  deps.handle(channels.xListening.captureNetwork, (e, reqArg) => {
+  deps.handle(channels.xListening.captureNetwork, async (e, reqArg) => {
     assertTrustedSender(e);
     const req = reqArg as
       | { caseId?: unknown; channelId?: unknown; targetUsername?: unknown; kind?: unknown }
@@ -1817,14 +1825,21 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
     // M5: live follower/following extraction opens a Tor-gated capture window (Enterprise's
     // relationship capture runs under the global `sweepRunning`, `main.cjs:2427`) — hold the app-wide
     // collection lock so it never egresses concurrently with a sweep/archive/manual capture.
-    return withCollectionLock(() =>
+    const netCaseId = ensureUuid(req.caseId as string, 'caseId');
+    const netResult = await withCollectionLock(() =>
       captureNetwork({
-        caseId: ensureUuid(req.caseId as string, 'caseId'),
+        caseId: netCaseId,
         channelId,
         targetUsername,
         kind: kind as 'followers' | 'following'
       })
     );
+    // v3.72.1 display-pics fix: refresh avatars for handles this network extraction discovered (same
+    // rationale as captureTimeline — idempotent, Tor-gated, fail-closed, fire-and-forget).
+    if (!netResult.blocked) {
+      void repairAvatars(netCaseId).catch((err) => console.warn('[XListening] repairAvatars (post-network):', err));
+    }
+    return netResult;
   });
 
   // ---- Task E1: Tor-gated "open in X" affordances (openInX) ----------------

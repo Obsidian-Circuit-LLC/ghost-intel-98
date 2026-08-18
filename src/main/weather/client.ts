@@ -142,8 +142,8 @@ export class WeatherEgressBlockedError extends Error {
 }
 
 export const TOR_NOT_READY_REASON =
-  'Tor is not ready — the weather fetch is blocked (no clearnet fallback). Enable clearnet in ' +
-  "Settings to fetch over your real IP, or wait for Tor to finish connecting.";
+  'Tor is not ready — the weather fetch is blocked (no clearnet fallback). Tick the "clearnet" box ' +
+  'in the header to fetch over your real IP, or wait for Tor to finish connecting.';
 
 /**
  * Resolve the egress posture, mirroring `resolveXTorGate`:

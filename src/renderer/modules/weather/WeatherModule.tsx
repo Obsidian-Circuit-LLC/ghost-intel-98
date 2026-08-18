@@ -30,7 +30,7 @@ import './weather.css';
 
 const CLEARNET_WARNING =
   'Routing weather over CLEARNET fetches Open-Meteo directly over your real IP instead of Tor. ' +
-  'This is remembered — you will not be asked again unless you clear it in Settings. Enable clearnet?';
+  'This is remembered on this device — untick the "clearnet" box in the header to go back to Tor. Enable clearnet?';
 
 /** Unit labels derived from the FETCHED bundle's `units`, so the labels always match the numbers. */
 function unitLabels(units: Units): { temp: string; wind: string; precip: string } {

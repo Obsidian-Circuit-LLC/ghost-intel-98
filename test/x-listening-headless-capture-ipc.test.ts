@@ -33,7 +33,7 @@ vi.mock('../src/main/x-listening/session', () => ({
 
 vi.mock('../src/main/x-listening/capture', () => ({
   captureTimeline: vi.fn(async () => ({ blocked: false, added: 0, skipped: 0, posts: [] })),
-  captureNetwork: vi.fn(),
+  captureNetwork: vi.fn(async () => ({ blocked: false, kind: 'followers', target: '@target', observed: 0, added: 0, completedPasses: 1, reachedEnd: true })),
   verifyPost: vi.fn(),
   openInX: vi.fn(),
 }));
@@ -76,6 +76,7 @@ vi.mock('electron', () => ({
 import { channels } from '../src/shared/ipc-contracts';
 import { registerXListeningIpc } from '../src/main/x-listening/ipc';
 import { connectXSession, getXWindow } from '../src/main/x-listening/session';
+import { repairAvatars } from '../src/main/x-listening/avatar-repair';
 
 const TRUSTED = { senderFrame: { url: 'file:///app/index.html' } };
 
@@ -126,6 +127,30 @@ describe('captureTimeline handler — headless ensure-window', () => {
     });
 
     expect(rec.connectCalls).toHaveLength(0);
+  });
+
+  // v3.72.1 display-pics fix: a sweep discovers new author handles whose avatars were never fetched
+  // (repair otherwise runs only on session-open). Both capture paths must re-run the idempotent repair.
+  it('re-runs the avatar repair after a successful timeline capture', async () => {
+    vi.mocked(repairAvatars).mockClear();
+    const ipc = fakeIpcMain();
+    registerXListeningIpc({ handle: ipc.handle as never });
+    const caseId = randomUUID();
+    await ipc.registered.get(channels.xListening.captureTimeline)!(TRUSTED, {
+      caseId, channelId: 'target', targetUsername: 'target',
+    });
+    expect(vi.mocked(repairAvatars)).toHaveBeenCalledWith(caseId);
+  });
+
+  it('re-runs the avatar repair after a successful network extraction', async () => {
+    vi.mocked(repairAvatars).mockClear();
+    const ipc = fakeIpcMain();
+    registerXListeningIpc({ handle: ipc.handle as never });
+    const caseId = randomUUID();
+    await ipc.registered.get(channels.xListening.captureNetwork)!(TRUSTED, {
+      caseId, channelId: 'target', targetUsername: 'target', kind: 'followers',
+    });
+    expect(vi.mocked(repairAvatars)).toHaveBeenCalledWith(caseId);
   });
 });
 
