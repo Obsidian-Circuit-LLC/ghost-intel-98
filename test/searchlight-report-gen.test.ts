@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { generateHTML } from '../src/renderer/modules/searchlight/report-gen';
+import { generateHTML, generateJSON, generateTXT } from '../src/renderer/modules/searchlight/report-gen';
 import type { SweepResult } from '../src/shared/searchlight/types';
 
 function r(overrides: Partial<SweepResult> = {}): SweepResult {
@@ -95,12 +95,26 @@ describe('generateHTML — maybe tier', () => {
   });
 
   it('determinism: same input → same output', () => {
+    // The generation timestamp is an INPUT, not an ambient read: two calls with the same inputs must
+    // produce byte-identical output. Reading the clock inside the generator made this test flaky
+    // (it failed only when a millisecond ticked between the two calls) and made the exported
+    // evidence artifact irreproducible.
     const results = [
       r({ status: 'found', found: true }),
       r({ status: 'maybe', found: false, probability: 0.42 }),
     ];
-    const a = generateHTML('Case', results);
-    const b = generateHTML('Case', results);
+    const at = '2026-08-18T12:00:00.000Z';
+    const a = generateHTML('Case', results, at);
+    const b = generateHTML('Case', results, at);
     expect(a).toBe(b);
+  });
+
+  it('stamps the injected generation time, and defaults to now when omitted', () => {
+    const at = '2026-08-18T12:00:00.000Z';
+    expect(generateHTML('Case', [r({})], at)).toContain(at);
+    expect(generateJSON('Case', [r({})], at)).toContain(at);
+    expect(generateTXT('Case', [r({})], at)).toContain(at);
+    // Omitted → still produced, just not reproducible across the clock tick.
+    expect(generateHTML('Case', [r({})])).toContain('GENERATED:');
   });
 });

@@ -27,6 +27,15 @@
   height: 100%;
   display: grid;
   grid-template-columns: 272px 1fr;
+  /* CAP THE ROW. Without an explicit row track the single row is IMPLICIT, therefore `auto`-sized,
+     and grid items default to `min-height:auto` — so the row grew to the tallest page's content
+     (the Compose account wall: ~4900px) instead of the shell's height. `.gsm-main{height:100%}`
+     then resolved against the grown row and `.gsm-page{flex:1}` filled it, so the page never
+     overflowed and never scrolled, while `.gsm-root{overflow:hidden}` clipped it — the field
+     "windows are locked / won't scroll to the other profiles" lockout. `minmax(0, 100%)` pins the
+     row to the shell and lets its items shrink below their content. Measured, not declared:
+     `ghost-social-compose-scroll.test.ts` asserts the real geometry in headless Chrome. */
+  grid-template-rows: minmax(0, 100%);
   background: var(--ga98-gsm-bg);
 }
 
@@ -142,7 +151,9 @@
 .gsm-sidebar-bottom button { width: 50%; }
 
 /* ── main column ─────────────────────────────────────────────────────────── */
-.gsm-main { min-width: 0; position: relative; display: flex; flex-direction: column; height: 100%; }
+/* `min-height:0` is load-bearing: a grid item's automatic minimum size would otherwise refuse to
+   shrink below its content, re-growing the row the rule above just capped. */
+.gsm-main { min-width: 0; min-height: 0; position: relative; display: flex; flex-direction: column; height: 100%; }
 .gsm-header {
   flex: 0 0 74px;
   border-bottom: 1px solid var(--ga98-gsm-border);

@@ -256,6 +256,36 @@ describe('WebSDR renderer module', () => {
     }
   });
 
+  it('presents the host bounds BEFORE navigating, so the page never lays out unsized', async () => {
+    // A WebSDR page builds its waterfall/stream canvas at load time. If the overlay is still
+    // unpositioned when the navigation starts, the audio plays but the visual never starts (the
+    // field report: "hit refresh and suddenly the display is there"). Main heals that with a
+    // one-shot reload, but the reload is a visible reconnect cycle — the renderer must not need it.
+    const api = mkApi();
+    setApi(api);
+    const order: string[] = [];
+    api.receiverPresent.mockImplementation((a: any) => {
+      if (a && a.visible === true && a.bounds) order.push('present');
+      return Promise.resolve(undefined);
+    });
+    api.receiverLoad.mockImplementation(() => {
+      order.push('load');
+      return Promise.resolve(undefined);
+    });
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockReturnValue({ x: 12, y: 34, left: 12, top: 34, width: 800, height: 560, right: 812, bottom: 594, toJSON: () => ({}) } as DOMRect);
+    await mount();
+    await act(async () => {
+      (container.querySelector('.sdr-receiver-main') as HTMLButtonElement).dispatchEvent(
+        new MouseEvent('click', { bubbles: true }),
+      );
+    });
+    rectSpy.mockRestore();
+    expect(order).toContain('load');
+    expect(order[0], 'bounds are presented before the receiver is navigated').toBe('present');
+  });
+
   it('savePreset creates a preset through the in-app dialog (not window.prompt)', async () => {
     const api = mkApi();
     setApi(api);

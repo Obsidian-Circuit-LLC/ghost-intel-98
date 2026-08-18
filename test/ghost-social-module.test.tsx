@@ -214,6 +214,33 @@ describe('Ghost Social — overlay lifecycle (constraint 9, the SDR regression c
     await act(async () => { root.unmount(); });
     expect(api.browserCloseAll).toHaveBeenCalled();
   });
+
+  it('clips a tile scrolled under the header instead of painting the live view over it', async () => {
+    // A native WebContentsView is not clipped by the DOM scroll container, so a half-scrolled tile
+    // must be presented CLIPPED to the scrolling page — never spanning the module header.
+    const PAGE = { x: 272, y: 95, width: 900, height: 620 };
+    const HOST = { x: 300, y: 20, width: 400, height: 390 }; // scrolled up under the header
+    const rect = (r: { x: number; y: number; width: number; height: number }): DOMRect =>
+      ({ ...r, left: r.x, top: r.y, right: r.x + r.width, bottom: r.y + r.height, toJSON: () => ({}) }) as DOMRect;
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      if (this.classList.contains('gsm-compose-browser-host')) return rect(HOST);
+      if (this.classList.contains('gsm-page')) return rect(PAGE);
+      return rect({ x: 0, y: 0, width: 1180, height: 734 });
+    });
+    await mount();
+    await unlock();
+    clickText(/Compose/);
+    await tick();
+    await act(async () => { await new Promise((r) => setTimeout(r, 160)); });
+    await tick();
+    const items = api.browserShowGrid.mock.calls.at(-1)![1] as Array<{ bounds: { x: number; y: number; width: number; height: number } }>;
+    const onScreen = items.filter((i) => i.bounds.x > -10000);
+    expect(onScreen.length, 'the wall presented at least one visible tile').toBeGreaterThan(0);
+    for (const i of onScreen) {
+      expect(i.bounds.y, 'no tile may start above the scrolling page').toBeGreaterThanOrEqual(PAGE.y);
+      expect(i.bounds.y + i.bounds.height, 'no tile may extend past the page bottom').toBeLessThanOrEqual(PAGE.y + PAGE.height);
+    }
+  });
 });
 
 describe('Ghost Social — renderer resyncs the arm flag (Finding 1) + deferred-open unmount safety (Finding 4)', () => {

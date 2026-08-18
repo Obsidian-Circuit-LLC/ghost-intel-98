@@ -56,6 +56,8 @@ export interface ReceiverWebContentsLike {
   /** His `getMediaSourceId(forWebContents)` — the capture handshake the renderer's MediaRecorder
    *  uses to record THIS receiver view (Phase 3, R7). */
   getMediaSourceId(forWebContents: unknown): string;
+  /** Re-navigate the CURRENT page. Used only by the unsized-navigation heal (see `navigatedUnsized`). */
+  reload(): void;
   close(): void;
 }
 
@@ -182,6 +184,12 @@ function sanitizeBounds(b: ReceiverBounds | undefined): ReceiverBounds | undefin
   };
 }
 
+/** A rectangle big enough for a receiver page to lay out into. `sanitizeBounds` floors width/height
+ *  at 1, so "1×1" is the shape a zero-size host report takes — treat it as unsized, not as real. */
+function isRealBounds(b: ReceiverBounds | undefined): boolean {
+  return !!b && b.width >= 2 && b.height >= 2;
+}
+
 // ---- factory -----------------------------------------------------------
 
 export function makeReceiverViewManager(deps: ReceiverViewDeps): ReceiverViewManager {
@@ -190,6 +198,12 @@ export function makeReceiverViewManager(deps: ReceiverViewDeps): ReceiverViewMan
   let desiredVisible = false;
   let modalOpen = false;
   let bounds: ReceiverBounds | undefined;
+  /** True when the CURRENT page was navigated while the overlay had no real on-screen size. A
+   *  WebSDR page lays its waterfall/stream canvas out at load time: loaded into a 0×0 (or not-yet-
+   *  positioned) view, the audio still plays but the visual never starts, and only a reload heals
+   *  it — the "hit refresh and suddenly the display is there" field report. Cleared by the one-shot
+   *  reload the next time the overlay is actually shown at a real size. */
+  let navigatedUnsized = false;
   let egressMode: WebSdrEgressMode = 'clearnet';
   let sessionLockedDown = false;
   let torWarned = false;
@@ -297,6 +311,14 @@ export function makeReceiverViewManager(deps: ReceiverViewDeps): ReceiverViewMan
       }
       if (bounds) view.setBounds(bounds);
       view.setVisible(true);
+      // One-shot heal: the page was navigated before the overlay had a real size, so its waterfall
+      // never started. Now that it is genuinely on screen, re-navigate once (idempotent — the flag
+      // clears first, so a later reposition never reloads again).
+      if (navigatedUnsized && isRealBounds(bounds)) {
+        navigatedUnsized = false;
+        deps.diag?.('heal reload (page had been navigated with no real bounds)');
+        view.webContents.reload();
+      }
     } else {
       view.setVisible(false);
       if (attached) {
@@ -321,9 +343,12 @@ export function makeReceiverViewManager(deps: ReceiverViewDeps): ReceiverViewMan
       desiredVisible = true;
       reconcile();
       deps.diag?.(`load ${url}`);
+      // Did this navigation happen into a view that is actually on screen at a real size? If not,
+      // the page laid out at 0×0 and needs the one-shot heal above once it is.
+      navigatedUnsized = !(isRealBounds(bounds) && desiredVisible && !modalOpen);
       try {
         await v.webContents.loadURL(url);
-        deps.diag?.(`load ok ${url}`);
+        deps.diag?.(`load ok ${url} sized=${!navigatedUnsized}`);
       } catch (e) {
         deps.diag?.(`load FAILED ${url} :: ${(e as Error)?.message ?? e}`);
         throw e;

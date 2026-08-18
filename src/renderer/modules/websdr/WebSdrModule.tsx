@@ -311,6 +311,20 @@ export function WebSdrModule({ windowId }: { windowId?: string } = {}): JSX.Elem
     setSelected(r);
     setPanel('feeds');
     setMessage(`Loading ${r.name}…`);
+    // Position the overlay BEFORE navigating. A receiver page builds its waterfall/stream canvas at
+    // load time, so a navigation into a not-yet-positioned view plays audio but never starts the
+    // visual — only a reload heals it (GhostExodus: "I hit refresh and suddenly the display is
+    // there"). Main DOES heal that, but the heal is a visible reconnect cycle, so don't need it.
+    // The host region (`.sdr-browser-frame`) is always mounted, so it is already laid out here;
+    // syncBounds can't do this itself because `selectedRef` is still the OLD selection this tick.
+    const pre = host.current?.getBoundingClientRect();
+    if (pre && pre.width >= 2 && pre.height >= 2 && windowActiveRef.current) {
+      await api.receiverPresent({
+        visible: true,
+        bounds: { x: pre.left, y: pre.top, width: pre.width, height: pre.height },
+        diag: 'pre-load',
+      });
+    }
     await api.receiverLoad(r.url);
     // v3.72.1 blank-view fix: the host region often finishes laying out AFTER the load resolves, so a
     // single 100ms re-sync can still park the view at stale/zero bounds. Re-assert across a frame and a

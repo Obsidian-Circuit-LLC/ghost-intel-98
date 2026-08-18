@@ -30,7 +30,7 @@ function isFound(r: SweepResult): boolean {
 
 // ─── HTML export ──────────────────────────────────────────────────────────────
 
-export function generateHTML(caseName: string, results: SweepResult[]): string {
+export function generateHTML(caseName: string, results: SweepResult[], generatedAt = new Date().toISOString()): string {
   const found = results.filter(isFound);
   const maybeCount = results.filter((r) => r.status === 'maybe').length;
 
@@ -69,7 +69,7 @@ export function generateHTML(caseName: string, results: SweepResult[]): string {
   tr:hover{background:rgba(26,111,255,.04)}
 </style></head><body>
 <h1>SEARCHLIGHT</h1>
-<div class="meta">CASE: ${esc(caseName)} · GENERATED: ${new Date().toISOString()} · TOTAL: ${results.length}</div>
+<div class="meta">CASE: ${esc(caseName)} · GENERATED: ${generatedAt} · TOTAL: ${results.length}</div>
 <div class="stats">
   <div><div class="stat-val">${results.length}</div><div class="stat-lbl">TOTAL CHECKED</div></div>
   <div><div class="stat-val" style="color:#00ff88">${found.length}</div><div class="stat-lbl">PROFILES FOUND</div></div>
@@ -110,12 +110,12 @@ export function generateCSV(results: SweepResult[]): string {
 
 // ─── JSON ─────────────────────────────────────────────────────────────────────
 
-export function generateJSON(caseName: string, results: SweepResult[]): string {
+export function generateJSON(caseName: string, results: SweepResult[], generatedAt = new Date().toISOString()): string {
   return JSON.stringify(
     {
       tool: 'Searchlight',
       case: caseName,
-      generated: new Date().toISOString(),
+      generated: generatedAt,
       summary: {
         total: results.length,
         found: results.filter(isFound).length,
@@ -130,14 +130,14 @@ export function generateJSON(caseName: string, results: SweepResult[]): string {
 
 // ─── TXT ──────────────────────────────────────────────────────────────────────
 
-export function generateTXT(caseName: string, results: SweepResult[]): string {
+export function generateTXT(caseName: string, results: SweepResult[], generatedAt = new Date().toISOString()): string {
   const found = results.filter(isFound);
   return [
     '═══════════════════════════════════════════════════════════',
     'SEARCHLIGHT — INVESTIGATION REPORT',
     '═══════════════════════════════════════════════════════════',
     `CASE: ${caseName}`,
-    `DATE: ${new Date().toISOString()}`,
+    `DATE: ${generatedAt}`,
     `TOTAL CHECKED: ${results.length}  |  PROFILES FOUND: ${found.length}`,
     '',
     '─── CONFIRMED PROFILES (FOUND) ────────────────────────────',

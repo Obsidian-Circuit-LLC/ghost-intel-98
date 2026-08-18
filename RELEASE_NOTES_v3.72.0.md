@@ -26,8 +26,8 @@ The X Listening Station now functions as GhostExodus's Enterprise build intended
 
 Windows NSIS installer — `GhostIntel98-Setup-3.72.0.exe` (per-user, no admin; unsigned → **More info → Run anyway**). Installs over the previous build in place.
 
-- **SHA-256:** `__SHA256__`
-- **Size:** `__SIZE__`
+- **SHA-256:** `b06dcebed609996b3cf5eac6af03ff8d1794ee86f2df8d516f26d1ac7004ccb9`
+- **Size:** `945,150,643 bytes (~901 MB)`
 
 Confirm **Settings ▸ About** reads **3.72.0**.
 
