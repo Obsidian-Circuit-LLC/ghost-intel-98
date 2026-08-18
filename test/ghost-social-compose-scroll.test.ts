@@ -41,13 +41,13 @@ afterAll(async () => {
 
 /** The Compose page inside its REAL ancestor chain — the `.ga98-window-shell > .window >
  *  .window-body` cascade the module actually renders under. */
-function composeHtml(accounts: number): string {
+function composeHtml(accounts: number, w = WIN_W, h = WIN_H): string {
   const dest = Array.from({ length: accounts }, (_, i) =>
     `<div class="gsm-destination"><div><i>x</i><span><b>acct${i}</b><small>Open in account wall</small></span></div><button class="gsm-switch on"><span></span></button></div>`).join('');
   const cards = Array.from({ length: accounts }, (_, i) =>
     `<div class="gsm-compose-browser-card"><div class="gsm-compose-browser-title"><div><span><b>acct${i}</b><small>drag</small></span></div><button>REFRESH</button></div><div class="gsm-compose-browser-host"></div></div>`).join('');
   return `<style>${CSS}</style>
-  <div class="ga98-window-shell" style="left:0;top:0;width:${WIN_W}px;height:${WIN_H}px">
+  <div class="ga98-window-shell" style="left:0;top:0;width:${w}px;height:${h}px">
     <div class="window" style="width:100%">
       <div class="title-bar"><div class="title-bar-text">Ghost Social</div></div>
       <div class="window-body">
@@ -85,8 +85,8 @@ interface Geometry {
   lastTileOverhangAfterScroll: number;
 }
 
-async function measure(accounts: number): Promise<Geometry> {
-  await session.page.setContent(composeHtml(accounts));
+async function measure(accounts: number, w = WIN_W, h = WIN_H): Promise<Geometry> {
+  await session.page.setContent(composeHtml(accounts, w, h));
   const raw = await session.page.evaluate<string>(`(() => {
     const root = document.querySelector('.gsm-root');
     const main = document.querySelector('.gsm-main');
@@ -124,6 +124,15 @@ describe('Ghost Social Compose page — scrolls instead of clipping', () => {
   it('leaves the last account tile reachable by scrolling', async () => {
     const g = await measure(8);
     expect(g.lastTileOverhangAfterScroll).toBeLessThanOrEqual(0);
+  }, 60000);
+
+  it("scrolls in GhostExodus's field configuration — 4 accounts, maximized window", async () => {
+    // From the field video (2026-08-18): a maximized 2560x1524 desktop, campaign of 4 accounts
+    // (X / Facebook / LinkedIn / YouTube). The wall is two tiles per row, so the second row sat
+    // below the fold and was unreachable.
+    const g = await measure(4, 2560, 1424);
+    expect(g.canScroll, 'the field configuration must scroll').toBe(true);
+    expect(g.lastTileOverhangAfterScroll, 'the 4th account tile must be reachable').toBeLessThanOrEqual(0);
   }, 60000);
 
   it('still scrolls with only two accounts', async () => {

@@ -60,18 +60,22 @@ export function ReportsPanel(): JSX.Element {
     if (!activeCase || !allResults.length) return;
     const name = activeCase.name;
     const slug = name.replace(/\s+/g, '_');
+    // ONE stamp per export, so every artifact this call produces carries the same generation time.
+    // The generators used to read the clock themselves, which made their output irreproducible for
+    // identical inputs (and made the determinism test flaky across a millisecond tick).
+    const generatedAt = new Date().toISOString();
 
     if (format === 'pdf') {
-      const html = generateHTML(name, allResults);
+      const html = generateHTML(name, allResults, generatedAt);
       await window.api.searchlight.exportPdf({ html, filename: `searchlight_${slug}.pdf` });
       return;
     }
 
     const map: Record<'html' | 'csv' | 'json' | 'txt', { content: string; defaultName: string }> = {
-      html: { content: generateHTML(name, allResults),  defaultName: `ghost_intel_${slug}.html` },
+      html: { content: generateHTML(name, allResults, generatedAt),  defaultName: `ghost_intel_${slug}.html` },
       csv:  { content: generateCSV(allResults),          defaultName: `ghost_intel_${slug}.csv`  },
-      json: { content: generateJSON(name, allResults),   defaultName: `ghost_intel_${slug}.json` },
-      txt:  { content: generateTXT(name, allResults),    defaultName: `ghost_intel_${slug}.txt`  },
+      json: { content: generateJSON(name, allResults, generatedAt),   defaultName: `ghost_intel_${slug}.json` },
+      txt:  { content: generateTXT(name, allResults, generatedAt),    defaultName: `ghost_intel_${slug}.txt`  },
     };
     const { content, defaultName } = map[format];
     await window.api.searchlight.saveReport({ content, defaultName });
