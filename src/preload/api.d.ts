@@ -1342,6 +1342,7 @@ export interface GhostApi {
     receiverPresent(input: {
       visible: boolean;
       bounds?: { x: number; y: number; width: number; height: number };
+      diag?: string;
     }): Promise<void>;
     receiverModal(open: boolean): Promise<void>;
     receiverStatus(url: string): Promise<{ online: boolean; status?: number; error?: string }>;

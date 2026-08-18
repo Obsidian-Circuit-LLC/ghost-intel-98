@@ -101,6 +101,11 @@ export interface ViewManagerDeps {
   torSocks(): string | null;
   /** Open a URL in the system browser (already `normalizeSocialUrl`-validated by the manager). */
   openExternal(url: string): void;
+  /** v3.72.1 field diagnostic (optional): one-line append sink for the per-account overlay show/bounds
+   *  lifecycle, so a blank embedded view is diagnosable from a log the user can send. Production wires
+   *  it to a plaintext file under the module data dir; tests leave it undefined. No secret — only view
+   *  key, visibility, and integer bounds. */
+  diag?(line: string): void;
   /** SSRF-guarded fetch of a host-anchored `…/favicon.ico`, returning a cached `file://` path or
    *  null. The manager decides WHICH url (only a registered account host's own /favicon.ico) — the
    *  seam only performs the guarded fetch + cache. */
@@ -247,6 +252,11 @@ export function makeGhostSocialViewManager(deps: ViewManagerDeps): GhostSocialVi
     const win = deps.getWindow();
     if (!win) return;
     const show = windowActive && !modalOpen && cv.desiredVisible && !!cv.bounds;
+    const b = cv.bounds;
+    deps.diag?.(
+      `reconcile key=${cv.key} show=${show} windowActive=${windowActive} modalOpen=${modalOpen} ` +
+      `desiredVisible=${cv.desiredVisible} bounds=${b ? `${b.x},${b.y} ${b.width}x${b.height}` : 'none'}`,
+    );
     if (show) {
       if (!cv.attached) {
         win.contentView.addChildView(cv.view);

@@ -155,6 +155,9 @@ export function GhostSocialModule({ windowId }: { windowId: string }): JSX.Eleme
     if (page !== 'browser' || !browserHost.current || !windowActive) return;
     const update = (): void => {
       const r = browserHost.current!.getBoundingClientRect();
+      // v3.72.1 blank-view fix: don't position the native view at 0×0 before the host has laid out (it
+      // renders blank + can stay stuck there). Skip; the ResizeObserver re-fires on the real layout.
+      if (r.width < 2 || r.height < 2) return;
       void gs().browserResize({ x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) });
     };
     update();
@@ -193,6 +196,19 @@ export function GhostSocialModule({ windowId }: { windowId: string }): JSX.Eleme
       if (!mountedRef.current) return;
       await gs().browserOpenAccount(cid, a);
       if (!mountedRef.current) return;
+      // v3.72.1 blank-view fix: re-assert the host bounds after the view is created + the page starts
+      // loading, in case the host laid out (or the ResizeObserver missed the initial 0→real transition)
+      // — otherwise the freshly-created view can sit at 0×0 and render blank.
+      const resync = (): void => {
+        const h = browserHost.current;
+        if (!h || !mountedRef.current) return;
+        const r = h.getBoundingClientRect();
+        if (r.width >= 2 && r.height >= 2) {
+          void gs().browserResize({ x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) });
+        }
+      };
+      requestAnimationFrame(resync);
+      for (const ms of [150, 500, 1200]) window.setTimeout(resync, ms);
       await syncCacheStatus();
     }, 30);
   }

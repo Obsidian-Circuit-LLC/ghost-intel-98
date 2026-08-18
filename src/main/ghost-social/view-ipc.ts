@@ -114,7 +114,28 @@ export function prodViewManagerDeps(getWindow: () => BrowserWindowLike): ViewMan
         return null;
       }
     },
+    diag: appendGhostSocialDiag,
   };
+}
+
+/** v3.72.1 field diagnostic sink — mirror of the WebSDR one: append one timestamped line to
+ *  `<module data>/diag.log`, self-capped at ~512 KB. Plaintext by design (view key, visibility,
+ *  integer bounds only — never a secret) so a user can send it to diagnose a blank embedded view.
+ *  Never throws. */
+function appendGhostSocialDiag(line: string): void {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+    const fs = require('node:fs') as typeof import('node:fs');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+    const nodePath = require('node:path') as typeof import('node:path');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+    const { ghostSocialDir } = require('../storage/paths') as typeof import('../storage/paths');
+    const dir = ghostSocialDir();
+    fs.mkdirSync(dir, { recursive: true });
+    const p = nodePath.join(dir, 'diag.log');
+    try { if (fs.statSync(p).size > 512 * 1024) fs.writeFileSync(p, ''); } catch { /* first write */ }
+    fs.appendFileSync(p, `${new Date().toISOString()} ${line}\n`);
+  } catch { /* diagnostic only */ }
 }
 
 // ---- argument-shape validators (the renderer is hostile) ---------------
