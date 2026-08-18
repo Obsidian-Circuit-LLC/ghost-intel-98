@@ -144,6 +144,20 @@
 
 /* ── main column ──────────────────────────────────────────────────────────── */
 .sdr-main { min-width: 0; display: grid; grid-template-rows: auto auto auto 1fr 28px; }
+/* PIN EACH CHILD TO ITS TRACK. The Tor banner is conditionally rendered (`{torWarning && …}`), and
+   with positional auto-placement its absence shifted every later child up one track: the receiver
+   host inherited `auto` and collapsed to 0 (it has no DOM children while a receiver is loaded) while
+   the 28px footer inherited the `1fr`. A zero-height host makes the renderer's overlay guard measure
+   <2px, exhaust its 40-frame retry budget and HIDE the native view — the field "waterfall appears on
+   Reload, then vanishes ~1s later" cycle — and it also hid the `.sdr-empty` placeholder, which is
+   `position:absolute; inset:0` inside that collapsed box. Explicit rows make the layout independent
+   of which optional children happen to be present. Measured, not declared:
+   `websdr-receiver-host-geometry.test.ts` asserts the real geometry in headless Chrome. */
+.sdr-main > .sdr-toolbar { grid-row: 1; }
+.sdr-main > .sdr-tor-warning { grid-row: 2; }
+.sdr-main > .sdr-receiver-header { grid-row: 3; }
+.sdr-main > .sdr-browser-frame { grid-row: 4; }
+.sdr-main > .sdr-footer { grid-row: 5; }
 .sdr-toolbar { padding: 9px 12px; background: var(--ga98-sdr-toolbar-bg); border-bottom: 1px solid var(--ga98-sdr-toolbar-border); display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
 .sdr-toolbar label { font: 10px var(--ga98-sdr-mono); color: var(--ga98-sdr-label); }
 .sdr-freq { display: flex; margin-top: 4px; }
