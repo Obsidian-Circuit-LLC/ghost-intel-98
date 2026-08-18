@@ -58,6 +58,7 @@ function fakeView() {
     setVisible: [] as boolean[],
     setBounds: [] as ReceiverBounds[],
     muted: [] as boolean[],
+    reloaded: 0,
     closed: 0,
     navGuards: [] as Array<[string, (e: NavEventLike, url: string) => void]>,
     windowOpenHandler: null as null | ((d: { url: string }) => { action: string }),
@@ -78,6 +79,9 @@ function fakeView() {
     // Phase-3 seam additions (unused on the Phase-2 paths, present so the fake satisfies the type).
     executeJavaScript: async (_code: string) => '',
     getMediaSourceId: (_forWc: unknown) => 'source-id',
+    reload: () => {
+      calls.reloaded += 1;
+    },
     close: () => {
       calls.closed += 1;
     },
@@ -354,6 +358,49 @@ describe('receiver-view: multi-window z-order + modal detach', () => {
     h.mgr.present({ visible: true, bounds: BOUNDS });
     expect(h.created()).toBe(1); // no new view
     expect(h.w.calls.added).toBe(addedAfterHide); // nothing re-attached
+  });
+});
+
+describe('receiver-view: a receiver navigated before the overlay was sized heals itself', () => {
+  it('reloads ONCE when real bounds first arrive after a navigation with no bounds', async () => {
+    const h = harness();
+    await h.mgr.load('https://sdr.example/');
+    expect(h.v.calls.reloaded).toBe(0);
+    h.mgr.present({ visible: true, bounds: BOUNDS });
+    expect(h.v.calls.reloaded).toBe(1);
+    h.mgr.present({ visible: true, bounds: { ...BOUNDS, x: 12 } });
+    expect(h.v.calls.reloaded).toBe(1);
+  });
+
+  it('does NOT reload when the navigation already had real bounds', async () => {
+    const h = harness();
+    h.mgr.present({ visible: true, bounds: BOUNDS });
+    await h.mgr.load('https://sdr.example/');
+    h.mgr.present({ visible: true, bounds: { ...BOUNDS, y: 44 } });
+    expect(h.v.calls.reloaded).toBe(0);
+  });
+
+  it('treats a degenerate zero-size report as unsized', async () => {
+    const h = harness();
+    h.mgr.present({ visible: true, bounds: { x: 0, y: 0, width: 0, height: 0 } });
+    await h.mgr.load('https://sdr.example/');
+    h.mgr.present({ visible: true, bounds: BOUNDS });
+    expect(h.v.calls.reloaded).toBe(1);
+  });
+
+  it('does not reload a hidden overlay — the heal waits for a visible, sized present', async () => {
+    const h = harness();
+    await h.mgr.load('https://sdr.example/');
+    h.mgr.present({ visible: false, bounds: BOUNDS });
+    expect(h.v.calls.reloaded).toBe(0);
+  });
+
+  it('does not reload after hide() destroyed the view', async () => {
+    const h = harness();
+    await h.mgr.load('https://sdr.example/');
+    h.mgr.hide();
+    h.mgr.present({ visible: true, bounds: BOUNDS });
+    expect(h.v.calls.reloaded).toBe(0);
   });
 });
 

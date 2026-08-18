@@ -36,6 +36,7 @@ import type {
   Campaign, GhostState, SocialAccount, PlatformKey, InboxItem, BrowserCacheMode,
   ScheduledPost,
 } from '@shared/ghost-social/types';
+import { clipOverlayBounds } from '@shared/ghost-social/overlay-bounds';
 import { useWindows } from '../../state/store';
 import { confirmDialog } from '../../state/dialogs';
 import './ghost-social.css';
@@ -460,8 +461,18 @@ function Composer({ campaign, campaignId, value, setValue, publish, toggleCompos
         const el = hosts.current[a.id];
         if (!el) return null;
         const r = el.getBoundingClientRect();
-        const visible = r.bottom > 76 && r.top < window.innerHeight && r.right > 0 && r.left < window.innerWidth;
-        return { account: a, bounds: visible ? { x: Math.round(r.x), y: Math.round(r.y), width: Math.max(1, Math.round(r.width)), height: Math.max(1, Math.round(r.height)) } : { x: -20000, y: -20000, width: 1, height: 1 } };
+        // The wall SCROLLS (v3.72.2), and a native view is not clipped by its DOM scroll container:
+        // a half-scrolled tile would paint its live account straight over the module header. Clip
+        // every tile to the scrolling page, then to the app window, and park what survives neither.
+        const page = el.closest('.gsm-page')?.getBoundingClientRect();
+        const host = { x: r.x, y: r.y, width: r.width, height: r.height };
+        const inPage = page
+          ? clipOverlayBounds(host, { x: page.x, y: page.y, width: page.width, height: page.height })
+          : host;
+        const clipped = inPage
+          ? clipOverlayBounds(inPage, { x: 0, y: 0, width: window.innerWidth, height: window.innerHeight })
+          : null;
+        return { account: a, bounds: clipped ?? { x: -20000, y: -20000, width: 1, height: 1 } };
       }).filter(Boolean) as Array<{ account: SocialAccount; bounds: { x: number; y: number; width: number; height: number } }>;
       if (items.length) void gs().browserShowGrid(campaignId, items); else void gs().browserHide();
     };
