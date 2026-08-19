@@ -45,7 +45,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ScrapingCase } from '@shared/types';
-import { normalizeXSourceKey } from '@shared/x-listening-source';
+import { normalizeXSourceKey, displayXHandle } from '@shared/x-listening-source';
 import {
   DEFAULT_COLLECTION_SETTINGS,
   COLLECTION_SETTINGS_RANGES,
@@ -431,6 +431,45 @@ function formatWhen(iso: string | undefined): string {
 const CLEARNET_WARNING_TEXT =
   'Routing X capture over CLEARNET exposes your real IP directly to X instead of Tor. ' +
   'This is remembered — you will not be asked again unless you clear it in Settings. Enable clearnet?';
+
+/**
+ * Run a collection call while surfacing WHY it is waiting. Manual collection ops queue behind a live
+ * background sweep (operator decision, 2026-08-19) rather than failing, so a press can legitimately
+ * sit for a while — without this the button just looks hung. Polls the read-only collection-mutex
+ * status and reports "Waiting for <holder> (running 47s)…" until the call actually starts.
+ */
+async function withCollectionWaitIndicator<T>(
+  run: () => Promise<T>,
+  report: (message: string) => void,
+  busyMessage: string,
+): Promise<T> {
+  let settled = false;
+  const poll = async (): Promise<void> => {
+    while (!settled) {
+      try {
+        if (!window.api?.xListening?.collectionStatus) return;
+        const held = await window.api.xListening.collectionStatus();
+        if (settled) return;
+        if (held && held.owner) {
+          const s = Math.round(held.heldMs / 1000);
+          const age = s < 60 ? `${s}s` : `${Math.floor(s / 60)}m${String(s % 60).padStart(2, '0')}s`;
+          report(`Waiting for ${held.owner} (running ${age})…`);
+        } else {
+          report(busyMessage);
+        }
+      } catch {
+        /* status is advisory only — never fail the operation because the indicator could not read */
+      }
+      await new Promise((resolve) => setTimeout(resolve, 900));
+    }
+  };
+  void poll();
+  try {
+    return await run();
+  } finally {
+    settled = true;
+  }
+}
 
 export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
   const settings = useSettings((s) => s.settings);
@@ -1236,12 +1275,17 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
           for (const kind of kinds) {
             setNetworkProgress(`Extracting ${kind} for @${username}…`);
             try {
-              const res = await window.api.xListening.captureNetwork({
-                caseId: activeCampaignId,
-                channelId: username,
-                targetUsername: username,
-                kind,
-              });
+              const res = await withCollectionWaitIndicator(
+                () =>
+                  window.api.xListening.captureNetwork({
+                    caseId: activeCampaignId,
+                    channelId: username,
+                    targetUsername: username,
+                    kind,
+                  }),
+                setNetworkProgress,
+                `Extracting ${kind} for @${username}…`,
+              );
               if (res?.blocked) {
                 lastBlockedReason = res.reason;
                 continue;
@@ -2473,7 +2517,7 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
                     <details className="xls-pair-card" key={`${p.profileAId}:${p.profileBId}`}>
                       <summary>
                         <strong>
-                          @{p.profileA} ↔ @{p.profileB}
+                          {displayXHandle(p.profileA)} ↔ {displayXHandle(p.profileB)}
                         </strong>
                         <span className="xls-count">
                           {p.commonFollowerCount} followers · {p.commonFollowingCount} following ·{' '}

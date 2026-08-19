@@ -18,3 +18,18 @@ export function normalizeXSourceKey(value: unknown): string {
     .trim()
     .toLowerCase();
 }
+
+/**
+ * Format an X handle for DISPLAY: exactly one leading `@`, case preserved, and empty for an absent
+ * handle (never a bare `@`). Idempotent, because handles arrive at the UI from several layers —
+ * capture, analysis, store — some already carrying a `@` and some not. The COMMON FOLLOWERS pair
+ * line rendered `@@ADanielHill` by prefixing a value that already had one (field report, v3.72.2).
+ *
+ * This is a display formatter, NOT a lookup key: `normalizeXSourceKey` lowercases for identity, so
+ * using it here would render handles in the wrong case.
+ */
+export function displayXHandle(value: unknown): string {
+  const raw = typeof value === 'string' ? value.trim() : '';
+  const handle = raw.replace(/^@+/, '').trim();
+  return handle ? `@${handle}` : '';
+}

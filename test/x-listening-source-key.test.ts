@@ -6,7 +6,7 @@
  * either deleted both cards' posts — silent evidence loss. This pins the shared contract.
  */
 import { describe, it, expect } from 'vitest';
-import { normalizeXSourceKey } from '../src/shared/x-listening-source';
+import { normalizeXSourceKey, displayXHandle } from '../src/shared/x-listening-source';
 
 describe('normalizeXSourceKey — shared source-card / removeSource canonicalization', () => {
   it('strips a leading @, trims, and lowercases', () => {
@@ -27,5 +27,35 @@ describe('normalizeXSourceKey — shared source-card / removeSource canonicaliza
     expect(normalizeXSourceKey('')).toBe('');
     expect(normalizeXSourceKey(null)).toBe('');
     expect(normalizeXSourceKey(undefined)).toBe('');
+  });
+});
+
+/**
+ * FIELD BUG (GhostExodus, v3.72.2): the COMMON FOLLOWERS / FOLLOWING pair line rendered
+ * "@@ADanielHill ↔ @@TodayDarkweb" — the renderer prefixed '@' onto a value that already carried
+ * one. Handles reach the UI from several places (capture, analysis, store), some with '@' and some
+ * without, so display formatting must be idempotent rather than assuming a convention.
+ */
+describe('displayXHandle', () => {
+  it('adds exactly one @ to a bare handle', () => {
+    expect(displayXHandle('ADanielHill')).toBe('@ADanielHill');
+  });
+
+  it('does not double the @ on a handle that already carries one', () => {
+    expect(displayXHandle('@ADanielHill')).toBe('@ADanielHill');
+  });
+
+  it('collapses an already-doubled prefix', () => {
+    expect(displayXHandle('@@ADanielHill')).toBe('@ADanielHill');
+  });
+
+  it('preserves the handle case (display is not a lookup key)', () => {
+    expect(displayXHandle('@TodayDarkweb')).toBe('@TodayDarkweb');
+  });
+
+  it('returns empty for an absent handle rather than a bare @', () => {
+    expect(displayXHandle('')).toBe('');
+    expect(displayXHandle(undefined)).toBe('');
+    expect(displayXHandle('   ')).toBe('');
   });
 });

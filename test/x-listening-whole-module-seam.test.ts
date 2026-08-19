@@ -36,6 +36,8 @@ const MODULE_SOURCE = readdirSync(MODULE_DIR)
 /** Every channel key that MUST be reachable from a control in XListeningModule.tsx, mapped to
  *  the exact `window.api.xListening.<method>` call the renderer makes for it. */
 const REACHABLE_CHANNELS: ReadonlyArray<keyof typeof channels.xListening> = [
+  // v3.72.3: read-only mutex status, polled by the "Waiting for <holder>…" indicator.
+  'collectionStatus',
   'openSession',
   'sessionStatus',
   'closeSession',

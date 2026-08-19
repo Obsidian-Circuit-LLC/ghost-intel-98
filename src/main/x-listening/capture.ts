@@ -52,6 +52,7 @@ import {
   type XVerifyPage,
 } from './extract';
 import { postEvidenceHash } from './evidence';
+import { withNavigationTimeout, NAVIGATION_TIMEOUT_MS } from '../capture/nav-timeout';
 import {
   ingestPostsWithHistory,
   markPostUnavailable,
@@ -365,7 +366,8 @@ function defaultDeps(): XCaptureDeps {
       await defaultRunCapture(win, X_TIMELINE_SCROLL_SCRIPT);
     },
     navigate: async (win, url) => {
-      await win.loadURL(url);
+      // Bounded (v3.72.2): a stalled navigation must fail, not hold the collection mutex forever.
+      await withNavigationTimeout(() => win.loadURL(url), NAVIGATION_TIMEOUT_MS, url);
     },
     assertSignedIn: (win) => probeSignedInState(win),
     delay: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),

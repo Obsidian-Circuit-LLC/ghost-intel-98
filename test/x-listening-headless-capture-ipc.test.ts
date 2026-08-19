@@ -62,6 +62,13 @@ vi.mock('../src/main/x-listening/scheduler', () => ({
 
 vi.mock('../src/main/x-listening/avatar-repair', () => ({
   repairAvatars: vi.fn(async () => undefined),
+  buildAvatarLookup: vi.fn(async () => ({})),
+  primeEntityAvatarsForCase: vi.fn(async () => undefined),
+}));
+// v3.72.3: the post-capture avatar work now runs as MAINTENANCE — repair + entity priming under the
+// collection mutex, scheduled so it starts only after the capture's own lock is released.
+vi.mock('../src/main/x-listening/avatar-maintenance', () => ({
+  scheduleAvatarMaintenance: vi.fn(),
 }));
 
 // `loadClearnetEnabled` dynamically imports this; return the default (Tor mode, clearnet off).
@@ -76,7 +83,7 @@ vi.mock('electron', () => ({
 import { channels } from '../src/shared/ipc-contracts';
 import { registerXListeningIpc } from '../src/main/x-listening/ipc';
 import { connectXSession, getXWindow } from '../src/main/x-listening/session';
-import { repairAvatars } from '../src/main/x-listening/avatar-repair';
+import { scheduleAvatarMaintenance } from '../src/main/x-listening/avatar-maintenance';
 
 const TRUSTED = { senderFrame: { url: 'file:///app/index.html' } };
 
@@ -131,26 +138,26 @@ describe('captureTimeline handler — headless ensure-window', () => {
 
   // v3.72.1 display-pics fix: a sweep discovers new author handles whose avatars were never fetched
   // (repair otherwise runs only on session-open). Both capture paths must re-run the idempotent repair.
-  it('re-runs the avatar repair after a successful timeline capture', async () => {
-    vi.mocked(repairAvatars).mockClear();
+  it('schedules avatar maintenance after a successful timeline capture', async () => {
+    vi.mocked(scheduleAvatarMaintenance).mockClear();
     const ipc = fakeIpcMain();
     registerXListeningIpc({ handle: ipc.handle as never });
     const caseId = randomUUID();
     await ipc.registered.get(channels.xListening.captureTimeline)!(TRUSTED, {
       caseId, channelId: 'target', targetUsername: 'target',
     });
-    expect(vi.mocked(repairAvatars)).toHaveBeenCalledWith(caseId);
+    expect(vi.mocked(scheduleAvatarMaintenance)).toHaveBeenCalledWith(caseId);
   });
 
-  it('re-runs the avatar repair after a successful network extraction', async () => {
-    vi.mocked(repairAvatars).mockClear();
+  it('schedules avatar maintenance after a successful network extraction', async () => {
+    vi.mocked(scheduleAvatarMaintenance).mockClear();
     const ipc = fakeIpcMain();
     registerXListeningIpc({ handle: ipc.handle as never });
     const caseId = randomUUID();
     await ipc.registered.get(channels.xListening.captureNetwork)!(TRUSTED, {
       caseId, channelId: 'target', targetUsername: 'target', kind: 'followers',
     });
-    expect(vi.mocked(repairAvatars)).toHaveBeenCalledWith(caseId);
+    expect(vi.mocked(scheduleAvatarMaintenance)).toHaveBeenCalledWith(caseId);
   });
 });
 

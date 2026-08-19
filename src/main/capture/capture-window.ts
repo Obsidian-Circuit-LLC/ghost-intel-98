@@ -24,6 +24,7 @@
  */
 
 import { BrowserWindow, session } from 'electron';
+import { withNavigationTimeout, NAVIGATION_TIMEOUT_MS } from './nav-timeout';
 
 export interface CaptureWindowOpts {
   /** Session partition the window runs on, e.g. `persist:x-listening`. */
@@ -143,7 +144,10 @@ export async function createCaptureWindow(
     });
   }
 
-  await win.loadURL(opts.url);
+  // Bounded: an unbounded loadURL over Tor could stall forever, and every X Listening collection op
+  // awaits this INSIDE the app-wide collection mutex — one stalled navigation disabled all collection
+  // until the app restarted (v3.72.2 field report). Fail-closed instead of hanging.
+  await withNavigationTimeout(() => win.loadURL(opts.url), NAVIGATION_TIMEOUT_MS, opts.url);
   return win;
 }
 
