@@ -586,3 +586,22 @@ describe('registerGhostSocialViewIpc: every channel is wired + sender-checks FIR
     await expect((async () => fn(TRUSTED_EVENT, true))()).resolves.not.toThrow();
   });
 });
+
+/**
+ * Same exposure as the WebSDR overlay (field video, v3.72.3): a `WebContentsView` is composited above
+ * all DOM, so hiding an account tile must not rely on a visibility flag alone — the live account view
+ * could keep painting over the desktop after the window is minimised. Park it off-screen as well.
+ */
+describe('ghost-social view-manager — hiding leaves nothing on screen', () => {
+  it('parks a tile OFF-SCREEN before hiding + detaching it', async () => {
+    const h = harness();
+    await h.mgr.showGrid(CID, [{ account: ACC, bounds: { x: 10, y: 20, width: 400, height: 390 } }]);
+    const v = h.viewFor(CID, ACC.id);
+    v.calls.setBounds.length = 0;
+    await h.mgr.hideAll();
+    const parked = v.calls.setBounds.at(-1);
+    expect(parked, 'a hide must re-position the view off-screen').toBeTruthy();
+    expect(parked!.x).toBeLessThan(-1000);
+    expect(v.calls.setVisible.at(-1)).toBe(false);
+  });
+});

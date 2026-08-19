@@ -567,6 +567,10 @@ export const channels = {
     sessionStatus: 'xListening:sessionStatus',
     /** Close (not log out of) one campaign's live capture window (session.ts). */
     closeSession: 'xListening:closeSession',
+    /** Read-only: who currently holds the app-wide collection mutex, how long they have held it,
+     *  and whether they have gone stale. Drives the "Waiting for <holder>…" indicator while a
+     *  manual op queues behind a background sweep (operator decision, 2026-08-19). No egress. */
+    collectionStatus: 'xListening:collectionStatus',
     /** Capture the ALREADY-VISIBLE X profile timeline in a campaign's open capture window
      *  (capture.ts) — the analyst navigates the visible window to the target manually; this
      *  channel captures whatever page is currently loaded, folds metrics/metricsRaw into an

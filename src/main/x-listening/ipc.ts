@@ -27,7 +27,8 @@ import { getCollectionSettings, saveCollectionSettings } from './collection-sett
 import { normalizeImageMode, type XImageMode } from '@shared/x-listening-image-policy';
 import { getImagePolicy, setProfileImageMode, resolveEffectiveImageCollection } from './image-policy';
 import { restartSchedule, stopSchedule, scheduleStatus } from './scheduler';
-import { repairAvatars, buildAvatarLookup } from './avatar-repair';
+import { buildAvatarLookup } from './avatar-repair';
+import { scheduleAvatarMaintenance } from './avatar-maintenance';
 import { prodXStore, xNoteKey } from './store';
 import type { XNote, XPostArtifact, XNetworkArtifact, XPreset, XEntityCacheEntry } from './store';
 import { ensureUuid } from '../security/validate';
@@ -71,7 +72,7 @@ import {
   type XHealthRelationship
 } from './analysis';
 import { runArchiveSteps } from './archive';
-import { withCollectionLock } from './collection-lock';
+import { withQueuedCollectionLock, describeCollectionHolder } from './collection-lock';
 import { loadDemoData } from './demo';
 import { readCachedMedia } from './media';
 import {
@@ -1283,7 +1284,7 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
       // (`main.cjs:1104-1106`). Fire-and-forget: a repair hiccup must never fail the connect, and the
       // pass FAILS CLOSED itself (no window, no egress) if Tor is down. Idempotent, so repeated
       // connects don't re-fetch already-cached avatars.
-      void repairAvatars(caseId).catch((err) => console.warn('[XListening] repairAvatars (open):', err));
+      scheduleAvatarMaintenance(caseId);
     }
     return result;
   });
@@ -1381,7 +1382,7 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
     // operation is already running." (his manual-entrypoint behaviour) rather than opening a second
     // capture window. The lock spans the profile navigation + the scroll-and-accumulate scrape (the
     // egressing work) and releases in `finally`.
-    return withCollectionLock(async () => {
+    return withQueuedCollectionLock(async () => {
       // Drive the window to the target profile so the analyst does not have to hand-navigate it first
       // (the "Capture Timeline" field says "capture THIS username"). A blocked/signed-out page returns
       // its reason; a render timeout is non-fatal (the capture below then reports 0 honestly).
@@ -1421,10 +1422,12 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
       // Re-run it after a successful capture (idempotent: won't re-fetch a cached avatar; Tor-gated +
       // fail-closed; fire-and-forget so a repair hiccup never fails the capture).
       if (!capResult.blocked) {
-        void repairAvatars(caseId).catch((err) => console.warn('[XListening] repairAvatars (post-capture):', err));
+        // Scheduled (not awaited) so it runs AFTER this handler's collection lock is released — it
+        // takes the lock itself, so it can never open a second window alongside another op.
+        scheduleAvatarMaintenance(caseId);
       }
       return capResult;
-    });
+    }, `timeline capture of @${targetUsername}`);
   });
 
   // Task 14: list every captured post artifact for a campaign — the persisted source of truth
@@ -1565,6 +1568,13 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
     return buildAvatarLookup(ensureUuid(caseIdArg, 'caseId'));
   });
 
+  // Read-only collection-mutex status — drives the renderer's "Waiting for <holder>…" indicator
+  // while a manual op queues behind a background sweep. Pure in-process state; no egress.
+  deps.handle(channels.xListening.collectionStatus, (e) => {
+    assertTrustedSender(e);
+    return describeCollectionHolder();
+  });
+
   // Presets: pure store CRUD (extend XStore, Task 1) — no capture window, no network.
   deps.handle(channels.xListening.presetsRead, async (e, caseIdArg) => {
     assertTrustedSender(e);
@@ -1674,7 +1684,8 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
     // M5: a manual archive is a collection op — hold the single app-wide collection lock across the
     // whole (possibly multi-cycle) run so it never egresses concurrently with a sweep / another op
     // (Enterprise `runArchiveCycle`'s `sweepRunning`, `main.cjs:1962`). Contention throws.
-    return withCollectionLock(() =>
+    return withQueuedCollectionLock(
+      () =>
       runArchiveSteps(
         win,
         {
@@ -1685,7 +1696,8 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
           targetUsername
         },
         { maxCycles: Number.isFinite(maxCycles) && maxCycles > 0 ? maxCycles : 1 }
-      )
+      ),
+      'archive run',
     );
   });
 
@@ -1792,7 +1804,10 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
     // M5: a live verify opens a Tor-gated capture window (Enterprise `verifyPostLive` runs under the
     // global `sweepRunning`, `main.cjs:2425-2427`) — hold the app-wide collection lock so it never
     // races a sweep/archive/manual capture. Contention throws.
-    return withCollectionLock(() => verifyPost(ensureUuid(req.caseId as string, 'caseId'), req.postId as string));
+    return withQueuedCollectionLock(
+      () => verifyPost(ensureUuid(req.caseId as string, 'caseId'), req.postId as string),
+      'live post verification',
+    );
   });
 
   // ---- Task C1: live follower/following network extraction (captureNetwork) ----------------
@@ -1826,18 +1841,20 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
     // relationship capture runs under the global `sweepRunning`, `main.cjs:2427`) — hold the app-wide
     // collection lock so it never egresses concurrently with a sweep/archive/manual capture.
     const netCaseId = ensureUuid(req.caseId as string, 'caseId');
-    const netResult = await withCollectionLock(() =>
-      captureNetwork({
-        caseId: netCaseId,
-        channelId,
-        targetUsername,
-        kind: kind as 'followers' | 'following'
-      })
+    const netResult = await withQueuedCollectionLock(
+      () =>
+        captureNetwork({
+          caseId: netCaseId,
+          channelId,
+          targetUsername,
+          kind: kind as 'followers' | 'following'
+        }),
+      `${kind} extraction of @${targetUsername}`,
     );
     // v3.72.1 display-pics fix: refresh avatars for handles this network extraction discovered (same
     // rationale as captureTimeline — idempotent, Tor-gated, fail-closed, fire-and-forget).
     if (!netResult.blocked) {
-      void repairAvatars(netCaseId).catch((err) => console.warn('[XListening] repairAvatars (post-network):', err));
+      scheduleAvatarMaintenance(netCaseId);
     }
     return netResult;
   });

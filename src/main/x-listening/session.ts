@@ -25,6 +25,7 @@
  */
 
 import type { BrowserWindow } from 'electron';
+import { withNavigationTimeout, NAVIGATION_TIMEOUT_MS } from '../capture/nav-timeout';
 import { session as electronSession } from 'electron';
 import { createCaptureWindow } from '../capture/capture-window';
 import { getBgTor } from '../bgconn/tor-singleton';
@@ -231,7 +232,7 @@ export interface XNavigateDeps {
 function defaultNavigateDeps(): XNavigateDeps {
   return {
     resolveWindow: getXWindow,
-    loadUrl: (win, url) => win.loadURL(url),
+    loadUrl: (win, url) => withNavigationTimeout(() => win.loadURL(url), NAVIGATION_TIMEOUT_MS, url),
     runScript: (win, js) => win.webContents.executeJavaScript(js, true),
     delay: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     maxAttempts: 24,

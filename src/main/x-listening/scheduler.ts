@@ -34,7 +34,7 @@ import {
 } from '@shared/x-listening-collection-settings';
 import type { XScheduleStatus } from '@shared/x-listening-schedule';
 import type { XTimelineCaptureResult } from './capture';
-import { tryAcquireCollectionLock, releaseCollectionLock } from './collection-lock';
+import { tryAcquireCollectionLock, releaseCollectionLock, touchCollectionLock } from './collection-lock';
 
 export type { XScheduleStatus };
 
@@ -255,7 +255,7 @@ export async function runScheduledSweep(
   // this scheduled sweep SKIPS this tick (Enterprise's background-timer `if (!sweepRunning && …)`,
   // `main.cjs:1919`) — never a second concurrent capture window. The timer keeps ticking; the next
   // tick retries once the lock is free.
-  if (!tryAcquireCollectionLock()) {
+  if (!tryAcquireCollectionLock('scheduled sweep')) {
     return { swept: false, blocked: false, reason: 'collection-busy', sources: 0, added: 0 };
   }
   try {
@@ -270,6 +270,8 @@ export async function runScheduledSweep(
     let added = 0;
     let captured = 0;
     for (let index = 0; index < sources.length; index += 1) {
+      // Report progress so a long BUT HEALTHY multi-target sweep never trips the stale-hold break.
+      touchCollectionLock();
       const res = await deps.sweepProfile(caseId, sources[index]!, settings);
       if (res.blocked) {
         // Fail closed: the Tor gate refused — stop the pass, egress nothing further (no trailing gap).
@@ -303,7 +305,7 @@ export async function runScheduledArchive(
   // M5: same single app-wide collection lock as a sweep — an archive tick contending with any other
   // collection op SKIPS (Enterprise's archive-timer `if (!sweepRunning && …)`, `main.cjs:2065`), so
   // an archive op never egresses concurrently with a sweep / manual capture / another campaign.
-  if (!tryAcquireCollectionLock()) {
+  if (!tryAcquireCollectionLock('archive tick')) {
     return { swept: false, blocked: false, reason: 'collection-busy', sources: 0, added: 0 };
   }
   try {

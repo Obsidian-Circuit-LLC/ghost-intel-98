@@ -734,6 +734,7 @@ const api = {
     openSession: (caseId: string) => ipcRenderer.invoke(channels.xListening.openSession, caseId),
     sessionStatus: (caseId: string) =>
       ipcRenderer.invoke(channels.xListening.sessionStatus, caseId),
+    collectionStatus: () => ipcRenderer.invoke(channels.xListening.collectionStatus),
     closeSession: (caseId: string) =>
       ipcRenderer.invoke(channels.xListening.closeSession, caseId),
     captureTimeline: (req: {

@@ -404,6 +404,50 @@ describe('receiver-view: a receiver navigated before the overlay was sized heals
   });
 });
 
+/**
+ * FIELD BUG (GhostExodus, v3.72.3 video): after the WebSDR window was minimised, the receiver kept
+ * painting over the DESKTOP for ~6 seconds — a stray native view outliving its window, which the
+ * module header calls a release blocker (constraint 9).
+ *
+ * A `WebContentsView` is composited by the OS above all DOM, so "hidden" must not rely on the
+ * compositor noticing a visibility flag alone: the overlay is PARKED OFF-SCREEN as well as hidden
+ * and detached, so there is no on-screen rectangle for a stale frame to occupy.
+ */
+describe('receiver-view: hiding leaves nothing on screen', () => {
+  it('parks the overlay OFF-SCREEN before hiding + detaching it', async () => {
+    const h = harness();
+    await h.mgr.load('https://sdr.example/');
+    h.mgr.present({ visible: true, bounds: BOUNDS });
+    h.v.calls.setBounds.length = 0;
+    h.mgr.present({ visible: false });
+    const parked = h.v.calls.setBounds.at(-1);
+    expect(parked, 'a hide must re-position the view off-screen').toBeTruthy();
+    expect(parked!.x).toBeLessThan(-1000);
+    expect(parked!.y).toBeLessThan(-1000);
+    expect(h.v.calls.setVisible.at(-1)).toBe(false);
+    expect(h.w.calls.removed).toBeGreaterThan(0);
+  });
+
+  it('parks the overlay when a modal detaches it too', async () => {
+    const h = harness();
+    await h.mgr.load('https://sdr.example/');
+    h.mgr.present({ visible: true, bounds: BOUNDS });
+    h.v.calls.setBounds.length = 0;
+    h.mgr.setModal(true);
+    expect(h.v.calls.setBounds.at(-1)?.x).toBeLessThan(-1000);
+  });
+
+  it('restores real bounds when it becomes visible again (parking is not sticky)', async () => {
+    const h = harness();
+    await h.mgr.load('https://sdr.example/');
+    h.mgr.present({ visible: true, bounds: BOUNDS });
+    h.mgr.present({ visible: false });
+    h.mgr.present({ visible: true, bounds: BOUNDS });
+    expect(h.v.calls.setBounds.at(-1)).toEqual(BOUNDS);
+    expect(h.v.calls.setVisible.at(-1)).toBe(true);
+  });
+});
+
 // ---- B. IPC registration seam ------------------------------------------
 
 function fakeIpcMain() {

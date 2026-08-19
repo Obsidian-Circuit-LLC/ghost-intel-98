@@ -184,6 +184,9 @@ function sanitizeBounds(b: ReceiverBounds | undefined): ReceiverBounds | undefin
   };
 }
 
+/** Where a hidden overlay is parked — far outside any real display, never a 0x0 at the origin. */
+const OFFSCREEN_BOUNDS: ReceiverBounds = { x: -20000, y: -20000, width: 1, height: 1 };
+
 /** A rectangle big enough for a receiver page to lay out into. `sanitizeBounds` floors width/height
  *  at 1, so "1×1" is the shape a zero-size host report takes — treat it as unsized, not as real. */
 function isRealBounds(b: ReceiverBounds | undefined): boolean {
@@ -320,6 +323,12 @@ export function makeReceiverViewManager(deps: ReceiverViewDeps): ReceiverViewMan
         view.webContents.reload();
       }
     } else {
+      // Park OFF-SCREEN before hiding. A WebContentsView is composited by the OS above all DOM, so a
+      // visibility flag alone left the receiver painting over the DESKTOP for seconds after the
+      // window was minimised (field video, v3.72.3) — a stray native view outliving its window is a
+      // release blocker (constraint 9). Moving it out of the viewport first means there is no
+      // on-screen rectangle for a stale frame to occupy, whatever the compositor does next.
+      view.setBounds(OFFSCREEN_BOUNDS);
       view.setVisible(false);
       if (attached) {
         win.contentView.removeChildView(view);

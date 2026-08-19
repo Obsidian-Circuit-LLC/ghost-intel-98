@@ -857,6 +857,8 @@ export interface GhostApi {
     /** Derived session/window state for one campaign — `connected` is the shared partition's
      *  auth-cookie presence; `windowOpen` is whether THIS campaign has a live capture window. */
     sessionStatus(caseId: string): Promise<{ connected: boolean; windowOpen: boolean }>;
+    /** Who holds the app-wide collection mutex right now (null when free). Read-only, no egress. */
+    collectionStatus(): Promise<{ owner: string; heldMs: number; stale: boolean } | null>;
     /** Close (not log out of) one campaign's live capture window. */
     closeSession(caseId: string): Promise<{ cleared: boolean }>;
     /**

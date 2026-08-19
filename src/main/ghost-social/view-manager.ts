@@ -37,6 +37,9 @@ import type { AccountLike, BrowserCacheMode, PlatformKey } from '@shared/ghost-s
 import { accountPartition } from '@shared/ghost-social/types';
 import { hostOfUrl, normalizeSocialUrl, sameSite } from '@shared/ghost-social/url';
 
+/** Where a hidden overlay is parked — far outside any real display, never a 0x0 at the origin. */
+const GSM_OFFSCREEN_BOUNDS: ViewBounds = { x: -20000, y: -20000, width: 1, height: 1 };
+
 // ---- injectable electron-shaped seams ----------------------------------
 // Minimal structural shapes of exactly the Electron surface this manager drives — kept structural
 // (not `import type` from electron) so a test injects a fake with zero electron runtime.
@@ -265,6 +268,11 @@ export function makeGhostSocialViewManager(deps: ViewManagerDeps): GhostSocialVi
       if (cv.bounds) cv.view.setBounds(cv.bounds);
       cv.view.setVisible(true);
     } else {
+      // Park OFF-SCREEN before hiding — a WebContentsView is composited above all DOM, so a
+      // visibility flag alone let the WebSDR overlay keep painting over the desktop for seconds
+      // after its window was minimised (field video, v3.72.3). The account wall carries the same
+      // exposure (a live, logged-in social session), so it gets the same treatment.
+      cv.view.setBounds(GSM_OFFSCREEN_BOUNDS);
       cv.view.setVisible(false);
       if (cv.attached) {
         win.contentView.removeChildView(cv.view);

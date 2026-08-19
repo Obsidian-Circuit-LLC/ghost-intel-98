@@ -449,3 +449,224 @@ export async function buildAvatarLookup(
   }
   return out;
 }
+
+// ---- entity-avatar priming (operator decision, 2026-08-19) -----------------------------------
+/**
+ * `repairAvatars` can only re-fetch avatars whose remote URL we ALREADY observed — i.e. profiles the
+ * campaign actually captured. An account that was merely MENTIONED in a captured post has no
+ * snapshot, so the ENTITY INDEX could only ever render a monogram for it (GhostExodus field report,
+ * v3.72.2: "still not extracting display pics").
+ *
+ * Priming closes that gap the only way it can be closed — by VISITING the mentioned profile to read
+ * its header avatar. That is real added egress, so the pass is deliberately conservative:
+ *   - **Tor-gated + fail-closed.** The gate is resolved BEFORE any window opens; blocked ⇒ nothing.
+ *   - **Bounded.** At most `cap` profiles are visited per run, on one shared hidden window.
+ *   - **Idempotent.** A handle already in the avatar cache ledger is skipped without a visit.
+ *   - **Remembers misses.** A profile that yields no readable avatar is recorded in a miss ledger and
+ *     not re-visited until the miss ages out — otherwise every sweep would re-visit it forever.
+ *   - **Never fabricates a visit.** Only canonical `^[A-Za-z0-9_]{1,15}$` handles are navigated to.
+ */
+
+/** Miss-ledger sidecar: handles whose profile yielded no usable avatar, and when we last looked. */
+export const X_AVATAR_MISS_FILE = 'x-avatar-misses.json';
+/** How long a miss suppresses a re-visit. Long enough that a sweep loop never re-walks dead handles. */
+export const AVATAR_MISS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+export interface XEntityAvatarPrimeDeps {
+  loadClearnetEnabled: () => Promise<boolean>;
+  resolveGate: (clearnetEnabled: boolean) => XTorGate | Promise<XTorGate>;
+  openWindow: (url: string, proxy?: { socks: string }) => Promise<Electron.BrowserWindow>;
+  /** Handles seen as MENTION entities in this campaign (canonical or '@'-prefixed; both tolerated). */
+  listEntityHandles: (caseId: string) => Promise<string[]>;
+  /** Navigate the shared window to the profile and read its header avatar URL ('' when unreadable). */
+  discoverAvatarUrl: (win: Electron.BrowserWindow, handle: string) => Promise<string>;
+  /** Host-anchored fetch + cache of the discovered URL (`media.ts` `cacheRemoteMedia`). */
+  cache: (
+    win: Electron.BrowserWindow,
+    url: string,
+    caseId: string,
+  ) => Promise<{ ref: string; sha256: string } | null>;
+  readCache: (caseId: string) => Promise<Record<string, unknown> | null>;
+  writeCache: (caseId: string, map: XAvatarCacheMap) => Promise<void>;
+  readMisses: (caseId: string) => Promise<Record<string, string>>;
+  writeMisses: (caseId: string, misses: Record<string, string>) => Promise<void>;
+  now: () => string;
+  cap: number;
+}
+
+export interface XEntityAvatarPrimeResult {
+  /** Entity handles considered before filtering. */
+  scanned: number;
+  /** Handles skipped because they already had a cached avatar. */
+  skipped: number;
+  /** Profiles visited this run. */
+  visited: number;
+  /** Avatars newly cached this run. */
+  cached: number;
+  /** True when the Tor gate refused — no window opened, nothing visited. */
+  blocked: boolean;
+  reason?: string;
+}
+
+export async function primeEntityAvatars(
+  caseId: string,
+  deps: XEntityAvatarPrimeDeps,
+): Promise<XEntityAvatarPrimeResult> {
+  const cap = Math.max(1, Math.min(MAX_AVATAR_REPAIR_CAP, Math.floor(deps.cap) || DEFAULT_AVATAR_REPAIR_CAP));
+  const [rawMap, handles, misses] = await Promise.all([
+    deps.readCache(caseId).catch(() => null),
+    deps.listEntityHandles(caseId).catch(() => [] as string[]),
+    deps.readMisses(caseId).catch(() => ({} as Record<string, string>)),
+  ]);
+  const map = normalizeCacheMap(rawMap);
+  const nowIso = deps.now();
+  const nowMs = Date.parse(nowIso);
+
+  // LOCAL filtering first — a pass with nothing to do must never open a window (no egress for junk).
+  const seen = new Set<string>();
+  const wanted: string[] = [];
+  let skipped = 0;
+  for (const raw of handles) {
+    const display = String(raw ?? '').replace(/^@+/, '').trim();
+    if (!X_HANDLE_RE.test(display)) continue;
+    const key = normalizeXSourceKey(display);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    if (map[key]) {
+      skipped += 1;
+      continue;
+    }
+    const missedAt = Date.parse(String(misses[key] ?? ''));
+    if (Number.isFinite(missedAt) && Number.isFinite(nowMs) && nowMs - missedAt < AVATAR_MISS_TTL_MS) continue;
+    wanted.push(display);
+  }
+  const scanned = seen.size;
+  if (!wanted.length) return { scanned, skipped, visited: 0, cached: 0, blocked: false };
+
+  const gate = await deps.resolveGate(await deps.loadClearnetEnabled());
+  if (gate.blocked) {
+    return { scanned, skipped, visited: 0, cached: 0, blocked: true, reason: gate.reason };
+  }
+
+  const batch = wanted.slice(0, cap);
+  const win = await deps.openWindow(REPAIR_WINDOW_URL, gate.proxy);
+  let visited = 0;
+  let cached = 0;
+  const nextMisses = { ...misses };
+  try {
+    for (const display of batch) {
+      const key = normalizeXSourceKey(display);
+      visited += 1;
+      let url = '';
+      try {
+        url = String((await deps.discoverAvatarUrl(win, display)) ?? '').trim();
+      } catch {
+        url = ''; // a failed visit is a miss, not a crash — the next run retries after the TTL
+      }
+      if (!url) {
+        nextMisses[key] = nowIso;
+        continue;
+      }
+      const stored = await deps.cache(win, url, caseId).catch(() => null);
+      if (!stored) {
+        nextMisses[key] = nowIso;
+        continue;
+      }
+      map[key] = { ref: stored.ref, sha256: stored.sha256, sourceUrl: url, cachedAt: nowIso };
+      delete nextMisses[key];
+      cached += 1;
+    }
+  } finally {
+    try {
+      if (!win.isDestroyed()) win.destroy();
+    } catch {
+      /* a window already gone is fine */
+    }
+  }
+  if (cached) await deps.writeCache(caseId, map).catch(() => undefined);
+  await deps.writeMisses(caseId, nextMisses).catch(() => undefined);
+  return { scanned, skipped, visited, cached, blocked: false };
+}
+
+
+/**
+ * Production seams for `primeEntityAvatars`. Same posture as `defaultDeps()` — every electron / Tor /
+ * store / media / secure-fs touch is a LAZY dynamic import, so a test injecting deps never evaluates
+ * electron. Candidate handles come from the campaign's MENTION entities; the visit itself is a
+ * bounded navigation on the shared hidden window followed by the same static profile-header read the
+ * capture path uses (no interpolation — the handle is `X_HANDLE_RE`-validated before the URL is built).
+ */
+export function defaultEntityPrimeDeps(): XEntityAvatarPrimeDeps {
+  const base = defaultDeps();
+  return {
+    loadClearnetEnabled: base.loadClearnetEnabled,
+    resolveGate: base.resolveGate,
+    openWindow: base.openWindow,
+    cache: base.cache,
+    readCache: base.readCache,
+    writeCache: base.writeCache,
+    now: base.now,
+    cap: base.cap,
+    listEntityHandles: async (caseId) => {
+      try {
+        const { prodXStore } = await import('./store');
+        const store = await prodXStore();
+        const entities = await store.entitiesCache.read(caseId);
+        // MENTION entities are the ones that denote an account; hashtags/domains have no profile.
+        return entities
+          .filter((e) => String(e.type ?? '').toLowerCase() === 'mention')
+          .sort((a, b) => (b.count ?? 0) - (a.count ?? 0)) // most-seen identities first within the cap
+          .map((e) => String(e.value ?? '').replace(/^@+/, ''));
+      } catch {
+        return [];
+      }
+    },
+    discoverAvatarUrl: async (win, handle) => {
+      if (!X_HANDLE_RE.test(handle)) return '';
+      const [{ withNavigationTimeout, NAVIGATION_TIMEOUT_MS }, { X_PROFILE_META_SCRIPT }, { normalizeProfileMeta }] =
+        await Promise.all([import('../capture/nav-timeout'), import('./extract'), import('./capture')]);
+      const url = `https://x.com/${handle}`;
+      await withNavigationTimeout(() => win.loadURL(url), NAVIGATION_TIMEOUT_MS, url);
+      // Same SPA settle the capture path uses before reading a freshly-navigated header.
+      await new Promise((resolve) => setTimeout(resolve, 2600));
+      const raw = await win.webContents.executeJavaScript(X_PROFILE_META_SCRIPT, true);
+      const meta = normalizeProfileMeta(raw);
+      return String(meta?.avatar ?? '').trim();
+    },
+    readMisses: async (caseId) => {
+      const [{ join }, paths, { secureReadFile }] = await Promise.all([
+        import('node:path'),
+        import('../storage/paths'),
+        import('../storage/secure-fs'),
+      ]);
+      try {
+        const buf = await secureReadFile(join(paths.scrapingCaseDir('x', caseId), X_AVATAR_MISS_FILE));
+        const parsed = JSON.parse(buf.toString('utf8')) as Record<string, unknown>;
+        const out: Record<string, string> = {};
+        for (const [k, v] of Object.entries(parsed ?? {})) {
+          const key = normalizeXSourceKey(k);
+          if (key && typeof v === 'string') out[key] = v;
+        }
+        return out;
+      } catch {
+        return {};
+      }
+    },
+    writeMisses: async (caseId, misses) => {
+      const [{ join }, paths, { secureWriteFile }] = await Promise.all([
+        import('node:path'),
+        import('../storage/paths'),
+        import('../storage/secure-fs'),
+      ]);
+      await secureWriteFile(
+        join(paths.scrapingCaseDir('x', caseId), X_AVATAR_MISS_FILE),
+        Buffer.from(JSON.stringify(misses), 'utf8'),
+      );
+    },
+  };
+}
+
+/** Convenience for the IPC call sites: prime with production seams. */
+export function primeEntityAvatarsForCase(caseId: string): Promise<XEntityAvatarPrimeResult> {
+  return primeEntityAvatars(caseId, defaultEntityPrimeDeps());
+}
