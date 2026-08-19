@@ -18,8 +18,8 @@ Follow-up to v3.72.2 from GhostExodus's testing. The WebSDR Viewer's waterfall f
 
 Windows NSIS installer — `GhostIntel98-Setup-3.72.3.exe` (per-user, no admin; unsigned → **More info → Run anyway**). Installs over the previous build in place.
 
-- **SHA-256:** `__SHA256__`
-- **Size:** `__SIZE__`
+- **SHA-256:** `8d6a8b6387a1001a36edac95c93f07e96f38bf880d17392706bbe8c6333ab89b`
+- **Size:** `945,155,327 bytes (~901 MB)`
 
 Confirm **Settings ▸ About** reads **3.72.3**.
 
