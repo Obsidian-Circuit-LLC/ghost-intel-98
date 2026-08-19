@@ -24,7 +24,7 @@ This release is **not** a claim that display pictures now work on your machine �
 
 Windows NSIS installer — `GhostIntel98-Setup-3.72.4.exe` (per-user, no admin; unsigned → **More info → Run anyway**). Installs over the previous build in place.
 
-- **SHA-256:** `__SHA256__`
-- **Size:** `__SIZE__`
+- **SHA-256:** `497d87c4f1bf8aeac42fafcb468d4f785515a79f48a08c8203c49c49965c9470`
+- **Size:** `945,156,824 bytes (~901 MB)`
 
 Confirm **Settings ▸ About** reads **3.72.4**.
