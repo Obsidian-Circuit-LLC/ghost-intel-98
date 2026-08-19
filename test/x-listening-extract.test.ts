@@ -248,3 +248,44 @@ describe('normalizeItem: per-post displayName (M1)', () => {
     expect(withName.id).toBe(withOther.id);
   });
 });
+
+/**
+ * PORT FIDELITY: his `main.cjs` stores the author avatar URL on every captured post
+ * (`mapCollectedPost`, main.cjs:1350) and resolves an avatar for ANY handle from profiles →
+ * relationships → posts (`avatarSourceForUsername`, main.cjs:1445). Our port kept only profile-header
+ * avatars, which is why an account that was merely MENTIONED could never show a picture.
+ *
+ * The URL is carried as an evidence-neutral SOURCE for the host-anchored cache — exactly like
+ * `XProfileSnapshot.avatar` — never rendered remotely.
+ */
+describe('normalizePost — author avatar carried as a cache source', () => {
+  const ctx = {
+    caseId: 'c', jobId: 'j', collectorVersion: 'v', harvestedAt: '2026-08-19T00:00:00.000Z',
+    channelId: 'target', channelLabel: '@target',
+  };
+  const raw = {
+    id: '1', username: 'someone', url: 'https://x.com/someone/status/1', text: 'hi',
+    createdAt: '2026-08-19T00:00:00.000Z', isReply: false, isRepost: false, socialContext: '',
+    metricsRaw: { replies: '', reposts: '', likes: '', views: '' }, media: [],
+  };
+
+  it('carries the scraped avatar URL onto the post', () => {
+    const item = normalizePost({ ...raw, avatar: 'https://pbs.twimg.com/profile_images/1/a.jpg' } as never, ctx as never);
+    expect(item.avatar).toBe('https://pbs.twimg.com/profile_images/1/a.jpg');
+  });
+
+  it('OMITS the avatar when none was observed — never an empty string masquerading as captured', () => {
+    const item = normalizePost({ ...raw, avatar: '' } as never, ctx as never);
+    expect(item.avatar).toBeUndefined();
+  });
+
+  it('refuses a non-pbs avatar URL (only X CDN hosts are a legitimate avatar source)', () => {
+    const item = normalizePost({ ...raw, avatar: 'https://evil.example/profile_images/x.jpg' } as never, ctx as never);
+    expect(item.avatar).toBeUndefined();
+  });
+
+  it('refuses a non-http scheme outright', () => {
+    const item = normalizePost({ ...raw, avatar: 'javascript:alert(1)' } as never, ctx as never);
+    expect(item.avatar).toBeUndefined();
+  });
+});

@@ -75,6 +75,7 @@ const POST_HTML = `
 <div data-testid="primaryColumn">
   <article data-testid="tweet">
     <div data-testid="socialContext">Pinned</div>
+    <div data-testid="Tweet-User-Avatar"><img src="https://pbs.twimg.com/profile_images/1/target_normal.jpg" alt=""/></div>
     <div class="row">
       <a href="/target/status/1789000000000000001" role="link">
         <time datetime="2026-08-06T11:59:00.000Z">2h</time>
@@ -255,5 +256,39 @@ describe('X_PAGE_STATE_SCRIPT against a rendered page', () => {
     const state = runInPage<{ text: string; articles: number }>(X_PAGE_STATE_SCRIPT);
     expect(state.articles).toBe(0);
     expect(state.text).toContain('Sign in to X');
+  });
+
+  /**
+   * PORT FIDELITY (GhostExodus, 2026-08-19): "I think Claude is still trying to recreate it in its own
+   * environment and not integrating the app I already tested." His `main.cjs:1254` reads the author's
+   * avatar out of EVERY tweet article, which is why his Entity Index can show a picture for an account
+   * he only ever saw mentioned — he already has its avatar URL. Our port omitted this entirely, so the
+   * only avatars we ever held were the profile headers of explicitly-targeted accounts, and every
+   * mentioned account was doomed to a monogram no matter what the fetching code did.
+   */
+  it('captures the author avatar from the tweet article (his main.cjs:1254)', () => {
+    document.body.innerHTML = POST_HTML;
+    const items = runInPage<Array<{ username: string; avatar?: string }>>(X_POST_SCRIPT);
+    const first = items.find((i) => i.username === 'target')!;
+    expect(first.avatar).toBe('https://pbs.twimg.com/profile_images/1/target_normal.jpg');
+  });
+
+  it('leaves the avatar empty when the article shows none — never fabricated', () => {
+    document.body.innerHTML = `<article data-testid="tweet">
+      <div class="row"><a href="/noavatar/status/55"><time datetime="2026-08-06T09:00:00.000Z">1h</time></a></div>
+      <div data-testid="tweetText">A post whose article exposes no avatar image</div>
+    </article>`;
+    const items = runInPage<Array<{ username: string; avatar?: string }>>(X_POST_SCRIPT);
+    expect(items[0]!.avatar).toBe('');
+  });
+
+  it('never takes a media image as an avatar', () => {
+    document.body.innerHTML = `<article data-testid="tweet">
+      <div class="row"><a href="/mediaonly/status/77"><time datetime="2026-08-06T09:00:00.000Z">1h</time></a></div>
+      <div data-testid="tweetText">A post with media but no avatar</div>
+      <div class="media"><img src="https://pbs.twimg.com/media/ZZZ.jpg" alt="Image"/></div>
+    </article>`;
+    const items = runInPage<Array<{ username: string; avatar?: string }>>(X_POST_SCRIPT);
+    expect(items[0]!.avatar).toBe('');
   });
 });

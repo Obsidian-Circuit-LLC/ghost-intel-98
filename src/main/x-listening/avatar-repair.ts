@@ -174,29 +174,38 @@ function defaultDeps(): XAvatarRepairDeps {
       return cacheRemoteMedia(win as unknown as import('../capture/security').MediaCapturePage, url, caseId);
     },
     listCandidates: async (caseId) => {
-      // Production candidate source: the captured profile-metadata snapshots. The LATEST snapshot per
-      // profile carries the remote avatar URL last observed on that profile's header — the closest
-      // GI98 analog to Enterprise's `appState.profiles[].avatar`. A snapshot with no usable handle or
-      // no remote avatar URL contributes nothing (never fabricate a fetch).
+      // PORT FIDELITY (2026-08-19): candidates come from EVERYTHING the campaign has observed —
+      // profile headers, network rows, and captured posts — resolved with his precedence
+      // (`avatarSourceForUsername`, main.cjs:1445). Reading only profile snapshots, as this did
+      // before, meant an account that was merely MENTIONED had no avatar source at all, so three
+      // releases of fixes to the FETCHING changed nothing: the candidate list was empty first.
       try {
         const { prodXStore } = await import('./store');
         const store = await prodXStore();
-        const snapshots = await store.profileSnapshots.read(caseId);
-        const latestByProfile = new Map<string, { handle: string; sourceUrl: string }>();
-        for (const snap of snapshots) {
-          const handle = normalizeXSourceKey(snap.sourceUsername ?? '');
-          const sourceUrl = String(snap.avatar ?? '').trim();
-          if (!handle || !sourceUrl) continue;
-          // Append order = capture order (store doc), so a later snapshot overwrites an earlier one —
-          // the newest observed avatar URL wins for each profile.
-          latestByProfile.set(snap.profileId, { handle, sourceUrl });
-        }
-        // De-dup by handle (two profiles with the same handle share one cache entry).
-        const byHandle = new Map<string, XAvatarRepairCandidate>();
-        for (const c of latestByProfile.values()) {
-          if (!byHandle.has(c.handle)) byHandle.set(c.handle, c);
-        }
-        return [...byHandle.values()];
+        const [snapshots, networks, posts] = await Promise.all([
+          store.profileSnapshots.read(caseId).catch(() => []),
+          store.networks.read(caseId).catch(() => []),
+          store.posts.read(caseId).catch(() => []),
+        ]);
+        return resolveAvatarCandidates({
+          profiles: snapshots.map((snap) => ({
+            username: String(snap.sourceUsername ?? ''),
+            avatar: String(snap.avatar ?? ''),
+            observedAt: String(snap.capturedAt ?? ''),
+          })),
+          networkAccounts: networks.flatMap((artifact) =>
+            (artifact.accounts ?? []).map((account) => ({
+              username: String(account.handle ?? ''),
+              avatar: String(account.avatar ?? ''),
+              observedAt: String(artifact.capturedAt ?? ''),
+            })),
+          ),
+          posts: posts.map((post) => ({
+            username: String(post.authorHandle ?? ''),
+            avatar: String((post as { avatar?: string }).avatar ?? ''),
+            observedAt: String(post.harvestedAt ?? post.publishedAt ?? ''),
+          })),
+        });
       } catch {
         return [];
       }
@@ -669,4 +678,67 @@ export function defaultEntityPrimeDeps(): XEntityAvatarPrimeDeps {
 /** Convenience for the IPC call sites: prime with production seams. */
 export function primeEntityAvatarsForCase(caseId: string): Promise<XEntityAvatarPrimeResult> {
   return primeEntityAvatars(caseId, defaultEntityPrimeDeps());
+}
+
+
+// ---- avatar SOURCE resolution (port of his `avatarSourceForUsername`, main.cjs:1445) ----------
+/**
+ * Resolve an avatar URL for every handle the campaign has ever observed, from data already captured.
+ *
+ * This is the piece our port was missing, and the reason three releases of display-pic fixes changed
+ * nothing: we only ever held avatars for profile HEADERS of explicitly targeted accounts, so an
+ * account that merely appeared in a captured post had no source at all and the fetcher had nothing to
+ * fetch. His app carries the author's avatar URL on every post and every network row, so any handle
+ * seen anywhere resolves without visiting a profile.
+ *
+ * Precedence is his: profile header → network row → post, newest observation first within each tier.
+ * A profile header is the most trustworthy (it is unambiguously that account's own avatar) and a post
+ * the least (but still the account's own, since it is scoped to that article).
+ */
+export interface AvatarObservation {
+  username: string;
+  avatar?: string;
+  /** Any comparable timestamp string; newest wins within a tier. */
+  observedAt?: string;
+}
+
+export function resolveAvatarCandidates(sources: {
+  profiles: readonly AvatarObservation[];
+  networkAccounts: readonly AvatarObservation[];
+  posts: readonly AvatarObservation[];
+}): XAvatarRepairCandidate[] {
+  const byHandle = new Map<string, string>();
+  // Least-trusted tier first, so a better tier overwrites it — his precedence, expressed as order.
+  const tiers = [sources.posts ?? [], sources.networkAccounts ?? [], sources.profiles ?? []];
+  for (const tier of tiers) {
+    const newestFirst = [...tier].sort((a, b) =>
+      String(b.observedAt ?? '').localeCompare(String(a.observedAt ?? '')),
+    );
+    const seenThisTier = new Set<string>();
+    for (const row of newestFirst) {
+      const display = String(row.username ?? '').replace(/^@+/, '').trim();
+      if (!X_HANDLE_RE.test(display)) continue;
+      const handle = normalizeXSourceKey(display);
+      if (!handle || seenThisTier.has(handle)) continue; // newest within the tier already won
+      const sourceUrl = admissibleAvatarUrl(row.avatar);
+      if (!sourceUrl) continue;
+      seenThisTier.add(handle);
+      byHandle.set(handle, sourceUrl);
+    }
+  }
+  return [...byHandle.entries()].map(([handle, sourceUrl]) => ({ handle, sourceUrl }));
+}
+
+/** Only `http(s)` on an allowlisted X media host is a legitimate avatar source. */
+function admissibleAvatarUrl(value: unknown): string {
+  const raw = typeof value === 'string' ? value.trim() : '';
+  if (!raw) return '';
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return '';
+    const host = url.hostname.toLowerCase();
+    return MEDIA_HOST_ALLOWLIST.some((a) => host === a || host.endsWith(`.${a}`)) ? raw : '';
+  } catch {
+    return '';
+  }
 }
