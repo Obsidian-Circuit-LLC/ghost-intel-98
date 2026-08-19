@@ -51,6 +51,7 @@ function mentionEntity(handle: string, sources: string[] = []) {
 function makeApi(over: {
   entities?: unknown[];
   avatars?: Record<string, string>;
+  fetchResult?: unknown;
 } = {}) {
   return {
     xListening: {
@@ -78,6 +79,11 @@ function makeApi(over: {
       readNotes: vi.fn(async () => ({ notes: [] })),
       archiveStatus: vi.fn(async () => null),
       presetsRead: vi.fn(async () => ({ presets: [] })),
+      collectionStatus: vi.fn(async () => null),
+      fetchDisplayPictures: vi.fn(async () => over.fetchResult ?? {
+        ok: true, message: 'Fetched 3 display pictures.', needsClearnetAck: false,
+        outcome: { scanned: 5, skipped: 2, visited: 3, cached: 3, blocked: false },
+      }),
     },
   };
 }
@@ -182,5 +188,60 @@ describe('X Listening ENTITY INDEX — display pics', () => {
     expect(api.xListening.verifyPost).not.toHaveBeenCalled();
     expect(api.xListening.openInX).not.toHaveBeenCalled();
     expect(api.xListening.openSession).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The pass used to run fire-and-forget and discard its result, so "no pictures" was indistinguishable
+   * from "blocked", "nothing to fetch" and "fetch failed" — three releases of invisible failure
+   * (GhostExodus: "It's still not extracting the display photos… it was a back and forth pain").
+   */
+  it('FETCH DISPLAY PICS runs the pass and reports what happened', async () => {
+    install();
+    await mount();
+    await clickTab(/^entities$/i);
+    const btn = Array.from(container.querySelectorAll('button')).find((b) =>
+      /FETCH DISPLAY PICS/i.test(b.textContent || ''),
+    ) as HTMLButtonElement;
+    expect(btn, 'the Entity Index exposes a display-picture fetch').toBeTruthy();
+    await act(async () => { btn.click(); });
+    for (let i = 0; i < 4; i += 1) await act(async () => { await Promise.resolve(); });
+    expect(api.xListening.fetchDisplayPictures).toHaveBeenCalledWith(CAMP.id);
+    expect(container.textContent).toMatch(/Fetched 3 display pictures/);
+  });
+
+  it('re-reads the avatar map after fetching, so pictures appear without reopening the module', async () => {
+    install();
+    await mount();
+    await clickTab(/^entities$/i);
+    const before = api.xListening.avatars.mock.calls.length;
+    const btn = Array.from(container.querySelectorAll('button')).find((b) =>
+      /FETCH DISPLAY PICS/i.test(b.textContent || ''),
+    ) as HTMLButtonElement;
+    await act(async () => { btn.click(); });
+    for (let i = 0; i < 4; i += 1) await act(async () => { await Promise.resolve(); });
+    expect(api.xListening.avatars.mock.calls.length).toBeGreaterThan(before);
+  });
+
+  it('surfaces a blocked gate AND offers the acknowledgement that unblocks it', async () => {
+    install({
+      fetchResult: {
+        ok: false,
+        message: 'Display pictures are blocked: clearnet is switched on for capture, but the real-IP exposure has never been acknowledged.',
+        needsClearnetAck: true,
+        outcome: { scanned: 22, skipped: 0, visited: 0, cached: 0, blocked: true },
+      },
+    });
+    await mount();
+    await clickTab(/^entities$/i);
+    const btn = Array.from(container.querySelectorAll('button')).find((b) =>
+      /FETCH DISPLAY PICS/i.test(b.textContent || ''),
+    ) as HTMLButtonElement;
+    await act(async () => { btn.click(); });
+    for (let i = 0; i < 4; i += 1) await act(async () => { await Promise.resolve(); });
+    expect(container.textContent).toMatch(/never been acknowledged/);
+    const ack = Array.from(container.querySelectorAll('button')).find((b) =>
+      /ACKNOWLEDGE CLEARNET/i.test(b.textContent || ''),
+    );
+    expect(ack, 'a blocked-by-ack result offers the acknowledgement').toBeTruthy();
   });
 });

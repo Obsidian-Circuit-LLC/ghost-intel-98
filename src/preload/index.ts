@@ -735,6 +735,8 @@ const api = {
     sessionStatus: (caseId: string) =>
       ipcRenderer.invoke(channels.xListening.sessionStatus, caseId),
     collectionStatus: () => ipcRenderer.invoke(channels.xListening.collectionStatus),
+    fetchDisplayPictures: (caseId: string) =>
+      ipcRenderer.invoke(channels.xListening.fetchDisplayPictures, caseId),
     closeSession: (caseId: string) =>
       ipcRenderer.invoke(channels.xListening.closeSession, caseId),
     captureTimeline: (req: {

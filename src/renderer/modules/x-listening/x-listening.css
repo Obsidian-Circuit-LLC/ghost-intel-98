@@ -1561,3 +1561,21 @@
 @media (max-width: 720px) {
   .xls-sidebar { flex-basis: 240px; }
 }
+
+/* ENTITY INDEX display-picture fetch (v3.72.4). The status line is the point of the feature: the
+   avatar passes used to fail silently, so this must be readable even when it is reporting a refusal. */
+.xls-entity-pics-btn { margin-left: 8px; }
+.xls-entity-pics-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 6px 0 10px;
+  padding: 7px 10px;
+  border: 1px solid var(--ga98-shadow-dark);
+  background: var(--ga98-grey);
+  color: var(--ga98-text);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.xls-entity-pics-status span { flex: 1; min-width: 220px; }

@@ -859,6 +859,13 @@ export interface GhostApi {
     sessionStatus(caseId: string): Promise<{ connected: boolean; windowOpen: boolean }>;
     /** Who holds the app-wide collection mutex right now (null when free). Read-only, no egress. */
     collectionStatus(): Promise<{ owner: string; heldMs: number; stale: boolean } | null>;
+    /** Run the avatar repair + entity-priming passes now and report what happened. */
+    fetchDisplayPictures(caseId: string): Promise<{
+      ok: boolean;
+      message: string;
+      needsClearnetAck: boolean;
+      outcome: { scanned: number; skipped: number; visited: number; cached: number; blocked: boolean; reason?: string };
+    }>;
     /** Close (not log out of) one campaign's live capture window. */
     closeSession(caseId: string): Promise<{ cleared: boolean }>;
     /**

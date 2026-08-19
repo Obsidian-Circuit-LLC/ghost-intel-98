@@ -1047,6 +1047,40 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
     }
   }, [activeCampaignId, refreshSession]);
 
+  // ── ENTITY INDEX display pictures: an OBSERVABLE, operator-initiated fetch ──────────────────
+  // Display pics failed silently for three releases: every avatar pass ran fire-and-forget and threw
+  // its result away, so a fail-closed gate, an empty candidate list and a failed fetch all looked the
+  // same — monograms and no explanation. This runs the passes in the foreground and SAYS what
+  // happened, then re-reads the avatar map so anything fetched appears without reopening the module.
+  const [picsBusy, setPicsBusy] = useState(false);
+  const [picsMessage, setPicsMessage] = useState('');
+  const [picsNeedsAck, setPicsNeedsAck] = useState(false);
+  const fetchDisplayPictures = useCallback(async () => {
+    const id = activeCampaignId;
+    if (!id || picsBusy) return;
+    setPicsBusy(true);
+    setPicsNeedsAck(false);
+    setPicsMessage('Fetching display pictures…');
+    try {
+      const res = await withCollectionWaitIndicator(
+        () => window.api.xListening.fetchDisplayPictures(id),
+        setPicsMessage,
+        'Fetching display pictures…',
+      );
+      setPicsMessage(res?.message || 'Done.');
+      setPicsNeedsAck(res?.needsClearnetAck === true);
+      // Re-read the cache-only avatar map so newly fetched pictures render immediately.
+      if (typeof window.api?.xListening?.avatars === 'function') {
+        const avatarRes = await window.api.xListening.avatars(id);
+        setAvatars((avatarRes as unknown as Record<string, string>) ?? {});
+      }
+    } catch (err) {
+      setPicsMessage((err as Error)?.message || 'Could not fetch display pictures.');
+    } finally {
+      setPicsBusy(false);
+    }
+  }, [activeCampaignId, picsBusy]);
+
   // ── Tor / clearnet posture ─────────────────────────────────────────────────
   const setClearnet = useCallback(
     async (next: boolean) => {
@@ -2783,7 +2817,26 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
                 />
               </label>
               <span className="xls-count">{filteredEntities.length} entities</span>
+              <button
+                type="button"
+                className="xls-btn xls-entity-pics-btn"
+                onClick={() => void fetchDisplayPictures()}
+                disabled={picsBusy || !activeCampaignId}
+                title="Fetch display pictures for the accounts listed here"
+              >
+                {picsBusy ? 'FETCHING…' : 'FETCH DISPLAY PICS'}
+              </button>
             </div>
+            {picsMessage && (
+              <div className="xls-entity-pics-status" role="status">
+                <span>{picsMessage}</span>
+                {picsNeedsAck && (
+                  <button type="button" className="xls-btn" onClick={() => void setClearnet(true)}>
+                    ACKNOWLEDGE CLEARNET
+                  </button>
+                )}
+              </div>
+            )}
             {filteredEntities.length === 0 ? (
               <div className="xls-empty">No extracted entities match.</div>
             ) : (
