@@ -576,6 +576,10 @@ export const channels = {
      *  fire-and-forget and discarded their result, so a fail-closed gate looked identical to success
      *  with nothing to fetch — three releases of invisible failure. */
     fetchDisplayPictures: 'xListening:fetchDisplayPictures',
+    /** Main → renderer PUSH: `{message, current, total, running}` while a collection run is in
+     *  flight, so the UI can say what it is doing ("Collecting @handle…") instead of a static
+     *  "ready". Port of his `sweep:progress` (`main.cjs:589`). */
+    sweepProgress: 'xListening:sweepProgress',
     /** Capture the ALREADY-VISIBLE X profile timeline in a campaign's open capture window
      *  (capture.ts) — the analyst navigates the visible window to the target manually; this
      *  channel captures whatever page is currently loaded, folds metrics/metricsRaw into an

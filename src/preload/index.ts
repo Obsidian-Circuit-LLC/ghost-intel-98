@@ -737,6 +737,12 @@ const api = {
     collectionStatus: () => ipcRenderer.invoke(channels.xListening.collectionStatus),
     fetchDisplayPictures: (caseId: string) =>
       ipcRenderer.invoke(channels.xListening.fetchDisplayPictures, caseId),
+    onSweepProgress: (cb: (p: { message: string; current: number; total: number; running: boolean }) => void) => {
+      const listener = (_e: unknown, payload: { message: string; current: number; total: number; running: boolean }) =>
+        cb(payload);
+      ipcRenderer.on(channels.xListening.sweepProgress, listener);
+      return () => ipcRenderer.removeListener(channels.xListening.sweepProgress, listener);
+    },
     closeSession: (caseId: string) =>
       ipcRenderer.invoke(channels.xListening.closeSession, caseId),
     captureTimeline: (req: {

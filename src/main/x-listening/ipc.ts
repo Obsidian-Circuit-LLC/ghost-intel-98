@@ -29,6 +29,7 @@ import { getImagePolicy, setProfileImageMode, resolveEffectiveImageCollection } 
 import { restartSchedule, stopSchedule, scheduleStatus } from './scheduler';
 import { buildAvatarLookup } from './avatar-repair';
 import { scheduleAvatarMaintenance, fetchDisplayPicturesNow } from './avatar-maintenance';
+import { makeSweepProgress, setSweepProgress, sweepProgress } from './progress';
 import { prodXStore, xNoteKey } from './store';
 import type { XNote, XPostArtifact, XNetworkArtifact, XPreset, XEntityCacheEntry } from './store';
 import { ensureUuid } from '../security/validate';
@@ -1136,7 +1137,12 @@ export async function exportNetworkJsonInteractive(
  * renderer-controlled value (spoofable) or `undefined` (fails closed). The event
  * this handler validates is delivered by Electron/`ipcMain`, never by the renderer.
  */
-export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
+export function registerXListeningIpc(deps: { handle: HandleWithEvent; getWindow?: () => { isDestroyed(): boolean; webContents: { send(channel: string, payload: unknown): void } } | null }): void {
+  // Report what the collection is DOING (his `emitProgress`, main.cjs:589) — the renderer shows it in
+  // the notice banner and the sidebar session box, so "Collecting @handle…" is visible wherever the
+  // analyst is looking instead of a static "ready".
+  setSweepProgress(makeSweepProgress(() => (deps.getWindow ? deps.getWindow() : null)));
+
   // Notes are pure store ops (no capture window, no network) — they need no
   // connectivity gate, only the sender check + arg validation. `savedAt` is stamped
   // MAIN-side inside `saveNote`; the renderer supplies only caseId/findingId/text.
@@ -1383,6 +1389,7 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
     // capture window. The lock spans the profile navigation + the scroll-and-accumulate scrape (the
     // egressing work) and releases in `finally`.
     return withQueuedCollectionLock(async () => {
+      sweepProgress().collecting(targetUsername);
       // Drive the window to the target profile so the analyst does not have to hand-navigate it first
       // (the "Capture Timeline" field says "capture THIS username"). A blocked/signed-out page returns
       // its reason; a render timeout is non-fatal (the capture below then reports 0 honestly).
@@ -1426,6 +1433,9 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
         // takes the lock itself, so it can never open a second window alongside another op.
         scheduleAvatarMaintenance(caseId);
       }
+      sweepProgress().done(
+        capResult.blocked ? 'Capture blocked.' : `Captured ${capResult.added ?? 0} new post(s).`,
+      );
       return capResult;
     }, `timeline capture of @${targetUsername}`);
   });
@@ -1853,6 +1863,7 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
     // relationship capture runs under the global `sweepRunning`, `main.cjs:2427`) — hold the app-wide
     // collection lock so it never egresses concurrently with a sweep/archive/manual capture.
     const netCaseId = ensureUuid(req.caseId as string, 'caseId');
+    sweepProgress().say(`Extracting ${kind} for ${targetUsername.startsWith('@') ? targetUsername : '@' + targetUsername}…`);
     const netResult = await withQueuedCollectionLock(
       () =>
         captureNetwork({

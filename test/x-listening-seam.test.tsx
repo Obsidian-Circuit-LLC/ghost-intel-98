@@ -35,6 +35,7 @@ const rec = vi.hoisted(() => ({
   handlers: new Map<string, (e: unknown, ...a: unknown[]) => unknown>(),
   event: { senderFrame: { url: 'file:///app/index.html' } } as unknown,
   createCaptureWindowCalls: 0,
+  listeners: new Map<string, (...a: unknown[]) => void>(),
 }));
 
 vi.mock('electron', () => ({
@@ -53,6 +54,14 @@ vi.mock('electron', () => ({
       const fn = rec.handlers.get(channel);
       if (fn) return Promise.resolve(fn(rec.event, ...args));
       return Promise.resolve(undefined);
+    },
+    // v3.72.5: the module subscribes to the main→renderer sweep-progress push, so the seam's
+    // ipcRenderer needs the event surface too — an invoke-only mock made the real preload throw.
+    on: (channel: string, listener: (...a: unknown[]) => void) => {
+      rec.listeners.set(channel, listener);
+    },
+    removeListener: (channel: string) => {
+      rec.listeners.delete(channel);
     },
   },
   webUtils: { getPathForFile: () => '' },

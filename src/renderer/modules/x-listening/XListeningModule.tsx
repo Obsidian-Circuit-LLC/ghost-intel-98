@@ -547,6 +547,15 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
   const [networkMinTargets, setNetworkMinTargets] = useState(2);
 
   const [notice, setNotice] = useState('X Listening Station ready.');
+  // Collection progress pushed from main (his `emitProgress`, main.cjs:589). While a run is in
+  // flight this REPLACES the notice and the session-box subtitle, exactly as his build does, so the
+  // current target is visible wherever the analyst is looking instead of a static "ready".
+  const [progress, setProgress] = useState<{ message: string; current: number; total: number; running: boolean }>({
+    message: '',
+    current: 0,
+    total: 0,
+    running: false,
+  });
 
   // ── Task 15 tabs: real state, real IPC — no hollow panels ──────────────────
   const [networks, setNetworks] = useState<XNetworkAccountRow[]>([]);
@@ -729,6 +738,12 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
     void loadInsights(activeCampaignId);
   }, [activeCampaignId, loadInsights]);
 
+  // Subscribe to collection progress for the life of the module; the preload returns an unsubscribe.
+  useEffect(() => {
+    if (typeof window.api?.xListening?.onSweepProgress !== 'function') return;
+    return window.api.xListening.onSweepProgress((p) => setProgress(p));
+  }, []);
+
   // Shared by the Live and Sources tabs: the analyst navigates the campaign's open capture
   // window to a target profile manually (Open Session above), then this drives the REAL
   // `captureTimeline` channel for whatever page is currently loaded there. On success the
@@ -749,7 +764,7 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
       const res = await window.api.xListening.captureTimeline({
         caseId: activeCampaignId,
         channelId: username,
-        channelLabel: `@${username}`,
+        channelLabel: displayXHandle(username),
         targetUsername: username,
       });
       if (res.blocked) {
@@ -787,7 +802,7 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
       } else {
         map.set(key, {
           channelId: raw,
-          channelLabel: p.channelLabel || `@${p.authorHandle}`,
+          channelLabel: p.channelLabel || displayXHandle(p.authorHandle),
           count: 1,
           lastPublishedAt: p.publishedAt,
         });
@@ -1372,7 +1387,7 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
         const res = await window.api.xListening.captureTimeline({
           caseId: activeCampaignId,
           channelId: username,
-          channelLabel: `@${username}`,
+          channelLabel: displayXHandle(username),
           targetUsername: username,
         });
         if (res?.blocked) {
@@ -1543,7 +1558,7 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
       const res = await window.api.xListening.archiveRun({
         caseId: activeCampaignId,
         channelId: username,
-        channelLabel: `@${username}`,
+        channelLabel: displayXHandle(username),
         targetUsername: username,
         maxCycles: 1,
       });
@@ -2111,7 +2126,7 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
           />
           <div className="xls-session-label">
             <strong>{sessionConnected ? 'X SESSION ONLINE' : 'X SESSION OFFLINE'}</strong>
-            <small>CAMPAIGN: {activeCampaign?.name || '—'}</small>
+            <small>{progress.running ? progress.message : `CAMPAIGN: ${activeCampaign?.name || '—'}`}</small>
           </div>
           <div className="xls-session-box-actions">
             <button
@@ -2177,7 +2192,9 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
         </header>
 
         <div className="xls-notice" role="status">
-          {notice}
+          {progress.running
+            ? `${progress.message}${progress.total > 1 ? ` (${progress.current}/${progress.total})` : ''}`
+            : notice}
         </div>
 
       <main className="xls-body">
@@ -2516,7 +2533,7 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
                 <small>
                   {networkTargetKey === null
                     ? 'all targets'
-                    : `@${networkTargetKey}`}
+                    : displayXHandle(networkTargetKey)}
                 </small>
               </article>
               <article className="xls-stat">
@@ -3293,7 +3310,7 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
                     return (
                       <li className="xls-source-row" key={key}>
                         <span>
-                          <strong>{post ? `@${post.authorHandle}` : n.findingId}</strong> —{' '}
+                          <strong>{post ? displayXHandle(post.authorHandle) : n.findingId}</strong> —{' '}
                           {n.text}
                         </span>
                         <span className="xls-source-actions">

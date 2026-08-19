@@ -24,6 +24,7 @@
  * import cycle with the module that renders this component.
  */
 import { Fragment, useEffect, useState } from 'react';
+import { displayXHandle } from '@shared/x-listening-source';
 import type { XPostRow, XNoteRow } from './XListeningModule';
 
 const POST_KIND_LABEL: Record<XPostRow['kind'], string> = {
@@ -147,7 +148,11 @@ export function PostCard({
 
   const kind = post.kind;
   const kindLabel = POST_KIND_LABEL[kind] ?? String(kind).toUpperCase();
-  const displayName = post.displayName || `@${post.authorHandle}`;
+  // `authorHandle` is stored WITH its '@' (extract.ts), but handles also reach the UI bare from other
+  // layers — so format idempotently rather than assuming a convention. Prefixing a second '@' is what
+  // rendered "@@ADanielHill" in the field A/B against his build.
+  const handleLabel = displayXHandle(post.authorHandle);
+  const displayName = post.displayName || handleLabel;
   // "VIA @source": the post surfaced through a monitored source (channelId/sourceUsername) whose
   // handle differs from the actual author — the indirect-observation marker (Enterprise parity).
   const rawSource = (post.sourceUsername ?? post.channelId ?? '').replace(/^@+/, '').trim();
@@ -166,7 +171,9 @@ export function PostCard({
     raw && raw.trim() ? raw : formatMetric(derived);
 
   const avatarSrc = post.avatar && post.avatar.startsWith('data:') ? post.avatar : null;
-  const initial = (post.authorHandle || '?').charAt(0).toUpperCase();
+  // The monogram must be the ACCOUNT's initial, not the '@' — taking charAt(0) of the stored handle
+  // put an '@' in every avatar-less card (visible in his A/B video).
+  const initial = (String(post.authorHandle ?? '').replace(/^@+/, '') || '?').charAt(0).toUpperCase();
 
   const mediaRefs = (post.mediaRefs ?? []).slice(0, 3);
 
@@ -202,7 +209,7 @@ export function PostCard({
         </div>
         <div className="xls-post-identity">
           <strong className="xls-post-displayname">{displayName}</strong>
-          <span className="xls-post-username">@{post.authorHandle}</span>
+          <span className="xls-post-username">{handleLabel}</span>
           <span className="xls-kind">{kindLabel}</span>
           {monitoredVia && <span className="xls-via">VIA @{rawSource}</span>}
           {post.synthetic && <span className="xls-marker xls-marker-demo">DEMO</span>}

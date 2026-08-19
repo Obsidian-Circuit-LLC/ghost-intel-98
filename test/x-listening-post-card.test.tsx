@@ -319,3 +319,61 @@ describe('X Listening Station — PostCard feed wiring (Task I1)', () => {
     expect(api.xListening.openInX).toHaveBeenCalledWith({ kind: 'thread', ref: 'https://x.com/alice/status/1' });
   });
 });
+
+/**
+ * FIELD BUG (GhostExodus A/B video, 2026-08-19): our post cards render "@@ADanielHill" and a "@"
+ * monogram where his render "@ADanielHill" and the account's initial.
+ *
+ * One root cause: `extract.ts` stores `authorHandle` WITH its '@' (`authorHandle: '@' + username`),
+ * and the card prefixed another one — and then took `charAt(0)` of that same value for the monogram,
+ * which is why every avatar-less card showed an '@' instead of a letter.
+ */
+describe('PostCard — handle rendering (his A/B)', () => {
+  let container: HTMLDivElement;
+  let root: Root;
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+  });
+  afterEach(() => {
+    act(() => root.unmount());
+    container.remove();
+  });
+  async function card(handle: string) {
+    const post: XPostRow = { ...RICH_POST, authorHandle: handle, displayName: undefined, avatar: undefined };
+    await act(async () => {
+      root.render(
+        <PostCard
+          post={post}
+          caseId="camp-a"
+          notes={[]}
+          verifying={false}
+          onOpenThread={vi.fn()}
+          onVerify={vi.fn()}
+          onAddNote={vi.fn(async () => undefined)}
+          onUpdateNote={vi.fn(async () => undefined)}
+          onDeleteNote={vi.fn(async () => undefined)}
+        />,
+      );
+    });
+  }
+
+  it('renders exactly one @ for a handle stored WITH one', async () => {
+    await card('@ADanielHill');
+    expect(container.textContent).toContain('@ADanielHill');
+    expect(container.textContent).not.toContain('@@');
+  });
+
+  it('renders exactly one @ for a handle stored WITHOUT one', async () => {
+    await card('ADanielHill');
+    expect(container.textContent).toContain('@ADanielHill');
+    expect(container.textContent).not.toContain('@@');
+  });
+
+  it('uses the account initial for the monogram, never the @ sign', async () => {
+    await card('@ADanielHill');
+    const mono = container.querySelector('.xls-post-avatar span');
+    expect(mono?.textContent).toBe('A');
+  });
+});

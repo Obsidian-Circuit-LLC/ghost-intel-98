@@ -31,6 +31,7 @@
  *     Every item is stamped `verified:false` + `captureProvenance:'visible-capture'`.
  */
 import { createHash } from 'node:crypto';
+import { MEDIA_HOST_ALLOWLIST } from '../capture/security';
 import type { HarvestedItem } from '@shared/socmint/types';
 import { csvCell } from '../capture/security';
 import type { XNetworkAccount, XNetworkArtifact } from './store';
@@ -54,6 +55,11 @@ export interface RawPost {
    *  author's name; for a comment the THIRD-PARTY replier's — the only place those names are
    *  observed. Never backfilled from the @handle. */
   displayName?: string;
+  /** The author's avatar URL as scraped from the article, or '' when none was visible. Carried as a
+   *  cache SOURCE only (host-checked below), never rendered remotely — his `mapCollectedPost`
+   *  (`main.cjs:1350`) keeps the same field, which is what lets an account that was only MENTIONED
+   *  still resolve a picture. */
+  avatar?: string;
   /** The visible permalink; scheme-guarded during normalization. */
   url: string;
   /** The visible tweet body text (verbatim). */
@@ -134,6 +140,12 @@ export interface XHarvestedItem extends HarvestedItem {
    *  display name was visible — an unobserved value is never presented as captured, and it is
    *  deliberately NOT part of `canonicalPostEvidence` (a rename is not a content edit). */
   displayName?: string;
+  /** The author's avatar URL, admitted only on an allowlisted X CDN host. A fetch SOURCE for the
+   *  host-anchored avatar cache — never a URL the renderer loads — and deliberately NOT part of
+   *  `canonicalPostEvidence` (an avatar change is not a content edit), matching `displayName`.
+   *  His `main.cjs` keeps the same field on every post, which is what lets a merely-MENTIONED
+   *  account resolve a picture without ever visiting its profile. */
+  avatar?: string;
   /** For a `comment`: the target root-post id whose thread it was seen under. Honest
    *  lineage only — never a fabricated "in reply to". Absent for every other kind. */
   parentId?: string;
@@ -182,11 +194,17 @@ export const X_POST_SCRIPT = `
       const images = Array.from(article.querySelectorAll('img[src*="pbs.twimg.com/media"]'))
         .map((image) => image.getAttribute('src'))
         .filter(Boolean);
+      // The AUTHOR's avatar, scoped to THIS article (his main.cjs:1254) — never X's global-nav
+      // avatar (the signed-in analyst), and a profile_images match is never a media image.
+      const avatar = Array.from(article.querySelectorAll('img[src*="profile_images"]'))
+        .map((image) => image.getAttribute('src') || '')
+        .find(Boolean) || '';
 
       return {
         id: (match && match[2]) || '',
         username: (match && match[1]) || '',
         displayName: displayName,
+        avatar: avatar,
         url: rawHref ? new URL(rawHref, location.origin).href : '',
         text: ((tweetText && tweetText.innerText) || '').trim(),
         createdAt: (time && time.getAttribute('datetime')) || '',
@@ -323,7 +341,28 @@ function normalizeItem(
   // a captured value. Not folded into the evidence hash (his canonicalPostEvidence omits it).
   const displayName = String(raw.displayName ?? '').trim();
   if (displayName) item.displayName = displayName;
+  // The author's avatar URL, admitted ONLY when it is an http(s) URL on an allowlisted X CDN host.
+  // It is a fetch SOURCE for the host-anchored avatar cache, never a URL the renderer loads, so a
+  // scraped off-host value is dropped here rather than travelling any further.
+  const avatarSource = avatarSourceUrl(raw.avatar);
+  if (avatarSource) item.avatar = avatarSource;
   return item;
+}
+
+/** An avatar URL is admissible only as `http(s)` on an allowlisted X media host — the same hosts the
+ *  host-anchored cache will accept. Anything else (off-host, `javascript:`, empty) yields ''. */
+export function avatarSourceUrl(value: unknown): string {
+  const raw = typeof value === 'string' ? value.trim() : '';
+  if (!raw) return '';
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return '';
+    const host = url.hostname.toLowerCase();
+    const ok = MEDIA_HOST_ALLOWLIST.some((allowed) => host === allowed || host.endsWith(`.${allowed}`));
+    return ok ? raw : '';
+  } catch {
+    return '';
+  }
 }
 
 /** The target's own top-level post → an `XHarvestedItem` (`kind:'post'`). */
