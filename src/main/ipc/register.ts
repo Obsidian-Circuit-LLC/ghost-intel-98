@@ -1777,7 +1777,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   // Wired via safeHandleWithEvent — NOT plain safeHandle — because the capture window can host a
   // hostile remote page (x.com), so every handler must validate the sender frame first
   // (assertTrustedSender inside the module). The plain safeHandle discards the event and cannot.
-  registerXListeningIpc({ handle: safeHandleWithEvent });
+  registerXListeningIpc({ handle: safeHandleWithEvent, getWindow });
 
   // WebSDR Viewer (Phase 1) — the receiver overlay (Phase 2) will host a hostile remote SDR page,
   // so every channel sender-validates first (assertTrustedSender inside the module), exactly like

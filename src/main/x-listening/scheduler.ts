@@ -35,6 +35,7 @@ import {
 import type { XScheduleStatus } from '@shared/x-listening-schedule';
 import type { XTimelineCaptureResult } from './capture';
 import { tryAcquireCollectionLock, releaseCollectionLock, touchCollectionLock } from './collection-lock';
+import { sweepProgress } from './progress';
 
 export type { XScheduleStatus };
 
@@ -272,6 +273,8 @@ export async function runScheduledSweep(
     for (let index = 0; index < sources.length; index += 1) {
       // Report progress so a long BUT HEALTHY multi-target sweep never trips the stale-hold break.
       touchCollectionLock();
+      // …and tell the ANALYST which target is being collected (his emitProgress, main.cjs:1880).
+      sweepProgress().collecting(String(sources[index] ?? ''), index + 1, sources.length);
       const res = await deps.sweepProfile(caseId, sources[index]!, settings);
       if (res.blocked) {
         // Fail closed: the Tor gate refused — stop the pass, egress nothing further (no trailing gap).
@@ -283,6 +286,7 @@ export async function runScheduledSweep(
       // bot-like than back-to-back egress. Never after the final target.
       if (index < sources.length - 1) await deps.sleep(deps.interTargetDelayMs);
     }
+    sweepProgress().done('Collection sweep complete.');
     return { swept: true, blocked: false, sources: captured, added };
   } finally {
     releaseCollectionLock();

@@ -80,6 +80,10 @@ function makeApi(over: {
       archiveStatus: vi.fn(async () => null),
       presetsRead: vi.fn(async () => ({ presets: [] })),
       collectionStatus: vi.fn(async () => null),
+      onSweepProgress: vi.fn((cb: (p: unknown) => void) => {
+        (globalThis as any).__emitSweepProgress = cb;
+        return () => { delete (globalThis as any).__emitSweepProgress; };
+      }),
       fetchDisplayPictures: vi.fn(async () => over.fetchResult ?? {
         ok: true, message: 'Fetched 3 display pictures.', needsClearnetAck: false,
         outcome: { scanned: 5, skipped: 2, visited: 3, cached: 3, blocked: false },
@@ -243,5 +247,39 @@ describe('X Listening ENTITY INDEX — display pics', () => {
       /ACKNOWLEDGE CLEARNET/i.test(b.textContent || ''),
     );
     expect(ack, 'a blocked-by-ack result offers the acknowledgement').toBeTruthy();
+  });
+
+  /**
+   * PORT FIDELITY (his A/B video): his build shows "Collecting @handle…" in BOTH the notice banner
+   * and the sidebar session box while a run is in flight; ours showed a static
+   * "X Listening Station ready." for the whole sweep.
+   */
+  it('shows the collection target in the notice banner AND the session box while running', async () => {
+    install();
+    await mount();
+    await act(async () => {
+      (globalThis as any).__emitSweepProgress?.({
+        message: 'Collecting @SebastianDAlex…', current: 2, total: 5, running: true,
+      });
+    });
+    const notice = container.querySelector('.xls-notice');
+    expect(notice?.textContent).toContain('Collecting @SebastianDAlex…');
+    expect(notice?.textContent).toContain('(2/5)');
+    const session = container.querySelector('.xls-session-label small');
+    expect(session?.textContent).toContain('Collecting @SebastianDAlex…');
+  });
+
+  it('reverts to the campaign/notice text once the run reports finished', async () => {
+    install();
+    await mount();
+    await act(async () => {
+      (globalThis as any).__emitSweepProgress?.({ message: 'Collecting @a…', current: 1, total: 1, running: true });
+    });
+    await act(async () => {
+      (globalThis as any).__emitSweepProgress?.({ message: 'Collection sweep complete.', current: 0, total: 0, running: false });
+    });
+    const session = container.querySelector('.xls-session-label small');
+    expect(session?.textContent).toContain('CAMPAIGN:');
+    expect(container.querySelector('.xls-notice')?.textContent).not.toContain('Collecting');
   });
 });

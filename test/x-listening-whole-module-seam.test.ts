@@ -86,6 +86,16 @@ const REACHABLE_CHANNELS: ReadonlyArray<keyof typeof channels.xListening> = [
   'scheduleStatus',
 ];
 
+/**
+ * PUSH channels (main → renderer) are reachable through a SUBSCRIBER, not a call of the same name,
+ * so the orphan check needs their subscriber name. Keeping them here rather than exempting them
+ * preserves the point of the check: a push channel nobody listens to is just as hollow as an
+ * invoke channel nobody calls.
+ */
+const PUSH_CHANNELS: Partial<Record<keyof typeof channels.xListening, string>> = {
+  sweepProgress: 'onSweepProgress',
+};
+
 describe('whole-module seam — every xListening channel is reachable from a real control', () => {
   it.each(REACHABLE_CHANNELS)('window.api.xListening.%s(...) is called somewhere in XListeningModule.tsx', (key) => {
     // Sanity: the channel constant itself must exist (catches a typo'd key in this very list).
@@ -94,9 +104,14 @@ describe('whole-module seam — every xListening channel is reachable from a rea
     expect(MODULE_SOURCE).toMatch(callSite);
   });
 
+  it.each(Object.entries(PUSH_CHANNELS))('push channel %s is subscribed via %s', (key, subscriber) => {
+    expect(typeof channels.xListening[key as keyof typeof channels.xListening]).toBe('string');
+    expect(MODULE_SOURCE).toMatch(new RegExp(`window\\.api\\.xListening\\.${subscriber}\\s*\\(`));
+  });
+
   it('every channels.xListening key is reachable — none are orphaned', () => {
     const all = Object.keys(channels.xListening) as Array<keyof typeof channels.xListening>;
-    const reachable = new Set(REACHABLE_CHANNELS);
+    const reachable = new Set<string>([...REACHABLE_CHANNELS, ...Object.keys(PUSH_CHANNELS)]);
     const orphaned = all.filter((k) => !reachable.has(k));
     // A failure here means a NEW channel was added to ipc-contracts.ts without wiring it into
     // the renderer (add it to REACHABLE_CHANNELS above once wired) — the exact "hollow channel"

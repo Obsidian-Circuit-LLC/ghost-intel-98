@@ -859,6 +859,10 @@ export interface GhostApi {
     sessionStatus(caseId: string): Promise<{ connected: boolean; windowOpen: boolean }>;
     /** Who holds the app-wide collection mutex right now (null when free). Read-only, no egress. */
     collectionStatus(): Promise<{ owner: string; heldMs: number; stale: boolean } | null>;
+    /** Subscribe to collection progress ("Collecting @handle…"). Returns an unsubscribe. */
+    onSweepProgress(
+      cb: (p: { message: string; current: number; total: number; running: boolean }) => void,
+    ): () => void;
     /** Run the avatar repair + entity-priming passes now and report what happened. */
     fetchDisplayPictures(caseId: string): Promise<{
       ok: boolean;
