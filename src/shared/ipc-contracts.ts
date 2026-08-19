@@ -571,6 +571,11 @@ export const channels = {
      *  and whether they have gone stale. Drives the "Waiting for <holder>…" indicator while a
      *  manual op queues behind a background sweep (operator decision, 2026-08-19). No egress. */
     collectionStatus: 'xListening:collectionStatus',
+    /** Operator-initiated "Fetch display pictures": runs the avatar repair + entity-priming passes in
+     *  the FOREGROUND and returns a readable summary. Exists because those passes previously ran
+     *  fire-and-forget and discarded their result, so a fail-closed gate looked identical to success
+     *  with nothing to fetch — three releases of invisible failure. */
+    fetchDisplayPictures: 'xListening:fetchDisplayPictures',
     /** Capture the ALREADY-VISIBLE X profile timeline in a campaign's open capture window
      *  (capture.ts) — the analyst navigates the visible window to the target manually; this
      *  channel captures whatever page is currently loaded, folds metrics/metricsRaw into an

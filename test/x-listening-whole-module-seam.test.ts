@@ -38,6 +38,8 @@ const MODULE_SOURCE = readdirSync(MODULE_DIR)
 const REACHABLE_CHANNELS: ReadonlyArray<keyof typeof channels.xListening> = [
   // v3.72.3: read-only mutex status, polled by the "Waiting for <holder>…" indicator.
   'collectionStatus',
+  // v3.72.4: operator-initiated display-picture fetch (Entity Index button).
+  'fetchDisplayPictures',
   'openSession',
   'sessionStatus',
   'closeSession',

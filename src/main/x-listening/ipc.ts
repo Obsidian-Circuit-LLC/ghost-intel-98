@@ -28,7 +28,7 @@ import { normalizeImageMode, type XImageMode } from '@shared/x-listening-image-p
 import { getImagePolicy, setProfileImageMode, resolveEffectiveImageCollection } from './image-policy';
 import { restartSchedule, stopSchedule, scheduleStatus } from './scheduler';
 import { buildAvatarLookup } from './avatar-repair';
-import { scheduleAvatarMaintenance } from './avatar-maintenance';
+import { scheduleAvatarMaintenance, fetchDisplayPicturesNow } from './avatar-maintenance';
 import { prodXStore, xNoteKey } from './store';
 import type { XNote, XPostArtifact, XNetworkArtifact, XPreset, XEntityCacheEntry } from './store';
 import { ensureUuid } from '../security/validate';
@@ -1573,6 +1573,18 @@ export function registerXListeningIpc(deps: { handle: HandleWithEvent }): void {
   deps.handle(channels.xListening.collectionStatus, (e) => {
     assertTrustedSender(e);
     return describeCollectionHolder();
+  });
+
+  // Operator-initiated display-picture fetch. A manual collection op, so it QUEUES behind a live
+  // background sweep rather than failing, and it always resolves to a readable summary — the whole
+  // point is that the operator can see WHY there are no pictures instead of guessing.
+  deps.handle(channels.xListening.fetchDisplayPictures, async (e, caseIdArg) => {
+    assertTrustedSender(e);
+    if (typeof caseIdArg !== 'string' || !caseIdArg) {
+      throw new Error('Fetching display pictures requires a caseId.');
+    }
+    const caseId = ensureUuid(caseIdArg, 'caseId');
+    return withQueuedCollectionLock(() => fetchDisplayPicturesNow(caseId), 'display-picture fetch');
   });
 
   // Presets: pure store CRUD (extend XStore, Task 1) — no capture window, no network.
