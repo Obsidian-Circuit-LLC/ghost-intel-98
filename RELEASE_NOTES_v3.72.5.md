@@ -16,8 +16,8 @@ This release came out of a side-by-side video of the original X Listening Statio
 
 Windows NSIS installer — `GhostIntel98-Setup-3.72.5.exe` (per-user, no admin; unsigned → **More info → Run anyway**). Installs over the previous build in place.
 
-- **SHA-256:** `__SHA256__`
-- **Size:** `__SIZE__`
+- **SHA-256:** `ca508af26124b575845b0363e293f27e15aecea2b79374ff6a48ef0007f54e3b`
+- **Size:** `945,158,587 bytes (~901 MB)`
 
 Confirm **Settings ▸ About** reads **3.72.5**.
 
