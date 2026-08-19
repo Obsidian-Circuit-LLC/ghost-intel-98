@@ -749,7 +749,7 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
       const res = await window.api.xListening.captureTimeline({
         caseId: activeCampaignId,
         channelId: username,
-        channelLabel: `@${username}`,
+        channelLabel: displayXHandle(username),
         targetUsername: username,
       });
       if (res.blocked) {
@@ -787,7 +787,7 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
       } else {
         map.set(key, {
           channelId: raw,
-          channelLabel: p.channelLabel || `@${p.authorHandle}`,
+          channelLabel: p.channelLabel || displayXHandle(p.authorHandle),
           count: 1,
           lastPublishedAt: p.publishedAt,
         });
@@ -1372,7 +1372,7 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
         const res = await window.api.xListening.captureTimeline({
           caseId: activeCampaignId,
           channelId: username,
-          channelLabel: `@${username}`,
+          channelLabel: displayXHandle(username),
           targetUsername: username,
         });
         if (res?.blocked) {
@@ -1543,7 +1543,7 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
       const res = await window.api.xListening.archiveRun({
         caseId: activeCampaignId,
         channelId: username,
-        channelLabel: `@${username}`,
+        channelLabel: displayXHandle(username),
         targetUsername: username,
         maxCycles: 1,
       });
@@ -2516,7 +2516,7 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
                 <small>
                   {networkTargetKey === null
                     ? 'all targets'
-                    : `@${networkTargetKey}`}
+                    : displayXHandle(networkTargetKey)}
                 </small>
               </article>
               <article className="xls-stat">
@@ -3293,7 +3293,7 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
                     return (
                       <li className="xls-source-row" key={key}>
                         <span>
-                          <strong>{post ? `@${post.authorHandle}` : n.findingId}</strong> —{' '}
+                          <strong>{post ? displayXHandle(post.authorHandle) : n.findingId}</strong> —{' '}
                           {n.text}
                         </span>
                         <span className="xls-source-actions">
