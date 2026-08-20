@@ -45,13 +45,13 @@ afterAll(async () => {
 });
 
 /** The receiver column inside its REAL ancestor chain, with the Tor banner present or absent. */
-function html(warning: boolean, selected: boolean): string {
+function html(warning: boolean, selected: boolean, w: number = WIN_W, h: number = WIN_H): string {
   return `<style>${CSS}</style>
-  <div class="ga98-window-shell" style="left:0;top:0;width:${WIN_W}px;height:${WIN_H}px">
-   <div class="window" style="width:100%"><div class="title-bar"><div class="title-bar-text">WebSDR</div></div>
+  <div class="ga98-window-shell" style="left:0;top:0;width:${w}px;height:${h}px">
+   <div class="window"><div class="title-bar"><div class="title-bar-text">WebSDR</div></div>
    <div class="window-body">
     <div class="sdr-root">
-      <header class="sdr-banner" style="height:170px"></header>
+      <header class="sdr-banner"><img class="sdr-banner-art" alt="" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" /></header>
       <div class="sdr-layout">
         <aside class="sdr-sidebar"><div class="sdr-receiver-list"></div></aside>
         <main class="sdr-main">
@@ -107,4 +107,36 @@ describe('WebSDR receiver host geometry', () => {
     const g = await measure(false, false);
     expect(g.emptyH, 'the "choose a feed" placeholder must be visible').toBeGreaterThan(100);
   }, 60000);
+
+  /**
+   * FIELD BUG (GhostExodus, persistent): "as long as it's not resized, the display is perfect."
+   * The overlay is positioned from this host rect, so if the host misbehaves at some window sizes the
+   * receiver is drawn wrong no matter how correct the overlay code is. Sweep real sizes.
+   */
+  it('keeps a usable host at every window size the module can be dragged to', async () => {
+    const sizes: Array<[number, number]> = [
+      [1400, 820],  // registered default
+      [2560, 1400], // maximised on his display
+      [1000, 700],
+      [820, 560],
+      [640, 480],   // small but legitimate
+      [420, 320],   // near the shell's minimum clamp
+    ];
+    const bad: string[] = [];
+    for (const [w, h] of sizes) {
+      await session.page.setContent(html(false, true, w, h));
+      const raw = await session.page.evaluate<string>(`(() => {
+        const f = document.querySelector('.sdr-browser-frame').getBoundingClientRect();
+        const shell = document.querySelector('.ga98-window-shell').getBoundingClientRect();
+        return JSON.stringify({ h: Math.round(f.height), w: Math.round(f.width),
+          overflowsRight: Math.round(f.right - shell.right), overflowsBottom: Math.round(f.bottom - shell.bottom) });
+      })()`);
+      const g = JSON.parse(raw) as { h: number; w: number; overflowsRight: number; overflowsBottom: number };
+      if (g.h < 40 || g.w < 40) bad.push(`${w}x${h}: host collapsed to ${g.w}x${g.h}`);
+      if (g.overflowsRight > 1 || g.overflowsBottom > 1) {
+        bad.push(`${w}x${h}: host escapes the window by ${g.overflowsRight}x${g.overflowsBottom}px`);
+      }
+    }
+    expect(bad, bad.join(' | ')).toEqual([]);
+  }, 90000);
 });
