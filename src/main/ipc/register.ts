@@ -1718,6 +1718,9 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   });
   safeHandle(channels.geoint.addMonitor, (...a) => geointMonitor.addPinned(typeof a[0] === 'string' ? a[0] : ''));
   safeHandle(channels.geoint.removeMonitor, (...a) => geointMonitor.removePinned(typeof a[0] === 'string' ? a[0] : ''));
+  safeHandle(channels.geoint.dismissSituation, (...a) => geointMonitor.dismissSituation(typeof a[0] === 'string' ? a[0] : ''));
+  safeHandle(channels.geoint.restoreSituation, (...a) => geointMonitor.restoreSituation(typeof a[0] === 'string' ? a[0] : ''));
+  safeHandle(channels.geoint.listDismissed, () => geointMonitor.loadDismissed());
   // CCTV-over-Tor readiness probe: lets the EyeSpy Viewer show TOR NOT READY before loading a stream.
   safeHandle(channels.geoint.cctvTorReady, () => cctvTorReady());
   safeHandle(channels.geoint.summarizeEvent, (...a) => summarizeEvent(String(a[0] ?? '')));

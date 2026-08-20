@@ -207,6 +207,22 @@ function GeoIntModuleInner(): JSX.Element {
     const ids = await window.api.geoint.addMonitor(id);
     setPinnedState(new Set(ids));
   }, []);
+  // Dismissed situations — hidden from Monitored Situations regardless of what qualified them.
+  // Un-pinning could not remove a CORROBORATED row (it simply re-qualified), which is why the row's
+  // "×" read as dead in the field. Persisted, so a dismissal survives reopening the module.
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (typeof window.api?.geoint?.listDismissed !== 'function') return;
+    void window.api.geoint.listDismissed()
+      .then((ids) => setDismissed(new Set(ids ?? [])))
+      .catch(() => undefined);
+  }, []);
+  const dismissSituation = useCallback(async (id: string) => {
+    if (typeof window.api?.geoint?.dismissSituation !== 'function') return;
+    const ids = await window.api.geoint.dismissSituation(id).catch(() => null);
+    if (ids) setDismissed(new Set(ids));
+  }, []);
+
   const removeMonitor = useCallback(async (id: string) => {
     const ids = await window.api.geoint.removeMonitor(id);
     setPinnedState(new Set(ids));
@@ -1201,6 +1217,8 @@ function GeoIntModuleInner(): JSX.Element {
         pinned={pinned}
         onAddMonitor={addMonitor}
         onRemoveMonitor={removeMonitor}
+        dismissed={dismissed}
+        onDismissSituation={(id) => void dismissSituation(id)}
         onViewDetails={selectEvent}
         onGroupRegion={groupRegion}
       />

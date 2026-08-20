@@ -511,6 +511,12 @@ export interface GhostApi {
     addMonitor(id: string): Promise<string[]>;
     /** Remove a single id from the pinned set; persisted. Returns the updated list. */
     removeMonitor(id: string): Promise<string[]>;
+    /** Hide a situation from Monitored Situations regardless of why it qualified. Persisted. */
+    dismissSituation(id: string): Promise<string[]>;
+    /** Undo a dismissal. */
+    restoreSituation(id: string): Promise<string[]>;
+    /** The persisted dismissal set. */
+    listDismissed(): Promise<string[]>;
     /** Returns true when the background Tor circuit is bootstrapped and the ga98cctv:// proxy is usable. */
     cctvTorReady(): Promise<boolean>;
     /** Isolated local-Ollama summary of a single incident description (Phase 3 Intel tab). Ollama-only,

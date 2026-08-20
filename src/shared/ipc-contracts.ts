@@ -318,6 +318,14 @@ export const channels = {
     setMonitors: 'geoint:setMonitors',
     addMonitor: 'geoint:addMonitor',
     removeMonitor: 'geoint:removeMonitor',
+    /** Hide a situation from Monitored Situations regardless of WHY it qualified (corroboration or
+     *  pin). Un-pinning alone could not remove a corroborated row, which made the row's "×" look
+     *  dead — the field report. Persisted, and reversible via `restoreSituation`. */
+    dismissSituation: 'geoint:dismissSituation',
+    /** Undo a dismissal — a removed situation is hidden, never destroyed. */
+    restoreSituation: 'geoint:restoreSituation',
+    /** The persisted dismissal set, read on module mount. */
+    listDismissed: 'geoint:listDismissed',
     cctvTorReady: 'geoint:cctvTorReady',
     summarizeEvent: 'geoint:summarizeEvent'
   },
@@ -1234,6 +1242,9 @@ export interface ApiContracts {
   [channels.geoint.setMonitors]: { args: [string[]]; returns: void };
   [channels.geoint.addMonitor]: { args: [string]; returns: string[] };
   [channels.geoint.removeMonitor]: { args: [string]; returns: string[] };
+  [channels.geoint.dismissSituation]: { args: [string]; returns: string[] };
+  [channels.geoint.restoreSituation]: { args: [string]; returns: string[] };
+  [channels.geoint.listDismissed]: { args: []; returns: string[] };
   [channels.geoint.cctvTorReady]: { args: []; returns: boolean };
   [channels.geoint.summarizeEvent]: { args: [string]; returns: EventSummaryResult };
 

@@ -406,6 +406,9 @@ const api = {
     setMonitors: (ids: string[]) => ipcRenderer.invoke(channels.geoint.setMonitors, ids),
     addMonitor: (id: string) => ipcRenderer.invoke(channels.geoint.addMonitor, id),
     removeMonitor: (id: string) => ipcRenderer.invoke(channels.geoint.removeMonitor, id),
+    dismissSituation: (id: string) => ipcRenderer.invoke(channels.geoint.dismissSituation, id),
+    restoreSituation: (id: string) => ipcRenderer.invoke(channels.geoint.restoreSituation, id),
+    listDismissed: () => ipcRenderer.invoke(channels.geoint.listDismissed),
     cctvTorReady: () => ipcRenderer.invoke(channels.geoint.cctvTorReady),
     summarizeEvent: (description: string) => ipcRenderer.invoke(channels.geoint.summarizeEvent, description)
   },
