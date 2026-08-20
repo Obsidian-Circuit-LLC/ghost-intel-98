@@ -26,6 +26,9 @@ const flyTos: Array<{ center: [number, number]; zoom?: number }> = [];
 type FakePopup = {
   domContent: unknown; text: string | null; opened: boolean;
   setDOMContent(el: unknown): FakePopup; setText(t: string): FakePopup; addTo(): FakePopup; isOpen(): boolean;
+  // MapLibre's Popup is Evented; v3.72.6 builds popup CONTENT on 'open' so a few hundred markers do
+  // not each construct a subtree that is never shown. The fake must expose it, and `open()` fires it.
+  on(event: string, cb: () => void): FakePopup; open(): void;
 };
 type FakeMarker = {
   lngLat: [number, number] | null; popup: FakePopup | null; added: boolean; removed: boolean; popupToggled: number;
@@ -49,10 +52,13 @@ vi.mock('maplibre-gl', () => {
     text: string | null = null;
     opened = false;
     constructor(public opts: Record<string, unknown> = {}) {}
+    handlers: Record<string, Array<() => void>> = {};
     setDOMContent(el: unknown): this { this.domContent = el; return this; }
     setText(t: string): this { this.text = t; return this; }
-    addTo(): this { this.opened = true; return this; }
+    addTo(): this { this.opened = true; this.open(); return this; }
     isOpen(): boolean { return this.opened; }
+    on(event: string, cb: () => void): this { (this.handlers[event] ||= []).push(cb); return this; }
+    open(): void { (this.handlers.open ?? []).forEach((cb) => cb()); }
   }
   class Marker implements FakeMarker {
     lngLat: [number, number] | null = null;
@@ -238,7 +244,11 @@ describe('GeoINT MapGL marker port (R3)', () => {
     ]);
     const popup = markers[0].popup as unknown as FakePopup;
     expect(popup).toBeTruthy();
-    // setDOMContent received the buildPopup element, whose <b> carries the title.
+    // v3.72.6: content is built on OPEN, so a few hundred markers do not each construct a subtree
+    // that is never shown. Nothing before the first open…
+    expect(popup.domContent).toBeNull();
+    popup.open();
+    // …and after it, setDOMContent received the buildPopup element, whose <b> carries the title.
     const el = popup.domContent as HTMLElement;
     expect(el.querySelector('b')?.textContent).toBe('Quake');
     expect(el.querySelector('a')?.getAttribute('href')).toBe('https://example.org/q');
