@@ -12,7 +12,7 @@ This release is also the first published by the project's automation rather than
 
 Windows NSIS installer — `GhostIntel98-Setup-3.72.7.exe` (per-user, no admin; unsigned → **More info → Run anyway**). Installs over the previous build in place.
 
-- **SHA-256:** `__SHA256__`
-- **Size:** `__SIZE__`
+- **SHA-256:** `270c33bbdd8b628a18820ea04e0aee3d14927c3cd144bc9fc97cbfb5ab639b2c`
+- **Size:** `945,169,626 bytes (~901 MB)`
 
 Confirm **Settings ▸ About** reads **3.72.7**.
