@@ -20,7 +20,7 @@ The WebSDR overflow is a *measured* defect, but it is not a reproduction of "the
 
 Windows NSIS installer — `GhostIntel98-Setup-3.72.6.exe` (per-user, no admin; unsigned → **More info → Run anyway**). Installs over the previous build in place.
 
-- **SHA-256:** `__SHA256__`
-- **Size:** `__SIZE__`
+- **SHA-256:** `e294c3f54ae546251ceacf0d1f6c7e54537b28165ced3953d7ac2294424904ed`
+- **Size:** `945,163,376 bytes (~901 MB)`
 
 Confirm **Settings ▸ About** reads **3.72.6**.
