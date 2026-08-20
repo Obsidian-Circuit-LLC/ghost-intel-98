@@ -41,13 +41,23 @@
 .sdr-banner-art { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center center; }
 
 /* ── layout ───────────────────────────────────────────────────────────────── */
-.sdr-layout { flex: 1; min-height: 0; display: grid; grid-template-columns: 310px 1fr; }
+/* Both tracks must be able to SHRINK. A fixed 310px sidebar plus a `1fr` main (whose automatic
+   minimum is its content) overflowed the window at narrow widths — the receiver host escaped the
+   right edge by ~45px at 420px wide, and the native overlay is positioned from that rect, so it
+   would paint outside the window. `minmax(0, …)` caps both tracks to the space that exists. */
+.sdr-layout { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 310px) minmax(0, 1fr); }
 .sdr-sidebar {
   border-right: 1px solid var(--ga98-sdr-border);
   background: var(--ga98-sdr-sidebar-bg);
   display: flex;
   flex-direction: column;
   min-height: 0;
+  /* The station menu must be able to shrink with its track. Its content's min-content width was a
+     hard floor for the whole layout, so at narrow window sizes the column pushed past the window's
+     right edge — carrying the native receiver overlay outside the window, since that overlay is
+     positioned from the host rect. */
+  min-width: 0;
+  overflow: hidden;
 }
 
 .sdr-menu-heading {
@@ -143,7 +153,13 @@
 .sdr-recording-side-list span, .sdr-recording-side-list small { font: 9px var(--ga98-sdr-mono); color: var(--ga98-sdr-ink-dim); margin-top: 3px; }
 
 /* ── main column ──────────────────────────────────────────────────────────── */
-.sdr-main { min-width: 0; display: grid; grid-template-rows: auto auto auto 1fr 28px; }
+/* CAP THE COLUMN TOO. With no explicit column track the implicit one is `auto`, i.e. sized to the
+   widest item's MIN-CONTENT (the toolbar's frequency field, ~192px) rather than to the container. At
+   narrow window sizes every grid item — including the receiver host — inherited that width and
+   overflowed the window by ~45px, carrying the native overlay outside the window with it, since the
+   overlay is positioned from the host rect. Item-level `min-width: 0` cannot fix this: the TRACK is
+   what refuses to shrink. Measured across window sizes in websdr-receiver-host-geometry.test.ts. */
+.sdr-main { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto 1fr 28px; }
 /* PIN EACH CHILD TO ITS TRACK. The Tor banner is conditionally rendered (`{torWarning && …}`), and
    with positional auto-placement its absence shifted every later child up one track: the receiver
    host inherited `auto` and collapsed to 0 (it has no DOM children while a receiver is loaded) while
@@ -158,10 +174,14 @@
 .sdr-main > .sdr-receiver-header { grid-row: 3; }
 .sdr-main > .sdr-browser-frame { grid-row: 4; }
 .sdr-main > .sdr-footer { grid-row: 5; }
-.sdr-toolbar { padding: 9px 12px; background: var(--ga98-sdr-toolbar-bg); border-bottom: 1px solid var(--ga98-sdr-toolbar-border); display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+.sdr-toolbar { min-width: 0; padding: 9px 12px; background: var(--ga98-sdr-toolbar-bg); border-bottom: 1px solid var(--ga98-sdr-toolbar-border); display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
 .sdr-toolbar label { font: 10px var(--ga98-sdr-mono); color: var(--ga98-sdr-label); }
-.sdr-freq { display: flex; margin-top: 4px; }
-.sdr-freq input { width: 150px; background: var(--ga98-sdr-inset-bg); border: 1px solid var(--ga98-sdr-border-strong); color: var(--ga98-sdr-green-bright); font: 18px var(--ga98-sdr-mono); padding: 6px 8px; outline: 0; }
+/* Must be able to shrink: an <input> refuses to go below its intrinsic width unless min-width is
+   cleared, so at narrow window sizes the frequency field pushed the whole column past the window's
+   right edge — and the native receiver overlay, positioned from the host rect, followed it outside
+   the window. */
+.sdr-freq { display: flex; margin-top: 4px; min-width: 0; }
+.sdr-freq input { width: 150px; min-width: 0; max-width: 100%; background: var(--ga98-sdr-inset-bg); border: 1px solid var(--ga98-sdr-border-strong); color: var(--ga98-sdr-green-bright); font: 18px var(--ga98-sdr-mono); padding: 6px 8px; outline: 0; }
 .sdr-freq span { display: flex; align-items: center; padding: 0 7px; background: var(--ga98-sdr-nav-active-bg); border-block: 1px solid var(--ga98-sdr-border-strong); font: 11px var(--ga98-sdr-mono); }
 .sdr-freq button { border-radius: 0; padding: 0 10px; font-weight: 700; }
 .sdr-steps, .sdr-modes { display: flex; gap: 3px; }
@@ -200,7 +220,14 @@
 .sdr-empty h2 { margin: 12px 0 3px; color: var(--ga98-sdr-empty-title); }
 .sdr-empty p { font-size: 12px; color: var(--ga98-sdr-empty-text); max-width: 560px; }
 
-.sdr-footer { display: flex; align-items: center; justify-content: space-between; padding: 0 10px; background: var(--ga98-sdr-footer-bg); border-top: 1px solid var(--ga98-sdr-heading-border); font: 10px var(--ga98-sdr-mono); color: var(--ga98-sdr-ink-dim); }
+.sdr-footer { min-width: 0; gap: 8px; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; background: var(--ga98-sdr-footer-bg); border-top: 1px solid var(--ga98-sdr-heading-border); font: 10px var(--ga98-sdr-mono); color: var(--ga98-sdr-ink-dim); }
+/* The status line and the adapter/egress label are free text, so without ellipsis their combined
+   min-content width set a floor for the whole column — at narrow window sizes that floor pushed the
+   layout past the window's right edge, taking the native receiver overlay outside the window with
+   it (the overlay is positioned from the host rect). */
+.sdr-footer > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sdr-footer > span:first-child { flex: 1 1 auto; }
+.sdr-footer > span:last-child { flex: 0 1 auto; }
 .sdr-rec-indicator { color: var(--ga98-sdr-record-border); }
 
 /* ── recording archive ────────────────────────────────────────────────────── */

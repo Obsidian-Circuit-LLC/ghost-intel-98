@@ -21,7 +21,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type { GeoItem, CameraStream } from '@shared/post-mvp-types';
-import { buildPopup } from './popup';
+import { buildPopup, buildPopupLazily } from './popup';
 import { syncCctvLayer } from './cctvLayer';
 import { makePropagator } from './satellites/propagate';
 import { ensureSatelliteLayer, updateSatelliteLayer } from './satellites/satelliteLayer';
@@ -209,8 +209,20 @@ export function rebuildItemMarkers(
     located++;
     if (placed >= MAX_MARKERS) continue; // cap so a huge cache can't bog the map (keep counting located)
     try {
-      const popup = new maplibregl.Popup({ closeButton: true, closeOnClick: true })
-        .setDOMContent(buildPopup(it.title, it.link));
+      // Popup CONTENT is built on first open, not per marker. One DOM element per item is already
+      // the map's dominant cost at a few hundred located events (the operator's CPU report, where
+      // narrowing the timeline normalised it); constructing a content subtree for every marker that
+      // will never be opened is pure waste on top of it. The Popup object itself stays eager because
+      // MapLibre needs it at setPopup() time.
+      const popup = new maplibregl.Popup({ closeButton: true, closeOnClick: true });
+      const content = buildPopupLazily(() => buildPopup(it.title, it.link));
+      if (typeof (popup as { on?: unknown }).on === 'function') {
+        popup.on('open', () => popup.setDOMContent(content()));
+      } else {
+        // No event surface (an older/stubbed Popup): fall back to eager content. Losing the saving is
+        // acceptable; losing the popup is not, and this builder's try/catch would hide the failure.
+        popup.setDOMContent(content());
+      }
       onPopup?.(popup); // single-open tracking: opening this closes any other open popup
       // Event Details (Phase 1): a marker click also opens the dossier panel. The listener sits on
       // the marker's own element (not the Marker object) so it never touches the popup/close-button

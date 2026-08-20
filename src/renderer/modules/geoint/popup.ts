@@ -31,3 +31,21 @@ export function buildPopup(title: string, link?: string): HTMLElement {
   }
   return root;
 }
+
+/**
+ * Defer a popup's DOM construction until it is first opened.
+ *
+ * Markers are DOM elements, one per item, and a Popup was previously built for every marker with its
+ * content constructed up front — although at most one popup is ever open. At a few hundred located
+ * events that is a few hundred subtrees created and retained for nothing, and the cost scales exactly
+ * with the item count the operator observed driving CPU (narrowing the timeline normalised it).
+ *
+ * Returns an idempotent opener: the content is built on the first call and reused thereafter.
+ */
+export function buildPopupLazily(build: () => HTMLElement): () => HTMLElement {
+  let content: HTMLElement | null = null;
+  return () => {
+    if (!content) content = build();
+    return content;
+  };
+}

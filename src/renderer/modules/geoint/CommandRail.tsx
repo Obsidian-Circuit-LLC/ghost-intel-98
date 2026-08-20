@@ -60,6 +60,10 @@ export interface CommandRailProps {
   onAddMonitor: (id: string) => void;
   /** Unpin an item id from the monitor set. */
   onRemoveMonitor: (id: string) => void;
+  /** Persisted dismissals — situations hidden regardless of what qualified them. */
+  dismissed?: Set<string>;
+  /** Persist "stop showing me this". Optional so existing callers/tests keep working. */
+  onDismissSituation?: (id: string) => void;
   /** Open the Event Details dossier panel for an item id (right-click → View details). */
   onViewDetails: (id: string) => void;
   /** Group the map + feed by the item's country (right-click → Group regional events). */
@@ -83,11 +87,15 @@ export function CommandRail(props: CommandRailProps): JSX.Element {
     visibleItems, corroboration, onFocus,
     categoryFilter, onToggleCategory,
     basemap, onBasemap, labels, onLabels, net,
-    pinned, onAddMonitor, onRemoveMonitor, onViewDetails, onGroupRegion
+    pinned, onAddMonitor, onRemoveMonitor, onViewDetails, onGroupRegion,
+    dismissed = new Set<string>(), onDismissSituation
   } = props;
 
   // Context menu state for the Situation Feed right-click.
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; id: string } | null>(null);
+  // Optimistic dismissals: the row disappears on the click rather than waiting for the persisted set
+  // to round-trip (immediate feedback — the standing UI constraint for this operator).
+  const [dismissedLocal, setDismissedLocal] = useState<Set<string>>(new Set());
 
   const located = visibleItems.filter(isLocated);
   const counts = categoryCounts(visibleItems);
@@ -103,8 +111,15 @@ export function CommandRail(props: CommandRailProps): JSX.Element {
   // Monitored situations: corroborated items (>=1 other source agrees on place+time) OR pinned.
   // Sorted by agreement count desc so the most-corroborated sit on top. Reuses the upstream
   // corroboration memo. The operator can also pin items via right-click → Add to Monitor.
+  // A row qualifies by corroboration OR pin, so "remove from monitor" could NOT be expressed by
+  // un-pinning: a corroborated row simply re-qualified and stayed put, which is why the "×" read as
+  // dead in the field (every reported row showed "×1", i.e. all of them were corroborated).
+  // Dismissal is its own fact. The local set makes the row vanish on the click; the persisted set
+  // arrives from the parent and keeps it gone across reopens.
+  const hidden = (id: string): boolean => dismissed.has(id) || dismissedLocal.has(id);
   const situations = visibleItems
     .map((i) => ({ item: i, count: corroboration.get(i.id) ?? 0 }))
+    .filter((s) => !hidden(s.item.id))
     .filter((s) => s.count >= 1 || pinned.has(s.item.id))
     .sort((a, b) => b.count - a.count);
 
@@ -214,7 +229,12 @@ export function CommandRail(props: CommandRailProps): JSX.Element {
               >
                 <span style={{ flex: 1, fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.title}</span>
                 <button
-                  onClick={(e) => { e.stopPropagation(); onRemoveMonitor(item.id); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDismissedLocal((prev) => new Set(prev).add(item.id));
+                    onRemoveMonitor(item.id);   // un-pin, if it was pinned
+                    onDismissSituation?.(item.id); // …and persist "stop showing me this"
+                  }}
                   title="Remove from monitor"
                   style={{
                     flex: '0 0 auto', fontSize: 10, fontWeight: 'bold', color: '#8fb7e0', background: '#1b2230',
