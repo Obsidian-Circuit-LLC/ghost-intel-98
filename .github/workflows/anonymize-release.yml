@@ -1,0 +1,78 @@
+# Any release published by a PERSON is re-published under github-actions[bot].
+#
+# GitHub binds a release to the account that created it and will not reassign it, so the only way to
+# make one anonymous is to delete and recreate it — and a workflow's GITHUB_TOKEN recreates it as
+# github-actions[bot]. This runs automatically so the routine cannot be half-remembered: publish a
+# release by any means (script, gh, the web UI) and it ends up bot-authored within a minute.
+#
+# The TAG is never touched (`gh release delete` without --cleanup-tag), so version history survives
+# even if this job fails.
+name: Anonymize release author
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  anonymize:
+    # A release recreated below is already the bot's. Events raised by GITHUB_TOKEN do not re-trigger
+    # workflows, so recursion is impossible anyway — this guard is belt-and-braces, and it also skips
+    # cheaply when a human re-publishes something already anonymous.
+    if: github.event.release.author.login != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Wait for every asset to finish uploading
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          # THE RACE THIS GUARDS: a release is typically created first and its installer uploaded
+          # afterwards (~900MB, tens of seconds). Deleting the release mid-upload would destroy the
+          # asset with no copy anywhere. Proceed only once every asset reports "uploaded", and once
+          # the asset set has stopped changing.
+          prev=""; stable=0
+          for i in $(seq 1 180); do   # up to 30 minutes
+            json=$(gh api "repos/$REPO/releases/tags/$TAG" --jq '[.assets[] | "\(.name):\(.size):\(.state)"] | join(",")')
+            pending=$(gh api "repos/$REPO/releases/tags/$TAG" --jq '[.assets[] | select(.state != "uploaded")] | length')
+            if [ "$pending" = "0" ] && [ -n "$json" ] && [ "$json" = "$prev" ]; then
+              stable=$((stable+1))
+              [ "$stable" -ge 2 ] && { echo "assets settled: $json"; exit 0; }
+            else
+              stable=0
+            fi
+            prev="$json"
+            sleep 10
+          done
+          echo "::error::Assets never settled for $TAG — refusing to touch the release."
+          exit 1
+
+      - name: Re-publish under the bot
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          gh release view "$TAG" --repo "$REPO" --json name,body,isPrerelease,isLatest > meta.json
+          NAME=$(jq -r '.name // ""' meta.json)
+          PRE=$(jq -r '.isPrerelease' meta.json)
+          LATEST=$(jq -r '.isLatest' meta.json)
+          jq -r '.body // ""' meta.json > body.md
+          rm -rf assets && mkdir assets
+          gh release download "$TAG" --repo "$REPO" --dir assets --clobber
+          echo "captured $(ls assets | wc -l) asset(s), $(du -sh assets | cut -f1)"
+          gh release delete "$TAG" --repo "$REPO" --yes      # the tag itself is left in place
+          ARGS=(--repo "$REPO" --verify-tag --notes-file body.md)
+          [ -n "$NAME" ] && ARGS+=(--title "$NAME")
+          [ "$PRE" = "true" ] && ARGS+=(--prerelease)
+          [ "$LATEST" = "true" ] && ARGS+=(--latest)
+          gh release create "$TAG" "${ARGS[@]}" assets/*
+          AUTHOR=$(gh release view "$TAG" --repo "$REPO" --json author --jq .author.login)
+          echo "$TAG is now authored by $AUTHOR"
+          [ "$AUTHOR" = "github-actions[bot]" ] || { echo "::error::author is still $AUTHOR"; exit 1; }
