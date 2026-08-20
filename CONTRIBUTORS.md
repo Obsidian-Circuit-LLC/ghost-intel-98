@@ -1,8 +1,7 @@
 # Contributors
 
-Ghost Intel 98 is built and maintained by:
-
-- **Obsidian Circuit** ([@onna-bugeisha-dev-team](https://github.com/Obsidian-Circuit-LLC)) — author, architecture, and maintenance (Obsidian Circuit).
+Ghost Intel 98 is built and maintained by **Obsidian Circuit**
+([Obsidian-Circuit-LLC](https://github.com/Obsidian-Circuit-LLC)).
 
 With thanks to:
 
