@@ -59,10 +59,13 @@ jobs:
           TAG: ${{ github.event.release.tag_name }}
         run: |
           set -euo pipefail
-          gh release view "$TAG" --repo "$REPO" --json name,body,isPrerelease,isLatest > meta.json
+          gh release view "$TAG" --repo "$REPO" --json name,body,isPrerelease > meta.json
           NAME=$(jq -r '.name // ""' meta.json)
           PRE=$(jq -r '.isPrerelease' meta.json)
-          LATEST=$(jq -r '.isLatest' meta.json)
+          # `isLatest` is not a field in every gh version, so ask the API which release is latest
+          # rather than the CLI — recreating must not silently demote the current release.
+          LATEST_TAG=$(gh api "repos/$REPO/releases/latest" --jq .tag_name 2>/dev/null || echo "")
+          LATEST=$([ "$LATEST_TAG" = "$TAG" ] && echo true || echo false)
           jq -r '.body // ""' meta.json > body.md
           rm -rf assets && mkdir assets
           gh release download "$TAG" --repo "$REPO" --dir assets --clobber
