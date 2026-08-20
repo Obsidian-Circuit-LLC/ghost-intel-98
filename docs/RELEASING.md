@@ -46,6 +46,14 @@ grep -a -c 'users.noreply.github.com' "$A"   # expect 0
 
 Note `grep -a` (binary-safe), not `grep -c` alone.
 
+## Gotcha: a release workflow runs the file from its TAG
+
+`anonymize-release.yml` is triggered by `release: published`, and GitHub runs the workflow file **as
+of the commit the release's tag points at** — not the default branch. Fixing the workflow on `main`
+therefore does nothing for a release cut from an older tag. This is harmless in the normal routine
+(a release tag is always current `main`), but it is confusing when testing: re-point the test tag at
+the fixed commit, or the old workflow keeps running.
+
 ## If the automatic swap fails
 
 `anonymize-release.yml` never deletes a release until every asset reports `uploaded` and the asset
