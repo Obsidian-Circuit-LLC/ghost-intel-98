@@ -315,6 +315,41 @@ export interface XEntityCacheEntry {
   count: number;
 }
 
+
+/**
+ * Fields a RE-OBSERVATION may fill in on a post we already hold. Deliberately tiny and strictly
+ * non-evidential: a display name and an avatar URL are presentation facts about the author, not the
+ * post's content, and neither is part of `canonicalPostEvidence`.
+ *
+ * Why this exists: `posts.save` skips a post whose id is already stored, so a field ADDED to the
+ * capture pipeline later (the author avatar, v3.72.5) could only ever land on brand-new posts. An
+ * established campaign already holds every recent post from its sources, so the field never arrived
+ * and display pictures stayed unreachable — the field report after v3.72.5.
+ */
+const ENRICHABLE_POST_FIELDS = ['avatar', 'displayName'] as const;
+
+/**
+ * Merge a fresh observation into a stored post, filling ONLY values we did not already have. Never
+ * rewrites an observed value and never touches evidence-bearing content, so re-observation cannot
+ * launder a change into an existing record — an actual change is the Change-Intel pipeline's job.
+ */
+export function enrichExistingPost(
+  stored: Record<string, unknown>,
+  fresh: Record<string, unknown>,
+): { post: Record<string, unknown>; changed: boolean } {
+  let changed = false;
+  const post = { ...stored };
+  for (const field of ENRICHABLE_POST_FIELDS) {
+    const incoming = typeof fresh[field] === 'string' ? (fresh[field] as string).trim() : '';
+    const current = typeof stored[field] === 'string' ? (stored[field] as string).trim() : '';
+    if (incoming && !current) {
+      post[field] = incoming;
+      changed = true;
+    }
+  }
+  return { post, changed };
+}
+
 // ---- injectable fs seam (for tests) ------------------------------------
 
 export interface XStoreDeps {
@@ -816,16 +851,30 @@ export function makeXStore(deps: XStoreDeps): XStore {
           const seen = new Set(existing.map((i) => i.id));
           let added = 0;
           let skipped = 0;
+          let enriched = 0;
           for (const post of posts) {
             if (seen.has(post.id)) {
               skipped++;
+              // A re-observation may carry fields the stored copy predates (the author avatar).
+              // Fill only what is missing — never rewrite observed content (see enrichExistingPost).
+              const idx = existing.findIndex((i) => i.id === post.id);
+              if (idx >= 0) {
+                const merged = enrichExistingPost(
+                  existing[idx] as unknown as Record<string, unknown>,
+                  post as unknown as Record<string, unknown>,
+                );
+                if (merged.changed) {
+                  existing[idx] = merged.post as unknown as XPostArtifact;
+                  enriched++;
+                }
+              }
             } else {
               existing.push(post);
               seen.add(post.id);
               added++;
             }
           }
-          if (added > 0) await writeJson(deps, p, existing);
+          if (added > 0 || enriched > 0) await writeJson(deps, p, existing);
           return { added, skipped };
         });
       },
