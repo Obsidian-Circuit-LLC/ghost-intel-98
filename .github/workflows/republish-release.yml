@@ -1,0 +1,52 @@
+# Re-publish an existing release under github-actions[bot].
+#
+# GitHub binds a release to the account that created it and will not reassign it, so making a
+# release anonymous means deleting and recreating it. Doing that from a workflow means the new
+# release is authored by github-actions[bot] rather than a person, and the installer never leaves
+# GitHub's network — the runner copies it from the old release to the new one.
+#
+# The TAG is untouched: `gh release delete` without --cleanup-tag removes only the release object,
+# so the repository's version history is preserved either way.
+name: Re-publish release under the bot
+
+on:
+  workflow_dispatch:
+    inputs:
+      tags:
+        description: 'Space-separated tags to re-publish (e.g. "v3.72.2 v3.72.3")'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  republish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - name: Re-publish each tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          TAGS: ${{ inputs.tags }}
+        run: |
+          set -euo pipefail
+          for TAG in $TAGS; do
+            echo "::group::$TAG"
+            # Capture everything that must survive the swap BEFORE anything is destroyed.
+            gh release view "$TAG" --repo "$REPO" --json name,body,isPrerelease > meta.json
+            NAME=$(jq -r '.name // ""' meta.json)
+            PRE=$(jq -r '.isPrerelease' meta.json)
+            jq -r '.body // ""' meta.json > body.md
+            rm -rf assets && mkdir assets
+            gh release download "$TAG" --repo "$REPO" --dir assets --clobber
+            echo "downloaded: $(ls -la assets | tail -n +2 | wc -l) asset(s), $(du -sh assets | cut -f1)"
+            # Only now is the old release removed — the tag itself is left alone.
+            gh release delete "$TAG" --repo "$REPO" --yes
+            ARGS=(--repo "$REPO" --verify-tag --notes-file body.md)
+            [ -n "$NAME" ] && ARGS+=(--title "$NAME")
+            [ "$PRE" = "true" ] && ARGS+=(--prerelease)
+            gh release create "$TAG" "${ARGS[@]}" assets/*
+            echo "re-published $TAG as $(gh release view "$TAG" --repo "$REPO" --json author --jq .author.login)"
+            echo "::endgroup::"
+          done
