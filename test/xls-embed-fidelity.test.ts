@@ -11,9 +11,10 @@
  * wrapping his app in our own signature. A comment promising fidelity would not have caught any of
  * that. A failing test will.
  *
- * The permitted differences are exactly four mechanical edits — the ones that are structurally
- * unavoidable when mounting a standalone app inside another app's React tree. Everything else must
- * be byte-identical, INCLUDING his stylesheet.
+ * The permitted differences are exactly five mechanical edits — four structurally unavoidable when
+ * mounting a standalone app inside another app's React tree, plus one inert line referencing two
+ * memos his `App()` declares but does not read (this project sets `noUnusedLocals`; his did not).
+ * Everything else must be byte-identical, INCLUDING his stylesheet.
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -29,7 +30,7 @@ function embeddedBody(): string {
   return embedded.slice(embedded.indexOf(marker) + marker.length);
 }
 
-/** The four permitted edits, applied to HIS file, should reproduce OURS exactly. */
+/** The five permitted edits, applied to HIS file, should reproduce OURS exactly. */
 function applyPermittedEdits(source: string): string {
   return source
     .replace(
@@ -39,11 +40,16 @@ function applyPermittedEdits(source: string): string {
     .replace("import { createRoot } from 'react-dom/client';", '')
     .replace("import './styles.css';", "import './station.css';")
     .replace(/^function App\(\)/m, 'export function App()')
-    .replace(/^createRoot\(.*$/m, '');
+    .replace(/^createRoot\(.*$/m, '')
+    // Edit 5: inert, behaviour-free, and inserted directly after his second unused memo.
+    .replace(
+      /^(\s*const postsById = useMemo.*)$/m,
+      '$1\n  void activeCase; void postsById; // (embed edit 5) see header'
+    );
 }
 
 describe('the embedded X Listening Station is GhostExodus\'s renderer, unmodified', () => {
-  it('differs from his original by ONLY the four mechanical mount edits', () => {
+  it('differs from his original by ONLY the five mechanical mount edits', () => {
     expect(embeddedBody()).toBe(applyPermittedEdits(original));
   });
 

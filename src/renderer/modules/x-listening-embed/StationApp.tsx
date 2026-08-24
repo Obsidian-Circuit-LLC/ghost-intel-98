@@ -10,6 +10,10 @@
  *   2. `import './styles.css'` → `import './station.css'` (his stylesheet, copied beside this file).
  *   3. `StrictMode` / `createRoot` imports dropped with the bootstrap.
  *   4. `function App()` → `export function App()` so the module can mount it.
+ *   5. one inert `void activeCase; void postsById;` line — his `App()` declares two memos it does
+ *      not read, which this project's `noUnusedLocals` rejects and his did not. Referencing them
+ *      changes no behaviour and was preferred to relaxing the rule for the whole renderer or
+ *      carrying a second tsconfig to avoid one line.
  *
  * WHY VERBATIM. Every previous attempt re-derived his behaviour against our own model and shipped
  * something that looked like his app but did not behave like it — five consecutive releases chasing
@@ -297,6 +301,7 @@ export function App() {
   }, [state.profiles, state.relationships, state.posts]);
   const avatarFor = (username: string) => avatarLookup.get(String(username || '').replace(/^@/, '').toLowerCase());
   const postsById = useMemo(() => new Map(state.posts.map((p) => [p.id, p])), [state.posts]);
+  void activeCase; void postsById; // (embed edit 5) see header
   const notesByPost = useMemo(() => { const m = new Map<string, InvestigationNote[]>(); for (const n of state.notes) { const a = m.get(n.postId) || []; a.push(n); m.set(n.postId, a); } for (const a of m.values()) a.sort((x, y) => y.updatedAt.localeCompare(x.updatedAt)); return m; }, [state.notes]);
   const presetById = useMemo(() => new Map(state.presets.map((preset) => [preset.id, preset])), [state.presets]);
   const presetMatchByPost = useMemo(() => { const map = new Map<string, { terms: string[]; names: string[] }>(); for (const match of state.matches) { const preset = presetById.get(match.presetId); if (!preset || preset.enabled === false) continue; const row = map.get(match.postId) || { terms: [], names: [] }; row.terms.push(...match.matchedKeywords); row.names.push(preset.name); map.set(match.postId, row); } return map; }, [state.matches, presetById]);

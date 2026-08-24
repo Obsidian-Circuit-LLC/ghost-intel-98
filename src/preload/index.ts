@@ -4,6 +4,7 @@
  */
 
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
+import { XLS_CHANNELS, XLS_EVENT_CHANNELS } from '@shared/xls/channels';
 import { channels } from '../shared/ipc-contracts';
 import type { LocalAiStatus, LocalAiProgress, MemoryStatus, MemoryProgress, MemoryItem, RecallPreview, LibraryDoc, MemoryGraphShape, BondShape, ScrapingCaseStoreId, PdfSignPlacement } from '../shared/ipc-contracts';
 import type { InvestigationScene, SceneDelta } from '../shared/investigation-graph';
@@ -1000,6 +1001,38 @@ const api = {
     exportRecording: (id: string) => ipcRenderer.invoke(channels.websdr.recordingsExport, id)
   }
 } as const;
+
+/**
+ * `window.xls` — GhostExodus's own context bridge, served by Ghost Intel 98.
+ *
+ * His embedded renderer (src/renderer/modules/x-listening-embed/StationApp.tsx) is compiled against
+ * HIS `global.d.ts` and talks to this and nothing else. The method names and argument order are his
+ * exactly; only the channel names are namespaced `xls:` underneath, because his bare `cases:create`
+ * / `cases:update` would otherwise collide with this app's own case-manager channels.
+ *
+ * Built by mapping his channel table rather than hand-listing methods, so the surface cannot drift
+ * from his preload — test/xls-embed-bridge-parity.test.ts fails if it gains or loses one.
+ */
+const xlsInvoke = Object.fromEntries(
+  Object.entries(XLS_CHANNELS).map(([method, channel]) => [
+    method,
+    (...args: unknown[]) => ipcRenderer.invoke(channel, ...args)
+  ])
+);
+
+const xlsEvents = Object.fromEntries(
+  Object.entries(XLS_EVENT_CHANNELS).map(([method, channel]) => [
+    method,
+    (cb: (payload: unknown) => void) => {
+      const listener = (_e: unknown, payload: unknown) => cb(payload);
+      ipcRenderer.on(channel, listener);
+      // His UI unsubscribes by calling the returned function (his preload's contract).
+      return () => ipcRenderer.removeListener(channel, listener);
+    }
+  ])
+);
+
+contextBridge.exposeInMainWorld('xls', { ...xlsInvoke, ...xlsEvents });
 
 contextBridge.exposeInMainWorld('api', api);
 
