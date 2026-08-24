@@ -21,7 +21,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type { GeoItem, CameraStream } from '@shared/post-mvp-types';
-import { buildPopup, buildPopupLazily } from './popup';
+import { buildPopup } from './popup';
 import { syncCctvLayer } from './cctvLayer';
 import { makePropagator } from './satellites/propagate';
 import { ensureSatelliteLayer, updateSatelliteLayer } from './satellites/satelliteLayer';
@@ -37,10 +37,6 @@ const CATEGORY_COLOR: Record<string, string> = {
   disaster: '#16a085', crime: '#7f8c8d', politics: '#2980b9'
 };
 
-// Hard cap on rendered markers so a huge cache (e.g. thousands of FIRMS points, 2000/source)
-// can't freeze the map. Only the first MAX_MARKERS *located* items get a marker — but `located`
-// keeps counting past the cap so the truncation readout is honest. Ported from MapPane.
-const MAX_MARKERS = 1500;
 
 // Diameter (px) by severity. Undefined/low → 11, medium → 14, high → 18. Ported from MapPane.
 function severityDiameter(sev: GeoItem['severity']): number {
@@ -58,26 +54,6 @@ export function validCoord(lat: number | null | undefined, lon: number | null | 
     && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180;
 }
 
-/**
- * Build a per-item round-dot HTMLElement for a MapLibre Marker: fill by category, size by severity,
- * and a white halo + colored glow ring when corroborated (count >= 1). Glow radius grows with the
- * count but is capped so a heavily corroborated cluster doesn't bloom across the map. Mirrors
- * MapPane's `buildIcon`, but returns a bare element (MapLibre's `new Marker({ element })`) rather
- * than an L.divIcon. Factored out + exported so the dot styling is unit-testable without a GL context.
- */
-export function buildIconElement(it: GeoItem, count: number): HTMLElement {
-  const d = severityDiameter(it.severity);
-  const color = CATEGORY_COLOR[it.category ?? ''] ?? '#555';
-  const glow = count >= 1 ? Math.min(4 + count * 3, 16) : 0; // cap the bloom
-  const ring = count >= 1
-    ? `box-shadow:0 0 0 3px rgba(255,255,255,.7), 0 0 ${glow}px ${glow}px ${color};`
-    : '';
-  const el = document.createElement('span');
-  el.className = 'ga98-geo-mk';
-  el.style.cssText = `display:block;width:${d}px;height:${d}px;border-radius:50%;`
-    + `background:${color};border:1px solid rgba(0,0,0,.5);box-sizing:border-box;${ring}`;
-  return el;
-}
 
 /** Build the distinct 📌 search-pin element (mirrors MapPane's searchPin divIcon). */
 function buildSearchPinElement(): HTMLElement {
@@ -179,67 +155,194 @@ export function createGlobeMap(
   });
 }
 
+// GPU event layer. Stable ids so a style rebuild or a resync addresses the same nodes.
+export const EVENTS_SOURCE = 'geoint-events';
+export const EVENTS_GLOW_LAYER = 'geoint-events-glow';
+export const EVENTS_LAYER = 'geoint-events-dots';
+
 /**
- * Rebuild the item markers on `map`: clear the previous markers (MapLibre markers live directly
- * on the map, not in a layer-group, so each is removed explicitly + the id map cleared), then for
- * each VALID item create a category-coloured dot marker with its clean popup at [lng, lat] and add
- * it to the map, capped at MAX_MARKERS. Returns the truncation readout ({shown,total}) when the cap
- * hid located events, else null.
- *
- * Factored out of the component (like createGlobeMap/buildStyle) so the marker port — coord order,
- * the strict coord gate, and the cap/truncation count — is unit-testable against a mocked
- * maplibre-gl without a real GL context or a React renderer.
+ * Cap on FEATURES in the GPU layer. Two orders of magnitude above the old DOM-marker cap because
+ * the cost profile is different in kind: a circle layer draws its points on the GPU in one pass,
+ * where the marker path paid a DOM element + a Marker + a Popup object EACH. The cap is kept only
+ * so a pathological cache cannot build an unbounded FeatureCollection in memory, and the
+ * truncation readout stays honest when it bites.
  */
-export function rebuildItemMarkers(
+const MAX_FEATURES = 20000;
+
+/** One point feature per located event, carrying everything the paint expressions read. */
+function buildEventFeatures(
+  items: GeoItem[],
+  corroboration?: Map<string, number>
+): { features: Array<Record<string, unknown>>; located: number } {
+  const features: Array<Record<string, unknown>> = [];
+  let located = 0;
+  for (const it of items) {
+    // Strict coord gate BEFORE building — a poisoned (NaN/Infinity/out-of-range) or unlocated
+    // (null) item must never be placed. No silent (0,0) pins (charter invariant), unchanged from
+    // the marker path.
+    if (!validCoord(it.lat, it.lon)) continue;
+    located++;
+    if (features.length >= MAX_FEATURES) continue; // keep counting located so the readout is honest
+    const count = corroboration?.get(it.id) ?? 0;
+    features.push({
+      type: 'Feature',
+      // CRITICAL: [lng, lat] — GeoJSON order, the OPPOSITE of Leaflet's [lat, lng].
+      geometry: { type: 'Point', coordinates: [it.lon as number, it.lat as number] },
+      properties: {
+        id: it.id,
+        title: String(it.title ?? ''),
+        link: String(it.link ?? ''),
+        color: CATEGORY_COLOR[it.category ?? ''] ?? '#555',
+        r: severityDiameter(it.severity) / 2,
+        count,
+      },
+    });
+  }
+  return { features, located };
+}
+
+/**
+ * Draw every located event as a GPU circle from ONE GeoJSON source, replacing one DOM element +
+ * one Marker + one Popup per event.
+ *
+ * The old marker was a coloured dot: diameter by severity, fill by category, a white ring and a
+ * coloured bloom once corroborated. All four are data-driven paint properties over the feature
+ * properties built above, so the appearance is preserved without a sprite or an icon atlas. The
+ * bloom (a CSS box-shadow on the marker element) becomes a translucent underlay circle — the
+ * standard way to fake a glow on a map, and the only part of the look that is an approximation
+ * rather than a transcription.
+ *
+ * Interaction is bound ONCE to the layer, not per feature: a click reads the feature's id and
+ * opens the Event Details dossier, and a single shared Popup is reused for every event, its
+ * content built at click time, so an event that is never clicked never constructs a subtree — the
+ * laziness `buildPopupLazily` used to provide is now structural: there is nothing to defer because
+ * nothing is built until a click happens.
+ *
+ * Returns the truncation readout ({shown,total}) when the cap hid located events, else null.
+ */
+export function syncItemLayer(
   map: maplibregl.Map,
-  store: Map<string, maplibregl.Marker>,
   items: GeoItem[],
   corroboration?: Map<string, number>,
   onPopup?: (p: maplibregl.Popup) => void,
   onSelect?: (id: string) => void
 ): { shown: number; total: number } | null {
-  for (const mk of store.values()) mk.remove();
-  store.clear();
-  let placed = 0;
-  let located = 0; // items with valid, placeable coords (whether or not capped)
-  for (const it of items) {
-    // Strict coord gate BEFORE constructing — no poisoned (NaN/Infinity/out-of-range) or
-    // unlocated (null) item ever reaches a marker. No silent (0,0) pins (charter invariant).
-    if (!validCoord(it.lat, it.lon)) continue;
-    located++;
-    if (placed >= MAX_MARKERS) continue; // cap so a huge cache can't bog the map (keep counting located)
-    try {
-      // Popup CONTENT is built on first open, not per marker. One DOM element per item is already
-      // the map's dominant cost at a few hundred located events (the operator's CPU report, where
-      // narrowing the timeline normalised it); constructing a content subtree for every marker that
-      // will never be opened is pure waste on top of it. The Popup object itself stays eager because
-      // MapLibre needs it at setPopup() time.
-      const popup = new maplibregl.Popup({ closeButton: true, closeOnClick: true });
-      const content = buildPopupLazily(() => buildPopup(it.title, it.link));
-      if (typeof (popup as { on?: unknown }).on === 'function') {
-        popup.on('open', () => popup.setDOMContent(content()));
-      } else {
-        // No event surface (an older/stubbed Popup): fall back to eager content. Losing the saving is
-        // acceptable; losing the popup is not, and this builder's try/catch would hide the failure.
-        popup.setDOMContent(content());
-      }
-      onPopup?.(popup); // single-open tracking: opening this closes any other open popup
-      // Event Details (Phase 1): a marker click also opens the dossier panel. The listener sits on
-      // the marker's own element (not the Marker object) so it never touches the popup/close-button
-      // behaviour and needs no MapLibre event plumbing. Blip click thus opens BOTH the popup
-      // (MapLibre's default marker→popup toggle) AND the panel (this handler).
-      const element = buildIconElement(it, corroboration?.get(it.id) ?? 0);
-      if (onSelect) element.addEventListener('click', () => onSelect(it.id));
-      // CRITICAL: MapLibre uses [lng, lat] (GeoJSON order), the OPPOSITE of Leaflet's [lat, lng].
-      const mk = new maplibregl.Marker({ element })
-        .setLngLat([it.lon as number, it.lat as number])
-        .setPopup(popup)
-        .addTo(map);
-      store.set(it.id, mk);
-      placed++;
-    } catch { /* skip a marker that fails to build; never let one bad item crash the layer */ }
+  const { features, located } = buildEventFeatures(items, corroboration);
+  const data = { type: 'FeatureCollection', features } as unknown as maplibregl.GeoJSONSourceSpecification['data'];
+
+  const existing = map.getSource(EVENTS_SOURCE) as maplibregl.GeoJSONSource | undefined;
+  if (existing && typeof existing.setData === 'function') {
+    existing.setData(data);
+  } else {
+    map.addSource(EVENTS_SOURCE, { type: 'geojson', data } as maplibregl.SourceSpecification);
+    // Bloom underlay, drawn only for corroborated events (the old marker's box-shadow).
+    map.addLayer({
+      id: EVENTS_GLOW_LAYER,
+      type: 'circle',
+      source: EVENTS_SOURCE,
+      filter: ['>=', ['get', 'count'], 1],
+      paint: {
+        'circle-radius': ['+', ['get', 'r'], ['min', ['*', ['get', 'count'], 3], 16]],
+        'circle-color': ['get', 'color'],
+        'circle-opacity': 0.35,
+        'circle-blur': 0.6,
+      },
+    } as unknown as maplibregl.LayerSpecification);
+    // The dot itself: severity radius, category fill, and the white ring once corroborated.
+    map.addLayer({
+      id: EVENTS_LAYER,
+      type: 'circle',
+      source: EVENTS_SOURCE,
+      paint: {
+        'circle-radius': ['get', 'r'],
+        'circle-color': ['get', 'color'],
+        'circle-stroke-width': ['case', ['>=', ['get', 'count'], 1], 3, 1],
+        'circle-stroke-color': [
+          'case',
+          ['>=', ['get', 'count'], 1],
+          'rgba(255,255,255,0.7)',
+          'rgba(0,0,0,0.5)',
+        ],
+      },
+    } as unknown as maplibregl.LayerSpecification);
+
+    // ONE handler for the whole layer. Bound only on creation so a resync never stacks listeners.
+    map.on('click', EVENTS_LAYER, (e: unknown) => {
+      const ev = e as { features?: Array<{ properties?: Record<string, unknown> }>; lngLat?: { lng: number; lat: number } };
+      const props = ev.features?.[0]?.properties;
+      if (!props) return;
+      const id = String(props.id ?? '');
+      const st = layerState(map);
+      if (id) st.onSelect?.(id);
+      const lngLat = ev.lngLat;
+      if (!lngLat) return;
+      const popup = sharedPopup(map);
+      st.onPopup?.(popup);
+      // Content is built HERE — on the click — so events that are never opened never build one.
+      popup.setDOMContent(buildPopup(String(props.title ?? ''), String(props.link ?? '')));
+      popup.setLngLat([lngLat.lng, lngLat.lat]).addTo(map);
+    });
+    // Pointer affordance: the dots are clickable, so say so.
+    map.on('mouseenter', EVENTS_LAYER, () => { try { map.getCanvas().style.cursor = 'pointer'; } catch { /* no canvas in a stub */ } });
+    map.on('mouseleave', EVENTS_LAYER, () => { try { map.getCanvas().style.cursor = ''; } catch { /* no canvas in a stub */ } });
   }
-  return placed < located ? { shown: placed, total: located } : null;
+
+  // The click handler is bound once but the callbacks change across renders; route through refs so
+  // the live ones are always used without rebinding (and without stacking listeners).
+  const st = layerState(map);
+  st.onSelect = onSelect;
+  st.onPopup = onPopup;
+
+  return features.length < located ? { shown: features.length, total: located } : null;
+}
+
+/**
+ * Per-map layer state: the live callbacks for the once-bound click handler, and the single Popup
+ * reused by every event.
+ *
+ * Keyed by the map — NOT module-level singletons. A style rebuild or a second map would otherwise
+ * share one popup and clobber each other's callbacks, and a popup would outlive the map it was
+ * attached to. A WeakMap also means the entry disappears with the map, with nothing to clean up.
+ */
+interface EventLayerState {
+  onSelect?: (id: string) => void;
+  onPopup?: (p: maplibregl.Popup) => void;
+  popup?: maplibregl.Popup;
+}
+const eventLayerState = new WeakMap<object, EventLayerState>();
+
+function layerState(map: maplibregl.Map): EventLayerState {
+  let st = eventLayerState.get(map as unknown as object);
+  if (!st) {
+    st = {};
+    eventLayerState.set(map as unknown as object, st);
+  }
+  return st;
+}
+
+/** One Popup per map, created on first click rather than one per event. */
+function sharedPopup(map: maplibregl.Map): maplibregl.Popup {
+  const st = layerState(map);
+  if (!st.popup) st.popup = new maplibregl.Popup({ closeButton: true, closeOnClick: true });
+  return st.popup;
+}
+
+/**
+ * Open the shared popup for one event. Used by the focus path ("Play story", Event Details), which
+ * previously reached into the marker store and toggled that marker's own popup. With events drawn
+ * as features there is no per-event popup to toggle, so focus opens the shared one at the event's
+ * coordinates with content built at open time — the same lazy rule the click path follows.
+ */
+export function openEventPopup(
+  map: maplibregl.Map,
+  it: GeoItem,
+  onPopup?: (p: maplibregl.Popup) => void
+): void {
+  if (!validCoord(it.lat, it.lon)) return;
+  const popup = sharedPopup(map);
+  onPopup?.(popup);
+  popup.setDOMContent(buildPopup(String(it.title ?? ''), it.link));
+  popup.setLngLat([it.lon as number, it.lat as number]).addTo(map);
 }
 
 // Prop surface mirrors MapPane's so GeoIntModule can pass the same props to either map. All are
@@ -310,7 +413,6 @@ export function MapGL(props: MapGLProps = {}): JSX.Element {
   const map = useRef<maplibregl.Map | null>(null);
   // Per-item markers keyed by id, so focus can address a marker without rebuilding the set.
   // MapLibre markers aren't in a layer-group, so we track + remove them explicitly on rebuild.
-  const markers = useRef<Map<string, maplibregl.Marker>>(new Map());
   // Single search pin, kept OUTSIDE the item set so item rebuilds don't clear it; replaced on
   // each new search.
   const searchMarker = useRef<maplibregl.Marker | null>(null);
@@ -464,14 +566,13 @@ export function MapGL(props: MapGLProps = {}): JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projection, tilesEnabled, tileUrl, tileAttribution, overlayUrls.join('|'), overlayAttribution]);
 
-  // Rebuild the item markers only when the item SET or corroboration changes (mirrors MapPane's
-  // effect deps; items is memoized upstream so a pan that merely re-renders no longer thrashes).
-  // MapLibre markers live directly on the map (no layer-group), so each old marker is removed
-  // explicitly and the id map cleared before rebuilding.
+  // Resync the GPU event layer when the item SET or corroboration changes (items is memoized
+  // upstream so a pan that merely re-renders no longer thrashes). One GeoJSON source is updated in
+  // place — there are no per-event DOM nodes to remove, which is the point of the layer.
   useEffect(() => {
     const m = map.current;
     if (!m) return;
-    setTruncated(rebuildItemMarkers(m, markers.current, items, corroboration, trackPopup, (id) => onSelectItemRef.current?.(id)));
+    setTruncated(syncItemLayer(m, items, corroboration, trackPopup, (id) => onSelectItemRef.current?.(id)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, corroboration]);
 
@@ -501,17 +602,13 @@ export function MapGL(props: MapGLProps = {}): JSX.Element {
   useEffect(() => {
     const m = map.current;
     if (!m || !focusId) return;
-    const mk = markers.current.get(focusId);
-    if (mk) {
-      const ll = mk.getLngLat();
-      m.flyTo({ center: [ll.lng, ll.lat], zoom: 6 });
-      if (!mk.getPopup()?.isOpen()) mk.togglePopup();
-      return;
-    }
-    // No marker for this id — past the MAX_MARKERS cap (or not yet built). Fall back to flying to
-    // the item's coords by id so "Play story" / focus still works on capped events.
+    // Events are features, not markers, so focus resolves through the item set by id — the path
+    // that used to be the past-the-cap fallback is now the only path, and it works for every event
+    // rather than only the ones that got a DOM node.
     const it = itemsRef.current.find((x) => x.id === focusId);
-    if (it && validCoord(it.lat, it.lon)) m.flyTo({ center: [it.lon as number, it.lat], zoom: 6 });
+    if (!it || !validCoord(it.lat, it.lon)) return;
+    m.flyTo({ center: [it.lon as number, it.lat], zoom: 6 });
+    openEventPopup(m, it, trackPopup);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusId]);
 
