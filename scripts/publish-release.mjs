@@ -83,9 +83,28 @@ gh(['api', `repos/${REPO}/releases/${created.id}`, '--method', 'PATCH',
     '-F', 'draft=false', '-F', 'make_latest=true'], {});
 
 console.log('waiting for the bot swap…');
+// The swap DELETES the release and recreates it under the bot, so `releases/tags/<tag>` returns 404
+// for the seconds in between. That window is the swap working, not a failure — polling it with a
+// throwing call aborted the script mid-swap on two consecutive releases (the release itself was
+// fine both times, which is the worst kind of false alarm: it looks like the publish broke). Treat
+// a 404 here as "still swapping" and keep waiting.
+const authorOrNull = () => {
+  try {
+    return gh(['api', `repos/${REPO}/releases/tags/${tag}`, '--jq', '.author.login']);
+  } catch (err) {
+    const out = String(err.stdout ?? '') + String(err.stderr ?? '');
+    if (out.includes('Not Found')) return null;
+    throw err;
+  }
+};
+
 for (let i = 0; i < 60; i += 1) {
   await sleep(10_000);
-  const author = gh(['api', `repos/${REPO}/releases/tags/${tag}`, '--jq', '.author.login']);
+  const author = authorOrNull();
+  if (author === null) {
+    process.stdout.write('~'); // mid-swap: the old release is gone, the new one is not up yet
+    continue;
+  }
   if (author === 'github-actions[bot]') {
     const digest = gh(['api', `repos/${REPO}/releases/tags/${tag}`, '--jq', '.assets[0].digest']);
     console.log(`done — ${tag} authored by ${author}, asset ${digest}`);
