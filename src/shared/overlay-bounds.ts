@@ -1,14 +1,17 @@
 /**
- * Clipping a native account-tile overlay to the page that scrolls it.
+ * Clipping a native overlay to whatever is supposed to contain it.
  *
- * A `WebContentsView` is a sibling of the entire renderer, not a DOM child, so nothing in the DOM
- * clips it: a tile host that has scrolled half-way under the module header still reports a rect
- * spanning the header, and the live account view would paint straight over that chrome (and, off
- * the top of the module, over the desktop). Every overlay bound must therefore be the intersection
- * of the host element with the scrolling viewport, and a tile whose intersection has collapsed must
- * not be presented at all.
+ * A `WebContentsView` is a sibling of the entire renderer, not a DOM child, so NOTHING in the DOM
+ * clips it — not a scroll container, not the module window, not the viewport. A host that has
+ * scrolled half-way under a header, or that overflows a window the user just resized smaller, still
+ * reports its full rect, and the native view paints that whole rectangle over whatever happens to
+ * be behind it (other windows, the desktop). Every overlay bound must therefore be the intersection
+ * of the host with each thing that visually contains it, and an overlay whose intersection has
+ * collapsed must not be presented at all.
  *
- * Pure + shared so both the renderer (which measures) and its tests can use the same arithmetic.
+ * Used by Ghost Social's account tiles (clipped to the scrolling wall) and the WebSDR receiver
+ * (clipped to its module window). Pure + shared so the renderers that measure and the tests that
+ * check them run the same arithmetic.
  */
 export interface OverlayRect {
   x: number;
