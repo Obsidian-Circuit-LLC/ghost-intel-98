@@ -26,8 +26,8 @@ Everything the old path guaranteed is re-asserted against the new one: no event 
 
 Windows NSIS installer — `GhostIntel98-Setup-3.73.0.exe` (per-user, no admin; unsigned → **More info → Run anyway**). Installs over the previous build in place.
 
-- **SHA-256:** `__SHA256__`
-- **Size:** `__SIZE__`
+- **SHA-256:** `83aaa4fa1b1354ad93b213f33a8d707c25df1c1c328c721a3e9963c513e27b68`
+- **Size:** `945,018,266 bytes (~901 MB)`
 
 Confirm **Settings ▸ About** reads **3.73.0**.
 
