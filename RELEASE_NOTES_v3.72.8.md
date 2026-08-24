@@ -28,7 +28,7 @@ The theme fix is measured, not eyeballed: the arrow's repeat and position are as
 
 Windows NSIS installer — `GhostIntel98-Setup-3.72.8.exe` (per-user, no admin; unsigned → **More info → Run anyway**). Installs over the previous build in place.
 
-- **SHA-256:** `__SHA256__`
-- **Size:** `__SIZE__`
+- **SHA-256:** `e37e47dbe79719692122660788d857315e5630a97b61fefac24ce426a20a65ef`
+- **Size:** `945,169,594 bytes (~901 MB)`
 
 Confirm **Settings ▸ About** reads **3.72.8**.
