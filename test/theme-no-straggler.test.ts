@@ -62,11 +62,30 @@ function walk(dir: string, exts: string[], out: string[]): void {
   }
 }
 
+/**
+ * VENDORED THIRD-PARTY SOURCE — not scanned.
+ *
+ * `x-listening-embed/` is GhostExodus's X Listening Station Enterprise v3.4.1 renderer and
+ * stylesheet, embedded VERBATIM and held byte-identical to his original by
+ * test/xls-embed-fidelity.test.ts. His stylesheet is his own fixed dark console palette: it
+ * deliberately does not follow the app skin, exactly like the WebSDR console.
+ *
+ * The difference from WebSDR — which IS scanned, because its palette was re-expressed as
+ * `--ga98-sdr-*` tokens during that port — is that this module is not a port. Tokenising his
+ * colours would mean EDITING HIS STYLESHEET, which the fidelity contract forbids and which is
+ * precisely the habit the embed exists to end ("your AI is still trying to wrap the original with
+ * its own signature"). The guard protects the theme layer from stragglers; his vendored console is
+ * not part of the theme layer.
+ */
+const VENDORED_UNSCANNED = ['src/renderer/modules/x-listening-embed/'];
+
 function collectFiles(): string[] {
   const files: string[] = [];
   for (const { dir, exts } of SCAN) walk(join(ROOT, dir), exts, files);
   for (const f of SINGLE_FILES) files.push(join(ROOT, f));
-  return files.sort();
+  return files
+    .filter((f) => !VENDORED_UNSCANNED.some((v) => f.includes(v)))
+    .sort();
 }
 
 // ── literal detection ───────────────────────────────────────────────────────

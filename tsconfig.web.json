@@ -27,5 +27,8 @@
     "src/renderer/**/*",
     "src/preload/api.d.ts",
     "src/shared/**/*"
+  ],
+  "exclude": [
+    "src/renderer/modules/x-listening-embed/StationApp.tsx"
   ]
 }
