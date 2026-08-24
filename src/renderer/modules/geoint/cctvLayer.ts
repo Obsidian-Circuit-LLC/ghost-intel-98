@@ -43,7 +43,15 @@ export interface CctvHandlers {
 
 /** Clear the previous camera markers and render one per cell. Singleton → camera icon → onOpen;
  *  cluster → count badge → onCluster. MapLibre markers live on the map (no layer group), so each is
- *  removed explicitly and the store cleared before rebuilding. */
+ *  removed explicitly and the store cleared before rebuilding.
+ *
+ *  DELIBERATELY STILL DOM MARKERS, unlike the event layer (`syncItemLayer` in MapGL.tsx, which
+ *  moved to a GPU circle layer because it drew one DOM node per event and the cache is unbounded).
+ *  The reasoning does not transfer here: these markers are per CLUSTER CELL for the current view,
+ *  so the count is bounded by the grid rather than by the number of streams, and a cluster icon
+ *  carries TEXT (the count badge) — which on a GPU layer means a symbol layer with `text-field`
+ *  and a glyph source, real work for a cost that is already bounded. Revisit only if profiling
+ *  shows this layer on the hot path. */
 export function renderCctvLayer(
   map: maplibregl.Map,
   store: Map<string, maplibregl.Marker>,

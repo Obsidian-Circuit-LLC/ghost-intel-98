@@ -41,7 +41,9 @@ import { NewsViewModule } from './geoint/NewsViewModule';
 import { HelpModule } from './help/HelpModule';
 import { SearchlightModule } from './searchlight/SearchlightModule';
 import { SocmintModule } from './socmint/SocmintModule';
-import { XListeningModule } from './x-listening/XListeningModule';
+// GhostExodus's own renderer, embedded verbatim (see x-listening-embed/StationApp.tsx). This
+// REPLACES the earlier port: there is one X Listening Station, and it is his.
+import { App as XListeningStation } from './x-listening-embed/StationApp';
 import { WebSdrModule } from './websdr/WebSdrModule';
 import { OSINTToolkitModule } from './osint-toolkit/OSINTToolkitModule';
 import { MindsEyeModule } from './minds-eye/MindsEyeModule';
@@ -210,8 +212,10 @@ function SocmintAdapter({ spec }: { spec: WindowSpec }): JSX.Element {
   return <SocmintModule caseId={spec.props?.['caseId'] as string | undefined} />;
 }
 
-function XListeningAdapter({ spec }: { spec: WindowSpec }): JSX.Element {
-  return <XListeningModule caseId={spec.props?.['caseId'] as string | undefined} />;
+function XListeningAdapter({ spec: _spec }: { spec: WindowSpec }): JSX.Element {
+  // His app owns its own campaign selection through `window.xls`, so it takes no caseId prop —
+  // unlike the port, which was driven by the app's active case.
+  return <XListeningStation />;
 }
 
 function WebSdrAdapter({ spec }: { spec: WindowSpec }): JSX.Element {

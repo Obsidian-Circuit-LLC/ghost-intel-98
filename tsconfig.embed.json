@@ -1,0 +1,23 @@
+{
+  // GhostExodus's EMBEDDED renderer, type-checked on his terms.
+  //
+  // `StationApp.tsx` is his `src/main.tsx` running verbatim (see the fidelity test). It is fully
+  // type-checked — strict, same lib and JSX settings as the rest of the renderer — with exactly two
+  // rules relaxed: `noUnusedLocals` / `noUnusedParameters`. His file declares two memos it does not
+  // currently read, which our project treats as an error and his did not.
+  //
+  // The alternative was editing his renderer to satisfy a lint-grade rule of ours, which is the
+  // precise habit this embed exists to stop. Type SAFETY is not weakened here — `strict` is still
+  // on; only the tidiness rules are off, and only for his file.
+  "extends": "./tsconfig.web.json",
+  "compilerOptions": {
+    "composite": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false
+  },
+  "include": [
+    "src/renderer/modules/x-listening-embed/**/*",
+    "src/shared/**/*"
+  ],
+  "exclude": []
+}

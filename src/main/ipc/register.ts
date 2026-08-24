@@ -15,7 +15,7 @@
  */
 
 import { app, ipcMain, shell, dialog, BrowserWindow } from 'electron';
-import { writeFile, rename, lstat, rm, readFile, stat, realpath } from 'node:fs/promises';
+import { writeFile, rename, lstat, rm, readFile, stat, realpath, mkdir as mkdirp } from 'node:fs/promises';
 import { basename, dirname, join, sep } from 'node:path';
 import { channels, BGCONN_LOCK_EXEMPT_CHANNELS } from '@shared/ipc-contracts';
 import type { MailAccount, MailSendInput, SshHostProfile, AiChatRequest, MediaTrack, AiConversation } from '@shared/post-mvp-types';
@@ -155,6 +155,10 @@ import { createScrapingCasesHandlers } from '../scraping-cases/ipc';
 import { prodScrapingCaseStore } from '../storage/scraping-cases';
 import { registerInvestigationGraphIpc, registerInvestigationRunIpc } from '../investigation/ipc';
 import { registerXListeningIpc } from '../x-listening/ipc';
+import { randomUUID } from 'node:crypto';
+import { secureReadFile, secureWriteFile } from '../storage/secure-fs';
+import { registerXlsEmbedIpc } from '../xls-embed/ipc';
+import { makeStationStore } from '../xls-embed/state-store';
 import { registerWebSdrIpc } from '../websdr/ipc';
 import { registerWebSdrReceiverIpc } from '../websdr/receiver-ipc';
 import { registerGhostSocialIpc } from '../ghost-social/ipc';
@@ -1781,6 +1785,28 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   // hostile remote page (x.com), so every handler must validate the sender frame first
   // (assertTrustedSender inside the module). The plain safeHandle discards the event and cannot.
   registerXListeningIpc({ handle: safeHandleWithEvent, getWindow });
+
+  // GhostExodus's embedded X Listening Station: his 47 channels under `xls:`, backed by HIS state
+  // document written through secure-fs (encrypted at rest, and a failed read REPORTED rather than
+  // reset — see xls-embed/state-store.ts). Same sender validation and Tor gate as everything else.
+  registerXlsEmbedIpc({
+    handle: safeHandleWithEvent,
+    getWindow,
+    store: makeStationStore({
+      readFile: (path) => secureReadFile(path),
+      writeFile: async (path, data) => {
+        await mkdirp(dirname(path), { recursive: true });
+        await secureWriteFile(path, Buffer.from(data, 'utf8'));
+      },
+      statePath: () => join(dataRoot(), 'x-listening-station', 'station-state.json'),
+      now: () => new Date().toISOString(),
+      makeId: () => randomUUID(),
+    }),
+    // Reuses the app's shared save path: native dialog, symlink refusal, atomic temp+rename. The
+    // renderer never names a destination, so there is no path-traversal surface.
+    saveExport: (defaultName, data) =>
+      saveBufferWithDialog(getWindow(), defaultName, Buffer.from(data, 'utf8')),
+  });
 
   // WebSDR Viewer (Phase 1) — the receiver overlay (Phase 2) will host a hostile remote SDR page,
   // so every channel sender-validates first (assertTrustedSender inside the module), exactly like

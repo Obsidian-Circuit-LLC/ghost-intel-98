@@ -539,7 +539,7 @@ type HandleWithEvent = (
  * module never pulls the settings graph at import time) and a fail-CLOSED catch — any
  * settings-read error yields `false` (Tor mode), never a silent widen to clearnet.
  */
-async function loadClearnetEnabled(): Promise<boolean> {
+export async function loadClearnetEnabled(): Promise<boolean> {
   try {
     const { settingsStore } = await import('../storage/json-fs');
     const settings = await settingsStore.read();

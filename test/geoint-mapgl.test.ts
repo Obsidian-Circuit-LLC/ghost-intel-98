@@ -26,6 +26,8 @@ const flyTos: Array<{ center: [number, number]; zoom?: number }> = [];
 type FakePopup = {
   domContent: unknown; text: string | null; opened: boolean;
   setDOMContent(el: unknown): FakePopup; setText(t: string): FakePopup; addTo(): FakePopup; isOpen(): boolean;
+  // The GPU event layer positions ONE shared popup rather than binding one per marker.
+  setLngLat(ll: [number, number]): FakePopup; lngLat: [number, number] | null;
   // MapLibre's Popup is Evented; v3.72.6 builds popup CONTENT on 'open' so a few hundred markers do
   // not each construct a subtree that is never shown. The fake must expose it, and `open()` fires it.
   on(event: string, cb: () => void): FakePopup; open(): void;
@@ -53,7 +55,9 @@ vi.mock('maplibre-gl', () => {
     opened = false;
     constructor(public opts: Record<string, unknown> = {}) {}
     handlers: Record<string, Array<() => void>> = {};
+    lngLat: [number, number] | null = null;
     setDOMContent(el: unknown): this { this.domContent = el; return this; }
+    setLngLat(ll: [number, number]): this { this.lngLat = ll; return this; }
     setText(t: string): this { this.text = t; return this; }
     addTo(): this { this.opened = true; this.open(); return this; }
     isOpen(): boolean { return this.opened; }
@@ -101,7 +105,7 @@ vi.mock('maplibre-gl', () => {
 // CSS import in MapGL.tsx — stub so the bare `import 'maplibre-gl/dist/maplibre-gl.css'` resolves.
 vi.mock('maplibre-gl/dist/maplibre-gl.css', () => ({}));
 
-import { createGlobeMap, buildStyle, MapGL, rebuildItemMarkers, validCoord } from '../src/renderer/modules/geoint/MapGL';
+import { createGlobeMap, buildStyle, MapGL, openEventPopup, validCoord } from '../src/renderer/modules/geoint/MapGL';
 import type { GeoItem } from '@shared/post-mvp-types';
 
 type TestStyle = {
@@ -222,77 +226,9 @@ describe('GeoINT MapGL marker port (R3)', () => {
     return lastMap as unknown as FakeMap;
   }
 
-  it('creates one marker per valid item at [lon, lat] order (catches the lng/lat swap)', () => {
-    const m = freshMap();
-    const store = new Map<string, maplibregl.Marker>();
-    rebuildItemMarkers(m as unknown as maplibregl.Map, store as unknown as Map<string, maplibregl.Marker>, [
-      item({ id: 'a', lat: 51, lon: -0.12 }),
-      item({ id: 'b', lat: 40.7, lon: -74 })
-    ]);
-    expect(markers).toHaveLength(2);
-    // [lng, lat]: the FIRST element is the longitude, NOT the latitude.
-    expect(markers[0].lngLat).toEqual([-0.12, 51]);
-    expect(markers[1].lngLat).toEqual([-74, 40.7]);
-    expect(store.size).toBe(2);
-  });
-
-  it('attaches a popup built from the item title/link to each marker', () => {
-    const m = freshMap();
-    const store = new Map<string, maplibregl.Marker>();
-    rebuildItemMarkers(m as unknown as maplibregl.Map, store as unknown as Map<string, maplibregl.Marker>, [
-      item({ title: 'Quake', link: 'https://example.org/q' })
-    ]);
-    const popup = markers[0].popup as unknown as FakePopup;
-    expect(popup).toBeTruthy();
-    // v3.72.6: content is built on OPEN, so a few hundred markers do not each construct a subtree
-    // that is never shown. Nothing before the first open…
-    expect(popup.domContent).toBeNull();
-    popup.open();
-    // …and after it, setDOMContent received the buildPopup element, whose <b> carries the title.
-    const el = popup.domContent as HTMLElement;
-    expect(el.querySelector('b')?.textContent).toBe('Quake');
-    expect(el.querySelector('a')?.getAttribute('href')).toBe('https://example.org/q');
-  });
-
-  it('hands every created popup to onPopup (single-open tracking wiring)', () => {
-    const m = freshMap();
-    const store = new Map<string, maplibregl.Marker>();
-    const seen: unknown[] = [];
-    rebuildItemMarkers(
-      m as unknown as maplibregl.Map,
-      store as unknown as Map<string, maplibregl.Marker>,
-      [item({ id: 'a', lat: 1, lon: 2 }), item({ id: 'b', lat: 3, lon: 4 })],
-      undefined,
-      (p) => seen.push(p)
-    );
-    // One callback per placed marker's popup, and each is the actual popup attached to its marker.
-    expect(seen).toHaveLength(2);
-    expect(seen[0]).toBe(markers[0].popup);
-    expect(seen[1]).toBe(markers[1].popup);
-  });
-
-  it('wires onSelect to each marker element — a marker-element click fires onSelect(id)', () => {
-    const m = freshMap();
-    const store = new Map<string, maplibregl.Marker>();
-    const selected: string[] = [];
-    rebuildItemMarkers(
-      m as unknown as maplibregl.Map,
-      store as unknown as Map<string, maplibregl.Marker>,
-      [item({ id: 'a', lat: 1, lon: 2 }), item({ id: 'b', lat: 3, lon: 4 })],
-      undefined,
-      undefined,
-      (id) => selected.push(id)
-    );
-    // The click handler is attached to the marker's element (the buildIconElement span).
-    const elA = (markers[0].opts as { element: HTMLElement }).element;
-    const elB = (markers[1].opts as { element: HTMLElement }).element;
-    elA.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    elB.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    expect(selected).toEqual(['a', 'b']);
-  });
-
-  it('rejects null / NaN / out-of-range coords — no poisoned marker reaches the map', () => {
-    // validCoord is the gate; assert it directly...
+  it('rejects null / NaN / out-of-range coords — the gate that keeps poisoned items off the map', () => {
+    // The gate itself. That NO poisoned item reaches the GPU layer is asserted in
+    // geoint-gpu-layer.test.ts, which owns event placement since events stopped being DOM markers.
     expect(validCoord(null, 5)).toBe(false);
     expect(validCoord(5, null)).toBe(false);
     expect(validCoord(NaN, 5)).toBe(false);
@@ -300,43 +236,6 @@ describe('GeoINT MapGL marker port (R3)', () => {
     expect(validCoord(91, 0)).toBe(false);
     expect(validCoord(0, 181)).toBe(false);
     expect(validCoord(51, -0.1)).toBe(true);
-    // ...and that rebuild produces NO marker for any of them while still placing the one valid item.
-    const m = freshMap();
-    const store = new Map<string, maplibregl.Marker>();
-    const trunc = rebuildItemMarkers(m as unknown as maplibregl.Map, store as unknown as Map<string, maplibregl.Marker>, [
-      item({ id: 'null', lat: undefined, lon: undefined }),
-      item({ id: 'nan', lat: NaN, lon: 0 }),
-      item({ id: 'inf', lat: 0, lon: Infinity }),
-      item({ id: 'oorLat', lat: 91, lon: 0 }),
-      item({ id: 'oorLon', lat: 0, lon: 181 }),
-      item({ id: 'good', lat: 12, lon: 34 })
-    ]);
-    expect(markers).toHaveLength(1);
-    expect(markers[0].lngLat).toEqual([34, 12]);
-    expect(store.has('good')).toBe(true);
-    expect(trunc).toBeNull(); // 1 located, 1 placed — nothing hidden
-  });
-
-  it('caps markers at 1500 and reports truncation over the located total', () => {
-    const m = freshMap();
-    const store = new Map<string, maplibregl.Marker>();
-    const many: GeoItem[] = [];
-    for (let i = 0; i < 1600; i++) many.push(item({ id: `i${i}`, lat: 10, lon: (i % 360) - 180 }));
-    const trunc = rebuildItemMarkers(m as unknown as maplibregl.Map, store as unknown as Map<string, maplibregl.Marker>, many);
-    expect(markers).toHaveLength(1500);
-    expect(store.size).toBe(1500);
-    expect(trunc).toEqual({ shown: 1500, total: 1600 });
-  });
-
-  it('clears the previous markers on rebuild (no leak across item-set changes)', () => {
-    const m = freshMap();
-    const store = new Map<string, maplibregl.Marker>();
-    rebuildItemMarkers(m as unknown as maplibregl.Map, store as unknown as Map<string, maplibregl.Marker>, [item({ id: 'a' })]);
-    const first = markers[0];
-    rebuildItemMarkers(m as unknown as maplibregl.Map, store as unknown as Map<string, maplibregl.Marker>, [item({ id: 'b' })]);
-    expect(first.removed).toBe(true);
-    expect(store.has('a')).toBe(false);
-    expect(store.has('b')).toBe(true);
   });
 
   it('pickMode click reports onPick(lat, lng) from e.lngLat; no call when off', () => {
@@ -364,17 +263,13 @@ describe('GeoINT MapGL marker port (R3)', () => {
     expect(flyTos[0].zoom).toBe(9);
   });
 
-  it('focus flies to a built marker and opens its popup', () => {
+  it('focus flies to the event by id and opens the shared popup', () => {
     const m = freshMap();
-    const store = new Map<string, maplibregl.Marker>();
-    rebuildItemMarkers(m as unknown as maplibregl.Map, store as unknown as Map<string, maplibregl.Marker>, [item({ id: 'f', lat: 22, lon: 33 })]);
-    // Emulate the focus effect's marker branch.
-    const mk = store.get('f') as unknown as FakeMarker;
-    const ll = mk.getLngLat();
-    (m as unknown as maplibregl.Map).flyTo({ center: [ll.lng, ll.lat], zoom: 6 });
-    if (!mk.getPopup()?.isOpen()) mk.togglePopup();
+    // Events are features now, so focus resolves through the item set rather than a marker store —
+    // which is why it works for EVERY event, not only ones that got a DOM node under the old cap.
+    openEventPopup(m as unknown as maplibregl.Map, item({ id: 'f', lat: 22, lon: 33 }));
+    (m as unknown as maplibregl.Map).flyTo({ center: [33, 22], zoom: 6 });
     expect(flyTos[0].center).toEqual([33, 22]); // [lng, lat]
     expect(flyTos[0].zoom).toBe(6);
-    expect(mk.popupToggled).toBe(1);
   });
 });
