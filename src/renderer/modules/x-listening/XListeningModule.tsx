@@ -471,6 +471,34 @@ async function withCollectionWaitIndicator<T>(
   }
 }
 
+/**
+ * Recognise the main-process vault-lock refusal across the IPC boundary.
+ *
+ * `ipc/register.ts` throws an Error carrying `code: 'EVAULTLOCKED'` / `name: 'VaultLocked'` and
+ * re-attaches the code to the wrapped error. Electron serialises a rejected handler primarily by
+ * MESSAGE, so the `code` may not survive the trip to the renderer — match the message too rather
+ * than trust one channel of the signal.
+ */
+export function isVaultLockedError(err: unknown): boolean {
+  const e = err as { code?: string; name?: string; message?: string } | undefined;
+  if (!e) return false;
+  if (e.code === 'EVAULTLOCKED' || e.name === 'VaultLocked') return true;
+  return /unlock ghost intel 98/i.test(String(e.message ?? ''));
+}
+
+/**
+ * Plain-language notice for panels whose read failed. Says what is missing, and — when the cause
+ * is the vault — the ONE action that fixes it. Never implies the data is gone: a failed read is
+ * not a deletion, and the field reports show that is exactly how a silent blank gets read
+ * ("they've all disappeared lol").
+ */
+export function insightsFailureNotice(panels: readonly string[], vaultLocked: boolean): string {
+  const list = panels.join(', ');
+  return vaultLocked
+    ? `Couldn't load ${list} — Ghost Intel 98 is locked. Unlock it to see your saved data.`
+    : `Couldn't load ${list}. Nothing was lost — reopen the campaign to try again.`;
+}
+
 export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
   const settings = useSettings((s) => s.settings);
   const patchSettings = useSettings((s) => s.patch);
@@ -679,9 +707,30 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
       return;
     }
     setInsightsBusy(true);
+    // PER-CHANNEL SETTLEMENT, NOT ALL-OR-NOTHING. This fan-out was a single `Promise.all`, which
+    // rejects on the FIRST failure — skipping all eleven `setX` calls, so one unreadable file
+    // blanked every panel in the station and said nothing (console.warn only). A locked vault or a
+    // failed GCM tag on ONE artifact is not a reason to present ten healthy panels as empty, and an
+    // unexplained blank reads as data loss. Each channel now lands on its own, and whatever failed
+    // is named on screen. Covered by test/x-listening-insights-partial-failure.test.tsx.
+    const failedPanels: string[] = [];
+    let vaultLocked = false;
+    const settle = (
+      res: PromiseSettledResult<unknown>,
+      panel: string,
+      apply: (value: unknown) => void,
+    ): void => {
+      if (res.status === 'fulfilled') {
+        apply(res.value);
+        return;
+      }
+      failedPanels.push(panel);
+      if (isVaultLockedError(res.reason)) vaultLocked = true;
+      console.warn(`[XListening] ${panel}:`, res.reason);
+    };
     try {
       const [postsRes, analysisRes, healthRes, entitiesRes, networksRes, notesRes, archiveRes, presetsRes, changeEventsRes, runLogRes, networkEventsRes] =
-        await Promise.all([
+        await Promise.allSettled([
           window.api.xListening.postsList(id),
           window.api.xListening.analysis(id),
           window.api.xListening.health(id),
@@ -694,44 +743,49 @@ export function XListeningModule({ caseId }: { caseId?: string }): JSX.Element {
           window.api.xListening.runLog(id),
           window.api.xListening.networkEvents(id),
         ]);
-      setPosts((postsRes as unknown as XPostRow[]) ?? []);
-      setAnalysis((analysisRes as unknown as XAnalysisView) ?? EMPTY_ANALYSIS);
-      setHealth((healthRes as unknown as XHealthRow[]) ?? []);
-      setEntities((entitiesRes as unknown as XEntityRow[]) ?? []);
+      settle(postsRes, 'the live feed', (v) => setPosts((v as XPostRow[]) ?? []));
+      settle(analysisRes, 'network analysis', (v) => setAnalysis((v as XAnalysisView) ?? EMPTY_ANALYSIS));
+      settle(healthRes, 'source health', (v) => setHealth((v as XHealthRow[]) ?? []));
+      settle(entitiesRes, 'the entity index', (v) => setEntities((v as XEntityRow[]) ?? []));
       // networksList returns raw XNetworkArtifact[] ({target,kind,accounts[],capturedAt}) —
       // flatten to the Changes tab's per-account row view client-side.
-      const artifacts = (networksRes as unknown as Array<{
-        target: string;
-        kind: 'followers' | 'following';
-        accounts: XNetworkAccountRow[];
-      }>) ?? [];
-      setNetworks(
-        artifacts.flatMap((a) =>
-          (a.accounts ?? []).map((acct) => ({ ...acct, target: a.target, kind: a.kind })),
-        ),
-      );
-      setNotes(((notesRes as unknown as { notes: XNoteRow[] })?.notes) ?? []);
-      setArchiveState((archiveRes as unknown as XArchiveStateView | null) ?? EMPTY_ARCHIVE_STATE);
-      setPresets(((presetsRes as unknown as { presets: XPresetRow[] })?.presets) ?? []);
-      setChangeEvents((changeEventsRes as unknown as XChangeEventRow[]) ?? []);
-      setRunLog((runLogRes as unknown as XRunLogRow[]) ?? []);
-      setNetworkDeltas((networkEventsRes as unknown as XNetworkDeltaEventRow[]) ?? []);
-    } catch (err) {
-      console.warn('[XListening] loadInsights:', err);
+      settle(networksRes, 'the follower network', (v) => {
+        const artifacts = (v as Array<{
+          target: string;
+          kind: 'followers' | 'following';
+          accounts: XNetworkAccountRow[];
+        }>) ?? [];
+        setNetworks(
+          artifacts.flatMap((a) =>
+            (a.accounts ?? []).map((acct) => ({ ...acct, target: a.target, kind: a.kind })),
+          ),
+        );
+      });
+      settle(notesRes, 'analyst notes', (v) => setNotes(((v as { notes: XNoteRow[] })?.notes) ?? []));
+      settle(archiveRes, 'archive status', (v) => setArchiveState((v as XArchiveStateView | null) ?? EMPTY_ARCHIVE_STATE));
+      settle(presetsRes, 'saved presets', (v) => setPresets(((v as { presets: XPresetRow[] })?.presets) ?? []));
+      settle(changeEventsRes, 'change intel', (v) => setChangeEvents((v as XChangeEventRow[]) ?? []));
+      settle(runLogRes, 'the run log', (v) => setRunLog((v as XRunLogRow[]) ?? []));
+      settle(networkEventsRes, 'network changes', (v) => setNetworkDeltas((v as XNetworkDeltaEventRow[]) ?? []));
     } finally {
       setInsightsBusy(false);
     }
     // Avatars are a display enhancement (ENTITY INDEX pics), resolved SEPARATELY so a miss never
     // blanks the core insights — and guarded so an older preload without the channel degrades to
-    // monograms rather than throwing. The lookup is cache-only (no egress).
-    try {
-      if (typeof window.api?.xListening?.avatars === 'function') {
+    // monograms rather than throwing. The lookup is cache-only (no egress). A THROWN avatar read
+    // still counts as a failed panel: silently serving monograms is how "it fetched some, then
+    // they all disappeared" happens. A preload that lacks the channel is not a failure.
+    if (typeof window.api?.xListening?.avatars === 'function') {
+      try {
         const avatarRes = await window.api.xListening.avatars(id);
         setAvatars((avatarRes as unknown as Record<string, string>) ?? {});
+      } catch (err) {
+        failedPanels.push('display pictures');
+        if (isVaultLockedError(err)) vaultLocked = true;
+        console.warn('[XListening] avatars:', err);
       }
-    } catch (err) {
-      console.warn('[XListening] avatars:', err);
     }
+    if (failedPanels.length > 0) setNotice(insightsFailureNotice(failedPanels, vaultLocked));
   }, []);
 
   useEffect(() => {

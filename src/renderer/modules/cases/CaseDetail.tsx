@@ -4,7 +4,8 @@
  */
 
 import { useCallback, useEffect, useState, type DragEvent } from 'react';
-import type { AttachmentMeta, CaseRecord, CasePriority, CaseStatus, ExtractedAttachmentMeta } from '@shared/types';
+import { formatLink, formatLinks } from './copy-text';
+import type { AttachmentMeta, CaseRecord, CasePriority, CaseStatus, ExtractedAttachmentMeta, WebLink } from '@shared/types';
 import type { SavedGeoEvent } from '@shared/post-mvp-types';
 import { useWindows } from '../../state/store';
 import { playError } from '../../audio/synth';
@@ -22,8 +23,25 @@ interface Props {
   onUpdateField<K extends keyof CaseRecord>(key: K, value: CaseRecord[K]): Promise<void>;
 }
 
+
+/** Win98 context-menu item styling, shared by the Web-links menu entries. */
+const ctxItemStyle = { padding: '3px 12px', cursor: 'pointer', whiteSpace: 'nowrap' } as const;
+
+/** Local clipboard write (no egress) with a confirming toast; a clipboard denial is non-fatal. */
+async function copyToClipboard(text: string, label: string): Promise<void> {
+  try {
+    await navigator.clipboard?.writeText?.(text);
+    toast.info(`Copied ${label}`);
+  } catch {
+    toast.error('Copy failed — clipboard unavailable');
+  }
+}
+
 export function CaseDetail({ record, onChange, onArchive, onRefresh, onUpdateField }: Props): JSX.Element {
   const [dropHot, setDropHot] = useState(false);
+  // Right-click copy for Web links (field request): per-link URL / title+URL, plus the whole list —
+  // lifting a case's links into a report previously meant retyping them.
+  const [linkCtx, setLinkCtx] = useState<{ x: number; y: number; link: WebLink | null } | null>(null);
   const [titleDraft, setTitleDraft] = useState(record.title);
   const [refDraft, setRefDraft] = useState(record.reference);
   const [descDraft, setDescDraft] = useState(record.description);
@@ -164,7 +182,11 @@ export function CaseDetail({ record, onChange, onArchive, onRefresh, onUpdateFie
       <BioImagesSection caseId={record.id} images={record.bioImages ?? []} onRefresh={onRefresh} />
 
       <fieldset>
-        <legend>Web links</legend>
+        <legend
+          onContextMenu={(e) => { e.preventDefault(); setLinkCtx({ x: e.clientX, y: e.clientY, link: null }); }}
+          title="Right-click to copy every link"
+          style={{ cursor: 'context-menu' }}
+        >Web links</legend>
         <div style={{ display: 'flex', gap: 4 }}>
           <input className="ga98-text" placeholder="https://…" value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} style={{ flex: 1 }} />
           <input className="ga98-text" placeholder="Title (optional)" value={linkTitle} onChange={(e) => setLinkTitle(e.target.value)} style={{ flex: 1 }} />
@@ -176,7 +198,10 @@ export function CaseDetail({ record, onChange, onArchive, onRefresh, onUpdateFie
         </div>
         <ul className="ga98-list">
           {record.links.map((l) => (
-            <li key={l.id}>
+            <li
+              key={l.id}
+              onContextMenu={(e) => { e.preventDefault(); setLinkCtx({ x: e.clientX, y: e.clientY, link: l }); }}
+            >
               <a onClick={() => void window.api.system.openExternal(l.url)} style={{ flex: 1, cursor: 'pointer', color: 'var(--ga98-navy-accent)' }}>
                 {l.title}
               </a>
@@ -184,6 +209,23 @@ export function CaseDetail({ record, onChange, onArchive, onRefresh, onUpdateFie
             </li>
           ))}
         </ul>
+        {linkCtx && (
+          <>
+            <div onClick={() => setLinkCtx(null)} style={{ position: 'fixed', inset: 0, zIndex: 99 }} />
+            <div className="ga98-menu" style={{ position: 'fixed', left: linkCtx.x, top: linkCtx.y, zIndex: 100, background: 'var(--ga98-grey)', border: '2px outset var(--ga98-shadow-light)' }}>
+              {linkCtx.link && (
+                <>
+                  <div onClick={() => { const l = linkCtx.link!; setLinkCtx(null); void copyToClipboard(l.url, 'URL'); }}
+                    style={ctxItemStyle}>Copy URL</div>
+                  <div onClick={() => { const l = linkCtx.link!; setLinkCtx(null); void copyToClipboard(formatLink(l), 'link'); }}
+                    style={ctxItemStyle}>Copy title + URL</div>
+                </>
+              )}
+              <div onClick={() => { setLinkCtx(null); void copyToClipboard(formatLinks(record.links), `${record.links.length} link(s)`); }}
+                style={ctxItemStyle}>Copy all links</div>
+            </div>
+          </>
+        )}
       </fieldset>
 
       <EntitiesSection caseId={record.id} entities={record.entities ?? []} attachments={record.attachments} onRefresh={onRefresh} />

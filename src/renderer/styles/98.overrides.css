@@ -280,9 +280,37 @@ button:focus {
 }
 
 /* Select dropdown arrow — a light chevron on the dark field (base draws a light
-   3-D silver button face + black arrow, a light island on dark). */
+   3-D silver button face + black arrow, a light island on dark).
+
+   POSITION/REPEAT ARE RESTATED HERE ON PURPOSE. Unlike the glyphs above, a `select` is a control
+   MODULES ALSO SKIN: five module classes that land on a `<select>` (`.xls-input`, `.gsm-select`,
+   `.sm-input`, `.sl-graph-import-select`, `.ga98-cdp-field`) set the `background` SHORTHAND, which
+   RESETS every background longhand it omits. A class (0,1,0) beats 98.css's element rule `select`
+   (0,0,1), so its `background-position: top 2px right 2px` / `background-repeat: no-repeat` are
+   gone before this rule is reached. Supplying `background-image` alone then resurrects the chevron
+   into a cascade defaulted to `0% 0%` / `repeat` — tiling it across the control, on top of the
+   option text (GhostExodus field report, 2026-08-18: "does not properly show the font in some of
+   these drop down menus"). Restating both longhands here places the arrow correctly no matter
+   which module class wiped them. Classic is untouched: there the shorthand wipes the IMAGE too,
+   so those controls simply have no arrow — the shipped appearance, deliberately left as-is.
+   Covered by test/theme-amethyst-select-arrow.test.ts. */
 :root[data-ga98-theme='amethyst'] select {
+  background-position: top 2px right 2px;
+  background-repeat: no-repeat;
   background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg width='16' height='17' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M11 6H4v1h1v1h1v1h1v1h1V9h1V8h1V7h1V6z' fill='%23efeaff'/%3E%3C/svg%3E");
+}
+/* Reserve room for that chevron. The same module rules also carry a `padding` SHORTHAND (e.g.
+   `.xls-input`'s `padding: 5px 8px`), which overrides 98.css's `padding-right: 32px` — the
+   reservation that keeps option text clear of the arrow. Under classic those controls have no
+   arrow, so 8px was harmless; now that amethyst draws one, a long option (measured: a 68-char
+   campaign name in a 300px control) runs underneath it. Restated only for the affected classes,
+   so every other select keeps 98.css's 32px untouched. */
+:root[data-ga98-theme='amethyst'] select.xls-input,
+:root[data-ga98-theme='amethyst'] select.gsm-select,
+:root[data-ga98-theme='amethyst'] select.sm-input,
+:root[data-ga98-theme='amethyst'] select.sl-graph-import-select,
+:root[data-ga98-theme='amethyst'] select.ga98-cdp-field {
+  padding-right: 24px;
 }
 :root[data-ga98-theme='amethyst'] select:active {
   background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg width='16' height='17' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M12 7H5v1h1v1h1v1h1v1h1v-1h1V9h1V8h1V7z' fill='%23efeaff'/%3E%3C/svg%3E");

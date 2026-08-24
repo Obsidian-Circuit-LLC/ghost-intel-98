@@ -8,7 +8,7 @@
  * scrolling viewport, and a tile whose intersection is degenerate must not be shown at all.
  */
 import { describe, it, expect } from 'vitest';
-import { clipOverlayBounds } from '../src/shared/ghost-social/overlay-bounds';
+import { clipOverlayBounds } from '../src/shared/overlay-bounds';
 
 const VIEWPORT = { x: 272, y: 95, width: 900, height: 620 };
 

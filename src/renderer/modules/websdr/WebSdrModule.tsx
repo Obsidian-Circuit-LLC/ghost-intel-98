@@ -31,6 +31,7 @@ import bannerImage from '../../assets/websdr-banner.png';
 import { PromptDialog } from '../../components/CaseDialogs';
 import { useWindows } from '../../state/store';
 import { confirmDialog } from '../../state/dialogs';
+import { clipOverlayBounds } from '@shared/overlay-bounds';
 import type {
   WebSdrReceiver,
   WebSdrPreset,
@@ -237,7 +238,26 @@ export function WebSdrModule({ windowId }: { windowId?: string } = {}): JSX.Elem
       return;
     }
     boundsRetryRef.current = 0;
-    void api.receiverPresent({ visible: true, bounds: { x: r.left, y: r.top, width: r.width, height: r.height }, diag: 'shown' });
+    // CLIP TO THE WINDOW THAT OWNS US. The overlay is a WebContentsView — a sibling of the whole
+    // renderer, not a DOM child — so no ancestor clips it, and main applies these bounds verbatim.
+    // While the host fits inside its window the two rects agree; shrink the window so the host
+    // overflows and the raw host rect paints the receiver straight over the neighbouring windows
+    // (field report: "as long as it's not resized, the display is perfect"). Present the
+    // INTERSECTION with the module window, then with the app viewport, and present NOTHING when
+    // that has collapsed — a receiver with no on-screen home must not pick somewhere else to live.
+    const shell = host.current?.closest('.ga98-window-shell')?.getBoundingClientRect();
+    const raw = { x: r.left, y: r.top, width: r.width, height: r.height };
+    const inShell = shell
+      ? clipOverlayBounds(raw, { x: shell.left, y: shell.top, width: shell.width, height: shell.height })
+      : raw;
+    const bounds = inShell
+      ? clipOverlayBounds(inShell, { x: 0, y: 0, width: window.innerWidth, height: window.innerHeight })
+      : null;
+    if (!bounds) {
+      void api.receiverPresent({ visible: false, diag: 'host-off-window' });
+      return;
+    }
+    void api.receiverPresent({ visible: true, bounds, diag: 'shown' });
   }
 
   // Detach the overlay while any GI98 modal is open (his v0.1.6 fix) so it never paints over it.

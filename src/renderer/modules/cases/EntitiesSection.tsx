@@ -4,6 +4,7 @@
  * attachments, and a cross-case lookup ("which other cases reference this entity").
  */
 import { useEffect, useState } from 'react';
+import { formatEntity, formatEntities, type CopyableEntity } from './copy-text';
 import type { AttachmentMeta, EntityRecord, EntityRelationship, EntityType, ResolvedEntity } from '@shared/types';
 import { ENTITY_TYPES, ENTITY_RELATIONSHIPS } from '@shared/types';
 import { confirmDialog } from '../../state/dialogs';
@@ -17,13 +18,11 @@ const BUCKETS: { key: EntityRelationship | 'untagged'; label: string }[] = [
   { key: 'untagged', label: 'Untagged' }
 ];
 
-/** Multi-line summary of an entity — shared by the Share action and the right-click Copy-summary. */
+/** Multi-line summary of an entity — shared by the Share action and the right-click Copy-summary.
+ *  Delegates to the same formatter the Web-links menu uses, so a copied entity reads identically
+ *  wherever it came from. */
 function entitySummary(item: ResolvedEntity): string {
-  const e = item.entity;
-  const lines = [`Case entity — ${e.type}: ${e.value}`];
-  if (e.aliases.length) lines.push(`aliases: ${e.aliases.join(', ')}`);
-  if (e.notes.trim()) lines.push(`notes: ${e.notes.trim()}`);
-  return lines.join('\n');
+  return formatEntity(item as unknown as CopyableEntity);
 }
 
 /** Local clipboard write (no egress) with a confirming toast; clipboard denial is non-fatal. */
@@ -121,6 +120,8 @@ export function EntitiesSection({ caseId, entities, attachments, onRefresh }: {
               style={{ padding: '3px 12px', cursor: 'pointer', whiteSpace: 'nowrap' }}>Copy value</div>
             <div onClick={() => { const it = ctxMenu.item; setCtxMenu(null); void copyText(entitySummary(it), 'summary'); }}
               style={{ padding: '3px 12px', cursor: 'pointer', whiteSpace: 'nowrap' }}>Copy summary</div>
+            <div onClick={() => { setCtxMenu(null); void copyText(formatEntities(entities as unknown as CopyableEntity[]), `${entities.length} entit${entities.length === 1 ? 'y' : 'ies'}`); }}
+              style={{ padding: '3px 12px', cursor: 'pointer', whiteSpace: 'nowrap' }}>Copy all entities</div>
           </div>
         </>
       )}

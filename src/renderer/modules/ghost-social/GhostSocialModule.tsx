@@ -36,7 +36,7 @@ import type {
   Campaign, GhostState, SocialAccount, PlatformKey, InboxItem, BrowserCacheMode,
   ScheduledPost,
 } from '@shared/ghost-social/types';
-import { clipOverlayBounds } from '@shared/ghost-social/overlay-bounds';
+import { clipOverlayBounds } from '@shared/overlay-bounds';
 import { useWindows } from '../../state/store';
 import { confirmDialog } from '../../state/dialogs';
 import './ghost-social.css';
