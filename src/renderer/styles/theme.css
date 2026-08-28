@@ -2678,3 +2678,32 @@ input.ga98-text, select.ga98-text {
   background: var(--ga98-recessed-bg);
   color: var(--ga98-text);
 }
+
+/* ---------------------------------------------------------------------------
+   Case identity photo (GhostExodus request, v3.73.1)
+
+   The case's primary bio image, shown beside the Identity fields. The row is a
+   plain flex pair so a case with NO photo collapses to just the fieldset and
+   loses no width — `IdentityPhoto` renders null rather than an empty frame.
+
+   The box is FIXED and the image is `object-fit: contain` (set inline on the
+   element, next to the rule that explains why): the photo is evidence, so it is
+   shown whole and never cropped or stretched to fill. A portrait fills the box;
+   a landscape letterboxes inside it.
+   --------------------------------------------------------------------------- */
+.ga98-case-identity-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.ga98-case-identity-photo {
+  flex: 0 0 auto;
+  width: 150px;
+  height: 200px;
+  background: var(--ga98-recessed-bg, var(--ga98-grey));
+  border-top: 2px solid var(--ga98-shadow-dark);
+  border-left: 2px solid var(--ga98-shadow-dark);
+  border-right: 2px solid var(--ga98-shadow-light);
+  border-bottom: 2px solid var(--ga98-shadow-light);
+  box-sizing: border-box;
+}
