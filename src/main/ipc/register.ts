@@ -1801,6 +1801,58 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
       statePath: () => join(dataRoot(), 'x-listening-station', 'station-state.json'),
       now: () => new Date().toISOString(),
       makeId: () => randomUUID(),
+      // FIRST RUN ONLY: carry the analyst's pre-embed campaigns across. v3.73.0 shipped without
+      // this, so upgrading opened the station with none of their existing campaigns in it — the
+      // data was never deleted, just never read. Consulted only on ENOENT, so it can never
+      // overwrite a live document, and never on a locked vault.
+      migrate: async () => {
+        try {
+          const [{ migrateLegacyStation }, { listCampaigns }, { prodXStore }] = await Promise.all([
+            import('../xls-embed/migrate'),
+            import('../x-listening/campaigns'),
+            import('../x-listening/store'),
+          ]);
+          const store = await prodXStore();
+          const result = await migrateLegacyStation(
+            {
+              // The old campaign record stamps epoch MILLISECONDS; his model wants ISO strings.
+              // Passing the number through would put a number where his UI renders a date.
+              listCampaigns: async () =>
+                (await listCampaigns()).map((c) => ({
+                  id: c.id,
+                  name: c.name,
+                  createdAt: new Date(c.createdAt).toISOString(),
+                  updatedAt: new Date(c.updatedAt).toISOString(),
+                })),
+              readPosts: (id) => store.posts.read(id),
+              readNetworks: (id) => store.networks.read(id),
+              // A pre-M11 note has no id of its own; migrate.ts mints one rather than dropping it.
+              readNotes: async (id) =>
+                (await store.notes.read(id)).map((n) => ({
+                  id: n.id ?? '',
+                  findingId: n.findingId,
+                  text: n.text,
+                  savedAt: n.savedAt,
+                })),
+            },
+            { now: () => new Date().toISOString(), makeId: () => randomUUID() },
+          );
+          if (!result) return null;
+          const { campaigns, posts, relationships, notes } = result.counts;
+          console.log(
+            `[xls-embed] migrated ${campaigns} campaign(s), ${posts} post(s), ` +
+            `${relationships} relationship(s), ${notes} note(s)` +
+            (result.skipped.length ? ` — ${result.skipped.length} unreadable` : ''),
+          );
+          for (const s of result.skipped) console.warn(`[xls-embed] could not migrate ${s.campaign}: ${s.reason}`);
+          return result.state;
+        } catch (err) {
+          // A migration that fails must not block the station from opening; the old data stays on
+          // disk untouched for a later attempt.
+          console.warn('[xls-embed] migration skipped:', err);
+          return null;
+        }
+      },
     }),
     // Reuses the app's shared save path: native dialog, symlink refusal, atomic temp+rename. The
     // renderer never names a destination, so there is no path-traversal surface.
