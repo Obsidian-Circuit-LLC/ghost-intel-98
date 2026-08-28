@@ -45,6 +45,13 @@ export interface XlsStateDeps {
   now(): string;
   /** Id source (injected for the same reason). */
   makeId(): string;
+  /**
+   * FIRST RUN ONLY: build the document from the pre-embed stores, or null when there is nothing to
+   * carry over. Without this, upgrading to the embed opened a station with none of the analyst's
+   * existing campaigns in it — the data was never deleted, just never read (see migrate.ts).
+   * Only ever consulted on ENOENT, so it can never overwrite a live document.
+   */
+  migrate?(): Promise<PersistedStationState | null>;
 }
 
 /** His `defaultState()` (electron/main.cjs:82), transcribed — values unchanged. */
@@ -144,8 +151,17 @@ export function makeStationStore(deps: XlsStateDeps): StationStore {
         // FIRST RUN ONLY. Every other failure — locked vault, failed decrypt, corrupt document —
         // propagates untouched: an unreadable document is not an empty one, and resetting here
         // would destroy the campaign it failed to read.
-        if (isEnoent(err)) return defaultStationState(deps.now, deps.makeId);
-        throw err;
+        if (!isEnoent(err)) throw err;
+        // No document yet. Carry the analyst's existing campaigns over if there are any, and
+        // PERSIST the result so the migration runs exactly once.
+        if (deps.migrate) {
+          const migrated = await deps.migrate();
+          if (migrated) {
+            await deps.writeFile(deps.statePath(), JSON.stringify(migrated, null, 2));
+            return migrated;
+          }
+        }
+        return defaultStationState(deps.now, deps.makeId);
       }
     },
 

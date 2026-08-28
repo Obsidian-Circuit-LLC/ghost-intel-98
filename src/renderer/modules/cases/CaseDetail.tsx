@@ -13,6 +13,7 @@ import { confirmDialog, promptDialog } from '../../state/dialogs';
 import { toast } from '../../state/toasts';
 import { EntitiesSection } from './EntitiesSection';
 import { BioImagesSection } from './BioImagesSection';
+import { IdentityPhoto } from './IdentityPhoto';
 import { ChatSharePicker, type ShareTarget } from '../../components/ChatSharePicker';
 
 interface Props {
@@ -90,7 +91,12 @@ export function CaseDetail({ record, onChange, onArchive, onRefresh, onUpdateFie
 
   return (
     <div className="ga98-stack" style={{ padding: 0 }}>
-      <fieldset>
+      {/* The case photo sits BESIDE Identity (GhostExodus's request): his cases are people, and the
+          face is the fastest way to know which case is open. The row collapses to just the fieldset
+          when the case has no bio images, so a case without a photo loses no width. */}
+      <div className="ga98-case-identity-row">
+        <IdentityPhoto caseId={record.id} images={record.bioImages} />
+        <fieldset style={{ flex: '1 1 auto', minWidth: 0 }}>
         <legend>Identity</legend>
         <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr', gap: 4, alignItems: 'center' }}>
           <label>Title:</label>
@@ -178,6 +184,7 @@ export function CaseDetail({ record, onChange, onArchive, onRefresh, onUpdateFie
           </ul>
         )}
       </fieldset>
+      </div>
 
       <BioImagesSection caseId={record.id} images={record.bioImages ?? []} onRefresh={onRefresh} />
 

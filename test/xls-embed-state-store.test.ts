@@ -133,3 +133,42 @@ describe('embedded station state — his document', () => {
     expect(order).toEqual(['start:a', 'end:a', 'start:b', 'end:b']);
   });
 });
+
+describe('first run carries the analyst\'s existing campaigns over', () => {
+  it('uses the migrated document and persists it so the migration runs once', async () => {
+    const migrated = { ...defaultStationState(() => 't', () => 'c1'), lastSweepAt: 'migrated' };
+    const { deps: d, writes } = deps({ migrate: async () => migrated });
+    const store = makeStationStore(d);
+    const state = await store.load();
+    expect(state.lastSweepAt).toBe('migrated');
+    // Persisted immediately — a migration that ran but was not written would re-run every launch.
+    expect(JSON.parse(writes.at(-1)!.data).lastSweepAt).toBe('migrated');
+  });
+
+  it('falls back to his default document when there is nothing to carry over', async () => {
+    const { deps: d } = deps({ migrate: async () => null });
+    expect((await makeStationStore(d).load()).cases[0].name).toBe('Primary Campaign');
+  });
+
+  it('NEVER consults the migration when a document already exists', async () => {
+    const saved = defaultStationState(() => 't', () => 'c1');
+    const migrate = vi.fn(async () => null);
+    const { deps: d } = deps({
+      readFile: vi.fn(async () => Buffer.from(JSON.stringify(saved), 'utf8')),
+      migrate,
+    });
+    await makeStationStore(d).load();
+    expect(migrate).not.toHaveBeenCalled();
+  });
+
+  it('does not migrate over a LOCKED vault — that is not a first run', async () => {
+    const migrate = vi.fn(async () => defaultStationState(() => 't', () => 'c1'));
+    const { deps: d, writes } = deps({
+      readFile: vi.fn(async () => { throw coded(EVAULTLOCKED); }),
+      migrate,
+    });
+    await expect(makeStationStore(d).load()).rejects.toThrow();
+    expect(migrate).not.toHaveBeenCalled();
+    expect(writes).toHaveLength(0);
+  });
+});

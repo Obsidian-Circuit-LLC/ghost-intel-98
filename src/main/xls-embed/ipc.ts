@@ -52,7 +52,8 @@ import { connectXSession, getXStatus, clearXSession, resolveXTorGate } from '../
 import { openInX, verifyPost, captureTimeline, captureNetwork, type XOpenKind } from '../x-listening/capture';
 import { getXWindow, navigateXToProfile } from '../x-listening/session';
 import { withQueuedCollectionLock } from '../x-listening/collection-lock';
-import { readCachedMedia } from '../x-listening/media';
+import { readCachedMedia, cacheRemoteMedia } from '../x-listening/media';
+import { resolveAvatarDataUri } from './avatars';
 // The app's single fail-closed reader of the Tor-default opt-out: any settings-read error
 // yields Tor mode, never a silent widen to clearnet.
 import { loadClearnetEnabled } from '../x-listening/ipc';
@@ -432,7 +433,34 @@ export function registerXlsEmbedIpc(deps: XlsEmbedDeps): void {
     const fromProfile = s.profiles.find((p) => p.caseId === caseId && p.username.toLowerCase() === handleName.toLowerCase() && p.avatar)?.avatar;
     const ref = fromPost || fromRel || fromProfile;
     if (!ref) return null;
-    return readCachedMedia(caseId, ref);
+
+    // v3.73.1: his records carry the REMOTE avatar URL his scraper read off the page, not one of
+    // our local media refs. v3.73.0 handed that value straight to readCachedMedia, which rejects
+    // anything that is not `x-media/<64 hex>` — so every avatar resolved to null and no display
+    // picture could ever appear. Localise a remote URL through the hardened cache (host-anchored,
+    // routed via the X session window, encrypted at rest) and write the local ref back onto every
+    // record that carried the same URL, so it is fetched once.
+    return resolveAvatarDataUri(
+      {
+        caseId,
+        ref,
+        onLocalised: (localRef) => {
+          for (const row of s.posts) if (row.avatar === ref) row.avatar = localRef;
+          for (const row of s.relationships) if (row.avatar === ref) row.avatar = localRef;
+          for (const row of s.profiles) if (row.avatar === ref) row.avatar = localRef;
+          void store.save(s);
+        },
+      },
+      {
+        readCached: (id, r) => readCachedMedia(id, r),
+        cacheRemote: async (id, url) => {
+          const win = getXWindow(id);
+          if (!win) return null;
+          return cacheRemoteMedia(win as never, url, id);
+        },
+        hasSession: (id) => Boolean(getXWindow(id)),
+      }
+    );
   });
 
   // ---- collection: his refresh / extract, on the app's hardened capture path ----
