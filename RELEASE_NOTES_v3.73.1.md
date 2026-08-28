@@ -26,8 +26,8 @@ Two details I was careful about, because a migration that quietly gets them wron
 
 Windows NSIS installer — `GhostIntel98-Setup-3.73.1.exe` (per-user, no admin; unsigned → **More info → Run anyway**). Installs over the previous build in place.
 
-- **SHA-256:** `__SHA256__`
-- **Size:** `__SIZE__`
+- **SHA-256:** `5e71031fbbbbe2eedd72eeb1755b7c9bcf3add3e7e417c154c6c4296fefe24e1`
+- **Size:** `945,001,533 bytes (~901 MB)`
 
 Confirm **Settings ▸ About** reads **3.73.1**.
 
