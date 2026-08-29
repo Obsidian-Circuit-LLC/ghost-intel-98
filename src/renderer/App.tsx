@@ -22,6 +22,7 @@ import { toast } from './state/toasts';
 import defaultWallpaper from './assets/wallpaper-dcs98.jpg';
 import { installPluginBridge, importPluginChunks } from './plugins/load-renderer-plugins';
 import { resolveTheme } from './styles/themes';
+import { buttonInk, normalizeButtonColor } from '@shared/theme/button-color';
 
 export function App(): JSX.Element {
   const windows = useWindows((s) => s.windows);
@@ -74,6 +75,24 @@ export function App(): JSX.Element {
     document.documentElement.dataset.ga98Intensity = settings?.themeIntensity ?? 'classic';
     document.documentElement.dataset.ga98Theme = resolveTheme(settings?.themeName);
   }, [settings?.themeIntensity, settings?.themeName]);
+
+  // Button face colour (GhostExodus request). '' means "no override" — the properties are REMOVED
+  // rather than set empty, so the theme's own button look applies untouched. The label ink is
+  // derived from the face, never stored separately: a picker that let you choose a dark face and
+  // kept dark text would reproduce the unreadable-text bug he reported, by design.
+  useEffect(() => {
+    const face = normalizeButtonColor(settings?.buttonColor);
+    const root = document.documentElement;
+    if (face) {
+      root.style.setProperty('--ga98-btn-face', face);
+      root.style.setProperty('--ga98-btn-ink', buttonInk(face));
+      root.dataset.ga98Btn = '';
+    } else {
+      root.style.removeProperty('--ga98-btn-face');
+      root.style.removeProperty('--ga98-btn-ink');
+      delete root.dataset.ga98Btn;
+    }
+  }, [settings?.buttonColor]);
 
   useEffect(() => {
     const off = window.api.system.onReminderFired(({ reminder }) => {

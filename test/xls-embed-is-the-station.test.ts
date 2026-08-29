@@ -22,7 +22,8 @@ const registry = readFileSync(
 
 describe('the mounted X Listening Station', () => {
   it('is the embedded renderer', () => {
-    expect(registry).toMatch(/from '\.\/x-listening-embed\/StationApp'/);
+    // The registry mounts the SHELL, which wraps his App and confines his stylesheet to it.
+    expect(registry).toMatch(/from '\.\/x-listening-embed\/StationShell'/);
   });
 
   it('is NOT the earlier port', () => {

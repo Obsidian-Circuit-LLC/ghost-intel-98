@@ -2707,3 +2707,25 @@ input.ga98-text, select.ga98-text {
   border-bottom: 2px solid var(--ga98-shadow-light);
   box-sizing: border-box;
 }
+
+/* ---------------------------------------------------------------------------
+   User-chosen button face (GhostExodus request, v3.73.2)
+
+   Applied only when Settings ▸ Theme sets one: App.tsx REMOVES these properties
+   for the default, so with no override every theme keeps its own button look
+   and this block does nothing at all.
+
+   The 3-D bevel is deliberately left to 98.css's box-shadow — only the face and
+   the label ink are replaced, so a custom colour still reads as a Win98 button
+   rather than a flat rectangle. The ink is derived from the face by luminance
+   (shared/theme/button-color.ts), which is why it cannot be set to something
+   unreadable on its own background.
+   --------------------------------------------------------------------------- */
+/* Gated on the root attribute, NOT on a var() fallback. `var(--x, initial)` resolves to
+   `transparent` for background-color when unset, which silently overrode 98.css's silver face and
+   made every button transparent when no colour was chosen — caught by measuring the default. With
+   no override the attribute is absent and this rule does not apply at all. */
+:root[data-ga98-btn] button {
+  background-color: var(--ga98-btn-face);
+  color: var(--ga98-btn-ink);
+}
