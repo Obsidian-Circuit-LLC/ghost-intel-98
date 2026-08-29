@@ -36,6 +36,14 @@ export interface AvatarRequest {
   caseId: string;
   /** Whatever his record carries: a local ref, a remote URL, or nothing. */
   ref: string | undefined;
+  /**
+   * The URL his UI hands over — `getAvatarDataUrl(username, preferredUrl)` — read straight off the
+   * page it is rendering. Tried FIRST, because it is the freshest thing anyone has: a row can be on
+   * screen before its record carries an avatar at all, which is exactly when the stored-record-only
+   * lookup returned null and the picture never appeared. It is scraped input, so it passes the same
+   * host allowlist as everything else.
+   */
+  preferred?: string | undefined;
   /** Called with the LOCAL ref once a remote avatar has been localised, so it is fetched once. */
   onLocalised?: (localRef: string) => void;
 }
@@ -61,20 +69,31 @@ export async function resolveAvatarDataUri(
   deps: AvatarDeps
 ): Promise<string | null> {
   const ref = String(req.ref ?? '').trim();
-  if (!ref) return null;
+  const preferred = String(req.preferred ?? '').trim();
 
-  // Already localised — read it straight back, no egress.
+  // 1. Already localised — read it straight back, no egress at all.
   if (LOCAL_REF_RE.test(ref)) return deps.readCached(req.caseId, ref);
 
-  const remote = allowedRemote(ref);
-  if (!remote) return null;
+  // 2. Whatever remote URLs we have, freshest first. His UI's preferred URL beats the stored one
+  //    because a row can be rendering before its record has an avatar; the stored value is the
+  //    fallback, not the other way round.
+  for (const candidate of [preferred, ref]) {
+    if (!candidate) continue;
+    const remote = allowedRemote(candidate);
+    if (!remote) continue;
 
-  // No session window means no Tor-gated partition to fetch through. Fail closed and let his UI
-  // fall back to a monogram rather than reaching for the network some other way.
-  if (!deps.hasSession(req.caseId)) return null;
+    // No session window means no Tor-gated partition to fetch through. Fail closed and let his UI
+    // fall back to a monogram rather than reaching for the network some other way.
+    if (!deps.hasSession(req.caseId)) return null;
 
-  const cached = await deps.cacheRemote(req.caseId, remote);
-  if (!cached?.ref) return null;
-  req.onLocalised?.(cached.ref);
-  return deps.readCached(req.caseId, cached.ref);
+    const cached = await deps.cacheRemote(req.caseId, remote);
+    if (cached?.ref) {
+      req.onLocalised?.(cached.ref);
+      return deps.readCached(req.caseId, cached.ref);
+    }
+  }
+
+  // 3. A stored local ref is still worth trying if the fetches came to nothing.
+  if (ref && LOCAL_REF_RE.test(ref)) return deps.readCached(req.caseId, ref);
+  return null;
 }
