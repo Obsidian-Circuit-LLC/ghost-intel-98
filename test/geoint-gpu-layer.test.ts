@@ -62,7 +62,9 @@ vi.mock('maplibre-gl', () => {
     /** `on(event, cb)` and `on(event, layerId, cb)` are both used by MapLibre. */
     handlers: Record<string, (e?: unknown) => void> = {};
     layerHandlers: Record<string, (e?: unknown) => void> = {};
+    styleLoaded = true;
     constructor(public opts: Record<string, unknown> = {}) {}
+    isStyleLoaded(): boolean { return this.styleLoaded; }
     addControl(): void {}
     on(ev: string, a?: unknown, b?: unknown): void {
       if (typeof a === 'string' && typeof b === 'function') this.layerHandlers[`${ev}:${a}`] = b as () => void;
@@ -243,5 +245,52 @@ describe('GeoINT events are drawn by the GPU, not by DOM markers', () => {
       lngLat: { lng: 20, lat: 10 },
     });
     expect(popupConstructions.length).toBe(1);
+  });
+
+  it('does NOT touch the map while the style is still loading', () => {
+    // THE v3.73.0 CRASH. `new Marker().addTo(map)` works at any time, but addSource/addLayer throw
+    // "Style is not done loading" — the same failure the satellite layer was hotfixed for in
+    // v3.17.1, which is why that layer self-guards on isStyleLoaded(). Replacing the markers with a
+    // GPU layer reintroduced it: the first open threw before the style settled, and because the
+    // event cache is already on disk it threw again on every reopen, so the module could not be
+    // recovered by closing and reopening it.
+    const map = newMap();
+    map.styleLoaded = false;
+    expect(() => syncItemLayer(map, [item({ id: 'a' })])).not.toThrow();
+    expect(addedSources.filter((s) => s.id === EVENTS_SOURCE)).toHaveLength(0);
+    expect(addedLayers).toHaveLength(0);
+  });
+
+  it('applies the pending items as soon as the style becomes ready', () => {
+    const map = newMap();
+    map.styleLoaded = false;
+    syncItemLayer(map, [item({ id: 'a' }), item({ id: 'b' })]);
+    expect(featuresOf(map)).toHaveLength(0);
+
+    // The map finishes loading and the layer lands, without the caller having to re-supply items.
+    map.styleLoaded = true;
+    map.handlers['load']?.();
+    expect(addedSources.filter((s) => s.id === EVENTS_SOURCE)).toHaveLength(1);
+    expect(featuresOf(map).map((f: any) => f.properties.id)).toEqual(['a', 'b']);
+  });
+
+  it('re-adds the layer after a style change wipes it', () => {
+    // setStyle() destroys every source and layer. Without re-adding on styledata the events simply
+    // vanish when the basemap or the tile gate is toggled.
+    const map = newMap();
+    syncItemLayer(map, [item({ id: 'a' })]);
+    expect(featuresOf(map)).toHaveLength(1);
+
+    delete map.sources[EVENTS_SOURCE];
+    addedSources.length = 0;
+    map.handlers['styledata']?.();
+    expect(addedSources.filter((s) => s.id === EVENTS_SOURCE)).toHaveLength(1);
+    expect(featuresOf(map).map((f: any) => f.properties.id)).toEqual(['a']);
+  });
+
+  it('survives a map that throws from addSource rather than taking the module down', () => {
+    const map = newMap();
+    map.addSource = () => { throw new Error('Style is not done loading'); };
+    expect(() => syncItemLayer(map, [item({ id: 'a' })])).not.toThrow();
   });
 });
