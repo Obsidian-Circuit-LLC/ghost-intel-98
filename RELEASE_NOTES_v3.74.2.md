@@ -24,8 +24,8 @@ Attachments is now full width, below Bio images, where you wanted it.
 
 Windows NSIS installer — `GhostIntel98-Setup-3.74.2.exe` (per-user, no admin; unsigned → **More info → Run anyway**). Installs over the previous build in place.
 
-- **SHA-256:** `__SHA256__`
-- **Size:** `__SIZE__`
+- **SHA-256:** `06ea3bb96cd4af0231f661ff1556d0fdf7b35b92c8ee73cb52ffc462965e1983`
+- **Size:** `945,174,412 bytes (~901 MB)`
 
 Confirm **Settings ▸ About** reads **3.74.2**.
 
