@@ -28,8 +28,8 @@ The case photo, the campaign carry-over and the display pictures from v3.73.1 ar
 
 Windows NSIS installer — `GhostIntel98-Setup-3.73.2.exe` (per-user, no admin; unsigned → **More info → Run anyway**). Installs over the previous build in place.
 
-- **SHA-256:** `__SHA256__`
-- **Size:** `__SIZE__`
+- **SHA-256:** `c95d228dfc8a13467a0dac3a726b55f5498025d4c3a548cf7afaaf391a86321f`
+- **Size:** `945,017,914 bytes (~901 MB)`
 
 Confirm **Settings ▸ About** reads **3.73.2**.
 
