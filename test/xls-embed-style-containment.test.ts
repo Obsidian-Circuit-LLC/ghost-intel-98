@@ -96,4 +96,27 @@ describe('his stylesheet is confined to his module', () => {
     expect(s['background-color']).toBe('rgb(7, 18, 22)');
     expect(s.color).toBe('rgb(220, 232, 234)');
   });
+
+  it('his sheet is loaded as TEXT, never as a stylesheet import', () => {
+    // The regression was a plain `import './station.css'`, which makes the bundler emit it as a
+    // GLOBAL stylesheet — at which point no amount of scoping at mount time helps, because the
+    // unscoped rules are already in the document. Verified against the built bundle by hand for
+    // v3.73.2; pinned here so it cannot come back through a stray import.
+    const shell = readFileSync(
+      join(process.cwd(), 'src/renderer/modules/x-listening-embed/StationShell.tsx'),
+      'utf8'
+    );
+    const app = readFileSync(
+      join(process.cwd(), 'src/renderer/modules/x-listening-embed/StationApp.tsx'),
+      'utf8'
+    );
+    expect(shell).toMatch(/from '\.\/station\.css\?raw'/);
+    // Neither file may import it as a stylesheet.
+    expect(shell).not.toMatch(/import '\.\/station\.css'/);
+    expect(app).not.toMatch(/import '\.\/station\.css'/);
+    // No stylesheet import of ANY kind in his file. Matched on real import STATEMENTS only — his
+    // header comment names './styles.css' when listing the permitted mount edits.
+    const imports = app.split('\n').filter((l) => /^\s*import\s/.test(l));
+    expect(imports.filter((l) => /\.css'/.test(l))).toEqual([]);
+  });
 });
