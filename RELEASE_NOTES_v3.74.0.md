@@ -24,7 +24,7 @@ That may not be all of what you're seeing — if the receiver still misbehaves a
 
 Windows NSIS installer — `GhostIntel98-Setup-3.74.0.exe` (per-user, no admin; unsigned → **More info → Run anyway**). Installs over the previous build in place.
 
-- **SHA-256:** `__SHA256__`
-- **Size:** `__SIZE__`
+- **SHA-256:** `1482f1b0ef9f7b0f234f25e059caf77ca3854386684b6684971baeb453e80427`
+- **Size:** `945,016,522 bytes (~901 MB)`
 
 Confirm **Settings ▸ About** reads **3.74.0**.
