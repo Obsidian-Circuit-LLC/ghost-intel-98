@@ -48,6 +48,7 @@ import {
   type StationCtx,
 } from './station-service';
 import { computeNetworkAnalysis, deriveCollectionHealth } from '../x-listening/analysis';
+import { postFromArtifact } from './migrate';
 import { connectXSession, getXStatus, clearXSession, resolveXTorGate } from '../x-listening/session';
 import { openInX, verifyPost, captureTimeline, captureNetwork, type XOpenKind } from '../x-listening/capture';
 import { getXWindow, navigateXToProfile } from '../x-listening/session';
@@ -475,7 +476,16 @@ export function registerXlsEmbedIpc(deps: XlsEmbedDeps): void {
   // document as the persistence target. That is the whole shape of the embed in one place: his
   // model, our egress.
 
-  /** Write captured posts into his document in HIS post shape, deduped by id like his handler. */
+  /**
+   * Write captured posts into his document in HIS post shape, deduped by id like his handler.
+   *
+   * Fed from `savePosts` — the RICH capture artifact — not `saveItems`. Capture persistence is
+   * DUAL: `savePosts` carries kind, metrics, avatar, mediaRefs and the evidence hash, while
+   * `saveItems` carries a thin sidecar with none of them. v3.73.0-v3.74.2 injected only
+   * `saveItems`, so his document received stripped posts with no avatar and no media while the
+   * rich copies went to the OLD store, where his station never looks. That is why fresh collection
+   * produced no images: the data was being written, just not the half that has pictures in it.
+   */
   function ingestPosts(
     s: PersistedStationState,
     profileId: string,
@@ -503,23 +513,15 @@ export function registerXlsEmbedIpc(deps: XlsEmbedDeps): void {
         continue;
       }
       seen.add(id);
-      s.posts.push({
-        ...(raw as object),
-        id,
-        caseId,
-        profileId,
-        // HIS field is `media`; our capture artifact calls the same thing `mediaRefs`. Spreading
-        // the artifact alone left `media` undefined on every newly collected post, so
-        // getPostMediaDataUrl found nothing and post images never appeared — while MIGRATED posts,
-        // which were mapped properly, still had theirs. "Old posts have pictures, new ones don't"
-        // is a horrible symptom to debug from the outside.
-        media: (raw.mediaRefs as string[] | undefined) ?? (raw.media as string[] | undefined) ?? [],
-        username: String(raw.username ?? username),
-        sourceUsername: username,
-        collectedAt: ctx.now(),
-        firstObservedAt: ctx.now(),
-        lastObservedAt: ctx.now(),
-      } as never);
+      // The SAME mapping the migration uses — one set of field names, one place to be wrong.
+      s.posts.push(
+        postFromArtifact(raw as never, {
+          caseId,
+          profileId,
+          source: username,
+          now: ctx.now(),
+        }) as never
+      );
       added += 1;
     }
     return { added, skipped };
@@ -558,10 +560,18 @@ export function registerXlsEmbedIpc(deps: XlsEmbedDeps): void {
         { caseId, jobId: caseId, channelId: profile.username, channelLabel: `@${profile.username}`, targetUsername: profile.username },
         {
           // HIS DOCUMENT IS THE STORE. Everything else about the capture stays ours.
-          saveItems: async (_caseId, items) => {
-            ingested = ingestPosts(s, profileId, profile.username, items as unknown as Array<Record<string, unknown>>);
+          //
+          // `savePosts` is the seam that matters: it carries the RICH artifact (kind, metrics,
+          // avatar, mediaRefs, evidence hash). `saveItems` carries a thin sidecar with none of
+          // that, and wiring only that one is why fresh collection produced no pictures.
+          savePosts: async (_caseId, posts) => {
+            ingested = ingestPosts(s, profileId, profile.username, posts as unknown as Array<Record<string, unknown>>);
             return ingested;
           },
+          // The plain sidecar would otherwise write a second, thinner copy into the OLD store,
+          // which nothing in the embed reads. Accept and discard rather than duplicate evidence
+          // into a place no one looks.
+          saveItems: async () => ({ added: 0, skipped: 0 }),
         }
       );
 

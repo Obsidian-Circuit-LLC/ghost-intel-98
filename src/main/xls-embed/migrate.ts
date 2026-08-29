@@ -94,6 +94,44 @@ export interface MigrationResult {
 
 const EMPTY_METRICS = { replies: 0, reposts: 0, likes: 0, views: 0 };
 
+/**
+ * One capture artifact → one of HIS post records.
+ *
+ * Shared by the migration and by live capture ingest deliberately. They were two separate mappings
+ * and they drifted: the migration mapped `mediaRefs` onto his `media` and carried the avatar, while
+ * the capture path spread the raw artifact and set neither — so old posts had pictures and newly
+ * collected ones never did. One function, one set of field names, one place to be wrong.
+ */
+export function postFromArtifact(
+  raw: LegacyPost,
+  ctx: { caseId: string; profileId: string; source: string; now: string }
+): Record<string, unknown> {
+  const kind = raw.kind === 'reply' || raw.kind === 'repost' || raw.kind === 'comment' ? raw.kind : 'post';
+  return {
+    id: raw.id,
+    caseId: ctx.caseId,
+    profileId: ctx.profileId,
+    username: String(raw.authorHandle ?? ctx.source),
+    displayName: raw.displayName,
+    avatar: raw.avatar,
+    sourceUsername: ctx.source,
+    url: String(raw.url ?? ''),
+    text: String(raw.text ?? ''),
+    // His `createdAt` is the PUBLISH time; `collectedAt` is when we harvested it.
+    createdAt: String(raw.publishedAt ?? raw.harvestedAt ?? ctx.now),
+    collectedAt: String(raw.harvestedAt ?? ctx.now),
+    firstObservedAt: raw.harvestedAt ?? ctx.now,
+    lastObservedAt: raw.harvestedAt ?? ctx.now,
+    evidenceHash: raw.evidenceHash,
+    kind,
+    isReply: kind === 'reply',
+    parentPostId: raw.parentPostId ?? null,
+    metrics: raw.metrics ?? EMPTY_METRICS,
+    // HIS field is `media`; the artifact calls it `mediaRefs`.
+    media: raw.mediaRefs ?? [],
+  };
+}
+
 function reason(err: unknown): string {
   const e = err as { code?: string; message?: string } | undefined;
   return e?.code || e?.message || String(err);
@@ -172,31 +210,9 @@ export async function migrateLegacyStation(
       const source = String(post.channelId ?? '').replace(/^@+/, '');
       if (!source) continue;
       const profileId = ensureProfile(source, post.harvestedAt);
-      const kind = post.kind === 'reply' || post.kind === 'repost' || post.kind === 'comment'
-        ? post.kind
-        : 'post';
-      state.posts.push({
-        id: post.id,
-        caseId,
-        profileId,
-        username: String(post.authorHandle ?? source),
-        displayName: post.displayName,
-        avatar: post.avatar,
-        sourceUsername: source,
-        url: String(post.url ?? ''),
-        text: String(post.text ?? ''),
-        // His model: `createdAt` is when X published it, `collectedAt` is when we harvested it.
-        createdAt: String(post.publishedAt ?? post.harvestedAt ?? ctx.now()),
-        collectedAt: String(post.harvestedAt ?? ctx.now()),
-        firstObservedAt: post.harvestedAt,
-        lastObservedAt: post.harvestedAt,
-        evidenceHash: post.evidenceHash,
-        kind,
-        isReply: kind === 'reply',
-        parentPostId: post.parentPostId ?? null,
-        metrics: post.metrics ?? EMPTY_METRICS,
-        media: post.mediaRefs ?? [],
-      } as never);
+      state.posts.push(
+        postFromArtifact(post, { caseId, profileId, source, now: ctx.now() }) as never
+      );
     }
 
     for (const artifact of networks) {

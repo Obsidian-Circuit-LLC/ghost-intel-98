@@ -17,6 +17,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { defaultStationState } from '../src/main/xls-embed/state-store';
+import { postFromArtifact } from '../src/main/xls-embed/migrate';
 import {
   clientState,
   createCampaign,
@@ -291,21 +292,52 @@ describe('clientState — what his renderer actually receives', () => {
   });
 });
 
-describe('captured posts carry media in HIS field', () => {
-  it("maps our `mediaRefs` onto his `media`", async () => {
-    // His model reads Post.media; our capture artifact calls it mediaRefs. Spreading the artifact
-    // alone left `media` undefined on every newly collected post, so his image lookup found
-    // nothing — while migrated posts, mapped properly, still showed theirs.
-    const { registerXlsEmbedIpc } = await import('../src/main/xls-embed/ipc');
-    const src = readFileSync(
-      join(process.cwd(), 'src/main/xls-embed/ipc.ts'),
-      'utf8'
-    );
-    expect(typeof registerXlsEmbedIpc).toBe('function');
-    // The ingest must set `media` explicitly rather than relying on the spread.
-    expect(src).toMatch(/media:\s*\(raw\.mediaRefs/);
+describe('postFromArtifact — one mapping for capture AND migration', () => {
+  const artifact = {
+    id: 'p1', channelId: 'darkwebtoday', authorHandle: 'darkwebtoday', displayName: 'DWT',
+    avatar: 'https://pbs.twimg.com/profile_images/1/a.jpg',
+    text: 'hello', url: 'https://x.com/darkwebtoday/status/1',
+    publishedAt: '2026-08-01T10:00:00.000Z', harvestedAt: '2026-08-01T11:00:00.000Z',
+    kind: 'reply', parentPostId: 'p0',
+    metrics: { replies: 1, reposts: 2, likes: 3, views: 4 },
+    evidenceHash: 'abc', mediaRefs: ['x-media/' + 'c'.repeat(64)],
+  };
+
+  it("maps the artifact's `mediaRefs` onto HIS `media`", () => {
+    // His model reads Post.media; the capture artifact calls it mediaRefs. Capture and migration
+    // were two separate mappings and they drifted — migration carried media and the avatar, the
+    // capture path spread the artifact and set neither, so old posts had pictures and newly
+    // collected ones never did.
+    const post = postFromArtifact(artifact as never, {
+      caseId: 'c1', profileId: 'pr1', source: 'darkwebtoday', now: NOW,
+    });
+    expect(post.media).toEqual(['x-media/' + 'c'.repeat(64)]);
+  });
+
+  it('carries the avatar, which is where his display pictures come from', () => {
+    const post = postFromArtifact(artifact as never, {
+      caseId: 'c1', profileId: 'pr1', source: 'darkwebtoday', now: NOW,
+    });
+    expect(post.avatar).toBe('https://pbs.twimg.com/profile_images/1/a.jpg');
+  });
+
+  it('keeps his publish/collect distinction and his reply flag', () => {
+    const post = postFromArtifact(artifact as never, {
+      caseId: 'c1', profileId: 'pr1', source: 'darkwebtoday', now: NOW,
+    });
+    expect(post.createdAt).toBe('2026-08-01T10:00:00.000Z');
+    expect(post.collectedAt).toBe('2026-08-01T11:00:00.000Z');
+    expect(post.kind).toBe('reply');
+    expect(post.isReply).toBe(true);
+    expect(post.metrics).toEqual({ replies: 1, reposts: 2, likes: 3, views: 4 });
+  });
+
+  it('records the SOURCE it was collected from, not the author', () => {
+    // On a reply or repost the author is a third party; the source is the monitored target.
+    const post = postFromArtifact({ ...artifact, authorHandle: 'someone_else' } as never, {
+      caseId: 'c1', profileId: 'pr1', source: 'darkwebtoday', now: NOW,
+    });
+    expect(post.sourceUsername).toBe('darkwebtoday');
+    expect(post.username).toBe('someone_else');
   });
 });
-
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
