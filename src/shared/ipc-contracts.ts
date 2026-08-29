@@ -763,7 +763,10 @@ export const channels = {
      *  the scheduler registry; no capture window, no network egress. The timers themselves are armed
      *  MAIN-side on session connect / settings save; each scheduled sweep's capture routes the SAME
      *  Tor gate as a manual capture (fail-closed, no clearnet unless clearnet+clearnetAck). */
-    scheduleStatus: 'xListening:schedule:status'
+    scheduleStatus: 'xListening:schedule:status',
+    /** Open GhostExodus's station in its own top-level window (his request). App-side channel —
+     *  deliberately NOT part of the `window.xls` surface, which mirrors his preload exactly. */
+    openStationWindow: 'xListening:openStationWindow'
   },
   // Ghost Social Media Manager (hardened port) — API-free social workstation. Phase 1 exposes
   // the password-vault lifecycle, the encrypted state store, and the per-platform defaults.

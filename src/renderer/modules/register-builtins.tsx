@@ -54,6 +54,7 @@ import { NumberMuncherModule } from './number-muncher/NumberMuncherModule';
 import { PdfSignerModule } from './pdf-signer/PdfSignerModule';
 import { GhostSocialModule } from './ghost-social/GhostSocialModule';
 import { WeatherModule } from './weather/WeatherModule';
+import { useCallback, useEffect, useState } from 'react';
 
 // ---------------------------------------------------------------------------
 // Adapter components — each has the uniform { spec: WindowSpec } signature and
@@ -212,10 +213,54 @@ function SocmintAdapter({ spec }: { spec: WindowSpec }): JSX.Element {
   return <SocmintModule caseId={spec.props?.['caseId'] as string | undefined} />;
 }
 
+/**
+ * X Listening Station — LAUNCHER.
+ *
+ * GhostExodus asked for his station to open outside the Ghost Intel 98 desktop: "when I click the
+ * icon or name from the drop-down menu, it just launches outside Ghost Intel." Choosing it from the
+ * menu therefore opens a real top-level window (main-side `openStationWindow`) rather than a
+ * shell window, and this small panel is what remains behind so the station can be re-opened if the
+ * window is closed.
+ *
+ * It is the same station either way — same process, same hardened boundary — and it still renders
+ * in-shell as a fallback when the standalone window cannot be opened, so the module is never
+ * unreachable.
+ */
 function XListeningAdapter({ spec: _spec }: { spec: WindowSpec }): JSX.Element {
-  // His app owns its own campaign selection through `window.xls`, so it takes no caseId prop —
-  // unlike the port, which was driven by the app's active case.
-  return <XListeningStation />;
+  const [launched, setLaunched] = useState<boolean | null>(null);
+
+  const launch = useCallback(async () => {
+    try {
+      await window.api.xListening.openStationWindow();
+      setLaunched(true);
+    } catch {
+      // No bridge (older preload) or the window refused to open — fall back to in-shell so the
+      // station is never unreachable.
+      setLaunched(false);
+    }
+  }, []);
+
+  useEffect(() => { void launch(); }, [launch]);
+
+  if (launched === false) {
+    // His app owns its own campaign selection through `window.xls`, so it takes no caseId prop.
+    return <XListeningStation />;
+  }
+
+  return (
+    <div className="ga98-stack" style={{ padding: 12, gap: 10 }}>
+      <p style={{ margin: 0 }}>
+        X Listening Station opens in its own window, outside the Ghost Intel 98 desktop.
+      </p>
+      <div>
+        <button onClick={() => void launch()}>Open X Listening Station</button>
+      </div>
+      <p style={{ margin: 0, fontSize: 11, opacity: 0.75 }}>
+        It runs on the same encrypted case store and the same Tor gate as the rest of the app —
+        only the window is separate.
+      </p>
+    </div>
+  );
 }
 
 function WebSdrAdapter({ spec }: { spec: WindowSpec }): JSX.Element {

@@ -1181,6 +1181,8 @@ export interface GhostApi {
      *  times — drives the renderer's next-sweep indicator + one-click Pause. Pure in-memory read of the
      *  scheduler registry; no capture window, no network egress. */
     scheduleStatus(caseId: string): Promise<XScheduleStatus>;
+    /** Open GhostExodus's station in its own top-level window, outside the app shell. */
+    openStationWindow(): Promise<{ opened: boolean }>;
   };
   /**
    * Ghost Social Media Manager (hardened port) — Phase 1 surface: the password-vault lifecycle,

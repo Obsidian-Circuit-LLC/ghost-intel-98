@@ -96,7 +96,26 @@ const PUSH_CHANNELS: Partial<Record<keyof typeof channels.xListening, string>> =
   sweepProgress: 'onSweepProgress',
 };
 
+/**
+ * Channels whose control lives OUTSIDE XListeningModule.tsx, mapped to the file that calls them.
+ * The reachability guarantee is the same — a channel must be driven by a real control — but the
+ * control is not always in the module (the station launcher is in the module registry, because
+ * choosing the station from the Access menu is what opens its standalone window).
+ */
+const REACHABLE_ELSEWHERE: Readonly<Record<string, string>> = {
+  openStationWindow: 'src/renderer/modules/register-builtins.tsx',
+};
+
 describe('whole-module seam — every xListening channel is reachable from a real control', () => {
+  it.each(Object.entries(REACHABLE_ELSEWHERE))(
+    'window.api.xListening.%s(...) is called in %s',
+    (key, file) => {
+      expect(typeof channels.xListening[key as keyof typeof channels.xListening]).toBe('string');
+      const source = readFileSync(resolve(process.cwd(), file), 'utf8');
+      expect(source).toMatch(new RegExp(`window\\.api\\.xListening\\.${key}\\s*\\(`));
+    }
+  );
+
   it.each(REACHABLE_CHANNELS)('window.api.xListening.%s(...) is called somewhere in XListeningModule.tsx', (key) => {
     // Sanity: the channel constant itself must exist (catches a typo'd key in this very list).
     expect(typeof channels.xListening[key]).toBe('string');
@@ -111,7 +130,11 @@ describe('whole-module seam — every xListening channel is reachable from a rea
 
   it('every channels.xListening key is reachable — none are orphaned', () => {
     const all = Object.keys(channels.xListening) as Array<keyof typeof channels.xListening>;
-    const reachable = new Set<string>([...REACHABLE_CHANNELS, ...Object.keys(PUSH_CHANNELS)]);
+    const reachable = new Set<string>([
+      ...REACHABLE_CHANNELS,
+      ...Object.keys(PUSH_CHANNELS),
+      ...Object.keys(REACHABLE_ELSEWHERE),
+    ]);
     const orphaned = all.filter((k) => !reachable.has(k));
     // A failure here means a NEW channel was added to ipc-contracts.ts without wiring it into
     // the renderer (add it to REACHABLE_CHANNELS above once wired) — the exact "hollow channel"
