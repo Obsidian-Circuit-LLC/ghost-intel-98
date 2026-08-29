@@ -370,6 +370,11 @@ export interface AppSettings {
   wallpaperColor: string;
   /** Optional desktop background image as a data: URI (covers the colour when set). */
   wallpaperImage: string | null;
+  /** Button face colour (CSS hex). '' = keep the active theme's own button look. The label ink is
+   *  derived from it, never chosen separately — see shared/theme/button-color.ts. */
+  buttonColor: string;
+  /** Saved button-colour swatches, newest first. */
+  buttonColorPresets: string[];
   /** Optional custom boot-splash / lock-screen image as a data: URI; falls back to the bundled
    *  boot-splash.jpg when null. Top-level scalar — mergeSettings' base-spread heals it on its own. */
   bootSplashImage: string | null;
@@ -733,6 +738,8 @@ export const defaultSettings: AppSettings = {
   themeName: 'classic',
   wallpaperColor: '#008080',
   wallpaperImage: null,
+  buttonColor: '',
+  buttonColorPresets: [],
   bootSplashImage: null,
   startupSoundEnabled: true,
   legacySounds: false,

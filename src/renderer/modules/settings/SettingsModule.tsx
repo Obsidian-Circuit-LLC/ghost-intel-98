@@ -19,6 +19,7 @@ import settingsBanner from '../../assets/settings-banner.png';
 import settingsBannerBlur from '../../assets/settings-banner-blur.jpg';
 import { ModuleBanner } from '../../components/ModuleBanner';
 import { THEMES } from '../../styles/themes';
+import { addColorPreset, buttonInk, CLASSIC_BUTTON_FACE, normalizeButtonColor } from '@shared/theme/button-color';
 
 type SectionKey = 'about' | 'sound' | 'theme' | 'cases' | 'shortcuts' | 'ai' | 'browser' | 'terminal' | 'mail' | 'backup' | 'security' | 'searchlight' | 'geoint' | 'socmint';
 
@@ -253,6 +254,62 @@ export function ThemePane({ s, patch }: { s: AppSettings; patch: (p: Partial<App
         <span style={{ fontSize: 11, fontFamily: 'monospace' }}>{s.wallpaperColor}</span>
         <button onClick={() => void patch({ wallpaperColor: '#008080' })}>Reset to teal</button>
       </div>
+      {/* Button colour (GhostExodus request). He lost the gold buttons when the embedded station's
+          stylesheet stopped leaking app-wide, and asked to be able to choose one on purpose:
+          "when things look flat, you end up getting lost when you're on a race against time".
+          The label ink is derived from the face, so no choice here can make a button unreadable. */}
+      <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <label>Button colour:&nbsp;
+          <input
+            type="color"
+            value={normalizeButtonColor(s.buttonColor) || CLASSIC_BUTTON_FACE}
+            onChange={(e) => void patch({ buttonColor: normalizeButtonColor(e.target.value) })}
+          />
+        </label>
+        <span style={{ fontSize: 11, fontFamily: 'monospace' }}>
+          {normalizeButtonColor(s.buttonColor) || 'theme default'}
+        </span>
+        <button
+          title="Back to the classic Windows button face"
+          onClick={() => void patch({ buttonColor: '' })}
+        >
+          Reset to default
+        </button>
+        <button
+          title="Save this colour as a swatch"
+          disabled={!normalizeButtonColor(s.buttonColor)}
+          onClick={() => void patch({
+            buttonColorPresets: addColorPreset(s.buttonColorPresets ?? [], s.buttonColor)
+          })}
+        >
+          Save preset
+        </button>
+      </div>
+      {(s.buttonColorPresets ?? []).length > 0 && (
+        <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 11, opacity: 0.8 }}>Saved:</span>
+          {(s.buttonColorPresets ?? []).map((preset) => (
+            <button
+              key={preset}
+              title={`Use ${preset} (right-click to remove)`}
+              aria-label={`Use button colour ${preset}`}
+              onClick={() => void patch({ buttonColor: preset })}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                void patch({
+                  buttonColorPresets: (s.buttonColorPresets ?? []).filter((p) => p !== preset)
+                });
+              }}
+              style={{
+                minWidth: 26, width: 26, height: 22, padding: 0,
+                backgroundColor: preset, color: buttonInk(preset)
+              }}
+            >
+              {normalizeButtonColor(s.buttonColor) === preset ? '\u2713' : ''}
+            </button>
+          ))}
+        </div>
+      )}
       <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
         <label>Background image:</label>
         <button onClick={async () => {

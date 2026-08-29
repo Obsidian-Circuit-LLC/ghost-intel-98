@@ -73,22 +73,54 @@ function getJSON<T>(port: number, path: string): Promise<T> {
 }
 
 async function waitForVersion(port: number): Promise<CdpVersion> {
-  for (let i = 0; i < 100; i++) {
+  for (let i = 0; i < 40; i++) {
     try {
       return await getJSON<CdpVersion>(port, '/json/version');
     } catch {
       await new Promise((r) => setTimeout(r, 100));
     }
   }
-  throw new Error('Chrome did not expose a DevTools endpoint within 10s');
+  throw new Error('Chrome did not expose a DevTools endpoint within 4s');
 }
 
 /**
  * Launch a headless Chrome, attach a page target, and return a minimal Page + a close() that
  * tears the whole thing down. The caller owns lifecycle (call `close()` in afterEach/finally).
  */
+/**
+ * Pick a debugging port that will not collide with another test file's browser.
+ *
+ * This used to be `9200 + Math.random() * 700`. With 27 test files sharing this harness and vitest
+ * running them in parallel, two files picking the same port is a birthday-problem near-certainty —
+ * the second Chrome then fails to bind and the file fails with a launch timeout. That is exactly
+ * the intermittent failure that kept appearing in full-suite runs and passing in isolation.
+ *
+ * Derived from the worker's pid plus a per-process counter instead: distinct within a run, and
+ * deterministic rather than random (the charter's no-unseeded-RNG rule applies to test
+ * infrastructure too — a flaky harness is a correctness problem, it just fails somewhere else).
+ */
+let portCounter = 0;
+function nextDebugPort(attempt: number): number {
+  const seed = process.pid * 131 + portCounter * 17 + attempt * 4099;
+  portCounter += 1;
+  return 9200 + (seed % 5000);
+}
+
 export async function launchChrome(): Promise<ChromeSession> {
-  const port = 9200 + Math.floor(Math.random() * 700);
+  // A port can still be taken by something outside this run, so a failed launch is retried on a
+  // fresh port rather than failing the whole file.
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    try {
+      return await launchChromeOnce(nextDebugPort(attempt));
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
+}
+
+async function launchChromeOnce(port: number): Promise<ChromeSession> {
   const chrome: ChildProcess = spawn(
     CHROME_BIN,
     [
@@ -102,7 +134,14 @@ export async function launchChrome(): Promise<ChromeSession> {
     { stdio: 'ignore' }
   );
 
-  const version = await waitForVersion(port);
+  let version: CdpVersion;
+  try {
+    version = await waitForVersion(port);
+  } catch (err) {
+    // Kill the child before retrying, or a failed attempt leaks a browser for the whole run.
+    try { chrome.kill('SIGKILL'); } catch { /* already gone */ }
+    throw err;
+  }
   const ws = new WebSocket(version.webSocketDebuggerUrl, { maxPayload: 256 * 1024 * 1024 });
 
   let nextId = 0;
