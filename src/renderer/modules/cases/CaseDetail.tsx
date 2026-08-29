@@ -162,7 +162,14 @@ export function CaseDetail({ record, onChange, onArchive, onRefresh, onUpdateFie
           }}>Import Case…</button>
         </div>
       </fieldset>
+      </div>
 
+      <BioImagesSection caseId={record.id} images={record.bioImages ?? []} onRefresh={onRefresh} />
+
+      {/* Attachments sits BELOW Bio images (GhostExodus request). It was rendered beside
+          Identity because the photo row's wrapper closed after the WRONG fieldset, making
+          the two flex siblings — at the default window size they overlapped into each other.
+          Full width, below the images, is also where he wants it. */}
       <fieldset>
         <legend>Attachments</legend>
         <div
@@ -184,9 +191,6 @@ export function CaseDetail({ record, onChange, onArchive, onRefresh, onUpdateFie
           </ul>
         )}
       </fieldset>
-      </div>
-
-      <BioImagesSection caseId={record.id} images={record.bioImages ?? []} onRefresh={onRefresh} />
 
       <fieldset>
         <legend

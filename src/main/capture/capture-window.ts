@@ -162,8 +162,14 @@ export function runCapture(win: Electron.BrowserWindow, staticJs: string): Promi
   return win.webContents.executeJavaScript(staticJs, true);
 }
 
-/** True iff `url` is the app's own renderer frame — a `file://…/index.html`
- *  document, or (dev only) the Vite dev-server renderer origin. */
+/** The app's own local renderer pages. `station.html` is GhostExodus's X Listening Station in its
+ *  own top-level window (v3.74.0) — a page THIS build emits, loaded from `file:` like index.html.
+ *  Kept as an explicit two-name allowlist rather than "any local .html": the whole purpose of this
+ *  gate is that a capture window can host a hostile remote page, so the rule must stay tight. */
+const APP_PAGES = /(?:^|\/)(?:index|station)\.html$/i;
+
+/** True iff `url` is one of the app's own renderer frames — a `file://…` app page, or (dev only)
+ *  the Vite dev-server renderer origin. */
 function isTrustedSenderUrl(url: string | undefined | null): boolean {
   if (!url) return false;
   let u: URL;
@@ -172,7 +178,7 @@ function isTrustedSenderUrl(url: string | undefined | null): boolean {
   } catch {
     return false;
   }
-  if (u.protocol === 'file:' && /(?:^|\/)index\.html$/i.test(u.pathname)) {
+  if (u.protocol === 'file:' && APP_PAGES.test(u.pathname)) {
     return true;
   }
   const devOrigin = process.env['ELECTRON_RENDERER_URL'];

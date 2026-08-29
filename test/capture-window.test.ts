@@ -263,6 +263,25 @@ describe('assertTrustedSender', () => {
     ).not.toThrow();
   });
 
+  it("passes for the station's own top-level window (v3.74.0)", () => {
+    // GhostExodus's X Listening Station runs in its own window on station.html. v3.74.0 shipped
+    // that window without widening this gate, so every one of his channels came back "Rejected IPC
+    // from an untrusted sender frame" and Connect did nothing at all.
+    expect(() =>
+      assertTrustedSender(mkEvent('file:///opt/ghost-intel/resources/app.asar/renderer/station.html'))
+    ).not.toThrow();
+  });
+
+  it('still rejects any OTHER local page — the allowlist is two names, not "any .html"', () => {
+    // The gate exists because a capture window can host a hostile remote page. Widening it to
+    // "any local html" would be a much bigger change than the one this needed.
+    for (const page of ['capture.html', 'x.html', 'evil.html', 'index.html.evil']) {
+      expect(() =>
+        assertTrustedSender(mkEvent(`file:///opt/ghost-intel/resources/app.asar/renderer/${page}`))
+      , page).toThrow();
+    }
+  });
+
   it('throws when senderFrame is missing entirely', () => {
     expect(() => assertTrustedSender({} as Electron.IpcMainInvokeEvent)).toThrow();
   });
