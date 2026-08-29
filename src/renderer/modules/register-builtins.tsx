@@ -43,7 +43,7 @@ import { SearchlightModule } from './searchlight/SearchlightModule';
 import { SocmintModule } from './socmint/SocmintModule';
 // GhostExodus's own renderer, embedded verbatim (see x-listening-embed/StationApp.tsx). This
 // REPLACES the earlier port: there is one X Listening Station, and it is his.
-import { App as XListeningStation } from './x-listening-embed/StationApp';
+import { StationShell as XListeningStation } from './x-listening-embed/StationShell';
 import { WebSdrModule } from './websdr/WebSdrModule';
 import { OSINTToolkitModule } from './osint-toolkit/OSINTToolkitModule';
 import { MindsEyeModule } from './minds-eye/MindsEyeModule';

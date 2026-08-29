@@ -14,7 +14,8 @@
  * The permitted differences are exactly five mechanical edits — four structurally unavoidable when
  * mounting a standalone app inside another app's React tree, plus one inert line referencing two
  * memos his `App()` declares but does not read (this project sets `noUnusedLocals`; his did not).
- * Everything else must be byte-identical, INCLUDING his stylesheet.
+ * Everything else must be byte-identical, INCLUDING his stylesheet — which is still shipped
+ * unchanged and is now CONFINED at mount time rather than edited (see scope-css.ts).
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -38,7 +39,10 @@ function applyPermittedEdits(source: string): string {
       "import { useEffect, useMemo, useState } from 'react';"
     )
     .replace("import { createRoot } from 'react-dom/client';", '')
-    .replace("import './styles.css';", "import './station.css';")
+    // Edit 2: his stylesheet import is REMOVED, not repointed. Importing his sheet from here is
+    // what leaked his global element rules (`*`, `body`, `button`, `input`…) across the whole app
+    // in v3.73.0; StationShell injects the same file scoped to his container instead.
+    .replace("import './styles.css';\n", "")
     .replace(/^function App\(\)/m, 'export function App()')
     .replace(/^createRoot\(.*$/m, '')
     // Edit 5: inert, behaviour-free, and inserted directly after his second unused memo.

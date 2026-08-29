@@ -7,7 +7,9 @@
  * below. Anything else is a defect.
  *
  *   1. `createRoot(...)` bootstrap removed — this mounts inside Ghost Intel 98's React tree.
- *   2. `import './styles.css'` → `import './station.css'` (his stylesheet, copied beside this file).
+ *   2. `import './styles.css'` REMOVED. His sheet styles global element selectors (`*`, `body`,
+ *      `button`, `input`…), so importing it here applied it to the whole app (the v3.73.0
+ *      regression). `StationShell` now injects the SAME file, scoped to his container.
  *   3. `StrictMode` / `createRoot` imports dropped with the bootstrap.
  *   4. `function App()` → `export function App()` so the module can mount it.
  *   5. one inert `void activeCase; void postsById;` line — his `App()` declares two memos it does
@@ -28,7 +30,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 
-import './station.css';
 
 export type PostKind = 'post' | 'reply' | 'repost' | 'comment';
 export type RelationshipType = 'follower' | 'following';
