@@ -28,8 +28,8 @@ Add a target, run a sweep, and posts should arrive with author pictures and any 
 
 Windows NSIS installer — `GhostIntel98-Setup-3.74.3.exe` (per-user, no admin; unsigned → **More info → Run anyway**). Installs over the previous build in place.
 
-- **SHA-256:** `__SHA256__`
-- **Size:** `__SIZE__`
+- **SHA-256:** `907fd9a9bf46fcde7a98e44708f89fe45efd4028a93b2f88859129d442b26970`
+- **Size:** `945,172,998 bytes (~901 MB)`
 
 Confirm **Settings ▸ About** reads **3.74.3**.
 
