@@ -420,7 +420,7 @@ export function registerXlsEmbedIpc(deps: XlsEmbedDeps): void {
     return readCachedMedia(activeCaseId(s), ref);
   });
 
-  handle(XLS_CHANNELS.getAvatarDataUrl, async (e, username) => {
+  handle(XLS_CHANNELS.getAvatarDataUrl, async (e, username, preferredUrl) => {
     assertTrustedSender(e);
     const handleName = String(username ?? '').replace(/^@+/, '');
     if (!handleName) return null;
@@ -432,7 +432,9 @@ export function registerXlsEmbedIpc(deps: XlsEmbedDeps): void {
     const fromRel = s.relationships.find((r) => r.caseId === caseId && r.username?.toLowerCase() === handleName.toLowerCase() && r.avatar)?.avatar;
     const fromProfile = s.profiles.find((p) => p.caseId === caseId && p.username.toLowerCase() === handleName.toLowerCase() && p.avatar)?.avatar;
     const ref = fromPost || fromRel || fromProfile;
-    if (!ref) return null;
+    // NOT an early return on a missing ref any more: his UI may be handing over the only URL that
+    // exists, for a row whose record has not been enriched yet.
+    if (!ref && typeof preferredUrl !== 'string') return null;
 
     // v3.73.1: his records carry the REMOTE avatar URL his scraper read off the page, not one of
     // our local media refs. v3.73.0 handed that value straight to readCachedMedia, which rejects
@@ -444,6 +446,9 @@ export function registerXlsEmbedIpc(deps: XlsEmbedDeps): void {
       {
         caseId,
         ref,
+        // His UI passes the avatar it just read off the page as the SECOND argument. Dropping it
+        // was why pictures never appeared for a row whose stored record had no avatar yet.
+        preferred: typeof preferredUrl === 'string' ? preferredUrl : undefined,
         onLocalised: (localRef) => {
           for (const row of s.posts) if (row.avatar === ref) row.avatar = localRef;
           for (const row of s.relationships) if (row.avatar === ref) row.avatar = localRef;
@@ -503,6 +508,12 @@ export function registerXlsEmbedIpc(deps: XlsEmbedDeps): void {
         id,
         caseId,
         profileId,
+        // HIS field is `media`; our capture artifact calls the same thing `mediaRefs`. Spreading
+        // the artifact alone left `media` undefined on every newly collected post, so
+        // getPostMediaDataUrl found nothing and post images never appeared — while MIGRATED posts,
+        // which were mapped properly, still had theirs. "Old posts have pictures, new ones don't"
+        // is a horrible symptom to debug from the outside.
+        media: (raw.mediaRefs as string[] | undefined) ?? (raw.media as string[] | undefined) ?? [],
         username: String(raw.username ?? username),
         sourceUsername: username,
         collectedAt: ctx.now(),

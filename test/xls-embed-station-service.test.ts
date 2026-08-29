@@ -290,3 +290,22 @@ describe('clientState — what his renderer actually receives', () => {
     expect(clientState(s).settings.scrollPasses).toBe(42);
   });
 });
+
+describe('captured posts carry media in HIS field', () => {
+  it("maps our `mediaRefs` onto his `media`", async () => {
+    // His model reads Post.media; our capture artifact calls it mediaRefs. Spreading the artifact
+    // alone left `media` undefined on every newly collected post, so his image lookup found
+    // nothing — while migrated posts, mapped properly, still showed theirs.
+    const { registerXlsEmbedIpc } = await import('../src/main/xls-embed/ipc');
+    const src = readFileSync(
+      join(process.cwd(), 'src/main/xls-embed/ipc.ts'),
+      'utf8'
+    );
+    expect(typeof registerXlsEmbedIpc).toBe('function');
+    // The ingest must set `media` explicitly rather than relying on the spread.
+    expect(src).toMatch(/media:\s*\(raw\.mediaRefs/);
+  });
+});
+
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';

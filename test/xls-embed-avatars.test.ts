@@ -92,4 +92,37 @@ describe('resolveAvatarDataUri', () => {
     expect(await resolveAvatarDataUri({ caseId: 'c1', ref: '' }, d)).toBeNull();
     expect(await resolveAvatarDataUri({ caseId: 'c1', ref: undefined }, d)).toBeNull();
   });
+
+  it('prefers the URL his UI hands over, before falling back to the stored record', async () => {
+    // His component calls getAvatarDataUrl(username, preferredUrl) with the avatar it just read
+    // off the page. v3.73.1-v3.74.2 dropped that second argument on the floor and only consulted
+    // stored records, so a row whose record had no avatar yet resolved to null — no picture — even
+    // though the caller was holding the URL. Seventh iteration of this one feature, and the second
+    // caused by not honouring his contract exactly.
+    const d = deps();
+    const uri = await resolveAvatarDataUri({ caseId: 'c1', ref: '', preferred: REMOTE }, d);
+    expect(d.cacheRemote).toHaveBeenCalledWith('c1', REMOTE);
+    expect(uri).toBe('data:image/jpeg;base64,LOCALBYTES');
+  });
+
+  it('falls back to the stored record when no preferred URL is offered', async () => {
+    const d = deps();
+    expect(await resolveAvatarDataUri({ caseId: 'c1', ref: LOCAL, preferred: undefined }, d))
+      .toBe('data:image/jpeg;base64,LOCALBYTES');
+  });
+
+  it('holds a preferred URL to the SAME host allowlist as a stored one', async () => {
+    // A preferred URL comes from a scraped page, so it is the least trusted input here — it gets
+    // no weaker check than a value we stored ourselves.
+    const d = deps();
+    expect(await resolveAvatarDataUri({ caseId: 'c1', ref: '', preferred: 'https://evil.example.com/a.jpg' }, d))
+      .toBeNull();
+    expect(d.cacheRemote).not.toHaveBeenCalled();
+  });
+
+  it('uses the stored ref when the preferred URL cannot be fetched', async () => {
+    const d = deps({ cacheRemote: vi.fn(async () => null) });
+    expect(await resolveAvatarDataUri({ caseId: 'c1', ref: LOCAL, preferred: REMOTE }, d))
+      .toBe('data:image/jpeg;base64,LOCALBYTES');
+  });
 });
