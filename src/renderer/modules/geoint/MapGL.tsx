@@ -228,13 +228,58 @@ export function syncItemLayer(
   onSelect?: (id: string) => void
 ): { shown: number; total: number } | null {
   const { features, located } = buildEventFeatures(items, corroboration);
-  const data = { type: 'FeatureCollection', features } as unknown as maplibregl.GeoJSONSourceSpecification['data'];
+  const data = { type: 'FeatureCollection', features } as unknown;
 
+  const st = layerState(map);
+  // The click handler is bound once but the callbacks change across renders; route through the
+  // per-map state so the live ones are always used without rebinding or stacking listeners.
+  st.onSelect = onSelect;
+  st.onPopup = onPopup;
+  st.pending = { data, shown: features.length, located };
+
+  // STYLE-READINESS GATE. `new Marker().addTo(map)` works at any time, but addSource/addLayer throw
+  // "Style is not done loading" — the crash the satellite layer was hotfixed for in v3.17.1, and
+  // which moving the events onto a GPU layer reintroduced. It fired on the FIRST open before the
+  // style settled and, because this runs even with zero features, it threw again on every reopen —
+  // so "Reset GeoINT (purge cache + tiles)" could not clear it either.
+  //
+  // Attach once and re-apply on `load` (initial) and `styledata` (after setStyle, which destroys
+  // every source and layer). Both are idempotent: applyPending re-checks readiness and getSource.
+  if (!st.wired) {
+    st.wired = true;
+    const reapply = () => applyPending(map);
+    map.on('load', reapply);
+    map.on('styledata', reapply);
+  }
+
+  applyPending(map);
+  return features.length < located ? { shown: features.length, total: located } : null;
+}
+
+/**
+ * Push the latest features onto the map, if and only if the style can take them. Never throws: a
+ * map that refuses the call leaves the pending features in place for the next `styledata`, and the
+ * module stays up rather than falling into its error boundary.
+ */
+function applyPending(map: maplibregl.Map): void {
+  const st = layerState(map);
+  const pending = st.pending;
+  if (!pending) return;
+  if (typeof map.isStyleLoaded === 'function' && !map.isStyleLoaded()) return;
+
+  try {
+    installEventLayer(map, pending.data);
+  } catch {
+    /* Style went away mid-call (a concurrent setStyle) — the next styledata re-applies. */
+  }
+}
+
+function installEventLayer(map: maplibregl.Map, data: unknown): void {
   const existing = map.getSource(EVENTS_SOURCE) as maplibregl.GeoJSONSource | undefined;
   if (existing && typeof existing.setData === 'function') {
-    existing.setData(data);
+    existing.setData(data as Parameters<maplibregl.GeoJSONSource['setData']>[0]);
   } else {
-    map.addSource(EVENTS_SOURCE, { type: 'geojson', data } as maplibregl.SourceSpecification);
+    map.addSource(EVENTS_SOURCE, { type: 'geojson', data } as unknown as maplibregl.SourceSpecification);
     // Bloom underlay, drawn only for corroborated events (the old marker's box-shadow).
     map.addLayer({
       id: EVENTS_GLOW_LAYER,
@@ -287,13 +332,6 @@ export function syncItemLayer(
     map.on('mouseleave', EVENTS_LAYER, () => { try { map.getCanvas().style.cursor = ''; } catch { /* no canvas in a stub */ } });
   }
 
-  // The click handler is bound once but the callbacks change across renders; route through refs so
-  // the live ones are always used without rebinding (and without stacking listeners).
-  const st = layerState(map);
-  st.onSelect = onSelect;
-  st.onPopup = onPopup;
-
-  return features.length < located ? { shown: features.length, total: located } : null;
 }
 
 /**
@@ -308,6 +346,10 @@ interface EventLayerState {
   onSelect?: (id: string) => void;
   onPopup?: (p: maplibregl.Popup) => void;
   popup?: maplibregl.Popup;
+  /** Latest features, kept so they can be applied once the style is ready (see syncItemLayer). */
+  pending?: { data: unknown; shown: number; located: number };
+  /** `load`/`styledata` handlers are attached once per map. */
+  wired?: boolean;
 }
 const eventLayerState = new WeakMap<object, EventLayerState>();
 
