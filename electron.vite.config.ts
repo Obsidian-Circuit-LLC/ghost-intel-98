@@ -39,7 +39,13 @@ export default defineConfig({
     build: {
       outDir: 'out/renderer',
       rollupOptions: {
-        input: resolve(__dirname, 'src/renderer/index.html')
+        input: {
+          // The app shell.
+          index: resolve(__dirname, 'src/renderer/index.html'),
+          // GhostExodus's X Listening Station in its OWN top-level window (his request), on the
+          // same hardened main process — separate document, so his stylesheet cannot reach the app.
+          station: resolve(__dirname, 'src/renderer/station.html')
+        }
       }
     }
   }

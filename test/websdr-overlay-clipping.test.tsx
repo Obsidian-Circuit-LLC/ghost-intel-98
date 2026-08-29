@@ -154,4 +154,34 @@ describe('WebSDR overlay is clipped to its window', () => {
     spy.mockRestore();
     expect(api.receiverPresent.mock.calls.at(-1)![0]).toMatchObject({ visible: false });
   });
+
+  it('resyncs the overlay when the window is DRAGGED, not just resized', async () => {
+    // The overlay is positioned in window coordinates and was resynced only from `window.resize`
+    // and a ResizeObserver on the host. Neither fires on a move: the host changes position without
+    // changing size, so the native receiver stayed at its old coordinates, painting over whatever
+    // was now underneath it. Resizing worked only because the SIZE changed and the observer caught
+    // that; nothing was watching position at all.
+    const api = mkApi();
+    const spy = stubLayout({ x: 60, y: 40, width: 200, height: 150 });
+    await mountWithReceiver(api);
+    const before = lastShown(api);
+    expect(before.bounds).toEqual({ x: 60, y: 40, width: 200, height: 150 });
+
+    // Move the window: same size, new position. The host now reports a shifted rect.
+    spy.mockRestore();
+    const moved = stubLayout({ x: 160, y: 90, width: 200, height: 150 });
+    api.receiverPresent.mockClear();
+    await act(async () => {
+      useWindows.setState({
+        windows: [{ id: 'w1', x: 100, y: 50 }],
+        focusStack: ['w1'],
+      } as never);
+    });
+    for (let i = 0; i < 4; i++) await act(async () => { await Promise.resolve(); });
+    moved.mockRestore();
+
+    const after = lastShown(api);
+    expect(after, 'a move must re-present the overlay').toBeTruthy();
+    expect(after.bounds).toEqual({ x: 160, y: 90, width: 200, height: 150 });
+  });
 });

@@ -158,6 +158,8 @@ import { registerXListeningIpc } from '../x-listening/ipc';
 import { randomUUID } from 'node:crypto';
 import { secureReadFile, secureWriteFile } from '../storage/secure-fs';
 import { registerXlsEmbedIpc } from '../xls-embed/ipc';
+import { openStationWindow, getStationWindow } from '../xls-embed/window';
+import { assertTrustedSender } from '../capture/capture-window';
 import { makeStationStore } from '../xls-embed/state-store';
 import { registerWebSdrIpc } from '../websdr/ipc';
 import { registerWebSdrReceiverIpc } from '../websdr/receiver-ipc';
@@ -1789,9 +1791,24 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   // GhostExodus's embedded X Listening Station: his 47 channels under `xls:`, backed by HIS state
   // document written through secure-fs (encrypted at rest, and a failed read REPORTED rather than
   // reset — see xls-embed/state-store.ts). Same sender validation and Tor gate as everything else.
+  // His station in its own top-level window (his request: "it just launches outside Ghost Intel").
+  // Same process, same hardened boundary — see xls-embed/window.ts for why this is not a separate
+  // portable binary.
+  safeHandleWithEvent(channels.xListening.openStationWindow, (e) => {
+    assertTrustedSender(e);
+    openStationWindow({
+      rendererUrl: process.env['ELECTRON_RENDERER_URL'],
+      mainDir: __dirname,
+    });
+    return { opened: true };
+  });
+
   registerXlsEmbedIpc({
     handle: safeHandleWithEvent,
-    getWindow,
+    // His `state:changed` / `sweep:progress` pushes must reach the station wherever it is showing:
+    // the standalone window when one is open, otherwise the app shell. Without this the standalone
+    // window would render once and then never update as collection ran.
+    getWindow: () => getStationWindow() ?? getWindow(),
     store: makeStationStore({
       readFile: (path) => secureReadFile(path),
       writeFile: async (path, data) => {

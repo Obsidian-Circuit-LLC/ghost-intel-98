@@ -136,6 +136,21 @@ export function WebSdrModule({ windowId }: { windowId?: string } = {}): JSX.Elem
     return !s.windows.find((w) => w.id === windowId)?.minimized;
   });
 
+  /**
+   * This window's geometry, as a primitive so a re-render only happens when it actually changes.
+   *
+   * The overlay is a native view positioned in window coordinates, and it was resynced only from
+   * `window.resize` and a ResizeObserver on the host. Neither of those fires when a module window
+   * is DRAGGED: the host moves, the native receiver does not, and it sits at its old coordinates
+   * painting over whatever is now underneath it. Resizing happened to work because the host's SIZE
+   * changed and the observer caught it; moving had nothing watching it at all.
+   */
+  const windowGeometry = useWindows((s) => {
+    if (!windowId) return '';
+    const w = s.windows.find((win) => win.id === windowId);
+    return w ? `${w.x ?? 0}:${w.y ?? 0}:${w.width ?? 0}:${w.height ?? 0}:${w.maximized ? 1 : 0}` : '';
+  });
+
   const [bootError, setBootError] = useState('');
   const [receivers, setReceivers] = useState<WebSdrReceiver[]>([]);
   const [presets, setPresets] = useState<WebSdrPreset[]>([]);
@@ -275,7 +290,7 @@ export function WebSdrModule({ windowId }: { windowId?: string } = {}): JSX.Elem
     const t = setTimeout(syncBounds, 20);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected, panel, windowActive]);
+  }, [selected, panel, windowActive, windowGeometry]);
 
   // Tear the native overlay DOWN when the module unmounts (window closed). Without this the
   // WebContentsView stays attached to contentView, visible, audio playing, over the whole desktop
@@ -296,8 +311,10 @@ export function WebSdrModule({ windowId }: { windowId?: string } = {}): JSX.Elem
       window.removeEventListener('resize', sync);
       ob?.disconnect();
     };
+    // `windowGeometry` is in the deps so a DRAG resyncs the overlay — a move changes the host's
+    // position without changing its size, so neither listener above sees it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected, panel, windowActive]);
+  }, [selected, panel, windowActive, windowGeometry]);
 
   // Revoke the previous object URL when playback changes / on unmount (no dangling blob).
   useEffect(() => {

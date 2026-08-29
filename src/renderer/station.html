@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Mirrors the app's renderer CSP. `connect-src 'none'` because this page talks to the main
+         process over IPC only: every network byte the station fetches is made by main, through the
+         Tor gate. img-src allows data: because avatars are served as cached data: URIs, never as
+         remote URLs. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'none'"
+    />
+    <title>X Listening Station</title>
+  </head>
+  <body style="margin:0;height:100vh;overflow:hidden">
+    <div id="station-root" style="height:100%"></div>
+    <script type="module" src="/station-main.tsx"></script>
+  </body>
+</html>

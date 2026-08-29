@@ -736,6 +736,8 @@ const api = {
 
     // ---- Phase-1 Enterprise-port surface (plan Task 6) --------------------------------
     openSession: (caseId: string) => ipcRenderer.invoke(channels.xListening.openSession, caseId),
+    /** Launch his station outside the Ghost Intel 98 shell, in its own OS window. */
+    openStationWindow: () => ipcRenderer.invoke(channels.xListening.openStationWindow),
     sessionStatus: (caseId: string) =>
       ipcRenderer.invoke(channels.xListening.sessionStatus, caseId),
     collectionStatus: () => ipcRenderer.invoke(channels.xListening.collectionStatus),
