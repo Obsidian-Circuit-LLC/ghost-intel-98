@@ -31,7 +31,8 @@ const rec = vi.hoisted(() => ({
   bootstrapped: false,
   socksPort: 9050,
   cookieQuery: null as Record<string, unknown> | null,
-  cookies: [] as Array<{ name: string; value: string; domain: string }>
+  cookies: [] as Array<{ name?: string; value?: string; domain: string }>,
+  cleared: [] as Array<Record<string, unknown>>
 }));
 
 vi.mock('../src/main/capture/capture-window', () => ({
@@ -66,7 +67,13 @@ vi.mock('electron', () => ({
           rec.cookieQuery = q;
           return rec.cookies;
         })
-      }
+      },
+      // Clearing the partition is what a real sign-out means; record it so the tests can assert it.
+      clearStorageData: vi.fn(async (opts: Record<string, unknown>) => {
+        rec.cleared.push(opts);
+        // The auth cookie is gone once the partition is cleared, so `connected` must follow.
+        rec.cookies = [];
+      })
     }))
   }
 }));
@@ -203,23 +210,41 @@ describe('connectXSession — per-case window lifecycle', () => {
 });
 
 describe('clearXSession', () => {
-  it('closes and forgets the case window; a later connect opens a fresh one', async () => {
+  it('CLEARS THE LOGIN, not just the window', async () => {
+    // It used to close the window and return {cleared:true} without touching the auth cookie —
+    // while `connected` is read FROM that cookie. So the station reported "X session cleared" and
+    // carried on showing CONNECTED, because the login really was still there. A Clear Session
+    // button that leaves you signed in invites handing the machine over believing otherwise.
     rec.bootstrapped = true;
-    const first = await connectXSession(CASE_A, false);
-    expect(first).toMatchObject({ blocked: false });
-    const closed = clearXSession(CASE_A);
-    expect(closed).toMatchObject({ cleared: true });
+    rec.cookies = [{ domain: '.x.com' }];
+    await connectXSession(CASE_A, false);
 
+    const closed = await clearXSession(CASE_A);
+    expect(closed).toMatchObject({ cleared: true });
+    expect(rec.cleared.at(-1)).toMatchObject({ storages: expect.arrayContaining(['cookies']) });
+
+    // …and the status the UI renders now agrees.
+    await expect(getXStatus(CASE_A)).resolves.toMatchObject({ connected: false });
+  });
+
+  it('forgets the window, so a later connect opens a fresh one', async () => {
+    rec.bootstrapped = true;
+    await connectXSession(CASE_A, false);
+    await clearXSession(CASE_A);
     await connectXSession(CASE_A, false);
     expect(rec.createCalls).toHaveLength(2);
   });
 
-  it('is a harmless no-op when the case has no live window', () => {
-    expect(clearXSession(CASE_A)).toMatchObject({ cleared: false });
+  it('still clears the login when no window is open', async () => {
+    // The old contract returned {cleared:false} here, which read as "nothing happened" — but the
+    // login is exactly what needed clearing, window or no window.
+    rec.cookies = [{ domain: '.x.com' }];
+    await expect(clearXSession(CASE_A)).resolves.toMatchObject({ cleared: true });
+    await expect(getXStatus(CASE_A)).resolves.toMatchObject({ connected: false });
   });
 
-  it('rejects a non-UUID caseId', () => {
-    expect(() => clearXSession('not-a-uuid')).toThrow();
+  it('rejects a non-UUID caseId', async () => {
+    await expect(clearXSession('nope' as never)).rejects.toThrow();
   });
 });
 

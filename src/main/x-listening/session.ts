@@ -302,13 +302,33 @@ export async function navigateXToProfile(
  * cookie lives on the shared partition and survives; a later `connectXSession` for any case
  * reuses it without a fresh login).
  */
-export function clearXSession(caseId: string): { cleared: boolean } {
+/**
+ * Sign out of X: close the capture window AND clear the authenticated partition.
+ *
+ * This used to close the window and return `{cleared:true}` without touching the auth cookie —
+ * while `getXStatus.connected` is read FROM that cookie. So "Clear session" reported success and
+ * the station carried straight on showing CONNECTED, because the login genuinely was still there
+ * (GhostExodus: "it says X session cleared, but it didn't clear"). A button labelled Clear Session
+ * that leaves you signed in is worse than no button: it invites you to hand the machine to someone
+ * believing the account is off it.
+ *
+ * `cleared` now means the session data was actually removed, not merely that a window happened to
+ * be open.
+ */
+export async function clearXSession(caseId: string): Promise<{ cleared: boolean }> {
   const id = ensureUuid(caseId, 'caseId');
   const win = xWindows.get(id);
   xWindows.delete(id);
-  if (win && !win.isDestroyed()) {
-    win.close();
+  if (win && !win.isDestroyed()) win.close();
+
+  try {
+    const ses = electronSession.fromPartition(X_LISTENING_PARTITION);
+    // Cookies first — that is what `connected` is derived from, so a partial failure later still
+    // leaves the app reporting the truth about the login.
+    await ses.clearStorageData({ storages: ['cookies', 'localstorage', 'indexdb', 'websql', 'serviceworkers', 'cachestorage'] });
     return { cleared: true };
+  } catch {
+    // Report honestly rather than claiming a logout that did not happen.
+    return { cleared: false };
   }
-  return { cleared: false };
 }
