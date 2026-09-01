@@ -551,8 +551,27 @@ export function registerXlsEmbedIpc(deps: XlsEmbedDeps): void {
         return { collected: 0, added: 0 };
       }
 
-      const win = getXWindow(caseId);
-      if (!win) throw new Error('Connect to X before collecting.');
+      // ENSURE a capture window. The auth cookie is case-independent and persisted, so his UI can
+      // read SESSION CONNECTED while this campaign has no live window — after a restart, or before
+      // Open Session was ever clicked. This is the "signed in (cookie) != ready to capture
+      // (window)" trap the old module was fixed for in v3.71.1; the embed threw here instead, the
+      // sweep swallowed it per target, and it still reported "Collection sweep complete" having
+      // collected nothing at all.
+      //
+      // Opened HIDDEN: a sweep must never pop the Chromium browser at the analyst. Tor gate and
+      // fail-closed posture unchanged — a blocked gate is reported, not worked around.
+      let win = getXWindow(caseId);
+      if (!win) {
+        const opened = await connectXSession(caseId, await loadClearnetEnabled(), { visible: false });
+        if (opened.blocked) {
+          throw new Error(
+            opened.reason ??
+              'Tor is not ready — cannot open a capture window. Wait for Tor, or enable the clearnet opt-in.'
+          );
+        }
+        win = getXWindow(caseId);
+      }
+      if (!win) throw new Error('Could not open a capture window for this campaign.');
 
       let ingested = { added: 0, skipped: 0 };
       const result = await captureTimeline(
@@ -606,6 +625,8 @@ export function registerXlsEmbedIpc(deps: XlsEmbedDeps): void {
     const targets = s.profiles.filter((p) => p.caseId === caseId && p.enabled).map((p) => p.id);
     let collected = 0;
     let added = 0;
+    let failed = 0;
+    let lastReason = '';
     for (const id of targets) {
       emit(XLS_EVENT_CHANNELS.onSweepProgress, {
         message: `Collecting @${s.profiles.find((p) => p.id === id)?.username ?? ''}…`,
@@ -618,12 +639,38 @@ export function registerXlsEmbedIpc(deps: XlsEmbedDeps): void {
         collected += r.collected;
         added += r.added;
       } catch (err) {
-        // One bad target must not abort the sweep; his app reports it and moves on.
-        emit(XLS_EVENT_CHANNELS.onBackgroundError, { message: err instanceof Error ? err.message : String(err) });
+        // One bad target must not abort the sweep — but it must not vanish either. Count it,
+        // record it in the run log where he can find it, and keep the reason for the summary.
+        failed += 1;
+        lastReason = err instanceof Error ? err.message : String(err);
+        const profile = s.profiles.find((p) => p.id === id);
+        s.collectionRuns.push({
+          id: ctx.makeId(), caseId, profileId: id, username: profile?.username ?? '',
+          operation: 'posts', startedAt: ctx.now(), completedAt: ctx.now(),
+          requestedPasses: 0, passesCompleted: 0, observed: 0, added: 0, duplicates: 0,
+          stopReason: lastReason, reachedEnd: false, frontierUsernames: [],
+          status: 'error', error: lastReason,
+        } as never);
+        emit(XLS_EVENT_CHANNELS.onBackgroundError, { message: lastReason });
       }
     }
     emit(XLS_EVENT_CHANNELS.onSweepProgress, { message: '', current: targets.length, total: targets.length, running: false });
-    return clientState(s);
+    if (failed > 0) {
+      await store.save(s);
+      emit(XLS_EVENT_CHANNELS.onStateChanged, clientState(s));
+    }
+    // Report the failures. A sweep that says "complete" having collected nothing, with the reason
+    // only in a console the analyst never sees, is how a total collection failure looked like a
+    // working feature for three releases.
+    return {
+      ...clientState(s),
+      collected,
+      added,
+      failed,
+      reason: failed
+        ? `${failed} of ${targets.length} source(s) failed: ${lastReason}`
+        : undefined,
+    };
   });
 
   handle(XLS_CHANNELS.extractRelationships, async (e, id, relationship) => {

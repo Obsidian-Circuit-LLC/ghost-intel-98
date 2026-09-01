@@ -27,12 +27,18 @@ vi.mock('../src/main/x-listening/capture', () => ({
   openInX: vi.fn(),
   verifyPost: vi.fn(),
 }));
+/** Models the real trap: the auth cookie persists, so "connected" can be true with NO window. */
+const sessionState = { window: null as unknown, connectCalls: [] as unknown[][] };
 vi.mock('../src/main/x-listening/session', () => ({
-  connectXSession: vi.fn(),
+  connectXSession: vi.fn(async (...args: unknown[]) => {
+    sessionState.connectCalls.push(args);
+    sessionState.window = { id: 'opened-window' };
+    return { blocked: false };
+  }),
   getXStatus: vi.fn(),
   clearXSession: vi.fn(),
   resolveXTorGate: () => ({ blocked: false }),
-  getXWindow: () => ({ id: 'win' }),
+  getXWindow: () => sessionState.window,
   navigateXToProfile: vi.fn(async () => ({ blocked: false })),
 }));
 vi.mock('../src/main/x-listening/collection-lock', () => ({
@@ -89,7 +95,11 @@ function harness() {
 }
 
 describe('live collection writes the rich artifact into his document', () => {
-  beforeEach(() => captureTimeline.mockReset());
+  beforeEach(() => {
+    captureTimeline.mockReset();
+    sessionState.window = { id: 'win' };
+    sessionState.connectCalls = [];
+  });
 
   it('injects savePosts — the seam that carries avatar and media', async () => {
     let seen: Record<string, unknown> | undefined;
@@ -138,5 +148,50 @@ describe('live collection writes the rich artifact into his document', () => {
     expect(typeof seen?.saveItems).toBe('function');
     const result = await (seen!.saveItems as Function)('case', [ARTIFACT]);
     expect(result).toEqual({ added: 0, skipped: 0 });
+  });
+
+  it('OPENS a capture window when the cookie says connected but none exists', async () => {
+    // THE TRAP, already hit once in v3.71.1 and recorded as "signed in (cookie) != ready to capture
+    // (window)". The auth cookie is case-independent and persists, so the UI reads SESSION
+    // CONNECTED after a restart while this campaign has no live window. The embed threw
+    // "Connect to X before collecting", refreshAll swallowed it per-target, and the sweep still
+    // reported "Collection sweep complete" having collected nothing — exactly what the field video
+    // shows: 0 posts, 0 findings, no error anywhere the analyst could see.
+    sessionState.window = null;
+    captureTimeline.mockImplementation(async (...args: unknown[]) => {
+      const o = (args[2] ?? {}) as { savePosts?: Function };
+      if (typeof o.savePosts === 'function') await o.savePosts('case', [ARTIFACT]);
+      return { blocked: false, added: 1, skipped: 0, posts: [ARTIFACT] };
+    });
+
+    const { handlers, store } = harness();
+    await (handlers.get(XLS_CHANNELS.addProfile) as never as Function)({}, 'darkwebtoday');
+    const profileId = (await store.load()).profiles[0].id;
+    await (handlers.get(XLS_CHANNELS.refreshProfile) as never as Function)({}, profileId);
+
+    // It ensured a window instead of giving up…
+    expect(sessionState.connectCalls.length, 'a capture window must be opened').toBe(1);
+    // …HIDDEN, because a sweep must never pop the Chromium browser at the analyst.
+    expect(sessionState.connectCalls[0][2]).toMatchObject({ visible: false });
+    // …and the capture then actually happened.
+    expect((await store.load()).posts).toHaveLength(1);
+  });
+
+  it('does NOT claim the sweep completed when every target failed', async () => {
+    // "Collection sweep complete." with zero collected and no reason is how this stayed invisible.
+    sessionState.window = { id: 'win' };
+    captureTimeline.mockImplementation(async () => { throw new Error('page never loaded'); });
+
+    const { handlers, store } = harness();
+    await (handlers.get(XLS_CHANNELS.addProfile) as never as Function)({}, 'darkwebtoday');
+    const result = (await (handlers.get(XLS_CHANNELS.refreshAll) as never as Function)({})) as {
+      failed?: number; collected?: number; reason?: string;
+    };
+    expect(result.failed, 'the failure count must be reported').toBeGreaterThan(0);
+    expect(result.reason, 'and a reason the analyst can read').toBeTruthy();
+
+    // The failure is also recorded where he can find it: the collection run log.
+    const runs = (await store.load()).collectionRuns;
+    expect(runs.some((r) => r.status === 'error')).toBe(true);
   });
 });
