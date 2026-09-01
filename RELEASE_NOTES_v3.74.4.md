@@ -26,8 +26,8 @@ You said this thing would be a pain, and you've been right. This is the fourth a
 
 Windows NSIS installer — `GhostIntel98-Setup-3.74.4.exe` (per-user, no admin; unsigned → **More info → Run anyway**). Installs over the previous build in place.
 
-- **SHA-256:** `__SHA256__`
-- **Size:** `__SIZE__`
+- **SHA-256:** `7674ba7405334c1e9a1cfcbbba13dcf5eccc2f02b2b1c855dc2b85eb82ddee1c`
+- **Size:** `945,166,319 bytes (~901 MB)`
 
 Confirm **Settings ▸ About** reads **3.74.4**.
 
