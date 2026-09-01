@@ -28,8 +28,8 @@ Good instinct though: something *was* reporting a connection that couldn't be us
 
 Windows NSIS installer — `GhostIntel98-Setup-3.74.5.exe` (per-user, no admin; unsigned → **More info → Run anyway**). Installs over the previous build in place.
 
-- **SHA-256:** `__SHA256__`
-- **Size:** `__SIZE__`
+- **SHA-256:** `79418caba80db35206ce6bc9916ec462617e2cbf0cd5c35f201336bd0d3c2c32`
+- **Size:** `945,164,609 bytes (~901 MB)`
 
 Confirm **Settings ▸ About** reads **3.74.5**.
 
