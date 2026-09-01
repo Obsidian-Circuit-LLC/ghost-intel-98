@@ -24,8 +24,8 @@ Everything from v3.74.5 and earlier this week: the capture window being opened b
 
 Windows NSIS installer — `GhostIntel98-Setup-3.75.0.exe` (per-user, no admin; unsigned → **More info → Run anyway**). Installs over the previous build in place.
 
-- **SHA-256:** `__SHA256__`
-- **Size:** `__SIZE__`
+- **SHA-256:** `df9d8ddcfde8bbb2ded78e49df5d838eec89b556906a2513d6f8dc84352c1946`
+- **Size:** `945,164,306 bytes (~901 MB)`
 
 Confirm **Settings ▸ About** reads **3.75.0**.
 
