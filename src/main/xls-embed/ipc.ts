@@ -535,6 +535,31 @@ export function registerXlsEmbedIpc(deps: XlsEmbedDeps): void {
 
     const startedAt = ctx.now();
     return withQueuedCollectionLock(async () => {
+      // ENSURE a capture window FIRST. The auth cookie is case-independent and persisted, so his
+      // UI reads SESSION CONNECTED while this campaign has no live window — after a restart, or
+      // before Open Session was ever clicked ("signed in (cookie) != ready to capture (window)",
+      // the trap the old module was fixed for in v3.71.1).
+      //
+      // v3.74.4 added this ensure AFTER the navigate below, which is useless: navigateXToProfile
+      // itself throws "No capture window is open for this campaign." when there is none, so the
+      // ensure could never run and that is the error his REFRESH button returned. Right fix,
+      // wrong place — order is the whole point here.
+      //
+      // Opened HIDDEN: collection must never pop the Chromium browser at the analyst. Tor gate and
+      // fail-closed posture unchanged — a blocked gate is reported, not worked around.
+      let win = getXWindow(caseId);
+      if (!win) {
+        const opened = await connectXSession(caseId, await loadClearnetEnabled(), { visible: false });
+        if (opened.blocked) {
+          throw new Error(
+            opened.reason ??
+              'Tor is not ready — cannot open a capture window. Wait for Tor, or enable the clearnet opt-in.'
+          );
+        }
+        win = getXWindow(caseId);
+      }
+      if (!win) throw new Error('Could not open a capture window for this campaign.');
+
       const nav = await navigateXToProfile(caseId, profile.username, {}, { collectReplies: activeSettings(s).collectReplies });
       if (nav.blocked) {
         profile.lastError = nav.reason ?? 'blocked';
@@ -551,27 +576,7 @@ export function registerXlsEmbedIpc(deps: XlsEmbedDeps): void {
         return { collected: 0, added: 0 };
       }
 
-      // ENSURE a capture window. The auth cookie is case-independent and persisted, so his UI can
-      // read SESSION CONNECTED while this campaign has no live window — after a restart, or before
-      // Open Session was ever clicked. This is the "signed in (cookie) != ready to capture
-      // (window)" trap the old module was fixed for in v3.71.1; the embed threw here instead, the
-      // sweep swallowed it per target, and it still reported "Collection sweep complete" having
-      // collected nothing at all.
-      //
-      // Opened HIDDEN: a sweep must never pop the Chromium browser at the analyst. Tor gate and
-      // fail-closed posture unchanged — a blocked gate is reported, not worked around.
-      let win = getXWindow(caseId);
-      if (!win) {
-        const opened = await connectXSession(caseId, await loadClearnetEnabled(), { visible: false });
-        if (opened.blocked) {
-          throw new Error(
-            opened.reason ??
-              'Tor is not ready — cannot open a capture window. Wait for Tor, or enable the clearnet opt-in.'
-          );
-        }
-        win = getXWindow(caseId);
-      }
-      if (!win) throw new Error('Could not open a capture window for this campaign.');
+
 
       let ingested = { added: 0, skipped: 0 };
       const result = await captureTimeline(
