@@ -33,6 +33,36 @@ export function lockScreenBgconnLabel(
   return conns.map((c) => `Telegram monitor: LIVE (${c.routing})`).join(' · ');
 }
 
+/** Close Ghost Intel 98. Cancel/× on a Logon dialog means "do not log on", and while the vault is
+ *  locked there is nowhere else to go. Guarded so a host that refuses `close()` is a no-op rather
+ *  than a thrown error on the lock screen. */
+function cancelLogon(): void {
+  try {
+    window.close();
+  } catch {
+    /* nothing sensible to do on the lock screen */
+  }
+}
+
+/** The classic key-and-monitor logon glyph, drawn inline so it needs no asset and stays crisp. */
+function LogonKeyIcon(): JSX.Element {
+  return (
+    <svg width="72" height="72" viewBox="0 0 32 32" shapeRendering="crispEdges" role="img" aria-label="">
+      {/* monitor */}
+      <rect x="11" y="9" width="18" height="13" fill="#c0c0c0" stroke="#000" />
+      <rect x="13" y="11" width="14" height="9" fill="#000080" />
+      <rect x="17" y="22" width="6" height="3" fill="#c0c0c0" stroke="#000" />
+      <rect x="14" y="25" width="12" height="2" fill="#c0c0c0" stroke="#000" />
+      {/* key, overlapping the monitor's lower-left like the original */}
+      <circle cx="9" cy="14" r="5" fill="#ffd700" stroke="#000" />
+      <circle cx="9" cy="14" r="2" fill="#000080" />
+      <rect x="8" y="18" width="2" height="9" fill="#ffd700" stroke="#000" />
+      <rect x="10" y="22" width="3" height="2" fill="#ffd700" stroke="#000" />
+      <rect x="10" y="25" width="3" height="2" fill="#ffd700" stroke="#000" />
+    </svg>
+  );
+}
+
 export function LockScreen(): JSX.Element {
   const refresh = useAuth((st) => st.refresh);
   const settings = useSettings((st) => st.settings);
@@ -97,60 +127,82 @@ export function LockScreen(): JSX.Element {
     }
   };
 
+  const isRecovery = mode === 'recovery';
+
   return (
     <div
       className="ga98-lock-overlay"
       style={{ background: `var(--ga98-shadow-deep) url(${JSON.stringify(settings?.bootSplashImage || splash)}) center / cover no-repeat` }}
     >
-      <div className="window ga98-lock-window">
+      <div className="window ga98-logon-window">
         <div className="title-bar">
-          <div className="title-bar-text">Ghost Intel 98 — Locked</div>
+          <div className="title-bar-text">Ghost Intel 98 - Logon</div>
+          <div className="title-bar-controls">
+            {/* Win98 semantics: Cancel/× on a Logon dialog means "do not log on". There is nowhere
+                else to go while the vault is locked, so it closes the app. `window.close()` needs no
+                new IPC — inventing a lock-exempt quit channel for a cosmetic change would add a
+                capability reachable while locked. */}
+            <button aria-label="Close" onClick={cancelLogon} />
+          </div>
         </div>
-        <div className="window-body">
-          <p style={{ marginTop: 0 }}>
-            {mode === 'password'
-              ? 'Enter your master password to unlock.'
-              : 'Enter your recovery key (dashes and case optional).'}
-          </p>
+        <div className="window-body ga98-logon-body">
+          <div className="ga98-logon-head">
+            <div className="ga98-logon-icon" aria-hidden="true">
+              <LogonKeyIcon />
+            </div>
+            <p className="ga98-logon-prompt">
+              {isRecovery
+                ? <>Enter your recovery key<br />to log on to Ghost Intel 98.</>
+                : <>Enter your master password<br />to log on to Ghost Intel 98.</>}
+            </p>
+          </div>
+
+          <hr className="ga98-logon-rule" />
+
           <form onSubmit={submit}>
-            <div className="field-row-stacked">
+            <div className="ga98-logon-field">
+              <label htmlFor="ga98-logon-input">{isRecovery ? 'Recovery key:' : 'Password:'}</label>
               <input
-                type={mode === 'password' ? 'password' : 'text'}
+                id="ga98-logon-input"
+                type={isRecovery ? 'text' : 'password'}
                 autoFocus
                 value={value}
                 disabled={busy}
                 onChange={(e) => setValue(e.target.value)}
-                aria-label={mode === 'password' ? 'Master password' : 'Recovery key'}
+                aria-label={isRecovery ? 'Recovery key' : 'Master password'}
               />
             </div>
+
             {/* Unlock-error ink: the ORIGINAL classic literal was #a00 — route to the parity-exact
                 --ga98-neg-ink (#a00) its sibling sites use, NOT the LOCKED status tier (#9a1621),
                 which would shift the classic hue. Amethyst variant (#ff8a8a) stays legible on dark. */}
-            {error && <p role="alert" style={{ color: 'var(--ga98-neg-ink)', margin: '4px 0' }}>{error}</p>}
-            <div className="field-row" style={{ justifyContent: 'space-between', gap: 6, marginTop: 8 }}>
+            {error && (
+              <p role="alert" className="ga98-logon-error" style={{ color: 'var(--ga98-neg-ink)' }}>
+                {error}
+              </p>
+            )}
+
+            <hr className="ga98-logon-rule" />
+
+            <div className="ga98-logon-actions">
               <button
                 type="button"
                 disabled={busy}
-                onClick={() => { setMode(mode === 'password' ? 'recovery' : 'password'); setValue(''); setError(null); }}
+                onClick={() => { setMode(isRecovery ? 'password' : 'recovery'); setValue(''); setError(null); }}
               >
-                {mode === 'password' ? 'Use recovery key' : 'Use password'}
+                {isRecovery ? 'Use password…' : 'Use recovery key…'}
               </button>
-              <button type="submit" disabled={busy || !value}>{busy ? 'Unlocking…' : 'Unlock'}</button>
+              <div className="ga98-logon-actions-right">
+                <button type="submit" className="default" disabled={busy || !value}>
+                  {busy ? 'Unlocking…' : 'OK'}
+                </button>
+                <button type="button" onClick={cancelLogon}>Cancel</button>
+              </div>
             </div>
           </form>
+
           {bgConns.length > 0 && (
-            <div
-              className="ga98-lock-bgconn"
-              style={{
-                marginTop: 12,
-                border: '1px solid var(--ga98-shadow-dark)',
-                borderTop: '1px solid var(--ga98-lock-bevel)',
-                borderLeft: '1px solid var(--ga98-lock-bevel)',
-                padding: '6px 8px',
-                background: 'var(--ga98-grey)',
-                fontSize: '0.85em'
-              }}
-            >
+            <div className="ga98-lock-bgconn">
               <p style={{ margin: '0 0 6px' }}>{lockScreenBgconnLabel(bgConns)}</p>
               <div className="field-row" style={{ flexWrap: 'wrap', gap: 6 }}>
                 {bgConns.map((c) => (

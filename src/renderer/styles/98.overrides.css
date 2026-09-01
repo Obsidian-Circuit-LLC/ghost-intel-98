@@ -374,3 +374,87 @@ button:focus {
   width: 360px;
   max-width: 90vw;
 }
+
+/* ---- Logon dialog (GhostExodus's redesign) --------------------------------
+   A classic Win98 Logon dialog: icon + prompt, a rule, the password row, a
+   rule, then Use-recovery-key on the left with OK/Cancel on the right. Sizing
+   and rules are the dialog's own; every colour comes from the theme tokens, so
+   the amethyst skin restyles it without a second definition.
+   -------------------------------------------------------------------------- */
+.ga98-logon-window {
+  width: 560px;
+  max-width: 94vw;
+}
+.ga98-logon-body {
+  padding: 14px 16px 12px;
+}
+.ga98-logon-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+}
+/* The icon sits on the classic blue tile, sized to the two-line prompt beside it. */
+.ga98-logon-icon {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 88px;
+  height: 104px;
+  background: var(--ga98-titlebar-active-from, var(--ga98-blue));
+  border: 2px solid;
+  border-color: var(--ga98-shadow-light) var(--ga98-shadow-dark) var(--ga98-shadow-dark) var(--ga98-shadow-light);
+}
+.ga98-logon-prompt {
+  margin: 6px 0 0;
+  line-height: 1.5;
+}
+/* A 3-D groove, the way a Win98 dialog separates its regions. */
+.ga98-logon-rule {
+  height: 0;
+  margin: 12px 0;
+  border: none;
+  border-top: 1px solid var(--ga98-shadow-dark);
+  border-bottom: 1px solid var(--ga98-shadow-light);
+}
+.ga98-logon-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ga98-logon-field label {
+  flex: 0 0 auto;
+  min-width: 92px;
+  text-align: right;
+}
+.ga98-logon-field input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.ga98-logon-error {
+  margin: 8px 0 0 102px;
+}
+.ga98-logon-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ga98-logon-actions-right {
+  display: flex;
+  gap: 8px;
+}
+.ga98-logon-actions button {
+  min-width: 104px;
+}
+/* The live background-monitor badge keeps its own recessed panel below the dialog body. */
+.ga98-lock-bgconn {
+  margin-top: 12px;
+  padding: 6px 8px;
+  font-size: 0.85em;
+  background: var(--ga98-grey);
+  border: 1px solid var(--ga98-shadow-dark);
+  border-top-color: var(--ga98-lock-bevel);
+  border-left-color: var(--ga98-lock-bevel);
+}
