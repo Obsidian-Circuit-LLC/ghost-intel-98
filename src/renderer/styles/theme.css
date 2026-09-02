@@ -2287,7 +2287,11 @@ input.ga98-text, select.ga98-text {
  * rules are namespaced under .ga98-report-* so they cannot leak into other modules. */
 /* Editor view — light Win98 to match the shell (GhostExodus mockup): silver rails, a grey document
  * workspace with the white page floating on it, beveled toolbar buttons, white sunken inputs/lists. */
-.ga98-report-shell { position: relative; display: grid; grid-template-columns: 210px 1fr 230px; gap: 3px; height: 100%; overflow: hidden; background: #c0c0c0; color: #000; padding: 3px; --ga98-report-statusbar-h: 21px; }
+/* Rails narrowed at GhostExodus's request (v3.75.1) — they were taking space the document
+   needed. The floor is the widest control they contain: the "Introductions…" button measures
+   98px, so with 16px of rail chrome nothing below ~114px is safe. 168/188 keeps a clear margin
+   over that and hands ~84px back to the page. */
+.ga98-report-shell { position: relative; display: grid; grid-template-columns: 168px 1fr 188px; gap: 3px; height: 100%; overflow: hidden; background: #c0c0c0; color: #000; padding: 3px; --ga98-report-statusbar-h: 21px; }
 /* Reserve the statusbar's height under both rails so their bottoms line up with the center document
  * workspace (the statusbar lives inside .ga98-report-center only) instead of hanging a statusbar-height
  * below it. The shared var keeps the rail inset and the pinned statusbar height in lockstep. */
@@ -2728,4 +2732,39 @@ input.ga98-text, select.ga98-text {
 :root[data-ga98-btn] button {
   background-color: var(--ga98-btn-face);
   color: var(--ga98-btn-ink);
+}
+
+/* ---------------------------------------------------------------------------
+   Right-click text menu (GhostExodus request, v3.75.1)
+
+   Cut / Copy / Paste / Select All on any text field — Electron supplies no
+   native menu for these, so right-clicking an input did nothing at all.
+
+   A disabled item stays VISIBLE and greyed rather than disappearing: a menu
+   that changes shape is harder to learn than one whose layout is fixed, which
+   is exactly how the real Windows menu behaves.
+   --------------------------------------------------------------------------- */
+.ga98-text-context-menu {
+  position: fixed;
+  z-index: 12000;
+  min-width: 140px;
+  padding: 2px;
+  background: var(--ga98-grey);
+  color: var(--ga98-text);
+  border: 2px solid;
+  border-color: var(--ga98-shadow-light) var(--ga98-shadow-dark) var(--ga98-shadow-dark) var(--ga98-shadow-light);
+  box-shadow: 2px 2px 0 var(--ga98-shadow-deep);
+}
+.ga98-text-context-item {
+  padding: 3px 18px 3px 10px;
+  font-size: 11px;
+  cursor: default;
+  user-select: none;
+}
+.ga98-text-context-item:not(.is-disabled):hover {
+  background: var(--ga98-select-bg, var(--ga98-blue));
+  color: var(--ga98-titlebar-text);
+}
+.ga98-text-context-item.is-disabled {
+  color: var(--ga98-text-dim);
 }

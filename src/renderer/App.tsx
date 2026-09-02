@@ -11,6 +11,7 @@ import { Window } from './shell/Window';
 import { ModuleHost } from './shell/ModuleHost';
 import { DialogHost } from './shell/Dialog';
 import { Toaster } from './shell/Toaster';
+import { TextContextMenu } from './shell/TextContextMenu';
 import { Shortcuts } from './shell/Shortcuts';
 import { Welcome } from './shell/Welcome';
 import { LockScreen } from './shell/LockScreen';
@@ -181,6 +182,9 @@ export function App(): JSX.Element {
       )}
       <Toaster />
       <DialogHost />
+      {/* Right-click Cut/Copy/Paste on any text field. Mounted at the shell so it covers every
+          module, and it yields to any handler that already claimed the event. */}
+      <TextContextMenu />
       {!splashDone && <SplashScreen onDone={() => setSplashDone(true)} />}
     </div>
   );
