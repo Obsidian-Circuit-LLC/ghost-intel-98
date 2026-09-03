@@ -2287,7 +2287,7 @@ input.ga98-text, select.ga98-text {
  * rules are namespaced under .ga98-report-* so they cannot leak into other modules. */
 /* Editor view — light Win98 to match the shell (GhostExodus mockup): silver rails, a grey document
  * workspace with the white page floating on it, beveled toolbar buttons, white sunken inputs/lists. */
-/* Rails narrowed at GhostExodus's request (v3.75.1) — they were taking space the document
+/* Rails narrowed at GhostExodus's request (v3.76.0) — they were taking space the document
    needed. The floor is the widest control they contain: the "Introductions…" button measures
    98px, so with 16px of rail chrome nothing below ~114px is safe. 168/188 keeps a clear margin
    over that and hands ~84px back to the page. */
@@ -2735,7 +2735,7 @@ input.ga98-text, select.ga98-text {
 }
 
 /* ---------------------------------------------------------------------------
-   Right-click text menu (GhostExodus request, v3.75.1)
+   Right-click text menu (GhostExodus request, v3.76.0)
 
    Cut / Copy / Paste / Select All on any text field — Electron supplies no
    native menu for these, so right-clicking an input did nothing at all.
