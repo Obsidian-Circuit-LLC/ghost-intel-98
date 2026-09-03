@@ -2768,3 +2768,19 @@ input.ga98-text, select.ga98-text {
 .ga98-text-context-item.is-disabled {
   color: var(--ga98-text-dim);
 }
+
+/* Edit ops at the head of the Reports right-click menu (GhostExodus request, v3.76.1).
+   Laid out as a row so the four verbs read at a glance and the descriptor library below keeps its
+   own vertical rhythm; separated by a groove so the two halves of the menu stay distinct. */
+.ga98-report-descmenu-edit {
+  display: flex;
+  gap: 4px;
+  padding-bottom: 6px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--ga98-shadow-dark);
+}
+.ga98-report-descmenu-edit button {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 2px 6px;
+}

@@ -107,3 +107,23 @@ export function descriptorInsertHtml(d: { name: string; body: string }, mode: 't
 export function introductionInsertHtml(d: { name: string; body: string }, mode: 'text' | 'title'): string {
   return descriptorInsertHtml(d, mode);
 }
+
+/**
+ * Build the HTML a PASTE inserts at the caret in a report text block.
+ *
+ * Clipboard content is the least trustworthy input the editor takes — it can hold anything the user
+ * copied from anywhere, including markup from a scraped page. It is escaped exactly like a
+ * descriptor, so nothing pasted into a report body can carry tags, handlers or scripts into the
+ * document (and, since reports are exported to PDF/DOCX/HTML, into the artefact afterwards).
+ *
+ * Line breaks are preserved as `<br>` because a pasted paragraph that collapses to one line is
+ * useless — but they are the ONLY markup produced, and they are generated here rather than passed
+ * through from the clipboard.
+ */
+export function pastedTextHtml(text: string): string {
+  return String(text ?? '')
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .map((line) => escape(line))
+    .join('<br>');
+}

@@ -18,7 +18,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { ReportBlock, Descriptor } from '@shared/reports-types';
-import { sanitizeReportHtml, descriptorInsertHtml, introductionInsertHtml, FONT_SIZES, FONT_FAMILIES } from '../rich-text';
+import { sanitizeReportHtml, descriptorInsertHtml, introductionInsertHtml, pastedTextHtml, FONT_SIZES, FONT_FAMILIES } from '../rich-text';
+import { textMenuItems, type TextMenuAction } from '../../../shell/text-menu';
 
 export interface TextBlockProps {
   block: Extract<ReportBlock, { kind: 'text' }>;
@@ -260,6 +261,59 @@ export function TextBlock(props: TextBlockProps): JSX.Element {
     commit();
   }
 
+  /**
+   * Cut / Copy / Paste / Select All for the right-click menu (GhostExodus's request: right-clicking
+   * a Reports text box offered descriptors but no edit ops).
+   *
+   * Opening the popover moves focus off the block, so every op first restores the caret the menu
+   * saved in `savedRange` — the same range the descriptor insert uses. Paste goes through
+   * `insertFragment` like a descriptor does, so clipboard content is escaped by `pastedTextHtml`
+   * and re-sanitised by `commit()`: nothing pasted can carry markup into the report, or into the
+   * PDF/DOCX exported from it.
+   */
+  function restoreCaret(): boolean {
+    const el = ref.current;
+    if (!el) return false;
+    el.focus();
+    const range = savedRange.current;
+    if (!range) return true;
+    const sel = window.getSelection();
+    if (!sel) return true;
+    sel.removeAllRanges();
+    sel.addRange(range);
+    return true;
+  }
+
+  async function runEditAction(action: TextMenuAction): Promise<void> {
+    if (!restoreCaret()) return;
+    if (action === 'selectAll') {
+      const el = ref.current;
+      if (!el) return;
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const sel = window.getSelection();
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+      return;
+    }
+    if (action === 'paste') {
+      try {
+        const text = await navigator.clipboard.readText();
+        if (text) insertFragment(pastedTextHtml(text));
+      } catch {
+        /* clipboard refused — leave the block untouched rather than half-pasting */
+      }
+      return;
+    }
+    try {
+      document.execCommand(action);
+      // Cut mutates the block, so persist it the way a descriptor insert does.
+      if (action === 'cut') commit();
+    } catch {
+      /* best effort */
+    }
+  }
+
   function insertDescriptor(d: Descriptor, mode: 'text' | 'title'): void { insertFragment(descriptorInsertHtml(d, mode)); }
   function insertIntroduction(d: Descriptor, mode: 'text' | 'title'): void { insertFragment(introductionInsertHtml(d, mode)); }
 
@@ -365,6 +419,24 @@ export function TextBlock(props: TextBlockProps): JSX.Element {
           aria-label="Insert descriptor or introduction"
           style={{ position: 'fixed', left: menu.x, top: menu.y }}
         >
+          {/* Edit ops first — the reason most right-clicks happen — then the descriptor library. */}
+          <div className="ga98-report-descmenu-edit">
+            {textMenuItems({
+              editable: true,
+              hasSelection: !!savedRange.current && !savedRange.current.collapsed,
+              hasContent: (ref.current?.textContent ?? '').length > 0,
+            }).map((item) => (
+              <button
+                key={item.action}
+                type="button"
+                disabled={!item.enabled}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => { void runEditAction(item.action); setMenu(null); }}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
           {descriptors.length === 0 && introductions.length === 0 ? (
             <div className="ga98-report-descmenu-empty">No descriptors or introductions yet.</div>
           ) : null}
