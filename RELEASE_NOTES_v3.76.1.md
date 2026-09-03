@@ -16,8 +16,8 @@ The reason: your clipboard could be holding anything you copied from anywhere, i
 
 Windows NSIS installer — `GhostIntel98-Setup-3.76.1.exe` (per-user, no admin; unsigned → **More info → Run anyway**). Installs over the previous build in place.
 
-- **SHA-256:** `__SHA256__`
-- **Size:** `__SIZE__`
+- **SHA-256:** `c5a5ca8d8b54646d699120884e148831f71a30a320e3d4c8ed4e50038c03fcd7`
+- **Size:** `945,166,383 bytes (~901 MB)`
 
 Confirm **Settings ▸ About** reads **3.76.1**.
 
