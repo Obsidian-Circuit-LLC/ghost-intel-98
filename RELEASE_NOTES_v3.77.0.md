@@ -34,7 +34,7 @@ Closing the WebSDR window within a second of opening a receiver left a re-layout
 
 Windows NSIS installer — `GhostIntel98-Setup-3.77.0.exe` (per-user, no admin; unsigned → **More info → Run anyway**). Installs over the previous build in place.
 
-- **SHA-256:** `PENDING`
-- **Size:** `PENDING`
+- **SHA-256:** `abc6c638779dbb12d0af990c75b51fecac26f28bfed19e0f86a529e24bb65c5b`
+- **Size:** `945,170,948 bytes (~901 MB)`
 
 Confirm **Settings ▸ About** reads **3.77.0**.
