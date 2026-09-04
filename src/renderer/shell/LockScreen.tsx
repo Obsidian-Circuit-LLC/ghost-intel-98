@@ -8,7 +8,11 @@ import { useState, useEffect } from 'react';
 import type { FormEvent } from 'react';
 import { useAuth, useSettings } from '../state/store';
 import splash from '../assets/boot-splash.jpg';
-import logoUrl from '../assets/logo.png';
+// The hex-G mark and GHOST INTEL 98 wordmark from GhostExodus's own logon mockup, lifted out of
+// the mockup image itself and cut off its grey background by flooding from the border — a flat
+// colour key would have punched holes through the chrome lettering, which is grey too. Transparent
+// so it sits on either theme's dialog face.
+import brandUrl from '../assets/logon-brand.webp';
 
 /** A live background-connection summary, as returned by the lock-exempt bgconn:status channel. */
 interface BgConnStatus {
@@ -153,7 +157,7 @@ export function LockScreen(): JSX.Element {
               import. Hidden below 620px so a narrow window keeps the form usable. */}
           <div className="ga98-logon-brand" aria-hidden="true">
             <div className="ga98-logon-welcome">WELCOME</div>
-            <img className="ga98-logon-logo" src={logoUrl} alt="" />
+            <img className="ga98-logon-logo" src={brandUrl} alt="" />
           </div>
 
           <div className="ga98-logon-form">
