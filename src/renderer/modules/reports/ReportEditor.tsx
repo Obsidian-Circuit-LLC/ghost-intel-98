@@ -15,6 +15,7 @@ import { TableBlock } from './blocks/TableBlock';
 import { RightRail } from './panels/RightRail';
 import { ContactBook } from './ContactBook';
 import { SignaturePad } from '../invoices/SignaturePad';
+import { confirmDialog } from '../../state/dialogs';
 import { extractOutline, wordCount, estimatePageCount } from './outline';
 
 export interface ReportEditorProps {
@@ -73,6 +74,10 @@ export function ReportEditor(props: ReportEditorProps): JSX.Element {
   } = props;
   const [dragOver, setDragOver] = useState(false);
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
+  // The text block the caret is in — what "Remove text" acts on. Null means nothing is chosen
+  // and the control stays disabled rather than guessing between blocks.
+  const [activeTextId, setActiveTextId] = useState<string | null>(null);
+  const activeTextBlock = report.blocks.some((b) => b.id === activeTextId && b.kind === 'text');
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
   // Which header field a "Choose…" click opened the ContactBook popup for — null when it's closed.
   // The one popup instance serves both fields; `onUse` below reads this to decide which id to patch.
@@ -156,7 +161,24 @@ export function ReportEditor(props: ReportEditorProps): JSX.Element {
 
   function removeBlock(id: string): void {
     if (id === selectedImageId) setSelectedImageId(null);
+    // The pointer must not outlive the block it points at, or the next Remove deletes a block the
+    // operator never chose.
+    if (id === activeTextId) setActiveTextId(null);
     patch({ blocks: report.blocks.filter((b) => b.id !== id) });
+  }
+
+  /** Remove the text box the caret is in — the field-reported gap: image and table blocks have had
+   *  a remove affordance since they were written, text blocks never did, so an accidental "+ Text"
+   *  was permanent. Gated behind a confirm because it destroys writing, which is the one thing in a
+   *  report that cannot be re-derived from the case. */
+  async function removeActiveTextBlock(): Promise<void> {
+    const id = activeTextId;
+    if (!id) return;
+    const ok = await confirmDialog(
+      'Delete this text box and everything written in it?\n\nThis cannot be undone.',
+      'Delete text box',
+    );
+    if (ok) removeBlock(id);
   }
 
   // Drag-drop images onto the body → same encrypt-and-append path as "+ Photo". Only png/jpeg (the
@@ -228,6 +250,17 @@ export function ReportEditor(props: ReportEditorProps): JSX.Element {
       <div className="ga98-report-center">
         <div className="ga98-report-toolbar">
           <button type="button" onClick={addTextBlock}>+ Text</button>
+          <button
+            type="button"
+            className="ga98-report-removetext"
+            disabled={!activeTextBlock}
+            title={activeTextBlock
+              ? 'Delete the text box you are working in'
+              : 'Click inside a text box first, then use this to remove it'}
+            onClick={() => { void removeActiveTextBlock(); }}
+          >
+            − Remove text
+          </button>
           <label className="ga98-report-addphoto">
             <span>+ Photo</span>
             <input
@@ -399,7 +432,14 @@ export function ReportEditor(props: ReportEditorProps): JSX.Element {
               {report.blocks.map((b) => {
                 if (b.kind === 'text') {
                   return (
-                    <div key={b.id} id={`ga98-report-block-${b.id}`} className="ga98-report-block">
+                    <div
+                      key={b.id}
+                      id={`ga98-report-block-${b.id}`}
+                      className="ga98-report-block"
+                      // focusin (not focus) because the caret lands on the contentEditable INSIDE
+                      // this wrapper, and focus does not bubble.
+                      onFocus={() => setActiveTextId(b.id)}
+                    >
                       <TextBlock
                         block={b}
                         onChange={(html) => updateTextBlock(b.id, html)}
