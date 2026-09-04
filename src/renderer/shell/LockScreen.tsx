@@ -8,6 +8,7 @@ import { useState, useEffect } from 'react';
 import type { FormEvent } from 'react';
 import { useAuth, useSettings } from '../state/store';
 import splash from '../assets/boot-splash.jpg';
+import logoUrl from '../assets/logo.png';
 
 /** A live background-connection summary, as returned by the lock-exempt bgconn:status channel. */
 interface BgConnStatus {
@@ -134,7 +135,7 @@ export function LockScreen(): JSX.Element {
       className="ga98-lock-overlay"
       style={{ background: `var(--ga98-shadow-deep) url(${JSON.stringify(settings?.bootSplashImage || splash)}) center / cover no-repeat` }}
     >
-      <div className="window ga98-logon-window">
+      <div className="window ga98-logon-window has-brand">
         <div className="title-bar">
           <div className="title-bar-text">Ghost Intel 98 - Logon</div>
           <div className="title-bar-controls">
@@ -146,6 +147,16 @@ export function LockScreen(): JSX.Element {
           </div>
         </div>
         <div className="window-body ga98-logon-body">
+          {/* Left brand panel + divider, to GhostExodus's mockup. The artwork is the app's own
+              shipped logo; his mock used a wordmark we do not have as an asset, so the LAYOUT is
+              reproduced rather than the lettering imitated. Swapping in a supplied PNG is one
+              import. Hidden below 620px so a narrow window keeps the form usable. */}
+          <div className="ga98-logon-brand" aria-hidden="true">
+            <div className="ga98-logon-welcome">WELCOME</div>
+            <img className="ga98-logon-logo" src={logoUrl} alt="" />
+          </div>
+
+          <div className="ga98-logon-form">
           <div className="ga98-logon-head">
             <div className="ga98-logon-icon" aria-hidden="true">
               <LogonKeyIcon />
@@ -200,6 +211,8 @@ export function LockScreen(): JSX.Element {
               </div>
             </div>
           </form>
+
+          </div>
 
           {bgConns.length > 0 && (
             <div className="ga98-lock-bgconn">

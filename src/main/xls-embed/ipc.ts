@@ -689,6 +689,7 @@ export function registerXlsEmbedIpc(deps: XlsEmbedDeps): void {
 
     let added = 0;
     let observed = 0;
+    const startedAt = ctx.now();
     const result = await captureNetwork(
       { caseId, channelId: profile.username, targetUsername: profile.username, kind },
       {
@@ -721,9 +722,37 @@ export function registerXlsEmbedIpc(deps: XlsEmbedDeps): void {
       }
     );
 
+    // Record the run in HIS log, success or failure. captureNetwork writes its own run record into
+    // the OLD store, which his station never reads — so without this a blocked extraction left no
+    // trace anywhere he could see, exactly the way a failing sweep used to report "complete".
+    s.collectionRuns.push({
+      id: ctx.makeId(), caseId, profileId: target, username: profile.username,
+      operation: kind, startedAt, completedAt: ctx.now(),
+      requestedPasses: 0, passesCompleted: result.completedPasses ?? 0,
+      observed, added, duplicates: Math.max(0, observed - added),
+      stopReason: result.blocked ? (result.reason ?? 'blocked') : null,
+      reachedEnd: Boolean(result.reachedEnd), frontierUsernames: [],
+      status: result.blocked ? 'error' : 'ok',
+      error: result.blocked ? (result.reason ?? 'blocked') : null,
+    } as never);
+
     await store.save(s);
     emit(XLS_EVENT_CHANNELS.onStateChanged, clientState(s));
-    return { collected: observed, added, relationship: kind === 'following' ? 'following' : 'follower', reachedEnd: result.reachedEnd };
+    if (result.blocked) {
+      emit(XLS_EVENT_CHANNELS.onBackgroundError, {
+        message: `Network extraction blocked: ${result.reason ?? 'unknown reason'}`,
+      });
+    }
+    // Surface the block. Returning a bare zero here is how "Network extraction complete" came to
+    // mean "nothing happened and I will not tell you why".
+    return {
+      collected: observed,
+      added,
+      relationship: kind === 'following' ? 'following' : 'follower',
+      reachedEnd: Boolean(result.reachedEnd),
+      blocked: Boolean(result.blocked),
+      reason: result.blocked ? (result.reason ?? 'Network extraction was blocked.') : undefined,
+    };
   });
 
   handle(XLS_CHANNELS.clearRelationships, async (e, profileId) => {

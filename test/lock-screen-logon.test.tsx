@@ -92,4 +92,29 @@ describe('Ghost Intel 98 — Logon', () => {
     const ok = Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'OK') as HTMLButtonElement;
     expect(ok.disabled).toBe(true);
   });
+
+  it('shows the brand panel, decorative and out of the accessibility tree', async () => {
+    await mount();
+    const brand = container.querySelector('.ga98-logon-brand');
+    expect(brand, 'the logon dialog carries a brand column').toBeTruthy();
+    // WELCOME + the logo are decoration. A screen reader announcing them before the password
+    // prompt would add noise without information; the dialog is already named by its title bar.
+    expect(brand!.getAttribute('aria-hidden')).toBe('true');
+    expect(brand!.textContent).toContain('WELCOME');
+    const logo = brand!.querySelector('img');
+    expect(logo, 'the logo renders as an image, not alt text').toBeTruthy();
+    expect(logo!.getAttribute('src')).toBeTruthy();
+    // Decorative image: an empty alt is correct, a described one is not.
+    expect(logo!.getAttribute('alt')).toBe('');
+  });
+
+  it('keeps the password form a sibling of the brand column, not a child of it', async () => {
+    // If the form nested inside the brand panel it would inherit its fixed 220px width and the
+    // password field would be unusably narrow — the failure this asserts against.
+    await mount();
+    const form = container.querySelector('.ga98-logon-form');
+    expect(form, 'the form lives in its own column').toBeTruthy();
+    expect(form!.closest('.ga98-logon-brand')).toBeNull();
+    expect(form!.querySelector('input')).toBeTruthy();
+  });
 });

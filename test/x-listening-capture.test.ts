@@ -164,6 +164,32 @@ describe('toPostArtifact', () => {
     expect(a.posts[0]!.evidenceHash).not.toBe(b.posts[0]!.evidenceHash);
   });
 
+  it('carries the author AVATAR onto the artifact — the source of every display picture', async () => {
+    // The scraper reads each post author's avatar URL off the page, and XHarvestedItem has carried
+    // it since v3.72.5 — but toPostArtifact rebuilt the artifact field by field and never copied it.
+    // So the persisted post had no avatar, and no display picture could be resolved from it. Seven
+    // releases of "the pictures still aren't working" ended at this one missing line.
+    const res = await captureTimeline(
+      WIN,
+      REQ,
+      deps({ runCapture: async () => [raw({ avatar: 'https://pbs.twimg.com/profile_images/1/a.jpg' })] }),
+    );
+    expect(res.posts[0]!.avatar).toBe('https://pbs.twimg.com/profile_images/1/a.jpg');
+  });
+
+  it('the avatar does NOT perturb the evidence hash', async () => {
+    // An author changing their profile picture is not an edit to the post's content. The hash must
+    // stay stable across it, exactly as it does for displayName (canonicalPostEvidence excludes
+    // both), or every avatar change would look like tampered evidence.
+    const withAvatar = await captureTimeline(
+      WIN, REQ, deps({ runCapture: async () => [raw({ avatar: 'https://pbs.twimg.com/profile_images/1/a.jpg' })] }),
+    );
+    const changed = await captureTimeline(
+      WIN, REQ, deps({ runCapture: async () => [raw({ avatar: 'https://pbs.twimg.com/profile_images/2/b.jpg' })] }),
+    );
+    expect(withAvatar.posts[0]!.evidenceHash).toBe(changed.posts[0]!.evidenceHash);
+  });
+
   it('kind:"post" carries parentPostId: null (no fabricated lineage)', async () => {
     const res = await captureTimeline(WIN, REQ, deps());
     expect(res.posts[0]!.kind).toBe('post');

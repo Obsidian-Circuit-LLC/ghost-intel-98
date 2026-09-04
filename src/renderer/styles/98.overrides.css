@@ -458,3 +458,59 @@ button:focus {
   border-top-color: var(--ga98-lock-bevel);
   border-left-color: var(--ga98-lock-bevel);
 }
+
+/* ---- Logon brand panel (GhostExodus's mockup, v3.77.0) --------------------
+   WELCOME + the app logo on the left, a groove divider, the form on the right.
+   The dialog widens to carry it; below 620px the panel drops out entirely so a
+   small window keeps a usable form rather than a squeezed one.
+   -------------------------------------------------------------------------- */
+.ga98-logon-window.has-brand {
+  width: 720px;
+}
+.ga98-logon-body {
+  display: flex;
+  align-items: stretch;
+  gap: 18px;
+}
+.ga98-logon-brand {
+  flex: 0 0 auto;
+  width: 220px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding-right: 18px;
+  border-right: 1px solid var(--ga98-shadow-dark);
+  box-shadow: 1px 0 0 var(--ga98-shadow-light);
+}
+.ga98-logon-welcome {
+  font-size: 26px;
+  font-weight: bold;
+  letter-spacing: 0.14em;
+  /* Classic's --ga98-blue is the Win98 logon navy, correct here. Amethyst redefines that same
+     token as a near-black SURFACE (#241a33) sitting on a #1a1822 face — using it as a text colour
+     there would have painted WELCOME invisible. Amethyst gets the accent instead. */
+  color: var(--ga98-blue);
+  text-shadow: 1px 1px 0 var(--ga98-shadow-light);
+}
+:root[data-ga98-theme='amethyst'] .ga98-logon-welcome {
+  color: var(--ga98-accent);
+  text-shadow: none;
+}
+.ga98-logon-logo {
+  width: 190px;
+  max-width: 100%;
+  height: auto;
+  image-rendering: auto;
+}
+.ga98-logon-form {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+@media (max-width: 620px) {
+  .ga98-logon-brand { display: none; }
+}

@@ -170,6 +170,15 @@ export interface XPostArtifact extends HarvestedItem {
    *  Absent when none was visible (honest absence). NOT part of `canonicalPostEvidence` (a display
    *  rename is not a content edit of the post), so it never perturbs `evidenceHash`. */
   displayName?: string;
+  /** The author's avatar URL at capture, read off the page by the scraper. Carried for DISPLAY only
+   *  and excluded from `canonicalPostEvidence` for the same reason `displayName` is: an author
+   *  changing their profile picture is not an edit to the post, and hashing it would make every
+   *  avatar change look like tampered evidence. Absent when none was visible (honest absence).
+   *
+   *  This is where display pictures come from. XHarvestedItem has carried it since v3.72.5, but the
+   *  artifact never declared it, so `toPostArtifact` dropped it and nothing downstream could show a
+   *  picture — the root of seven releases of "the pictures still aren't working". */
+  avatar?: string;
   synthetic?: boolean;
   mediaRefs?: string[];
   /** Prior captured versions of THIS post, appended on a text/media re-ingest diff (Task A2,
