@@ -32,8 +32,8 @@ Fixed at the point of loss: those line wrappers are turned into real paragraphs 
 
 Windows NSIS installer — `GhostIntel98-Setup-3.78.0.exe` (per-user, no admin; unsigned → **More info → Run anyway**). Installs over the previous build in place.
 
-- **SHA-256:** `PENDING`
-- **Size:** `PENDING`
+- **SHA-256:** `2f058bc67b8f527bec30a8c76362db731ff0cacb508ed45d8ed1f415e9db3904`
+- **Size:** `945,197,423 bytes (~901 MB)`
 
 Confirm **Settings ▸ About** reads **3.78.0**.
 
