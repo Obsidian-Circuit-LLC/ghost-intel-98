@@ -2367,6 +2367,11 @@ input.ga98-text, select.ga98-text {
   cursor: text;
 }
 .ga98-report-textblock-body:focus { border-color: #000080 #000080 #000080 #000080; }
+/* Paragraph rhythm identical to the export stylesheet (report-html.ts). A line typed with Enter is
+   a <p>; without this it renders flush in the editor and spaced in the PDF, which is the "looks
+   clustered" mismatch from the field. */
+.ga98-report-textblock-body p { margin: 0 0 0.65em; }
+.ga98-report-textblock-body p:last-child { margin-bottom: 0; }
 .ga98-report-textblock-body:empty::before {
   content: attr(data-placeholder);
   color: #9a9a9a;

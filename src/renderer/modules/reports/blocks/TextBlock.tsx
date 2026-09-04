@@ -76,6 +76,15 @@ export function TextBlock(props: TextBlockProps): JSX.Element {
       && el.contains(sel.getRangeAt(0).commonAncestorContainer)) ? sel.getRangeAt(0).cloneRange() : null;
   }
 
+  // Make Enter produce <p> rather than Chromium's default <div>. The sanitizer converts stray divs
+  // anyway, so this is not what saves the break — it is what keeps the EDITOR honest: a div line has
+  // no margin and a <p> line has one, so without this the text looked tight while being typed and
+  // spaced once reopened or exported. Same shape on screen as in the PDF.
+  useEffect(() => {
+    try { document.execCommand('defaultParagraphSeparator', false, 'p'); }
+    catch { /* not implemented in jsdom/headless; the sanitizer still handles divs */ }
+  }, []);
+
   /** Sanitize the live DOM and hand the result up. Called on every input + on blur, so the stored
    *  html is never a moment behind an unsanitized edit. */
   function commit(): void {

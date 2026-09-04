@@ -74,9 +74,30 @@ function installHook(): void {
  * font-family:<whitelisted> / text-align:left|center|right, and `a[href]` scheme-guarded to
  * http/https/mailto. Everything else — scripts, event handlers, images, other schemes/props — is removed.
  */
+/**
+ * Turn contentEditable's line wrappers into paragraphs BEFORE sanitizing.
+ *
+ * Chromium wraps each Enter-separated line in a `<div>` (`defaultParagraphSeparator` is "div"),
+ * and `div` is not on the allowlist below. DOMPurify UNWRAPS a disallowed tag rather than dropping
+ * its text, so `<div>a</div><div>b</div>` came out as `ab` — the break destroyed at edit time,
+ * before the block was ever saved. `<p>` is allowlisted, is what the DOCX tokenizer already treats
+ * as a paragraph boundary, and carries a margin in the export stylesheet, so rename rather than
+ * widen the allowlist: nothing new gets through, the break survives.
+ */
+function paragraphiseEditorDivs(html: string): string {
+  if (typeof DOMParser === 'undefined' || !html.includes('<div')) return html;
+  const doc = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html');
+  for (const div of Array.from(doc.body.querySelectorAll('div'))) {
+    const p = doc.createElement('p');
+    while (div.firstChild) p.appendChild(div.firstChild);
+    div.replaceWith(p);
+  }
+  return doc.body.innerHTML;
+}
+
 export function sanitizeReportHtml(html: string): string {
   installHook();
-  return DOMPurify.sanitize(String(html ?? ''), {
+  return DOMPurify.sanitize(paragraphiseEditorDivs(String(html ?? '')), {
     ALLOWED_TAGS: ['b', 'strong', 'i', 'em', 'u', 'p', 'br', 'span', 'ul', 'ol', 'li', 'a'],
     ALLOWED_ATTR: ['style', 'href'],
     ALLOW_DATA_ATTR: false
