@@ -78,18 +78,12 @@ describe('the window.xls bridge matches his surface exactly', () => {
 
   it('registers every advertised channel main-side, sender-validated', async () => {
     const registered: string[] = [];
+    const handlers: Array<[string, (e: unknown, ...args: unknown[]) => unknown]> = [];
     const { registerXlsEmbedIpc } = await import('../src/main/xls-embed/ipc');
-    const senderChecked: string[] = [];
     registerXlsEmbedIpc({
       handle: (channel: string, fn: (e: unknown, ...args: unknown[]) => unknown) => {
         registered.push(channel);
-        // Every handler must call assertTrustedSender FIRST; the fake event below makes that
-        // observable — an unvalidated handler would run its body instead of throwing.
-        try {
-          void fn({ __untrusted: true }, undefined);
-        } catch {
-          senderChecked.push(channel);
-        }
+        handlers.push([channel, fn]);
       },
       getWindow: () => null,
     } as never);
@@ -97,5 +91,19 @@ describe('the window.xls bridge matches his surface exactly', () => {
     const advertised = Object.values(XLS_CHANNELS);
     const unregistered = advertised.filter((c) => !registered.includes(c));
     expect(unregistered, `advertised but never registered: ${unregistered.join(', ')}`).toEqual([]);
+
+    // Every handler must call assertTrustedSender FIRST. The handlers are ASYNC, so a thrown
+    // rejection is a rejected promise, not a synchronous throw — an earlier version of this test
+    // wrapped the call in try/catch, caught nothing, asserted nothing, and filled the run with 47
+    // unhandled rejections while reporting green. Await each one instead.
+    const unguarded: string[] = [];
+    for (const [channel, fn] of handlers) {
+      const outcome = await Promise.resolve()
+        .then(() => fn({ __untrusted: true }, undefined))
+        .then(() => 'resolved', (e: unknown) => (e as Error)?.message ?? 'rejected');
+      if (!/untrusted sender/i.test(outcome)) unguarded.push(`${channel} (${outcome})`);
+    }
+    expect(unguarded, `handlers that did not reject an untrusted sender: ${unguarded.join(', ')}`)
+      .toEqual([]);
   });
 });

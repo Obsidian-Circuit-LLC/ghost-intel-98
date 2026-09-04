@@ -505,6 +505,9 @@ export function toPostArtifact(item: XHarvestedItem, mediaRefs?: readonly string
     // `canonicalPostEvidence` excludes it, so it is preserved for display without perturbing
     // `evidenceHash` (a repost/comment author's name is not content evidence of the post).
     ...(item.displayName ? { displayName: item.displayName } : {}),
+    // Same rule as displayName: set BEFORE the hash, excluded from `canonicalPostEvidence`, so the
+    // picture is preserved for display without an avatar change perturbing the evidence hash.
+    ...(item.avatar ? { avatar: item.avatar } : {}),
     mediaRefs: mediaRefs && mediaRefs.length ? [...mediaRefs] : undefined,
     evidenceHash: '',
   };
