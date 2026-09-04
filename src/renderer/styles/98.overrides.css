@@ -465,7 +465,7 @@ button:focus {
    small window keeps a usable form rather than a squeezed one.
    -------------------------------------------------------------------------- */
 .ga98-logon-window.has-brand {
-  width: 720px;
+  width: 760px;
 }
 .ga98-logon-body {
   display: flex;
@@ -474,7 +474,7 @@ button:focus {
 }
 .ga98-logon-brand {
   flex: 0 0 auto;
-  width: 220px;
+  width: 292px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -499,7 +499,7 @@ button:focus {
   text-shadow: none;
 }
 .ga98-logon-logo {
-  width: 190px;
+  width: 268px;
   max-width: 100%;
   height: auto;
   image-rendering: auto;
@@ -511,6 +511,6 @@ button:focus {
   flex-direction: column;
   justify-content: center;
 }
-@media (max-width: 620px) {
+@media (max-width: 700px) {
   .ga98-logon-brand { display: none; }
 }

@@ -87,6 +87,8 @@ body{font-family:'Segoe UI',sans-serif;margin:0;color:#111;background:#fff}
 .from,.to{margin-bottom:1em}
 .from h3,.to h3{margin:0 0 0.25em;font-size:0.85em;text-transform:uppercase;letter-spacing:0.05em;color:#555}
 .block{margin:1em 0}
+.block-text p{margin:0 0 0.65em}
+.block-text p:last-child{margin-bottom:0}
 .block-image img{max-width:100%;display:block}
 .block-image figcaption{font-size:0.85em;color:#555;margin-top:0.25em}
 .ga98-report-doc-table{border-collapse:collapse;width:100%;margin:1em 0}
