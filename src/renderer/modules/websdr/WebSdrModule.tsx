@@ -229,8 +229,27 @@ export function WebSdrModule({ windowId }: { windowId?: string } = {}): JSX.Elem
 
   // ---- receiver overlay bounds / visibility -----------------------------
   const boundsRetryRef = useRef(0);
+  // Every re-sync this module schedules, so the module can take them with it when it goes. Without
+  // this, closing the window mid-retry leaves the frame chain running against a host ref React has
+  // already nulled: work with no owner, forty frames of it.
+  const aliveRef = useRef(true);
+  const rafRef = useRef<number | null>(null);
+  const resyncTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  /** Re-run syncBounds on the next frame, tracked so unmount can cancel it. */
+  function resyncNextFrame(): void {
+    if (!aliveRef.current) return;
+    rafRef.current = requestAnimationFrame(syncBounds);
+  }
+  useEffect(() => {
+    return () => {
+      aliveRef.current = false;
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+      for (const t of resyncTimersRef.current) clearTimeout(t);
+      resyncTimersRef.current = [];
+    };
+  }, []);
   function syncBounds(): void {
-    if (!api) return;
+    if (!api || !aliveRef.current) return;
     // Show the overlay only when this window is active, a receiver is loaded, and we're not on the
     // recordings panel; otherwise HIDE (never leave it floating). windowActive/selected drive the gate.
     const wantShow = !!selectedRef.current && panelRef.current !== 'recordings' && windowActiveRef.current;
@@ -246,7 +265,7 @@ export function WebSdrModule({ windowId }: { windowId?: string } = {}): JSX.Elem
     if (!r || r.width < 2 || r.height < 2) {
       if (boundsRetryRef.current < 40) {
         boundsRetryRef.current += 1;
-        requestAnimationFrame(syncBounds);
+        resyncNextFrame();
       } else {
         void api.receiverPresent({ visible: false, diag: 'host-zero-bounds' });
       }
@@ -366,8 +385,8 @@ export function WebSdrModule({ windowId }: { windowId?: string } = {}): JSX.Elem
     // v3.72.1 blank-view fix: the host region often finishes laying out AFTER the load resolves, so a
     // single 100ms re-sync can still park the view at stale/zero bounds. Re-assert across a frame and a
     // few settle points (syncBounds is idempotent + self-guards against zero bounds).
-    requestAnimationFrame(syncBounds);
-    for (const ms of [100, 400, 1000]) setTimeout(syncBounds, ms);
+    resyncNextFrame();
+    for (const ms of [100, 400, 1000]) resyncTimersRef.current.push(setTimeout(syncBounds, ms));
     setMessage(`${r.name} loaded.`);
   }
   async function saveReceiver(r: WebSdrReceiver): Promise<void> {

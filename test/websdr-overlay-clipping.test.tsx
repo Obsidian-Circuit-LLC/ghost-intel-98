@@ -119,7 +119,9 @@ describe('WebSDR overlay is clipped to its window', () => {
   });
 
   afterEach(() => {
-    act(() => root.unmount());
+    // A test may have unmounted already (the post-unmount case below); unmounting twice is a no-op
+    // we do not want to fail the teardown on.
+    try { act(() => root.unmount()); } catch { /* already unmounted */ }
     shellEl.remove();
     delete (globalThis as any).window.api;
     useWindows.setState({ windows: [], focusStack: [] } as never);
@@ -183,5 +185,40 @@ describe('WebSDR overlay is clipped to its window', () => {
     const after = lastShown(api);
     expect(after, 'a move must re-present the overlay').toBeTruthy();
     expect(after.bounds).toEqual({ x: 160, y: 90, width: 200, height: 150 });
+  });
+
+  it('stops its bounds retry loop when the window closes', async () => {
+    // `openReceiver` schedules a frame plus re-syncs at 100/400/1000ms, because the host often
+    // finishes laying out after the load resolves. Close the WebSDR window inside that second and
+    // those timers still fire — against a component whose host ref React has already nulled. That
+    // takes the zero-bounds branch, which schedules ANOTHER frame, up to forty times, all after the
+    // module is gone. Harmless on screen (the unmount effect has already hidden the view) but it is
+    // work with no owner, and it is what fills the test run with post-teardown errors.
+    vi.useFakeTimers();
+    try {
+      const restore = stubLayout({ x: 60, y: 40, width: 200, height: 150 });
+      const api = mkApi();
+      await mountWithReceiver(api);
+      restore.mockRestore();
+
+      act(() => root.unmount());
+      expect(api.receiverHide, 'unmount tears the overlay down').toHaveBeenCalled();
+
+      // Count frames requested from here on: after unmount there must be none.
+      const raf = vi.spyOn(globalThis, 'requestAnimationFrame');
+      api.receiverPresent.mockClear();
+      await act(async () => {
+        vi.advanceTimersByTime(2000);
+        await Promise.resolve();
+      });
+
+      expect(raf.mock.calls.length, 'no frame may be requested once the module is unmounted').toBe(0);
+      expect(
+        api.receiverPresent.mock.calls,
+        'and nothing may touch the overlay either',
+      ).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
