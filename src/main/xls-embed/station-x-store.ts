@@ -1,6 +1,6 @@
 /**
- * A narrow `XStore` face over HIS single document, so VERIFY LIVE reads and writes the findings he
- * can actually see.
+ * A narrow `XStore` face over HIS single document, so the hardened capture services read and write
+ * the records he can actually see.
  *
  * WHY THIS EXISTS. `verifyPost` (capture.ts, Task A1) is the hardened rebuild of his
  * `verifyPostLive` — Tor gate, hidden capture window, signed-in guard, window destroyed in a
@@ -13,12 +13,19 @@
  * exactly the way GhostExodus's screenshot shows. Same class as the display-picture defect: a
  * hardened service wired to the store the station does not use.
  *
- * `verifyPost` and the two change-history helpers it calls (`markPostUnavailable`,
- * `ingestPostsWithHistory`) touch only three members between them — `posts.read`, `posts.transform`
- * and `changeEvents.append`. This implements those three against his document and leaves the rest
- * of `XStore` unreachable: anything else would be a silent second persistence path, which is the
- * mistake this file exists to undo. Reaching one of them throws rather than resolving to a store
- * nothing reads.
+ * The same defect was in four more places. `entities`, `profileSnapshots`, `networkSnapshots` and
+ * `networkEvents` each appeared in the embed exactly once outside `defaultStationState` — in a
+ * filter that DELETES rows. Nothing ever added one, so ENTITY INDEX and CHANGE INTEL could never
+ * show anything, which is what his sidebar read against 55 collected findings. Ghost Intel 98
+ * already implements all of it (`snapshotProfile`, `extractEntities`, `deriveNetworkDeltaEvents`),
+ * hardened and tested; the results were simply going to per-case sidecars his station never opens.
+ *
+ * Between them `verifyPost`, `markPostUnavailable`, `ingestPostsWithHistory` and `snapshotProfile`
+ * touch five store members: `posts.read`, `posts.transform`, `changeEvents.append`,
+ * `profileSnapshots.latest` and `profileSnapshots.append`. This implements those five against his
+ * document and leaves the rest of `XStore` unreachable: anything else would be a silent second
+ * persistence path, which is the mistake this file exists to undo. Reaching one of them throws
+ * rather than resolving to a store nothing reads.
  */
 import type { XChangeEvent, XPostArtifact, XStore } from '../x-listening/store';
 import type { PersistedStationState } from './state-store';
@@ -94,7 +101,7 @@ function unsupported(member: string): never {
  * other handler in `ipc.ts` works); `persist` is called after any write so the change reaches disk
  * and the renderer, exactly once per transform that asked to write.
  */
-export function makeStationVerifyStore(
+export function makeStationXStore(
   state: PersistedStationState,
   persist: () => Promise<void>,
   ctx: { makeId: () => string },
@@ -121,16 +128,43 @@ export function makeStationVerifyStore(
           return result;
         },
       },
+      profileSnapshots: {
+        latest: async (caseId: string, profileId: string) => {
+          const rows = (state.profileSnapshots as Array<Record<string, unknown>>).filter(
+            (r) => r.caseId === caseId && r.profileId === profileId,
+          );
+          return (rows.length ? rows[rows.length - 1] : null) as never;
+        },
+        append: async (caseId: string, snapshot: Record<string, unknown>) => {
+          // His record shape (`username`, `capturedAt`, `signature`) alongside the artifact's, so
+          // the same row satisfies his UI and the service that wrote it.
+          const profile = state.profiles.find((p) => p.id === snapshot.profileId && p.caseId === caseId);
+          (state.profileSnapshots as Array<Record<string, unknown>>).push({
+            ...snapshot,
+            id: ctx.makeId(),
+            caseId,
+            username: snapshot.sourceUsername ?? profile?.username ?? '',
+          });
+          await persist();
+          return state.profileSnapshots as never;
+        },
+      },
       changeEvents: {
         append: async (caseId: string, event: XChangeEvent) => {
           // His CHANGE INTEL record shape (`type`/`observedAt`/`details`), not the artifact's
           // (`kind`/`at`) — the same singular-vs-plural care the relationship migration needed.
           const post = state.posts.find((p) => p.id === event.postId && p.caseId === caseId);
+          const profileId = event.profileId ?? post?.profileId ?? null;
+          // A `profile_change` carries a profileId and no post, so resolve the handle from the
+          // source record — otherwise his CHANGE INTEL row has no account name on it.
+          const profile = profileId
+            ? state.profiles.find((p) => p.id === profileId && p.caseId === caseId)
+            : undefined;
           state.changeEvents.push({
             id: event.id || ctx.makeId(),
             caseId,
-            profileId: event.profileId ?? post?.profileId ?? null,
-            sourceUsername: event.sourceUsername ?? post?.sourceUsername ?? null,
+            profileId,
+            sourceUsername: event.sourceUsername ?? post?.sourceUsername ?? profile?.username ?? null,
             type: event.kind,
             summary: event.summary,
             details: event.postId ? { postId: event.postId } : {},

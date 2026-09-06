@@ -47,9 +47,10 @@ import {
   updateNote,
   type StationCtx,
 } from './station-service';
-import { computeNetworkAnalysis, deriveCollectionHealth } from '../x-listening/analysis';
+import { computeNetworkAnalysis, deriveCollectionHealth, extractEntities } from '../x-listening/analysis';
 import { postFromArtifact } from './migrate';
-import { makeStationVerifyStore } from './verify-store';
+import { makeStationXStore } from './station-x-store';
+import { snapshotProfile } from '../x-listening/changes';
 import { connectXSession, getXStatus, clearXSession, resolveXTorGate } from '../x-listening/session';
 import { openInX, verifyPost, captureTimeline, captureNetwork, type XOpenKind } from '../x-listening/capture';
 import { getXWindow, navigateXToProfile } from '../x-listening/session';
@@ -80,6 +81,14 @@ export interface XlsEmbedDeps {
    * or null when the analyst cancels. Injectable so export tests never open a dialog.
    */
   saveExport?: (defaultName: string, data: string) => Promise<string | null>;
+  /**
+   * Run `fn` AFTER the in-flight handler's reply has left. His `run()` sets the notice to a fixed
+   * success string on any resolved value, so anything announced during a partial sweep is painted
+   * over before he can read it — the reason has to arrive afterwards to survive. His own app emits
+   * background errors asynchronously from background tasks, so this matches his model rather than
+   * working around it. Injectable so the suite stays deterministic.
+   */
+  defer?: (fn: () => void) => void;
 }
 
 const defaultCtx: StationCtx = {
@@ -95,6 +104,7 @@ function str(value: unknown, what: string): string {
 
 export function registerXlsEmbedIpc(deps: XlsEmbedDeps): void {
   const ctx = deps.ctx ?? defaultCtx;
+  const defer = deps.defer ?? ((fn: () => void) => { setTimeout(fn, 0); });
   const store =
     deps.store ??
     makeStationStore({
@@ -440,7 +450,7 @@ export function registerXlsEmbedIpc(deps: XlsEmbedDeps): void {
     if (!s.posts.some((p) => p.id === target && p.caseId === caseId)) {
       throw new Error('Finding not found in the active campaign.');
     }
-    const verifyStore = makeStationVerifyStore(s, async () => {
+    const verifyStore = makeStationXStore(s, async () => {
       await store.save(s);
       emit(XLS_EVENT_CHANNELS.onStateChanged, clientState(s));
     }, ctx);
@@ -524,6 +534,42 @@ export function registerXlsEmbedIpc(deps: XlsEmbedDeps): void {
    * rich copies went to the OLD store, where his station never looks. That is why fresh collection
    * produced no images: the data was being written, just not the half that has pictures in it.
    */
+  /**
+   * His `indexEntitiesForPost` (`main.cjs:472`), against his document.
+   *
+   * `entities` appeared in this embed exactly once outside the default state: in a filter that
+   * DELETES rows when a profile is removed. Nothing ever added one, so ENTITY INDEX read 0 no
+   * matter how much was collected. The extractor itself has been here all along (`analysis.ts`
+   * `extractEntities`, ported from his `enterprise.cjs`) — it was simply never called.
+   */
+  function indexEntitiesForPost(s: PersistedStationState, post: { id: string; caseId: string; username?: string; text?: string; collectedAt?: string; firstObservedAt?: string; lastObservedAt?: string }): void {
+    const caseId = post.caseId;
+    for (const found of extractEntities(String(post.text ?? ''))) {
+      const key = `${caseId}:${found.type}:${found.normalizedValue}`;
+      let existing = s.entities.find((e) => `${e.caseId}:${e.type}:${e.normalizedValue}` === key);
+      if (!existing) {
+        existing = {
+          id: ctx.makeId(), caseId, type: found.type, value: found.value,
+          normalizedValue: found.normalizedValue, postIds: [], sourceUsernames: [],
+          firstObservedAt: post.firstObservedAt ?? post.collectedAt ?? ctx.now(),
+          lastObservedAt: post.lastObservedAt ?? post.collectedAt ?? ctx.now(),
+          count: 0,
+        } as never;
+        s.entities.push(existing as never);
+      }
+      // His counting rule: ONE per (entity, post). A re-observed post must not inflate the count,
+      // or an archive cycle turns a single mention into evidence of a pattern.
+      if (!existing.postIds.includes(post.id)) {
+        existing.postIds.push(post.id);
+        if (existing.postIds.length > 1000) existing.postIds = existing.postIds.slice(-1000);
+        existing.count = Math.max(Number(existing.count) || 0, 0) + 1;
+      }
+      const source = String(post.username ?? '');
+      if (source && !existing.sourceUsernames.includes(source)) existing.sourceUsernames.push(source);
+      existing.lastObservedAt = post.lastObservedAt ?? post.collectedAt ?? ctx.now();
+    }
+  }
+
   function ingestPosts(
     s: PersistedStationState,
     profileId: string,
@@ -546,20 +592,21 @@ export function registerXlsEmbedIpc(deps: XlsEmbedDeps): void {
           if (!existing.avatar && raw.avatar) existing.avatar = String(raw.avatar);
           if (!existing.displayName && raw.displayName) existing.displayName = String(raw.displayName);
           existing.lastObservedAt = ctx.now();
+          indexEntitiesForPost(s, existing);
         }
         skipped += 1;
         continue;
       }
       seen.add(id);
       // The SAME mapping the migration uses — one set of field names, one place to be wrong.
-      s.posts.push(
-        postFromArtifact(raw as never, {
-          caseId,
-          profileId,
-          source: username,
-          now: ctx.now(),
-        }) as never
-      );
+      const stored = postFromArtifact(raw as never, {
+        caseId,
+        profileId,
+        source: username,
+        now: ctx.now(),
+      });
+      s.posts.push(stored as never);
+      indexEntitiesForPost(s, stored as never);
       added += 1;
     }
     return { added, skipped };
@@ -634,6 +681,27 @@ export function registerXlsEmbedIpc(deps: XlsEmbedDeps): void {
           // which nothing in the embed reads. Accept and discard rather than duplicate evidence
           // into a place no one looks.
           saveItems: async () => ({ added: 0, skipped: 0 }),
+          // IMAGES: ON/OFF. His toggle and per-source override live in HIS document; the default
+          // seam reads the OLD `x-image-policy.json` / `x-collection-settings.json` sidecars, which
+          // the embed never writes and which default to images-ON. So switching images OFF fetched
+          // media anyway — a data-minimisation control that silently did nothing. His rule exactly
+          // (`effectiveImageCollection`, main.cjs:369): an explicit per-source mode wins, otherwise
+          // inherit the campaign toggle.
+          imagesEnabledForSource: async () => {
+            if (profile.imageMode === 'on') return true;
+            if (profile.imageMode === 'off') return false;
+            return activeSettings(s).collectImages !== false;
+          },
+          // CHANGE INTEL. The default routes the snapshot + `profile_change` to the OLD per-case
+          // sidecars, so his document's `profileSnapshots` was never written and the panel could
+          // only ever read 0 — the same defect as VERIFY LIVE, one service over.
+          snapshotProfile: async (_c, input, opts) =>
+            snapshotProfile(
+              caseId,
+              { ...input, profileId },
+              opts,
+              makeStationXStore(s, async () => { await store.save(s); }, ctx),
+            ),
         }
       );
 
@@ -705,6 +773,13 @@ export function registerXlsEmbedIpc(deps: XlsEmbedDeps): void {
     // Report the failures. A sweep that says "complete" having collected nothing, with the reason
     // only in a console the analyst never sees, is how a total collection failure looked like a
     // working feature for three releases.
+    // A PARTIAL failure is real news and used to vanish: the per-target error above is emitted
+    // mid-sweep, and his `run()` then paints "Collection sweep complete." over it. Announce the
+    // summary after this handler's reply has left, so the last thing on screen is what happened.
+    if (failed > 0 && failed < targets.length) {
+      const summary = `${failed} of ${targets.length} source(s) failed: ${lastReason}`;
+      defer(() => { emitBackgroundError('collection sweep', summary); });
+    }
     // A sweep in which EVERY target failed is not a completed sweep. His `run()` sets the notice
     // to its success string for any resolved value, so returning a `reason` field here left
     // "Collection sweep complete." on screen with the reason nowhere he could read it.
@@ -731,6 +806,7 @@ export function registerXlsEmbedIpc(deps: XlsEmbedDeps): void {
     const profile = s.profiles.find((p) => p.id === target && p.caseId === caseId);
     if (!profile) throw new Error('Profile not found in the active campaign.');
 
+    const rel = kind === 'following' ? 'following' : 'follower';
     let added = 0;
     let observed = 0;
     const startedAt = ctx.now();
@@ -747,11 +823,51 @@ export function registerXlsEmbedIpc(deps: XlsEmbedDeps): void {
       { caseId, channelId: profile.username, targetUsername: profile.username, kind },
       {
         onProgress: (p) => { progress(p.message, p.current, p.total, true); },
+        // The follower network's own history. All three of these defaulted to the OLD store, so
+        // `networkEvents` and `networkSnapshots` in his document stayed empty forever and the scan
+        // had no previous-scan basis to diff against — every scan looked like the first one.
+        readScanState: async () => {
+          const rows = (s.networkSnapshots as Array<Record<string, unknown>>).filter(
+            (r) => r.caseId === caseId && r.profileId === target && r.relationship === rel,
+          );
+          const last = rows[rows.length - 1];
+          if (!last) return null;
+          return {
+            target: `@${profile.username}`,
+            relationship: kind,
+            observedUsernames: (last.observedUsernames as string[]) ?? [],
+            observedCount: Number(last.observedCount ?? 0) || 0,
+            passesCompleted: Number(last.passesCompleted ?? 0) || 0,
+            capturedAt: String(last.capturedAt ?? ''),
+          };
+        },
+        saveScanState: async (_c, state) => {
+          (s.networkSnapshots as Array<Record<string, unknown>>).push({
+            id: ctx.makeId(), caseId, profileId: target, sourceUsername: profile.username,
+            relationship: rel, capturedAt: state.capturedAt,
+            passesCompleted: state.passesCompleted, observedCount: state.observedCount,
+            // His cap. A follower list of hundreds of thousands must not grow the document without
+            // bound just to hold a diff basis.
+            observedUsernames: state.observedUsernames.slice(0, 30000),
+            reachedEnd: false, requestedPasses: 0, frontierUsernames: [],
+          });
+        },
+        appendNetworkEvents: async (_c, evs) => {
+          for (const ev of evs) {
+            s.networkEvents.push({
+              id: ctx.makeId(), caseId, profileId: target, sourceUsername: profile.username,
+              // His rows use the SINGULAR relationship form; the artifact is plural. Getting this
+              // wrong yields events his UI silently filters out.
+              relationship: rel,
+              username: String(ev.handle ?? '').replace(/^@+/, ''),
+              eventType: ev.kind, observedAt: ev.observedAt, confidence: ev.confidence,
+            } as never);
+          }
+        },
         // Again: his document is the store, our capture path does the work.
         saveNetwork: async (_caseId, artifact) => {
           const rows = (artifact as unknown as { accounts?: Array<Record<string, unknown>> }).accounts ?? [];
           observed = rows.length;
-          const rel = kind === 'following' ? 'following' : 'follower';
           const existing = new Set(
             s.relationships
               .filter((r) => r.caseId === caseId && r.profileId === target && r.relationship === rel)

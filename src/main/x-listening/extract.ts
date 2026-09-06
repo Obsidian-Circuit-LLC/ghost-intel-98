@@ -730,6 +730,20 @@ export const X_PROFILE_META_SCRIPT = `
  * off an unobserved value as captured; the renderer surfaces the absent field as
  * "Not visible" instead.
  */
+/** True iff `raw` is an https URL on a media host we allow. Exact host or a subdomain of one, so
+ *  `pbs.twimg.com.evil.example` is refused; non-https is refused outright (no downgrade). */
+function isAnchoredAvatarUrl(raw: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(String(raw ?? ''));
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== 'https:') return false;
+  const host = parsed.hostname.toLowerCase();
+  return MEDIA_HOST_ALLOWLIST.some((a) => host === a || host.endsWith(`.${a}`));
+}
+
 export function normalizeUserCell(raw: RawUserCell): XNetworkAccount | null {
   const username = String(raw?.username ?? '').replace(/^@+/, '');
   if (!USERNAME_RE.test(username)) return null;
@@ -741,7 +755,14 @@ export function normalizeUserCell(raw: RawUserCell): XNetworkAccount | null {
   const bio = String(raw?.bio ?? '').trim();
   if (bio) account.bio = bio;
   const avatar = String(raw?.avatar ?? '');
+  // A `data:` thumbnail is already local. A REMOTE src is kept only as a host-anchored REFERENCE —
+  // no bytes are fetched here, and the renderer localises it lazily through the hardened cache the
+  // post path already uses. Admitting only `data:` is why every follower row's identity circle was
+  // blank: the collector reads the URL off the page and nothing downstream could ever see it.
+  // Anything off the allowlist is DROPPED — a scraped src pointing elsewhere is a deanon beacon.
+  // `canonicalRelationshipEvidence` excludes the avatar, so this cannot perturb the evidence hash.
   if (avatar.startsWith('data:')) account.avatar = avatar;
+  else if (isAnchoredAvatarUrl(avatar)) account.avatar = avatar;
   return account;
 }
 

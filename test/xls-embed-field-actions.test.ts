@@ -62,6 +62,7 @@ type Fn = (e: unknown, ...a: unknown[]) => Promise<unknown>;
 function harness() {
   const handlers = new Map<string, Fn>();
   const sent: Array<{ channel: string; payload: never }> = [];
+  const deferred: Array<() => void> = [];
   let seq = 0;
   const files = new Map<string, string>();
   const store = makeStationStore({
@@ -83,8 +84,9 @@ function harness() {
     }),
     store,
     ctx: { now: () => '2026-09-06T12:00:00.000Z', makeId: () => `id-${++seq}` },
+    defer: (fn: () => void) => { deferred.push(fn); },
   } as never);
-  return { handlers, store, sent };
+  return { handlers, store, sent, deferred };
 }
 
 /** Seed one target source and one collected finding, the way a real campaign holds them. */
@@ -345,5 +347,49 @@ describe('an extraction that read nothing says so', () => {
     const res = await handlers.get(XLS_CHANNELS.extractRelationships)!({}, 'profile-1', 'follower') as { added: number };
     expect(res.added).toBe(1);
     expect((await store.load()).relationships.map((r) => r.username)).toContain('someone');
+  });
+});
+
+describe('a PARTIAL sweep failure survives to the screen', () => {
+  it('announces the summary after the call resolves, not before it', async () => {
+    // Two sources, one fails. The per-target background error is emitted DURING the sweep, so his
+    // `run()` then paints "Collection sweep complete." straight over it and the reason is gone.
+    // A partial failure has to arrive AFTER the handler resolves to survive.
+    const { handlers, store, sent, deferred } = harness();
+    const s = await store.load();
+    const caseId = s.activeCaseId;
+    for (const username of ['good', 'bad']) {
+      s.profiles.push({
+        id: `p-${username}`, caseId, username, displayName: username, enabled: true,
+        addedAt: 'T', lastCheckedAt: null, lastError: null, collectedCount: 0,
+      } as never);
+    }
+    await store.save(s);
+    captureTimeline.mockImplementation((async (_w: unknown, req: { targetUsername: string }) => {
+      if (req.targetUsername === 'bad') throw new Error('Connect to X before collecting.');
+      return { blocked: false, added: 1, skipped: 0, posts: [] };
+    }) as never);
+
+    const result = await handlers.get(XLS_CHANNELS.refreshAll)!({}) as { failed: number; reason?: string };
+    expect(result.failed).toBe(1);
+
+    // Nothing announced yet — anything emitted before now is overwritten by his success string.
+    const during = sent.filter((m) => m.channel === XLS_EVENT_CHANNELS.onBackgroundError).length;
+    expect(deferred.length, 'the summary must be scheduled, not emitted inline').toBeGreaterThan(0);
+
+    deferred.forEach((fn) => fn());
+    const after = sent.filter((m) => m.channel === XLS_EVENT_CHANNELS.onBackgroundError);
+    expect(after.length).toBeGreaterThan(during);
+    const summary = after.at(-1)!.payload as unknown as { context: string; message: string };
+    expect(summary.message).toMatch(/1 of 2/);
+    expect(summary.message).toMatch(/Connect to X before collecting/);
+    expect(typeof summary.context).toBe('string');
+  });
+
+  it('schedules nothing when every source succeeded', async () => {
+    const { handlers, store, deferred } = harness();
+    await seedPost(store);
+    await handlers.get(XLS_CHANNELS.refreshAll)!({});
+    expect(deferred).toHaveLength(0);
   });
 });
