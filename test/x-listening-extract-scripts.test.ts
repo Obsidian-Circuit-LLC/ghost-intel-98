@@ -229,7 +229,10 @@ describe('USER_CELL_SCRIPT against a captured UserCell DOM', () => {
     expect(a).not.toBeNull();
     expect(a!.handle).toBe('@alice');
     expect(a!.displayName).toBe('Alice Analyst');
-    expect(a!.avatar).toBeUndefined(); // remote profile_images URL dropped
+    // v3.81.0: an allowlisted profile_images URL is kept as a reference so the row can show a
+    // picture (localised lazily through the hardened cache). Off-allowlist hosts are still refused
+    // — covered in x-listening-network.test.ts.
+    expect(a!.avatar).toBe('https://pbs.twimg.com/profile_images/1/a.jpg');
 
     const b = normalizeUserCell(bob);
     expect(b).not.toBeNull();

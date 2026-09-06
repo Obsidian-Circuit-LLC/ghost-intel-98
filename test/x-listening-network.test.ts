@@ -87,10 +87,16 @@ describe('normalizeUserCell', () => {
     expect(acct!.bio).toBe('analyst');
   });
 
-  it('drops a remote avatar URL (data:-only — no remote media inlining)', () => {
-    expect(normalizeUserCell(cell())!.avatar).toBeUndefined();
+  it('keeps an allowlisted avatar URL as a reference, drops anything else', () => {
+    // v3.81.0 POLICY CHANGE, deliberate. This asserted `data:`-only, which meant a follower row
+    // could never carry a picture at all — the blank identity circles in the follower network.
+    // A host-anchored URL is a REFERENCE, not inlined media: no bytes are fetched here, and the
+    // renderer localises it through the same hardened cache the post path has used for releases.
+    // The invariant that matters is unchanged and asserted below: an off-allowlist src is refused.
+    expect(normalizeUserCell(cell())!.avatar).toBe(cell().avatar);
     const withData = normalizeUserCell(cell({ avatar: 'data:image/png;base64,AAAA' }));
     expect(withData!.avatar).toBe('data:image/png;base64,AAAA');
+    expect(normalizeUserCell(cell({ avatar: 'https://evil.example/t.gif' }))!.avatar).toBeUndefined();
   });
 
   it('rejects an invalid handle (returns null, never a fabricated row)', () => {
@@ -292,5 +298,61 @@ describe('networkToCsv', () => {
     expect(col('last_observed_at')).toBe('2026-08-06T12:00:00.000Z');
     // url is derived host-anchored from the bare handle (no @ prefix in the fixture)
     expect(col('url')).toBe('https://x.com/bob');
+  });
+});
+
+// ---- follower/following row display pictures --------------------------------------------------
+//
+// GhostExodus, on the follower network: the identity circles are blank. `normalizeUserCell` admitted
+// ONLY a `data:` avatar, so the remote `profile_images` src the collector reads off the page was
+// dropped and a relationship row could never carry a picture at all — permanently, by construction.
+//
+// The POST path already solves this and has shipped for releases: keep the URL as a REFERENCE (no
+// bytes, nothing fetched here), then localise it lazily through the hardened cache — host-anchored,
+// routed via the X session window, encrypted at rest — rewriting the record to a local ref on first
+// use. Storing an allowlisted URL is not inlining remote media; storing the BYTES would be, and
+// nothing here does that.
+//
+// `canonicalRelationshipEvidence` covers target/kind/handle/displayName/bio, so the avatar is
+// already outside the evidence hash: a profile-picture change cannot perturb captured evidence.
+describe('normalizeUserCell — the follower row keeps its display picture', () => {
+  it('keeps a host-anchored profile_images URL as a reference', () => {
+    const account = normalizeUserCell({
+      username: 'carol', displayName: 'Carol', bio: '', url: 'https://x.com/carol',
+      avatar: 'https://pbs.twimg.com/profile_images/9/c.jpg',
+    });
+    expect(account?.avatar).toBe('https://pbs.twimg.com/profile_images/9/c.jpg');
+  });
+
+  it('still admits an already-localised data: thumbnail', () => {
+    const account = normalizeUserCell({
+      username: 'dave', displayName: 'Dave', bio: '', url: 'https://x.com/dave',
+      avatar: 'data:image/png;base64,AAAA',
+    });
+    expect(account?.avatar).toBe('data:image/png;base64,AAAA');
+  });
+
+  it('DROPS an off-allowlist host — a scraped src pointing elsewhere is a deanon beacon', () => {
+    for (const avatar of [
+      'https://evil.example/track.gif?u=carol',
+      'http://pbs.twimg.com.evil.example/x.jpg',
+      'javascript:alert(1)',
+      'file:///etc/passwd',
+    ]) {
+      const account = normalizeUserCell({
+        username: 'erin', displayName: 'Erin', bio: '', url: 'https://x.com/erin', avatar,
+      });
+      expect(account?.avatar, `${avatar} must not be stored`).toBeUndefined();
+    }
+  });
+
+  it('leaves the evidence hash untouched — a new picture is not a change of evidence', () => {
+    const base = { username: 'frank', displayName: 'Frank', bio: 'analyst', url: 'https://x.com/frank' };
+    const withPic = normalizeNetwork(
+      [{ ...base, avatar: 'https://pbs.twimg.com/profile_images/9/f.jpg' }],
+      'alice', 'followers', '2026-09-06T12:00:00.000Z',
+    );
+    const without = normalizeNetwork([{ ...base, avatar: '' }], 'alice', 'followers', '2026-09-06T12:00:00.000Z');
+    expect(withPic.accounts[0].evidenceHash).toBe(without.accounts[0].evidenceHash);
   });
 });

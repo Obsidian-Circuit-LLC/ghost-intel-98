@@ -8,12 +8,12 @@
  * the outcome lands back on HIS record, and a `post_unavailable` reaches HIS change-event stream in
  * his field shape (`type`/`observedAt`), not the artifact's (`kind`/`at`).
  *
- * Mutation check performed when this was written: pointing `makeStationVerifyStore` at an empty
+ * Mutation check performed when this was written: pointing `makeStationXStore` at an empty
  * document reproduces the field error verbatim — "Post not found in this campaign."
  */
 import { describe, expect, it } from 'vitest';
 import { verifyPost } from '../src/main/x-listening/capture';
-import { makeStationVerifyStore } from '../src/main/xls-embed/verify-store';
+import { makeStationXStore } from '../src/main/xls-embed/station-x-store';
 import { defaultStationState, type PersistedStationState } from '../src/main/xls-embed/state-store';
 
 const CASE_ID = 'ba5eba11-0000-4000-8000-00000000cafe';
@@ -51,7 +51,7 @@ function deps(page: { body: string; items: Array<{ id: string; text: string }> }
 
 function storeOver(s: PersistedStationState) {
   let saves = 0;
-  const store = makeStationVerifyStore(s, async () => { saves += 1; }, { makeId: () => 'event-1' });
+  const store = makeStationXStore(s, async () => { saves += 1; }, { makeId: () => 'event-1' });
   return { store, saves: () => saves };
 }
 
