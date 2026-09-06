@@ -734,9 +734,19 @@ export function registerXlsEmbedIpc(deps: XlsEmbedDeps): void {
     let added = 0;
     let observed = 0;
     const startedAt = ctx.now();
-    const result = await captureNetwork(
+    // Show the work. His scan emits `pass i/N — C unique` throughout, and his UI renders that in
+    // the status line; without it a scrape that takes a minute and a button that does nothing look
+    // identical, which is how this came back three times as "unresponsive".
+    const progress = (message: string, current: number, total: number, running: boolean): void => {
+      emit(XLS_EVENT_CHANNELS.onSweepProgress, { message, current, total, running });
+    };
+    progress(`Extracting ${kind} for @${profile.username}…`, 0, 1, true);
+    let result: Awaited<ReturnType<typeof captureNetwork>>;
+    try {
+      result = await captureNetwork(
       { caseId, channelId: profile.username, targetUsername: profile.username, kind },
       {
+        onProgress: (p) => { progress(p.message, p.current, p.total, true); },
         // Again: his document is the store, our capture path does the work.
         saveNetwork: async (_caseId, artifact) => {
           const rows = (artifact as unknown as { accounts?: Array<Record<string, unknown>> }).accounts ?? [];
@@ -764,11 +774,19 @@ export function registerXlsEmbedIpc(deps: XlsEmbedDeps): void {
           return added;
         },
       }
-    );
+      );
+    } finally {
+      // ALWAYS clear it. His extract buttons are disabled while `progress.running`, so a scan that
+      // throws without clearing leaves every one of them dead — the exact symptom, manufactured.
+      progress('', 1, 1, false);
+    }
 
     // Record the run in HIS log, success or failure. captureNetwork writes its own run record into
     // the OLD store, which his station never reads — so without this a blocked extraction left no
     // trace anywhere he could see, exactly the way a failing sweep used to report "complete".
+    // `observed` is only assigned inside the saveNetwork seam, which a scan with nothing to persist
+    // may never reach. captureNetwork's own count is the source of truth for what was READ.
+    observed = Math.max(observed, Number(result.observed ?? 0) || 0);
     s.collectionRuns.push({
       id: ctx.makeId(), caseId, profileId: target, username: profile.username,
       operation: kind, startedAt, completedAt: ctx.now(),
@@ -794,6 +812,16 @@ export function registerXlsEmbedIpc(deps: XlsEmbedDeps): void {
     // success string. The reason has to arrive as a rejection to survive to the screen.
     if (result.blocked) {
       throw new Error(result.reason ?? 'Network extraction was blocked.');
+    }
+    // The LAST silent path. A scan that is not blocked, raises no error and reads nothing used to
+    // resolve, and his `run()` then announced "Network extraction complete." over the top of it —
+    // indistinguishable from a button that does nothing. State the outcome without inventing a
+    // cause for it; the collection run log carries the pass count next to this.
+    if (observed === 0) {
+      throw new Error(
+        `Finished ${kind} extraction for @${profile.username} without reading any accounts. ` +
+          'The list did not render, or this X session cannot see it.',
+      );
     }
     return {
       collected: observed,

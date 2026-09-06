@@ -146,12 +146,21 @@ function cell(username: string) {
  *  `completedPasses` equals the setting the path consulted. */
 function growingNetworkDeps(settings: XCollectionSettings): XNetworkCaptureDeps {
   let call = 0;
+  const accumulated: ReturnType<typeof cell>[] = [];
   return {
     loadClearnetEnabled: async () => false,
     resolveGate: async () => ({ blocked: false, proxy: { socks: 'socks5://127.0.0.1:9050' } }),
     openWindow: async () => fakeWindow(),
-    runCapture: async () => [cell(`user${call++}`)], // a new handle each pass ⇒ never stagnant
+    runCapture: async () => [cell(`user${call++}`)],
     guard: async (_w, capture) => ({ blocked: false, result: await capture() }),
+    // v3.80.0 page model: his page-side accumulator. It GROWS every pass here, so stagnation never
+    // fires and `completedPasses` still reports exactly how many reads the pass budget allowed.
+    delay: async () => undefined,
+    installCollector: async () => undefined,
+    readCollector: async () => {
+      accumulated.push(cell(`user${call++}`));
+      return { rows: [...accumulated], count: accumulated.length, scrollTop: 0, scrollHeight: 800, innerHeight: 800 };
+    },
     scroll: async () => undefined,
     assertSignedIn: async () => ({ blocked: false }),
     readNetwork: async () => [],
@@ -170,7 +179,11 @@ describe('captureNetwork consults per-campaign follower/following base passes (F
       growingNetworkDeps(settings),
     );
     expect(res.blocked).toBe(false);
-    expect(res.completedPasses).toBe(4); // read straight from followerBasePasses
+    // `passes + 1` reads for a budget of 4 — his `for (index = 0; index <= passes; index++)`
+    // (`scrapeRelationshipRows`). The timeline path was corrected to the same shape earlier; the
+    // network path had kept the `i < passes` loop, reading one viewport of followers too few on
+    // every single scan.
+    expect(res.completedPasses).toBe(5);
   });
 
   it('bounds the following scroll loop to followingBasePasses from the campaign settings', async () => {
@@ -179,7 +192,7 @@ describe('captureNetwork consults per-campaign follower/following base passes (F
       { caseId: 'camp-1', channelId: 'alice', targetUsername: 'alice', kind: 'following' },
       growingNetworkDeps(settings),
     );
-    expect(res.completedPasses).toBe(2); // read straight from followingBasePasses
+    expect(res.completedPasses).toBe(3); // budget 2 ⇒ 3 reads (his `index <= passes`) // read straight from followingBasePasses
   });
 
   it('an explicit req.passes still overrides the campaign default', async () => {
@@ -188,6 +201,6 @@ describe('captureNetwork consults per-campaign follower/following base passes (F
       { caseId: 'camp-1', channelId: 'alice', targetUsername: 'alice', kind: 'followers', passes: 6 },
       growingNetworkDeps(settings),
     );
-    expect(res.completedPasses).toBe(6);
+    expect(res.completedPasses).toBe(7); // budget 6 ⇒ 7 reads (his `index <= passes`)
   });
 });

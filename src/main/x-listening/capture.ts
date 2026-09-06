@@ -31,7 +31,9 @@ import {
   X_POST_SCRIPT,
   X_PAGE_STATE_SCRIPT,
   X_VERIFY_POST_SCRIPT,
-  USER_CELL_SCRIPT,
+  X_NETWORK_COLLECTOR_INSTALL_SCRIPT,
+  X_NETWORK_COLLECTOR_READ_SCRIPT,
+  type XNetworkCollectorState,
   classifyXPageState,
   isPostUnavailableText,
   normalizePost,
@@ -133,6 +135,41 @@ const COMMENT_THREAD_SETTLE_MS = 2500;
  *  not-yet-rendered page as "available, unchanged". Wall-clock pacing only; feeds NO evidence/hash
  *  path. Exported so the verify suite can assert the ceiling. */
 export const VERIFY_POST_SETTLE_MS = 2600;
+
+/** Fixed post-navigation SPA-render settle before a PROFILE PAGE is read during collection —
+ *  Enterprise `scrapeProfile` does `loadURL` → `sleep(3500)` → `assertSignedInPage` →
+ *  `readProfileMetadata` (`main.cjs`), and this port had no settle at all: it read the header in
+ *  the same tick it was handed the window.
+ *
+ *  The header is where the DISPLAY PICTURE comes from, so reading it unpainted stores a source
+ *  with no picture — intermittently, depending on how fast the page rendered. That is why the
+ *  same feature could be confirmed working in one release and reported broken in the next with
+ *  nothing in between touching picture collection. The manual path masked it: `navigateXToProfile`
+ *  polls until `articles > 0` before handing the window over; the sweep and archive paths get no
+ *  such pre-wait.
+ *
+ *  Wall-clock pacing only; feeds NO evidence/hash path. */
+export const TIMELINE_SETTLE_MS = 3500;
+
+/** Fixed post-navigation SPA-render settle before the follower/following list is read — Enterprise
+ *  `scrapeRelationshipRows` does `loadURL` → `sleep(3500)` → `assertSignedInPage` → install the
+ *  page-side collector (`main.cjs:2347+`).
+ *
+ *  `captureNetwork` was the one capture path in this module with no pacing of any kind, which does
+ *  not merely make the scrape slow — it makes it EMPTY AND SUCCESSFUL: every read lands on an
+ *  unhydrated page, the no-growth counter reaches `stagnationLimit` within milliseconds, and the
+ *  run returns `{ blocked: false, observed: 0, reachedEnd: true }`. Nothing failed, so nothing was
+ *  reported, which is precisely the silent dead button reported from the field.
+ *
+ *  Wall-clock pacing only; feeds NO evidence/hash path. */
+export const NETWORK_SETTLE_MS = 3500;
+
+/** Per-pass scroll pacing band for the follower/following loop — Enterprise
+ *  `scrapeRelationshipRows` clamps `scrollDelayMs` to `[500, 5000]` with an 1100ms default
+ *  (`main.cjs:2347+`). Wall-clock pacing only; feeds NO evidence/hash path. */
+const MIN_NETWORK_PASS_DELAY_MS = 500;
+const MAX_NETWORK_PASS_DELAY_MS = 5000;
+const DEFAULT_NETWORK_PASS_DELAY_MS = 1100;
 
 /** STATIC scroll payload — no interpolation, no scraped data. Scrolls the timeline to the bottom so
  *  the SPA lazy-loads the next batch of posts before the next `X_POST_SCRIPT` scrape, exactly as
@@ -561,6 +598,17 @@ export async function captureTimeline(
     channelId: req.channelId,
     channelLabel: req.channelLabel,
   };
+
+  // Post-navigation settle, BEFORE the signed-in gate and the header read — his `scrapeProfile`
+  // order exactly (`loadURL` → `sleep(3500)` → `assertSignedInPage` → `readProfileMetadata`). This
+  // port had none, so on a slow render the header was read unpainted and the source was stored
+  // with no display picture. Fail SOFT, the same posture as the verify and comment settles: a
+  // settle that rejects must not abort a collection.
+  try {
+    await deps.delay(TIMELINE_SETTLE_MS);
+  } catch {
+    /* ignore a settle error — proceed to read, same soft posture as the other capture paths */
+  }
 
   const gated = await deps.guard(win, async () => {
     // FA1: scroll-and-accumulate. Run `X_POST_SCRIPT` each pass (the ONLY payload ever run against the
@@ -1251,7 +1299,7 @@ export async function openInX(
 // (which captures whatever an analyst already navigated to): it OPENS its own Tor-gated window on
 // the shared authenticated X partition, navigates it to `https://x.com/<user>/{followers|following}`
 // (URL validated + built BEFORE the gate/network are ever touched), gates the page (signed-in),
-// scroll-scrapes the visible `UserCell` rows with the STATIC `USER_CELL_SCRIPT` (no interpolation),
+// installs his page-side MutationObserver accumulator and scroll-drives it (X virtualizes the list),
 // accumulates unique handles across bounded passes (stagnation-stop), normalizes + persists via the
 // same accumulator a re-scan uses, emits a run-log record, and ALWAYS destroys the window in a
 // `finally`. Remote avatars are dropped by `normalizeUserCell` (no remote-media inlining) — avatar
@@ -1311,6 +1359,19 @@ export interface XNetworkCaptureDeps {
   ) => Promise<{ blocked: boolean; reason?: string; result?: T }>;
   /** Scroll the capture page one step (a static in-page payload, no interpolation). */
   scroll: (win: Electron.BrowserWindow) => Promise<void>;
+  /** Await `ms`. Wall-clock pacing ONLY — the post-navigation settle and the per-pass delay that
+   *  let X render and lazy-load. This module's one capture path that lacked it returned an empty
+   *  follower list as a SUCCESSFUL scan. A unit harness injects an instant/virtual clock; the
+   *  production default is a real `setTimeout`. Never feeds an evidence/hash path. */
+  delay: (ms: number) => Promise<void>;
+  /** Install the page-side accumulator (`X_NETWORK_COLLECTOR_INSTALL_SCRIPT`) — static payload. */
+  installCollector: (win: Electron.BrowserWindow) => Promise<void>;
+  /** Capture once more and read the accumulator back (`X_NETWORK_COLLECTOR_READ_SCRIPT`). */
+  readCollector: (win: Electron.BrowserWindow) => Promise<XNetworkCollectorState>;
+  /** Per-pass progress for the analyst. His scan emits `pass i/N — C unique` throughout; without
+   *  it a long scrape and a dead button are indistinguishable from the outside. Optional so every
+   *  existing caller keeps working. */
+  onProgress?: (p: { message: string; current: number; total: number }) => void;
   /** Mid-scroll signed-in/challenge re-check. The network scroll loop runs up to `MAX_NETWORK_PASSES`
    *  (240); a rate-limit or challenge surfacing PARTWAY through must DISCARD the truncated list and
    *  flag it, never persist it as `complete` — the same fail-closed honesty the timeline + comment
@@ -1426,6 +1487,21 @@ function defaultNetworkCaptureDeps(): XNetworkCaptureDeps {
     scroll: async (win) => {
       await defaultRunCapture(win, X_NETWORK_SCROLL_SCRIPT);
     },
+    delay: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    installCollector: async (win) => {
+      await defaultRunCapture(win, X_NETWORK_COLLECTOR_INSTALL_SCRIPT);
+    },
+    readCollector: async (win) => {
+      const raw = await defaultRunCapture(win, X_NETWORK_COLLECTOR_READ_SCRIPT);
+      const state = (raw ?? {}) as Partial<XNetworkCollectorState>;
+      return {
+        rows: Array.isArray(state.rows) ? state.rows : [],
+        count: Number(state.count ?? 0) || 0,
+        scrollTop: Number(state.scrollTop ?? 0) || 0,
+        scrollHeight: Number(state.scrollHeight ?? 0) || 0,
+        innerHeight: Number(state.innerHeight ?? 0) || 0,
+      };
+    },
     assertSignedIn: (win) => probeSignedInState(win),
     readNetwork: async (caseId, target, kind) => {
       const { prodXStore } = await import('./store');
@@ -1479,30 +1555,57 @@ async function scrapeNetworkRows(
   win: Electron.BrowserWindow,
   passes: number,
   stagnationLimit: number,
+  delayMs: number,
+  target: string,
   deps: XNetworkCaptureDeps,
 ): Promise<{ rows: RawUserCell[]; completedPasses: number; reachedEnd: boolean; challenged?: boolean; challengeReason?: string }> {
-  const seen = new Map<string, RawUserCell>();
+  // HIS loop (`scrapeRelationshipRows`, main.cjs:2347+), transcribed: install the page-side
+  // accumulator once, then per pass read it back, report progress, test for a stable end, scroll,
+  // WAIT, and re-assert signed-in.
+  //
+  // What this replaces read the viewport fresh each pass and paced nothing at all — no settle after
+  // navigation, no delay between passes. That does not make a scrape slow, it makes it EMPTY AND
+  // SUCCESSFUL: every read lands on an unhydrated page, the no-growth counter reaches
+  // `stagnationLimit` in milliseconds, and the caller returns `{ blocked: false, observed: 0 }`.
+  // Nothing failed, so nothing was reported. That is the dead Extract Followers button.
+  await deps.installCollector(win);
+
   let completedPasses = 0;
   let stagnant = 0;
+  let previousSize = 0;
   let reachedEnd = false;
-  for (let i = 0; i < passes; i += 1) {
+  let rows: RawUserCell[] = [];
+
+  // `passes + 1` reads and `passes` scrolls — his iteration count exactly (`index <= passes`).
+  for (let i = 0; i <= passes; i += 1) {
     completedPasses = i + 1;
-    const raw = await deps.runCapture(win, USER_CELL_SCRIPT);
-    const rows: RawUserCell[] = Array.isArray(raw) ? (raw as RawUserCell[]) : [];
-    const before = seen.size;
-    for (const row of rows) {
-      const handle = String(row?.username ?? '').replace(/^@+/, '');
-      const key = handle.toLowerCase();
-      if (handle && !seen.has(key)) seen.set(key, row);
-    }
-    if (seen.size === before) stagnant += 1;
-    else stagnant = 0;
-    if (i >= passes - 1) break;
-    if (stagnant >= stagnationLimit) {
-      reachedEnd = true;
-      break;
-    }
+    const state = await deps.readCollector(win);
+    rows = state.rows;
+
+    // His stable-end test: the scroller is at the bottom (within his 8px tolerance).
+    reachedEnd = state.scrollTop + state.innerHeight >= state.scrollHeight - 8;
+
+    // LEADING-EMPTY GUARD — a deliberate hardening over his source, and the same one the timeline
+    // loop already carries. An unhydrated page reports scrollHeight ≈ innerHeight, so `reachedEnd`
+    // is TRUE before anything has rendered; counting those reads toward stagnation lets a page that
+    // simply has not painted yet end the scan as a "stable end". Only count no-growth passes once
+    // at least one account has actually been seen.
+    if (state.count !== previousSize) stagnant = 0;
+    else if (state.count > 0) stagnant += 1;
+    previousSize = state.count;
+
+    deps.onProgress?.({
+      message: `Extracting ${target} — pass ${i + 1}/${passes + 1} — ${state.count} unique`,
+      current: i + 1,
+      total: passes + 1,
+    });
+
+    if (i >= passes) break;
+    if (stagnant >= stagnationLimit && reachedEnd) break;
+
     await deps.scroll(win);
+    // The pacing his loop has and this port did not: give the SPA time to mount the next batch.
+    await deps.delay(delayMs);
     // FA-A review (Important): re-assert signed-in/challenge MID-SCROLL — mirrors the timeline +
     // comment loops. Over up to MAX_NETWORK_PASSES (240), a rate-limit/challenge interstitial can
     // surface partway through; without this the loop would keep scrolling the flagged page and the
@@ -1513,7 +1616,7 @@ async function scrapeNetworkRows(
       return { rows: [], completedPasses, reachedEnd: false, challenged: true, challengeReason: mid.reason };
     }
   }
-  return { rows: [...seen.values()], completedPasses, reachedEnd };
+  return { rows, completedPasses, reachedEnd };
 }
 
 /**
@@ -1553,6 +1656,13 @@ export async function captureNetwork(
       Math.floor(Number(settings.networkStagnationLimit)) || DEFAULT_NETWORK_STAGNATION_LIMIT,
     ),
   );
+  // Per-pass pacing, from the same campaign setting the timeline loop uses, clamped to his band
+  // ([500, 5000] in `scrapeRelationshipRows`). A scroll with no wait after it reads the same
+  // viewport again.
+  const delayMs = Math.max(
+    MIN_NETWORK_PASS_DELAY_MS,
+    Math.min(MAX_NETWORK_PASS_DELAY_MS, Math.floor(Number(settings.delayPerPassMs)) || DEFAULT_NETWORK_PASS_DELAY_MS),
+  );
   const startedAt = deps.now();
   const username = String(req.targetUsername ?? '').replace(/^@+/, '').trim();
   const fullTarget = `@${username}`;
@@ -1581,7 +1691,17 @@ export async function captureNetwork(
 
   const win = await deps.openWindow(url.toString(), gate.proxy);
   try {
-    const gated = await deps.guard(win, () => scrapeNetworkRows(win, passes, stagnationLimit, deps));
+    // Post-navigation settle BEFORE the signed-in gate and the first read — his
+    // `loadURL` → `sleep(3500)` → `assertSignedInPage` order. Fail SOFT, matching the verify and
+    // comment settles: a settle that rejects must not abort the scan.
+    try {
+      await deps.delay(NETWORK_SETTLE_MS);
+    } catch {
+      /* ignore a settle error — proceed to read, same soft posture as the other capture paths */
+    }
+    const gated = await deps.guard(win, () =>
+      scrapeNetworkRows(win, passes, stagnationLimit, delayMs, fullTarget, deps),
+    );
     if (gated.blocked) {
       await emitNetworkRun(deps, req.caseId, {
         profileId,

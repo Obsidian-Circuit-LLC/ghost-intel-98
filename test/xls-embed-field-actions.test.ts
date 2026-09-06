@@ -261,3 +261,89 @@ describe('a failure his UI can read (his `run()` announces success unless we thr
       .rejects.toThrow(/all 1 source\(s\) failed: connect to x before collecting/i);
   });
 });
+
+describe('the extraction shows its work while it runs', () => {
+  it('forwards per-pass progress to his sweep-progress channel, and clears it at the end', async () => {
+    const { handlers, store, sent } = harness();
+    await seedPost(store);
+    captureNetwork.mockImplementation((async (_req: unknown, over: {
+      onProgress?: (p: { message: string; current: number; total: number }) => void;
+    }) => {
+      over.onProgress?.({ message: 'Extracting @exodusghost — pass 1/9 — 0 unique', current: 1, total: 9 });
+      over.onProgress?.({ message: 'Extracting @exodusghost — pass 2/9 — 24 unique', current: 2, total: 9 });
+      return { blocked: false, kind: 'followers', target: '@exodusghost', observed: 24, added: 24, completedPasses: 2, reachedEnd: true };
+    }) as never);
+
+    await handlers.get(XLS_CHANNELS.extractRelationships)!({}, 'profile-1', 'follower');
+
+    const progress = sent.filter((m) => m.channel === XLS_EVENT_CHANNELS.onSweepProgress)
+      .map((m) => m.payload as unknown as { message: string; running: boolean });
+    // A long scrape with no visible progress is indistinguishable from a dead button — the whole
+    // reason this was reported as "unresponsive" three times.
+    expect(progress.length).toBeGreaterThanOrEqual(3);
+    expect(progress[0].running).toBe(true);
+    expect(progress.some((p) => /24 unique/.test(p.message))).toBe(true);
+    // …and it must not leave the UI stuck: his extract buttons are disabled while `running`.
+    expect(progress.at(-1)!.running).toBe(false);
+  });
+
+  it('clears the progress bar even when the extraction is blocked', async () => {
+    const { handlers, store, sent } = harness();
+    await seedPost(store);
+    captureNetwork.mockResolvedValue({
+      blocked: true, reason: 'Tor is not connected.', kind: 'followers',
+      target: '@exodusghost', observed: 0, added: 0, completedPasses: 0, reachedEnd: false,
+    });
+    await handlers.get(XLS_CHANNELS.extractRelationships)!({}, 'profile-1', 'follower').catch(() => undefined);
+
+    const progress = sent.filter((m) => m.channel === XLS_EVENT_CHANNELS.onSweepProgress)
+      .map((m) => m.payload as unknown as { running: boolean });
+    expect(progress.at(-1)!.running, 'a stuck progress bar disables every extract button').toBe(false);
+  });
+});
+
+describe('an extraction that read nothing says so', () => {
+  it('rejects with a plain-language message rather than announcing completion', async () => {
+    const { handlers, store } = harness();
+    await seedPost(store);
+    // Not blocked, no error, no accounts — the LAST silent path. Before the progress line existed
+    // this was indistinguishable from a dead button, and his `run()` announced "Network extraction
+    // complete." over the top of it.
+    captureNetwork.mockResolvedValue({
+      blocked: false, kind: 'followers', target: '@exodusghost',
+      observed: 0, added: 0, completedPasses: 9, reachedEnd: true,
+    });
+
+    await expect(handlers.get(XLS_CHANNELS.extractRelationships)!({}, 'profile-1', 'follower'))
+      .rejects.toThrow(/without reading any accounts/i);
+  });
+
+  it('records the empty read in his collection log', async () => {
+    const { handlers, store } = harness();
+    await seedPost(store);
+    captureNetwork.mockResolvedValue({
+      blocked: false, kind: 'followers', target: '@exodusghost',
+      observed: 0, added: 0, completedPasses: 9, reachedEnd: true,
+    });
+    await handlers.get(XLS_CHANNELS.extractRelationships)!({}, 'profile-1', 'follower').catch(() => undefined);
+
+    const run = (await store.load()).collectionRuns.at(-1)!;
+    expect(run.observed).toBe(0);
+    expect(run.passesCompleted).toBe(9);
+  });
+
+  it('a scan that DID read accounts resolves normally', async () => {
+    const { handlers, store } = harness();
+    await seedPost(store);
+    captureNetwork.mockImplementation((async (_r: unknown, over: {
+      saveNetwork: (c: string, a: { accounts: Array<Record<string, unknown>> }) => Promise<number>;
+    }) => {
+      await over.saveNetwork('c', { accounts: [{ username: 'someone', displayName: 'Someone' }] });
+      return { blocked: false, kind: 'followers', target: '@exodusghost', observed: 1, added: 1, completedPasses: 2, reachedEnd: true };
+    }) as never);
+
+    const res = await handlers.get(XLS_CHANNELS.extractRelationships)!({}, 'profile-1', 'follower') as { added: number };
+    expect(res.added).toBe(1);
+    expect((await store.load()).relationships.map((r) => r.username)).toContain('someone');
+  });
+});
