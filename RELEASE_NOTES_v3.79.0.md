@@ -68,3 +68,8 @@ predecessor too, and this time the message can actually get to you.
 - Mutation-verified: the fix was proven by reproducing your exact error string first.
 - One bug caught by the new tests before it shipped: the store adapter's safety guard
   would have rejected every verification in production.
+
+## Installer
+
+`GhostIntel98-Setup-3.79.0.exe` — 945,196,889 bytes
+SHA-256 `d3b57141f0605ddd1343eca1d037944b90bca10edcc8bed8c2264e316f51e3b5`
