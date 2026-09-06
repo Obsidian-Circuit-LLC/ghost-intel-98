@@ -49,6 +49,7 @@ import {
 } from './station-service';
 import { computeNetworkAnalysis, deriveCollectionHealth } from '../x-listening/analysis';
 import { postFromArtifact } from './migrate';
+import { makeStationVerifyStore } from './verify-store';
 import { connectXSession, getXStatus, clearXSession, resolveXTorGate } from '../x-listening/session';
 import { openInX, verifyPost, captureTimeline, captureNetwork, type XOpenKind } from '../x-listening/capture';
 import { getXWindow, navigateXToProfile } from '../x-listening/session';
@@ -115,6 +116,17 @@ export function registerXlsEmbedIpc(deps: XlsEmbedDeps): void {
   function emit(channel: string, payload: unknown): void {
     const win = deps.getWindow?.();
     if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
+  }
+
+  /**
+   * Announce a background failure in the shape HIS listener reads. `StationApp.tsx:285` does
+   * `payload.context.toUpperCase()`, so a payload with only a `message` throws INSIDE his callback
+   * and nothing is ever displayed — the click looks dead. That is why v3.77.0's blocked-reason
+   * reporting never reached the field: the reason was emitted, and then thrown away one frame
+   * later. His own emitter always sends `{ context, message, observedAt }` (`main.cjs:600-610`).
+   */
+  function emitBackgroundError(context: string, message: string): void {
+    emit(XLS_EVENT_CHANNELS.onBackgroundError, { context, message, observedAt: ctx.now() });
   }
 
   /** Apply a mutation, persist it, push the new snapshot, and answer with it (his handlers do). */
@@ -381,7 +393,20 @@ export function registerXlsEmbedIpc(deps: XlsEmbedDeps): void {
     return openInX(kind, str(ref, 'A reference'));
   };
 
-  handle(XLS_CHANNELS.openThread, open('thread'));
+  // OPEN REAL THREAD. His card hands this a post ID (`onOpenThread(post.id)`), not a URL — so the
+  // id is resolved against his document first, exactly as HIS `openPostThread` does
+  // (`main.cjs:1173-1183`: look the finding up, prefer its stored `url`, fall back to
+  // `/<username>/status/<id>`). Passing the id straight to `openInX` made every click throw on URL
+  // validation before a window could open, which is what "unresponsive" looked like from the field.
+  handle(XLS_CHANNELS.openThread, async (e, postId) => {
+    assertTrustedSender(e);
+    const target = str(postId, 'A finding id');
+    const s = await doc();
+    const post = s.posts.find((p) => p.id === target && p.caseId === activeCaseId(s));
+    if (!post) throw new Error('Finding not found.');
+    const fallback = `https://x.com/${encodeURIComponent(String(post.username ?? ''))}/status/${encodeURIComponent(target)}`;
+    return openInX('thread', String(post.url || fallback));
+  });
   handle(XLS_CHANNELS.openIdentityProfile, open('identity'));
 
   handle(XLS_CHANNELS.openProfileFeed, async (e, id) => {
@@ -402,11 +427,24 @@ export function registerXlsEmbedIpc(deps: XlsEmbedDeps): void {
     return openInX('identity', row.username);
   });
 
+  // VERIFY LIVE. The hardened `verifyPost` is reused whole — Tor gate, hidden window, signed-in
+  // guard, window destroyed in a `finally` — but pointed at HIS document instead of the old split
+  // store it defaults to. Without the injected store it read a case file the embed never writes,
+  // so it threw "Post not found in this campaign" on every finding he has. The adapter is
+  // deliberately narrow (see verify-store.ts).
   handle(XLS_CHANNELS.verifyPost, async (e, postId) => {
     assertTrustedSender(e);
-    const target = str(postId, 'A post id');
+    const target = str(postId, 'A finding id');
     const s = await doc();
-    return verifyPost(activeCaseId(s), target);
+    const caseId = activeCaseId(s);
+    if (!s.posts.some((p) => p.id === target && p.caseId === caseId)) {
+      throw new Error('Finding not found in the active campaign.');
+    }
+    const verifyStore = makeStationVerifyStore(s, async () => {
+      await store.save(s);
+      emit(XLS_EVENT_CHANNELS.onStateChanged, clientState(s));
+    }, ctx);
+    return verifyPost(caseId, target, {}, verifyStore);
   });
 
   // ---- cached media (never remote; the cache only) -------------------------
@@ -656,7 +694,7 @@ export function registerXlsEmbedIpc(deps: XlsEmbedDeps): void {
           stopReason: lastReason, reachedEnd: false, frontierUsernames: [],
           status: 'error', error: lastReason,
         } as never);
-        emit(XLS_EVENT_CHANNELS.onBackgroundError, { message: lastReason });
+        emitBackgroundError('collection sweep', lastReason);
       }
     }
     emit(XLS_EVENT_CHANNELS.onSweepProgress, { message: '', current: targets.length, total: targets.length, running: false });
@@ -667,6 +705,12 @@ export function registerXlsEmbedIpc(deps: XlsEmbedDeps): void {
     // Report the failures. A sweep that says "complete" having collected nothing, with the reason
     // only in a console the analyst never sees, is how a total collection failure looked like a
     // working feature for three releases.
+    // A sweep in which EVERY target failed is not a completed sweep. His `run()` sets the notice
+    // to its success string for any resolved value, so returning a `reason` field here left
+    // "Collection sweep complete." on screen with the reason nowhere he could read it.
+    if (targets.length > 0 && failed === targets.length) {
+      throw new Error(`All ${targets.length} source(s) failed: ${lastReason}`);
+    }
     return {
       ...clientState(s),
       collected,
@@ -739,12 +783,18 @@ export function registerXlsEmbedIpc(deps: XlsEmbedDeps): void {
     await store.save(s);
     emit(XLS_EVENT_CHANNELS.onStateChanged, clientState(s));
     if (result.blocked) {
-      emit(XLS_EVENT_CHANNELS.onBackgroundError, {
-        message: `Network extraction blocked: ${result.reason ?? 'unknown reason'}`,
-      });
+      emitBackgroundError(
+        `${kind} extraction`,
+        `Network extraction blocked: ${result.reason ?? 'unknown reason'}`,
+      );
     }
     // Surface the block. Returning a bare zero here is how "Network extraction complete" came to
-    // mean "nothing happened and I will not tell you why".
+    // mean "nothing happened and I will not tell you why" — and a RESOLVED `{ blocked: true }` is
+    // the same lie one step later, because his `run()` overwrites the background error with its
+    // success string. The reason has to arrive as a rejection to survive to the screen.
+    if (result.blocked) {
+      throw new Error(result.reason ?? 'Network extraction was blocked.');
+    }
     return {
       collected: observed,
       added,

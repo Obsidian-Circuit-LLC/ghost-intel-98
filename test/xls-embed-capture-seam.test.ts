@@ -184,11 +184,13 @@ describe('live collection writes the rich artifact into his document', () => {
 
     const { handlers, store } = harness();
     await (handlers.get(XLS_CHANNELS.addProfile) as never as Function)({}, 'darkwebtoday');
-    const result = (await (handlers.get(XLS_CHANNELS.refreshAll) as never as Function)({})) as {
-      failed?: number; collected?: number; reason?: string;
-    };
-    expect(result.failed, 'the failure count must be reported').toBeGreaterThan(0);
-    expect(result.reason, 'and a reason the analyst can read').toBeTruthy();
+
+    // v3.79.0 STRENGTHENED this from a resolved `{ failed, reason }` to a rejection. Reporting the
+    // reason in the return value was not enough: his `run()` sets the notice to its SUCCESS string
+    // for any resolved value, so "Collection sweep complete." was painted over the reason before he
+    // could read it. Only a rejection reaches the screen.
+    await expect((handlers.get(XLS_CHANNELS.refreshAll) as never as Function)({}))
+      .rejects.toThrow(/all 1 source\(s\) failed: page never loaded/i);
 
     // The failure is also recorded where he can find it: the collection run log.
     const runs = (await store.load()).collectionRuns;
