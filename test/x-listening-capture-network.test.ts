@@ -74,6 +74,18 @@ function baseDeps(rows: ReturnType<typeof cell>[]): {
     openWindow,
     runCapture: async () => rows,
     guard: async (_w, capture) => ({ blocked: false, result: await capture() }),
+    // v3.80.0: the page model is his MutationObserver accumulator, not a per-pass viewport read —
+    // X virtualizes the follower list, so a per-pass read loses every row that scrolls away. These
+    // seams stand in for the installed collector; `delay` is virtual so the suite stays instant.
+    delay: async () => undefined,
+    installCollector: async () => undefined,
+    readCollector: async () => ({
+      rows,
+      count: rows.length,
+      scrollTop: 0,
+      scrollHeight: 800,
+      innerHeight: 800,
+    }),
     scroll,
     assertSignedIn: async () => ({ blocked: false }),
     readNetwork: async () => [],
@@ -85,6 +97,23 @@ function baseDeps(rows: ReturnType<typeof cell>[]): {
     now: () => '2026-08-12T00:00:00.000Z',
   };
   return { deps, win, saved, runs, openWindow, resolveGate, scroll, appendEvents, saveScanState };
+}
+
+
+/**
+ * Adapt a per-read page source to the page-side accumulator seam.
+ *
+ * v3.80.0 replaced the per-pass viewport read with GhostExodus's MutationObserver accumulator (X
+ * virtualizes the follower list, so a per-pass read loses every row that scrolls out of the DOM).
+ * These fixtures already express CUMULATIVE sets per pass, which is accumulator semantics, so they
+ * carry over unchanged — only the seam they are attached to moves. `scrollHeight === innerHeight`
+ * puts the scroller at the bottom so the stable-end test can fire.
+ */
+function asCollector(page: () => Promise<ReturnType<typeof cell>[]> | ReturnType<typeof cell>[]) {
+  return async () => {
+    const rows = await page();
+    return { rows, count: rows.length, scrollTop: 0, scrollHeight: 800, innerHeight: 800 };
+  };
 }
 
 describe('buildNetworkUrl — validate the target BEFORE any window opens', () => {
@@ -171,7 +200,7 @@ describe('captureNetwork — mid-scroll challenge (FA-A review: no truncated lis
     // One NEW cell per pass so the loop never stagnates; block the signed-in re-check after the
     // first scroll — the raised 240-pass ceiling must not keep scrolling a flagged page.
     let pass = 0;
-    deps.runCapture = async () => [cell(`u${pass++}`)];
+    deps.readCollector = asCollector(async () => [cell(`u${pass++}`)]);
     deps.assertSignedIn = async () => ({ blocked: true, reason: 'rate limit interstitial' });
     const res = await captureNetwork(
       { caseId: 'case-1', channelId: 'alice', targetUsername: 'alice', kind: 'followers', passes: 20 },
@@ -236,7 +265,7 @@ describe('captureNetwork — scroll loop', () => {
     // Pass 1 → carol, pass 2 → carol+dave, pass 3+ → no new (stagnant).
     const pages = [[cell('carol')], [cell('carol'), cell('dave')], [cell('carol'), cell('dave')]];
     let call = 0;
-    deps.runCapture = async () => pages[Math.min(call++, pages.length - 1)];
+    deps.readCollector = asCollector(async () => pages[Math.min(call++, pages.length - 1)]);
     const res = await captureNetwork(
       { caseId: 'case-1', channelId: 'alice', targetUsername: 'alice', kind: 'followers', passes: 30 },
       deps,
@@ -277,7 +306,7 @@ describe('captureNetwork — configurable stagnation limit (settings-driven)', (
   it('honors networkStagnationLimit=5 from campaign settings (breaks on the 5th stagnant pass)', async () => {
     const { deps, scroll } = baseDeps([]);
     deps.loadCollectionSettings = async () => ({ ...DEFAULT_COLLECTION_SETTINGS, networkStagnationLimit: 5 });
-    deps.runCapture = twoGrowThenStagnant();
+    deps.readCollector = asCollector(twoGrowThenStagnant());
     const res = await captureNetwork(
       { caseId: 'case-1', channelId: 'alice', targetUsername: 'alice', kind: 'followers', passes: 100 },
       deps,
@@ -291,7 +320,7 @@ describe('captureNetwork — configurable stagnation limit (settings-driven)', (
   it('a lower networkStagnationLimit=4 stops one pass sooner', async () => {
     const { deps, scroll } = baseDeps([]);
     deps.loadCollectionSettings = async () => ({ ...DEFAULT_COLLECTION_SETTINGS, networkStagnationLimit: 4 });
-    deps.runCapture = twoGrowThenStagnant();
+    deps.readCollector = asCollector(twoGrowThenStagnant());
     await captureNetwork(
       { caseId: 'case-1', channelId: 'alice', targetUsername: 'alice', kind: 'followers', passes: 100 },
       deps,
@@ -303,7 +332,7 @@ describe('captureNetwork — configurable stagnation limit (settings-driven)', (
     const { deps, scroll } = baseDeps([]);
     // A raw 1 (below His [4,20] band) must NOT stop after a single stagnant pass — it clamps to 4.
     deps.loadCollectionSettings = async () => ({ ...DEFAULT_COLLECTION_SETTINGS, networkStagnationLimit: 1 });
-    deps.runCapture = twoGrowThenStagnant();
+    deps.readCollector = asCollector(twoGrowThenStagnant());
     await captureNetwork(
       { caseId: 'case-1', channelId: 'alice', targetUsername: 'alice', kind: 'followers', passes: 100 },
       deps,
@@ -317,16 +346,18 @@ describe('captureNetwork — raised 240-pass ceiling', () => {
   it('scrolls up to 240 passes (His ceiling), not the old 60 cap', async () => {
     const { deps, scroll } = baseDeps([]);
     deps.loadCollectionSettings = async () => ({ ...DEFAULT_COLLECTION_SETTINGS, networkStagnationLimit: 20 });
-    deps.runCapture = growingRows();
+    deps.readCollector = asCollector(growingRows());
     const res = await captureNetwork(
       // A request above the ceiling clamps to 240 (never 300, never the old 60).
       { caseId: 'case-1', channelId: 'alice', targetUsername: 'alice', kind: 'followers', passes: 300 },
       deps,
     );
-    expect(res.completedPasses).toBe(240);
-    // 240 reads ⇒ 239 scrolls (never scroll past the final pass).
-    expect(scroll).toHaveBeenCalledTimes(239);
-    expect(res.observed).toBe(240);
+    // A 240-pass BUDGET is 241 reads and 240 scrolls — his `for (index = 0; index <= passes;
+    // index++)`. The old `i < passes` loop read one viewport of followers too few on every scan;
+    // the timeline path had already been corrected to this shape, the network path had not.
+    expect(res.completedPasses).toBe(241);
+    expect(scroll).toHaveBeenCalledTimes(240);
+    expect(res.observed).toBe(241);
   });
 
   it('an ordinary capture still uses the base pass budget (8), not the raised ceiling', async () => {
@@ -336,14 +367,14 @@ describe('captureNetwork — raised 240-pass ceiling', () => {
       followerBasePasses: 8,
       networkStagnationLimit: 20,
     });
-    deps.runCapture = growingRows();
+    deps.readCollector = asCollector(growingRows());
     const res = await captureNetwork(
       // No explicit passes ⇒ defaults to the per-direction base budget (8), unchanged by the raise.
       { caseId: 'case-1', channelId: 'alice', targetUsername: 'alice', kind: 'followers' },
       deps,
     );
-    expect(res.completedPasses).toBe(8);
-    expect(scroll).toHaveBeenCalledTimes(7);
+    expect(res.completedPasses).toBe(9); // a budget of 8 ⇒ 9 reads, 8 scrolls
+    expect(scroll).toHaveBeenCalledTimes(8);
   });
 });
 
@@ -370,6 +401,9 @@ function statefulNetworkStore() {
       openWindow: async () => fakeWindow(),
       runCapture: async () => rows,
       guard: async (_w, capture) => ({ blocked: false, result: await capture() }),
+      delay: async () => undefined,
+      installCollector: async () => undefined,
+      readCollector: asCollector(async () => rows),
       scroll: async () => undefined,
       assertSignedIn: async () => ({ blocked: false }),
       readNetwork: async () => [...accumulator.values()] as never,

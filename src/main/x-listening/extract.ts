@@ -538,6 +538,130 @@ export const USER_CELL_SCRIPT = `
   })()
 `;
 
+/**
+ * STATIC in-page payload that INSTALLS his page-side follower/following accumulator.
+ *
+ * WHY AN ACCUMULATOR AND NOT A PER-PASS READ. X virtualizes the follower list: a `UserCell` is
+ * REMOVED from the DOM once it scrolls out of view. Reading `querySelectorAll('[data-testid=
+ * "UserCell"]')` once per scroll pass therefore only ever sees the current viewport, and misses
+ * every row that appeared and vanished between two passes. GhostExodus hit this and rewrote his
+ * collector for exactly this reason — his own UI copy describes it as "a page-side MutationObserver
+ * accumulator so virtualized X user cells remain in the current scan even after they scroll out of
+ * the DOM".
+ *
+ * This port had been carrying `USER_CELL_SCRIPT`, the per-pass viewport read from his SUPERSEDED
+ * v2.3.0 source (our comment even cites `main.cjs:982-1011`, line numbers from that older file).
+ * `readVisibleUserCells` does not exist anywhere in v3.4.1. His source is the authority, so this is
+ * his v3.4.1 `installNetworkCollector`, transcribed.
+ *
+ * TWO DELIBERATE DIVERGENCES, both preserving invariants this app states and his does not:
+ *   - `displayName` stays '' when no display-name line is visible; his falls back to the @handle.
+ *     Fabricating a display name from the handle presents a value the module never observed.
+ *     `normalizeUserCell` already expects the honest ''.
+ *   - the raw remote `avatar` src is carried out of the page but dropped by `normalizeUserCell` —
+ *     no remote media is ever inlined. Nothing here fetches it.
+ *
+ * STATIC: the only inputs are literal selectors. No interpolation of scraped data, ever.
+ */
+export const X_NETWORK_COLLECTOR_INSTALL_SCRIPT = `
+  (() => {
+    const parseCell = (cell) => {
+      const rawText = cell.innerText || '';
+      const lines = rawText.split(/\\n+/).map((line) => line.trim()).filter(Boolean);
+      const links = Array.from(cell.querySelectorAll('a[href^="/"]'))
+        .map((link) => link.getAttribute('href') || '')
+        .filter(Boolean);
+      const profileHref = links.find((href) => /^\\/[A-Za-z0-9_]{1,15}$/.test(href)) || '';
+      const hrefMatch = profileHref.match(/^\\/([A-Za-z0-9_]{1,15})$/);
+      const textMatch = rawText.match(/(?:^|\\s)@([A-Za-z0-9_]{1,15})(?:\\b|$)/);
+      const username = (hrefMatch && hrefMatch[1]) || (textMatch && textMatch[1]) || '';
+      if (!username) return null;
+      const displayName = lines.find((line) => !line.startsWith('@') && !/^(Follow|Following|Follows you|Verified)$/i.test(line)) || '';
+      const ignored = new Set([displayName, '@' + username, 'Follow', 'Following', 'Follows you', 'Verified']);
+      const bio = lines.filter((line) => line && !ignored.has(line)).join(' ').trim();
+      const avatarEl = cell.querySelector('img[src*="profile_images"]');
+      const avatar = avatarEl ? (avatarEl.getAttribute('src') || '') : '';
+      return {
+        username: username,
+        displayName: displayName,
+        bio: bio,
+        url: profileHref ? new URL(profileHref, location.origin).href : '',
+        avatar: avatar
+      };
+    };
+    const collector = window.__ga98NetworkCollector = {
+      rows: new Map(), order: [], captures: 0, maxScrollY: 0, lastCount: 0, lastError: null
+    };
+    collector.capture = () => {
+      try {
+        const scope = document.querySelector('[data-testid="primaryColumn"]') || document.querySelector('main') || document;
+        const cells = Array.from(scope.querySelectorAll('[data-testid="UserCell"]'));
+        for (const cell of cells) {
+          const row = parseCell(cell);
+          if (!row || !row.username || !row.url) continue;
+          const key = row.username.toLowerCase();
+          if (!collector.rows.has(key)) collector.order.push(key);
+          collector.rows.set(key, row);
+        }
+        collector.captures += 1;
+        const scroller = document.scrollingElement || document.documentElement;
+        collector.maxScrollY = Math.max(collector.maxScrollY, (scroller && scroller.scrollTop) || 0);
+        collector.lastCount = collector.rows.size;
+        collector.lastError = null;
+      } catch (error) {
+        collector.lastError = error instanceof Error ? error.message : String(error);
+      }
+      return collector.rows.size;
+    };
+    collector.observer = new MutationObserver(() => {
+      try { collector.capture(); } catch (error) {
+        collector.lastError = error instanceof Error ? error.message : String(error);
+      }
+    });
+    collector.observer.observe(document.body, { childList: true, subtree: true });
+    collector.capture();
+    return collector.rows.size;
+  })()
+`;
+
+/** What one `X_NETWORK_COLLECTOR_READ_SCRIPT` read returns — the accumulated rows plus the scroll
+ *  geometry his stable-end test uses. */
+export interface XNetworkCollectorState {
+  rows: RawUserCell[];
+  count: number;
+  scrollTop: number;
+  scrollHeight: number;
+  innerHeight: number;
+  captures?: number;
+  lastError?: string | null;
+}
+
+/**
+ * STATIC in-page payload that CAPTURES once more and reads the accumulator back. Transcribed from
+ * his `readNetworkCollector`. Returns an empty state (never throws) when the collector is absent,
+ * so a navigation that wiped the page is reported as "nothing accumulated" rather than crashing
+ * the scan.
+ */
+export const X_NETWORK_COLLECTOR_READ_SCRIPT = `
+  (() => {
+    const c = window.__ga98NetworkCollector;
+    const scroller = document.scrollingElement || document.documentElement;
+    if (!c) {
+      return { rows: [], count: 0, scrollTop: 0, scrollHeight: 0, innerHeight: window.innerHeight, captures: 0, lastError: null };
+    }
+    c.capture();
+    return {
+      rows: Array.from(c.rows.values()),
+      count: c.rows.size,
+      captures: c.captures,
+      scrollTop: (scroller && scroller.scrollTop) || 0,
+      scrollHeight: (scroller && scroller.scrollHeight) || 0,
+      innerHeight: window.innerHeight,
+      lastError: c.lastError || null
+    };
+  })()
+`;
+
 /** The visible profile-HEADER metadata a profile page exposes — the fields whose change over time
  *  is evidentiary (`profile_change`). Port of Enterprise `readProfileMetadata`'s return shape
  *  (`electron/main.cjs:1305-1334`). `avatar` is the raw header `profile_images` `src` as scraped;

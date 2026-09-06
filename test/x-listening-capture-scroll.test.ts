@@ -21,6 +21,7 @@ import { describe, it, expect, vi } from 'vitest';
 
 import {
   captureTimeline,
+  TIMELINE_SETTLE_MS,
   type XTimelineCaptureRequest,
   type XCaptureDeps,
 } from '../src/main/x-listening/capture';
@@ -102,7 +103,11 @@ describe('FA1 — scroll-and-accumulate timeline capture', () => {
     expect(res.posts.map((p) => p.messageId).sort()).toEqual(['100', '101', '102']);
     // scroll + delay run BETWEEN passes only — passes+1 (4) reads ⇒ 3 gaps, never after the final read.
     expect(scroll).toHaveBeenCalledTimes(3);
-    expect(delay).toHaveBeenCalledTimes(3);
+    // v3.80.0: one MORE delay than there are gaps — the post-navigation settle. His `scrapeProfile`
+    // sleeps 3500ms after loadURL and before reading the profile header, and this port had no
+    // settle at all, so the header (where the display picture lives) could be read unpainted.
+    expect(delay).toHaveBeenCalledTimes(4);
+    expect(delay).toHaveBeenCalledWith(TIMELINE_SETTLE_MS);
   });
 
   it('accumulates by the ${id}:${repost|tweet} key — re-seeing the same post across passes dedupes to one', async () => {
@@ -131,9 +136,11 @@ describe('FA1 — scroll-and-accumulate timeline capture', () => {
         delay,
       }),
     );
-    // profileScrollPasses=2 ⇒ passes+1 (3) reads ⇒ 2 inter-pass gaps (FA1 finding 2).
-    expect(delay).toHaveBeenCalledTimes(2);
+    // profileScrollPasses=2 ⇒ passes+1 (3) reads ⇒ 2 inter-pass gaps (FA1 finding 2), PLUS the
+    // v3.80.0 post-navigation settle that precedes the header read.
+    expect(delay).toHaveBeenCalledTimes(3);
     expect(delay).toHaveBeenCalledWith(1500);
+    expect(delay).toHaveBeenCalledWith(TIMELINE_SETTLE_MS);
   });
 
   it('stops early after 5 consecutive stagnant passes even with a large budget', async () => {
