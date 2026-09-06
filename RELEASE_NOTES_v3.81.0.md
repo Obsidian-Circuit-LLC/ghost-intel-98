@@ -64,3 +64,8 @@ scrape uses your accumulator, and the progress line shows the running count.
   deletes rows. Nothing ever added one. Reading the code from the panel's side shows all four
   correctly wired up and tells you nothing.
 - Every fix is a test that was watched to fail first.
+
+## Installer
+
+`GhostIntel98-Setup-3.81.0.exe` — 945,194,258 bytes
+SHA-256 `f3cc16180281d8498de13a439986aba5cebe3ce65501b9fbf77ab42e0cdd36c1`
