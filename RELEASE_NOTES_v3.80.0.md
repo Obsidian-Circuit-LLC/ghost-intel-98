@@ -72,3 +72,8 @@ the progress line will tell you what it found while it's finding it.
 - Every finding was checked against a falsifier before it was believed: the picture regression
   against the release diff, the scraper against your v3.4.1 source, the "it's all just Tor-gated"
   theory against the session code that refuted it.
+
+## Installer
+
+`GhostIntel98-Setup-3.80.0.exe` — 945,197,228 bytes
+SHA-256 `c391f728ce97415fdd14ae53fa501e494a883090215a23cb1ccc30b4f4e4d059`
