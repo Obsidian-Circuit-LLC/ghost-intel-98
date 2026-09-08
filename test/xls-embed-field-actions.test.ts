@@ -90,7 +90,10 @@ function harness() {
 }
 
 /** Seed one target source and one collected finding, the way a real campaign holds them. */
-async function seedPost(store: { load(): Promise<PersistedStationState>; save(s: PersistedStationState): Promise<void> }) {
+async function seedPost(
+  store: { load(): Promise<PersistedStationState>; save(s: PersistedStationState): Promise<void> },
+  opts: { withPicture?: boolean } = {},
+) {
   const s = await store.load();
   const caseId = s.activeCaseId;
   s.profiles.push({
@@ -103,6 +106,9 @@ async function seedPost(store: { load(): Promise<PersistedStationState>; save(s:
     text: 'I joined #Anonymous in 2008 at age 24.', createdAt: 'T', collectedAt: 'T',
     kind: 'post', isReply: false, parentPostId: null,
     metrics: { replies: 11, reposts: 2, likes: 16, views: 0 }, media: [],
+    // A normally-collected finding HAS a picture. Seeding one without means the campaign looks
+    // picture-less, which now (correctly) trips the no-pictures report.
+    ...(opts.withPicture === false ? {} : { avatar: 'https://pbs.twimg.com/profile_images/1/e.jpg' }),
   } as never);
   await store.save(s);
   return { caseId };
@@ -386,10 +392,93 @@ describe('a PARTIAL sweep failure survives to the screen', () => {
     expect(typeof summary.context).toBe('string');
   });
 
-  it('schedules nothing when every source succeeded', async () => {
+  it('schedules nothing when every source succeeded AND collected', async () => {
     const { handlers, store, deferred } = harness();
     await seedPost(store);
+    // A sweep that succeeds having collected NOTHING is not a quiet success — it now reports the
+    // station diagnostic, covered below. This asserts the genuinely healthy case stays silent.
+    captureTimeline.mockResolvedValue({ blocked: false, added: 1, skipped: 0, posts: [{ id: 'x' }] } as never);
     await handlers.get(XLS_CHANNELS.refreshAll)!({});
+    expect(deferred).toHaveLength(0);
+  });
+});
+
+describe('a sweep that collects nothing explains the station', () => {
+  it('reports a pasteable diagnostic instead of announcing completion', async () => {
+    const { handlers, store, sent, deferred } = harness();
+    await seedPost(store);
+    // Every source "succeeds" and returns nothing. Not blocked, no error — the shape that has now
+    // produced three indistinguishable field reports.
+    captureTimeline.mockResolvedValue({ blocked: false, added: 0, skipped: 0, posts: [] } as never);
+
+    await handlers.get(XLS_CHANNELS.refreshAll)!({});
+    expect(deferred.length, 'the account must outlive his success string').toBeGreaterThan(0);
+    deferred.forEach((fn) => fn());
+
+    const report = sent
+      .filter((m) => m.channel === XLS_EVENT_CHANNELS.onBackgroundError)
+      .map((m) => (m.payload as unknown as { message: string }).message)
+      .join('\n');
+    expect(report).toMatch(/diagnostic/i);
+    expect(report).toMatch(/capture window/i);
+    expect(report).toMatch(/with a picture/i);
+    expect(report).toMatch(/Findings: /i);
+  });
+
+  it('stays quiet when the sweep actually collected something', async () => {
+    const { handlers, store, deferred } = harness();
+    await seedPost(store);
+    captureTimeline.mockImplementation((async (_w: unknown, _r: unknown, over: {
+      savePosts: (c: string, p: unknown[]) => Promise<unknown>;
+    }) => {
+      await over.savePosts('c', [{
+        id: 'fresh-1', channelId: 'exodusghost', authorHandle: 'exodusghost', text: 'hello',
+        url: 'https://x.com/ExodusGhost/status/9', publishedAt: 'T', harvestedAt: 'T',
+        kind: 'post', parentPostId: null, metrics: { replies: 0, reposts: 0, likes: 0, views: 0 },
+        evidenceHash: 'h', mediaRefs: [],
+      }]);
+      return { blocked: false, added: 1, skipped: 0, posts: [{ id: 'fresh-1' }] };
+    }) as never);
+
+    await handlers.get(XLS_CHANNELS.refreshAll)!({});
+    expect(deferred, 'a working sweep must not nag').toHaveLength(0);
+  });
+});
+
+describe('a sweep that collects findings but no pictures explains itself too', () => {
+  it('reports when images are ON and nothing came back with one', async () => {
+    const { handlers, store, sent, deferred } = harness();
+    await seedPost(store, { withPicture: false });
+    captureTimeline.mockImplementation((async (_w: unknown, _r: unknown, over: {
+      savePosts: (c: string, p: unknown[]) => Promise<unknown>;
+    }) => {
+      await over.savePosts('c', [{
+        id: 'nopic-1', channelId: 'exodusghost', authorHandle: 'exodusghost', text: 'hello',
+        url: 'https://x.com/ExodusGhost/status/9', publishedAt: 'T', harvestedAt: 'T',
+        kind: 'post', parentPostId: null, metrics: { replies: 0, reposts: 0, likes: 0, views: 0 },
+        evidenceHash: 'h', mediaRefs: [], // no avatar — the reported symptom
+      }]);
+      return { blocked: false, added: 1, skipped: 0, posts: [{ id: 'nopic-1' }] };
+    }) as never);
+
+    await handlers.get(XLS_CHANNELS.refreshAll)!({});
+    expect(deferred.length).toBeGreaterThan(0);
+    deferred.forEach((fn) => fn());
+
+    const report = sent
+      .filter((m) => m.channel === XLS_EVENT_CHANNELS.onBackgroundError)
+      .map((m) => (m.payload as unknown as { message: string }).message).join('\n');
+    expect(report).toMatch(/no display pictures/i);
+    expect(report).toMatch(/with a picture: 0 of/i);
+  });
+
+  it('does not report when images are deliberately OFF', async () => {
+    const { handlers, store, deferred } = harness();
+    await seedPost(store);
+    await handlers.get(XLS_CHANNELS.setCampaignImages)!({}, false);
+    captureTimeline.mockResolvedValue({ blocked: false, added: 1, skipped: 0, posts: [{ id: 'x' }] } as never);
+    await handlers.get(XLS_CHANNELS.refreshAll)!({});
+    // Turning pictures off and then being told there are no pictures is nagging, not reporting.
     expect(deferred).toHaveLength(0);
   });
 });
