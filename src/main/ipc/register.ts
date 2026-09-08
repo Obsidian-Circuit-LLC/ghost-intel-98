@@ -1805,6 +1805,9 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
 
   registerXlsEmbedIpc({
     handle: safeHandleWithEvent,
+    // Quoted in the station diagnostic, so a report can never again be ambiguous about which build
+    // produced it.
+    version: () => app.getVersion(),
     // His `state:changed` / `sweep:progress` pushes must reach the station wherever it is showing:
     // the standalone window when one is open, otherwise the app shell. Without this the standalone
     // window would render once and then never update as collection ran.

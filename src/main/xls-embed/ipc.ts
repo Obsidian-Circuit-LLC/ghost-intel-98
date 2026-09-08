@@ -50,6 +50,7 @@ import {
 import { computeNetworkAnalysis, deriveCollectionHealth, extractEntities } from '../x-listening/analysis';
 import { postFromArtifact } from './migrate';
 import { makeStationXStore } from './station-x-store';
+import { buildStationDiagnostic } from './diagnostic';
 import { snapshotProfile } from '../x-listening/changes';
 import { connectXSession, getXStatus, clearXSession, resolveXTorGate } from '../x-listening/session';
 import { openInX, verifyPost, captureTimeline, captureNetwork, type XOpenKind } from '../x-listening/capture';
@@ -89,6 +90,13 @@ export interface XlsEmbedDeps {
    * working around it. Injectable so the suite stays deterministic.
    */
   defer?: (fn: () => void) => void;
+  /** The running build, quoted in the station diagnostic. "Reverted to a previous state" has a
+   *  boring explanation this project has already hit (v3.70.1, an installer that left a stale
+   *  install in place), and nothing in the app has ever said which build is running.
+   *
+   *  A GETTER, not a value: registration must not touch electron. Reading `app.getVersion()` at
+   *  registration time ran it for every caller that merely wires up IPC. */
+  version?: () => string;
 }
 
 const defaultCtx: StationCtx = {
@@ -137,6 +145,40 @@ export function registerXlsEmbedIpc(deps: XlsEmbedDeps): void {
    */
   function emitBackgroundError(context: string, message: string): void {
     emit(XLS_EVENT_CHANNELS.onBackgroundError, { context, message, observedAt: ctx.now() });
+  }
+
+  /**
+   * A pasteable account of what the station currently is, announced AFTER the reply has left so it
+   * is not painted over by his success string. Fired when a sweep completes having collected
+   * nothing: that outcome is not an error anywhere in the pipeline, which is exactly why three
+   * consecutive field reports of it carried no usable detail.
+   */
+  async function reportStationDiagnostic(s: PersistedStationState, headline: string): Promise<void> {
+    let connected = false;
+    try {
+      connected = Boolean((await getXStatus(activeCaseId(s)))?.connected);
+    } catch {
+      /* a status read that fails is itself reported below as "disconnected" — never throw here */
+    }
+    let clearnetAcked = false;
+    try {
+      clearnetAcked = await loadClearnetEnabled();
+    } catch {
+      /* fail-closed: report Tor mode rather than claiming an opt-in we could not read */
+    }
+    const report = buildStationDiagnostic({
+      version: (() => {
+        try {
+          return deps.version?.() ?? 'unknown';
+        } catch {
+          return 'unknown';
+        }
+      })(),
+      state: s,
+      session: { connected, hasWindow: Boolean(getXWindow(activeCaseId(s))) },
+      tor: { connected: Boolean(s.tor?.connected), clearnetAcked },
+    });
+    defer(() => { emitBackgroundError('station', `${headline}\n${report}`); });
   }
 
   /** Apply a mutation, persist it, push the new snapshot, and answer with it (his handlers do). */
@@ -773,6 +815,32 @@ export function registerXlsEmbedIpc(deps: XlsEmbedDeps): void {
     // Report the failures. A sweep that says "complete" having collected nothing, with the reason
     // only in a console the analyst never sees, is how a total collection failure looked like a
     // working feature for three releases.
+    // A sweep that ran, raised nothing, and collected nothing is the outcome that has produced
+    // three indistinguishable field reports. It is not an error at any layer, so nothing reported
+    // it. Say what the station actually is instead of announcing completion.
+    if (targets.length > 0 && failed === 0 && collected === 0) {
+      await reportStationDiagnostic(
+        s,
+        `Collection finished but read nothing from ${targets.length} source(s).`,
+      );
+    }
+    // His OTHER standing symptom: the sweep works, the findings arrive, and not one of them has a
+    // picture. Nothing fails, so nothing reports it — and "no display pictures" has already meant
+    // three different causes. Only when pictures are actually switched ON somewhere, so turning
+    // them off and then being told there are none is not mistaken for a fault.
+    if (targets.length > 0 && failed === 0 && collected > 0) {
+      const campaignImages = activeSettings(s).collectImages !== false;
+      const anySourceWantsImages = s.profiles
+        .filter((p) => p.caseId === caseId && p.enabled)
+        .some((p) => (p.imageMode ?? 'inherit') === 'on' || ((p.imageMode ?? 'inherit') === 'inherit' && campaignImages));
+      const campaignPosts = s.posts.filter((p) => p.caseId === caseId);
+      if (anySourceWantsImages && campaignPosts.length > 0 && !campaignPosts.some((p) => p.avatar)) {
+        await reportStationDiagnostic(
+          s,
+          'Collection worked, but no display pictures came back with it.',
+        );
+      }
+    }
     // A PARTIAL failure is real news and used to vanish: the per-target error above is emitted
     // mid-sweep, and his `run()` then paints "Collection sweep complete." over it. Announce the
     // summary after this handler's reply has left, so the last thing on screen is what happened.
