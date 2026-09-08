@@ -75,3 +75,8 @@ you're running. Now it does.
 - The diagnostic is a pure function with no clock, no I/O — everything it reports is passed in, and
   it is capped so it stays pasteable.
 - It stays quiet on a healthy sweep, and quiet when you have deliberately turned pictures off.
+
+## Installer
+
+`GhostIntel98-Setup-3.82.0.exe` — 945,178,341 bytes
+SHA-256 `559aa57e95d054cc6182b39fc071bf1d5f3debe872c52882e3af9c97bc37f7b4`
