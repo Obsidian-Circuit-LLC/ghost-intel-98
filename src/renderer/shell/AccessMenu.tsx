@@ -21,14 +21,14 @@ interface AccessMenuProps {
 }
 
 /** Games live in their own "Games ▸" submenu (not on the desktop, not flat in the menu). */
-const GAMES: { module: ModuleKey; label: string }[] = [
+export const GAMES: { module: ModuleKey; label: string }[] = [
   { module: 'solitaire', label: 'Solitaire' },
   { module: 'minesweeper', label: 'Mine Detector' },
   { module: 'chess', label: 'Chess' },
   { module: 'pinball', label: 'Ghost Space Ball' }
 ];
 /** The five fixed category flyouts. Verified against the `ModuleKey` union in `state/store.ts`. */
-const CATEGORIES: { label: string; glyph: string; items: { module: ModuleKey; label: string }[] }[] = [
+export const CATEGORIES: { label: string; glyph: string; items: { module: ModuleKey; label: string }[] }[] = [
   { label: 'Programs', glyph: '📁', items: [
     { module: 'cases', label: 'My Cases' }, { module: 'notepad', label: 'Notepad 98' },
     { module: 'briefcase', label: 'Briefcase' }, { module: 'markets', label: 'Markets' },
@@ -42,6 +42,7 @@ const CATEGORIES: { label: string; glyph: string; items: { module: ModuleKey; la
     { module: 'dialterm', label: 'DialTerm' }, { module: 'mail', label: 'Mail' },
     { module: 'chat', label: 'Chat (beta)' }, { module: 'bookmarks', label: 'Bookmarks' } ] },
   { label: 'Organizer', glyph: '📅', items: [
+    { module: 'address-book', label: 'Address Book' },
     { module: 'invoices', label: 'Invoices' }, { module: 'report', label: 'Reports' },
     { module: 'calendar', label: 'Calendar' }, { module: 'reminders', label: 'Reminders' },
     { module: 'alarm', label: 'Alarm' }, { module: 'number-muncher', label: 'Number Muncher' },
