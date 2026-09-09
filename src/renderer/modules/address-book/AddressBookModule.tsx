@@ -37,13 +37,14 @@ const MULTI_FIELDS = [
   { key: 'phones', label: 'Phone', placeholder: '+44 …' },
   { key: 'urls', label: 'URL', placeholder: 'https://…' },
   { key: 'socials', label: 'Social Media', placeholder: '@handle' },
+  { key: 'affiliations', label: 'Affiliation', placeholder: 'group, org, or collective' },
 ] as const;
 type MultiKey = (typeof MULTI_FIELDS)[number]['key'];
 
 /** A blank contact — every field present, so the editor is never driven by `undefined`. */
 function emptyContact(): Contact {
   return {
-    id: '', name: '', alias: '', emails: [''], phones: [''], urls: [''], socials: [''],
+    id: '', name: '', alias: '', emails: [''], phones: [''], urls: [''], socials: [''], affiliations: [''],
     occupation: '', skills: '', notes: '', thoughts: '',
     bioPicRef: null, photoRefs: [], commonContacts: [],
     createdAt: '', updatedAt: '',
@@ -114,6 +115,7 @@ export function AddressBookModule(): JSX.Element {
       phones: contact.phones.length ? contact.phones : [''],
       urls: contact.urls.length ? contact.urls : [''],
       socials: contact.socials.length ? contact.socials : [''],
+      affiliations: contact.affiliations.length ? contact.affiliations : [''],
     });
     setSelectedId(id);
     setDirty(false);
@@ -154,6 +156,7 @@ export function AddressBookModule(): JSX.Element {
       ...(draft.id ? { id: draft.id } : {}),
       name: draft.name, alias: draft.alias,
       emails: draft.emails, phones: draft.phones, urls: draft.urls, socials: draft.socials,
+      affiliations: draft.affiliations,
       occupation: draft.occupation, skills: draft.skills,
       notes: draft.notes, thoughts: draft.thoughts,
       bioPicRef: draft.bioPicRef, photoRefs: draft.photoRefs,
@@ -220,6 +223,11 @@ export function AddressBookModule(): JSX.Element {
               style={{ flex: 1, minWidth: 0 }}
             />
           </div>
+          <div className="ga98-ab-list-head" title="Every contact, sorted by name">
+            {query.trim()
+              ? `${rows.length} match${rows.length === 1 ? '' : 'es'}`
+              : `All contacts (${rows.length}) · A→Z`}
+          </div>
           <ul className="ga98-list" style={{ flex: 1, overflow: 'auto', margin: 0 }}>
             {rows.length === 0 && (
               <li style={{ color: 'var(--ga98-dim-soft)', fontSize: 11 }}>
@@ -241,7 +249,7 @@ export function AddressBookModule(): JSX.Element {
           </ul>
         </div>
 
-        <div className="ga98-pane" style={{ flex: 1, minWidth: 0, overflow: 'auto', padding: 8 }}>
+        <div className="ga98-pane ga98-ab-editor" style={{ flex: 1, minWidth: 0, overflow: 'auto', padding: 8 }}>
           {!dirty && !selectedId ? (
             <p style={{ color: 'var(--ga98-dim-soft)' }}>Select a contact, or click New to add one.</p>
           ) : (
@@ -275,13 +283,12 @@ export function AddressBookModule(): JSX.Element {
                 <fieldset key={field.key} style={{ marginTop: 8 }}>
                   <legend>{field.label}</legend>
                   {draft[field.key].map((value, i) => (
-                    <div key={i} style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
+                    <div key={i} className="ga98-ab-row">
                       <input
                         value={value}
                         placeholder={field.placeholder}
                         aria-label={`${field.label} ${i + 1}`}
                         onChange={(e) => editMulti(field.key, i, e.target.value)}
-                        style={{ flex: 1, minWidth: 0 }}
                       />
                       <button type="button" title={`Remove this ${field.label.toLowerCase()}`} onClick={() => removeMulti(field.key, i)}>−</button>
                     </div>

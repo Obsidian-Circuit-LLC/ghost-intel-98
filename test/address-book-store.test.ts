@@ -41,8 +41,10 @@ describe('the repeatable fields', () => {
       phones: ['+44 7000 000000', 'ext 12'],
       urls: ['https://example.org', 'not a url but they typed it'],
       socials: ['@ada', 'matrix:@ada:example.org'],
+      affiliations: ['Analytical Society', 'the Difference Engine circle'],
     }));
     expect(saved.emails).toHaveLength(3);
+    expect(saved.affiliations).toEqual(['Analytical Society', 'the Difference Engine circle']);
     expect(saved.emails[1]).toBe('b@y.test');
     expect(saved.phones).toEqual(['+44 7000 000000', 'ext 12']);
     // Never normalised into a shape they did not type — an OSINT record stores what was observed.
@@ -127,12 +129,13 @@ describe('search', () => {
     await save(c('Ada Lovelace', {
       alias: 'Enchantress', emails: ['ada@analytical.test'], occupation: 'Mathematician',
       skills: 'analytical engines', notes: 'met at the symposium', thoughts: 'sharp',
+      affiliations: ['Analytical Society'],
     }));
     await save(c('Bob Stone', { occupation: 'Locksmith', skills: 'physical entry' }));
   });
 
   it('matches across every text field, case-insensitively', async () => {
-    for (const q of ['ada', 'ENCHANTRESS', 'analytical.test', 'mathematician', 'symposium', 'sharp']) {
+    for (const q of ['ada', 'ENCHANTRESS', 'analytical.test', 'mathematician', 'symposium', 'sharp', 'analytical society']) {
       expect((await search(q)).map((r) => r.name), `query: ${q}`).toEqual(['Ada Lovelace']);
     }
   });

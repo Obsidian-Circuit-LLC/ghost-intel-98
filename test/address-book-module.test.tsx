@@ -23,7 +23,7 @@ const summary = (id: string, name: string, alias = ''): ContactSummary => ({
 });
 
 const contact = (id: string, name: string, extra: Partial<Contact> = {}): Contact => ({
-  id, name, alias: '', emails: [], phones: [], urls: [], socials: [],
+  id, name, alias: '', emails: [], phones: [], urls: [], socials: [], affiliations: [],
   occupation: '', skills: '', notes: '', thoughts: '',
   bioPicRef: null, photoRefs: [], commonContacts: [],
   createdAt: 'T', updatedAt: 'T', ...extra,
@@ -165,5 +165,47 @@ describe('the album', () => {
     click(container.querySelector('.ga98-list li'));
     await act(async () => {});
     expect(container.textContent).toMatch(/drag photos here/i);
+  });
+});
+
+describe('the requested additions', () => {
+  it('lists an Affiliation section, repeatable like the other contact fields', async () => {
+    installApi([summary('1', 'Ada')], { 1: contact('1', 'Ada') });
+    await render();
+    click(container.querySelector('.ga98-list li'));
+    await act(async () => {});
+    const legends = Array.from(container.querySelectorAll('fieldset legend')).map((l) => l.textContent);
+    expect(legends, 'affiliation was the forgotten field').toContain('Affiliation');
+    expect(container.querySelector('input[aria-label^="Affiliation "]')).toBeTruthy();
+  });
+
+  it('sends affiliations with the save', async () => {
+    installApi([summary('1', 'Ada')], { 1: contact('1', 'Ada', { affiliations: ['Analytical Society'] }) });
+    await render();
+    click(container.querySelector('.ga98-list li'));
+    await act(async () => {});
+    click(Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Save'));
+    await act(async () => {});
+    expect((saved[0] as { affiliations: string[] }).affiliations).toEqual(['Analytical Society']);
+  });
+
+  it('names the ordering on the home list, so "all contacts, A to Z" is on the page', async () => {
+    installApi([summary('1', 'Adam'), summary('2', 'Zara')], {});
+    await render();
+    const head = container.querySelector('.ga98-ab-list-head')!;
+    expect(head.textContent).toMatch(/all contacts \(2\)/i);
+    expect(head.textContent).toMatch(/A.?Z/i);
+  });
+
+  it('switches the header to a match count while searching', async () => {
+    installApi([summary('1', 'Adam')], {});
+    await render();
+    const search = container.querySelector('input[aria-label="Search contacts"]') as HTMLInputElement;
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
+      setter.call(search, 'ad');
+      search.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(container.querySelector('.ga98-ab-list-head')!.textContent).toMatch(/1 match/i);
   });
 });
