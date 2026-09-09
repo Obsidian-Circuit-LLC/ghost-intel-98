@@ -1339,6 +1339,7 @@ export function ensureContactInput(v: unknown): ContactInput {
     ...(values(o.phones, 'phones') === undefined ? {} : { phones: values(o.phones, 'phones')! }),
     ...(values(o.urls, 'urls') === undefined ? {} : { urls: values(o.urls, 'urls')! }),
     ...(values(o.socials, 'socials') === undefined ? {} : { socials: values(o.socials, 'socials')! }),
+    ...(values(o.affiliations, 'affiliations') === undefined ? {} : { affiliations: values(o.affiliations, 'affiliations')! }),
     ...(str(o.occupation, 'occupation') === undefined ? {} : { occupation: str(o.occupation, 'occupation')! }),
     ...(str(o.skills, 'skills') === undefined ? {} : { skills: str(o.skills, 'skills')! }),
     ...(str(o.notes, 'notes') === undefined ? {} : { notes: str(o.notes, 'notes')! }),

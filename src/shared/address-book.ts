@@ -26,6 +26,9 @@ export interface Contact {
   phones: ContactValues;
   urls: ContactValues;
   socials: ContactValues;
+  /** Groups, orgs or collectives the contact is tied to. Repeatable — an OSINT subject can belong
+   *  to several, and the network is often the point. */
+  affiliations: ContactValues;
   occupation: string;
   skills: string;
   /** Important facts about the contact. */
@@ -53,6 +56,7 @@ export interface ContactInput {
   phones?: ContactValues;
   urls?: ContactValues;
   socials?: ContactValues;
+  affiliations?: ContactValues;
   occupation?: string;
   skills?: string;
   notes?: string;

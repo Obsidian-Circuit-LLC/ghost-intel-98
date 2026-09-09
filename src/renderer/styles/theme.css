@@ -2034,6 +2034,9 @@ input.ga98-text, select.ga98-text {
 .ga98-banner-shred     { --ga98-banner-bg: #1a2342; }
 .ga98-banner-journal   { --ga98-banner-bg: #acaeb6; }
 .ga98-banner-addressbook { --ga98-banner-bg: #020b2b; }
+/* His art carries a lot of dark grid on the right; a shorter band keeps it from eating a compact
+   window while still showing the wordmark at full crispness. */
+.ga98-module-banner-wrap.ga98-banner-addressbook { height: clamp(96px, 11vw, 150px); }
 
 /* Briefcase module-specific column wrapper: banner above the shared .ga98-split so the split
  * class itself stays unaffected for its other consumers. */
@@ -2793,11 +2796,52 @@ input.ga98-text, select.ga98-text {
 
 
 /* ---- Address Book ------------------------------------------------------------------------- */
+/* The list header names the ordering, so "why this order" is answered on the page, not guessed. */
+.ga98-ab-list-head {
+  padding: 3px 6px;
+  font-size: 11px;
+  color: var(--ga98-dim-soft);
+  border-bottom: 1px solid var(--ga98-shadow-dark);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Labels stack their input on its own full-width line. Without this, `<label>Name<input></label>`
+   renders the caption and the field inline, which is the cramped, mislabelled look from the field
+   screenshots. Every field is a normal, editable input — this just makes that legible. */
+.ga98-ab-editor label {
+  display: block;
+  font-size: 11px;
+  color: var(--ga98-dim-soft);
+  margin: 0;
+}
+.ga98-ab-editor label > input {
+  display: block;
+  width: 100%;
+  margin-top: 2px;
+}
+.ga98-ab-editor fieldset {
+  border: 1px solid var(--ga98-shadow-dark);
+  margin: 8px 0 0;
+  padding: 6px 8px 8px;
+  min-width: 0;
+}
+.ga98-ab-editor fieldset legend { font-size: 11px; padding: 0 4px; }
+.ga98-ab-editor textarea { display: block; width: 100%; box-sizing: border-box; resize: vertical; }
+/* The repeatable-field rows: input takes the space, the − sits tight beside it, the + is its own
+   row beneath. Fixed-width buttons so a long value never squeezes the control off the edge. */
+.ga98-ab-editor fieldset .ga98-ab-row { display: flex; gap: 4px; margin-bottom: 4px; }
+.ga98-ab-editor fieldset .ga98-ab-row > input { flex: 1; min-width: 0; }
+.ga98-ab-editor fieldset .ga98-ab-row > button,
+.ga98-ab-editor fieldset > button { min-width: 28px; }
+
 /* The bio picture frame keeps a fixed footprint whether or not a photo is set, so the fields
    beside it do not jump as one is added or cleared. */
 .ga98-ab-biopic {
   width: 120px;
   height: 120px;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2807,7 +2851,7 @@ input.ga98-text, select.ga98-text {
   font-size: 11px;
   overflow: hidden;
 }
-.ga98-ab-biopic img { width: 100%; height: 100%; object-fit: cover; }
+.ga98-ab-biopic img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
 /* The album is a drop target; the dashed outline appears only while a drag is over it, so the
    affordance is visible exactly when it applies. */

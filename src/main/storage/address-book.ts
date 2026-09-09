@@ -65,6 +65,7 @@ function withDefaults(raw: Contact): Contact {
     phones: raw.phones ?? [],
     urls: raw.urls ?? [],
     socials: raw.socials ?? [],
+    affiliations: raw.affiliations ?? [],
     occupation: raw.occupation ?? '',
     skills: raw.skills ?? '',
     notes: raw.notes ?? '',
@@ -120,7 +121,7 @@ export async function read(id: string): Promise<Contact | null> {
 function haystack(c: Contact): string {
   return [
     c.name, c.alias, c.occupation, c.skills, c.notes, c.thoughts,
-    ...c.emails, ...c.phones, ...c.urls, ...c.socials,
+    ...c.emails, ...c.phones, ...c.urls, ...c.socials, ...c.affiliations,
   ].join('\n').toLowerCase();
 }
 
@@ -167,6 +168,7 @@ export async function save(input: ContactInput): Promise<Contact> {
       phones: input.phones === undefined ? (existing?.phones ?? []) : cleanValues(input.phones),
       urls: input.urls === undefined ? (existing?.urls ?? []) : cleanValues(input.urls),
       socials: input.socials === undefined ? (existing?.socials ?? []) : cleanValues(input.socials),
+      affiliations: input.affiliations === undefined ? (existing?.affiliations ?? []) : cleanValues(input.affiliations),
       occupation: text(input.occupation ?? existing?.occupation ?? ''),
       skills: text(input.skills ?? existing?.skills ?? ''),
       notes: text(input.notes ?? existing?.notes ?? ''),
