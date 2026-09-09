@@ -37,3 +37,8 @@ taller now so the editor has room to breathe. The art is yours — I just gave i
   and search — same as every other field.
 - Tests cover the new field saving and searching, and the list header naming its order.
 - Everything stays encrypted at rest, zero network.
+
+## Installer
+
+`GhostIntel98-Setup-3.85.0.exe` — 945,755,204 bytes
+SHA-256 `d6fe7f179398f302bf6cc233033c64a76ed9c6e6417f2b914d2fde8ca0d62c4b`
