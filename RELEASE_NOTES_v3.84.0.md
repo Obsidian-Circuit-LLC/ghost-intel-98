@@ -44,3 +44,8 @@ merely stored. That last number separates two opposite faults that have each cos
 - 713 test files, 5,390 tests, 1 skipped, zero failures; typecheck clean.
 - The reachability guard is deliberately dumb: it reads the launcher source files and the module
   registrations, so it cannot be satisfied by anything except an actual entry a person can click.
+
+## Installer
+
+`GhostIntel98-Setup-3.84.0.exe` — 945,756,742 bytes
+SHA-256 `2b0b4456a9c30e7d60dab5b1ff38c6c03812c033cd4eb573bcdbee7f155c79df`
