@@ -67,10 +67,12 @@ import * as bookmarksBoard from '../storage/bookmarks-board';
 import * as stickyNotesStore from '../storage/sticky-notes';
 import * as aiConvos from '../storage/ai-conversations';
 import * as briefcase from '../storage/briefcase';
+import * as addressBook from '../storage/address-book';
+import * as addressBookAssets from '../storage/address-book-assets';
 import * as journal from '../storage/journal';
 import * as journalAssets from '../storage/journal-assets';
 import * as voiceModel from '../voice/model-protocol';
-import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityType, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureShellProgram, ensureWhiteboard, ensureBoardFile, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon, ensureSaveToCaseOpts, ensureGeoItem, ensureThreatLayerId, ensureKeyedLayerId, ensureLayerKey, isKeyedLayerId, ensureBookmarkBoard, ensureMarketsSettings, ensureStickyNotes, ensureAiConversation, ensureBriefcaseNote, ensureJournalEntry, ensurePin, ensureUid, ensureMailFlag, stripProtectedSettings, ensureBounds, ensureDocRelPath, ensureDocName, ensureImportSourcePath, ensureNoteBody, ensureIdArray, ensureInvoice, ensureProfile, ensureAssetInput, ensureReport, ensureContact, ensureDescriptor, ensureIntroduction, ensureReportTemplate, ensureReportAssetInput, ensureJournalAssetInput, ensureConversationId, MAX_PDF_SIGN_BYTES, ensurePdfBytes, parseSignatureDataUrl, ensurePlacement } from '../security/validate';
+import { ensureUuid, ensureFileName, validateExternalUrl, validateBookmarkUrl, validatePickFilters, sanitiseSaveDefault, validateByteRange, ensureEntityId, ensureEntityType, ensureEntityInput, ensureEntityPatch, ensureRelationship, ensureLinkOpts, ensureTimelineEvent, ensureBioId, ensureBioInput, ensureSearchQuery, ensureFtpName, ensureFtpPath, ensureSessionId, ensureShellProgram, ensureWhiteboard, ensureBoardFile, ensurePassword, ensureNewPassword, ensureRecoveryKey, ensureLocalAiSetupOpts, ensureMediaRoot, ensureStationInput, ensureFeedUrl, ensureGeoSource, ensureLatLon, ensureSaveToCaseOpts, ensureGeoItem, ensureThreatLayerId, ensureKeyedLayerId, ensureLayerKey, isKeyedLayerId, ensureBookmarkBoard, ensureMarketsSettings, ensureStickyNotes, ensureAiConversation, ensureBriefcaseNote, ensureJournalEntry, ensurePin, ensureUid, ensureMailFlag, stripProtectedSettings, ensureBounds, ensureDocRelPath, ensureDocName, ensureImportSourcePath, ensureNoteBody, ensureIdArray, ensureInvoice, ensureProfile, ensureAssetInput, ensureReport, ensureContact, ensureDescriptor, ensureIntroduction, ensureReportTemplate, ensureReportAssetInput, ensureJournalAssetInput, ensureContactInput, ensureContactAssetInput, ensureConversationId, MAX_PDF_SIGN_BYTES, ensurePdfBytes, parseSignatureDataUrl, ensurePlacement } from '../security/validate';
 import { signPdf } from '../pdf-signer/sign';
 import * as entities from '../storage/entities';
 import * as bioStore from '../storage/bio-images';
@@ -1244,6 +1246,22 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   // ---- journal (PIN-gated personal journal; entries stay INSIDE the journal store — never a
   //      case or the briefcase; encrypted at rest, zero egress). The PIN is a rate-limited UI
   //      gate over already-vault-encrypted storage, NOT the encryption key (see storage/journal.ts).
+  // ---- address book (contacts + their photo album; encrypted at rest like every other store,
+  //      zero network). The common-contact graph's symmetry is enforced in the STORE, not here.
+  safeHandle(channels.addressBook.list, () => addressBook.list());
+  safeHandle(channels.addressBook.read, (...args) => addressBook.read(ensureUuid(args[0], 'contact id')));
+  safeHandle(channels.addressBook.save, (...args) => addressBook.save(ensureContactInput(args[0])));
+  safeHandle(channels.addressBook.delete, (...args) => addressBook.remove(ensureUuid(args[0], 'contact id')));
+  safeHandle(channels.addressBook.search, (...args) => addressBook.search(String(args[0] ?? '')));
+  safeHandle(channels.addressBook.putAsset, async (...args) => {
+    const { bytes, mime } = ensureContactAssetInput(args[0]);
+    return addressBookAssets.putAsset(bytes, mime);
+  });
+  safeHandle(channels.addressBook.getAsset, async (...args) => {
+    const got = await addressBookAssets.getAsset(ensureFileName(args[0], 'assetRef'));
+    return got ? { bytes: Array.from(got.bytes), mime: got.mime } : null;
+  });
+
   safeHandle(channels.journal.list, () => journal.list());
   safeHandle(channels.journal.read, (...args) => journal.read(ensureUuid(args[0], 'journal entry id')));
   safeHandle(channels.journal.save, (...args) => journal.save(ensureJournalEntry(args[0])));

@@ -243,6 +243,15 @@ const api = {
     save: (note: unknown) => ipcRenderer.invoke(channels.briefcase.save, note),
     delete: (id: string) => ipcRenderer.invoke(channels.briefcase.delete, id)
   },
+  addressBook: {
+    list: () => ipcRenderer.invoke(channels.addressBook.list),
+    read: (id: string) => ipcRenderer.invoke(channels.addressBook.read, id),
+    save: (contact: unknown) => ipcRenderer.invoke(channels.addressBook.save, contact),
+    delete: (id: string) => ipcRenderer.invoke(channels.addressBook.delete, id),
+    search: (query: string) => ipcRenderer.invoke(channels.addressBook.search, query),
+    putAsset: (bytes: number[], mime: string) => ipcRenderer.invoke(channels.addressBook.putAsset, { bytes, mime }),
+    getAsset: (ref: string) => ipcRenderer.invoke(channels.addressBook.getAsset, ref)
+  },
   journal: {
     list: () => ipcRenderer.invoke(channels.journal.list),
     read: (id: string) => ipcRenderer.invoke(channels.journal.read, id),

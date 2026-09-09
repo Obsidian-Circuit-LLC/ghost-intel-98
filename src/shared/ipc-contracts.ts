@@ -49,6 +49,7 @@ export interface LearningModelMeta {
   verdict: { pass: boolean; reason: string };
 }
 import type { HarvestedItem, MonitoredChannel } from './socmint/types';
+import type { Contact, ContactInput, ContactSummary } from './address-book';
 
 export interface EntityCreateInput { type: EntityType; value: string; notes?: string; aliases?: string[] }
 export interface EntityLinkOpts { relationship?: EntityRelationship; linkIds?: string[]; attachmentFileNames?: string[] }
@@ -192,6 +193,15 @@ export const channels = {
     read: 'briefcase:read',
     save: 'briefcase:save',
     delete: 'briefcase:delete'
+  },
+  addressBook: {
+    list: 'addressBook:list',
+    read: 'addressBook:read',
+    save: 'addressBook:save',
+    delete: 'addressBook:delete',
+    search: 'addressBook:search',
+    putAsset: 'addressBook:putAsset',
+    getAsset: 'addressBook:getAsset'
   },
   journal: {
     list: 'journal:list',
@@ -1253,6 +1263,13 @@ export interface ApiContracts {
 
   [channels.markets.fetch]: { args: []; returns: MarketSnapshot };
 
+  [channels.addressBook.list]: { args: []; returns: ContactSummary[] };
+  [channels.addressBook.read]: { args: [string]; returns: Contact | null };
+  [channels.addressBook.save]: { args: [ContactInput]; returns: Contact };
+  [channels.addressBook.delete]: { args: [string]; returns: void };
+  [channels.addressBook.search]: { args: [string]; returns: ContactSummary[] };
+  [channels.addressBook.putAsset]: { args: [{ bytes: number[]; mime: string }]; returns: string };
+  [channels.addressBook.getAsset]: { args: [string]; returns: { bytes: number[]; mime: string } | null };
   [channels.journal.list]: { args: []; returns: JournalEntrySummary[] };
   [channels.journal.read]: { args: [string]; returns: JournalEntry | null };
   [channels.journal.save]: { args: [JournalEntryInput]; returns: JournalEntry };

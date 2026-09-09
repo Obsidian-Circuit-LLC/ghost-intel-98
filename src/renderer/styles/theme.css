@@ -2033,6 +2033,7 @@ input.ga98-text, select.ga98-text {
 .ga98-banner-settings  { --ga98-banner-bg: #1a4a6d; }
 .ga98-banner-shred     { --ga98-banner-bg: #1a2342; }
 .ga98-banner-journal   { --ga98-banner-bg: #acaeb6; }
+.ga98-banner-addressbook { --ga98-banner-bg: #020b2b; }
 
 /* Briefcase module-specific column wrapper: banner above the shared .ga98-split so the split
  * class itself stays unaffected for its other consumers. */
@@ -2788,4 +2789,37 @@ input.ga98-text, select.ga98-text {
   flex: 1 1 auto;
   min-width: 0;
   padding: 2px 6px;
+}
+
+
+/* ---- Address Book ------------------------------------------------------------------------- */
+/* The bio picture frame keeps a fixed footprint whether or not a photo is set, so the fields
+   beside it do not jump as one is added or cleared. */
+.ga98-ab-biopic {
+  width: 120px;
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px inset var(--ga98-face);
+  background: var(--ga98-input-bg);
+  color: var(--ga98-dim-soft);
+  font-size: 11px;
+  overflow: hidden;
+}
+.ga98-ab-biopic img { width: 100%; height: 100%; object-fit: cover; }
+
+/* The album is a drop target; the dashed outline appears only while a drag is over it, so the
+   affordance is visible exactly when it applies. */
+.ga98-ab-album.dragging { outline: 2px dashed var(--ga98-accent); outline-offset: -3px; }
+
+.ga98-ab-photo { position: relative; width: 84px; height: 84px; border: 1px solid var(--ga98-shadow-dark); }
+.ga98-ab-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ga98-ab-photo button {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  min-width: 0;
+  padding: 0 4px;
+  line-height: 1.2;
 }

@@ -13,6 +13,7 @@ import { homedir } from 'node:os';
 import { isIP, isIPv6 } from 'node:net';
 import { randomUUID } from 'node:crypto';
 import { ENTITY_TYPES, ENTITY_RELATIONSHIPS, TIMELINE_KINDS, IMAGE_MIMES, type EntityType, type EntityRelationship, type TimelineKind, type TimelineEvent, type ImageMime, type Whiteboard, type WhiteboardNode, type WhiteboardEdge, type WhiteboardNodeType, type JournalEntryInput, type JournalBlock } from '@shared/types';
+import type { ContactInput } from '@shared/address-book';
 import type { Bounds } from '@shared/livefeeds/types';
 import type { GeoItem, BookmarkBoard, BookmarkCategory, BookmarkLink, StickyNote, StickyNotesState, AiChatMessage, AiConversationInput, BriefcaseNoteInput } from '@shared/post-mvp-types';
 
@@ -1288,6 +1289,75 @@ const MAX_JOURNAL_ASSET = 25 * 1024 * 1024;
 /** Journal Jots photo upload: identical shape/cap to ensureReportAssetInput (png/jpeg, 25 MB) —
  *  Journal photos are full-size phone photos same as report photos. */
 export function ensureJournalAssetInput(v: unknown): { bytes: Buffer; mime: string } {
+  if (!v || typeof v !== 'object') throw new ValidationError('asset must be an object');
+  const o = v as { bytes?: unknown; mime?: unknown };
+  if (o.mime !== 'image/png' && o.mime !== 'image/jpeg') throw new ValidationError('asset.mime must be image/png or image/jpeg');
+  if (!Array.isArray(o.bytes)) throw new ValidationError('asset.bytes must be a byte array');
+  if (o.bytes.length > MAX_JOURNAL_ASSET) throw new ValidationError('asset too large (max 25MB)');
+  return { bytes: Buffer.from(o.bytes as number[]), mime: o.mime };
+}
+
+// ---------- address book ----------
+
+/** A contact crossing the IPC boundary. The main process is unsandboxed, so every field is coerced
+ *  to its declared type here rather than trusted; the STORE owns ids, timestamps and the symmetry
+ *  of `commonContacts`. Repeatable fields stay unparsed — an OSINT record stores what was observed,
+ *  not a normalised guess at it. */
+export function ensureContactInput(v: unknown): ContactInput {
+  if (!v || typeof v !== 'object') throw new ValidationError('contact must be an object');
+  const o = v as Record<string, unknown>;
+  const name = typeof o.name === 'string' ? o.name.trim() : '';
+  if (!name) throw new ValidationError('contact.name is required');
+  const values = (raw: unknown, field: string): string[] | undefined => {
+    if (raw === undefined) return undefined;
+    if (!Array.isArray(raw)) throw new ValidationError(`contact.${field} must be an array`);
+    return raw.map((x) => String(x ?? ''));
+  };
+  const str = (raw: unknown, field: string): string | undefined => {
+    if (raw === undefined) return undefined;
+    if (typeof raw !== 'string') throw new ValidationError(`contact.${field} must be a string`);
+    return raw;
+  };
+  // Every asset ref is name-checked HERE, at the boundary, so a traversal ref can never be stored
+  // and later handed back to the asset reader as if the store had vouched for it.
+  const ref = (raw: unknown, field: string): string | null | undefined => {
+    if (raw === undefined) return undefined;
+    if (raw === null || raw === '') return null;
+    if (typeof raw !== 'string') throw new ValidationError(`contact.${field} must be a string`);
+    return ensureFileName(raw, `contact.${field}`);
+  };
+  const refs = (raw: unknown, field: string): string[] | undefined => {
+    if (raw === undefined) return undefined;
+    if (!Array.isArray(raw)) throw new ValidationError(`contact.${field} must be an array`);
+    return raw.map((x, i) => ensureFileName(String(x ?? ''), `contact.${field}[${i}]`));
+  };
+  return {
+    ...(o.id === undefined ? {} : { id: ensureUuid(o.id, 'contact.id') }),
+    name,
+    ...(str(o.alias, 'alias') === undefined ? {} : { alias: str(o.alias, 'alias')! }),
+    ...(values(o.emails, 'emails') === undefined ? {} : { emails: values(o.emails, 'emails')! }),
+    ...(values(o.phones, 'phones') === undefined ? {} : { phones: values(o.phones, 'phones')! }),
+    ...(values(o.urls, 'urls') === undefined ? {} : { urls: values(o.urls, 'urls')! }),
+    ...(values(o.socials, 'socials') === undefined ? {} : { socials: values(o.socials, 'socials')! }),
+    ...(str(o.occupation, 'occupation') === undefined ? {} : { occupation: str(o.occupation, 'occupation')! }),
+    ...(str(o.skills, 'skills') === undefined ? {} : { skills: str(o.skills, 'skills')! }),
+    ...(str(o.notes, 'notes') === undefined ? {} : { notes: str(o.notes, 'notes')! }),
+    ...(str(o.thoughts, 'thoughts') === undefined ? {} : { thoughts: str(o.thoughts, 'thoughts')! }),
+    ...(ref(o.bioPicRef, 'bioPicRef') === undefined ? {} : { bioPicRef: ref(o.bioPicRef, 'bioPicRef')! }),
+    ...(refs(o.photoRefs, 'photoRefs') === undefined ? {} : { photoRefs: refs(o.photoRefs, 'photoRefs')! }),
+    ...(o.commonContacts === undefined
+      ? {}
+      : {
+          commonContacts: (Array.isArray(o.commonContacts) ? o.commonContacts : []).map((x, i) =>
+            ensureUuid(x, `contact.commonContacts[${i}]`),
+          ),
+        }),
+  };
+}
+
+/** Bio picture / album photo bytes crossing the IPC boundary — png or jpeg, bounded, same posture
+ *  as the journal's asset gate. */
+export function ensureContactAssetInput(v: unknown): { bytes: Buffer; mime: string } {
   if (!v || typeof v !== 'object') throw new ValidationError('asset must be an object');
   const o = v as { bytes?: unknown; mime?: unknown };
   if (o.mime !== 'image/png' && o.mime !== 'image/jpeg') throw new ValidationError('asset.mime must be image/png or image/jpeg');

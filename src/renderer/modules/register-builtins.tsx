@@ -30,6 +30,7 @@ import { BookmarksModule } from './bookmarks/BookmarksModule';
 import { MarketsModule } from './markets/MarketsModule';
 import { BriefcaseModule } from './briefcase/BriefcaseModule';
 import { JournalModule } from './journal/JournalModule';
+import { AddressBookModule } from './address-book/AddressBookModule';
 import { SolitaireModule } from './solitaire/SolitaireModule';
 import { MinesweeperModule } from './minesweeper/MinesweeperModule';
 import { ChessModule } from './chess/ChessModule';
@@ -148,6 +149,10 @@ function BriefcaseAdapter({ spec }: { spec: WindowSpec }): JSX.Element {
 
 function JournalAdapter({ spec: _spec }: { spec: WindowSpec }): JSX.Element {
   return <JournalModule />;
+}
+
+function AddressBookAdapter({ spec: _spec }: { spec: WindowSpec }): JSX.Element {
+  return <AddressBookModule />;
 }
 
 function SolitaireAdapter({ spec: _spec }: { spec: WindowSpec }): JSX.Element {
@@ -336,6 +341,7 @@ export function registerBuiltins(): void {
   registerModule({ key: 'markets',      title: 'Markets',          glyph: '📈', component: MarketsAdapter,      builtin: true });
   registerModule({ key: 'briefcase',    title: 'Briefcase',        glyph: '💼', component: BriefcaseAdapter,    builtin: true });
   registerModule({ key: 'journal',      title: 'Journal Jots',     glyph: '📓', component: JournalAdapter,      builtin: true });
+  registerModule({ key: 'address-book', title: 'Address Book',     glyph: '📇', component: AddressBookAdapter, builtin: true, defaultWidth: 900, defaultHeight: 640 });
   registerModule({ key: 'solitaire',    title: 'Solitaire',        glyph: '🃏', component: SolitaireAdapter,    builtin: true });
   registerModule({ key: 'minesweeper',  title: 'Mine Detector',    glyph: '💣', component: MinesweeperAdapter,  builtin: true });
   registerModule({ key: 'chess',        title: 'Chess',            glyph: '♟', component: ChessAdapter,        builtin: true });
