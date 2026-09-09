@@ -67,7 +67,12 @@ Your banner art is the module header.
 
 ## Under the hood
 
-- 712 test files, 5,384 tests, 1 skipped, zero failures; typecheck clean.
+- 712 test files, 5,385 tests, 1 skipped, zero failures; typecheck clean.
 - Contacts and photos are encrypted at rest through the same vault as case data. Zero network.
 - Every photo reference is path-checked at the boundary and again at the read, so a contact's photo
   can never resolve into another module's store or anywhere else on disk.
+
+## Installer
+
+`GhostIntel98-Setup-3.83.0.exe` — 945,753,680 bytes
+SHA-256 `5a0fa35c2c9ff8ee4f59b6cf48c56510c1f3668a2618844e5a019ae312af65d4`
