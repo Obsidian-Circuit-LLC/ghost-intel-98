@@ -433,6 +433,8 @@ describe('a sweep that collects nothing explains the station', () => {
     }) => {
       await over.savePosts('c', [{
         id: 'fresh-1', channelId: 'exodusghost', authorHandle: 'exodusghost', text: 'hello',
+        // A healthy capture brings the picture with it; without one this is the reported symptom.
+        avatar: 'https://pbs.twimg.com/profile_images/1/h.jpg',
         url: 'https://x.com/ExodusGhost/status/9', publishedAt: 'T', harvestedAt: 'T',
         kind: 'post', parentPostId: null, metrics: { replies: 0, reposts: 0, likes: 0, views: 0 },
         evidenceHash: 'h', mediaRefs: [],
@@ -480,5 +482,56 @@ describe('a sweep that collects findings but no pictures explains itself too', (
     await handlers.get(XLS_CHANNELS.refreshAll)!({});
     // Turning pictures off and then being told there are no pictures is nagging, not reporting.
     expect(deferred).toHaveLength(0);
+  });
+});
+
+describe('the pictures report judges THIS sweep, not the whole campaign', () => {
+  it('fires when the newly collected findings have no picture, even though older ones do', async () => {
+    // THE BUG THIS CATCHES. The condition asked whether ANY post in the campaign carried a picture.
+    // Against a campaign with 55 existing findings that is almost always true, so the report never
+    // fired — which is why a fourth "no display pics" report arrived carrying no diagnostic at all.
+    // What matters is whether the posts collected JUST NOW came back with pictures.
+    const { handlers, store, sent, deferred } = harness();
+    await seedPost(store); // an existing finding that DOES have a picture
+    captureTimeline.mockImplementation((async (_w: unknown, _r: unknown, over: {
+      savePosts: (c: string, p: unknown[]) => Promise<unknown>;
+    }) => {
+      await over.savePosts('c', [{
+        id: 'fresh-nopic', channelId: 'exodusghost', authorHandle: 'exodusghost', text: 'new',
+        url: 'https://x.com/ExodusGhost/status/77', publishedAt: 'T', harvestedAt: 'T',
+        kind: 'post', parentPostId: null, metrics: { replies: 0, reposts: 0, likes: 0, views: 0 },
+        evidenceHash: 'h', mediaRefs: [], // no avatar
+      }]);
+      return { blocked: false, added: 1, skipped: 0, posts: [{ id: 'fresh-nopic' }] };
+    }) as never);
+
+    await handlers.get(XLS_CHANNELS.refreshAll)!({});
+    expect(deferred.length, 'a fresh finding with no picture is the reported symptom').toBeGreaterThan(0);
+    deferred.forEach((fn) => fn());
+
+    const report = sent
+      .filter((m) => m.channel === XLS_EVENT_CHANNELS.onBackgroundError)
+      .map((m) => (m.payload as unknown as { message: string }).message).join('\n');
+    expect(report).toMatch(/no display pictures/i);
+  });
+
+  it('stays quiet when the newly collected findings DO have pictures', async () => {
+    const { handlers, store, deferred } = harness();
+    await seedPost(store, { withPicture: false }); // an older picture-less finding must not trip it
+    captureTimeline.mockImplementation((async (_w: unknown, _r: unknown, over: {
+      savePosts: (c: string, p: unknown[]) => Promise<unknown>;
+    }) => {
+      await over.savePosts('c', [{
+        id: 'fresh-pic', channelId: 'exodusghost', authorHandle: 'exodusghost', text: 'new',
+        avatar: 'https://pbs.twimg.com/profile_images/1/f.jpg',
+        url: 'https://x.com/ExodusGhost/status/78', publishedAt: 'T', harvestedAt: 'T',
+        kind: 'post', parentPostId: null, metrics: { replies: 0, reposts: 0, likes: 0, views: 0 },
+        evidenceHash: 'h', mediaRefs: [],
+      }]);
+      return { blocked: false, added: 1, skipped: 0, posts: [{ id: 'fresh-pic' }] };
+    }) as never);
+
+    await handlers.get(XLS_CHANNELS.refreshAll)!({});
+    expect(deferred, 'collection is working — saying otherwise is nagging').toHaveLength(0);
   });
 });

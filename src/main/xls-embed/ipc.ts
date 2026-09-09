@@ -776,6 +776,9 @@ export function registerXlsEmbedIpc(deps: XlsEmbedDeps): void {
     const s = await doc();
     const caseId = activeCaseId(s);
     const targets = s.profiles.filter((p) => p.caseId === caseId && p.enabled).map((p) => p.id);
+    // Which findings existed BEFORE this sweep, so the report below can judge what THIS sweep
+    // brought back rather than what the campaign happens to contain.
+    const preexistingIds = new Set(s.posts.filter((p) => p.caseId === caseId).map((p) => p.id));
     let collected = 0;
     let added = 0;
     let failed = 0;
@@ -833,8 +836,12 @@ export function registerXlsEmbedIpc(deps: XlsEmbedDeps): void {
       const anySourceWantsImages = s.profiles
         .filter((p) => p.caseId === caseId && p.enabled)
         .some((p) => (p.imageMode ?? 'inherit') === 'on' || ((p.imageMode ?? 'inherit') === 'inherit' && campaignImages));
-      const campaignPosts = s.posts.filter((p) => p.caseId === caseId);
-      if (anySourceWantsImages && campaignPosts.length > 0 && !campaignPosts.some((p) => p.avatar)) {
+      // JUDGE THIS SWEEP. Asking whether ANY post in the campaign has a picture is almost always
+      // true once there are 55 findings, so the report never fired — which is why a fourth "no
+      // display pics" report arrived carrying no diagnostic at all. What was just collected is the
+      // only thing that says whether collection is working NOW.
+      const freshPosts = s.posts.filter((p) => p.caseId === caseId && !preexistingIds.has(p.id));
+      if (anySourceWantsImages && freshPosts.length > 0 && !freshPosts.some((p) => p.avatar)) {
         await reportStationDiagnostic(
           s,
           'Collection worked, but no display pictures came back with it.',
