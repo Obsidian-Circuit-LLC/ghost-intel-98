@@ -2,6 +2,7 @@
  * Ambient typings for window.api. The renderer imports this so every call is typed.
  */
 
+import type { Contact as AddressBookContact, ContactInput, ContactSummary } from '../shared/address-book';
 import type { VerifiedPluginInfo, PluginStatus, PluginBridgeApi } from '../shared/plugin-types';
 import type { XCollectionSettings } from '../shared/x-listening-collection-settings';
 import type { XImageMode } from '../shared/x-listening-image-policy';
@@ -332,6 +333,15 @@ export interface GhostApi {
     read(id: string): Promise<BriefcaseNote | null>;
     save(note: BriefcaseNoteInput): Promise<BriefcaseNote>;
     delete(id: string): Promise<void>;
+  };
+  addressBook: {
+    list(): Promise<ContactSummary[]>;
+    read(id: string): Promise<AddressBookContact | null>;
+    save(contact: ContactInput): Promise<AddressBookContact>;
+    delete(id: string): Promise<void>;
+    search(query: string): Promise<ContactSummary[]>;
+    putAsset(bytes: number[], mime: string): Promise<string>;
+    getAsset(ref: string): Promise<{ bytes: number[]; mime: string } | null>;
   };
   journal: {
     list(): Promise<JournalEntrySummary[]>;

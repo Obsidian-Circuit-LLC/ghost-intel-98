@@ -32,7 +32,9 @@ const rec = vi.hoisted(() => ({
   socksPort: 9050,
   cookieQuery: null as Record<string, unknown> | null,
   cookies: [] as Array<{ name?: string; value?: string; domain: string }>,
-  cleared: [] as Array<Record<string, unknown>>
+  cleared: [] as Array<Record<string, unknown>>,
+  cacheCleared: false,
+  authCacheCleared: false
 }));
 
 vi.mock('../src/main/capture/capture-window', () => ({
@@ -73,7 +75,11 @@ vi.mock('electron', () => ({
         rec.cleared.push(opts);
         // The auth cookie is gone once the partition is cleared, so `connected` must follow.
         rec.cookies = [];
-      })
+      }),
+      // A cookie wipe alone is not a fresh profile: a stale HTTP or auth cache can keep serving the
+      // same degraded session. Recorded so the reset can be asserted to be profile-equivalent.
+      clearCache: vi.fn(async () => { rec.cacheCleared = true; }),
+      clearAuthCache: vi.fn(async () => { rec.authCacheCleared = true; })
     }))
   }
 }));
@@ -225,6 +231,29 @@ describe('clearXSession', () => {
 
     // …and the status the UI renders now agrees.
     await expect(getXStatus(CASE_A)).resolves.toMatchObject({ connected: false });
+  });
+
+  it('resets the profile the way a fresh install would, not just the cookies', async () => {
+    // FIELD EVIDENCE (2026-09-09). GhostExodus's PORTABLE build collects fine — display pictures,
+    // follower network, everything — and its collection code is BYTE-IDENTICAL to the copy embedded
+    // here. `diff -r` against the source this was ported from shows the entire delta is packaging:
+    // a portable electron-builder target and a `userData` path beside the executable. Not one line
+    // of scraping, session, network or UI code differs.
+    //
+    // What that changes is not behaviour, it is STATE: a portable build necessarily starts on a
+    // clean Chromium profile and a fresh X login. So a reset here has to be equivalent to a fresh
+    // profile, not merely a cookie wipe — a stale HTTP/auth cache can keep serving the same
+    // degraded session that a cookie clear appears to fix.
+    rec.bootstrapped = true;
+    rec.cookies = [{ domain: '.x.com' }];
+    await connectXSession(CASE_A, false);
+
+    await expect(clearXSession(CASE_A)).resolves.toMatchObject({ cleared: true });
+    expect(rec.cleared.at(-1)!.storages).toEqual(
+      expect.arrayContaining(['cookies', 'localstorage', 'indexdb', 'serviceworkers', 'cachestorage', 'filesystem']),
+    );
+    expect(rec.cacheCleared, 'a stale HTTP cache survives a cookie wipe').toBe(true);
+    expect(rec.authCacheCleared, 'so does a cached auth challenge').toBe(true);
   });
 
   it('forgets the window, so a later connect opens a fresh one', async () => {

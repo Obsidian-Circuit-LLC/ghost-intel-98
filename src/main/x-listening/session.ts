@@ -325,7 +325,27 @@ export async function clearXSession(caseId: string): Promise<{ cleared: boolean 
     const ses = electronSession.fromPartition(X_LISTENING_PARTITION);
     // Cookies first — that is what `connected` is derived from, so a partial failure later still
     // leaves the app reporting the truth about the login.
-    await ses.clearStorageData({ storages: ['cookies', 'localstorage', 'indexdb', 'websql', 'serviceworkers', 'cachestorage'] });
+    await ses.clearStorageData({
+      storages: ['cookies', 'localstorage', 'indexdb', 'websql', 'serviceworkers', 'cachestorage', 'filesystem'],
+    });
+    // FIELD EVIDENCE (2026-09-09): GhostExodus's PORTABLE build collects correctly while the same
+    // code embedded here does not, and `diff -r` puts the ENTIRE delta in packaging — a portable
+    // electron-builder target and a `userData` path beside the executable. Not one line of
+    // scraping, session or network code differs. What a portable build changes is STATE: it
+    // necessarily starts on a clean Chromium profile with a fresh X login.
+    //
+    // So this has to be equivalent to a fresh profile rather than a cookie wipe. A stale HTTP or
+    // auth cache can keep serving the degraded session that clearing cookies only appears to fix,
+    // which is exactly the shape of a fault that looks intermittent and survives a "sign out".
+    // Best-effort: a cache that refuses to clear must not turn a successful sign-out into a
+    // reported failure, because the login itself IS gone by this point.
+    for (const clear of [() => ses.clearCache(), () => ses.clearAuthCache()]) {
+      try {
+        await clear();
+      } catch {
+        /* the cookie wipe above already ended the session; a cache hiccup is not a failed logout */
+      }
+    }
     return { cleared: true };
   } catch {
     // Report honestly rather than claiming a logout that did not happen.
