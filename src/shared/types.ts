@@ -654,6 +654,17 @@ export interface AppSettings {
      *  before the store file exists; the weather store mirrors it as the read source of truth. */
     units: Units;
   };
+  /** Spectre — wireless-signal OSINT (WireTapper engine, h9zdev, CC BY-NC 4.0). Tor-default egress;
+   *  clearnet only when `clearnet && clearnetAck`, mirroring `weather`/`xListening`. `keys` are the
+   *  six upstream API credentials, held here (encrypted at rest) and never returned to the renderer
+   *  after write — the renderer sees only which slots are filled. */
+  spectre: {
+    /** Egress posture only — the six API KEYS live in an ENCRYPTED secure-fs store
+     *  (`src/main/spectre/store.ts`), never here: AppSettings is plaintext on disk (the lock screen
+     *  reads theme/wallpaper before unlock), so a credential in it would defeat encrypt-at-rest. */
+    clearnet: boolean;
+    clearnetAck: boolean;
+  };
 }
 
 export const defaultShortcuts: AccessShortcut[] = [
@@ -818,6 +829,10 @@ export const defaultSettings: AppSettings = {
     clearnet: false,
     clearnetAck: false,
     units: 'metric'
+  },
+  spectre: {
+    clearnet: false,
+    clearnetAck: false
   },
   plugins: {},
   offensive: { confirmMode: 'per-scan', rateLimitPerSec: 10, downstreamProxy: null, requireSignedAuthorization: false, issuerKeys: [] },

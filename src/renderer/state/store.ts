@@ -35,6 +35,7 @@ export type ModuleKey =
   | 'briefcase'
   | 'journal'
   | 'address-book'
+  | 'spectre'
   | 'solitaire'
   | 'minesweeper'
   | 'chess'

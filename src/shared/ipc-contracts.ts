@@ -50,6 +50,7 @@ export interface LearningModelMeta {
 }
 import type { HarvestedItem, MonitoredChannel } from './socmint/types';
 import type { Contact, ContactInput, ContactSummary } from './address-book';
+import type { SpectreQuery, SpectreQueryResult, SpectreKeys, SpectreKeyStatus } from './spectre/types';
 
 export interface EntityCreateInput { type: EntityType; value: string; notes?: string; aliases?: string[] }
 export interface EntityLinkOpts { relationship?: EntityRelationship; linkIds?: string[]; attachmentFileNames?: string[] }
@@ -193,6 +194,13 @@ export const channels = {
     read: 'briefcase:read',
     save: 'briefcase:save',
     delete: 'briefcase:delete'
+  },
+  spectre: {
+    query: 'spectre:query',
+    keyStatus: 'spectre:keyStatus',
+    saveKeys: 'spectre:saveKeys',
+    getEgress: 'spectre:getEgress',
+    setClearnet: 'spectre:setClearnet'
   },
   addressBook: {
     list: 'addressBook:list',
@@ -1263,6 +1271,11 @@ export interface ApiContracts {
 
   [channels.markets.fetch]: { args: []; returns: MarketSnapshot };
 
+  [channels.spectre.query]: { args: [SpectreQuery]; returns: SpectreQueryResult };
+  [channels.spectre.keyStatus]: { args: []; returns: SpectreKeyStatus };
+  [channels.spectre.saveKeys]: { args: [Partial<SpectreKeys>]; returns: SpectreKeyStatus };
+  [channels.spectre.getEgress]: { args: []; returns: { clearnet: boolean; clearnetAck: boolean; torReady: boolean } };
+  [channels.spectre.setClearnet]: { args: [{ clearnet: boolean; clearnetAck: boolean }]; returns: { clearnet: boolean; clearnetAck: boolean } };
   [channels.addressBook.list]: { args: []; returns: ContactSummary[] };
   [channels.addressBook.read]: { args: [string]; returns: Contact | null };
   [channels.addressBook.save]: { args: [ContactInput]; returns: Contact };

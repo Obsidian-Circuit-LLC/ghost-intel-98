@@ -3,6 +3,7 @@
  */
 
 import type { Contact as AddressBookContact, ContactInput, ContactSummary } from '../shared/address-book';
+import type { SpectreQuery, SpectreQueryResult, SpectreKeys, SpectreKeyStatus } from '../shared/spectre/types';
 import type { VerifiedPluginInfo, PluginStatus, PluginBridgeApi } from '../shared/plugin-types';
 import type { XCollectionSettings } from '../shared/x-listening-collection-settings';
 import type { XImageMode } from '../shared/x-listening-image-policy';
@@ -333,6 +334,13 @@ export interface GhostApi {
     read(id: string): Promise<BriefcaseNote | null>;
     save(note: BriefcaseNoteInput): Promise<BriefcaseNote>;
     delete(id: string): Promise<void>;
+  };
+  spectre: {
+    query(q: SpectreQuery): Promise<SpectreQueryResult>;
+    keyStatus(): Promise<SpectreKeyStatus>;
+    saveKeys(patch: Partial<SpectreKeys>): Promise<SpectreKeyStatus>;
+    getEgress(): Promise<{ clearnet: boolean; clearnetAck: boolean; torReady: boolean }>;
+    setClearnet(v: { clearnet: boolean; clearnetAck: boolean }): Promise<{ clearnet: boolean; clearnetAck: boolean }>;
   };
   addressBook: {
     list(): Promise<ContactSummary[]>;

@@ -243,6 +243,13 @@ const api = {
     save: (note: unknown) => ipcRenderer.invoke(channels.briefcase.save, note),
     delete: (id: string) => ipcRenderer.invoke(channels.briefcase.delete, id)
   },
+  spectre: {
+    query: (q: unknown) => ipcRenderer.invoke(channels.spectre.query, q),
+    keyStatus: () => ipcRenderer.invoke(channels.spectre.keyStatus),
+    saveKeys: (patch: unknown) => ipcRenderer.invoke(channels.spectre.saveKeys, patch),
+    getEgress: () => ipcRenderer.invoke(channels.spectre.getEgress),
+    setClearnet: (v: unknown) => ipcRenderer.invoke(channels.spectre.setClearnet, v)
+  },
   addressBook: {
     list: () => ipcRenderer.invoke(channels.addressBook.list),
     read: (id: string) => ipcRenderer.invoke(channels.addressBook.read, id),

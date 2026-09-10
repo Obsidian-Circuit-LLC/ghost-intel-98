@@ -31,6 +31,7 @@ import { MarketsModule } from './markets/MarketsModule';
 import { BriefcaseModule } from './briefcase/BriefcaseModule';
 import { JournalModule } from './journal/JournalModule';
 import { AddressBookModule } from './address-book/AddressBookModule';
+import { SpectreModule } from './spectre/SpectreModule';
 import { SolitaireModule } from './solitaire/SolitaireModule';
 import { MinesweeperModule } from './minesweeper/MinesweeperModule';
 import { ChessModule } from './chess/ChessModule';
@@ -153,6 +154,10 @@ function JournalAdapter({ spec: _spec }: { spec: WindowSpec }): JSX.Element {
 
 function AddressBookAdapter({ spec: _spec }: { spec: WindowSpec }): JSX.Element {
   return <AddressBookModule />;
+}
+
+function SpectreAdapter({ spec: _spec }: { spec: WindowSpec }): JSX.Element {
+  return <SpectreModule />;
 }
 
 function SolitaireAdapter({ spec: _spec }: { spec: WindowSpec }): JSX.Element {
@@ -337,6 +342,7 @@ export function registerBuiltins(): void {
   // to the persisted mode (shade.ts → shadeHeight) on mount. Keep in sync with SHADE_HEIGHTS.strip.
   registerModule({ key: 'media-player', title: 'Jukebox',          glyph: '🎵', component: MediaPlayerAdapter,  builtin: true, defaultWidth: 380, defaultHeight: 150 });
   registerModule({ key: 'geoint',       title: 'GeoINT',           glyph: '🌍', component: GeoIntAdapter,       builtin: true, category: 'osint', subcategory: 'Geospatial' });
+  registerModule({ key: 'spectre',      title: 'Spectre',          glyph: '📡', component: SpectreAdapter,      builtin: true, category: 'osint', subcategory: 'Geospatial', defaultWidth: 980, defaultHeight: 700 });
   registerModule({ key: 'bookmarks',    title: 'Bookmarks',        glyph: '🔖', component: BookmarksAdapter,    builtin: true });
   registerModule({ key: 'markets',      title: 'Markets',          glyph: '📈', component: MarketsAdapter,      builtin: true });
   registerModule({ key: 'briefcase',    title: 'Briefcase',        glyph: '💼', component: BriefcaseAdapter,    builtin: true });

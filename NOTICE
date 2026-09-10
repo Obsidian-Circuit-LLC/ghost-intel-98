@@ -1,0 +1,17 @@
+Ghost Intel 98 — third-party attributions
+==========================================
+
+Spectre module — wireless-signal OSINT
+--------------------------------------
+The Spectre module's signal engine (API client contracts, the device classifier, and the
+telemetry/dataset model) is ported from WireTapper by h9zdev:
+
+  https://github.com/h9zdev/WireTapper
+
+WireTapper is licensed under Creative Commons Attribution-NonCommercial 4.0 International
+(CC BY-NC 4.0). Ghost Intel 98's distribution is non-commercial; this attribution is provided
+in accordance with the licence's Attribution requirement. The port is re-implemented in
+TypeScript with the app's hardening applied (Tor-gated egress, encrypted key storage, host
+allowlisting); it is a derivative work and carries the same non-commercial terms.
+
+  Licence: https://creativecommons.org/licenses/by-nc/4.0/
