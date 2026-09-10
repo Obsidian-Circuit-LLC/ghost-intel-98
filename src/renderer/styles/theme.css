@@ -2867,3 +2867,11 @@ input.ga98-text, select.ga98-text {
   padding: 0 4px;
   line-height: 1.2;
 }
+
+/* ---- Spectre ------------------------------------------------------------------------------ */
+.ga98-spectre-bar { display: flex; gap: 4px; align-items: center; padding: 4px; border-bottom: 1px solid var(--ga98-shadow-dark); }
+.ga98-spectre-bar button.active { font-weight: bold; }
+.ga98-spectre-egress { margin-left: auto; font-size: 11px; padding: 1px 8px; border: 1px solid var(--ga98-shadow-dark); }
+.ga98-spectre-egress.tor { color: var(--ga98-ok); }
+.ga98-spectre-egress.clearnet { color: var(--ga98-warn); }
+.ga98-spectre-egress.blocked { color: var(--ga98-dim-soft); }

@@ -986,6 +986,10 @@ export function mergeSettings(base: AppSettings, patch: Partial<AppSettings>): A
     // predates the block (or a future weather sub-field) heals to the default instead of dropping it
     // (same class as searchlight.scorer / xListening.collect — v3.24.0 dataloss).
     weather: { ...base.weather, ...(patch.weather ?? {}) },
+    // spectre is a fixed-shape block (WireTapper engine, 2026-09-11) with a nested `keys` object;
+    // deep-merge BOTH levels so a settings.json that predates the block — or a future key slot —
+    // heals to the default instead of dropping the operator's stored keys (v3.24.0 dataloss class).
+    spectre: { ...base.spectre, ...(patch.spectre ?? {}) },
     // Flat config objects: deep-merge so a sub-field added to defaults in a later build
     // survives an older persisted block that predates it (same class as the searchlight
     // scorer regression). plugins is a dynamic Record, so it is intentionally left to the
