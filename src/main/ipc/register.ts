@@ -170,6 +170,7 @@ import { registerGhostSocialViewIpc } from '../ghost-social/view-ipc';
 import { registerGhostSocialPublishingIpc } from '../ghost-social/publishing-ipc';
 import { registerWeatherIpc } from '../weather/ipc';
 import { registerSpectreIpc } from '../spectre/ipc';
+import { registerExternalProgramsIpc } from '../externalPrograms/ipc';
 import { registerInvestigationReportIpc } from '../investigation/report-ipc';
 import { renderIntelReportPdf } from '../investigation/report-pdf';
 import { addManualNode, addManualEdge } from '../investigation/graph';
@@ -1967,6 +1968,8 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   // sender frame (constraint 7); egress is Tor-default/fail-closed, host-anchored MAIN-side (client.ts).
   registerWeatherIpc({ handle: safeHandleWithEvent });
   registerSpectreIpc({ handle: safeHandleWithEvent });
+  // ---- External Apps: drop an .exe into the Programs folder, launch it as a real OS process ----
+  registerExternalProgramsIpc({ handle: safeHandleWithEvent });
 
   // ---- SP-4 investigation graph: per-case scene fetch + live delta push (Task 5) ----
   registerInvestigationGraphIpc({

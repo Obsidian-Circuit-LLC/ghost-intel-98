@@ -250,6 +250,12 @@ const api = {
     getEgress: () => ipcRenderer.invoke(channels.spectre.getEgress),
     setClearnet: (v: unknown) => ipcRenderer.invoke(channels.spectre.setClearnet, v)
   },
+  externalPrograms: {
+    list: () => ipcRenderer.invoke(channels.externalPrograms.list),
+    refresh: () => ipcRenderer.invoke(channels.externalPrograms.refresh),
+    launch: (id: string) => ipcRenderer.invoke(channels.externalPrograms.launch, { id }),
+    openFolder: () => ipcRenderer.invoke(channels.externalPrograms.openFolder)
+  },
   addressBook: {
     list: () => ipcRenderer.invoke(channels.addressBook.list),
     read: (id: string) => ipcRenderer.invoke(channels.addressBook.read, id),

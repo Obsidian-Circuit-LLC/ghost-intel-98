@@ -6,7 +6,7 @@
  * longer consumes it.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSettings, useWindows, type ModuleKey } from '../state/store';
 import { getModule, listModules } from '../state/registry';
 import { buildOsintDirectory } from '../modules/osint-toolkit/directory';
@@ -14,11 +14,20 @@ import { glyphFor } from './Icon';
 import { playClick } from '../audio/synth';
 import { confirmDialog } from '../state/dialogs';
 import { CLOCK_ENABLED_KEY } from './ClockWidget';
+import { toast } from '../state/toasts';
+import type { ExternalProgramsScanResult } from '@shared/external-programs/types';
 import logoUrl from '../assets/logo.png';
+
+const EMPTY_EXTERNAL_SCAN: ExternalProgramsScanResult = { programs: [], diagnostics: [] };
 
 interface AccessMenuProps {
   onClose(): void;
 }
+
+/** The External Apps flyout's one fixed row that opens a module (the other two fixed rows are
+ *  direct IPC actions, not module opens) — kept as a typed entry, same shape as every other
+ *  launcher row, so `module-reachability.test.ts`'s scan of AccessMenu.tsx sees it for real. */
+export const MANAGE_PROGRAMS_ITEM: { module: ModuleKey; label: string } = { module: 'external-programs', label: 'Manage Programs' };
 
 /** Games live in their own "Games ▸" submenu (not on the desktop, not flat in the menu). */
 export const GAMES: { module: ModuleKey; label: string }[] = [
@@ -105,10 +114,50 @@ export function AccessMenu({ onClose }: AccessMenuProps): JSX.Element {
   let clockOn = false;
   try { clockOn = localStorage.getItem(CLOCK_ENABLED_KEY) === '1'; } catch { /* storage off */ }
 
+  // External Apps — GhostExodus's "connect ANY app" ask. NEVER hard-coded: this is whatever the
+  // main process's live folder scan finds, re-fetched every time the Access menu itself is opened
+  // (it's remounted fresh each open — see Taskbar.tsx) so a program dropped in moments ago shows
+  // up without hunting for a separate refresh action first. "Refresh Programs" below re-runs the
+  // same scan in place for the rare case the menu was left open.
+  const [externalOpen, setExternalOpen] = useState(false);
+  const [externalScan, setExternalScan] = useState<ExternalProgramsScanResult>(EMPTY_EXTERNAL_SCAN);
+  useEffect(() => {
+    try {
+      window.api.externalPrograms.list().then(setExternalScan).catch(() => { /* main process not ready yet */ });
+    } catch { /* window.api not wired (e.g. a render harness that doesn't need it) */ }
+  }, []);
+
   function openModule(mod: ModuleKey, label: string): void {
     if (settings?.soundEnabled) playClick();
     open({ module: mod, title: getModule(mod)?.title ?? label });
     onClose();
+  }
+
+  async function refreshExternalPrograms(): Promise<void> {
+    try {
+      setExternalScan(await window.api.externalPrograms.refresh());
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function openProgramsFolder(): Promise<void> {
+    try {
+      await window.api.externalPrograms.openFolder();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function launchExternalProgram(id: string, name: string): Promise<void> {
+    if (settings?.soundEnabled) playClick();
+    onClose();
+    try {
+      await window.api.externalPrograms.launch(id);
+      toast.success(`Launched ${name}.`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    }
   }
 
   return (
@@ -167,6 +216,62 @@ export function AccessMenu({ onClose }: AccessMenuProps): JSX.Element {
                       <span>{tool.title}</span>
                     </div>
                   ))}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="ga98-access-separator" />
+        {/* External Apps — GhostExodus's "connect ANY app" feature. Same bottom-anchored,
+            DOM-descendant flyout shape as OSINT Toolkit above (a submenu row on its own doesn't
+            trigger the wrapper's mouseleave). Three fixed actions first, then one row per
+            discovered program — clicking a program row launches it directly, it does not open a
+            module window, so it deliberately does NOT go through `openModule`. */}
+        <div style={{ position: 'relative' }} onMouseEnter={() => setExternalOpen(true)} onMouseLeave={() => setExternalOpen(false)}>
+          <div
+            className="ga98-access-entry"
+            role="menuitem"
+            tabIndex={0}
+            aria-haspopup="true"
+            aria-expanded={externalOpen}
+            onClick={() => setExternalOpen((o) => !o)}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowRight') setExternalOpen(true); }}
+          >
+            <span className="ga98-access-entry-glyph" aria-hidden="true">🗂</span>
+            <span style={{ flex: 1 }}>External Apps</span>
+            <span aria-hidden="true" style={{ opacity: 0.7 }}>▸</span>
+          </div>
+          {externalOpen && (
+            <div role="menu" style={{ position: 'absolute', left: '100%', bottom: 0, minWidth: 200, background: 'var(--ga98-grey)', border: '2px outset var(--ga98-flyout-outset)', boxShadow: '2px 2px 5px rgba(0,0,0,0.4)', zIndex: 30, maxHeight: '70vh', overflowY: 'auto' }}>
+              <div className="ga98-access-entry" role="menuitem" tabIndex={0} onClick={() => { void openProgramsFolder(); }}>
+                <span className="ga98-access-entry-glyph" aria-hidden="true">📁</span>
+                <span>Open Programs Folder</span>
+              </div>
+              <div className="ga98-access-entry" role="menuitem" tabIndex={0} onClick={() => { void refreshExternalPrograms(); }}>
+                <span className="ga98-access-entry-glyph" aria-hidden="true">🔄</span>
+                <span>Refresh Programs</span>
+              </div>
+              <div className="ga98-access-entry" role="menuitem" tabIndex={0} onClick={() => openModule(MANAGE_PROGRAMS_ITEM.module, MANAGE_PROGRAMS_ITEM.label)}>
+                <span className="ga98-access-entry-glyph" aria-hidden="true">🗂</span>
+                <span>{MANAGE_PROGRAMS_ITEM.label}</span>
+              </div>
+              <div className="ga98-access-separator" />
+              {externalScan.programs.length === 0 && (
+                <div style={{ padding: '4px 8px', fontSize: '0.85em', opacity: 0.75 }}>No programs found.</div>
+              )}
+              {externalScan.programs.map((p) => (
+                <div
+                  key={p.id}
+                  className="ga98-access-entry"
+                  role="menuitem"
+                  tabIndex={0}
+                  data-external-program-id={p.id}
+                  title={p.description}
+                  onClick={() => { void launchExternalProgram(p.id, p.name); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') void launchExternalProgram(p.id, p.name); }}
+                >
+                  <span className="ga98-access-entry-glyph" aria-hidden="true">▶</span>
+                  <span>{p.name}</span>
                 </div>
               ))}
             </div>
