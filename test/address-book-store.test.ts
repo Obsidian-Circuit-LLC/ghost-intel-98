@@ -7,7 +7,7 @@ import { rm } from 'node:fs/promises';
 vi.mock('electron', () => ({ app: { getPath: () => '/tmp/ga98-address-book-test' } }));
 
 // imported AFTER the mock (vitest hoists vi.mock above imports)
-import { list, read, save, remove, search } from '../src/main/storage/address-book';
+import { list, read, save, remove, search, exportAll, importAll } from '../src/main/storage/address-book';
 
 beforeEach(async () => {
   await rm('/tmp/ga98-address-book-test', { recursive: true, force: true });
@@ -172,5 +172,68 @@ describe('the record itself', () => {
 
   it('refuses a nameless contact rather than storing an unfindable row', async () => {
     await expect(save(c('   '))).rejects.toThrow(/name/i);
+  });
+});
+
+describe('export / import', () => {
+  it('exportAll returns every contact, alphabetised, full fidelity', async () => {
+    await save(c('Zara', { emails: ['z@x.test'] }));
+    await save(c('Adam', { affiliations: ['Society'] }));
+    const rows = await exportAll();
+    expect(rows.map((r) => r.name)).toEqual(['Adam', 'Zara']);
+    expect(rows.find((r) => r.name === 'Adam')!.affiliations).toEqual(['Society']);
+  });
+
+  it('importAll creates new contacts and reports how many', async () => {
+    const res = await importAll([
+      { name: 'Grace Hopper', occupation: 'Rear Admiral', emails: ['g@navy.test'] },
+      { name: 'Ada Lovelace', affiliations: ['Analytical Society'] },
+    ]);
+    expect(res).toEqual({ added: 2, skipped: 0 });
+    const names = (await list()).map((r) => r.name);
+    expect(names).toEqual(['Ada Lovelace', 'Grace Hopper']);
+  });
+
+  it('skips rows with no name rather than aborting the whole import', async () => {
+    const res = await importAll([{ name: 'Good Row' }, { occupation: 'no name here' }, { name: '   ' }]);
+    expect(res).toEqual({ added: 1, skipped: 2 });
+  });
+
+  it('rejects a non-array payload with a clear error', async () => {
+    await expect(importAll({ not: 'an array' })).rejects.toThrow(/array/i);
+  });
+
+  it('remaps common-contact links WITHIN the imported set, symmetrically', async () => {
+    // A round-trip: export two linked contacts, wipe the book, import the file back.
+    const a = await save(c('Alice'));
+    const b = await save(c('Bob'));
+    await save({ ...a, commonContacts: [b.id] });
+    const exported = await exportAll();
+
+    await remove(a.id);
+    await remove(b.id);
+    const res = await importAll(exported);
+    expect(res.added).toBe(2);
+
+    const rows = await list();
+    const newA = (await read(rows.find((r) => r.name === 'Alice')!.id))!;
+    const newB = (await read(rows.find((r) => r.name === 'Bob')!.id))!;
+    expect(newA.commonContacts).toEqual([newB.id]);
+    expect(newB.commonContacts).toEqual([newA.id]);
+  });
+
+  it('drops a link to an id outside the imported set rather than importing a dangling reference', async () => {
+    const res = await importAll([{ name: 'Solo', commonContacts: ['not-in-this-file'] }]);
+    expect(res.added).toBe(1);
+    const row = (await list())[0];
+    expect((await read(row.id))!.commonContacts).toEqual([]);
+  });
+
+  it('never carries photo refs across an import — they would point at nothing on another machine', async () => {
+    await importAll([{ name: 'Has A Photo In The File', bioPicRef: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.png', photoRefs: ['x.jpg'] }]);
+    const row = (await list())[0];
+    const full = (await read(row.id))!;
+    expect(full.bioPicRef).toBeNull();
+    expect(full.photoRefs).toEqual([]);
   });
 });

@@ -209,7 +209,9 @@ export const channels = {
     delete: 'addressBook:delete',
     search: 'addressBook:search',
     putAsset: 'addressBook:putAsset',
-    getAsset: 'addressBook:getAsset'
+    getAsset: 'addressBook:getAsset',
+    exportAll: 'addressBook:exportAll',
+    importAll: 'addressBook:importAll'
   },
   journal: {
     list: 'journal:list',
@@ -1283,6 +1285,8 @@ export interface ApiContracts {
   [channels.addressBook.search]: { args: [string]; returns: ContactSummary[] };
   [channels.addressBook.putAsset]: { args: [{ bytes: number[]; mime: string }]; returns: string };
   [channels.addressBook.getAsset]: { args: [string]; returns: { bytes: number[]; mime: string } | null };
+  [channels.addressBook.exportAll]: { args: []; returns: string | null };
+  [channels.addressBook.importAll]: { args: []; returns: { added: number; skipped: number } | null };
   [channels.journal.list]: { args: []; returns: JournalEntrySummary[] };
   [channels.journal.read]: { args: [string]; returns: JournalEntry | null };
   [channels.journal.save]: { args: [JournalEntryInput]; returns: JournalEntry };

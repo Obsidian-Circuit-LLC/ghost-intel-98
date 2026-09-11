@@ -350,6 +350,8 @@ export interface GhostApi {
     search(query: string): Promise<ContactSummary[]>;
     putAsset(bytes: number[], mime: string): Promise<string>;
     getAsset(ref: string): Promise<{ bytes: number[]; mime: string } | null>;
+    exportAll(): Promise<string | null>;
+    importAll(): Promise<{ added: number; skipped: number } | null>;
   };
   journal: {
     list(): Promise<JournalEntrySummary[]>;

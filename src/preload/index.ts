@@ -257,7 +257,9 @@ const api = {
     delete: (id: string) => ipcRenderer.invoke(channels.addressBook.delete, id),
     search: (query: string) => ipcRenderer.invoke(channels.addressBook.search, query),
     putAsset: (bytes: number[], mime: string) => ipcRenderer.invoke(channels.addressBook.putAsset, { bytes, mime }),
-    getAsset: (ref: string) => ipcRenderer.invoke(channels.addressBook.getAsset, ref)
+    getAsset: (ref: string) => ipcRenderer.invoke(channels.addressBook.getAsset, ref),
+    exportAll: () => ipcRenderer.invoke(channels.addressBook.exportAll),
+    importAll: () => ipcRenderer.invoke(channels.addressBook.importAll)
   },
   journal: {
     list: () => ipcRenderer.invoke(channels.journal.list),
