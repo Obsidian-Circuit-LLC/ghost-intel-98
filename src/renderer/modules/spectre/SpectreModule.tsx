@@ -100,7 +100,14 @@ export function SpectreModule(): JSX.Element {
   }
 
   return (
-    <div className="ga98-window-shell" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    /* FIELD BUG, found by actually launching the packaged app and measuring the real DOM
+     * (jsdom does no layout — this was invisible to every unit test). `Window.tsx` already
+     * renders this component inside its OWN `.ga98-window-shell` > `.window` > `.window-body`,
+     * so this is a SECOND, nested `.ga98-window-shell`. That class is `position:absolute` with
+     * no explicit width (theme.css), so without an explicit `width` here it shrink-wraps to
+     * its own content instead of filling the real window — measured live at 424px inside a
+     * 920px window. `width:'100%'` makes it a definite box instead of shrink-to-fit. */
+    <div className="ga98-window-shell" style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%' }}>
       <div className="ga98-spectre-bar">
         <button type="button" className={tab === 'map' ? 'active' : ''} onClick={() => setTab('map')}>Map Search</button>
         <button type="button" className={tab === 'settings' ? 'active' : ''} onClick={() => setTab('settings')}>Settings</button>
