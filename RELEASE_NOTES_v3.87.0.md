@@ -43,3 +43,8 @@ A couple of things worth knowing:
   uses — the file path is always picked by you, never guessed by the app.
 - Everything in the address book stays encrypted at rest and the import/export files are plain JSON
   you control, same as any other backup you'd make yourself.
+
+## Installer
+
+`GhostIntel98-Setup-3.87.0.exe` — 945,760,840 bytes
+SHA-256 `0df61c879c85302858c74082a39c22f9b3bf0b2a09604a85bdc8acfa7c7f7530`
