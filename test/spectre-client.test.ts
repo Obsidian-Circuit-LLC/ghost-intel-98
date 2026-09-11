@@ -73,6 +73,18 @@ describe('egress gate — Tor-default, fail closed', () => {
     expect(resolveSpectreEgress({ clearnet: true, clearnetAck: true }, { torReady: false }))
       .toMatchObject({ mode: 'clearnet' });
   });
+
+  it('points the blocked reason at Spectre\'s OWN Settings tab, not the app-wide Settings dialog', () => {
+    // FIELD BUG: the toggle lives on Spectre's in-window "Settings" tab (SpectreModule.tsx), but
+    // the app-wide Settings dialog has no Spectre category at all. A reason that just says
+    // "Settings" sends the analyst hunting through every category of the WRONG dialog looking for
+    // a control that was never there — confirmed on video, GhostExodus scrolled the entire
+    // app-wide Settings list (About through SOCMINT) and never found it.
+    const blocked = resolveSpectreEgress({ clearnet: false, clearnetAck: false }, { torReady: false });
+    expect(blocked).toMatchObject({ blocked: true });
+    expect((blocked as { reason: string }).reason).toMatch(/spectre.*settings tab/i);
+    expect((blocked as { reason: string }).reason).not.toMatch(/^.*enable clearnet in settings\./i);
+  });
 });
 
 /** A transport that records the request it was asked to make and returns canned JSON. */

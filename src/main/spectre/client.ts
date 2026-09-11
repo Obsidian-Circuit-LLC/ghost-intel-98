@@ -90,7 +90,12 @@ export function resolveSpectreEgress(
 ): SpectreEgress {
   if (s.clearnet === true && s.clearnetAck === true) return { mode: 'clearnet' };
   if (!env.torReady) {
-    return { blocked: true, reason: 'Tor is not ready — Spectre is blocked (no clearnet fallback). Enable clearnet in Settings to use your real IP.' };
+    // FIELD BUG: this used to say "Enable clearnet in Settings" — read as the app-wide Settings
+    // dialog (gear icon / F1), which has no Spectre category at all. The toggle actually lives on
+    // Spectre's OWN "Settings" tab, next to "Map Search", inside its window. Naming that tab
+    // specifically is the fix — confirmed on video, GhostExodus scrolled the entire app-wide
+    // Settings list looking for a control that was never there.
+    return { blocked: true, reason: 'Tor is not ready — Spectre is blocked (no clearnet fallback). Open Spectre\'s own Settings tab (next to Map Search) and enable clearnet to use your real IP.' };
   }
   return { mode: 'tor', socksPort: env.socksPort ?? 9050 };
 }
