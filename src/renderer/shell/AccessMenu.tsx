@@ -42,7 +42,7 @@ export const CATEGORIES: { label: string; glyph: string; items: { module: Module
     { module: 'dialterm', label: 'DialTerm' }, { module: 'mail', label: 'Mail' },
     { module: 'chat', label: 'Chat (beta)' }, { module: 'bookmarks', label: 'Bookmarks' } ] },
   { label: 'Organizer', glyph: '📅', items: [
-    { module: 'address-book', label: 'Address Book' },
+    { module: 'address-book', label: 'HumanDB' },
     { module: 'invoices', label: 'Invoices' }, { module: 'report', label: 'Reports' },
     { module: 'calendar', label: 'Calendar' }, { module: 'reminders', label: 'Reminders' },
     { module: 'alarm', label: 'Alarm' }, { module: 'number-muncher', label: 'Number Muncher' },

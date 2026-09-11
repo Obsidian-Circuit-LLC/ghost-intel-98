@@ -1,10 +1,16 @@
 /**
- * Address Book — the contact record and its input shape.
+ * HumanDB (renamed from Address Book) — the contact record and its input shape.
  *
  * Field set is GhostExodus's spec verbatim: name, alias, email, phone, URL, social media,
- * occupation, skills, notes, thoughts, a bio picture and a photo album. The four repeatable fields
- * (email / phone / URL / social) are arrays because his UI adds entries with a plus sign; a contact
+ * occupation, skills, notes, thoughts, a bio picture and a photo album — later extended with date
+ * of birth, place of birth, address and criminal record. The five repeatable fields (email / phone
+ * / URL / social / affiliation) are arrays because his UI adds entries with a plus sign; a contact
  * with one email and a contact with six are the same shape.
+ *
+ * `dob`/`placeOfBirth`/`address`/`criminalRecord` are plain free text, same posture as `notes` —
+ * whatever the analyst typed, never parsed into a structured date/address, never adjudicated. A
+ * criminal-record entry is the analyst's own research note about what they found, not a verified
+ * legal fact; it carries no more authority than anything else typed into this record.
  *
  * `commonContacts` is the one field with a rule attached, and the rule lives in the STORE rather
  * than the UI: "I want that common contact attribution to be retro-active, and attribute the common
@@ -31,6 +37,14 @@ export interface Contact {
   affiliations: ContactValues;
   occupation: string;
   skills: string;
+  /** Free text, as typed — no calendar/date parsing, so a partial or uncertain date ("circa 1990")
+   *  is not forced into a shape the analyst never observed. */
+  dob: string;
+  placeOfBirth: string;
+  /** Free text — may be one line or several (street, then city/state/zip). */
+  address: string;
+  /** The analyst's own research note, not a verified legal record — same posture as `notes`. */
+  criminalRecord: string;
   /** Important facts about the contact. */
   notes: string;
   /** Impressions ABOUT the person — deliberately a separate field from `notes`, so an observation
@@ -59,6 +73,10 @@ export interface ContactInput {
   affiliations?: ContactValues;
   occupation?: string;
   skills?: string;
+  dob?: string;
+  placeOfBirth?: string;
+  address?: string;
+  criminalRecord?: string;
   notes?: string;
   thoughts?: string;
   bioPicRef?: string | null;

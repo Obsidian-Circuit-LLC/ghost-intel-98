@@ -24,7 +24,7 @@ const summary = (id: string, name: string, alias = ''): ContactSummary => ({
 
 const contact = (id: string, name: string, extra: Partial<Contact> = {}): Contact => ({
   id, name, alias: '', emails: [], phones: [], urls: [], socials: [], affiliations: [],
-  occupation: '', skills: '', notes: '', thoughts: '',
+  occupation: '', skills: '', dob: '', placeOfBirth: '', address: '', criminalRecord: '', notes: '', thoughts: '',
   bioPicRef: null, photoRefs: [], commonContacts: [],
   createdAt: 'T', updatedAt: 'T', ...extra,
 });
@@ -189,6 +189,31 @@ describe('the requested additions', () => {
     click(Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Save'));
     await act(async () => {});
     expect((saved[0] as { affiliations: string[] }).affiliations).toEqual(['Analytical Society']);
+  });
+
+  it('shows DOB, place of birth, address and criminal record, and sends them with the save', async () => {
+    installApi([summary('1', 'Ada')], { 1: contact('1', 'Ada', {
+      dob: '1815-12-10', placeOfBirth: 'London', address: '12 St James Square',
+      criminalRecord: 'none known',
+    }) });
+    await render();
+    click(container.querySelector('.ga98-list li'));
+    await act(async () => {});
+
+    const labels = Array.from(container.querySelectorAll('label')).map((l) => l.textContent);
+    expect(labels.some((t) => t?.includes('DOB'))).toBe(true);
+    expect(labels.some((t) => t?.includes('Place of birth'))).toBe(true);
+    expect(labels.some((t) => t?.includes('Address'))).toBe(true);
+    const legends = Array.from(container.querySelectorAll('legend')).map((l) => l.textContent);
+    expect(legends.some((t) => t?.includes('Criminal record'))).toBe(true);
+
+    click(Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Save'));
+    await act(async () => {});
+    const payload = saved[0] as { dob: string; placeOfBirth: string; address: string; criminalRecord: string };
+    expect(payload.dob).toBe('1815-12-10');
+    expect(payload.placeOfBirth).toBe('London');
+    expect(payload.address).toBe('12 St James Square');
+    expect(payload.criminalRecord).toBe('none known');
   });
 
   it('names the ordering on the home list, so "all contacts, A to Z" is on the page', async () => {

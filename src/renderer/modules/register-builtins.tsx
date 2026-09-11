@@ -347,7 +347,7 @@ export function registerBuiltins(): void {
   registerModule({ key: 'markets',      title: 'Markets',          glyph: '📈', component: MarketsAdapter,      builtin: true });
   registerModule({ key: 'briefcase',    title: 'Briefcase',        glyph: '💼', component: BriefcaseAdapter,    builtin: true });
   registerModule({ key: 'journal',      title: 'Journal Jots',     glyph: '📓', component: JournalAdapter,      builtin: true });
-  registerModule({ key: 'address-book', title: 'Address Book',     glyph: '📇', component: AddressBookAdapter, builtin: true, defaultWidth: 920, defaultHeight: 720 });
+  registerModule({ key: 'address-book', title: 'HumanDB',          glyph: '📇', component: AddressBookAdapter, builtin: true, defaultWidth: 920, defaultHeight: 720 });
   registerModule({ key: 'solitaire',    title: 'Solitaire',        glyph: '🃏', component: SolitaireAdapter,    builtin: true });
   registerModule({ key: 'minesweeper',  title: 'Mine Detector',    glyph: '💣', component: MinesweeperAdapter,  builtin: true });
   registerModule({ key: 'chess',        title: 'Chess',            glyph: '♟', component: ChessAdapter,        builtin: true });

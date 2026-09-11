@@ -130,12 +130,14 @@ describe('search', () => {
       alias: 'Enchantress', emails: ['ada@analytical.test'], occupation: 'Mathematician',
       skills: 'analytical engines', notes: 'met at the symposium', thoughts: 'sharp',
       affiliations: ['Analytical Society'],
+      dob: '1815-12-10', placeOfBirth: 'London', address: '12 St James Square',
+      criminalRecord: 'none known',
     }));
     await save(c('Bob Stone', { occupation: 'Locksmith', skills: 'physical entry' }));
   });
 
   it('matches across every text field, case-insensitively', async () => {
-    for (const q of ['ada', 'ENCHANTRESS', 'analytical.test', 'mathematician', 'symposium', 'sharp', 'analytical society']) {
+    for (const q of ['ada', 'ENCHANTRESS', 'analytical.test', 'mathematician', 'symposium', 'sharp', 'analytical society', '1815-12-10', 'london', 'st james square', 'none known']) {
       expect((await search(q)).map((r) => r.name), `query: ${q}`).toEqual(['Ada Lovelace']);
     }
   });
@@ -172,6 +174,25 @@ describe('the record itself', () => {
 
   it('refuses a nameless contact rather than storing an unfindable row', async () => {
     await expect(save(c('   '))).rejects.toThrow(/name/i);
+  });
+
+  it('carries dob, place of birth, address and criminal record as plain text', async () => {
+    const saved = await save(c('Ada', {
+      dob: 'circa 1990', placeOfBirth: 'Unknown', address: '123 Main St\nAnytown, USA',
+      criminalRecord: 'Analyst note: unverified rumor of fraud charge, 2019.',
+    }));
+    expect(saved.dob).toBe('circa 1990');
+    expect(saved.placeOfBirth).toBe('Unknown');
+    expect(saved.address).toBe('123 Main St\nAnytown, USA');
+    expect(saved.criminalRecord).toBe('Analyst note: unverified rumor of fraud charge, 2019.');
+  });
+
+  it('defaults the new fields to empty strings when omitted', async () => {
+    const saved = await save(c('Bare'));
+    expect(saved.dob).toBe('');
+    expect(saved.placeOfBirth).toBe('');
+    expect(saved.address).toBe('');
+    expect(saved.criminalRecord).toBe('');
   });
 });
 
@@ -227,6 +248,19 @@ describe('export / import', () => {
     expect(res.added).toBe(1);
     const row = (await list())[0];
     expect((await read(row.id))!.commonContacts).toEqual([]);
+  });
+
+  it('imports dob, place of birth, address and criminal record', async () => {
+    await importAll([{
+      name: 'Imported Row', dob: '1990-01-01', placeOfBirth: 'Somewhere',
+      address: '1 Import Ln', criminalRecord: 'flagged in prior case file',
+    }]);
+    const row = (await list())[0];
+    const full = (await read(row.id))!;
+    expect(full.dob).toBe('1990-01-01');
+    expect(full.placeOfBirth).toBe('Somewhere');
+    expect(full.address).toBe('1 Import Ln');
+    expect(full.criminalRecord).toBe('flagged in prior case file');
   });
 
   it('never carries photo refs across an import — they would point at nothing on another machine', async () => {

@@ -68,6 +68,10 @@ function withDefaults(raw: Contact): Contact {
     affiliations: raw.affiliations ?? [],
     occupation: raw.occupation ?? '',
     skills: raw.skills ?? '',
+    dob: raw.dob ?? '',
+    placeOfBirth: raw.placeOfBirth ?? '',
+    address: raw.address ?? '',
+    criminalRecord: raw.criminalRecord ?? '',
     notes: raw.notes ?? '',
     thoughts: raw.thoughts ?? '',
     bioPicRef: raw.bioPicRef ?? null,
@@ -120,7 +124,7 @@ export async function read(id: string): Promise<Contact | null> {
  *  they met someone is searching their own words about them. */
 function haystack(c: Contact): string {
   return [
-    c.name, c.alias, c.occupation, c.skills, c.notes, c.thoughts,
+    c.name, c.alias, c.occupation, c.skills, c.dob, c.placeOfBirth, c.address, c.criminalRecord, c.notes, c.thoughts,
     ...c.emails, ...c.phones, ...c.urls, ...c.socials, ...c.affiliations,
   ].join('\n').toLowerCase();
 }
@@ -171,6 +175,10 @@ export async function save(input: ContactInput): Promise<Contact> {
       affiliations: input.affiliations === undefined ? (existing?.affiliations ?? []) : cleanValues(input.affiliations),
       occupation: text(input.occupation ?? existing?.occupation ?? ''),
       skills: text(input.skills ?? existing?.skills ?? ''),
+      dob: text(input.dob ?? existing?.dob ?? ''),
+      placeOfBirth: text(input.placeOfBirth ?? existing?.placeOfBirth ?? ''),
+      address: text(input.address ?? existing?.address ?? ''),
+      criminalRecord: text(input.criminalRecord ?? existing?.criminalRecord ?? ''),
       notes: text(input.notes ?? existing?.notes ?? ''),
       thoughts: text(input.thoughts ?? existing?.thoughts ?? ''),
       bioPicRef: input.bioPicRef === undefined ? (existing?.bioPicRef ?? null) : (input.bioPicRef || null),
@@ -245,6 +253,10 @@ export async function importAll(raw: unknown): Promise<ImportResult> {
       affiliations: cleanValues(o.affiliations),
       occupation: text(o.occupation),
       skills: text(o.skills),
+      dob: text(o.dob),
+      placeOfBirth: text(o.placeOfBirth),
+      address: text(o.address),
+      criminalRecord: text(o.criminalRecord),
       notes: text(o.notes),
       thoughts: text(o.thoughts),
       bioPicRef: null,

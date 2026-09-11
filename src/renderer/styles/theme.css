@@ -1552,6 +1552,15 @@ input.ga98-text, select.ga98-text {
    Bumped 340→380 so the View row (2D Map / Satellite / Street View / Labels) and the event
    titles get a little breathing room instead of clipping. */
 .ga98-geo { grid-template-columns: 380px 1fr; }
+/* Address Book / HumanDB — the generic .ga98-split track is 220px, but the list pane's own inline
+   width (230, content-box: +12px padding +1px border = 243px rendered) was independently set and
+   drifted from it. CSS Grid does not clip an item's overflow into a neighbouring cell, so the list
+   pane's oversized box bled 23px into the editor pane — measured live, landing exactly on the bio
+   picture ("everything below it clipping into the contacts section"). Fixed at the source: ONE
+   number (this track) now governs the pane's width; the pane itself no longer sets its own width
+   and uses border-box so its padding/border can never push it wider than the track again. */
+.ga98-ab-split { grid-template-columns: 250px 1fr; }
+
 /* Command-center 3-column layout (R9) — GLOBE MODE ONLY. Applied via the ga98-geo-3col modifier
    only when useMapGL is true; the 2-column .ga98-geo track above is untouched in the default app.
    left controls (380px) | center globe (1fr, flexes) | right rail (300px fixed). */
@@ -2844,6 +2853,20 @@ input.ga98-text, select.ga98-text {
 .ga98-ab-editor fieldset legend { font-size: 11px; padding: 0 4px; display: flex; align-items: center; gap: 6px; }
 /* The per-section Edit/Done toggle sits in the legend, small enough not to unbalance the label. */
 .ga98-ab-fieldlock { padding: 0 6px; min-width: 0; font-size: 10px; line-height: 1.4; }
+
+/* The empty-state placeholder ("Select a contact, or click New") used to be an ordinary block
+   element at the top-left of an otherwise-blank pane — correct document flow, but against all
+   that blank space it read as text stranded off to the side. Centring the whole pane's content
+   (illustration + text together) fills the space intentionally instead of leaving it looking
+   unfinished. */
+.ga98-ab-empty {
+  margin: auto;
+  text-align: center;
+  color: var(--ga98-dim-soft);
+  max-width: 420px;
+}
+.ga98-ab-empty img { max-width: 320px; width: 100%; height: auto; opacity: 0.9; }
+.ga98-ab-empty p { margin: 12px 0 0; }
 .ga98-ab-editor textarea { display: block; width: 100%; box-sizing: border-box; resize: vertical; }
 /* The repeatable-field rows: input takes the space, the − sits tight beside it, the + is its own
    row beneath. Fixed-width buttons so a long value never squeezes the control off the edge. */
