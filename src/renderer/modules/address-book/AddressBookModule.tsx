@@ -6,7 +6,7 @@
  * (email / phone / URL / social), search, an always-alphabetised list, and common contacts chosen
  * from a dropdown.
  *
- * Two things are deliberately NOT decided here:
+ * Three things are deliberately NOT decided here:
  *
  *   - ALPHABETISATION is the store's, not this component's. The list renders what `list()` returns,
  *     which is sorted by NAME regardless of alias ("alphabetized by Name despite if they have an
@@ -15,9 +15,16 @@
  *     edited and re-reads; it never writes the other side itself. That is what makes the
  *     attribution retro-active without this component having to remember to do it — and it means a
  *     half-link cannot be created by any path through the UI.
+ *   - IMPORT's id-remapping for common-contact links is the store's job too (`address-book.ts`
+ *     `importAll`) — this screen just fires the picker and refreshes.
  *
  * Photo bytes never live in the contact record: they go to the encrypted asset store and the record
  * keeps a ref, same as Journal Jots and Reports. Zero egress — nothing here fetches anything.
+ *
+ * The five repeatable fields (Email/Phone/URL/Social/Affiliation) start LOCKED — read-only, with
+ * their +/- controls disabled — so a stray tap or a scroll doesn't quietly edit or delete an entry.
+ * Each section's own Edit/Done button unlocks just that section; the lock state resets whenever a
+ * different contact is opened.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Contact, ContactSummary } from '@shared/address-book';
@@ -96,6 +103,11 @@ export function AddressBookModule(): JSX.Element {
   const [draft, setDraft] = useState<Contact>(emptyContact);
   const [dirty, setDirty] = useState(false);
   const [dragging, setDragging] = useState(false);
+  // The five repeatable fields start LOCKED (read-only) so a stray tap or a scroll on a touch
+  // surface can't silently edit or remove an entry — the analyst has to press Edit first. Reset
+  // whenever a different contact is opened, so unlocking one contact's Email doesn't leak into
+  // the next contact you click on.
+  const [unlockedFields, setUnlockedFields] = useState<Set<MultiKey>>(new Set());
   const bioInput = useRef<HTMLInputElement>(null);
   const albumInput = useRef<HTMLInputElement>(null);
 
@@ -119,12 +131,22 @@ export function AddressBookModule(): JSX.Element {
     });
     setSelectedId(id);
     setDirty(false);
+    setUnlockedFields(new Set());
   }, []);
 
   function startNew(): void {
     setDraft(emptyContact());
     setSelectedId(null);
     setDirty(true);
+    setUnlockedFields(new Set());
+  }
+
+  function toggleFieldLock(key: MultiKey): void {
+    setUnlockedFields((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
   }
 
   function edit<K extends keyof Contact>(key: K, value: Contact[K]): void {
@@ -181,6 +203,20 @@ export function AddressBookModule(): JSX.Element {
     await refresh(query);
   }
 
+  async function exportBook(): Promise<void> {
+    // Main process picks the save path and writes the file — the renderer never sees or chooses
+    // a filesystem path, same as every other export in this app.
+    const saved = await window.api.addressBook.exportAll();
+    if (saved) toast.success(`Exported to ${saved}.`);
+  }
+
+  async function importBook(): Promise<void> {
+    const res = await window.api.addressBook.importAll();
+    if (!res) return; // the analyst cancelled the file picker
+    await refresh(query);
+    toast.success(`Imported ${res.added} contact${res.added === 1 ? '' : 's'}.${res.skipped ? ` (${res.skipped} row${res.skipped === 1 ? '' : 's'} skipped — no name.)` : ''}`);
+  }
+
   async function attachBioPic(file: File | undefined): Promise<void> {
     if (!file) return;
     const read = await readImage(file);
@@ -213,14 +249,16 @@ export function AddressBookModule(): JSX.Element {
       <ModuleBanner variant="addressbook" src={banner} blurSrc={bannerBlur} alt="Address Book" />
       <div className="ga98-split" style={{ flex: 1, minHeight: 0 }}>
         <div className="ga98-pane" style={{ width: 230, flex: '0 0 auto', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-          <div style={{ display: 'flex', gap: 4, padding: 4 }}>
+          <div style={{ display: 'flex', gap: 4, padding: 4, flexWrap: 'wrap' }}>
             <button type="button" onClick={startNew} title="Add a new contact">New</button>
+            <button type="button" onClick={() => { void exportBook(); }} title="Save every contact to a JSON file">Export</button>
+            <button type="button" onClick={() => { void importBook(); }} title="Add contacts from a JSON file (photos are not included — a ref from another machine's asset folder would point at nothing)">Import</button>
             <input
               aria-label="Search contacts"
               placeholder="Search…"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              style={{ flex: 1, minWidth: 0 }}
+              style={{ flex: 1, minWidth: 120 }}
             />
           </div>
           <div className="ga98-ab-list-head" title="Every contact, sorted by name">
@@ -272,30 +310,54 @@ export function AddressBookModule(): JSX.Element {
                 </div>
 
                 <div style={{ flex: 1, minWidth: 0, display: 'grid', gap: 6 }}>
-                  <label>Name<input value={draft.name} onChange={(e) => edit('name', e.target.value)} /></label>
-                  <label>Alias<input value={draft.alias} onChange={(e) => edit('alias', e.target.value)} /></label>
-                  <label>Occupation<input value={draft.occupation} onChange={(e) => edit('occupation', e.target.value)} /></label>
-                  <label>Skills<input value={draft.skills} onChange={(e) => edit('skills', e.target.value)} /></label>
+                  <div className="ga98-ab-row2">
+                    <label>Name<input value={draft.name} onChange={(e) => edit('name', e.target.value)} /></label>
+                    <label>Alias<input value={draft.alias} onChange={(e) => edit('alias', e.target.value)} /></label>
+                  </div>
+                  <div className="ga98-ab-row2">
+                    <label>Occupation<input value={draft.occupation} onChange={(e) => edit('occupation', e.target.value)} /></label>
+                    <label>Skills<input value={draft.skills} onChange={(e) => edit('skills', e.target.value)} /></label>
+                  </div>
                 </div>
               </div>
 
-              {MULTI_FIELDS.map((field) => (
-                <fieldset key={field.key} style={{ marginTop: 8 }}>
-                  <legend>{field.label}</legend>
-                  {draft[field.key].map((value, i) => (
-                    <div key={i} className="ga98-ab-row">
-                      <input
-                        value={value}
-                        placeholder={field.placeholder}
-                        aria-label={`${field.label} ${i + 1}`}
-                        onChange={(e) => editMulti(field.key, i, e.target.value)}
-                      />
-                      <button type="button" title={`Remove this ${field.label.toLowerCase()}`} onClick={() => removeMulti(field.key, i)}>−</button>
-                    </div>
-                  ))}
-                  <button type="button" title={`Add another ${field.label.toLowerCase()}`} onClick={() => addMulti(field.key)}>+</button>
-                </fieldset>
-              ))}
+              {/* Two to a row so five sections fill the width instead of stacking into one long,
+                  mostly-empty column. Each starts LOCKED (read-only) — a stray tap or scroll on a
+                  touch surface can't quietly edit or delete an entry; Edit unlocks just that one
+                  section, and Done locks it again. */}
+              <div className="ga98-ab-fields-grid">
+                {MULTI_FIELDS.map((field) => {
+                  const locked = !unlockedFields.has(field.key);
+                  return (
+                    <fieldset key={field.key}>
+                      <legend>
+                        {field.label}
+                        <button
+                          type="button"
+                          className="ga98-ab-fieldlock"
+                          title={locked ? `Unlock ${field.label} for editing` : `Lock ${field.label} again`}
+                          onClick={() => toggleFieldLock(field.key)}
+                        >
+                          {locked ? 'Edit' : 'Done'}
+                        </button>
+                      </legend>
+                      {draft[field.key].map((value, i) => (
+                        <div key={i} className="ga98-ab-row">
+                          <input
+                            value={value}
+                            readOnly={locked}
+                            placeholder={field.placeholder}
+                            aria-label={`${field.label} ${i + 1}`}
+                            onChange={(e) => editMulti(field.key, i, e.target.value)}
+                          />
+                          <button type="button" disabled={locked} title={`Remove this ${field.label.toLowerCase()}`} onClick={() => removeMulti(field.key, i)}>−</button>
+                        </div>
+                      ))}
+                      <button type="button" disabled={locked} title={`Add another ${field.label.toLowerCase()}`} onClick={() => addMulti(field.key)}>+</button>
+                    </fieldset>
+                  );
+                })}
+              </div>
 
               <fieldset style={{ marginTop: 8 }}>
                 <legend>Notes</legend>

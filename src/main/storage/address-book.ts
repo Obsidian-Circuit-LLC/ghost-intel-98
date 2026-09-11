@@ -199,6 +199,73 @@ export async function save(input: ContactInput): Promise<Contact> {
   });
 }
 
+/** Every contact, full fidelity, alphabetised — the export the analyst can move or back up. Photo
+ *  refs travel along with it (portable within THIS install; see `importAll` for why they are
+ *  dropped on the way back in on another one). */
+export async function exportAll(): Promise<Contact[]> {
+  return (await readAll()).slice().sort(byName);
+}
+
+export interface ImportResult { added: number; skipped: number; }
+
+/**
+ * Import contacts from a previously exported (or hand-built) JSON array. Every row becomes a NEW
+ * contact — ids from the file are never reused, so importing the same file twice safely produces
+ * two sets rather than colliding with whatever is already in the book. A row with no name is
+ * SKIPPED, never aborting the rest of the import over one bad entry.
+ *
+ * Common-contact links are remapped in a second pass, through an old-id → new-id table built while
+ * creating the rows: a link between two contacts that are BOTH in the file survives, symmetrically,
+ * through `save()`'s own reconciliation. A link to an id that is not present in the file cannot be
+ * resolved on this machine and is dropped — the same discipline `save()` already applies to any
+ * unknown id, not a special case for import.
+ *
+ * Photo refs are never carried over: `address-book-assets/<uuid>.<ext>` on the machine that
+ * exported the file is not the folder on the machine reading it back in, so an imported ref would
+ * point at nothing. Imported contacts start with no picture; the analyst re-attaches one if needed.
+ */
+export async function importAll(raw: unknown): Promise<ImportResult> {
+  if (!Array.isArray(raw)) throw new Error('Expected a JSON array of contacts.');
+  let skipped = 0;
+  const idMap = new Map<string, string>();
+  const created: Array<{ id: string; name: string; oldLinks: string[] }> = [];
+
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') { skipped += 1; continue; }
+    const o = item as Record<string, unknown>;
+    const name = String(o.name ?? '').trim();
+    if (!name) { skipped += 1; continue; }
+    const rec = await save({
+      name,
+      alias: text(o.alias),
+      emails: cleanValues(o.emails),
+      phones: cleanValues(o.phones),
+      urls: cleanValues(o.urls),
+      socials: cleanValues(o.socials),
+      affiliations: cleanValues(o.affiliations),
+      occupation: text(o.occupation),
+      skills: text(o.skills),
+      notes: text(o.notes),
+      thoughts: text(o.thoughts),
+      bioPicRef: null,
+      photoRefs: [],
+    });
+    if (typeof o.id === 'string' && o.id) idMap.set(o.id, rec.id);
+    const oldLinks = Array.isArray(o.commonContacts) ? o.commonContacts.map((v) => String(v ?? '')) : [];
+    created.push({ id: rec.id, name: rec.name, oldLinks });
+  }
+
+  // Second pass: every imported row now has its NEW id, so links between two imported rows can be
+  // resolved. save() needs `name` on every call (its own "a contact needs a name" invariant) — reuse
+  // the name we already have rather than re-reading the record.
+  for (const row of created) {
+    const remapped = row.oldLinks.map((old) => idMap.get(old)).filter((v): v is string => Boolean(v));
+    if (remapped.length) await save({ id: row.id, name: row.name, commonContacts: remapped });
+  }
+
+  return { added: created.length, skipped };
+}
+
 /** Delete a contact and sweep its id out of every other contact's links, so no one is left holding
  *  a reference to somebody who is gone. */
 export async function remove(id: string): Promise<void> {

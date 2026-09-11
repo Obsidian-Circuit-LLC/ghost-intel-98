@@ -2827,7 +2827,23 @@ input.ga98-text, select.ga98-text {
   padding: 6px 8px 8px;
   min-width: 0;
 }
-.ga98-ab-editor fieldset legend { font-size: 11px; padding: 0 4px; }
+/* Name/Alias and Occupation/Skills side by side rather than one field per line — fills the width
+   a wide editor pane otherwise leaves blank. Collapses to one column if the window gets narrow. */
+.ga98-ab-row2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 6px 12px;
+}
+/* The five repeatable-field sections, two to a row instead of stacked into one long column. */
+.ga98-ab-fields-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0 10px;
+  align-items: start;
+}
+.ga98-ab-editor fieldset legend { font-size: 11px; padding: 0 4px; display: flex; align-items: center; gap: 6px; }
+/* The per-section Edit/Done toggle sits in the legend, small enough not to unbalance the label. */
+.ga98-ab-fieldlock { padding: 0 6px; min-width: 0; font-size: 10px; line-height: 1.4; }
 .ga98-ab-editor textarea { display: block; width: 100%; box-sizing: border-box; resize: vertical; }
 /* The repeatable-field rows: input takes the space, the − sits tight beside it, the + is its own
    row beneath. Fixed-width buttons so a long value never squeezes the control off the edge. */

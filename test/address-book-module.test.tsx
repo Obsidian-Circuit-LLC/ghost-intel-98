@@ -100,7 +100,9 @@ describe('the repeatable fields', () => {
     expect(emailRows()).toHaveLength(1);
 
     const emailFieldset = Array.from(container.querySelectorAll('fieldset'))
-      .find((f) => f.querySelector('legend')?.textContent === 'Email')!;
+      .find((f) => f.querySelector('legend')?.textContent?.startsWith('Email'))!;
+    click(emailFieldset.querySelector('.ga98-ab-fieldlock')); // unlock the section first
+    await act(async () => {});
     click(Array.from(emailFieldset.querySelectorAll('button')).at(-1));
     await act(async () => {});
     expect(emailRows(), 'the plus button is how he adds a second address').toHaveLength(2);
@@ -175,7 +177,7 @@ describe('the requested additions', () => {
     click(container.querySelector('.ga98-list li'));
     await act(async () => {});
     const legends = Array.from(container.querySelectorAll('fieldset legend')).map((l) => l.textContent);
-    expect(legends, 'affiliation was the forgotten field').toContain('Affiliation');
+    expect(legends.some((t) => t?.startsWith('Affiliation')), 'affiliation was the forgotten field').toBe(true);
     expect(container.querySelector('input[aria-label^="Affiliation "]')).toBeTruthy();
   });
 
@@ -207,5 +209,97 @@ describe('the requested additions', () => {
       search.dispatchEvent(new Event('input', { bubbles: true }));
     });
     expect(container.querySelector('.ga98-ab-list-head')!.textContent).toMatch(/1 match/i);
+  });
+});
+
+describe('the layout groups fields side by side instead of one long column', () => {
+  it('pairs Name/Alias and Occupation/Skills in a shared two-column row', async () => {
+    installApi([summary('1', 'Ada')], { 1: contact('1', 'Ada') });
+    await render();
+    click(container.querySelector('.ga98-list li'));
+    await act(async () => {});
+    const nameLabel = Array.from(container.querySelectorAll('.ga98-ab-editor label')).find((l) => l.textContent?.startsWith('Name'))!;
+    const pairRow = nameLabel.closest('.ga98-ab-row2');
+    expect(pairRow, 'Name should sit in a two-column row, not a lone column').toBeTruthy();
+  });
+
+  it('pairs the five repeatable-field sections two to a row', async () => {
+    installApi([summary('1', 'Ada')], { 1: contact('1', 'Ada') });
+    await render();
+    click(container.querySelector('.ga98-list li'));
+    await act(async () => {});
+    const grid = container.querySelector('.ga98-ab-fields-grid');
+    expect(grid, 'the repeatable fields should sit in a filling grid, not stacked full-width').toBeTruthy();
+    expect(grid!.querySelectorAll('fieldset').length).toBe(5);
+  });
+});
+
+describe('the repeatable fields are locked until Edit is pressed', () => {
+  it('Email/Phone/URL/Social/Affiliation start read-only with an Edit button', async () => {
+    installApi([summary('1', 'Ada')], { 1: contact('1', 'Ada', { emails: ['a@x.test'] }) });
+    await render();
+    click(container.querySelector('.ga98-list li'));
+    await act(async () => {});
+
+    for (const label of ['Email', 'Phone', 'URL', 'Social Media', 'Affiliation']) {
+      const fs = Array.from(container.querySelectorAll('fieldset')).find((f) => f.querySelector('legend')?.textContent?.includes(label))!;
+      const input = fs.querySelector('input') as HTMLInputElement;
+      expect(input.readOnly, `${label} should start locked`).toBe(true);
+      const editBtn = Array.from(fs.querySelectorAll('button')).find((b) => b.textContent === 'Edit');
+      expect(editBtn, `${label} needs an Edit button`).toBeTruthy();
+    }
+  });
+
+  it('clicking Edit unlocks that section only, and the +/- controls with it', async () => {
+    installApi([summary('1', 'Ada')], { 1: contact('1', 'Ada', { emails: ['a@x.test'] }) });
+    await render();
+    click(container.querySelector('.ga98-list li'));
+    await act(async () => {});
+
+    const emailFs = Array.from(container.querySelectorAll('fieldset')).find((f) => f.querySelector('legend')?.textContent?.startsWith('Email'))!;
+    const phoneFs = Array.from(container.querySelectorAll('fieldset')).find((f) => f.querySelector('legend')?.textContent?.startsWith('Phone'))!;
+    click(emailFs.querySelector('button')!); // the Edit button
+    await act(async () => {});
+
+    expect((emailFs.querySelector('input') as HTMLInputElement).readOnly).toBe(false);
+    expect((phoneFs.querySelector('input') as HTMLInputElement).readOnly, 'unlocking Email must not unlock Phone').toBe(true);
+    const plus = Array.from(emailFs.querySelectorAll('button')).find((b) => b.textContent === '+')!;
+    expect(plus.hasAttribute('disabled')).toBe(false);
+  });
+
+  it('the +/- controls are disabled while locked, so a stray tap cannot remove an entry', async () => {
+    installApi([summary('1', 'Ada')], { 1: contact('1', 'Ada', { emails: ['a@x.test', 'b@x.test'] }) });
+    await render();
+    click(container.querySelector('.ga98-list li'));
+    await act(async () => {});
+    const emailFs = Array.from(container.querySelectorAll('fieldset')).find((f) => f.querySelector('legend')?.textContent?.startsWith('Email'))!;
+    const minus = emailFs.querySelector('input')!.closest('.ga98-ab-row')!.querySelector('button')!;
+    expect(minus.hasAttribute('disabled')).toBe(true);
+  });
+});
+
+describe('import / export to JSON', () => {
+  it('renders Export and Import buttons that call the API', async () => {
+    installApi([summary('1', 'Ada')], {});
+    (window as unknown as { api: { addressBook: Record<string, unknown> } }).api.addressBook.exportAll = vi.fn(async () => 'address-book-export.json');
+    (window as unknown as { api: { addressBook: Record<string, unknown> } }).api.addressBook.importAll = vi.fn(async () => ({ added: 3, skipped: 1 }));
+    await render();
+
+    const exportBtn = Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Export');
+    const importBtn = Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Import');
+    expect(exportBtn, 'an Export button must exist').toBeTruthy();
+    expect(importBtn, 'an Import button must exist').toBeTruthy();
+
+    click(exportBtn);
+    await act(async () => {});
+    const api = (window as unknown as { api: { addressBook: { exportAll: ReturnType<typeof vi.fn> } } }).api;
+    expect(api.addressBook.exportAll).toHaveBeenCalled();
+
+    click(importBtn);
+    await act(async () => {});
+    const api2 = (window as unknown as { api: { addressBook: { importAll: ReturnType<typeof vi.fn>; search: ReturnType<typeof vi.fn> } } }).api;
+    expect(api2.addressBook.importAll).toHaveBeenCalled();
+    // A successful import must refresh the visible list.
+    expect(api2.addressBook.search).toHaveBeenCalled();
   });
 });

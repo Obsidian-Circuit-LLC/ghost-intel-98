@@ -1262,6 +1262,30 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     const got = await addressBookAssets.getAsset(ensureFileName(args[0], 'assetRef'));
     return got ? { bytes: Array.from(got.bytes), mime: got.mime } : null;
   });
+  // Export/import to a plain JSON file the analyst explicitly picks — a portable backup, not vault
+  // storage, so it is written/read as plaintext through the same save/open-dialog convention every
+  // other export in this app uses. Photo bytes never travel in it (address-book.ts importAll drops
+  // refs on the way in — a ref from another machine's asset folder would point at nothing).
+  safeHandle(channels.addressBook.exportAll, async () => {
+    const rows = await addressBook.exportAll();
+    const data = Buffer.from(JSON.stringify(rows, null, 2), 'utf8');
+    return saveBufferWithDialog(getWindow(), 'address-book-export.json', data);
+  });
+  safeHandle(channels.addressBook.importAll, async () => {
+    const win = getWindow();
+    const result = win
+      ? await dialog.showOpenDialog(win, { properties: ['openFile'], filters: [{ name: 'JSON', extensions: ['json'] }] })
+      : await dialog.showOpenDialog({ properties: ['openFile'], filters: [{ name: 'JSON', extensions: ['json'] }] });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    const bytes = await readFile(result.filePaths[0]);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(bytes.toString('utf8'));
+    } catch {
+      throw new Error('That file is not valid JSON.');
+    }
+    return addressBook.importAll(parsed);
+  });
 
   safeHandle(channels.journal.list, () => journal.list());
   safeHandle(channels.journal.read, (...args) => journal.read(ensureUuid(args[0], 'journal entry id')));
