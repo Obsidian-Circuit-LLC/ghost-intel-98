@@ -36,6 +36,14 @@ function parseLatLon(raw: string): { lat: number; lon: number } | null {
   return { lat, lon };
 }
 
+/** Strip Electron's IPC-bridge wrapping ("Error invoking remote method 'x': Error: [x] ") so the
+ *  toast shows the plain reason a main-process handler threw, not the transport's own framing —
+ *  same fix GeoINT's ADS-B fetch already applies to its own channel's errors. Confirmed needed on
+ *  video: the raw text was what actually rendered in the error toast for a blocked Spectre query. */
+export function cleanIpcErrorMessage(raw: string): string {
+  return raw.replace(/^Error invoking remote method '[^']*':\s*/, '').replace(/^Error:\s*\[[^\]]*\]\s*/, '');
+}
+
 const KEY_LABELS: Array<{ slot: keyof SpectreKeyStatus; label: string; hint: string }> = [
   { slot: 'wigleName', label: 'WiGLE API name', hint: 'from wigle.net account → Show My Token' },
   { slot: 'wigleToken', label: 'WiGLE API token', hint: 'the token beside the name' },
@@ -72,8 +80,9 @@ export function SpectreModule(): JSX.Element {
       if (res.devices.length === 0 && failed.length) toast.warn(failed[0].reason ?? 'No results.');
       else toast.success(`${res.devices.length} device(s) near ${res.center.label ?? `${res.center.lat.toFixed(3)}, ${res.center.lon.toFixed(3)}`}.`);
     } catch (err) {
-      // A blocked Tor gate surfaces here as a thrown reason — say it plainly.
-      toast.error(err instanceof Error ? err.message : String(err));
+      // A blocked Tor gate surfaces here as a thrown reason — say it plainly, not wrapped in the
+      // IPC bridge's own "Error invoking remote method" framing.
+      toast.error(cleanIpcErrorMessage(err instanceof Error ? err.message : String(err)));
     } finally {
       setRunning(false);
     }

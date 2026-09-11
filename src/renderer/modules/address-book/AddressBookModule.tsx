@@ -1,5 +1,7 @@
 /**
- * Address Book — contacts, their photos, and who knows whom.
+ * HumanDB (displayed name; module key/IPC/storage stay `address-book` internally, same posture as
+ * the app's own "Ghost Intel 98" rename keeping its `/dcs98` internals) — contacts, their photos,
+ * and who knows whom.
  *
  * Built to GhostExodus's spec: a bio picture and a drag-and-drop album, the fixed fields (name,
  * alias, occupation, skills, notes, thoughts), four REPEATABLE fields each with a plus button
@@ -33,6 +35,7 @@ import { confirmDialog } from '../../state/dialogs';
 import { ModuleBanner } from '../../components/ModuleBanner';
 import banner from '../../assets/address-book-banner.png';
 import bannerBlur from '../../assets/address-book-banner-blur.jpg';
+import emptyIllustration from '../../assets/address-book-empty-illustration.png';
 
 const IMAGE_MIME = ['image/png', 'image/jpeg'];
 const MAX_ASSET_BYTES = 25 * 1024 * 1024;
@@ -52,7 +55,7 @@ type MultiKey = (typeof MULTI_FIELDS)[number]['key'];
 function emptyContact(): Contact {
   return {
     id: '', name: '', alias: '', emails: [''], phones: [''], urls: [''], socials: [''], affiliations: [''],
-    occupation: '', skills: '', notes: '', thoughts: '',
+    occupation: '', skills: '', dob: '', placeOfBirth: '', address: '', criminalRecord: '', notes: '', thoughts: '',
     bioPicRef: null, photoRefs: [], commonContacts: [],
     createdAt: '', updatedAt: '',
   };
@@ -180,6 +183,7 @@ export function AddressBookModule(): JSX.Element {
       emails: draft.emails, phones: draft.phones, urls: draft.urls, socials: draft.socials,
       affiliations: draft.affiliations,
       occupation: draft.occupation, skills: draft.skills,
+      dob: draft.dob, placeOfBirth: draft.placeOfBirth, address: draft.address, criminalRecord: draft.criminalRecord,
       notes: draft.notes, thoughts: draft.thoughts,
       bioPicRef: draft.bioPicRef, photoRefs: draft.photoRefs,
       commonContacts: draft.commonContacts,
@@ -243,6 +247,10 @@ export function AddressBookModule(): JSX.Element {
   /** Everyone except the contact being edited — the dropdown must not offer a self-link. */
   const linkable = rows.filter((r) => r.id !== draft.id && !draft.commonContacts.includes(r.id));
   const nameOf = (id: string): string => rows.find((r) => r.id === id)?.name ?? 'Unknown contact';
+  /** Nothing selected and no draft in progress — the "pick a contact" placeholder, not the form.
+   *  Only THIS state centres its content (`margin:auto` needs a flex parent); the filled form
+   *  below must keep ordinary block flow, so the flex display is applied here, not on the class. */
+  const showingEmptyState = !dirty && !selectedId;
 
   return (
     /* FIELD BUG, found by actually launching the packaged app and measuring the real DOM
@@ -254,8 +262,11 @@ export function AddressBookModule(): JSX.Element {
      * 920px window. `width:'100%'` makes it a definite box instead of shrink-to-fit. */
     <div className="ga98-window-shell" style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%' }}>
       <ModuleBanner variant="addressbook" src={banner} blurSrc={bannerBlur} alt="Address Book" />
-      <div className="ga98-split" style={{ flex: 1, minHeight: 0 }}>
-        <div className="ga98-pane" style={{ width: 230, flex: '0 0 auto', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      <div className="ga98-split ga98-ab-split" style={{ flex: 1, minHeight: 0 }}>
+        {/* No width here — the `.ga98-ab-split` grid track above is the ONE place this pane's
+            width is decided. An inline width here would only reintroduce the drift the CSS
+            comment on that track explains. box-sizing keeps its own padding/border inside it. */}
+        <div className="ga98-pane" style={{ boxSizing: 'border-box', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <div style={{ display: 'flex', gap: 4, padding: 4, flexWrap: 'wrap' }}>
             <button type="button" onClick={startNew} title="Add a new contact">New</button>
             <button type="button" onClick={() => { void exportBook(); }} title="Save every contact to a JSON file">Export</button>
@@ -294,9 +305,19 @@ export function AddressBookModule(): JSX.Element {
           </ul>
         </div>
 
-        <div className="ga98-pane ga98-ab-editor" style={{ flex: 1, minWidth: 0, overflow: 'auto', padding: 8 }}>
-          {!dirty && !selectedId ? (
-            <p style={{ color: 'var(--ga98-dim-soft)' }}>Select a contact, or click New to add one.</p>
+        <div
+          className="ga98-pane ga98-ab-editor"
+          style={{ flex: 1, minWidth: 0, overflow: 'auto', padding: 8, ...(showingEmptyState ? { display: 'flex' } : {}) }}
+        >
+          {showingEmptyState ? (
+            // FIELD BUG: the placeholder text rendered as an ordinary block element at the top-left
+            // of a mostly-empty pane — correct flow, but it read as "off to the side" against all
+            // the blank space around it. His own artwork now fills that space; the wrapper centres
+            // both the illustration and the text together instead of leaving the text to float.
+            <div className="ga98-ab-empty">
+              <img src={emptyIllustration} alt="" aria-hidden="true" />
+              <p>Select a contact, or click New to add one.</p>
+            </div>
           ) : (
             <>
               <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
@@ -325,6 +346,11 @@ export function AddressBookModule(): JSX.Element {
                     <label>Occupation<input value={draft.occupation} onChange={(e) => edit('occupation', e.target.value)} /></label>
                     <label>Skills<input value={draft.skills} onChange={(e) => edit('skills', e.target.value)} /></label>
                   </div>
+                  <div className="ga98-ab-row2">
+                    <label>DOB<input value={draft.dob} placeholder="As known — a partial or approximate date is fine" onChange={(e) => edit('dob', e.target.value)} /></label>
+                    <label>Place of birth<input value={draft.placeOfBirth} onChange={(e) => edit('placeOfBirth', e.target.value)} /></label>
+                  </div>
+                  <label>Address<input value={draft.address} onChange={(e) => edit('address', e.target.value)} /></label>
                 </div>
               </div>
 
@@ -373,6 +399,13 @@ export function AddressBookModule(): JSX.Element {
               <fieldset>
                 <legend>Thoughts</legend>
                 <textarea rows={3} value={draft.thoughts} onChange={(e) => edit('thoughts', e.target.value)} style={{ width: '100%' }} />
+              </fieldset>
+              <fieldset>
+                {/* The analyst's own research note, not a verified legal record — same posture as
+                    Notes/Thoughts above, so it gets a free-text box rather than any structured
+                    charge/date/jurisdiction shape that would imply an authority this app doesn't have. */}
+                <legend>Criminal record</legend>
+                <textarea rows={3} value={draft.criminalRecord} onChange={(e) => edit('criminalRecord', e.target.value)} style={{ width: '100%' }} />
               </fieldset>
 
               <fieldset>

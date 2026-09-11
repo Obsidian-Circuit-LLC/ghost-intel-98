@@ -199,6 +199,15 @@ export function secretsFile(): string {
   return join(dataRoot(), 'secrets.enc');
 }
 
+/** External Apps' drop-in folder. Deliberately under userData (never the install directory):
+ *  Program Files is read-only without elevation post-install (the same problem `firefox.ts`
+ *  already works around), and this folder holds files the USER drops in after install, which an
+ *  uninstall/reinstall must not silently wipe. Always outside app.asar — userData is never
+ *  packaged into it. */
+export function externalProgramsDir(): string {
+  return join(dataRoot(), 'Programs');
+}
+
 export async function ensureDataLayout(): Promise<void> {
   await mkdir(dataRoot(), { recursive: true });
   await mkdir(casesDir(), { recursive: true });

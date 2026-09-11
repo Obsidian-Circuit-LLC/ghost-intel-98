@@ -51,6 +51,7 @@ export interface LearningModelMeta {
 import type { HarvestedItem, MonitoredChannel } from './socmint/types';
 import type { Contact, ContactInput, ContactSummary } from './address-book';
 import type { SpectreQuery, SpectreQueryResult, SpectreKeys, SpectreKeyStatus } from './spectre/types';
+import type { ExternalProgramsScanResult } from './external-programs/types';
 
 export interface EntityCreateInput { type: EntityType; value: string; notes?: string; aliases?: string[] }
 export interface EntityLinkOpts { relationship?: EntityRelationship; linkIds?: string[]; attachmentFileNames?: string[] }
@@ -201,6 +202,12 @@ export const channels = {
     saveKeys: 'spectre:saveKeys',
     getEgress: 'spectre:getEgress',
     setClearnet: 'spectre:setClearnet'
+  },
+  externalPrograms: {
+    list: 'externalPrograms:list',
+    refresh: 'externalPrograms:refresh',
+    launch: 'externalPrograms:launch',
+    openFolder: 'externalPrograms:openFolder'
   },
   addressBook: {
     list: 'addressBook:list',
@@ -1278,6 +1285,11 @@ export interface ApiContracts {
   [channels.spectre.saveKeys]: { args: [Partial<SpectreKeys>]; returns: SpectreKeyStatus };
   [channels.spectre.getEgress]: { args: []; returns: { clearnet: boolean; clearnetAck: boolean; torReady: boolean } };
   [channels.spectre.setClearnet]: { args: [{ clearnet: boolean; clearnetAck: boolean }]; returns: { clearnet: boolean; clearnetAck: boolean } };
+
+  [channels.externalPrograms.list]: { args: []; returns: ExternalProgramsScanResult };
+  [channels.externalPrograms.refresh]: { args: []; returns: ExternalProgramsScanResult };
+  [channels.externalPrograms.launch]: { args: [{ id: string }]; returns: { ok: true } };
+  [channels.externalPrograms.openFolder]: { args: []; returns: string };
   [channels.addressBook.list]: { args: []; returns: ContactSummary[] };
   [channels.addressBook.read]: { args: [string]; returns: Contact | null };
   [channels.addressBook.save]: { args: [ContactInput]; returns: Contact };

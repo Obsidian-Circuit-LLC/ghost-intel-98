@@ -32,6 +32,7 @@ import { BriefcaseModule } from './briefcase/BriefcaseModule';
 import { JournalModule } from './journal/JournalModule';
 import { AddressBookModule } from './address-book/AddressBookModule';
 import { SpectreModule } from './spectre/SpectreModule';
+import { ExternalProgramsModule } from './external-programs/ExternalProgramsModule';
 import { SolitaireModule } from './solitaire/SolitaireModule';
 import { MinesweeperModule } from './minesweeper/MinesweeperModule';
 import { ChessModule } from './chess/ChessModule';
@@ -158,6 +159,10 @@ function AddressBookAdapter({ spec: _spec }: { spec: WindowSpec }): JSX.Element 
 
 function SpectreAdapter({ spec: _spec }: { spec: WindowSpec }): JSX.Element {
   return <SpectreModule />;
+}
+
+function ExternalProgramsAdapter({ spec: _spec }: { spec: WindowSpec }): JSX.Element {
+  return <ExternalProgramsModule />;
 }
 
 function SolitaireAdapter({ spec: _spec }: { spec: WindowSpec }): JSX.Element {
@@ -343,11 +348,12 @@ export function registerBuiltins(): void {
   registerModule({ key: 'media-player', title: 'Jukebox',          glyph: '🎵', component: MediaPlayerAdapter,  builtin: true, defaultWidth: 380, defaultHeight: 150 });
   registerModule({ key: 'geoint',       title: 'GeoINT',           glyph: '🌍', component: GeoIntAdapter,       builtin: true, category: 'osint', subcategory: 'Geospatial' });
   registerModule({ key: 'spectre',      title: 'Spectre',          glyph: '📡', component: SpectreAdapter,      builtin: true, category: 'osint', subcategory: 'Geospatial', defaultWidth: 980, defaultHeight: 700 });
+  registerModule({ key: 'external-programs', title: 'Program Manager', glyph: '🗂', component: ExternalProgramsAdapter, builtin: true, defaultWidth: 640, defaultHeight: 520 });
   registerModule({ key: 'bookmarks',    title: 'Bookmarks',        glyph: '🔖', component: BookmarksAdapter,    builtin: true });
   registerModule({ key: 'markets',      title: 'Markets',          glyph: '📈', component: MarketsAdapter,      builtin: true });
   registerModule({ key: 'briefcase',    title: 'Briefcase',        glyph: '💼', component: BriefcaseAdapter,    builtin: true });
   registerModule({ key: 'journal',      title: 'Journal Jots',     glyph: '📓', component: JournalAdapter,      builtin: true });
-  registerModule({ key: 'address-book', title: 'Address Book',     glyph: '📇', component: AddressBookAdapter, builtin: true, defaultWidth: 920, defaultHeight: 720 });
+  registerModule({ key: 'address-book', title: 'HumanDB',          glyph: '📇', component: AddressBookAdapter, builtin: true, defaultWidth: 920, defaultHeight: 720 });
   registerModule({ key: 'solitaire',    title: 'Solitaire',        glyph: '🃏', component: SolitaireAdapter,    builtin: true });
   registerModule({ key: 'minesweeper',  title: 'Mine Detector',    glyph: '💣', component: MinesweeperAdapter,  builtin: true });
   registerModule({ key: 'chess',        title: 'Chess',            glyph: '♟', component: ChessAdapter,        builtin: true });
